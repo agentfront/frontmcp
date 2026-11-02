@@ -93,8 +93,10 @@ A `@Stage('execute')` hook does not replace the flow's own `execute` step: it ad
 
 To keep the flow's own step from running:
 
-- Call `ctx.respond(result)` from the `@Stage` (or a `@Will`) hook. The flow ends with that result: it skips the rest of the stage and the main stages after it, while the stage's `@Finally` hooks (and its `@Did` hooks, when a `@Stage` hook answered) and the cleanup stages (in `tools:call-tool`: `releaseSemaphore`, `releaseQuota`, `applyUI`, `finalize`) still run. In `tools:call-tool`, `result` is a complete MCP `CallToolResult`; it does not go through the tool's output schema.
+- Call `ctx.respond(result)` from the `@Stage` (or a `@Will`) hook. The flow ends with that result: it skips the rest of the stage and the main stages after it, while the stage's `@Finally` hooks (and its `@Did` hooks, when a `@Stage` hook answered) and the cleanup stages (in `tools:call-tool`: `releaseSemaphore`, `releaseQuota`, `applyUI`, `finalize`, `fitAnswer`, `shapeAnswer`, `meterAnswer`) still run. In `tools:call-tool`, `result` is a complete MCP `CallToolResult`; it does not go through the tool's output schema.
 - Or use an `@Around` hook that does not call `next()`. The stage is skipped and the flow goes on; in `tools:call-tool`, set `ctx.state.required.toolContext.output`, and the result is validated and formatted like the tool's own.
+
+Each answer the flow sends, the tool's from `finalize` or a hook's `ctx.respond(result)` (an `@Around('finalize')` hook that replaces it after `next()` included), becomes `ctx.state.output` in `tools:call-tool` and `resources:read-resource`. The stages after `finalize` work on it: `fitAnswer` (`output.budget`), `shapeAnswer` (`clients` profiles) and `meterAnswer` (the `/metrics` answer cost). Hook `Did('meterAnswer')` to see the answer the client receives.
 
 ## Hook Order
 
@@ -324,7 +326,7 @@ The entry flows also name their entry:
 
 - `sessionId`: the session the server verified for the request; `undefined` for a request without one (the stateless transports, MCP 2026-07-28, an `mcp-session-id` the server did not accept).
 - `clientInfo`: the client's `name` and `version`, sent with the request (MCP 2026-07-28 `_meta`) or at its session's `initialize`.
-- `metadata`: the request's `userAgent`, `contentType`, `accept`, `clientIp` and `customHeaders` (its `x-frontmcp-*` headers).
+- `metadata`: the request's `userAgent`, `contentType`, `accept`, `clientIp` and `customHeaders` (its `x-frontmcp-*` headers, and those `http.forwardHeaders` keeps).
 - `protocol`: the transport the session was opened over (`'streamable-http'`, `'legacy-sse'`, ...), when the session records it; an anonymous session (`auth.mode: 'public'`) does not.
 
 The flow has no `elapsed` or `tryGet`, and its `input`, `scope` and `tryGetContext()` are protected: read the request through `ctx.request`. In `tools:call-tool`, the tool entry is `ctx.state.tool` (set by `findTool`) and the tool instance `ctx.state.toolContext` (set from `createToolCallContext` on); to rewrite the call's name or arguments, set `ctx.state.input`. The state accepts only the keys the flow declares: `ctx.state.set('startedAt', Date.now())` does not compile.
@@ -596,6 +598,7 @@ class ProcessOrderTool extends ToolContext {
 parseInput → ensureRemoteCapabilities → findTool → checkToolAuthorization → checkEntryAuthorities
   → createTaskIfRequested → createToolCallContext → checkToolCredentials → acquireQuota → acquireSemaphore
   → validateInput → execute → validateOutput → releaseSemaphore → releaseQuota → applyUI → finalize
+  → fitAnswer → shapeAnswer → meterAnswer
 ```
 
 A tool-class hook declared as an instance method runs on the tool instance, which `createToolCallContext` builds. So it can hook `Did`/`Stage`/`Finally` on `createToolCallContext` and any hook on a later stage. The same holds for `@Resource` (`createResourceContext`), `@Prompt` (`createPromptContext`) and `@Agent` (`createAgentContext`) classes.

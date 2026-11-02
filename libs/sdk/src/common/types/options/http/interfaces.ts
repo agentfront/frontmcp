@@ -193,6 +193,22 @@ export interface HttpOptionsInterface {
    * default. Set a header to `false` to omit it.
    */
   securityHeaders?: SecurityHeadersOptions;
+
+  /**
+   * More request headers to keep in the request context's `metadata.customHeaders`, besides the
+   * `x-frontmcp-*` headers it always keeps: header names or globs (`x-acme-*`), matched without
+   * regard to case. A tool reads them as `this.context.metadata.customHeaders['x-acme-tenant']`.
+   *
+   * - `authorization`, `cookie`, `set-cookie`, `proxy-*`, hop-by-hop headers and the client-address
+   *   headers `host`, `forwarded`, `x-forwarded-*` and `x-real-ip` are never kept: a name or glob
+   *   that matches one (`x-*` matches `x-forwarded-for`) fails at startup.
+   * - The debug request log still redacts credential-looking headers (`x-acme-api-key`).
+   * - `this.fetch()` sends a kept header upstream only to the origins
+   *   `fetch.forwardCustomHeadersTo` lists.
+   *
+   * @example ['x-acme-*', 'x-request-source']
+   */
+  forwardHeaders?: string[];
 }
 
 /** CSP configuration for {@link SecurityHeadersOptions.csp}. */

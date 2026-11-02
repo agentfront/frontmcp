@@ -37,6 +37,7 @@ import { type JobType } from '../common/interfaces/job.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
 import { type ChannelsConfigOptions } from '../common/metadata/channel.metadata';
 import { resolveDefaultSqlitePath, type SqliteOptionsInput } from '../common/types/options/sqlite';
+import { createHeaderForwarder } from '../common/utils/forward-headers.utils';
 import { resolveEntryPath } from '../common/utils/path.utils';
 import CompleteFlow from '../completion/flows/complete.flow';
 import { FrontMcpContextProvider, FrontMcpContextStorage } from '../context';
@@ -1346,7 +1347,10 @@ export class Scope extends ScopeEntry {
         scope: ProviderScope.GLOBAL,
         name: 'FrontMcpContextStorage',
         provide: FrontMcpContextStorage,
-        useValue: new FrontMcpContextStorage().configure(this.metadata.fetch, proxyTrustOf(this.metadata.throttle)),
+        useValue: new FrontMcpContextStorage().configure(this.metadata.fetch, {
+          ...proxyTrustOf(this.metadata.throttle),
+          forwardsHeader: createHeaderForwarder(this.metadata.http?.forwardHeaders),
+        }),
       },
       // FrontMcpContextProvider is a factory that retrieves from AsyncLocalStorage
       FrontMcpContextProvider,

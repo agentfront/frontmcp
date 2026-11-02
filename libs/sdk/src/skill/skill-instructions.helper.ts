@@ -28,6 +28,7 @@
  *   see, like `skills/list`.
  */
 
+import { resolveClientProfile } from '../answer/client-profile';
 import type { ScopeEntry, SkillEntry } from '../common';
 import { callSurfaceOf } from '../common/availability';
 import { mcpRequestSurface } from '../transport/mcp-handlers/mcp-surface';
@@ -326,6 +327,18 @@ export interface CallerInstructionsOptions {
   ctx?: { authInfo?: unknown };
   /** Append the SEP-2640 `skill://…/SKILL.md` hints when `skillsConfig.sep2640InInstructions` is on. */
   skillUriHints?: boolean;
+  /** The caller's `clientInfo.name`, whose `clients` profile may set `instructions`. */
+  clientName?: string;
+}
+
+/** The `skillsConfig.injectInstructions` policy, unless the caller's `clients` profile sets `instructions`. */
+function instructionsPolicyFor(
+  scope: InstructionsScope,
+  clientName: string | undefined,
+): InjectInstructionsPolicy | undefined {
+  const profiled = resolveClientProfile(scope.metadata.clients, clientName)?.instructions;
+  if (profiled === 'full') return 'append';
+  return profiled ?? scope.metadata.skillsConfig?.injectInstructions;
 }
 
 /**
@@ -346,7 +359,7 @@ export async function composeCallerInstructions(
     userInstructions: scope.metadata.instructions,
     channelInstructions: buildChannelInstructions(scope.channels),
     skillRegistry: scope.skills,
-    policy: skillsConfig?.injectInstructions,
+    policy: instructionsPolicyFor(scope, options.clientName),
     mcpResources: skillsConfig?.mcpResources,
   };
   const withUriHints = options.skillUriHints === true && skillUriHintsEnabled(scope);

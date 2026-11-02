@@ -22,6 +22,7 @@ import type { AdapterPlatformType as AIPlatformType } from '@frontmcp/uipack/ada
 import { isUIType, type UIType } from '@frontmcp/uipack/types';
 import { base64Decode, base64Encode } from '@frontmcp/utils';
 
+import { callerClientProfile } from '../../answer';
 import { isPubliclyListed, publicAccessFor } from '../../auth/public-access.utils';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { DEFAULT_TOOL_PAGINATION, type ToolPaginationOptions } from '../../common/types/options/pagination';
@@ -481,6 +482,14 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         ? await this.loadToolUIRenderer()
         : undefined;
 
+      // A client that gets text answers only (`clients` profile `structured: 'text'`) is listed no outputSchema
+      const listsOutputSchemas =
+        callerClientProfile(this.scope.metadata.clients, {
+          context: this.tryGetContext(),
+          authInfo: this.state.authInfo,
+          notifications: this.scope.notifications,
+        })?.structured !== 'text';
+
       const tools: ResponseToolItem[] = resolved.map(({ finalName, tool }) => {
         const inputSchema = (tool.getInputJsonSchema() ?? {
           type: 'object',
@@ -510,7 +519,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         const outputPolicies = toolOutputPolicies(tool, this.scope);
         const schemaMode = resolveOutputSchemaMode(...outputPolicies);
 
-        if (schemaMode === 'definition' || schemaMode === 'both') {
+        if ((schemaMode === 'definition' || schemaMode === 'both') && listsOutputSchemas) {
           // getRawOutputSchema() returns the explicit rawOutputSchema (OpenAPI / remote
           // passthrough) or a JSON Schema derived from the declared Zod-shape, z.object() or
           // union-of-objects outputSchema (elicitation-extended when elicitation is enabled).

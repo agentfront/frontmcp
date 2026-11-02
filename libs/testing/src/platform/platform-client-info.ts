@@ -59,6 +59,16 @@ export function getPlatformClientInfo(platform: TestPlatformType): TestClientInf
         name: 'claude-desktop',
         version: '1.0',
       };
+    case 'claude-code':
+      return {
+        name: 'claude-code',
+        version: '1.0',
+      };
+    case 'codex':
+      return {
+        name: 'codex-mcp-client',
+        version: '1.0',
+      };
     case 'cursor':
       return {
         name: 'cursor',
@@ -124,6 +134,8 @@ export const PLATFORM_DETECTION_PATTERNS: Record<TestPlatformType, RegExp> = {
   openai: /chatgpt/i,
   'ext-apps': /mcp-ext-apps/i, // Note: Actual detection uses capabilities
   claude: /claude|claude-desktop/i,
+  'claude-code': /claude[- ]code/i,
+  codex: /codex/i,
   cursor: /cursor/i,
   continue: /continue/i,
   cody: /cody/i,

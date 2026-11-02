@@ -873,8 +873,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
       // initialize-request.handler.ts): dynamic skill registrations after boot
       // are reflected, and the skill catalog only names skills the caller may
       // see. No caller exists yet here, so the McpServer seed carries none.
-      const composeInstructions = (caller?: { authInfo?: unknown }): Promise<string> =>
-        composeCallerInstructions(scope, { ctx: caller });
+      const composeInstructions = (caller?: { authInfo?: unknown }, clientName?: string): Promise<string> =>
+        composeCallerInstructions(scope, { ctx: caller, clientName });
       const instructions = '';
 
       const serverOptions = {

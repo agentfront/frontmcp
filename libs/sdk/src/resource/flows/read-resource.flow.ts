@@ -5,14 +5,17 @@ import { z } from '@frontmcp/lazy-zod';
 import { ReadResourceRequestSchema, ReadResourceResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import { randomBytes } from '@frontmcp/utils';
 
+import { fitResourceAnswer } from '../../answer';
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import {
   Flow,
   FlowBase,
   FlowControl,
   FlowHooksOf,
+  resolveOutputBudget,
   type FlowPlan,
   type FlowRunOptions,
+  type OutputPolicy,
   type ResourceContext,
   type ResourceEntry,
   type ScopeEntry,
@@ -72,7 +75,8 @@ const stateSchema = z.object({
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities', 'findResource', 'checkEntryAuthorities', 'createResourceContext'],
   execute: ['execute', 'validateOutput'],
-  finalize: ['finalize'],
+  // After 'finalize' answers: hooks on 'fitAnswer' read and replace `state.output`
+  finalize: ['finalize', 'fitAnswer'],
 } as const satisfies FlowPlan<string>;
 
 declare global {
@@ -482,8 +486,28 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       throw new InvalidOutputError();
     }
 
-    // Respond with the properly formatted MCP result
+    // Respond with the properly formatted MCP result; 'fitAnswer' may replace it
     this.respond(parseResult.data);
     this.logger.verbose('finalize:done');
+  }
+
+  /** Fit the read to `output.budget` (App > server); a `ui://` widget is never cut. A plugin can replace this stage. */
+  @Stage('fitAnswer')
+  async fitAnswer() {
+    const { resource, output, isUIResource } = this.state;
+    if (!resource || !output || isUIResource) return;
+    const appId = appOwnerIdOf(this.scope.resources.lineageOf(resource) ?? [], resource.owner);
+    const app = this.scope.apps.getApps().find((candidate) => candidate.id === appId);
+    const appOutput = (app?.metadata as { output?: OutputPolicy } | undefined)?.output;
+    const budget = resolveOutputBudget(undefined, appOutput, this.scope.metadata.output);
+    const fitted = budget && fitResourceAnswer(output, budget);
+    if (fitted) this.respond(fitted);
+  }
+
+  /** Answer the read. Each answer, a stage's or a hook's, becomes `state.output`, which `fitAnswer` fits. */
+  override respond(output: z.infer<typeof outputSchema>): never {
+    const answer = outputSchema.parse(output);
+    this.state.set('output', answer);
+    throw FlowControl.respond(answer);
   }
 }

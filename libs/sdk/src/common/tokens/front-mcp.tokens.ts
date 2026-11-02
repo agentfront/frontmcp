@@ -70,4 +70,6 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   tasks: tokenFactory.meta('tasks'),
   // output validation policy (e.g., reject non-finite numeric output)
   output: tokenFactory.meta('output'),
+  // per-client answer shaping, keyed by a clientInfo.name glob
+  clients: tokenFactory.meta('clients'),
 };

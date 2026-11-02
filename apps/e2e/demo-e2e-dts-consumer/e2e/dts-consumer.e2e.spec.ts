@@ -37,6 +37,7 @@ const fixtureFiles = [
   'output-schemas-must-compile.ts',
   'providers-must-compile.ts',
   'tool-aliases-must-compile.ts',
+  'answer-shaping-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -160,6 +161,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types @Tool({ aliases }), refused() and a PublicMcpError remedy', () => {
     expect(describeEach(inFixtureFile('tool-aliases-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types output.budget, clients profiles, http.forwardHeaders and the budget note', () => {
+    expect(describeEach(inFixtureFile('answer-shaping-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

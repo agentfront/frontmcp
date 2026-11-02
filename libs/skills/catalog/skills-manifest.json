@@ -76,8 +76,14 @@
           "name": "output-schema",
           "description": "Define the tool's output contract — Zod shape, primitives, media, multi-content arrays."
         },
-        { "name": "quick-start", "description": "60-second tour — minimal tool, schemas, registration, calling it." },
-        { "name": "registration", "description": "@App({ tools }) vs @FrontMcp({ tools }), multi-app composition." },
+        {
+          "name": "quick-start",
+          "description": "60-second tour — minimal tool, schemas, registration, calling it."
+        },
+        {
+          "name": "registration",
+          "description": "@App({ tools }) vs @FrontMcp({ tools }), multi-app composition."
+        },
         {
           "name": "remote-and-esm",
           "description": "Tool.esm / Tool.remote — load tools from npm packages or remote MCP servers."
@@ -86,7 +92,10 @@
           "name": "testing",
           "description": "Per-tool unit tests — pointer to the dedicated `testing` skill for the canonical patterns."
         },
-        { "name": "throttling", "description": "rateLimit, concurrency, timeout — semantics, interaction, defaults." },
+        {
+          "name": "throttling",
+          "description": "rateLimit, concurrency, timeout — semantics, interaction, defaults."
+        },
         {
           "name": "ui-widgets",
           "description": "@Tool({ ui }) — template formats, trusted markup (html / escapeStringResults), servingMode, host-detect resourceMode, CSP, ignored options, MCP Apps spec."
@@ -862,6 +871,25 @@
                 "Declaring an upstream provider in top-level `auth.providers` so FrontMCP orchestrates its OAuth flow",
                 "Loading `clientId`/`clientSecret` from environment variables instead of hardcoding",
                 "Reading the downstream provider token in a tool via `this.orchestration.getToken('github')`"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "configure-client-profiles",
+          "description": "Shape answers per MCP client with clients profiles - text, structuredContent or both, resource annotations, and skills instructions",
+          "examples": [
+            {
+              "name": "coding-agent-profiles",
+              "description": "Send coding agents one copy of each answer, and keep numbers out of one client's annotations.",
+              "level": "intermediate",
+              "tags": ["config", "clients", "codex", "claude-code", "structured-content", "metrics"],
+              "features": [
+                "Matching clients by a glob of their `clientInfo.name`, first match wins",
+                "Sending Codex the text content only, with no `outputSchema` in its `tools/list`",
+                "Sending Claude Code `structuredContent` with a one-line summary as the text",
+                "Dropping numeric resource annotations for one client",
+                "Checking the saved bytes with the answer-cost counters on `/metrics`"
               ]
             }
           ]

@@ -13,6 +13,15 @@ import {
   randomUUID,
 } from '@frontmcp/utils';
 
+import {
+  callerClientProfile,
+  fitToolAnswer,
+  measureAnswer,
+  meteringEnabled,
+  outputSchemaMismatch,
+  recordAnswerCost,
+  shapeToolAnswer,
+} from '../../answer';
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { getAuthorizedAppIds } from '../../auth/authorized-apps.utils';
 import { getConsentedToolIds, isToolConsented } from '../../auth/consent.utils';
@@ -26,9 +35,13 @@ import {
   FlowHooksOf,
   GLOBAL_RATE_LIMIT_CHECKED,
   isOrchestratedMode,
+  resolveOutputBudget,
+  resolveOutputSchemaMode,
   resolveUndeclaredKeysPolicy,
   ToolContext,
   ToolEntry,
+  type AIPlatformType,
+  type ClientProfile,
   type FlowPlan,
   type FlowRunOptions,
   type ScopeEntry,
@@ -207,7 +220,8 @@ const plan = {
     'acquireSemaphore',
   ],
   execute: ['validateInput', 'execute', 'validateOutput'],
-  finalize: ['releaseSemaphore', 'releaseQuota', 'applyUI', 'finalize'],
+  // After 'finalize' answers: hooks on these stages read and replace `state.output`
+  finalize: ['releaseSemaphore', 'releaseQuota', 'applyUI', 'finalize', 'fitAnswer', 'shapeAnswer', 'meterAnswer'],
 } as const satisfies FlowPlan<string>;
 
 declare global {
@@ -233,6 +247,9 @@ const resolvedTools = new ResolvedEntries<ToolEntry>();
 
 /** The undeclared key paths already reported per tool, so the 'warn' policy names each one once. */
 const reportedUndeclaredKeyPaths = new WeakMap<CallToolEntry, Set<string>>();
+
+/** Tools whose answer the budget left whole because a cut broke the outputSchema, so it is logged once. */
+const reportedUnfittedTools = new WeakSet<CallToolEntry>();
 
 /** The aliases each tool was already called by, so a call by an alias is logged once. */
 const loggedAliasCalls = new WeakMap<ToolEntry, Set<string>>();
@@ -331,8 +348,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
    */
   @Stage('checkSkillsOnlyMode')
   async checkSkillsOnlyMode() {
-    const callerCtx = this.input.ctx as { internalCall?: boolean; agentPrivateCall?: boolean } | undefined;
-    if (callerCtx?.internalCall || callerCtx?.agentPrivateCall || getRunningTool()) return;
+    if (!this.isClientCall()) return;
     if (!isSkillsOnlyRequest(this.state.authInfo, this.tryGetContext())) return;
     const { name } = this.state.required.input;
     this.logger.verbose(`checkSkillsOnlyMode: refusing tool "${name}" in skills-only mode`);
@@ -1376,19 +1392,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         '../ui/ui-render.js'
       );
 
-      // Get session info for platform detection from authInfo (already in state from parseInput)
-      const { authInfo } = this.state;
-      const sessionId = authInfo?.sessionId;
       const requestId: string = randomUUID();
 
-      // Get platform type: first check sessionIdPayload (detected from user-agent),
-      // then fall back to notification service (detected from MCP clientInfo),
-      // finally default to 'unknown' (conservative: skip UI for unknown clients)
-      const platformType =
-        authInfo?.sessionIdPayload?.platformType ??
-        this.tryGetContext()?.platformType ??
-        (sessionId ? scope.notifications.getPlatformType(sessionId) : undefined) ??
-        'unknown';
+      const platformType = this.callerPlatformType();
 
       // Resolve the effective serving mode based on configuration and client capabilities.
       // The tool's own `ui.servingMode` wins, then its app's and the server's `ui.servingMode`
@@ -1661,9 +1667,111 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       isError: result.isError,
     });
 
-    // Respond with the properly formatted MCP result
+    // Respond with the properly formatted MCP result; the stages after this one may replace it
     this.respond(result);
     this.logger.verbose('finalize:done');
+  }
+
+  /**
+   * Fit the answer to `output.budget` (Tool > App > server), unless the cut breaks the outputSchema
+   * the client validates `structuredContent` against. A plugin can replace this stage.
+   */
+  @Stage('fitAnswer')
+  async fitAnswer() {
+    const { tool, output } = this.state;
+    if (!tool || !output || !this.isClientCall()) return;
+    const budget = resolveOutputBudget(...toolOutputPolicies(tool, this.scope));
+    const fitted = budget && fitToolAnswer(output, budget);
+    if (!fitted) return;
+    const mismatch =
+      fitted.structuredContent !== output.structuredContent && this.clientValidatesStructuredContent(tool)
+        ? outputSchemaMismatch(tool.getRawOutputSchema() as Record<string, unknown>, fitted.structuredContent)
+        : undefined;
+    if (mismatch === undefined) {
+      this.respond(fitted);
+    } else if (!reportedUnfittedTools.has(tool)) {
+      reportedUnfittedTools.add(tool);
+      this.logger.warn(
+        `Tool "${tool.metadata.name}" answered over its ${budget.maxBytes}-byte output.budget and was sent whole: ` +
+          `the cut answer breaks its outputSchema (${mismatch}). Loosen the schema, or raise or turn off the budget.`,
+      );
+    }
+  }
+
+  /** Shape the answer for the caller's `clients` profile: text, `structuredContent` or both. */
+  @Stage('shapeAnswer')
+  async shapeAnswer() {
+    const { tool, output, uiResult } = this.state;
+    if (!tool || !output || uiResult || !this.isClientCall()) return;
+    const mode = this.callerProfile()?.structured;
+    const shaped = mode && shapeToolAnswer(output, mode, this.listsOutputSchema(tool));
+    if (shaped) this.respond(shaped);
+  }
+
+  /** Count what the answer costs on `/metrics`, per tool and per client platform. */
+  @Stage('meterAnswer')
+  async meterAnswer() {
+    const { tool, output } = this.state;
+    if (!tool || !output || !this.isClientCall() || !meteringEnabled(this.scope.metadata.metrics)) return;
+    try {
+      recordAnswerCost(measureAnswer(output), { tool: tool.fullName, client: this.callerPlatformType() });
+    } catch (error) {
+      this.logger.warn('meterAnswer: could not count the answer', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Answer the call. Each answer, a stage's or a hook's (an `Around('finalize')` that redacts it),
+   * becomes `state.output`, which the stages after `finalize` fit, shape and count.
+   */
+  override respond(output: z.infer<typeof outputSchema>): never {
+    const answer = outputSchema.parse(output);
+    this.state.set('output', answer);
+    throw FlowControl.respond(answer);
+  }
+
+  /** Whether a client called the tool, rather than a tool, agent or job in process (`this.callTool()`). */
+  private isClientCall(): boolean {
+    const callerCtx = this.input.ctx as { internalCall?: boolean; agentPrivateCall?: boolean } | undefined;
+    return !(callerCtx?.internalCall || callerCtx?.agentPrivateCall || getRunningTool());
+  }
+
+  /**
+   * The caller's platform: the session's (from its user agent, then `initialize`), else this
+   * request's client info, else the notification service's; 'unknown' when none was recognized.
+   */
+  private callerPlatformType(): AIPlatformType {
+    const { authInfo } = this.state;
+    const sessionId = authInfo?.sessionId;
+    return (
+      authInfo?.sessionIdPayload?.platformType ??
+      this.tryGetContext()?.platformType ??
+      (sessionId ? this.scope.notifications.getPlatformType(sessionId) : undefined) ??
+      'unknown'
+    );
+  }
+
+  private callerProfile(): ClientProfile | undefined {
+    return callerClientProfile(this.scope.metadata.clients, {
+      context: this.tryGetContext(),
+      authInfo: this.state.authInfo,
+      notifications: this.scope.notifications,
+    });
+  }
+
+  /** Whether the caller is listed the tool's `outputSchema` and gets `structuredContent`, so it may validate it. */
+  private clientValidatesStructuredContent(tool: CallToolEntry): boolean {
+    return this.listsOutputSchema(tool) && this.callerProfile()?.structured !== 'text';
+  }
+
+  /** Whether `tools/list` lists the tool's `outputSchema`, so a client can read `structuredContent` alone. */
+  private listsOutputSchema(tool: CallToolEntry): boolean {
+    const schemaMode = resolveOutputSchemaMode(...toolOutputPolicies(tool, this.scope));
+    const schema = tool.getRawOutputSchema();
+    const isObjectSchema = typeof schema === 'object' && schema !== null && Reflect.get(schema, 'type') === 'object';
+    return (schemaMode === 'definition' || schemaMode === 'both') && isObjectSchema;
   }
 
   private warnUndeclaredKeysOnce(tool: CallToolEntry, keyPaths: string[]): void {

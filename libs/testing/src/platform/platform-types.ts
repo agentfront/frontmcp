@@ -22,6 +22,8 @@ export type TestPlatformType =
   | 'openai'
   | 'ext-apps'
   | 'claude'
+  | 'claude-code'
+  | 'codex'
   | 'cursor'
   | 'continue'
   | 'cody'

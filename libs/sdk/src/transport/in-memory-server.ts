@@ -169,8 +169,8 @@ export async function createInMemoryServer(
   const mcpServer = new McpServer(scope.metadata.info, serverOptions);
 
   // Register handlers with auth context injection
-  const composeInstructions = (caller?: { authInfo?: unknown }) =>
-    composeCallerInstructions(scope, { ctx: caller, skillUriHints: true });
+  const composeInstructions = (caller?: { authInfo?: unknown }, clientName?: string) =>
+    composeCallerInstructions(scope, { ctx: caller, clientName, skillUriHints: true });
   const handlers = createMcpHandlers({ scope, serverOptions, composeInstructions });
   for (const handler of handlers) {
     // Wrap handler to inject auth context

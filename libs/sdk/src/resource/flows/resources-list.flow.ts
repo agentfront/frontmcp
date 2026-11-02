@@ -15,6 +15,7 @@ import 'reflect-metadata';
 import { z } from '@frontmcp/lazy-zod';
 import { ListResourcesRequestSchema, ListResourcesResultSchema, type Resource } from '@frontmcp/protocol';
 
+import { annotationsForClient, callerClientProfile, type ClientNameSources } from '../../answer';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 
@@ -280,6 +281,13 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
         this.logger.warn(`parseResources: ${withoutUri.length} resource(s) skipped due to missing URI`);
       }
 
+      // A `clients` profile can drop numeric annotations, or give each SKILL.md its priority
+      const annotationsMode = callerClientProfile(this.scope.metadata.clients, {
+        context: this.tryGetContext(),
+        authInfo: (this.input.ctx as { authInfo?: ClientNameSources['authInfo'] } | undefined)?.authInfo,
+        notifications: this.scope.notifications,
+      })?.annotations;
+
       const resources: ResponseResourceItem[] = resolved
         .filter(({ resource }) => resource.uri != null)
         .map(({ finalName, resource }) => {
@@ -298,7 +306,8 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
           // Forward MCP `annotations` (audience, priority, lastModified) when set
           // — used by SEP-2640 skill resources to declare assistant-targeted
           // priority for SKILL.md vs lower priority for sub-files.
-          const annotations = resource.metadata.annotations;
+          const isSkillMd = uri.startsWith('skill://') && uri.endsWith('/SKILL.md');
+          const annotations = annotationsForClient(resource.metadata.annotations, annotationsMode, isSkillMd);
           if (annotations) {
             (item as ResponseResourceItem & { annotations?: typeof annotations }).annotations = annotations;
           }

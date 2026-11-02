@@ -66,8 +66,8 @@ async function wireServer(
   const { createMcpHandlers } = await import('./mcp-handlers/index.js');
 
   const mcpServer = new McpServer(scope.metadata.info, serverOptions);
-  const composeInstructions = (caller?: { authInfo?: unknown }) =>
-    composeCallerInstructions(scope, { ctx: caller, skillUriHints: true });
+  const composeInstructions = (caller?: { authInfo?: unknown }, clientName?: string) =>
+    composeCallerInstructions(scope, { ctx: caller, clientName, skillUriHints: true });
   for (const handler of createMcpHandlers({ scope, serverOptions, composeInstructions })) {
     const originalHandler = handler.handler;
     const wrappedHandler = async (req: unknown, ctx: Record<string, unknown>): Promise<unknown> => {
