@@ -165,6 +165,44 @@ describe('Provider lifecycle hooks', () => {
     expect(phases).toEqual(['shutdown:repo', 'shutdown:pool']);
   });
 
+  it('makes a registry that shares a value still bootstrapping wait for it before building its dependents', async () => {
+    const POOL = Symbol('POOL');
+    const REPO = Symbol('REPO');
+    let finishBootstrap: () => void = () => undefined;
+    const pool = {
+      onBootstrap: () =>
+        new Promise<void>((resolve) => {
+          finishBootstrap = () => {
+            phases.push('bootstrap:pool');
+            resolve();
+          };
+        }),
+    };
+    const parent = new ProviderRegistry([]);
+    await parent.ready;
+    const first = new ProviderRegistry([{ name: 'pool', provide: POOL, useValue: pool }], parent);
+    const second = new ProviderRegistry(
+      [
+        { name: 'pool', provide: POOL, useValue: pool },
+        {
+          name: 'repo',
+          provide: REPO,
+          inject: () => [POOL] as const,
+          useFactory: () => ({ onBootstrap: () => void phases.push('bootstrap:repo') }),
+        },
+      ],
+      parent,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    finishBootstrap();
+    await Promise.all([first.ready, second.ready]);
+
+    expect(phases).toEqual(['bootstrap:pool', 'bootstrap:repo']);
+    first.dispose();
+    second.dispose();
+  });
+
   it('ignores values without hooks and CONTEXT-scoped providers', async () => {
     @Provider({ name: 'per-request', scope: ProviderScope.CONTEXT })
     class PerRequest implements OnBootstrap {
