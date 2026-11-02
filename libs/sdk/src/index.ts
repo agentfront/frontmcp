@@ -36,8 +36,113 @@ export * from './elicitation';
 export * from './task';
 export { default as LoggerRegistry } from './logger/logger.registry';
 export * from '@frontmcp/guard';
-// Jobs, workflows, channels, remote MCP and the ESM loader
-export * from './subsystems';
+// Remote MCP and the ESM loader; the classes and functions of every subsystem in ./subsystems load on first use under CommonJS
+export type {
+  McpClientConnection,
+  McpConnectionStatus,
+  McpConnectionInfo,
+  McpTransportType,
+  McpHttpTransportOptions,
+  McpWorkerTransportOptions,
+  McpEsmTransportOptions,
+  McpTransportOptions,
+  McpStaticCredentials,
+  McpRemoteAuthConfig,
+  McpRemoteAuthContext,
+  McpRemoteCapabilities,
+  McpCapabilityChangeEvent,
+  McpClientServiceOptions,
+  McpConnectRequest,
+  McpRemoteCallToolResult,
+  McpRemoteReadResourceResult,
+  McpRemoteGetPromptResult,
+  McpCapabilityChangeCallback,
+  McpConnectionChangeCallback,
+  McpUnsubscribeFn,
+  CapabilityCacheConfig,
+  RetryOptions,
+  CircuitState,
+  CircuitBreakerOptions,
+  HealthStatus,
+  HealthCheckResult,
+  HealthCheckOptions,
+} from './remote-mcp';
+export {
+  McpClientService,
+  CapabilityCache,
+  withRetry,
+  isTransientError,
+  isConnectionError,
+  isAuthError,
+  CircuitBreaker,
+  CircuitBreakerManager,
+  CircuitOpenError,
+  HealthChecker,
+  HealthCheckManager,
+  createRemoteToolContextClass,
+  createRemoteResourceContextClass,
+  createRemotePromptContextClass,
+  buildRemoteToolRecord,
+  buildRemoteResourceRecord,
+  buildRemoteResourceTemplateRecord,
+  buildRemotePromptRecord,
+  createRemoteToolInstance,
+  createRemoteResourceInstance,
+  createRemoteResourceTemplateInstance,
+  createRemotePromptInstance,
+} from './subsystems';
+export type {
+  ParsedPackageSpecifier,
+  EsmRegistryAuth,
+  EsmCacheEntry,
+  EsmCacheOptions,
+  FrontMcpPackageManifest,
+  ManifestPrimitiveKey,
+  VersionResolutionResult,
+  VersionResolverOptions,
+  EsmLoadResult,
+  EsmModuleLoaderOptions,
+  VersionPollerOptions,
+  VersionCheckResult,
+  EsmToolExecuteHandler,
+  EsmResourceReadHandler,
+  EsmPromptExecuteHandler,
+  EsmToolDefinition,
+  EsmResourceDefinition,
+  EsmPromptDefinition,
+} from './esm-loader';
+export {
+  parsePackageSpecifier,
+  isPackageSpecifier,
+  buildEsmShUrl,
+  ESM_SH_BASE_URL,
+  esmRegistryAuthSchema,
+  resolveRegistryToken,
+  getRegistryUrl,
+  DEFAULT_NPM_REGISTRY,
+  satisfiesRange,
+  maxSatisfying,
+  isValidRange,
+  isValidVersion,
+  compareVersions,
+  isNewerVersion,
+  EsmCacheManager,
+  normalizeEsmExport,
+  frontMcpPackageManifestSchema,
+  MANIFEST_PRIMITIVE_KEYS,
+  VersionResolver,
+  EsmModuleLoader,
+  VersionPoller,
+  createEsmToolContextClass,
+  createEsmResourceContextClass,
+  createEsmPromptContextClass,
+  buildEsmToolRecord,
+  buildEsmResourceRecord,
+  buildEsmPromptRecord,
+  createEsmToolInstance,
+  createEsmResourceInstance,
+  createEsmPromptInstance,
+} from './subsystems';
 
 // Lazy-zod: `z` is lazy by default for cold-start wins, `eagerZ` is the
 // straight zod pass-through, `lazyZ` is the explicit factory form.
@@ -150,6 +255,7 @@ export { ToolInstance } from './tool/tool.instance';
 export { default as ProviderRegistry } from './provider/provider.registry';
 
 // Job exports - saved, discoverable, triggerable executions
+export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter } from './subsystems';
 export type {
   JobRegistryInterface,
   IndexedJob,
@@ -163,7 +269,19 @@ export type {
 } from './job';
 export type { JobStateStore, JobRunRecord, WorkflowRunRecord, JobExecutionState, JobDefinitionStore } from './job';
 
+// Job-management tool classes (issue #408 — opt-in manual registration via
+// @App({ tools: [...] }) when finer-grained control than auto-registration
+// is needed, e.g. to omit register_job / remove_job in production).
+export { ExecuteJobTool, GetJobStatusTool, ListJobsTool, RegisterJobTool, RemoveJobTool } from './subsystems';
+
 // Workflow exports - managed multi-step job pipelines
+export {
+  WorkflowRegistry,
+  WorkflowInstance,
+  WorkflowEngine,
+  WorkflowStepExecutor,
+  WorkflowEmitter,
+} from './subsystems';
 export type {
   WorkflowRegistryInterface,
   IndexedWorkflow,
@@ -172,7 +290,24 @@ export type {
   WorkflowChangeScope,
 } from './workflow';
 
+// Workflow-management tool classes (issue #408)
+export {
+  ExecuteWorkflowTool,
+  GetWorkflowStatusTool,
+  ListWorkflowsTool,
+  RegisterWorkflowTool,
+  RemoveWorkflowTool,
+} from './subsystems';
+
 // Channel exports - push-based notification channels for Claude Code
+export {
+  ChannelInstance,
+  ChannelRegistry,
+  ChannelEmitter,
+  ChannelNotificationService,
+  ChannelEventBus,
+  ChannelReplyTool,
+} from './subsystems';
 export type {
   ChannelRegistryInterface,
   IndexedChannel,
@@ -516,6 +651,8 @@ export { McpStatelessClient, McpStatelessError, TASKS_CLIENT_CAPABILITY } from '
 export type { McpStatelessClientOptions, McpStatelessInputHandlers } from './transport/mcp-20260728';
 export { validateHeaderParams, buildParamHeaders } from './transport/mcp-20260728';
 export { FRONTMCP_SUPPORTED_PROTOCOL_VERSIONS, TASKS_EXTENSION_ID } from './transport/mcp-20260728';
+// Remote-proxy adapter so a FrontMCP server can proxy a 2026-07-28 remote.
+export { McpStatelessClientAdapter, negotiateRemoteProtocol } from './subsystems';
 export { PROTOCOL_2026_07_28 } from '@frontmcp/protocol';
 
 // Web-standard MCP transport helpers — stateless runner + persistent (Durable

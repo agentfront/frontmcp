@@ -29,6 +29,13 @@ describe('the root exports of @frontmcp/sdk', () => {
     expect(exportKinds('libs/sdk/dist/index.js', 'require')).toEqual(await pinnedExports());
   });
 
+  it("are the pinned names and kinds when an ESM import loads the CommonJS build, as Node's export detection sees it", async () => {
+    expect(exportKinds('libs/sdk/dist/index.js', 'import')).toEqual({
+      ...(await pinnedExports()),
+      'module.exports': 'object',
+    });
+  });
+
   it('are the pinned names and kinds under import', async () => {
     expect(exportKinds('libs/sdk/dist/esm/index.mjs', 'import')).toEqual(await pinnedExports());
   });
