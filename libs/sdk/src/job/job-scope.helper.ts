@@ -104,8 +104,8 @@ export interface RegisterJobCapabilitiesArgs {
   jobsConfig: JobsConfig;
   logger: FrontMcpLogger;
   notifyFn?: (data: Record<string, unknown>) => Promise<void>;
-  /** The scope is served in process only (`create()`, `createDirect()`, `connect()`): it has no entry to run again. */
-  directOnly?: boolean;
+  /** The server was started by an entry a detached runner runs again (`bootstrap()`, `runStdio()`, `runUnixSocket()`). */
+  entryServer?: boolean;
   /** The scope was booted by a detached runner, which runs one run and reconciles nothing. */
   jobWorker?: boolean;
 }
@@ -125,7 +125,7 @@ export interface JobCapabilitiesResult {
  */
 export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs): Promise<JobCapabilitiesResult> {
   const { providers, flowRegistry, owner, jobsList, jobProviders, workflowsList, jobsConfig, logger, notifyFn } = args;
-  const { directOnly = false, jobWorker = false } = args;
+  const { entryServer = false, jobWorker = false } = args;
 
   // Every attempt of every job runs through this hookable flow (#700)
   await flowRegistry.registryFlows([ExecuteJobFlow]);
@@ -192,7 +192,7 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
       cancelPollMs: stateStoreType === 'memory' ? undefined : jobWorker ? DETACHED_FLUSH_MS : CANCEL_POLL_MS,
       runner: jobsConfig.runner,
       findJob: (name) => jobRegistry.findByName(name),
-      detachedUnavailable: detachedUnavailable(stateStoreType, directOnly && !jobWorker),
+      detachedUnavailable: detachedUnavailable(stateStoreType, !entryServer && !jobWorker),
     },
   );
   // At shutdown the runs left are interrupted (their cleanup runs) before the stores close
@@ -253,7 +253,7 @@ function detachedUnavailable(
 ): { why: string; remedy: string } | undefined {
   if (inProcess) {
     return {
-      why: 'an in-process server (create(), createDirect(), connect()) has no entry a detached process can run again',
+      why: 'this server was not started by an entry a detached process can run again (bootstrap(), runStdio(), runUnixSocket() or @FrontMcp), as an in-process server (create(), createDirect(), connect(), the generated CLI) is not',
       remedy: "Start the server from its entry (node dist/main.js, frontmcp dev), or set runner: 'inline' on the job",
     };
   }

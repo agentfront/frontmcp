@@ -47,7 +47,7 @@ import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors'
 import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
 import { assertAuthoritiesRules } from '../front-mcp/authorities-rules.check';
-import { isJobWorker } from '../front-mcp/detached-job.flag';
+import { isEntryServer, isJobWorker } from '../front-mcp/detached-job.flag';
 import { isDirectOnly } from '../front-mcp/direct-only.flag';
 import type { HaManager } from '../ha';
 import type { HealthService } from '../health';
@@ -895,7 +895,7 @@ export class Scope extends ScopeEntry {
         jobsConfig: effectiveConfig,
         logger: this.logger,
         notifyFn,
-        directOnly: this.directOnly,
+        entryServer: isEntryServer(this.metadata),
         jobWorker: isJobWorker(this.metadata),
       });
 
@@ -1054,7 +1054,8 @@ export class Scope extends ScopeEntry {
       this._channelTeardown = channelResult.teardown;
       // `dispose()` (what `create()` returns calls it) disconnects service channels, as `shutdown()` does.
       this.onDispose(() => this.teardownChannels());
-      await channelResult.connectServices();
+      // A detached job runner runs one run: the server that started it already listens to the services
+      if (!isJobWorker(this.metadata)) await channelResult.connectServices();
     }
 
     // Initialize health service (after all registries and stores are ready)

@@ -10,6 +10,7 @@ import { App, Job, job, JobContext, LogLevel } from '../../common';
 import { type DirectMcpServer } from '../../direct/direct.types';
 import { ProviderNotAvailableError } from '../../errors/provider.errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
+import { MemoryJobStateStore } from '../../job/store/memory-job-state.store';
 import { workerJobKey, workerJobRunners, type WorkerJobRunner } from '../offload-worker.globals';
 import { OffloadService } from '../offload.service';
 import { workerJobSourceOf } from '../worker-jobs';
@@ -138,6 +139,25 @@ describe('a worker job in a server', () => {
     const read = await server.readResource(`job://runs/${runId}`);
     expect(JSON.parse(String((read.contents[0] as { text: string }).text))).toEqual(
       expect.objectContaining({ state: 'completed', progress: { progress: 1, total: 2, message: 'from the worker' } }),
+    );
+  });
+
+  it('writes the latest progress a worker reports, not each report, and the last one before the outcome', async () => {
+    const updates = jest.spyOn(MemoryJobStateStore.prototype, 'updateRun');
+    jest.spyOn(OffloadService.prototype, 'run').mockImplementation(async (_task, call) => {
+      for (let step = 1; step <= 200; step++) call.onProgress?.({ progress: step, total: 200 });
+      return { output: { doubled: 2 }, logs: [] };
+    });
+    const server = await serve();
+
+    const response = await server.callTool('execute_job', { name: 'crunch_job', input: { n: 1 } });
+
+    const runId = (response.structuredContent as { runId: string }).runId;
+    const progressWrites = updates.mock.calls.filter(([id, update]) => id === runId && update.progress);
+    expect(progressWrites.length).toBeLessThanOrEqual(2);
+    const read = await server.readResource(`job://runs/${runId}`);
+    expect(JSON.parse(String((read.contents[0] as { text: string }).text))).toEqual(
+      expect.objectContaining({ state: 'completed', progress: { progress: 200, total: 200 } }),
     );
   });
 

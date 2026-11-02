@@ -16,15 +16,32 @@ import { resetRuntimeContext } from '@frontmcp/utils';
 
 import { completionEventsOf } from '../../channel/sources/completion-events';
 import { type JobCompletionEvent } from '../../channel/sources/job-completion.source';
-import { App, Job, JobContext, LogLevel, type JobPermission } from '../../common';
+import {
+  App,
+  Channel,
+  ChannelContext,
+  Job,
+  JobContext,
+  LogLevel,
+  type ChannelNotification,
+  type JobPermission,
+} from '../../common';
 import { type DirectAuthContext, type DirectMcpServer } from '../../direct/direct.types';
 import { JobRunnerUnavailableError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
 import { JobExecutionManager } from '../execution/job-execution.manager';
 import { runDetachedJob } from '../runner/detached-job.worker';
+import { spawnDetachedRunner } from '../runner/job-runner';
+import { createJobStateStore } from '../store/job-state-store.factory';
 import { type JobRunRecord, type JobStateStore } from '../store/job-state.interface';
 import { StorageJobStateStore } from '../store/storage-job-state.store';
+
+// A runner of this file's servers would run jest again: every spawn is a stand-in
+jest.mock('../runner/job-runner', () => ({
+  ...jest.requireActual('../runner/job-runner'),
+  spawnDetachedRunner: jest.fn(() => ({ pid: process.pid, once: () => undefined })),
+}));
 
 const events: string[] = [];
 let openGate: () => void = () => undefined;
@@ -75,6 +92,22 @@ class WaitJob extends JobContext {
 
 @App({ id: 'detached', name: 'Detached', jobs: [CountJob, WaitJob] })
 class DetachedApp {}
+
+const connections: string[] = [];
+
+@Channel({ name: 'inbox', source: { type: 'service', service: 'inbox' } })
+class InboxChannel extends ChannelContext {
+  override async onConnect(): Promise<void> {
+    connections.push(`connect:${process.pid}`);
+  }
+
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    return { content: String(payload) };
+  }
+}
+
+@App({ id: 'inbox', name: 'Inbox', channels: [InboxChannel] })
+class InboxApp {}
 
 const alice: DirectAuthContext = { sessionId: 'alice-session', user: { sub: 'alice' } };
 const bob: DirectAuthContext = { sessionId: 'bob-session', user: { sub: 'bob' } };
@@ -305,6 +338,38 @@ describe('a detached run', () => {
     await expect(refusal).rejects.toBeInstanceOf(JobRunnerUnavailableError);
     await expect(refusal).rejects.toHaveProperty('remedy.say', expect.stringMatching(/entry/));
   });
+
+  it('is refused by a CLI-mode server, whose command (`<bin> job run`) a runner would only run again', async () => {
+    const cli = await FrontMcpInstance.createForCli(config());
+    try {
+      const scope = cli.getPrimaryScope() as Scope;
+      const manager = (scope as unknown as { _jobExecutionManager?: JobExecutionManager })._jobExecutionManager;
+      const job = scope.jobs?.findByName('count_job');
+      if (!manager || !job) throw new Error('jobs are not enabled');
+      jest.mocked(spawnDetachedRunner).mockClear();
+
+      await expect(manager.executeJob(job, { to: 1 }, {})).rejects.toBeInstanceOf(JobRunnerUnavailableError);
+      expect(spawnDetachedRunner).not.toHaveBeenCalled();
+    } finally {
+      await cli.shutdown();
+    }
+  });
+
+  it('stops within its cancel poll when another process ended its run, such as a runner taken for gone', async () => {
+    const server = await open();
+    const { handle } = await startDetached(server, 'wait_job', { tag: 'z1' });
+    await waitFor(() => events.includes('z1:started'), 'the job to start');
+
+    await storeOf(server).updateRun(handle.runId, { state: 'interrupted', completedAt: Date.now() });
+    const stopped = await Promise.race([
+      workers[0].then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3_000)),
+    ]);
+    if (!stopped) await storeOf(server).requestCancel?.(handle.runId);
+
+    expect(stopped).toBe(true);
+    expect((await stateOf(server, handle.runId))?.state).toBe('interrupted');
+  });
 });
 
 describe('a detached job at boot', () => {
@@ -358,6 +423,50 @@ describe('the detached runner entry', () => {
     expect(await runDetachedJob(config(), 'no-such-run')).toBe(0);
     expect(await runDetachedJob(config(), 'done-1')).toBe(0);
     expect((await stateOf(server, 'done-1'))?.state).toBe('completed');
+  });
+
+  it('runs its run instead of serving when the entry calls runUnixSocket(), as a daemon does', async () => {
+    const exit = jest.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const socketPath = path.join(dir, 'daemon.sock');
+    process.env['FRONTMCP_RUN_JOB_ID'] = 'no-such-run';
+    let handle: { close: () => Promise<void> } | undefined;
+    try {
+      handle = await FrontMcpInstance.runUnixSocket({ ...config(), socketPath });
+
+      await waitFor(() => exit.mock.calls.length > 0, 'the runner to exit', 3_000);
+      expect(exit).toHaveBeenCalledWith(0);
+      expect(fs.existsSync(socketPath)).toBe(false);
+    } finally {
+      delete process.env['FRONTMCP_RUN_JOB_ID'];
+      await handle?.close();
+      exit.mockRestore();
+    }
+  });
+
+  it('takes FRONTMCP_RUN_JOB_ID out of its environment, so no process its job starts boots as a runner', async () => {
+    process.env['FRONTMCP_RUN_JOB_ID'] = 'no-such-run';
+    try {
+      expect(await runDetachedJob(config(), 'no-such-run')).toBe(0);
+      expect(process.env['FRONTMCP_RUN_JOB_ID']).toBeUndefined();
+    } finally {
+      delete process.env['FRONTMCP_RUN_JOB_ID'];
+    }
+  });
+
+  it('connects no service channel: the server it was started by already listens', async () => {
+    connections.length = 0;
+    const { store } = await createJobStateStore({ sqlite: { path: dbPath } });
+    const run = { state: 'pending' as const, jobName: 'count_job', input: { to: 1 }, scopeId: undefined };
+    await store.createRun(orphan('quiet-1', '', run));
+    await store.dispose();
+
+    const code = await runDetachedJob(
+      { ...config(), apps: [DetachedApp, InboxApp], channels: { enabled: true } },
+      'quiet-1',
+    );
+
+    expect(code).toBe(0);
+    expect(connections).toEqual([]);
   });
 
   it('fails a run whose job the server no longer has', async () => {
@@ -439,6 +548,36 @@ describe('reconcile on boot', () => {
 
     expect((await stateOf(first, 'busy-1'))?.state).toBe('running');
     expect(events).toEqual([]);
+  });
+
+  it('judges an orphan by its record as it is when it ends it, not as the listing found it', async () => {
+    const first = await open();
+    const store = storeOf(first);
+    const listed = orphan('moved-1', scopeOf(first).id, { state: 'pending' });
+    await store.createRun({ ...listed, state: 'running' });
+    jest.spyOn(store, 'listRuns').mockResolvedValueOnce([listed]);
+
+    await managerOf(first).reconcile();
+
+    expect(await stateOf(first, 'moved-1')).toEqual(
+      expect.objectContaining({
+        state: 'interrupted',
+        error: expect.objectContaining({ name: 'JobInterruptedError' }),
+      }),
+    );
+    expect(events).toEqual(['moved-1:cleanup:interrupt']);
+  });
+
+  it("ends a run whose runner had this server's pid before this server started, as after a container restart", async () => {
+    const first = await open();
+    const earlier = { kind: 'inline' as const, id: 'old-server', pid: process.pid, hostname: os.hostname() };
+    const startedAt = Math.floor(performance.timeOrigin) - 60_000;
+    await storeOf(first).createRun(orphan('reused-1', scopeOf(first).id, { runner: earlier, startedAt }));
+
+    await managerOf(first).reconcile();
+
+    expect((await stateOf(first, 'reused-1'))?.state).toBe('interrupted');
+    expect(events).toEqual(['reused-1:cleanup:interrupt']);
   });
 
   it('leaves the inline runs of a live server and the runs of an older release alone', async () => {

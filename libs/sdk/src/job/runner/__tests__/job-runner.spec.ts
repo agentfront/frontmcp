@@ -133,6 +133,19 @@ describe('the detached runner process', () => {
     });
   });
 
+  it('leaves the inspector flags out: a runner held by --inspect-brk would never start its run', () => {
+    process.execArgv = [
+      '--inspect-brk=9229',
+      '--inspect',
+      '--inspect-wait',
+      '--inspect-port=9230',
+      '--enable-source-maps',
+    ];
+    process.argv = [process.execPath, '/repo/dist/main.js'];
+
+    expect(detachedRunnerCommand().args).toEqual(['--inspect-port=9230', '--enable-source-maps', '/repo/dist/main.js']);
+  });
+
   it('is refused without an entry to run', () => {
     process.argv = [process.execPath];
     expect(() => detachedRunnerCommand()).toThrow(/no entry/);

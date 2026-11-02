@@ -374,7 +374,7 @@ export class JobExecutionManager {
     for (const record of await this.stateStore.listRuns()) {
       if (FINISHED_JOB_STATES.has(record.state) || !record.runner) continue;
       if (this.scope && record.scopeId !== undefined && record.scopeId !== this.scope.id) continue;
-      if (await this.runnerGone(record.runner)) await this.endOrphan(record);
+      if (await this.runnerGone(record.runner, record.startedAt)) await this.endOrphan(record);
       else if (record.runner.kind === 'detached') this.watch(record.runId);
     }
   }
@@ -465,7 +465,7 @@ export class JobExecutionManager {
         if (!record || FINISHED_JOB_STATES.has(record.state)) {
           this.unwatch(runId);
           if (record) await this.notify({ type: 'job:status', runId, state: record.state, jobName: record.jobName });
-        } else if (record.runner && (await this.runnerGone(record.runner))) {
+        } else if (record.runner && (await this.runnerGone(record.runner, record.startedAt))) {
           this.unwatch(runId);
           await this.endOrphan(record);
         }
@@ -485,19 +485,24 @@ export class JobExecutionManager {
   }
 
   /**
-   * Whether a runner is gone. On this host its pid decides: a runner whose event loop is busy misses heartbeats
-   * but is alive. On another host the store's TTL does, and without heartbeats in the store it counts as alive.
+   * Whether the runner of a run started at `startedAt` is gone. On this host its pid decides: a runner whose event
+   * loop is busy misses heartbeats but is alive, and this process's own pid on a run older than this process was an
+   * earlier process's (a restarted container's). On another host the store's TTL does, and without heartbeats in
+   * the store it counts as alive.
    */
-  private async runnerGone(runner: JobRunnerInfo): Promise<boolean> {
-    if (runner.hostname !== undefined && runner.hostname === getHostname()) return !isAlive(runner.pid);
+  private async runnerGone(runner: JobRunnerInfo, startedAt: number): Promise<boolean> {
+    if (runner.hostname !== undefined && runner.hostname === getHostname()) {
+      return runner.pid === currentPid() ? startedAt < performance.timeOrigin : !isAlive(runner.pid);
+    }
     if (!this.stateStore.isRunnerAlive) return false;
     return !(await this.stateStore.isRunnerAlive(runner.id));
   }
 
   /** End a run whose runner is gone, once across the processes sharing the store, and run its job's cleanup. */
-  private async endOrphan(record: JobRunRecord): Promise<void> {
-    const { runId } = record;
+  private async endOrphan(listed: JobRunRecord): Promise<void> {
+    const { runId } = listed;
     if (this.stateStore.claimRun && !(await this.stateStore.claimRun(runId))) return;
+    const record = (await this.stateStore.getRun(runId)) ?? listed;
     const neverStarted = record.state === 'pending' && record.runner?.kind === 'detached';
     const error = neverStarted
       ? new JobRunnerBootError(runId, 'its process exited before it took the run over')
@@ -577,15 +582,16 @@ export class JobExecutionManager {
     }
   }
 
-  /** Track a run this process executes until `end()`: its abort controller, and its watch for a cancel in the store. */
+  /**
+   * Track a run this process executes until `end()`: its abort controller, and its watch of the store for a cancel
+   * or for an end another process wrote (one that took this process for gone).
+   */
   private startRun(runId: string): { signal: AbortSignal; end: () => void } {
     const controller = new AbortController();
     let settle: () => void = () => undefined;
     const settled = new Promise<void>((resolve) => (settle = resolve));
     const { cancelPollMs } = this.options;
-    const watch = cancelPollMs
-      ? setInterval(() => void this.abortIfCancelled(runId, controller), cancelPollMs)
-      : undefined;
+    const watch = cancelPollMs ? setInterval(() => void this.abortIfEnded(runId, controller), cancelPollMs) : undefined;
     watch?.unref?.();
     this.activeRuns.set(runId, { controller, settled });
     const end = () => {
@@ -596,11 +602,15 @@ export class JobExecutionManager {
     return { signal: controller.signal, end };
   }
 
-  private async abortIfCancelled(runId: string, controller: AbortController): Promise<void> {
+  private async abortIfEnded(runId: string, controller: AbortController): Promise<void> {
     try {
-      if (await this.cancelRequested(runId)) controller.abort(new JobCancelledError(runId));
+      if (await this.cancelRequested(runId)) {
+        controller.abort(new JobCancelledError(runId));
+      } else if (FINISHED_JOB_STATES.has((await this.stateStore.getRun(runId))?.state ?? 'pending')) {
+        controller.abort(new JobInterruptedError(runId, 'another process ended it'));
+      }
     } catch (error) {
-      this.logger.warn(`Could not read whether run ${runId} was cancelled: ${toJobError(error).message}`);
+      this.logger.warn(`Could not read whether run ${runId} was cancelled or ended: ${toJobError(error).message}`);
     }
   }
 

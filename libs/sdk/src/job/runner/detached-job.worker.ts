@@ -6,7 +6,7 @@ import {
 } from '../../common';
 import { resolveDefaultSqlitePath } from '../../common/types/options/sqlite/resolve';
 import { JobRunnerBootError } from '../../errors';
-import { JOB_WORKER_FLAG } from '../../front-mcp/detached-job.flag';
+import { JOB_WORKER_FLAG, RUN_JOB_ENV_VAR } from '../../front-mcp/detached-job.flag';
 import { markDirectOnly } from '../../front-mcp/direct-only.flag';
 import { type JobExecutionManager } from '../execution/job-execution.manager';
 import { toJobError } from '../job-attempt';
@@ -27,12 +27,14 @@ type ServerConfig = FrontMcpConfigInput | FrontMcpConfigType;
  * The entry of a detached runner: boot the server's config with no transport, run the run through the job
  * execution manager of the scope that started it, and shut down. SIGTERM or SIGINT interrupts the run (its
  * cleanup runs). A boot that fails is written to the run as `JobRunnerBootError`. Resolves with the exit code.
+ * The run id leaves the environment first, so a server the job starts does not boot as a runner too.
  */
 export async function runDetachedJob(
   config: ServerConfig,
   runId: string,
   boot: (config: ServerConfig) => Promise<DetachedJobHost> = bootRunner,
 ): Promise<number> {
+  delete process.env[RUN_JOB_ENV_VAR];
   let host: DetachedJobHost;
   try {
     host = await boot(config);

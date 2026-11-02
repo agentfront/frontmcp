@@ -27,7 +27,7 @@ import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task/task-scope.helper';
 import { createMcpServer } from '../transport/mcp-server.factory';
 import type { FetchHandlerCtx, WebFetchHandler } from '../transport/web-fetch-handler';
-import { detachedJobRunId } from './detached-job.flag';
+import { detachedJobRunId, markEntryServer } from './detached-job.flag';
 import { markDirectOnly } from './direct-only.flag';
 import { createMcpGlobalProviders } from './front-mcp.providers';
 import {
@@ -407,6 +407,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       return undefined;
     }
 
+    markEntryServer(parsedConfig);
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
@@ -708,6 +709,11 @@ export class FrontMcpInstance implements FrontMcpInterface {
   ): Promise<{ close: () => Promise<void> }> {
     if (isSchemaExtraction()) return { close: async () => undefined };
     const { socketPath, sqlite, ...configInput } = options;
+    const detachedRunId = detachedJobRunId();
+    if (detachedRunId) {
+      await exitAfterDetachedRun({ ...configInput, ...(sqlite ? { sqlite } : {}) }, detachedRunId);
+      return { close: async () => undefined };
+    }
 
     // Parse config with HTTP enabled, overriding socketPath
     const parsedConfig = frontMcpMetadataSchema.parse({
@@ -720,6 +726,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       ...(sqlite ? { sqlite } : {}),
     });
 
+    markEntryServer(parsedConfig);
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
@@ -869,6 +876,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
         };
       }
 
+      markEntryServer(parsedConfig);
       const frontMcp = new FrontMcpInstance(parsedConfig);
       await frontMcp.ready;
       // Scopes are now live (sqlite/redis/channels/jobs) — shut them down if a

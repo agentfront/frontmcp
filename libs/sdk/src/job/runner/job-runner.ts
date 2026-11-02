@@ -9,6 +9,9 @@ export { detachedJobRunId, JOB_WORKER_MARKER, RUN_JOB_ENV_VAR } from '../../fron
 
 const OWNER_ARG_PREFIX = '--frontmcp-owner=';
 
+/** `--inspect`, `--inspect-brk` and `--inspect-wait`: a runner would take the server's debugger port, or wait for one. */
+const INSPECTOR_FLAG = /^--inspect(-brk|-wait)?(=|$)/;
+
 const INLINE_REMEDY = "Set runner: 'inline' (or 'worker') on the job, or run the server where it can start processes";
 
 interface RunnerJob {
@@ -56,7 +59,7 @@ export function assertRunnersAvailable(
   }
 }
 
-/** The server's own command (node, its flags, its entry and arguments), which a detached runner runs again. */
+/** The server's own command (node, its flags but the inspector's, its entry and arguments), which a runner runs again. */
 export function detachedRunnerCommand(): { command: string; args: string[] } {
   const [, entry, ...args] = process.argv;
   if (!entry) {
@@ -67,7 +70,8 @@ export function detachedRunnerCommand(): { command: string; args: string[] } {
     );
   }
   const ownArgs = args.filter((arg) => !arg.startsWith(OWNER_ARG_PREFIX));
-  return { command: process.execPath, args: [...process.execArgv, entry, ...ownArgs] };
+  const flags = process.execArgv.filter((flag) => !INSPECTOR_FLAG.test(flag));
+  return { command: process.execPath, args: [...flags, entry, ...ownArgs] };
 }
 
 /** The process of a detached run, as the server that starts it sees it. */
