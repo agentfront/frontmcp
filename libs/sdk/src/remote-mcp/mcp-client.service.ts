@@ -882,7 +882,7 @@ export class McpClientService {
   }
 
   private createTransport(
-    { StreamableHTTPClientTransport, SSEClientTransport }: ProtocolClientModule,
+    protocolClient: ProtocolClientModule,
     request: McpConnectRequest,
     headers: Record<string, string> | undefined,
   ): Transport {
@@ -895,10 +895,10 @@ export class McpClientService {
     switch (transportType) {
       case 'http':
         // Start with Streamable HTTP - fallback to SSE happens during connect() if needed
-        return new StreamableHTTPClientTransport(new URL(url), options);
+        return new protocolClient.StreamableHTTPClientTransport(new URL(url), options);
 
       case 'sse':
-        return new SSEClientTransport(new URL(url), options);
+        return new protocolClient.SSEClientTransport(new URL(url), options);
 
       case 'worker':
       case 'npm':
