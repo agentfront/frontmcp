@@ -564,8 +564,9 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     // The values a Finally hook set on the state before the throw the runner drops, such as a job's answer, are put back
     const restoreState = (before: Readonly<Record<string, unknown>>) => {
+      const state = context.state as unknown as Record<string, unknown>;
       for (const key of Object.keys(context.state.snapshot())) {
-        if (!(key in before)) context.state.set(key as never, undefined as never);
+        if (!(key in before)) delete state[key];
       }
       context.state.set(before as never);
     };
