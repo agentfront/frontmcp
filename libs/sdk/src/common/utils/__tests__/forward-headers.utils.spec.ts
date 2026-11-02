@@ -70,6 +70,12 @@ describe('forward-headers utils', () => {
       const forwards = createHeaderForwarder(['x-forwarded-po*']);
       expect(forwards?.('x-forwarded-port')).toBe(false);
     });
+
+    it("never forwards content-length: an outbound request's body has its own length", () => {
+      const forwards = createHeaderForwarder(['content-*']);
+      expect(forwards?.('content-type')).toBe(true);
+      expect(forwards?.('Content-Length')).toBe(false);
+    });
   });
 
   describe('http.forwardHeaders validation', () => {
@@ -93,6 +99,10 @@ describe('forward-headers utils', () => {
       ['x-*'],
       ['x-forwarded-*'],
       ['x-real-ip'],
+      ['x-forwarded-port'],
+      ['proxy-tenant'],
+      ['proxy-t*'],
+      ['content-*'],
     ])('refuses %s with a message naming it', (glob) => {
       const result = httpOptionsSchema.safeParse({ forwardHeaders: [glob] });
       expect(result.success).toBe(false);

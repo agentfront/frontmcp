@@ -167,7 +167,9 @@ describe('http.forwardHeaders at boot', () => {
       expect(run.status).not.toBe(0);
       expect(output.match(/InvalidDecoratorMetadataError: @FrontMcp invalid metadata for "http"/)?.[0]).toBeDefined();
       expect(
-        output.match(/FrontMCP never forwards authorization, cookie, proxy-\*, hop-by-hop or client-address/)?.[0],
+        output.match(
+          /FrontMCP never forwards authorization, cookie, proxy-\*, hop-by-hop, content-length or client-address/,
+        )?.[0],
       ).toBeDefined();
     } finally {
       closeSync(outputFd);

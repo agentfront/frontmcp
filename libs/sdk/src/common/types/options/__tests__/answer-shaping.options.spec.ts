@@ -73,7 +73,9 @@ describe('answer shaping options', () => {
     it('fails @FrontMcp at boot for authorization', () => {
       const boot = bootWith({ http: { forwardHeaders: ['x-acme-*', 'authorization'] } });
       expect(boot).toThrow(InvalidDecoratorMetadataError);
-      expect(boot).toThrow(/"http"[\s\S]*never forwards authorization, cookie, proxy-\*, hop-by-hop or client-address/);
+      expect(boot).toThrow(
+        /"http"[\s\S]*never forwards authorization, cookie, proxy-\*, hop-by-hop, content-length or client-address/,
+      );
     });
   });
 });
