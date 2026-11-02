@@ -1,4 +1,4 @@
-import { parseTypedKey } from '../flow.instance';
+import { parseTypedKey, stageBasesOf } from '../flow.instance';
 
 describe('parseTypedKey', () => {
   it.each([
@@ -12,5 +12,15 @@ describe('parseTypedKey', () => {
 
   it.each(['execute', 'finalize', 'finally', 'will'])('reads %s as a plain stage name', (key) => {
     expect(parseTypedKey(key)).toEqual({ base: key });
+  });
+});
+
+describe('stageBasesOf', () => {
+  it('runs a typed key with its base stage, never as a stage of its own', () => {
+    expect(stageBasesOf(['execute', 'finallyExecute', 'willExecute'])).toEqual(['execute']);
+  });
+
+  it('keeps a stage named finally<Something> a stage when the group lists no <something> stage, as before Finally hooks', () => {
+    expect(stageBasesOf(['parse', 'finallyCheck'])).toEqual(['parse', 'finallyCheck']);
   });
 });
