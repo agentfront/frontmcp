@@ -26,6 +26,10 @@ export interface CreateContainerOptions {
   apps?: AppType[];
   logging?: LoggingOptionsInput;
   lifecycle?: LifecycleOptionsInput;
+  /** Start the `@Duty` providers, as a server does once it serves; `dispose()` stops them. @default false */
+  runDuties?: boolean;
+  /** The server's name, as in `@FrontMcp({ info })`: duties share their leases with that server's. */
+  info?: { name: string };
 }
 
 /** The providers of a server, built without its tools, resources, prompts, flows or transport. */
@@ -43,11 +47,16 @@ const createContainerOptionsSchema = z.object({
   apps: z.array(annotatedFrontMcpAppSchema).optional().default([]),
   logging: loggingOptionsSchema.optional(),
   lifecycle: lifecycleOptionsSchema.optional(),
+  runDuties: z.boolean({ message: 'runDuties must be true or false' }).optional(),
+  info: z.object({ name: z.string().min(1, 'info.name must not be empty') }).optional(),
 } satisfies RawZodShape<CreateContainerOptions>);
 
-/** Build the providers a server would (same tokens, scopes and `onBootstrap()` order) and nothing else; no `onReady()`. */
+/**
+ * Build the providers a server would (same tokens, scopes and `onBootstrap()` order) and nothing else; no `onReady()`,
+ * and no duty runs unless `runDuties` asks.
+ */
 export async function createContainer(options: CreateContainerOptions): Promise<FrontMcpContainer> {
-  const { providers, apps, logging, lifecycle } = createContainerOptionsSchema.parse(options);
+  const { providers, apps, logging, lifecycle, runDuties } = createContainerOptionsSchema.parse(options);
   const root = new ProviderRegistry(
     [{ name: 'frontmcp:config', provide: FrontMcpConfig, useValue: { ...options, logging, lifecycle } }],
     undefined,
@@ -72,6 +81,10 @@ export async function createContainer(options: CreateContainerOptions): Promise<
       const appProviders = new ProviderRegistry(collectAppMetadata(app).providers ?? [], serverProviders);
       registries.push(appProviders);
       await appProviders.ready;
+    }
+    if (runDuties) {
+      const { startDuties } = await import('../duty/duty.lifecycle.js');
+      for (const registry of registries) await startDuties(registry);
     }
   } catch (error) {
     await dispose();
