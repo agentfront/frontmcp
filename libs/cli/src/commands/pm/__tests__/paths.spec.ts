@@ -91,9 +91,19 @@ describe('pm sockets directory', () => {
   posixIt('creates ~/.frontmcp/sockets owner-only (0700)', () => {
     const paths = pathsUnder(home);
 
-    paths.ensurePmDirs();
+    paths.ensureSocketsDir();
 
     expect(fs.statSync(paths.PM_DIRS.sockets).mode & 0o777).toBe(0o700);
+  });
+
+  posixIt('leaves the sockets directory mode to the commands that start a socket server', () => {
+    const paths = pathsUnder(home);
+    fs.mkdirSync(paths.PM_DIRS.sockets, { recursive: true, mode: 0o755 });
+    fs.chmodSync(paths.PM_DIRS.sockets, 0o755);
+
+    paths.ensurePmDirs();
+
+    expect(fs.statSync(paths.PM_DIRS.sockets).mode & 0o777).toBe(0o755);
   });
 
   posixIt(

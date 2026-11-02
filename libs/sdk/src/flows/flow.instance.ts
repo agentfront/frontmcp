@@ -104,6 +104,13 @@ export function parseTypedKey(k: string): { base: string; type?: 'will' | 'did' 
   return { base: k };
 }
 
+/** The error a fail() carried, or an Error naming why the flow was aborted. */
+function failureOf(control: FlowControl): unknown {
+  const originalError = (control as { originalError?: unknown }).originalError;
+  if (originalError !== undefined) return originalError;
+  return control.type === 'abort' ? new InternalMcpError(`Flow aborted: ${String(control.output)}`) : control;
+}
+
 const stageBasesByGroup = new WeakMap<readonly string[], string[]>();
 
 /** The base stages a plan group runs, in order: a typed key runs with its base, and a repeated base runs once. */
@@ -584,11 +591,10 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       return FAILED_OUTCOMES.has(innerResult.outcome) ? { outcome: 'ok' } : innerResult;
     };
 
-    // `state.flowError` keeps the run's first failure, the Error a stage threw or gave `fail()`, for what runs after it
+    // `state.flowError` keeps the run's first failure (a thrown Error, a `fail()` or an abort) for what runs after it
     const recordFailure = (control: unknown) => {
       if (context.state.get('flowError' as never)) return;
-      const failure =
-        control instanceof FlowControl ? ((control as { originalError?: unknown }).originalError ?? control) : control;
+      const failure = control instanceof FlowControl ? failureOf(control) : control;
       const flowError =
         failure instanceof Error
           ? failure
@@ -629,7 +635,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     // Then the stage's Finally hooks run, whatever its outcome, with its failure recorded for them.
     const runOneStage = async (stageName: string, stopOnRespond: boolean): Promise<StageResult> => {
       const result = await runStageSteps(stageName, stopOnRespond);
-      if (result.outcome === 'fail' || result.outcome === 'unknown_error') recordFailure(result.control);
+      if (FAILED_OUTCOMES.has(result.outcome)) recordFailure(result.control);
       const finallyKey = stageKeysOf(stageName).finally;
       if (hasEntries(finallyKey)) await runList(finallyKey, { ignoreThrows: true });
       return result;
