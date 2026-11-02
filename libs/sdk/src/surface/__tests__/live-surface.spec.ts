@@ -1,4 +1,5 @@
 import type { EnabledOption, EnabledSource } from '../../common/metadata/enabled.metadata';
+import { STATELESS_SESSION_ID } from '../../transport/transport.types';
 import { LiveSurface, surfaceHash, type LiveSurfaceScope } from '../live-surface';
 
 class TestSource implements EnabledSource {
@@ -39,12 +40,15 @@ class TestRegistry {
   }
 }
 
-function testScope() {
+function testScope(connected: (sessionId: string) => boolean = () => true) {
   return {
     tools: new TestRegistry(),
     resources: new TestRegistry(),
     prompts: new TestRegistry(),
-    notifications: { sendNotificationToSession: jest.fn() },
+    notifications: {
+      sendNotificationToSession: jest.fn(),
+      getRegisteredServer: jest.fn((sessionId: string) => (connected(sessionId) ? {} : undefined)),
+    },
     logger: { warn: jest.fn() },
   };
 }
@@ -254,6 +258,22 @@ describe('LiveSurface', () => {
       expect(surface.isStale('first')).toBe(true);
       expect(surface.isStale('second')).toBe(false);
       expect(surface.isStale('third')).toBe(true);
+      surface.stop();
+    });
+
+    it('remembers only connected sessions, so per-request ids push none of them out', () => {
+      const scope = testScope((sessionId) => sessionId !== 'anon:request-1' && sessionId !== 'anon:request-2');
+      const surface = surfaceOf(scope, { maxSessions: 1 });
+      surface.start();
+      surface.recordToolList('connected', ['a']);
+      surface.recordToolList('anon:request-1', ['a']);
+      surface.recordToolList('anon:request-2', ['a']);
+      surface.recordToolList(STATELESS_SESSION_ID, ['a']);
+      scope.tools.emit();
+
+      expect(surface.isStale('connected')).toBe(true);
+      expect(surface.isStale('anon:request-2')).toBe(false);
+      expect(surface.isStale(STATELESS_SESSION_ID)).toBe(false);
       surface.stop();
     });
   });

@@ -41,7 +41,7 @@ The `@Resource` decorator accepts:
 - `description` (optional) -- human-readable description
 - `mimeType` (optional) -- MIME type of the resource content
 - `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
-- `enabled` (optional) -- `true`/`false`, or an `EnabledSource` such as `fileSignal('./features.json', 'reports')` that turns the resource on and off while sessions are live. Off: left out of `resources/list`, and `resources/read` answers `FEATURE_OFF` (403, `data.status` and the source's `data.remedy`); a change sends `notifications/resources/list_changed`. See [`enabled`](../../create-tool/references/availability.md#enabled--turned-on-and-off-while-sessions-are-live).
+- `enabled` (optional) -- `true`/`false`, or an `EnabledSource` such as `fileSignal('./features.json', 'reports')` that turns the resource on and off while sessions are live. Off: left out of `resources/list`, and `resources/read` and `resources/subscribe` answer `FEATURE_OFF` (403, `data.status` and the source's `data.remedy`); a change sends `notifications/resources/list_changed`. See [`enabled`](../../create-tool/references/availability.md#enabled--turned-on-and-off-while-sessions-are-live).
 
 ### Class-Based Pattern
 

@@ -79,6 +79,25 @@ describe('fileSignal', () => {
     unsubscribe();
   });
 
+  it('keeps its last value while a write leaves the file empty or half written', async () => {
+    await writeFile(file, JSON.stringify({ reviews: true }));
+    const signal = fileSignal(file, 'reviews', { pollIntervalMs: 20, logger: warnings() });
+    const listener = jest.fn();
+    const unsubscribe = signal.subscribe(listener);
+    await until(() => (signal as unknown as { value?: boolean }).value === true);
+
+    for (const halfWritten of ['', '{"reviews": tr']) {
+      await writeFile(file, halfWritten);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(await signal.get()).toBe(true);
+    }
+    await writeFile(file, JSON.stringify({ reviews: true }));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
   it('answers its default for a missing file, and logs that once', async () => {
     const logger = warnings();
     const signal = fileSignal(file, 'reviews', { logger });

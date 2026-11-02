@@ -5,7 +5,7 @@
  */
 import 'reflect-metadata';
 
-import type { CallToolResult } from '@frontmcp/protocol';
+import type { CallToolResult, GetPromptResult, ReadResourceResult } from '@frontmcp/protocol';
 
 import {
   App,
@@ -18,8 +18,6 @@ import {
   Tool,
   ToolContext,
   type EnabledSource,
-  type GetPromptResult,
-  type ReadResourceResult,
 } from '../../common';
 import { connect } from '../../direct';
 import type { DirectClient } from '../../direct/client.types';
@@ -275,6 +273,11 @@ describe('a live surface through the flows', () => {
       }
     });
 
+    it('refuse a subscription to a resource that is off, as its read is refused', async () => {
+      const refusal = await refusalOf(client.subscribeResource('live://off'));
+      expect(refusal?.data).toMatchObject({ code: 'FEATURE_OFF', status: 403, entryType: 'Resource' });
+    });
+
     it('refuse a get of a prompt that is off', async () => {
       const refusal = await refusalOf(client.getPrompt('off-prompt'));
       expect(refusal?.data).toMatchObject({
@@ -346,6 +349,27 @@ describe('a live surface through the flows', () => {
       expect(missing._meta).toMatchObject({ code: 'TOOL_NOT_FOUND' });
     });
 
+    it("answers the task runner's run of a task as usual: the call that created it was checked", async () => {
+      const [scope] = (await FrontMcpInstance.createForGraph(serverConfig)).getScopes();
+      scope.notifications.registerServer(
+        'session-task',
+        {} as Parameters<typeof scope.notifications.registerServer>[1],
+      );
+      await scope.runFlowForOutput('tools:list-tools', {
+        request: { method: 'tools/list', params: {} },
+        ctx: { authInfo: { sessionId: 'session-task' } },
+      });
+      scope.tools.notifyListChanged();
+
+      const run = await refusalOf(
+        scope.runFlowForOutput('tools:call-tool', {
+          request: { method: 'tools/call', params: { name: 'no_such_tool', arguments: {} } },
+          ctx: { authInfo: { sessionId: 'session-task' }, taskId: 'task-1' },
+        }),
+      );
+      expect(run).toMatchObject({ code: 'TOOL_NOT_FOUND' });
+    });
+
     it('lets a stale session call a tool that is still on', async () => {
       await toolNames(client);
       reviews.set(false);
@@ -361,6 +385,10 @@ describe('a live surface through the flows', () => {
 
     it("is carried by tools/list for every tool name the session was shown, and kept as the session's", async () => {
       const [scope] = (await FrontMcpInstance.createForGraph(serverConfig)).getScopes();
+      scope.notifications.registerServer(
+        'session-hash',
+        {} as Parameters<typeof scope.notifications.registerServer>[1],
+      );
       const listing = await scope.runFlowForOutput('tools:list-tools', {
         request: { method: 'tools/list', params: {} },
         ctx,
@@ -395,8 +423,14 @@ describe('a live surface through the flows', () => {
 
   describe('validation', () => {
     it('refuses an enabled that is neither a boolean nor a source, naming the option', () => {
+      class BadTool extends ToolContext {
+        async execute() {
+          return {};
+        }
+      }
+
       expect(() =>
-        Tool({ name: 'bad_enabled', inputSchema: {}, enabled: 'yes' as unknown as boolean })(class BadTool {}),
+        Tool({ name: 'bad_enabled', inputSchema: {}, enabled: 'yes' as unknown as boolean })(BadTool),
       ).toThrow('`enabled` must be a boolean or an EnabledSource');
     });
   });

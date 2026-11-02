@@ -373,12 +373,14 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   /**
    * A client call from a session whose tool list changed since it last listed, to a tool that is not in the current
    * list (unknown, or `enabled` off): answered `STALE_TOOL_LIST`, and the session is sent `tools/list_changed`.
+   * The task runner's run of a task-augmented call is not checked: the call that created the task was.
    */
   @Stage('checkSurface')
   async checkSurface() {
     const sessionId = this.state.authInfo?.sessionId;
     const surface = this.scope.surface;
-    if (!surface || !sessionId || !this.isClientCall() || !surface.isStale(sessionId)) return;
+    const callerCtx = this.input.ctx as { taskId?: string } | undefined;
+    if (!surface || !sessionId || callerCtx?.taskId || !this.isClientCall() || !surface.isStale(sessionId)) return;
     const { name } = this.state.required.input;
     const tool = resolvedTools.peek(this.rawInput, name) ?? lookupTool(this.scope, name);
     if (tool && (await isEntryEnabled(tool.metadata.enabled, this.tryGetContext(), this.logger))) return;

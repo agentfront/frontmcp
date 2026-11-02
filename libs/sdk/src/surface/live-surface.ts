@@ -2,6 +2,7 @@ import { sha256Hex } from '@frontmcp/utils';
 
 import type { ListChangedKind } from '../common/interfaces/flow.interface';
 import { isEnabledSource, type EnabledOption, type EnabledSource } from '../common/metadata/enabled.metadata';
+import { STATELESS_SESSION_ID } from '../transport/transport.types';
 
 /** The `_meta` key of a list result that carries the hash of what the list shows. */
 export const SURFACE_META_KEY = 'frontmcp/surface';
@@ -21,6 +22,7 @@ export interface LiveSurfaceScope {
   readonly prompts: SurfaceRegistry;
   readonly notifications: {
     sendNotificationToSession(sessionId: string, method: 'notifications/tools/list_changed'): void;
+    getRegisteredServer(sessionId: string): unknown;
   };
   readonly logger: { warn(message: string): void };
 }
@@ -101,9 +103,9 @@ export class LiveSurface {
     this.pending.set(kind, timer);
   }
 
-  /** Remember that `sessionId` was just listed the tools `names`; returns their surface hash. */
+  /** Remember that `sessionId`, when connected here, was just listed the tools `names`; returns their surface hash. */
   recordToolList(sessionId: string | undefined, names: readonly string[]): string {
-    if (sessionId) {
+    if (this.isConnectedSession(sessionId)) {
       this.listedVersions.delete(sessionId);
       this.listedVersions.set(sessionId, this.toolsVersion);
       if (this.listedVersions.size > this.maxSessions) {
@@ -124,6 +126,12 @@ export class LiveSurface {
   refreshSession(sessionId: string): void {
     if (this.listedVersions.has(sessionId)) this.listedVersions.set(sessionId, this.toolsVersion);
     this.scope.notifications.sendNotificationToSession(sessionId, 'notifications/tools/list_changed');
+  }
+
+  /** The id of a 2026-07-28 or stateless request names that request, not a session that can be told of a change. */
+  private isConnectedSession(sessionId: string | undefined): sessionId is string {
+    if (!sessionId || sessionId === STATELESS_SESSION_ID) return false;
+    return this.scope.notifications.getRegisteredServer(sessionId) !== undefined;
   }
 
   private registryOf(kind: ListChangedKind): SurfaceRegistry {

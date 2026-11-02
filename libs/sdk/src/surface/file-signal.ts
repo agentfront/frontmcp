@@ -4,7 +4,7 @@ import type { EnabledSource } from '../common/metadata/enabled.metadata';
 import { InvalidFileSignalError, type ErrorRemedy } from '../errors/mcp.error';
 
 export interface FileSignalOptions {
-  /** The answer while the file is missing, is not JSON, or has no boolean under the key. Defaults to `false`. */
+  /** The answer while the file is missing or has no boolean under the key. Defaults to `false`. */
   defaultValue?: boolean;
   /** How often the file is read again, on top of watching it (and instead of it where watching fails). Defaults to 2000. */
   pollIntervalMs?: number;
@@ -109,7 +109,8 @@ class FileSignal implements EnabledSource {
     try {
       parsed = JSON.parse(content);
     } catch {
-      return this.fallBack(`${this.path} is not valid JSON`);
+      // A write in progress leaves the file empty or half written: keep the value last read
+      return this.fallBack(`${this.path} is not valid JSON`, this.value);
     }
     const value = (parsed as Record<string, unknown> | null)?.[this.key];
     if (typeof value !== 'boolean') return this.fallBack(`${this.path} has no boolean "${this.key}"`);
@@ -117,19 +118,22 @@ class FileSignal implements EnabledSource {
     return value;
   }
 
-  private fallBack(problem: string): boolean {
+  private fallBack(problem: string, lastValue?: boolean): boolean {
+    const value = lastValue ?? this.defaultValue;
     if (this.problem !== problem) {
       this.problem = problem;
-      this.logger.warn(`fileSignal: ${problem}; "${this.key}" is ${this.defaultValue ? 'on' : 'off'}, its default.`);
+      const kept = lastValue === undefined ? 'its default' : 'its last value';
+      this.logger.warn(`fileSignal: ${problem}; "${this.key}" is ${value ? 'on' : 'off'}, ${kept}.`);
     }
-    return this.defaultValue;
+    return value;
   }
 }
 
 /**
  * An `EnabledSource` that reads the boolean under `key` in the JSON file at `path`, and follows the file as it
- * changes: it watches the file's directory and reads the file again every `pollIntervalMs`. A missing or
- * unparsable file means the default (`false`), reported once.
+ * changes: it watches the file's directory and reads the file again every `pollIntervalMs`. A missing file means the
+ * default (`false`); content that is not JSON, as a write in progress leaves it, keeps the last value read (the
+ * default before one was read). Each problem is reported once.
  *
  * @example
  * ```ts
