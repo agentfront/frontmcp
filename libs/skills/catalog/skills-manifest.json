@@ -1865,7 +1865,7 @@
                 "Using `ToolHook` pre-built export instead of calling `FlowHooksOf('tools:call-tool')` directly",
                 "Destructuring `Will` and `Did` decorators from the hook object",
                 "Setting `priority: -100` on `@Will` so the logging hook runs before the stage's other `@Will` hooks (lower runs first)",
-                "Reading the tool name and arguments from `ctx.state.required.input` and logging with `ctx.logger`",
+                "Reading the tool name and arguments from `ctx.toolName` and `ctx.toolInput` and logging with `ctx.logger`",
                 "Registering a plugin in the `plugins` array of `@App`"
               ]
             },

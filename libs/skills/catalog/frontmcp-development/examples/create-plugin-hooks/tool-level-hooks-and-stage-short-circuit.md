@@ -81,7 +81,7 @@ const { Stage } = ToolHook;
 export class MockPlugin {
   // Joins the `execute` stage and runs before the tool's own step (same priority).
   @Stage('execute', {
-    filter: (ctx) => ctx.state.required.input.name === 'fetch_weather',
+    filter: (ctx) => ctx.toolName === 'fetch_weather',
   })
   mockWeather(ctx: FlowCtxOf<'tools:call-tool'>) {
     // Ends the flow with this result, so `fetch_weather`'s execute() does not run.

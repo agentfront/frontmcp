@@ -252,6 +252,16 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
   logger = this.scopeLogger.child('CallToolFlow');
 
+  /** The tool's name: the one `findTool` resolved, else the name the call asks for. */
+  get toolName(): string {
+    return this.state.tool?.metadata.name ?? (this.state.input ?? this.input.request.params).name;
+  }
+
+  /** The arguments the call passes to the tool, as `Will` hooks left them. */
+  get toolInput(): Record<string, unknown> | undefined {
+    return (this.state.input ?? this.input.request.params).arguments;
+  }
+
   @Stage('parseInput')
   async parseInput() {
     this.logger.verbose('parseInput:start');

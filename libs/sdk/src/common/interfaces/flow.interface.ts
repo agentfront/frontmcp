@@ -2,10 +2,12 @@ import { type Token, type Type } from '@frontmcp/di';
 import { type z } from '@frontmcp/lazy-zod';
 import { brandClass, isBrandedInstance } from '@frontmcp/utils';
 
-import type { FrontMcpContext } from '../../context/frontmcp-context';
+import type { FrontMcpContext, RequestMetadata } from '../../context/frontmcp-context';
 import { FrontMcpContextStorage } from '../../context/frontmcp-context-storage';
+import type { ClientInfo } from '../../notification';
 import { type HookEntry, type ScopeEntry } from '../entries';
 import { type FlowMetadata, type FlowName } from '../metadata';
+import { type TransportProtocolType } from '../types';
 import { FlowState, type FlowStateOf } from './internal/flow.utils';
 import { type FrontMcpLogger } from './logger.interface';
 
@@ -17,6 +19,27 @@ export type FlowStagesOf<N extends FlowName> = ExtendFlows[N]['stage'];
 export type FlowExecuteStagesOf<N extends FlowName> = ExtendFlows[N]['executeStage'];
 
 export type FlowControlType = 'respond' | 'fail' | 'abort' | 'next' | 'handled';
+
+/** The request a flow run serves, as a hook reads it (`ctx.request`); a field is undefined when the run has no such value. */
+export interface FlowRequestInfo {
+  /** The session the server verified for the request. */
+  readonly sessionId: string | undefined;
+  /** The client's name and version, sent with the request or at its session's initialize. */
+  readonly clientInfo: ClientInfo | undefined;
+  /** The request's user agent, content type, accept header, client IP and `x-frontmcp-*` headers. */
+  readonly metadata: RequestMetadata | undefined;
+  /** The transport the request's session was opened over, when its session records it (an anonymous one does not). */
+  readonly protocol: TransportProtocolType | undefined;
+}
+
+/** The lists `ctx.notify.listChanged()` can tell every connected client changed. */
+export type ListChangedKind = 'tools' | 'resources' | 'prompts';
+
+/** Notifications a flow run sends to the connected clients (`ctx.notify`). */
+export interface FlowNotifier {
+  /** Sends `notifications/<kind>/list_changed` to every connected session. */
+  listChanged(kind: ListChangedKind): void;
+}
 
 function setStackTraceLimit(limit: number): void {
   try {
@@ -117,6 +140,33 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
   get<T>(token: Token<T>): T {
     if (this.deps.has(token)) return this.deps.get(token) as T;
     return this.scope.providers.get(token);
+  }
+
+  /** The request this run serves; its fields are undefined when the run has no request context. */
+  get request(): FlowRequestInfo {
+    const context = this.tryGetContext();
+    const sessionId = context?.verifiedSessionId;
+    let clientInfo = context?.clientInfo;
+    if (!clientInfo && sessionId) clientInfo = this.scope.notifications.getClientInfo(sessionId);
+    return {
+      sessionId,
+      clientInfo,
+      metadata: context?.metadata,
+      protocol: context?.sessionMetadata?.protocol,
+    };
+  }
+
+  /** Notifications the run sends to the connected clients. */
+  get notify(): FlowNotifier {
+    return {
+      listChanged: (kind) => this.scope.notifications.broadcastNotification(`notifications/${kind}/list_changed`),
+    };
+  }
+
+  /** The first failure of the run (`state.flowError`), for the stages and `Finally` hooks after it. */
+  get error(): Error | undefined {
+    const flowError: unknown = this.state.get('flowError' as never);
+    return flowError instanceof Error ? flowError : undefined;
   }
 
   respond(output: FlowOutputOf<N>) {

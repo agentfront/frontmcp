@@ -28,6 +28,7 @@ const fixtureFiles = [
   'tool-must-fail.ts',
   'prompts-must-compile.ts',
   'hooks-must-compile.ts',
+  'hooks-must-fail.ts',
   'host-must-compile.ts',
   'skills-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
@@ -90,8 +91,12 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('prompts-must-compile.ts'))).toEqual([]);
   });
 
-  it('types the prompt, completion and Finally hooks, the scope channel accessors and server-level adapters', () => {
+  it('types the prompt, completion and Finally hooks, the hook ctx accessors, the scope channel accessors and server-level adapters', () => {
     expect(describeEach(inFixtureFile('hooks-must-compile.ts'))).toEqual([]);
+  });
+
+  it('rejects a hook whose parameter the flow ctx does not satisfy, for every hook decorator', () => {
+    expect(describeEach(inFixtureFile('hooks-must-fail.ts'))).toEqual([]);
   });
 
   it('types a custom host without enhancedHandler, and names Scope for the web-fetch helpers (#819)', () => {
