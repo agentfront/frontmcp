@@ -145,7 +145,7 @@ frontmcp socket ./src/main.ts -b --db ~/.my-tool/data.db
 
 The daemon accepts JSON-RPC requests over HTTP via the Unix socket, making it ideal for local MCP clients (Claude Code, IDE extensions) that need persistent tool access without a TCP port.
 
-The socket is the daemon's only boundary, so it is created owner-only (`0600`): only the user running the daemon can connect. `~/.frontmcp/sockets` is created `0700` and `~/.frontmcp` loses group and other write, and startup refuses a socket whose directory, or any directory above it, another user owns or the group or others can write to (unless it has the sticky bit, as `/tmp` does). A start replaces a stale socket a crashed daemon left behind, but refuses a live one (another daemon is answering on it), a regular file, or another user's socket instead of removing it.
+The socket is the daemon's only boundary, so it is created owner-only (`0600`): only the user running the daemon can connect. `~/.frontmcp/sockets` is created `0700` and `~/.frontmcp` loses group and other write, and startup refuses a socket whose directory, or any directory above it (through symlinks too), another user (other than root) owns or the group or others can write to (unless it has the sticky bit, as `/tmp` does). A start replaces a stale socket a crashed daemon left behind, but refuses a live one (another daemon is answering on it), a regular file, or another user's socket instead of removing it.
 
 ## Process Management
 

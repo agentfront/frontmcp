@@ -1827,6 +1827,10 @@ daemonCmd
     fs.mkdirSync(socketDir, { recursive: true, mode: 0o700 });
     var homeMode = fs.statSync(FRONTMCP_HOME).mode & 0o7777;
     if (homeMode & 0o022) fs.chmodSync(FRONTMCP_HOME, homeMode & ~0o022);
+    if (fs.lstatSync(socketDir).isSymbolicLink()) {
+      console.error('Refusing to use ' + socketDir + ': it is a symlink. Replace it with a directory only you can write to.');
+      process.exit(1);
+    }
     fs.chmodSync(socketDir, 0o700);
 
     var usePort = !!opts.port;

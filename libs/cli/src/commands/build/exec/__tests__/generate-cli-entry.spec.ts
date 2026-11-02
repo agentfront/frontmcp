@@ -990,6 +990,13 @@ describe('generateCliEntry', () => {
       expect(source).toContain('if (homeMode & 0o022) fs.chmodSync(FRONTMCP_HOME, homeMode & ~0o022)');
     });
 
+    it('refuses a symlinked sockets directory before setting its mode', () => {
+      const source = generateCliEntry(makeOptions());
+      const symlinkCheck = source.indexOf('fs.lstatSync(socketDir).isSymbolicLink()');
+      expect(symlinkCheck).toBeGreaterThan(-1);
+      expect(source.indexOf('fs.chmodSync(socketDir, 0o700)')).toBeGreaterThan(symlinkCheck);
+    });
+
     it('removes a leftover socket only once no daemon is running', () => {
       const source = generateCliEntry(makeOptions());
       const runningCheck = source.indexOf("console.log('Daemon already running");

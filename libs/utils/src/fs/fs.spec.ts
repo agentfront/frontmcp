@@ -387,7 +387,9 @@ describe('FS Utils', () => {
   });
 
   describe('lstat', () => {
-    it('describes a symlink itself, not its target', async () => {
+    const symlinkIt = process.platform === 'win32' ? it.skip : it;
+
+    symlinkIt('describes a symlink itself, not its target, where creating one needs no elevated rights', async () => {
       const target = path.join(tempDir, 'target.txt');
       const link = path.join(tempDir, 'link.txt');
       await fs.promises.writeFile(target, 'content');
