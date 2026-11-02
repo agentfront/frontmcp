@@ -18,6 +18,7 @@ export {
   StaleToolListError,
   InvalidFileSignalError,
   // Resource errors
+  InvalidResourceStoreError,
   ResourceNotFoundError,
   ResourceReadError,
   InvalidResourceUriError,

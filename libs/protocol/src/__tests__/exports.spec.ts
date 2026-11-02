@@ -6,8 +6,12 @@ import { StdioServerTransport as SdkStdioServerTransport } from '@modelcontextpr
 import { StreamableHTTPServerTransport as SdkStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { WebStandardStreamableHTTPServerTransport as SdkWebStandardTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js';
+import { AjvJsonSchemaValidator as SdkAjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv-provider.js';
 
-import { Server as BrowserServer } from '../browser-mcp-server';
+import {
+  AjvJsonSchemaValidator as BrowserAjvJsonSchemaValidator,
+  Server as BrowserServer,
+} from '../browser-mcp-server';
 import * as browserStreamableHttp from '../browser-mcp-streamable-http';
 import * as browserServerTypes from '../browser-server-types';
 import { StdioClientTransport as BrowserStdioClientTransport } from '../browser-stdio-client';
@@ -15,7 +19,7 @@ import { StdioServerTransport as BrowserStdioServerTransport } from '../browser-
 import * as clients from '../clients';
 import { InMemoryTransport } from '../in-memory';
 import * as protocol from '../index';
-import { Server as NodeServer } from '../node-mcp-server';
+import { AjvJsonSchemaValidator as NodeAjvJsonSchemaValidator, Server as NodeServer } from '../node-mcp-server';
 import * as nodeStreamableHttp from '../node-mcp-streamable-http';
 import * as nodeServerTypes from '../node-server-types';
 import { StdioServerTransport as NodeStdioServerTransport } from '../node-stdio-server';
@@ -26,6 +30,8 @@ describe('@frontmcp/protocol exports', () => {
   it('re-exports the MCP SDK server, transports and types for Node', () => {
     expect(NodeServer).toBe(SdkServer);
     expect(BrowserServer).toBe(SdkServer);
+    expect(NodeAjvJsonSchemaValidator).toBe(SdkAjvJsonSchemaValidator);
+    expect(BrowserAjvJsonSchemaValidator).toBe(SdkAjvJsonSchemaValidator);
     expect(nodeStreamableHttp.StreamableHTTPServerTransport).toBe(SdkStreamableHTTPServerTransport);
     expect(nodeStreamableHttp.WebStandardStreamableHTTPServerTransport).toBe(SdkWebStandardTransport);
     expect(NodeStdioServerTransport).toBe(SdkStdioServerTransport);
@@ -37,6 +43,7 @@ describe('@frontmcp/protocol exports', () => {
 
   it('exports the protocol surface from the package root', () => {
     expect(protocol.LATEST_PROTOCOL_VERSION).toBe(LATEST_PROTOCOL_VERSION);
+    expect(protocol.AjvJsonSchemaValidator).toBe(SdkAjvJsonSchemaValidator);
     expect(protocol.PROTOCOL_2026_07_28).toBe('2026-07-28');
     expect(protocol.StdioServerTransport).toBe(SdkStdioServerTransport);
   });

@@ -99,32 +99,81 @@ export function registerSkillsCommands(program: Command): void {
 
   skills
     .command('export')
-    .description('Convert a catalog skill into a Cursor / Windsurf / Copilot rule file in the current directory')
+    .description(
+      "Convert a catalog skill into a Cursor / Windsurf / Copilot rule file, or export the project's own @Skill entries to agent skills folders (--from-entry)",
+    )
     .option(
       '-t, --target <target>',
       'Target IDE: cursor | windsurf | copilot (default: skills.exportTarget from frontmcp.config, else cursor)',
     )
     .option('-n, --name <name>', 'Skill name to export (required unless --all is set)')
-    .option('-a, --all', 'Export every skill in the catalog')
-    .option('-d, --out <directory>', 'Output directory (default: cwd)')
-    .action(async (options: { target?: string; name?: string; all?: boolean; out?: string }) => {
-      const validTargets = ['cursor', 'windsurf', 'copilot'] as const;
-      type Target = (typeof validTargets)[number];
-      const { loadSkillsDefaults } = await import('./config-defaults.js');
-      const defaults = await loadSkillsDefaults((program.opts() as { config?: string }).config);
-      const t = (options.target ?? defaults.exportTarget ?? 'cursor') as Target;
-      if (!validTargets.includes(t)) {
-        console.error(`Invalid target "${options.target}". Valid targets: ${validTargets.join(', ')}`);
-        process.exit(1);
-      }
-      const { exportSkills } = await import('./export.js');
-      await exportSkills({
-        target: t,
-        name: options.name,
-        all: options.all,
-        outDir: options.out,
-      });
-    });
+    .option('-a, --all', 'Export every skill in the catalog (or every @Skill entry with --from-entry)')
+    .option(
+      '-d, --out <directory>',
+      'Output directory (default: cwd); with --from-entry, the folder that gets the skills folders',
+    )
+    .option('--from-entry <path>', 'Export the @Skill entries of this project entry file instead of catalog skills')
+    .option(
+      '-p, --provider <providers>',
+      'With --from-entry: claude, codex, or both comma-separated (default: skills.provider from frontmcp.config, else claude)',
+    )
+    .option('--check', 'With --from-entry: write nothing, and exit 1 when an exported copy drifted from the source')
+    .action(
+      async (options: {
+        target?: string;
+        name?: string;
+        all?: boolean;
+        out?: string;
+        fromEntry?: string;
+        provider?: string;
+        check?: boolean;
+      }) => {
+        const { loadSkillsDefaults } = await import('./config-defaults.js');
+        const defaults = await loadSkillsDefaults((program.opts() as { config?: string }).config);
+        if (options.fromEntry) {
+          if (options.target) {
+            console.error('--target exports catalog skills; use --provider with --from-entry.');
+            process.exit(1);
+          }
+          const validProviders = ['claude', 'codex'] as const;
+          type Provider = (typeof validProviders)[number];
+          const providers = (options.provider ?? defaults.provider ?? 'claude').split(',').map((p) => p.trim());
+          const invalid = providers.filter((p) => !validProviders.includes(p as Provider));
+          if (invalid.length > 0) {
+            console.error(`Invalid provider "${invalid.join(', ')}". Valid providers: ${validProviders.join(', ')}`);
+            process.exit(1);
+          }
+          const { exportSkillsFromEntry } = await import('./export-from-entry.js');
+          await exportSkillsFromEntry({
+            entry: options.fromEntry,
+            providers: [...new Set(providers)] as Provider[],
+            name: options.name,
+            all: options.all,
+            outDir: options.out,
+            check: options.check,
+          });
+          return;
+        }
+        if (options.provider || options.check) {
+          console.error('--provider and --check apply to --from-entry exports.');
+          process.exit(1);
+        }
+        const validTargets = ['cursor', 'windsurf', 'copilot'] as const;
+        type Target = (typeof validTargets)[number];
+        const t = (options.target ?? defaults.exportTarget ?? 'cursor') as Target;
+        if (!validTargets.includes(t)) {
+          console.error(`Invalid target "${options.target}". Valid targets: ${validTargets.join(', ')}`);
+          process.exit(1);
+        }
+        const { exportSkills } = await import('./export.js');
+        await exportSkills({
+          target: t,
+          name: options.name,
+          all: options.all,
+          outDir: options.out,
+        });
+      },
+    );
 
   skills
     .command('publish')

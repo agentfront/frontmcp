@@ -1,5 +1,5 @@
 import { type Token } from '@frontmcp/di';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import {
   type EntryOwnerRef,
@@ -99,6 +99,7 @@ export class JobInstance<
       contextProviders?: unknown;
       attempt?: number;
       signal?: AbortSignal;
+      onProgress?: JobCtorArgs<In>['onProgress'];
     },
   ): JobContext<InSchema, OutSchema, In, Out> {
     const metadata = this.metadata;
@@ -117,6 +118,7 @@ export class JobInstance<
       authInfo,
       attempt: extra.attempt ?? 1,
       signal: extra.signal,
+      onProgress: extra.onProgress,
     };
 
     switch (this.record.kind) {

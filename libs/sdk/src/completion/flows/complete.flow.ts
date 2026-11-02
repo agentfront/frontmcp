@@ -1,7 +1,7 @@
 // file: libs/sdk/src/completion/flows/complete.flow.ts
 
 import { AuthorityDeniedError, resolveRequiredScopes, type AuthoritiesMetadata } from '@frontmcp/auth';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { CompleteRequestSchema, CompleteResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';

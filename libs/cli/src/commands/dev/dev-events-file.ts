@@ -2,10 +2,22 @@ import * as path from 'path';
 
 import { appendFile, ensureDir, writeFile } from '@frontmcp/utils';
 
-/** Empties the events file of a new `frontmcp dev` run, creating its folder. */
-export async function startEventsFile(file: string): Promise<void> {
-  await ensureDir(path.dirname(file));
-  await writeFile(file, '');
+/** Empties the events file of a new `frontmcp dev` run, creating its folder; false, after a warning, when it cannot. */
+export async function startEventsFile(file: string, warn: (message: string) => void): Promise<boolean> {
+  try {
+    await ensureDir(path.dirname(file));
+    await writeFile(file, '');
+    return true;
+  } catch (error) {
+    warn(`dev events are off: could not create ${file} (${error instanceof Error ? error.message : String(error)})`);
+    return false;
+  }
+}
+
+/** Clears the variables that make the server write dev events, or send them over IPC. */
+export function turnDevEventsOff(env: NodeJS.ProcessEnv): void {
+  env['FRONTMCP_DEV_EVENTS_FILE'] = '';
+  env['FRONTMCP_DEV_EVENTS_IPC'] = '';
 }
 
 export interface DevEventsWriter {

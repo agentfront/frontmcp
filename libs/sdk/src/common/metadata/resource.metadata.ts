@@ -1,9 +1,10 @@
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { IconSchema, type Icon } from '@frontmcp/protocol';
 import { entryAvailabilitySchema, isValidMcpUri, isValidMcpUriTemplate, type EntryAvailability } from '@frontmcp/utils';
 
 import { type RawZodShape } from '../types';
 import { enabledOptionSchema, type EnabledOption } from './enabled.metadata';
+import { resourceKeySchema, type ResourceKey } from './materialized.metadata';
 
 declare global {
   /**
@@ -105,6 +106,13 @@ interface ResourceMetadata extends ExtendFrontMcpResourceMetadata {
   enabled?: EnabledOption;
 
   /**
+   * The resource store key whose value this resource serves (`resourceStore().key(name)`). FrontMCP answers
+   * `resources/subscribe` for it and sends `notifications/resources/updated` whenever its revision changes, from a
+   * write in any process that shares the store. Extend `MaterializedResourceContext` to serve the value as it is.
+   */
+  from?: ResourceKey;
+
+  /**
    * Run `read` in a worker thread of the server's offload pool (Node only), so CPU-heavy work does not block the server.
    * The worker imports the module that declares the resource and builds the resource there, without a DI container:
    * `this.get()`, `this.scope`, `this.auth` and the request context throw there. It gets the URI and its parameters, and
@@ -152,6 +160,7 @@ export const frontMcpResourceMetadataSchema = z
     _meta: z.record(z.string(), z.unknown()).optional(),
     availableWhen: entryAvailabilitySchema.optional(),
     enabled: enabledOptionSchema.optional(),
+    from: resourceKeySchema.optional(),
     worker: resourceWorkerOptionSchema.optional(),
   } satisfies RawZodShape<ResourceMetadata, ExtendFrontMcpResourceMetadata>)
   .passthrough();
@@ -240,7 +249,11 @@ export const frontMcpResourceTemplateMetadataSchema = z
     enabled: enabledOptionSchema.optional(),
     worker: resourceWorkerOptionSchema.optional(),
   } satisfies RawZodShape<ResourceTemplateMetadata, ExtendFrontMcpResourceTemplateMetadata>)
-  .passthrough();
+  .passthrough()
+  .refine((metadata) => !('from' in metadata), {
+    message: '`from` serves one stored value at a fixed `uri`: declare it on @Resource, not on @ResourceTemplate',
+    path: ['from'],
+  });
 
 export {
   ResourceMetadata,

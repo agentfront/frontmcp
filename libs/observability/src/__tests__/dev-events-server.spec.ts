@@ -42,16 +42,23 @@ const pingCall = new Request('https://desk.example.com/', {
   }),
 });
 
-async function callEventsIn(file: string): Promise<unknown[]> {
-  const deadline = Date.now() + 2_000;
-  while (Date.now() < deadline && !(await fileExists(file))) await new Promise((resolve) => setTimeout(resolve, 10));
-  await new Promise((resolve) => setTimeout(resolve, 50));
+async function writtenCallEvents(file: string): Promise<unknown[]> {
   if (!(await fileExists(file))) return [];
   return (await readFile(file))
     .split('\n')
-    .filter((line) => line.length > 0)
+    .slice(0, -1)
     .map((line) => JSON.parse(line) as { type: string })
     .filter((event) => event.type === 'call');
+}
+
+/** The call events once the first is written, then 50 ms more, so a duplicate written behind it is counted. */
+async function callEventsIn(file: string): Promise<unknown[]> {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline && (await writtenCallEvents(file)).length === 0) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  return writtenCallEvents(file);
 }
 
 describe('a server frontmcp dev starts', () => {

@@ -258,6 +258,23 @@ describe('SqliteStorageAdapter', () => {
       expect(await adapter.expireIfEquals('lease', 'mine', 10)).toBe(false);
     });
 
+    it('setIfEquals replaces the value only while the key holds the expected one, and drops its TTL', async () => {
+      await adapter.set('board', 'v1', { ttlSeconds: 10 });
+      expect(await adapter.setIfEquals('board', 'v0', 'v2')).toBe(false);
+      expect(await adapter.get('board')).toBe('v1');
+      expect(await adapter.setIfEquals('board', 'v1', 'v2')).toBe(true);
+      expect(await adapter.get('board')).toBe('v2');
+      expect(await adapter.ttl('board')).toBe(-1);
+    });
+
+    it('setIfEquals returns false for a missing or expired key', async () => {
+      expect(await adapter.setIfEquals('missing', 'x', 'y')).toBe(false);
+      expect(await adapter.exists('missing')).toBe(false);
+      await adapter.set('board', 'v1', { ttlSeconds: 1 });
+      expireNow('board');
+      expect(await adapter.setIfEquals('board', 'v1', 'v2')).toBe(false);
+    });
+
     it('expireIfEquals rejects a TTL that is not a positive integer', async () => {
       await adapter.set('lease', 'mine');
       await expect(adapter.expireIfEquals('lease', 'mine', -1)).rejects.toBeInstanceOf(StorageTTLError);
@@ -275,6 +292,9 @@ describe('SqliteStorageAdapter', () => {
         await encrypted.set('lease', 'mine', { ttlSeconds: 10 });
         expect(await encrypted.expireIfEquals('lease', 'mine', 100)).toBe(true);
         expect(await encrypted.deleteIfEquals('lease', 'mine')).toBe(true);
+        await encrypted.set('board', 'v1');
+        expect(await encrypted.setIfEquals('board', 'v1', 'v2')).toBe(true);
+        expect(await encrypted.get('board')).toBe('v2');
         await encrypted.set('n', '41');
         expect(await encrypted.incr('n')).toBe(42);
       } finally {
@@ -318,10 +338,21 @@ describe('SqliteStorageAdapter', () => {
       ['delete', 'has', () => adapter.delete('k')],
       ['deleteIfEquals', 'get', () => adapter.deleteIfEquals('k', 'v')],
       ['expireIfEquals', 'get', () => adapter.expireIfEquals('k', 'v', 10)],
+      ['setIfEquals', 'get', () => adapter.setIfEquals('k', 'v', 'w')],
     ] as const)('%s holds the write lock from its read to its write', async (_name, read, operation) => {
       const seen = foreignWriteDuringRead(read);
       await operation();
       expect(seen.outcome).toBe('SQLITE_BUSY');
+    });
+
+    it("dataVersion() changes after another connection's commit, not after this connection's", async () => {
+      const before = await adapter.dataVersion();
+      await adapter.set('own', 'write');
+      expect(await adapter.dataVersion()).toBe(before);
+
+      foreign.prepare("INSERT OR REPLACE INTO kv (key, value) VALUES ('foreign', 'x')").run();
+
+      expect(await adapter.dataVersion()).not.toBe(before);
     });
   });
 

@@ -65,7 +65,8 @@ export async function shutdownProviders(
   }
 }
 
-async function outlasts(run: () => unknown, timeoutMs: number): Promise<boolean> {
+/** Run `run`, and answer true when it is still going after `timeoutMs` (it is not stopped). */
+export async function outlasts(run: () => unknown, timeoutMs: number): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<boolean>((resolve) => {
     timer = setTimeout(() => resolve(true), timeoutMs);

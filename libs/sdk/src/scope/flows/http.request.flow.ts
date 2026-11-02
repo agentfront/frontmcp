@@ -8,7 +8,7 @@ import {
   type TokenRefreshCallback,
 } from '@frontmcp/auth';
 import { GuardStorageUnavailableError, type GuardManager } from '@frontmcp/guard';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
 import { sessionVerifyOutputSchema } from '../../auth/flows/session.verify.flow';

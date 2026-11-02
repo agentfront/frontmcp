@@ -41,6 +41,15 @@ export {
   type BudgetOmission,
 } from './answer';
 export { fileSignal, SURFACE_META_KEY, surfaceHash, type FileSignalOptions, type LiveSurface } from './surface';
+export {
+  MATERIALIZED_META_KEY,
+  MaterializedResourceContext,
+  resourceStore,
+  ResourceStore,
+  type ResourceKeyOptions,
+  type ResourceStoreOptions,
+  type ResourceStoreStorage,
+} from './resource/materialized';
 export * from './errors';
 export {
   addHookObserver,
@@ -175,7 +184,7 @@ export type { SqliteStorageProviderOptions } from './storage/sqlite-storage.prov
 export type { OffloadCallOptions, OffloadFunction, OffloadModuleRef } from './offload/offload.types';
 
 // Job exports - saved, discoverable, triggerable executions
-export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter } from './job';
+export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter, JobRunResource } from './job';
 export type {
   JobRegistryInterface,
   IndexedJob,
@@ -186,13 +195,31 @@ export type {
   ExecuteWorkflowOptions,
   InlineJobResult,
   BackgroundJobResult,
+  JobExecutionManagerOptions,
+  JobAdmissionOptions,
+  JobsConfig,
+  JobsStoreConfig,
 } from './job';
-export type { JobStateStore, JobRunRecord, WorkflowRunRecord, JobExecutionState, JobDefinitionStore } from './job';
+export type {
+  JobStateStore,
+  JobRunRecord,
+  WorkflowRunRecord,
+  JobExecutionState,
+  JobRunProgress,
+  JobDefinitionStore,
+} from './job';
 
 // Job-management tool classes (issue #408 — opt-in manual registration via
 // @App({ tools: [...] }) when finer-grained control than auto-registration
 // is needed, e.g. to omit register_job / remove_job in production).
-export { ExecuteJobTool, GetJobStatusTool, ListJobsTool, RegisterJobTool, RemoveJobTool } from './job/tools';
+export {
+  ExecuteJobTool,
+  GetJobStatusTool,
+  CancelJobTool,
+  ListJobsTool,
+  RegisterJobTool,
+  RemoveJobTool,
+} from './job/tools';
 
 // Workflow exports - managed multi-step job pipelines
 export { WorkflowRegistry, WorkflowInstance, WorkflowEngine, WorkflowStepExecutor, WorkflowEmitter } from './workflow';
@@ -542,6 +569,29 @@ export type {
 // create() factory — flat-config direct server creation
 export { create, clearCreateCache } from './direct';
 export type { CreateConfig } from './direct';
+
+// Build manifest: the server's entries with their schemas (`frontmcp.manifest.json`), and its lint
+export {
+  buildManifest,
+  findBudgetOverruns,
+  lintServerManifest,
+  serverManifestSchema,
+  SERVER_MANIFEST_FILE,
+  SERVER_MANIFEST_VERSION,
+} from './manifest';
+export type {
+  BudgetedSurface,
+  ManifestApp,
+  ManifestEntryKind,
+  ManifestFinding,
+  ManifestFindingRule,
+  ManifestPrompt,
+  ManifestResource,
+  ManifestResourceTemplate,
+  ManifestSkill,
+  ManifestTool,
+  ServerManifest,
+} from './manifest';
 
 // A custom HTTP host (`http.hostFactory`) extends HostServerAdapter; the web-fetch helpers take a Scope
 export { HostServerAdapter } from './server/adapters/base.host.adapter';

@@ -422,7 +422,8 @@ left running (found by parent PID).
 `frontmcp dev` empties `.frontmcp/dev-events.jsonl` in the project root when it starts, and the server appends one JSON
 line per event to it: the timing and outcome of each `tools/call`, `resources/read` and `prompts/get`, and each
 event-loop stall when `observability.stalls` is on (see `frontmcp-observability`'s `stall-detection` reference). The
-events never hold a call's input or answer.
+events never hold a call's input or answer. When the file cannot be created (`.frontmcp` is not writable, say),
+`frontmcp dev` prints a warning and starts with the events off.
 
 ```jsonl
 {"type":"call","at":"2026-11-02T10:00:00.000Z","method":"tools/call","entry":"reports:export","durationMs":12.4,"outcome":"ok","session":"3fa9c2d41b07"}

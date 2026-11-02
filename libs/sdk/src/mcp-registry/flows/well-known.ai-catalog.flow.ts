@@ -1,6 +1,6 @@
 /** GET /.well-known/ai-catalog.json at the literal root of the host: the AI Catalog listing the server card. */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import {
   enforceGlobalRateLimit,

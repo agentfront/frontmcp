@@ -58,6 +58,12 @@ describe('registerSkillsCommands — CLI surface lock (issue #414)', () => {
     expect(flagLongs).toEqual(expect.arrayContaining(['--target', '--name', '--all', '--out']));
   });
 
+  it("export exposes --from-entry / --provider / --check for the project's own @Skill entries", () => {
+    const exp = getSubcommand('export');
+    const flagLongs = exp.options.map((o) => o.long).filter(Boolean) as string[];
+    expect(flagLongs).toEqual(expect.arrayContaining(['--from-entry', '--provider', '--check']));
+  });
+
   it('list exposes --category / --tag / --bundle', () => {
     const list = getSubcommand('list');
     const flagLongs = list.options.map((o) => o.long).filter(Boolean) as string[];

@@ -121,6 +121,21 @@ export class SqliteStorageAdapter extends BaseStorageAdapter {
     return this.connection.write(() => this.kv.get(key) === expectedValue && this.kv.expire(key, ttlSeconds * 1000));
   }
 
+  override async setIfEquals(key: string, expectedValue: string, value: string): Promise<boolean> {
+    this.ensureConnected();
+    return this.connection.write(() => {
+      if (this.kv.get(key) !== expectedValue) return false;
+      this.kv.set(key, value);
+      return true;
+    });
+  }
+
+  /** SQLite's `PRAGMA data_version` on this process's connection: it changes when another process commits. */
+  async dataVersion(): Promise<number> {
+    this.ensureConnected();
+    return this.connection.read(() => Number(this.connection.db.pragma('data_version', { simple: true })));
+  }
+
   async exists(key: string): Promise<boolean> {
     this.ensureConnected();
     return this.connection.read(() => this.kv.has(key));

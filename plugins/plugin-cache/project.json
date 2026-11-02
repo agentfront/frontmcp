@@ -30,7 +30,15 @@
           "outExtension": {
             ".js": ".js"
           },
-          "external": ["@frontmcp/lazy-zod", "ioredis", "@frontmcp/sdk", "@vercel/kv", "zod", "reflect-metadata"]
+          "external": [
+            "@frontmcp/lazy-zod",
+            "@frontmcp/utils",
+            "ioredis",
+            "@frontmcp/sdk",
+            "@vercel/kv",
+            "zod",
+            "reflect-metadata"
+          ]
         }
       }
     },
@@ -52,7 +60,15 @@
           "outExtension": {
             ".js": ".mjs"
           },
-          "external": ["@frontmcp/lazy-zod", "ioredis", "@frontmcp/sdk", "@vercel/kv", "zod", "reflect-metadata"]
+          "external": [
+            "@frontmcp/lazy-zod",
+            "@frontmcp/utils",
+            "ioredis",
+            "@frontmcp/sdk",
+            "@vercel/kv",
+            "zod",
+            "reflect-metadata"
+          ]
         }
       }
     },

@@ -144,7 +144,8 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 
 ## Jobs & Workflows (if enabled)
 
-- [ ] Jobs Redis store is configured for production (`jobs: { enabled: true, store: { redis } }`)
+- [ ] Jobs keep their runs in a shared store for production: `jobs.store.redis` across machines, `jobs.store.sqlite` on one machine, or the top-level `redis` / `sqlite` they fall back to
+- [ ] Long jobs set `timeout` (or `jobs.defaultTimeoutMs`) and a `cleanup` for what they start; `jobs.admission` bounds heavy jobs (`concurrency`, `memoryMb`)
 - [ ] Job retry config has reasonable `maxAttempts` and `maxBackoffMs`
 - [ ] Workflow timeout is set to prevent runaway workflows
 - [ ] Job execution times are monitored (long-running jobs need alerting)
@@ -163,6 +164,7 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] Single-writer constraint respected (v1.2.0): writes routed to a single elected leader pod
 - [ ] `instructions` is set or `skillsConfig.injectInstructions` tuned for clients
 - [ ] With `injectInstructions: 'append'`, `'prepend'` or `'replace'`, the skill catalog summary stays within the 16 KB ceiling (the default `'compact'` sends one line)
+- [ ] The server logs no `instructionsBudget` warning at startup, and `frontmcp build --strict-lint` passes (instructions and tool descriptions within budget, every listed entry described)
 
 ## ExtApps / Widgets (if enabled)
 

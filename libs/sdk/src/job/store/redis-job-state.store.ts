@@ -15,6 +15,13 @@ export interface RedisStateStoreLike {
   srem(key: string, ...members: string[]): Promise<number>;
   smembers(key: string): Promise<string[]>;
   keys(pattern: string): Promise<string[]>;
+  expire?(key: string, seconds: number): Promise<unknown>;
+  quit?(): Promise<unknown>;
+}
+
+export interface RedisJobStateStoreOptions {
+  /** Close the client on `dispose()`: set when the store created it (the factory does). @default false */
+  ownsClient?: boolean;
 }
 
 /**
@@ -26,17 +33,20 @@ export class RedisJobStateStore implements JobStateStore {
   private readonly keyPrefix: string;
   private readonly logger?: FrontMcpLogger;
   private readonly ttlSeconds: number;
+  private ownsClient: boolean;
 
   constructor(
     client: RedisStateStoreLike,
     logger: FrontMcpLogger | undefined,
     keyPrefix = 'mcp:jobs:',
     ttlSeconds = 86400,
+    options: RedisJobStateStoreOptions = {},
   ) {
     this.client = client;
     this.logger = logger;
     this.keyPrefix = keyPrefix;
     this.ttlSeconds = ttlSeconds;
+    this.ownsClient = options.ownsClient ?? false;
   }
 
   private key(runId: string): string {
@@ -47,18 +57,23 @@ export class RedisJobStateStore implements JobStateStore {
     return `${this.keyPrefix}idx:${field}:${value}`;
   }
 
+  private cancelKey(runId: string): string {
+    return `${this.keyPrefix}cancel:${runId}`;
+  }
+
   async createRun(record: JobRunRecord | WorkflowRunRecord): Promise<void> {
     const key = this.key(record.runId);
-    const data = JSON.stringify(record);
+    const data = JSON.stringify({ ...record, revision: 1, updatedAt: Date.now() });
     await this.client.set(key, data, 'EX', this.ttlSeconds);
 
-    // Index by jobId and sessionId for queries
-    if (record.jobId) {
-      await this.client.sadd(this.indexKey('jobId', record.jobId), record.runId);
-    }
-    if (record.sessionId) {
-      await this.client.sadd(this.indexKey('sessionId', record.sessionId), record.runId);
-    }
+    // Index by jobId and sessionId for queries; an index lives as long as its newest run
+    if (record.jobId) await this.index(this.indexKey('jobId', record.jobId), record.runId);
+    if (record.sessionId) await this.index(this.indexKey('sessionId', record.sessionId), record.runId);
+  }
+
+  private async index(key: string, runId: string): Promise<void> {
+    await this.client.sadd(key, runId);
+    await this.client.expire?.(key, this.ttlSeconds);
   }
 
   async updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
@@ -66,8 +81,9 @@ export class RedisJobStateStore implements JobStateStore {
     const raw = await this.client.get(key);
     if (!raw) return;
 
-    const existing = JSON.parse(raw);
-    const updated = { ...existing, ...updates };
+    const existing = JSON.parse(raw) as JobRunRecord;
+    const { runId: _ignoreRunId, ...safeUpdates } = updates;
+    const updated = { ...existing, ...safeUpdates, revision: (existing.revision ?? 0) + 1, updatedAt: Date.now() };
     await this.client.set(key, JSON.stringify(updated), 'EX', this.ttlSeconds);
   }
 
@@ -83,7 +99,7 @@ export class RedisJobStateStore implements JobStateStore {
     state?: JobExecutionState;
     limit?: number;
   }): Promise<(JobRunRecord | WorkflowRunRecord)[]> {
-    let runIds: string[] = [];
+    let runIds: string[];
 
     if (opts?.jobId) {
       runIds = await this.client.smembers(this.indexKey('jobId', opts.jobId));
@@ -141,7 +157,23 @@ export class RedisJobStateStore implements JobStateStore {
     return removed;
   }
 
+  async requestCancel(runId: string): Promise<void> {
+    await this.client.set(this.cancelKey(runId), '1', 'EX', this.ttlSeconds);
+  }
+
+  async isCancelRequested(runId: string): Promise<boolean> {
+    return (await this.client.get(this.cancelKey(runId))) !== null;
+  }
+
   async dispose(): Promise<void> {
-    // Don't close shared redis client
+    // A client passed in is shared and outlives the store
+    if (!this.ownsClient) return;
+    this.ownsClient = false;
+    try {
+      await this.client.quit?.();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger?.warn(`Could not close the job state store's redis client: ${message}`);
+    }
   }
 }

@@ -1,5 +1,5 @@
 import { getMetadata, isClass, type Type } from '@frontmcp/di';
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { entryAvailabilitySchema, isValidMcpUri, type EntryAvailability } from '@frontmcp/utils';
 
 import { InvalidInputError } from '../../errors/mcp.error';

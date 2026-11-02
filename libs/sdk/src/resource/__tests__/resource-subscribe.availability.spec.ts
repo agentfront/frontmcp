@@ -38,8 +38,18 @@ class EdgeNotes extends ResourceContext {
   }
 }
 
+@Resource({ name: 'admin-notes', uri: 'admin://notes', authorities: 'admin' })
+class AdminNotes extends ResourceContext {
+  async execute(uri: string) {
+    return text(uri);
+  }
+}
+
 @App({ id: 'notes', name: 'Notes', resources: [OpenNotes, AgentNotes, EdgeNotes] })
 class NotesApp {}
+
+@App({ id: 'admin', name: 'Admin', resources: [OpenNotes, AdminNotes] })
+class AdminApp {}
 
 /** What a caller learns from a refusal: its code and message. */
 async function answerOf(promise: Promise<unknown>): Promise<unknown> {
@@ -79,6 +89,35 @@ describe('resources/subscribe applies what resources/read applies', () => {
   );
 
   it('still subscribes to a resource the caller may read', async () => {
+    await expect(answerOf(client.subscribeResource('open://notes'))).resolves.toBe('accepted');
+  });
+});
+
+describe('resources/subscribe applies the authorities resources/read applies', () => {
+  let client: DirectClient;
+
+  beforeAll(async () => {
+    client = await connect({
+      info: { name: 'resource-subscribe-authorities', version: '1.0.0' },
+      apps: [AdminApp],
+      logging: { level: LogLevel.Off },
+      authorities: { claimsMapping: { roles: 'roles' }, profiles: { admin: { roles: { any: ['admin'] } } } },
+    });
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  it('refuses a resource the caller may not read, with the resources/read error', async () => {
+    const read = await answerOf(client.readResource('admin://notes'));
+    const subscribe = await answerOf(client.subscribeResource('admin://notes'));
+
+    expect(read).not.toBe('accepted');
+    expect(subscribe).toEqual(read);
+  });
+
+  it('still subscribes to a resource with no authorities', async () => {
     await expect(answerOf(client.subscribeResource('open://notes'))).resolves.toBe('accepted');
   });
 });

@@ -39,7 +39,7 @@ import {
 
 import type { ParsedArgs } from '../../../core/args';
 import { resolveDevLaunch } from '../dev';
-import { createDevEventsWriter, startEventsFile, type DevEventsWriter } from '../dev-events-file';
+import { createDevEventsWriter, startEventsFile, turnDevEventsOff, type DevEventsWriter } from '../dev-events-file';
 import {
   createChildSupervisor,
   resolveChildCommand,
@@ -97,8 +97,11 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
   const log = await createBridgeLogger({ filePath: logFile });
   let devEvents: DevEventsWriter | undefined;
   if (launch.eventsFile) {
-    await startEventsFile(launch.eventsFile);
-    if (runtime.mode === 'pipe') devEvents = createDevEventsWriter(launch.eventsFile, log);
+    if (await startEventsFile(launch.eventsFile, (message) => log.warn('dev-events-off', { reason: message }))) {
+      if (runtime.mode === 'pipe') devEvents = createDevEventsWriter(launch.eventsFile, log);
+    } else {
+      turnDevEventsOff(launch.childEnv);
+    }
   }
   log.info('bridge-start', {
     entry: launch.entry,

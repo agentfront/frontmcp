@@ -7,7 +7,7 @@
  * @module elicitation/flows/elicitation-request.flow
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';

@@ -14,7 +14,7 @@
  * @module task/flows/tasks-result.flow
  */
 
-import { z } from '@frontmcp/lazy-zod';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 import { GetTaskPayloadRequestSchema, GetTaskPayloadResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';

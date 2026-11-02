@@ -260,6 +260,8 @@ When `redis` is configured, the SDK automatically enables transport session pers
 3. If `transport.persistence.redis` is explicitly set, that config is used instead.
 4. If `transport.persistence` is an object without `redis`, the global redis config is injected.
 
+Jobs use the global redis too when `jobs.store` names no backend: their runs and dynamic definitions live under `<keyPrefix>jobs:` (`mcp:jobs:` by default). Servers that share one Redis keep them apart by setting different `keyPrefix` values.
+
 This means you do not need to configure `transport.persistence` separately when using the top-level `redis` field.
 
 ## Step 6 -- Environment Variables

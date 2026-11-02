@@ -429,6 +429,13 @@ export class InvalidFileSignalError extends InternalMcpError {
   }
 }
 
+/** A `resourceStore()` or key declared with options it cannot use, or a materialized resource without a `from` key. */
+export class InvalidResourceStoreError extends InternalMcpError {
+  constructor(details: string) {
+    super(`resourceStore(): ${details}`, 'INVALID_RESOURCE_STORE');
+  }
+}
+
 /** The environment that offers an entry: each missing axis set to a value its `availableWhen` allows, if any does. */
 function availabilityRemedy(entryType: string, availability: unknown, missingAxes: string[]): ErrorRemedy | undefined {
   const requirements = missingAxes.map((axis) => {
