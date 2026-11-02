@@ -1,6 +1,7 @@
 import { type FrontMcpConfigInput } from '../common';
 import { joinInstance } from '../direct/connect';
 import { PublicMcpError } from '../errors';
+import { type ConfigOrServerClass } from '../front-mcp/front-mcp';
 import { type Scope } from '../scope/scope.instance';
 import { buildServerManifest } from './build-server-manifest';
 import { type ServerManifest } from './server-manifest.schema';
@@ -18,8 +19,9 @@ import { type ServerManifest } from './server-manifest.schema';
  * expect(lintServerManifest(await buildManifest(Server))).toEqual([]);
  * ```
  */
-export async function buildManifest(config: FrontMcpConfigInput): Promise<ServerManifest> {
-  const { instancePromise, release } = joinInstance(config, 'manifest');
+export async function buildManifest(config: ConfigOrServerClass): Promise<ServerManifest> {
+  // A decorated class resolves to the config its decorator stored, as in `connect()`
+  const { instancePromise, release } = joinInstance(config as FrontMcpConfigInput, 'manifest');
   try {
     const instance = await instancePromise;
     const primary = instance.getPrimaryScope() as Scope | undefined;

@@ -26,6 +26,7 @@
     "answer-shaping-must-compile.ts",
     "live-surface-must-compile.ts",
     "offload-must-compile.ts",
+    "build-manifest-must-compile.ts",
     "call-recorder-must-compile.ts",
     "hook-ordering-must-compile.ts",
     "hook-ordering-must-fail.ts",

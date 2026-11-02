@@ -20,6 +20,7 @@ import {
   type EnabledSource,
   type FrontMcpConfigInput,
 } from '../../common';
+import { FrontMcp } from '../../common/decorators/front-mcp.decorator';
 import { connect } from '../../direct/connect';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
@@ -230,6 +231,13 @@ describe('buildManifest()', () => {
     expect(serverManifestSchema.parse(first)).toEqual(first);
     const names = first.tools.map((tool) => tool.name);
     expect(names).toEqual([...names].sort());
+  });
+
+  it('takes a @FrontMcp-decorated class', async () => {
+    @FrontMcp({ ...config(), serve: false })
+    class CalcServer {}
+
+    expect((await buildManifest(CalcServer)).tools.map((tool) => tool.name)).toContain('add');
   });
 
   it('shares the server a connect() client already serves', async () => {
