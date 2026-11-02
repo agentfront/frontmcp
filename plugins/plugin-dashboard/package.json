@@ -54,7 +54,7 @@
     "reflect-metadata": "^0.2.2"
   },
   "dependencies": {
-    "@enclave-vm/ast": "^2.17.0"
+    "@frontmcp/utils": "1.10.16"
   },
   "peerDependencies": {
     "@frontmcp/lazy-zod": "1.10.16",
