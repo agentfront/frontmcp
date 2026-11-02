@@ -11,8 +11,9 @@ import {
   type HttpOutput,
   type HttpRouteType,
 } from '../../common';
-import { ElicitationNotSupportedError, InvalidInputError, QuestionNotFoundError } from '../../errors';
+import { ElicitationNotSupportedError, InvalidInputError } from '../../errors';
 import { questionSubjectOf } from './question-subject';
+import { QuestionNotFoundError } from './question.errors';
 import { QUESTIONS_TOPIC, type PersistentQuestion, type QuestionStore } from './question.store';
 
 export const QUESTION_INBOX_PATH = '/_frontmcp/inbox';

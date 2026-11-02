@@ -16,3 +16,11 @@ export {
   type QuestionStoreOptions,
 } from './question.store';
 export { DEFAULT_QUESTION_TTL_MS, type PersistentQuestions } from './question-scope.helper';
+export {
+  InvalidQuestionStoreError,
+  QuestionAlreadyAnsweredError,
+  QuestionNotFoundError,
+  QuestionPendingError,
+  QuestionStoreBusyError,
+  QuestionSupersededError,
+} from './question.errors';

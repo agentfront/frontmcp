@@ -1,4 +1,4 @@
-import { InternalMcpError, MCP_ERROR_CODES, PublicMcpError } from './mcp.error';
+import { InternalMcpError, MCP_ERROR_CODES, PublicMcpError } from '../../errors/mcp.error';
 
 /** A persistent question has no answer yet: it stays in the inbox, and the next call that asks it gets the answer. */
 export class QuestionPendingError extends PublicMcpError {

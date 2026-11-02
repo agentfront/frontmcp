@@ -11,8 +11,8 @@ import {
 
 import { isRedisProvider, redisOptionsSchema, type FrontMcpLogger } from '../../common';
 import { type PersistentQuestionsStorage } from '../../common/types/options/elicitation';
-import { InvalidQuestionStoreError } from '../../errors';
 import { getElicitationSecret } from '../store/elicitation-encryption';
+import { InvalidQuestionStoreError } from './question.errors';
 import { QuestionStore } from './question.store';
 
 const OWNER_ONLY_DIRECTORY = 0o700;

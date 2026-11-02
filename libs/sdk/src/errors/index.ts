@@ -123,16 +123,6 @@ export {
   ElicitationSubscriptionError,
 } from './elicitation.error';
 
-// Export persistent question errors
-export {
-  QuestionPendingError,
-  QuestionSupersededError,
-  QuestionNotFoundError,
-  QuestionAlreadyAnsweredError,
-  QuestionStoreBusyError,
-  InvalidQuestionStoreError,
-} from './question.errors';
-
 // Export worker offload errors
 export {
   OffloadBudgetExceededError,

@@ -7,8 +7,8 @@ import {
   type PersistentQuestionsOptionsInterface,
   type PersistentQuestionsStorage,
 } from '../../common/types/options/elicitation';
-import { InvalidQuestionStoreError } from '../../errors';
 import { createQuestionStore, resolveQuestionStorage, type QuestionStoreResult } from './question-store.factory';
+import { InvalidQuestionStoreError } from './question.errors';
 import { type QuestionStore } from './question.store';
 
 /** @default 24 hours */

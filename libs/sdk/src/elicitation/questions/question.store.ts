@@ -8,15 +8,11 @@ import {
 } from '@frontmcp/utils';
 
 import { type HttpRouteTopicSource } from '../../common/metadata/http-route.metadata';
-import {
-  InvalidInputError,
-  QuestionAlreadyAnsweredError,
-  QuestionNotFoundError,
-  QuestionStoreBusyError,
-} from '../../errors';
+import { InvalidInputError } from '../../errors';
 import { type ElicitResult } from '../elicitation.types';
 import { validateElicitationContent } from '../helpers/validate-elicitation-content';
 import { deserializeAndDecrypt, encryptAndSerialize } from '../store/elicitation-encryption';
+import { QuestionAlreadyAnsweredError, QuestionNotFoundError, QuestionStoreBusyError } from './question.errors';
 
 /** The topic a store publishes whenever a question is asked, answered or taken. */
 export const QUESTIONS_TOPIC = 'questions';

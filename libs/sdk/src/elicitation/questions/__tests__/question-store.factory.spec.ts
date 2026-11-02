@@ -7,13 +7,13 @@ import * as utils from '@frontmcp/utils';
 import { mkdtemp, rm, stat } from '@frontmcp/utils';
 
 import { elicitationOptionsSchema } from '../../../common/types/options/elicitation';
-import { InvalidQuestionStoreError } from '../../../errors';
 import {
   DEFAULT_QUESTION_TTL_MS,
   openPersistentQuestions,
   parsePersistentQuestionsOptions,
 } from '../question-scope.helper';
 import { createQuestionStore, resolveQuestionStorage } from '../question-store.factory';
+import { InvalidQuestionStoreError } from '../question.errors';
 
 jest.mock('@frontmcp/utils', () => {
   const actual = jest.requireActual<typeof import('@frontmcp/utils')>('@frontmcp/utils');

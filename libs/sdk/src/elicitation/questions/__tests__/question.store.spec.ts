@@ -5,8 +5,9 @@ import * as path from 'node:path';
 
 import { mkdtemp, rm } from '@frontmcp/utils';
 
-import { InvalidInputError, QuestionAlreadyAnsweredError, QuestionNotFoundError } from '../../../errors';
+import { InvalidInputError } from '../../../errors';
 import { createQuestionStore } from '../question-store.factory';
+import { QuestionAlreadyAnsweredError, QuestionNotFoundError } from '../question.errors';
 import { type QuestionRequest, type QuestionStore } from '../question.store';
 
 const SCHEMA = {

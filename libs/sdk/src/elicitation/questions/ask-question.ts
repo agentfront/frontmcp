@@ -1,15 +1,11 @@
 import { toJSONSchema, internalZ as z, type ZodType } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
-import {
-  ElicitationNotSupportedError,
-  InvalidInputError,
-  QuestionPendingError,
-  QuestionSupersededError,
-} from '../../errors';
+import { ElicitationNotSupportedError, InvalidInputError } from '../../errors';
 import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult, type PersistOptions } from '../elicitation.types';
 import { type ElicitHelperDeps } from '../helpers/elicit.helper';
 import { questionSubjectOf } from './question-subject';
+import { QuestionPendingError, QuestionSupersededError } from './question.errors';
 import { QUESTIONS_TOPIC, type QuestionOutcome, type QuestionRequest, type QuestionStore } from './question.store';
 
 /** How often a waiting call reads its question even without a change notification. */
