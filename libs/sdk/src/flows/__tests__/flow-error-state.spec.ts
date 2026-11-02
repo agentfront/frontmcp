@@ -76,6 +76,25 @@ class UnprintableThrower {
 @App({ id: 'unprintable', name: 'Unprintable', tools: [OkTool], plugins: [UnprintableThrower, FlowErrorProbe] })
 class UnprintableApp {}
 
+const probeSeen: boolean[] = [];
+
+@Plugin({ name: 'state-probe' })
+class StateProbe {
+  @ToolHook.Finally('finalize', { priority: -1 })
+  markThenThrow(flowCtx: { state: { set(key: never, value: never): unknown } }) {
+    flowCtx.state.set('probe' as never, true as never);
+    throw new Error('the probe store is down');
+  }
+
+  @ToolHook.Finally('finalize', { priority: 1 })
+  lookForMark(flowCtx: { state: object }) {
+    probeSeen.push('probe' in flowCtx.state);
+  }
+}
+
+@App({ id: 'probed', name: 'Probed', tools: [OkTool], plugins: [StateProbe] })
+class ProbedApp {}
+
 @Plugin({ name: 'finalize-breaker' })
 class FinalizeBreaker {
   @ToolHook.Will('finalize')
@@ -127,6 +146,17 @@ describe('state.flowError', () => {
 
     expect(seenFinally).toHaveLength(1);
     expect(String(seenFinally[0])).toContain('[object Object]');
+  });
+
+  it('loses a key a Finally hook added before a throw the runner dropped', async () => {
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'probed', version: '1.0.0' },
+      apps: [ProbedApp],
+    });
+    await server.callTool('ok', {});
+    await server.dispose();
+
+    expect(probeSeen).toEqual([false]);
   });
 
   it("is the output schema's refusal of the answer for the Finally hooks of finalize, whose Did hooks skip it", async () => {
