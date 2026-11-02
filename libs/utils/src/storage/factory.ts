@@ -4,13 +4,53 @@
  * Factory function to create storage adapters with auto-detection.
  */
 
+import { z } from '@frontmcp/lazy-zod';
+
 import { getEnv, isProduction } from '#env';
 import { getRuntimeContext } from '#runtime-context';
 
 import { MemoryStorageAdapter } from './adapters/memory';
 import { StorageConfigError } from './errors';
 import { createNamespacedStorage, createRootStorage } from './namespace';
-import type { RootStorage, StorageAdapter, StorageConfig, StorageType } from './types';
+import type { RootStorage, SqliteAdapterOptions, StorageAdapter, StorageConfig, StorageType } from './types';
+
+/** Required through a variable: it depends on this package, so a literal would make bundlers and Nx see a cycle. */
+const SQLITE_STORAGE_PACKAGE = '@frontmcp/storage-sqlite';
+
+interface SqliteStorageModule {
+  SqliteStorageAdapter: new (options: SqliteAdapterOptions) => StorageAdapter;
+}
+
+const PATH_REQUIRED = { error: 'is required (the path of the database file)' };
+
+const sqliteAdapterOptionsSchema = z.object({
+  path: z.string(PATH_REQUIRED).min(1, PATH_REQUIRED),
+  walMode: z.boolean().optional(),
+  busyTimeoutMs: z.number().int().nonnegative().optional(),
+  ttlCleanupIntervalMs: z.number().int().nonnegative().optional(),
+  encryption: z.object({ secret: z.string().min(1) }).optional(),
+});
+
+/** The `sqlite` block of a config, validated; a mistake in it is the caller's to fix, so no fallback hides it. */
+function parseSqliteOptions(options: SqliteAdapterOptions | undefined): SqliteAdapterOptions {
+  const result = sqliteAdapterOptionsSchema.safeParse(options ?? {});
+  if (result.success) return result.data;
+  const problems = result.error.issues.map((issue) => `sqlite.${issue.path.join('.')}: ${issue.message}`);
+  throw new StorageConfigError('sqlite', problems.join('; '));
+}
+
+function loadSqliteStorage(): SqliteStorageModule {
+  try {
+    return require(SQLITE_STORAGE_PACKAGE) as SqliteStorageModule;
+  } catch (error) {
+    const missing = (error as { code?: unknown }).code === 'MODULE_NOT_FOUND';
+    if (!missing || !String((error as Error).message).includes(SQLITE_STORAGE_PACKAGE)) throw error;
+    throw new StorageConfigError(
+      'sqlite',
+      `the sqlite type needs ${SQLITE_STORAGE_PACKAGE}. Install it with: npm install ${SQLITE_STORAGE_PACKAGE}`,
+    );
+  }
+}
 
 /** Whether this process already printed the no-distributed-storage warning. */
 let noDistributedStorageWarned = false;
@@ -81,6 +121,11 @@ async function createAdapter(type: StorageType, config: StorageConfig): Promise<
       return new UpstashStorageAdapter(config.upstash);
     }
 
+    case 'sqlite': {
+      const { SqliteStorageAdapter } = loadSqliteStorage();
+      return new SqliteStorageAdapter(parseSqliteOptions(config.sqlite));
+    }
+
     case 'cloudflare-kv': {
       if (!config.cloudflareKv) {
         throw new StorageConfigError(
@@ -118,6 +163,12 @@ async function createAdapter(type: StorageType, config: StorageConfig): Promise<
  * await store.connect();
  * ```
  *
+ * @example A SQLite file shared by the processes on one machine (needs `@frontmcp/storage-sqlite`)
+ * ```typescript
+ * const store = await createStorage({ type: 'sqlite', sqlite: { path: '/var/lib/my-app/state.sqlite' } });
+ * await store.incr('runs');
+ * ```
+ *
  * @example With namespaces
  * ```typescript
  * const store = await createStorage({ type: 'memory' });
@@ -146,6 +197,8 @@ export async function createStorage(config: StorageConfig = {}): Promise<RootSto
 
     if (type === 'memory' && isProduction()) warnNoDistributedStorage();
   }
+
+  if (type === 'sqlite') parseSqliteOptions(config.sqlite);
 
   let adapter: StorageAdapter;
 

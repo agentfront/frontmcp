@@ -3578,7 +3578,7 @@
         },
         {
           "name": "setup-sqlite",
-          "description": "Configure SQLite with WAL mode and optional encryption for local single-instance deployments",
+          "description": "Configure SQLite for local deployments, shared by the processes on one machine, with WAL mode and optional encryption",
           "examples": [
             {
               "name": "basic-sqlite-setup",
@@ -3614,6 +3614,18 @@
                 "`transport: { protocol: 'modern' }` for Streamable HTTP with strict sessions",
                 "`ttlCleanupIntervalMs: 15000` for more aggressive cleanup on high-throughput daemons",
                 "Absolute path for the database file in system-level storage (`/var/lib/`)"
+              ]
+            },
+            {
+              "name": "multi-process-storage",
+              "description": "Share counters and a lock between several local processes through one SQLite file.",
+              "level": "intermediate",
+              "tags": ["setup", "sqlite", "storage", "multi-process", "lock", "local"],
+              "features": [
+                "`sqliteStorageProvider()` registers a SQLite-backed storage that tools read with `this.get(SqliteStorageToken)`",
+                "`incr` stays exact and an `ifNotExists` lock has one holder across processes on the same file",
+                "`createStorage({ type: 'sqlite' })` gives scripts and `throttle.storage` the same file",
+                "Waiting for another process's lock does not block the event loop"
               ]
             }
           ]

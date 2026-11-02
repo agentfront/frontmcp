@@ -150,6 +150,8 @@ export { ToolInstance } from './tool/tool.instance';
 export { default as ProviderRegistry } from './provider/provider.registry';
 export { createContainer } from './provider/create-container';
 export type { CreateContainerOptions, FrontMcpContainer } from './provider/create-container';
+export { sqliteStorageProvider, SqliteStorageToken } from './storage/sqlite-storage.provider';
+export type { SqliteStorageProviderOptions } from './storage/sqlite-storage.provider';
 
 // Job exports - saved, discoverable, triggerable executions
 export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter } from './job';

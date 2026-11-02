@@ -8,7 +8,8 @@
 import type Database from 'better-sqlite3';
 
 import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
-import { openDatabase, withBusyRetry } from './open-database';
+import { withBusyRetry } from './open-database';
+import { acquireConnection, type SqliteConnection } from './sqlite-connection';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 /** Bundled prepared statements - all-or-nothing initialization. */
@@ -16,6 +17,7 @@ interface KvPreparedStatements {
   get: Database.Statement;
   set: Database.Statement;
   del: Database.Statement;
+  delExpired: Database.Statement;
   has: Database.Statement;
   keys: Database.Statement;
   keysPattern: Database.Statement;
@@ -37,30 +39,40 @@ interface KvPreparedStatements {
  * ```
  */
 export class SqliteKvStore {
-  private db: Database.Database;
+  private readonly connection: SqliteConnection;
+  private readonly db: Database.Database;
   private encryptionKey: Uint8Array | null = null;
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private stmts: KvPreparedStatements | null = null;
 
   constructor(options: SqliteStorageOptions) {
-    // Resolve better-sqlite3 (ESM-safe) and ensure the parent dir exists.
-    this.db = openDatabase(options.path, 'SqliteKvStore', {
+    this.connection = acquireConnection(options.path, 'SqliteKvStore', {
       busyTimeoutMs: options.busyTimeoutMs,
       walMode: options.walMode !== false,
     });
+    this.db = this.connection.db;
 
     // Derive encryption key if secret provided
     if (options.encryption?.secret) {
       this.encryptionKey = deriveEncryptionKey(options.encryption.secret);
     }
 
-    withBusyRetry(() => this.initSchema());
-    this.prepareStatements();
+    try {
+      withBusyRetry(() => this.initSchema());
+      this.prepareStatements();
+    } catch (error) {
+      this.connection.release();
+      throw error;
+    }
 
     // Start periodic TTL cleanup
     const cleanupInterval = options.ttlCleanupIntervalMs ?? 60000;
     if (cleanupInterval > 0) {
-      this.cleanupTimer = setInterval(() => this.purgeExpired(), cleanupInterval);
+      // Queued, so a lock held by another process neither blocks the event loop nor throws from the timer.
+      this.cleanupTimer = setInterval(
+        () => void this.connection.write(() => this.purgeExpired()).catch(() => undefined),
+        cleanupInterval,
+      );
       // Allow the process to exit even if timer is running
       if (this.cleanupTimer.unref) {
         this.cleanupTimer.unref();
@@ -84,6 +96,7 @@ export class SqliteKvStore {
       get: this.db.prepare('SELECT value, expires_at FROM kv WHERE key = ?'),
       set: this.db.prepare('INSERT OR REPLACE INTO kv (key, value, expires_at) VALUES (?, ?, ?)'),
       del: this.db.prepare('DELETE FROM kv WHERE key = ?'),
+      delExpired: this.db.prepare('DELETE FROM kv WHERE key = ? AND expires_at IS NOT NULL AND expires_at <= ?'),
       has: this.db.prepare('SELECT 1 FROM kv WHERE key = ? AND (expires_at IS NULL OR expires_at > ?)'),
       keys: this.db.prepare('SELECT key FROM kv WHERE (expires_at IS NULL OR expires_at > ?)'),
       keysPattern: this.db.prepare(
@@ -93,7 +106,7 @@ export class SqliteKvStore {
       ),
       cleanup: this.db.prepare('DELETE FROM kv WHERE expires_at IS NOT NULL AND expires_at <= ?'),
       ttl: this.db.prepare('SELECT expires_at FROM kv WHERE key = ?'),
-      expire: this.db.prepare('UPDATE kv SET expires_at = ? WHERE key = ?'),
+      expire: this.db.prepare('UPDATE kv SET expires_at = ? WHERE key = ? AND (expires_at IS NULL OR expires_at > ?)'),
     };
   }
 
@@ -117,8 +130,9 @@ export class SqliteKvStore {
     if (!row) return null;
 
     // Check TTL
-    if (row.expires_at !== null && row.expires_at <= Date.now()) {
-      stmts.del.run(key);
+    const now = Date.now();
+    if (row.expires_at !== null && row.expires_at <= now) {
+      stmts.delExpired.run(key, now);
       return null;
     }
 
@@ -208,11 +222,11 @@ export class SqliteKvStore {
    *
    * @param key - The key to set expiry on
    * @param ttlMs - Time to live in milliseconds
-   * @returns true if key exists and TTL was set, false if key doesn't exist
+   * @returns true if key exists and TTL was set, false if key doesn't exist or has expired
    */
   expire(key: string, ttlMs: number): boolean {
-    const expiresAt = Date.now() + ttlMs;
-    const result = this.prepared().expire.run(expiresAt, key);
+    const now = Date.now();
+    const result = this.prepared().expire.run(now + ttlMs, key, now);
     return result.changes > 0;
   }
 
@@ -227,9 +241,10 @@ export class SqliteKvStore {
     if (!row) return -2;
     if (row.expires_at === null) return -1;
 
-    const remaining = row.expires_at - Date.now();
+    const now = Date.now();
+    const remaining = row.expires_at - now;
     if (remaining <= 0) {
-      stmts.del.run(key);
+      stmts.delExpired.run(key, now);
       return -2;
     }
 
@@ -246,20 +261,26 @@ export class SqliteKvStore {
   }
 
   /**
-   * Close the database connection and stop cleanup timer.
+   * Stop the cleanup timer and release the connection, which closes once no other store on the file uses it.
    */
   close(): void {
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
     }
-    this.db.close();
+    this.connection.release();
   }
 
   /**
    * Get the underlying database instance (for advanced use cases / testing).
+   * Other stores on the same file share it, so do not close it directly.
    */
   getDatabase(): Database.Database {
     return this.db;
+  }
+
+  /** The connection this store shares with the other stores on its file, with its queue of operations. */
+  getConnection(): SqliteConnection {
+    return this.connection;
   }
 }

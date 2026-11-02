@@ -1,0 +1,32 @@
+{
+  "name": "demo-e2e-local-runtime",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-local-runtime/fixture",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:local-runtime"],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-local-runtime"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-local-runtime/jest.e2e.config.ts",
+        "runInBand": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-local-runtime-e2e"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-local-runtime/jest.e2e.config.ts",
+        "runInBand": true
+      }
+    },
+    "typecheck-e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p tsconfig.e2e.json",
+        "cwd": "apps/e2e/demo-e2e-local-runtime"
+      }
+    }
+  }
+}
