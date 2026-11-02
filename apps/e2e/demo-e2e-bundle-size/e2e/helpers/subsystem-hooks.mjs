@@ -1,6 +1,7 @@
-// Requires the SDK's CommonJS build, runs a job, a workflow, a channel notification, the channel list and a request
-// to each OAuth route of a public-mode server, and prints, as JSON, the flows a server plugin's hooks saw:
-// node subsystem-hooks.mjs <dist/index.js>
+// Requires the SDK's CommonJS build, runs a job, a workflow, a channel notification, the channel list, a remote app's
+// tool, an ESM package's tool and a request to each OAuth route of a public-mode server, and prints, as JSON, the
+// flows a server plugin's hooks saw, on its last line: node subsystem-hooks.mjs <dist/index.js>
+import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 
 const [entry] = process.argv.slice(2);
@@ -48,10 +49,15 @@ class SubsystemHooksPlugin {
   recordChannelList() {
     seen.push('channels:list');
   }
+  recordToolCall(flowCtx) {
+    const tool = flowCtx.rawInput.request.params.name;
+    if (tool.startsWith('remote') || tool.startsWith('esm')) seen.push(`tools:call-tool ${tool}`);
+  }
 }
 decorate(SubsystemHooksPlugin.prototype, 'recordJob', FlowHooksOf('jobs:execute-job').Did('updateRunState'));
 decorate(SubsystemHooksPlugin.prototype, 'recordChannelSend', FlowHooksOf('channels:send-notification').Will('send'));
 decorate(SubsystemHooksPlugin.prototype, 'recordChannelList', FlowHooksOf('channels:list').Will('listChannels'));
+decorate(SubsystemHooksPlugin.prototype, 'recordToolCall', FlowHooksOf('tools:call-tool').Will('parseInput'));
 for (const flow of Object.keys(OAUTH_ROUTES)) {
   const method = `record:${flow}`;
   SubsystemHooksPlugin.prototype[method] = () => seen.push(flow);
@@ -96,9 +102,64 @@ App({
   tools: [AlertTool],
 })(SubsystemsApp);
 
+class ShoutTool extends ToolContext {
+  async execute() {
+    return 'HELLO';
+  }
+}
+Tool({ name: 'shout', inputSchema: {} })(ShoutTool);
+class RemoteApp {}
+App({ name: 'Remote', tools: [ShoutTool] })(RemoteApp);
+
+function listen(server) {
+  return new Promise((resolveListen) => server.listen(0, '127.0.0.1', () => resolveListen(server.address().port)));
+}
+
+const portProbe = createServer();
+const remotePort = await listen(portProbe);
+await new Promise((resolveClose) => portProbe.close(resolveClose));
+const remote = await FrontMcpInstance.bootstrap({
+  info: { name: 'remote', version: '1.0.0' },
+  apps: [RemoteApp],
+  http: { port: remotePort },
+  logging: { level: LogLevel.Off },
+});
+
+const ESM_PACKAGE = '@frontmcp-e2e/wave-tools';
+const ESM_BUNDLE = `module.exports = { default: { name: '${ESM_PACKAGE}', version: '1.0.0', tools: [{
+  name: 'wave', description: 'Waves', inputSchema: { type: 'object', properties: {} },
+  execute: async () => ({ content: [{ type: 'text', text: 'wave' }] }),
+}] } };`;
+const esmPackages = createServer((request, response) => {
+  const path = decodeURIComponent(new URL(request.url, 'http://127.0.0.1').pathname).slice(1);
+  if (path === ESM_PACKAGE) {
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(
+      JSON.stringify({
+        name: ESM_PACKAGE,
+        'dist-tags': { latest: '1.0.0' },
+        versions: { '1.0.0': { name: ESM_PACKAGE, version: '1.0.0' } },
+        time: { '1.0.0': new Date().toISOString() },
+      }),
+    );
+  } else if (path === `${ESM_PACKAGE}@1.0.0`) {
+    response.writeHead(200, { 'Content-Type': 'application/javascript' });
+    response.end(ESM_BUNDLE);
+  } else {
+    response.writeHead(404);
+    response.end();
+  }
+});
+const esmPort = await listen(esmPackages);
+
 const config = {
   info: { name: 'subsystem-hooks', version: '1.0.0' },
-  apps: [SubsystemsApp],
+  loader: { url: `http://127.0.0.1:${esmPort}` },
+  apps: [
+    SubsystemsApp,
+    { name: 'remote', urlType: 'url', url: `http://127.0.0.1:${remotePort}/`, namespace: 'remote', standalone: false },
+    App.esm(`${ESM_PACKAGE}@^1.0.0`, { namespace: 'esm' }),
+  ],
   plugins: [SubsystemHooksPlugin],
   jobs: { enabled: true },
   channels: { enabled: true },
@@ -110,6 +171,10 @@ try {
   await client.callTool('execute_job', { name: 'greet', input: { name: 'Ada' } });
   await client.callTool('execute_workflow', { name: 'greet-twice' });
   await client.callTool('raise-alert', {});
+  const tools = await client.listTools();
+  for (const { name } of tools.filter((tool) => tool.name.startsWith('remote') || tool.name.startsWith('esm'))) {
+    await client.callTool(name, {});
+  }
   await new Promise((resolveDelivery) => setTimeout(resolveDelivery, 100));
 } finally {
   await client.close();
@@ -121,5 +186,7 @@ for (const [method, path] of Object.values(OAUTH_ROUTES)) {
   await response.arrayBuffer();
 }
 
-process.stdout.write(JSON.stringify(seen));
+await remote?.shutdown?.();
+esmPackages.close();
+process.stdout.write(`\n${JSON.stringify(seen)}\n`);
 process.exit(0);

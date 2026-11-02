@@ -1,7 +1,7 @@
 /**
  * With the SDK's CommonJS build, a plugin's hooks on the flows of the subsystems it sets up on first use still run:
- * jobs and workflow steps, channel notifications and the channel list, and every OAuth flow of a public-mode server
- * (#950).
+ * jobs and workflow steps, channel notifications and the channel list, the tools of a remote app and of an ESM package,
+ * and every OAuth flow of a public-mode server (#950).
  *
  * Needs the packages built: `nx run-many -t build -p sdk plugin-webmcp`.
  */
@@ -12,12 +12,11 @@ import { workspaceRoot } from './helpers/browser-bundle';
 
 function flowsTheHooksSaw(): string[] {
   const runner = resolve(__dirname, 'helpers', 'subsystem-hooks.mjs');
-  return JSON.parse(
-    execFileSync(process.execPath, [runner, resolve(workspaceRoot, 'libs/sdk/dist/index.js')], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }),
-  );
+  const output = execFileSync(process.execPath, [runner, resolve(workspaceRoot, 'libs/sdk/dist/index.js')], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  return JSON.parse(output.trim().split('\n').at(-1) ?? '[]');
 }
 
 describe('hooks on the flows of the subsystems the SDK sets up on first use', () => {
@@ -28,6 +27,8 @@ describe('hooks on the flows of the subsystems the SDK sets up on first use', ()
         'jobs:execute-job greet in greet-twice',
         'channels:send-notification',
         'channels:list',
+        'tools:call-tool remote:shout',
+        'tools:call-tool esm:wave',
         'oauth:authorize',
         'oauth:token',
         'oauth:userinfo',
