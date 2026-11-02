@@ -570,13 +570,15 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       return FAILED_OUTCOMES.has(innerResult.outcome) ? { outcome: 'ok' } : innerResult;
     };
 
-    // `state.flowError` keeps the run's first failure, always an Error, for the stages and hooks after it
+    // `state.flowError` keeps the run's first failure, the Error a stage threw or gave `fail()`, for what runs after it
     const recordFailure = (control: unknown) => {
       if (context.state.get('flowError' as never)) return;
+      const failure =
+        control instanceof FlowControl ? ((control as { originalError?: unknown }).originalError ?? control) : control;
       const flowError =
-        control instanceof Error
-          ? control
-          : new InternalMcpError(`Flow failed with a non-Error value: ${String(control)}`);
+        failure instanceof Error
+          ? failure
+          : new InternalMcpError(`Flow failed with a non-Error value: ${String(failure)}`);
       context.state.set('flowError' as never, flowError as never);
     };
 

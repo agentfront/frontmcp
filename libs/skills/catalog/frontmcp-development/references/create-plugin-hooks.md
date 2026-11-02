@@ -57,7 +57,7 @@ const { Stage, Will, Did, Around, Finally } = FlowHooksOf('tools:call-tool');
 A stage runs its `@Will` hooks, then its body (wrapped by its `@Around` hooks), then its `@Did` hooks, then its `@Finally` hooks.
 
 - `@Did` runs only when the stage succeeded. When a `@Will` hook, the body or an `@Around` hook fails, the stage's `@Did` hooks are skipped. So a `@Did` hook that closes what a `@Will` hook opened (a span, a timer, a lock) leaks it on every failure.
-- `@Finally` runs after the stage on every outcome: when it succeeded or responded, when it failed, when a `@Will` hook failed or responded in its place, when an `@Around` hook failed, and when `finalize` refused an answer the tool's output schema rejects (`InvalidOutputError`). Read the failure from `ctx.state.flowError`: the first error the run failed with, typed on `tools:call-tool`, `resources:read-resource`, `prompts:get-prompt` and `jobs:execute-job`.
+- `@Finally` runs after the stage on every outcome: when it succeeded or responded, when it failed, when a `@Will` hook failed or responded in its place, when an `@Around` hook failed, and when `finalize` refused an answer the tool's output schema rejects (`InvalidOutputError`). Read the failure from `ctx.state.flowError`: the first error the run failed with (what a stage or hook threw, or passed to `ctx.fail()`), typed on `tools:call-tool`, `resources:read-resource`, `prompts:get-prompt` and `jobs:execute-job`.
 - A `@Finally` hook cannot change the outcome. If it calls `ctx.respond()` or `ctx.fail()`, or throws, the flow logs a warning and goes on as if it had not: the client gets the same answer or the same error, and the stage's other `@Finally` hooks still run.
 - `@Finally` hooks of one stage run in `priority` order, like every other hook. A stage the flow never reaches (because an earlier stage failed) runs none of its hooks, `@Finally` included: hook `finalize` to see the end of every call.
 
@@ -93,7 +93,7 @@ A `@Stage('execute')` hook does not replace the flow's own `execute` step: it ad
 
 To keep the flow's own step from running:
 
-- Call `ctx.respond(result)` from the `@Stage` (or a `@Will`) hook. The flow ends with that result: it skips the rest of the stage and the main stages after it, while the stage's `@Did` and `@Finally` hooks and the cleanup stages (in `tools:call-tool`: `releaseSemaphore`, `releaseQuota`, `applyUI`, `finalize`) still run. In `tools:call-tool`, `result` is a complete MCP `CallToolResult`; it does not go through the tool's output schema.
+- Call `ctx.respond(result)` from the `@Stage` (or a `@Will`) hook. The flow ends with that result: it skips the rest of the stage and the main stages after it, while the stage's `@Finally` hooks (and its `@Did` hooks, when a `@Stage` hook answered) and the cleanup stages (in `tools:call-tool`: `releaseSemaphore`, `releaseQuota`, `applyUI`, `finalize`) still run. In `tools:call-tool`, `result` is a complete MCP `CallToolResult`; it does not go through the tool's output schema.
 - Or use an `@Around` hook that does not call `next()`. The stage is skipped and the flow goes on; in `tools:call-tool`, set `ctx.state.required.toolContext.output`, and the result is validated and formatted like the tool's own.
 
 ## Available Flow Names

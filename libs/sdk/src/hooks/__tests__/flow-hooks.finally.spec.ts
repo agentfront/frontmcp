@@ -72,6 +72,11 @@ class LedgerFinallyPlugin {
     throw new PublicMcpError('blocked by policy');
   }
 
+  @ToolHook.Will('execute', { filter: calling('post_gated') })
+  closeGate(ctx: CallToolFlow) {
+    ctx.fail(new PublicMcpError('gate closed'));
+  }
+
   @ToolHook.Will('execute', { filter: calling('post_cached') })
   answerFromCache(ctx: CallToolFlow) {
     ctx.respond({ content: [{ type: 'text', text: 'from cache' }] });
@@ -117,6 +122,7 @@ class LedgerFinallyPlugin {
     PostCrashTool,
     PostRefusedTool,
     postingTool('post_blocked'),
+    postingTool('post_gated'),
     postingTool('post_cached'),
     postingTool('post_wrapped'),
   ],
@@ -205,6 +211,18 @@ describe('Finally hooks', () => {
       'Finally p100 execute: blocked by policy',
       'Did finalize',
       'Finally finalize: blocked by policy',
+    ]);
+  });
+
+  it('read the error a Will hook passed to fail(), not the signal that carried it', async () => {
+    const call = await callTool(server, 'post_gated');
+
+    expect({ isError: call.isError, text: call.text }).toEqual({ isError: true, text: 'gate closed' });
+    expect(call.trace).toEqual([
+      'Finally p0 execute: gate closed',
+      'Finally p100 execute: gate closed',
+      'Did finalize',
+      'Finally finalize: gate closed',
     ]);
   });
 

@@ -16,10 +16,7 @@ function record(flowCtx: CallToolFlow, stage: string): void {
   });
 }
 
-/**
- * Finally hooks run after a stage whatever its outcome. The first two try to answer and to fail the call;
- * both are ignored, and the recorders after them still see how each stage ended.
- */
+/** The first two Finally hooks try to answer and to fail the call: both are ignored, and the recorders still run. */
 @Plugin({
   name: 'finally-recorder',
   description: 'Records how the execute and finalize stages of a tool call ended',

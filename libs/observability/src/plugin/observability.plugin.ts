@@ -638,8 +638,8 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onTransportStage('onElicitResult', ctx);
   }
 
-  @LegacySseHook.Did('cleanup', { priority: 1000 })
-  _sseDidCleanup(ctx: unknown): void {
+  @LegacySseHook.Finally('cleanup', { priority: 1000 })
+  _sseFinallyCleanup(ctx: unknown): void {
     if (this.tracingEnabled) onTransportDidFinalize(ctx);
   }
 
@@ -682,8 +682,8 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onTransportStage('onExtApps', ctx);
   }
 
-  @StreamableHttpHook.Did('cleanup', { priority: 1000 })
-  _shttpDidCleanup(ctx: unknown): void {
+  @StreamableHttpHook.Finally('cleanup', { priority: 1000 })
+  _shttpFinallyCleanup(ctx: unknown): void {
     if (this.tracingEnabled) onTransportDidFinalize(ctx);
   }
 
@@ -701,8 +701,8 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onTransportStage('handleRequest', ctx);
   }
 
-  @StatelessHttpHook.Did('cleanup', { priority: 1000 })
-  _slhttpDidCleanup(ctx: unknown): void {
+  @StatelessHttpHook.Finally('cleanup', { priority: 1000 })
+  _slhttpFinallyCleanup(ctx: unknown): void {
     if (this.tracingEnabled) onTransportDidFinalize(ctx);
   }
 

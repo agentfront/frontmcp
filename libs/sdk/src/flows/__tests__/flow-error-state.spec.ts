@@ -65,6 +65,17 @@ class ZeroThrower {
 @App({ id: 'zero', name: 'Zero', tools: [OkTool], plugins: [ZeroThrower, FlowErrorProbe] })
 class ZeroApp {}
 
+@Plugin({ name: 'finalize-breaker' })
+class FinalizeBreaker {
+  @ToolHook.Will('finalize')
+  breakFinalize() {
+    throw new Error('finalize broke');
+  }
+}
+
+@App({ id: 'broken', name: 'Broken', tools: [CrashTool], plugins: [FinalizeBreaker, FlowErrorProbe] })
+class BrokenFinalizeApp {}
+
 describe('state.flowError', () => {
   beforeEach(() => {
     seen.length = 0;
@@ -103,5 +114,19 @@ describe('state.flowError', () => {
 
     expect(seen).toEqual([]);
     expect(seenFinally).toEqual([expect.any(InvalidOutputError)]);
+  });
+
+  it('keeps the first failure, the one the client gets, when the finalize stage fails after it', async () => {
+    const server = await FrontMcpInstance.createDirect({
+      info: { name: 'broken', version: '1.0.0' },
+      apps: [BrokenFinalizeApp],
+    });
+
+    const failure = await server.callTool('crash', {}).catch((error: unknown) => error);
+    await server.dispose();
+
+    expect(String(failure)).toContain('tool crashed');
+    expect(seenFinally).toHaveLength(1);
+    expect(String(seenFinally[0])).toContain('tool crashed');
   });
 });

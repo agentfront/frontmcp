@@ -1,3 +1,5 @@
+import { FrontMcpFlowHookTokens, type HookMetadata } from '@frontmcp/sdk';
+
 import { StructuredLogTransport } from '../logging/structured-log-transport';
 import { OTEL_CONFIG, OTEL_TRACER } from '../otel/otel.tokens';
 import ObservabilityPlugin from '../plugin/observability.plugin';
@@ -132,7 +134,7 @@ describe('ObservabilityPlugin', () => {
     it('_sseDidInit', () => plugin._sseDidInit(emptyCtx));
     it('_sseDidMsg', () => plugin._sseDidMsg(emptyCtx));
     it('_sseDidElicit', () => plugin._sseDidElicit(emptyCtx));
-    it('_sseDidCleanup', () => plugin._sseDidCleanup(emptyCtx));
+    it('_sseFinallyCleanup', () => plugin._sseFinallyCleanup(emptyCtx));
 
     // Transport: Streamable HTTP
     it('_shttpWillParse', () => plugin._shttpWillParse(emptyCtx));
@@ -142,12 +144,12 @@ describe('ObservabilityPlugin', () => {
     it('_shttpDidElicit', () => plugin._shttpDidElicit(emptyCtx));
     it('_shttpDidSse', () => plugin._shttpDidSse(emptyCtx));
     it('_shttpDidExtApps', () => plugin._shttpDidExtApps(emptyCtx));
-    it('_shttpDidCleanup', () => plugin._shttpDidCleanup(emptyCtx));
+    it('_shttpFinallyCleanup', () => plugin._shttpFinallyCleanup(emptyCtx));
 
     // Transport: Stateless HTTP
     it('_slhttpWillParse', () => plugin._slhttpWillParse(emptyCtx));
     it('_slhttpDidHandle', () => plugin._slhttpDidHandle(emptyCtx));
-    it('_slhttpDidCleanup', () => plugin._slhttpDidCleanup(emptyCtx));
+    it('_slhttpFinallyCleanup', () => plugin._slhttpFinallyCleanup(emptyCtx));
 
     // Auth
     it('_authVerifyWill', () => plugin._authVerifyWill(emptyCtx));
@@ -295,7 +297,7 @@ describe('ObservabilityPlugin', () => {
       plugin._sseDidInit(noop);
       plugin._sseDidMsg(noop);
       plugin._sseDidElicit(noop);
-      plugin._sseDidCleanup(noop);
+      plugin._sseFinallyCleanup(noop);
 
       // Transport: Streamable HTTP
       plugin._shttpWillParse(noop);
@@ -305,12 +307,12 @@ describe('ObservabilityPlugin', () => {
       plugin._shttpDidElicit(noop);
       plugin._shttpDidSse(noop);
       plugin._shttpDidExtApps(noop);
-      plugin._shttpDidCleanup(noop);
+      plugin._shttpFinallyCleanup(noop);
 
       // Transport: Stateless HTTP
       plugin._slhttpWillParse(noop);
       plugin._slhttpDidHandle(noop);
-      plugin._slhttpDidCleanup(noop);
+      plugin._slhttpFinallyCleanup(noop);
 
       // Auth
       plugin._authVerifyWill(noop);
@@ -413,6 +415,16 @@ describe('ObservabilityPlugin', () => {
         requestLogs: false,
       });
       expect(providers).toHaveLength(0);
+    });
+  });
+
+  describe('hooks on the finalize stages', () => {
+    it('are Finally hooks, which still run when a stage failed, so the spans they end never stay open', () => {
+      const hooks = Reflect.getMetadata(FrontMcpFlowHookTokens.hooks, ObservabilityPlugin) as HookMetadata[];
+      const finalizeStageHooks = hooks.filter((hook) => hook.stage === 'finalize' || hook.stage === 'cleanup');
+
+      expect(finalizeStageHooks.length).toBeGreaterThan(0);
+      expect(finalizeStageHooks.filter((hook) => hook.type !== 'finally').map((hook) => hook.method)).toEqual([]);
     });
   });
 });

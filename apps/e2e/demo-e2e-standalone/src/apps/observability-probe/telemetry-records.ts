@@ -6,10 +6,7 @@ import {
   type ReadableSpan,
 } from '@opentelemetry/sdk-trace-base';
 
-/**
- * The spans and request logs `@frontmcp/observability` records in this server. The tracer provider is
- * registered when this module loads, before the server starts, so observability uses it.
- */
+/** Registered when this module loads, before the server starts, so observability records into this exporter. */
 const exporter = new InMemorySpanExporter();
 trace.setGlobalTracerProvider(new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] }));
 
