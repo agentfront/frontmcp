@@ -47,7 +47,7 @@ function expectNoInternalDetail(...values: unknown[]): void {
   const serialized = JSON.stringify(values);
   expect(serialized).not.toContain('ECONNREFUSED');
   expect(serialized).not.toContain('10.0.4.7');
-  expect(serialized).not.toContain('5432');
+  expect(serialized).not.toMatch(/:5432\b/);
 }
 
 async function settled(store: TaskStore, taskId: string, owner: string): Promise<TaskRecord> {
@@ -81,6 +81,10 @@ describe('a tool error in a task', () => {
 
   beforeEach(() => {
     process.env['NODE_ENV'] = 'production';
+    // A clock whose epoch milliseconds contain 5432, as task timestamps sometimes do
+    const realNow = Date.now.bind(Date);
+    const offset = 1_754_320_000_000 - realNow();
+    jest.spyOn(Date, 'now').mockImplementation(() => realNow() + offset);
   });
 
   afterEach(() => {
