@@ -27,12 +27,13 @@ jest.mock('../base.host.adapter', () => {
 
 jest.mock('@frontmcp/utils', () => {
   const actual = jest.requireActual('@frontmcp/utils');
-  return { ...actual, chmod: jest.fn(actual.chmod), lstat: jest.fn(actual.lstat) };
+  return { ...actual, chmod: jest.fn(actual.chmod), lstat: jest.fn(actual.lstat), stat: jest.fn(actual.stat) };
 });
 
 const actualUtils = jest.requireActual<typeof utils>('@frontmcp/utils');
 const chmodMock = utils.chmod as jest.MockedFunction<typeof utils.chmod>;
 const lstatMock = utils.lstat as jest.MockedFunction<typeof utils.lstat>;
+const statMock = utils.stat as jest.MockedFunction<typeof utils.stat>;
 
 const posixIt = process.platform === 'win32' ? it.skip : it;
 
@@ -71,6 +72,7 @@ describe('ExpressHostAdapter on a Unix socket', () => {
     log.mockRestore();
     chmodMock.mockImplementation(actualUtils.chmod);
     lstatMock.mockImplementation(actualUtils.lstat);
+    statMock.mockImplementation(actualUtils.stat);
     fs.rmSync(directory, { recursive: true, force: true });
   });
 
@@ -91,10 +93,14 @@ describe('ExpressHostAdapter on a Unix socket', () => {
 
   posixIt('binds owner-only before any chmod, so there is no window', async () => {
     chmodMock.mockResolvedValue(undefined);
+    lstatMock.mockImplementation(async (p) => {
+      const stats = await actualUtils.lstat(p);
+      return p === socketPath ? Object.assign(stats, { mode: (stats.mode & ~0o777) | 0o600 }) : stats;
+    });
 
     await start();
 
-    expect(fs.lstatSync(socketPath).mode & 0o777).toBe(0o600);
+    expect(fs.lstatSync(socketPath).mode & 0o077).toBe(0);
   });
 
   posixIt('restores the process umask after binding', async () => {
@@ -135,6 +141,33 @@ describe('ExpressHostAdapter on a Unix socket', () => {
 
   posixIt('accepts a world-writable directory with the sticky bit, as /tmp is', async () => {
     fs.chmodSync(directory, 0o1777);
+
+    await start();
+
+    expect(await health(socketPath)).toBe(200);
+  });
+
+  function ownDirectoryAs(uid: number): void {
+    statMock.mockImplementation(async (p) => {
+      const stats = await actualUtils.stat(p);
+      return p === directory ? Object.assign(stats, { uid }) : stats;
+    });
+  }
+
+  posixIt('refuses a sticky directory another user owns, since its owner can replace the socket', async () => {
+    fs.chmodSync(directory, 0o1777);
+    ownDirectoryAs(fs.statSync(directory).uid + 1);
+
+    const failure = start();
+
+    await expect(failure).rejects.toBeInstanceOf(UnsafeSocketDirectoryError);
+    await expect(failure).rejects.toThrow('another user');
+    expect(fs.existsSync(socketPath)).toBe(false);
+  });
+
+  posixIt('accepts a sticky directory root owns, as /tmp is', async () => {
+    fs.chmodSync(directory, 0o1777);
+    ownDirectoryAs(0);
 
     await start();
 

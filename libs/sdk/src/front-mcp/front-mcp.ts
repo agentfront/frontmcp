@@ -88,21 +88,24 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
   /** Shut down what a failed start built, for at most the signal path's deadline, then fail with its error. */
   private async releaseFailedStart(error: unknown): Promise<never> {
+    await this.releaseWithin(DEFAULT_SHUTDOWN_DEADLINE_MS);
+    throw error;
+  }
+
+  /** Shut down what a failed start built, waiting at most `deadlineMs` for it. */
+  private async releaseWithin(deadlineMs: number): Promise<void> {
     let deadline: ReturnType<typeof setTimeout> | undefined;
     const outlasted = new Promise<boolean>((resolve) => {
-      deadline = setTimeout(() => resolve(true), DEFAULT_SHUTDOWN_DEADLINE_MS);
+      deadline = setTimeout(() => resolve(true), deadlineMs);
     });
     const released = this.shutdown().then(
       () => false,
       () => false,
     );
     if (await Promise.race([released, outlasted])) {
-      this.log?.error(
-        `Releasing a server that failed to start did not finish within ${DEFAULT_SHUTDOWN_DEADLINE_MS} ms`,
-      );
+      this.log?.error(`Releasing a server that failed to start did not finish within ${deadlineMs} ms`);
     }
     clearTimeout(deadline);
-    throw error;
   }
 
   async initialize(): Promise<void> {
@@ -805,7 +808,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       await frontMcp.ready;
       // Scopes are now live (sqlite/redis/channels/jobs) — shut them down if a
       // later startup step throws.
-      startupCleanups.push(() => frontMcp.shutdown());
+      startupCleanups.push(() => frontMcp.releaseWithin(STDIO_SHUTDOWN_DEADLINE_MS));
 
       // The scope holding the server's own apps, not a standalone app's
       const primaryScope = frontMcp.getPrimaryScope();

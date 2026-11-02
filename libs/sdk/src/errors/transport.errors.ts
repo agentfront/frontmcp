@@ -127,14 +127,18 @@ function octalMode(mode: number): string {
 }
 
 /**
- * Thrown at startup when a Unix socket's directory can be written by the group or others and has no
- * sticky bit, so another user could replace the socket.
+ * Thrown at startup when another user could replace a Unix socket in its directory: the directory
+ * belongs to another user (not root), or the group or others can write to it and it has no sticky bit.
  */
 export class UnsafeSocketDirectoryError extends InternalMcpError {
-  constructor(directory: string, mode: number) {
+  constructor(directory: string, mode: number, ownerUid?: number) {
+    const reason =
+      ownerUid === undefined
+        ? 'the group or others can write to it and it has no sticky bit'
+        : `it belongs to another user (uid ${ownerUid})`;
     super(
-      `Refusing to create a Unix socket in ${directory} (mode ${octalMode(mode)}): the group or others can write ` +
-        'to it and it has no sticky bit. Use a directory only you can write to, such as ~/.frontmcp/sockets.',
+      `Refusing to create a Unix socket in ${directory} (mode ${octalMode(mode)}): ${reason}. ` +
+        'Use a directory only you can write to, such as ~/.frontmcp/sockets.',
       'UNSAFE_SOCKET_DIRECTORY',
     );
   }

@@ -20,11 +20,10 @@ Shows how to secure a local daemon with restrictive socket permissions, XDG-comp
 
 ```typescript
 // src/lifecycle/daemon-security.ts
-import { chmod } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 
-import { ensureDir, fileExists, readFile, stat, writeFile } from '@frontmcp/utils';
+import { chmod, ensureDir, fileExists, readFile, stat, writeFile } from '@frontmcp/utils';
 
 // XDG Base Directory compliance
 function getConfigDir(appName: string): string {
@@ -86,6 +85,8 @@ export async function loadSecrets(configDir: string): Promise<Record<string, str
 
 ```typescript
 // src/main.ts
+import * as os from 'os';
+
 import { FrontMcp } from '@frontmcp/sdk';
 
 import { MyApp } from './my.app';
@@ -94,9 +95,10 @@ import { MyApp } from './my.app';
   info: { name: 'secure-daemon', version: '1.0.0' },
   apps: [MyApp],
 
-  // Socket-only — no TCP network exposure
+  // Socket-only — no TCP network exposure. FrontMCP creates the socket 0600 and refuses a directory
+  // another user could replace it in; `frontmcp socket` creates ~/.frontmcp/sockets as 0700.
   http: {
-    socketPath: '/tmp/secure-daemon.sock',
+    socketPath: `${os.homedir()}/.frontmcp/sockets/secure-daemon.sock`,
   },
 
   // SQLite in the data directory (persistent, writable)

@@ -13,9 +13,11 @@ import {
 } from '../../errors/transport.errors';
 
 const OWNER_ONLY_MODE = 0o600;
-const OWNER_ONLY_UMASK = 0o177;
+// Clears group and other bits only: the umask is process-wide, so a directory created meanwhile stays usable.
+const OWNER_ONLY_UMASK = 0o077;
 const GROUP_OR_OTHER_WRITE = 0o022;
 const STICKY_BIT = 0o1000;
+const ROOT_UID = 0;
 
 /** A win32 socket path names a named pipe, which has no file mode. */
 export function hasSocketFileMode(): boolean {
@@ -26,10 +28,11 @@ function errorCode(error: unknown): string | undefined {
   return (error as NodeJS.ErrnoException | undefined)?.code;
 }
 
-/** Refuse a directory the group or others can write to, unless it has the sticky bit (as /tmp does). */
+/** Refuse a directory another user owns (the sticky bit does not bind its owner) or can write without the sticky bit. */
 export async function assertSafeSocketDirectory(socketPath: string): Promise<void> {
   const directory = path.dirname(path.resolve(socketPath));
-  const { mode } = await stat(directory);
+  const { mode, uid } = await stat(directory);
+  if (uid !== ROOT_UID && uid !== process.getuid?.()) throw new UnsafeSocketDirectoryError(directory, mode, uid);
   if (mode & GROUP_OR_OTHER_WRITE && !(mode & STICKY_BIT)) throw new UnsafeSocketDirectoryError(directory, mode);
 }
 

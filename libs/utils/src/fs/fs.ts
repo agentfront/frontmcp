@@ -298,7 +298,6 @@ export async function stat(p: string): Promise<import('fs').Stats> {
   return fsp.stat(p);
 }
 
-/** Link type accepted by {@link symlink}; only meaningful on Windows. */
 /**
  * Get file/directory stats without following a symlink.
  *
@@ -332,6 +331,7 @@ export async function chmod(p: string, mode: number): Promise<void> {
   await fsp.chmod(p, mode);
 }
 
+/** Link type accepted by {@link symlink}; only meaningful on Windows. */
 export type SymlinkType = 'dir' | 'file' | 'junction';
 
 /**

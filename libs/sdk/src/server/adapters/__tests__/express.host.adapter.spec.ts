@@ -739,6 +739,23 @@ describe('ExpressHostAdapter — derived Origin check on a loopback bind', () =>
     expect(check(adapter, { host, origin: 'http://[::1]:3000' })).toBe('allowed');
   });
 
+  it('refuses Origin null and matches the spellings of its own origin', () => {
+    const adapter = listening(new ExpressHostAdapter(), 3000, '127.0.0.1');
+
+    expect(check(adapter, { host, origin: 'null' })).toMatchObject({ status: 403 });
+    expect(check(adapter, { host, origin: 'HTTP://LOCALHOST:3000' })).toBe('allowed');
+    expect(check(adapter, { host, origin: 'http://[0:0:0:0:0:0:0:1]:3000' })).toBe('allowed');
+    expect(check(adapter, { host, origin: 'https://127.0.0.1:3000' })).toBe('allowed');
+    expect(check(adapter, { host, origin: 'http://127.0.0.2:3000' })).toMatchObject({ status: 403 });
+  });
+
+  it('matches a default port only for its own scheme', () => {
+    const adapter = listening(new ExpressHostAdapter(), 80, '127.0.0.1');
+
+    expect(check(adapter, { host: 'localhost', origin: 'http://localhost' })).toBe('allowed');
+    expect(check(adapter, { host: 'localhost', origin: 'https://localhost' })).toMatchObject({ status: 403 });
+  });
+
   it('refuses a loopback page served on another port', () => {
     const adapter = listening(new ExpressHostAdapter(), 3000, '127.0.0.1');
 
@@ -767,6 +784,16 @@ describe('ExpressHostAdapter — derived Origin check on a loopback bind', () =>
 
     expect(check(adapter, { host, origin: 'https://app.example.com' })).toBe('allowed');
     expect(check(adapter, { host, origin: 'http://localhost:3000' })).toMatchObject({ status: 403 });
+  });
+
+  it('leaves Origin to the operator when the Host list is explicit', () => {
+    const adapter = listening(
+      new ExpressHostAdapter({ security: { dnsRebindingProtection: { allowedHosts: [host] } } }),
+      3000,
+      '127.0.0.1',
+    );
+
+    expect(check(adapter, { host, origin: 'https://evil.example' })).toBe('allowed');
   });
 
   it('checks no Origin on a routable bind', () => {
