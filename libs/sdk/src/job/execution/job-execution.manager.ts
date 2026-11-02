@@ -7,9 +7,20 @@ import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobPermission } from '../../common/metadata/job.metadata';
 import { resolvePrincipal } from '../../common/utils/principal.utils';
 import { FrontMcpContext } from '../../context';
-import { JobNotAuthorizedError } from '../../errors';
-import { WorkflowEngine } from '../../workflow/engine/workflow.engine';
 import {
+  JobCancelledError,
+  JobInterruptedError,
+  JobNotAuthorizedError,
+  JobRunFinishedError,
+  JobRunNotCancellableError,
+  JobRunNotFoundError,
+  JobTimeoutError,
+} from '../../errors';
+import { outlasts } from '../../provider/provider.lifecycle';
+import { WorkflowEngine } from '../../workflow/engine/workflow.engine';
+import { type JobAdmission } from '../job-admission';
+import {
+  abortableDelay,
   retryDelayMs,
   runJobAttemptFlow,
   toJobError,
@@ -20,13 +31,34 @@ import {
 } from '../job-attempt';
 import { detachedRunContext } from '../job-context-providers';
 import { JobPermissionGuard } from '../job-permission.guard';
+import { jobRunUri } from '../job-run-access';
 import { type JobRegistryInterface } from '../job.registry';
 import {
+  FINISHED_JOB_STATES,
   type JobExecutionState,
+  type JobRunProgress,
   type JobRunRecord,
   type JobStateStore,
   type WorkflowRunRecord,
 } from '../store/job-state.interface';
+
+/** How long an attempt of a job that sets no `timeout` may run. */
+export const DEFAULT_JOB_TIMEOUT_MS = 300_000;
+
+export interface JobExecutionManagerOptions {
+  /** How long an attempt of a job that sets no `timeout` may run, in ms; 0 for no limit. @default 300000 */
+  defaultTimeoutMs?: number;
+  /** When attempts may start (`jobs.admission`); unset admits every attempt at once. */
+  admission?: JobAdmission;
+  /** How often an active run reads the store for a cancel another process wrote, in ms; unset never reads it. */
+  cancelPollMs?: number;
+}
+
+/** A run this manager is executing: aborting its controller stops the run, and `settled` resolves once it ended. */
+interface ActiveRun {
+  controller: AbortController;
+  settled: Promise<void>;
+}
 
 export interface ExecuteJobOptions {
   background?: boolean;
@@ -73,21 +105,28 @@ export class JobExecutionManager {
   private readonly logger: FrontMcpLogger;
   private readonly notifyFn?: (data: Record<string, unknown>) => Promise<void>;
   private readonly scope?: ScopeEntry;
+  private readonly options: JobExecutionManagerOptions;
+  private readonly activeRuns = new Map<string, ActiveRun>();
+  /** The last write this process queued for each run, so the next one waits for it. */
+  private readonly runWrites = new Map<string, Promise<unknown>>();
 
   /**
    * @param scope - The scope the manager serves. A background run without a caller context gets a
-   *   fresh context of this scope; without a scope, a job's own scope is used.
+   *   fresh context of this scope; without a scope, a job's own scope is used. Its subscribers to
+   *   `job://runs/{runId}` are told when a run changes.
    */
   constructor(
     stateStore: JobStateStore,
     logger: FrontMcpLogger,
     notifyFn?: (data: Record<string, unknown>) => Promise<void>,
     scope?: ScopeEntry,
+    options: JobExecutionManagerOptions = {},
   ) {
     this.stateStore = stateStore;
     this.logger = logger;
     this.notifyFn = notifyFn;
     this.scope = scope;
+    this.options = options;
   }
 
   /**
@@ -235,6 +274,44 @@ export class JobExecutionManager {
   }
 
   /**
+   * Cancel a job run: the cancel is written to the store first, where every process sharing it reads it,
+   * then the run's `this.signal` is aborted with `JobCancelledError` when this process runs it (another
+   * process polls the store and aborts its own run). The caller checks it may cancel the run.
+   *
+   * @throws JobRunNotFoundError for an unknown run
+   * @throws JobRunNotCancellableError for a workflow run
+   * @throws JobRunFinishedError for a run that already ended
+   */
+  async cancel(runId: string): Promise<void> {
+    const reason = new JobCancelledError(runId);
+    await this.withRunLock(runId, async () => {
+      const record = await this.stateStore.getRun(runId);
+      if (!record) throw new JobRunNotFoundError(runId);
+      if ('workflowName' in record) throw new JobRunNotCancellableError(runId);
+      if (FINISHED_JOB_STATES.has(record.state)) throw new JobRunFinishedError(runId, record.state);
+      await this.stateStore.requestCancel?.(runId);
+      await this.write(runId, cancelledUpdate(reason));
+    });
+    this.activeRuns.get(runId)?.controller.abort(reason);
+  }
+
+  /**
+   * Interrupt every run this manager is executing, as the scope shuts down: each is aborted with
+   * `JobInterruptedError`, runs its job's `cleanup`, and ends as `interrupted`. With `timeoutMs`, waits
+   * for them at most that long.
+   */
+  async dispose(timeoutMs?: number): Promise<void> {
+    const runs = [...this.activeRuns.entries()];
+    for (const [runId, run] of runs) run.controller.abort(new JobInterruptedError(runId));
+    const ended = () => Promise.all(runs.map(([, run]) => run.settled));
+    if (timeoutMs === undefined) {
+      await ended();
+    } else if (await outlasts(ended, timeoutMs)) {
+      this.logger.warn(`The interrupted job runs did not end within ${timeoutMs} ms`);
+    }
+  }
+
+  /**
    * List runs with optional filters.
    */
   async listRuns(opts?: {
@@ -254,12 +331,69 @@ export class JobExecutionManager {
     runId: string,
     opts: ExecuteJobOptions,
   ): Promise<InlineJobResult> {
-    await this.updateState(runId, { state: 'running' });
+    const { signal, end } = this.startRun(runId);
+    try {
+      return await this.runJobAttempts(job, input, runId, opts, signal);
+    } finally {
+      end();
+    }
+  }
+
+  /** Track a run this process executes until `end()`: its abort controller, and its watch for a cancel in the store. */
+  private startRun(runId: string): { signal: AbortSignal; end: () => void } {
+    const controller = new AbortController();
+    let settle: () => void = () => undefined;
+    const settled = new Promise<void>((resolve) => (settle = resolve));
+    const { cancelPollMs } = this.options;
+    const watch = cancelPollMs
+      ? setInterval(() => void this.abortIfCancelled(runId, controller), cancelPollMs)
+      : undefined;
+    watch?.unref?.();
+    this.activeRuns.set(runId, { controller, settled });
+    const end = () => {
+      clearInterval(watch);
+      this.activeRuns.delete(runId);
+      settle();
+    };
+    return { signal: controller.signal, end };
+  }
+
+  private async abortIfCancelled(runId: string, controller: AbortController): Promise<void> {
+    try {
+      if (await this.cancelRequested(runId)) controller.abort(new JobCancelledError(runId));
+    } catch (error) {
+      this.logger.warn(`Could not read whether run ${runId} was cancelled: ${toJobError(error).message}`);
+    }
+  }
+
+  private async runJobAttempts(
+    job: JobEntry,
+    input: unknown,
+    runId: string,
+    opts: ExecuteJobOptions,
+    signal: AbortSignal,
+  ): Promise<InlineJobResult> {
+    // A run cancelled before it started never starts
+    const started = await this.withRunLock(runId, async () => {
+      if (await this.cancelRequested(runId)) return false;
+      await this.write(runId, { state: 'running' });
+      return true;
+    });
+    if (!started) {
+      await this.notify({ type: 'job:status', runId, state: 'cancelled', jobName: job.name });
+      throw new JobCancelledError(runId);
+    }
     await this.notify({ type: 'job:status', runId, state: 'running', jobName: job.name });
 
     const retryConfig = job.metadata.retry ?? {};
     const maxAttempts = retryConfig.maxAttempts ?? 1;
-    const run = new RunRecorder(runId, maxAttempts, (outcome) => this.recordAttempt(job, runId, outcome));
+    const timeoutMs = job.metadata.timeout ?? this.options.defaultTimeoutMs ?? DEFAULT_JOB_TIMEOUT_MS;
+    const run = new RunRecorder(
+      runId,
+      maxAttempts,
+      (outcome) => this.recordAttempt(job, runId, outcome),
+      (progress) => this.updateState(runId, { progress }),
+    );
 
     // Each attempt is one run of the `jobs:execute-job` flow, which records how it ended (#700).
     // The first attempt always runs; `retry.maxAttempts` is at least 1.
@@ -275,6 +409,9 @@ export class JobExecutionManager {
           contextProviders: opts.contextProviders,
           authoritiesContextBuilder: opts.authoritiesContextBuilder,
           run,
+          signal,
+          timeoutMs,
+          admission: this.options.admission,
         });
       } catch (err) {
         const error = toJobError(err);
@@ -282,7 +419,14 @@ export class JobExecutionManager {
         // The flow records a failed attempt, unless it failed before it could
         await run.ensureRecorded({ state: retry ? 'retrying' : 'failed', attempt, error });
         if (!retry) throw error;
-        await new Promise((resolve) => setTimeout(resolve, retryDelayMs(retryConfig, attempt)));
+        try {
+          await abortableDelay(retryDelayMs(retryConfig, attempt), signal);
+        } catch (stopped) {
+          // Cancelled or interrupted between two attempts
+          const stoppedError = toJobError(stopped);
+          await run.recordAttempt({ state: 'failed', attempt, error: stoppedError });
+          throw stoppedError;
+        }
         continue;
       }
       // A hook may keep the flow from recording, or the run store failed its write; the run record
@@ -295,37 +439,42 @@ export class JobExecutionManager {
 
   /** Write how an attempt ended to the run record, and send the run's status notification. */
   private async recordAttempt(job: JobEntry, runId: string, outcome: JobAttemptOutcome): Promise<void> {
+    const state = await this.withRunLock(runId, () => this.writeOutcome(runId, outcome));
+    if (!state) return;
+    const attempt = state === 'retrying' ? { attempt: outcome.attempt } : {};
+    await this.notify({ type: 'job:status', runId, state, jobName: job.name, ...attempt });
+  }
+
+  /** Write how an attempt ended, answering the state written; a cancel written to the store wins over it. */
+  private async writeOutcome(runId: string, outcome: JobAttemptOutcome): Promise<JobExecutionState | undefined> {
+    if (await this.cancelRequested(runId)) {
+      if (outcome.state === 'retrying') return undefined;
+      await this.write(runId, { ...cancelledUpdate(new JobCancelledError(runId)), attempt: outcome.attempt });
+      return 'cancelled';
+    }
     switch (outcome.state) {
       case 'completed':
-        await this.updateState(runId, {
+        await this.write(runId, {
           state: 'completed',
           result: outcome.result,
           completedAt: Date.now(),
           attempt: outcome.attempt,
           logs: [...outcome.logs],
         });
-        await this.notify({ type: 'job:status', runId, state: 'completed', jobName: job.name });
-        return;
+        return 'completed';
       case 'retrying':
-        await this.updateState(runId, { state: 'retrying', attempt: outcome.attempt });
-        await this.notify({
-          type: 'job:status',
-          runId,
-          state: 'retrying',
-          jobName: job.name,
-          attempt: outcome.attempt,
-        });
-        return;
+        await this.write(runId, { state: 'retrying', attempt: outcome.attempt });
+        return 'retrying';
       case 'failed': {
         const { error } = outcome;
-        await this.updateState(runId, {
-          state: 'failed',
+        const state = finishedStateOf(error);
+        await this.write(runId, {
+          state,
           error: { message: error.message, name: error.name, stack: error.stack },
           completedAt: Date.now(),
           attempt: outcome.attempt,
         });
-        await this.notify({ type: 'job:status', runId, state: 'failed', jobName: job.name });
-        return;
+        return state;
       }
     }
   }
@@ -361,11 +510,12 @@ export class JobExecutionManager {
         context: opts.context,
         authoritiesContextBuilder: opts.authoritiesContextBuilder,
         workflowRunId: runId,
+        admission: this.options.admission,
       });
 
       const result = await engine.execute(opts.workflowInput);
 
-      await this.stateStore.updateRun(runId, {
+      await this.updateState(runId, {
         state: result.state === 'completed' ? 'completed' : 'failed',
         result,
         completedAt: Date.now(),
@@ -406,8 +556,35 @@ export class JobExecutionManager {
 
   // ---- Helpers ----
 
-  private async updateState(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
+  /** Write to the run record once this process's earlier writes to it landed (see {@link write}). */
+  private updateState(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
+    return this.withRunLock(runId, () => this.write(runId, updates));
+  }
+
+  /** Write to the run record, and tell the subscribers to `job://runs/{runId}`; callers hold the run's lock. */
+  private async write(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
     await this.stateStore.updateRun(runId, updates);
+    this.scope?.resources.notifyContentChanged(jobRunUri(runId));
+  }
+
+  /**
+   * Run `task` once the writes this process queued for the run before it are done. A store's update reads
+   * the run and writes it back, so two writes that overlap would lose one of them.
+   */
+  private withRunLock<T>(runId: string, task: () => Promise<T>): Promise<T> {
+    const queued = (this.runWrites.get(runId) ?? Promise.resolve()).then(task);
+    const done = queued.catch(() => undefined);
+    this.runWrites.set(runId, done);
+    void done.then(() => {
+      if (this.runWrites.get(runId) === done) this.runWrites.delete(runId);
+    });
+    return queued;
+  }
+
+  /** Whether the run was cancelled: the store's cancel request, or its state on a store that keeps none. */
+  private async cancelRequested(runId: string): Promise<boolean> {
+    if (this.stateStore.isCancelRequested) return this.stateStore.isCancelRequested(runId);
+    return (await this.stateStore.getRun(runId))?.state === 'cancelled';
   }
 
   private async notify(data: Record<string, unknown>): Promise<void> {
@@ -447,14 +624,22 @@ function withBackgroundContext<Options extends ExecuteJobOptions>(opts: Options,
  */
 class RunRecorder implements JobRunRecorder {
   private readonly recorded = new Set<number>();
+  private finished = false;
 
   constructor(
     readonly runId: string,
     readonly maxAttempts: number,
     private readonly write: (outcome: JobAttemptOutcome) => Promise<void>,
+    private readonly writeProgress: (progress: JobRunProgress) => Promise<void>,
   ) {}
 
+  async recordProgress(progress: JobRunProgress): Promise<void> {
+    // A run that ended keeps what it last reported
+    if (!this.finished) await this.writeProgress(progress);
+  }
+
   async recordAttempt(outcome: JobAttemptOutcome): Promise<void> {
+    if (outcome.state !== 'retrying') this.finished = true;
     await this.write(outcome);
     this.recorded.add(outcome.attempt);
   }
@@ -462,4 +647,17 @@ class RunRecorder implements JobRunRecorder {
   async ensureRecorded(outcome: JobAttemptOutcome): Promise<void> {
     if (!this.recorded.has(outcome.attempt)) await this.recordAttempt(outcome);
   }
+}
+
+/** What a cancel writes to the run record. */
+function cancelledUpdate(reason: JobCancelledError): Partial<JobRunRecord> {
+  return { state: 'cancelled', error: { message: reason.message, name: reason.name }, completedAt: Date.now() };
+}
+
+/** The state a run ends in when its last attempt failed with `error`. */
+function finishedStateOf(error: Error): JobExecutionState {
+  if (error instanceof JobCancelledError) return 'cancelled';
+  if (error instanceof JobInterruptedError) return 'interrupted';
+  if (error instanceof JobTimeoutError) return 'timed_out';
+  return 'failed';
 }

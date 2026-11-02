@@ -5,6 +5,7 @@ import { ensureDir, fileExists, readFile, writeJSON } from '@frontmcp/utils';
 import { fsp, resolveEntry } from '../../shared/fs';
 import { runTsc } from '../../shared/tsc';
 import { cleanOutDir } from '../../shared/clean-out-dir';
+import { emitServerManifest } from './server-manifest';
 import { REQUIRED_DECORATOR_FIELDS } from '../../core/tsconfig';
 import { ADAPTERS, composeAdapterSetup } from './adapters';
 import { haEnv } from '../../config/ha-env';
@@ -212,6 +213,23 @@ export async function runBuild(opts: ParsedArgs): Promise<void> {
   await buildSingleTarget(target, opts, config);
 }
 
+/** What a deployment in `frontmcp.config` forwards to the exec build. */
+interface ExecOverrides {
+  cli?: CliTargetConfig;
+  // #365 round-3 — without this, top-level `nodeVersion` declared in
+  // `frontmcp.config.{ts,js}` was silently dropped because the legacy
+  // `loadExecConfig` doesn't read .ts and the new-shape loader's result
+  // wasn't forwarded into buildExec. The exec build's manifest emitter
+  // shipped the SDK default (`>=22.0.0`) instead of the user's value.
+  nodeVersion?: string;
+  // #642 — `transport.http.path` reaches the exec/node runner as an env default.
+  httpEntryPath?: string;
+  // #680 — the deployment's `server` block (http, cookies, csp, headers) for the bundle banner.
+  server?: ServerDefaults;
+  // #680 — `deployments[].env`, carried as defaults by the artifact.
+  env?: Record<string, string>;
+}
+
 /**
  * Build a single deployment target.
  * Merges per-target config (from frontmcp.config) with CLI opts.
@@ -244,21 +262,7 @@ async function buildSingleTarget(
   // #370: forward the cli deployment's `cli` block from the FrontMcp config
   // into the exec build so the manifest and the generated CLI reflect it. The
   // top-level `build` block reaches the exec build through `normalizeConfig`.
-  const execOverrides: {
-    cli?: CliTargetConfig;
-    // #365 round-3 — without this, top-level `nodeVersion` declared in
-    // `frontmcp.config.{ts,js}` was silently dropped because the legacy
-    // `loadExecConfig` doesn't read .ts and the new-shape loader's result
-    // wasn't forwarded into buildExec. The exec build's manifest emitter
-    // shipped the SDK default (`>=22.0.0`) instead of the user's value.
-    nodeVersion?: string;
-    // #642 — `transport.http.path` reaches the exec/node runner as an env default.
-    httpEntryPath?: string;
-    // #680 — the deployment's `server` block (http, cookies, csp, headers) for the bundle banner.
-    server?: ServerDefaults;
-    // #680 — `deployments[].env`, carried as defaults by the artifact.
-    env?: Record<string, string>;
-  } = {
+  const execOverrides: ExecOverrides = {
     cli: deployment?.target === 'cli' ? deployment.cli : undefined,
     nodeVersion: config?.nodeVersion,
     httpEntryPath: deploymentHttpPath(
@@ -269,6 +273,22 @@ async function buildSingleTarget(
     env: deployment?.env,
   };
 
+  await runTargetBuild(target, targetOpts, opts, deployment, config, execOverrides);
+
+  // Every target gets the manifest of the server it ships; `--no-manifest` skips it.
+  if (opts.manifest !== false) {
+    await emitServerManifest({ cwd: process.cwd(), entry, outDir: targetOutDir, strictLint: opts.strictLint });
+  }
+}
+
+async function runTargetBuild(
+  target: string,
+  targetOpts: ParsedArgs,
+  opts: ParsedArgs,
+  deployment: DeploymentTarget | undefined,
+  config: FrontMcpConfigParsed | undefined,
+  execOverrides: ExecOverrides,
+): Promise<void> {
   switch (target) {
     case 'cli': {
       const { buildExec } = await import('./exec/index.js');

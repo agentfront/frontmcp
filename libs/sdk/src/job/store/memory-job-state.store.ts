@@ -11,16 +11,18 @@ import {
  */
 export class MemoryJobStateStore implements JobStateStore {
   private readonly runs = new Map<string, JobRunRecord | WorkflowRunRecord>();
+  private readonly cancelRequests = new Set<string>();
 
   async createRun(record: JobRunRecord | WorkflowRunRecord): Promise<void> {
-    this.runs.set(record.runId, { ...record });
+    this.runs.set(record.runId, { ...record, revision: 1, updatedAt: Date.now() });
   }
 
   async updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
     const existing = this.runs.get(runId);
     if (!existing) return;
     const { runId: _ignoreRunId, ...safeUpdates } = updates;
-    this.runs.set(runId, { ...existing, ...safeUpdates });
+    const revision = (existing.revision ?? 0) + 1;
+    this.runs.set(runId, { ...existing, ...safeUpdates, revision, updatedAt: Date.now() });
   }
 
   async getRun(runId: string): Promise<JobRunRecord | WorkflowRunRecord | null> {
@@ -68,7 +70,16 @@ export class MemoryJobStateStore implements JobStateStore {
     return removed;
   }
 
+  async requestCancel(runId: string): Promise<void> {
+    this.cancelRequests.add(runId);
+  }
+
+  async isCancelRequested(runId: string): Promise<boolean> {
+    return this.cancelRequests.has(runId);
+  }
+
   async dispose(): Promise<void> {
     this.runs.clear();
+    this.cancelRequests.clear();
   }
 }

@@ -20,6 +20,7 @@ import {
   extAppsOptionsSchema,
   healthOptionsSchema,
   httpOptionsSchema,
+  instructionsBudgetOptionsSchema,
   lifecycleOptionsSchema,
   loggingOptionsSchema,
   mcpRegistryOptionsSchema,
@@ -42,6 +43,7 @@ import {
   type ExtAppsOptionsInput,
   type HealthOptionsInput,
   type HttpOptionsInput,
+  type InstructionsBudgetOptionsInput,
   type LifecycleOptionsInput,
   type LoggingOptionsInput,
   type McpRegistryOptionsInput,
@@ -105,6 +107,15 @@ export interface FrontMcpBaseMetadata {
    *   catalog and channel hints.
    */
   instructions?: string;
+
+  /**
+   * Size limits, in characters, for the `initialize` instructions and each tool's `description`. Some clients copy
+   * the instructions into every tool's description. Over a limit, the server logs a warning at startup and
+   * `frontmcp build` reports it in its manifest lint (an error with `--strict-lint`). `false` turns both off.
+   *
+   * @default { instructions: 1024, toolDescription: 1024 }
+   */
+  instructionsBudget?: InstructionsBudgetOptionsInput;
 
   /**
    * Shared storage configuration
@@ -385,6 +396,15 @@ export interface FrontMcpBaseMetadata {
    *   store: { redis: { provider: 'redis', host: 'localhost' } }
    * }
    * ```
+   *
+   * @example Runs kept in a SQLite file, two at a time, each claiming 2 GB of free memory
+   * ```typescript
+   * jobs: {
+   *   enabled: true,
+   *   store: { sqlite: { path: '~/.my-server/jobs.db' } },
+   *   admission: { concurrency: 2, memoryMb: 2_048 },
+   * }
+   * ```
    */
   jobs?: {
     enabled: boolean;
@@ -395,9 +415,32 @@ export interface FrontMcpBaseMetadata {
      * @default false
      */
     allowDynamicRegistration?: boolean;
+    /**
+     * Where runs and dynamic definitions are kept: Redis, or a SQLite file the processes on one machine
+     * share (`@frontmcp/storage-sqlite`). Without one, the top-level `redis` (unless Vercel KV), then
+     * the top-level `sqlite`, then memory.
+     */
     store?: {
       redis?: RedisOptionsInput;
+      sqlite?: SqliteOptionsInput & { path: string };
       keyPrefix?: string;
+    };
+    /**
+     * How long an attempt of a job that sets no `timeout` may run, in ms, before it ends as `timed_out`;
+     * 0 for no limit.
+     *
+     * @default 300000
+     */
+    defaultTimeoutMs?: number;
+    /**
+     * When job attempts (and workflow steps) may start in this process: at most `concurrency` at once,
+     * each claiming `memoryMb` of free memory. An attempt waits up to `maxWaitMs` (default 600000) and
+     * is then refused with `JOB_ADMISSION_TIMEOUT`.
+     */
+    admission?: {
+      concurrency?: number;
+      memoryMb?: number;
+      maxWaitMs?: number;
     };
   };
 
@@ -641,6 +684,7 @@ export const frontMcpBaseSchema = z.object({
   // so it survives the strict-object parse and reaches the scope metadata.
   __sourceDir: z.string().optional(),
   instructions: z.string().optional(),
+  instructionsBudget: instructionsBudgetOptionsSchema.optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   lifecycle: lifecycleOptionsSchema.optional(),
   offload: offloadOptionsSchema.optional(),
@@ -690,7 +734,17 @@ export const frontMcpBaseSchema = z.object({
       store: z
         .object({
           redis: redisOptionsSchema.optional(),
+          sqlite: sqliteOptionsSchema.extend({ path: z.string().min(1) }).optional(),
           keyPrefix: z.string().optional(),
+        })
+        .refine((store) => !(store.redis && store.sqlite), { message: 'jobs.store takes redis or sqlite, not both' })
+        .optional(),
+      defaultTimeoutMs: z.number().int().nonnegative().optional(),
+      admission: z
+        .object({
+          concurrency: z.number().int().positive().optional(),
+          memoryMb: z.number().positive().optional(),
+          maxWaitMs: z.number().int().nonnegative().optional(),
         })
         .optional(),
     })
@@ -873,6 +927,7 @@ const frontMcpLiteSchema = z.object({
   // Server-level instructions injected into the MCP `initialize` response.
   // Must round-trip through the lite parser so CLI/MCPB builds preserve it.
   instructions: z.string().optional(),
+  instructionsBudget: instructionsBudgetOptionsSchema.optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   lifecycle: lifecycleOptionsSchema.optional(),
   offload: offloadOptionsSchema.optional(),

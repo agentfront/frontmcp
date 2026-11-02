@@ -30,14 +30,15 @@ Configure MCP clients to connect to your FrontMCP server. Covers all transport t
 
 ## Transport Selection
 
-| Scenario                              | Transport   | Server Command                   | Config Key                          |
-| ------------------------------------- | ----------- | -------------------------------- | ----------------------------------- |
-| npm package for public distribution   | Stdio       | `npx my-server --stdio`          | `command` + `args`                  |
-| Local CLI binary for personal use     | Stdio       | `./my-server --stdio`            | `command` + `args`                  |
-| Remote/cloud server                   | HTTP        | `my-server serve -p 3000`        | `type: "http"`, `url`               |
-| Local persistent daemon (low latency) | Unix Socket | `my-server daemon start`         | `type: "http"`, `url`, `socketPath` |
-| Background daemon on specific port    | HTTP        | `my-server daemon start -p 4000` | `type: "http"`, `url`               |
-| Vibe coding with AI agent (dev mode)  | HTTP        | `frontmcp dev`                   | `type: "http"`, `url`               |
+| Scenario                              | Transport   | Server Command                      | Config Key                          |
+| ------------------------------------- | ----------- | ----------------------------------- | ----------------------------------- |
+| npm package for public distribution   | Stdio       | `npx my-server --stdio`             | `command` + `args`                  |
+| Local CLI binary for personal use     | Stdio       | `./my-server --stdio`               | `command` + `args`                  |
+| Several sessions share one process    | Stdio       | `node dist/shared.js` (`runShared`) | `command` + `args`                  |
+| Remote/cloud server                   | HTTP        | `my-server serve -p 3000`           | `type: "http"`, `url`               |
+| Local persistent daemon (low latency) | Unix Socket | `my-server daemon start`            | `type: "http"`, `url`, `socketPath` |
+| Background daemon on specific port    | HTTP        | `my-server daemon start -p 4000`    | `type: "http"`, `url`               |
+| Vibe coding with AI agent (dev mode)  | HTTP        | `frontmcp dev`                      | `type: "http"`, `url`               |
 
 > **About `daemon` subcommands:** `daemon start | stop | status | logs` are subcommands of the **CLI binary you build with `frontmcp build --target cli`** — the build emits them into your CLI executable. They are NOT subcommands of the global `frontmcp` CLI itself. The framework-level equivalent is `frontmcp socket <entry>` (with `-b` for background, `-s` for socket path). Use whichever matches the binary the user installs.
 
@@ -126,7 +127,7 @@ The most common transport. The MCP client spawns your server as a child process 
 - Pass `--stdio` flag to the binary (detected before CLI framework loads)
 - All logs are automatically redirected to stderr and `~/.frontmcp/logs/`
 - stdout contains ONLY MCP JSON-RPC protocol messages
-- One client per process (no multiplexing)
+- One client per process (no multiplexing); to serve several sessions from one process, see `shared-local-server`
 - Every MCP revision on one connection: `initialize` clients (`2024-11-05` …
   `2025-11-25`) and `2026-07-28` clients (`server/discover`, per-request `_meta`);
   see `protocol-versions`

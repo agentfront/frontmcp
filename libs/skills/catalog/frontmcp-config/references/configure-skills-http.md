@@ -86,6 +86,8 @@ With a read-only `externalProvider` the line names no number (`This server has s
 
 **Default change (1.10.16):** up to 1.10.15 the default was `'append'`, which lists every skill's name and description (up to 16 KB). Some clients copy the server's instructions into every tool's description, so a large catalog was repeated once per tool. Set `injectInstructions: 'append'` to get the full catalog back.
 
+The composed instructions count against `@FrontMcp({ instructionsBudget })`, 1024 characters by default: over it, the server logs a warning at startup and `frontmcp build` reports it in its manifest lint (see `frontmcp-deployment` → `build-manifest`).
+
 The catalog summary is built by `composeInitializeInstructions(...)` and `buildSkillsCatalogSummary(...)` (exported from `@frontmcp/sdk`). It is bounded at **16 KB** with a truncation footer. Its header and footer point clients at `skill://index.json` (SEP-2640 — singular scheme), which lists each skill's `skill://<skillPath>/SKILL.md` URI. With `mcpResources: false` no `skill://` resource is served, so they point at the `skills/load` and `skills/search` methods instead, and `sep2640InInstructions` is ignored.
 
 > **Dynamic skills:** because the composer recomputes the summary on every `initialize` request, skills registered after server boot **are** picked up automatically. Their `skill://<skillPath>/SKILL.md` resources follow too: a skill registered or removed after boot (`this.scope.skills.registerSkillContent()` / `unregisterSkill()`, a skill-bundle plugin) is added to or dropped from `resources/list`, and clients get `notifications/resources/list_changed`. Up to 1.9.4 `resources/list` named only the skills present at startup.

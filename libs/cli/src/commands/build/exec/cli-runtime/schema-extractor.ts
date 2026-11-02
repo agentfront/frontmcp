@@ -74,6 +74,12 @@ export interface ExtractedSchema {
   jobs: ExtractedJob[];
   capabilities: ExtractedCapabilities;
   skillAssets: ExtractedSkillAsset[];
+  /** The server manifest `frontmcp build` writes, when the project's `@frontmcp/sdk` builds one. */
+  manifest?: ExtractedManifest;
+  /** The lint findings on {@link manifest}. */
+  manifestFindings?: ManifestLintFinding[];
+  /** Why no {@link manifest} was built. */
+  manifestError?: string;
   /**
    * Server bind config extracted from `@FrontMcp({ http })` (or its
    * decorator-attached `__frontmcp:config` metadata). Used by the manifest
@@ -81,6 +87,48 @@ export interface ExtractedSchema {
    * actually listen on, not a hard-coded SDK default.
    */
   httpPort?: number;
+}
+
+/** The parts of the SDK's `ServerManifest` the CLI reads; the rest is written to the file as it is. */
+export interface ExtractedManifest {
+  manifestVersion: number;
+  tools: Array<{ name: string; description?: string }>;
+  skills: Array<{
+    name: string;
+    description: string;
+    tags?: string[];
+    license?: string;
+    hidden?: boolean;
+    tools: Array<{ name: string; purpose?: string }>;
+    hash?: string;
+  }>;
+  [field: string]: unknown;
+}
+
+export interface ManifestLintFinding {
+  rule: string;
+  message: string;
+}
+
+interface ManifestSdk {
+  buildManifest?: (config: unknown) => Promise<ExtractedManifest>;
+  lintServerManifest?: (manifest: ExtractedManifest) => ManifestLintFinding[];
+}
+
+/** The manifest of the server and its lint, or why the installed SDK built none. */
+async function extractManifest(
+  sdk: ManifestSdk,
+  configOrClass: unknown,
+): Promise<Pick<ExtractedSchema, 'manifest' | 'manifestFindings' | 'manifestError'>> {
+  if (typeof sdk.buildManifest !== 'function' || typeof sdk.lintServerManifest !== 'function') {
+    return { manifestError: 'the installed @frontmcp/sdk does not build manifests; upgrade it' };
+  }
+  try {
+    const manifest = await sdk.buildManifest(configOrClass);
+    return { manifest, manifestFindings: sdk.lintServerManifest(manifest) };
+  } catch (err) {
+    return { manifestError: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /**
@@ -94,6 +142,7 @@ export const SYSTEM_TOOL_NAMES = new Set([
   'list_jobs',
   'execute_job',
   'get_job_status',
+  'cancel_job',
   'register_job',
   'remove_job',
   'list_workflows',
@@ -155,9 +204,12 @@ async function extractSchemasFromBundle(bundlePath: string): Promise<ExtractedSc
 
   // Use @frontmcp/sdk connect() to boot in-memory client
   let connect: (config: unknown, options?: { mode?: string }) => Promise<unknown>;
+  // An SDK that builds manifests boots the server only to read it: no transport, no store, no log file
+  let mode = 'cli';
   try {
     const sdk = require('@frontmcp/sdk');
     connect = sdk.connect || sdk.direct?.connect;
+    if (typeof sdk.buildManifest === 'function') mode = 'manifest';
     if (!connect) {
       throw new Error('connect() not found in @frontmcp/sdk');
     }
@@ -167,7 +219,7 @@ async function extractSchemasFromBundle(bundlePath: string): Promise<ExtractedSc
     );
   }
 
-  const client = await connect(configOrClass, { mode: 'cli' }) as {
+  const client = await connect(configOrClass, { mode }) as {
     listTools(): Promise<unknown>;
     listResources(): Promise<{ resources: Array<{ uri: string; name?: string; description?: string; mimeType?: string }> }>;
     listResourceTemplates?(): Promise<{ resourceTemplates: Array<{ uriTemplate: string; name?: string; description?: string }> }>;
@@ -189,6 +241,9 @@ async function extractSchemasFromBundle(bundlePath: string): Promise<ExtractedSc
   };
 
   try {
+    // Before the lists: listing a remote app discovers its tools, which are the remote server's, not the source's
+    const manifest = await extractManifest(require('@frontmcp/sdk') as ManifestSdk, configOrClass);
+
     const [toolsRaw, resourcesResult, promptsResult] = await Promise.all([
       client.listTools().catch(() => []),
       client.listResources().catch(() => ({ resources: [] })),
@@ -304,7 +359,7 @@ async function extractSchemasFromBundle(bundlePath: string): Promise<ExtractedSc
       // best-effort — manifest writer will fall back to its own default
     }
 
-    return { tools, resources, resourceTemplates, prompts, jobs, capabilities, skillAssets, httpPort };
+    return { tools, resources, resourceTemplates, prompts, jobs, capabilities, skillAssets, httpPort, ...manifest };
   } finally {
     await client.close().catch(() => {});
   }

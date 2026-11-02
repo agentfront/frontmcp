@@ -1,5 +1,6 @@
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
+import { type JobContext } from '../interfaces/job.interface';
 import { type RawZodShape } from '../types';
 import { type ToolInputType, type ToolOutputType } from './tool.metadata';
 
@@ -53,6 +54,31 @@ const jobRetryConfigSchema = z.object({
 });
 
 // ============================================
+// Job Cleanup
+// ============================================
+
+/** Why an attempt stopped before it finished: the server shut down, it ran past its timeout, or the run was cancelled. */
+export type JobInterruptReason = 'interrupt' | 'timeout' | 'cancel';
+
+/** Undo what an interrupted attempt left behind; `job` is that attempt's instance (read `job.input` as your input type). */
+export type JobCleanup = (
+  job: JobContext<ToolInputType, ToolOutputType, unknown, unknown>,
+  reason: JobInterruptReason,
+) => void | Promise<void>;
+
+/** A cleanup with its own time limit. */
+export interface JobCleanupOptions {
+  run: JobCleanup;
+  /** How long the cleanup may take before the run ends without waiting for it. @default 3000 */
+  timeoutMs?: number;
+}
+
+const jobCleanupSchema = z.union([
+  z.function(),
+  z.object({ run: z.function(), timeoutMs: z.number().int().positive().optional() }),
+]);
+
+// ============================================
 // Job Metadata
 // ============================================
 
@@ -91,9 +117,18 @@ export interface JobMetadata<
   outputSchema: OutSchema;
 
   /**
-   * Maximum execution time in milliseconds. Default: 300000 (5 min).
+   * How long one attempt may run, in milliseconds, before it ends with `JobTimeoutError`; a run whose
+   * last attempt timed out is `timed_out`. `0` means no limit. Default: `jobs.defaultTimeoutMs`
+   * (300000, 5 min).
    */
   timeout?: number;
+
+  /**
+   * Runs when an attempt is interrupted (the server shuts down), times out or is cancelled, with the
+   * attempt's instance, while `this.signal` is aborted. Its failure is logged and never changes how the
+   * run ends. Pass `{ run, timeoutMs }` to bound it other than by the default 3000 ms.
+   */
+  cleanup?: JobCleanup | JobCleanupOptions;
 
   /**
    * Retry configuration for failed executions.
@@ -129,7 +164,8 @@ export const frontMcpJobMetadataSchema = z
     description: z.string().optional(),
     inputSchema: z.instanceof(Object),
     outputSchema: z.instanceof(Object),
-    timeout: z.number().int().min(0).optional().default(300000),
+    timeout: z.number().int().min(0).optional(),
+    cleanup: jobCleanupSchema.optional(),
     retry: jobRetryConfigSchema.optional(),
     tags: z.array(z.string().min(1)).optional(),
     labels: z.record(z.string(), z.string()).optional(),

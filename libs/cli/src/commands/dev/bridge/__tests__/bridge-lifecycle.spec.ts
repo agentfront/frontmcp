@@ -1,9 +1,9 @@
 import type { ChildProcess } from 'node:child_process';
 
+import type { JsonRpcFrame, UpstreamClient } from '@frontmcp/utils';
+
 import type { ChildReadyInfo } from '../child-supervisor';
 import { runDevBridge } from '../index';
-import type { JsonRpcFrame } from '../stdio-framer';
-import type { UpstreamClient } from '../upstream-client';
 
 const supervisorStop = jest.fn(async () => undefined);
 const supervisorStart = jest.fn(async () => undefined);
@@ -27,22 +27,6 @@ jest.mock('../log', () => ({
     close: async () => undefined,
   }),
 }));
-jest.mock('../stdio-framer', () => ({
-  createStdioFramer: (options: { onClose?: () => void }) => {
-    framerOptions = options;
-    return { start: jest.fn(), stop: jest.fn(), write: framerWrite };
-  },
-}));
-jest.mock('../upstream-client', () => ({
-  createHttpUpstream: () => {
-    const next = upstreams.shift();
-    if (!next) throw new Error('no upstream prepared for this test');
-    return next;
-  },
-  createPipeUpstream: () => {
-    throw new Error('pipe mode is not used here');
-  },
-}));
 jest.mock('../child-supervisor', () => ({
   createChildSupervisor: (options: typeof supervisorOptions) => {
     supervisorOptions = options;
@@ -54,7 +38,20 @@ jest.mock('../child-supervisor', () => ({
 jest.mock('../watcher', () => ({
   createDevWatcher: () => ({ start: jest.fn(), stop: watcherStop }),
 }));
-jest.mock('../state-machine', () => ({
+jest.mock('@frontmcp/utils', () => ({
+  ...jest.requireActual('@frontmcp/utils'),
+  createStdioFramer: (options: { onClose?: () => void }) => {
+    framerOptions = options;
+    return { start: jest.fn(), stop: jest.fn(), write: framerWrite };
+  },
+  createHttpUpstream: () => {
+    const next = upstreams.shift();
+    if (!next) throw new Error('no upstream prepared for this test');
+    return next;
+  },
+  createPipeUpstream: () => {
+    throw new Error('pipe mode is not used here');
+  },
   createBridgeStateMachine: (options: typeof fsmOptions) => {
     fsmOptions = options;
     return {

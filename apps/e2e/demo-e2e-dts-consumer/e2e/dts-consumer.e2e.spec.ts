@@ -47,6 +47,9 @@ const fixtureFiles = [
   'duties-must-compile.ts',
   'offload-must-compile.ts',
   'http-routes-must-compile.ts',
+  'shared-server-must-compile.ts',
+  'durable-jobs-must-compile.ts',
+  'build-manifest-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -221,6 +224,18 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types this.offload() from the offloaded function, @Resource({ worker }) and the offload option', () => {
     expect(describeEach(inFixtureFile('offload-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types FrontMcpInstance.runShared(), its options and errors, and the shared:identify flow', () => {
+    expect(describeEach(inFixtureFile('shared-server-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types @Job({ cleanup }), jobs.store.sqlite, jobs.defaultTimeoutMs, jobs.admission, CancelJobTool, the run states and a store without cancel requests', () => {
+    expect(describeEach(inFixtureFile('durable-jobs-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types instructionsBudget, buildManifest(), lintServerManifest() and the manifest schema', () => {
+    expect(describeEach(inFixtureFile('build-manifest-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

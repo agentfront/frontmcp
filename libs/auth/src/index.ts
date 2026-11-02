@@ -691,3 +691,16 @@ export type {
   PeopleSessionIssue,
   PeopleSignInRefusal,
 } from './people';
+
+// ============================================
+// Shared Local Server Identity Module
+// ============================================
+export {
+  createSharedServerNonce,
+  createSharedServerSecret,
+  deriveSharedServerKeys,
+  isSharedServerNonce,
+  proveSharedServerIdentity,
+  verifySharedServerIdentity,
+} from './shared-server';
+export type { SharedServerKeys } from './shared-server';

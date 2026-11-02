@@ -104,7 +104,7 @@ The event is `{ agentId, agentName, status: 'success' | 'error', durationMs, out
 
 ## Job Completion Source
 
-Pushes when background jobs or workflows complete. Optionally filter by job names. The event is `{ jobName, jobId, status: 'success' | 'error', durationMs?, output?, error?, attempt, sessionId }` (for a workflow, `jobName` is its name). It goes only to the session that ran the job; a run with no session is delivered to no one.
+Pushes when background jobs or workflows complete. Optionally filter by job names. The event is `{ jobName, jobId, status: 'success' | 'error' | 'timeout' | 'cancelled', durationMs?, output?, error?, attempt, sessionId }` (for a workflow, `jobName` is its name): a job run that ended `timed_out` is a `'timeout'`, a `cancelled` one a `'cancelled'`, and one `interrupted` at shutdown an `'error'`. It goes only to the session that ran the job; a run with no session is delivered to no one.
 
 ```typescript
 @Channel({

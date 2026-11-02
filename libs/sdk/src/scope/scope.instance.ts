@@ -60,6 +60,7 @@ import { normalizeJob } from '../job/job.utils';
 import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
+import { describeBudgetOverruns } from '../manifest/instructions-budget.check';
 import { NotificationService } from '../notification';
 import { OffloadService } from '../offload/offload.service';
 import { agentToolMetadata, findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
@@ -867,18 +868,22 @@ export class Scope extends ScopeEntry {
       if (autoEnabled) {
         this.logger.info(
           `Jobs auto-enabled: detected ${allJobs.length} job(s) and ${allWorkflows.length} workflow(s) in @App declarations. ` +
-            `Defaulting to in-memory stores — configure storage via @FrontMcp({ jobs: { store: ... } }) for multi-replica HA.`,
+            `Their runs are kept in jobs.store, else the top-level redis or sqlite, else in memory.`,
         );
       }
 
-      const effectiveConfig: JobsConfig = { ...(jobsConfig ?? {}), enabled: true };
       const notifyFn = async (data: Record<string, unknown>) => {
         if (this.notificationService) {
           this.logger.debug('Job notification', data);
         }
       };
 
-      const { registerJobCapabilities } = await import('../job/job-scope.helper.js');
+      const { registerJobCapabilities, resolveJobsStore } = await import('../job/job-scope.helper.js');
+      const effectiveConfig: JobsConfig = {
+        ...(jobsConfig ?? {}),
+        enabled: true,
+        store: resolveJobsStore(jobsConfig?.store, { redis: this.metadata.redis, sqlite: resolvedTopLevelSqlite }),
+      };
       const result = await registerJobCapabilities({
         providers: this.scopeProviders,
         flowRegistry: this.scopeFlows,
@@ -1056,6 +1061,8 @@ export class Scope extends ScopeEntry {
       this._healthService.autoDiscoverProbes(this);
       this.logger.verbose(`HealthService initialized (${this._healthService.getProbeCount()} probe(s))`);
     }
+
+    for (const message of await describeBudgetOverruns(this)) this.logger.warn(message);
 
     mark('batch3:finalization');
     this.logger.info(`Scope ready — ${this.formatScopeSummary()}`);

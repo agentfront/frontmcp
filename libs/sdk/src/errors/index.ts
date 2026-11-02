@@ -229,6 +229,14 @@ export {
   SignInRefusedError,
 } from './http-route.errors';
 
+// Export shared local server errors
+export {
+  InvalidSharedServerOptionsError,
+  SharedServerIdentityError,
+  SharedServerStartError,
+  UnsafeSharedServerDirectoryError,
+} from './shared-server.errors';
+
 // Export transport errors
 export {
   MethodNotImplementedError,

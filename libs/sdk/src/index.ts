@@ -21,6 +21,7 @@ import { FlowHooksOf } from './common';
 
 export { FrontMcpInstance, FrontMcpConfig } from './front-mcp';
 export type { ConfigOrServerClass } from './front-mcp';
+export type { SharedServerOptions, SharedServerTransport } from './shared/shared-server.options';
 export { assertStaticStartupConfig } from './front-mcp/static-startup.check';
 export { registerOptionalModule } from './scope/optional-dependency.util';
 export {
@@ -183,7 +184,7 @@ export type { SqliteStorageProviderOptions } from './storage/sqlite-storage.prov
 export type { OffloadCallOptions, OffloadFunction, OffloadModuleRef } from './offload/offload.types';
 
 // Job exports - saved, discoverable, triggerable executions
-export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter } from './job';
+export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter, JobRunResource } from './job';
 export type {
   JobRegistryInterface,
   IndexedJob,
@@ -194,13 +195,31 @@ export type {
   ExecuteWorkflowOptions,
   InlineJobResult,
   BackgroundJobResult,
+  JobExecutionManagerOptions,
+  JobAdmissionOptions,
+  JobsConfig,
+  JobsStoreConfig,
 } from './job';
-export type { JobStateStore, JobRunRecord, WorkflowRunRecord, JobExecutionState, JobDefinitionStore } from './job';
+export type {
+  JobStateStore,
+  JobRunRecord,
+  WorkflowRunRecord,
+  JobExecutionState,
+  JobRunProgress,
+  JobDefinitionStore,
+} from './job';
 
 // Job-management tool classes (issue #408 — opt-in manual registration via
 // @App({ tools: [...] }) when finer-grained control than auto-registration
 // is needed, e.g. to omit register_job / remove_job in production).
-export { ExecuteJobTool, GetJobStatusTool, ListJobsTool, RegisterJobTool, RemoveJobTool } from './job/tools';
+export {
+  ExecuteJobTool,
+  GetJobStatusTool,
+  CancelJobTool,
+  ListJobsTool,
+  RegisterJobTool,
+  RemoveJobTool,
+} from './job/tools';
 
 // Workflow exports - managed multi-step job pipelines
 export { WorkflowRegistry, WorkflowInstance, WorkflowEngine, WorkflowStepExecutor, WorkflowEmitter } from './workflow';
@@ -425,6 +444,7 @@ export type { default as ServerCardFlow } from './mcp-registry/flows/server-card
 export type { default as ElicitationRequestFlow } from './elicitation/flows/elicitation-request.flow';
 export type { default as ElicitationResultFlow } from './elicitation/flows/elicitation-result.flow';
 export type { default as SetLevelFlow } from './logging/flows/set-level.flow';
+export type { default as SharedIdentifyFlow } from './shared/flows/shared.identify.flow';
 export type { default as SubscribeResourceFlow } from './resource/flows/subscribe-resource.flow';
 export type { default as UnsubscribeResourceFlow } from './resource/flows/unsubscribe-resource.flow';
 export type { default as HttpIpFilterFlow } from './scope/flows/http.ip-filter.flow';
@@ -555,6 +575,29 @@ export type {
 // create() factory — flat-config direct server creation
 export { create, clearCreateCache } from './direct';
 export type { CreateConfig } from './direct';
+
+// Build manifest: the server's entries with their schemas (`frontmcp.manifest.json`), and its lint
+export {
+  buildManifest,
+  findBudgetOverruns,
+  lintServerManifest,
+  serverManifestSchema,
+  SERVER_MANIFEST_FILE,
+  SERVER_MANIFEST_VERSION,
+} from './manifest';
+export type {
+  BudgetedSurface,
+  ManifestApp,
+  ManifestEntryKind,
+  ManifestFinding,
+  ManifestFindingRule,
+  ManifestPrompt,
+  ManifestResource,
+  ManifestResourceTemplate,
+  ManifestSkill,
+  ManifestTool,
+  ServerManifest,
+} from './manifest';
 
 // A custom HTTP host (`http.hostFactory`) extends HostServerAdapter; the web-fetch helpers take a Scope
 export { HostServerAdapter } from './server/adapters/base.host.adapter';

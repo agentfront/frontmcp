@@ -20,8 +20,8 @@
 
 import type { ChildProcess } from 'node:child_process';
 
-import type { BridgeLogger } from './log';
 import type { JsonRpcFrame } from './stdio-framer';
+import type { BridgeLogger } from './types';
 
 export interface UpstreamClient {
   send(frame: JsonRpcFrame): Promise<void>;
@@ -42,6 +42,7 @@ export interface UpstreamClientOptions {
 }
 
 const SESSION_HEADER = 'mcp-session-id';
+const END_SESSION_TIMEOUT_MS = 2_000;
 let reinitCounter = 0;
 
 /** Id for a bridge-originated `initialize`, never colliding with client ids. */
@@ -67,9 +68,18 @@ function resultOf(frame: JsonRpcFrame | undefined, method: string): Record<strin
 export interface HttpUpstreamOptions extends UpstreamClientOptions {
   /** Loopback URL of the user-code MCP endpoint. */
   url: string;
+  /** Sent with every request, such as the credential a shared local server asks for. */
+  headers?: Record<string, string>;
+  /** Sends the requests instead of the global `fetch`, such as one that reaches a Unix socket. */
+  fetch?: typeof fetch;
 }
 
-export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient {
+export interface HttpUpstreamClient extends UpstreamClient {
+  /** End the MCP session the server issued (`DELETE` with its id); the next `initialize` starts a new one. */
+  endSession(): Promise<void>;
+}
+
+export function createHttpUpstream(options: HttpUpstreamOptions): HttpUpstreamClient {
   const { log, url, onFrame } = options;
   // Track every in-flight request — `close()` must abort all of them,
   // not just whichever happened to be assigned last. A shared scalar
@@ -84,14 +94,16 @@ export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient
     const signal = abortController.signal;
     try {
       const headers: Record<string, string> = {
+        ...options.headers,
         'content-type': 'application/json',
         accept: 'application/json, text/event-stream',
       };
       // `initialize` starts a new session: never send a stale id with it.
       if (sessionId && frame.method !== 'initialize') headers[SESSION_HEADER] = sessionId;
 
-      const res = await fetch(url, {
+      const res = await (options.fetch ?? fetch)(url, {
         method: 'POST',
+        redirect: 'error',
         headers,
         body: JSON.stringify(frame),
         signal,
@@ -171,6 +183,22 @@ export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient
       const result = resultOf(response, 'initialize');
       if (initialized) await post(initializedNotification(), onFrame);
       return result;
+    },
+    async endSession() {
+      const ending = sessionId;
+      if (!ending) return;
+      sessionId = undefined;
+      try {
+        const res = await (options.fetch ?? fetch)(url, {
+          method: 'DELETE',
+          redirect: 'error',
+          headers: { ...options.headers, [SESSION_HEADER]: ending },
+          signal: AbortSignal.timeout(END_SESSION_TIMEOUT_MS),
+        });
+        await res.body?.cancel();
+      } catch (err) {
+        log.warn('http-upstream-end-session-failed', { error: (err as Error).message });
+      }
     },
     close: async () => {
       for (const ac of abortControllers) ac.abort();

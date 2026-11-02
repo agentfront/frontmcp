@@ -1,4 +1,4 @@
-import { fileExists, stat } from '@frontmcp/utils';
+import { fileExists, readFile, stat } from '@frontmcp/utils';
 
 import { readArchive, readArchiveEntry, sha256File } from './helpers/archive';
 import {
@@ -63,6 +63,16 @@ describe('frontmcp build --target mcpb', () => {
     expect(entries).toContain('server/index.js');
     expect(entries).toContain('server/package.json');
     expect(entries).toContain('manifest.json');
+  });
+
+  it('ships the server manifest next to the server it describes, as frontmcp build writes it', async () => {
+    const staged = JSON.parse(await readArchiveEntry(getArchivePath(), 'server/frontmcp.manifest.json'));
+
+    expect(staged['manifestVersion']).toBe(1);
+    expect((staged['tools'] as Array<{ name: string }>).map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(['echo', 'greet']),
+    );
+    expect(staged).toEqual(JSON.parse(await readFile(`${getMcpbDir()}/frontmcp.manifest.json`)));
   });
 
   it('sets FRONTMCP_STDIO so the server serves stdio to the MCPB host', async () => {
