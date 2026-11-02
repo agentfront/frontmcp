@@ -7,6 +7,7 @@ import {
   FrontMcp,
   ListPromptsHook,
   PromptHook,
+  ToolHook,
   type FlowCtxOf,
   type FrontMcpAdapterResponse,
   type ScopeEntry,
@@ -37,6 +38,19 @@ export class PromptAudit {
 
   @CompletionHook.Did('complete')
   afterComplete(): void {}
+
+  @GetPrompt.Finally('execute')
+  afterPromptWhateverItsOutcome(ctx: FlowCtxOf<'prompts:get-prompt'>): void {
+    void ctx.state.flowError?.message;
+  }
+}
+
+// Finally hooks run after a stage whatever its outcome, and read the failure from state.flowError.
+export class CallAudit {
+  @ToolHook.Finally('finalize')
+  afterCall(ctx: FlowCtxOf<'tools:call-tool'>): void {
+    void ctx.state.flowError?.message;
+  }
 }
 
 // ScopeEntry declares the channel accessors, so no cast is needed.

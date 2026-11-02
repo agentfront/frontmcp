@@ -35,6 +35,16 @@ class TracePlugin {
     trace.push('Did p100');
   }
 
+  @ToolHook.Finally('execute', { priority: 100 })
+  finallyPriorityHundred() {
+    trace.push('Finally p100');
+  }
+
+  @ToolHook.Finally('execute', { priority: 0 })
+  finallyPriorityZero() {
+    trace.push('Finally p0');
+  }
+
   @ToolHook.Around('execute')
   async aroundExecute(_ctx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<unknown>) {
     trace.push('Around: before next()');
@@ -182,6 +192,15 @@ describe('tools:call-tool flow hooks', () => {
 
   it('runs Did hooks with a lower priority first', () => {
     expect(deskTrace.filter((entry) => entry.startsWith('Did p'))).toEqual(['Did p0', 'Did p100']);
+  });
+
+  it('runs Finally hooks after the Did hooks, with a lower priority first', () => {
+    expect(deskTrace.filter((entry) => /^(Did|Finally) p/.test(entry))).toEqual([
+      'Did p0',
+      'Did p100',
+      'Finally p0',
+      'Finally p100',
+    ]);
   });
 
   it('runs a hook declared on the @Tool class', () => {

@@ -1,7 +1,9 @@
-import ObservabilityPlugin from '../plugin/observability.plugin';
-import { OTEL_TRACER, OTEL_CONFIG } from '../otel/otel.tokens';
-import { REQUEST_LOG_COLLECTOR } from '../request-log/request-log.tokens';
+import { FrontMcpFlowHookTokens, type HookMetadata } from '@frontmcp/sdk';
+
 import { StructuredLogTransport } from '../logging/structured-log-transport';
+import { OTEL_CONFIG, OTEL_TRACER } from '../otel/otel.tokens';
+import ObservabilityPlugin from '../plugin/observability.plugin';
+import { REQUEST_LOG_COLLECTOR } from '../request-log/request-log.tokens';
 
 describe('ObservabilityPlugin', () => {
   describe('constructor', () => {
@@ -69,7 +71,7 @@ describe('ObservabilityPlugin', () => {
     it('_httpDidAuth', () => plugin._httpDidAuth(emptyCtx));
     it('_httpWillRoute', () => plugin._httpWillRoute(emptyCtx));
     it('_httpDidRoute', () => plugin._httpDidRoute(emptyCtx));
-    it('_httpDidFinalize', () => plugin._httpDidFinalize(emptyCtx));
+    it('_httpFinallyFinalize', () => plugin._httpFinallyFinalize(emptyCtx));
 
     // Tool hooks
     it('_toolWillParse', () => plugin._toolWillParse(emptyCtx));
@@ -81,28 +83,28 @@ describe('ObservabilityPlugin', () => {
     it('_toolDidExecute', () => plugin._toolDidExecute(emptyCtx));
     it('_toolWillValidateOut', () => plugin._toolWillValidateOut(emptyCtx));
     it('_toolWillApplyUI', () => plugin._toolWillApplyUI(emptyCtx));
-    it('_toolDidFinalize', () => plugin._toolDidFinalize(emptyCtx));
+    it('_toolFinallyFinalize', () => plugin._toolFinallyFinalize(emptyCtx));
 
     // Resource hooks
     it('_resourceWillParse', () => plugin._resourceWillParse(emptyCtx));
     it('_resourceWillFind', () => plugin._resourceWillFind(emptyCtx));
     it('_resourceWillExecute', () => plugin._resourceWillExecute(emptyCtx));
     it('_resourceDidExecute', () => plugin._resourceDidExecute(emptyCtx));
-    it('_resourceDidFinalize', () => plugin._resourceDidFinalize(emptyCtx));
+    it('_resourceFinallyFinalize', () => plugin._resourceFinallyFinalize(emptyCtx));
 
     // Prompt hooks
     it('_promptWillParse', () => plugin._promptWillParse(emptyCtx));
     it('_promptWillFind', () => plugin._promptWillFind(emptyCtx));
     it('_promptWillExecute', () => plugin._promptWillExecute(emptyCtx));
     it('_promptDidExecute', () => plugin._promptDidExecute(emptyCtx));
-    it('_promptDidFinalize', () => plugin._promptDidFinalize(emptyCtx));
+    it('_promptFinallyFinalize', () => plugin._promptFinallyFinalize(emptyCtx));
 
     // Agent hooks
     it('_agentWillParse', () => plugin._agentWillParse(emptyCtx));
     it('_agentWillFind', () => plugin._agentWillFind(emptyCtx));
     it('_agentWillExecute', () => plugin._agentWillExecute(emptyCtx));
     it('_agentDidExecute', () => plugin._agentDidExecute(emptyCtx));
-    it('_agentDidFinalize', () => plugin._agentDidFinalize(emptyCtx));
+    it('_agentFinallyFinalize', () => plugin._agentFinallyFinalize(emptyCtx));
 
     // List hooks
     it('_listToolsWill', () => plugin._listToolsWill(emptyCtx));
@@ -132,7 +134,7 @@ describe('ObservabilityPlugin', () => {
     it('_sseDidInit', () => plugin._sseDidInit(emptyCtx));
     it('_sseDidMsg', () => plugin._sseDidMsg(emptyCtx));
     it('_sseDidElicit', () => plugin._sseDidElicit(emptyCtx));
-    it('_sseDidCleanup', () => plugin._sseDidCleanup(emptyCtx));
+    it('_sseFinallyCleanup', () => plugin._sseFinallyCleanup(emptyCtx));
 
     // Transport: Streamable HTTP
     it('_shttpWillParse', () => plugin._shttpWillParse(emptyCtx));
@@ -142,12 +144,12 @@ describe('ObservabilityPlugin', () => {
     it('_shttpDidElicit', () => plugin._shttpDidElicit(emptyCtx));
     it('_shttpDidSse', () => plugin._shttpDidSse(emptyCtx));
     it('_shttpDidExtApps', () => plugin._shttpDidExtApps(emptyCtx));
-    it('_shttpDidCleanup', () => plugin._shttpDidCleanup(emptyCtx));
+    it('_shttpFinallyCleanup', () => plugin._shttpFinallyCleanup(emptyCtx));
 
     // Transport: Stateless HTTP
     it('_slhttpWillParse', () => plugin._slhttpWillParse(emptyCtx));
     it('_slhttpDidHandle', () => plugin._slhttpDidHandle(emptyCtx));
-    it('_slhttpDidCleanup', () => plugin._slhttpDidCleanup(emptyCtx));
+    it('_slhttpFinallyCleanup', () => plugin._slhttpFinallyCleanup(emptyCtx));
 
     // Auth
     it('_authVerifyWill', () => plugin._authVerifyWill(emptyCtx));
@@ -232,7 +234,7 @@ describe('ObservabilityPlugin', () => {
       plugin._httpDidAuth(noop);
       plugin._httpWillRoute(noop);
       plugin._httpDidRoute(noop);
-      plugin._httpDidFinalize(noop);
+      plugin._httpFinallyFinalize(noop);
 
       // Tool
       plugin._toolWillParse(noop);
@@ -244,28 +246,28 @@ describe('ObservabilityPlugin', () => {
       plugin._toolDidExecute(noop);
       plugin._toolWillValidateOut(noop);
       plugin._toolWillApplyUI(noop);
-      plugin._toolDidFinalize(noop);
+      plugin._toolFinallyFinalize(noop);
 
       // Resource
       plugin._resourceWillParse(noop);
       plugin._resourceWillFind(noop);
       plugin._resourceWillExecute(noop);
       plugin._resourceDidExecute(noop);
-      plugin._resourceDidFinalize(noop);
+      plugin._resourceFinallyFinalize(noop);
 
       // Prompt
       plugin._promptWillParse(noop);
       plugin._promptWillFind(noop);
       plugin._promptWillExecute(noop);
       plugin._promptDidExecute(noop);
-      plugin._promptDidFinalize(noop);
+      plugin._promptFinallyFinalize(noop);
 
       // Agent
       plugin._agentWillParse(noop);
       plugin._agentWillFind(noop);
       plugin._agentWillExecute(noop);
       plugin._agentDidExecute(noop);
-      plugin._agentDidFinalize(noop);
+      plugin._agentFinallyFinalize(noop);
 
       // Lists
       plugin._listToolsWill(noop);
@@ -295,7 +297,7 @@ describe('ObservabilityPlugin', () => {
       plugin._sseDidInit(noop);
       plugin._sseDidMsg(noop);
       plugin._sseDidElicit(noop);
-      plugin._sseDidCleanup(noop);
+      plugin._sseFinallyCleanup(noop);
 
       // Transport: Streamable HTTP
       plugin._shttpWillParse(noop);
@@ -305,12 +307,12 @@ describe('ObservabilityPlugin', () => {
       plugin._shttpDidElicit(noop);
       plugin._shttpDidSse(noop);
       plugin._shttpDidExtApps(noop);
-      plugin._shttpDidCleanup(noop);
+      plugin._shttpFinallyCleanup(noop);
 
       // Transport: Stateless HTTP
       plugin._slhttpWillParse(noop);
       plugin._slhttpDidHandle(noop);
-      plugin._slhttpDidCleanup(noop);
+      plugin._slhttpFinallyCleanup(noop);
 
       // Auth
       plugin._authVerifyWill(noop);
@@ -413,6 +415,16 @@ describe('ObservabilityPlugin', () => {
         requestLogs: false,
       });
       expect(providers).toHaveLength(0);
+    });
+  });
+
+  describe('hooks on the finalize stages', () => {
+    it('are Finally hooks, which still run when a stage failed, so the spans they end never stay open', () => {
+      const hooks = Reflect.getMetadata(FrontMcpFlowHookTokens.hooks, ObservabilityPlugin) as HookMetadata[];
+      const finalizeStageHooks = hooks.filter((hook) => hook.stage === 'finalize' || hook.stage === 'cleanup');
+
+      expect(finalizeStageHooks.length).toBeGreaterThan(0);
+      expect(finalizeStageHooks.filter((hook) => hook.type !== 'finally').map((hook) => hook.method)).toEqual([]);
     });
   });
 });

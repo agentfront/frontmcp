@@ -22,6 +22,7 @@ import {
   Tool,
   ToolContext,
   ToolHook,
+  z,
   type FlowCtxOf,
 } from '@frontmcp/sdk';
 
@@ -59,6 +60,13 @@ class ExportReport extends ToolContext {
   }
 }
 
+@Tool({ name: 'total_invoice', inputSchema: {}, outputSchema: { total: z.number() } })
+class TotalInvoice extends ToolContext {
+  async execute() {
+    return { total: 'twelve' } as unknown as { total: number };
+  }
+}
+
 @Plugin({ name: 'audit' })
 class AuditPlugin {
   @ToolHook.Did('execute')
@@ -67,7 +75,7 @@ class AuditPlugin {
   }
 }
 
-@App({ id: 'desk', name: 'Desk', tools: [CloseTicket, Ping, ExportReport] })
+@App({ id: 'desk', name: 'Desk', tools: [CloseTicket, Ping, ExportReport, TotalInvoice] })
 class DeskApp {}
 
 function toolCall(name: string): Request {
@@ -163,6 +171,26 @@ describe('a call that a hook failed with a plain Error', () => {
   });
 });
 
+describe('a call whose answer the output schema refuses', () => {
+  it('ends the tools/call span and logs the refusal with the error ID the client gets', async () => {
+    const logs: RequestLog[] = [];
+    const handler = await serve({}, logs);
+
+    const { result } = await (await handler(toolCall('total_invoice'))).json();
+    await settle();
+
+    const { code, errorId } = result._meta;
+    expect(code).toBe('INVALID_OUTPUT');
+    expect(span('tools/call').status.code).toBe(SpanStatusCode.ERROR);
+    expect(span('tools/call').events.find((event) => event.name === 'exception')?.attributes).toEqual(
+      expect.objectContaining({ 'exception.type': 'INVALID_OUTPUT' }),
+    );
+    expect(logs[0].error).toEqual(
+      expect.objectContaining({ type: 'InvalidOutputError', code: 'INVALID_OUTPUT', error_id: errorId }),
+    );
+  });
+});
+
 describe('the spans of one request', () => {
   it('nests the tools/call span in the POST / span, and this.fetch() sends the GET span as the parent', async () => {
     const handler = await serve();
@@ -222,7 +250,7 @@ describe('startupReport', () => {
     await serve();
 
     expect(span('frontmcp.startup').attributes).toEqual(
-      expect.objectContaining({ 'frontmcp.startup.tools_count': 3, 'frontmcp.startup.plugins_count': 2 }),
+      expect.objectContaining({ 'frontmcp.startup.tools_count': 4, 'frontmcp.startup.plugins_count': 2 }),
     );
   });
 
