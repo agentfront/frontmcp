@@ -1,0 +1,19 @@
+{
+  "name": "demo-e2e-published-imports",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-published-imports/e2e",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:published-imports"],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-published-imports"],
+      "dependsOn": [{ "projects": ["plugin-cache", "plugin-dashboard", "edge"], "target": "build" }],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-published-imports/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": false
+      }
+    }
+  }
+}

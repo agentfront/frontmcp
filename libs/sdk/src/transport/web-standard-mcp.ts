@@ -16,13 +16,14 @@
  * Auth / quota / router / audit / metrics + hooks have already run in the flow
  * around this call; this only translates the MCP request↔response.
  */
-import { McpServer, WebStandardStreamableHTTPServerTransport, type AuthInfo } from '@frontmcp/protocol';
+import { WebStandardStreamableHTTPServerTransport, type AuthInfo } from '@frontmcp/protocol';
 import { randomUUID } from '@frontmcp/utils';
 
 import { type Scope } from '../scope/scope.instance';
 import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { mcpTransportBodyLimit } from './body-limit';
 import { buildScopedServerOptions, type ScopedServerOptions } from './build-scoped-server-options';
+import { createMcpServer } from './mcp-server.factory';
 import { type PersistentSessionOwnerStore } from './persistent-session-owner';
 
 const STATELESS_METHODS = ['POST', 'DELETE'];
@@ -65,7 +66,7 @@ async function wireServer(
 ): Promise<WebStandardMcpPair> {
   const { createMcpHandlers } = await import('./mcp-handlers/index.js');
 
-  const mcpServer = new McpServer(scope.metadata.info, serverOptions);
+  const mcpServer = createMcpServer(scope.metadata.info, serverOptions);
   const composeInstructions = (caller?: { authInfo?: unknown }) =>
     composeCallerInstructions(scope, { ctx: caller, skillUriHints: true });
   for (const handler of createMcpHandlers({ scope, serverOptions, composeInstructions })) {

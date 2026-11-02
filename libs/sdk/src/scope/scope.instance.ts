@@ -319,6 +319,7 @@ export class Scope extends ScopeEntry {
     }
     if (httpServing) {
       this.transportService = new httpServing.TransportService(this, effectivePersistence, transportBus);
+      httpServing.loadStreamableHttpTransportOnStart(this);
     }
     warnIfRequestStateKeyNotShared({ logger: this.logger, metadata: this.metadata });
     warnIfSessionModeIgnored({ logger: this.logger, transport: transportConfig, session: this.metadata.session });

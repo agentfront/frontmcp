@@ -2443,8 +2443,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/edge@workspace:libs/edge"
   dependencies:
-    "@enclave-vm/ast": "npm:^2.17.0"
     "@frontmcp/plugin-skilled-openapi": "npm:1.10.16"
+    "@frontmcp/utils": "npm:1.10.16"
     "@types/node": "npm:^24.0.0"
     typescript: "npm:^5.0.0"
   peerDependencies:
@@ -2541,7 +2541,6 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugin-cache@workspace:plugins/plugin-cache"
   dependencies:
-    "@enclave-vm/ast": "npm:^2.17.0"
     "@frontmcp/sdk": "npm:1.10.16"
     "@frontmcp/utils": "npm:1.10.16"
     ioredis: "npm:^5.8.0"
@@ -2576,8 +2575,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugin-dashboard@workspace:plugins/plugin-dashboard"
   dependencies:
-    "@enclave-vm/ast": "npm:^2.17.0"
     "@frontmcp/sdk": "npm:1.10.16"
+    "@frontmcp/utils": "npm:1.10.16"
     reflect-metadata: "npm:^0.2.2"
   peerDependencies:
     "@frontmcp/lazy-zod": 1.10.16

@@ -15,7 +15,8 @@ import {
   type Tool,
   type Transport,
 } from '@frontmcp/protocol';
-import { Client, SSEClientTransport, StreamableHTTPClientTransport } from '@frontmcp/protocol/client';
+
+import { loadProtocolClient, type ProtocolClientModule } from '#protocol-client';
 
 import { type FrontMcpLogger } from '../common';
 import { listAllPages } from '../common/utils/list-all-pages.utils';
@@ -214,10 +215,11 @@ export class McpClientService {
       }
 
       // Create transport based on type
-      let transport = this.createTransport(request, headers);
+      const protocolClient = await loadProtocolClient();
+      let transport = this.createTransport(protocolClient, request, headers);
 
       // Create MCP client with configurable name/version
-      const client = new Client(
+      const client = new protocolClient.Client(
         {
           name: this.options.clientName,
           version: this.options.clientVersion,
@@ -239,7 +241,7 @@ export class McpClientService {
             `Streamable HTTP connection failed for ${appId}: ${(connectError as Error).message}. ` +
               `Falling back to SSE transport.`,
           );
-          transport = this.createFallbackSSETransport(request, headers);
+          transport = this.createFallbackSSETransport(protocolClient, request, headers);
           await client.connect(transport);
         } else {
           throw connectError;
@@ -879,7 +881,11 @@ export class McpClientService {
     };
   }
 
-  private createTransport(request: McpConnectRequest, headers: Record<string, string> | undefined): Transport {
+  private createTransport(
+    { StreamableHTTPClientTransport, SSEClientTransport }: ProtocolClientModule,
+    request: McpConnectRequest,
+    headers: Record<string, string> | undefined,
+  ): Transport {
     const { transportType, url } = request;
     const options = {
       requestInit: headers ? { headers } : undefined,
@@ -909,6 +915,7 @@ export class McpClientService {
    * Create fallback SSE transport when Streamable HTTP fails
    */
   private createFallbackSSETransport(
+    { SSEClientTransport }: ProtocolClientModule,
     request: McpConnectRequest,
     headers: Record<string, string> | undefined,
   ): Transport {
