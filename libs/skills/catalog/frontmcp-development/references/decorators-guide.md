@@ -699,7 +699,7 @@ export class AuditPlugin {
 
 Register the plugin in `@App({ plugins: [AuditPlugin] })`, or in `@FrontMcp({ plugins: [AuditPlugin] })` to run its hooks for every app.
 
-A hook method receives the running flow, typed `FlowCtxOf<'<flow-name>'>`. The decorator checks the parameter: the flow's ctx, a structural subset of it, `unknown` or none compiles, and a property the flow does not have (or of the wrong type) fails to compile (up to 1.10.15 any parameter compiled).
+A hook method receives the running flow, typed `FlowCtxOf<'<flow-name>'>`. The decorator checks the parameter: the flow's ctx, a structural subset of it, `unknown` or none compiles, and a property the flow does not have (or keeps protected, or of the wrong type) fails to compile (up to 1.10.15 any parameter compiled).
 
 - `ctx.toolName` and `ctx.toolInput` (`tools:call-tool`), `ctx.uri` (`resources:read-resource`) and `ctx.promptName` (`prompts:get-prompt`) name the entry and its input.
 - `ctx.request` holds the request's `sessionId`, `clientInfo`, `metadata` (user agent, client IP, `x-frontmcp-*` headers) and `protocol`; each is `undefined` when the run has none.

@@ -91,6 +91,13 @@ class SayHelloTool extends ToolContext {
   }
 }
 
+@Tool({ id: 'archive_note', name: 'Archive a note', inputSchema: {} })
+class ArchiveNoteTool extends ToolContext {
+  async execute() {
+    return 'archived';
+  }
+}
+
 @Tool({ name: 'ledger', inputSchema: {} })
 class LedgerTool extends ToolContext {
   async execute(): Promise<string> {
@@ -116,7 +123,7 @@ class GreetingPrompt extends PromptContext {
   id: 'notes',
   name: 'Notes',
   plugins: [AccessorProbe],
-  tools: [SayHelloTool, LedgerTool],
+  tools: [SayHelloTool, ArchiveNoteTool, LedgerTool],
   resources: [ReadmeResource],
   prompts: [GreetingPrompt],
 })
@@ -155,7 +162,14 @@ describe('flow accessors in hooks', () => {
     expect(at('did:findTool')).toEqual({ at: 'did:findTool', toolName: 'say_hello' });
   });
 
-  it('toolInput is the arguments the tool runs with', async () => {
+  it('toolName of a tool with an id stays the name tools/list lists it under', async () => {
+    await server.callTool('archive_note', {});
+
+    expect(at('will:findTool')).toEqual({ at: 'will:findTool', toolName: 'archive_note' });
+    expect(at('did:findTool')).toEqual({ at: 'did:findTool', toolName: 'archive_note' });
+  });
+
+  it('toolInput is the arguments the call passes to the tool', async () => {
     await server.callTool('say_hello', { mood: 'calm' });
 
     expect(at('will:execute')?.['toolInput']).toEqual({ mood: 'calm' });

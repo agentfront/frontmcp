@@ -63,26 +63,33 @@ class PromptsApp {}
 
 const typedCtxFixture = resolve(__dirname, 'fixtures/typed-hook-ctx.fixture.ts');
 
-function strictCompileErrors(fileName: string): string[] {
+function strictCompileErrors(fileName: string, sourceText?: string): string[] {
   const configFile = resolve(__dirname, '../../../tsconfig.spec.json');
   const parsed = ts.getParsedCommandLineOfConfigFile(configFile, undefined, {
     ...ts.sys,
     onUnRecoverableConfigFileDiagnostic: () => undefined,
   });
   if (!parsed) throw new Error(`${configFile} could not be read`);
-  const program = ts.createProgram([fileName], {
+  const options = {
     ...parsed.options,
     strict: true,
     noEmit: true,
     composite: false,
     declaration: false,
     rootDir: undefined,
-  });
+  };
+  const host = ts.createCompilerHost(options);
+  const getSourceFile = host.getSourceFile.bind(host);
+  host.getSourceFile = (name, languageVersion, ...rest) =>
+    sourceText !== undefined && resolve(name) === fileName
+      ? ts.createSourceFile(name, sourceText, languageVersion)
+      : getSourceFile(name, languageVersion, ...rest);
+  const program = ts.createProgram([fileName], options, host);
   const sourceFile = program.getSourceFile(fileName);
   return [...program.getSyntacticDiagnostics(sourceFile), ...program.getSemanticDiagnostics(sourceFile)].map(
     (diagnostic) => {
       const line = sourceFile?.getLineAndCharacterOfPosition(diagnostic.start ?? 0).line ?? -1;
-      return `${line + 1}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')}`;
+      return `${line + 1}: TS${diagnostic.code} ${ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')}`;
     },
   );
 }
@@ -90,6 +97,17 @@ function strictCompileErrors(fileName: string): string[] {
 describe('hook decorator types', () => {
   it('reject a parameter the flow ctx does not satisfy and accept the ctx or a subset of it, for every export', () => {
     expect(strictCompileErrors(typedCtxFixture)).toEqual([]);
+  }, 120_000);
+
+  it('fail with TS1241, on each decorator the fixture expects to fail, once its @ts-expect-error is removed', () => {
+    const fixture = ts.sys.readFile(typedCtxFixture) ?? '';
+    const expectedFailures = fixture
+      .split('\n')
+      .flatMap((line, index) => (line.includes('// @ts-expect-error') ? [`${index + 2}: TS1241`] : []));
+    const errors = strictCompileErrors(typedCtxFixture, fixture.replaceAll('// @ts-expect-error', '// expected:'));
+
+    expect(expectedFailures.length).toBeGreaterThan(20);
+    expect(errors.map((error) => error.split(' ', 2).join(' '))).toEqual(expectedFailures);
   }, 120_000);
 
   it('are checked in the fixture for every exported hook helper', () => {

@@ -262,9 +262,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
   logger = this.scopeLogger.child('CallToolFlow');
 
-  /** The tool's name: the one `findTool` resolved, else the name the call asks for. */
+  /** The tool's name (its `id`, else its `name`) once `findTool` resolved it, else the name the call asks for. */
   get toolName(): string {
-    return this.state.tool?.metadata.name ?? (this.state.input ?? this.input.request.params).name;
+    return this.state.tool?.name ?? (this.state.input ?? this.input.request.params).name;
   }
 
   /** The arguments the call passes to the tool, as `Will` hooks left them. */

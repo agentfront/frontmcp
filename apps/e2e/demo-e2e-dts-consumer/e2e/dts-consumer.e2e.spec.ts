@@ -34,7 +34,7 @@ const fixtureFiles = [
   'output-schemas-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
-function compileFixture(): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
+function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
   const sdkPathOverride = sdkDeclarationsOverride
     ? { paths: { '@frontmcp/sdk': [path.join(sdkDeclarationsDir, 'index.d.ts')] } }
     : {};
@@ -47,11 +47,21 @@ function compileFixture(): { diagnostics: FixtureDiagnostic[]; sourceFiles: stri
   if (!parsedConfig) {
     throw new Error(`Unable to read ${path.join(fixtureDir, 'tsconfig.json')}`);
   }
-  const program = ts.createProgram({ rootNames: parsedConfig.fileNames, options: parsedConfig.options });
+  const host = ts.createCompilerHost(parsedConfig.options);
+  const getSourceFile = host.getSourceFile.bind(host);
+  host.getSourceFile = (fileName, languageVersion, ...rest) =>
+    path.resolve(fileName) === withoutExpectErrors
+      ? ts.createSourceFile(fileName, withoutExpectErrorsText(fileName), languageVersion)
+      : getSourceFile(fileName, languageVersion, ...rest);
+  const program = ts.createProgram({ rootNames: parsedConfig.fileNames, options: parsedConfig.options, host });
   return {
     diagnostics: [...parsedConfig.errors, ...ts.getPreEmitDiagnostics(program)].map(toFixtureDiagnostic),
     sourceFiles: program.getSourceFiles().map((sourceFile) => path.resolve(sourceFile.fileName)),
   };
+}
+
+function withoutExpectErrorsText(fileName: string): string {
+  return (ts.sys.readFile(fileName) ?? '').replaceAll('// @ts-expect-error', '// expected:');
 }
 
 function describeEach(diagnostics: FixtureDiagnostic[]): string[] {
@@ -98,6 +108,21 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('rejects a hook whose parameter the flow ctx does not satisfy, for every hook decorator', () => {
     expect(describeEach(inFixtureFile('hooks-must-fail.ts'))).toEqual([]);
+  });
+
+  it('fails each hooks-must-fail.ts case with TS1241 once its @ts-expect-error is removed', () => {
+    const mustFail = path.join(fixtureDir, 'hooks-must-fail.ts');
+    const expectedFailures = (ts.sys.readFile(mustFail) ?? '')
+      .split('\n')
+      .flatMap((line, index) => (line.includes('// @ts-expect-error') ? [index + 2] : []))
+      .map(
+        (line) =>
+          `${path.relative(workspaceRoot, mustFail)}:${line} TS1241: Unable to resolve signature of method decorator when called as an expression.`,
+      );
+    const failures = compileFixture(mustFail).diagnostics.filter((diagnostic) => diagnostic.fileName === mustFail);
+
+    expect(expectedFailures.length).toBeGreaterThan(10);
+    expect(describeEach(failures)).toEqual(expectedFailures);
   });
 
   it('types a custom host without enhancedHandler, and names Scope for the web-fetch helpers (#819)', () => {

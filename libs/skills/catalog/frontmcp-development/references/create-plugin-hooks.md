@@ -248,7 +248,7 @@ The main stages of the `tools:call-tool` flow, in order (the full list is under 
 
 A hook method on a plugin or provider receives the running flow as its first argument; type it `FlowCtxOf<'<flow-name>'>`. An `@Around` hook also receives `next`. `this` is the plugin or provider instance.
 
-The decorator checks that parameter against the flow it hooks. `FlowCtxOf<'<flow-name>'>`, a structural subset of it (`ctx: { toolName: string }`), `unknown`, or no parameter compiles. A parameter with a property the flow does not have, a property of the wrong type, the ctx of another flow, or a second parameter on a hook other than `@Around` fails to compile, with `TS1241: Unable to resolve signature of method decorator when called as an expression` and a last line naming the property, such as `Property 'notAField' is missing in type 'CallToolFlow'`. Up to 1.10.15 the decorators did not check the parameter: a hook typed `ctx: { toolName: string }` compiled, read `undefined` and silently never matched.
+The decorator checks that parameter against the flow it hooks. `FlowCtxOf<'<flow-name>'>`, a structural subset of it (`ctx: { toolName: string }`), `unknown`, or no parameter compiles. A parameter with a property the flow does not have (or keeps protected, such as `input` or `scope`), a property of the wrong type, the ctx of another flow, or a second parameter on a hook other than `@Around` fails to compile, with `TS1241: Unable to resolve signature of method decorator when called as an expression` and a last line naming the property, such as `Property 'notAField' is missing in type 'CallToolFlow'`. Up to 1.10.15 the decorators did not check the parameter: a hook typed `ctx: { toolName: string }` compiled, read `undefined` and silently never matched. A hook decorator is a `FlowHookDecorator`, not a `MethodDecorator`: a helper that returns one leaves its return type inferred.
 
 | Member            | Description                                                                                                                                             |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -264,12 +264,12 @@ The decorator checks that parameter against the flow it hooks. `FlowCtxOf<'<flow
 
 The entry flows also name their entry:
 
-| Flow                      | Member       | Description                                                                                         |
-| ------------------------- | ------------ | --------------------------------------------------------------------------------------------------- |
-| `tools:call-tool`         | `toolName`   | The tool's name: the one `findTool` resolved (its declared `name`), else the name the call asks for |
-| `tools:call-tool`         | `toolInput`  | The arguments the tool runs with (`state.input.arguments`, as `@Will` hooks left them)              |
-| `resources:read-resource` | `uri`        | The URI the read asks for                                                                           |
-| `prompts:get-prompt`      | `promptName` | The prompt's name: the one `findPrompt` resolved, else the name the request asks for                |
+| Flow                      | Member       | Description                                                                                                                          |
+| ------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `tools:call-tool`         | `toolName`   | The tool's name (its `id`, else its `name`) once `findTool` resolved it, else the name the call asks for                             |
+| `tools:call-tool`         | `toolInput`  | The arguments the call passes to the tool (`state.input.arguments`, as `@Will` hooks left them), before its input schema parses them |
+| `resources:read-resource` | `uri`        | The URI the read asks for                                                                                                            |
+| `prompts:get-prompt`      | `promptName` | The prompt's name: the one `findPrompt` resolved, else the name the request asks for                                                 |
 
 `ctx.request` holds:
 
