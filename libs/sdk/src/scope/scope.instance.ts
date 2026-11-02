@@ -25,10 +25,12 @@ import {
   type FlowOutputOf,
   type FlowType,
   type FrontMcpAuth,
+  type LateAppRegistries,
   type PublicAuthOptions,
   type ScopeRecord,
   type ServerRequest,
   type Token,
+  type ToolEntry,
   type Type,
   type WidgetServingMode,
 } from '../common';
@@ -1693,7 +1695,7 @@ export class Scope extends ScopeEntry {
    * without `throttle.enabled`, unless `throttle.enabled` is explicitly `false`. That includes the
    * tools declared inside an agent and its nested agents, at any depth.
    */
-  private async initGuardForDeclaredLimits(): Promise<void> {
+  private async initGuardForDeclaredLimits(lateTools: readonly ToolEntry[] = []): Promise<void> {
     const throttleConfig = this.metadata.throttle;
     if (this._rateLimitManager || this.cliMode) return;
     if (throttleConfig?.enabled === false) {
@@ -1701,7 +1703,7 @@ export class Scope extends ScopeEntry {
       return;
     }
 
-    const guardedEntries = [...this.scopeTools.getTools(true), ...this.scopeAgents.getAgents(true)];
+    const guardedEntries = [...this.scopeTools.getTools(true), ...lateTools, ...this.scopeAgents.getAgents(true)];
     const declaresLimits =
       guardedEntries.some((entry) => entry.metadata.rateLimit || entry.metadata.concurrency) ||
       // `publicAccess.rateLimit` counts anonymous calls per IP
@@ -1794,6 +1796,14 @@ export class Scope extends ScopeEntry {
     }
 
     assertAuthoritiesRules(engine, entries);
+  }
+
+  async checkLateApp(app: LateAppRegistries): Promise<void> {
+    const { tools, resources, prompts, agents, skills } = app;
+    const problems = findUnenforcedMetadata({ hooks: this.scopeHooks, tools, resources, prompts, agents, skills });
+    if (problems.length > 0) throw new UnenforcedMetadataError(problems);
+    checkHookOrder(hookRunsOf(this.scopeHooks), (message) => this.logger.warn(message));
+    await this.initGuardForDeclaredLimits(tools.getTools(true));
   }
 
   /**

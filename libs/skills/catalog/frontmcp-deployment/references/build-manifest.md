@@ -91,6 +91,14 @@ The manifest holds what clients see in `initialize` and the lists, plus app owne
 config values, credentials, or environment variables, and no skill instructions (only their hash). A widget tool's
 `_meta.ui` keys are added per client at list time, so the manifest only flags it with `ui: true`.
 
+## Lazy Apps Read It at Run Time
+
+A lazy app (`apps: [{ name, lazy: () => import('./billing.app') }]`) is listed from the manifest until its first call
+imports it, so the manifest is part of what you deploy: keep it next to the server's entry (`dist/<target>/`, the
+`mcpb` archive's `server/`), or pass `@FrontMcp({ manifest })` (a path, or the manifest object a Worker or browser
+build imports). Production refuses to start a lazy app no manifest lists. The build itself imports lazy apps, so the
+manifest has their entries. See `frontmcp-setup` → `multi-app-composition`.
+
 ## The Lint
 
 | Rule                       | Finding                                                                                           |
@@ -155,16 +163,18 @@ const manifest = serverManifestSchema.parse(JSON.parse(text));
 - [ ] Every tool you expect is listed with its `app`
 - [ ] `frontmcp build --strict-lint` exits 0
 - [ ] The server logs no `instructionsBudget` warning at startup
+- [ ] With lazy apps, the manifest ships next to the server's entry, built from the same source as the bundle
 
 ## Troubleshooting
 
-| Problem                                   | Cause                                                              | Solution                                                                                    |
-| ----------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| `frontmcp.manifest.json not written: ...` | The entry fails to boot in Node at build time, or the SDK is older | Fix the boot error the reason names, upgrade `@frontmcp/sdk`, or build with `--no-manifest` |
-| A skill has no `hash`                     | Its instructions could not be loaded at build time                 | Check the `instructions` source (a missing file, an unreachable URL)                        |
-| `over the instructionsBudget` at startup  | Instructions or a tool description longer than the limit           | Shorten them, keep `injectInstructions: 'compact'`, or raise `instructionsBudget`           |
-| A tool missing from the manifest          | It belongs to a remote app, whose tools are discovered at run time | Expected: remote apps are listed in `apps` with `remote: true`                              |
-| `did not finish booting within 60 s`      | A provider, plugin, adapter or remote app waits for a service      | Make it fail fast when the service is unreachable, or build with `--no-manifest`            |
+| Problem                                              | Cause                                                              | Solution                                                                                    |
+| ---------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `frontmcp.manifest.json not written: ...`            | The entry fails to boot in Node at build time, or the SDK is older | Fix the boot error the reason names, upgrade `@frontmcp/sdk`, or build with `--no-manifest` |
+| A skill has no `hash`                                | Its instructions could not be loaded at build time                 | Check the `instructions` source (a missing file, an unreachable URL)                        |
+| `over the instructionsBudget` at startup             | Instructions or a tool description longer than the limit           | Shorten them, keep `injectInstructions: 'compact'`, or raise `instructionsBudget`           |
+| A tool missing from the manifest                     | It belongs to a remote app, whose tools are discovered at run time | Expected: remote apps are listed in `apps` with `remote: true`                              |
+| `did not finish booting within 60 s`                 | A provider, plugin, adapter or remote app waits for a service      | Make it fail fast when the service is unreachable, or build with `--no-manifest`            |
+| `App "x" is lazy, and no frontmcp.manifest.json ...` | The deployed server has no manifest that lists the lazy app        | Ship the manifest the build wrote next to the entry, or pass `@FrontMcp({ manifest })`      |
 
 ## Reference
 

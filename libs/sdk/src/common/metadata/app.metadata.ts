@@ -33,6 +33,7 @@ import {
 } from '../schemas';
 import { type AuthOptionsInput, type RawZodShape } from '../types';
 import { appFilterConfigSchema, type AppFilterConfig } from './app-filter.metadata';
+import { enabledOptionSchema, type EnabledOption } from './enabled.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import { type EsmOptions, type RemoteOptions } from './remote-primitive.metadata';
 import type { WidgetServingMode } from './tool-ui.metadata';
@@ -559,6 +560,31 @@ export const frontMcpRemoteAppMetadataSchema = z
     },
     { message: 'URL must have a valid scheme for url/worker types (e.g., https://, file://)' },
   );
+
+/**
+ * An app whose code is imported on its first call: `apps: [{ name: 'Billing', lazy: () => import('./billing.app') }]`.
+ * Until then `frontmcp.manifest.json` (written by `frontmcp build`) answers the lists for it.
+ */
+export interface LazyAppMetadata {
+  /** The id of the `@App` the import loads; defaults to one derived from `name`, as for that app. */
+  id?: string;
+  name: string;
+  description?: string;
+  /** Imports the app: resolves to its `@App` class, or a module whose default export (or only `@App` export) is one. */
+  lazy: () => Promise<unknown>;
+  /** Turns the whole app on and off. While it is off its entries are refused with `FEATURE_OFF` and it is never imported. */
+  enabled?: EnabledOption;
+}
+
+export const lazyAppMetadataSchema = z.strictObject({
+  id: z.string().min(1).optional(),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  lazy: z.custom<LazyAppMetadata['lazy']>((value) => typeof value === 'function', {
+    message: "`lazy` must be a function that imports the app, such as () => import('./billing.app')",
+  }),
+  enabled: enabledOptionSchema.optional(),
+} satisfies RawZodShape<LazyAppMetadata>);
 
 export type AppMetadata = LocalAppMetadata | RemoteAppMetadata;
 

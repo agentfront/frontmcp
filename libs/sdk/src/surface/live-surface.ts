@@ -3,6 +3,7 @@ import { sha256Hex } from '@frontmcp/utils';
 import type { ListChangedKind } from '../common/interfaces/flow.interface';
 import { isEnabledSource, type EnabledOption, type EnabledSource } from '../common/metadata/enabled.metadata';
 import { STATELESS_SESSION_ID } from '../transport/transport.types';
+import { listsUnchanged } from './unchanged-lists';
 
 /** The `_meta` key of a list result that carries the hash of what the list shows. */
 export const SURFACE_META_KEY = 'frontmcp/surface';
@@ -76,7 +77,11 @@ export class LiveSurface {
       this.followSources(kind);
       this.stops.push(this.registryOf(kind).subscribe({ immediate: false }, () => this.followSources(kind)));
     }
-    this.stops.push(this.scope.tools.subscribe({ immediate: false }, () => this.toolsVersion++));
+    this.stops.push(
+      this.scope.tools.subscribe({ immediate: false }, () => {
+        if (!listsUnchanged()) this.toolsVersion++;
+      }),
+    );
   }
 
   stop(): void {

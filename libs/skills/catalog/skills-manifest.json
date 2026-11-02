@@ -3361,8 +3361,20 @@
         },
         {
           "name": "multi-app-composition",
-          "description": "Compose multiple @App classes, ESM packages, and remote MCP servers into a single FrontMCP gateway",
+          "description": "Compose multiple @App classes, lazy apps imported on their first call, ESM packages, and remote MCP servers into a single FrontMCP gateway",
           "examples": [
+            {
+              "name": "lazy-apps-from-the-manifest",
+              "description": "Import apps on their first call, listed from `frontmcp.manifest.json` until then.",
+              "level": "intermediate",
+              "tags": ["setup", "multi-app", "lazy", "manifest", "build", "startup"],
+              "features": [
+                "`{ name, lazy: () => import(...) }` in `apps` imports the app on its first call, once for concurrent calls",
+                "`frontmcp build` writes `frontmcp.manifest.json`, which lists the app until then; the server reads it next to its entry",
+                "The lazy app's `enabled` keeps it unimported while it is off, and refuses its entries with `FEATURE_OFF`",
+                "Without a manifest, development imports lazy apps at startup and production refuses to start"
+              ]
+            },
             {
               "name": "local-apps-with-shared-tools",
               "description": "Compose multiple local `@App` classes into a server with shared tools available to all apps.",

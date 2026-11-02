@@ -287,6 +287,8 @@ export {
   type ExternalEntryKind,
 } from './external-entry.errors';
 
+export { LazyAppConfigurationError, LazyAppLoadError } from './lazy-app.errors';
+
 // Export SDK errors
 export {
   FlowExitedWithoutOutputError,

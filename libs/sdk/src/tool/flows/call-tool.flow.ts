@@ -22,6 +22,7 @@ import {
   recordAnswerCost,
   shapeToolAnswer,
 } from '../../answer';
+import { assertAppLoaded, loadAppOfPlaceholder } from '../../app/lazy/lazy-placeholders';
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { getAuthorizedAppIds } from '../../auth/authorized-apps.utils';
 import { getConsentedToolIds, isToolConsented } from '../../auth/consent.utils';
@@ -207,6 +208,8 @@ const plan = {
     'checkSurface',
     'findTool',
     'checkEnabled',
+    // A lazy app's entry that is on and still a placeholder: its app failed to load before this run
+    'checkAppLoaded',
     'checkPublicAccess',
     // Auth checks run BEFORE task creation so unauthorized callers cannot
     // materialize a task record (which would leak tool existence + hand back a
@@ -280,6 +283,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       await loadRemoteAppCapabilities(scope);
       tool = lookupTool(scope, toolName);
     }
+    if (tool && (await loadAppOfPlaceholder(scope, tool))) tool = lookupTool(scope, toolName);
     if (!tool) return undefined;
     resolvedTools.remember(rawInput, toolName, tool);
     return hookOwnerIdOf(scope.tools.lineageOf(tool) ?? [], tool.owner);
@@ -477,6 +481,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   async checkEnabled() {
     const { tool } = this.state.required;
     await assertEntryEnabled('Tool', tool.name, tool.metadata.enabled, this.tryGetContext(), this.logger);
+  }
+
+  /** A lazy app's tool that is on and still a placeholder is answered `LAZY_APP_LOAD_FAILED`: its app did not load. */
+  @Stage('checkAppLoaded')
+  async checkAppLoaded() {
+    assertAppLoaded(this.state.required.tool);
   }
 
   private logAliasCall(tool: ToolEntry, alias: string): void {

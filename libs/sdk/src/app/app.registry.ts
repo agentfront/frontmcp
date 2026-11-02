@@ -35,13 +35,13 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
     const tokens = new Set<Token>();
     const defs = new Map<Token, AppRecord>();
     const graph = new Map<Token, Set<Token>>();
-    const remoteAppIds = new Set<string>();
+    const configuredAppIds = new Set<string>();
     for (const raw of list) {
       const rec = normalizeApp(raw);
-      if (rec.kind === AppKind.REMOTE_VALUE && !rec.useValue) {
+      if ((rec.kind === AppKind.REMOTE_VALUE && !rec.useValue) || rec.kind === AppKind.LAZY_IMPORT) {
         const appId = appIdOf(rec.metadata);
-        if (remoteAppIds.has(appId)) throw new DuplicateAppIdError(appId);
-        remoteAppIds.add(appId);
+        if (configuredAppIds.has(appId)) throw new DuplicateAppIdError(appId);
+        configuredAppIds.add(appId);
       }
       const provide = rec.provide;
       tokens.add(provide);
@@ -83,6 +83,9 @@ export default class AppRegistry extends RegistryAbstract<AppEntry, AppRecord, A
           const { AppRemoteInstance } = await import('./instances/app.remote.instance.js');
           app = new AppRemoteInstance(rec, this.providers);
         }
+      } else if (rec.kind === AppKind.LAZY_IMPORT) {
+        const { AppLazyInstance } = await import('./instances/app.lazy.instance.js');
+        app = new AppLazyInstance(rec, this.providers);
       } else {
         throw new InvalidRegistryKindError('app', (rec as { kind?: string }).kind);
       }

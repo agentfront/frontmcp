@@ -4,6 +4,7 @@ import { AuthorityDeniedError, resolveRequiredScopes } from '@frontmcp/auth';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 import { GetPromptRequestSchema, GetPromptResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
+import { assertAppLoaded, loadAppOfPlaceholder } from '../../app/lazy/lazy-placeholders';
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { enforcePublicAccess, publicAccessFor } from '../../auth/public-access.utils';
 import {
@@ -72,6 +73,7 @@ const plan = {
     'ensureRemoteCapabilities',
     'findPrompt',
     'checkEnabled',
+    'checkAppLoaded',
     'checkPublicAccess',
     'checkEntryAuthorities',
     'createPromptContext',
@@ -128,6 +130,7 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
       await loadRemoteAppCapabilities(scope);
       prompt = findPromptForGet(scope.prompts, promptName);
     }
+    if (prompt && (await loadAppOfPlaceholder(scope, prompt))) prompt = findPromptForGet(scope.prompts, promptName);
     if (!prompt) return undefined;
     resolvedPrompts.remember(rawInput, promptName, prompt);
     return appOwnerIdOf(scope.prompts.lineageOf(prompt) ?? [], prompt.owner);
@@ -268,6 +271,12 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
   async checkEnabled() {
     const { prompt } = this.state.required;
     await assertEntryEnabled('Prompt', prompt.name, prompt.metadata.enabled, this.tryGetContext(), this.logger);
+  }
+
+  /** A lazy app's prompt that is on and still a placeholder is answered `LAZY_APP_LOAD_FAILED`: its app did not load. */
+  @Stage('checkAppLoaded')
+  async checkAppLoaded() {
+    assertAppLoaded(this.state.required.prompt);
   }
 
   /**

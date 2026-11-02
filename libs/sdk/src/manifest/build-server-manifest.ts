@@ -1,5 +1,9 @@
+import { type AppEntry } from '../common/entries/app.entry';
 import { type EntryLineage, type EntryOwnerRef } from '../common/entries/base.entry';
+import { type PromptEntry } from '../common/entries/prompt.entry';
+import { type ResourceEntry } from '../common/entries/resource.entry';
 import { type SkillEntry } from '../common/entries/skill.entry';
+import { type ToolEntry } from '../common/entries/tool.entry';
 import { isEnabledSource, type EnabledOption } from '../common/metadata/enabled.metadata';
 import { resolveToolVisibility } from '../common/metadata/tool.metadata';
 import { resolveInstructionsBudget } from '../common/types/options/instructions-budget';
@@ -29,7 +33,7 @@ interface LineageRegistry<Entry> {
 }
 
 /** An entry's owners without the scopes holding it: a scope only when it owns the entry itself. */
-function ownersOf(lineage: EntryLineage | undefined, owner: EntryOwnerRef): EntryLineage {
+export function ownersOf(lineage: EntryLineage | undefined, owner: EntryOwnerRef): EntryLineage {
   const owners = (lineage ?? []).filter((candidate) => candidate.kind !== 'scope');
   if (owners.length > 0) return owners;
   return lineage && lineage.length > 0 ? [lineage[lineage.length - 1]] : [owner];
@@ -99,13 +103,9 @@ async function skillHash(skill: SkillEntry): Promise<string | undefined> {
   }
 }
 
-/**
- * The manifest of a server: every tool, resource, resource template, prompt and skill its scopes hold, whether or
- * not it is available, on or listed here, with the fields their listings need. Entries are sorted, and the
- * manifest is plain JSON, so the same server always gives the same manifest.
- */
-export async function buildServerManifest(scopes: readonly Scope[], primary: Scope): Promise<ServerManifest> {
-  const tools: ManifestTool[] = entriesOf(scopes, (scope) => scope.tools).map(({ entry: tool, lineage }) => ({
+/** A tool as the manifest records it, under the owners `lineage` names. */
+export function manifestToolOf(tool: ToolEntry, lineage: EntryLineage): ManifestTool {
+  return {
     name: tool.metadata.id ?? tool.metadata.name,
     title: tool.metadata.title,
     description: tool.metadata.description,
@@ -122,37 +122,74 @@ export async function buildServerManifest(scopes: readonly Scope[], primary: Sco
     output: jsonObject(tool.metadata.output),
     examples: jsonObjects(tool.metadata.examples),
     ui: hasUIConfig(tool.metadata) ? true : undefined,
-  }));
+  };
+}
 
-  const resources: ManifestResource[] = [];
-  const resourceTemplates: ManifestResourceTemplate[] = [];
-  for (const { entry: resource, lineage } of entriesOf(scopes, (scope) => scope.resources)) {
-    const metadata = resource.metadata;
-    const fields = {
-      name: metadata.name,
-      title: metadata.title,
-      description: metadata.description,
-      mimeType: metadata.mimeType,
-      icons: jsonObjects(metadata.icons),
-      annotations: jsonObject(metadata.annotations),
-      _meta: metadata._meta,
-      ...ownedFields(lineage, metadata),
-    };
-    if (resource.isTemplate && resource.uriTemplate) {
-      resourceTemplates.push({ uriTemplate: resource.uriTemplate, ...fields });
-    } else if (resource.uri) {
-      resources.push({ uri: resource.uri, ...fields });
-    }
-  }
+/** A resource or resource template as the manifest records it; undefined for one with neither a URI nor a template. */
+export function manifestResourceOf(
+  resource: ResourceEntry,
+  lineage: EntryLineage,
+): { template: ManifestResourceTemplate } | { resource: ManifestResource } | undefined {
+  const metadata = resource.metadata;
+  const fields = {
+    name: metadata.name,
+    title: metadata.title,
+    description: metadata.description,
+    mimeType: metadata.mimeType,
+    icons: jsonObjects(metadata.icons),
+    annotations: jsonObject(metadata.annotations),
+    _meta: metadata._meta,
+    ...ownedFields(lineage, metadata),
+  };
+  if (resource.isTemplate && resource.uriTemplate)
+    return { template: { uriTemplate: resource.uriTemplate, ...fields } };
+  return resource.uri ? { resource: { uri: resource.uri, ...fields } } : undefined;
+}
 
-  const prompts: ManifestPrompt[] = entriesOf(scopes, (scope) => scope.prompts).map(({ entry: prompt, lineage }) => ({
+/** A prompt as the manifest records it. */
+export function manifestPromptOf(prompt: PromptEntry, lineage: EntryLineage): ManifestPrompt {
+  return {
     name: prompt.metadata.name,
     title: prompt.metadata.title,
     description: prompt.metadata.description,
     ...ownedFields(lineage, prompt.metadata),
     arguments: prompt.metadata.arguments,
     icons: jsonObjects(prompt.metadata.icons),
-  }));
+  };
+}
+
+/** An app as the manifest records it. */
+export function manifestAppOf(app: AppEntry): ManifestApp {
+  const metadata = app.metadata as { name: string; description?: string; standalone?: ManifestApp['standalone'] };
+  return {
+    id: app.id,
+    name: metadata.name,
+    description: metadata.description,
+    remote: app.isRemote ? true : undefined,
+    standalone: metadata.standalone || undefined,
+    output: jsonObject((app.metadata as { output?: object }).output),
+  };
+}
+
+/**
+ * The manifest of a server: every tool, resource, resource template, prompt and skill its scopes hold, whether or
+ * not it is available, on or listed here, with the fields their listings need. Entries are sorted, and the
+ * manifest is plain JSON, so the same server always gives the same manifest.
+ */
+export async function buildServerManifest(scopes: readonly Scope[], primary: Scope): Promise<ServerManifest> {
+  const tools = entriesOf(scopes, (scope) => scope.tools).map(({ entry, lineage }) => manifestToolOf(entry, lineage));
+
+  const resources: ManifestResource[] = [];
+  const resourceTemplates: ManifestResourceTemplate[] = [];
+  for (const { entry, lineage } of entriesOf(scopes, (scope) => scope.resources)) {
+    const recorded = manifestResourceOf(entry, lineage);
+    if (recorded && 'template' in recorded) resourceTemplates.push(recorded.template);
+    else if (recorded) resources.push(recorded.resource);
+  }
+
+  const prompts = entriesOf(scopes, (scope) => scope.prompts).map(({ entry, lineage }) =>
+    manifestPromptOf(entry, lineage),
+  );
 
   const skills: ManifestSkill[] = await Promise.all(
     entriesOf(scopes, (scope) => scope.skills).map(async ({ entry: skill, lineage }) => ({
@@ -172,16 +209,7 @@ export async function buildServerManifest(scopes: readonly Scope[], primary: Sco
   const apps = new Map<string, ManifestApp>();
   for (const scope of scopes) {
     for (const app of scope.apps.getApps()) {
-      if (apps.has(app.id)) continue;
-      const metadata = app.metadata as { name: string; description?: string; standalone?: ManifestApp['standalone'] };
-      apps.set(app.id, {
-        id: app.id,
-        name: metadata.name,
-        description: metadata.description,
-        remote: app.isRemote ? true : undefined,
-        standalone: metadata.standalone || undefined,
-        output: jsonObject((app.metadata as { output?: object }).output),
-      });
+      if (!apps.has(app.id)) apps.set(app.id, manifestAppOf(app));
     }
   }
 

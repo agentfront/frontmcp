@@ -29,6 +29,7 @@ import { createMcpServer } from '../transport/mcp-server.factory';
 import type { FetchHandlerCtx, WebFetchHandler } from '../transport/web-fetch-handler';
 import { markDirectOnly } from './direct-only.flag';
 import { createMcpGlobalProviders } from './front-mcp.providers';
+import { markManifestMode } from './manifest-mode.flag';
 import {
   DEFAULT_SHUTDOWN_DEADLINE_MS,
   exitOnShutdownSignals,
@@ -581,6 +582,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     for (const backend of ['redis', 'pubsub', 'sqlite']) delete config[backend];
     if (config.jobs) config.jobs = { ...config.jobs, store: undefined };
     markDirectOnly(parsedConfig);
+    markManifestMode(parsedConfig);
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
     return frontMcp;
