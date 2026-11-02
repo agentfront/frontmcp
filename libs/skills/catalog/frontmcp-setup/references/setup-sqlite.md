@@ -481,15 +481,15 @@ The change in `src/main.ts`:
 
 ## Troubleshooting
 
-| Problem                                 | Cause                                                           | Solution                                                                                                                  |
-| --------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `Cannot find module 'better-sqlite3'`   | Native module not installed                                     | Run `yarn add @frontmcp/storage-sqlite better-sqlite3`                                                                    |
-| `Could not locate the bindings file`    | Native compilation failed                                       | Ensure build tools are installed (Xcode CLI on macOS, `build-essential` on Linux), delete `node_modules` and reinstall    |
-| `SQLITE_BUSY` errors                    | Another process held the write lock longer than `busyTimeoutMs` | Keep WAL mode on (`walMode: true`), keep transactions short, and raise `busyTimeoutMs` (default 5000)                     |
-| `Failed to persist session to SQLite`   | A session write waited longer than `busyTimeoutMs` for the lock | Raise `busyTimeoutMs`, or use Redis for many writer processes                                                             |
-| `SQLITE_READONLY`                       | Insufficient file permissions                                   | Check write permissions on the database file and its parent directory                                                     |
-| WAL errors on network mount             | WAL mode requires a local filesystem with shared-memory support | Move the database to a local disk or set `walMode: false`                                                                 |
-| Encrypted data unreadable after restart | Encryption secret changed or missing                            | The secret must be identical across restarts; if the original secret is lost, delete the database and let it be recreated |
+| Problem                                 | Cause                                                           | Solution                                                                                                                      |
+| --------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `Cannot find module 'better-sqlite3'`   | Native module not installed                                     | Run `yarn add @frontmcp/storage-sqlite better-sqlite3`                                                                        |
+| `Could not locate the bindings file`    | Native compilation failed                                       | Ensure build tools are installed (Xcode CLI on macOS, `build-essential` on Linux), delete `node_modules` and reinstall        |
+| `SQLITE_BUSY` errors                    | Another process held the write lock longer than `busyTimeoutMs` | Keep WAL mode on (`walMode: true`), keep transactions short, and raise `busyTimeoutMs` (default 5000)                         |
+| `Failed to persist session to SQLite`   | A session write waited longer than `busyTimeoutMs` for the lock | Raise `busyTimeoutMs`, or use Redis for many writer processes                                                                 |
+| `SQLITE_READONLY`                       | Insufficient file permissions                                   | Check write permissions on the database file and its parent directory                                                         |
+| WAL errors on network mount             | WAL mode requires a local filesystem with shared-memory support | Move the database to a local disk; `walMode: false` only keeps a new file out of WAL, it does not switch an existing one back |
+| Encrypted data unreadable after restart | Encryption secret changed or missing                            | The secret must be identical across restarts; if the original secret is lost, delete the database and let it be recreated     |
 
 ## Examples
 
