@@ -24,7 +24,7 @@ export async function runShared(
   const version = config.info?.version;
   if (!isSharedVersion(version)) {
     throw new InvalidSharedServerOptionsError(
-      `info.version: a shared server states its version, which must be 1 to ${MAX_SHARED_VERSION_LENGTH} characters`,
+      `info.version: a shared server states its version, which must be 1 to ${MAX_SHARED_VERSION_LENGTH} printable ASCII characters`,
     );
   }
   if (getEnv(SHARED_SERVE_ENV) === options.key) {

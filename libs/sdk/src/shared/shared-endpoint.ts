@@ -52,8 +52,9 @@ export type IdentifyResult =
   | { outcome: 'exiting' }
   | { outcome: 'unreachable' };
 
+/** A version a shared server states: printable ASCII, since sessions and servers write it to their logs. */
 export function isSharedVersion(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= MAX_SHARED_VERSION_LENGTH;
+  return typeof value === 'string' && /^[\x20-\x7e]+$/.test(value) && value.length <= MAX_SHARED_VERSION_LENGTH;
 }
 
 /** Challenge whatever listens on `endpoint` with a fresh nonce, sending it nothing else. */

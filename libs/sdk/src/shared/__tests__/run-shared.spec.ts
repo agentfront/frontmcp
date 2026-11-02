@@ -66,12 +66,13 @@ posixOnly('FrontMcpInstance.runShared', () => {
   it.each([
     ['empty', ''],
     ['longer than 256 characters', '1'.repeat(257)],
+    ['not printable ASCII', '1.0.0\nforged log line'],
   ])('refuses an info.version that is %s, which a shared server states to its sessions', async (_, version) => {
     await expect(
       FrontMcpInstance.runShared({ ...config, info: { ...config.info, version } }, { key: 'run' }),
     ).rejects.toThrow(
       new InvalidSharedServerOptionsError(
-        'info.version: a shared server states its version, which must be 1 to 256 characters',
+        'info.version: a shared server states its version, which must be 1 to 256 printable ASCII characters',
       ),
     );
     expect(attachSharedSession).not.toHaveBeenCalled();

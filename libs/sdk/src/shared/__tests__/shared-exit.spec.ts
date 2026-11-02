@@ -133,7 +133,13 @@ posixOnly('a shared local server exiting on its own', () => {
     it('refuses a drain that does not say its version', async () => {
       const record = await serve('http');
       const { token } = deriveSharedServerKeys(record.secret);
-      for (const body of [{}, { version: 42 }, { version: '' }, { version: '1'.repeat(257) }]) {
+      for (const body of [
+        {},
+        { version: 42 },
+        { version: '' },
+        { version: '1'.repeat(257) },
+        { version: '9.0.0\nx' },
+      ]) {
         expect((await post(record, SHARED_DRAIN_PATH, { authorization: `Bearer ${token}` }, body)).status).toBe(400);
       }
     });

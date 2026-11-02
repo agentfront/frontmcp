@@ -51,6 +51,7 @@ describe('identifySharedServer', () => {
   it.each([
     ['a version that is not a string', 42],
     ['a version longer than one', '1'.repeat(257)],
+    ['a version with a line break, which would forge a log line', '1.0.0\nforged'],
   ])('refuses an answer with %s', async (_, version) => {
     const nonceOf = (body: string): string => (JSON.parse(body) as { nonce: string }).nonce;
     const liar = http.createServer((req, res) => {

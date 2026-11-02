@@ -85,7 +85,7 @@ starts, for example
 `runShared() options are invalid: replaceOlder: replaceOlder must be true or false`,
 `runShared() options are invalid: idleTimeoutMs: idleTimeoutMs must be a whole number of milliseconds from 1 to 604800000, or false`,
 `runShared() options are invalid: checkout: checkout must be the path of a folder, or false`,
-`runShared() options are invalid: info.version: a shared server states its version, which must be 1 to 256 characters`
+`runShared() options are invalid: info.version: a shared server states its version, which must be 1 to 256 printable ASCII characters`
 (the config's `info.version` is the version sessions compare), or, on Windows,
 `runShared() options are invalid: transport: a Unix socket can't be kept owner-only on Windows; use transport 'http'`.
 With the Unix socket, a socket path longer than a socket address holds (103 bytes) is refused the same way:
