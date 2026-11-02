@@ -87,7 +87,13 @@ export function spawnDetachedRunner(runId: string): DetachedRunnerProcess {
   const { command, args } = detachedRunnerCommand();
   const env: NodeJS.ProcessEnv = { ...process.env, [RUN_JOB_ENV_VAR]: runId };
   delete env[RUN_TASK_ENV_VAR];
-  const { child } = spawnOwned(command, args, { marker: JOB_WORKER_MARKER, detached: true, stdio: 'ignore', env });
+  const { child } = spawnOwned(command, args, {
+    marker: JOB_WORKER_MARKER,
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+    env,
+  });
   child.unref();
   return child;
 }

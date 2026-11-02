@@ -165,7 +165,13 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
   }
 
   // A detached job is refused here, at boot, where its process could not outlive the server
-  assertRunnersAvailable(jobRegistry.getJobs(), jobsConfig.runner);
+  try {
+    assertRunnersAvailable(jobRegistry.getJobs(), jobsConfig.runner);
+  } catch (error) {
+    await stateStore.dispose();
+    await definitionStore.dispose();
+    throw error;
+  }
 
   // 4. Create execution manager. Its status notifications also publish finished job and workflow
   // runs to the scope's completions, which `job-completion` channel sources subscribe to.

@@ -12,6 +12,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { z } from '@frontmcp/lazy-zod';
+import { resetRuntimeContext } from '@frontmcp/utils';
 
 import { completionEventsOf } from '../../channel/sources/completion-events';
 import { type JobCompletionEvent } from '../../channel/sources/job-completion.source';
@@ -290,6 +291,28 @@ describe('a detached run', () => {
 
     await expect(refusal).rejects.toBeInstanceOf(JobRunnerUnavailableError);
     await expect(refusal).rejects.toHaveProperty('remedy.say', expect.stringMatching(/entry/));
+  });
+});
+
+describe('a detached job at boot', () => {
+  afterEach(() => {
+    delete process.env['FRONTMCP_DEPLOYMENT_MODE'];
+    resetRuntimeContext();
+  });
+
+  it('fails the start of a serverless deployment, with a remedy, and closes the job store it opened', async () => {
+    process.env['FRONTMCP_DEPLOYMENT_MODE'] = 'serverless';
+    resetRuntimeContext();
+    const dispose = jest.spyOn(StorageJobStateStore.prototype, 'dispose');
+    try {
+      const start = FrontMcpInstance.createDirect(config());
+
+      await expect(start).rejects.toBeInstanceOf(JobRunnerUnavailableError);
+      await expect(start).rejects.toHaveProperty('code', 'JOB_RUNNER_UNAVAILABLE');
+      expect(dispose).toHaveBeenCalled();
+    } finally {
+      dispose.mockRestore();
+    }
   });
 });
 
