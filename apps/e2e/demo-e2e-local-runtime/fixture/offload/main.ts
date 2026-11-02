@@ -1,11 +1,11 @@
 import { App, FrontMcp, LogLevel } from '@frontmcp/sdk';
 
 import { CrunchTool } from './crunch.tool';
-import { HeavyReport, InlineReport, StuckReport } from './reports.resource';
+import { HeavyReport, InlineReport, MissingReport, StuckReport } from './reports.resource';
 
 const port = parseInt(process.env['PORT'] ?? '3190', 10);
 
-@App({ name: 'reports', resources: [HeavyReport, StuckReport, InlineReport], tools: [CrunchTool] })
+@App({ name: 'reports', resources: [HeavyReport, StuckReport, InlineReport, MissingReport], tools: [CrunchTool] })
 class ReportsApp {}
 
 @FrontMcp({

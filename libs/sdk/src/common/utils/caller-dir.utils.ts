@@ -48,7 +48,7 @@ export function captureCallerFile(skipBasenames: readonly string[] = []): string
   return firstCallerFile(callSiteFiles(), skipBasenames);
 }
 
-/** @internal The first of the stack's files (innermost first) outside this module, node internals and node_modules. */
+/** @internal The first of the stack's files (innermost first) outside this module and node internals, packages included. */
 export function firstCallerFile(files: readonly string[], skipBasenames: readonly string[] = []): string | undefined {
   const ownFile = files[0];
   const file = files.find(
@@ -56,7 +56,6 @@ export function firstCallerFile(files: readonly string[], skipBasenames: readonl
       index > 0 &&
       candidate !== ownFile &&
       !candidate.startsWith('node:') &&
-      !candidate.includes('node_modules') &&
       !skipBasenames.includes(basename(candidate)),
   );
   return file === undefined ? undefined : fileUrlToPath(file);

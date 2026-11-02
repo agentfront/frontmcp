@@ -35,7 +35,7 @@ export type OffloadFunction = (...args: never[]) => unknown;
 /** @internal What the pool runs. */
 export type OffloadTask =
   | { kind: 'function'; moduleRef: OffloadModuleRef; args: readonly unknown[] }
-  | { kind: 'resource'; file: string; name: string; uri: string; params: Record<string, string> };
+  | { kind: 'resource'; file: string; key: string; name: string; uri: string; params: Record<string, string> };
 
 /** @internal How the pool runs it. */
 export interface OffloadRun {

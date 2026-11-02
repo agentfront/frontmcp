@@ -40,12 +40,26 @@ class StaysInline extends ResourceContext {
   }
 }
 
+@Resource({ name: 'twin', uri: 'twin://static', worker: true })
+class StaticTwin extends ResourceContext {
+  async execute() {
+    return 'static';
+  }
+}
+
+@ResourceTemplate({ name: 'twin', uriTemplate: 'twin://{id}', worker: true })
+class TemplateTwin extends ResourceContext<{ id: string }> {
+  async execute() {
+    return 'template';
+  }
+}
+
 const HandlerResource = resource({ name: 'handler-report', uri: 'report://handler', worker: true })((uri, params) => ({
   contents: [{ uri, text: JSON.stringify(params) }],
 }));
 
-function readerOf(name: string) {
-  const reader = workerResourceReaders().get(workerResourceKey(__filename, name));
+function readerOf(name: string, uri: string) {
+  const reader = workerResourceReaders().get(workerResourceKey(__filename, name, uri));
   if (!reader) throw new Error(`no reader for ${name}`);
   return reader;
 }
@@ -53,8 +67,16 @@ function readerOf(name: string) {
 describe('worker: true resources', () => {
   it('records the module that declared each worker resource, and nothing for the others', () => {
     void HandlerResource;
-    expect(workerResourceSourceOf(ReadsInWorker)).toEqual({ file: __filename, name: 'reads-in-worker' });
-    expect(workerResourceSourceOf(RespondsInWorker)).toEqual({ file: __filename, name: 'responds-in-worker' });
+    expect(workerResourceSourceOf(ReadsInWorker)).toEqual({
+      file: __filename,
+      name: 'reads-in-worker',
+      key: `${__filename}#reads-in-worker#report://reads`,
+    });
+    expect(workerResourceSourceOf(RespondsInWorker)).toEqual({
+      file: __filename,
+      name: 'responds-in-worker',
+      key: `${__filename}#responds-in-worker#report://users/{id}`,
+    });
     expect(workerResourceSourceOf(StaysInline)).toBeUndefined();
     expect(workerResourceSourceOf('not a function')).toBeUndefined();
   });
@@ -62,7 +84,7 @@ describe('worker: true resources', () => {
   it('reads a class resource with no DI container, forwarding its log lines', async () => {
     const log = jest.fn();
 
-    await expect(readerOf('reads-in-worker').read('report://reads', {}, log)).resolves.toEqual({
+    await expect(readerOf('reads-in-worker', 'report://reads').read('report://reads', {}, log)).resolves.toEqual({
       uri: 'report://reads',
       token: 'none',
     });
@@ -71,7 +93,7 @@ describe('worker: true resources', () => {
   });
 
   it('answers with what respond() sends, rethrows what fail() throws, and refuses this.get() and this.scope', async () => {
-    const reader = readerOf('responds-in-worker');
+    const reader = readerOf('responds-in-worker', 'report://users/{id}');
     const log = jest.fn();
 
     await expect(reader.read('report://users/7', { id: '7' }, log)).resolves.toEqual({ user: '7' });
@@ -84,8 +106,19 @@ describe('worker: true resources', () => {
     );
   });
 
+  it('reads the right one of two worker resources of one module that share a name', async () => {
+    const keyOf = (target: unknown) => workerResourceSourceOf(target)?.key ?? '';
+    const reader = (target: unknown) => workerResourceReaders().get(keyOf(target));
+
+    expect(keyOf(StaticTwin)).not.toBe(keyOf(TemplateTwin));
+    await expect(reader(StaticTwin)?.read('twin://static', {}, jest.fn())).resolves.toBe('static');
+    await expect(reader(TemplateTwin)?.read('twin://7', { id: '7' }, jest.fn())).resolves.toBe('template');
+  });
+
   it('reads a function-style resource through its handler', async () => {
-    await expect(readerOf('handler-report').read('report://handler', { a: '1' }, jest.fn())).resolves.toEqual({
+    await expect(
+      readerOf('handler-report', 'report://handler').read('report://handler', { a: '1' }, jest.fn()),
+    ).resolves.toEqual({
       contents: [{ uri: 'report://handler', text: '{"a":"1"}' }],
     });
   });
@@ -94,8 +127,8 @@ describe('worker: true resources', () => {
     const handler = () => 'x';
     registerWorkerResourceHandler(handler, { name: 'nowhere', uri: 'report://nowhere' }, undefined);
 
-    expect(workerResourceSourceOf(handler)).toEqual({ file: undefined, name: 'nowhere' });
-    expect([...workerResourceReaders().keys()].some((key) => key.endsWith('#nowhere'))).toBe(false);
+    expect(workerResourceSourceOf(handler)).toMatchObject({ file: undefined, name: 'nowhere' });
+    expect([...workerResourceReaders().keys()].some((key) => key.includes('#nowhere#'))).toBe(false);
   });
 
   it('refuses to read in a worker a resource whose module is unknown', () => {

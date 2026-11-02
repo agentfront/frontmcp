@@ -25,6 +25,7 @@ export function workerResourceReaders(): Map<string, WorkerResourceReader> {
   return readers;
 }
 
-export function workerResourceKey(file: string, name: string): string {
-  return `${file}#${name}`;
+/** A worker resource by its module, name and URI (or URI template), so two of one module that share a name differ. */
+export function workerResourceKey(file: string, name: string, uri: string): string {
+  return `${file}#${name}#${uri}`;
 }

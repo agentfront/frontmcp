@@ -1,6 +1,6 @@
 import { isMainThread } from 'node:worker_threads';
 
-import { Resource, ResourceContext } from '@frontmcp/sdk';
+import { Resource, ResourceContext, ResourceNotFoundError, ResourceTemplate } from '@frontmcp/sdk';
 
 import { HEAVY_MS, spin } from './spin';
 
@@ -16,6 +16,13 @@ export class HeavyReport extends ResourceContext {
 export class StuckReport extends ResourceContext {
   async execute(): Promise<never> {
     for (;;) spin(1000);
+  }
+}
+
+@ResourceTemplate({ name: 'missing-report', uriTemplate: 'report://missing/{id}', worker: true })
+export class MissingReport extends ResourceContext<{ id: string }> {
+  async execute(uri: string): Promise<never> {
+    throw new ResourceNotFoundError(uri);
   }
 }
 

@@ -68,4 +68,19 @@ test.describe('worker offload', () => {
     expect(crunched).toBeSuccessful();
     expect(crunched.json<{ turns: number }>().turns).toBeGreaterThan(0);
   });
+
+  test('answers a not-found thrown in the worker as the read would on the main thread', async ({ mcp }) => {
+    const missing = await mcp.raw.request({
+      jsonrpc: '2.0',
+      id: 'missing',
+      method: 'resources/read',
+      params: { uri: 'report://missing/7' },
+    });
+
+    expect(missing.error).toMatchObject({
+      code: -32002,
+      message: expect.stringContaining('Resource not found: report://missing/7'),
+      data: { uri: 'report://missing/7' },
+    });
+  });
 });

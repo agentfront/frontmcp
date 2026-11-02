@@ -88,9 +88,10 @@ export class CountWordsTool extends ToolContext {
   `timeout` passes, so a timed-out tool does not leave its worker running.
 
 In development (`frontmcp dev`, which runs `tsx`), a worker loads `.ts` modules too: it registers tsx itself, since tsx
-hooks only the main thread. A production build must ship the module as its own file next to the code that names it;
-`frontmcp build --target node` bundles the server into one file, so keep offloaded modules out of the bundle (copy them
-with the build output) and point `moduleRef.module` at the copied file.
+hooks only the main thread (a tsx without the `tsx/cjs/api` and `tsx/esm/api` entry points is skipped, and the worker
+then loads JavaScript modules only). A production build must ship the module as its own file next to the code that names
+it; `frontmcp build --target node` bundles the server into one file, so keep offloaded modules out of the bundle (copy
+them with the build output) and point `moduleRef.module` at the copied file.
 
 ## `@Resource({ worker: true })`
 
@@ -112,9 +113,13 @@ export class RepoIndexResource extends ResourceContext {
 
 `worker` is `true` or `{ budgetMs }` (default `offload.budgetMs`). The read-resource flow runs as usual (authorities,
 `enabled`, hooks, output validation and the answer budget all run on the main thread); only `execute()` runs in a
-worker. FrontMCP records the module the decorator was evaluated in, the worker imports that module (its `@FrontMcp`
-class, if it has one, serves nothing there), builds the resource and calls `execute(uri, params)`. Keep worker resources
-in their own module with no import-time side effects.
+worker. FrontMCP records the module the decorator was evaluated in (a module of an installed package too), the worker
+imports that module (its `@FrontMcp` class, if it has one, serves nothing there), builds the resource and calls
+`execute(uri, params)`. Keep worker resources in their own module with no import-time side effects.
+
+The `--target node` build keeps `@frontmcp/sdk` out of the server bundle, so a worker imports that bundle. A bundle that
+inlines the SDK (a SEA binary, `mcpb`, `lambda`, `vercel`) has no separate module to import: its `worker` reads are
+refused with `InvalidOffloadCallError`.
 
 What the worker-side resource can and can't reach:
 
@@ -126,8 +131,10 @@ What the worker-side resource can and can't reach:
 | `this.fetch()` as a plain `fetch` (no forwarded headers or token) | `this.signal` is undefined (cancelling the read terminates the worker)               |
 
 The output crosses back by structured clone, so return plain data: strings, numbers, arrays, plain objects, `Date`,
-`Map`, `Set`, typed arrays. An error thrown in the worker reaches the flow with its name, message, stack and `code`; a
-public FrontMCP error (`ResourceNotFoundError`, `refused(...)`) stays public.
+`Map`, `Set`, typed arrays. An error thrown in the worker reaches the flow with its name, message, stack and `code`. A
+public FrontMCP error (`ResourceNotFoundError`, `refused(...)`) stays public, with its JSON-RPC code, data and remedy,
+so the client gets the answer an inline read gives (`-32002` and `data.uri` for a missing resource). Any other error is
+internal, as it is on the main thread, even one that has an `isPublic` property.
 
 ## What Crosses the Worker Boundary
 
@@ -136,8 +143,11 @@ A worker never receives what it was not passed:
 - **In:** the module URL, the export name (or the resource's name, URI and parameters) and `args`, by structured clone.
   Its `process.env` holds only the variables named in `offload.env` (default `['NODE_ENV']`); variables the server
   loaded from `--env-file` are removed too. No DI container, session, auth info, access token or request headers.
-- **Out:** the return value by structured clone; an error's name, message, stack, `code` and whether it is public; a
-  worker-side resource's log lines.
+- **Flags:** a worker inherits the server's `execArgv` (loaders, conditions), never its arguments. A preload among them
+  (`--require`, `--import`) runs in each worker before the worker clears its environment, and an `--env-file` flag is
+  read again there, so a preload must not keep the variables it sees.
+- **Out:** the return value by structured clone; an error's name, message, stack, `code`, whether it is public and, for
+  a public FrontMCP error, its JSON-RPC code, data and remedy; a worker-side resource's log lines.
 - A worker's `console.log` goes to the server's stderr, so it never corrupts a stdio transport.
 
 ## The `offload` Server Option
@@ -160,9 +170,10 @@ export default class Server {}
 
 Each option is validated at startup: an invalid one fails `@FrontMcp` with `InvalidDecoratorMetadataError` naming it
 (`offload.maxWorkers must be at least 1`, `offload.budgetMs must be a whole number of milliseconds`). Each scope (a
-`splitByApp` app has its own) has its own pool. The pool shuts down when its scope is disposed (graceful HTTP or stdio
-shutdown, `dispose()` of `create()`/`createDirect()`, the last `connect()` client's `close()`): workers are terminated
-and the calls still running or waiting reject with `OffloadAbortedError`.
+`splitByApp` app has its own) has its own pool, so a server of N split apps runs up to N × `maxWorkers` worker threads.
+The pool shuts down when its scope is disposed (graceful HTTP or stdio shutdown, `dispose()` of
+`create()`/`createDirect()`, the last `connect()` client's `close()`): workers are terminated and the calls still
+running or waiting reject with `OffloadAbortedError`.
 
 ## Errors
 
@@ -199,6 +210,7 @@ and the calls still running or waiting reject with `OffloadAbortedError`.
 | -------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `has no exported function "x"`                     | The export name is wrong, or the module exports something else | Check `moduleRef.export`; a default export needs no `export`                              |
 | `Importing ... registered no worker resource`      | The resource class is not in the module the decorator ran in   | Declare the resource directly in its module (not through a factory in another file)       |
+| `the module that declares it was not found`        | The server is a bundle that inlines `@frontmcp/sdk`            | Build with `--target node`, or offload the computation with `this.offload()` instead      |
 | `Provider "X" is not available: ... worker thread` | A `worker: true` resource calls `this.get(X)`                  | Drop `worker`, or move the DI-dependent part into a tool and offload only the computation |
 | Calls past `maxWorkers` are slow                   | They wait for a free worker                                    | Raise `offload.maxWorkers`, or lower the work per call                                    |
 | `process.env.X` is undefined in the worker         | Only `offload.env` crosses                                     | Add `X` to `offload.env`, or pass the value in `args`                                     |

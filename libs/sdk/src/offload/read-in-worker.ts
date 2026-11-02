@@ -16,11 +16,11 @@ export function readInWorker(
   const source = workerResourceSourceOf(provide);
   if (!source?.file) {
     throw new InvalidOffloadCallError(
-      `resource "${name}" sets worker, but the module that declares it was not found on the call stack, so no worker can import it`,
+      `resource "${name}" sets worker, but the module that declares it was not found on the call stack, so no worker can import it (a bundle that inlines @frontmcp/sdk has no separate module to import)`,
     );
   }
   return context.get(OffloadService).run(
-    { kind: 'resource', file: source.file, name: source.name, uri, params },
+    { kind: 'resource', file: source.file, key: source.key, name: source.name, uri, params },
     {
       label: name,
       budgetMs: typeof worker === 'object' ? worker.budgetMs : undefined,

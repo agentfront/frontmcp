@@ -1,9 +1,9 @@
 import { tmpdir } from 'node:os';
 
-import { mkdtemp, pathJoin, pathToFileURL, realpath, rm, writeFile } from '@frontmcp/utils';
+import { ensureDir, mkdtemp, pathJoin, pathToFileURL, realpath, rm, writeFile } from '@frontmcp/utils';
 
 import type { FrontMcpLogger } from '../../common/interfaces/logger.interface';
-import { PublicMcpError } from '../../errors/mcp.error';
+import { isPublicError, PublicMcpError } from '../../errors/mcp.error';
 import {
   InvalidOffloadCallError,
   OffloadAbortedError,
@@ -11,6 +11,7 @@ import {
   OffloadNotCloneableError,
   OffloadWorkerError,
 } from '../../errors/offload.errors';
+import { toSdkMcpError } from '../../transport/mcp-handlers/mcp-error.utils';
 import { OffloadPool, tsxApiOf } from '../offload-pool';
 import { workerResourceKey } from '../offload-worker.globals';
 import type { OffloadRun } from '../offload.types';
@@ -22,11 +23,25 @@ export function add(a, b) { return a + b; }
 export function forever() { for (;;) {} }
 export function slow(ms) { return new Promise((resolve) => setTimeout(() => resolve(threadId), ms)); }
 export function fail() { const error = new TypeError('nope'); error.code = 'E_NOPE'; throw error; }
-export function refuse() {
-  const error = new Error('Resource "x" not found');
-  Object.assign(error, { name: 'ResourceNotFoundError', isPublic: true, code: 'RESOURCE_NOT_FOUND', statusCode: 404 });
-  throw error;
+class BrandedMcpError extends Error {}
+Object.defineProperty(BrandedMcpError, Symbol.for('@frontmcp/class-brand'), { value: '@frontmcp/sdk:McpError' });
+class NotFound extends BrandedMcpError {
+  constructor(uri) {
+    super('Resource not found: ' + uri);
+    Object.assign(this, { name: 'ResourceNotFoundError', uri, isPublic: true, code: 'RESOURCE_NOT_FOUND', statusCode: 404 });
+    this.remedy = { say: 'List the resources first', tool: 'list_reports' };
+  }
+  toJsonRpcError() { return { code: -32002, message: this.message, data: { uri: this.uri } }; }
 }
+export function refuse() { throw new NotFound('report://x'); }
+export function refuseWithRemedy() {
+  const error = new BrandedMcpError('Reviews are off');
+  throw Object.assign(error, { isPublic: true, code: 'REFUSED', statusCode: 403, remedy: { say: 'Turn on Reviews' } });
+}
+export function claimPublic() {
+  throw Object.assign(new Error('connection string postgres://admin:hunter2@db'), { isPublic: true, statusCode: 400 });
+}
+export function shout(text) { console.log(text); return text; }
 export function makeFunction() { return () => 1; }
 export function readEnv() { return { ...process.env }; }
 export function exitNow() { process.exit(3); }
@@ -35,6 +50,8 @@ export const notAFunction = 1;
 `;
 
 const CJS_MODULE = `module.exports = { triple: (n) => n * 3 };`;
+
+const DEFAULT_FUNCTION_MODULE = `export default function named() { return 'named'; }`;
 
 const SLOW_TO_LOAD_MODULE = `
 await new Promise((resolve) => setTimeout(resolve, 400));
@@ -45,7 +62,7 @@ const RESOURCE_MODULE = `
 const { isMainThread } = require('node:worker_threads');
 const key = Symbol.for('@frontmcp/sdk:worker-resources');
 globalThis[key] = globalThis[key] || new Map();
-globalThis[key].set(__filename + '#report', {
+globalThis[key].set(__filename + '#report#report://{id}', {
   read: async (uri, params, log) => {
     log('info', 'reading ' + uri);
     log('nonsense', 'unknown level');
@@ -76,6 +93,7 @@ describe('OffloadPool', () => {
     work = pathJoin(dir, 'work.mjs');
     await writeFile(work, WORK_MODULE);
     await writeFile(pathJoin(dir, 'triple.cjs'), CJS_MODULE);
+    await writeFile(pathJoin(dir, 'default-function.mjs'), DEFAULT_FUNCTION_MODULE);
     await writeFile(pathJoin(dir, 'slow-to-load.mjs'), SLOW_TO_LOAD_MODULE);
     await writeFile(pathJoin(dir, 'report.cjs'), RESOURCE_MODULE);
   });
@@ -236,7 +254,7 @@ describe('OffloadPool', () => {
     await expect(failure).rejects.toHaveProperty('stack', expect.stringContaining('work.mjs'));
   });
 
-  it('keeps a public error public', async () => {
+  it('keeps a public FrontMCP error public, with its JSON-RPC code, data and remedy', async () => {
     const offload = pool();
 
     const refusal = runExport(offload, 'refuse');
@@ -246,6 +264,25 @@ describe('OffloadPool', () => {
       code: 'RESOURCE_NOT_FOUND',
       statusCode: 404,
     });
+    const answered = toSdkMcpError(await refusal.catch((error: unknown) => error));
+    expect(answered.code).toBe(-32002);
+    expect(answered.data).toMatchObject({
+      uri: 'report://x',
+      remedy: { say: 'List the resources first', tool: 'list_reports' },
+    });
+
+    const refused = toSdkMcpError(await runExport(offload, 'refuseWithRemedy').catch((error: unknown) => error));
+    expect(refused.code).toBe(-32003);
+    expect(refused.data).toMatchObject({ code: 'REFUSED', remedy: { say: 'Turn on Reviews' } });
+  });
+
+  it('keeps an error that only claims isPublic internal, as it is on the main thread', async () => {
+    const offload = pool();
+
+    const failure = await runExport(offload, 'claimPublic').catch((error: unknown) => error);
+
+    expect(isPublicError(failure)).toBe(false);
+    expect(failure).toMatchObject({ message: 'connection string postgres://admin:hunter2@db' });
   });
 
   it('rejects with OffloadWorkerError when the worker exits or crashes, and starts a new one', async () => {
@@ -297,6 +334,53 @@ describe('OffloadPool', () => {
     await expect(runExport(offload, 'notAFunction')).rejects.toThrow(/has no exported function "notAFunction"/);
   });
 
+  it('calls only a function the module exports, never one its exports inherit', async () => {
+    const offload = pool();
+    const inherited = (module: string, exportName: string) =>
+      offload.run({ kind: 'function', moduleRef: { module, export: exportName }, args: [] }, call());
+
+    await expect(inherited(pathJoin(dir, 'triple.cjs'), 'toString')).rejects.toThrow(
+      /has no exported function "toString"/,
+    );
+    await expect(inherited(pathJoin(dir, 'default-function.mjs'), 'call')).rejects.toThrow(
+      /has no exported function "call"/,
+    );
+  });
+
+  it("forwards a worker's console output to stderr without piping into it once per worker", async () => {
+    const offload = pool({ maxWorkers: 3 });
+    const write = jest.spyOn(process.stderr, 'write');
+    const before = process.stderr.listenerCount('unpipe');
+    try {
+      const running = Promise.all([1, 2, 3].map(() => runExport(offload, 'slow', [150])));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(offload.size).toBe(3);
+      expect(process.stderr.listenerCount('unpipe') - before).toBeLessThanOrEqual(offload.size);
+      await running;
+
+      await runExport(offload, 'shout', ['offload-stdout-check']);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(write.mock.calls.some(([chunk]) => String(chunk).includes('offload-stdout-check'))).toBe(true);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it('still runs plain modules when the tsx it runs under has no registration API', async () => {
+    const dist = pathJoin(dir, 'old-tsx', 'node_modules', 'tsx', 'dist');
+    await ensureDir(dist);
+    const execArgv = process.execArgv;
+    let offload: OffloadPool;
+    process.execArgv = [...execArgv, '--import', pathJoin(dist, 'loader.mjs')];
+    try {
+      offload = pool();
+    } finally {
+      process.execArgv = execArgv;
+    }
+
+    await expect(runExport(offload, 'add', [1, 2])).resolves.toBe(3);
+  });
+
   it('gives a worker only the environment variables it is configured to pass', async () => {
     process.env['OFFLOAD_SPEC_SECRET'] = 'do-not-cross';
     process.env['OFFLOAD_SPEC_PASSED'] = 'crosses';
@@ -319,14 +403,20 @@ describe('OffloadPool', () => {
     const file = pathJoin(dir, 'report.cjs');
 
     const value = await offload.run(
-      { kind: 'resource', file, name: 'report', uri: 'report://1', params: { id: '1' } },
+      {
+        kind: 'resource',
+        file,
+        key: workerResourceKey(file, 'report', 'report://{id}'),
+        name: 'report',
+        uri: 'report://1',
+        params: { id: '1' },
+      },
       call({ label: 'report', logger }),
     );
 
     expect(value).toEqual({ uri: 'report://1', params: { id: '1' }, isMainThread: false });
     expect(logger.info).toHaveBeenCalledWith('reading report://1');
     expect(logger.info).toHaveBeenCalledWith('unknown level');
-    expect(workerResourceKey(file, 'report')).toBe(`${file}#report`);
   });
 
   it('rejects a worker resource its module did not register', async () => {
@@ -334,7 +424,14 @@ describe('OffloadPool', () => {
 
     await expect(
       offload.run(
-        { kind: 'resource', file: pathJoin(dir, 'report.cjs'), name: 'other', uri: 'report://1', params: {} },
+        {
+          kind: 'resource',
+          file: pathJoin(dir, 'report.cjs'),
+          key: workerResourceKey(pathJoin(dir, 'report.cjs'), 'other', 'report://{id}'),
+          name: 'other',
+          uri: 'report://1',
+          params: {},
+        },
         call(),
       ),
     ).rejects.toThrow(/registered no worker resource "other"/);

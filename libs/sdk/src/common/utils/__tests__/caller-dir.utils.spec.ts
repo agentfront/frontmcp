@@ -163,19 +163,25 @@ describe('captureCallerFile', () => {
     }
   });
 
-  it('skips its own module (one bundle holding the decorator too), node internals, node_modules and skipped basenames', () => {
-    const bundle = '/srv/node_modules/@frontmcp/sdk/index.js';
+  it('skips its own module (one bundle holding the decorator too), node internals and skipped basenames', () => {
     const files = [
       '/srv/app/dist/sdk-bundle.js',
       '/srv/app/dist/sdk-bundle.js',
       'node:internal/modules/cjs/loader',
-      bundle,
       '/srv/app/dist/resource.decorator.js',
       pathToFileURL('/srv/app/dist/reports.resource.js').href,
     ];
 
     expect(firstCallerFile(files, ['resource.decorator.js'])).toBe('/srv/app/dist/reports.resource.js');
-    expect(firstCallerFile(files.slice(0, 5), ['resource.decorator.js'])).toBeUndefined();
+    expect(firstCallerFile(files.slice(0, 4), ['resource.decorator.js'])).toBeUndefined();
     expect(firstCallerFile([])).toBeUndefined();
+  });
+
+  it('names a module of an installed package, not the module that required the package', () => {
+    const sdk = '/srv/node_modules/@frontmcp/sdk/index.js';
+    const declaring = '/srv/node_modules/@acme/reports/dist/reports.resource.js';
+    const files = [sdk, sdk, declaring, 'node:internal/modules/cjs/loader', '/srv/app/dist/main.js'];
+
+    expect(firstCallerFile(files)).toBe(declaring);
   });
 });

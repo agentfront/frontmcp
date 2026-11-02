@@ -10,10 +10,11 @@ export type WorkerResourceTarget =
   | { kind: 'class'; cls: WorkerResourceClass }
   | { kind: 'function'; handler: WorkerResourceHandler };
 
-/** The module a worker imports to read a `worker: true` resource, and the resource's name. */
+/** The module a worker imports to read a `worker: true` resource, the resource's name and its key in the worker. */
 export interface WorkerResourceSource {
   file: string | undefined;
   name: string;
+  key: string;
 }
 
 const sources = new WeakMap<object, WorkerResourceSource>();
@@ -46,7 +47,9 @@ function register(
   metadata: AnyResourceMetadata,
   file: string | undefined,
 ): void {
-  sources.set(key, { file, name: metadata.name });
+  const declaredUri = 'uriTemplate' in metadata ? metadata.uriTemplate : metadata.uri;
+  const readerKey = workerResourceKey(file ?? '', metadata.name, declaredUri);
+  sources.set(key, { file, name: metadata.name, key: readerKey });
   if (!file) return;
   const reader: WorkerResourceReader = {
     read: async (uri, params, log) => {
@@ -54,5 +57,5 @@ function register(
       return readWorkerResource(target, metadata, uri, params, log);
     },
   };
-  workerResourceReaders().set(workerResourceKey(file, metadata.name), reader);
+  workerResourceReaders().set(readerKey, reader);
 }

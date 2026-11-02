@@ -4,7 +4,7 @@ import { dirname, isAbsolute, pathJoin, pathToFileURL } from '@frontmcp/utils';
 
 import type { FrontMcpLogger } from '../common/interfaces/logger.interface';
 import type { OffloadOptions } from '../common/types/options/offload';
-import { PublicMcpError } from '../errors/mcp.error';
+import { PublicMcpError, type ErrorRemedy } from '../errors/mcp.error';
 import {
   InvalidOffloadCallError,
   OffloadAbortedError,
@@ -12,7 +12,7 @@ import {
   OffloadNotCloneableError,
   OffloadWorkerError,
 } from '../errors/offload.errors';
-import { workerResourceKey, type WorkerLogLevel } from './offload-worker.globals';
+import type { WorkerLogLevel } from './offload-worker.globals';
 import { OFFLOAD_WORKER_SOURCE } from './offload-worker.source';
 import type { OffloadRun, OffloadTask } from './offload.types';
 
@@ -32,6 +32,8 @@ interface SerializedError {
   code?: string;
   isPublic?: boolean;
   statusCode?: number;
+  remedy?: ErrorRemedy;
+  jsonRpc?: { code: number; message: string; data?: Record<string, unknown> };
 }
 
 type WorkerMessage =
@@ -169,7 +171,7 @@ export class OffloadPool {
       stdout: true,
       workerData: { env: this.env, tsxApi: this.tsxApi },
     });
-    worker.stdout.pipe(process.stderr, { end: false });
+    worker.stdout.on('data', (chunk: Buffer) => process.stderr.write(chunk));
     const pooled: PooledWorker = { worker, gone: false };
     worker.on('message', (message: WorkerMessage) => this.onMessage(pooled, message));
     worker.on('error', (error) => this.onFailure(pooled, messageOf(error)));
@@ -270,7 +272,7 @@ function toWorkerTask(task: OffloadTask): WorkerTask {
     return {
       kind: 'resource',
       url: pathToFileURL(task.file).href,
-      key: workerResourceKey(task.file, task.name),
+      key: task.key,
       name: task.name,
       uri: task.uri,
       params: task.params,
@@ -312,11 +314,16 @@ function targetOf(task: WorkerTask): string {
 
 function fromWorker(serialized: SerializedError): Error {
   const error = serialized.isPublic
-    ? new PublicMcpError(serialized.message, serialized.code, serialized.statusCode)
+    ? publicError(serialized)
     : Object.assign(new Error(serialized.message), serialized.code ? { code: serialized.code } : {});
   error.name = serialized.name;
   if (serialized.stack) error.stack = serialized.stack;
   return error;
+}
+
+function publicError({ message, code, statusCode, remedy, jsonRpc }: SerializedError): PublicMcpError {
+  const error = new PublicMcpError(message, code, statusCode, undefined, remedy);
+  return jsonRpc ? Object.assign(error, { toJsonRpcError: () => jsonRpc }) : error;
 }
 
 function pickEnv(names: readonly string[]): Record<string, string> {

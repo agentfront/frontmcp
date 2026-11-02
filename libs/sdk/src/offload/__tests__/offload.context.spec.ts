@@ -126,12 +126,26 @@ describe('this.offload() and worker: true in a server', () => {
       expect(templated.contents).toHaveLength(1);
       expect(run).toHaveBeenNthCalledWith(
         1,
-        { kind: 'resource', file: __filename, name: 'report', uri: 'report://worker', params: {} },
+        {
+          kind: 'resource',
+          file: __filename,
+          key: `${__filename}#report#report://worker`,
+          name: 'report',
+          uri: 'report://worker',
+          params: {},
+        },
         expect.objectContaining({ label: 'report', budgetMs: 1234 }),
       );
       expect(run).toHaveBeenNthCalledWith(
         2,
-        { kind: 'resource', file: __filename, name: 'user-report', uri: 'report://users/7', params: { id: '7' } },
+        {
+          kind: 'resource',
+          file: __filename,
+          key: `${__filename}#user-report#report://users/{id}`,
+          name: 'user-report',
+          uri: 'report://users/7',
+          params: { id: '7' },
+        },
         expect.objectContaining({ label: 'user-report', budgetMs: undefined }),
       );
     } finally {

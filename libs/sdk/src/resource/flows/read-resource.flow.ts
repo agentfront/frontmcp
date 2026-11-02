@@ -34,7 +34,6 @@ import {
 import { ResolvedEntries } from '../../flows/resolved-entries';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
-import { readInWorker } from '../../offload/read-in-worker';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { assertEntryEnabled } from '../../surface';
 import { isUIResourceUri } from '../../tool/ui/ui-shared';
@@ -426,7 +425,9 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       const worker = resource.metadata.worker;
       resourceContext.output = await runOnSurface(callSurfaceOf(this.input.ctx), async () =>
         worker
-          ? readInWorker(resourceContext, resource.record.provide, worker, input.uri, params)
+          ? import('../../offload/read-in-worker.js').then(({ readInWorker }) =>
+              readInWorker(resourceContext, resource.record.provide, worker, input.uri, params),
+            )
           : resourceContext.execute(input.uri, params),
       );
       this.logger.verbose('execute:done');
