@@ -2,37 +2,71 @@ import { z as realZ, type ZodTypeAny } from 'zod';
 
 import { HEAVY_FACTORIES, LEAF_FACTORIES } from './factories';
 import { LAZY_TARGET, LazyZodSchema, wrapLazy } from './lazy-schema';
-import { createLazyZ, type StandInFactory, type z } from './lazy-z';
+import { createLazyZ, type SchemaFactory, type StandInFactory, type z } from './lazy-z';
 import { withoutRecursionWalk } from './memoizer';
 import { isLazy } from './utils';
 
 const BUILT_WITH_PARENT: unique symbol = Symbol('builtWithParent');
 
-class InternalLazySchema extends LazyZodSchema {
-  readonly [BUILT_WITH_PARENT]: boolean;
+const NO_ARGS: readonly unknown[] = Object.freeze([]);
 
-  constructor(factory: () => ZodTypeAny, builtWithParent: boolean) {
-    super(factory);
+/** A stand-in keeps what it is built from in fields: a closure per stand-in would cost more than the stand-in. */
+abstract class InternalLazySchema extends LazyZodSchema {
+  readonly [BUILT_WITH_PARENT]: boolean;
+  private args: readonly unknown[];
+
+  protected constructor(args: readonly unknown[], builtWithParent: boolean) {
+    super(InternalLazySchema.buildOnce);
+    this.args = args;
     this[BUILT_WITH_PARENT] = builtWithParent;
   }
 
+  private static buildOnce(this: InternalLazySchema): ZodTypeAny {
+    const args = this.args;
+    this.args = NO_ARGS;
+    return this.buildWith(args);
+  }
+
+  protected abstract buildWith(args: readonly unknown[]): ZodTypeAny;
+
   protected override build(factory: () => ZodTypeAny): ZodTypeAny {
-    return withoutRecursionWalk(factory);
+    return withoutRecursionWalk(() => factory.call(this));
   }
 
   override chain(method: string, args: unknown[]): unknown {
-    return internalStandIn(
-      () => {
-        const real = this.materialize() as unknown as Record<string, (...a: unknown[]) => ZodTypeAny>;
-        return real[method](...args.map(withBuiltChildren));
-      },
-      this[BUILT_WITH_PARENT] && args.every(holdsOnlyLeaves),
-    );
+    return wrapLazy(new ChainedStandIn(this, method, args, this[BUILT_WITH_PARENT] && args.every(holdsOnlyLeaves)));
   }
 }
 
-function internalStandIn(build: () => ZodTypeAny, builtWithParent: boolean): unknown {
-  return wrapLazy(new InternalLazySchema(build, builtWithParent));
+class FactoryStandIn extends InternalLazySchema {
+  constructor(
+    private readonly factory: SchemaFactory,
+    private readonly namespace: object,
+    args: readonly unknown[],
+    builtWithParent: boolean,
+  ) {
+    super(args, builtWithParent);
+  }
+
+  protected buildWith(args: readonly unknown[]): ZodTypeAny {
+    return this.factory.apply(this.namespace, args.map(withBuiltChildren));
+  }
+}
+
+class ChainedStandIn extends InternalLazySchema {
+  constructor(
+    private readonly parent: InternalLazySchema,
+    private readonly method: string,
+    args: readonly unknown[],
+    builtWithParent: boolean,
+  ) {
+    super(args, builtWithParent);
+  }
+
+  protected buildWith(args: readonly unknown[]): ZodTypeAny {
+    const real = this.parent.materialize() as unknown as Record<string, SchemaFactory>;
+    return real[this.method](...args.map(withBuiltChildren));
+  }
 }
 
 function targetOf(value: unknown): LazyZodSchema | undefined {
@@ -85,8 +119,8 @@ function withBuiltChildren(arg: unknown): unknown {
   return changed ? Object.create(Object.getPrototypeOf(arg), descriptors) : arg;
 }
 
-const deferEveryFactory: StandInFactory = (name, args, build) =>
-  internalStandIn(() => build(args.map(withBuiltChildren)), LEAF_FACTORIES.has(name) && args.every(holdsOnlyLeaves));
+const deferEveryFactory: StandInFactory = (name, args, factory, namespace) =>
+  wrapLazy(new FactoryStandIn(factory, namespace, args, LEAF_FACTORIES.has(name) && args.every(holdsOnlyLeaves)));
 
 /** FrontMCP's own `z`: every factory returns a stand-in that builds its leaf children with it. Not public API. */
 export const internalZ: typeof realZ = createLazyZ(

@@ -472,4 +472,37 @@ describe('internalZ', () => {
     const typed: internalZ.ZodType<Parsed> = schema;
     expect(typed.parse(value)).toEqual({ a: 'x' });
   });
+
+  it('makes no function per stand-in: two alike stand-ins hold the same functions', () => {
+    const functionsOf = (schema: unknown) =>
+      Object.values(targetOf(schema)).filter((value) => typeof value === 'function');
+    const builds: Array<() => unknown> = [
+      () => internalZ.string(),
+      () => internalZ.object({ a: internalZ.number() }),
+      () => internalZ.string().min(1).optional(),
+      () => internalZ.union([internalZ.string(), internalZ.number()]).optional(),
+    ];
+
+    for (const build of builds) {
+      const first = functionsOf(build());
+      expect(first.length).toBeGreaterThan(0);
+      expect(functionsOf(build())).toEqual(first);
+    }
+  });
+
+  it('lets a built stand-in go of the arguments it was made with', () => {
+    const shape = { name: internalZ.string() };
+    const options = [internalZ.literal('a'), internalZ.literal('b')];
+    const object = internalZ.object(shape);
+    const union = internalZ.union(options).optional();
+
+    object.parse({ name: 'x' });
+    union.parse('a');
+
+    for (const target of [object, union].map(targetOf)) {
+      const held = Object.values(target).flatMap((value) => (Array.isArray(value) ? value : [value]));
+      expect(held).not.toContain(shape);
+      expect(held).not.toContain(options);
+    }
+  });
 });
