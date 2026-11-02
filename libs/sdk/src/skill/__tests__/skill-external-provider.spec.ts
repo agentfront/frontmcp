@@ -8,7 +8,9 @@ import 'reflect-metadata';
 import { App, LogLevel, ScopeEntry, skill, Tool, ToolContext } from '../../common';
 import type { SkillContent } from '../../common/interfaces';
 import { connect, type DirectClient } from '../../direct';
+import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { ExternalSkillProviderBase } from '../providers/external-skill.provider';
+import { composeCallerInstructions } from '../skill-instructions.helper';
 import type { SkillSearchResult } from '../skill-storage.interface';
 
 const remoteSkill: SkillContent = {
@@ -184,5 +186,29 @@ describe('skillsConfig.externalProvider', () => {
     const skillMd = await client.readResource('skill://remote-skill/SKILL.md');
 
     expect((skillMd.contents[0] as { text?: string }).text).toContain('name: remote-skill');
+  });
+});
+
+describe('skillsConfig.externalProvider in the default initialize instructions', () => {
+  const indexLine = "This server has skills: the `skill://index.json` resource lists each skill's `SKILL.md` URI.";
+
+  async function instructionsWith(apps: Array<typeof DeskApp>): Promise<string> {
+    const instance = await FrontMcpInstance.createForGraph({
+      info: { name: 'external-skills-instructions', version: '1.0.0' },
+      apps,
+      skillsConfig: { externalProvider: new InMemoryExternalProvider({ mode: 'read-only' }) },
+      logging: { level: LogLevel.Off },
+    });
+    const [scope] = instance.getScopes();
+    if (!scope) throw new Error('the config produced no scope');
+    return composeCallerInstructions(scope, { ctx: { authInfo: {} } });
+  }
+
+  it("counts no skill, as skill://index.json also lists the provider's", async () => {
+    await expect(instructionsWith([DeskApp])).resolves.toBe(indexLine);
+  });
+
+  it('points at skill://index.json on a server that declares no skill itself', async () => {
+    await expect(instructionsWith([BareApp])).resolves.toBe(indexLine);
   });
 });

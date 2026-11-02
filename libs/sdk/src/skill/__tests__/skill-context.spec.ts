@@ -101,7 +101,7 @@ describe('the description an overridden build() returns, wherever skills are lis
       info: { name: 'skill-context-listings', version: '1.0.0' },
       apps: [DeskApp],
       logging: { level: LogLevel.Off },
-      skillsConfig: { enabled: true, sep2640InInstructions: true },
+      skillsConfig: { enabled: true, sep2640InInstructions: true, injectInstructions: 'append' as const },
     };
     client = await connect(config);
     server = await createTestFetchServer(config);

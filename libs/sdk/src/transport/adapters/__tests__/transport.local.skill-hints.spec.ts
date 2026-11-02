@@ -14,7 +14,7 @@ import { composeCallerInstructions, type InstructionsScope } from '../../../skil
 type SkillsConfig = {
   sep2640InInstructions?: boolean;
   mcpResources?: boolean;
-  injectInstructions?: 'off' | 'append' | 'prepend' | 'replace';
+  injectInstructions?: 'off' | 'compact' | 'append' | 'prepend' | 'replace';
 };
 
 const DEPLOY_HINT = 'skill://ops/deploy/SKILL.md — Deploy to production';
@@ -31,7 +31,12 @@ function makeScope(
   };
   return {
     metadata: { skillsConfig, instructions },
-    skills: { hasAny: () => true, getSkills: () => [skill], getSep2640InstructionUris: () => [] },
+    skills: {
+      hasAny: () => true,
+      getSkills: () => [skill],
+      getSep2640InstructionUris: () => [],
+      getExternalProvider: () => undefined,
+    },
     logger: { warn: jest.fn() },
     runFlowForOutput: async (_flow: string, input: { skills: SkillEntry[] }) => ({ skills: servable(input.skills) }),
   } as unknown as InstructionsScope;
@@ -57,6 +62,13 @@ describe('initialize instructions: SEP-2640 skill URI hints', () => {
     expect(await hintsFor(scope)).toBe('Server prompt.');
   });
 
+  it("keeps the hints under 'off', which drops only the skills line and catalog", async () => {
+    const scope = makeScope({ sep2640InInstructions: true, injectInstructions: 'off' }, 'Server prompt.');
+    expect(await hintsFor(scope)).toBe(
+      `Server prompt.\n\n---\n\nAvailable skills (load via resources/read):\n- ${DEPLOY_HINT}`,
+    );
+  });
+
   it("keeps the hints when 'replace' falls back to 'append' for empty instructions", async () => {
     const scope = makeScope({ sep2640InInstructions: true, injectInstructions: 'replace' }, '  ');
     expect(await hintsFor(scope)).toContain('skill://ops/deploy/SKILL.md');
@@ -80,7 +92,9 @@ describe('initialize instructions: SEP-2640 skill URI hints', () => {
   });
 
   it('sends no hints unless the transport asks for them', async () => {
-    const instructions = await composeCallerInstructions(makeScope({ sep2640InInstructions: true }));
+    const instructions = await composeCallerInstructions(
+      makeScope({ sep2640InInstructions: true, injectInstructions: 'append' }),
+    );
 
     expect(instructions).toContain('**deploy**: Deploy to production');
     expect(instructions).not.toContain(DEPLOY_HINT);

@@ -74,6 +74,13 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       if (formatted.providers) {
         throw new InvalidDecoratorMetadataError('FrontMcp', 'providers', JSON.stringify(formatted.providers, null, 2));
       }
+      if (formatted.skillsConfig) {
+        throw new InvalidDecoratorMetadataError(
+          'FrontMcp',
+          'skillsConfig',
+          JSON.stringify(formatted.skillsConfig, null, 2),
+        );
+      }
       const loggingFormat = formatted['logging'] as Record<string, unknown> | undefined;
       if (loggingFormat?.['transports']) {
         throw new InvalidDecoratorMetadataError(

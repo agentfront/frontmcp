@@ -1066,7 +1066,7 @@
         },
         {
           "name": "configure-skills-http",
-          "description": "Full reference for skillsConfig — HTTP catalog endpoints, auth, caching, instructions injection, and tamper-evident audit log.",
+          "description": "Full reference for skillsConfig — HTTP catalog endpoints, auth, caching, instructions injection, SKILL.md resource annotations, and tamper-evident audit log.",
           "examples": [
             {
               "name": "audit-log-basic",
@@ -1095,12 +1095,13 @@
             },
             {
               "name": "inject-instructions",
-              "description": "Set a server-level instructions string and append the skill catalog summary on every initialize response.",
+              "description": "Set a server-level instructions string and append the full skill catalog summary on every initialize response.",
               "level": "basic",
               "tags": ["config", "skills", "instructions", "injection", "initialize"],
               "features": [
                 "Top-level `instructions` on `@FrontMcp` exposes a global system prompt to MCP clients",
                 "`skillsConfig.injectInstructions: 'append'` adds the skill catalog summary after the user prompt",
+                "The default, `'compact'`, adds one line with the skill count and the `skill://index.json` pointer instead",
                 "Dynamic skills are picked up because the composer runs on every initialize request",
                 "The catalog only names skills the initializing caller may see (skill authorities and the `skills:filter` flow, e.g. feature flags)",
                 "Catalog summary is bounded at 16 KB with a truncation footer pointing at skill://index.json"

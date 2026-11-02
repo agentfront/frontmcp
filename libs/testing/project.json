@@ -19,7 +19,14 @@
         "bundle": true,
         "thirdParty": false,
         "platform": "node",
-        "assets": ["libs/testing/README.md", "LICENSE", "libs/testing/jest-preset.js", "libs/testing/package.json"],
+        "assets": [
+          "libs/testing/README.md",
+          "LICENSE",
+          "libs/testing/jest-preset.js",
+          "libs/testing/jest-preset.base.js",
+          "libs/testing/jest-preset-unit.js",
+          "libs/testing/package.json"
+        ],
         "additionalEntryPoints": [
           "libs/testing/src/setup.ts",
           "libs/testing/src/fixtures/index.ts",
