@@ -618,7 +618,7 @@ plugins/
 | Context extension registration | `contextExtensions: [{ property: 'auditLog', token: AuditLoggerToken }]` in metadata                 | `Object.defineProperty(ExecutionContextBase.prototype, ...)` manually | SDK handles runtime installation; manual modification causes ordering issues                       |
 | Type augmentation              | `declare module '@frontmcp/sdk' { interface ExecutionContextBase { ... } }` in a separate file       | Skipping the augmentation and casting `this` in tools                 | Without augmentation, TypeScript cannot type-check `this.auditLog`                                 |
 | Provider types                 | `Token<AuditLogger> = Symbol('AuditLogger')` with typed token                                        | `provide: Symbol('AuditLogger')` without type annotation              | Typed tokens enable compile-time DI resolution checking                                            |
-| Exporting a provider           | `providers: [auditLoggerProvider], exports: [auditLoggerProvider]`                                   | `exports: [AuditLoggerToken]`, or a provider object without `name`    | `exports` takes named provider definitions; the other forms throw at decoration                    |
+| Exporting a provider           | `providers: [auditLoggerProvider], exports: [auditLoggerProvider]`                                   | `exports: [AuditLoggerToken]` (a bare token)                          | `exports` takes the provider definitions from `providers`; a bare token throws at decoration       |
 | Caller identity in a tool      | `this.auth.user.sub`                                                                                 | `this.scope.userId`                                                   | `this.scope` is the server scope; the user is on `this.auth`                                       |
 | Plugin scope                   | `scope: 'app'` (default) for app-scoped behavior                                                     | `scope: 'server'` when hooks should only apply to one app             | Server scope fires hooks for every app's entries, even when declared on one `@App`; default to app |
 | Dynamic options                | Extend `DynamicPlugin<TOptions, TInput>` with `static dynamicProviders()`                            | Constructing providers in the constructor body                        | `dynamicProviders` runs before instantiation, enabling proper DI wiring                            |
@@ -631,7 +631,7 @@ plugins/
 - [ ] `@Plugin` decorator has `name` and `description`
 - [ ] Providers are listed in `providers` array with typed tokens
 - [ ] Exported providers are listed in `exports` array as the same definitions, not bare tokens
-- [ ] Every provider object has a `name`, and every `@Provider` decorator passes `{ name }`
+- [ ] A provider sets `name` only where its default (the class name, or a provider object's token name) is not the name you want in logs and errors
 - [ ] Context extensions have `property`, `token`, and `errorMessage` fields
 
 ### Type Safety
