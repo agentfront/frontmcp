@@ -12,13 +12,16 @@ import * as path from 'node:path';
 import { PassThrough } from 'node:stream';
 
 import { createSharedServerNonce, deriveSharedServerKeys, verifySharedServerIdentity } from '@frontmcp/auth';
+import type { RootStorage } from '@frontmcp/utils';
 
 import { App, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
+import { SharedServerStartError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { attachSharedSession } from '../shared-attach';
 import { SHARED_IDENTIFY_PATH } from '../shared-endpoint';
-import { readServerRecord, sharedServerFiles, type SharedServerRecord } from '../shared-files';
+import { prepareSharedDirectory, readServerRecord, sharedServerFiles, type SharedServerRecord } from '../shared-files';
 import { serveShared, type SharedServerHandle } from '../shared-serve';
+import { openStartLockStorage, SharedStartLock } from '../start-lock';
 
 @Tool({ name: 'server_pid', inputSchema: {} })
 class ServerPidTool extends ToolContext {
@@ -30,6 +33,18 @@ class ServerPidTool extends ToolContext {
 @App({ id: 'shared', name: 'Shared', tools: [ServerPidTool] })
 class SharedApp {}
 
+@App({ id: 'own-auth', name: 'OwnAuth', tools: [ServerPidTool], auth: { mode: 'public' } })
+class OwnAuthApp {}
+
+@App({
+  id: 'standalone-own-auth',
+  name: 'StandaloneOwnAuth',
+  tools: [ServerPidTool],
+  standalone: true,
+  auth: { mode: 'public' },
+})
+class StandaloneOwnAuthApp {}
+
 const config: FrontMcpConfigInput = {
   info: { name: 'shared-spec', version: '1.0.0' },
   apps: [SharedApp],
@@ -39,6 +54,19 @@ const config: FrontMcpConfigInput = {
 const verboseConfig: FrontMcpConfigInput = { ...config, logging: { level: LogLevel.Verbose, enableConsole: true } };
 
 const create = (parsed: ConstructorParameters<typeof FrontMcpInstance>[0]) => new FrontMcpInstance(parsed);
+
+/** `create`, with `beforeStart` run once the server is ready, just before it listens. */
+function createRunning(beforeStart: () => Promise<void>) {
+  return (parsed: ConstructorParameters<typeof FrontMcpInstance>[0]) => {
+    const instance = create(parsed);
+    const start = instance.start.bind(instance);
+    instance.start = async () => {
+      await beforeStart();
+      await start();
+    };
+    return instance;
+  };
+}
 
 interface Frame {
   jsonrpc: '2.0';
@@ -118,16 +146,19 @@ posixOnly('a shared local server', () => {
   let home: string;
   let previousHome: string | undefined;
   let servers: SharedServerHandle[];
+  let lockStorages: RootStorage[];
 
   beforeEach(() => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-shared-'));
     previousHome = process.env['FRONTMCP_HOME'];
     process.env['FRONTMCP_HOME'] = home;
     servers = [];
+    lockStorages = [];
   });
 
   afterEach(async () => {
     for (const server of servers) await server.close();
+    for (const storage of lockStorages) await storage.disconnect();
     if (previousHome === undefined) delete process.env['FRONTMCP_HOME'];
     else process.env['FRONTMCP_HOME'] = previousHome;
     fs.rmSync(home, { recursive: true, force: true });
@@ -180,9 +211,11 @@ posixOnly('a shared local server', () => {
         transport,
         input,
         output,
-        spawnServer: () => {
+        spawnServer: (startLockHolder) => {
           spawned++;
-          void serveShared(config, { key: 'spec', transport }, create).then((server) => servers.push(server));
+          void serveShared(config, { key: 'spec', transport }, create, startLockHolder).then((server) =>
+            servers.push(server),
+          );
           return { exitReason: undefined };
         },
       });
@@ -232,6 +265,80 @@ posixOnly('a shared local server', () => {
 
       await (servers.pop() as SharedServerHandle).close();
       expect(fs.existsSync(files.recordFile)).toBe(false);
+    });
+
+    it.each([
+      ['the app it serves', { splitByApp: true, apps: [OwnAuthApp] }, 'own-auth'],
+      ['an app on an endpoint of its own', { apps: [SharedApp, StandaloneOwnAuthApp] }, 'standalone-own-auth'],
+    ])('refuses to start when %s has auth of its own, which its token would not guard', async (_, apps, app) => {
+      const files = sharedServerFiles('spec');
+      await expect(
+        serveShared({ ...config, ...apps } as FrontMcpConfigInput, { key: 'spec', transport }, create),
+      ).rejects.toThrow(
+        new SharedServerStartError(
+          'spec',
+          `app "${app}" has auth of its own (mode public), which the shared server's token would not guard; ` +
+            'remove auth from its @App, or serve it without runShared()',
+        ),
+      );
+      expect(fs.existsSync(files.recordFile)).toBe(false);
+      expect(fs.existsSync(files.socketPath)).toBe(false);
+    });
+  });
+
+  describe('its start lock', () => {
+    const anotherStart = new SharedServerStartError('spec', 'another session is starting it');
+
+    async function openLauncherLocks(): Promise<RootStorage> {
+      const files = sharedServerFiles('spec');
+      await prepareSharedDirectory(files);
+      const storage = await openStartLockStorage(files);
+      lockStorages.push(storage);
+      return storage;
+    }
+
+    it('keeps the lock its launcher took while it starts, after the launcher let go, until its record is written', async () => {
+      const storage = await openLauncherLocks();
+      const launcher = new SharedStartLock(storage, 'spec');
+      const other = new SharedStartLock(storage, 'spec');
+      expect(await launcher.acquire()).toBe(true);
+      await launcher.release();
+      let otherTookItWhileStarting: boolean | undefined;
+
+      const starting = createRunning(async () => {
+        otherTookItWhileStarting = await other.acquire();
+      });
+      servers.push(await serveShared(config, { key: 'spec', transport: 'http' }, starting, launcher.holder));
+
+      expect(otherTookItWhileStarting).toBe(false);
+      expect(await other.acquire()).toBe(true);
+    });
+
+    it('writes no record and stops when another launcher took its lock while it started', async () => {
+      const storage = await openLauncherLocks();
+      const launcher = new SharedStartLock(storage, 'spec');
+      const other = new SharedStartLock(storage, 'spec');
+      expect(await launcher.acquire()).toBe(true);
+      const files = sharedServerFiles('spec');
+
+      const overtaken = createRunning(async () => {
+        await launcher.release();
+        expect(await other.acquire()).toBe(true);
+      });
+      await expect(serveShared(config, { key: 'spec', transport: 'unix' }, overtaken, launcher.holder)).rejects.toThrow(
+        anotherStart,
+      );
+
+      expect(fs.existsSync(files.recordFile)).toBe(false);
+      expect(fs.existsSync(files.socketPath)).toBe(false);
+    });
+
+    it('does not start while another launcher starts the server of its key', async () => {
+      const storage = await openLauncherLocks();
+      expect(await new SharedStartLock(storage, 'spec').acquire()).toBe(true);
+
+      await expect(serveShared(config, { key: 'spec', transport: 'http' }, create)).rejects.toThrow(anotherStart);
+      expect(fs.existsSync(sharedServerFiles('spec').recordFile)).toBe(false);
     });
   });
 

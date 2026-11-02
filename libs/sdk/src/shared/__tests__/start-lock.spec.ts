@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { createMemoryStorage } from '@frontmcp/utils';
 
 import { prepareSharedDirectory, sharedServerFiles } from '../shared-files';
-import { openStartLockStorage, SharedStartLock } from '../start-lock';
+import { holdStartLock, openStartLockStorage, SharedStartLock } from '../start-lock';
 
 describe('SharedStartLock', () => {
   it('lets one launcher of a key hold it until that one releases it', async () => {
@@ -41,6 +41,63 @@ describe('SharedStartLock', () => {
   });
 
   const posixOnly = process.platform === 'win32' ? it.skip : it;
+
+  async function inSharedHome(run: (files: ReturnType<typeof sharedServerFiles>) => Promise<void>): Promise<void> {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-shared-lock-'));
+    const previousHome = process.env['FRONTMCP_HOME'];
+    process.env['FRONTMCP_HOME'] = home;
+    try {
+      const files = sharedServerFiles('notes');
+      await prepareSharedDirectory(files);
+      await run(files);
+    } finally {
+      if (previousHome === undefined) delete process.env['FRONTMCP_HOME'];
+      else process.env['FRONTMCP_HOME'] = previousHome;
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  }
+
+  posixOnly("keeps a launcher's lock past its TTL for the server it started, until that server releases it", () =>
+    inSharedHome(async (files) => {
+      const storage = await openStartLockStorage(files);
+      try {
+        const launcher = new SharedStartLock(storage, 'notes', 1);
+        const next = new SharedStartLock(storage, 'notes', 1);
+        expect(await launcher.acquire()).toBe(true);
+
+        const server = await holdStartLock(files, 'notes', launcher.holder, 1);
+        await new Promise((resolve) => setTimeout(resolve, 1_500));
+        expect(await next.acquire()).toBe(false);
+        expect(await server.held()).toBe(true);
+
+        await server.release();
+        expect(await next.acquire()).toBe(true);
+      } finally {
+        await storage.disconnect();
+      }
+    }),
+  );
+
+  posixOnly('tells a server that another launcher took its lock, even once that one let go of it', () =>
+    inSharedHome(async (files) => {
+      const storage = await openStartLockStorage(files);
+      try {
+        const launcher = new SharedStartLock(storage, 'notes');
+        expect(await launcher.acquire()).toBe(true);
+        await launcher.release();
+        const other = new SharedStartLock(storage, 'notes');
+        expect(await other.acquire()).toBe(true);
+
+        const server = await holdStartLock(files, 'notes', launcher.holder);
+        expect(await server.held()).toBe(false);
+        await other.release();
+        expect(await server.held()).toBe(false);
+        await server.release();
+      } finally {
+        await storage.disconnect();
+      }
+    }),
+  );
 
   posixOnly('keeps the lock in an owner-only SQLite file every launcher of the key opens', async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-shared-lock-'));

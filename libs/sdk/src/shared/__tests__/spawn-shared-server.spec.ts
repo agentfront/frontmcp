@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 
-import { SHARED_SERVE_ENV, spawnSharedServer } from '../ensure-shared-server';
+import { SHARED_SERVE_ENV, SHARED_START_LOCK_ENV, spawnSharedServer } from '../ensure-shared-server';
 
 class FakeChild extends EventEmitter {
   readonly unref = jest.fn();
@@ -22,7 +22,7 @@ describe('spawnSharedServer', () => {
   });
 
   it("runs this process's entry again, detached and unwatched, as the key's server", () => {
-    const spawned = spawnSharedServer('notes');
+    const spawned = spawnSharedServer('notes', 'holder-1');
 
     expect(spawn).toHaveBeenCalledWith(
       process.execPath,
@@ -31,24 +31,25 @@ describe('spawnSharedServer', () => {
     );
     const [, , options] = spawn.mock.calls[0] as [string, string[], { env: Record<string, string> }];
     expect(options.env[SHARED_SERVE_ENV]).toBe('notes');
+    expect(options.env[SHARED_START_LOCK_ENV]).toBe('holder-1');
     expect(child.unref).toHaveBeenCalled();
     expect(spawned.exitReason).toBeUndefined();
   });
 
   it('reports why the server can no longer come up', () => {
-    const exited = spawnSharedServer('notes');
+    const exited = spawnSharedServer('notes', 'holder-1');
     child.emit('exit', 1, null);
     expect(exited.exitReason).toBe('it exited with code 1');
 
     child = new FakeChild();
     spawn.mockReturnValue(child);
-    const killed = spawnSharedServer('notes');
+    const killed = spawnSharedServer('notes', 'holder-1');
     child.emit('exit', null, 'SIGKILL');
     expect(killed.exitReason).toBe('it exited with SIGKILL');
 
     child = new FakeChild();
     spawn.mockReturnValue(child);
-    const missing = spawnSharedServer('notes');
+    const missing = spawnSharedServer('notes', 'holder-1');
     child.emit('error', new Error('spawn ENOENT'));
     child.emit('exit', -2, null);
     expect(missing.exitReason).toBe('it could not be started (spawn ENOENT)');

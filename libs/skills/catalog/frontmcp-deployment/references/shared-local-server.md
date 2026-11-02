@@ -68,9 +68,14 @@ Starting the server takes the start lock in a SQLite file, so install `@frontmcp
 | `key`       | `string`            | required                       | Names the server: sessions with the same key on this machine share one process |
 | `transport` | `'unix'` / `'http'` | `'unix'` (`'http'` on Windows) | An owner-only Unix socket, or loopback HTTP on `127.0.0.1` with a token        |
 
-`key` is 1 to 64 letters, digits, `.`, `_` or `-`, starting with a letter or digit. Invalid options reject with
-`InvalidSharedServerOptionsError` (`INVALID_SHARED_SERVER_OPTIONS`) before anything starts, for example
-`runShared() options are invalid: key: key must be 1 to 64 letters, digits, ".", "_" or "-", starting with a letter or digit`,
+`key` is 1 to 64 lowercase letters, digits, `.`, `_` or `-`, starting and ending with a letter or digit, and not a
+device name Windows reserves (`con`, `prn`, `aux`, `nul`, `com0`-`com9`, `lpt0`-`lpt9`, with or without an extension):
+on a case-insensitive file system (macOS, Windows) `My-Server` and `my-server` would share one folder, and Windows
+drops a trailing dot. Use the package name of the server, or another name no other server on the machine uses.
+Invalid options reject with `InvalidSharedServerOptionsError` (`INVALID_SHARED_SERVER_OPTIONS`) before anything
+starts, for example
+`runShared() options are invalid: key: key must be 1 to 64 lowercase letters, digits, ".", "_" or "-", starting and ending with a letter or digit`,
+`runShared() options are invalid: key: key can't be a device name Windows reserves (con, prn, aux, nul, com0-9 and lpt0-9)`,
 `runShared() options are invalid: transport: transport must be 'unix' or 'http'`, or, on Windows,
 `runShared() options are invalid: transport: a Unix socket can't be kept owner-only on Windows; use transport 'http'`.
 With the Unix socket, a socket path longer than a socket address holds (103 bytes) is refused the same way:
@@ -83,16 +88,25 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
    nonce bound to its endpoint (the socket path, or `http://127.0.0.1:<port>`), keyed by a key derived from the secret
    in the record. Only when the proof verifies (compared in constant time) does the session send the token, also
    derived from that secret, as `Authorization: Bearer` on every MCP request. Over loopback HTTP it challenges the
-   server again before each request, so a process that takes the port of a server that stopped gets none.
+   server again before each request, so a process that takes the port of a server that stopped gets none. An answer
+   to a challenge that doesn't state its length, or is longer than 1 KiB, is refused unread.
 2. **Start.** When no server proves its identity, the session takes the key's start lock (a lease in
    `~/.frontmcp/shared/<key>/start-lock.sqlite`, set only when absent, with a 10 s TTL it renews while it waits), checks
-   once more, and runs its own entry again, detached, as the server (the process gets `FRONTMCP_SHARED_SERVE=<key>`).
-   Sessions started together wait for that one server; a launcher that dies stops renewing the lock and another takes
-   it over. A session gives up after 60 s, or as soon as the server it started exits.
+   once more, and runs its own entry again, detached, as the server (the process gets `FRONTMCP_SHARED_SERVE=<key>` and
+   `FRONTMCP_SHARED_START_LOCK=<holder>`). The server keeps renewing that lock until it has written its record, so a
+   session that dies while its server is slow to start doesn't let another session start a second one. Sessions started
+   together wait for that one server; when both a launcher and its server die, the lock lapses and another session takes
+   it over. A server that finds the lock taken by another session stops without writing its record
+   (`did not start: another session is starting it`), and the session that started it waits for the other one's server.
+   A session gives up after 60 s, or as soon as the server it started exits while it still holds the lock.
 3. **Serve.** The server generates a fresh secret, listens, and only then writes the record. It serves the config
    through the normal HTTP flows (`http:request`, `session:verify`, the MCP handlers, every hook), with `auth`
    replaced by static-token auth for that token and `http` replaced by the shared endpoint, so a configured `auth`,
-   `http.routes` or CORS does not apply to it. The identity challenge is its own flow, `shared:identify`
+   `http.routes` or CORS does not apply to it. An app with `auth` of its own (an `@App({ auth })` that gets an
+   endpoint of its own, with `splitByApp` or `standalone`) would keep that auth and answer without the token, so the
+   server refuses to start:
+   `The shared server "<key>" did not start: app "<id>" has auth of its own (mode <mode>), which the shared server's token would not guard; remove auth from its @App, or serve it without runShared()`.
+   The identity challenge is its own flow, `shared:identify`
    (`POST /.well-known/frontmcp-shared-server`), hookable like any other.
 4. **Bridge.** The session is the same stdio bridge `frontmcp dev --stdio` uses: newline-delimited JSON-RPC on
    stdin/stdout, frames buffered while the session attaches, the server's `mcp-session-id` reused on every request.
@@ -119,12 +133,19 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
   challenge, made with an earlier server's key, or bound to another endpoint is refused.
 - **Web pages** can't reach the socket. On loopback HTTP the server accepts only the loopback names as `Host` (DNS
   rebinding) and refuses every request that carries an `Origin`.
+- The record is what a session trusts: a server proves it holds the record's secret, not that it is yours. That is
+  why the folder checks above matter, and why `FRONTMCP_HOME` must be a folder only you can write to.
+- Endpoints that need no token on any FrontMCP server still answer other users on loopback HTTP: the health routes
+  (`/health`, `/healthz`, `/readyz`: the server's name, version and counts) and routes a plugin adds.
+- A process that takes the port in the instant between a challenge and the request it guards could receive that one
+  request; the token it carries is useless, since it dies with the server.
 - **Same-user processes** can read the record, as they can read everything else of yours: the shared server trusts
   them like any stdio server does.
 - **A stale socket** a crashed server left is removed by the next server that starts; a live one that doesn't prove
   its identity is never replaced.
 - The secret and the token are never logged, put in an argument or passed in the environment.
-- On Windows the files are kept private by your profile folder's permissions; modes aren't checked there.
+- On Windows the files are kept private by your profile folder's permissions; modes aren't checked there, so keep
+  `FRONTMCP_HOME` (if you set it) inside your profile.
 
 ## Errors
 
@@ -144,7 +165,9 @@ the session can't send (its server stopped, or `SharedServerIdentityError`) is a
 
 - The server runs until it gets `SIGTERM` or `SIGINT`; stop it with the pid in `server.json`. A session whose server
   stopped answers `dev_server_unreachable` (`-32099`) until its client restarts it.
-- The server runs with the environment and working folder of the session that started it.
+- The server runs with the environment, working folder and Node flags of the session that started it (an inspector
+  flag such as `--inspect` too, so the process that runs your tools can be debugged). A later session's own
+  environment isn't applied: two client configs that pass different credentials in `env` need different keys.
 - Sessions speak to the server over streamable HTTP like `frontmcp dev --stdio` without `--serve`, so a client on MCP
   `2026-07-28` isn't served yet.
 - A key names one server per user on the machine: give each server its own key, since a session attaches to whichever
@@ -155,6 +178,8 @@ the session can't send (its server stopped, or `SharedServerIdentityError`) is a
 | Problem                                                  | Fix                                                                                                                                    |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `did not start: it exited with code 1`                   | Run the entry with `FRONTMCP_SHARED_SERVE=<key>` in a terminal to see why the server can't start; its log is under `~/.frontmcp/logs/` |
+| `app "<id>" has auth of its own`                         | Remove `auth` from that `@App`: on a shared server the token guards every app                                                          |
+| `did not start: another session is starting it`          | Seen when running the server by hand while another session starts one; a session whose server stops this way waits for the other's     |
 | `the sqlite type needs @frontmcp/storage-sqlite`         | Install `@frontmcp/storage-sqlite`: the start lock lives in SQLite                                                                     |
 | `Unix socket … is already in use by a running server`    | A process that is not the server listens on the socket: stop it (the pid of the real server is in `server.json`)                       |
 | `the process at … did not prove it is the shared server` | Something else answers on the recorded endpoint; the session sent it nothing and starts a server of its own. Check what listens there  |

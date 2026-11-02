@@ -78,8 +78,10 @@ posixOnly('ensureSharedServer', () => {
   it('starts one server when several launchers find none', async () => {
     const secret = createSharedServerSecret();
     let spawned = 0;
-    const spawnServer = (): SpawnedServer => {
+    const holdsTheLock: Array<Promise<boolean>> = [];
+    const spawnServer = (startLockHolder: string): SpawnedServer => {
       spawned++;
+      holdsTheLock.push(new SharedStartLock(lockStore, 'notes', 10, startLockHolder).renew());
       setTimeout(() => void startRecordedServer(secret, 99), 200);
       return { exitReason: undefined };
     };
@@ -87,6 +89,7 @@ posixOnly('ensureSharedServer', () => {
     const attached = await Promise.all(Array.from({ length: 5 }, () => ensureSharedServer(options({ spawnServer }))));
 
     expect(spawned).toBe(1);
+    expect(await Promise.all(holdsTheLock)).toEqual([true]);
     expect(new Set(attached.map(({ url }) => url)).size).toBe(1);
     expect(attached.every(({ pid }) => pid === 99)).toBe(true);
   });
@@ -185,6 +188,22 @@ posixOnly('ensureSharedServer', () => {
     await expect(
       ensureSharedServer(options({ spawnServer: () => ({ exitReason: 'it exited with code 1' }) })),
     ).rejects.toThrow(new SharedServerStartError('notes', 'it exited with code 1'));
+  });
+
+  it('waits for the server another launcher starts when that launcher took its lock and its own server stopped', async () => {
+    const secret = createSharedServerSecret();
+    const spawned: { exitReason: string | undefined } = { exitReason: undefined };
+    const spawnServer = (startLockHolder: string): SpawnedServer => {
+      setTimeout(async () => {
+        await new SharedStartLock(lockStore, 'notes', 10, startLockHolder).release();
+        await new SharedStartLock(lockStore, 'notes').acquire();
+        spawned.exitReason = 'it exited with code 1';
+        setTimeout(() => void startRecordedServer(secret, 42), 100);
+      }, 50);
+      return spawned;
+    };
+
+    await expect(ensureSharedServer(options({ spawnServer }))).resolves.toMatchObject({ pid: 42 });
   });
 
   it('fails when no server answers in time', async () => {

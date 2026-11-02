@@ -9,7 +9,7 @@ import { InvalidSharedServerOptionsError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { exitOnShutdownSignals } from '../../front-mcp/shutdown-signals';
 import { redirectConsoleToStderr } from '../../front-mcp/stdio-console';
-import { SHARED_SERVE_ENV } from '../ensure-shared-server';
+import { SHARED_SERVE_ENV, SHARED_START_LOCK_ENV } from '../ensure-shared-server';
 import { attachSharedSession } from '../shared-attach';
 import { sharedServerFiles } from '../shared-files';
 
@@ -51,6 +51,7 @@ posixOnly('FrontMcpInstance.runShared', () => {
 
   afterEach(() => {
     delete process.env[SHARED_SERVE_ENV];
+    delete process.env[SHARED_START_LOCK_ENV];
     if (previousHome === undefined) delete process.env['FRONTMCP_HOME'];
     else process.env['FRONTMCP_HOME'] = previousHome;
     fs.rmSync(home, { recursive: true, force: true });
@@ -64,9 +65,11 @@ posixOnly('FrontMcpInstance.runShared', () => {
 
   it('serves the key in the process a session started, which keeps the key out of its own children', async () => {
     process.env[SHARED_SERVE_ENV] = 'run';
+    process.env[SHARED_START_LOCK_ENV] = 'the-launcher';
     await FrontMcpInstance.runShared(config, { key: 'run', transport: 'http' });
 
     expect(process.env[SHARED_SERVE_ENV]).toBeUndefined();
+    expect(process.env[SHARED_START_LOCK_ENV]).toBeUndefined();
     expect(attachSharedSession).not.toHaveBeenCalled();
     const files = sharedServerFiles('run');
     expect(fs.existsSync(files.recordFile)).toBe(true);

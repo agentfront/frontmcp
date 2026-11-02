@@ -24,7 +24,7 @@ const RELOAD_DEADLINE_MS = 30_000;
 export interface AttachSharedSessionOptions extends ResolvedSharedServerOptions {
   input: Readable;
   output: Writable;
-  spawnServer?: () => SpawnedServer;
+  spawnServer?: (startLockHolder: string) => SpawnedServer;
 }
 
 export interface SharedSession {
@@ -61,7 +61,7 @@ async function connect(options: AttachSharedSessionOptions, logger: BridgeLogger
     transport: options.transport,
     files,
     logger,
-    spawnServer: options.spawnServer ?? (() => spawnSharedServer(options.key)),
+    spawnServer: options.spawnServer ?? ((startLockHolder) => spawnSharedServer(options.key, startLockHolder)),
     openLock: async () => {
       const storage = await openStartLockStorage(files);
       return { lock: new SharedStartLock(storage, options.key), close: () => storage.disconnect() };

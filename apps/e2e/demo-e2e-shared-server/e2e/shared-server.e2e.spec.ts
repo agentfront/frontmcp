@@ -83,13 +83,22 @@ describe('a shared local server', () => {
     return record;
   }
 
-  function startSession(transport: 'unix' | 'http'): StdioJsonRpcProcess {
+  function startSession(transport: 'unix' | 'http', env: Record<string, string> = {}): StdioJsonRpcProcess {
     const session = StdioJsonRpcProcess.start('fixture/shared-session.ts', projectRoot, {
       FRONTMCP_HOME: home,
       SHARED_TRANSPORT: transport,
+      ...env,
     });
     sessions.push(session);
     return session;
+  }
+
+  /** The pids of the server processes the sessions started, each written as it starts. */
+  function startedServers(file: string): number[] {
+    if (!fs.existsSync(file)) return [];
+    const pids = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(Number);
+    for (const pid of pids) serverPids.add(pid);
+    return pids;
   }
 
   /** Every log line any of the processes wrote. */
@@ -141,6 +150,34 @@ describe('a shared local server', () => {
     },
     240_000,
   );
+
+  it('keeps one server when the session that started it dies while the server is slow to start', async () => {
+    const pidsFile = path.join(home, 'server-pids');
+    const slow = { SHARED_BOOT_DELAY_MS: '14000', SHARED_SERVER_PIDS: pidsFile };
+    const first = startSession('http', slow);
+    await waitUntil(() => startedServers(pidsFile).length > 0, 30_000, 'the first session to start a server');
+    const [starting] = startedServers(pidsFile);
+    await first.kill();
+    await new Promise((resolve) => setTimeout(resolve, 11_000));
+    expect(fs.existsSync(path.join(keyDirectory(), 'server.json'))).toBe(false);
+
+    const second = startSession('http', slow);
+
+    expect(await serverPidOf(second)).toBe(starting);
+    expect(startedServers(pidsFile)).toEqual([starting]);
+  }, 240_000);
+
+  it('refuses to serve an app with auth of its own, which its token would not guard', async () => {
+    const session = startSession('http', { SHARED_PUBLIC_APP: '1' });
+
+    const answer = await session.request(initialize(1), ATTACH_TIMEOUT_MS);
+
+    expect(answer.error).toMatchObject({
+      message: 'dev_reload_deadline',
+      data: { error: 'The shared server "e2e" did not start: it exited with code 1' },
+    });
+    expect(fs.existsSync(path.join(keyDirectory(), 'server.json'))).toBe(false);
+  }, 240_000);
 
   it('never sends a request or the token to a squatter on the endpoint of a server that stopped', async () => {
     const first = startSession('http');

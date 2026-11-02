@@ -15,6 +15,8 @@ import type { SharedStartLock } from './start-lock';
 
 /** Set on the process a session starts: the key that process serves instead of attaching to it. */
 export const SHARED_SERVE_ENV = 'FRONTMCP_SHARED_SERVE';
+/** Set beside it: the holder of the start lock the session took, which the server keeps until its record is written. */
+export const SHARED_START_LOCK_ENV = 'FRONTMCP_SHARED_START_LOCK';
 
 const START_TIMEOUT_MS = 60_000;
 const POLL_MS = 100;
@@ -43,7 +45,7 @@ export interface EnsureSharedServerOptions {
   transport: SharedServerTransport;
   files: SharedServerFiles;
   openLock(): Promise<StartLockHandle>;
-  spawnServer(): SpawnedServer;
+  spawnServer(startLockHolder: string): SpawnedServer;
   startTimeoutMs?: number;
   pollMs?: number;
   logger: Pick<BridgeLogger, 'warn'>;
@@ -92,8 +94,11 @@ export async function ensureSharedServer(options: EnsureSharedServerOptions): Pr
       if (attached) return attached;
       handle ??= await options.openLock();
       holding = holding ? await handle.lock.renew() : await handle.lock.acquire();
-      if (holding) spawned ??= options.spawnServer();
-      if (spawned?.exitReason) throw new SharedServerStartError(key, spawned.exitReason);
+      if (holding) spawned ??= options.spawnServer(handle.lock.holder);
+      if (spawned?.exitReason) {
+        if (holding) throw new SharedServerStartError(key, spawned.exitReason);
+        spawned = undefined;
+      }
       if (Date.now() >= deadline) {
         throw new SharedServerStartError(key, `no server proved its identity within ${startTimeoutMs} ms`);
       }
@@ -106,14 +111,14 @@ export async function ensureSharedServer(options: EnsureSharedServerOptions): Pr
 }
 
 /** Run this process's entry again, detached, as the key's server: it outlives the session that started it. */
-export function spawnSharedServer(key: string): SpawnedServer {
+export function spawnSharedServer(key: string, startLockHolder: string): SpawnedServer {
   const spawned: { exitReason: string | undefined } = { exitReason: undefined };
   const child = getSpawnFn()(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
     cwd: process.cwd(),
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
-    env: { ...process.env, [SHARED_SERVE_ENV]: key },
+    env: { ...process.env, [SHARED_SERVE_ENV]: key, [SHARED_START_LOCK_ENV]: startLockHolder },
   });
   child.once('error', (error) => {
     spawned.exitReason = `it could not be started (${error.message})`;
