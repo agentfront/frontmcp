@@ -8,6 +8,7 @@ import { featuresFile } from '../reviews.signal';
   name: 'settings_set',
   description: 'Turns a feature on or off',
   inputSchema: { feature: z.string(), on: z.boolean() },
+  outputSchema: { feature: z.string(), on: z.boolean() },
 })
 export default class SettingsSetTool extends ToolContext {
   async execute({ feature, on }: { feature: string; on: boolean }) {

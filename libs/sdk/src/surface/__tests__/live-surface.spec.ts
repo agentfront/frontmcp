@@ -154,6 +154,24 @@ describe('LiveSurface', () => {
       expect(scope.tools.notifyListChanged).not.toHaveBeenCalled();
     });
 
+    it('logs a list change its registry fails to announce, and keeps going', () => {
+      const scope = testScope();
+      scope.tools.notifyListChanged.mockImplementationOnce(() => {
+        throw new Error('a listener failed');
+      });
+      const surface = surfaceOf(scope, { windowMs: 10 });
+      surface.start();
+
+      surface.listChanged('tools');
+      expect(() => jest.advanceTimersByTime(10)).not.toThrow();
+      expect(scope.logger.warn).toHaveBeenCalledWith(expect.stringContaining('a listener failed'));
+
+      surface.listChanged('tools');
+      jest.advanceTimersByTime(10);
+      expect(scope.tools.notifyListChanged).toHaveBeenCalledTimes(2);
+      surface.stop();
+    });
+
     it('logs a source that cannot be subscribed to, and keeps going', () => {
       const scope = testScope();
       const broken: EnabledSource = {

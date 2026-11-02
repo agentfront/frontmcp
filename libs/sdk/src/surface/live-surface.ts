@@ -32,6 +32,10 @@ export interface LiveSurfaceOptions {
   maxSessions?: number;
 }
 
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** A short hash of the names a list shows, in any order. */
 export function surfaceHash(names: readonly string[]): string {
   return sha256Hex([...names].sort().join('\n')).slice(0, 16);
@@ -87,7 +91,11 @@ export class LiveSurface {
     if (!this.running || this.pending.has(kind)) return;
     const timer = setTimeout(() => {
       this.pending.delete(kind);
-      this.registryOf(kind).notifyListChanged();
+      try {
+        this.registryOf(kind).notifyListChanged();
+      } catch (error) {
+        this.scope.logger.warn(`The ${kind} list change could not be announced: ${messageOf(error)}`);
+      }
     }, this.windowMs);
     timer.unref?.();
     this.pending.set(kind, timer);
@@ -146,9 +154,7 @@ export class LiveSurface {
         );
       } catch (error) {
         watched.set(source, () => undefined);
-        this.scope.logger.warn(
-          `An enabled source of the ${kind} could not be followed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        this.scope.logger.warn(`An enabled source of the ${kind} could not be followed: ${messageOf(error)}`);
       }
     }
   }

@@ -1,3 +1,4 @@
+import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { reviewsEnabled } from '../reviews.signal';
@@ -6,6 +7,7 @@ import { reviewsEnabled } from '../reviews.signal';
   name: 'review_list',
   description: 'Lists the open reviews; on while the reviews feature is on',
   inputSchema: {},
+  outputSchema: { reviews: z.array(z.string()) },
   enabled: reviewsEnabled,
 })
 export default class ReviewListTool extends ToolContext {

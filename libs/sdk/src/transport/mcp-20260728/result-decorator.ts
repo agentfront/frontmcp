@@ -119,7 +119,7 @@ const RESULT_SHAPING_FLOWS: Record<string, readonly FlowName[]> = {
   'server/discover': ['skills:filter'],
 };
 
-/** The entries whose `enabled` filters each list. */
+/** The entries whose `enabled` filters each list, or gates each read. */
 const LIVE_LIST_ENTRIES: Record<
   string,
   (scope: Pick<ScopeEntry, 'tools' | 'resources' | 'prompts'>) => readonly { metadata: { enabled?: unknown } }[]
@@ -128,6 +128,7 @@ const LIVE_LIST_ENTRIES: Record<
   'resources/list': (scope) => scope.resources.listAllInstances(),
   'resources/templates/list': (scope) => scope.resources.listAllInstances(),
   'prompts/list': (scope) => scope.prompts.listAllInstances(),
+  'resources/read': (scope) => scope.resources.listAllInstances(),
 };
 
 /**
@@ -135,7 +136,7 @@ const LIVE_LIST_ENTRIES: Record<
  *
  * It may when the scope evaluates `authorities` rules, which filter lists and gate reads for the
  * caller, or when any hook runs in a flow that builds the result: feature flags, skill visibility
- * and custom filters all decide there, for the caller. So does a list holding an entry whose
+ * and custom filters all decide there, for the caller. So does a list or read of entries whose
  * `enabled` is a source. Methods not listed count as per-caller.
  */
 export function isShapedPerCaller(

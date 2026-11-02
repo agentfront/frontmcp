@@ -84,8 +84,18 @@ class FileSignal implements EnabledSource {
       const previous = this.value;
       this.value = next;
       if (previous === undefined || previous === next) return;
-      for (const listener of [...this.listeners]) listener();
+      for (const listener of [...this.listeners]) this.notify(listener);
     });
+  }
+
+  private notify(listener: () => void): void {
+    try {
+      listener();
+    } catch (error) {
+      this.logger.warn(
+        `fileSignal: a listener of "${this.key}" failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private async read(): Promise<boolean> {

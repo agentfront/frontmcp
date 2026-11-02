@@ -123,8 +123,12 @@ const RESULTS: Array<[string, Record<string, unknown>]> = [
   ['server/discover', {}],
 ];
 
-async function cacheScopeOf(server: Awaited<ReturnType<typeof createTestFetchServer>>, method: string) {
-  const { message } = await rpc20260728(server.handler, method, {});
+async function cacheScopeOf(
+  server: Awaited<ReturnType<typeof createTestFetchServer>>,
+  method: string,
+  params: Record<string, unknown> = {},
+) {
+  const { message } = await rpc20260728(server.handler, method, params);
   return message.result?.['cacheScope'];
 }
 
@@ -146,40 +150,43 @@ describe('cacheScope of anonymous 2026-07-28 results', () => {
     expect(await cacheScopeOf(server, method)).toBe('private');
   });
 
-  it.each(RESULTS.slice(0, 4))('%s is private when it holds an entry whose enabled is a source', async (method) => {
-    const perCaller: EnabledSource = { get: () => true, subscribe: () => () => undefined };
+  it.each([...RESULTS.slice(0, 4), ['resources/read', { uri: 'status://beta' }] as const])(
+    '%s is private when it holds an entry whose enabled is a source',
+    async (method, params) => {
+      const perCaller: EnabledSource = { get: () => true, subscribe: () => () => undefined };
 
-    @Tool({ name: 'beta_order', inputSchema: {}, enabled: perCaller })
-    class BetaOrderTool extends ToolContext {
-      async execute() {
-        return { order: 'o-2' };
+      @Tool({ name: 'beta_order', inputSchema: {}, enabled: perCaller })
+      class BetaOrderTool extends ToolContext {
+        async execute() {
+          return { order: 'o-2' };
+        }
       }
-    }
 
-    @Resource({ name: 'beta-status', uri: 'status://beta', enabled: perCaller })
-    class BetaStatusResource extends ResourceContext {
-      async execute(uri: string): Promise<ReadResourceResult> {
-        return { contents: [{ uri, text: 'beta' }] };
+      @Resource({ name: 'beta-status', uri: 'status://beta', enabled: perCaller })
+      class BetaStatusResource extends ResourceContext {
+        async execute(uri: string): Promise<ReadResourceResult> {
+          return { contents: [{ uri, text: 'beta' }] };
+        }
       }
-    }
 
-    @Prompt({ name: 'beta-summary', arguments: [], enabled: perCaller })
-    class BetaSummaryPrompt extends PromptContext {
-      async execute(): Promise<GetPromptResult> {
-        return { messages: [] };
+      @Prompt({ name: 'beta-summary', arguments: [], enabled: perCaller })
+      class BetaSummaryPrompt extends PromptContext {
+        async execute(): Promise<GetPromptResult> {
+          return { messages: [] };
+        }
       }
-    }
 
-    const server = await createTestFetchServer(
-      config({
-        tools: [LookupOrderTool, BetaOrderTool],
-        resources: [StatusResource, TicketTemplate, BetaStatusResource],
-        prompts: [SummaryPrompt, BetaSummaryPrompt],
-      }),
-    );
+      const server = await createTestFetchServer(
+        config({
+          tools: [LookupOrderTool, BetaOrderTool],
+          resources: [StatusResource, TicketTemplate, BetaStatusResource],
+          prompts: [SummaryPrompt, BetaSummaryPrompt],
+        }),
+      );
 
-    expect(await cacheScopeOf(server, method)).toBe('private');
-  });
+      expect(await cacheScopeOf(server, method, params)).toBe('private');
+    },
+  );
 
   it.each(RESULTS)('%s stays public when nothing shapes it per caller', async (method) => {
     const server = await createTestFetchServer(config({}));

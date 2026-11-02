@@ -148,6 +148,27 @@ describe('fileSignal', () => {
     expect(await signal.get()).toBe(false);
   });
 
+  it('keeps following the file after a listener throws, and reports the error', async () => {
+    await writeFile(file, JSON.stringify({ reviews: true }));
+    const logger = warnings();
+    const signal = fileSignal(file, 'reviews', { pollIntervalMs: 20, logger });
+    const listener = jest.fn();
+    const unsubscribeThrowing = signal.subscribe(() => {
+      throw new Error('listener failed');
+    });
+    const unsubscribe = signal.subscribe(listener);
+    await until(() => (signal as unknown as { value?: boolean }).value === true);
+
+    await writeFile(file, JSON.stringify({ reviews: false }));
+    await until(() => listener.mock.calls.length === 1);
+    await writeFile(file, JSON.stringify({ reviews: true }));
+    await until(() => listener.mock.calls.length === 2);
+
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('listener failed'));
+    unsubscribeThrowing();
+    unsubscribe();
+  });
+
   it('carries the remedy it is given', () => {
     const remedy = { say: 'Turn on Reviews in Settings', tool: 'settings_set' };
     expect(fileSignal(file, 'reviews', { remedy }).remedy).toEqual(remedy);
