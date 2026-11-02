@@ -113,7 +113,7 @@ describe('RunnerHeartbeat', () => {
 
     const release = await heartbeat.hold();
     expect(touch).toHaveBeenCalledTimes(1);
-    expect(touch).toHaveBeenLastCalledWith('runner-1', 5);
+    expect(touch).toHaveBeenLastCalledWith('runner-1', 30);
     expect(await store.isRunnerAlive('runner-1')).toBe(true);
 
     await jest.advanceTimersByTimeAsync(3_000);
@@ -123,8 +123,19 @@ describe('RunnerHeartbeat', () => {
     release();
     await jest.advanceTimersByTimeAsync(3_000);
     expect(touch).toHaveBeenCalledTimes(4);
-    await jest.advanceTimersByTimeAsync(3_000);
+    await jest.advanceTimersByTimeAsync(30_000);
     expect(await store.isRunnerAlive('runner-1')).toBe(false);
+  });
+
+  it('keeps a runner alive through 10 s in which its event loop could not renew the heartbeat', async () => {
+    const store = new MemoryJobStateStore();
+    const heartbeat = new RunnerHeartbeat(store, 'runner-1');
+    const release = await heartbeat.hold();
+
+    jest.setSystemTime(Date.now() + 10_000);
+
+    expect(await store.isRunnerAlive('runner-1')).toBe(true);
+    release();
   });
 
   it('beats once for every holder, until the last one lets go', async () => {
