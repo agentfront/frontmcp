@@ -20,8 +20,8 @@
 
 import type { ChildProcess } from 'node:child_process';
 
-import type { BridgeLogger } from './log';
 import type { JsonRpcFrame } from './stdio-framer';
+import type { BridgeLogger } from './types';
 
 export interface UpstreamClient {
   send(frame: JsonRpcFrame): Promise<void>;
@@ -67,6 +67,10 @@ function resultOf(frame: JsonRpcFrame | undefined, method: string): Record<strin
 export interface HttpUpstreamOptions extends UpstreamClientOptions {
   /** Loopback URL of the user-code MCP endpoint. */
   url: string;
+  /** Sent with every request, such as the credential a shared local server asks for. */
+  headers?: Record<string, string>;
+  /** Sends the requests instead of the global `fetch`, such as one that reaches a Unix socket. */
+  fetch?: typeof fetch;
 }
 
 export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient {
@@ -84,13 +88,14 @@ export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient
     const signal = abortController.signal;
     try {
       const headers: Record<string, string> = {
+        ...options.headers,
         'content-type': 'application/json',
         accept: 'application/json, text/event-stream',
       };
       // `initialize` starts a new session: never send a stale id with it.
       if (sessionId && frame.method !== 'initialize') headers[SESSION_HEADER] = sessionId;
 
-      const res = await fetch(url, {
+      const res = await (options.fetch ?? fetch)(url, {
         method: 'POST',
         headers,
         body: JSON.stringify(frame),

@@ -11,8 +11,8 @@ import { EventEmitter } from 'node:events';
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import type { BridgeLogger } from '../log';
 import type { JsonRpcFrame } from '../stdio-framer';
+import type { BridgeLogger } from '../types';
 import { createHttpUpstream, createPipeUpstream } from '../upstream-client';
 
 function silentLog(): BridgeLogger {
@@ -147,6 +147,31 @@ describe('createHttpUpstream', () => {
       const upstream = createHttpUpstream({ url: server.url, log: silentLog(), onFrame: () => undefined });
       await upstream.reinitialize(initialize, false);
       expect(server.seen.map((s) => s.method)).toEqual(['initialize']);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('sends its headers with every request through the fetch it is given', async () => {
+    const server = await startServer();
+    const sent: Array<Record<string, string>> = [];
+    const sendThrough: typeof fetch = (input, init) => {
+      sent.push(init?.headers as Record<string, string>);
+      return fetch(input, init);
+    };
+    try {
+      const upstream = createHttpUpstream({
+        url: server.url,
+        log: silentLog(),
+        onFrame: () => undefined,
+        headers: { authorization: 'Bearer secret', 'content-type': 'text/plain' },
+        fetch: sendThrough,
+      });
+      await upstream.send(initialize);
+      await upstream.send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+
+      expect(sent.map((headers) => headers['authorization'])).toEqual(['Bearer secret', 'Bearer secret']);
+      expect(sent[1]).toMatchObject({ 'content-type': 'application/json', 'mcp-session-id': 'session-1' });
     } finally {
       await server.close();
     }

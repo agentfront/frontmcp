@@ -24,6 +24,19 @@
 import type { ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
 
+import {
+  createBridgeStateMachine,
+  createHttpUpstream,
+  createPipeUpstream,
+  createStdioFramer,
+  listChangedNotifications,
+  type BridgeLogger,
+  type BridgeStateMachine,
+  type JsonRpcFrame,
+  type StdioFramer,
+  type UpstreamClient,
+} from '@frontmcp/utils';
+
 import type { ParsedArgs } from '../../../core/args';
 import { resolveDevLaunch } from '../dev';
 import { createDevEventsWriter, startEventsFile, type DevEventsWriter } from '../dev-events-file';
@@ -35,10 +48,7 @@ import {
   type ChildSupervisor,
   type SupervisorMode,
 } from './child-supervisor';
-import { createBridgeLogger, type BridgeLogger } from './log';
-import { createBridgeStateMachine, type BridgeStateMachine } from './state-machine';
-import { createStdioFramer, type JsonRpcFrame, type StdioFramer } from './stdio-framer';
-import { createHttpUpstream, createPipeUpstream, type UpstreamClient } from './upstream-client';
+import { createBridgeLogger } from './log';
 import { createDevWatcher } from './watcher';
 
 interface RuntimeBridgeOptions {
@@ -49,13 +59,6 @@ interface RuntimeBridgeOptions {
 }
 
 const DEFAULT_LOG_FILE = path.join('.frontmcp', 'dev.log');
-
-/** `list_changed` notifications a reload may warrant, keyed by capability. */
-const LIST_CHANGED = {
-  tools: 'notifications/tools/list_changed',
-  resources: 'notifications/resources/list_changed',
-  prompts: 'notifications/prompts/list_changed',
-} as const;
 
 function normalizeOptions(opts: ParsedArgs): RuntimeBridgeOptions {
   const mode: SupervisorMode = opts.serve ? 'pipe' : 'http';
@@ -70,20 +73,6 @@ function normalizeOptions(opts: ParsedArgs): RuntimeBridgeOptions {
 export function mcpPathOf(entryPath: string | undefined): string {
   const trimmed = (entryPath ?? '').replace(/^\/+|\/+$/g, '');
   return trimmed ? `/${trimmed}` : '/';
-}
-
-/** The `list_changed` notifications the capabilities of a fresh child advertise. */
-export function listChangedNotifications(initializeResult: Record<string, unknown> | undefined): JsonRpcFrame[] {
-  const capabilities = initializeResult?.['capabilities'];
-  if (typeof capabilities !== 'object' || capabilities === null) return [];
-  const frames: JsonRpcFrame[] = [];
-  for (const [capability, method] of Object.entries(LIST_CHANGED)) {
-    const entry = (capabilities as Record<string, unknown>)[capability];
-    if (typeof entry === 'object' && entry !== null && (entry as { listChanged?: unknown }).listChanged === true) {
-      frames.push({ jsonrpc: '2.0', method });
-    }
-  }
-  return frames;
 }
 
 export async function runDevBridge(opts: ParsedArgs): Promise<void> {
