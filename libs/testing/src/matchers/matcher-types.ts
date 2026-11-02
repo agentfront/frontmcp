@@ -219,6 +219,21 @@ export interface McpResultMatchers<R = unknown> {
    * ```
    */
   toHaveErrorCode(code: number): R;
+
+  // ═══════════════════════════════════════════════════════════════════
+  // REPLAY MATCHERS
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Check that every call of a replay answered as recorded; the failure names each call that differs, and how
+   *
+   * @example
+   * ```typescript
+   * const report = await replaySession('calls.jsonl', server, { ignore: ['**.generatedAt'] });
+   * expect(report).toMatchRecording();
+   * ```
+   */
+  toMatchRecording(): R;
 }
 
 /**

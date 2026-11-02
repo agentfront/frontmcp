@@ -38,6 +38,7 @@ const fixtureFiles = [
   'providers-must-compile.ts',
   'tool-aliases-must-compile.ts',
   'answer-shaping-must-compile.ts',
+  'call-recorder-must-compile.ts',
   'hook-ordering-must-compile.ts',
   'hook-ordering-must-fail.ts',
   'live-surface-must-compile.ts',
@@ -168,6 +169,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types output.budget, clients profiles, http.forwardHeaders, the budget note and isClientCall() on the call-tool hook ctx', () => {
     expect(describeEach(inFixtureFile('answer-shaping-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types CallRecorderPlugin.init() options, on an app and on the server, and the CallRecord lines', () => {
+    expect(describeEach(inFixtureFile('call-recorder-must-compile.ts'))).toEqual([]);
   });
 
   it('types HookPhase, before / after, appliesTo: all-apps, the hook observers, the hook trace and devtools', () => {
