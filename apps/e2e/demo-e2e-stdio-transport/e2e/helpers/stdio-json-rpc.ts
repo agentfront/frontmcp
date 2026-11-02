@@ -66,15 +66,20 @@ export class StdioJsonRpcProcess {
     }
   }
 
+  private hasExited(): boolean {
+    return this.child.exitCode !== null || this.child.signalCode !== null;
+  }
+
   /** Send SIGTERM, leaving stdin open, and resolve with the exit code. */
   async terminate(): Promise<number | null> {
+    if (this.hasExited()) return this.child.exitCode;
     const exited = new Promise<number | null>((resolve) => this.child.once('exit', (code) => resolve(code)));
     this.child.kill('SIGTERM');
     return exited;
   }
 
   async stop(): Promise<void> {
-    if (this.child.exitCode !== null) return;
+    if (this.hasExited()) return;
     const exited = new Promise((resolve) => this.child.once('close', resolve));
     this.child.stdin.end();
     this.child.kill('SIGTERM');

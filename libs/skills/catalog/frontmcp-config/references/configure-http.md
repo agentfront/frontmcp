@@ -187,7 +187,7 @@ To turn it off entirely: `dnsRebindingProtection: { enabled: false }`. It wins o
 turn protection back on.
 
 A request with **no** `Origin` header is allowed through — non-browser clients never send one, and a
-browser page always does. Rejecting the absent case breaks every CLI client and adds nothing.
+browser sends one on every cross-site `POST`. Rejecting the absent case breaks every CLI client and adds nothing.
 
 ## CORS Configuration
 

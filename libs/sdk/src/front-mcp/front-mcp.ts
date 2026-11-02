@@ -159,8 +159,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     try {
       await this.start();
     } catch (error) {
-      await this.shutdown().catch(() => undefined);
-      throw error;
+      return this.releaseFailedStart(error);
     }
   }
 

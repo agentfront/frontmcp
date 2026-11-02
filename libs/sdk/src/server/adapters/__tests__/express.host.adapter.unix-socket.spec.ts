@@ -201,6 +201,43 @@ describe('ExpressHostAdapter on a Unix socket', () => {
     }
   });
 
+  posixIt('still ends up 0600 where the umask cannot be set (a worker thread)', async () => {
+    const umask = jest.spyOn(process, 'umask').mockImplementation(((mask?: number) => {
+      if (mask !== undefined) throw new Error('ERR_WORKER_UNSUPPORTED_OPERATION');
+      return 0o022;
+    }) as typeof process.umask);
+    try {
+      await start();
+    } finally {
+      umask.mockRestore();
+    }
+
+    expect(fs.lstatSync(socketPath).mode & 0o777).toBe(0o600);
+  });
+
+  posixIt('goes on when the stale socket disappears before the probe', async () => {
+    leaveStaleSocket(socketPath);
+    const connect = jest.spyOn(net, 'connect').mockImplementation(() => {
+      const socket = new net.Socket();
+      fs.unlinkSync(socketPath);
+      process.nextTick(() => socket.emit('error', Object.assign(new Error('ENOENT'), { code: 'ENOENT' })));
+      return socket;
+    });
+    try {
+      await start();
+    } finally {
+      connect.mockRestore();
+    }
+
+    expect(await health(socketPath)).toBe(200);
+  });
+
+  posixIt('reports an lstat failure other than a missing path', async () => {
+    lstatMock.mockRejectedValue(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
+
+    await expect(start()).rejects.toThrow('EACCES');
+  });
+
   it('applies none of this to a Windows named pipe', async () => {
     const platform = Object.getOwnPropertyDescriptor(process, 'platform');
     Object.defineProperty(process, 'platform', { value: 'win32' });
