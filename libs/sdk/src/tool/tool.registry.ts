@@ -613,6 +613,15 @@ export default class ToolRegistry extends RegistryAbstract<
     const external = [...defs.values()].find(isExternalToolRecord);
     if (external) throw externalEntryAfterStartup('tool', external);
 
+    const replacements = [...tokens].map((token) => {
+      const rec = defs.get(token);
+      if (!rec) throw new RegistryDefinitionNotFoundError('ToolRegistry', String(token));
+      return { token, instance: new ToolInstance(rec, this.providers, owner) };
+    });
+    const replaced = new Set<ToolEntry>(this.instances.values());
+    const kept = [...this.listAllInstances(), ...this.scopeToolsBeside()].filter((tool) => !replaced.has(tool));
+    assertNoAliasConflicts([...kept, ...replacements.map(({ instance }) => instance)]);
+
     // Clear local rows, instances, and remote app tool tracking
     this.localRows = [];
     this.instances.clear();
@@ -636,14 +645,11 @@ export default class ToolRegistry extends RegistryAbstract<
     this.buildGraph();
 
     // Recreate instances and local rows
-    for (const token of this.tokens) {
-      const rec = this.defs.get(token);
-      if (!rec) throw new RegistryDefinitionNotFoundError('ToolRegistry', String(token));
-      const ti = new ToolInstance(rec, this.providers, owner);
-      this.instances.set(token as Token<ToolInstance>, ti);
+    for (const { token, instance } of replacements) {
+      this.instances.set(token as Token<ToolInstance>, instance);
 
       const lineage: EntryLineage = owner ? [owner] : [];
-      const row = this.makeRow(token, ti, lineage, this);
+      const row = this.makeRow(token, instance, lineage, this);
       this.localRows.push(row);
     }
 
