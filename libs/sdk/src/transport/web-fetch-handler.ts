@@ -381,9 +381,13 @@ function buildWebFetchHandler(
     // middleware; the Worker has no middleware server, so we dispatch the
     // matching flow here through the SAME flow pipeline (hookable) instead of
     // hand-rolling discovery. Trailing slashes are normalized.
-    if (!entryPaths.has(normalizePath(url.pathname))) {
-      const authResponse = await runMatchingHttpFlowWeb(scope, request, { ctx, env });
-      if (authResponse) return withCors(authResponse, request);
+    // An `@HttpRoute` may serve a page load on the entry path itself, so a route claims its request first.
+    const onEntryPath = entryPaths.has(normalizePath(url.pathname));
+    if (!onEntryPath || claimedByHttpRoute(scope, request, url)) {
+      const flowResponse = await runMatchingHttpFlowWeb(scope, request, { ctx, env });
+      if (flowResponse) return withCors(flowResponse, request);
+    }
+    if (!onEntryPath) {
       return withCors(
         Response.json({ error: 'Not Found', entryPaths: listedEntryPaths ?? [...entryPaths] }, { status: 404 }),
         request,
@@ -418,8 +422,8 @@ function buildWebFetchHandler(
  * A fetch handler for every scope of a server, each served at its path (`<entryPath>`, or `<entryPath>/<appId>` for a
  * `splitByApp` or `standalone` app's own scope), exactly where the Node server serves it: with `splitByApp` nothing is
  * served at the entry path itself. A request goes to the scope whose path is the longest prefix of the request's, else
- * to the scope at the entry path, else to `primary`, which also answers the health probes and `/metrics`. A 404 lists
- * every scope's path.
+ * to the scope at the entry path, else to `primary`, which also answers the health probes and `/metrics`. A scope's
+ * `@HttpRoute` claims its request first. A 404 lists every scope's path.
  */
 export function createServerFetchHandler(
   primary: Scope,
@@ -451,8 +455,10 @@ export function createServerFetchHandler(
   }
 
   return (request, ctx, env) => {
-    const path = scopePathOf(new URL(request.url).pathname);
+    const url = new URL(request.url);
+    const path = scopePathOf(url.pathname);
     const route =
+      handlers.find(({ scope }) => claimedByHttpRoute(scope, request, url)) ??
       handlers.find(({ basePath }) => isUnder(path, basePath)) ??
       handlers.find(({ basePath }) => basePath === '') ??
       primaryRoute;
@@ -585,6 +591,15 @@ export async function runMatchingHttpFlowWeb(
     output = flowErrorToHttpOutput(error);
   }
   return output ? renderHttpOutputToWebResponse(output) : undefined;
+}
+
+/** Whether an `@HttpRoute` of the scope serves this request, read from its method, path and headers alone. */
+function claimedByHttpRoute(scope: Scope, request: Request, url: URL): boolean {
+  const table = scope.httpRouteTable;
+  if (!table) return false;
+  const headers: Record<string, string> = {};
+  request.headers.forEach((value, name) => (headers[name] = value));
+  return table.match({ method: request.method, path: url.pathname, headers }) !== undefined;
 }
 
 /**

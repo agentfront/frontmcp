@@ -37,7 +37,7 @@ function stringToBytes(str: string, encoding: 'utf8' | 'base64'): Uint8Array {
   try {
     return base64Decode(str);
   } catch (err) {
-    throw new Error(`Invalid base64 body: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`Invalid base64 body: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
   }
 }
 
@@ -150,8 +150,14 @@ export async function writeHttpResponse(res: ServerResponse, value: any): Promis
         Symbol.asyncIterator
       ];
       if (typeof maybeIter === 'function' && 'write' in res && typeof res.write === 'function') {
-        for await (const chunk of out.stream as AsyncIterable<Uint8Array | string>) {
-          res.write(chunk);
+        const iterator = maybeIter.call(out.stream);
+        // The client left: end the stream, so whatever feeds it stops listening.
+        const stop = () => void iterator.return?.();
+        res.on?.('close', stop);
+        try {
+          for (let step = await iterator.next(); !step.done; step = await iterator.next()) res.write(step.value);
+        } finally {
+          res.off?.('close', stop);
         }
         res.end();
         return;

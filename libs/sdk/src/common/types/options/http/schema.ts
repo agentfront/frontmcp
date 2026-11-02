@@ -2,6 +2,7 @@
 // Zod schema for HTTP configuration. Uses lazy-zod so the schema tree is
 // not constructed at module load when nothing parses it.
 
+import { peopleAuthOptionsSchema } from '@frontmcp/auth';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 import { getEnv } from '@frontmcp/utils';
 
@@ -184,6 +185,8 @@ export const httpOptionsSchema = z.object({
    * `session:verify` flow. Reserved-path collisions are rejected at startup.
    */
   routes: z.array(httpRouteSchema).optional(),
+  /** People auth for the `@HttpRoute` pages; see `HttpAuthOptions`. */
+  auth: z.object({ people: peopleAuthOptionsSchema.optional() }).strict().optional(),
   /** Response security headers; see `SecurityHeadersOptions`. */
   securityHeaders: securityHeadersSchema.optional(),
   /** More request headers to keep in `customHeaders`, besides `x-frontmcp-*`; see `HttpOptionsInterface`. */

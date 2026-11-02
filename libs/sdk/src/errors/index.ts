@@ -219,6 +219,15 @@ export { InvalidDecoratorMetadataError, HookTargetNotDefinedError } from './deco
 // Export duty errors
 export { DutyNameConflictError, UnsafeDutyStoreError } from './duty.errors';
 
+// Export HTTP route errors
+export {
+  CrossOriginRequestError,
+  InvalidHttpRouteError,
+  PersonNotSignedInError,
+  SignInLockedError,
+  SignInRefusedError,
+} from './http-route.errors';
+
 // Export transport errors
 export {
   MethodNotImplementedError,
