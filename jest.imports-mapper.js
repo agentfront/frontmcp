@@ -29,4 +29,5 @@ module.exports = {
   '^#js-yaml$': path.resolve(root, 'libs/sdk/src/third-party/js-yaml.ts'),
   '^#semver$': path.resolve(root, 'libs/sdk/src/third-party/semver.ts'),
   '^#uipack-render$': path.resolve(root, 'libs/sdk/src/third-party/uipack-render.ts'),
+  '^#protocol-client$': path.resolve(root, 'libs/sdk/src/third-party/protocol-client.ts'),
 };

@@ -54,6 +54,13 @@
       "types": "./src/third-party/uipack-render.ts",
       "require": "./src/third-party/lazy-uipack-render.ts",
       "default": "./src/third-party/uipack-render.ts"
+    },
+    "#protocol-client": {
+      "types": "./src/third-party/protocol-client.ts",
+      "worker": "./src/third-party/protocol-client.ts",
+      "browser": "./src/third-party/protocol-client.ts",
+      "import": "./src/third-party/import-protocol-client.ts",
+      "default": "./src/third-party/protocol-client.ts"
     }
   },
   "type": "commonjs",
