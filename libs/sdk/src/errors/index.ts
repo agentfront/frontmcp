@@ -4,12 +4,19 @@ export {
   McpError,
   PublicMcpError,
   InternalMcpError,
+  // Refusals
+  refused,
+  type ErrorRemedy,
+  type RefusalOptions,
   // Tool errors
   ToolNotFoundError,
   ToolNotConsentedError,
   ToolExecutionError,
   // Availability errors
   EntryUnavailableError,
+  FeatureOffError,
+  StaleToolListError,
+  InvalidFileSignalError,
   // Resource errors
   ResourceNotFoundError,
   ResourceReadError,
@@ -115,6 +122,16 @@ export {
   ElicitationSubscriptionError,
 } from './elicitation.error';
 
+// Export worker offload errors
+export {
+  OffloadBudgetExceededError,
+  OffloadAbortedError,
+  OffloadUnsupportedRuntimeError,
+  InvalidOffloadCallError,
+  OffloadNotCloneableError,
+  OffloadWorkerError,
+} from './offload.errors';
+
 // Export MRTR signals (protocol 2026-07-28)
 export {
   InputRequiredSignal,
@@ -172,10 +189,12 @@ export {
   NameDisambiguationError,
   EntryValidationError,
   ToolNameConflictError,
+  ToolAliasConflictError,
   ReservedAppIdError,
   DuplicateAppIdError,
   FlowNotRegisteredError,
   UnsupportedHookOwnerKindError,
+  HookOrderCycleError,
 } from './registry.errors';
 
 // Export provider errors
@@ -185,6 +204,7 @@ export {
   ProviderNotInstantiatedError,
   DependencyCycleError,
   ProviderConstructionError,
+  ProviderBootstrapError,
   ProviderDependencyError,
   ProviderScopedAccessError,
   ProviderNotAvailableError,
@@ -291,6 +311,7 @@ export {
   EnclaveExecutionError,
   FlowInputMissingError,
   DynamicJobDirectExecutionError,
+  CallRecorderConfigurationError,
 } from './sdk.errors';
 export * from './job.errors';
 export * from './plugin.errors';

@@ -45,6 +45,31 @@ export type SchemaDescriptionFormat = (typeof SCHEMA_DESCRIPTION_FORMATS)[number
 export const UNDECLARED_KEYS_POLICIES = ['strip', 'warn', 'keep', 'fail'] as const;
 export type UndeclaredKeysPolicy = (typeof UNDECLARED_KEYS_POLICIES)[number];
 
+/**
+ * Which end of a list an answer budget keeps when it has to leave items out.
+ *
+ * - `'keep-newest'` (default): the last items, as in a log or a history kept in time order.
+ * - `'keep-oldest'`: the first items.
+ */
+export const BUDGET_LIST_POLICIES = ['keep-newest', 'keep-oldest'] as const;
+export type BudgetListPolicy = (typeof BUDGET_LIST_POLICIES)[number];
+
+/** The smallest `output.budget.maxBytes`: room for an answer's shape and the note on what was left out. */
+export const MIN_OUTPUT_BUDGET_BYTES = 1024;
+
+/**
+ * The most bytes a tool answer or a resource read may take, measured as UTF-8 JSON. Each copy of
+ * the data counts on its own: an answer with both the text and `structuredContent` sends each one
+ * within `maxBytes`. The budget never cuts inside JSON: it leaves out whole list items and the end
+ * of long strings, and notes what it left out in `_meta['frontmcp/budget']` and a last text line.
+ */
+export interface OutputBudget {
+  /** At least {@link MIN_OUTPUT_BUDGET_BYTES}. */
+  maxBytes: number;
+  /** @default 'keep-newest' */
+  lists?: BudgetListPolicy;
+}
+
 /** Default exposure mode when unset at every level. */
 export const DEFAULT_OUTPUT_SCHEMA_MODE: OutputSchemaMode = 'definition';
 /** Default description rendering when unset at every level. */
@@ -85,6 +110,14 @@ export interface OutputPolicy {
    * @default 'warn' when NODE_ENV is 'development', otherwise 'strip'
    */
   undeclaredKeys?: UndeclaredKeysPolicy;
+
+  /**
+   * Fit each answer to a byte budget. `false` turns off a budget an outer level set.
+   * See {@link OutputBudget}.
+   *
+   * @default off
+   */
+  budget?: OutputBudget | false;
 }
 
 /**
@@ -96,6 +129,22 @@ export const outputPolicySchema = z.object({
   schemaMode: z.enum(OUTPUT_SCHEMA_MODES).optional(),
   schemaDescriptionFormat: z.enum(SCHEMA_DESCRIPTION_FORMATS).optional(),
   undeclaredKeys: z.enum(UNDECLARED_KEYS_POLICIES).optional(),
+  budget: z
+    .union([
+      z.literal(false),
+      z
+        .object({
+          maxBytes: z
+            .number()
+            .int()
+            .min(MIN_OUTPUT_BUDGET_BYTES, {
+              message: `output.budget.maxBytes must be an integer of at least ${MIN_OUTPUT_BUDGET_BYTES}`,
+            }),
+          lists: z.enum(BUDGET_LIST_POLICIES).optional(),
+        })
+        .strict(),
+    ])
+    .optional(),
 });
 
 /** Resolve the effective output-schema mode: Tool > App > server > default. */
@@ -128,6 +177,16 @@ export function resolveUndeclaredKeysPolicy(
   server?: OutputPolicy,
 ): UndeclaredKeysPolicy {
   return tool?.undeclaredKeys ?? app?.undeclaredKeys ?? server?.undeclaredKeys ?? (isDevelopment() ? 'warn' : 'strip');
+}
+
+/** Resolve the answer budget: Tool > App > server, where `false` turns off the budget a wider level set. */
+export function resolveOutputBudget(
+  tool?: OutputPolicy,
+  app?: OutputPolicy,
+  server?: OutputPolicy,
+): OutputBudget | undefined {
+  const budget = tool?.budget ?? app?.budget ?? server?.budget;
+  return budget === false ? undefined : budget;
 }
 
 /** A copy of a JSON Schema whose objects accept undeclared keys: every `additionalProperties: false` is left out. */

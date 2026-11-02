@@ -15,12 +15,14 @@ import {
 import { logAvailabilityFiltering } from '../common/availability';
 import { resolveToolVisibility } from '../common/metadata/tool.metadata';
 import { externalEntryAfterStartup } from '../common/utils/external-entry.utils';
+import { describeToolAliasConflicts, type ToolAliasCandidate } from '../common/utils/tool-lookup.utils';
 import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.utils';
 import {
   EntryValidationError,
   NameDisambiguationError,
   RegistryDefinitionNotFoundError,
   RegistryGraphEntryNotFoundError,
+  ToolAliasConflictError,
 } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
@@ -164,6 +166,7 @@ export default class ToolRegistry extends RegistryAbstract<
 
     // Build effective indexes from (locals + already adopted children)
     this.reindex();
+    assertNoAliasConflicts(this.listAllInstances());
 
     // Log availability filtering results at boot time.
     // This is a REGISTRY-LEVEL concern — not HTTP/flow-level auth or rule-based filtering.
@@ -531,6 +534,11 @@ export default class ToolRegistry extends RegistryAbstract<
     return this.emitter.on((e) => cb({ ...e, snapshot: this.listAllInstances().filter(filter) }));
   }
 
+  /** Tell listeners the listed tools changed though none was added or removed, as when an `enabled` source flips. */
+  notifyListChanged(): void {
+    this.bump('reset');
+  }
+
   private bump(kind: ToolChangeEvent['kind']) {
     const version = ++this.version;
     this.emitter.emit({ kind, changeScope: 'global', version, snapshot: this.listAllInstances() });
@@ -589,6 +597,12 @@ export default class ToolRegistry extends RegistryAbstract<
     return undefined;
   }
 
+  /** The tools of the scope this registry's tools join, when that is another registry (an app's joins the scope's). */
+  private scopeToolsBeside(): readonly ToolEntry[] {
+    const scopeTools: ToolRegistry | undefined = this.providers.getActiveScope().tools;
+    return scopeTools && scopeTools !== this ? scopeTools.listAllInstances() : [];
+  }
+
   /** True if this registry (or adopted children) has any tools. */
   hasAny(): boolean {
     return this.listAllIndexed().length > 0 || this.tokens.size > 0;
@@ -603,6 +617,10 @@ export default class ToolRegistry extends RegistryAbstract<
     const { tokens, defs, graph } = this.buildMap(list);
     const external = [...defs.values()].find(isExternalToolRecord);
     if (external) throw externalEntryAfterStartup('tool', external);
+
+    const replaced = new Set<ToolEntry>(this.instances.values());
+    const kept = [...this.listAllInstances(), ...this.scopeToolsBeside()].filter((tool) => !replaced.has(tool));
+    assertNoAliasConflicts([...kept, ...[...defs.values()].map((rec) => aliasCandidateOf(rec, owner))]);
 
     // Clear local rows, instances, and remote app tool tracking
     this.localRows = [];
@@ -721,6 +739,7 @@ export default class ToolRegistry extends RegistryAbstract<
     if (this.instances.has(token as Token<ToolInstance>)) {
       return; // Already registered, skip silently
     }
+    assertNoAliasConflicts([...this.listAllInstances(), ...this.scopeToolsBeside(), tool]);
 
     // Add to instances map - the type guard ensures tool has the required properties
     this.instances.set(token as Token<ToolInstance>, tool as ToolInstance);
@@ -773,6 +792,17 @@ export default class ToolRegistry extends RegistryAbstract<
       },
     };
   }
+}
+
+function assertNoAliasConflicts(tools: readonly ToolAliasCandidate[]): void {
+  const conflicts = describeToolAliasConflicts(tools);
+  if (conflicts.length > 0) throw new ToolAliasConflictError(conflicts);
+}
+
+/** The names the tool built from `record` under `owner` will answer to, read without building it (and its hooks). */
+function aliasCandidateOf(record: ToolRecord, owner: EntryOwnerRef): ToolAliasCandidate {
+  const name = record.metadata.id || record.metadata.name;
+  return { name, fullName: `${owner.id}:${name}`, metadata: record.metadata };
 }
 
 /* -------------------- lineage utility -------------------- */

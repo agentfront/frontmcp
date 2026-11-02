@@ -30,6 +30,9 @@ export const MISCONFIGURATION_REMEDIES: Record<string, string> = {
     'The auth or authorities configuration is invalid (for example, entries declare authorities and the server ' +
     'has no authorities option, or a rule checks nothing), so the server refuses to start. The server log names ' +
     'the entries.',
+  TOOL_ALIAS_CONFLICT:
+    'A tool alias (`@Tool({ aliases })`) is also the name of a tool or the alias of another tool, so the server ' +
+    'refuses to start. Give each alias to one tool; the server log names the conflicts.',
 };
 
 /**

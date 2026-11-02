@@ -26,7 +26,7 @@ import { ProviderScope } from '../common/metadata';
 import { ServerRequestTokens } from '../common/tokens';
 import { RequestContextNotAvailableError } from '../errors/mcp.error';
 import { FrontMcpContext, type FrontMcpContextArgs, type FrontMcpContextConfig } from './frontmcp-context';
-import { extractMetadata, type ClientIpOptions } from './metadata.utils';
+import { extractMetadata, type MetadataOptions } from './metadata.utils';
 import { parseTraceContext } from './trace-context';
 
 /**
@@ -63,19 +63,28 @@ export function workerEnvOf(context: FrontMcpContext | undefined): Readonly<Reco
 })
 export class FrontMcpContextStorage {
   private contextConfig: FrontMcpContextConfig = {};
-  private proxyTrust: Omit<ClientIpOptions, 'peerAddress'> = {};
+  private metadataOptions: Omit<MetadataOptions, 'peerAddress'> = {};
 
   /**
    * Apply server-wide defaults (from `@FrontMcp({ fetch })`) to every context this storage creates.
    *
    * @param contextConfig - Defaults; a context's own config still overrides them
-   * @param proxyTrust - Whether to read the client address from `X-Forwarded-For` (`throttle.ipFilter`)
+   * @param metadataOptions - Whether to read the client address from `X-Forwarded-For` (`throttle.ipFilter`),
+   * and which headers besides `x-frontmcp-*` to keep (`http.forwardHeaders`)
    * @returns This storage
    */
-  configure(contextConfig: FrontMcpContextConfig = {}, proxyTrust: Omit<ClientIpOptions, 'peerAddress'> = {}): this {
+  configure(
+    contextConfig: FrontMcpContextConfig = {},
+    metadataOptions: Omit<MetadataOptions, 'peerAddress'> = {},
+  ): this {
     this.contextConfig = contextConfig;
-    this.proxyTrust = proxyTrust;
+    this.metadataOptions = metadataOptions;
     return this;
+  }
+
+  /** Whether a header besides `x-frontmcp-*` is kept in `customHeaders` (`http.forwardHeaders`). */
+  get forwardsHeader(): ((name: string) => boolean) | undefined {
+    return this.metadataOptions.forwardsHeader;
   }
 
   /**
@@ -110,7 +119,7 @@ export class FrontMcpContextStorage {
     const traceContext = parseTraceContext(headers);
     // The socket peer is the only client address a caller cannot forge; forwarding headers
     // are used in its place only behind a trusted proxy (GHSA-p3qf-fcwm-35x4).
-    const metadata = extractMetadata(headers, { ...this.proxyTrust, peerAddress });
+    const metadata = extractMetadata(headers, { ...this.metadataOptions, peerAddress });
     const context = new FrontMcpContext(
       this.withServerConfig({
         ...contextArgs,

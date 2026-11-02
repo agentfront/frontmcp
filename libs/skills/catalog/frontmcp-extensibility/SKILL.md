@@ -61,6 +61,8 @@ Patterns and examples for extending FrontMCP servers with external npm packages.
 | Load an app from an npm package               | `multi-app-composition` (in frontmcp-setup)     | `App.esm('@scope/pkg@^1.0.0', { namespace: 'pkg' })` pattern |
 | Connect to a remote MCP server                | `multi-app-composition` (in frontmcp-setup)     | `App.remote('https://...', { namespace: 'ns' })` pattern     |
 | Build a reusable plugin with hooks            | `create-plugin-hooks` (in frontmcp-development) | `DynamicPlugin`, context extensions, lifecycle hooks         |
+| Order a plugin's hooks against another plugin | `create-plugin-hooks` (in frontmcp-development) | `HookPhase` bands, `before` / `after`, the dev hook trace    |
+| Run one app's hook for every app              | `create-plugin-hooks` (in frontmcp-development) | `appliesTo: 'all-apps'` vs `'uncovered-apps'` and `scope`    |
 | Build a custom adapter for an external source | `create-adapter` (in frontmcp-development)      | `DynamicAdapter` for OpenAPI, GraphQL, or custom sources     |
 | Auto-generate tools from an OpenAPI spec      | `official-adapters` (in frontmcp-development)   | `OpenapiAdapter` with filtering, auth, and transforms        |
 
@@ -112,13 +114,13 @@ More integrations can be added as references (e.g., enclave-vm, applescript, dat
 | -------------------- | ------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------- |
 | Library access       | `this.get(SearchToken)` from a tool        | `import { client } from 'lib'` in a tool | DI boundary lets you swap implementations and test in isolation     |
 | Provider scope       | `ProviderScope.GLOBAL` for shared clients  | New instance per request                 | Library clients (DB pools, indices) are expensive to construct      |
-| Async initialisation | `onInit()` lifecycle hook on the provider  | Constructor `await`                      | Constructors can't be async; `onInit` is the framework's init seam  |
+| Async initialisation | `onBootstrap()` on the provider            | Constructor `await`                      | Constructors can't be async; startup awaits `onBootstrap()`         |
 | Error surfaces       | Throw `PublicMcpError`/`InvalidInputError` | Re-throw raw library errors              | Library stack traces leak internals and aren't JSON-RPC error-coded |
 
 ## Verification Checklist
 
 - [ ] External library is in `dependencies` (not `devDependencies`)
-- [ ] Provider wraps the library with proper initialization and cleanup
+- [ ] Provider wraps the library, opening it in `onBootstrap()` and closing it in `onShutdown()` when it holds connections
 - [ ] Provider class is listed in `@App` or `@FrontMcp` `providers: [...]` array (the class itself is the DI token)
 - [ ] Tools use `this.get(ProviderClass)` to access the provider (not direct imports)
 - [ ] Error handling wraps library-specific errors into MCP error classes

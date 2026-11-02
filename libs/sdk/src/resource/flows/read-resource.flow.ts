@@ -5,14 +5,17 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 import { ReadResourceRequestSchema, ReadResourceResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import { randomBytes } from '@frontmcp/utils';
 
+import { fitResourceAnswer } from '../../answer';
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import {
   Flow,
   FlowBase,
   FlowControl,
   FlowHooksOf,
+  resolveOutputBudget,
   type FlowPlan,
   type FlowRunOptions,
+  type OutputPolicy,
   type ResourceContext,
   type ResourceEntry,
   type ScopeEntry,
@@ -32,6 +35,7 @@ import { ResolvedEntries } from '../../flows/resolved-entries';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
+import { assertEntryEnabled } from '../../surface';
 import { isUIResourceUri } from '../../tool/ui/ui-shared';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
 
@@ -70,9 +74,17 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'ensureRemoteCapabilities', 'findResource', 'checkEntryAuthorities', 'createResourceContext'],
+  pre: [
+    'parseInput',
+    'ensureRemoteCapabilities',
+    'findResource',
+    'checkEnabled',
+    'checkEntryAuthorities',
+    'createResourceContext',
+  ],
   execute: ['execute', 'validateOutput'],
-  finalize: ['finalize'],
+  // After 'finalize' answers: hooks on 'fitAnswer' read and replace `state.output`
+  finalize: ['finalize', 'fitAnswer'],
 } as const satisfies FlowPlan<string>;
 
 declare global {
@@ -104,6 +116,8 @@ const resolvedResources = new ResolvedEntries<{ instance: ResourceEntry; params:
   access: 'authorized',
 })
 export default class ReadResourceFlow extends FlowBase<typeof name> {
+  static override readonly tracesHooksInAnswer = true;
+
   static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
     const uri = (rawInput as { request?: { params?: { uri?: unknown } } } | undefined)?.request?.params?.uri;
     if (typeof uri !== 'string') return undefined;
@@ -297,6 +311,16 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     this.logger.verbose('findResource:done');
   }
 
+  /** A resource or template whose `enabled` is off is refused with `FEATURE_OFF` and the remedy of its source. */
+  @Stage('checkEnabled')
+  async checkEnabled() {
+    const { resource } = this.state;
+    if (!resource) return;
+    const entryType = resource.isTemplate ? 'ResourceTemplate' : 'Resource';
+    const { uri } = this.state.required.input;
+    await assertEntryEnabled(entryType, uri, resource.metadata.enabled, this.tryGetContext(), this.logger);
+  }
+
   /**
    * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in resource metadata.
    * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
@@ -390,7 +414,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     }
 
     const resourceContext = this.state.resourceContext;
-    const { input, params } = this.state.required;
+    const { input, params, resource } = this.state.required;
 
     if (!resourceContext) {
       this.logger.warn('execute: resourceContext not found, skipping execution');
@@ -400,8 +424,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
 
     try {
       // What the resource does for the caller (a skill:// listing, say) is judged for this call's surface.
+      const worker = resource.metadata.worker;
       resourceContext.output = await runOnSurface(callSurfaceOf(this.input.ctx), async () =>
-        resourceContext.execute(input.uri, params),
+        worker
+          ? import('../../offload/read-in-worker.js').then(({ readInWorker }) =>
+              readInWorker(resourceContext, resource.record.provide, worker, input.uri, params),
+            )
+          : resourceContext.execute(input.uri, params),
       );
       this.logger.verbose('execute:done');
     } catch (error) {
@@ -482,8 +511,28 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       throw new InvalidOutputError();
     }
 
-    // Respond with the properly formatted MCP result
+    // Respond with the properly formatted MCP result; 'fitAnswer' may replace it
     this.respond(parseResult.data);
     this.logger.verbose('finalize:done');
+  }
+
+  /** Fit the read to `output.budget` (App > server); a `ui://` widget is never cut. A plugin can replace this stage. */
+  @Stage('fitAnswer')
+  async fitAnswer() {
+    const { resource, output, isUIResource } = this.state;
+    if (!resource || !output || isUIResource) return;
+    const appId = appOwnerIdOf(this.scope.resources.lineageOf(resource) ?? [], resource.owner);
+    const app = this.scope.apps.getApps().find((candidate) => candidate.id === appId);
+    const appOutput = (app?.metadata as { output?: OutputPolicy } | undefined)?.output;
+    const budget = resolveOutputBudget(undefined, appOutput, this.scope.metadata.output);
+    const fitted = budget && fitResourceAnswer(output, budget);
+    if (fitted) this.respond(fitted);
+  }
+
+  /** Answer the read. Each answer, a stage's or a hook's, becomes `state.output`, which `fitAnswer` fits. */
+  override respond(output: z.infer<typeof outputSchema>): never {
+    const answer = outputSchema.parse(output);
+    this.state.set('output', answer);
+    throw FlowControl.respond(answer);
   }
 }

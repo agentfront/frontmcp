@@ -7,6 +7,7 @@ import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
 import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError, ResourceNotFoundError } from '../../errors';
+import { assertEntryEnabled } from '../../surface';
 import { isUIResourceUri } from '../../tool/ui/ui-shared';
 import { mcpRequestSessionId } from '../../transport/mcp-handlers/mcp-surface';
 
@@ -104,14 +105,9 @@ export default class SubscribeResourceFlow extends FlowBase<typeof name> {
     const surface = callSurfaceOf(this.input.ctx);
     const availability = availabilityForCall(availableWhen, surface);
     if (availability === 'not-offered') throw new ResourceNotFoundError(uri);
-    if (availability === 'unavailable') {
-      throw entryUnavailableError(
-        match.instance.isTemplate ? 'ResourceTemplate' : 'Resource',
-        uri,
-        availableWhen,
-        surface,
-      );
-    }
+    const entryType = match.instance.isTemplate ? 'ResourceTemplate' : 'Resource';
+    if (availability === 'unavailable') throw entryUnavailableError(entryType, uri, availableWhen, surface);
+    await assertEntryEnabled(entryType, uri, match.instance.metadata.enabled, this.tryGetContext(), this.logger);
 
     this.logger.verbose('validateResource:done');
   }

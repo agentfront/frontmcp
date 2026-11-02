@@ -21,6 +21,7 @@ export type {
   RedisUrlFillInConfig,
   VercelKvAdapterOptions,
   UpstashAdapterOptions,
+  SqliteAdapterOptions,
   StorageType,
   StorageConfig,
 } from './types';

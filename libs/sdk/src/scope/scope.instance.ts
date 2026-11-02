@@ -2,7 +2,7 @@ import 'reflect-metadata';
 
 import { createGuardManager, type GuardConfig, type GuardManager } from '@frontmcp/guard';
 import { type EventStore } from '@frontmcp/protocol';
-import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime } from '@frontmcp/utils';
+import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeRuntime, mkdir } from '@frontmcp/utils';
 
 import AdapterRegistry from '../adapter/adapter.registry';
 import AgentRegistry from '../agent/agent.registry';
@@ -37,6 +37,7 @@ import { type JobType } from '../common/interfaces/job.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
 import { type ChannelsConfigOptions } from '../common/metadata/channel.metadata';
 import { resolveDefaultSqlitePath, type SqliteOptionsInput } from '../common/types/options/sqlite';
+import { createHeaderForwarder } from '../common/utils/forward-headers.utils';
 import { resolveEntryPath } from '../common/utils/path.utils';
 import CompleteFlow from '../completion/flows/complete.flow';
 import { FrontMcpContextProvider, FrontMcpContextStorage } from '../context';
@@ -49,6 +50,7 @@ import { assertAuthoritiesRules } from '../front-mcp/authorities-rules.check';
 import { isDirectOnly } from '../front-mcp/direct-only.flag';
 import type { HaManager } from '../ha';
 import type { HealthService } from '../health';
+import { checkHookOrder, hookRunsOf } from '../hooks/hook-order';
 import HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls, serverProviderHooks } from '../hooks/hooks.utils';
 import { type JobExecutionManager } from '../job/execution/job-execution.manager';
@@ -59,6 +61,7 @@ import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
 import { NotificationService } from '../notification';
+import { OffloadService } from '../offload/offload.service';
 import { agentToolMetadata, findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
 import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry';
 import PromptRegistry from '../prompt/prompt.registry';
@@ -69,6 +72,7 @@ import { SkillValidationError } from '../skill/errors/skill-validation.error';
 import type { SkillSessionManager } from '../skill/session';
 import { pluginsRegisterDynamicSkills, registerSkillCapabilities } from '../skill/skill-scope.helper';
 import SkillRegistry from '../skill/skill.registry';
+import { LiveSurface } from '../surface/live-surface';
 import type { InProcessTaskRunner, TaskRegistry, TaskStore } from '../task';
 import { resolvesToVercelKvTaskBackend } from '../task/store/task-backend.utils';
 import { describeUnlistedOutputSchemas } from '../tool/tool-output-policy';
@@ -82,7 +86,6 @@ import { warnIfRequestStateKeyNotShared } from '../transport/mcp-20260728/reques
 import type { SessionRelayHandle } from '../transport/relay/relay-scope.helper';
 import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import type { TransportService } from '../transport/transport.registry';
-import { importWithRequireFallback } from '../utils/dynamic-import.utils';
 import type WorkflowRegistry from '../workflow/workflow.registry';
 import { registerServerEntries } from './server-entries.helper';
 import { reportStartup } from './startup-report.helper';
@@ -113,6 +116,7 @@ export class Scope extends ScopeEntry {
   /** Undefined in a direct-only scope, which serves no HTTP. */
   transportService: TransportService | undefined; // TODO: migrate transport service to transport.registry
   notificationService: NotificationService;
+  private liveSurface?: LiveSurface;
   declare haManager?: HaManager;
   /** ioredis client owned by the HA manager and transport bus; closed in shutdown(). */
   private haRedisClient?: { quit(): Promise<unknown>; disconnect(): void };
@@ -694,6 +698,9 @@ export class Scope extends ScopeEntry {
     // Fail-fast: entries with metadata only a plugin enforces (`approval`, `featureFlag`, ...) that no such plugin covers
     this.validateEnforcedMetadata();
 
+    // Fail-fast on hooks whose before/after order each other in a cycle; warn about a target no hook matches
+    checkHookOrder(hookRunsOf(this.scopeHooks), (message) => this.logger.warn(message));
+
     // One warning per tool whose declared outputSchema tools/list has to leave out
     for (const message of describeUnlistedOutputSchemas(this)) this.logger.warn(message);
 
@@ -910,6 +917,11 @@ export class Scope extends ScopeEntry {
     await this.notificationService.initialize();
     this.logger.verbose('NotificationService initialized');
 
+    const liveSurface = new LiveSurface(this);
+    liveSurface.start();
+    this.liveSurface = liveSurface;
+    this.onDispose(() => liveSurface.stop());
+
     // Install the task runner now that the notification service is available.
     // The runner needs it to deliver `notifications/tasks/status` events.
     installTaskRunner?.();
@@ -1078,10 +1090,6 @@ export class Scope extends ScopeEntry {
     }
     try {
       const { dirname } = require('path') as typeof import('path');
-      const { mkdir } = await importWithRequireFallback(
-        () => import('@frontmcp/utils'),
-        () => require('@frontmcp/utils') as typeof import('@frontmcp/utils'),
-      );
       await mkdir(dirname(finalPath), { recursive: true });
     } catch (err) {
       this.logger.warn('[FrontMcp] Could not ensure sqlite parent directory exists', {
@@ -1352,10 +1360,19 @@ export class Scope extends ScopeEntry {
         scope: ProviderScope.GLOBAL,
         name: 'FrontMcpContextStorage',
         provide: FrontMcpContextStorage,
-        useValue: new FrontMcpContextStorage().configure(this.metadata.fetch, proxyTrustOf(this.metadata.throttle)),
+        useValue: new FrontMcpContextStorage().configure(this.metadata.fetch, {
+          ...proxyTrustOf(this.metadata.throttle),
+          forwardsHeader: createHeaderForwarder(this.metadata.http?.forwardHeaders),
+        }),
       },
       // FrontMcpContextProvider is a factory that retrieves from AsyncLocalStorage
       FrontMcpContextProvider,
+      {
+        scope: ProviderScope.GLOBAL,
+        name: 'OffloadService',
+        provide: OffloadService,
+        useValue: new OffloadService(this.metadata.offload, this.logger),
+      },
     ];
   }
 
@@ -1448,6 +1465,10 @@ export class Scope extends ScopeEntry {
 
   get notifications(): NotificationService {
     return this.notificationService;
+  }
+
+  get surface(): LiveSurface | undefined {
+    return this.liveSurface;
   }
 
   /**
@@ -1922,6 +1943,7 @@ export class Scope extends ScopeEntry {
    */
   async dispose(): Promise<void> {
     await this.emitDispose();
+    await this.scopeProviders.runShutdownHooks(this.logger);
     this.scopeProviders.dispose();
     if (this.notificationService) {
       await this.notificationService.destroy();

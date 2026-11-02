@@ -3,6 +3,7 @@ import { IconSchema, type Icon } from '@frontmcp/protocol';
 import { entryAvailabilitySchema, isValidMcpUri, isValidMcpUriTemplate, type EntryAvailability } from '@frontmcp/utils';
 
 import { type RawZodShape } from '../types';
+import { enabledOptionSchema, type EnabledOption } from './enabled.metadata';
 
 declare global {
   /**
@@ -95,7 +96,39 @@ interface ResourceMetadata extends ExtendFrontMcpResourceMetadata {
    * When set, the resource is only discoverable and readable in matching environments.
    */
   availableWhen?: EntryAvailability;
+
+  /**
+   * Whether the resource is on: a boolean, or an `EnabledSource` such as `fileSignal(path, key)` that can change
+   * while sessions are live. A resource that is off is left out of `resources/list`, and `resources/read` refuses it with
+   * `FEATURE_OFF` and a remedy. When a source changes, connected clients get `notifications/resources/list_changed`.
+   */
+  enabled?: EnabledOption;
+
+  /**
+   * Run `read` in a worker thread of the server's offload pool (Node only), so CPU-heavy work does not block the server.
+   * The worker imports the module that declares the resource and builds the resource there, without a DI container:
+   * `this.get()`, `this.scope`, `this.auth` and the request context throw there. It gets the URI and its parameters, and
+   * sends back the output by structured clone. `{ budgetMs }` bounds how long it may run (default `offload.budgetMs`);
+   * past it the read is refused with `OffloadBudgetExceededError`.
+   */
+  worker?: ResourceWorkerOption;
 }
+
+/** `true`, or the budget of each read in the worker. */
+export type ResourceWorkerOption = boolean | { budgetMs?: number };
+
+const resourceWorkerOptionSchema = z.union([
+  z.boolean(),
+  z
+    .object({
+      budgetMs: z
+        .number({ message: 'worker.budgetMs must be a number of milliseconds' })
+        .int('worker.budgetMs must be a whole number of milliseconds')
+        .positive('worker.budgetMs must be greater than 0')
+        .optional(),
+    })
+    .strict(),
+]);
 
 const resourceAnnotationsSchema = z
   .object({
@@ -118,6 +151,8 @@ export const frontMcpResourceMetadataSchema = z
     annotations: resourceAnnotationsSchema.optional(),
     _meta: z.record(z.string(), z.unknown()).optional(),
     availableWhen: entryAvailabilitySchema.optional(),
+    enabled: enabledOptionSchema.optional(),
+    worker: resourceWorkerOptionSchema.optional(),
   } satisfies RawZodShape<ResourceMetadata, ExtendFrontMcpResourceMetadata>)
   .passthrough();
 
@@ -177,6 +212,16 @@ interface ResourceTemplateMetadata extends ExtendFrontMcpResourceTemplateMetadat
    * When set, the resource template is only discoverable in matching environments.
    */
   availableWhen?: EntryAvailability;
+
+  /**
+   * Whether the template is on: a boolean, or an `EnabledSource` such as `fileSignal(path, key)` that can change
+   * while sessions are live. A template that is off is left out of `resources/templates/list`, and `resources/read` refuses it with
+   * `FEATURE_OFF` and a remedy. When a source changes, connected clients get `notifications/resources/list_changed`.
+   */
+  enabled?: EnabledOption;
+
+  /** Read in a worker thread of the offload pool; see `ResourceMetadata.worker`. */
+  worker?: ResourceWorkerOption;
 }
 
 export const frontMcpResourceTemplateMetadataSchema = z
@@ -192,6 +237,8 @@ export const frontMcpResourceTemplateMetadataSchema = z
     annotations: resourceAnnotationsSchema.optional(),
     _meta: z.record(z.string(), z.unknown()).optional(),
     availableWhen: entryAvailabilitySchema.optional(),
+    enabled: enabledOptionSchema.optional(),
+    worker: resourceWorkerOptionSchema.optional(),
   } satisfies RawZodShape<ResourceTemplateMetadata, ExtendFrontMcpResourceTemplateMetadata>)
   .passthrough();
 

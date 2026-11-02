@@ -3,6 +3,11 @@ import 'reflect-metadata';
 import { type ReadResourceRequest, type ReadResourceResult } from '@frontmcp/protocol';
 
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import {
+  registerWorkerResourceClass,
+  registerWorkerResourceHandler,
+  type WorkerResourceClass,
+} from '../../offload/worker-resources';
 import { type ResourceContext } from '../interfaces';
 // ═══════════════════════════════════════════════════════════════════
 // STATIC METHODS: Resource.esm() and Resource.remote()
@@ -22,14 +27,30 @@ import {
   FrontMcpResourceTemplateTokens,
   FrontMcpResourceTokens,
 } from '../tokens';
+import { captureCallerFile } from '../utils/caller-dir.utils';
 import { validateRemoteUrl } from '../utils/validate-remote-url';
+
+/** Basenames of THIS decorator file, skipped so the captured frame is the module that declares the resource. */
+const RESOURCE_DECORATOR_BASENAMES = [
+  'resource.decorator.ts',
+  'resource.decorator.js',
+  'resource.decorator.mjs',
+  'resource.decorator.cjs',
+];
+
+/** The module a `worker: true` resource is declared in, which its worker imports to read it. */
+function workerModuleOf(metadata: { worker?: unknown }): string | undefined {
+  return metadata.worker ? captureCallerFile(RESOURCE_DECORATOR_BASENAMES) : undefined;
+}
 
 /**
  * Decorator that marks a class as a McpResource module and provides metadata
  */
 function FrontMcpResource(providedMetadata: ResourceMetadata): ClassDecorator {
+  const workerModule = workerModuleOf(providedMetadata);
   return (target: Function) => {
     const metadata = frontMcpResourceMetadataSchema.parse(providedMetadata);
+    if (metadata.worker) registerWorkerResourceClass(target as WorkerResourceClass, metadata, workerModule);
 
     Reflect.defineMetadata(FrontMcpResourceTokens.type, true, target);
 
@@ -49,8 +70,10 @@ function FrontMcpResource(providedMetadata: ResourceMetadata): ClassDecorator {
  * Decorator that marks a class as a McpResourceTemplate module and provides metadata
  */
 function FrontMcpResourceTemplate(providedMetadata: ResourceTemplateMetadata): ClassDecorator {
+  const workerModule = workerModuleOf(providedMetadata);
   return (target: Function) => {
     const metadata = frontMcpResourceTemplateMetadataSchema.parse(providedMetadata);
+    if (metadata.worker) registerWorkerResourceClass(target as WorkerResourceClass, metadata, workerModule);
 
     Reflect.defineMetadata(FrontMcpResourceTemplateTokens.type, true, target);
 
@@ -95,8 +118,10 @@ export type FrontMcpResourceTemplateExecuteHandler = (
 function frontMcpResource<T extends ResourceMetadata>(
   providedMetadata: T,
 ): (handler: FrontMcpResourceExecuteHandler) => () => FrontMcpResourceExecuteHandler {
+  const workerModule = workerModuleOf(providedMetadata);
   return (execute) => {
     const metadata = frontMcpResourceMetadataSchema.parse(providedMetadata);
+    if (metadata.worker) registerWorkerResourceHandler(execute, metadata, workerModule);
     const resourceFunction = function () {
       return execute;
     };
@@ -126,8 +151,10 @@ function frontMcpResource<T extends ResourceMetadata>(
 function frontMcpResourceTemplate<T extends ResourceTemplateMetadata>(
   providedMetadata: T,
 ): (handler: FrontMcpResourceTemplateExecuteHandler) => () => FrontMcpResourceTemplateExecuteHandler {
+  const workerModule = workerModuleOf(providedMetadata);
   return (execute) => {
     const metadata = frontMcpResourceTemplateMetadataSchema.parse(providedMetadata);
+    if (metadata.worker) registerWorkerResourceHandler(execute, metadata, workerModule);
     const resourceFunction = function () {
       return execute;
     };

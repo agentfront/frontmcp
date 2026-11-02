@@ -498,8 +498,12 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       signal: stdio?.signal,
       clientDeclaredRevision: this.state.clientDeclaredRevision !== false,
       // The instructions `initialize` sends: the server's, the channel hint and the skill catalog, for this caller
-      composeInstructions: (caller?: { authInfo?: unknown }) =>
-        composeCallerInstructions(this.scope, { ctx: caller, skillUriHints: true }),
+      composeInstructions: (caller?: { authInfo?: unknown }, clientName?: string) =>
+        composeCallerInstructions(this.scope, {
+          ctx: caller,
+          clientName: clientName ?? this.tryGetContext()?.clientInfo?.name,
+          skillUriHints: true,
+        }),
       notificationSink: sink,
       traceContext: extractTraceContext(meta),
     } satisfies Parameters<typeof dispatch20260728>[0];

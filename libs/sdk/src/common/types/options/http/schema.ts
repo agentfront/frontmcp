@@ -6,6 +6,7 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 import { getEnv } from '@frontmcp/utils';
 
 import type { HttpMethod, ServerRequestHandler } from '../../../interfaces';
+import { HEADER_GLOB_PATTERN, refusedHeadersMatchedBy } from '../../../utils/forward-headers.utils';
 import type { RawZodShape } from '../../common.types';
 import type { CorsOptions, HttpOptionsInterface } from './interfaces';
 
@@ -94,6 +95,24 @@ const securityHeadersSchema = z.object({
     .optional(),
 });
 
+/** A header glob `http.forwardHeaders` keeps, refused when it matches a credential or hop-by-hop header. */
+const forwardHeaderGlobSchema = z
+  .string()
+  .regex(HEADER_GLOB_PATTERN, {
+    message: 'http.forwardHeaders takes a header name or a glob of one, such as "x-acme-*"',
+  })
+  .superRefine((glob, ctx) => {
+    const refused = refusedHeadersMatchedBy(glob);
+    if (refused.length === 0) return;
+    ctx.addIssue({
+      code: 'custom',
+      message:
+        `http.forwardHeaders: "${glob}" matches ${refused.join(', ')}. FrontMCP never forwards ` +
+        'authorization, cookie, proxy-*, hop-by-hop, content-length or client-address (host, forwarded, x-forwarded-*, x-real-ip) ' +
+        'headers; name the application headers to keep instead.',
+    });
+  });
+
 /** The port the HTTP server listens on when `http.port` is not set: `PORT`, else 3000. */
 export const defaultHttpPort = (): number => Number(getEnv('PORT')) || 3000;
 
@@ -167,6 +186,8 @@ export const httpOptionsSchema = z.object({
   routes: z.array(httpRouteSchema).optional(),
   /** Response security headers; see `SecurityHeadersOptions`. */
   securityHeaders: securityHeadersSchema.optional(),
+  /** More request headers to keep in `customHeaders`, besides `x-frontmcp-*`; see `HttpOptionsInterface`. */
+  forwardHeaders: z.array(forwardHeaderGlobSchema).optional(),
 } satisfies RawZodShape<HttpOptionsInterface>);
 
 /**

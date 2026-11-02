@@ -20,6 +20,7 @@ Configure a FrontMCP daemon that listens on a unix socket and uses SQLite for pe
 ```typescript
 // src/main.ts
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({

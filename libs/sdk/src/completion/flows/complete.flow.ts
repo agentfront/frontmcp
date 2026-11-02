@@ -22,6 +22,7 @@ import { availabilityForCall, callSurfaceOf } from '../../common/availability';
 import { runOnSurface } from '../../context/call-surface';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 import { ResolvedEntries } from '../../flows/resolved-entries';
+import { isEntryEnabled } from '../../surface';
 import { hasUIConfig } from '../../tool/ui/ui-shared';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
 
@@ -61,7 +62,7 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'findReference', 'checkPublicAccess', 'checkEntryAuthorities', 'findWidgetTools'],
+  pre: ['parseInput', 'findReference', 'checkEnabled', 'checkPublicAccess', 'checkEntryAuthorities', 'findWidgetTools'],
   execute: ['complete'],
   finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
@@ -207,6 +208,19 @@ export default class CompleteFlow extends FlowBase<typeof name> {
     this.logger.verbose('findReference:done');
   }
 
+  /** A prompt or resource whose `enabled` is off completes nothing, like one `availableWhen` excludes. */
+  @Stage('checkEnabled')
+  async checkEnabled() {
+    const { prompt, resource } = this.state;
+    const context = this.tryGetContext();
+    if (prompt && !(await isEntryEnabled(prompt.metadata.enabled, context, this.logger))) {
+      this.state.set('prompt', undefined);
+    }
+    if (resource && !(await isEntryEnabled(resource.metadata.enabled, context, this.logger))) {
+      this.state.set('resource', undefined);
+    }
+  }
+
   /** The caller's auth info, as the MCP handler passed it in the call context. */
   private get authInfo(): AuthInfo | undefined {
     return (this.input.ctx as { authInfo?: AuthInfo } | undefined)?.authInfo;
@@ -279,7 +293,7 @@ export default class CompleteFlow extends FlowBase<typeof name> {
       for (let page = 0; page < MAX_TOOL_LIST_PAGES; page++) {
         const { tools, nextCursor } = await this.scope.runFlowForOutput('tools:list-tools', {
           request: { method: 'tools/list', params: cursor ? { cursor } : {} },
-          ctx: this.input.ctx,
+          ctx: { ...(this.input.ctx as object), internalCall: true },
         });
         for (const tool of tools) names.add(tool.name);
         if (!nextCursor) break;

@@ -3,6 +3,8 @@
  * @description StreamableHTTP transport implementation for MCP Test Client
  */
 
+import { trimSlashes, trimTrailing } from '@frontmcp/utils';
+
 import type { ClientInfo, ElicitationCreateRequest, ElicitationHandler } from '../client/mcp-test-client.types';
 import type { InterceptorChain } from '../interceptor';
 import { errorMessage, isAbortError, markInterceptedError } from './error-utils';
@@ -793,8 +795,8 @@ export class StreamableHttpTransport implements McpTransport {
     // client's `queryParams`, so appending to it would produce
     // `http://host/?mode=x/mcp` — a request to `/` with a mangled query.
     const url = new URL(this.config.baseUrl);
-    const entry = (this.config.entryPath ?? '').replace(/^\/+|\/+$/g, '');
-    const basePath = url.pathname.replace(/\/+$/, '');
+    const entry = trimSlashes(this.config.entryPath);
+    const basePath = trimTrailing(url.pathname, '/');
     url.pathname = entry ? `${basePath}/${entry}` : `${basePath}/`;
     return url.toString();
   }

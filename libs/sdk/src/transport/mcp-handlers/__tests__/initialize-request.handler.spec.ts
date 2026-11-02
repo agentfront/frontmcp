@@ -681,14 +681,14 @@ describe('initializeRequestHandler', () => {
       expect(second.instructions).toBe('dynamic-instructions-#2');
     });
 
-    it('composes the instructions for the calling context and awaits them (#603)', async () => {
+    it('composes the instructions for the calling context and client name, and awaits them (#603)', async () => {
       const composeInstructions = jest.fn(async (caller?: { authInfo?: unknown }) => `composed for ${String(caller)}`);
       const handler = initializeRequestHandler({ ...handlerOptions, composeInstructions });
       const ctx = createContext();
 
       const result = await handler.handler(createRequest(), ctx as any);
 
-      expect(composeInstructions).toHaveBeenCalledWith(ctx);
+      expect(composeInstructions).toHaveBeenCalledWith(ctx, 'TestClient');
       expect(result.instructions).toBe(`composed for ${String(ctx)}`);
     });
 

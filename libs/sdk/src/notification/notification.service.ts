@@ -170,6 +170,16 @@ function matchCustomMappings(clientName: string, mappings?: PlatformMappingEntry
 function defaultPlatformDetection(identifier: string): AIPlatformType {
   const lowerIdentifier = identifier.toLowerCase();
 
+  // OpenAI Codex sends 'codex-mcp-client' (or 'Codex'); checked before the 'mcp' fallback
+  if (lowerIdentifier.includes('codex')) {
+    return 'codex';
+  }
+
+  // Claude Code sends 'claude-code'; checked before the other Claude clients
+  if (lowerIdentifier.includes('claude-code') || lowerIdentifier.includes('claude code')) {
+    return 'claude-code';
+  }
+
   // OpenAI/ChatGPT clients (includes user-agent like 'openai-mcp/1.0.0')
   if (lowerIdentifier.includes('chatgpt') || lowerIdentifier.includes('openai') || lowerIdentifier.includes('gpt')) {
     return 'openai';

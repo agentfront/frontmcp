@@ -1,6 +1,6 @@
 ---
 name: setup-sqlite
-description: Configure SQLite with WAL mode and optional encryption for local single-instance deployments
+description: Configure SQLite for local deployments, shared by the processes on one machine, with WAL mode and optional encryption
 ---
 
 # Configure SQLite for Local and Single-Instance Deployments
@@ -9,7 +9,8 @@ description: Configure SQLite with WAL mode and optional encryption for local si
 
 ### Must Use
 
-- Your FrontMCP server runs as a single instance with local persistent storage (CLI tools, unix-socket daemons)
+- Your FrontMCP server runs on one machine with local persistent storage (CLI tools, unix-socket daemons)
+- Several processes on one machine (a server per agent or terminal) share state, counters or locks
 - You need session or key-value storage for local development without running external services
 - Your deployment target is a single-process Node.js server on a machine with a local filesystem
 
@@ -22,10 +23,10 @@ description: Configure SQLite with WAL mode and optional encryption for local si
 ### Skip When
 
 - Deploying to serverless (Vercel, Lambda, Cloudflare) where there is no persistent local filesystem -- use `setup-redis` instead
-- Running multiple server instances behind a load balancer -- use `setup-redis` instead
+- Running server instances on more than one machine (behind a load balancer) -- use `setup-redis` instead
 - You need pub/sub for resource subscriptions or real-time event distribution -- use `setup-redis` instead
 
-> **Decision:** Use SQLite for single-instance local storage; switch to `setup-redis` for multi-instance or serverless deployments.
+> **Decision:** Use SQLite for storage on one machine, including several processes sharing a file; switch to `setup-redis` for several machines or serverless deployments.
 
 ## Step 1 -- Install the Native Dependency
 
@@ -197,7 +198,7 @@ sqlite: {
 },
 ```
 
-## Step 3 -- WAL Mode Configuration
+## Step 3 -- Journal Mode, Busy Timeout and Several Processes
 
 WAL (Write-Ahead Logging) mode is enabled by default (`walMode: true`) and is strongly recommended. It provides:
 
@@ -223,6 +224,27 @@ sqlite: {
   walMode: false,
 },
 ```
+
+### Choosing a journal mode
+
+| Mode                                | Readers and the writer                                                                   | Files                                                                                                  | Use it for                                                                |
+| ----------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| WAL (`walMode: true`, default)      | Readers never wait for the writer, and the writer never waits for readers                | `-wal` and `-shm` beside the database while it is open; back it up with `VACUUM INTO`, not a file copy | Almost everything, and any file several processes write to                |
+| Rollback journal (`walMode: false`) | The writer waits for readers to finish before it commits; readers wait during the commit | A `-journal` file only while a write commits                                                           | Mostly-read files with rare writes, or a filesystem without shared memory |
+
+WAL needs a local filesystem: never put a WAL database on NFS, SMB or another network mount. A file once switched to WAL stays in WAL for every process that opens it, so `walMode: false` on one process does not switch it back.
+
+### Several processes on one file
+
+Any number of processes on one machine can open the same file. SQLite lets one process write at a time; FrontMCP keeps that cheap:
+
+- **One connection per file per process.** The stores a process opens on one file (sessions, tasks, elicitation, events, and your own SQLite storage) share a single connection, so a process never waits on its own lock.
+- **Short, atomic writes.** Each write is one short `BEGIN IMMEDIATE` transaction. A conditional set (`ifNotExists`/`ifExists`), `incr`, `deleteIfEquals` and `expireIfEquals` read and write in that one transaction, so counters stay exact and an NX lock has one holder across processes.
+- **Waiting without blocking.** Operations through `createStorage({ type: 'sqlite' })`, `sqliteStorageProvider()` or `SqliteStorageAdapter` run one at a time per process and wait for another process's lock on a timer, so the event loop keeps running; `disconnect()` lets the operations already called finish first. The periodic sweeps of expired keys and events wait the same way. The built-in session, task, elicitation and event stores' own reads and writes still wait synchronously, for at most `busyTimeoutMs`.
+
+### Busy timeout
+
+`busyTimeoutMs` (default `5000`) is how long an operation waits for another process's write lock before it fails with `SQLITE_BUSY`. The wait counts from the call, so while the lock stays held every queued operation fails within `busyTimeoutMs` of its call, not one timeout after another; it restarts each time an earlier operation in the queue gets the lock. Writes hold the lock for one short transaction, so the default covers many writer processes. Raise it when processes hold the lock longer (bulk imports, long transactions) or when dozens of processes write at once; lower it for an interactive tool that should fail fast. When several stores in one process open a file with different values, the longest applies.
 
 ## Step 4 -- How the SDK Builds the SQLite Session Store
 
@@ -288,7 +310,57 @@ const sqlite: SqliteOptionsInput = {
 export default class Server {}
 ```
 
-## Step 5 -- Environment Variables
+## Step 5 -- SQLite Storage in Your Own Code
+
+The same file can hold your own keys, counters and locks. Install `@frontmcp/storage-sqlite`, then either register a provider and read it in tools:
+
+```typescript
+import { FrontMcp, sqliteStorageProvider, SqliteStorageToken, Tool, ToolContext } from '@frontmcp/sdk';
+
+@Tool({ name: 'count_visit', description: 'Count a visit across every process on this machine', inputSchema: {} })
+class CountVisitTool extends ToolContext {
+  async execute() {
+    const storage = this.get(SqliteStorageToken);
+    return { visits: await storage.incr('visits') };
+  }
+}
+
+@FrontMcp({
+  info: { name: 'my-server', version: '0.1.0' },
+  apps: [
+    /* ... */
+  ],
+  providers: [sqliteStorageProvider({ path: '/var/lib/my-server/app.sqlite', prefix: 'app:' })],
+})
+export default class Server {}
+```
+
+or create the storage yourself:
+
+```typescript
+import { createStorage } from '@frontmcp/utils';
+
+const storage = await createStorage({
+  type: 'sqlite',
+  sqlite: { path: '/var/lib/my-server/app.sqlite' },
+  fallback: 'error', // a lock in process memory would not be shared
+});
+await storage.set('lock:reindex', process.pid.toString(), { ifNotExists: true, ttlSeconds: 60 });
+```
+
+| Option (`sqliteStorageProvider` / `createStorage`'s `sqlite`) | Default              | Description                                                       |
+| ------------------------------------------------------------- | -------------------- | ----------------------------------------------------------------- |
+| `path`                                                        | (required)           | The database file; its directory is created if missing            |
+| `walMode`                                                     | `true`               | See [Choosing a journal mode](#choosing-a-journal-mode)           |
+| `busyTimeoutMs`                                               | `5000`               | See [Busy timeout](#busy-timeout)                                 |
+| `ttlCleanupIntervalMs`                                        | `60000`              | How often expired keys are purged; `0` turns the sweep off        |
+| `encryption`                                                  | `undefined`          | `{ secret }` encrypts values at rest (AES-256-GCM)                |
+| `prefix` (provider only)                                      | `''`                 | Prefix for every key the storage reads and writes                 |
+| `provide` (provider only)                                     | `SqliteStorageToken` | Register under another token to hold more than one SQLite storage |
+
+The provider opens the file at boot, fails the boot on an invalid option or a missing `@frontmcp/storage-sqlite` (it never falls back to memory), and disconnects at shutdown; it works in `createContainer()` scripts too. `createStorage` throws `StorageConfigError` for an invalid `sqlite` block whatever its `fallback`; with `fallback: 'memory'` (the default outside production) a missing package falls back to memory with a warning, as the other backends do. The same `{ type: 'sqlite', sqlite: { path } }` works for `throttle.storage` and for plugins that take a `StorageConfig`. SQLite storage has no pub/sub.
+
+## Step 6 -- Environment Variables
 
 Add to your `.env` file:
 
@@ -302,7 +374,7 @@ SQLITE_DB_PATH=~/.frontmcp/data/sessions.sqlite
 
 Confirm `.env` is in `.gitignore`. Never commit credentials.
 
-## Step 6 -- Verify the Setup
+## Step 7 -- Verify the Setup
 
 Start the server:
 
@@ -333,7 +405,7 @@ Inspect the database contents (after at least one session is created):
 
 ```bash
 sqlite3 ~/.frontmcp/data/sessions.sqlite ".tables"
-sqlite3 ~/.frontmcp/data/sessions.sqlite "SELECT key FROM kv_store LIMIT 5;"
+sqlite3 ~/.frontmcp/data/sessions.sqlite "SELECT key FROM kv LIMIT 5;"
 ```
 
 ## Migrating from SQLite to Redis
@@ -409,15 +481,15 @@ The change in `src/main.ts`:
 
 ## Troubleshooting
 
-| Problem                                 | Cause                                                           | Solution                                                                                                                   |
-| --------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `Cannot find module 'better-sqlite3'`   | Native module not installed                                     | Run `yarn add @frontmcp/storage-sqlite better-sqlite3`                                                                     |
-| `Could not locate the bindings file`    | Native compilation failed                                       | Ensure build tools are installed (Xcode CLI on macOS, `build-essential` on Linux), delete `node_modules` and reinstall     |
-| `SQLITE_BUSY` errors                    | Multiple processes accessing the same database file             | Enable WAL mode (`walMode: true`), raise `busyTimeoutMs` (default 5000), or ensure only one process writes to the database |
-| `Failed to persist session to SQLite`   | A session write waited longer than `busyTimeoutMs` for the lock | Raise `busyTimeoutMs`, or use Redis for many writer processes                                                              |
-| `SQLITE_READONLY`                       | Insufficient file permissions                                   | Check write permissions on the database file and its parent directory                                                      |
-| WAL errors on network mount             | WAL mode requires a local filesystem with shared-memory support | Move the database to a local disk or set `walMode: false`                                                                  |
-| Encrypted data unreadable after restart | Encryption secret changed or missing                            | The secret must be identical across restarts; if the original secret is lost, delete the database and let it be recreated  |
+| Problem                                 | Cause                                                           | Solution                                                                                                                      |
+| --------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `Cannot find module 'better-sqlite3'`   | Native module not installed                                     | Run `yarn add @frontmcp/storage-sqlite better-sqlite3`                                                                        |
+| `Could not locate the bindings file`    | Native compilation failed                                       | Ensure build tools are installed (Xcode CLI on macOS, `build-essential` on Linux), delete `node_modules` and reinstall        |
+| `SQLITE_BUSY` errors                    | Another process held the write lock longer than `busyTimeoutMs` | Keep WAL mode on (`walMode: true`), keep transactions short, and raise `busyTimeoutMs` (default 5000)                         |
+| `Failed to persist session to SQLite`   | A session write waited longer than `busyTimeoutMs` for the lock | Raise `busyTimeoutMs`, or use Redis for many writer processes                                                                 |
+| `SQLITE_READONLY`                       | Insufficient file permissions                                   | Check write permissions on the database file and its parent directory                                                         |
+| WAL errors on network mount             | WAL mode requires a local filesystem with shared-memory support | Move the database to a local disk; `walMode: false` only keeps a new file out of WAL, it does not switch an existing one back |
+| Encrypted data unreadable after restart | Encryption secret changed or missing                            | The secret must be identical across restarts; if the original secret is lost, delete the database and let it be recreated     |
 
 ## Examples
 
@@ -426,6 +498,7 @@ The change in `src/main.ts`:
 | [`basic-sqlite-setup`](../examples/setup-sqlite/basic-sqlite-setup.md)             | Basic        | Configure a FrontMCP server with SQLite for local session storage with WAL mode enabled.          |
 | [`encrypted-sqlite-storage`](../examples/setup-sqlite/encrypted-sqlite-storage.md) | Intermediate | Enable AES-256-GCM at-rest encryption for sensitive session data stored in SQLite.                |
 | [`unix-socket-daemon`](../examples/setup-sqlite/unix-socket-daemon.md)             | Advanced     | Configure a FrontMCP daemon that listens on a unix socket and uses SQLite for persistent storage. |
+| [`multi-process-storage`](../examples/setup-sqlite/multi-process-storage.md)       | Intermediate | Share counters and a lock between several local processes through one SQLite file.                |
 
 > See all examples in [`examples/setup-sqlite/`](../examples/setup-sqlite/)
 

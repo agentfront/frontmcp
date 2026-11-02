@@ -1,6 +1,8 @@
 import { type ChildProcess } from 'child_process';
 import * as path from 'path';
 
+import { processTreeSpawnOptions, signalProcessTree, stopProcessTree } from '@frontmcp/utils';
+
 import { resolveConfig, type ResolvedFrontMcpConfig } from '../../config';
 import { serverRuntimeEnv } from '../../config/deployment-env';
 import { absolutizePathOptions, enterConfigRoot } from '../../config/project-root';
@@ -9,7 +11,6 @@ import { type ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
 import { loadDevEnv } from '../../shared/env';
 import { resolveEntry } from '../../shared/fs';
-import { processTreeSpawnOptions, signalProcessTree, stopProcessTree } from '../../shared/process-tree';
 import { projectToolCommand, spawnTool, type ToolCommand } from '../../shared/tool-command';
 import { findNextFreePort, isPortFree, lookupPortOwner } from './port';
 

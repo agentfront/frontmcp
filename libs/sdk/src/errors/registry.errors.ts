@@ -67,6 +67,22 @@ export class ToolNameConflictError extends InternalMcpError {
 }
 
 /**
+ * Thrown at startup, or when a tool is registered at runtime, when a tool alias (`@Tool({ aliases })`) is also a
+ * tool's name or another tool's alias in the server.
+ */
+export class ToolAliasConflictError extends InternalMcpError {
+  readonly conflicts: string[];
+
+  constructor(conflicts: string[]) {
+    super(
+      `Tool alias conflict: ${conflicts.join('; ')}. Give each alias to one tool, and never use a tool's name as one.`,
+      'TOOL_ALIAS_CONFLICT',
+    );
+    this.conflicts = conflicts;
+  }
+}
+
+/**
  * Thrown when an app's id is the owner id server-level entries (`@FrontMcp({ tools, resources })`) are
  * listed under, which would make an app tool and a server tool of the same name indistinguishable.
  */
@@ -108,5 +124,22 @@ export class FlowNotRegisteredError extends InternalMcpError {
 export class UnsupportedHookOwnerKindError extends InternalMcpError {
   constructor(kind: string) {
     super(`Unsupported hook owner kind: "${kind}"`, 'UNSUPPORTED_HOOK_OWNER_KIND');
+  }
+}
+
+/**
+ * Thrown at startup when the `before` / `after` options of the hooks on one stage order each other in a cycle.
+ */
+export class HookOrderCycleError extends InternalMcpError {
+  /** The hooks in the cycle, in the order their constraints chain them, as `name.method`. */
+  readonly hooks: string[];
+
+  constructor(flow: string, type: string, stage: string, hooks: string[]) {
+    super(
+      `The before/after options of the ${type} hooks on '${stage}' of '${flow}' form a cycle: ` +
+        `${[...hooks, hooks[0]].join(' → ')}. Remove one of these constraints.`,
+      'HOOK_ORDER_CYCLE',
+    );
+    this.hooks = hooks;
   }
 }

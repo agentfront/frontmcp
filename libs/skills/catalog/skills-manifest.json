@@ -38,7 +38,7 @@
         },
         {
           "name": "availability",
-          "description": "availableWhen axes (os / runtime / deployment / provider / target / surface / env), missingAxes, isPlatform."
+          "description": "availableWhen axes (os / runtime / deployment / provider / target / surface / env), missingAxes, isPlatform, and enabled (fileSignal, FEATURE_OFF, list_changed, the surface hash, STALE_TOOL_LIST)."
         },
         {
           "name": "decorator-options",
@@ -54,7 +54,7 @@
         },
         {
           "name": "error-handling",
-          "description": "this.fail, MCP error classes, error flow — when to throw vs fail."
+          "description": "this.fail, MCP error classes, refused() and remedies, error flow — when to throw vs fail."
         },
         {
           "name": "execution-context",
@@ -862,6 +862,25 @@
                 "Declaring an upstream provider in top-level `auth.providers` so FrontMCP orchestrates its OAuth flow",
                 "Loading `clientId`/`clientSecret` from environment variables instead of hardcoding",
                 "Reading the downstream provider token in a tool via `this.orchestration.getToken('github')`"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "configure-client-profiles",
+          "description": "Shape answers per MCP client with clients profiles - text, structuredContent or both, resource annotations, and skills instructions",
+          "examples": [
+            {
+              "name": "coding-agent-profiles",
+              "description": "Send coding agents one copy of each answer, and keep numbers out of one client's annotations.",
+              "level": "intermediate",
+              "tags": ["config", "clients", "codex", "claude-code", "structured-content", "metrics"],
+              "features": [
+                "Matching clients by a glob of their `clientInfo.name`, first match wins",
+                "Sending Codex the text content only, with no `outputSchema` in its `tools/list`",
+                "Sending Claude Code `structuredContent` with a one-line summary as the text",
+                "Dropping numeric resource annotations for one client",
+                "Checking the saved bytes with the answer-cost counters on `/metrics`"
               ]
             }
           ]
@@ -1992,12 +2011,13 @@
           "examples": [
             {
               "name": "basic-database-provider",
-              "description": "A provider that manages a database connection pool, bound through `AsyncProvider({ useFactory })` so the pool is opened before any tool runs.",
+              "description": "A provider that manages a database connection pool, bound through `AsyncProvider({ useFactory })` so the pool is opened before any tool runs, and closed in `onShutdown()`.",
               "level": "basic",
               "tags": ["development", "database", "provider"],
               "features": [
                 "Defining a typed token with `Token<T>` using a `Symbol` for DI identification",
                 "Using `AsyncProvider({ provide, name, scope, useFactory })` so async setup completes before tool execution",
+                "Closing the pool in `onShutdown()`, which runs after the requests in flight finish",
                 "Consuming the provider in a tool via `this.get(DB_TOKEN)` with full type safety",
                 "Registering the factory in the `providers` array so tools can resolve it"
               ]
@@ -2009,7 +2029,7 @@
               "tags": ["development", "provider", "config", "api", "providers"],
               "features": [
                 "A configuration provider using `readonly` properties from environment variables (sync construction)",
-                "An API client provider that reads credentials in the constructor (no `onInit` — `@Provider` has no lifecycle hooks)",
+                "An API client provider that reads credentials in the constructor, so a missing one fails startup",
                 "Folder-per-provider layout (`src/apps/main/providers/<slug>/`) with a barrel `index.ts` and a co-located `.provider.spec.ts`",
                 "Top-level `src/apps/main/providers/index.ts` barrel re-exporting each provider folder",
                 "Registering providers at `@FrontMcp` level for server-wide sharing across all apps",
@@ -2245,7 +2265,7 @@
         },
         {
           "name": "official-plugins",
-          "description": "Guide to the 7 official plugins for discovery, memory, auth, caching, flags, monitoring, and WebMCP",
+          "description": "Guide to the 8 official plugins for discovery, memory, auth, caching, flags, monitoring, WebMCP, and large answers",
           "examples": [
             {
               "name": "cache-and-feature-flags",
@@ -2362,6 +2382,16 @@
               ]
             }
           ]
+        },
+        {
+          "name": "result-handles-plugin",
+          "description": "Fold large tool answers into a preview, a shape and a handle, and let the model read slices with result_query",
+          "examples": []
+        },
+        {
+          "name": "offload-cpu-work",
+          "description": "Run CPU-heavy work in a worker-thread pool with this.offload() and @Resource({ worker true }), so the server keeps answering",
+          "examples": []
         }
       ]
     },
@@ -2550,7 +2580,7 @@
               "features": [
                 "Class-as-token DI: `@Provider({ name, scope })` and inject via `this.get(TaskStoreProvider)`",
                 "Building the singleton with `AsyncProvider({ provide, name, scope, useFactory })` for async setup",
-                "Cleanup: explicit `disconnect()` method (called from the host before `server.dispose()`) — `@Provider` has no `onDestroy` hook",
+                "Cleanup: `onShutdown()` quits the Redis client at shutdown, after the requests in flight finish",
                 "Using `@frontmcp/utils` for `randomUUID()` instead of `node:crypto`",
                 "Per-user data isolation using Redis hash keys (`tasks:${userId}`)"
               ]
@@ -2827,7 +2857,7 @@
                 "Setting per-tool TTL via `@Tool({ cache: { ttl } })` metadata in seconds",
                 "Using Redis-backed cache for multi-instance consistency",
                 "Configuring connection pool limits and timeouts to prevent resource exhaustion",
-                "Providers do not implement `onInit` / `onDestroy` — initialize in the constructor and let framework shutdown handle cleanup"
+                "The pool is created in the constructor and drained in `onShutdown()`, which framework shutdown runs"
               ]
             },
             {
@@ -2976,7 +3006,7 @@
               "features": [
                 "Exit code conventions: 0 (success), 1 (user error), 2 (internal error)",
                 "Using stderr for all logging since stdout is the MCP JSON-RPC channel",
-                "Handling EOF on stdin and broken pipe on stdout gracefully",
+                "Relying on the built-in shutdown when stdin ends or the parent exits, and handling a broken pipe on stdout",
                 "Showing helpful error messages for unknown flags instead of stack traces",
                 "Validating file paths to prevent writes to unexpected locations"
               ]
@@ -3011,7 +3041,7 @@
                 "Leaving the Unix socket file to the framework, which removes it on close and replaces a stale one at startup",
                 "Cleaning up the PID file on shutdown",
                 "Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations",
-                "Providers initialize in the constructor — there is no `onInit` / `onDestroy`"
+                "Closing the database in the provider's `onShutdown()`, which the framework's SIGTERM handler runs"
               ]
             },
             {
@@ -3084,7 +3114,7 @@
               "features": [
                 "Connection reuse pattern: caching the connection promise in module scope so it survives Lambda freeze/thaw",
                 "Lazy-loading heavy dependencies (`pg`) via dynamic `import()` on first use, not at module load",
-                "Not closing connections on shutdown for Lambda (they survive freeze/thaw — and providers have no `onDestroy` hook anyway)",
+                "Not closing connections on shutdown for Lambda (they survive freeze/thaw, and a serverless handler never runs `onShutdown()`)",
                 "Keeping module scope lightweight with no heavy initialization"
               ]
             },
@@ -3134,11 +3164,11 @@
             },
             {
               "name": "multi-instance-cleanup",
-              "description": "Shows how multiple SDK instances can coexist without conflicts, and how to clean up timers and listeners — given that `@Provider` classes have **no** `onInit` / `onDestroy` lifecycle hooks. The pattern is: initialize in the constructor, expose a `stop()` method, and register it with `scope.onDispose()` from a factory provider so `server.dispose()` runs it.",
+              "description": "Shows how multiple SDK instances can coexist without conflicts, and how a provider cleans up its timers and listeners: it starts them in `onReady()` and stops them in `onShutdown()`, which `server.dispose()` runs for the providers of that instance only.",
               "level": "advanced",
               "tags": ["production", "sdk", "node", "multi", "instance", "cleanup"],
               "features": [
-                "`stop()` registered with `scope.onDispose()` from a factory provider that injects `ScopeEntry` (since `@Provider` classes have no `onDestroy` lifecycle hook)",
+                "A provider that starts its timer in `onReady()` and stops it in `onShutdown()`, so each `server.dispose()` stops only the timer of its own instance",
                 "Ensuring multiple instances coexist without sharing global state",
                 "Testing that dispose removes all event listeners (no leaks)",
                 "Verifying one instance still works after another is disposed"
@@ -3213,7 +3243,7 @@
               "level": "intermediate",
               "tags": ["production", "vercel", "openapi", "performance", "cold", "start"],
               "features": [
-                "Lazy-loading heavy SDKs via dynamic `import()` on **first use**, not at module scope (and not in a fictional `Provider.onInit`)",
+                "Lazy-loading heavy SDKs via dynamic `import()` on **first use**, not at module scope or in `onBootstrap()`, which both run during the cold start",
                 "Caching expensive fetches (e.g., OpenAPI specs) across warm invocations",
                 "Keeping the module scope lightweight with no side effects",
                 "No `top-level await` and no heavy global initialization or network calls at import time (lightweight module-scope caching of cheap synchronous values like `cachedSpec` is fine)"
@@ -3577,7 +3607,7 @@
         },
         {
           "name": "setup-sqlite",
-          "description": "Configure SQLite with WAL mode and optional encryption for local single-instance deployments",
+          "description": "Configure SQLite for local deployments, shared by the processes on one machine, with WAL mode and optional encryption",
           "examples": [
             {
               "name": "basic-sqlite-setup",
@@ -3601,6 +3631,18 @@
                 "The secret must be at least 32 characters and sourced from environment variables",
                 "The same secret must be used across server restarts to decrypt existing data",
                 "Never hardcode the encryption secret in source code"
+              ]
+            },
+            {
+              "name": "multi-process-storage",
+              "description": "Share counters and a lock between several local processes through one SQLite file.",
+              "level": "intermediate",
+              "tags": ["setup", "sqlite", "storage", "multi-process", "lock", "local"],
+              "features": [
+                "`sqliteStorageProvider()` registers a SQLite-backed storage that tools read with `this.get(SqliteStorageToken)`",
+                "`incr` stays exact and an `ifNotExists` lock has one holder across processes on the same file",
+                "`createStorage({ type: 'sqlite' })` gives scripts and `throttle.storage` the same file",
+                "Waiting for another process's lock does not block the event loop"
               ]
             },
             {
@@ -3630,6 +3672,24 @@
       "bundle": ["recommended", "full"],
       "priority": 10,
       "references": [
+        {
+          "name": "replay-calls",
+          "description": "Record the calls clients make with CallRecorderPlugin, then replay them against a new build with replaySession() or frontmcp test --replay",
+          "examples": [
+            {
+              "name": "record-and-replay",
+              "description": "Record calls against one version of a server with `CallRecorderPlugin`, replay them against the next with `replaySession()`, and assert on what changed.",
+              "level": "intermediate",
+              "tags": ["testing", "replay", "regression", "e2e"],
+              "features": [
+                "Turning on `CallRecorderPlugin` from an env var, so only a recording run writes the JSONL file",
+                "Recording through a real `McpTestClient`, and stopping the server so the last lines are written",
+                "Replaying with `replaySession()` and ignoring volatile fields with `**.` globs",
+                "Asserting on `report.differences` and failing a spec with `toMatchRecording()`"
+              ]
+            }
+          ]
+        },
         {
           "name": "setup-testing",
           "description": "Configure Jest, write unit and E2E tests, and enforce 95%+ coverage for FrontMCP applications",

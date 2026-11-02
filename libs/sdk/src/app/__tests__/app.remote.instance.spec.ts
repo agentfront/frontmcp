@@ -10,7 +10,7 @@
  */
 import 'reflect-metadata';
 
-import { App, type RemoteUrlAppOptions } from '../../common';
+import { App, Tool, ToolContext, type RemoteUrlAppOptions } from '../../common';
 import { frontMcpRemoteAppMetadataSchema } from '../../common/metadata/app.metadata';
 import type { DirectMcpServer } from '../../direct/direct.types';
 import { McpClientService } from '../../remote-mcp/mcp-client.service';
@@ -189,6 +189,33 @@ describe('App.remote()', () => {
       expect(resources.map((r) => r.uri)).toEqual(['test://status']);
       expect(tools.map((t) => t.name)).toEqual(['up:echo']);
       expect(prompts.map((p) => p.name)).toEqual(['up:greeting']);
+    });
+
+    it('skips a remote tool named like a local alias and loads the rest, once per discovery', async () => {
+      @Tool({ name: 'local_echo', aliases: ['up:echo'], inputSchema: {} })
+      class LocalEchoTool extends ToolContext {
+        async execute() {
+          return 'local';
+        }
+      }
+      @App({ id: 'local', name: 'local', tools: [LocalEchoTool] })
+      class LocalApp {}
+
+      discover.mockResolvedValue({
+        ...capabilities,
+        tools: [{ name: 'ping', inputSchema: { type: 'object', properties: {} } }, ...capabilities.tools],
+      });
+      const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
+      server = await FrontMcpInstance.createDirect({
+        info: { name: 'remote-gateway', version: '1.0.0' },
+        apps: [LocalApp, App.remote('http://localhost:65530/mcp', { name: 'upstream', namespace: 'up', cacheTTL: 1 })],
+      });
+
+      expect((await server.listTools()).tools.map((t) => t.name).sort()).toEqual(['local_echo', 'up:ping']);
+      await tick();
+      expect((await server.listTools()).tools.map((t) => t.name).sort()).toEqual(['local_echo', 'up:ping']);
+      expect((await server.listPrompts()).prompts.map((p) => p.name)).toEqual(['up:greeting']);
+      expect(JSON.stringify((await server.callTool('up:echo', {})).content)).toContain('local');
     });
 
     it('drops entries the remote no longer offers after a re-discovery', async () => {

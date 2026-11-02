@@ -25,6 +25,9 @@ function toFixtureDiagnostic(diagnostic: ts.Diagnostic): FixtureDiagnostic {
 }
 
 const fixtureFiles = [
+  'provider-lifecycle-must-compile.ts',
+  'sqlite-storage-must-compile.ts',
+  'process-kit-must-compile.ts',
   'tool-must-fail.ts',
   'prompts-must-compile.ts',
   'hooks-must-compile.ts',
@@ -33,6 +36,13 @@ const fixtureFiles = [
   'skills-must-compile.ts',
   'output-schemas-must-compile.ts',
   'providers-must-compile.ts',
+  'tool-aliases-must-compile.ts',
+  'answer-shaping-must-compile.ts',
+  'call-recorder-must-compile.ts',
+  'hook-ordering-must-compile.ts',
+  'hook-ordering-must-fail.ts',
+  'live-surface-must-compile.ts',
+  'offload-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -99,6 +109,18 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('tool-must-fail.ts'))).toEqual([]);
   });
 
+  it('types the provider lifecycle hooks, the lifecycle option and createContainer()', () => {
+    expect(describeEach(inFixtureFile('provider-lifecycle-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types sqliteStorageProvider() and the storage SqliteStorageToken resolves to', () => {
+    expect(describeEach(inFixtureFile('sqlite-storage-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types the process kit and lifecycle.exitWhenOrphaned', () => {
+    expect(describeEach(inFixtureFile('process-kit-must-compile.ts'))).toEqual([]);
+  });
+
   it('accepts the documented @Prompt forms', () => {
     expect(describeEach(inFixtureFile('prompts-must-compile.ts'))).toEqual([]);
   });
@@ -140,6 +162,45 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types providers without a name, AsyncProvider with and without inject, useValue and symbol or string tokens in every entry point', () => {
     expect(describeEach(inFixtureFile('providers-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types @Tool({ aliases }), refused() and a PublicMcpError remedy', () => {
+    expect(describeEach(inFixtureFile('tool-aliases-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types output.budget, clients profiles, http.forwardHeaders, the budget note and isClientCall() on the call-tool hook ctx', () => {
+    expect(describeEach(inFixtureFile('answer-shaping-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types CallRecorderPlugin.init() options, on an app and on the server, and the CallRecord lines', () => {
+    expect(describeEach(inFixtureFile('call-recorder-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types HookPhase, before / after, appliesTo: all-apps, the hook observers, the hook trace and devtools', () => {
+    expect(describeEach(inFixtureFile('hook-ordering-must-compile.ts'))).toEqual([]);
+  });
+
+  it('rejects an appliesTo, before or after the SDK cannot apply, and a write to HookPhase', () => {
+    expect(describeEach(inFixtureFile('hook-ordering-must-fail.ts'))).toEqual([]);
+  });
+
+  it('fails each hook-ordering-must-fail.ts case once its @ts-expect-error is removed', () => {
+    const mustFail = path.join(fixtureDir, 'hook-ordering-must-fail.ts');
+    const expectedLines = (ts.sys.readFile(mustFail) ?? '')
+      .split('\n')
+      .flatMap((line, index) => (line.includes('// @ts-expect-error') ? [index + 2] : []));
+    const failures = compileFixture(mustFail).diagnostics.filter((diagnostic) => diagnostic.fileName === mustFail);
+
+    expect(expectedLines).toHaveLength(4);
+    expect([...new Set(failures.map(({ location }) => Number(location.split(':').pop())))]).toEqual(expectedLines);
+  });
+
+  it('types enabled as a boolean or an EnabledSource such as fileSignal(), and the surface key', () => {
+    expect(describeEach(inFixtureFile('live-surface-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types this.offload() from the offloaded function, @Resource({ worker }) and the offload option', () => {
+    expect(describeEach(inFixtureFile('offload-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

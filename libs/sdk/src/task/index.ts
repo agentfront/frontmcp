@@ -21,6 +21,7 @@ export {
   type CliTaskRunnerCommand,
   RUN_TASK_SUBCOMMAND,
   RUN_TASK_ENV_VAR,
+  TASK_WORKER_MARKER,
 } from './helpers/cli-task-runner';
 export { isAlive } from './helpers/process-liveness';
 // NOTE: `executeTaskWorker` intentionally NOT re-exported here — it imports
