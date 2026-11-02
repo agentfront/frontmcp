@@ -1,34 +1,12 @@
 import { z as realZ, type ZodTypeAny } from 'zod';
-import type { $ZodMemoizer } from 'zod/v4/core';
 
 import { HEAVY_FACTORIES, LEAF_FACTORIES } from './factories';
 import { LAZY_TARGET, LazyZodSchema, wrapLazy } from './lazy-schema';
 import { createLazyZ, type StandInFactory, type z } from './lazy-z';
+import { withoutRecursionWalk } from './memoizer';
 import { isLazy } from './utils';
 
 const BUILT_WITH_PARENT: unique symbol = Symbol('builtWithParent');
-
-const zodConfig = realZ.config();
-const defaultMemoizer = (realZ as { memoizer?: () => $ZodMemoizer }).memoizer;
-const walklessMemoizers = new WeakMap<$ZodMemoizer, $ZodMemoizer>();
-
-/** Zod's memoizer walks a container's whole subtree on its first parse, which would build every stand-in in it. */
-function withoutRecursionWalk<T>(build: () => T): T {
-  const saved = zodConfig.memoizer;
-  const memoizer = saved ?? defaultMemoizer?.();
-  if (!memoizer) return build();
-  let walkless = walklessMemoizers.get(memoizer);
-  if (!walkless) {
-    walkless = Object.create(memoizer, { attach: { value: () => undefined } }) as $ZodMemoizer;
-    walklessMemoizers.set(memoizer, walkless);
-  }
-  zodConfig.memoizer = walkless;
-  try {
-    return build();
-  } finally {
-    zodConfig.memoizer = saved;
-  }
-}
 
 class InternalLazySchema extends LazyZodSchema {
   readonly [BUILT_WITH_PARENT]: boolean;

@@ -1,6 +1,7 @@
 import type { infer as zInfer, ZodTypeAny } from 'zod';
 
 import { CHAIN_METHODS } from './factories';
+import { withRecursionWalk } from './memoizer';
 
 /**
  * Branded symbol that identifies lazy schemas at runtime.
@@ -47,7 +48,7 @@ export class LazyZodSchema {
   }
 
   protected build(factory: () => ZodTypeAny): ZodTypeAny {
-    return factory();
+    return withRecursionWalk(factory);
   }
 
   /** True once the underlying schema has been constructed. */

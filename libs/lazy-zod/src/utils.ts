@@ -85,7 +85,8 @@ function deepMaterialize(value: unknown, seen: WeakSet<object>): unknown {
       for (let i = 0; i < options.length; i++) options[i] = deepMaterialize(options[i], seen);
     }
     for (const key of CHILD_KEYS) {
-      if (key in def) def[key] = deepMaterialize(def[key], seen);
+      // `.merge()` defines `catchall` as a getter, which an assignment would throw on
+      if (key in def) Reflect.set(def, key, deepMaterialize(def[key], seen));
     }
     const items = def['items'];
     if (Array.isArray(items)) {

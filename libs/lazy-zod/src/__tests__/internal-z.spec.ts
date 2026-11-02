@@ -193,6 +193,12 @@ const chainCases: ChainCase[] = [
     invalid: [{ a: 1 }, { b: 1 }],
   },
   {
+    name: 'merge',
+    build: (Z) => Z.object({ a: Z.string() }).merge(Z.object({ b: Z.number().optional() })),
+    valid: [{ a: 'x' }, { a: 'x', b: 1 }],
+    invalid: [{ b: 1 }, { a: 'x', b: 'y' }],
+  },
+  {
     name: 'catchall',
     build: (Z) => Z.object({ a: Z.string() }).catchall(Z.number()),
     valid: [{ a: 'x', n: 1 }],
@@ -229,6 +235,17 @@ function expectSameResult(internal: realZ.ZodType, eager: realZ.ZodType, input: 
     expect(actual.error?.issues).toEqual(expected.error.issues);
     expect(actual.error?.message).toBe(expected.error.message);
   }
+}
+
+function expectSameJSONSchema(build: (Z: Namespace) => realZ.ZodType): void {
+  let expected: unknown;
+  try {
+    expected = realZ.toJSONSchema(build(realZ));
+  } catch (error) {
+    expect(() => toJSONSchema(build(internalZ))).toThrow((error as Error).message);
+    return;
+  }
+  expect(toJSONSchema(build(internalZ))).toEqual(expected);
 }
 
 describe('public z', () => {
@@ -280,15 +297,7 @@ describe('internalZ', () => {
     });
 
     it('converts to the same JSON Schema', () => {
-      const eager = build(realZ);
-      let expected: unknown;
-      try {
-        expected = toJSONSchema(eager);
-      } catch (error) {
-        expect(() => toJSONSchema(build(internalZ))).toThrow((error as Error).message);
-        return;
-      }
-      expect(toJSONSchema(build(internalZ))).toEqual(expected);
+      expectSameJSONSchema(build);
     });
   });
 
@@ -297,6 +306,10 @@ describe('internalZ', () => {
       const internal = build(internalZ);
       const eager = build(realZ);
       for (const input of [...valid, ...invalid]) expectSameResult(internal, eager, input);
+    });
+
+    it('converts to the same JSON Schema', () => {
+      expectSameJSONSchema(build);
     });
   });
 
@@ -358,6 +371,79 @@ describe('internalZ', () => {
       .pick({ a: true });
     expect(() => broken.parse({ a: 'x' })).toThrow('.pick() cannot be used on object schemas containing refinements');
     expect(realZ.config().memoizer).toBe(before);
+  });
+
+  describe.each([
+    [
+      '.merge()',
+      (node: realZ.ZodType) => internalZ.object({ extra: internalZ.string().optional() }).merge(node as never),
+    ],
+    ['record()', (node: realZ.ZodType) => internalZ.record(internalZ.string(), node)],
+    [
+      'discriminatedUnion()',
+      (node: realZ.ZodType) =>
+        internalZ.discriminatedUnion('kind', [internalZ.object({ kind: internalZ.literal('leaf') }), node as never]),
+    ],
+  ])('a schema of the caller’s that %s builds along with its own', (_method, embed) => {
+    it('keeps Zod’s memoizer, so it still parses a cyclic input', () => {
+      type Node = { kind: 'node'; next?: Node };
+      const node: realZ.ZodType<Node> = z.object({
+        kind: z.literal('node'),
+        get next(): realZ.ZodOptional<realZ.ZodType<Node>> {
+          return node.optional();
+        },
+      });
+      embed(node).safeParse({ kind: 'node' });
+
+      const cyclic: Node = { kind: 'node' };
+      cyclic.next = cyclic;
+      const parsed = node.parse(cyclic);
+      expect(parsed.next).toBe(parsed);
+    });
+  });
+
+  it('keeps Zod’s memoizer for a schema from another copy of lazy-zod, built along with its own', () => {
+    type Node = { kind: 'node'; next?: Node };
+    let otherZ: Namespace = z;
+    jest.isolateModules(() => {
+      otherZ = jest.requireActual<typeof import('../index')>('../index').z;
+    });
+    expect(otherZ).not.toBe(z);
+    const node: realZ.ZodType<Node> = otherZ.object({
+      kind: otherZ.literal('node'),
+      get next(): realZ.ZodOptional<realZ.ZodType<Node>> {
+        return node.optional();
+      },
+    });
+    internalZ.record(internalZ.string(), node).safeParse({});
+
+    const cyclic: Node = { kind: 'node' };
+    cyclic.next = cyclic;
+    const parsed = node.parse(cyclic);
+    expect(parsed.next).toBe(parsed);
+  });
+
+  it('builds around the memoizer Zod attaches to every container', () => {
+    realZ.object({});
+    const memoizer = realZ.config().memoizer;
+    expect(memoizer).toBe(realZ.memoizer());
+    expect(typeof memoizer?.attach).toBe('function');
+  });
+
+  it('builds with whatever Zod does when Zod has no memoizer to swap', () => {
+    jest.isolateModules(() => {
+      jest.doMock('zod', () => {
+        const actual = jest.requireActual<typeof import('zod')>('zod');
+        return { ...actual, z: { ...actual.z, memoizer: undefined, config: () => ({}) } };
+      });
+      const { internalZ: withoutMemoizer } = jest.requireActual<typeof import('../internal-z')>('../internal-z');
+      const schema = withoutMemoizer.object({
+        name: withoutMemoizer.string(),
+        auth: withoutMemoizer.object({ issuer: withoutMemoizer.url() }).optional(),
+      });
+      expect(schema.parse({ name: 'a' })).toEqual({ name: 'a' });
+      expect(schema.safeParse({ name: 'a', auth: { issuer: 'x' } }).success).toBe(false);
+    });
   });
 
   it('answers introspection like the schema it stands for', () => {
