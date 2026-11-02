@@ -2977,7 +2977,7 @@
               "features": [
                 "Exit code conventions: 0 (success), 1 (user error), 2 (internal error)",
                 "Using stderr for all logging since stdout is the MCP JSON-RPC channel",
-                "Handling EOF on stdin and broken pipe on stdout gracefully",
+                "Relying on the built-in shutdown when stdin ends or the parent exits, and handling a broken pipe on stdout",
                 "Showing helpful error messages for unknown flags instead of stack traces",
                 "Validating file paths to prevent writes to unexpected locations"
               ]

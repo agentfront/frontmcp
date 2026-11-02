@@ -1,7 +1,11 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { getHostname } from '@frontmcp/utils';
 
 import type { TaskRecord } from '../../task.types';
-import { CliTaskRunner } from '../cli-task-runner';
+import { CliTaskRunner, RUN_TASK_SUBCOMMAND, TASK_WORKER_MARKER } from '../cli-task-runner';
 
 const WORKER_PID = 4242;
 
@@ -74,5 +78,36 @@ describe('CliTaskRunner.run', () => {
         executor: expect.objectContaining({ host: 'cli', pid: expect.any(Number), hostname: getHostname() }),
       }),
     );
+  });
+
+  it('spawns the worker as owned by this process, so an orphaned worker can be reaped', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'cli-task-runner-'));
+    const seen = join(directory, 'seen.json');
+    const script = `require('fs').writeFileSync(${JSON.stringify(seen)}, JSON.stringify({ argv: process.argv.slice(1), owner: process.env.FRONTMCP_OWNER, taskId: process.env.FRONTMCP_RUN_TASK_ID }))`;
+    const runner = new CliTaskRunner({
+      store: { update: jest.fn(async () => null) } as never,
+      command: { exe: process.execPath, args: ['-e', script] },
+    });
+    try {
+      await runner.run(runningTask(undefined), { cleanedRequestParams: {}, ctx: {} });
+      const deadline = Date.now() + 10_000;
+      let written: string | undefined;
+      while (!written && Date.now() < deadline) {
+        try {
+          written = readFileSync(seen, 'utf8');
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      }
+
+      expect(TASK_WORKER_MARKER).toBe('frontmcp-task');
+      expect(JSON.parse(written ?? '{}')).toEqual({
+        argv: [RUN_TASK_SUBCOMMAND, 'task-cancel', `--frontmcp-owner=frontmcp-task:${process.pid}`],
+        owner: `frontmcp-task:${process.pid}`,
+        taskId: 'task-cancel',
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });

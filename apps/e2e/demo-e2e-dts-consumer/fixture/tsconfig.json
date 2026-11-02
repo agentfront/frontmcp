@@ -13,6 +13,7 @@
   "files": [
     "provider-lifecycle-must-compile.ts",
     "sqlite-storage-must-compile.ts",
+    "process-kit-must-compile.ts",
     "tool-must-fail.ts",
     "prompts-must-compile.ts",
     "hooks-must-compile.ts",

@@ -82,6 +82,29 @@ export {
 } from './fs';
 export type { FileWatcherHandle } from './fs';
 
+// Process supervision (Node.js only): process trees, owned children, orphan reaping, parent and path watchers
+export {
+  processTreeSpawnOptions,
+  signalProcessTree,
+  isProcessTreeAlive,
+  stopProcessTree,
+  spawnOwned,
+  reapOrphans,
+  OwnedProcessError,
+  watchParent,
+  watchPath,
+} from './process';
+export type {
+  ProcessTreeDeps,
+  SpawnOwnedOptions,
+  OwnedProcess,
+  ReapOrphansOptions,
+  ParentGoneReason,
+  ProcessWatcher,
+  WatchParentOptions,
+  WatchPathOptions,
+} from './process';
+
 // Escape utilities (HTML, JS, XSS prevention)
 export { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJsonForScript } from './escape';
 

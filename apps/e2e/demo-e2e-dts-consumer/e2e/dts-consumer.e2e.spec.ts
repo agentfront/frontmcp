@@ -27,6 +27,7 @@ function toFixtureDiagnostic(diagnostic: ts.Diagnostic): FixtureDiagnostic {
 const fixtureFiles = [
   'provider-lifecycle-must-compile.ts',
   'sqlite-storage-must-compile.ts',
+  'process-kit-must-compile.ts',
   'tool-must-fail.ts',
   'prompts-must-compile.ts',
   'hooks-must-compile.ts',
@@ -107,6 +108,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types sqliteStorageProvider() and the storage SqliteStorageToken resolves to', () => {
     expect(describeEach(inFixtureFile('sqlite-storage-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types the process kit and lifecycle.exitWhenOrphaned', () => {
+    expect(describeEach(inFixtureFile('process-kit-must-compile.ts'))).toEqual([]);
   });
 
   it('accepts the documented @Prompt forms', () => {

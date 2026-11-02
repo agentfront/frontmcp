@@ -132,6 +132,10 @@ The most common transport. The MCP client spawns your server as a child process 
   see `protocol-versions`
 - **Stdio binds no TCP port** — the HTTP server is disabled, so multiple stdio
   instances of the same server run without an `EADDRINUSE` conflict
+- **No orphans** — when stdin ends (the client closed it or exited) or the parent
+  process exits, the server runs its graceful shutdown (providers' `onShutdown()`
+  included) and exits 0, as on `SIGTERM`. The parent is checked once a second.
+  `lifecycle: { exitWhenOrphaned: false }` turns this off
 
 ### npx (published npm package)
 

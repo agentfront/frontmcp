@@ -1,4 +1,11 @@
+import { watchParent, type ParentGoneReason } from '@frontmcp/utils';
+
 const SHUTDOWN_SIGNALS = ['SIGTERM', 'SIGINT'] as const;
+
+const ORPHANED_MESSAGES: Record<ParentGoneReason, string> = {
+  'parent-exited': 'The parent process exited; shutting down',
+  'stdin-ended': 'stdin ended; shutting down',
+};
 
 export const DEFAULT_SHUTDOWN_DEADLINE_MS = 10_000;
 
@@ -16,15 +23,18 @@ export interface ShutdownSignalOptions {
   target?: SignalTarget;
   /** How long the shutdown may take before the process exits with code 1. */
   deadlineMs?: number;
-  logger?: { error(message: string, error?: unknown): void };
+  logger?: { error(message: string, error?: unknown): void; info?(message: string): void };
+  /** Also shut down when the parent process exits or, when given, `stdin` ends (`lifecycle.exitWhenOrphaned`). */
+  whenOrphaned?: { stdin?: NodeJS.ReadableStream };
 }
 
 /**
  * On SIGTERM or SIGINT, run `shutdown` once and exit: code 0 when it completes, 1 when it fails
  * or outlasts the deadline (#712). The deadline timer is ref'd, so the process stays up while
- * the shutdown runs even after the server stops listening.
+ * the shutdown runs even after the server stops listening. With `whenOrphaned`, the parent
+ * exiting (or stdin ending) does the same.
  *
- * @returns A function that removes the signal listeners
+ * @returns A function that removes the signal listeners and stops watching the parent
  */
 export function exitOnShutdownSignals(shutdown: () => Promise<void>, options: ShutdownSignalOptions = {}): () => void {
   const target = options.target ?? process;
@@ -49,7 +59,17 @@ export function exitOnShutdownSignals(shutdown: () => Promise<void>, options: Sh
   };
 
   for (const signal of SHUTDOWN_SIGNALS) target.on(signal, onSignal);
+  const watcher =
+    options.whenOrphaned &&
+    watchParent({
+      stdin: options.whenOrphaned.stdin,
+      onGone: (reason) => {
+        options.logger?.info?.(ORPHANED_MESSAGES[reason]);
+        onSignal();
+      },
+    });
   return () => {
+    watcher?.close();
     for (const signal of SHUTDOWN_SIGNALS) target.removeListener(signal, onSignal);
   };
 }

@@ -37,25 +37,26 @@ await storage.get('ticket:T-1'); // 'open'
 
 ## What's in it
 
-| Area             | Exports                                                                                                                                                                   |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Naming           | `splitWords`, `toCase`, `shortHash`, `ensureMaxLen`, `idFromString`                                                                                                       |
-| URIs             | `isValidMcpUri`, `extractUriScheme`, `parseUriTemplate`, `matchUriTemplate`, `expandUriTemplate`, `extractTemplateParams` (RFC 3986 URIs, RFC 6570 templates)             |
-| Paths            | `trimSlashes`, `joinPath`, and cross-platform `pathJoin`, `pathResolve`, `basename`, `dirname`, `extname`                                                                 |
-| Content          | `sanitizeToJson`, `inferMimeType`, `safeStringify`                                                                                                                        |
-| HTTP             | `validateBaseUrl`, `buildSetCookie`, `parseCookies`, `getCookie`, `isLocalhost`, `isSecureRequest`                                                                        |
-| Network          | `classifyIpAddress`, `parseIpv4`, `expandIpv6`, `isRedirectResponse`, for SSRF (server-side request forgery) checks                                                       |
-| Escaping         | `escapeHtml`, `escapeHtmlAttr`, `escapeJsString`, `safeJsonForScript`                                                                                                     |
-| Crypto           | `sha256`, `sha256Hex`, `hmacSha256`, `hkdfSha256`, `encryptAesGcm`, `decryptAesGcm`, `randomBytes`, `randomUUID`, `timingSafeEqual`, `base64urlEncode`, `base64urlDecode` |
-| PKCE             | `generateCodeVerifier`, `generateCodeChallenge`, `verifyCodeChallenge`, `generatePkcePair` (RFC 7636)                                                                     |
-| Encryption, keys | `encryptValue`, `decryptValue`, `signData`, `verifyData`, `KeyPersistence`, `createKeyPersistence`                                                                        |
-| Storage          | `createStorage`, `createMemoryStorage`, `TypedStorage`, `EncryptedTypedStorage`, and adapters for memory, Redis, Vercel KV, Upstash and the file system                   |
-| File system      | `readFile`, `writeFile`, `mkdir`, `stat`, `fileExists`, `readJSON`, `writeJSON`, `ensureDir`, `isDirEmpty`, `runCmd` and more. Node.js only; `fs` loads on first use.     |
-| Environment      | `getEnv`, `isProduction`, `isDevelopment`, `isEdgeRuntime`, `isServerless`, `getRuntimeContext`, `isNode`, `isBrowser`                                                    |
-| Context, events  | `AsyncLocalStorage`, `EventEmitter`, both with browser builds                                                                                                             |
-| Safe regex       | `isPatternSafe`, `createSafeRegExp`, `safeTest`, `safeMatch`, `safeReplace`, against ReDoS (regular expression denial of service)                                         |
-| Model tool calls | `processPlatformToolCalls`, which passes OpenAI, Claude or Vercel AI tool calls to your `callTool` function and returns the results in that platform's format             |
-| Machine ID       | `getMachineId`, `setMachineIdOverride`, `getHostname`                                                                                                                     |
+| Area             | Exports                                                                                                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Naming           | `splitWords`, `toCase`, `shortHash`, `ensureMaxLen`, `idFromString`                                                                                                                 |
+| URIs             | `isValidMcpUri`, `extractUriScheme`, `parseUriTemplate`, `matchUriTemplate`, `expandUriTemplate`, `extractTemplateParams` (RFC 3986 URIs, RFC 6570 templates)                       |
+| Paths            | `trimSlashes`, `joinPath`, and cross-platform `pathJoin`, `pathResolve`, `basename`, `dirname`, `extname`                                                                           |
+| Content          | `sanitizeToJson`, `inferMimeType`, `safeStringify`                                                                                                                                  |
+| HTTP             | `validateBaseUrl`, `buildSetCookie`, `parseCookies`, `getCookie`, `isLocalhost`, `isSecureRequest`                                                                                  |
+| Network          | `classifyIpAddress`, `parseIpv4`, `expandIpv6`, `isRedirectResponse`, for SSRF (server-side request forgery) checks                                                                 |
+| Escaping         | `escapeHtml`, `escapeHtmlAttr`, `escapeJsString`, `safeJsonForScript`                                                                                                               |
+| Crypto           | `sha256`, `sha256Hex`, `hmacSha256`, `hkdfSha256`, `encryptAesGcm`, `decryptAesGcm`, `randomBytes`, `randomUUID`, `timingSafeEqual`, `base64urlEncode`, `base64urlDecode`           |
+| PKCE             | `generateCodeVerifier`, `generateCodeChallenge`, `verifyCodeChallenge`, `generatePkcePair` (RFC 7636)                                                                               |
+| Encryption, keys | `encryptValue`, `decryptValue`, `signData`, `verifyData`, `KeyPersistence`, `createKeyPersistence`                                                                                  |
+| Storage          | `createStorage`, `createMemoryStorage`, `TypedStorage`, `EncryptedTypedStorage`, and adapters for memory, Redis, Vercel KV, Upstash and the file system                             |
+| File system      | `readFile`, `writeFile`, `mkdir`, `stat`, `fileExists`, `readJSON`, `writeJSON`, `ensureDir`, `isDirEmpty`, `runCmd` and more. Node.js only; `fs` loads on first use.               |
+| Processes        | `spawnOwned`, `reapOrphans` (POSIX `ps`; nothing on Windows), `watchParent`, `watchPath`, `stopProcessTree`, `signalProcessTree`. Node.js only; `child_process` loads on first use. |
+| Environment      | `getEnv`, `isProduction`, `isDevelopment`, `isEdgeRuntime`, `isServerless`, `getRuntimeContext`, `isNode`, `isBrowser`                                                              |
+| Context, events  | `AsyncLocalStorage`, `EventEmitter`, both with browser builds                                                                                                                       |
+| Safe regex       | `isPatternSafe`, `createSafeRegExp`, `safeTest`, `safeMatch`, `safeReplace`, against ReDoS (regular expression denial of service)                                                   |
+| Model tool calls | `processPlatformToolCalls`, which passes OpenAI, Claude or Vercel AI tool calls to your `callTool` function and returns the results in that platform's format                       |
+| Machine ID       | `getMachineId`, `setMachineIdOverride`, `getHostname`                                                                                                                               |
 
 ## Related packages
 

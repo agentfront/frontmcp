@@ -16,6 +16,8 @@ Checklist for deploying FrontMCP as a long-running local MCP server managed by t
 - [ ] `frontmcp restart <name>` works without orphaned processes
 - [ ] `frontmcp status` shows the daemon as running
 - [ ] `frontmcp logs <name> --follow` streams daemon output
+- [ ] A daemon that must not outlive the process that started it sets `lifecycle: { exitWhenOrphaned: true }`: it then shuts down gracefully when its parent exits. Off by default for `runUnixSocket()` and the HTTP server, since a detached daemon outlives its launcher
+- [ ] Background task workers (`tasks.runner: 'cli'`) carry the owner mark `TASK_WORKER_MARKER` (`@frontmcp/sdk`): `reapOrphans(TASK_WORKER_MARKER)` (`@frontmcp/utils`) stops the ones whose server is gone (POSIX `ps`; does nothing on Windows)
 
 ## Socket / Transport
 
