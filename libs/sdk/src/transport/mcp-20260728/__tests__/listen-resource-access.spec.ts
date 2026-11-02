@@ -17,6 +17,7 @@ import {
 import { App, Resource, ResourceContext, Tool, ToolContext } from '../../../common';
 import { MaterializedResourceContext } from '../../../resource/materialized/materialized-resource.context';
 import { resourceStore } from '../../../resource/materialized/resource-store';
+import { MAX_RESOURCE_SUBSCRIPTIONS } from '../../flows/handle.mcp-20260728.flow';
 
 const store = resourceStore({ coalesceMs: 0 });
 const board = store.key<{ open: number }>('board', { initial: { open: 0 } });
@@ -161,6 +162,37 @@ describe('a subscriptions/listen stream and resource access', () => {
     await board.set({ open: 0 });
     await cancelled;
     controller.abort();
+  });
+
+  it('checks a URI requested twice once, and acknowledges it once', async () => {
+    const controller = new AbortController();
+    const subscribe = jest.spyOn(server.instance.getScopes()[0], 'runFlow');
+    const reader = (await listen(server, ['notes://today', 'notes://today'], controller.signal)).body?.getReader();
+    if (!reader) throw new Error('no stream');
+    const [acknowledgement] = await collect(reader, (messages) => messages.length === 1);
+
+    expect((acknowledgement['params'] as { notifications: unknown }).notifications).toEqual({
+      resourceSubscriptions: ['notes://today'],
+    });
+    expect(subscribe.mock.calls.filter(([flow]) => flow === 'resources:subscribe')).toHaveLength(1);
+    subscribe.mockRestore();
+    const cancelled = reader.cancel();
+    await rpc20260728(server.handler, 'tools/call', { name: 'touch', arguments: { uri: 'notes://today' } });
+    await cancelled;
+    controller.abort();
+  });
+
+  it(`refuses more than ${MAX_RESOURCE_SUBSCRIPTIONS} resource subscriptions in one request, before checking any`, async () => {
+    const subscribe = jest.spyOn(server.instance.getScopes()[0], 'runFlow');
+    const uris = Array.from({ length: MAX_RESOURCE_SUBSCRIPTIONS + 1 }, (_, index) => `notes://today/${index}`);
+
+    const response = await listen(server, uris, new AbortController().signal);
+    const body = (await response.json()) as { error?: { code: number; message: string } };
+
+    expect(body.error).toMatchObject({ code: -32602 });
+    expect(body.error?.message).toContain(`at most ${MAX_RESOURCE_SUBSCRIPTIONS}`);
+    expect(subscribe.mock.calls.filter(([flow]) => flow === 'resources:subscribe')).toHaveLength(0);
+    subscribe.mockRestore();
   });
 
   it('acknowledges only the resources the caller may read, and sends only their updates', async () => {
