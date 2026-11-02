@@ -126,6 +126,11 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
 
   logger = this.scopeLogger.child('ReadResourceFlow');
 
+  /** The URI the read asks for. */
+  get uri(): string {
+    return (this.state.input ?? this.input.request.params).uri;
+  }
+
   @Stage('parseInput')
   async parseInput() {
     this.logger.verbose('parseInput:start');

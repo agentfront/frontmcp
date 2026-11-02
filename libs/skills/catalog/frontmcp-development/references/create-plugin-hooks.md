@@ -57,7 +57,7 @@ const { Stage, Will, Did, Around, Finally } = FlowHooksOf('tools:call-tool');
 A stage runs its `@Will` hooks, then its body (wrapped by its `@Around` hooks), then its `@Did` hooks, then its `@Finally` hooks.
 
 - `@Did` runs only when the stage succeeded. When a `@Will` hook, the body or an `@Around` hook fails, the stage's `@Did` hooks are skipped. So a `@Did` hook that closes what a `@Will` hook opened (a span, a timer, a lock) leaks it on every failure.
-- `@Finally` runs after the stage on every outcome: when it succeeded or responded, when it failed, when a `@Will` hook failed or responded in its place, when an `@Around` hook failed, and when `finalize` refused an answer the tool's output schema rejects (`InvalidOutputError`). Read the failure from `ctx.state.flowError`: the first error the run failed with (what a stage or hook threw or passed to `ctx.fail()`; a `FlowControl.abort(reason)` reads as `Flow aborted: <reason>`), typed on `tools:call-tool`, `resources:read-resource`, `prompts:get-prompt` and `jobs:execute-job`.
+- `@Finally` runs after the stage on every outcome: when it succeeded or responded, when it failed, when a `@Will` hook failed or responded in its place, when an `@Around` hook failed, and when `finalize` refused an answer the tool's output schema rejects (`InvalidOutputError`). Read the failure from `ctx.error`: the first error the run failed with (what a stage or hook threw or passed to `ctx.fail()`; a `FlowControl.abort(reason)` reads as `Flow aborted: <reason>`), `undefined` while the run has none. `ctx.error` reads `ctx.state.flowError`, which the state types only on `tools:call-tool`, `resources:read-resource`, `prompts:get-prompt` and `jobs:execute-job`; `ctx.error` is typed on every flow.
 - A `@Finally` hook cannot change the outcome. If it calls `ctx.respond()` or `ctx.fail()`, or throws, the flow logs a warning and goes on as if it had not: the client gets the same answer or the same error, the values the hook set on `ctx.state` before it responded, failed or threw are put back (a job's answer, for one; an object it changed in place is not), and the stage's other `@Finally` hooks still run. A `@Finally` hook that returns normally keeps what it set on `ctx.state`, like any other hook: on `jobs:execute-job`, setting `state.answer` before `updateRunState` changes the result the run records and returns.
 - `@Finally` hooks of one stage run in `priority` order, like every other hook. A stage the flow never reaches (because an earlier stage failed) runs none of its hooks, `@Finally` included: hook `finalize` to see the end of every call.
 
@@ -79,13 +79,13 @@ export class ExecuteTimerPlugin {
   stop(ctx: FlowCtxOf<'tools:call-tool'>) {
     const startedAt = this.startedAt.get(ctx);
     if (startedAt === undefined) return;
-    const outcome = ctx.state.flowError ? `failed: ${ctx.state.flowError.message}` : 'succeeded';
+    const outcome = ctx.error ? `failed: ${ctx.error.message}` : 'succeeded';
     ctx.logger.info(`execute ${outcome} in ${Date.now() - startedAt}ms`);
   }
 }
 ```
 
-Up to 1.10.15 there was no `@Finally`: a failure in `finalize` (an output schema refusing the answer) skipped the stage's `@Did` hooks and left `state.flowError` unset.
+Up to 1.10.15 there was no `@Finally`: a failure in `finalize` (an output schema refusing the answer) skipped the stage's `@Did` hooks and left `state.flowError` unset. `ctx.error` is new in 1.10.16.
 
 ### What `@Stage` Does
 
@@ -199,7 +199,7 @@ const reportCacheProvider = {
 export class CacheWarmerPlugin {}
 ```
 
-Listing the provider in `exports` too lets the app's tools resolve the cache with `this.get(ReportCache)`; `exports` takes provider definitions, not bare tokens. Inside a tool, resource or prompt, the scope itself is `this.scope`. Inside a flow hook, resolve it with `ctx.get(ScopeEntry)` (for example `ctx.get(ScopeEntry).apps.getApps()` in a server-scoped plugin): the flow's own `scope` is protected. See [Scope lifecycle hooks](https://frontmcp.dev/reference/sdk/scope).
+Listing the provider in `exports` too lets the app's tools resolve the cache with `this.get(ReportCache)`; `exports` takes provider definitions, not bare tokens. Inside a tool, resource or prompt, the scope itself is `this.scope`. Inside a flow hook, resolve it with `ctx.get(ScopeEntry)` (for example `ctx.get(ScopeEntry).apps.getApps()` in a server-scoped plugin): the flow's own `scope` is protected. To tell clients a list changed, a hook calls `ctx.notify.listChanged('tools')` (see [What a Hook Receives](#what-a-hook-receives)). See [Scope lifecycle hooks](https://frontmcp.dev/reference/sdk/scope).
 
 ## Pre-Built Hook Type Exports
 
@@ -248,6 +248,8 @@ The main stages of the `tools:call-tool` flow, in order (the full list is under 
 
 A hook method on a plugin or provider receives the running flow as its first argument; type it `FlowCtxOf<'<flow-name>'>`. An `@Around` hook also receives `next`. `this` is the plugin or provider instance.
 
+The decorator checks that parameter against the flow it hooks. `FlowCtxOf<'<flow-name>'>`, a structural subset of it (`ctx: { toolName: string }`), `unknown`, or no parameter compiles. A parameter with a property the flow does not have (or keeps protected, such as `input` or `scope`), a property of the wrong type, the ctx of another flow, or a second parameter on a hook other than `@Around` fails to compile, with `TS1241: Unable to resolve signature of method decorator when called as an expression` and a last line naming the property, such as `Property 'notAField' is missing in type 'CallToolFlow'`. Up to 1.10.15 the decorators did not check the parameter: a hook typed `ctx: { toolName: string }` compiled, read `undefined` and silently never matched. A hook decorator is a `FlowHookDecorator`, not a `MethodDecorator`: a helper that returns one leaves its return type inferred.
+
 | Member            | Description                                                                                                                                             |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `state`           | The flow's state, typed per flow: read `ctx.state.tool` (or `ctx.state.required.tool`, which throws when unset), write with `ctx.state.set(key, value)` |
@@ -256,8 +258,55 @@ A hook method on a plugin or provider receives the running flow as its first arg
 | `get(token)`      | Resolves a provider registered on the server, or a context-scoped provider of the current call                                                          |
 | `respond(output)` | Ends the flow with this output (ignored in a `@Finally` hook)                                                                                           |
 | `fail(error)`     | Ends the flow with this error (an `Error`, such as an MCP error class; ignored in a `@Finally` hook)                                                    |
+| `request`         | The request the run serves: `sessionId`, `clientInfo`, `metadata`, `protocol` (see below); each `undefined` when the run has none                       |
+| `notify`          | `notify.listChanged('tools' \| 'resources' \| 'prompts')` sends `notifications/<kind>/list_changed` to every connected session                          |
+| `error`           | The first failure of the run (`state.flowError`), for the stages and `@Finally` hooks after it; `undefined` while the run has none                      |
 
-The flow has no `toolName`, `elapsed` or `tryGet`, and its `input` is protected. In `tools:call-tool`, read the tool name and arguments from `ctx.state.required.input` (`name`, `arguments`), the tool entry from `ctx.state.tool`, and the tool instance from `ctx.state.toolContext` (set from `createToolCallContext` on). The state accepts only the keys the flow declares: `ctx.state.set('startedAt', Date.now())` does not compile.
+The entry flows also name their entry:
+
+| Flow                      | Member       | Description                                                                                                                          |
+| ------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `tools:call-tool`         | `toolName`   | The tool's name (its `id`, else its `name`) once `findTool` resolved it, else the name the call asks for                             |
+| `tools:call-tool`         | `toolInput`  | The arguments the call passes to the tool (`state.input.arguments`, as `@Will` hooks left them), before its input schema parses them |
+| `resources:read-resource` | `uri`        | The URI the read asks for                                                                                                            |
+| `prompts:get-prompt`      | `promptName` | The prompt's name: the one `findPrompt` resolved, else the name the request asks for                                                 |
+
+`ctx.request` holds:
+
+- `sessionId`: the session the server verified for the request; `undefined` for a request without one (the stateless transports, MCP 2026-07-28, an `mcp-session-id` the server did not accept).
+- `clientInfo`: the client's `name` and `version`, sent with the request (MCP 2026-07-28 `_meta`) or at its session's `initialize`.
+- `metadata`: the request's `userAgent`, `contentType`, `accept`, `clientIp` and `customHeaders` (its `x-frontmcp-*` headers).
+- `protocol`: the transport the session was opened over (`'streamable-http'`, `'legacy-sse'`, ...), when the session records it; an anonymous session (`auth.mode: 'public'`) does not.
+
+The flow has no `elapsed` or `tryGet`, and its `input`, `scope` and `tryGetContext()` are protected: read the request through `ctx.request`. In `tools:call-tool`, the tool entry is `ctx.state.tool` (set by `findTool`) and the tool instance `ctx.state.toolContext` (set from `createToolCallContext` on); to rewrite the call's name or arguments, set `ctx.state.input`. The state accepts only the keys the flow declares: `ctx.state.set('startedAt', Date.now())` does not compile.
+
+### Reading the Request and Announcing a List Change
+
+```typescript
+import { FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
+
+const { Will, Did } = ToolHook;
+
+@Plugin({ name: 'client-audit' })
+export class ClientAuditPlugin {
+  @Will('execute', { filter: (ctx) => ctx.toolName !== 'health_check' })
+  logCaller(ctx: FlowCtxOf<'tools:call-tool'>) {
+    const { clientInfo, sessionId, metadata } = ctx.request;
+    ctx.logger.info(`${clientInfo?.name ?? 'An unknown client'} called ${ctx.toolName}`, {
+      sessionId,
+      userAgent: metadata?.userAgent,
+      arguments: ctx.toolInput,
+    });
+  }
+
+  @Did('execute', { filter: (ctx) => ctx.toolName === 'install_extension' })
+  announceNewTools(ctx: FlowCtxOf<'tools:call-tool'>) {
+    ctx.notify.listChanged('tools');
+  }
+}
+```
+
+`notify.listChanged()` reaches every session connected to the server, over the transports that keep a session (streamable HTTP with its `GET` stream, legacy SSE, stdio, `connect()`); a client without a session (stateless HTTP, MCP 2026-07-28) receives nothing. Up to 1.10.15 a hook reached the request only through `ctx.get(FRONTMCP_CONTEXT)` and the notifications through `ctx.get(ScopeEntry).notifications`.
 
 ### Sharing Data Between Hooks
 
@@ -284,7 +333,7 @@ export class TimingPlugin {
   stop(ctx: FlowCtxOf<'tools:call-tool'>) {
     const startedAt = this.startedAt.get(ctx);
     if (startedAt !== undefined) {
-      ctx.logger.info(`Tool "${ctx.state.required.input.name}" took ${Date.now() - startedAt}ms`);
+      ctx.logger.info(`Tool "${ctx.toolName}" took ${Date.now() - startedAt}ms`);
     }
   }
 }
@@ -297,13 +346,13 @@ All five decorators accept an optional options object:
 ```typescript
 @Will('execute', {
   priority: 10, // Lower runs first (default: 0)
-  filter: (ctx) => ctx.state.required.input.name !== 'health_check', // Predicate to skip
+  filter: (ctx) => ctx.toolName !== 'health_check', // Predicate to skip
   appliesTo: 'own-app', // Reach of an app plugin's hook (default: 'own-app')
 })
 ```
 
 - **priority** (`number`) - Execution order when multiple hooks target the same stage. Lower values run first, for `@Will`, `@Did`, `@Around`, `@Finally` and `@Stage` alike. Default: `0`.
-- **filter** (`(ctx) => boolean`) - A predicate that receives the flow context. Return `false` to skip this hook for the current invocation.
+- **filter** (`(ctx) => boolean`) - A predicate that receives the flow context, typed like the hook's (`ctx.toolName`, `ctx.request`, ...). Return `false` to skip this hook for the current invocation.
 - **appliesTo** (`'own-app' | 'uncovered-apps'`) - A hook of a plugin installed on an app runs, in `tools/call`, `resources/read`, `prompts/get` and `completion/complete`, only for that app's entries (`'own-app'`), unless the plugin has `scope: 'server'`. With `'uncovered-apps'` it also runs for the entries of any app that has no instance of the same hook (same class and method) of its own or from a server-level plugin. Use it for gates an entry's metadata asks for (approval, feature flags), so the entry is not left ungated when the plugin sits on another app. Server-level plugins' hooks, and list-flow hooks, already run for every app.
 
 ## Examples
@@ -319,13 +368,12 @@ const { Will, Did } = ToolHook;
 export class LoggingPlugin {
   @Will('execute', { priority: -100 })
   logBefore(ctx: FlowCtxOf<'tools:call-tool'>) {
-    const { name, arguments: toolArguments } = ctx.state.required.input;
-    ctx.logger.info(`Tool "${name}" called`, toolArguments);
+    ctx.logger.info(`Tool "${ctx.toolName}" called`, ctx.toolInput);
   }
 
   @Did('execute')
   logAfter(ctx: FlowCtxOf<'tools:call-tool'>) {
-    ctx.logger.info(`Tool "${ctx.state.required.input.name}" completed`);
+    ctx.logger.info(`Tool "${ctx.toolName}" completed`);
   }
 }
 ```
@@ -362,8 +410,7 @@ export class CachePlugin {
 
   @Around('execute', { priority: 90 })
   async cacheResults(ctx: FlowCtxOf<'tools:call-tool'>, next: () => Promise<void>) {
-    const { name, arguments: toolArguments } = ctx.state.required.input;
-    const key = `${name}:${JSON.stringify(toolArguments)}`;
+    const key = `${ctx.toolName}:${JSON.stringify(ctx.toolInput)}`;
     const toolContext = ctx.state.required.toolContext;
     const cached = this.cache.get(key);
 
@@ -394,7 +441,7 @@ const { Stage } = ToolHook;
 @Plugin({ name: 'mock-plugin' })
 export class MockPlugin {
   @Stage('execute', {
-    filter: (ctx) => ctx.state.required.input.name === 'fetch_weather',
+    filter: (ctx) => ctx.toolName === 'fetch_weather',
   })
   mockWeather(ctx: FlowCtxOf<'tools:call-tool'>) {
     ctx.respond({ content: [{ type: 'text', text: '72F and sunny' }] });
@@ -533,7 +580,8 @@ An instance method on an earlier stage, or `Will`/`Around` on `createToolCallCon
 | Around next()         | `await next();`                                                       | Forgetting to call `next()` in `@Around`                               | Omitting `next()` skips the wrapped stage; its `@Did` hooks still run              |
 | Cleanup after a stage | `@Finally('execute')` closes the span or timer `@Will` opened         | Closing it in `@Did('execute')`                                        | `@Did` is skipped when the stage fails; `@Finally` runs on every outcome           |
 | Around error recovery | `catch { ctx.state.required.toolContext.output = fallback; }`         | Catching a rejected `next()` without setting the output                | Returning normally handles the failure: the stage counts as successful             |
-| Filter predicate      | `filter: (ctx) => ctx.state.required.input.name !== 'health_check'`   | Checking tool name inside the hook body and returning early            | A filtered-out hook is skipped cleanly; for `@Around`, the stage still runs        |
+| Filter predicate      | `filter: (ctx) => ctx.toolName !== 'health_check'`                    | Checking tool name inside the hook body and returning early            | A filtered-out hook is skipped cleanly; for `@Around`, the stage still runs        |
+| Hook parameter        | `ctx: FlowCtxOf<'tools:call-tool'>`, then `ctx.toolName`              | `ctx: { toolName: string }` copied from another flow's hook            | The decorator checks the parameter against the flow; the full type documents it    |
 | Tool-level hooks      | `@Will('execute')` on a `@Tool` class (scoped to that tool)           | `@Will('execute')` on a `@Plugin` class expecting tool-scoped behavior | Plugin hooks fire for every tool of the app; tool-level hooks only for that tool   |
 
 ## Verification Checklist
@@ -543,6 +591,7 @@ An instance method on an earlier stage, or `Will`/`Around` on `createToolCallCon
 - [ ] Hook decorator is obtained from `FlowHooksOf(flowName)` or a pre-built export (e.g., `ToolHook`)
 - [ ] Stage name matches an actual stage in the targeted flow (e.g., `execute`, `validateInput`)
 - [ ] Plugin with hooks is registered in `plugins` array of `@App` or `@FrontMcp`
+- [ ] Each hook's parameter is `FlowCtxOf<'<flow-name>'>` (or a subset of it), so the compiler checks what the hook reads
 
 ### Runtime
 
@@ -555,16 +604,17 @@ An instance method on an earlier stage, or `Will`/`Around` on `createToolCallCon
 
 ## Troubleshooting
 
-| Problem                                           | Cause                                               | Solution                                                                                                                                     |
-| ------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Hook never fires                                  | Plugin not registered in `plugins` array            | Add plugin class to `@App` or `@FrontMcp` `plugins` array                                                                                    |
-| `InvalidHookFlowError` at startup                 | Entry-class hook that could never run               | Make early-stage hooks `static`; move list-flow hooks (and a `@Job` hook for a flow other than `jobs:execute-job`) to a plugin or a provider |
-| Hook fires for wrong flow                         | Used wrong flow name in `FlowHooksOf`               | Verify flow name matches (e.g., `'tools:call-tool'` not `'tool:call'`)                                                                       |
-| `@Around` skips the stage entirely                | `next()` not called inside the around handler       | Always `await next()` to execute the wrapped stage                                                                                           |
-| Multiple hooks execute in wrong order             | Priorities not set or conflicting                   | Set explicit `priority` values; lower numbers execute first                                                                                  |
-| The tool still runs despite a plugin `@Stage`     | `@Stage` adds a step; it does not replace the stage | End the flow with `ctx.respond(result)`, or use `@Around` without calling `next()`                                                           |
-| A span or timer opened in `@Will` stays open      | It is closed in `@Did`, which a failed stage skips  | Close it in `@Finally` on the same stage                                                                                                     |
-| `ctx.respond()` in a `@Finally` hook does nothing | `@Finally` cannot change a stage's outcome          | Answer from `@Will`, `@Stage` or `@Around`; the flow logs a warning for each ignored `@Finally` response or throw                            |
+| Problem                                                             | Cause                                                                                                                                    | Solution                                                                                                                                     |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hook never fires                                                    | Plugin not registered in `plugins` array                                                                                                 | Add plugin class to `@App` or `@FrontMcp` `plugins` array                                                                                    |
+| `InvalidHookFlowError` at startup                                   | Entry-class hook that could never run                                                                                                    | Make early-stage hooks `static`; move list-flow hooks (and a `@Job` hook for a flow other than `jobs:execute-job`) to a plugin or a provider |
+| Hook fires for wrong flow                                           | Used wrong flow name in `FlowHooksOf`                                                                                                    | Verify flow name matches (e.g., `'tools:call-tool'` not `'tool:call'`)                                                                       |
+| `@Around` skips the stage entirely                                  | `next()` not called inside the around handler                                                                                            | Always `await next()` to execute the wrapped stage                                                                                           |
+| Multiple hooks execute in wrong order                               | Priorities not set or conflicting                                                                                                        | Set explicit `priority` values; lower numbers execute first                                                                                  |
+| The tool still runs despite a plugin `@Stage`                       | `@Stage` adds a step; it does not replace the stage                                                                                      | End the flow with `ctx.respond(result)`, or use `@Around` without calling `next()`                                                           |
+| A span or timer opened in `@Will` stays open                        | It is closed in `@Did`, which a failed stage skips                                                                                       | Close it in `@Finally` on the same stage                                                                                                     |
+| `ctx.respond()` in a `@Finally` hook does nothing                   | `@Finally` cannot change a stage's outcome                                                                                               | Answer from `@Will`, `@Stage` or `@Around`; the flow logs a warning for each ignored `@Finally` response or throw                            |
+| `TS1241: Unable to resolve signature of method decorator` on a hook | The method's parameter asks for what the flow does not have: a missing or wrongly typed property, another flow's ctx, a second parameter | Type it `FlowCtxOf<'<flow-name>'>` and read the ctx members (`ctx.toolName`, `ctx.request`, ...); only `@Around` takes `next`                |
 
 ## Examples
 

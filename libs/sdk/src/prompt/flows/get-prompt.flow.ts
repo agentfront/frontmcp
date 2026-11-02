@@ -138,6 +138,11 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
 
   logger = this.scopeLogger.child('GetPromptFlow');
 
+  /** The prompt's name: the one `findPrompt` resolved, else the name the request asks for. */
+  get promptName(): string {
+    return this.state.prompt?.metadata.name ?? (this.state.input ?? this.input.request.params).name;
+  }
+
   @Stage('parseInput')
   async parseInput() {
     this.logger.verbose('parseInput:start');
