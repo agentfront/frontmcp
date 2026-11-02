@@ -15,7 +15,7 @@ import {
 import { logAvailabilityFiltering } from '../common/availability';
 import { resolveToolVisibility } from '../common/metadata/tool.metadata';
 import { externalEntryAfterStartup } from '../common/utils/external-entry.utils';
-import { describeToolAliasConflicts } from '../common/utils/tool-lookup.utils';
+import { describeToolAliasConflicts, type ToolAliasCandidate } from '../common/utils/tool-lookup.utils';
 import { isSendElicitationResultTool } from '../elicitation/send-elicitation-result.utils';
 import {
   EntryValidationError,
@@ -613,14 +613,9 @@ export default class ToolRegistry extends RegistryAbstract<
     const external = [...defs.values()].find(isExternalToolRecord);
     if (external) throw externalEntryAfterStartup('tool', external);
 
-    const replacements = [...tokens].map((token) => {
-      const rec = defs.get(token);
-      if (!rec) throw new RegistryDefinitionNotFoundError('ToolRegistry', String(token));
-      return { token, instance: new ToolInstance(rec, this.providers, owner) };
-    });
     const replaced = new Set<ToolEntry>(this.instances.values());
     const kept = [...this.listAllInstances(), ...this.scopeToolsBeside()].filter((tool) => !replaced.has(tool));
-    assertNoAliasConflicts([...kept, ...replacements.map(({ instance }) => instance)]);
+    assertNoAliasConflicts([...kept, ...[...defs.values()].map((rec) => aliasCandidateOf(rec, owner))]);
 
     // Clear local rows, instances, and remote app tool tracking
     this.localRows = [];
@@ -645,11 +640,14 @@ export default class ToolRegistry extends RegistryAbstract<
     this.buildGraph();
 
     // Recreate instances and local rows
-    for (const { token, instance } of replacements) {
-      this.instances.set(token as Token<ToolInstance>, instance);
+    for (const token of this.tokens) {
+      const rec = this.defs.get(token);
+      if (!rec) throw new RegistryDefinitionNotFoundError('ToolRegistry', String(token));
+      const ti = new ToolInstance(rec, this.providers, owner);
+      this.instances.set(token as Token<ToolInstance>, ti);
 
       const lineage: EntryLineage = owner ? [owner] : [];
-      const row = this.makeRow(token, instance, lineage, this);
+      const row = this.makeRow(token, ti, lineage, this);
       this.localRows.push(row);
     }
 
@@ -791,9 +789,15 @@ export default class ToolRegistry extends RegistryAbstract<
   }
 }
 
-function assertNoAliasConflicts(tools: readonly ToolEntry[]): void {
+function assertNoAliasConflicts(tools: readonly ToolAliasCandidate[]): void {
   const conflicts = describeToolAliasConflicts(tools);
   if (conflicts.length > 0) throw new ToolAliasConflictError(conflicts);
+}
+
+/** The names the tool built from `record` under `owner` will answer to, read without building it (and its hooks). */
+function aliasCandidateOf(record: ToolRecord, owner: EntryOwnerRef): ToolAliasCandidate {
+  const name = record.metadata.id || record.metadata.name;
+  return { name, fullName: `${owner.id}:${name}`, metadata: record.metadata };
 }
 
 /* -------------------- lineage utility -------------------- */
