@@ -5,7 +5,7 @@ description: Define the tool's output contract — Zod shape, primitives, media,
 
 # `outputSchema` reference
 
-`outputSchema` is **always required** ([rule](../rules/always-define-output-schema.md)). It declares what `execute()` returns and gives the framework permission to strip any fields you didn't declare, which guards against accidental PII / token / debug-trace leaks in the result. The exception is a `_meta` object on the returned value: it is copied into the response's `_meta` without validation, so never put secrets there. A result that does not match fails the call with `_meta.code: 'INVALID_OUTPUT'`, and nothing from the rejected result is sent. A number field holding `Infinity`, `-Infinity`, or `NaN` fails the same way, unless the server sets `output: { allowNonFinite: true }`. JSON cannot encode those values, so with that setting the client receives `null` in their place.
+`outputSchema` is **always required** ([rule](../rules/always-define-output-schema.md)). It declares what `execute()` returns, and the framework strips any fields you didn't declare, which guards against accidental PII / token / debug-trace leaks in the result. In development (`NODE_ENV=development`) it also warns once per tool about the keys it stripped; see [Undeclared keys](#undeclared-keys) to change that. The exception is a `_meta` object on the returned value: it is copied into the response's `_meta` without validation, so never put secrets there. A result that does not match fails the call with `_meta.code: 'INVALID_OUTPUT'`, and nothing from the rejected result is sent. A number field holding `Infinity`, `-Infinity`, or `NaN` fails the same way, unless the server sets `output: { allowNonFinite: true }`. JSON cannot encode those values, so with that setting the client receives `null` in their place.
 
 ## Supported shapes
 
@@ -44,7 +44,7 @@ class GetWeatherTool extends ToolContext {
 
 ## Zod schema (full Zod)
 
-When the output is a union, discriminated union, or array of objects:
+Use a full Zod schema when the output is a union, discriminated union, or array of objects. `z.union([...])` and `z.discriminatedUnion(...)` type-check as `outputSchema` with no cast:
 
 ```typescript
 const outputSchema = z.discriminatedUnion('kind', [
@@ -129,10 +129,11 @@ class AnalyzeImageTool extends ToolContext {
 
 Structured object outputs are converted to JSON Schema and advertised on the tool's `outputSchema` in `tools/list` — symmetric with how `inputSchema` is advertised:
 
-- **Advertised:** a Zod raw shape (`{ field: z.string() }`) or a top-level `z.object({...})` — these serialize to a `type: 'object'` JSON Schema.
-- **Not advertised:** primitives (`'string'` / `'number'` / `'boolean'` / `'date'`), media (`'image'` / `'audio'` / `'resource'` / `'resource_link'`), multi-content arrays (`['string', 'image']`), and unions (`z.discriminatedUnion(...)`). These flow through `content` rather than `structuredContent`, and the MCP spec requires `outputSchema` to be a top-level `type: 'object'` — so there is nothing object-shaped to advertise. Runtime output validation still applies to every form.
+- **Advertised:** a Zod raw shape (`{ field: z.string() }`) or a top-level `z.object({...})` — these serialize to a `type: 'object'` JSON Schema. A `z.union([...])` or `z.discriminatedUnion(...)` whose members are all objects is advertised too, as `{ type: 'object', anyOf: [...] }` (or `oneOf` for a discriminated union), since MCP requires a top-level `type: 'object'`.
+- **Not advertised, by design:** primitives (`'string'` / `'number'` / `'boolean'` / `'date'`, `z.string()`, …), media (`'image'` / `'audio'` / `'resource'` / `'resource_link'`), and multi-content arrays (`['string', 'image']`). These flow through `content` rather than `structuredContent`.
+- **Not advertised, with a startup warning:** any other Zod schema — an array (`z.array(...)`), a nullable object, a union with a non-object member, or a schema that has no JSON Schema form (a `z.date()` field). The server logs `Tool "<name>": tools/list leaves out its outputSchema because …` once at startup, naming the tool. Wrap the value in a `z.object({...})` to advertise it.
 
-If a client reports _"Output schema recommended,"_ declare a structured object `outputSchema` (a raw shape or `z.object`) — that's the form that gets advertised.
+Runtime output validation still applies to every form. If a client reports _"Output schema recommended,"_ declare a structured object `outputSchema` (a raw shape, a `z.object`, or a union of `z.object`s) — that's the form that gets advertised.
 
 ### Exposure mode
 
@@ -142,6 +143,7 @@ A cascading `output` policy controls _how_ the (object-shaped) schema reaches cl
 output?: {
   schemaMode?: 'definition' | 'description' | 'both' | 'none'; // default 'definition'
   schemaDescriptionFormat?: 'summary' | 'jsonSchema';          // default 'summary'
+  undeclaredKeys?: 'strip' | 'warn' | 'keep' | 'fail';         // see Undeclared keys
 };
 ```
 
@@ -166,9 +168,39 @@ class GetStatusTool extends ToolContext {
 
 The default (`'definition'`) preserves the current behavior described above — omit `output` entirely and nothing changes.
 
+## Undeclared keys
+
+`output.undeclaredKeys` decides what `tools/call` does with keys an answer carries that `outputSchema` does not declare, at any depth (`costCenter`, `lines[].margin`). It cascades **Tool > App > server > default**, like `schemaMode`.
+
+| `undeclaredKeys` | Effect                                                                                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'strip'`        | Drop them. **Default** outside development.                                                                                                                   |
+| `'warn'`         | Drop them and log a warning once per tool and set of keys. **Default** when `NODE_ENV=development`.                                                           |
+| `'keep'`         | Send them in `structuredContent` and the text content. `tools/list` lists the schema's objects without `additionalProperties: false`, so clients accept them. |
+| `'fail'`         | Refuse the answer with `_meta.code: 'INVALID_OUTPUT'`; the error message in the server log names the keys. Nothing from the answer is sent.                   |
+
+```typescript
+// Fail loudly when an upstream API starts returning fields the tool never declared
+@Tool({ name: 'get_invoice', inputSchema, outputSchema, output: { undeclaredKeys: 'fail' } })
+class GetInvoiceTool extends ToolContext {
+  /* … */
+}
+```
+
+A call that renders the tool's UI (`@Tool({ ui })`) sends declared keys only, whatever the policy: the widget, the text content and `structuredContent` are built from the declared fields.
+
+To check in a test that an answer has no undeclared keys, use the `@frontmcp/testing` matcher:
+
+```typescript
+import { expect } from '@frontmcp/testing';
+
+expect(await tool.execute({ id: 'INV-1' })).toPassOutputSchemaWhole(outputSchema);
+// fails with: … parsing drops keys it does not declare: costCenter, lines[].margin
+```
+
 ## Why this matters
 
-- **Data leak prevention** — without `outputSchema`, accidentally returning `{ result, internalApiKey }` leaks the key. With it, only `result` flows.
+- **Data leak prevention** — without `outputSchema`, accidentally returning `{ result, internalApiKey }` leaks the key. With it, only `result` flows (unless `output.undeclaredKeys` is `'keep'`).
 - **CodeCall compatibility** — the CodeCall plugin uses `outputSchema` to chain tool calls in its VM. Tools without it degrade chain-ability.
 - **Compile-time type safety** — `ToolContext` infers `execute()`'s return type from `outputSchema` (when `ToolOutputOf<>` is used). The compiler catches divergence at build time.
 - **Self-documenting** — a structured object `outputSchema` is converted to JSON Schema and exposed in `tools/list` (see [Advertisement in `tools/list`](#advertisement-in-toolslist)); AI clients pick tools partly based on what they return.

@@ -26,12 +26,14 @@ import {
   FlowHooksOf,
   GLOBAL_RATE_LIMIT_CHECKED,
   isOrchestratedMode,
+  resolveUndeclaredKeysPolicy,
   ToolContext,
   ToolEntry,
   type FlowPlan,
   type FlowRunOptions,
   type ScopeEntry,
   type Token,
+  type UndeclaredKeysPolicy,
 } from '../../common';
 import { callSurfaceOf, entryUnavailableError, isOfferedOnSurface } from '../../common/availability';
 import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
@@ -171,6 +173,8 @@ const stateSchema = z.object({
     .optional(),
 });
 
+type CallToolEntry = z.infer<typeof stateSchema>['tool'];
+
 const plan = {
   pre: [
     'parseInput',
@@ -219,6 +223,9 @@ const { Stage } = FlowHooksOf<'tools:call-tool'>(name);
 
 /** Tools `resolveHookOwnerId` found, reused by the same run's `findTool`. */
 const resolvedTools = new ResolvedEntries<ToolEntry>();
+
+/** The undeclared key sets already reported per tool, so the 'warn' policy logs each one once. */
+const reportedUndeclaredKeySets = new WeakMap<CallToolEntry, Set<string>>();
 
 @Flow({
   name,
@@ -1529,7 +1536,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
 
     // Parse and construct the MCP-compliant output using safeParseOutput
-    const parseResult = tool.safeParseOutput(rawOutput);
+    const undeclaredKeys = this.undeclaredKeysPolicyFor(tool);
+    const parseResult = tool.safeParseOutput(rawOutput, {
+      // A call that renders the tool's UI sends declared keys only, whatever the policy
+      undeclaredKeys: uiResult && undeclaredKeys === 'keep' ? 'strip' : undeclaredKeys,
+      onUndeclaredKeys: (keyPaths) => this.warnUndeclaredKeysOnce(tool, keyPaths),
+    });
 
     if (!parseResult.success) {
       this.logger.error('finalize: output validation failed', {
@@ -1617,6 +1629,25 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // Respond with the properly formatted MCP result
     this.respond(result);
     this.logger.verbose('finalize:done');
+  }
+
+  /** The tool's `output.undeclaredKeys`, else its app's, else the server's, else the default. */
+  private undeclaredKeysPolicyFor(tool: CallToolEntry): UndeclaredKeysPolicy {
+    // The app is found the way tools/list finds it, so both flows resolve the same policy
+    const appMetadata = this.scope.apps.getApps().find((app) => app.id === tool.owner.id)?.metadata;
+    const appOutput = appMetadata && 'output' in appMetadata ? appMetadata.output : undefined;
+    return resolveUndeclaredKeysPolicy(tool.metadata.output, appOutput, this.scope.metadata.output);
+  }
+
+  private warnUndeclaredKeysOnce(tool: CallToolEntry, keyPaths: string[]): void {
+    const keySet = keyPaths.join(', ');
+    const reportedKeySets = reportedUndeclaredKeySets.get(tool) ?? new Set<string>();
+    if (reportedKeySets.has(keySet)) return;
+    reportedUndeclaredKeySets.set(tool, reportedKeySets.add(keySet));
+    this.logger.warn(
+      `Tool "${tool.metadata.name}" answered with keys its outputSchema does not declare, so they were stripped: ` +
+        `${keySet}. Declare them, or set output.undeclaredKeys to 'strip', 'keep' or 'fail'.`,
+    );
   }
 }
 

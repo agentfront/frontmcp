@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 
-import { Agent, Tool, ToolContext, z } from '@frontmcp/sdk';
+import { Tool, ToolContext, z, type Agent } from '@frontmcp/sdk';
 
 type IsAny<T> = 0 extends 1 & T ? true : false;
 
@@ -31,5 +31,13 @@ export class NotATool {
 export class Total extends ToolContext {
   async execute() {
     return { total: '12.50 EUR' };
+  }
+}
+
+// @ts-expect-error output.undeclaredKeys accepts 'strip' | 'warn' | 'keep' | 'fail' only
+@Tool({ name: 'drop_extra', inputSchema: {}, output: { undeclaredKeys: 'drop' } })
+export class DropExtra extends ToolContext {
+  async execute() {
+    return 1;
   }
 }

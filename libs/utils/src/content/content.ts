@@ -140,6 +140,37 @@ export function findNonFiniteNumber(value: unknown): { path: string; value: numb
 }
 
 /**
+ * The key paths `original` holds that `parsed` lacks: what parsing `original` against a schema
+ * dropped. Nested keys are dotted (`customer.taxId`), array items share an `[]` segment
+ * (`lines[].margin`), keys holding `undefined` are skipped, and the paths come back sorted and
+ * unique. The walk follows `parsed`, so it stops wherever the two values differ in shape.
+ */
+export function findDroppedKeys(original: unknown, parsed: unknown): string[] {
+  const droppedPaths = new Set<string>();
+
+  function walk(source: unknown, target: unknown, path: string): void {
+    if (Array.isArray(source)) {
+      if (Array.isArray(target)) source.forEach((item, index) => walk(item, target[index], `${path}[]`));
+      return;
+    }
+    if (!isPlainRecord(source) || !isPlainRecord(target)) return;
+    for (const [key, value] of Object.entries(source)) {
+      if (value === undefined) continue;
+      const keyPath = path ? `${path}.${key}` : key;
+      if (Object.prototype.hasOwnProperty.call(target, key)) walk(value, target[key], keyPath);
+      else droppedPaths.add(keyPath);
+    }
+  }
+
+  walk(original, parsed, '');
+  return [...droppedPaths].sort();
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
  * Common MIME types by file extension.
  */
 const MIME_TYPES: Record<string, string> = {

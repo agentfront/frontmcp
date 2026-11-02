@@ -18,8 +18,12 @@
  */
 
 import type { MatcherFunction } from 'expect';
-import type { Tool, Resource, ResourceTemplate, Prompt } from '@frontmcp/protocol';
-import type { ToolResultWrapper, ResourceContentWrapper, PromptResultWrapper } from '../client/mcp-test-client.types';
+
+import { z, type ZodRawShape, type ZodType } from '@frontmcp/lazy-zod';
+import type { Prompt, Resource, ResourceTemplate, Tool } from '@frontmcp/protocol';
+import { findDroppedKeys } from '@frontmcp/utils';
+
+import type { PromptResultWrapper, ResourceContentWrapper, ToolResultWrapper } from '../client/mcp-test-client.types';
 import { uiMatchers } from '../ui/ui-matchers';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -192,6 +196,38 @@ const toHaveResourceContent: MatcherFunction<[]> = function (received) {
   return {
     pass,
     message: () => (pass ? 'Expected result not to have resource content' : 'Expected result to have resource content'),
+  };
+};
+
+/**
+ * Check that a tool's answer passes its output schema whole: it matches, and parsing drops no
+ * key the schema does not declare (which the server would strip, warn about or refuse)
+ */
+const toPassOutputSchemaWhole: MatcherFunction<[outputSchema: ZodType | ZodRawShape]> = function (
+  received,
+  outputSchema,
+) {
+  const schema = outputSchema instanceof z.ZodType ? outputSchema : z.object(outputSchema);
+  const parsed = schema.safeParse(received);
+  if (!parsed.success) {
+    const [firstIssue] = parsed.error.issues;
+    const location = firstIssue?.path.length ? ` at ${firstIssue.path.join('.')}` : '';
+    return {
+      pass: false,
+      message: () =>
+        `Expected the answer to pass its output schema whole, but it does not match its output schema${location}: ${firstIssue?.message}`,
+    };
+  }
+
+  const droppedKeys = findDroppedKeys(received, parsed.data);
+  const pass = droppedKeys.length === 0;
+
+  return {
+    pass,
+    message: () =>
+      pass
+        ? 'Expected the answer not to pass its output schema whole'
+        : `Expected the answer to pass its output schema whole, but parsing drops keys it does not declare: ${droppedKeys.join(', ')}`,
   };
 };
 
@@ -457,6 +493,7 @@ export const mcpMatchers = {
   toHaveTextContent,
   toHaveImageContent,
   toHaveResourceContent,
+  toPassOutputSchemaWhole,
 
   // Resource matchers
   toContainResource,

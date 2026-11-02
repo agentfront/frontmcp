@@ -7,7 +7,9 @@ import {
   formatOutputSchemaForDescription,
   resolveOutputSchemaMode,
   resolveSchemaDescriptionFormat,
+  resolveUndeclaredKeysPolicy,
   ToolEntry,
+  withUndeclaredKeysAllowed,
   type FlowPlan,
   type FlowRunOptions,
   type OutputPolicy,
@@ -517,15 +519,19 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
         if (schemaMode === 'definition' || schemaMode === 'both') {
           // getRawOutputSchema() returns the explicit rawOutputSchema (OpenAPI / remote
-          // passthrough) or a JSON Schema derived from the declared Zod-shape / z.object()
-          // outputSchema (elicitation-extended when elicitation is enabled).
+          // passthrough) or a JSON Schema derived from the declared Zod-shape, z.object() or
+          // union-of-objects outputSchema (elicitation-extended when elicitation is enabled).
           const rawOutput = tool.getRawOutputSchema();
           if (rawOutput) {
             // MCP spec requires outputSchema to have type: 'object' at the top level.
             // Strip non-compliant schemas to prevent a single tool from breaking the entire tools/list response.
             const schema = rawOutput as Record<string, unknown>;
             if (schema['type'] === 'object') {
-              item.outputSchema = schema as typeof item.outputSchema;
+              // An answer that keeps undeclared keys must still validate against the listed schema
+              const keepsUndeclaredKeys = resolveUndeclaredKeysPolicy(toolOutput, appOutput, serverOutput) === 'keep';
+              item.outputSchema = (
+                keepsUndeclaredKeys ? withUndeclaredKeysAllowed(schema) : schema
+              ) as typeof item.outputSchema;
             } else {
               this.logger.warn(
                 `parseTools: tool "${finalName}" has outputSchema without type: 'object' — stripping to maintain MCP compliance`,

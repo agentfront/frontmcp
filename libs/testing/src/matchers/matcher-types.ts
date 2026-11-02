@@ -8,6 +8,7 @@
 
 // Note: These imports are used for documentation/JSDoc purposes in the interface comments
 // The actual runtime types are in mcp-matchers.ts
+import type { ZodRawShape, ZodType } from '@frontmcp/lazy-zod';
 
 /**
  * Custom MCP matchers for Jest
@@ -88,6 +89,20 @@ export interface McpMatchers<R = unknown> {
    * ```
    */
   toHaveResourceContent(): R;
+
+  /**
+   * Check that a tool's answer passes its output schema whole: it matches the schema, and parsing
+   * drops no key the schema does not declare. The failure message names the undeclared keys, which
+   * the server would strip, warn about or refuse, per its `output.undeclaredKeys` policy.
+   * @param outputSchema - The tool's `outputSchema`: a Zod schema or a raw shape
+   *
+   * @example
+   * ```typescript
+   * const answer = await tool.execute({ id: 'INV-1' });
+   * expect(answer).toPassOutputSchemaWhole(invoiceOutputSchema);
+   * ```
+   */
+  toPassOutputSchemaWhole(outputSchema: ZodType | ZodRawShape): R;
 
   // ═══════════════════════════════════════════════════════════════════
   // RESOURCE MATCHERS
@@ -305,7 +320,7 @@ export interface McpMatchers<R = unknown> {
 // JEST TYPE AUGMENTATION
 // ═══════════════════════════════════════════════════════════════════
 
-/* eslint-disable @typescript-eslint/no-namespace, @typescript-eslint/no-empty-object-type */
+/* eslint-disable @typescript-eslint/no-namespace */
 
 declare global {
   namespace jest {
@@ -319,7 +334,7 @@ declare global {
     interface InverseAsymmetricMatchers extends McpMatchers<void> {}
   }
 }
-/* eslint-enable @typescript-eslint/no-namespace, @typescript-eslint/no-empty-object-type */
+/* eslint-enable @typescript-eslint/no-namespace */
 
 // This export is needed to make this a module
 export {};
