@@ -3,12 +3,16 @@ import 'reflect-metadata';
 import { z } from '@frontmcp/lazy-zod';
 
 import {
+  Adapter,
   App,
+  DynamicAdapter,
+  FlowHooksOf,
   LogLevel,
   LogTransport,
   LogTransportInterface,
   Tool,
   ToolContext,
+  type FrontMcpAdapterResponse,
   type FrontMcpConfigInput,
   type LogRecord,
 } from '../../common';
@@ -17,6 +21,8 @@ import { connect } from '../../direct/connect';
 import { type DirectMcpServer } from '../../direct/direct.types';
 import { ToolAliasConflictError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
+
+const CallToolHook = FlowHooksOf('tools:call-tool');
 
 @Tool({ name: 'get_ticket', inputSchema: { id: z.string() } })
 class GetTicketTool extends ToolContext {
@@ -309,5 +315,106 @@ describe('tool alias conflicts', () => {
     }
 
     expect(() => Tool({ name: 'blank', aliases: [''], inputSchema: {} })(BlankAliasTool)).toThrow(/alias/i);
+  });
+
+  it("refuses an adapter update whose tool takes another tool's name as an alias, and keeps the tools it had", async () => {
+    @Tool({ name: 'count_orders', inputSchema: {} })
+    class CountOrdersTool extends ToolContext {
+      async execute() {
+        return { tool: 'count_orders' };
+      }
+    }
+
+    @Tool({ name: 'feed_orders', aliases: ['count_orders'], inputSchema: {} })
+    class FeedOrdersTool extends ToolContext {
+      async execute() {
+        return { tool: 'feed_orders' };
+      }
+    }
+
+    let publish: (response: FrontMcpAdapterResponse) => void = () => undefined;
+
+    @Adapter({ name: 'orders-feed' })
+    class OrdersFeedAdapter extends DynamicAdapter<{ name: string }> {
+      constructor(readonly options: { name: string }) {
+        super();
+      }
+      async fetch(): Promise<FrontMcpAdapterResponse> {
+        return {};
+      }
+      onUpdate(callback: (response: FrontMcpAdapterResponse) => void): () => void {
+        publish = callback;
+        return () => undefined;
+      }
+    }
+
+    @App({
+      id: 'counts',
+      name: 'Counts',
+      tools: [CountOrdersTool],
+      adapters: [OrdersFeedAdapter.init({ name: 'orders-feed' })],
+    })
+    class CountsApp {}
+
+    const server = await FrontMcpInstance.createDirect(serverWith(CountsApp));
+
+    expect(() => publish({ tools: [FeedOrdersTool] })).toThrow(ToolAliasConflictError);
+
+    const result = (await server.callTool('count_orders', {})) as { structuredContent?: unknown };
+    expect(result.structuredContent).toEqual({ tool: 'count_orders' });
+    const { tools } = await server.listTools();
+    expect(tools.map((tool) => tool.name)).not.toContain('feed_orders');
+    await server.dispose();
+  });
+  it('builds nothing from a refused adapter update, so a later update runs its tool hooks once', async () => {
+    const hookRuns: string[] = [];
+
+    @Tool({ name: 'count_stock', inputSchema: {} })
+    class CountStockTool extends ToolContext {
+      async execute() {
+        return {};
+      }
+    }
+
+    @Tool({ name: 'feed_stock', aliases: ['count_stock'], inputSchema: {} })
+    class FeedStockTool extends ToolContext {
+      async execute() {
+        return {};
+      }
+
+      @CallToolHook.Will('execute')
+      record() {
+        hookRuns.push('feed_stock');
+      }
+    }
+
+    let publish: (response: FrontMcpAdapterResponse) => void = () => undefined;
+
+    @Adapter({ name: 'stock-feed' })
+    class StockFeedAdapter extends DynamicAdapter<{ name: string }> {
+      constructor(readonly options: { name: string }) {
+        super();
+      }
+      async fetch(): Promise<FrontMcpAdapterResponse> {
+        return { tools: [CountStockTool] };
+      }
+      onUpdate(callback: (response: FrontMcpAdapterResponse) => void): () => void {
+        publish = callback;
+        return () => undefined;
+      }
+    }
+
+    @App({ id: 'stock', name: 'Stock', adapters: [StockFeedAdapter.init({ name: 'stock-feed' })] })
+    class StockApp {}
+
+    const server = await FrontMcpInstance.createDirect(serverWith(StockApp));
+
+    expect(() => publish({ tools: [CountStockTool, FeedStockTool] })).toThrow(ToolAliasConflictError);
+    publish({ tools: [FeedStockTool] });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await server.callTool('feed_stock', {});
+
+    expect(hookRuns).toEqual(['feed_stock']);
+    await server.dispose();
   });
 });

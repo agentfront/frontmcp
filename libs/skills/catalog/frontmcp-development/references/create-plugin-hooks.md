@@ -93,8 +93,12 @@ A `@Stage('execute')` hook does not replace the flow's own `execute` step: it ad
 
 To keep the flow's own step from running:
 
-- Call `ctx.respond(result)` from the `@Stage` (or a `@Will`) hook. The flow ends with that result: it skips the rest of the stage and the main stages after it, while the stage's `@Finally` hooks (and its `@Did` hooks, when a `@Stage` hook answered) and the cleanup stages (in `tools:call-tool`: `releaseSemaphore`, `releaseQuota`, `applyUI`, `finalize`) still run. In `tools:call-tool`, `result` is a complete MCP `CallToolResult`; it does not go through the tool's output schema.
+- Call `ctx.respond(result)` from the `@Stage` (or a `@Will`) hook. The flow ends with that result: it skips the rest of the stage and the main stages after it, while the stage's `@Finally` hooks (and its `@Did` hooks, when a `@Stage` hook answered) and the cleanup stages (in `tools:call-tool`: `releaseSemaphore`, `releaseQuota`, `applyUI`, `finalize`, `fitAnswer`, `shapeAnswer`, `meterAnswer`) still run. In `tools:call-tool`, `result` is a complete MCP `CallToolResult`; it does not go through the tool's output schema.
 - Or use an `@Around` hook that does not call `next()`. The stage is skipped and the flow goes on; in `tools:call-tool`, set `ctx.state.required.toolContext.output`, and the result is validated and formatted like the tool's own.
+
+Each answer the flow sends, the tool's from `finalize` or a hook's `ctx.respond(result)` (an `@Around('finalize')` hook that replaces it after `next()` included), becomes `ctx.state.output` in `tools:call-tool` and `resources:read-resource`. The stages after `finalize` work on it: `fitAnswer` (`output.budget`), `shapeAnswer` (`clients` profiles) and `meterAnswer` (the `/metrics` answer cost). Hook `Did('meterAnswer')` to see the answer the client receives.
+
+These stages shape only a client's answer, not the one a tool gets from `this.callTool()`; a hook on them checks the same with `ctx.isClientCall()`. A `Will('fitAnswer')` hook that answers with `ctx.respond(result)` replaces the answer before the budget fits it, as `@frontmcp/plugin-result-handles` does to fold a large answer (see `result-handles-plugin`).
 
 ## Hook Order
 
@@ -707,6 +711,7 @@ class ProcessOrderTool extends ToolContext {
 parseInput → ensureRemoteCapabilities → findTool → checkToolAuthorization → checkEntryAuthorities
   → createTaskIfRequested → createToolCallContext → checkToolCredentials → acquireQuota → acquireSemaphore
   → validateInput → execute → validateOutput → releaseSemaphore → releaseQuota → applyUI → finalize
+  → fitAnswer → shapeAnswer → meterAnswer
 ```
 
 A tool-class hook declared as an instance method runs on the tool instance, which `createToolCallContext` builds. So it can hook `Did`/`Stage`/`Finally` on `createToolCallContext` and any hook on a later stage. The same holds for `@Resource` (`createResourceContext`), `@Prompt` (`createPromptContext`) and `@Agent` (`createAgentContext`) classes.

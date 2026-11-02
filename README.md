@@ -112,6 +112,7 @@ Internal, published so the above resolve: [`protocol`](libs/protocol), [`di`](li
 | -------------------------------------------------------------------- | ----------------------------------------------- |
 | [`@frontmcp/plugin-cache`](plugins/plugin-cache)                     | Cache tool results with a TTL                   |
 | [`@frontmcp/plugin-remember`](plugins/plugin-remember)               | Per-session memory (`this.remember`)            |
+| [`@frontmcp/plugin-result-handles`](plugins/plugin-result-handles)   | Fold large answers into a handle to query       |
 | [`@frontmcp/plugin-approval`](plugins/plugin-approval)               | Human approval gates before a tool runs         |
 | [`@frontmcp/plugin-codecall`](plugins/plugin-codecall)               | Let the model compose tool calls as code        |
 | [`@frontmcp/plugin-dashboard`](plugins/plugin-dashboard)             | Built-in web dashboard                          |

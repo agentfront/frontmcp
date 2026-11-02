@@ -19,6 +19,7 @@ import { entryAvailabilitySchema, type EntryAvailability } from '@frontmcp/utils
 
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
 import { type RawZodShape } from '../types';
+import { enabledOptionSchema, type EnabledOption } from './enabled.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import { type ToolUIConfig } from './tool-ui.metadata';
 
@@ -491,6 +492,13 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
   availableWhen?: EntryAvailability;
 
   /**
+   * Whether the tool is on: a boolean, or an `EnabledSource` such as `fileSignal(path, key)` that can change while
+   * sessions are live. A tool that is off is left out of `tools/list`, and `tools/call` refuses it with `FEATURE_OFF`
+   * and a remedy. When a source changes, connected clients get `notifications/tools/list_changed`.
+   */
+  enabled?: EnabledOption;
+
+  /**
    * Execution hints reported in `tools/list` items per MCP 2025-11-25.
    *
    * `taskSupport` controls whether clients may invoke this tool as a background task
@@ -576,6 +584,7 @@ export const frontMcpToolMetadataSchema = z
     concurrency: concurrencyConfigSchema.optional(),
     timeout: timeoutConfigSchema.optional(),
     availableWhen: entryAvailabilitySchema.optional(),
+    enabled: enabledOptionSchema.optional(),
     execution: z
       .object({
         taskSupport: z.enum(['required', 'optional', 'forbidden']).optional(),

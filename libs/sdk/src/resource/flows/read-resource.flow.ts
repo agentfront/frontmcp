@@ -35,6 +35,7 @@ import { ResolvedEntries } from '../../flows/resolved-entries';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
+import { assertEntryEnabled } from '../../surface';
 import { isUIResourceUri } from '../../tool/ui/ui-shared';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
 
@@ -73,7 +74,14 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'ensureRemoteCapabilities', 'findResource', 'checkEntryAuthorities', 'createResourceContext'],
+  pre: [
+    'parseInput',
+    'ensureRemoteCapabilities',
+    'findResource',
+    'checkEnabled',
+    'checkEntryAuthorities',
+    'createResourceContext',
+  ],
   execute: ['execute', 'validateOutput'],
   // After 'finalize' answers: hooks on 'fitAnswer' read and replace `state.output`
   finalize: ['finalize', 'fitAnswer'],
@@ -303,6 +311,16 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     this.logger.verbose('findResource:done');
   }
 
+  /** A resource or template whose `enabled` is off is refused with `FEATURE_OFF` and the remedy of its source. */
+  @Stage('checkEnabled')
+  async checkEnabled() {
+    const { resource } = this.state;
+    if (!resource) return;
+    const entryType = resource.isTemplate ? 'ResourceTemplate' : 'Resource';
+    const { uri } = this.state.required.input;
+    await assertEntryEnabled(entryType, uri, resource.metadata.enabled, this.tryGetContext(), this.logger);
+  }
+
   /**
    * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in resource metadata.
    * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
@@ -489,7 +507,6 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     }
 
     // Respond with the properly formatted MCP result; 'fitAnswer' may replace it
-    this.state.set('output', parseResult.data);
     this.respond(parseResult.data);
     this.logger.verbose('finalize:done');
   }
@@ -504,8 +521,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     const appOutput = (app?.metadata as { output?: OutputPolicy } | undefined)?.output;
     const budget = resolveOutputBudget(undefined, appOutput, this.scope.metadata.output);
     const fitted = budget && fitResourceAnswer(output, budget);
-    if (!fitted) return;
-    this.state.set('output', fitted);
-    this.respond(fitted);
+    if (fitted) this.respond(fitted);
+  }
+
+  /** Answer the read. Each answer, a stage's or a hook's, becomes `state.output`, which `fitAnswer` fits. */
+  override respond(output: z.infer<typeof outputSchema>): never {
+    const answer = outputSchema.parse(output);
+    this.state.set('output', answer);
+    throw FlowControl.respond(answer);
   }
 }

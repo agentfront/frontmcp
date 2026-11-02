@@ -13,6 +13,7 @@ export const FrontMcpResourceTokens = {
   annotations: tokenFactory.meta('annotations'),
   _meta: tokenFactory.meta('_meta'),
   availableWhen: tokenFactory.meta('availableWhen'),
+  enabled: tokenFactory.meta('enabled'),
   metadata: tokenFactory.meta('metadata'), // used in resource({}) construction
 } as const satisfies RawMetadataShape<ResourceMetadata, ExtendFrontMcpResourceMetadata>;
 
@@ -27,6 +28,7 @@ export const FrontMcpResourceTemplateTokens = {
   annotations: tokenFactory.meta('annotations'),
   _meta: tokenFactory.meta('_meta'),
   availableWhen: tokenFactory.meta('availableWhen'),
+  enabled: tokenFactory.meta('enabled'),
   metadata: tokenFactory.meta('metadata'), // used in resourceTemplate({}) construction
 } as const satisfies RawMetadataShape<ResourceTemplateMetadata, ExtendFrontMcpResourceTemplateMetadata>;
 

@@ -1,11 +1,11 @@
 ---
 name: official-plugins
-description: Guide to the 7 official plugins for discovery, memory, auth, caching, flags, monitoring, and WebMCP
+description: Guide to the 8 official plugins for discovery, memory, auth, caching, flags, monitoring, WebMCP, and large answers
 ---
 
 # Official FrontMCP Plugins
 
-FrontMCP ships 7 official plugins that extend server behavior with cross-cutting concerns: semantic tool discovery, session memory, authorization workflows, result caching, feature gating, visual monitoring, and exposing in-browser tools to browser agents (WebMCP). Install individually or via `@frontmcp/plugins` (meta-package re-exporting cache, codecall, and remember).
+FrontMCP ships 8 official plugins that extend server behavior with cross-cutting concerns: semantic tool discovery, session memory, authorization workflows, result caching, feature gating, visual monitoring, exposing in-browser tools to browser agents (WebMCP), and folding large tool answers into a handle the model reads in slices. Install individually or via `@frontmcp/plugins` (meta-package re-exporting cache, codecall, and remember).
 
 > **Note:** The Dashboard plugin (`@frontmcp/plugin-dashboard`) is currently in **beta** and may not work correctly in all environments. It is not recommended for production use at this time.
 
@@ -17,6 +17,7 @@ FrontMCP ships 7 official plugins that extend server behavior with cross-cutting
 - Adding session memory, tool caching, or authorization workflows to an existing server
 - Integrating feature flag services (LaunchDarkly, Split.io, Unleash) to gate tools at runtime
 - Exposing the tools of a FrontMCP server running in the browser to in-browser agents through WebMCP (`document.modelContext`)
+- Keeping large tool answers out of the model's context, readable in slices through `result_query` (see `result-handles-plugin`)
 
 ### Recommended
 
@@ -913,6 +914,39 @@ class CustomFlagServer {}
 - `unleash` -- Unleash integration. Requires `unleash-client` package.
 - `custom` -- Provide your own adapter instance (`adapterInstance`, required) implementing the `FeatureFlagAdapter` interface. Its optional `initialize()` runs before the server serves and `destroy()` when the server is disposed, as for the built-in adapters (up to 1.9.1 neither was called).
 
+### A flag flip updates connected clients
+
+An adapter that reports changes, through the optional `subscribe(listener): () => void` of `FeatureFlagAdapter`,
+makes a flag flip send `notifications/tools/list_changed` (and the resources and prompts ones, for the lists that
+hold an entry with a `featureFlag`) to every connected session, one per list per 100 ms. Split.io (`SDK_UPDATE`),
+LaunchDarkly (`update`) and Unleash (`changed`) report their SDK's change events; `static` flags never change; a
+`custom` adapter reports changes when it implements `subscribe`. The lists already follow the flag on every request.
+
+Each flag is an `EnabledSource` (`FeatureFlagSource`): the gates ask it, with the same fallback as above. Use one as
+an entry's `enabled` with `featureFlagSource(adapter, ref, options?)` and give the plugin the same adapter. However
+many entries use an adapter's flags, its SDK client gets one change listener for them. Such an
+entry is filtered and refused by the SDK itself: `FEATURE_OFF` with the remedy `Turn on the feature flag "beta".`
+(where `featureFlag` answers `FEATURE_FLAG_DISABLED`), and a call from a session whose tool list changed since it
+listed answers `STALE_TOOL_LIST` (see `create-tool` → `availability.md`).
+
+```typescript
+import FeatureFlagPlugin, { featureFlagSource, UnleashFeatureFlagAdapter } from '@frontmcp/plugin-feature-flags';
+
+const flags = new UnleashFeatureFlagAdapter({ url: 'https://unleash.example.com/api', appName: 'my-mcp-server' });
+
+@Tool({ name: 'beta_report', inputSchema: {}, enabled: featureFlagSource(flags, 'beta-reports') })
+class BetaReportTool extends ToolContext {
+  /* ... */
+}
+
+@App({
+  name: 'reports',
+  tools: [BetaReportTool],
+  plugins: [FeatureFlagPlugin.init({ adapter: 'custom', adapterInstance: flags })],
+})
+class ReportsApp {}
+```
+
 ### Using `this.featureFlags` in Tools
 
 ```typescript
@@ -1171,6 +1205,28 @@ void registerWebMcpTools(resolveDocumentModelContext(), tools, (modelContext) =>
 - `listWebMcpTools(factory)` returns exactly what the plugin passes to `registerTool()` (names, titles, descriptions, input schemas, hints), then disposes the server. The factory must hand the `modelContext` it gets to `WebMcpPlugin.init()`; otherwise it rejects.
 - `registerWebMcpTools(modelContext, tools, loadServer, { exposedTo? })` registers the list at once. The first call loads the server once (concurrent first calls share the load) and runs through the plugin; a failed load rejects that call (a server it built is disposed, the listed tools stay) and the next call retries. Then the plugin follows the server's tool changes; a listed tool the server lacks is unregistered. No `modelContext` → does nothing.
 - `@frontmcp/plugin-webmcp/register` never imports `@frontmcp/sdk` (a few KB, CJS and ESM).
+
+## 8. Result Handles Plugin (`@frontmcp/plugin-result-handles`)
+
+Folds a tool answer over `thresholdBytes` (16 KB by default) into `{ preview, shape, handle }` and adds the
+`result_query` tool, which reads slices of the rest by path, range or page, and fields. A handle is a random UUID bound
+to the call's session and authenticated caller; another session or caller gets `RESULT_HANDLE_NOT_FOUND`, and the
+store keeps each answer encrypted under keys derived from its handle and owner. It runs on
+the `fitAnswer` stage, before `output.budget`. A tool with an output schema folds only when the schema admits the
+folded form (`z.union([schema, foldedAnswerSchema])`).
+
+```typescript
+import ResultHandlesPlugin from '@frontmcp/plugin-result-handles';
+
+@App({
+  name: 'Orders',
+  tools: [ExportOrdersTool],
+  plugins: [ResultHandlesPlugin.init({ thresholdBytes: 32 * 1024, ttlSeconds: 600, storage: { type: 'auto' } })],
+})
+class OrdersApp {}
+```
+
+Every option, the folded form, `result_query` and its errors: see `result-handles-plugin`.
 
 ## Common Patterns
 

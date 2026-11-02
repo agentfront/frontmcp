@@ -1,0 +1,63 @@
+{
+  "name": "@frontmcp/plugin-result-handles",
+  "version": "1.10.16",
+  "description": "Result handles plugin for FrontMCP: folds large tool answers into a preview, a shape and a handle, and lets the model read the rest with result_query",
+  "author": "AgentFront <info@agentfront.dev>",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "keywords": [
+    "frontmcp",
+    "mcp",
+    "model-context-protocol",
+    "result-handles",
+    "large-results",
+    "pagination",
+    "plugin",
+    "agentfront"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentfront/frontmcp.git",
+    "directory": "plugins/plugin-result-handles"
+  },
+  "bugs": {
+    "url": "https://github.com/agentfront/frontmcp/issues"
+  },
+  "homepage": "https://frontmcp.dev/reference/plugins/result-handles",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/esm/index.mjs"
+      }
+    }
+  },
+  "dependencies": {
+    "@frontmcp/utils": "1.10.16"
+  },
+  "peerDependencies": {
+    "@frontmcp/lazy-zod": "1.10.16",
+    "@frontmcp/sdk": "1.10.16"
+  },
+  "devDependencies": {
+    "@frontmcp/sdk": "1.10.16",
+    "reflect-metadata": "^0.2.2"
+  }
+}

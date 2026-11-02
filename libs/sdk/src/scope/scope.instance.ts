@@ -71,6 +71,7 @@ import { SkillValidationError } from '../skill/errors/skill-validation.error';
 import type { SkillSessionManager } from '../skill/session';
 import { pluginsRegisterDynamicSkills, registerSkillCapabilities } from '../skill/skill-scope.helper';
 import SkillRegistry from '../skill/skill.registry';
+import { LiveSurface } from '../surface/live-surface';
 import type { InProcessTaskRunner, TaskRegistry, TaskStore } from '../task';
 import { resolvesToVercelKvTaskBackend } from '../task/store/task-backend.utils';
 import { describeUnlistedOutputSchemas } from '../tool/tool-output-policy';
@@ -114,6 +115,7 @@ export class Scope extends ScopeEntry {
   /** Undefined in a direct-only scope, which serves no HTTP. */
   transportService: TransportService | undefined; // TODO: migrate transport service to transport.registry
   notificationService: NotificationService;
+  private liveSurface?: LiveSurface;
   declare haManager?: HaManager;
   /** ioredis client owned by the HA manager and transport bus; closed in shutdown(). */
   private haRedisClient?: { quit(): Promise<unknown>; disconnect(): void };
@@ -913,6 +915,11 @@ export class Scope extends ScopeEntry {
     await this.notificationService.initialize();
     this.logger.verbose('NotificationService initialized');
 
+    const liveSurface = new LiveSurface(this);
+    liveSurface.start();
+    this.liveSurface = liveSurface;
+    this.onDispose(() => liveSurface.stop());
+
     // Install the task runner now that the notification service is available.
     // The runner needs it to deliver `notifications/tasks/status` events.
     installTaskRunner?.();
@@ -1450,6 +1457,10 @@ export class Scope extends ScopeEntry {
 
   get notifications(): NotificationService {
     return this.notificationService;
+  }
+
+  get surface(): LiveSurface | undefined {
+    return this.liveSurface;
   }
 
   /**

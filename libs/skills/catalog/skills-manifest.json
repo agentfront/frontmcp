@@ -38,7 +38,7 @@
         },
         {
           "name": "availability",
-          "description": "availableWhen axes (os / runtime / deployment / provider / target / surface / env), missingAxes, isPlatform."
+          "description": "availableWhen axes (os / runtime / deployment / provider / target / surface / env), missingAxes, isPlatform, and enabled (fileSignal, FEATURE_OFF, list_changed, the surface hash, STALE_TOOL_LIST)."
         },
         {
           "name": "decorator-options",
@@ -2274,7 +2274,7 @@
         },
         {
           "name": "official-plugins",
-          "description": "Guide to the 7 official plugins for discovery, memory, auth, caching, flags, monitoring, and WebMCP",
+          "description": "Guide to the 8 official plugins for discovery, memory, auth, caching, flags, monitoring, WebMCP, and large answers",
           "examples": [
             {
               "name": "cache-and-feature-flags",
@@ -2391,6 +2391,11 @@
               ]
             }
           ]
+        },
+        {
+          "name": "result-handles-plugin",
+          "description": "Fold large tool answers into a preview, a shape and a handle, and let the model read slices with result_query",
+          "examples": []
         }
       ]
     },

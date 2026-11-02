@@ -40,6 +40,7 @@ const fixtureFiles = [
   'answer-shaping-must-compile.ts',
   'hook-ordering-must-compile.ts',
   'hook-ordering-must-fail.ts',
+  'live-surface-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -165,7 +166,7 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('tool-aliases-must-compile.ts'))).toEqual([]);
   });
 
-  it('types output.budget, clients profiles, http.forwardHeaders and the budget note', () => {
+  it('types output.budget, clients profiles, http.forwardHeaders, the budget note and isClientCall() on the call-tool hook ctx', () => {
     expect(describeEach(inFixtureFile('answer-shaping-must-compile.ts'))).toEqual([]);
   });
 
@@ -186,6 +187,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
     expect(expectedLines).toHaveLength(4);
     expect([...new Set(failures.map(({ location }) => Number(location.split(':').pop())))]).toEqual(expectedLines);
+  });
+
+  it('types enabled as a boolean or an EnabledSource such as fileSignal(), and the surface key', () => {
+    expect(describeEach(inFixtureFile('live-surface-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

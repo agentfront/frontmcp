@@ -18,6 +18,7 @@ import {
   fitToolAnswer,
   measureAnswer,
   meteringEnabled,
+  outputSchemaMismatch,
   recordAnswerCost,
   shapeToolAnswer,
 } from '../../answer';
@@ -70,6 +71,7 @@ import {
   isClientFacingError,
   MissingClientCapabilityError,
   RateLimitError,
+  StaleToolListError,
   TaskAugmentationNotSupportedError,
   TaskAugmentationRequiredError,
   TaskConcurrencyLimitError,
@@ -85,6 +87,7 @@ import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { type Scope } from '../../scope';
 import { isSkillsOnlyRequest } from '../../skill/skill-mode.utils';
+import { assertEntryEnabled, isEntryEnabled } from '../../surface';
 import { generateTaskId } from '../../task/helpers/task-id';
 import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
@@ -200,7 +203,10 @@ const plan = {
     // `?mode=skills_only`: a client's call is answered as for an unknown tool
     'checkSkillsOnlyMode',
     'ensureRemoteCapabilities',
+    // A session that listed an older tool list is told so before a tool it may no longer have is looked up
+    'checkSurface',
     'findTool',
+    'checkEnabled',
     'checkPublicAccess',
     // Auth checks run BEFORE task creation so unauthorized callers cannot
     // materialize a task record (which would leak tool existence + hand back a
@@ -246,6 +252,9 @@ const resolvedTools = new ResolvedEntries<ToolEntry>();
 
 /** The undeclared key paths already reported per tool, so the 'warn' policy names each one once. */
 const reportedUndeclaredKeyPaths = new WeakMap<CallToolEntry, Set<string>>();
+
+/** Tools whose answer the budget left whole because a cut broke the outputSchema, so it is logged once. */
+const reportedUnfittedTools = new WeakSet<CallToolEntry>();
 
 /** The aliases each tool was already called by, so a call by an alias is logged once. */
 const loggedAliasCalls = new WeakMap<ToolEntry, Set<string>>();
@@ -367,6 +376,25 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose(`ensureRemoteCapabilities:done (${remoteAppCount} remote app(s))`);
   }
 
+  /**
+   * A client call from a session whose tool list changed since it last listed, to a tool that is not in the current
+   * list (unknown, or `enabled` off): answered `STALE_TOOL_LIST`, and the session is sent `tools/list_changed`.
+   * The task runner's run of a task-augmented call is not checked: the call that created the task was.
+   */
+  @Stage('checkSurface')
+  async checkSurface() {
+    const sessionId = this.state.authInfo?.sessionId;
+    const surface = this.scope.surface;
+    const callerCtx = this.input.ctx as { taskId?: string } | undefined;
+    if (!surface || !sessionId || callerCtx?.taskId || !this.isClientCall() || !surface.isStale(sessionId)) return;
+    const { name } = this.state.required.input;
+    const tool = resolvedTools.peek(this.rawInput, name) ?? lookupTool(this.scope, name);
+    if (tool && (await isEntryEnabled(tool.metadata.enabled, this.tryGetContext(), this.logger))) return;
+    this.logger.verbose(`checkSurface: "${name}" is not in the tool list that replaced this session's`);
+    surface.refreshSession(sessionId);
+    throw new StaleToolListError(name);
+  }
+
   @Stage('findTool')
   async findTool() {
     this.logger.verbose('findTool:start');
@@ -442,6 +470,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.state.set('tool', tool);
     this.logger.verbose(`findTool: tool "${name}" found`);
     this.logger.verbose('findTool:done');
+  }
+
+  /** A tool whose `enabled` is off is refused with `FEATURE_OFF` and the remedy of its source. */
+  @Stage('checkEnabled')
+  async checkEnabled() {
+    const { tool } = this.state.required;
+    await assertEntryEnabled('Tool', tool.name, tool.metadata.enabled, this.tryGetContext(), this.logger);
   }
 
   private logAliasCall(tool: ToolEntry, alias: string): void {
@@ -1666,19 +1701,34 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     });
 
     // Respond with the properly formatted MCP result; the stages after this one may replace it
-    this.state.set('output', result);
     this.respond(result);
     this.logger.verbose('finalize:done');
   }
 
-  /** Fit the answer to `output.budget` (Tool > App > server). A plugin can replace this stage. */
+  /**
+   * Fit the answer to `output.budget` (Tool > App > server), unless the cut breaks the outputSchema
+   * the client validates `structuredContent` against. A plugin can replace this stage.
+   */
   @Stage('fitAnswer')
   async fitAnswer() {
     const { tool, output } = this.state;
     if (!tool || !output || !this.isClientCall()) return;
     const budget = resolveOutputBudget(...toolOutputPolicies(tool, this.scope));
     const fitted = budget && fitToolAnswer(output, budget);
-    if (fitted) this.answerWith(fitted);
+    if (!fitted) return;
+    const mismatch =
+      fitted.structuredContent !== output.structuredContent && this.clientValidatesStructuredContent(tool)
+        ? outputSchemaMismatch(tool.getRawOutputSchema() as Record<string, unknown>, fitted.structuredContent)
+        : undefined;
+    if (mismatch === undefined) {
+      this.respond(fitted);
+    } else if (!reportedUnfittedTools.has(tool)) {
+      reportedUnfittedTools.add(tool);
+      this.logger.warn(
+        `Tool "${tool.metadata.name}" answered over its ${budget.maxBytes}-byte output.budget and was sent whole: ` +
+          `the cut answer breaks its outputSchema (${mismatch}). Loosen the schema, or raise or turn off the budget.`,
+      );
+    }
   }
 
   /** Shape the answer for the caller's `clients` profile: text, `structuredContent` or both. */
@@ -1688,7 +1738,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     if (!tool || !output || uiResult || !this.isClientCall()) return;
     const mode = this.callerProfile()?.structured;
     const shaped = mode && shapeToolAnswer(output, mode, this.listsOutputSchema(tool));
-    if (shaped) this.answerWith(shaped);
+    if (shaped) this.respond(shaped);
   }
 
   /** Count what the answer costs on `/metrics`, per tool and per client platform. */
@@ -1705,13 +1755,18 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
   }
 
-  private answerWith(output: z.infer<typeof outputSchema>): void {
-    this.state.set('output', output);
-    this.respond(output);
+  /**
+   * Answer the call. Each answer, a stage's or a hook's (an `Around('finalize')` that redacts it),
+   * becomes `state.output`, which the stages after `finalize` fit, shape and count.
+   */
+  override respond(output: z.infer<typeof outputSchema>): never {
+    const answer = outputSchema.parse(output);
+    this.state.set('output', answer);
+    throw FlowControl.respond(answer);
   }
 
   /** Whether a client called the tool, rather than a tool, agent or job in process (`this.callTool()`). */
-  private isClientCall(): boolean {
+  isClientCall(): boolean {
     const callerCtx = this.input.ctx as { internalCall?: boolean; agentPrivateCall?: boolean } | undefined;
     return !(callerCtx?.internalCall || callerCtx?.agentPrivateCall || getRunningTool());
   }
@@ -1737,6 +1792,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       authInfo: this.state.authInfo,
       notifications: this.scope.notifications,
     });
+  }
+
+  /** Whether the caller is listed the tool's `outputSchema` and gets `structuredContent`, so it may validate it. */
+  private clientValidatesStructuredContent(tool: CallToolEntry): boolean {
+    return this.listsOutputSchema(tool) && this.callerProfile()?.structured !== 'text';
   }
 
   /** Whether `tools/list` lists the tool's `outputSchema`, so a client can read `structuredContent` alone. */
