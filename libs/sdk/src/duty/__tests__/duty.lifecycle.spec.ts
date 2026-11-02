@@ -7,10 +7,16 @@ import * as path from 'path';
 import { resetRuntimeContext } from '@frontmcp/utils';
 
 import { App, Duty, LogLevel, redisOptionsSchema, type OnBootstrap, type OnReady, type OnShutdown } from '../../common';
+import { findProjectRoot } from '../../common/types/options/sqlite/resolve';
 import type { DirectMcpServer } from '../../direct';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { createContainer, type FrontMcpContainer } from '../../provider/create-container';
 import { dutyStorageConfig } from '../duty.lifecycle';
+
+jest.mock('../../common/types/options/sqlite/resolve', () => {
+  const actual = jest.requireActual('../../common/types/options/sqlite/resolve');
+  return { ...actual, findProjectRoot: jest.fn(actual.findProjectRoot) };
+});
 
 const quiet = { level: LogLevel.Off, enableConsole: false };
 const ran: object[] = [];
@@ -168,6 +174,17 @@ describe('duties in a server and in createContainer()', () => {
     await sleep(300);
 
     expect(ran).not.toContain(inASubdirectory);
+  });
+
+  it('opens no lease store when the project root cannot be read', async () => {
+    jest.mocked(findProjectRoot).mockImplementationOnce(() => {
+      throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
+    });
+
+    await expect(createContainer({ providers: [IndexDuty], runDuties: true, logging: quiet })).rejects.toThrow(
+      'permission denied',
+    );
+    expect(fs.existsSync(path.join(home, 'duties.sqlite'))).toBe(false);
   });
 
   it('does not start duties in a serverless deployment', async () => {

@@ -132,6 +132,7 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
       return undefined;
     }
     const config = this.providers.get(FrontMcpConfig);
+    const key = leaseKey(this.metadata, config.info?.name ?? 'frontmcp');
     const storageConfig = dutyStorageConfig(config.redis);
     if (storageConfig.sqlite) await ensureDir(nodePath().dirname(storageConfig.sqlite.path));
     const storage = await createStorage(storageConfig);
@@ -141,7 +142,7 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
       leaseMs,
       storage,
       logger,
-      key: leaseKey(this.metadata, config.info?.name ?? 'frontmcp'),
+      key,
       run: (context) => this.duty.run(context),
     });
     await runner.start();

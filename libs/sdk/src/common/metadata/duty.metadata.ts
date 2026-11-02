@@ -55,6 +55,7 @@ export const dutyMetadataSchema = z
   })
   .strict();
 
+/** @internal Records what `@Duty` resolved on the class. */
 export function defineDutyMetadata(target: object, metadata: ResolvedDutyMetadata): void {
   Reflect.defineMetadata(DUTY_METADATA, metadata, target);
 }
