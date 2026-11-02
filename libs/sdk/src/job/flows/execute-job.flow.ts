@@ -17,7 +17,7 @@ import { JobEntry } from '../../common/entries/job.entry';
 import { JobContext } from '../../common/interfaces/job.interface';
 import { runOnSurface } from '../../context/call-surface';
 import { InternalMcpError, JobNotAuthorizedError } from '../../errors';
-import { type EntryClassHooksJoin } from '../../hooks/entry-class-hooks';
+import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import {
   EXECUTE_JOB_FLOW,
@@ -110,7 +110,7 @@ declare global {
 const name = EXECUTE_JOB_FLOW;
 
 /** Where the hooks a job class declares join a run: instance methods run on the instance 'createJobContext' builds. */
-export const jobClassHooksJoin: EntryClassHooksJoin = { flow: name, plan, contextStage: 'createJobContext' };
+export const jobClassHooksJoin = entryClassHooksJoin({ flow: name, plan, contextStage: 'createJobContext' });
 const { Stage } = FlowHooksOf<'jobs:execute-job'>(name);
 
 /** The job a run's raw input names. */
