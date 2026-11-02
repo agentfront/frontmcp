@@ -30,10 +30,10 @@ export class StdioJsonRpcProcess {
     });
   }
 
-  static start(entrypointPath: string, cwd: string): StdioJsonRpcProcess {
+  static start(entrypointPath: string, cwd: string, env: Record<string, string> = {}): StdioJsonRpcProcess {
     const child = spawn('npx', ['tsx', entrypointPath], {
       cwd,
-      env: process.env as Record<string, string>,
+      env: { ...process.env, ...env } as Record<string, string>,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     child.stderr.resume();
@@ -64,6 +64,13 @@ export class StdioJsonRpcProcess {
         setTimeout(wake, 200);
       });
     }
+  }
+
+  /** Send SIGTERM, leaving stdin open, and resolve with the exit code. */
+  async terminate(): Promise<number | null> {
+    const exited = new Promise<number | null>((resolve) => this.child.once('exit', (code) => resolve(code)));
+    this.child.kill('SIGTERM');
+    return exited;
   }
 
   async stop(): Promise<void> {

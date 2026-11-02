@@ -979,6 +979,20 @@ describe('generateCliEntry', () => {
       expect(source).toContain('.pid');
     });
 
+    it('creates the sockets directory owner-only (0700)', () => {
+      const source = generateCliEntry(makeOptions());
+      expect(source).toContain('fs.mkdirSync(socketDir, { recursive: true, mode: 0o700 })');
+      expect(source).toContain('fs.chmodSync(socketDir, 0o700)');
+    });
+
+    it('removes a leftover socket only once no daemon is running', () => {
+      const source = generateCliEntry(makeOptions());
+      const runningCheck = source.indexOf("console.log('Daemon already running");
+      const unlink = source.indexOf('fs.unlinkSync(socketPath)');
+      expect(runningCheck).toBeGreaterThan(-1);
+      expect(unlink).toBeGreaterThan(runningCheck);
+    });
+
     it('should write the name and entry that frontmcp list and status read (#768)', () => {
       const source = generateCliEntry(makeOptions({ appName: 'my-server', selfContained: false }));
       expect(source).toContain('name: "my-server"');

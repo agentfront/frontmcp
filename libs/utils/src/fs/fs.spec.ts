@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import {
   access,
+  chmod,
   copyFile,
   cp,
   ensureDir,
@@ -12,6 +13,7 @@ import {
   fileExistsSync,
   getSpawnFn,
   isDirEmpty,
+  lstat,
   mkdir,
   mkdtemp,
   readdir,
@@ -381,6 +383,38 @@ describe('FS Utils', () => {
 
     it('should throw for non-existing path', async () => {
       await expect(stat(path.join(tempDir, 'nonexistent'))).rejects.toThrow(/ENOENT/);
+    });
+  });
+
+  describe('lstat', () => {
+    it('describes a symlink itself, not its target', async () => {
+      const target = path.join(tempDir, 'target.txt');
+      const link = path.join(tempDir, 'link.txt');
+      await fs.promises.writeFile(target, 'content');
+      await fs.promises.symlink(target, link);
+
+      const stats = await lstat(link);
+
+      expect(stats.isSymbolicLink()).toBe(true);
+    });
+
+    it('should throw for non-existing path', async () => {
+      await expect(lstat(path.join(tempDir, 'nonexistent'))).rejects.toThrow(/ENOENT/);
+    });
+  });
+
+  describe('chmod', () => {
+    it('sets the permission bits', async () => {
+      const filePath = path.join(tempDir, 'chmod.txt');
+      await fs.promises.writeFile(filePath, 'content');
+
+      await chmod(filePath, 0o600);
+
+      expect((await fs.promises.stat(filePath)).mode & 0o777).toBe(0o600);
+    });
+
+    it('should throw for non-existing path', async () => {
+      await expect(chmod(path.join(tempDir, 'nonexistent'), 0o600)).rejects.toThrow(/ENOENT/);
     });
   });
 

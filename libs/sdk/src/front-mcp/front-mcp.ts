@@ -28,7 +28,7 @@ import { computeTaskCapabilities } from '../task/task-scope.helper';
 import type { FetchHandlerCtx, WebFetchHandler } from '../transport/web-fetch-handler';
 import { markDirectOnly } from './direct-only.flag';
 import { createMcpGlobalProviders } from './front-mcp.providers';
-import { DEFAULT_SHUTDOWN_DEADLINE_MS, exitOnShutdownSignals } from './shutdown-signals';
+import { DEFAULT_SHUTDOWN_DEADLINE_MS, exitOnShutdownSignals, STDIO_SHUTDOWN_DEADLINE_MS } from './shutdown-signals';
 
 /**
  * A `@FrontMcp`-decorated server class, or the raw config object it wraps.
@@ -151,6 +151,16 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // hard-code either, and the bridge must not guess.
     if (getEnv('FRONTMCP_DEV_BOOTSTRAP_SENTINEL') === '1') {
       process.stderr.write(`__FRONTMCP_BOOTSTRAP_COMPLETE__ ${JSON.stringify(this.devListenerInfo(server))}\n`);
+    }
+  }
+
+  /** Start, or shut down what was built when the start fails (a refused socket, a port in use), then rethrow. */
+  private async startOrRelease(): Promise<void> {
+    try {
+      await this.start();
+    } catch (error) {
+      await this.shutdown().catch(() => undefined);
+      throw error;
     }
   }
 
@@ -342,7 +352,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
-    await frontMcp.start();
+    await frontMcp.startOrRelease();
     exitOnShutdownSignals(() => frontMcp.shutdown(), { logger: frontMcp.log });
     frontMcp.log?.info('FrontMCP bootstrap complete');
     return frontMcp;
@@ -656,7 +666,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
-    await frontMcp.start();
+    await frontMcp.startOrRelease();
     frontMcp.log?.info(`MCP server listening on unix://${socketPath}`);
 
     // The graceful shutdown of the TCP server (#712). Closing the server removes its socket file, and the next
@@ -796,11 +806,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       await frontMcp.ready;
       // Scopes are now live (sqlite/redis/channels/jobs) — shut them down if a
       // later startup step throws.
-      startupCleanups.push(async () => {
-        for (const s of frontMcp.getScopes()) {
-          await (s as Scope).shutdown();
-        }
-      });
+      startupCleanups.push(() => frontMcp.shutdown());
 
       // The scope holding the server's own apps, not a standalone app's
       const primaryScope = frontMcp.getPrimaryScope();
@@ -908,29 +914,19 @@ export class FrontMcpInstance implements FrontMcpInterface {
         scope.notifications.subscribeAllChannels(sessionId, channelNames);
       }
 
-      // Graceful shutdown: cleanup resources then exit with code 0.
-      // A ref'd timer keeps the event loop alive while async cleanup runs —
-      // without it, closing the transport removes the last ref (stdin) and the
-      // process exits via the raw signal before process.exit(0) is reached.
-      // This is the same pattern used by Express/Fastify for graceful shutdown.
-      let shuttingDown = false;
-      const shutdownHandler = async () => {
-        if (shuttingDown) return; // prevent re-entry from second signal
-        shuttingDown = true;
-        const deadline = setTimeout(() => process.exit(1), 5000);
-        try {
+      // The graceful shutdown of the HTTP and socket servers (#712): every scope is shut down, then
+      // disposed, so `onDispose` callbacks run under stdio too.
+      exitOnShutdownSignals(
+        async () => {
           scope.notifications.unregisterServer(sessionId);
-          await scope.shutdown();
-          await mcpServer.close();
-        } catch (err) {
-          console.error('Error closing MCP server:', err);
-        } finally {
-          clearTimeout(deadline);
-        }
-        process.exit(0);
-      };
-      process.on('SIGINT', shutdownHandler);
-      process.on('SIGTERM', shutdownHandler);
+          try {
+            await frontMcp.shutdown();
+          } finally {
+            await mcpServer.close();
+          }
+        },
+        { logger: frontMcp.log, deadlineMs: STDIO_SHUTDOWN_DEADLINE_MS },
+      );
     } finally {
       if (!startupSucceeded) {
         // Roll back resources the partial startup created (newest-first), then

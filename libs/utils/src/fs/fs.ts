@@ -299,6 +299,39 @@ export async function stat(p: string): Promise<import('fs').Stats> {
 }
 
 /** Link type accepted by {@link symlink}; only meaningful on Windows. */
+/**
+ * Get file/directory stats without following a symlink.
+ *
+ * **Node.js only** - throws an error if called in browser.
+ *
+ * @param p - Path to file, directory, socket or symlink
+ * @returns Stats of the entry itself (isSocket(), isSymbolicLink(), mode, uid, ...)
+ *
+ * @example
+ * const stats = await lstat('/tmp/app.sock');
+ * if (stats.isSocket()) { ... }
+ */
+export async function lstat(p: string): Promise<import('fs').Stats> {
+  const fsp = getFsp();
+  return fsp.lstat(p);
+}
+
+/**
+ * Change the permission bits of a file or directory.
+ *
+ * **Node.js only** - throws an error if called in browser.
+ *
+ * @param p - Path to file or directory
+ * @param mode - Permission bits, e.g. 0o600
+ *
+ * @example
+ * await chmod('/tmp/app.sock', 0o600);
+ */
+export async function chmod(p: string, mode: number): Promise<void> {
+  const fsp = getFsp();
+  await fsp.chmod(p, mode);
+}
+
 export type SymlinkType = 'dir' | 'file' | 'junction';
 
 /**

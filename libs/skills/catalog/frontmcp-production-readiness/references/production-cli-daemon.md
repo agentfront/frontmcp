@@ -22,7 +22,9 @@ Checklist for deploying FrontMCP as a long-running local MCP server managed by t
 - [ ] Unix socket path is configured: `http: { socketPath: '/tmp/my-app.sock' }`
 - [ ] Socket file is cleaned up on shutdown (no stale `.sock` files)
 - [ ] Stdio transport works as fallback: `frontmcp socket ./src/main.ts`
-- [ ] Socket permissions are restrictive (only the owning user can connect)
+- [ ] Socket permissions are restrictive: FrontMCP creates the socket `0600` (only the owning user can connect) and fails startup if it cannot
+- [ ] The socket directory is writable only by the owner (or is sticky, like `/tmp`); startup refuses any other with `UnsafeSocketDirectoryError`
+- [ ] A second daemon on the same socket path fails with `SocketInUseError` and the first keeps serving
 
 ## Service Registration
 
@@ -64,10 +66,10 @@ On a Unix socket (`runUnixSocket()`, or `bootstrap()` under `FRONTMCP_DAEMON_SOC
 
 ## Examples
 
-| Example                                                                                       | Level        | Description                                                                                                                                 |
-| --------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`daemon-socket-config`](../examples/production-cli-daemon/daemon-socket-config.md)           | Basic        | Shows how to configure a FrontMCP server as a long-running local daemon with Unix socket transport, process management, and SQLite storage. |
-| [`graceful-shutdown-cleanup`](../examples/production-cli-daemon/graceful-shutdown-cleanup.md) | Intermediate | Shows how to layer daemon-specific cleanup (socket file, PID file) **on top of** the framework's built-in SIGTERM/SIGINT handler.           |
-| [`security-and-permissions`](../examples/production-cli-daemon/security-and-permissions.md)   | Advanced     | Shows how to secure a local daemon with restrictive socket permissions, XDG-compliant config storage, and file-based secret management.     |
+| Example                                                                                       | Level        | Description                                                                                                                                                    |
+| --------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`daemon-socket-config`](../examples/production-cli-daemon/daemon-socket-config.md)           | Basic        | Shows how to configure a FrontMCP server as a long-running local daemon with Unix socket transport, process management, and SQLite storage.                    |
+| [`graceful-shutdown-cleanup`](../examples/production-cli-daemon/graceful-shutdown-cleanup.md) | Intermediate | Shows how to layer daemon-specific cleanup (PID file) **on top of** the framework's built-in SIGTERM/SIGINT handler, leaving the socket file to the framework. |
+| [`security-and-permissions`](../examples/production-cli-daemon/security-and-permissions.md)   | Advanced     | Shows how to secure a local daemon with restrictive socket permissions, XDG-compliant config storage, and file-based secret management.                        |
 
 > See all examples in [`examples/production-cli-daemon/`](../examples/production-cli-daemon/)

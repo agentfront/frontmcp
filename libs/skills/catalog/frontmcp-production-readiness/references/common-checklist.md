@@ -40,7 +40,8 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] Startup logs show no `DNS-rebinding protection is not enforcing a Host allow-list` warning, and
       the production audit reports `[Security] DNS_REBINDING_PROTECTED` (not `DNS_REBINDING_NOT_ENFORCED`)
 - [ ] Include the port when the public URL uses a non-default one (`api.example.com:8443`)
-- [ ] `allowedOrigins` is set when a browser client connects, so a foreign `Origin` is refused
+- [ ] On a routable bind, `allowedOrigins` is set when a browser client connects, so a foreign `Origin` is refused.
+      A loopback bind derives its own origins (plus the `cors.origin` list) and refuses any other `Origin`
 
 ### Input Validation
 

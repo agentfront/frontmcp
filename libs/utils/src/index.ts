@@ -58,6 +58,8 @@ export {
   rename,
   unlink,
   stat,
+  lstat,
+  chmod,
   copyFile,
   cp,
   readdir,

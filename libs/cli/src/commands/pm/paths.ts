@@ -4,8 +4,8 @@
  */
 
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
 
 const FRONTMCP_HOME = path.join(os.homedir(), '.frontmcp');
 
@@ -50,4 +50,11 @@ export function ensurePmDirs(): void {
       fs.mkdirSync(dir, { recursive: true });
     }
   }
+  ensureSocketsDir();
+}
+
+/** The server refuses a socket directory others can write to, so this one is owner-only (0700). */
+export function ensureSocketsDir(): void {
+  fs.mkdirSync(PM_DIRS.sockets, { recursive: true, mode: 0o700 });
+  fs.chmodSync(PM_DIRS.sockets, 0o700);
 }
