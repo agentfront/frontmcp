@@ -93,6 +93,20 @@ class TwoTextsTool extends ToolContext {
   }
 }
 
+@Tool({ name: 'rows_and_summary', inputSchema: {} })
+class RowsAndSummaryTool extends ToolContext {
+  async execute() {
+    const data = { rows: rows(100), total: 100 };
+    return {
+      content: [
+        { type: 'text', text: JSON.stringify(data) },
+        { type: 'text', text: 'Exported 100 rows from the archive.' },
+      ],
+      structuredContent: data,
+    };
+  }
+}
+
 @Tool({ name: 'chart', inputSchema: {} })
 class ChartTool extends ToolContext {
   async execute() {
@@ -143,6 +157,7 @@ const foldPolicy = jest.fn((toolName: string, _answer: unknown, _context: FoldCo
     LongTextTool,
     RowsTextTool,
     TwoTextsTool,
+    RowsAndSummaryTool,
     ChartTool,
     FailingRowsTool,
     RowCountTool,
@@ -322,6 +337,9 @@ describe('ResultHandlesPlugin', () => {
       const client = await open();
       expect((await call(client, 'chart')).content[0]?.type).toBe('image');
       expect((await call(client, 'two_texts')).content).toHaveLength(2);
+      const withSummary = await call(client, 'rows_and_summary');
+      expect(textAt(withSummary, 1)).toBe('Exported 100 rows from the archive.');
+      expect(withSummary.structuredContent).toEqual({ rows: rows(100), total: 100 });
       const failing = await call(client, 'failing_rows');
       expect(failing.isError).toBe(true);
       expect(JSON.parse(textAt(failing, 0))).toHaveLength(100);

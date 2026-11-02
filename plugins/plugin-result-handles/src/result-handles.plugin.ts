@@ -34,10 +34,10 @@ function parsedJsonText(text: string): unknown {
   }
 }
 
-/** What an answer of text content only carries: its `structuredContent`, else its one text (as JSON when it is JSON). */
+/** What an answer of at most one text content carries: its `structuredContent`, else its text (as JSON when it is JSON). */
 function answerDataOf(result: CallToolResult): unknown {
   const texts = result.content.flatMap((block) => (block.type === 'text' ? [block.text] : []));
-  if (texts.length !== result.content.length) return undefined;
+  if (texts.length !== result.content.length || texts.length > 1) return undefined;
   if (result.structuredContent !== undefined) return result.structuredContent;
   if (texts.length !== 1) return undefined;
   return parsedJsonText(texts[0]) ?? texts[0];
