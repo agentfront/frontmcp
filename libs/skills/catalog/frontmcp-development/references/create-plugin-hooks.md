@@ -134,7 +134,7 @@ export class BillingApp {}
 
 ### Seeing the Resolved Order
 
-With `NODE_ENV=development`, or `DEBUG=1`, a flow logs at info level the order its hooks resolve to, on its first run for each hook owner (the app of the entry the run is for) and for each entry class that declares hooks of its own. It is logged once, not per request, and nothing is built outside dev mode. Each line is a stage that has hooks, with its steps in the order they run, as `type Class.method (priority)`; an `@Around` hook's brackets hold what it wraps:
+With `NODE_ENV=development`, or `DEBUG=1`, a flow logs at info level the order its hooks resolve to, on its first run for each hook owner (the app of the entry the run is for) and for each entry class that declares hooks of its own. It is logged once, not per request, and nothing is built for it unless the server runs in dev mode or with `DEBUG` set. Each line is a stage that has hooks, with its steps in the order they run, as `type Class.method (priority)`; an `@Around` hook's brackets hold what it wraps:
 
 ```text
 [FlowInstance] INFO Hook order of 'tools:call-tool' for 'billing', lowest priority first (an around hook wraps what its brackets hold):
