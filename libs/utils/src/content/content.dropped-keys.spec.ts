@@ -45,6 +45,13 @@ describe('findDroppedKeys', () => {
     expect(findDroppedKeys([{ id: 1 }], { 0: { id: 1 } })).toEqual(['[].id']);
   });
 
+  it('stops at a value the parsed answer holds by reference, so a cycle under it is not followed', () => {
+    const node: Record<string, unknown> = { name: 'node' };
+    node['self'] = node;
+
+    expect(findDroppedKeys({ id: 1, extra: true, meta: node }, { id: 1, meta: node })).toEqual(['extra']);
+  });
+
   it('finds nothing to drop in a primitive answer', () => {
     expect(findDroppedKeys('text', { value: 'text' })).toEqual([]);
     expect(findDroppedKeys(['a', 'b'], 'a,b')).toEqual([]);

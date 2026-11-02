@@ -396,7 +396,8 @@ function parseSingleValue(
 
 /**
  * The value an output schema accepts, with undeclared keys handled per `options.undeclaredKeys`,
- * or an InvalidOutputError naming the first mismatch or the undeclared keys `'fail'` refuses.
+ * or an InvalidOutputError naming the first mismatch, the undeclared keys `'fail'` refuses, or those `'keep'` cannot
+ * put back because the schema replaced the object holding them (a coercion to a primitive).
  * A schema with a transform is always stripped: its output cannot be compared with the answer key by key.
  */
 function parseAgainstOutputSchema(schema: z.ZodType, value: unknown, options: OutputParseOptions = {}): unknown {
@@ -406,8 +407,17 @@ function parseAgainstOutputSchema(schema: z.ZodType, value: unknown, options: Ou
   const undeclaredKeys = findDroppedKeys(value, declared);
   if (undeclaredKeys.length === 0) return declared;
   switch (policy) {
-    case 'keep':
-      return withUndeclaredKeys(value, declared);
+    case 'keep': {
+      const kept = withUndeclaredKeys(value, declared);
+      const unkeptKeys = findDroppedKeys(value, kept);
+      if (unkeptKeys.length > 0) {
+        throw new InvalidOutputError({
+          reason: 'undeclared keys the outputSchema cannot keep',
+          value: unkeptKeys.join(', '),
+        });
+      }
+      return kept;
+    }
     case 'fail':
       throw new InvalidOutputError({ reason: 'undeclared keys', value: undeclaredKeys.join(', ') });
     case 'warn':
@@ -418,6 +428,7 @@ function parseAgainstOutputSchema(schema: z.ZodType, value: unknown, options: Ou
 
 /** `declared` with the keys of `original` its schema dropped put back, at every level. */
 function withUndeclaredKeys(original: unknown, declared: unknown): unknown {
+  if (original === declared) return declared;
   if (Array.isArray(original) && Array.isArray(declared)) {
     return declared.map((item, index) => withUndeclaredKeys(original[index], item));
   }
