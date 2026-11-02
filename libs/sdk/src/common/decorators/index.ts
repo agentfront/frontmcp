@@ -16,3 +16,4 @@ export * from './job.decorator';
 export * from './workflow.decorator';
 export * from './channel.decorator';
 export * from './duty.decorator';
+export * from './http-route.decorator';

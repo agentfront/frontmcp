@@ -67,13 +67,21 @@ export const plan = {
  * the 200 and the SSE headers are already committed — the client would see a
  * truncated stream instead of a JSON-RPC error.
  */
+/** The most resource URIs one `subscriptions/listen` may ask for: each one runs the `resources:subscribe` checks. */
+export const MAX_RESOURCE_SUBSCRIPTIONS = 1000;
+
 const subscriptionParamsSchema = z.object({
   notifications: z
     .object({
       toolsListChanged: z.boolean().optional(),
       promptsListChanged: z.boolean().optional(),
       resourcesListChanged: z.boolean().optional(),
-      resourceSubscriptions: z.array(z.string()).optional(),
+      resourceSubscriptions: z
+        .array(z.string())
+        .max(MAX_RESOURCE_SUBSCRIPTIONS, {
+          message: `subscriptions/listen takes at most ${MAX_RESOURCE_SUBSCRIPTIONS} resourceSubscriptions`,
+        })
+        .optional(),
     })
     .default({}),
 });
@@ -381,7 +389,14 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
     const parsedParams = subscriptionParamsSchema.safeParse((body['params'] as Record<string, unknown>) ?? {});
     if (!parsedParams.success) {
       this.respond(
-        errorResponse(400, { code: -32602, message: 'Invalid subscriptions/listen params' }, subscriptionId.data),
+        errorResponse(
+          400,
+          {
+            code: -32602,
+            message: `Invalid subscriptions/listen params: ${parsedParams.error.issues[0]?.message ?? 'not an object'}`,
+          },
+          subscriptionId.data,
+        ),
       );
       return;
     }
@@ -458,8 +473,9 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
     mayRead: (uri: string) => Promise<boolean>,
   ): Promise<string[] | undefined> {
     if (!uris) return undefined;
-    const allowed = await Promise.all(uris.map(mayRead));
-    return uris.filter((_uri, index) => allowed[index]);
+    const unique = [...new Set(uris)];
+    const allowed = await Promise.all(unique.map(mayRead));
+    return unique.filter((_uri, index) => allowed[index]);
   }
 
   /**

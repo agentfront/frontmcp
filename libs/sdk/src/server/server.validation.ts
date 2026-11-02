@@ -37,7 +37,35 @@ function stringToBytes(str: string, encoding: 'utf8' | 'base64'): Uint8Array {
   try {
     return base64Decode(str);
   } catch (err) {
-    throw new Error(`Invalid base64 body: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`Invalid base64 body: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+  }
+}
+
+/**
+ * Write an `sse` output's chunks, taking the next one only once a full socket drains, so a slow reader leaves the
+ * waiting to the stream. The client leaving, before or while writing, ends the iterator.
+ */
+async function writeSseChunks(res: ServerResponse, iterator: AsyncIterator<Uint8Array | string>): Promise<void> {
+  let clientLeft = false;
+  let resume: (() => void) | undefined;
+  const stop = () => {
+    if (clientLeft) return;
+    clientLeft = true;
+    resume?.();
+    void iterator.return?.();
+  };
+  const drained = () => resume?.();
+  res.on?.('close', stop);
+  res.on?.('drain', drained);
+  if (res.destroyed) stop();
+  try {
+    for (let step = await iterator.next(); !step.done && !clientLeft; step = await iterator.next()) {
+      if (res.write(step.value) === false && !clientLeft) await new Promise<void>((resolve) => (resume = resolve));
+      resume = undefined;
+    }
+  } finally {
+    res.off?.('close', stop);
+    res.off?.('drain', drained);
   }
 }
 
@@ -150,9 +178,7 @@ export async function writeHttpResponse(res: ServerResponse, value: any): Promis
         Symbol.asyncIterator
       ];
       if (typeof maybeIter === 'function' && 'write' in res && typeof res.write === 'function') {
-        for await (const chunk of out.stream as AsyncIterable<Uint8Array | string>) {
-          res.write(chunk);
-        }
+        await writeSseChunks(res, maybeIter.call(out.stream));
         res.end();
         return;
       }

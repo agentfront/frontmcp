@@ -77,6 +77,10 @@ a package bin that is the folder of the bin link (`node_modules/.bin`, or the gl
 cache takes the server with it, and a global bin folder never goes. Only a folder that is gone counts as removed; one
 that can't be checked (no access, a network file system timing out) does not.
 
+Give every session of a key the same `transport`. A session attaches only to a server of its own transport, so one
+that finds the key's server running over the other transport starts a second server, which takes the record over;
+the first keeps running, with its background work, until you stop it.
+
 `key` is 1 to 64 lowercase letters, digits, `.`, `_` or `-`, starting and ending with a letter or digit, and not a
 device name Windows reserves (`con`, `prn`, `aux`, `nul`, `com0`-`com9`, `lpt0`-`lpt9`, with or without an extension):
 on a case-insensitive file system (macOS, Windows) `My-Server` and `my-server` would share one folder, and Windows
@@ -176,10 +180,10 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
   way.
 - **Other users** can't reach the Unix socket at all. On loopback HTTP they can connect, but every MCP request needs
   the token; a process that takes the port of a server that stopped, before a session attaches or while sessions are
-  attached, gets challenges it can't answer, and never a request or the token. A proof replayed from an earlier
-  challenge, made with an earlier server's key, bound to another endpoint, or claiming another version is refused, so
-  a squatter can't pass for a newer server either. Only a holder of the token can make a server drain, and only for a
-  newer version.
+  attached, gets challenges it can't answer, and is not sent a request or the token, except in the instant described
+  below. A proof replayed from an earlier challenge, made with an earlier server's key, bound to another endpoint, or
+  claiming another version is refused, so a squatter can't pass for a newer server either. Only a holder of the token
+  can make a server drain, and only for a newer version.
 - **Web pages** can't reach the socket. On loopback HTTP the server accepts only the loopback names as `Host` (DNS
   rebinding) and refuses every request that carries an `Origin`.
 - The record is what a session trusts: a server proves it holds the record's secret, not that it is yours. That is
@@ -187,7 +191,7 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
 - Endpoints that need no token on any FrontMCP server still answer other users on loopback HTTP: the health routes
   (`/health`, `/healthz`, `/readyz`: the server's name, version and counts) and routes a plugin adds.
 - A process that takes the port in the instant between a challenge and the request it guards could receive that one
-  request; the token it carries is useless, since it dies with the server.
+  request, its payload included; the token it carries is useless, since it dies with the server.
 - **Same-user processes** can read the record, as they can read everything else of yours: the shared server trusts
   them like any stdio server does. One that holds the token can make a server drain by claiming a newer version, as it
   could stop its pid.

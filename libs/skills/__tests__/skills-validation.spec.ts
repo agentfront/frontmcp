@@ -566,7 +566,12 @@ describe('skills catalog validation', () => {
       ]);
       for (const { skill, file, fullPath } of documentationFiles) {
         if (METRICS_AUTH_FILES.has(`${skill}/${file}`)) continue;
-        const content = fs.readFileSync(fullPath, 'utf-8');
+        // `@HttpRoute({ auth: 'public' })` is a route's own option, not the server's auth shorthand
+        const content = fs
+          .readFileSync(fullPath, 'utf-8')
+          .split('\n')
+          .filter((line) => !line.includes('@HttpRoute('))
+          .join('\n');
         // Match auth: 'remote', auth: 'public', auth: 'transparent' as standalone config values
         const authShorthand = content.match(/auth:\s*['"](?:remote|public|transparent)['"]/g);
         if (authShorthand) {

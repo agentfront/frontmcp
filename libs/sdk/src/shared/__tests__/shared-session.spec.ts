@@ -336,6 +336,25 @@ posixOnly('a shared local server', () => {
       expect(fs.existsSync(files.socketPath)).toBe(false);
     });
 
+    it('shuts the server down when its scope cannot take the identify flow', async () => {
+      let shutdown: jest.SpyInstance | undefined;
+      const failing = (parsed: ConstructorParameters<typeof FrontMcpInstance>[0]) => {
+        const instance = create(parsed);
+        shutdown = jest.spyOn(instance, 'shutdown');
+        const getPrimaryScope = instance.getPrimaryScope.bind(instance);
+        jest.spyOn(instance, 'getPrimaryScope').mockImplementation(() => {
+          const scope = getPrimaryScope();
+          if (scope) jest.spyOn(scope, 'registryFlows').mockRejectedValue(new Error('flows refused'));
+          return scope;
+        });
+        return instance;
+      };
+
+      await expect(serveShared(config, { key: 'spec', transport: 'http' }, failing)).rejects.toThrow('flows refused');
+      expect(shutdown).toHaveBeenCalled();
+      expect(fs.existsSync(sharedServerFiles('spec').recordFile)).toBe(false);
+    });
+
     it('does not start while another launcher starts the server of its key', async () => {
       const storage = await openLauncherLocks();
       expect(await new SharedStartLock(storage, 'spec').acquire()).toBe(true);

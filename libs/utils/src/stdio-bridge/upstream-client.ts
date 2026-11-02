@@ -103,6 +103,7 @@ export function createHttpUpstream(options: HttpUpstreamOptions): HttpUpstreamCl
 
       const res = await (options.fetch ?? fetch)(url, {
         method: 'POST',
+        redirect: 'error',
         headers,
         body: JSON.stringify(frame),
         signal,
@@ -190,6 +191,7 @@ export function createHttpUpstream(options: HttpUpstreamOptions): HttpUpstreamCl
       try {
         const res = await (options.fetch ?? fetch)(url, {
           method: 'DELETE',
+          redirect: 'error',
           headers: { ...options.headers, [SESSION_HEADER]: ending },
           signal: AbortSignal.timeout(END_SESSION_TIMEOUT_MS),
         });
