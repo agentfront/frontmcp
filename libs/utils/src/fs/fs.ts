@@ -43,9 +43,10 @@ function getSpawn(): typeof import('child_process').spawn {
  * detached worker (CLI task runners, dev-server supervisors, etc.). Throws
  * via `assertNode` on non-Node runtimes.
  *
- * **Node.js only.** Exposed because consumers (e.g. `CliTaskRunner` in the
- * SDK) need a single place to reach `spawn` without a top-level
- * `import 'node:child_process'` that V8 isolates would choke on.
+ * **Node.js only.** Exposed so consumers have a single place to reach `spawn`
+ * without a top-level `import 'node:child_process'` that V8 isolates would
+ * choke on. A worker that should be reapable once its owner dies is spawned
+ * with `spawnOwned` instead (as `CliTaskRunner` in the SDK does).
  */
 export function getSpawnFn(): typeof import('child_process').spawn {
   return getSpawn();

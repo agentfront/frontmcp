@@ -5,6 +5,16 @@ import { join } from 'path';
 
 import { OwnedProcessError, parseProcessList, reapOrphans, spawnOwned, type ProcessInfo } from '../owned-process';
 
+let mockPsResult: object | undefined;
+
+jest.mock('child_process', () => {
+  const actual = jest.requireActual<typeof import('child_process')>('child_process');
+  return {
+    ...actual,
+    spawnSync: (...args: Parameters<typeof actual.spawnSync>) => mockPsResult ?? actual.spawnSync(...args),
+  };
+});
+
 function esrch(): Error {
   return Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' });
 }
@@ -212,4 +222,21 @@ describe('reapOrphans', () => {
     },
     20_000,
   );
+});
+
+describe('reapOrphans when ps fails', () => {
+  afterEach(() => {
+    mockPsResult = undefined;
+  });
+
+  it.each([
+    [{ status: 1, stdout: '', stderr: 'ps: illegal option -- w\n' }, 'ps: illegal option -- w'],
+    [{ status: 1, stdout: '', stderr: '' }, 'exit code 1'],
+    [{ status: null, stdout: '', stderr: '', error: new Error('spawnSync ps ENOENT') }, 'spawnSync ps ENOENT'],
+  ])('rejects with the reason', async (result, reason) => {
+    mockPsResult = result;
+    const reaping = reapOrphans('tasks', {}, { platform: 'linux' });
+    await expect(reaping).rejects.toBeInstanceOf(OwnedProcessError);
+    await expect(reaping).rejects.toThrow(`Could not list processes with ps: ${reason}`);
+  });
 });
