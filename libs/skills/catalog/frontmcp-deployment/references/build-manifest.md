@@ -33,9 +33,22 @@ over the server's `instructionsBudget`.
 
 ## What the Build Does
 
-After a target's own build, `frontmcp build` bundles the entry, boots the server in process (as
-`frontmcp skills install --from-entry` does: no port, no transport, no file log), and writes the manifest. One build
-of several targets boots it once and writes the same manifest into each output directory.
+After a target's own build, `frontmcp build` bundles the entry, boots the server in process only to read it, and
+writes the manifest. One build of several targets boots it once and writes the same manifest into each output
+directory; the `mcpb` target also ships it inside the archive, as `server/frontmcp.manifest.json` next to the server
+it describes.
+
+The boot reads the server; it does not run it:
+
+- Nothing serves: no port, no transport, no file log. `FrontMcpInstance.bootstrap()`, `runStdio()` and
+  `runUnixSocket()` called while the entry module loads return without serving.
+- None of the config's stores is opened: `redis`, `pubsub`, `sqlite` and `jobs.store` are left out, so the build
+  connects to no Redis, writes no SQLite file, and a CI machine without them builds the same manifest.
+- Providers are built and their `onBootstrap()` runs; `onReady()` never does, so nothing that starts once the server
+  serves starts. `onShutdown()` runs when the manifest has been read.
+- Your own code still runs: module-level code, provider factories, plugins and adapters that connect while starting
+  (an OpenAPI spec fetched from a URL, a remote app's server). A boot that has not finished after 60 s stops the wait:
+  `The server did not finish booting within 60 s: ...`.
 
 ```bash
 frontmcp build --target node              # dist/node/frontmcp.manifest.json, lint printed as warnings
@@ -49,8 +62,8 @@ When the manifest cannot be built (the entry fails to boot in Node, an older `@f
 ## What the Manifest Holds
 
 `manifestVersion` is `1`. Every list is sorted (tools and prompts by name, resources by URI, templates by URI template,
-skills by path, apps by id) and the file has no timestamps, so the same source always writes the same file and a
-diff shows a real change.
+skills by path, apps by id), the file has no timestamps, and a skill's `hash` reads its instructions with LF line
+endings, so the same source always writes the same file, on any machine, and a diff shows a real change.
 
 | Field               | Content                                                                                                                                                                                                                   |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -151,6 +164,7 @@ const manifest = serverManifestSchema.parse(JSON.parse(text));
 | A skill has no `hash`                     | Its instructions could not be loaded at build time                 | Check the `instructions` source (a missing file, an unreachable URL)                        |
 | `over the instructionsBudget` at startup  | Instructions or a tool description longer than the limit           | Shorten them, keep `injectInstructions: 'compact'`, or raise `instructionsBudget`           |
 | A tool missing from the manifest          | It belongs to a remote app, whose tools are discovered at run time | Expected: remote apps are listed in `apps` with `remote: true`                              |
+| `did not finish booting within 60 s`      | A provider, plugin, adapter or remote app waits for a service      | Make it fail fast when the service is unreachable, or build with `--no-manifest`            |
 
 ## Reference
 

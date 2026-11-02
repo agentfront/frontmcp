@@ -375,6 +375,7 @@ class Server {}
 - A `useValue` object registered in more than one place of a server runs its hooks once for that server. Its `onShutdown()` runs once every scope that holds it (each app of a `splitByApp` server) has shut down its own providers, so the providers that depend on it shut down first.
 - `onReady()` is awaited: `createDirect()`, `connect()` and the handlers return, and `bootstrap()` and `runStdio()` install their SIGTERM / SIGINT handlers, once every `onReady()` has settled. Start long work there without awaiting it, as `SearchIndex` does.
 - A host you assemble from `FrontMcpInstance.createForGraph()` runs the `onReady()` hooks itself, with `instance.emitProvidersReady()`.
+- `frontmcp build` (and `skills install` / `skills export --from-entry`) boots the server only to read its entries: providers are built and `onBootstrap()` and `onShutdown()` run, `onReady()` never does. So does `connect(config, { mode: 'manifest' })`. A provider that connects in its constructor, factory or `onBootstrap()` connects at build time too: make it fail fast when the service is unreachable (the build stops waiting for a boot after 60 s).
 - Serverless and edge handlers are never shut down, so `onShutdown()` does not run there.
 - On SIGTERM the process still exits at the shutdown deadline (10 s, 5 s under stdio), whatever hooks are left.
 
