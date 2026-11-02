@@ -285,6 +285,16 @@ describe('FS Utils', () => {
       const content = await fs.promises.readFile(filePath, 'utf8');
       expect(content).toBe('updated');
     });
+
+    it('appends with the append flag, creating the file with the mode only when it is missing', async () => {
+      const filePath = path.join(tempDir, 'append-test.txt');
+
+      await writeFile(filePath, 'first', { flag: 'a', mode: 0o600 });
+      await writeFile(filePath, '', { flag: 'a', mode: 0o644 });
+
+      expect(await fs.promises.readFile(filePath, 'utf8')).toBe('first');
+      if (process.platform !== 'win32') expect((await fs.promises.stat(filePath)).mode & 0o777).toBe(0o600);
+    });
   });
 
   describe('mkdir', () => {

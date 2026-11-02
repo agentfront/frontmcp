@@ -403,7 +403,7 @@ try {
 - It builds the server-level `providers`, then the `providers` of each local `@App` in `apps`. Remote apps, plugins and the other options of a server config are ignored.
 - `get(token)` looks at the server-level providers first, then each app's in order, and throws `ProviderNotAvailableError` when nothing registers the token; `tryGet(token)` returns `undefined` instead. A CONTEXT-scoped provider throws `ProviderScopedAccessError`: only a request builds it.
 - `onReady()` never runs: nothing is served. `FrontMcpLogger` can be injected, and `FrontMcpConfig` is the object you passed; `Scope` cannot, since there is none.
-- A `@Duty` provider is built but never started, so scripts and workers don't run duties. `runDuties: true` starts them, with `info: { name }` set to the server's name so they share its leases; `dispose()` stops them (see `create-duty`).
+- A `@Duty` provider is built but never started, so scripts and workers don't run duties. `runDuties: true` starts them (each duty's own `onReady()` first) and needs `info: { name }`, the server's name, so they share its leases; `dispose()` stops them (see `create-duty`).
 - A failing `onBootstrap()` rejects with `ProviderBootstrapError` after the providers that bootstrapped are shut down.
 - It runs in Node, and in the browser when the providers do.
 - Import the config from a module without `@FrontMcp`: importing a decorated class starts the server.

@@ -9,6 +9,7 @@ import { resetRuntimeContext } from '@frontmcp/utils';
 import { App, Duty, LogLevel, redisOptionsSchema, type OnBootstrap, type OnReady, type OnShutdown } from '../../common';
 import { findProjectRoot } from '../../common/types/options/sqlite/resolve';
 import type { DirectMcpServer } from '../../direct';
+import { DutyNameConflictError, UnsafeDutyStoreError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { createContainer, type FrontMcpContainer } from '../../provider/create-container';
 import { dutyStorageConfig } from '../duty.lifecycle';
@@ -19,6 +20,8 @@ jest.mock('../../common/types/options/sqlite/resolve', () => {
 });
 
 const quiet = { level: LogLevel.Off, enableConsole: false };
+const info = { name: 'duty-spec' };
+const describeOnPosix = process.platform === 'win32' ? describe.skip : describe;
 const ran: object[] = [];
 const shutdowns: string[] = [];
 
@@ -97,7 +100,12 @@ describe('duties in a server and in createContainer()', () => {
   it('starts the duties of a container that asks with runDuties, and stops them at dispose()', async () => {
     const label = { name: 'label', provide: Symbol('label'), useValue: 'nightly' };
     const settings = { name: 'settings', provide: Symbol('settings'), useValue: { region: 'eu' } };
-    const built = await createContainer({ providers: [label, settings, SweepDuty], runDuties: true, logging: quiet });
+    const built = await createContainer({
+      providers: [label, settings, SweepDuty],
+      runDuties: true,
+      info,
+      logging: quiet,
+    });
 
     await until(() => ran.length >= 2);
     await built.dispose();
@@ -176,12 +184,81 @@ describe('duties in a server and in createContainer()', () => {
     expect(ran).not.toContain(inASubdirectory);
   });
 
+  it("runs the duty's own onReady() before its first run in a container that runs duties", async () => {
+    const phases: string[] = [];
+    @Duty({ name: 'hooked-in-container', every: 100, scope: 'machine' })
+    class HookedDuty implements OnReady {
+      onReady(): void {
+        phases.push('ready');
+      }
+      run(): void {
+        phases.push('run');
+      }
+    }
+
+    await container({ providers: [HookedDuty], runDuties: true, info });
+    await until(() => phases.includes('run'));
+
+    expect(phases[0]).toBe('ready');
+  });
+
+  it('needs the server name to run duties in a container, since leases are per server name', async () => {
+    await expect(createContainer({ providers: [SweepDuty], runDuties: true, logging: quiet })).rejects.toThrow(
+      'runDuties needs info.name',
+    );
+    expect(fs.existsSync(path.join(home, 'duties.sqlite'))).toBe(false);
+  });
+
+  it('refuses a second duty class that would share the lease of another in this process', async () => {
+    @Duty({ name: 'shared', every: 100, scope: 'machine' })
+    class FirstShared {
+      run(): void {
+        ran.push(this);
+      }
+    }
+    @Duty({ name: 'shared', every: 100, scope: 'machine' })
+    class SecondShared {
+      run(): void {
+        ran.push(this);
+      }
+    }
+
+    const first = (await container({ providers: [FirstShared], runDuties: true, info })).get(FirstShared);
+    const conflict = createContainer({ providers: [SecondShared], runDuties: true, info, logging: quiet });
+    await expect(conflict).rejects.toBeInstanceOf(DutyNameConflictError);
+    await expect(conflict).rejects.toThrow(
+      'Duty "shared" of server "duty-spec" is declared by two classes in this process (FirstShared and SecondShared)',
+    );
+    const again = (await container({ providers: [FirstShared], runDuties: true, info })).get(FirstShared);
+    await until(() => ran.includes(first) || ran.includes(again));
+  });
+
+  it('keeps the leases of names that contain colons apart', async () => {
+    @Duty({ name: 'c', every: 100, scope: 'machine' })
+    class NamedC {
+      run(): void {
+        ran.push(this);
+      }
+    }
+    @Duty({ name: 'b:c', every: 100, scope: 'machine' })
+    class NamedBC {
+      run(): void {
+        ran.push(this);
+      }
+    }
+
+    const c = (await container({ providers: [NamedC], runDuties: true, info: { name: 'a:b' } })).get(NamedC);
+    const bc = (await container({ providers: [NamedBC], runDuties: true, info: { name: 'a' } })).get(NamedBC);
+
+    await until(() => ran.includes(c) && ran.includes(bc), 3_000);
+  });
+
   it('opens no lease store when the project root cannot be read', async () => {
     jest.mocked(findProjectRoot).mockImplementationOnce(() => {
       throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
     });
 
-    await expect(createContainer({ providers: [IndexDuty], runDuties: true, logging: quiet })).rejects.toThrow(
+    await expect(createContainer({ providers: [IndexDuty], runDuties: true, info, logging: quiet })).rejects.toThrow(
       'permission denied',
     );
     expect(fs.existsSync(path.join(home, 'duties.sqlite'))).toBe(false);
@@ -191,7 +268,7 @@ describe('duties in a server and in createContainer()', () => {
     process.env['FRONTMCP_DEPLOYMENT_MODE'] = 'serverless';
     resetRuntimeContext();
     try {
-      await container({ providers: [SweepDuty], runDuties: true });
+      await container({ providers: [SweepDuty], runDuties: true, info });
       await sleep(300);
     } finally {
       delete process.env['FRONTMCP_DEPLOYMENT_MODE'];
@@ -200,6 +277,42 @@ describe('duties in a server and in createContainer()', () => {
 
     expect(ran).toEqual([]);
     expect(fs.existsSync(path.join(home, 'duties.sqlite'))).toBe(false);
+  });
+
+  describeOnPosix('the lease file', () => {
+    it('is created owner-only (0600) in a folder created owner-only (0700)', async () => {
+      const parent = path.join(home, 'nested');
+      const leaseHome = path.join(parent, 'home');
+      process.env['FRONTMCP_HOME'] = leaseHome;
+      await container({ providers: [SweepDuty], runDuties: true, info });
+
+      expect(fs.statSync(parent).mode & 0o777).toBe(0o700);
+      expect(fs.statSync(leaseHome).mode & 0o777).toBe(0o700);
+      const files = fs.readdirSync(leaseHome);
+      expect(files).toContain('duties.sqlite');
+      for (const file of files) expect(fs.statSync(path.join(leaseHome, file)).mode & 0o777).toBe(0o600);
+    });
+
+    it.each([0o777, 0o1777, 0o770])(
+      'is refused in a folder the group or others can write to (mode %o)',
+      async (mode) => {
+        fs.chmodSync(home, mode);
+
+        const refused = createContainer({ providers: [SweepDuty], runDuties: true, info, logging: quiet });
+        await expect(refused).rejects.toBeInstanceOf(UnsafeDutyStoreError);
+        await expect(refused).rejects.toThrow(
+          `Refusing to keep duty leases under ${home} (mode 0${mode.toString(8)}): the group or others can write to it`,
+        );
+        expect(fs.existsSync(path.join(home, 'duties.sqlite'))).toBe(false);
+      },
+    );
+  });
+
+  it('names the other user that owns a lease folder it refuses', () => {
+    expect(new UnsafeDutyStoreError('/srv/shared', 0o40755, 501).message).toBe(
+      'Refusing to keep duty leases under /srv/shared (mode 0755): it belongs to another user (uid 501). ' +
+        'Set FRONTMCP_HOME to a folder only you can write to.',
+    );
   });
 
   it("keeps leases in the server's Redis when one is configured, and in the machine's SQLite file otherwise", () => {

@@ -115,14 +115,14 @@ export async function readFileBuffer(p: string): Promise<Buffer> {
  *
  * @param p - Path to write to
  * @param content - Content to write
- * @param options - Optional mode (permissions)
+ * @param options - Optional mode (permissions, applied when the file is created) and flag (e.g. `'a'` to append)
  *
  * @example
  * await writeFile('/path/to/file.txt', 'hello', { mode: 0o600 });
  */
-export async function writeFile(p: string, content: string, options?: { mode?: number }): Promise<void> {
+export async function writeFile(p: string, content: string, options?: { mode?: number; flag?: string }): Promise<void> {
   const fsp = getFsp();
-  await fsp.writeFile(p, content, { encoding: 'utf8', mode: options?.mode });
+  await fsp.writeFile(p, content, { encoding: 'utf8', mode: options?.mode, flag: options?.flag });
 }
 
 /**

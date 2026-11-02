@@ -72,6 +72,7 @@ describe('@Duty across processes', () => {
     await waitUntil(() => runsOf(workers).length >= 6, 30_000, 'six runs');
     const beforeKill = runsOf(workers);
     expectOneHolderOncePerInterval(beforeKill);
+    if (process.platform !== 'win32') expect(fs.statSync(path.join(home, 'duties.sqlite')).mode & 0o777).toBe(0o600);
 
     const first = workerOf(workers, beforeKill[0].pid);
     const killedAt = Date.now();
