@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import type z from '@frontmcp/lazy-zod';
 
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
+import { registerWorkerJob } from '../../offload/worker-jobs';
 import { type JobContext } from '../interfaces';
 import { type EsmOptions, type RemoteOptions, type ToolInputType, type ToolOutputType } from '../metadata';
 import { frontMcpJobMetadataSchema, type JobMetadata } from '../metadata/job.metadata';
@@ -12,15 +13,21 @@ import { frontMcpJobMetadataSchema, type JobMetadata } from '../metadata/job.met
 
 import { JobKind, type JobEsmTargetRecord, type JobRemoteRecord } from '../records/job.record';
 import { extendedJobMetadata, FrontMcpJobTokens } from '../tokens';
+import { captureCallerFile } from '../utils/caller-dir.utils';
 import { validateRemoteUrl } from '../utils/validate-remote-url';
 import { type ToolInputOf, type ToolOutputOf } from './tool.decorator';
+
+/** Basenames of THIS decorator file, skipped so the captured frame is the module that declares the job. */
+const JOB_DECORATOR_BASENAMES = ['job.decorator.ts', 'job.decorator.js', 'job.decorator.mjs', 'job.decorator.cjs'];
 
 /**
  * Decorator that marks a class as a Job and provides metadata.
  */
 function _FrontMcpJob(providedMetadata: JobMetadata): ClassDecorator {
+  const declaringModule = captureCallerFile(JOB_DECORATOR_BASENAMES);
   return (target: any) => {
     const metadata = frontMcpJobMetadataSchema.parse(providedMetadata);
+    registerWorkerJob(target, providedMetadata, declaringModule);
     Reflect.defineMetadata(FrontMcpJobTokens.type, true, target);
     const extended = {};
     for (const property in metadata) {
@@ -51,8 +58,10 @@ function frontMcpJob<
 >(
   providedMetadata: T,
 ): (handler: FrontMcpJobExecuteHandler<InSchema, OutSchema>) => () => FrontMcpJobExecuteHandler<InSchema, OutSchema> {
+  const declaringModule = captureCallerFile(JOB_DECORATOR_BASENAMES);
   return (execute) => {
     const metadata = frontMcpJobMetadataSchema.parse(providedMetadata);
+    registerWorkerJob(execute, providedMetadata, declaringModule);
     const jobFunction = function () {
       return execute;
     };

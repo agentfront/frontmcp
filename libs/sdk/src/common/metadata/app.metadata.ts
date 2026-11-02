@@ -8,6 +8,7 @@ import type {
   AgentType,
   AuthProviderType,
   ChannelType,
+  HttpRouteType,
   JobType,
   PluginType,
   PromptType,
@@ -147,6 +148,12 @@ export interface LocalAppMetadata {
   channels?: ChannelType[];
 
   /**
+   * `@HttpRoute` classes this app serves beside the MCP endpoint: pages, APIs and SSE streams for people, with the
+   * app's providers (`this.get()`), the ones its tools get.
+   */
+  routes?: HttpRouteType[];
+
+  /**
    * Configures the app's default authentication provider.
    * If not provided, the app will use the gateway's default auth provider.
    */
@@ -219,6 +226,11 @@ export const frontMcpLocalAppMetadataSchema = z.looseObject({
   jobs: z.array(z.lazy(() => annotatedFrontMcpJobsSchema)).optional(),
   workflows: z.array(z.lazy(() => annotatedFrontMcpWorkflowsSchema)).optional(),
   channels: z.array(z.lazy(() => annotatedFrontMcpChannelsSchema)).optional(),
+  routes: z
+    .array(
+      z.custom<HttpRouteType>((value) => typeof value === 'function', { message: 'routes takes @HttpRoute classes' }),
+    )
+    .optional(),
   auth: authOptionsSchema.optional(),
   output: outputPolicySchema.optional(),
   ui: z.object({ servingMode: widgetServingModeSchema.optional() }).optional(),

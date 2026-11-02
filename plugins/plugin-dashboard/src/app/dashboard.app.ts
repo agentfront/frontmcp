@@ -3,26 +3,19 @@ import {
   DynamicPlugin,
   FrontMcpConfig,
   FrontMcpContextStorage,
-  FrontMcpServer,
   HttpHook,
   Plugin,
   ScopeEntry,
   type FlowCtxOf,
   type FrontMcpConfigType,
-  type NextFn,
   type ProviderType,
   type Reference,
   type ServerRequest,
-  type ServerResponse,
 } from '@frontmcp/sdk';
 
 // Auth
 import { DashboardDisabledError, DashboardUnauthorizedError, markDashboardGatePassed } from '../auth/dashboard-access';
-import {
-  createDashboardAuthValidator,
-  DASHBOARD_SESSION_COOKIE,
-  deriveDashboardCookieValue,
-} from '../auth/dashboard-auth';
+import { createDashboardAuthValidator } from '../auth/dashboard-auth';
 import { resolveDashboardOptions } from '../dashboard.config-store';
 // Types and symbols
 import { DashboardConfigToken, ParentScopeToken } from '../dashboard.symbol';
@@ -33,95 +26,18 @@ import {
   type DashboardPluginOptions,
   type DashboardPluginOptionsInput,
 } from '../dashboard.types';
-// HTML Generator
-import { generateDashboardHtml } from '../html/html.generator';
 // Providers
 import { GraphDataProvider } from '../providers';
 // Tools
 import GraphTool from '../tools/graph.tool';
 import ListResourcesTool from '../tools/list-resources.tool';
 import ListToolsTool from '../tools/list-tools.tool';
-
-/**
- * Token for tracking middleware registration.
- */
-const DashboardMiddlewareToken = Symbol('dashboard:middleware');
-
-type HeaderWriter = { setHeader?: (name: string, value: string | string[]) => void };
-
-/** The page's session cookie, one per path the page and its MCP client use. */
-function sessionCookies(options: DashboardPluginOptions, paths: string[], secure: boolean): string[] {
-  const token = options.auth.token;
-  if (!options.auth.enabled || !token) return [];
-  const value = deriveDashboardCookieValue(token);
-  return paths.map(
-    (path) =>
-      `${DASHBOARD_SESSION_COOKIE}=${value}; Path=${path}; HttpOnly; SameSite=Strict${secure ? '; Secure' : ''}`,
-  );
-}
-
-function isHttps(req: ServerRequest): boolean {
-  const socket = req.socket as { encrypted?: boolean } | undefined;
-  const forwarded = req.headers?.['x-forwarded-proto'];
-  return socket?.encrypted === true || (typeof forwarded === 'string' && forwarded.split(',')[0]?.trim() === 'https');
-}
-
-/**
- * Create the middleware that serves the dashboard page at `basePath`.
- *
- * The page holds no data; its client reads the inventory from the dashboard's MCP
- * endpoint (`mcpPath`), which the `http:request` hook on {@link DashboardHttpPlugin} gates.
- * When `auth` is on, a page request that shows the token also gets an HttpOnly,
- * `SameSite=Strict` cookie, which is how the page's own MCP client (an `EventSource`,
- * which cannot send headers) authenticates without a token in a URL.
- */
-function createDashboardMiddleware(options: DashboardPluginOptions, mcpPath: string) {
-  const html = generateDashboardHtml(options, mcpPath);
-  const authorize = createDashboardAuthValidator(options.auth, 'page');
-  const cookiePaths = [...new Set([mcpPath, options.basePath])];
-
-  return async (req: ServerRequest, res: ServerResponse, next: NextFn) => {
-    // Skip if dashboard is disabled
-    if (!isDashboardEnabled(options)) {
-      return next();
-    }
-
-    const urlPath = (req.path || req.url || '/') as string;
-    const method = ((req.method as string) || 'GET').toUpperCase();
-    const isPageRequest = method === 'GET' && (urlPath === '/' || urlPath === '');
-
-    if (!isPageRequest) {
-      // MCP requests under the same path belong to the dashboard's MCP scope, which the
-      // `http:request` hook gates.
-      return next();
-    }
-
-    // Token gate (GHSA-rgxj-434m-vxh3) for the page itself.
-    if (authorize) {
-      const result = authorize({
-        headers: req.headers as Record<string, string | string[] | undefined> | undefined,
-        query: req.query as Record<string, string | string[] | undefined> | undefined,
-      });
-      if (!result.authorized) {
-        res.status(result.status ?? 401).json({ error: 'Unauthorized', message: result.message ?? 'Unauthorized' });
-        return;
-      }
-    }
-
-    // ServerResponse extends HttpServerResponse which has setHeader
-    // Use optional chaining for environments that may not support it
-    const writer = res as unknown as HeaderWriter;
-    writer.setHeader?.('Content-Type', 'text/html');
-    const cookies = sessionCookies(options, cookiePaths, isHttps(req));
-    if (cookies.length > 0) writer.setHeader?.('Set-Cookie', cookies);
-    res.status(200).send(html);
-  };
-}
+import { DashboardPageRoute } from './dashboard-page.route';
 
 /**
  * Internal Dashboard HTTP Plugin.
  *
- * Serves the dashboard HTML, and gates the dashboard's MCP endpoint. The SSE transport
+ * Gates the dashboard's MCP endpoint; `DashboardPageRoute` serves the page. The SSE transport
  * and MCP protocol are handled by FrontMCP's built-in transport layer.
  */
 @Plugin({
@@ -181,16 +97,16 @@ class DashboardHttpPlugin extends DynamicPlugin<DashboardPluginOptions, Dashboar
   }
 
   /**
-   * Provide the dashboard config and page middleware registration via DI.
+   * Provide the dashboard config via DI.
    */
   static override dynamicProviders(options: DashboardPluginOptionsInput): ProviderType[] {
-    // NOTE: the operator's options are resolved INSIDE the factories, not here.
+    // NOTE: the operator's options are resolved INSIDE the factory, not here.
     // `DashboardApp` declares this plugin inside an `@App` decorator, which runs
     // at module-import time — strictly before `DashboardPlugin.init(...)` is
     // evaluated in the `@FrontMcp` metadata. Reading the published options at
     // this point would always see the defaults, which is how the operator's
     // `auth` and `basePath` came to be silently discarded
-    // (GHSA-rgxj-434m-vxh3). The factories run at scope-construction time, by
+    // (GHSA-rgxj-434m-vxh3). The factory runs at scope-construction time, by
     // which point `init(...)` has published.
     return [
       {
@@ -198,20 +114,6 @@ class DashboardHttpPlugin extends DynamicPlugin<DashboardPluginOptions, Dashboar
         provide: DashboardConfigToken,
         inject: () => [] as const,
         useFactory: () => resolveDashboardOptions(options),
-      },
-      // Register middleware for HTML serving (must be in dynamic providers to access config)
-      {
-        name: 'dashboard:middleware',
-        provide: DashboardMiddlewareToken,
-        inject: () => [FrontMcpServer, ScopeEntry] as const,
-        useFactory: (server: FrontMcpServer, scope: ScopeEntry) => {
-          const effectiveOptions = resolveDashboardOptions(options);
-          // The page moves with `basePath`; the MCP endpoint its client talks to is the
-          // dashboard scope's own route (`/dashboard`, after the server's `entryPath`).
-          const mcpPath = scope.fullPath;
-          server.registerMiddleware(effectiveOptions.basePath, createDashboardMiddleware(effectiveOptions, mcpPath));
-          return { registered: true, mcpPath };
-        },
       },
     ];
   }
@@ -268,6 +170,7 @@ class DashboardHttpPlugin extends DynamicPlugin<DashboardPluginOptions, Dashboar
   ],
   plugins: [DashboardHttpPlugin.init({})],
   tools: [GraphTool, ListToolsTool, ListResourcesTool],
+  routes: [DashboardPageRoute],
   // No `auth` block: the dashboard scope INHERITS the server's authentication
   // policy. It used to hard-code `mode: 'public'`, which made
   // `dashboard:graph` / `list-tools` / `list-resources` — and through them the

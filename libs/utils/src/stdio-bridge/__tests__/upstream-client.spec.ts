@@ -11,8 +11,8 @@ import { EventEmitter } from 'node:events';
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import type { BridgeLogger } from '../log';
 import type { JsonRpcFrame } from '../stdio-framer';
+import type { BridgeLogger } from '../types';
 import { createHttpUpstream, createPipeUpstream } from '../upstream-client';
 
 function silentLog(): BridgeLogger {
@@ -45,8 +45,14 @@ async function startServer(options: { sse?: boolean } = {}): Promise<{
     let body = '';
     req.on('data', (chunk) => (body += chunk));
     req.on('end', () => {
-      const frame = JSON.parse(body) as JsonRpcFrame;
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
+      if (req.method === 'DELETE') {
+        seen.push({ method: 'DELETE', sessionId });
+        res.statusCode = sessionId && known.delete(sessionId) ? 200 : 404;
+        res.end();
+        return;
+      }
+      const frame = JSON.parse(body) as JsonRpcFrame;
       seen.push({ method: frame.method, sessionId });
       if (frame.method === 'initialize') {
         const id = `session-${++issued}`;
@@ -150,6 +156,91 @@ describe('createHttpUpstream', () => {
     } finally {
       await server.close();
     }
+  });
+
+  it('sends its headers with every request through the fetch it is given', async () => {
+    const server = await startServer();
+    const sent: Array<Record<string, string>> = [];
+    const sendThrough: typeof fetch = (input, init) => {
+      sent.push(init?.headers as Record<string, string>);
+      return fetch(input, init);
+    };
+    try {
+      const upstream = createHttpUpstream({
+        url: server.url,
+        log: silentLog(),
+        onFrame: () => undefined,
+        headers: { authorization: 'Bearer secret', 'content-type': 'text/plain' },
+        fetch: sendThrough,
+      });
+      await upstream.send(initialize);
+      await upstream.send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+
+      expect(sent.map((headers) => headers['authorization'])).toEqual(['Bearer secret', 'Bearer secret']);
+      expect(sent[1]).toMatchObject({ 'content-type': 'application/json', 'mcp-session-id': 'session-1' });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('refuses a redirect on every request it sends its headers with, the session end included', async () => {
+    const server = await startServer();
+    const redirects: Array<RequestRedirect | undefined> = [];
+    const sendThrough: typeof fetch = (input, init) => {
+      redirects.push(init?.redirect);
+      return fetch(input, init);
+    };
+    try {
+      const upstream = createHttpUpstream({
+        url: server.url,
+        log: silentLog(),
+        onFrame: () => undefined,
+        headers: { authorization: 'Bearer secret' },
+        fetch: sendThrough,
+      });
+      await upstream.send(initialize);
+      await upstream.endSession();
+
+      expect(redirects).toEqual(['error', 'error']);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('ends the session the server issued, once', async () => {
+    const server = await startServer();
+    try {
+      const upstream = createHttpUpstream({ url: server.url, log: silentLog(), onFrame: () => undefined });
+      await upstream.endSession();
+      await upstream.send(initialize);
+      await upstream.endSession();
+      await upstream.endSession();
+
+      expect(server.seen).toEqual([
+        { method: 'initialize', sessionId: undefined },
+        { method: 'DELETE', sessionId: 'session-1' },
+      ]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('only logs a session it could not end', async () => {
+    const log = silentLog();
+    const upstream = createHttpUpstream({
+      url: 'http://127.0.0.1:9/',
+      log,
+      onFrame: () => undefined,
+      fetch: async (_input, init) => {
+        if (init?.method === 'DELETE') throw new Error('connection refused');
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: {} }), {
+          headers: { 'content-type': 'application/json', 'mcp-session-id': 'session-9' },
+        });
+      },
+    });
+    await upstream.send(initialize);
+    await expect(upstream.endSession()).resolves.toBeUndefined();
+    expect(log.warn).toHaveBeenCalledWith('http-upstream-end-session-failed', { error: 'connection refused' });
   });
 
   it('rejects a non-OK response so the bridge answers the client', async () => {

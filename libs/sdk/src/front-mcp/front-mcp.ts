@@ -23,10 +23,12 @@ import ProviderRegistry from '../provider/provider.registry';
 import { type Scope } from '../scope/scope.instance';
 import { ScopeRegistry } from '../scope/scope.registry';
 import { type FrontMcpServerInstance } from '../server/server.instance';
+import type { SharedServerOptions } from '../shared/shared-server.options';
 import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task/task-scope.helper';
 import { createMcpServer } from '../transport/mcp-server.factory';
 import type { FetchHandlerCtx, WebFetchHandler } from '../transport/web-fetch-handler';
+import { detachedJobRunId, markEntryServer } from './detached-job.flag';
 import { markDirectOnly } from './direct-only.flag';
 import { createMcpGlobalProviders } from './front-mcp.providers';
 import { markManifestMode } from './manifest-mode.flag';
@@ -36,6 +38,7 @@ import {
   STDIO_DRAIN_MS,
   STDIO_SHUTDOWN_DEADLINE_MS,
 } from './shutdown-signals';
+import { redirectConsoleToStderr } from './stdio-console';
 
 /**
  * A `@FrontMcp`-decorated server class, or the raw config object it wraps.
@@ -99,6 +102,12 @@ function parseCliConfig(options: FrontMcpConfigInput, { fileLog }: { fileLog: bo
     };
   }
   return parsedConfig;
+}
+
+/** A detached job runner runs the server's entry again: it runs its one run instead of serving, then exits. */
+async function exitAfterDetachedRun(config: FrontMcpConfigInput | FrontMcpConfigType, runId: string): Promise<void> {
+  const { runDetachedJob } = await import('../job/runner/detached-job.worker.js');
+  process.exit(await runDetachedJob(config, runId));
 }
 
 export class FrontMcpInstance implements FrontMcpInterface {
@@ -387,6 +396,12 @@ export class FrontMcpInstance implements FrontMcpInterface {
         : options,
     );
 
+    const detachedRunId = detachedJobRunId();
+    if (detachedRunId) {
+      await exitAfterDetachedRun(parsedConfig, detachedRunId);
+      return undefined;
+    }
+
     // When FRONTMCP_DAEMON_SOCKET is set (e.g., SEA binary started as daemon),
     // run in Unix socket mode instead of normal HTTP server
     const daemonSocket = process.env['FRONTMCP_DAEMON_SOCKET'];
@@ -395,6 +410,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       return undefined;
     }
 
+    markEntryServer(parsedConfig);
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
@@ -697,6 +713,11 @@ export class FrontMcpInstance implements FrontMcpInterface {
   ): Promise<{ close: () => Promise<void> }> {
     if (isSchemaExtraction()) return { close: async () => undefined };
     const { socketPath, sqlite, ...configInput } = options;
+    const detachedRunId = detachedJobRunId();
+    if (detachedRunId) {
+      await exitAfterDetachedRun({ ...configInput, ...(sqlite ? { sqlite } : {}) }, detachedRunId);
+      return { close: async () => undefined };
+    }
 
     // Parse config with HTTP enabled, overriding socketPath
     const parsedConfig = frontMcpMetadataSchema.parse({
@@ -709,6 +730,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       ...(sqlite ? { sqlite } : {}),
     });
 
+    markEntryServer(parsedConfig);
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
 
@@ -784,6 +806,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // redirection, env flags) — so invalid input fails fast and a failed
     // resolve never trips the single-connection guard below.
     const options = resolveConfigInput(optionsOrClass);
+    const detachedRunId = detachedJobRunId();
+    if (detachedRunId) return exitAfterDetachedRun(options, detachedRunId);
 
     // ── Stdio stdout protection ──────────────────────────────────────────
     // In stdio mode, stdout is the MCP JSON-RPC channel. ANY non-protocol
@@ -791,19 +815,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // Redirect all stdout-bound console methods to stderr BEFORE anything
     // else runs — this catches direct console.log() calls in SDK code,
     // plugins, adapters, and third-party dependencies.
-    const { Console } = require('node:console');
-    const stderrConsole = new Console({ stdout: process.stderr, stderr: process.stderr });
-    console.log = stderrConsole.log.bind(stderrConsole);
-    console.info = stderrConsole.info.bind(stderrConsole);
-    console.debug = stderrConsole.debug.bind(stderrConsole);
-    console.dir = stderrConsole.dir.bind(stderrConsole);
-    console.table = stderrConsole.table.bind(stderrConsole);
-    console.time = stderrConsole.time.bind(stderrConsole);
-    console.timeLog = stderrConsole.timeLog.bind(stderrConsole);
-    console.group = stderrConsole.group.bind(stderrConsole);
-    console.groupEnd = stderrConsole.groupEnd.bind(stderrConsole);
-    console.count = stderrConsole.count.bind(stderrConsole);
-    // console.warn and console.error already go to stderr — leave them.
+    redirectConsoleToStderr();
 
     // Mark stdio mode so any @FrontMcp decorator imported from here on serves
     // over stdio rather than binding an HTTP port (#451). Guard against a
@@ -856,6 +868,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
         };
       }
 
+      markEntryServer(parsedConfig);
       const frontMcp = new FrontMcpInstance(parsedConfig);
       await frontMcp.ready;
       // Scopes are now live (sqlite/redis/channels/jobs) — shut them down if a
@@ -1007,5 +1020,27 @@ export class FrontMcpInstance implements FrontMcpInterface {
         stdioServing = false;
       }
     }
+  }
+
+  /**
+   * Runs a stdio session of the shared local server `key`: the sessions of a key on this machine share one server
+   * process, which the first of them starts by running this entry again, detached. Needs `@frontmcp/storage-sqlite`.
+   * A session never attaches to a server older than its `info.version`: it replaces it (`replaceOlder`), moving the
+   * sessions on it to the new one, or runs the server in its own process, as it does past `attachBudgetMs`. The
+   * server exits when idle (`idleTimeoutMs`) or once its `checkout` folder is removed.
+   *
+   * @example
+   * ```typescript
+   * import { FrontMcpInstance } from '@frontmcp/sdk';
+   * import { serverConfig } from './server-config';
+   *
+   * FrontMcpInstance.runShared(serverConfig, { key: 'my-server' });
+   * ```
+   */
+  public static async runShared(optionsOrClass: ConfigOrServerClass, shared: SharedServerOptions): Promise<void> {
+    if (isSchemaExtraction()) return;
+    const options = resolveConfigInput(optionsOrClass);
+    const { runShared } = await import('../shared/index.js');
+    await runShared(options, shared, (config) => new FrontMcpInstance(config));
   }
 }

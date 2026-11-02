@@ -24,8 +24,8 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_335_360 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_342_227 },
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_334_799 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_341_666 },
 ];
 
 const VITE_INITIAL_CHUNK_MAX_BYTES = 960_000;
@@ -49,6 +49,7 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   duties: sdkModule('duty/'),
   elicitation: sdkModule('elicitation/(store|flows)/|elicitation/send-elicitation-result\\.tool'),
   health: sdkModule('health/'),
+  'http routes': sdkModule('http-route/'),
   'http transport': sdkModule(
     'scope/(flows/http\\.|http-scope\\.helper)|transport/(flows/|adapters/|transport\\.registry|web-fetch-handler)|server/(custom-routes\\.helper|server\\.instance)',
   ),
@@ -59,6 +60,7 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   observability: sdkModule('scope/(observability-scope\\.helper|tracer-provider\\.utils)'),
   'worker offload': sdkModule('offload/(offload-pool|offload-worker\\.source|read-in-worker|worker-resource\\.reader)'),
   'remote and esm entries': sdkModule('remote-mcp/|esm-loader/(?!package-specifier)'),
+  'shared local server': sdkModule('shared/'),
   skills:
     /^libs\/sdk\/dist\/browser\/skill\/(providers\/|session\/|hooks\/|sep-2640\/(?!sep-2640\.constants)|flows\/(?!filter-skills\.flow)|skill-md-parser)|(^|\/)node_modules\/(js-yaml|vectoriadb)\//,
   tasks: sdkModule(

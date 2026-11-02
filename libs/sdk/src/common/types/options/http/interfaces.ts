@@ -1,6 +1,8 @@
 // common/types/options/http/interfaces.ts
 // Explicit TypeScript interfaces for HTTP configuration
 
+import { type PeopleAuthOption } from '@frontmcp/auth';
+
 import { type FrontMcpServer, type HttpMethod, type ServerRequestHandler } from '../../../interfaces';
 
 /**
@@ -182,6 +184,9 @@ export interface HttpOptionsInterface {
    */
   routes?: HttpRouteConfig[];
 
+  /** How people sign in to the `@HttpRoute` pages; see {@link HttpAuthOptions}. */
+  auth?: HttpAuthOptions;
+
   /**
    * Response security headers (`X-Content-Type-Options`, `X-Frame-Options`,
    * `Strict-Transport-Security`, `Content-Security-Policy`, custom headers).
@@ -209,6 +214,18 @@ export interface HttpOptionsInterface {
    * @example ['x-acme-*', 'x-request-source']
    */
   forwardHeaders?: string[];
+}
+
+/** Authentication of the `@HttpRoute` pages, apart from the MCP endpoint's `auth`. */
+export interface HttpAuthOptions {
+  /**
+   * People auth. `'loopback-token'`: a token printed once at startup buys one-time sign-in codes
+   * (`POST /_frontmcp/people/code` with `Authorization: Bearer <token>`, or `this.get(LoopbackTokenAuth).createCode()`
+   * in a tool); the person opens `/_frontmcp/people/login?code=…`, whose page posts the code back and gets an
+   * HttpOnly, SameSite=Strict session cookie. With it set, routes need a signed-in person unless they say
+   * `auth: 'public'`.
+   */
+  people?: PeopleAuthOption;
 }
 
 /** CSP configuration for {@link SecurityHeadersOptions.csp}. */

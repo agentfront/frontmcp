@@ -49,6 +49,7 @@ import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors'
 import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
 import { assertAuthoritiesRules } from '../front-mcp/authorities-rules.check';
+import { isEntryServer, isJobWorker } from '../front-mcp/detached-job.flag';
 import { isDirectOnly } from '../front-mcp/direct-only.flag';
 import type { HaManager } from '../ha';
 import type { HealthService } from '../health';
@@ -262,7 +263,7 @@ export class Scope extends ScopeEntry {
     this.scopeHooks = new HookRegistry(scopeProviders, []);
     this.scopeFlows = new FlowRegistry(
       scopeProviders,
-      httpServing ? [httpServing.HttpRequestFlow, httpServing.HttpIpFilterFlow] : [],
+      httpServing ? [httpServing.HttpRouteFlow, httpServing.HttpRequestFlow, httpServing.HttpIpFilterFlow] : [],
     );
     this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth, createPrimaryAuth);
     this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps, scopeRef);
@@ -599,20 +600,12 @@ export class Scope extends ScopeEntry {
     // who sets both top-level `redis` and `sqlite` still gets the warning:
     // redis wins everywhere, the stores exist, but sqlite is effectively
     // unused.
-    if (this.metadata.sqlite) {
-      const transportUsedSqlite =
-        this.transportService?.isSessionStoreConfigured() === true &&
-        this.transportService.getBackendKind() === 'sqlite';
-      const tasksUsedSqlite = this.taskBackendType === 'sqlite';
-      const elicitationUsedSqlite = this.elicitationBackendType === 'sqlite';
-      if (!transportUsedSqlite && !tasksUsedSqlite && !elicitationUsedSqlite) {
-        this.logger.warn(
-          '[FrontMcp] Top-level `sqlite` config was provided but no subsystem consumes it ' +
-            '(transport persistence, tasks, and elicitation were all disabled or pre-configured with a different backend). ' +
-            'Sessions will use in-memory storage. Remove the `sqlite` block or enable one of the subsystems.',
-        );
-      }
-    }
+    // The jobs, registered below, may consume the top-level sqlite too: the unused warning waits for them
+    let topLevelSqliteUsed =
+      (this.transportService?.isSessionStoreConfigured() === true &&
+        this.transportService.getBackendKind() === 'sqlite') ||
+      this.taskBackendType === 'sqlite' ||
+      this.elicitationBackendType === 'sqlite';
 
     // ═══ BATCH 2: App-dependent registries (parallel) ═══
     // These call providers.getRegistries('AppRegistry') during initialize(),
@@ -870,18 +863,24 @@ export class Scope extends ScopeEntry {
       if (autoEnabled) {
         this.logger.info(
           `Jobs auto-enabled: detected ${allJobs.length} job(s) and ${allWorkflows.length} workflow(s) in @App declarations. ` +
-            `Defaulting to in-memory stores — configure storage via @FrontMcp({ jobs: { store: ... } }) for multi-replica HA.`,
+            `Their runs are kept in jobs.store, else the top-level redis or sqlite, else in memory.`,
         );
       }
 
-      const effectiveConfig: JobsConfig = { ...(jobsConfig ?? {}), enabled: true };
       const notifyFn = async (data: Record<string, unknown>) => {
         if (this.notificationService) {
           this.logger.debug('Job notification', data);
         }
       };
 
-      const { registerJobCapabilities } = await import('../job/job-scope.helper.js');
+      const { registerJobCapabilities, resolveJobsStore } = await import('../job/job-scope.helper.js');
+      const effectiveConfig: JobsConfig = {
+        ...(jobsConfig ?? {}),
+        enabled: true,
+        store: resolveJobsStore(jobsConfig?.store, { redis: this.metadata.redis, sqlite: resolvedTopLevelSqlite }),
+      };
+      topLevelSqliteUsed ||=
+        Boolean(resolvedTopLevelSqlite) && effectiveConfig.store?.sqlite === resolvedTopLevelSqlite;
       const result = await registerJobCapabilities({
         providers: this.scopeProviders,
         flowRegistry: this.scopeFlows,
@@ -892,6 +891,8 @@ export class Scope extends ScopeEntry {
         jobsConfig: effectiveConfig,
         logger: this.logger,
         notifyFn,
+        entryServer: isEntryServer(this.metadata),
+        jobWorker: isJobWorker(this.metadata),
       });
 
       this._scopeJobs = result.jobRegistry as JobRegistry;
@@ -919,6 +920,14 @@ export class Scope extends ScopeEntry {
 
       this.logger.info(
         `Jobs system initialized: ${this._scopeJobs.getJobs().length} jobs, ${this._scopeWorkflows.getWorkflows().length} workflows`,
+      );
+    }
+
+    if (this.metadata.sqlite && !topLevelSqliteUsed) {
+      this.logger.warn(
+        '[FrontMcp] Top-level `sqlite` config was provided but no subsystem consumes it ' +
+          '(transport persistence, tasks, elicitation and jobs were all disabled or pre-configured with a different backend). ' +
+          'Sessions will use in-memory storage. Remove the `sqlite` block or enable one of the subsystems.',
       );
     }
 
@@ -988,6 +997,7 @@ export class Scope extends ScopeEntry {
     // reserved-path guard uses the resolved entryPath + routeBase, so it is
     // aware of split-by-app scope bases (e.g. /mcp/billing).
     if (httpServing) {
+      httpServing.attachHttpRoutes(this, this.globalProviders);
       httpServing.registerCustomHttpRoutes({
         routes: this.metadata.http?.routes,
         server: this.httpRouteRegistrar,
@@ -1049,7 +1059,8 @@ export class Scope extends ScopeEntry {
       this._channelTeardown = channelResult.teardown;
       // `dispose()` (what `create()` returns calls it) disconnects service channels, as `shutdown()` does.
       this.onDispose(() => this.teardownChannels());
-      await channelResult.connectServices();
+      // A detached job runner runs one run: the server that started it already listens to the services
+      if (!isJobWorker(this.metadata)) await channelResult.connectServices();
     }
 
     // Initialize health service (after all registries and stores are ready)
@@ -1946,6 +1957,7 @@ export class Scope extends ScopeEntry {
     }
     await this.closeHaRedisClient();
     await this.teardownChannels();
+    this.httpRouteTable?.closeStreams();
   }
 
   /** Disconnect service channels (`onDisconnect()`) and drop channel subscriptions, once. */

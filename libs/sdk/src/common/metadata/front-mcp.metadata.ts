@@ -65,6 +65,7 @@ import {
 import { legacySessionOptionsSchema } from '../types/options/session/schema';
 import { packageLoaderSchema, type PackageLoader } from './app.metadata';
 import { channelsConfigSchema, type ChannelsConfigInput } from './channel.metadata';
+import { MAX_JOB_TIMER_MS, timerLimitMessage } from './job.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import type { WidgetServingMode } from './tool-ui.metadata';
 import { widgetServingModeSchema } from './ui-serving-mode';
@@ -404,6 +405,15 @@ export interface FrontMcpBaseMetadata {
    *   store: { redis: { provider: 'redis', host: 'localhost' } }
    * }
    * ```
+   *
+   * @example Runs kept in a SQLite file, two at a time, each claiming 2 GB of free memory
+   * ```typescript
+   * jobs: {
+   *   enabled: true,
+   *   store: { sqlite: { path: '~/.my-server/jobs.db' } },
+   *   admission: { concurrency: 2, memoryMb: 2_048 },
+   * }
+   * ```
    */
   jobs?: {
     enabled: boolean;
@@ -414,9 +424,40 @@ export interface FrontMcpBaseMetadata {
      * @default false
      */
     allowDynamicRegistration?: boolean;
+    /**
+     * Where runs and dynamic definitions are kept: Redis, or a SQLite file the processes on one machine
+     * share (`@frontmcp/storage-sqlite`). Without one, the top-level `redis` (unless Vercel KV), then
+     * the top-level `sqlite`, then memory.
+     */
     store?: {
       redis?: RedisOptionsInput;
+      sqlite?: SqliteOptionsInput & { path: string };
       keyPrefix?: string;
+    };
+    /**
+     * How long an attempt of a job that sets no `timeout` may run, in ms, before it ends as `timed_out`;
+     * 0 for no limit.
+     *
+     * @default 300000
+     */
+    defaultTimeoutMs?: number;
+    /**
+     * Where the attempts of a job that sets no `runner` run: `'inline'` on the server's event loop, `'worker'` in a
+     * worker thread of the offload pool, `'detached'` in a process of their own that survives a server restart
+     * (Node only, from the server's entry, with a store other processes share).
+     *
+     * @default 'inline'
+     */
+    runner?: 'inline' | 'worker' | 'detached';
+    /**
+     * When job attempts (and workflow steps) may start in this process: at most `concurrency` at once,
+     * each claiming `memoryMb` of free memory. An attempt waits up to `maxWaitMs` (default 600000) and
+     * is then refused with `JOB_ADMISSION_TIMEOUT`.
+     */
+    admission?: {
+      concurrency?: number;
+      memoryMb?: number;
+      maxWaitMs?: number;
     };
   };
 
@@ -717,7 +758,25 @@ export const frontMcpBaseSchema = z.object({
       store: z
         .object({
           redis: redisOptionsSchema.optional(),
+          sqlite: sqliteOptionsSchema.extend({ path: z.string().min(1) }).optional(),
           keyPrefix: z.string().optional(),
+        })
+        .refine((store) => !(store.redis && store.sqlite), { message: 'jobs.store takes redis or sqlite, not both' })
+        .optional(),
+      defaultTimeoutMs: z
+        .number()
+        .int()
+        .nonnegative()
+        .max(MAX_JOB_TIMER_MS, timerLimitMessage('jobs.defaultTimeoutMs'))
+        .optional(),
+      runner: z
+        .enum(['inline', 'worker', 'detached'], { message: "jobs.runner must be 'inline', 'worker' or 'detached'" })
+        .optional(),
+      admission: z
+        .object({
+          concurrency: z.number().int().positive().optional(),
+          memoryMb: z.number().positive().optional(),
+          maxWaitMs: z.number().int().nonnegative().optional(),
         })
         .optional(),
     })

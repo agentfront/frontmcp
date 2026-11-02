@@ -2,7 +2,7 @@ import { toJSONSchema, internalZ as z } from '@frontmcp/lazy-zod';
 
 import type ProviderRegistry from '../../provider/provider.registry';
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
-import { type JobContext } from '../interfaces';
+import { type JobContext, type JobCtorArgs } from '../interfaces';
 import { type ToolInputType, type ToolOutputType } from '../metadata';
 import { type JobMetadata } from '../metadata/job.metadata';
 import { JobKind, type JobRecord } from '../records';
@@ -82,6 +82,7 @@ export abstract class JobEntry<
       contextProviders?: unknown;
       attempt?: number;
       signal?: AbortSignal;
+      onProgress?: JobCtorArgs<In>['onProgress'];
     },
   ): JobContext<InSchema, OutSchema, In, Out>;
 

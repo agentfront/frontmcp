@@ -1,7 +1,7 @@
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { type RawZodShape } from '../types';
-import { type JobPermission, type JobRetryConfig } from './job.metadata';
+import { MAX_JOB_TIMER_MS, timerLimitMessage, type JobPermission, type JobRetryConfig } from './job.metadata';
 import { type ToolInputType, type ToolOutputType } from './tool.metadata';
 
 declare global {
@@ -150,7 +150,7 @@ const workflowStepSchema = z.object({
   dependsOn: z.array(z.string()).optional(),
   condition: z.function().optional(),
   continueOnError: z.boolean().optional().default(false),
-  timeout: z.number().int().min(0).optional(),
+  timeout: z.number().int().min(0).max(MAX_JOB_TIMER_MS, timerLimitMessage('step timeout')).optional(),
   retry: z
     .object({
       maxAttempts: z.number().int().min(1).optional().default(3),

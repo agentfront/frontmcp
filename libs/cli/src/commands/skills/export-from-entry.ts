@@ -272,8 +272,8 @@ export async function exportSkillsFromEntry(options: ExportFromEntryOptions): Pr
     copies.push(copy);
   }
 
-  // A skill skipped above is still in the source: its earlier copy stays
-  const kept = new Set(skills.map((skill) => skill.name));
+  // A skill skipped above, or left out by --name, is still in the source: its earlier copy stays
+  const kept = new Set(manifest.skills.map((skill) => skill.name));
   const drift: string[] = [];
   for (const provider of options.providers) {
     const base = path.join(outDir, PROVIDER_DIRS[provider]);

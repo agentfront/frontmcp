@@ -1,0 +1,34 @@
+{
+  "name": "demo-e2e-shared-server",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-shared-server/fixture",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:shared-server"],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-shared-server"],
+      "dependsOn": [{ "projects": ["sdk"], "target": "build" }],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-shared-server/jest.e2e.config.ts",
+        "runInBand": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-shared-server-e2e"],
+      "dependsOn": [{ "projects": ["sdk"], "target": "build" }],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-shared-server/jest.e2e.config.ts",
+        "runInBand": true
+      }
+    },
+    "typecheck-e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p tsconfig.e2e.json",
+        "cwd": "apps/e2e/demo-e2e-shared-server"
+      }
+    }
+  }
+}
