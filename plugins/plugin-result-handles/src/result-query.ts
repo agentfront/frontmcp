@@ -38,6 +38,14 @@ function parsePointer(path: string): PathSegment[] {
     .map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'));
 }
 
+function parseQuotedKey(path: string, quoted: string): string {
+  try {
+    return JSON.parse(quoted) as string;
+  } catch {
+    throw new ResultPathNotFoundError(path);
+  }
+}
+
 function parseDotPath(path: string, body: string): PathSegment[] {
   const segments: PathSegment[] = [];
   const step = new RegExp(DOT_STEP.source, 'y');
@@ -47,7 +55,7 @@ function parseDotPath(path: string, body: string): PathSegment[] {
     const [, key, index, quoted] = match;
     if (key !== undefined) segments.push(key);
     else if (index !== undefined) segments.push(Number(index));
-    else segments.push(JSON.parse(quoted) as string);
+    else segments.push(parseQuotedKey(path, quoted));
   }
   return segments;
 }

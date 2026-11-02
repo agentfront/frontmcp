@@ -25,7 +25,7 @@ describe('parseResultPath', () => {
     expect(parseResultPath(path)).toEqual(segments);
   });
 
-  it.each(['rows..title', 'rows[', 'rows[x]', '$rows', 'rows["a]'])('refuses %j', (path) => {
+  it.each(['rows..title', 'rows[', 'rows[x]', '$rows', 'rows["a]', '$["a\\x"]'])('refuses %j', (path) => {
     expect(() => parseResultPath(path)).toThrow(ResultPathNotFoundError);
   });
 });
