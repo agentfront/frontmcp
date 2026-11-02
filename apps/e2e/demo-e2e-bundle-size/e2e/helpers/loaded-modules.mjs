@@ -1,13 +1,12 @@
-// Imports a module and prints, as JSON, the URLs of the modules that loaded with it and match a pattern: node loaded-modules.mjs <entry> <pattern>
+// Imports a module and prints, as JSON, the URLs of the modules that loaded with it: node loaded-modules.mjs <entry>
 import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
-const [entry, pattern] = process.argv.slice(2);
-const matching = new RegExp(pattern);
+const [entry] = process.argv.slice(2);
 const loaded = [];
 registerHooks({
   load(url, context, nextLoad) {
-    if (matching.test(url)) loaded.push(url);
+    loaded.push(url);
     return nextLoad(url, context);
   },
 });
