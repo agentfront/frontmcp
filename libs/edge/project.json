@@ -24,7 +24,7 @@
           "outExtension": {
             ".js": ".js"
           },
-          "external": ["@frontmcp/sdk", "@frontmcp/plugin-skilled-openapi"]
+          "external": ["@frontmcp/sdk", "@frontmcp/utils", "@frontmcp/plugin-skilled-openapi"]
         }
       },
       "dependsOn": ["^build"]
@@ -47,7 +47,7 @@
           "outExtension": {
             ".js": ".mjs"
           },
-          "external": ["@frontmcp/sdk", "@frontmcp/plugin-skilled-openapi"]
+          "external": ["@frontmcp/sdk", "@frontmcp/utils", "@frontmcp/plugin-skilled-openapi"]
         }
       }
     },
