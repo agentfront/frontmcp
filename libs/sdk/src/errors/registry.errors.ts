@@ -126,3 +126,20 @@ export class UnsupportedHookOwnerKindError extends InternalMcpError {
     super(`Unsupported hook owner kind: "${kind}"`, 'UNSUPPORTED_HOOK_OWNER_KIND');
   }
 }
+
+/**
+ * Thrown at startup when the `before` / `after` options of the hooks on one stage order each other in a cycle.
+ */
+export class HookOrderCycleError extends InternalMcpError {
+  /** The hooks in the cycle, in the order their constraints chain them, as `name.method`. */
+  readonly hooks: string[];
+
+  constructor(flow: string, type: string, stage: string, hooks: string[]) {
+    super(
+      `The before/after options of the ${type} hooks on '${stage}' of '${flow}' form a cycle: ` +
+        `${[...hooks, hooks[0]].join(' → ')}. Remove one of these constraints.`,
+      'HOOK_ORDER_CYCLE',
+    );
+    this.hooks = hooks;
+  }
+}

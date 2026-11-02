@@ -27,6 +27,12 @@ export interface FeatureFlagAdapter {
    */
   evaluateFlags(flagKeys: string[], context: FeatureFlagContext): Promise<Map<string, boolean>>;
 
+  /**
+   * Call `listener` whenever flag values may have changed; returns the function that stops it. Optional: with it, a
+   * flag flip sends connected clients `list_changed` for the lists the plugin's flags gate.
+   */
+  subscribe?(listener: () => void): () => void;
+
   /** Destroy the adapter (disconnect, cleanup). Optional: the plugin calls it when the server is disposed. */
   destroy?(): Promise<void>;
 }

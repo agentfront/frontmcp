@@ -38,7 +38,7 @@
         },
         {
           "name": "availability",
-          "description": "availableWhen axes (os / runtime / deployment / provider / target / surface / env), missingAxes, isPlatform."
+          "description": "availableWhen axes (os / runtime / deployment / provider / target / surface / env), missingAxes, isPlatform, and enabled (fileSignal, FEATURE_OFF, list_changed, the surface hash, STALE_TOOL_LIST)."
         },
         {
           "name": "decorator-options",

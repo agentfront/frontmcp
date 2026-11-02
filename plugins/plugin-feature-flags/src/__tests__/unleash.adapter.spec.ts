@@ -5,12 +5,16 @@ describe('UnleashFeatureFlagAdapter', () => {
   const mockGetVariant = jest.fn();
   const mockStart = jest.fn().mockResolvedValue(undefined);
   const mockDestroyFn = jest.fn();
+  const mockOn = jest.fn();
+  const mockOff = jest.fn();
 
   const MockUnleash = jest.fn().mockImplementation(() => ({
     isEnabled: mockIsEnabled,
     getVariant: mockGetVariant,
     start: mockStart,
     destroy: mockDestroyFn,
+    on: mockOn,
+    off: mockOff,
   }));
 
   beforeEach(() => {
@@ -188,6 +192,26 @@ describe('UnleashFeatureFlagAdapter', () => {
       const results = await adapter.evaluateFlags(['flag-a', 'flag-b'], ctx);
       expect(results.get('flag-a')).toBe(true);
       expect(results.get('flag-b')).toBe(false);
+    });
+  });
+
+  describe('subscribe', () => {
+    it("follows the client's changed events until it is stopped", async () => {
+      const adapter = await createAdapter({ url: 'https://unleash.example.com/api', appName: 'my-app' });
+      await adapter.initialize();
+      const listener = jest.fn();
+
+      const stop = adapter.subscribe(listener);
+      expect(mockOn).toHaveBeenCalledWith('changed', listener);
+
+      stop();
+      expect(mockOff).toHaveBeenCalledWith('changed', listener);
+    });
+
+    it('follows nothing before it is initialized', async () => {
+      const adapter = await createAdapter({ url: 'https://unleash.example.com/api', appName: 'my-app' });
+      expect(() => adapter.subscribe(jest.fn())()).not.toThrow();
+      expect(mockOn).not.toHaveBeenCalled();
     });
   });
 

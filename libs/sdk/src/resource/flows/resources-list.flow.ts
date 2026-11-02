@@ -18,6 +18,7 @@ import { ListResourcesRequestSchema, ListResourcesResultSchema, type Resource } 
 import { annotationsForClient, callerClientProfile, type ClientNameSources } from '../../answer';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
+import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
 
 const inputSchema = z.object({
   request: ListResourcesRequestSchema,
@@ -47,7 +48,7 @@ type ResponseResourceItem = Resource;
 
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
-  execute: ['findResources', 'filterByAuthorities', 'resolveConflicts'],
+  execute: ['findResources', 'filterByEnabled', 'filterByAuthorities', 'resolveConflicts'],
   post: ['parseResources'],
 } as const satisfies FlowPlan<string>;
 
@@ -195,6 +196,16 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
       this.logger.error('findResources: failed to collect resources', error);
       throw error;
     }
+  }
+
+  /** Leave out the resources whose `enabled` is off for this request. */
+  @Stage('filterByEnabled')
+  async filterByEnabled() {
+    const { resources } = this.state.required;
+    this.state.set(
+      'resources',
+      await enabledItems(resources, ({ resource }) => resource.metadata.enabled, this.tryGetContext(), this.logger),
+    );
   }
 
   /**
@@ -346,7 +357,7 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
       const extra = resources.length > 5 ? `, +${resources.length - 5} more` : '';
       this.logger.verbose(`parseResources: prepared ${resources.length} resource descriptor(s): ${preview}${extra}`);
 
-      this.respond({ resources });
+      this.respond({ resources, _meta: { [SURFACE_META_KEY]: surfaceHash(resources.map(({ uri }) => uri)) } });
       this.logger.verbose('parseResources: response sent');
       this.logger.verbose('parseResources:done');
     } catch (error) {

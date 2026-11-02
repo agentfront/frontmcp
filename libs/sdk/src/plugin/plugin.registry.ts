@@ -296,12 +296,13 @@ export default class PluginRegistry
           }
         }
 
-        // Add owner information to each hook before registering
+        // Add owner information to each hook before registering, and the plugin's name `before` / `after` can name
         const hooksWithOwner = hooks.map((hook) => ({
           ...hook,
           metadata: {
             ...hook.metadata,
             owner: hookOwner,
+            pluginName: rec.metadata.name,
           },
         }));
         // Register hooks to the determined target scope

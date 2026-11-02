@@ -63,6 +63,19 @@ export class SplitioFeatureFlagAdapter implements FeatureFlagAdapter {
     return results;
   }
 
+  /** Follows the client's `SDK_UPDATE` events, which fire when the definitions it fetched change. */
+  subscribe(listener: () => void): () => void {
+    const client = this.client as {
+      Event: { SDK_UPDATE: string };
+      on(event: string, fn: () => void): void;
+      off(event: string, fn: () => void): void;
+    };
+    if (!client) return () => undefined;
+    const event = client.Event.SDK_UPDATE;
+    client.on(event, listener);
+    return () => client.off(event, listener);
+  }
+
   async destroy(): Promise<void> {
     if (this.client) {
       await (this.client as any).destroy();

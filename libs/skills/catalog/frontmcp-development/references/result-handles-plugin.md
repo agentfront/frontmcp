@@ -103,7 +103,8 @@ ResultHandlesPlugin.init({
 });
 ```
 
-The policy is asked only for answers over the threshold. `answer` is the answer's `structuredContent`, or its text.
+The policy is asked only for answers over the threshold. `answer` is the answer's `structuredContent`, or its text: a
+text that is a JSON object or array is parsed, so the policy (and `result_query`) gets the value, not the string.
 
 ## What the Model Sees
 
@@ -168,14 +169,14 @@ It answers `{ path, value, total?, offset?, nextOffset? }`.
 
 ## Troubleshooting
 
-| Problem                                   | Cause                                                                                              | Solution                                                                         |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Warning: "does not admit the folded form" | The tool's output schema rejects `{ preview, shape, handle }`                                      | Add `foldedAnswerSchema` to the schema as a union member                         |
-| A large answer is not folded              | Not text only, an error result, a widget answer, an in-process call, or a stateless anonymous call | Fold only applies to a client's text answer with a session or a signed-in caller |
-| Warning: "Could not keep the answer"      | The store failed to save it (Redis down, say); the answer was sent whole                           | Check the `storage` connection                                                   |
-| `RESULT_HANDLE_NOT_FOUND`                 | Expired, another session or caller, another instance or a full memory store                        | Call the tool again; use a shared store across instances                         |
-| `RESULT_SLICE_TOO_LARGE`                  | The slice is over `thresholdBytes`                                                                 | Read fewer items, fewer `fields`, or a deeper `path`                             |
-| `RESULT_PATH_NOT_FOUND`                   | The path is malformed or names nothing                                                             | Follow the keys the `shape` lists                                                |
+| Problem                                   | Cause                                                                                                                                                                           | Solution                                                                         |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Warning: "does not admit the folded form" | The tool's output schema rejects `{ preview, shape, handle }`                                                                                                                   | Add `foldedAnswerSchema` to the schema as a union member                         |
+| A large answer is not folded              | Not text only, several texts or a text beside `structuredContent` that says something else, an error result, a widget answer, an in-process call, or a stateless anonymous call | Fold only applies to a client's text answer with a session or a signed-in caller |
+| Warning: "Could not keep the answer"      | The store failed to save it (Redis down, say); the answer was sent whole                                                                                                        | Check the `storage` connection                                                   |
+| `RESULT_HANDLE_NOT_FOUND`                 | Expired, another session or caller, another instance or a full memory store                                                                                                     | Call the tool again; use a shared store across instances                         |
+| `RESULT_SLICE_TOO_LARGE`                  | The slice is over `thresholdBytes`                                                                                                                                              | Read fewer items, fewer `fields`, or a deeper `path`                             |
+| `RESULT_PATH_NOT_FOUND`                   | The path is malformed or names nothing                                                                                                                                          | Follow the keys the `shape` lists                                                |
 
 ## Reference
 

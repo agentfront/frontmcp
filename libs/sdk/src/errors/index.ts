@@ -14,6 +14,9 @@ export {
   ToolExecutionError,
   // Availability errors
   EntryUnavailableError,
+  FeatureOffError,
+  StaleToolListError,
+  InvalidFileSignalError,
   // Resource errors
   ResourceNotFoundError,
   ResourceReadError,
@@ -181,6 +184,7 @@ export {
   DuplicateAppIdError,
   FlowNotRegisteredError,
   UnsupportedHookOwnerKindError,
+  HookOrderCycleError,
 } from './registry.errors';
 
 // Export provider errors

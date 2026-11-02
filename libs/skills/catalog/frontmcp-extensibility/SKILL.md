@@ -61,6 +61,8 @@ Patterns and examples for extending FrontMCP servers with external npm packages.
 | Load an app from an npm package               | `multi-app-composition` (in frontmcp-setup)     | `App.esm('@scope/pkg@^1.0.0', { namespace: 'pkg' })` pattern |
 | Connect to a remote MCP server                | `multi-app-composition` (in frontmcp-setup)     | `App.remote('https://...', { namespace: 'ns' })` pattern     |
 | Build a reusable plugin with hooks            | `create-plugin-hooks` (in frontmcp-development) | `DynamicPlugin`, context extensions, lifecycle hooks         |
+| Order a plugin's hooks against another plugin | `create-plugin-hooks` (in frontmcp-development) | `HookPhase` bands, `before` / `after`, the dev hook trace    |
+| Run one app's hook for every app              | `create-plugin-hooks` (in frontmcp-development) | `appliesTo: 'all-apps'` vs `'uncovered-apps'` and `scope`    |
 | Build a custom adapter for an external source | `create-adapter` (in frontmcp-development)      | `DynamicAdapter` for OpenAPI, GraphQL, or custom sources     |
 | Auto-generate tools from an OpenAPI spec      | `official-adapters` (in frontmcp-development)   | `OpenapiAdapter` with filtering, auth, and transforms        |
 

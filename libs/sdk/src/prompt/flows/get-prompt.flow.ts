@@ -33,6 +33,7 @@ import { ResolvedEntries } from '../../flows/resolved-entries';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
+import { assertEntryEnabled } from '../../surface';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
 
 const inputSchema = z.object({
@@ -70,6 +71,7 @@ const plan = {
     'parseInput',
     'ensureRemoteCapabilities',
     'findPrompt',
+    'checkEnabled',
     'checkPublicAccess',
     'checkEntryAuthorities',
     'createPromptContext',
@@ -116,6 +118,8 @@ function findPromptForGet(prompts: ScopeEntry['prompts'], name: string): PromptE
   access: 'authorized',
 })
 export default class GetPromptFlow extends FlowBase<typeof name> {
+  static override readonly tracesHooksInAnswer = true;
+
   static override async resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): Promise<string | undefined> {
     const promptName = (rawInput as { request?: { params?: { name?: unknown } } } | undefined)?.request?.params?.name;
     if (typeof promptName !== 'string') return undefined;
@@ -257,6 +261,13 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     this.state.set('prompt', prompt);
     this.logger.verbose(`findPrompt: prompt "${prompt.name}" found`);
     this.logger.verbose('findPrompt:done');
+  }
+
+  /** A prompt whose `enabled` is off is refused with `FEATURE_OFF` and the remedy of its source. */
+  @Stage('checkEnabled')
+  async checkEnabled() {
+    const { prompt } = this.state.required;
+    await assertEntryEnabled('Prompt', prompt.name, prompt.metadata.enabled, this.tryGetContext(), this.logger);
   }
 
   /**
