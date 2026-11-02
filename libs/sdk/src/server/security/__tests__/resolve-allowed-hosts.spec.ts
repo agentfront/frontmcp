@@ -10,7 +10,9 @@
  */
 import {
   allowedHostsFromEnv,
+  corsAllowedOrigins,
   deriveAllowedHosts,
+  deriveAllowedOrigins,
   isLoopbackAddress,
   isRoutableBind,
   shouldEnforceDerivedHosts,
@@ -162,5 +164,52 @@ describe('allowedHostsFromEnv', () => {
     expect(allowedHostsFromEnv({})).toBeUndefined();
     expect(allowedHostsFromEnv({ FRONTMCP_ALLOWED_HOSTS: '   ' })).toBeUndefined();
     expect(allowedHostsFromEnv({ FRONTMCP_ALLOWED_HOSTS: ' , , ' })).toBeUndefined();
+  });
+});
+
+describe('deriveAllowedOrigins', () => {
+  it('names http and https on every loopback spelling with the bound port', () => {
+    expect(deriveAllowedOrigins({ port: 3000 })).toEqual([
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://[::1]:3000',
+      'https://localhost:3000',
+      'https://127.0.0.1:3000',
+      'https://[::1]:3000',
+    ]);
+  });
+
+  it('adds the issuer origin and the extra origins', () => {
+    expect(
+      deriveAllowedOrigins({
+        port: 3000,
+        issuer: 'https://mcp.example.com/base',
+        extraOrigins: [' https://app.example.com ', ''],
+      }),
+    ).toEqual(expect.arrayContaining(['https://mcp.example.com', 'https://app.example.com']));
+  });
+
+  it('ignores an unparseable issuer', () => {
+    expect(deriveAllowedOrigins({ port: 3000, issuer: 'not a url' })).toHaveLength(6);
+  });
+});
+
+describe('corsAllowedOrigins', () => {
+  it('admits no extra origin when CORS is off', () => {
+    expect(corsAllowedOrigins(undefined)).toEqual([]);
+    expect(corsAllowedOrigins(false)).toEqual([]);
+    expect(corsAllowedOrigins({ origin: false })).toEqual([]);
+  });
+
+  it('lists the origins a string or an array names', () => {
+    expect(corsAllowedOrigins({ origin: 'https://app.example.com' })).toEqual(['https://app.example.com']);
+    expect(corsAllowedOrigins({ origin: ['https://a.example', 'https://b.example'] })).toEqual([
+      'https://a.example',
+      'https://b.example',
+    ]);
+  });
+
+  it.each([true, '*', ['https://a.example', '*'], () => undefined])('admits any origin for %p', (origin) => {
+    expect(corsAllowedOrigins({ origin: origin as never })).toBeUndefined();
   });
 });

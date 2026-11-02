@@ -155,7 +155,7 @@ cross-cutting concern, it's wrong — rework it through a hookable flow.
 Besides flow hooks, the scope (`ScopeEntry`) takes two lifecycle callbacks:
 
 - **`scope.onServerStarted(callback: () => void | Promise<void>): void`** runs `callback` after the HTTP server starts listening, in `FrontMcpInstance.start()`. Callbacks run in registration order, each awaited. It never fires in direct mode (`create()`, `createDirect()`, `connect()`), where no HTTP server starts.
-- **`scope.onDispose(callback: () => void | Promise<void>): () => void`** runs `callback` when the scope is disposed, in direct mode too. Callbacks run once, in reverse order of registration; the returned function removes the callback.
+- **`scope.onDispose(callback: () => void | Promise<void>): () => void`** runs `callback` when the scope is disposed: on `SIGTERM`/`SIGINT` for an HTTP, Unix socket or stdio server, and in direct mode too. Callbacks run once, in reverse order of registration, each awaited; the shutdown deadline (5s under stdio, 10s otherwise) still exits a process whose callback hangs. The returned function removes the callback.
 
 Use them for warming caches, starting background indexing, or releasing timers and connections. A plugin reaches the scope from a factory provider: `ScopeEntry` is a DI token, so `inject: () => [ScopeEntry]` hands the factory the scope it is built in. The plugin's providers are built while the server starts up, before it listens, so the callback is registered in time.
 

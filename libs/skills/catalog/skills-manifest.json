@@ -3001,13 +3001,13 @@
             },
             {
               "name": "graceful-shutdown-cleanup",
-              "description": "Shows how to layer daemon-specific cleanup (socket file, PID file) **on top of** the framework's built-in SIGTERM/SIGINT handler.",
+              "description": "Shows how to layer daemon-specific cleanup (PID file) **on top of** the framework's built-in SIGTERM/SIGINT handler, leaving the socket file to the framework.",
               "level": "intermediate",
               "tags": ["production", "unix-socket", "cli", "database", "daemon", "graceful"],
               "features": [
                 "The framework already wires SIGTERM/SIGINT — daemon cleanup attaches _additional_ listeners and does not call `process.exit()`",
                 "Using `server.dispose()` (the only real method) instead of fictional `server.close()`",
-                "Removing the Unix socket file to prevent stale `.sock` files on restart",
+                "Leaving the Unix socket file to the framework, which removes it on close and replaces a stale one at startup",
                 "Cleaning up the PID file on shutdown",
                 "Using `@frontmcp/utils` (`unlink`, `fileExists`, `ensureDir`) for file operations",
                 "Providers initialize in the constructor — there is no `onInit` / `onDestroy`"
