@@ -3,10 +3,10 @@
  * Mock factory for ProviderRegistry
  */
 
-import { Token } from '../../common/interfaces';
+import type { EntryOwnerKind, EntryOwnerRef } from '../../common/entries';
+import { type Token } from '../../common/interfaces';
 import { ProviderScope } from '../../common/metadata';
 import type ProviderRegistry from '../../provider/provider.registry';
-import type { EntryOwnerRef, EntryOwnerKind } from '../../common/entries';
 
 /**
  * Creates a simple mock hook registry for provider testing
@@ -52,6 +52,7 @@ export function createMockScope() {
     },
     tools: {
       getTools: jest.fn().mockReturnValue([]),
+      listAllInstances: jest.fn().mockReturnValue([]),
     },
   };
 }

@@ -3,12 +3,15 @@ import 'reflect-metadata';
 import { z } from '@frontmcp/lazy-zod';
 
 import {
+  Adapter,
   App,
+  DynamicAdapter,
   LogLevel,
   LogTransport,
   LogTransportInterface,
   Tool,
   ToolContext,
+  type FrontMcpAdapterResponse,
   type FrontMcpConfigInput,
   type LogRecord,
 } from '../../common';
@@ -309,5 +312,55 @@ describe('tool alias conflicts', () => {
     }
 
     expect(() => Tool({ name: 'blank', aliases: [''], inputSchema: {} })(BlankAliasTool)).toThrow(/alias/i);
+  });
+
+  it("refuses an adapter update whose tool takes another tool's name as an alias, and keeps the tools it had", async () => {
+    @Tool({ name: 'count_orders', inputSchema: {} })
+    class CountOrdersTool extends ToolContext {
+      async execute() {
+        return { tool: 'count_orders' };
+      }
+    }
+
+    @Tool({ name: 'feed_orders', aliases: ['count_orders'], inputSchema: {} })
+    class FeedOrdersTool extends ToolContext {
+      async execute() {
+        return { tool: 'feed_orders' };
+      }
+    }
+
+    let publish: (response: FrontMcpAdapterResponse) => void = () => undefined;
+
+    @Adapter({ name: 'orders-feed' })
+    class OrdersFeedAdapter extends DynamicAdapter<{ name: string }> {
+      constructor(readonly options: { name: string }) {
+        super();
+      }
+      async fetch(): Promise<FrontMcpAdapterResponse> {
+        return {};
+      }
+      onUpdate(callback: (response: FrontMcpAdapterResponse) => void): () => void {
+        publish = callback;
+        return () => undefined;
+      }
+    }
+
+    @App({
+      id: 'counts',
+      name: 'Counts',
+      tools: [CountOrdersTool],
+      adapters: [OrdersFeedAdapter.init({ name: 'orders-feed' })],
+    })
+    class CountsApp {}
+
+    const server = await FrontMcpInstance.createDirect(serverWith(CountsApp));
+
+    expect(() => publish({ tools: [FeedOrdersTool] })).toThrow(ToolAliasConflictError);
+
+    const result = (await server.callTool('count_orders', {})) as { structuredContent?: unknown };
+    expect(result.structuredContent).toEqual({ tool: 'count_orders' });
+    const { tools } = await server.listTools();
+    expect(tools.map((tool) => tool.name)).not.toContain('feed_orders');
+    await server.dispose();
   });
 });
