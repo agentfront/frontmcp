@@ -38,7 +38,9 @@ function parsedJsonText(text: string): unknown {
 function repeatsStructuredContent(text: string, structured: Record<string, unknown>): boolean {
   if (JSON.stringify(parsedJsonText(text) ?? text) === JSON.stringify(structured)) return true;
   const keys = Object.keys(structured);
-  return keys.length === 1 && keys[0] === 'content' && text === String(structured['content']);
+  const content = structured['content'];
+  const isPrimitive = content === null || typeof content !== 'object';
+  return keys.length === 1 && keys[0] === 'content' && isPrimitive && text === String(content);
 }
 
 /** The answer's data: `structuredContent` when its one text only repeats it, else its one text (parsed when JSON). */
