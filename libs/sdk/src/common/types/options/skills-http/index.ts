@@ -5,6 +5,7 @@ export type {
   SkillsConfigOptions,
   SkillsConfigEndpointConfig,
   SkillsConfigAuthMode,
+  SkillResourceAnnotations,
   SkillsConfigAuditOptions,
   SkillsConfigJwtOptions,
   SkillsConfigCacheOptions,
