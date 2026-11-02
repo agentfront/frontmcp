@@ -71,8 +71,9 @@ The plugin runs on the `fitAnswer` stage of `tools/call`, before the answer budg
 sees the folded answer. An answer folds when all of these hold:
 
 - a client called the tool: a tool calling another with `this.callTool()` gets the whole answer;
-- the answer is `structuredContent` with at most one text content, or one text content. Images, audio, resources,
-  several texts (even beside `structuredContent`), error results and answers that render a widget are left alone;
+- the answer is one text content, or `structuredContent` with at most one text that only repeats it (as the SDK
+  writes it). Images, audio, resources, several texts, a text beside `structuredContent` that says something else,
+  error results and answers that render a widget are left alone;
 - its data, `structuredContent` or the text, is larger than `thresholdBytes` as UTF-8 JSON;
 - the call has a verified session or an authenticated caller. A stateless anonymous call is left alone, since nobody
   could read its handle back;
@@ -89,6 +90,7 @@ only when that schema admits `{ preview, shape, handle }`. Add `foldedAnswerSche
 
 ```ts
 import { foldedAnswerSchema } from '@frontmcp/plugin-result-handles';
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
 
 const reportSchema = z.object({ orders: z.array(orderSchema), total: z.number() });
 
