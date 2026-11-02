@@ -50,6 +50,9 @@ export type QuestionOutcome =
   | { kind: 'waiting'; question: PersistentQuestion }
   | { kind: 'superseded' };
 
+/** What asking gives: the answer, taken now, or the question this call now waits on. */
+export type AskOutcome = Exclude<QuestionOutcome, { kind: 'superseded' }>;
+
 interface QuestionRecord {
   id: string;
   subject: string;
@@ -101,7 +104,7 @@ export class QuestionStore implements HttpRouteTopicSource {
   }
 
   /** Ask a question: its answer when it was answered (taken now), else the question, now waited on by `waiter`. */
-  async ask(request: QuestionRequest): Promise<QuestionOutcome> {
+  async ask(request: QuestionRequest): Promise<AskOutcome> {
     const storageKey = this.recordKey(request.subject, request.key);
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       const current = await this.read(storageKey, request.subject);

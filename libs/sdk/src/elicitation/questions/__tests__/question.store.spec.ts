@@ -3,12 +3,12 @@ import 'reflect-metadata';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { mkdtemp, rm } from '@frontmcp/utils';
+import { createChangeFeed, createMemoryStorage, mkdtemp, rm } from '@frontmcp/utils';
 
 import { InvalidInputError } from '../../../errors';
 import { createQuestionStore } from '../question-store.factory';
-import { QuestionAlreadyAnsweredError, QuestionNotFoundError } from '../question.errors';
-import { type QuestionRequest, type QuestionStore } from '../question.store';
+import { QuestionAlreadyAnsweredError, QuestionNotFoundError, QuestionStoreBusyError } from '../question.errors';
+import { QuestionStore, type QuestionRequest } from '../question.store';
 
 const SCHEMA = {
   type: 'object',
@@ -217,6 +217,83 @@ describe('QuestionStore', () => {
       stop();
 
       expect(listener.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe('putting back an answer a call could not hand on', () => {
+    it('keeps it for the next call when the question is gone', async () => {
+      await store.restore(request(), { status: 'accept', content: { approve: true } });
+
+      expect(await store.ask(request({ waiter: 'next' }))).toEqual({
+        kind: 'answered',
+        answer: { status: 'accept', content: { approve: true } },
+      });
+    });
+
+    it('answers the question a newer call asked meanwhile', async () => {
+      await askedId(store, { waiter: 'newer' });
+
+      await store.restore(request(), { status: 'decline' });
+
+      expect(await store.take('principal:alice', 'deploy', 'newer')).toEqual({
+        kind: 'answered',
+        answer: { status: 'decline' },
+      });
+    });
+
+    it('leaves an answer that is already waiting', async () => {
+      const id = await askedId(store);
+      await store.answer('principal:alice', id, { status: 'accept', content: { approve: true } });
+
+      await store.restore(request(), { status: 'decline' });
+
+      expect(await store.take('principal:alice', 'deploy', 'call-1')).toEqual({
+        kind: 'answered',
+        answer: { status: 'accept', content: { approve: true } },
+      });
+    });
+  });
+
+  describe('a storage it cannot rely on', () => {
+    it('gives up with QuestionStoreBusyError when every compare-and-set loses', async () => {
+      const storage = createMemoryStorage();
+      await storage.connect();
+      const busy = new QuestionStore({ storage, feed: createChangeFeed(storage) });
+      jest.spyOn(storage, 'setIfEquals').mockResolvedValue(false);
+      const id = await askedId(busy);
+
+      await expect(busy.answer('principal:alice', id, { status: 'decline' })).rejects.toThrow(QuestionStoreBusyError);
+      await expect(busy.ask(request({ waiter: 'another-call' }))).rejects.toThrow(QuestionStoreBusyError);
+      await busy.close();
+    });
+
+    it('reads a record it cannot parse as no question', async () => {
+      const { store: plain, storage } = await createQuestionStore({
+        storage: { type: 'memory' },
+        encryption: { enabled: false },
+      });
+      await askedId(plain);
+      for (const key of await storage.keys('*')) if (key.includes('q:')) await storage.set(key, '{not json');
+
+      expect(await plain.list('principal:alice')).toEqual([]);
+      await plain.close();
+    });
+
+    it('keeps asking and answering when a change notification fails', async () => {
+      const storage = createMemoryStorage();
+      await storage.connect();
+      const feed = createChangeFeed(storage);
+      jest.spyOn(feed, 'publish').mockRejectedValue(new Error('the feed is down'));
+      const quiet = new QuestionStore({ storage, feed });
+
+      const id = await askedId(quiet);
+      await quiet.answer('principal:alice', id, { status: 'decline' });
+
+      expect(await quiet.take('principal:alice', 'deploy', 'call-1')).toEqual({
+        kind: 'answered',
+        answer: { status: 'decline' },
+      });
+      await quiet.close();
     });
   });
 

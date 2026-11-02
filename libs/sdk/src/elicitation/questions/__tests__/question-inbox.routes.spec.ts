@@ -145,6 +145,20 @@ describe('the question inbox', () => {
     expect((await answer(alice, id, { action: 'maybe' })).status).toBe(400);
   });
 
+  it('reads an answer sent as text, and refuses text that is not JSON', async () => {
+    const id = await ask('principal:alice', 'as-text');
+    const alice = await signInFor('principal:alice');
+    const post = (body: string) =>
+      send(`/_frontmcp/questions/${id}/answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain', Cookie: alice, Origin: ORIGIN },
+        body,
+      });
+
+    expect((await post('{not json')).status).toBe(400);
+    expect((await post(JSON.stringify({ action: 'decline' }))).status).toBe(200);
+  });
+
   it('refuses an answer posted from another site', async () => {
     const id = await ask('principal:alice', 'cross-site');
     const alice = await signInFor('principal:alice');

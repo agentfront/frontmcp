@@ -36,10 +36,9 @@ function parsedBody(body: unknown): unknown {
   }
 }
 
-async function inboxOf(route: HttpRouteContext): Promise<{ questions: PersistentQuestion[] }> {
+async function inboxOf(route: HttpRouteContext, store: QuestionStore): Promise<{ questions: PersistentQuestion[] }> {
   const subject = route.person?.subject;
-  const store = route.scope.persistentQuestions?.store;
-  return { questions: subject && store ? await store.list(subject) : [] };
+  return { questions: subject ? await store.list(subject) : [] };
 }
 
 /**
@@ -67,7 +66,7 @@ export function questionInboxRoutes(store: QuestionStore): HttpRouteType[] {
   @HttpRoute({ method: 'GET', path: QUESTIONS_PATH, auth: 'people' })
   class QuestionListRoute extends HttpRouteContext {
     handle() {
-      return inboxOf(this);
+      return inboxOf(this, store);
     }
   }
 
@@ -79,7 +78,7 @@ export function questionInboxRoutes(store: QuestionStore): HttpRouteType[] {
   })
   class QuestionEventsRoute extends HttpRouteContext {
     handle() {
-      return inboxOf(this);
+      return inboxOf(this, store);
     }
   }
 

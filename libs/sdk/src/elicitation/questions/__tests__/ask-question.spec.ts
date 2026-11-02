@@ -115,6 +115,64 @@ describe('askPersistentQuestion', () => {
     await expect(ask({ waitMs: 50 })).resolves.toEqual({ status: 'accept', content: { approve: true } });
   });
 
+  it('puts back an answer its take brought in after the call was aborted', async () => {
+    const controller = new AbortController();
+    let deliver: (outcome: unknown) => void = () => undefined;
+    const restore = jest.fn(async () => undefined);
+    const slow = {
+      ask: async () => ({ kind: 'waiting', question: { expiresAt: Date.now() + DAY_MS } }),
+      take: () => new Promise((settle) => (deliver = settle)),
+      subscribe: () => () => undefined,
+      restore,
+    } as unknown as QuestionStore;
+    const call = askPersistentQuestion(
+      { store: slow, subject: SUBJECT, signal: controller.signal },
+      'Deploy?',
+      schema,
+      {
+        key: 'deploy',
+        ttlMs: DAY_MS,
+        waitMs: 10_000,
+      },
+    );
+    await new Promise((settle) => setTimeout(settle, 10));
+
+    controller.abort();
+    deliver({ kind: 'answered', answer: { status: 'accept', content: { approve: true } } });
+
+    await expect(call).rejects.toThrow(QuestionPendingError);
+    await waitFor(async () => (restore.mock.calls.length > 0 ? true : undefined));
+    expect(restore).toHaveBeenCalledWith(expect.objectContaining({ subject: SUBJECT, key: 'deploy' }), {
+      status: 'accept',
+      content: { approve: true },
+    });
+  });
+
+  it('does not wait at all for a call already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(ask({ signal: controller.signal, key: 'aborted' })).rejects.toThrow(QuestionPendingError);
+  });
+
+  it('fails the call when the store fails while it waits', async () => {
+    const failing = {
+      ask: async () => ({ kind: 'waiting', question: { expiresAt: Date.now() + DAY_MS } }),
+      take: async () => {
+        throw new Error('the store is down');
+      },
+      subscribe: () => () => undefined,
+    } as unknown as QuestionStore;
+
+    await expect(
+      askPersistentQuestion({ store: failing, subject: SUBJECT }, 'Deploy?', schema, {
+        key: 'deploy',
+        ttlMs: DAY_MS,
+        waitMs: 10_000,
+      }),
+    ).rejects.toThrow('the store is down');
+  });
+
   it('refuses an answer the schema of the call refuses', async () => {
     const strict = z.object({ approve: z.boolean().refine((value) => value, 'must approve') });
     const call = askPersistentQuestion({ store, subject: SUBJECT }, 'Deploy?', strict, {

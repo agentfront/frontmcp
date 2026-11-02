@@ -17,6 +17,7 @@ import {
   type FlowType,
   type FrontMcpAuth,
 } from '../common';
+import type { PersistentQuestions } from '../elicitation/questions/question-scope.helper';
 import { FlowExitedWithoutOutputError } from '../errors';
 import FlowRegistry from '../flows/flow.registry';
 import { checkHookOrder, hookRunsOf } from '../hooks/hook-order';
@@ -347,6 +348,11 @@ export class AgentScope {
     return this.parentScope.rateLimitManager;
   }
 
+  /** The server's persistent questions: an agent's tools ask for the same callers. */
+  get persistentQuestions(): PersistentQuestions | undefined {
+    return this.parentScope.persistentQuestions;
+  }
+
   /** See {@link ScopeEntry.publicAccessGuard}. */
   get publicAccessGuard(): GuardManager | undefined {
     return this.parentScope.publicAccessGuard;
@@ -467,8 +473,8 @@ class AgentScopeEntry {
     return undefined;
   }
 
-  get persistentQuestions(): undefined {
-    return undefined;
+  get persistentQuestions(): PersistentQuestions | undefined {
+    return this.agentScope.persistentQuestions;
   }
 
   get metadata() {

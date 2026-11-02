@@ -10,6 +10,7 @@ export {
 export {
   QuestionStore,
   QUESTIONS_TOPIC,
+  type AskOutcome,
   type PersistentQuestion,
   type QuestionOutcome,
   type QuestionRequest,

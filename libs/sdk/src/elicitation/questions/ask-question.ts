@@ -63,7 +63,6 @@ export async function askPersistentQuestion<S extends ZodType>(
   };
   const asked = await store.ask(request);
   if (asked.kind === 'answered') return delivered(asked.answer, schema);
-  if (asked.kind === 'superseded') throw new QuestionSupersededError(options.key);
   const { expiresAt } = asked.question;
 
   const answer = await new Promise<ElicitResult>((resolve, reject) => {

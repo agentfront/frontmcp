@@ -16,13 +16,21 @@ interface Sent {
   body?: string;
 }
 
+function headersOf(init: HeadersInit | undefined): Record<string, string> {
+  const headers: Record<string, string> = {};
+  new Headers(init).forEach((value, name) => {
+    headers[name] = value;
+  });
+  return headers;
+}
+
 function server(routes: Record<string, (sent: Sent) => Response>) {
   const sent: Sent[] = [];
   const fetchImpl = (async (input: string | URL, init: RequestInit = {}) => {
     const request: Sent = {
       url: String(input),
       method: init.method ?? 'GET',
-      headers: Object.fromEntries(new Headers(init.headers).entries()),
+      headers: headersOf(init.headers),
       body: typeof init.body === 'string' ? init.body : undefined,
     };
     sent.push(request);
@@ -48,9 +56,35 @@ function io(fetchImpl: typeof fetch, replies?: string[]): InboxIo & { printed: s
   };
 }
 
+jest.mock('node:readline/promises', () => ({
+  createInterface: () => ({ question: async () => '2', close: jest.fn() }),
+}));
+
 describe('terminalIo', () => {
+  const tty = { stdin: process.stdin.isTTY, stdout: process.stdout.isTTY };
+
+  afterEach(() => {
+    process.stdin.isTTY = tty.stdin;
+    process.stdout.isTTY = tty.stdout;
+  });
+
   it('only lists, without asking, when not on a terminal', () => {
+    process.stdin.isTTY = false;
+
     expect(terminalIo().ask).toBeUndefined();
+  });
+
+  it('asks on a terminal, and prints to it', async () => {
+    process.stdin.isTTY = true;
+    process.stdout.isTTY = true;
+    const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const terminal = terminalIo();
+
+    terminal.print('hello');
+
+    expect(await terminal.ask?.('Which? ')).toBe('2');
+    expect(log).toHaveBeenCalledWith('hello');
+    log.mockRestore();
   });
 });
 
@@ -71,6 +105,7 @@ describe('parseSignInLink', () => {
     ['a path without --url', '/_frontmcp/people/login?code=abc', undefined],
     ['a link without a code', `${ORIGIN}/_frontmcp/people/login`, undefined],
     ['a code that is not one', 'not a code!', ORIGIN],
+    ['a server URL that is not one', 'abc', 'not a url'],
   ])('refuses %s', (_case, link, base) => {
     expect(() => parseSignInLink(link, base)).toThrow(InboxError);
   });
