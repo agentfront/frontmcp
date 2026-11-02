@@ -223,7 +223,7 @@ describe('connect utilities', () => {
 
       await connect(decoratedClass as unknown as FrontMcpConfigInput, { mode: 'cli' });
 
-      expect(FrontMcpInstance.createForCli).toHaveBeenCalledWith(storedConfig);
+      expect(FrontMcpInstance.createForCli).toHaveBeenCalledWith(storedConfig, { fileLog: true });
     });
 
     it('should generate sessionId when not provided', async () => {

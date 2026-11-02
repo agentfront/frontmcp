@@ -27,9 +27,12 @@ const instanceClients = new WeakMap<Promise<FrontMcpInstance>, number>();
  *
  * @internal
  */
+/** `'manifest'` is the CLI mode without its log file, for reading a server's entries in process. */
+type InstanceMode = 'full' | 'cli' | 'manifest';
+
 function getInstance(
   config: FrontMcpConfigInput,
-  mode?: 'full' | 'cli',
+  mode?: InstanceMode,
 ): { cacheKey: object; instancePromise: Promise<FrontMcpInstance> } {
   // Handle @FrontMcp-decorated class (e.g., from schema-extractor loading a bundle).
   // `getDecoratorConfig` returns the parsed metadata via the SDK's stable accessor.
@@ -51,9 +54,8 @@ function getInstance(
         const { FrontMcpInstance } = await import('../front-mcp/front-mcp.js');
         // Create instance without starting HTTP server
         // CLI mode skips non-essential registries for faster startup
-        return mode === 'cli'
-          ? await FrontMcpInstance.createForCli(resolvedConfig)
-          : await FrontMcpInstance.createForConnect(resolvedConfig);
+        if (mode === 'full' || mode === undefined) return await FrontMcpInstance.createForConnect(resolvedConfig);
+        return await FrontMcpInstance.createForCli(resolvedConfig, { fileLog: mode === 'cli' });
       } catch (error) {
         // Remove from cache on failure to allow retry
         instanceCache.delete(cacheKey);
@@ -75,7 +77,7 @@ function getInstance(
  */
 export function joinInstance(
   config: FrontMcpConfigInput,
-  mode?: 'full' | 'cli',
+  mode?: InstanceMode,
 ): { instancePromise: Promise<FrontMcpInstance>; release: () => Promise<void> } {
   const { cacheKey, instancePromise } = getInstance(config, mode);
   instanceClients.set(instancePromise, (instanceClients.get(instancePromise) ?? 0) + 1);

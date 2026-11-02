@@ -534,13 +534,17 @@ export class FrontMcpInstance implements FrontMcpInterface {
   /**
    * Creates a FrontMCP instance optimized for CLI execution.
    * Skips non-essential registries (UI widget compilation, event stores,
-   * elicitation stores) for faster startup (~100-150ms savings).
+   * elicitation stores) for faster startup (~100-150ms savings). `fileLog: false` leaves out the log file
+   * under `~/.frontmcp/logs` that a CLI run writes.
    *
    * @example
    * const instance = await FrontMcpInstance.createForCli(config);
    * const scopes = instance.getScopes();
    */
-  public static async createForCli(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
+  public static async createForCli(
+    options: FrontMcpConfigInput,
+    { fileLog = true }: { fileLog?: boolean } = {},
+  ): Promise<FrontMcpInstance> {
     const parsedConfig = parseFrontMcpConfigLite(options);
     // Mark config for CLI mode so Scope can skip non-essential work
     (parsedConfig as Record<string, unknown>)['__cliMode'] = true;
@@ -552,14 +556,14 @@ export class FrontMcpInstance implements FrontMcpInterface {
     if (parsedConfig.logging) {
       parsedConfig.logging.enableConsole = verbose;
       const transports = parsedConfig.logging.transports ?? [];
-      if (!transports.includes(FileLogTransportInstance)) {
+      if (fileLog && !transports.includes(FileLogTransportInstance)) {
         transports.push(FileLogTransportInstance);
       }
       parsedConfig.logging.transports = transports;
     } else {
       (parsedConfig as Record<string, unknown>)['logging'] = {
         enableConsole: verbose,
-        transports: [FileLogTransportInstance],
+        transports: fileLog ? [FileLogTransportInstance] : [],
       };
     }
 

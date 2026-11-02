@@ -1,6 +1,10 @@
 import 'reflect-metadata';
 
+import * as os from 'node:os';
+import * as path from 'node:path';
+
 import { z } from '@frontmcp/lazy-zod';
+import { mkdtemp, readdir, rm } from '@frontmcp/utils';
 
 import {
   App,
@@ -236,5 +240,23 @@ describe('buildManifest()', () => {
     expect(manifest.tools.map((tool) => tool.name)).toContain('add');
     await expect(client.callTool('add', { a: 1, b: 2 })).resolves.toBeDefined();
     await client.close();
+  });
+
+  it('writes no CLI log file, as connect() in CLI mode does', async () => {
+    const logDir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-manifest-logs-'));
+    const previous = process.env['FRONTMCP_LOG_DIR'];
+    process.env['FRONTMCP_LOG_DIR'] = logDir;
+    try {
+      await buildManifest(config());
+      expect(await readdir(logDir)).toEqual([]);
+
+      const client = await connect(config(), { mode: 'cli' });
+      await client.close();
+      expect(await readdir(logDir)).toHaveLength(1);
+    } finally {
+      if (previous === undefined) delete process.env['FRONTMCP_LOG_DIR'];
+      else process.env['FRONTMCP_LOG_DIR'] = previous;
+      await rm(logDir, { recursive: true, force: true });
+    }
   });
 });

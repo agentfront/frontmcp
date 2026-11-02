@@ -19,7 +19,7 @@ import { type ServerManifest } from './server-manifest.schema';
  * ```
  */
 export async function buildManifest(config: FrontMcpConfigInput): Promise<ServerManifest> {
-  const { instancePromise, release } = joinInstance(config, 'cli');
+  const { instancePromise, release } = joinInstance(config, 'manifest');
   try {
     const instance = await instancePromise;
     const primary = instance.getPrimaryScope() as Scope | undefined;
