@@ -37,6 +37,8 @@ function nestedSchemas(field: unknown): unknown[] {
   return [field];
 }
 
+const CHILD_KEYS = ['innerType', 'element', 'valueType', 'keyType', 'left', 'right', 'catchall', 'rest', 'in', 'out'];
+
 /**
  * Materialize a lazy schema and return the underlying real zod schema,
  * recursively materializing any lazy wrappers found in the schema tree
@@ -82,12 +84,9 @@ function deepMaterialize(value: unknown, seen: WeakSet<object>): unknown {
     if (Array.isArray(options)) {
       for (let i = 0; i < options.length; i++) options[i] = deepMaterialize(options[i], seen);
     }
-    if ('innerType' in def) def['innerType'] = deepMaterialize(def['innerType'], seen);
-    if ('element' in def) def['element'] = deepMaterialize(def['element'], seen);
-    if ('valueType' in def) def['valueType'] = deepMaterialize(def['valueType'], seen);
-    if ('keyType' in def) def['keyType'] = deepMaterialize(def['keyType'], seen);
-    if ('left' in def) def['left'] = deepMaterialize(def['left'], seen);
-    if ('right' in def) def['right'] = deepMaterialize(def['right'], seen);
+    for (const key of CHILD_KEYS) {
+      if (key in def) def[key] = deepMaterialize(def[key], seen);
+    }
     const items = def['items'];
     if (Array.isArray(items)) {
       for (let i = 0; i < items.length; i++) items[i] = deepMaterialize(items[i], seen);
