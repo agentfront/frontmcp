@@ -3,6 +3,7 @@ import { IconSchema, type Icon } from '@frontmcp/protocol';
 import { entryAvailabilitySchema, isValidMcpUri, isValidMcpUriTemplate, type EntryAvailability } from '@frontmcp/utils';
 
 import { type RawZodShape } from '../types';
+import { enabledOptionSchema, type EnabledOption } from './enabled.metadata';
 
 declare global {
   /**
@@ -95,6 +96,13 @@ interface ResourceMetadata extends ExtendFrontMcpResourceMetadata {
    * When set, the resource is only discoverable and readable in matching environments.
    */
   availableWhen?: EntryAvailability;
+
+  /**
+   * Whether the resource is on: a boolean, or an `EnabledSource` such as `fileSignal(path, key)` that can change
+   * while sessions are live. A resource that is off is left out of `resources/list`, and `resources/read` refuses it with
+   * `FEATURE_OFF` and a remedy. When a source changes, connected clients get `notifications/resources/list_changed`.
+   */
+  enabled?: EnabledOption;
 }
 
 const resourceAnnotationsSchema = z
@@ -118,6 +126,7 @@ export const frontMcpResourceMetadataSchema = z
     annotations: resourceAnnotationsSchema.optional(),
     _meta: z.record(z.string(), z.unknown()).optional(),
     availableWhen: entryAvailabilitySchema.optional(),
+    enabled: enabledOptionSchema.optional(),
   } satisfies RawZodShape<ResourceMetadata, ExtendFrontMcpResourceMetadata>)
   .passthrough();
 
@@ -177,6 +186,13 @@ interface ResourceTemplateMetadata extends ExtendFrontMcpResourceTemplateMetadat
    * When set, the resource template is only discoverable in matching environments.
    */
   availableWhen?: EntryAvailability;
+
+  /**
+   * Whether the template is on: a boolean, or an `EnabledSource` such as `fileSignal(path, key)` that can change
+   * while sessions are live. A template that is off is left out of `resources/templates/list`, and `resources/read` refuses it with
+   * `FEATURE_OFF` and a remedy. When a source changes, connected clients get `notifications/resources/list_changed`.
+   */
+  enabled?: EnabledOption;
 }
 
 export const frontMcpResourceTemplateMetadataSchema = z
@@ -192,6 +208,7 @@ export const frontMcpResourceTemplateMetadataSchema = z
     annotations: resourceAnnotationsSchema.optional(),
     _meta: z.record(z.string(), z.unknown()).optional(),
     availableWhen: entryAvailabilitySchema.optional(),
+    enabled: enabledOptionSchema.optional(),
   } satisfies RawZodShape<ResourceTemplateMetadata, ExtendFrontMcpResourceTemplateMetadata>)
   .passthrough();
 

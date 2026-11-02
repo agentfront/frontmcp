@@ -39,6 +39,7 @@ export {
   type BudgetNote,
   type BudgetOmission,
 } from './answer';
+export { fileSignal, SURFACE_META_KEY, surfaceHash, type FileSignalOptions, type LiveSurface } from './surface';
 export * from './errors';
 export * from './elicitation';
 export * from './task';

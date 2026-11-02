@@ -38,6 +38,7 @@ const fixtureFiles = [
   'providers-must-compile.ts',
   'tool-aliases-must-compile.ts',
   'answer-shaping-must-compile.ts',
+  'live-surface-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -165,6 +166,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types output.budget, clients profiles, http.forwardHeaders and the budget note', () => {
     expect(describeEach(inFixtureFile('answer-shaping-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types enabled as a boolean or an EnabledSource such as fileSignal(), and the surface key', () => {
+    expect(describeEach(inFixtureFile('live-surface-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

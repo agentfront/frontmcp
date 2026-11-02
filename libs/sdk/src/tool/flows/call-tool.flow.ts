@@ -70,6 +70,7 @@ import {
   isClientFacingError,
   MissingClientCapabilityError,
   RateLimitError,
+  StaleToolListError,
   TaskAugmentationNotSupportedError,
   TaskAugmentationRequiredError,
   TaskConcurrencyLimitError,
@@ -85,6 +86,7 @@ import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { type Scope } from '../../scope';
 import { isSkillsOnlyRequest } from '../../skill/skill-mode.utils';
+import { assertEntryEnabled, isEntryEnabled } from '../../surface';
 import { generateTaskId } from '../../task/helpers/task-id';
 import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
@@ -200,7 +202,10 @@ const plan = {
     // `?mode=skills_only`: a client's call is answered as for an unknown tool
     'checkSkillsOnlyMode',
     'ensureRemoteCapabilities',
+    // A session that listed an older tool list is told so before a tool it may no longer have is looked up
+    'checkSurface',
     'findTool',
+    'checkEnabled',
     'checkPublicAccess',
     // Auth checks run BEFORE task creation so unauthorized callers cannot
     // materialize a task record (which would leak tool existence + hand back a
@@ -365,6 +370,23 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose(`ensureRemoteCapabilities:done (${remoteAppCount} remote app(s))`);
   }
 
+  /**
+   * A client call from a session whose tool list changed since it last listed, to a tool that is not in the current
+   * list (unknown, or `enabled` off): answered `STALE_TOOL_LIST`, and the session is sent `tools/list_changed`.
+   */
+  @Stage('checkSurface')
+  async checkSurface() {
+    const sessionId = this.state.authInfo?.sessionId;
+    const surface = this.scope.surface;
+    if (!surface || !sessionId || !this.isClientCall() || !surface.isStale(sessionId)) return;
+    const { name } = this.state.required.input;
+    const tool = resolvedTools.peek(this.rawInput, name) ?? lookupTool(this.scope, name);
+    if (tool && (await isEntryEnabled(tool.metadata.enabled, this.tryGetContext(), this.logger))) return;
+    this.logger.verbose(`checkSurface: "${name}" is not in the tool list that replaced this session's`);
+    surface.refreshSession(sessionId);
+    throw new StaleToolListError(name);
+  }
+
   @Stage('findTool')
   async findTool() {
     this.logger.verbose('findTool:start');
@@ -440,6 +462,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.state.set('tool', tool);
     this.logger.verbose(`findTool: tool "${name}" found`);
     this.logger.verbose('findTool:done');
+  }
+
+  /** A tool whose `enabled` is off is refused with `FEATURE_OFF` and the remedy of its source. */
+  @Stage('checkEnabled')
+  async checkEnabled() {
+    const { tool } = this.state.required;
+    await assertEntryEnabled('Tool', tool.name, tool.metadata.enabled, this.tryGetContext(), this.logger);
   }
 
   private logAliasCall(tool: ToolEntry, alias: string): void {

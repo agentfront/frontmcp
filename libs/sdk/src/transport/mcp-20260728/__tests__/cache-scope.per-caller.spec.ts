@@ -24,6 +24,7 @@ import {
   Skill,
   Tool,
   ToolContext,
+  type EnabledSource,
   type FrontMcpConfigInput,
 } from '../../../common';
 
@@ -140,6 +141,41 @@ describe('cacheScope of anonymous 2026-07-28 results', () => {
         { tools: [LookupOrderTool, RefundOrderTool] },
         { authorities: { claimsMapping: { roles: 'roles' }, profiles: { admin: { roles: { any: ['admin'] } } } } },
       ),
+    );
+
+    expect(await cacheScopeOf(server, method)).toBe('private');
+  });
+
+  it.each(RESULTS.slice(0, 4))('%s is private when it holds an entry whose enabled is a source', async (method) => {
+    const perCaller: EnabledSource = { get: () => true, subscribe: () => () => undefined };
+
+    @Tool({ name: 'beta_order', inputSchema: {}, enabled: perCaller })
+    class BetaOrderTool extends ToolContext {
+      async execute() {
+        return { order: 'o-2' };
+      }
+    }
+
+    @Resource({ name: 'beta-status', uri: 'status://beta', enabled: perCaller })
+    class BetaStatusResource extends ResourceContext {
+      async execute(uri: string): Promise<ReadResourceResult> {
+        return { contents: [{ uri, text: 'beta' }] };
+      }
+    }
+
+    @Prompt({ name: 'beta-summary', arguments: [], enabled: perCaller })
+    class BetaSummaryPrompt extends PromptContext {
+      async execute(): Promise<GetPromptResult> {
+        return { messages: [] };
+      }
+    }
+
+    const server = await createTestFetchServer(
+      config({
+        tools: [LookupOrderTool, BetaOrderTool],
+        resources: [StatusResource, TicketTemplate, BetaStatusResource],
+        prompts: [SummaryPrompt, BetaSummaryPrompt],
+      }),
     );
 
     expect(await cacheScopeOf(server, method)).toBe('private');

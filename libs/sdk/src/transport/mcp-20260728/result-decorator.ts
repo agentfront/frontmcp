@@ -14,7 +14,7 @@
  */
 import { MCP_20260728_META, type Implementation } from '@frontmcp/protocol';
 
-import { type FlowName, type ScopeEntry } from '../../common';
+import { isEnabledSource, type FlowName, type ScopeEntry } from '../../common';
 import { CACHEABLE_METHODS, DEFAULT_CACHE_TTL_MS } from './protocol-20260728.constants';
 
 export interface DecorateResultOptions {
@@ -119,18 +119,34 @@ const RESULT_SHAPING_FLOWS: Record<string, readonly FlowName[]> = {
   'server/discover': ['skills:filter'],
 };
 
+/** The entries whose `enabled` filters each list. */
+const LIVE_LIST_ENTRIES: Record<
+  string,
+  (scope: Pick<ScopeEntry, 'tools' | 'resources' | 'prompts'>) => readonly { metadata: { enabled?: unknown } }[]
+> = {
+  'tools/list': (scope) => scope.tools.listAllInstances(),
+  'resources/list': (scope) => scope.resources.listAllInstances(),
+  'resources/templates/list': (scope) => scope.resources.listAllInstances(),
+  'prompts/list': (scope) => scope.prompts.listAllInstances(),
+};
+
 /**
  * Whether a cacheable result may differ from one caller to another, even between anonymous callers.
  *
  * It may when the scope evaluates `authorities` rules, which filter lists and gate reads for the
  * caller, or when any hook runs in a flow that builds the result: feature flags, skill visibility
- * and custom filters all decide there, for the caller. Methods not listed count as per-caller.
+ * and custom filters all decide there, for the caller. So does a list holding an entry whose
+ * `enabled` is a source. Methods not listed count as per-caller.
  */
-export function isShapedPerCaller(scope: Pick<ScopeEntry, 'hooks' | 'authoritiesEngine'>, method: string): boolean {
+export function isShapedPerCaller(
+  scope: Pick<ScopeEntry, 'hooks' | 'authoritiesEngine' | 'tools' | 'resources' | 'prompts'>,
+  method: string,
+): boolean {
   if (scope.authoritiesEngine) return true;
   const flows = RESULT_SHAPING_FLOWS[method];
   if (!flows) return true;
-  return flows.some((flow) => scope.hooks.getFlowHooks(flow).length > 0);
+  if (flows.some((flow) => scope.hooks.getFlowHooks(flow).length > 0)) return true;
+  return (LIVE_LIST_ENTRIES[method]?.(scope) ?? []).some((entry) => isEnabledSource(entry.metadata.enabled));
 }
 
 /**

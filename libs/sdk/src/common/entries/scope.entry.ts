@@ -19,6 +19,7 @@ import type PromptRegistry from '../../prompt/prompt.registry';
 import type ResourceRegistry from '../../resource/resource.registry';
 import type { SkillSessionManager } from '../../skill/session/skill-session.manager';
 import type { SkillRegistryInterface } from '../../skill/skill.registry';
+import type { LiveSurface } from '../../surface/live-surface';
 import type { TaskStore } from '../../task/store/task.store';
 import type { TaskRegistry } from '../../task/task.registry';
 import type ToolRegistry from '../../tool/tool.registry';
@@ -73,6 +74,9 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
   abstract get skillSession(): SkillSessionManager | undefined;
 
   abstract get notifications(): NotificationService;
+
+  /** Follows the entries' `enabled` sources, sends their coalesced `list_changed`, and finds stale tool lists. */
+  abstract get surface(): LiveSurface | undefined;
 
   abstract get agents(): AgentRegistry;
 

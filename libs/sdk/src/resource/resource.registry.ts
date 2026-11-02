@@ -576,6 +576,11 @@ export default class ResourceRegistry extends RegistryAbstract<
     });
   }
 
+  /** Tell listeners the listed resources and resource templates changed though none was added or removed, as when an `enabled` source flips. */
+  notifyListChanged(): void {
+    this.bump('reset');
+  }
+
   private bump(kind: ResourceChangeEvent['kind']) {
     const version = ++this.version;
     this.emitter.emit({ kind, changeScope: 'global', version, snapshot: this.listAllInstances() });
