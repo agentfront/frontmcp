@@ -363,6 +363,10 @@ describe.each([
     it.each([
       ['another site', { Origin: 'https://evil.example' }],
       ['a cross-site fetch without an Origin', { 'Sec-Fetch-Site': 'cross-site' }],
+      [
+        'another site that names itself in X-Forwarded-Host',
+        { Origin: 'https://evil.example', 'X-Forwarded-Host': 'evil.example' },
+      ],
     ])('refuses a mutation from %s', async (_case, headers) => {
       const response = await harness.send('/notes', {
         method: 'POST',
@@ -371,8 +375,17 @@ describe.each([
       });
 
       expect(response.status).toBe(403);
-      expect(await response.json()).toEqual({ error: expect.stringContaining('Cross-origin') });
       expect(((await (await harness.send('/notes')).json()) as string[]).includes('forged')).toBe(false);
+    });
+
+    it('answers the refusal with its own error', async () => {
+      const response = await harness.send('/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example' },
+        body: JSON.stringify({ note: 'forged' }),
+      });
+
+      expect(await response.json()).toEqual({ error: 'Cross-origin requests may not change anything here.' });
     });
 
     it('serves a mutation from the server page', async () => {

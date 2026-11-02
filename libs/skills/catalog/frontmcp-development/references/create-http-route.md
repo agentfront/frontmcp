@@ -196,7 +196,7 @@ A `POST`, `PUT`, `PATCH` or `DELETE` from another site is refused with `403`
 (`{ "error": "Cross-origin requests may not change anything here." }`, `CROSS_ORIGIN_REQUEST`), the sign-in post
 included, which makes signing in CSRF-safe. The rules are the loopback Origin rules of the MCP endpoint:
 
-- an `Origin` is accepted when its host is the request's `Host` (or `X-Forwarded-Host`), another loopback spelling of
+- an `Origin` is accepted when its host is the request's `Host` (or `X-Forwarded-Host` when `FRONTMCP_TRUST_PROXY` is set), another loopback spelling of
   the same port (`localhost` and `127.0.0.1`), or an origin the server lists in `http.cors.origin` (a string or an
   array) or `http.security.dnsRebindingProtection.allowedOrigins`. `cors.origin: true` or `'*'` lists none;
 - without an `Origin`, a `Sec-Fetch-Site` other than `same-origin` or `none` is refused;

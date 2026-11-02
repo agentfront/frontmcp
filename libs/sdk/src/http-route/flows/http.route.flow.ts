@@ -11,6 +11,7 @@ import {
   httpInputSchema,
   httpOutputSchema,
   httpRespond,
+  isProxyTrusted,
   type FlowPlan,
   type FlowRunOptions,
   type HttpOutput,
@@ -121,7 +122,7 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
       ...(corsAllowedOrigins(http?.cors) ?? []),
       ...(http?.security?.dnsRebindingProtection?.allowedOrigins ?? []),
     ];
-    if (!isSameOriginRequest(this.httpRequest.headers, allowed)) throw new CrossOriginRequestError();
+    if (!isSameOriginRequest(this.httpRequest.headers, allowed, isProxyTrusted())) throw new CrossOriginRequestError();
   }
 
   @Stage('authenticatePerson')

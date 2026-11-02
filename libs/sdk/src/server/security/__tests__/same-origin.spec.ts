@@ -9,10 +9,6 @@ describe('isSameOriginRequest', () => {
     ['its own Origin', { host: 'localhost:3000', origin: 'http://localhost:3000', 'sec-fetch-site': 'same-origin' }],
     ['its own Origin on a default port', { host: 'example.com:80', origin: 'http://example.com' }],
     [
-      'the Origin a proxy forwarded for',
-      { host: '10.0.0.5:3000', 'x-forwarded-host': 'app.example.com', origin: 'https://app.example.com' },
-    ],
-    [
       'another loopback spelling on the same port',
       { host: '127.0.0.1:3000', origin: 'http://localhost:3000', 'sec-fetch-site': 'cross-site' },
     ],
@@ -35,6 +31,18 @@ describe('isSameOriginRequest', () => {
     ],
     ['a loopback Origin on a routable host', { host: 'app.example.com', origin: 'http://localhost' }],
   ])('refuses %s', (_case, headers) => {
+    expect(isSameOriginRequest(headers)).toBe(false);
+  });
+
+  it('allows the Origin a trusted proxy forwarded for', () => {
+    const headers = { host: '10.0.0.5:3000', 'x-forwarded-host': 'app.example.com', origin: 'https://app.example.com' };
+
+    expect(isSameOriginRequest(headers, [], true)).toBe(true);
+  });
+
+  it('refuses an X-Forwarded-Host the page set itself, when no proxy is trusted', () => {
+    const headers = { host: 'api.example.com', 'x-forwarded-host': 'evil.example', origin: 'https://evil.example' };
+
     expect(isSameOriginRequest(headers)).toBe(false);
   });
 

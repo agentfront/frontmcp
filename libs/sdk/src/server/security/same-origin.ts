@@ -36,10 +36,13 @@ function isLoopbackAlias(origin: URL, hostHeader: string | undefined): boolean {
  *
  * @param headers - the request's headers, lowercase names
  * @param allowedOrigins - more origins to accept, such as the explicit `http.cors.origin` list
+ * @param trustForwardedHost - count `X-Forwarded-Host` as the server's own host; only behind a trusted proxy, since a
+ *   page can send the header itself when CORS lets it
  */
 export function isSameOriginRequest(
   headers: Readonly<Record<string, HeaderValue>>,
   allowedOrigins: readonly string[] = [],
+  trustForwardedHost = false,
 ): boolean {
   const originHeader = first(headers['origin']);
   if (originHeader !== undefined) {
@@ -48,7 +51,8 @@ export function isSameOriginRequest(
     const origin = parseUrl(originHeader);
     if (!origin || origin.origin === 'null') return false;
     const host = first(headers['host']);
-    const ownHosts = [host, ...(first(headers['x-forwarded-host'])?.split(',') ?? [])]
+    const forwardedHosts = trustForwardedHost ? (first(headers['x-forwarded-host'])?.split(',') ?? []) : [];
+    const ownHosts = [host, ...forwardedHosts]
       .filter((value): value is string => value !== undefined && value.trim().length > 0)
       .map(normalizeHost);
     if (!ownHosts.includes(normalizeHost(origin.host))) return isLoopbackAlias(origin, host);
