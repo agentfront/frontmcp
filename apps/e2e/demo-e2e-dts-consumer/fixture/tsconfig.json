@@ -17,6 +17,7 @@
     "hooks-must-fail.ts",
     "host-must-compile.ts",
     "skills-must-compile.ts",
-    "output-schemas-must-compile.ts"
+    "output-schemas-must-compile.ts",
+    "providers-must-compile.ts"
   ]
 }
