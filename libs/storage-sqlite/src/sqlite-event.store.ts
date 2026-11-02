@@ -79,13 +79,21 @@ export class SqliteEventStore implements EventStoreInterface {
     this.maxEvents = options.maxEvents ?? 10000;
     this.ttlMs = options.ttlMs ?? 300000;
 
-    withBusyRetry(() => this.initSchema());
-    this.prepareStatements();
+    try {
+      withBusyRetry(() => this.initSchema());
+      this.prepareStatements();
+    } catch (error) {
+      this.connection.release();
+      throw error;
+    }
 
-    // Periodic cleanup of expired events
+    // Periodic cleanup of expired events, queued so another process's lock does not block or throw
     const cleanupInterval = options.ttlCleanupIntervalMs ?? 60000;
     if (cleanupInterval > 0) {
-      this.cleanupTimer = setInterval(() => this.evictExpired(), cleanupInterval);
+      this.cleanupTimer = setInterval(
+        () => void this.connection.write(() => this.evictExpired()).catch(() => undefined),
+        cleanupInterval,
+      );
       if (this.cleanupTimer.unref) {
         this.cleanupTimer.unref();
       }

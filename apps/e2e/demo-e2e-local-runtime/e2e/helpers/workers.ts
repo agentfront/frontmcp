@@ -1,7 +1,4 @@
-/**
- * Start fixture scripts as child processes that follow `fixture/worker-protocol.ts`, and drive them
- * from a spec: wait for a line a worker prints, send it a line, read the result it reports.
- */
+/** Start fixture scripts that follow `fixture/worker-protocol.ts` and drive them line by line from a spec. */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
 

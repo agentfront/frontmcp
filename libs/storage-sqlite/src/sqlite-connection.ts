@@ -21,6 +21,7 @@ const sharedByPath = new Map<string, SharedDatabase>();
 class SharedDatabase {
   private references = 0;
   private queue: Promise<unknown> = Promise.resolve();
+  private lastProgressAt = 0;
 
   constructor(
     readonly db: Database.Database,
@@ -42,24 +43,31 @@ class SharedDatabase {
 
   release(): void {
     if (--this.references > 0) return;
-    if (this.cacheKey) sharedByPath.delete(this.cacheKey);
+    if (this.cacheKey && sharedByPath.get(this.cacheKey) === this) sharedByPath.delete(this.cacheKey);
     this.db.close();
   }
 
   enqueue<T>(operation: () => T): Promise<T> {
-    const run = this.queue.then(() => this.retryWhileBusy(operation));
+    const calledAt = Date.now();
+    const run = this.queue.then(() => this.retryWhileBusy(operation, calledAt));
     this.queue = run.catch(() => undefined);
     return run;
   }
 
+  idle(): Promise<void> {
+    return this.queue.then(() => undefined);
+  }
+
   /** Waits for another process's lock with timers, not inside SQLite, so the event loop keeps running. */
-  private async retryWhileBusy<T>(operation: () => T): Promise<T> {
-    const deadline = Date.now() + this.busyTimeoutMs;
+  private async retryWhileBusy<T>(operation: () => T, calledAt: number): Promise<T> {
     for (let backoffMs = MIN_BACKOFF_MS; ; backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS)) {
       try {
-        return this.withoutBusyWait(operation);
+        const result = this.withoutBusyWait(operation);
+        this.lastProgressAt = Date.now();
+        return result;
       } catch (error: unknown) {
-        const remainingMs = deadline - Date.now();
+        // The busy timeout runs from the call, or from the last queued operation that got the lock if later.
+        const remainingMs = Math.max(calledAt, this.lastProgressAt) + this.busyTimeoutMs - Date.now();
         if (!isBusyError(error) || remainingMs <= 0) throw error;
         const jitteredMs = backoffMs / 2 + Math.random() * (backoffMs / 2);
         await new Promise((wake) => setTimeout(wake, Math.min(jitteredMs, remainingMs)));
@@ -98,6 +106,11 @@ export class SqliteConnection {
     return this.shared.enqueue(operation);
   }
 
+  /** Resolves once the operations queued so far have finished. */
+  idle(): Promise<void> {
+    return this.shared.idle();
+  }
+
   /** The connection closes once every store that acquired it has released it; a second call does nothing. */
   release(): void {
     if (this.released) return;
@@ -114,7 +127,7 @@ export function acquireConnection(
 ): SqliteConnection {
   const cacheKey = PRIVATE_PATHS.has(path) ? undefined : pathResolve(path);
   let shared = cacheKey ? sharedByPath.get(cacheKey) : undefined;
-  if (!shared) {
+  if (!shared?.db.open) {
     const busyTimeoutMs = options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS;
     shared = new SharedDatabase(openDatabase(path, storeName, options), busyTimeoutMs, cacheKey);
     if (cacheKey) sharedByPath.set(cacheKey, shared);

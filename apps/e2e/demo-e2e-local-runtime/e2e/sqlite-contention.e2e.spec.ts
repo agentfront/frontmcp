@@ -1,8 +1,4 @@
-/**
- * E2E: ten processes share one SQLite file through `createStorage({ type: 'sqlite' })` while another
- * process holds the write lock. Every increment is counted once, one process takes the NX lock and the
- * semaphore slot, no SQLITE_BUSY reaches a caller, and no process's event loop stalls while it waits.
- */
+/** E2E: ten processes contend on one SQLite file while another holds its write lock. */
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';

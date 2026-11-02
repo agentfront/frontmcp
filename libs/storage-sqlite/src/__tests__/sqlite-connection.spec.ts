@@ -105,6 +105,43 @@ describe('shared SQLite connections', () => {
     reopened.close();
   });
 
+  it.each([
+    ['SqliteKvStore', (dbPath: string) => new SqliteKvStore({ path: dbPath, ttlCleanupIntervalMs: 0, walMode: false })],
+    [
+      'SqliteEventStore',
+      (dbPath: string) => new SqliteEventStore({ path: dbPath, ttlCleanupIntervalMs: 0, walMode: false }),
+    ],
+    [
+      'SqliteTaskStore',
+      (dbPath: string) => new SqliteTaskStore({ path: dbPath, ttlCleanupIntervalMs: 0, walMode: false }),
+    ],
+  ])('releases the connection when %s fails to set up the file', (_store, open) => {
+    fs.writeFileSync(dbPath, 'not a SQLite database, and long enough for SQLite to read its header');
+    expect(() => open(dbPath)).toThrow(expect.objectContaining({ code: 'SQLITE_NOTADB' }));
+
+    fs.writeFileSync(dbPath, '');
+    const kv = new SqliteKvStore({ path: dbPath, ttlCleanupIntervalMs: 0 });
+    const db = kv.getDatabase();
+    kv.close();
+    expect(db.open).toBe(false);
+  });
+
+  it('opens a new connection when the shared one was closed directly', () => {
+    const first = new SqliteKvStore({ path: dbPath, ttlCleanupIntervalMs: 0 });
+    first.getDatabase().close();
+
+    const second = new SqliteKvStore({ path: dbPath, ttlCleanupIntervalMs: 0 });
+    second.set('k', 'v');
+    first.close();
+    const third = new SqliteKvStore({ path: dbPath, ttlCleanupIntervalMs: 0 });
+    expect(third.getDatabase()).toBe(second.getDatabase());
+    expect(third.get('k')).toBe('v');
+
+    second.close();
+    third.close();
+    expect(third.getDatabase().open).toBe(false);
+  });
+
   it('gives every in-memory store a database of its own', () => {
     const first = new SqliteKvStore({ path: ':memory:', ttlCleanupIntervalMs: 0 });
     const second = new SqliteKvStore({ path: ':memory:', ttlCleanupIntervalMs: 0 });
@@ -206,6 +243,60 @@ describe('shared SQLite connections', () => {
       } finally {
         foreign.close();
         await adapter.disconnect();
+      }
+    });
+
+    it('fails every queued operation within busyTimeoutMs of its call, not one timeout after another', async () => {
+      const adapter = new SqliteStorageAdapter({ path: dbPath, ttlCleanupIntervalMs: 0, busyTimeoutMs: 100 });
+      await adapter.connect();
+      const foreign = openForeignConnection(dbPath);
+      try {
+        const released = holdWriteLock(foreign, 600);
+        const startedAt = Date.now();
+
+        const outcomes = await Promise.allSettled(Array.from({ length: 5 }, (_, i) => adapter.set(`k${i}`, 'v')));
+
+        expect(outcomes.map((outcome) => outcome.status)).toEqual(Array(5).fill('rejected'));
+        expect(Date.now() - startedAt).toBeLessThan(300);
+        await released;
+      } finally {
+        foreign.close();
+        await adapter.disconnect();
+      }
+    });
+
+    it.each([
+      [
+        'SqliteKvStore',
+        (dbPath: string) => new SqliteKvStore({ path: dbPath, ttlCleanupIntervalMs: 10, busyTimeoutMs: 200 }),
+      ],
+      [
+        'SqliteEventStore',
+        (dbPath: string) => new SqliteEventStore({ path: dbPath, ttlCleanupIntervalMs: 10, busyTimeoutMs: 200 }),
+      ],
+    ])("runs %s's sweep of expired rows on the queue, so it neither blocks nor throws", async (_store, open) => {
+      const store = open(dbPath);
+      const kv = new SqliteKvStore({ path: dbPath, ttlCleanupIntervalMs: 0 });
+      kv.set('stale', 'v', 1);
+      const foreign = openForeignConnection(dbPath);
+      let longestGapMs = 0;
+      let lastTickAt = Date.now();
+      const timer = setInterval(() => {
+        longestGapMs = Math.max(longestGapMs, Date.now() - lastTickAt);
+        lastTickAt = Date.now();
+      }, 5);
+      try {
+        await holdWriteLock(foreign, 400);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect(longestGapMs).toBeLessThan(150);
+        expect(kv.getDatabase().prepare("SELECT key FROM kv WHERE key = 'stale'").get()).toEqual(
+          store instanceof SqliteKvStore ? undefined : { key: 'stale' },
+        );
+      } finally {
+        clearInterval(timer);
+        foreign.close();
+        kv.close();
+        store.close();
       }
     });
 

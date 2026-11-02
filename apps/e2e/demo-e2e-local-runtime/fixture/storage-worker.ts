@@ -1,8 +1,4 @@
-/**
- * One of many processes sharing a SQLite file through `createStorage({ type: 'sqlite' })`: on "go" it
- * increments a shared counter, tries to take an NX lock and a one-slot semaphore, and reports what it
- * got, the errors that reached it, and the longest its event loop went without running a timer.
- */
+/** On "go": increment, take an NX lock and a semaphore slot, and report the errors and longest timer gap seen. */
 import { DistributedSemaphore } from '@frontmcp/guard';
 import { createStorage } from '@frontmcp/utils';
 
@@ -47,7 +43,7 @@ runWorker(async () => {
   const storage = await createStorage({
     type: 'sqlite',
     fallback: 'error',
-    sqlite: { path: requiredEnv('DB_PATH'), walMode: requiredEnv('WAL_MODE') === 'true', ttlCleanupIntervalMs: 0 },
+    sqlite: { path: requiredEnv('DB_PATH'), walMode: requiredEnv('WAL_MODE') === 'true', ttlCleanupIntervalMs: 200 },
   });
   const semaphore = new DistributedSemaphore(storage, 60);
   await readyThenWaitForGo();

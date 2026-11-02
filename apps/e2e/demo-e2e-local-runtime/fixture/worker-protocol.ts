@@ -1,7 +1,4 @@
-/**
- * The worker side of `e2e/helpers/workers.ts`: a worker prints lines on stdout and reads its
- * instructions from stdin, so a spec can start many workers at once and wait for each one.
- */
+/** The worker side of `e2e/helpers/workers.ts`: lines on stdout for the spec, instructions on stdin. */
 
 /** Print a line the spec waits for with `worker.waitFor(line)`. */
 export function signal(line: string): void {

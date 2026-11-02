@@ -1,7 +1,4 @@
-/**
- * Another process holding the SQLite write lock: on "go" it opens a write transaction, prints
- * "locked", keeps the lock for HOLD_MS, then commits.
- */
+/** On "go": hold the SQLite write lock for HOLD_MS, printing "locked" once it has it. */
 import { loadBetterSqlite3 } from '@frontmcp/storage-sqlite';
 
 import { readyThenWaitForGo, report, requiredEnv, runWorker, signal } from './worker-protocol';

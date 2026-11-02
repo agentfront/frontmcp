@@ -61,7 +61,8 @@ export class SqliteStorageAdapter extends BaseStorageAdapter {
     // Only close the KV store if we own it. When an external SqliteKvStore was
     // injected, its owner is responsible for closing it (and may still be using
     // it via another adapter), so we leave the handle open.
-    if (this.ownsKvStore && this.kv) {
+    if (this.ownsKvStore) {
+      await this.connection.idle();
       this.kv.close();
     }
   }

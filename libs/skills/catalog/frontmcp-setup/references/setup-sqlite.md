@@ -240,11 +240,11 @@ Any number of processes on one machine can open the same file. SQLite lets one p
 
 - **One connection per file per process.** The stores a process opens on one file (sessions, tasks, elicitation, events, and your own SQLite storage) share a single connection, so a process never waits on its own lock.
 - **Short, atomic writes.** Each write is one short `BEGIN IMMEDIATE` transaction. A conditional set (`ifNotExists`/`ifExists`), `incr`, `deleteIfEquals` and `expireIfEquals` read and write in that one transaction, so counters stay exact and an NX lock has one holder across processes.
-- **Waiting without blocking.** Operations through `createStorage({ type: 'sqlite' })`, `sqliteStorageProvider()` or `SqliteStorageAdapter` run one at a time per process and wait for another process's lock on a timer, so the event loop keeps running. The built-in session, task, elicitation and event stores still wait synchronously, for at most `busyTimeoutMs`.
+- **Waiting without blocking.** Operations through `createStorage({ type: 'sqlite' })`, `sqliteStorageProvider()` or `SqliteStorageAdapter` run one at a time per process and wait for another process's lock on a timer, so the event loop keeps running; `disconnect()` lets the operations already called finish first. The periodic sweeps of expired keys and events wait the same way. The built-in session, task, elicitation and event stores' own reads and writes still wait synchronously, for at most `busyTimeoutMs`.
 
 ### Busy timeout
 
-`busyTimeoutMs` (default `5000`) is how long an operation waits for another process's write lock before it fails with `SQLITE_BUSY`. Writes hold the lock for one short transaction, so the default covers many writer processes. Raise it when processes hold the lock longer (bulk imports, long transactions) or when dozens of processes write at once; lower it for an interactive tool that should fail fast. When several stores in one process open a file with different values, the longest applies.
+`busyTimeoutMs` (default `5000`) is how long an operation waits for another process's write lock before it fails with `SQLITE_BUSY`. The wait counts from the call, so while the lock stays held every queued operation fails within `busyTimeoutMs` of its call, not one timeout after another; it restarts each time an earlier operation in the queue gets the lock. Writes hold the lock for one short transaction, so the default covers many writer processes. Raise it when processes hold the lock longer (bulk imports, long transactions) or when dozens of processes write at once; lower it for an interactive tool that should fail fast. When several stores in one process open a file with different values, the longest applies.
 
 ## Step 4 -- How the SDK Builds the SQLite Session Store
 

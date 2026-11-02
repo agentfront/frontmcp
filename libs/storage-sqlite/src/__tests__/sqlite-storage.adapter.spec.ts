@@ -462,6 +462,13 @@ describe('SqliteStorageAdapter', () => {
       cleanup(externalPath);
     });
 
+    it('lets the operations already called finish before it closes the file', async () => {
+      const pending = [adapter.incr('counter'), adapter.set('k', 'v'), adapter.get('k')];
+      await adapter.disconnect();
+      expect(await Promise.all(pending)).toEqual([1, undefined, 'v']);
+      await expect(adapter.get('k')).rejects.toThrow(/not connected/i);
+    });
+
     it('is idempotent (second disconnect is a no-op)', async () => {
       const owned = new SqliteStorageAdapter({ path: tmpDbPath(), ttlCleanupIntervalMs: 0 });
       await owned.connect();

@@ -188,8 +188,13 @@ export class SqliteTaskStore implements TaskStoreInterface {
     }
     this.emitter.setMaxListeners(200);
 
-    withBusyRetry(() => this.initSchema());
-    this.prepareStatements();
+    try {
+      withBusyRetry(() => this.initSchema());
+      this.prepareStatements();
+    } catch (error) {
+      this.connection.release();
+      throw error;
+    }
 
     const cleanupInterval = options.ttlCleanupIntervalMs ?? 60_000;
     if (cleanupInterval > 0) {

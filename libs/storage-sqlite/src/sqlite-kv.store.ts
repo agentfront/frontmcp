@@ -56,13 +56,22 @@ export class SqliteKvStore {
       this.encryptionKey = deriveEncryptionKey(options.encryption.secret);
     }
 
-    withBusyRetry(() => this.initSchema());
-    this.prepareStatements();
+    try {
+      withBusyRetry(() => this.initSchema());
+      this.prepareStatements();
+    } catch (error) {
+      this.connection.release();
+      throw error;
+    }
 
     // Start periodic TTL cleanup
     const cleanupInterval = options.ttlCleanupIntervalMs ?? 60000;
     if (cleanupInterval > 0) {
-      this.cleanupTimer = setInterval(() => this.purgeExpired(), cleanupInterval);
+      // Queued, so a lock held by another process neither blocks the event loop nor throws from the timer.
+      this.cleanupTimer = setInterval(
+        () => void this.connection.write(() => this.purgeExpired()).catch(() => undefined),
+        cleanupInterval,
+      );
       // Allow the process to exit even if timer is running
       if (this.cleanupTimer.unref) {
         this.cleanupTimer.unref();

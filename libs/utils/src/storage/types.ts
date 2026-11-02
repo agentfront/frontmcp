@@ -547,10 +547,7 @@ export interface CloudflareKvAdapterOptions {
   keyPrefix?: string;
 }
 
-/**
- * SQLite adapter options (when type='sqlite'); the adapter comes from `@frontmcp/storage-sqlite`.
- * Processes on one machine that open the same file share its keys, counters and locks.
- */
+/** SQLite adapter options (type 'sqlite', from `@frontmcp/storage-sqlite`): processes on one file share its keys. */
 export interface SqliteAdapterOptions {
   /** Path to the database file; its directory is created if missing. */
   path: string;

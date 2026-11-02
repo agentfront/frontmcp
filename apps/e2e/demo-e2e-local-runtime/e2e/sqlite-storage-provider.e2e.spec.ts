@@ -1,7 +1,4 @@
-/**
- * E2E: scripts read the SQLite storage the SDK provides (`sqliteStorageProvider` under
- * `SqliteStorageToken`) from `createContainer()`, in several processes on one file at once.
- */
+/** E2E: several processes share the storage `sqliteStorageProvider()` registers, read from `createContainer()`. */
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';

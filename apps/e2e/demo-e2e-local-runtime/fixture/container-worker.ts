@@ -1,8 +1,4 @@
-/**
- * A script that reads the SQLite storage the SDK provides (`sqliteStorageProvider`, `SqliteStorageToken`)
- * from `createContainer()`: on "go" it increments a counter shared with the other workers, then disposes
- * the container and reports the values it got.
- */
+/** On "go": increment a shared counter through `SqliteStorageToken`, dispose the container, report the values. */
 import 'reflect-metadata';
 
 import { createContainer, LogLevel, sqliteStorageProvider, SqliteStorageToken } from '@frontmcp/sdk';
