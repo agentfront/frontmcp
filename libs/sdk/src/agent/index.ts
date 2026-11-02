@@ -7,7 +7,7 @@
  * @example Creating an agent
  * ```typescript
  * import { Agent, AgentContext } from '@frontmcp/sdk';
- * import { internalZ as z } from '@frontmcp/lazy-zod';
+ * import { z } from '@frontmcp/lazy-zod';
  *
  * @Agent({
  *   name: 'research-agent',

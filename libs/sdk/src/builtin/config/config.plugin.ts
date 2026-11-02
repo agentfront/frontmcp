@@ -27,7 +27,7 @@ import { loadEnvFiles, populateProcessEnv, processEnvEntries } from './providers
  * class MyServer {}
  *
  * // With typed schema (convict-style)
- * import { internalZ as z } from '@frontmcp/lazy-zod';
+ * import { z } from '@frontmcp/lazy-zod';
  *
  * const configSchema = z.object({
  *   database: z.object({
