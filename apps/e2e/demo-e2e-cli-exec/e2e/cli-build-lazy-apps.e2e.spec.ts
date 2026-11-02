@@ -93,16 +93,19 @@ export default class Server {}
       env: { NODE_ENV: 'production', MCP_SESSION_SECRET: 'lazy-demo-e2e-session-secret-0123456789abcdef' },
       startupTimeout: 60_000,
     });
-    const client = await McpTestClient.create({ baseUrl: server.info.baseUrl }).buildAndConnect();
+    let client: McpTestClient | undefined;
     try {
-      const imports = async () => (await client.tools.call('billing_imports', {})).json<{ imports: number }>().imports;
+      const connected = await McpTestClient.create({ baseUrl: server.info.baseUrl }).buildAndConnect();
+      client = connected;
+      const imports = async () =>
+        (await connected.tools.call('billing_imports', {})).json<{ imports: number }>().imports;
 
-      expect((await client.tools.list()).map((tool) => tool.name)).toContain('charge');
+      expect((await connected.tools.list()).map((tool) => tool.name)).toContain('charge');
       expect(await imports()).toBe(0);
-      expect((await client.tools.call('charge', {})).text()).toContain('charged');
+      expect((await connected.tools.call('charge', {})).text()).toContain('charged');
       expect(await imports()).toBe(1);
     } finally {
-      await client.disconnect();
+      await client?.disconnect();
       await server.stop();
     }
   }, 260_000);
