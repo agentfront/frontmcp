@@ -541,6 +541,29 @@ export type {
 export { create, clearCreateCache } from './direct';
 export type { CreateConfig } from './direct';
 
+// Build manifest: the server's entries with their schemas (`frontmcp.manifest.json`), and its lint
+export {
+  buildManifest,
+  findBudgetOverruns,
+  lintServerManifest,
+  serverManifestSchema,
+  SERVER_MANIFEST_FILE,
+  SERVER_MANIFEST_VERSION,
+} from './manifest';
+export type {
+  BudgetedSurface,
+  ManifestApp,
+  ManifestEntryKind,
+  ManifestFinding,
+  ManifestFindingRule,
+  ManifestPrompt,
+  ManifestResource,
+  ManifestResourceTemplate,
+  ManifestSkill,
+  ManifestTool,
+  ServerManifest,
+} from './manifest';
+
 // A custom HTTP host (`http.hostFactory`) extends HostServerAdapter; the web-fetch helpers take a Scope
 export { HostServerAdapter } from './server/adapters/base.host.adapter';
 export type { Scope } from './scope/scope.instance';

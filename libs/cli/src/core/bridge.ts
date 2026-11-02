@@ -32,6 +32,8 @@ export function toParsedArgs(
     if (options['stageOnly'] !== undefined) out.stageOnly = options['stageOnly'] as boolean;
     // #545 — commander turns `--no-clean` into `clean: false`; default stays true.
     if (options['clean'] === false) out.clean = false;
+    if (options['manifest'] === false) out.manifest = false;
+    if (options['strictLint'] !== undefined) out.strictLint = options['strictLint'] as boolean;
   }
 
   // Create

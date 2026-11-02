@@ -20,6 +20,7 @@ import {
   extAppsOptionsSchema,
   healthOptionsSchema,
   httpOptionsSchema,
+  instructionsBudgetOptionsSchema,
   lifecycleOptionsSchema,
   loggingOptionsSchema,
   mcpRegistryOptionsSchema,
@@ -42,6 +43,7 @@ import {
   type ExtAppsOptionsInput,
   type HealthOptionsInput,
   type HttpOptionsInput,
+  type InstructionsBudgetOptionsInput,
   type LifecycleOptionsInput,
   type LoggingOptionsInput,
   type McpRegistryOptionsInput,
@@ -105,6 +107,15 @@ export interface FrontMcpBaseMetadata {
    *   catalog and channel hints.
    */
   instructions?: string;
+
+  /**
+   * Size limits, in characters, for the `initialize` instructions and each tool's `description`. Some clients copy
+   * the instructions into every tool's description. Over a limit, the server logs a warning at startup and
+   * `frontmcp build` reports it in its manifest lint (an error with `--strict-lint`). `false` turns both off.
+   *
+   * @default { instructions: 1024, toolDescription: 1024 }
+   */
+  instructionsBudget?: InstructionsBudgetOptionsInput;
 
   /**
    * Shared storage configuration
@@ -641,6 +652,7 @@ export const frontMcpBaseSchema = z.object({
   // so it survives the strict-object parse and reaches the scope metadata.
   __sourceDir: z.string().optional(),
   instructions: z.string().optional(),
+  instructionsBudget: instructionsBudgetOptionsSchema.optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   lifecycle: lifecycleOptionsSchema.optional(),
   offload: offloadOptionsSchema.optional(),
@@ -873,6 +885,7 @@ const frontMcpLiteSchema = z.object({
   // Server-level instructions injected into the MCP `initialize` response.
   // Must round-trip through the lite parser so CLI/MCPB builds preserve it.
   instructions: z.string().optional(),
+  instructionsBudget: instructionsBudgetOptionsSchema.optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   lifecycle: lifecycleOptionsSchema.optional(),
   offload: offloadOptionsSchema.optional(),

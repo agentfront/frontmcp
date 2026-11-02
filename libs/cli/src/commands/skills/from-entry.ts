@@ -38,6 +38,8 @@ export function resolvePackageEntry(pkg: string, cwd: string): string {
  * the produced CJS bundle. Packages stay external, so the bundle is written
  * inside `cwd`: Node resolves its bare `require`s by walking up from the
  * bundle's own directory, which from the OS temp dir finds no project deps.
+ * The bundle carries a source map, so a skill's `instructions: { file }`
+ * resolves against the source file that declared it.
  *
  * Temporary bundle dir is cleaned up before return regardless of outcome.
  */
@@ -55,12 +57,19 @@ export async function extractProjectSchema(opts: FromEntryOptions): Promise<Extr
       format: 'cjs',
       target: 'es2022',
       packages: 'external',
-      sourcemap: false,
+      sourcemap: 'inline',
       logLevel: 'silent',
       absWorkingDir: opts.cwd,
     });
     const { extractSchemas } = await import('../build/exec/cli-runtime/schema-extractor.js');
-    return await extractSchemas(bundlePath);
+    // Stack traces name the source files, so the directory a decorator captures is the source's, not the bundle's
+    const sourceMapsEnabled = process.sourceMapsEnabled;
+    process.setSourceMapsEnabled(true);
+    try {
+      return await extractSchemas(bundlePath);
+    } finally {
+      process.setSourceMapsEnabled(sourceMapsEnabled);
+    }
   } finally {
     await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
   }

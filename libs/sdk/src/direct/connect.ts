@@ -67,6 +67,30 @@ function getInstance(
 }
 
 /**
+ * Use the in-process server of a config. Users of the same config share its server, which is disposed when the last
+ * of them releases it. The user is counted before any await, so another one leaving meanwhile cannot dispose the
+ * server under this one.
+ *
+ * @internal
+ */
+export function joinInstance(
+  config: FrontMcpConfigInput,
+  mode?: 'full' | 'cli',
+): { instancePromise: Promise<FrontMcpInstance>; release: () => Promise<void> } {
+  const { cacheKey, instancePromise } = getInstance(config, mode);
+  instanceClients.set(instancePromise, (instanceClients.get(instancePromise) ?? 0) + 1);
+  const release = async () => {
+    const remaining = (instanceClients.get(instancePromise) ?? 1) - 1;
+    instanceClients.set(instancePromise, remaining);
+    if (remaining > 0) return;
+    if (instanceCache.get(cacheKey) === instancePromise) instanceCache.delete(cacheKey);
+    const instance = await instancePromise;
+    await Promise.all((instance.getScopes() as Scope[]).map((scope) => scope.dispose()));
+  };
+  return { instancePromise, release };
+}
+
+/**
  * The endpoint a client connects to: the scope holding the server's own apps (not a standalone app's, such as
  * DashboardApp's), or the endpoint of the app `app` names.
  */
@@ -128,21 +152,7 @@ export async function connect(
   options?: ConnectOptions & { mode?: 'full' | 'cli'; app?: string },
 ): Promise<DirectClient> {
   const { DirectClientImpl } = await import('./direct-client.js');
-  // Clients of the same config share its server, which is disposed when the last of them closes. The client is
-  // counted before any await, so another client closing meanwhile cannot dispose the server under this one.
-  const { cacheKey, instancePromise } = getInstance(config, options?.mode);
-  instanceClients.set(instancePromise, (instanceClients.get(instancePromise) ?? 0) + 1);
-  const leave = () => {
-    const remaining = (instanceClients.get(instancePromise) ?? 1) - 1;
-    instanceClients.set(instancePromise, remaining);
-    return remaining;
-  };
-  const release = async () => {
-    if (leave() > 0) return;
-    if (instanceCache.get(cacheKey) === instancePromise) instanceCache.delete(cacheKey);
-    const instance = await instancePromise;
-    await Promise.all((instance.getScopes() as Scope[]).map((scope) => scope.dispose()));
-  };
+  const { instancePromise, release } = joinInstance(config, options?.mode);
   try {
     const instance = await instancePromise;
     const scope = await endpointScope(instance, options?.app);

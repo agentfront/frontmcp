@@ -195,6 +195,7 @@ frontmcp service uninstall my-server
 
 - [ ] `frontmcp build --target cli` completes without errors
 - [ ] Output directory contains the expected binary or `.cjs.js` file
+- [ ] Output directory contains `frontmcp.manifest.json`, the server manifest every target gets (see `build-manifest`)
 - [ ] Binary file size is reasonable (no unexpected bloat)
 
 **Runtime**

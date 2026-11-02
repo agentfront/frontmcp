@@ -79,6 +79,9 @@ export interface ParsedArgs {
   js?: boolean;
   // Build --no-clean flag (keep whatever is already in outDir)
   clean?: boolean;
+  // Build --no-manifest (skip frontmcp.manifest.json) and --strict-lint (fail on a manifest lint finding)
+  manifest?: boolean;
+  strictLint?: boolean;
   // MCPB flags
   sea?: boolean;
   mergeFrom?: string;

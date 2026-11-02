@@ -74,6 +74,12 @@ export interface ExtractedSchema {
   jobs: ExtractedJob[];
   capabilities: ExtractedCapabilities;
   skillAssets: ExtractedSkillAsset[];
+  /** The server manifest `frontmcp build` writes, when the project's `@frontmcp/sdk` builds one. */
+  manifest?: ExtractedManifest;
+  /** The lint findings on {@link manifest}. */
+  manifestFindings?: ManifestLintFinding[];
+  /** Why no {@link manifest} was built. */
+  manifestError?: string;
   /**
    * Server bind config extracted from `@FrontMcp({ http })` (or its
    * decorator-attached `__frontmcp:config` metadata). Used by the manifest
@@ -81,6 +87,48 @@ export interface ExtractedSchema {
    * actually listen on, not a hard-coded SDK default.
    */
   httpPort?: number;
+}
+
+/** The parts of the SDK's `ServerManifest` the CLI reads; the rest is written to the file as it is. */
+export interface ExtractedManifest {
+  manifestVersion: number;
+  tools: Array<{ name: string; description?: string }>;
+  skills: Array<{
+    name: string;
+    description: string;
+    tags?: string[];
+    license?: string;
+    hidden?: boolean;
+    tools: Array<{ name: string; purpose?: string }>;
+    hash?: string;
+  }>;
+  [field: string]: unknown;
+}
+
+export interface ManifestLintFinding {
+  rule: string;
+  message: string;
+}
+
+interface ManifestSdk {
+  buildManifest?: (config: unknown) => Promise<ExtractedManifest>;
+  lintServerManifest?: (manifest: ExtractedManifest) => ManifestLintFinding[];
+}
+
+/** The manifest of the server and its lint, or why the installed SDK built none. */
+async function extractManifest(
+  sdk: ManifestSdk,
+  configOrClass: unknown,
+): Promise<Pick<ExtractedSchema, 'manifest' | 'manifestFindings' | 'manifestError'>> {
+  if (typeof sdk.buildManifest !== 'function' || typeof sdk.lintServerManifest !== 'function') {
+    return { manifestError: 'the installed @frontmcp/sdk does not build manifests; upgrade it' };
+  }
+  try {
+    const manifest = await sdk.buildManifest(configOrClass);
+    return { manifest, manifestFindings: sdk.lintServerManifest(manifest) };
+  } catch (err) {
+    return { manifestError: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /**
@@ -304,7 +352,9 @@ async function extractSchemasFromBundle(bundlePath: string): Promise<ExtractedSc
       // best-effort — manifest writer will fall back to its own default
     }
 
-    return { tools, resources, resourceTemplates, prompts, jobs, capabilities, skillAssets, httpPort };
+    const manifest = await extractManifest(require('@frontmcp/sdk') as ManifestSdk, configOrClass);
+
+    return { tools, resources, resourceTemplates, prompts, jobs, capabilities, skillAssets, httpPort, ...manifest };
   } finally {
     await client.close().catch(() => {});
   }

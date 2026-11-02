@@ -510,3 +510,43 @@ describe('extractSchemas - SDK errors', () => {
     expect(schema.tools[0].name).toBe('tool1');
   });
 });
+
+describe('extractSchemas manifest', () => {
+  async function extractWith(sdk: Record<string, unknown>) {
+    jest.resetModules();
+    jest.doMock('@frontmcp/sdk', () => ({ connect: mockConnect, ...sdk }), { virtual: true });
+    jest.doMock('/fake/bundle.js', () => ({ default: class FakeServer {} }), { virtual: true });
+    const { extractSchemas: isolatedExtract } = require('../cli-runtime/schema-extractor');
+    return (await isolatedExtract('/fake/bundle.js')) as Awaited<ReturnType<typeof extractSchemas>>;
+  }
+
+  it('builds the manifest of the bundle and lints it', async () => {
+    const manifest = { manifestVersion: 1, tools: [], skills: [] };
+    const findings = [{ rule: 'missing-description', message: 'Tool "x" has no description.' }];
+    const buildManifest = jest.fn().mockResolvedValue(manifest);
+    const lintServerManifest = jest.fn().mockReturnValue(findings);
+
+    const result = await extractWith({ buildManifest, lintServerManifest });
+
+    expect(result.manifest).toBe(manifest);
+    expect(result.manifestFindings).toBe(findings);
+    expect(buildManifest).toHaveBeenCalledWith(expect.any(Function));
+    expect(lintServerManifest).toHaveBeenCalledWith(manifest);
+  });
+
+  it('says why there is no manifest when the SDK builds none, or building it fails', async () => {
+    expect((await extractWith({})).manifestError).toBe(
+      'the installed @frontmcp/sdk does not build manifests; upgrade it',
+    );
+
+    const failed = await extractWith({
+      buildManifest: jest.fn().mockRejectedValue(new Error('no scopes')),
+      lintServerManifest: jest.fn(),
+    });
+    expect(failed).toEqual(expect.objectContaining({ manifestError: 'no scopes', tools: [] }));
+    expect(failed.manifest).toBeUndefined();
+
+    const thrown = await extractWith({ buildManifest: jest.fn().mockRejectedValue('not an error'), lintServerManifest: jest.fn() });
+    expect(thrown.manifestError).toBe('not an error');
+  });
+});

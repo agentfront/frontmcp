@@ -1400,6 +1400,11 @@
           ]
         },
         {
+          "name": "build-manifest",
+          "description": "The frontmcp.manifest.json that frontmcp build writes for every target, its lint, and the instructionsBudget size limits",
+          "examples": []
+        },
+        {
           "name": "build-for-sdk",
           "description": "Build a FrontMCP server as an embeddable library with create() and connect() APIs",
           "examples": [

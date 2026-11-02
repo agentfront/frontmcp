@@ -75,7 +75,7 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       if (formatted.providers) {
         throw new InvalidDecoratorMetadataError('FrontMcp', 'providers', JSON.stringify(formatted.providers, null, 2));
       }
-      for (const field of ['skillsConfig', 'http', 'output', 'clients', 'offload'] as const) {
+      for (const field of ['skillsConfig', 'http', 'output', 'clients', 'offload', 'instructionsBudget'] as const) {
         if (formatted[field]) {
           throw new InvalidDecoratorMetadataError('FrontMcp', field, JSON.stringify(formatted[field], null, 2));
         }
