@@ -18,6 +18,7 @@ Resources expose data to AI clients through URI-based access following the MCP p
 ### Recommended
 
 - Providing binary assets (images, PDFs) to AI clients via base64 blob encoding
+- Serving state that other code or other processes keep up to date (a board, a status, a reducer's output), with `resources/updated` sent to subscribers on every change (`from`, see [Materialized Resources](#materialized-resources))
 - Centralizing read-only data sources that multiple tools or prompts reference
 - Replacing ad-hoc tool responses with structured, cacheable resource URIs
 
@@ -41,6 +42,7 @@ The `@Resource` decorator accepts:
 - `description` (optional) -- human-readable description
 - `mimeType` (optional) -- MIME type of the resource content
 - `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
+- `from` (optional) -- a resource store key, `resourceStore().key(name)`, whose value the resource serves; FrontMCP sends `notifications/resources/updated` to its subscribers whenever the value's revision changes, from a write in any process that shares the store. See [Materialized Resources](#materialized-resources). Only on `@Resource`: a `@ResourceTemplate` with `from` fails at the decorator.
 - `enabled` (optional) -- `true`/`false`, or an `EnabledSource` such as `fileSignal('./features.json', 'reports')` that turns the resource on and off while sessions are live. Off: left out of `resources/list`, and `resources/read` and `resources/subscribe` answer `FEATURE_OFF` (403, `data.status` and the source's `data.remedy`); a change sends `notifications/resources/list_changed`. See [`enabled`](../../create-tool/references/availability.md#enabled--turned-on-and-off-while-sessions-are-live).
 
 ### Class-Based Pattern
@@ -139,6 +141,49 @@ Supported return shapes:
 - **Array of content items**: each item with `text` or `blob` is treated as a content entry
 - **Plain string**: wrapped into a single text content block
 - **Plain object**: serialized with `JSON.stringify` into a single text content block
+
+## Materialized Resources
+
+A materialized resource serves a stored value with a revision and an update time. Code writes the value through a typed API, in this process or another one, and FrontMCP answers `resources/subscribe` for the resource and sends `notifications/resources/updated` to its subscribers whenever the revision changes. Use it for state that reducers, workers or tools keep up to date, instead of a resource that recomputes on every read and never tells anyone it changed.
+
+```typescript
+// src/board.store.ts -- imported by the server and by every process that writes
+import { resourceStore } from '@frontmcp/sdk';
+
+export interface Board {
+  open: number;
+}
+
+export const lens = resourceStore({ storage: { type: 'sqlite', sqlite: { path: '.lens/state.sqlite' } } });
+export const board = lens.key<Board>('board', { initial: { open: 0 } });
+```
+
+```typescript
+// src/apps/main/resources/board.resource.ts
+import { MaterializedResourceContext, Resource } from '@frontmcp/sdk';
+
+import { board } from '../../../board.store';
+
+@Resource({ name: 'board', uri: 'board://status', mimeType: 'application/json', from: board })
+export class BoardResource extends MaterializedResourceContext {}
+```
+
+```typescript
+// In a tool, a reducer, a worker, or another process:
+await board.set({ open: 3 });
+await board.update((current) => ({ open: current.open + 1 })); // runs again if another write came first
+const { value, revision, updatedAt } = await board.get();
+```
+
+- **`resourceStore({ storage?, pollIntervalMs?, coalesceMs?, onError? })`** -- `storage` is a `createStorage()` config: `memory` (the default, this process only), `sqlite` (every process on one machine that opens the file) or `redis` (every process on the server). A backend that cannot open fails the server's boot (`fallback` defaults to `'error'`, never a silent switch to memory). Invalid options throw `InvalidResourceStoreError` (`INVALID_RESOURCE_STORE`) where the store is declared.
+- **`key<T>(name, { initial? })`** -- `get()` returns `{ value, revision, updatedAt? }`: revision `0` and `initial` until the first write. `set(value)` and `update(change)` write atomically in every process (a compare-and-set on memory, Redis and SQLite; `change` may run more than once, so keep it pure) and add 1 to the revision. `subscribe(listener)` calls the listener with the snapshot whenever the revision changes.
+- **`MaterializedResourceContext`** -- serves the value as it is: a string as `text/plain`, anything else as JSON (`mimeType` wins when set), with `_meta['frontmcp/materialized'] = { revision, updatedAt }` (`MATERIALIZED_META_KEY`). A class that extends it without `from` fails the boot. To shape the value, extend `ResourceContext` instead, keep `from`, and read the key in `execute()`: subscribers are still told of every change.
+- **How other processes are heard.** SQLite: each process checks `PRAGMA data_version` every `pollIntervalMs` (250) and reads the changed keys only when another process wrote the file. Redis: pub/sub. Memory: this process only. Writes to one key within `coalesceMs` (50) are announced once.
+- **Who is told.** `resources/subscribe` checks what `resources/read` checks (`availableWhen`, `enabled`, and now `authorities`), so a caller that may not read the resource cannot subscribe to it. A 2026-07-28 `subscriptions/listen` stream runs each requested URI through the same `resources:subscribe` flow and leaves a refused one out of its acknowledgement; an update of a resource under an acknowledged URI is checked the same way before it is sent. Each scope follows only its own resources.
+- **Who can write.** The write API is code, not an MCP method: no client can write a value. A client changes one only through a tool you write, and that tool runs through `tools:call-tool` with its own `authorities`, `enabled` and hooks. Any process that can open the store's file or Redis can write, so protect them as you protect the server's data.
+- **Caching (2026-07-28).** A materialized read answers `ttlMs: 0`, since another process can change the value at any moment; `cacheScope` follows the usual rule (`public` only for an anonymous read nothing shaped per caller).
+- **Topics for other live views.** `store.subscribe(topic, listener)` and `store.publish(topic)` are the same change feed with no value attached (a key's topic is its name): a listener reads the current state. Use them for SSE routes or other views that follow the store.
+- **Lifecycle.** The server opens the stores its resources use at boot and closes them at shutdown. A script that writes calls `await store.close()` when it is done.
 
 ## Resource Templates with @ResourceTemplate
 
@@ -557,6 +602,7 @@ When a client requests completions for the `userId` parameter with a partial str
 | Return shape           | Return full `ReadResourceResult` or let FrontMCP normalize plain objects | Manually wrapping every return in `{ contents: [...] }` when not needed | FrontMCP auto-wraps strings, objects, and arrays into valid `ReadResourceResult` |
 | Template params typing | `ResourceContext<{ userId: string }>` with typed `params`                | `ResourceContext` with untyped `params: Record<string, string>`         | Generic parameter enables compile-time checking of URI parameters                |
 | Binary content         | Use `blob` field with base64 encoding for binary data                    | Returning raw `Buffer` in `text` field                                  | MCP protocol expects base64 in `blob`; `text` is for string content only         |
+| Live state             | `@Resource({ uri, from: store.key('board') })` and `board.update(...)`   | Calling `this.notifyResourceUpdated(uri)` after every write by hand     | `from` announces every revision change, including writes from other processes    |
 
 ## Verification Checklist
 
@@ -575,6 +621,14 @@ When a client requests completions for the `userId` parameter with a partial str
 - [ ] Binary resources return valid base64 in the `blob` field
 - [ ] DI dependencies resolve correctly via `this.get()`
 
+### Materialized resources
+
+- [ ] The store is declared once, in a module the server and every writer import
+- [ ] A materialized `@Resource` has `from: store.key(...)` and extends `MaterializedResourceContext` (or reads the key itself)
+- [ ] Processes that must hear each other use a `sqlite` or `redis` store, not `memory`
+- [ ] `update(change)` callbacks are pure: they can run more than once
+- [ ] A writer script calls `store.close()` before it exits
+
 ### Autocompletion
 
 - [ ] Template resources with dynamic params define `${argName}Completer` methods or override `getArgumentCompleter()`
@@ -590,6 +644,8 @@ When a client requests completions for the `userId` parameter with a partial str
 | Template parameters are empty                      | Using `@Resource` instead of `@ResourceTemplate` | Switch to `@ResourceTemplate` with `uriTemplate` containing `{param}` placeholders |
 | Binary content is garbled                          | Returning raw buffer in `text` field             | Use `blob: buffer.toString('base64')` instead of `text` for binary data            |
 | `this.get(TOKEN)` throws ProviderNotAvailableError | Provider not registered in scope                 | Register provider in `providers` array of `@App` or `@FrontMcp`                    |
+| Subscribers never hear another process's writes    | The store is `memory`                            | Use `storage: { type: 'sqlite', ... }` or `redis` in the store both processes use  |
+| `INVALID_RESOURCE_STORE` at boot                   | Bad store options, or no `from` on the class     | Fix the option named in the message, or add `from: store.key(...)`                 |
 
 ## Examples
 
@@ -598,6 +654,7 @@ When a client requests completions for the `userId` parameter with a partial str
 | [`basic-static-resource`](../examples/create-resource/basic-static-resource.md)       | Basic        | A static resource that exposes application configuration at a fixed URI.             |
 | [`binary-and-multi-content`](../examples/create-resource/binary-and-multi-content.md) | Advanced     | A resource serving binary blob data and a resource returning multiple content items. |
 | [`parameterized-template`](../examples/create-resource/parameterized-template.md)     | Intermediate | A resource template with typed URI parameters and argument autocompletion.           |
+| [`materialized-resource`](../examples/create-resource/materialized-resource.md)       | Intermediate | A resource serving a stored value that another process updates, with live updates.   |
 
 > See all examples in [`examples/create-resource/`](../examples/create-resource/)
 

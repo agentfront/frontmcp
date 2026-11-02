@@ -215,6 +215,7 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 | [`basic-static-resource`](./examples/create-resource/basic-static-resource.md)       | Basic        | A static resource that exposes application configuration at a fixed URI.             |
 | [`binary-and-multi-content`](./examples/create-resource/binary-and-multi-content.md) | Advanced     | A resource serving binary blob data and a resource returning multiple content items. |
 | [`parameterized-template`](./examples/create-resource/parameterized-template.md)     | Intermediate | A resource template with typed URI parameters and argument autocompletion.           |
+| [`materialized-resource`](./examples/create-resource/materialized-resource.md)       | Intermediate | A resource serving a stored value that another process updates, with live updates.   |
 
 ### `create-skill-with-tools`
 

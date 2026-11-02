@@ -40,6 +40,14 @@ export {
   type BudgetOmission,
 } from './answer';
 export { fileSignal, SURFACE_META_KEY, surfaceHash, type FileSignalOptions, type LiveSurface } from './surface';
+export {
+  MATERIALIZED_META_KEY,
+  MaterializedResourceContext,
+  resourceStore,
+  ResourceStore,
+  type ResourceKeyOptions,
+  type ResourceStoreOptions,
+} from './resource/materialized';
 export * from './errors';
 export {
   addHookObserver,

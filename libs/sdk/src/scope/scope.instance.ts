@@ -65,6 +65,7 @@ import { agentToolMetadata, findUnenforcedMetadata } from '../plugin/enforced-me
 import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry';
 import PromptRegistry from '../prompt/prompt.registry';
 import ProviderRegistry from '../provider/provider.registry';
+import { MaterializedResources } from '../resource/materialized/materialized-resources';
 import ResourceRegistry from '../resource/resource.registry';
 import type { HttpRouteRegistrar, RegisteredHttpRoute } from '../server/custom-routes.helper';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
@@ -919,6 +920,10 @@ export class Scope extends ScopeEntry {
     liveSurface.start();
     this.liveSurface = liveSurface;
     this.onDispose(() => liveSurface.stop());
+
+    const materializedResources = new MaterializedResources(this);
+    await materializedResources.start();
+    this.onDispose(() => materializedResources.stop());
 
     // Install the task runner now that the notification service is available.
     // The runner needs it to deliver `notifications/tasks/status` events.

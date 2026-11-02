@@ -4,6 +4,7 @@ import { entryAvailabilitySchema, isValidMcpUri, isValidMcpUriTemplate, type Ent
 
 import { type RawZodShape } from '../types';
 import { enabledOptionSchema, type EnabledOption } from './enabled.metadata';
+import { resourceKeySchema, type ResourceKey } from './materialized.metadata';
 
 declare global {
   /**
@@ -103,6 +104,13 @@ interface ResourceMetadata extends ExtendFrontMcpResourceMetadata {
    * `FEATURE_OFF` and a remedy. When a source changes, connected clients get `notifications/resources/list_changed`.
    */
   enabled?: EnabledOption;
+
+  /**
+   * The resource store key whose value this resource serves (`resourceStore().key(name)`). FrontMCP answers
+   * `resources/subscribe` for it and sends `notifications/resources/updated` whenever its revision changes, from a
+   * write in any process that shares the store. Extend `MaterializedResourceContext` to serve the value as it is.
+   */
+  from?: ResourceKey;
 }
 
 const resourceAnnotationsSchema = z
@@ -127,6 +135,7 @@ export const frontMcpResourceMetadataSchema = z
     _meta: z.record(z.string(), z.unknown()).optional(),
     availableWhen: entryAvailabilitySchema.optional(),
     enabled: enabledOptionSchema.optional(),
+    from: resourceKeySchema.optional(),
   } satisfies RawZodShape<ResourceMetadata, ExtendFrontMcpResourceMetadata>)
   .passthrough();
 
@@ -210,7 +219,11 @@ export const frontMcpResourceTemplateMetadataSchema = z
     availableWhen: entryAvailabilitySchema.optional(),
     enabled: enabledOptionSchema.optional(),
   } satisfies RawZodShape<ResourceTemplateMetadata, ExtendFrontMcpResourceTemplateMetadata>)
-  .passthrough();
+  .passthrough()
+  .refine((metadata) => !('from' in metadata), {
+    message: '`from` serves one stored value at a fixed `uri`: declare it on @Resource, not on @ResourceTemplate',
+    path: ['from'],
+  });
 
 export {
   ResourceMetadata,

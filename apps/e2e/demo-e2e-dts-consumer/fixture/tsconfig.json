@@ -27,6 +27,7 @@
     "call-recorder-must-compile.ts",
     "hook-ordering-must-compile.ts",
     "hook-ordering-must-fail.ts",
-    "live-surface-must-compile.ts"
+    "live-surface-must-compile.ts",
+    "materialized-resources-must-compile.ts"
   ]
 }
