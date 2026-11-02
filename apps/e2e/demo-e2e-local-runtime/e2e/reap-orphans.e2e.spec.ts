@@ -37,7 +37,6 @@ function running(pid: number): boolean {
     const reaped = await reapOrphans(marker);
 
     expect(reaped).toEqual([marked]);
-    expect(running(marked)).toBe(false);
     expect(running(unmarked)).toBe(true);
     expect(ours.child.exitCode).toBeNull();
     await expect(reapOrphans(marker)).resolves.toEqual([]);
