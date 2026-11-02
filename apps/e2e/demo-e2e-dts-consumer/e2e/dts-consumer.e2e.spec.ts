@@ -163,7 +163,7 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('tool-aliases-must-compile.ts'))).toEqual([]);
   });
 
-  it('types output.budget, clients profiles, http.forwardHeaders and the budget note', () => {
+  it('types output.budget, clients profiles, http.forwardHeaders, the budget note and isClientCall() on the call-tool hook ctx', () => {
     expect(describeEach(inFixtureFile('answer-shaping-must-compile.ts'))).toEqual([]);
   });
 

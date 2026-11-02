@@ -1733,7 +1733,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   }
 
   /** Whether a client called the tool, rather than a tool, agent or job in process (`this.callTool()`). */
-  private isClientCall(): boolean {
+  isClientCall(): boolean {
     const callerCtx = this.input.ctx as { internalCall?: boolean; agentPrivateCall?: boolean } | undefined;
     return !(callerCtx?.internalCall || callerCtx?.agentPrivateCall || getRunningTool());
   }

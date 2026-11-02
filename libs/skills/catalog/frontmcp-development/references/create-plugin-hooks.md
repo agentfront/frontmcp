@@ -98,6 +98,8 @@ To keep the flow's own step from running:
 
 Each answer the flow sends, the tool's from `finalize` or a hook's `ctx.respond(result)` (an `@Around('finalize')` hook that replaces it after `next()` included), becomes `ctx.state.output` in `tools:call-tool` and `resources:read-resource`. The stages after `finalize` work on it: `fitAnswer` (`output.budget`), `shapeAnswer` (`clients` profiles) and `meterAnswer` (the `/metrics` answer cost). Hook `Did('meterAnswer')` to see the answer the client receives.
 
+These stages shape only a client's answer, not the one a tool gets from `this.callTool()`; a hook on them checks the same with `ctx.isClientCall()`. A `Will('fitAnswer')` hook that answers with `ctx.respond(result)` replaces the answer before the budget fits it, as `@frontmcp/plugin-result-handles` does to fold a large answer (see `result-handles-plugin`).
+
 ## Hook Order
 
 Hooks on one stage run in `priority` order, **lowest first**; the default is `0`, and a higher number does not run earlier. A stage runs its `@Will` hooks, then its steps (the flow's own step and the `@Stage` hooks) wrapped by its `@Around` hooks, then its `@Did` hooks, then its `@Finally` hooks, each list in `priority` order.
