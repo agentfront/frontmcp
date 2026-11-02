@@ -370,7 +370,7 @@ class Server {}
 | Background work that should run only while serving | `onReady()`                                                           | `onShutdown()` |
 
 - Hooks are found by method name. A provider that already had a method called `onBootstrap`, `onReady` or `onShutdown` has it called since 1.11, with no arguments. That includes a third-party client registered with `useValue` or returned by a factory (an SDK's `onReady(callback)`, for example): wrap such a client in a provider class.
-- A `useValue` object registered in more than one place of a server runs its hooks once for that server.
+- A `useValue` object registered in more than one place of a server runs its hooks once for that server. Its `onShutdown()` runs once every scope that holds it (each app of a `splitByApp` server) has shut down its own providers, so the providers that depend on it shut down first.
 - `onReady()` is awaited: `createDirect()`, `connect()` and the handlers return, and `bootstrap()` and `runStdio()` install their SIGTERM / SIGINT handlers, once every `onReady()` has settled. Start long work there without awaiting it, as `SearchIndex` does.
 - A host you assemble from `FrontMcpInstance.createForGraph()` runs the `onReady()` hooks itself, with `instance.emitProvidersReady()`.
 - Serverless and edge handlers are never shut down, so `onShutdown()` does not run there.
