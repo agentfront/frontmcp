@@ -50,7 +50,7 @@ npx frontmcp test
 
 ## Matchers
 
-**Tools**: `toContainTool`, `toBeSuccessful`, `toBeError`, `toHaveTextContent`, `toHaveImageContent`, `toHaveResourceContent`
+**Tools**: `toContainTool`, `toBeSuccessful`, `toBeError`, `toHaveTextContent`, `toHaveImageContent`, `toHaveResourceContent`, `toPassOutputSchemaWhole`
 
 **Resources**: `toContainResource`, `toContainResourceTemplate`, `toHaveMimeType`
 

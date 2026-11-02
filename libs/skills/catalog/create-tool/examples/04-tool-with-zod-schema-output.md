@@ -14,7 +14,7 @@ features:
 
 Tool returning a discriminated union via a full `z.discriminatedUnion(...)` outputSchema — for outputs that branch on a kind field.
 
-When the output has more than one shape (e.g. `user` vs `group`), use a full Zod schema instead of a raw shape. `z.discriminatedUnion` is the cleanest pattern.
+When the output has more than one shape (e.g. `user` vs `group`), use a full Zod schema instead of a raw shape. `z.discriminatedUnion` is the cleanest pattern. A union whose members are all objects is advertised in `tools/list` as `{ type: 'object', oneOf: [...] }` (`anyOf` for a plain `z.union`), and needs no cast in `@Tool({ outputSchema })`.
 
 ## Code
 
@@ -92,6 +92,8 @@ export class ResolvePrincipalTool extends ToolContext {
 | Use raw shape                            | Use full Zod schema                                      |
 | ---------------------------------------- | -------------------------------------------------------- |
 | Single object with a fixed set of fields | Union of multiple shapes (`z.discriminatedUnion`)        |
-| All fields known statically              | Arrays of complex objects (`z.array(z.object(...))`)     |
+| All fields known statically              | Arrays of complex objects (`z.array(z.object(...))`)¹    |
 | No transforms / refinements needed       | Need `z.transform(...)`, `z.refine(...)`, `z.brand(...)` |
 | Default and recommended                  | When the raw shape can't express the contract            |
+
+¹ A top-level array is not an object, so `tools/list` leaves it out (with a startup warning naming the tool). Wrap it, e.g. `z.object({ items: z.array(...) })`, to advertise it.

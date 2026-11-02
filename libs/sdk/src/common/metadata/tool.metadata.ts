@@ -236,8 +236,8 @@ type StructuredOutputType =
   | z.ZodRawShape
   | z.ZodObject<any>
   | z.ZodArray<z.ZodType>
-  | z.ZodUnion<[z.ZodObject<any>, ...z.ZodObject<any>[]]>
-  | z.ZodDiscriminatedUnion<[z.ZodObject<any>, ...z.ZodObject<any>[]]>;
+  | z.ZodUnion<readonly [z.ZodObject<any>, ...z.ZodObject<any>[]]>
+  | z.ZodDiscriminatedUnion<readonly [z.ZodObject<any>, ...z.ZodObject<any>[]]>;
 
 export type ToolSingleOutputType =
   | PrimitiveOutputType
@@ -504,9 +504,10 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
 
   /**
    * Output policy for this tool — overrides `@App` and `@FrontMcp`. Controls
-   * non-finite handling (`allowNonFinite`) and how `outputSchema` is exposed in
+   * non-finite handling (`allowNonFinite`), how `outputSchema` is exposed in
    * `tools/list` (`schemaMode`: `'definition'` (default) / `'description'` / `'both'` /
-   * `'none'`; `schemaDescriptionFormat`: `'summary'` (default) / `'jsonSchema'`).
+   * `'none'`; `schemaDescriptionFormat`: `'summary'` (default) / `'jsonSchema'`), and what
+   * happens to undeclared answer keys (`undeclaredKeys`: `'strip'` / `'warn'` / `'keep'` / `'fail'`).
    */
   output?: OutputPolicy;
 }

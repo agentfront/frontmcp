@@ -323,6 +323,9 @@ export interface FrontMcpBaseMetadata {
    *   `InvalidOutputError`, surfacing silent `JSON.stringify` corruption.
    * - `schemaMode`: how `outputSchema` is exposed in `tools/list` — `'definition'`
    *   (default) / `'description'` / `'both'` / `'none'`.
+   * - `undeclaredKeys`: what `tools/call` does with keys an answer carries that its
+   *   `outputSchema` does not declare — `'strip'` / `'warn'` / `'keep'` / `'fail'`. Default
+   *   `'warn'` when `NODE_ENV` is `'development'`, otherwise `'strip'`.
    *
    * @default { allowNonFinite: false, schemaMode: 'definition' }
    */
