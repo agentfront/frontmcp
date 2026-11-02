@@ -29,7 +29,6 @@ class SharedDatabase {
   ) {}
 
   retain(options: OpenDatabaseOptions): void {
-    this.references++;
     if (options.walMode && this.db.pragma('journal_mode', { simple: true }) !== 'wal') {
       withBusyRetry(() => this.db.pragma('journal_mode = WAL'));
     }
@@ -38,6 +37,7 @@ class SharedDatabase {
       this.busyTimeoutMs = busyTimeoutMs;
       this.db.pragma(`busy_timeout = ${busyTimeoutMs}`);
     }
+    this.references++;
   }
 
   release(): void {
