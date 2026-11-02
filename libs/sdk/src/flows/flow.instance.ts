@@ -562,7 +562,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       });
     };
 
-    // What a Finally hook wrote on its way to a signal the runner drops, such as a job's answer, is dropped with it
+    // The values a Finally hook set on the state before the throw the runner drops, such as a job's answer, are put back
     const restoreState = (before: Readonly<Record<string, unknown>>) => {
       for (const key of Object.keys(context.state.snapshot())) {
         if (!(key in before)) context.state.set(key as never, undefined as never);
@@ -594,7 +594,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
           await item.method(context);
         } catch (e: any) {
           if (opts?.ignoreThrows) {
-            if (e instanceof FlowControl && stateBefore) restoreState(stateBefore);
+            if (stateBefore) restoreState(stateBefore);
             ignoreFinallyThrow(key, e);
             continue;
           }
