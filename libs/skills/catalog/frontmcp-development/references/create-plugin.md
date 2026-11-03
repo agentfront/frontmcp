@@ -406,6 +406,34 @@ class MyServer {}
 
 Listing the class itself (`plugins: [MyPlugin]`) is the same as `MyPlugin.init()`: the constructor, `dynamicProviders` and `dynamicTools` all get `{}`, so the plugin installs the providers and tools its default options give. A plugin that validates required options at runtime fails at startup with its own error; TypeScript types alone validate nothing, so a plugin without such a check starts with `{}`. Up to 1.9.3 the class form got none of the option-derived providers or tools (`plugins: [CodeCallPlugin]` served no tools; `plugins: [RememberPlugin]` failed on the first `this.remember`).
 
+### A store a browser cannot open
+
+A browser build (`create()` in a web page, WebMCP) has no TCP socket for Redis and no file for SQLite. A plugin that
+opens either calls `refusePluginStoreInBrowser()` from `@frontmcp/sdk` where it builds the store: in a browser it
+throws `BrowserStoreUnavailableError` (`BROWSER_STORE_UNAVAILABLE`), the error the SDK's own stores throw, naming the
+option that brings in the store and the one that keeps it in memory. `option: undefined` (a memory store) and any other
+runtime refuse nothing.
+
+```typescript
+import { refusePluginStoreInBrowser } from '@frontmcp/sdk';
+import type { StorageConfig } from '@frontmcp/utils';
+
+// Called from `static dynamicProviders(options)`, before it returns the store's provider
+function refuseRedisOrSqliteInBrowser(storage: StorageConfig | undefined): void {
+  const type = storage?.type;
+  refusePluginStoreInBrowser({
+    plugin: 'MyPlugin',
+    option: type === 'redis' || type === 'sqlite' ? `storage: { type: '${type}' }` : undefined,
+    memory: "storage: { type: 'memory' }",
+  });
+}
+```
+
+The message reads `A browser cannot open Redis or SQLite: MyPlugin would use storage: { type: 'redis' } (set storage:
+{ type: 'memory' } in place of storage: { type: 'redis' })`, and `error.stores` is `[['MyPlugin', "storage: { type:
+'redis' }"]]`. A store on the server's top-level `redis` (through `getGlobalStoreConfig()`) is known only at startup:
+call it in the provider's `useFactory`, before the client connects, unless that `redis` is Vercel KV.
+
 ### Option-derived providers are registered before nested plugins
 
 `dynamicProviders(options)` and `init({ providers })` are registered **before** the plugin's nested `plugins` are built, for both `init(options)` and `init({ useFactory, inject? })` (the factory runs first). A nested plugin can inject them:

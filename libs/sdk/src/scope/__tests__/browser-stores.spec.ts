@@ -1,5 +1,10 @@
 import { BrowserStoreUnavailableError, InternalMcpError } from '../../errors';
-import { elicitationServerStore, refuseServerStoresInBrowser, tasksServerStore } from '../browser-stores';
+import {
+  elicitationServerStore,
+  refusePluginStoreInBrowser,
+  refuseServerStoresInBrowser,
+  tasksServerStore,
+} from '../browser-stores';
 
 const redis = { provider: 'redis' as const, host: 'cache.internal', port: 6379 };
 const vercelKv = { provider: 'vercel-kv' as const };
@@ -78,5 +83,43 @@ describe('refuseServerStoresInBrowser', () => {
   it('refuses nothing outside a browser', () => {
     expect(() => refuseServerStoresInBrowser({ tasks: 'redis', jobs: 'sqlite' }, 'node')).not.toThrow();
     expect(() => refuseServerStoresInBrowser({ tasks: 'redis' })).not.toThrow();
+  });
+});
+
+describe('refusePluginStoreInBrowser', () => {
+  const cacheOnRedis = { plugin: 'CachePlugin', option: "type: 'global-store'", memory: "type: 'memory'" };
+
+  it("refuses, in a browser, a plugin's store that would open Redis or SQLite, naming the plugin's memory option", () => {
+    let refusal: unknown;
+    try {
+      refusePluginStoreInBrowser(cacheOnRedis, 'browser');
+    } catch (error) {
+      refusal = error;
+    }
+
+    expect(refusal).toBeInstanceOf(BrowserStoreUnavailableError);
+    expect(refusal).toMatchObject({
+      code: 'BROWSER_STORE_UNAVAILABLE',
+      stores: [['CachePlugin', "type: 'global-store'"]],
+    });
+    expect((refusal as Error).message).toBe(
+      "A browser cannot open Redis or SQLite: CachePlugin would use type: 'global-store' " +
+        "(set type: 'memory' in place of type: 'global-store')",
+    );
+  });
+
+  it("names the plugin's memory option for a plugin named like one of the SDK's stores", () => {
+    expect(() => refusePluginStoreInBrowser({ ...cacheOnRedis, plugin: 'jobs' }, 'browser')).toThrow(
+      "jobs would use type: 'global-store' (set type: 'memory' in place of type: 'global-store')",
+    );
+  });
+
+  it('lets a browser start a plugin store that opens neither', () => {
+    expect(() => refusePluginStoreInBrowser({ ...cacheOnRedis, option: undefined }, 'browser')).not.toThrow();
+  });
+
+  it('refuses nothing outside a browser', () => {
+    expect(() => refusePluginStoreInBrowser(cacheOnRedis, 'node')).not.toThrow();
+    expect(() => refusePluginStoreInBrowser(cacheOnRedis)).not.toThrow();
   });
 });

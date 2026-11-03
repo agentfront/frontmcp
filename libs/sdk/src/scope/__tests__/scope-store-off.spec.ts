@@ -57,6 +57,18 @@ async function startGraph(options: Record<string, unknown>): Promise<ScopeBacken
   return instance.getScopes()[0] as unknown as ScopeBackends;
 }
 
+async function startCli(options: Record<string, unknown>): Promise<ScopeBackends> {
+  const instance = await FrontMcpInstance.createForCli({
+    info: { name: 'store-off', version: '0.0.0' },
+    apps: [StoreOffApp],
+    transport: { persistence: false },
+    sqlite,
+    ...options,
+  });
+  started.push(instance);
+  return instance.getScopes()[0] as unknown as ScopeBackends;
+}
+
 describe('store: false with a top-level sqlite', () => {
   afterEach(async () => {
     await Promise.all(started.splice(0).map((instance) => instance.shutdown()));
@@ -97,21 +109,25 @@ describe('store: false with a top-level sqlite', () => {
   });
 
   it('keeps tasks off the sqlite with tasks.store: false in CLI mode too', async () => {
-    const startCli = async (options: Record<string, unknown>) => {
-      const instance = await FrontMcpInstance.createForCli({
-        info: { name: 'store-off', version: '0.0.0' },
-        apps: [StoreOffApp],
-        transport: { persistence: false },
-        sqlite,
-        ...options,
-      });
-      started.push(instance);
-      return instance.getScopes()[0] as unknown as ScopeBackends;
-    };
-
     expect((await startCli({})).taskBackendType).toBe('sqlite');
     expect((await startCli({ tasks: { store: false } })).taskBackendType).toBeUndefined();
     expect(sqliteTaskStore).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails startup in CLI mode on an invalid jobs.store, which the jobs took for unset and ran on the sqlite', async () => {
+    await expect(startCli({ tasks: { enabled: false }, jobs: { enabled: true, store: 'memory' } })).rejects.toThrow(
+      'jobs.store must be false (runs kept in memory) or an object with redis or sqlite',
+    );
+    expect(sqliteStorageAdapter).not.toHaveBeenCalled();
+  });
+
+  it('keeps jobs in memory with jobs.store: false in CLI mode, where they would take the sqlite otherwise', async () => {
+    await startCli({ tasks: { enabled: false }, jobs: { enabled: true } });
+    expect(sqliteStorageAdapter).toHaveBeenCalled();
+    sqliteStorageAdapter.mockClear();
+
+    await startCli({ tasks: { enabled: false }, jobs: { enabled: true, store: false } });
+    expect(sqliteStorageAdapter).not.toHaveBeenCalled();
   });
 });
 

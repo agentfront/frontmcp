@@ -66,9 +66,14 @@ export interface CliResult {
 }
 
 export function runCli(args: string[], extraEnv?: Record<string, string>): CliResult {
+  return runCliBundle(CLI_BUNDLE, args, extraEnv);
+}
+
+/** Run a generated CLI bundle, such as one a test built in a scratch project, from its own directory. */
+export function runCliBundle(bundle: string, args: string[], extraEnv?: Record<string, string>): CliResult {
   try {
-    const stdout = execFileSync('node', [CLI_BUNDLE, ...args], {
-      cwd: DIST_DIR,
+    const stdout = execFileSync('node', [bundle, ...args], {
+      cwd: path.dirname(bundle),
       timeout: 30000,
       encoding: 'utf-8',
       env: { ...process.env, NODE_ENV: 'test', ...extraEnv },

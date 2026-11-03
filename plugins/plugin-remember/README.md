@@ -93,6 +93,10 @@ Every option is optional. `RememberPlugin.init()` and `plugins: [RememberPlugin]
 | `'vercel-kv'`    | Vercel KV, through `@vercel/kv`.                                                                     |
 | `'global-store'` | The store in `@FrontMcp({ redis })`: Redis, or Vercel KV. Without `redis`, the server doesn't start. |
 
+A browser build (`create()` in a web page, WebMCP) has no TCP socket for Redis: there `'redis'` and `'redis-client'`
+throw `BrowserStoreUnavailableError` from `init()`, and `'global-store'` on a Redis `redis` throws it when the server
+starts, before anything connects. The message names `type: 'memory'`. Vercel KV, over HTTPS, is allowed.
+
 ## `this.remember`
 
 `this.remember` is available in tools, resources, prompts and agents. Every method takes a `scope` option, which

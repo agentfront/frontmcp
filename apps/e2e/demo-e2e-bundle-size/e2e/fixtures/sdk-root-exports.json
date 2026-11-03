@@ -953,6 +953,7 @@
   "redisOptionsSchema": "object",
   "redisProviderSchema": "object",
   "redisUrlSchema": "object",
+  "refusePluginStoreInBrowser": "function",
   "refused": "function",
   "registerOptionalModule": "function",
   "registerPendingTC39Hook": "function",
