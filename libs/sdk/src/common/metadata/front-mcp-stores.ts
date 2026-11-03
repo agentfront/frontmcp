@@ -7,7 +7,11 @@ const STORE_SETTINGS: ReadonlyArray<readonly [string, string?]> = [
   ['tasks', 'redis'],
   ['tasks', 'sqlite'],
   ['transport', 'persistence'],
+  ['transport', 'eventStore'],
+  ['elicitation', 'redis'],
   ['throttle', 'storage'],
+  ['auth', 'tokenStorage'],
+  ['auth', 'secureStore'],
 ];
 
 type ConfigRecord = Record<string, unknown>;

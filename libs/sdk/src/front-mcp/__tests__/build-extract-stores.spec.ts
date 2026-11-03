@@ -54,6 +54,14 @@ const unsetStores: Array<[string, Record<string, unknown>]> = [
   ['jobs.store', { jobs: { enabled: true, store: { redis: { url: unset } } } }],
   ['tasks.redis', { tasks: { redis: { url: unset } } }],
   ['tasks.sqlite', { tasks: { sqlite: { path: sqlitePath, encryption: { secret: unset } } } }],
+  ['auth.tokenStorage', { auth: { mode: 'local', tokenStorage: { redis: { host: unset } } } }],
+];
+
+/** Store settings the CLI host never opens, so its lite schema does not validate them. */
+const unsetServerStores: Array<[string, Record<string, unknown>]> = [
+  ['transport.persistence', { transport: { persistence: { redis: { url: unset } } } }],
+  ['transport.eventStore', { transport: { eventStore: { enabled: true, provider: 'redis', redis: { url: unset } } } }],
+  ['elicitation.redis', { elicitation: { enabled: true, redis: { url: unset } } }],
 ];
 
 describe('store settings a build recorded unvalidated', () => {
@@ -61,14 +69,11 @@ describe('store settings a build recorded unvalidated', () => {
     await expect(connect(readByBuild(stores) as unknown as FrontMcpConfigInput, { mode: 'cli' })).rejects.toThrow();
   });
 
-  it.each([...unsetStores, ['transport.persistence', { transport: { persistence: { redis: { url: unset } } } }]])(
-    'stop the server on an unset %s',
-    async (_store, stores) => {
-      const recorded = getDecoratorConfig(readByBuild(stores as Record<string, unknown>));
+  it.each([...unsetStores, ...unsetServerStores])('stop the server on an unset %s', async (_store, stores) => {
+    const recorded = getDecoratorConfig(readByBuild(stores));
 
-      await expect(FrontMcpInstance.bootstrap({ ...recorded, serve: false } as never)).rejects.toThrow();
-    },
-  );
+    await expect(FrontMcpInstance.bootstrap({ ...recorded, serve: false } as never)).rejects.toThrow();
+  });
 });
 
 describe('a CLI host run with FRONTMCP_BUILD_EXTRACT in its environment', () => {
@@ -93,6 +98,12 @@ describe('a CLI host run with FRONTMCP_BUILD_EXTRACT in its environment', () => 
       expect.objectContaining({ name: 'ZodError' }),
     );
     expect(await fileExists(sessions)).toBe(false);
+  });
+
+  it.each([...unsetStores, ...unsetServerStores])('refuses an unset %s, as the server does', async (_store, stores) => {
+    await expect(
+      connect(loadUnderBuildFlags(stores) as unknown as FrontMcpConfigInput, { mode: 'cli' }),
+    ).rejects.toThrow(expect.objectContaining({ name: 'ZodError' }));
   });
 
   it('serves a server whose store settings are valid', async () => {

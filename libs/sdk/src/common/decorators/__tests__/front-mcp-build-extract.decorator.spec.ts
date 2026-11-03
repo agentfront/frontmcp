@@ -25,6 +25,9 @@ const unsetStores: Array<[string, Record<string, unknown>]> = [
   ['tasks.redis', { tasks: { redis: { url: unset } } }],
   ['tasks.sqlite', { tasks: { sqlite: { path: sqlitePath, encryption: { secret: unset } } } }],
   ['transport.persistence', { transport: { persistence: { redis: { url: unset } } } }],
+  ['transport.eventStore', { transport: { eventStore: { enabled: true, provider: 'redis', redis: { url: unset } } } }],
+  ['elicitation.redis', { elicitation: { enabled: true, redis: { url: unset } } }],
+  ['auth.tokenStorage', { auth: { mode: 'local', tokenStorage: { redis: { host: unset } } } }],
 ];
 
 const config = { info: { name: 'build-extract-test', version: '1.0.0' }, apps: [] };
@@ -71,6 +74,7 @@ describe('FrontMcp decorator — store settings while a build reads the server',
         jobs: { enabled: true, store: { sqlite: { path: sqlitePath } } },
         tasks: { enabled: true, redis: { url: unset }, sqlite: { path: sqlitePath } },
         throttle: { enabled: true, storage: { type: 'redis', redis: { url: unset } } },
+        auth: { mode: 'local', secureStore: { sqlite: { path: sqlitePath, encryption: { secret: unset } } } },
       };
 
       expect(getDecoratorConfig(decorate(stores))).toMatchObject(stores);

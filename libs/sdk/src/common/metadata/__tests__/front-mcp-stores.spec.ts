@@ -6,8 +6,18 @@ const stores = {
   sqlite: { path: '/data/sessions.sqlite' },
   jobs: { enabled: true, store: { redis: { url: 'redis://jobs:6379' } } },
   tasks: { enabled: true, redis: { url: 'redis://tasks:6379' }, sqlite: { path: '/data/tasks.sqlite' } },
-  transport: { protocol: 'legacy', persistence: { redis: { url: 'redis://sessions:6379' } } },
+  transport: {
+    protocol: 'legacy',
+    persistence: { redis: { url: 'redis://sessions:6379' } },
+    eventStore: { enabled: true, provider: 'redis', redis: { url: 'redis://events:6379' } },
+  },
+  elicitation: { enabled: true, redis: { url: 'redis://elicitation:6379' } },
   throttle: { enabled: true, storage: { type: 'memory' } },
+  auth: {
+    mode: 'local',
+    tokenStorage: { redis: { host: 'tokens' } },
+    secureStore: { sqlite: { path: '/data/secrets.sqlite' } },
+  },
 };
 
 describe('the store settings of a server config', () => {
@@ -16,8 +26,10 @@ describe('the store settings of a server config', () => {
       info: { name: 'stores' },
       jobs: { enabled: true, store: undefined },
       tasks: { enabled: true, redis: undefined, sqlite: undefined },
-      transport: { protocol: 'legacy', persistence: undefined },
+      transport: { protocol: 'legacy', persistence: undefined, eventStore: undefined },
+      elicitation: { enabled: true, redis: undefined },
       throttle: { enabled: true, storage: undefined },
+      auth: { mode: 'local', tokenStorage: undefined, secureStore: undefined },
     });
   });
 
