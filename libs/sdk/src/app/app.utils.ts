@@ -4,13 +4,14 @@ import { idFromString, isValidMcpUri } from '@frontmcp/utils';
 import {
   AppKind,
   FrontMcpLocalAppTokens,
+  lazyAppMetadataSchema,
   type AppEntry,
   type AppRecord,
   type AppType,
   type LocalAppMetadata,
   type RemoteAppMetadata,
 } from '../common';
-import { InvalidEntityError, MissingProvideError } from '../errors';
+import { InvalidEntityError, LazyAppConfigurationError, MissingProvideError } from '../errors';
 import { type AppLocalInstance } from './instances';
 
 export function collectAppMetadata(cls: AppType): LocalAppMetadata {
@@ -63,6 +64,10 @@ export function normalizeApp(item: AppType): AppRecord {
     return { kind: AppKind.LOCAL_CLASS, provide: item as Type<AppLocalInstance>, metadata };
   }
 
+  if (item && typeof item === 'object' && 'lazy' in item) {
+    return normalizeLazyApp(item);
+  }
+
   // Check for remote app configuration (has urlType, url, and name)
   if (isRemoteAppConfig(item)) {
     const metadata = item; // Type guard already narrows to RemoteAppMetadata
@@ -99,14 +104,34 @@ export function normalizeApp(item: AppType): AppRecord {
   throw new InvalidEntityError('app', name, 'a class or remote app config object');
 }
 
+/** A lazy app `{ name, lazy: () => import(...) }`, validated; its code is not imported here. */
+function normalizeLazyApp(item: object): AppRecord {
+  const parsed = lazyAppMetadataSchema.safeParse(item);
+  if (!parsed.success) {
+    const name = (item as { name?: unknown }).name;
+    const label = typeof name === 'string' ? `Lazy app "${name}"` : 'A lazy app';
+    const issues = parsed.error.issues.map((issue) => {
+      const field = issue.path.join('.') || (issue.code === 'unrecognized_keys' ? issue.keys.join(', ') : '');
+      return field ? `${field}: ${issue.message}` : issue.message;
+    });
+    throw new LazyAppConfigurationError(
+      `${label} is invalid (${issues.join('; ')}). A lazy app takes id, name, description, enabled and lazy; ` +
+        'declare everything else on the @App class it imports.',
+    );
+  }
+  const metadata = { ...parsed.data, standalone: false as const };
+  return { kind: AppKind.LAZY_IMPORT, provide: Symbol(`lazy:${appIdOf(metadata)}`), metadata };
+}
+
 /**
  * For graph/cycle detection. Returns dependency tokens that should be graphed.
- * - REMOTE_VALUE: no deps
+ * - REMOTE_VALUE, LAZY_IMPORT: no deps
  * - LOCAL_CLASS: deps come from the class constructor
  */
 export function appDiscoveryDeps(rec: AppRecord): Token[] {
   switch (rec.kind) {
     case AppKind.REMOTE_VALUE:
+    case AppKind.LAZY_IMPORT:
       return [];
     case AppKind.LOCAL_CLASS:
       return depsOfClass(rec.provide, 'discovery');

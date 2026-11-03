@@ -6,6 +6,7 @@ import { ReadResourceRequestSchema, ReadResourceResultSchema, type AuthInfo } fr
 import { randomBytes } from '@frontmcp/utils';
 
 import { fitResourceAnswer } from '../../answer';
+import { assertAppLoaded, loadAppOfPlaceholder } from '../../app/lazy/lazy-placeholders';
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import {
   Flow,
@@ -79,6 +80,7 @@ const plan = {
     'ensureRemoteCapabilities',
     'findResource',
     'checkEnabled',
+    'checkAppLoaded',
     'checkEntryAuthorities',
     'createResourceContext',
   ],
@@ -126,6 +128,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       await loadRemoteAppCapabilities(scope);
       match = scope.resources.findResourceForUri(uri);
     }
+    if (match && (await loadAppOfPlaceholder(scope, match.instance))) match = scope.resources.findResourceForUri(uri);
     if (!match) return undefined;
     resolvedResources.remember(rawInput, uri, match);
     return appOwnerIdOf(scope.resources.lineageOf(match.instance) ?? [], match.instance.owner);
@@ -319,6 +322,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     const entryType = resource.isTemplate ? 'ResourceTemplate' : 'Resource';
     const { uri } = this.state.required.input;
     await assertEntryEnabled(entryType, uri, resource.metadata.enabled, this.tryGetContext(), this.logger);
+  }
+
+  /** A lazy app's resource that is on and still a placeholder is answered `LAZY_APP_LOAD_FAILED`: its app did not load. */
+  @Stage('checkAppLoaded')
+  async checkAppLoaded() {
+    const { resource } = this.state;
+    if (resource) assertAppLoaded(resource);
   }
 
   /**

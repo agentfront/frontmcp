@@ -9,6 +9,7 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   __sourceDir: tokenFactory.meta('__sourceDir'),
   instructions: tokenFactory.meta('instructions'),
   instructionsBudget: tokenFactory.meta('instructionsBudget'),
+  manifest: tokenFactory.meta('manifest'),
   apps: tokenFactory.meta('apps'),
   http: tokenFactory.meta('http'),
   redis: tokenFactory.meta('redis'),

@@ -167,6 +167,7 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] `instructions` is set or `skillsConfig.injectInstructions` tuned for clients
 - [ ] With `injectInstructions: 'append'`, `'prepend'` or `'replace'`, the skill catalog summary stays within the 16 KB ceiling (the default `'compact'` sends one line)
 - [ ] The server logs no `instructionsBudget` warning at startup, and `frontmcp build --strict-lint` passes (instructions and tool descriptions within budget, every listed entry described)
+- [ ] Lazy apps: the `frontmcp.manifest.json` that `frontmcp build` wrote ships next to the server's entry (production refuses to start a lazy app without it), and no `does not match frontmcp.manifest.json` warning follows a lazy app's first call
 
 ## ExtApps / Widgets (if enabled)
 

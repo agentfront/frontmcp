@@ -191,6 +191,8 @@ One hook can widen its own reach instead, with its `appliesTo` option (see `crea
 
 Either way, the hooks reach only the apps that share a scope with the installing app: a standalone app, or each app of a `splitByApp` server, is a scope of its own. Install the plugin on the server (`@FrontMcp({ plugins })`) to reach every scope.
 
+A lazy app (`apps: [{ name, lazy }]`) cannot install a `scope: 'server'` plugin, nor one with an `'all-apps'` hook or a hook on a list flow: until its first call imports it, those hooks would guard and shape nothing (`LazyAppConfigurationError: ... cannot be lazy`). See `frontmcp-setup` → `multi-app-composition`.
+
 To run a hook before or after another plugin's, name that plugin in the hook's `before` or `after` (`{ before: ['setup-gate'] }`) rather than choosing a priority on the other side of its number, and pick priorities from the `HookPhase` bands (`resolve`, `guard`, `observe`, `shape`). See `create-plugin-hooks`, "Hook Order".
 
 ## Step 2: Add Providers

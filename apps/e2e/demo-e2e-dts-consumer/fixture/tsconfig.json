@@ -38,6 +38,7 @@
     "job-runners-must-compile.ts",
     "materialized-resources-must-compile.ts",
     "duties-must-compile.ts",
+    "lazy-apps-must-compile.ts",
     "http-routes-must-compile.ts"
   ]
 }
