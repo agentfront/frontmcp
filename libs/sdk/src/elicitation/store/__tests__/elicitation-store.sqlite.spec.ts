@@ -9,13 +9,9 @@ import { createElicitationStore } from '../elicitation-store.factory';
 const fakeStore = { kind: 'sqlite-elicit-mock' };
 const SqliteElicitationStoreCtor = jest.fn().mockImplementation(() => fakeStore);
 
-jest.mock(
-  '@frontmcp/storage-sqlite',
-  () => ({
-    SqliteElicitationStore: SqliteElicitationStoreCtor,
-  }),
-  { virtual: true },
-);
+jest.mock('@frontmcp/storage-sqlite', () => ({
+  SqliteElicitationStore: SqliteElicitationStoreCtor,
+}));
 
 describe('createElicitationStore — SQLite branch (issue #401)', () => {
   beforeEach(() => {

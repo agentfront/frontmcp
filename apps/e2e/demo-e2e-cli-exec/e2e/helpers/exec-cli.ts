@@ -47,12 +47,17 @@ export async function ensureBuild(): Promise<string> {
   const frontmcpBin = path.join(rootDir, 'libs', 'cli', 'dist', 'src', 'core', 'cli.js');
 
   console.log('[e2e] Building CLI exec bundle...');
-  execFileSync('node', [frontmcpBin, 'build', '--target', 'cli', '--js'], {
-    cwd: FIXTURE_DIR,
-    stdio: 'pipe',
-    timeout: 90000,
-    env: { ...process.env, NODE_ENV: 'production' },
-  });
+  try {
+    execFileSync('node', [frontmcpBin, 'build', '--target', 'cli', '--js'], {
+      cwd: FIXTURE_DIR,
+      stdio: 'pipe',
+      timeout: 90000,
+      env: { ...process.env, NODE_ENV: 'production' },
+    });
+  } catch (err: unknown) {
+    const { stdout, stderr } = err as { stdout?: Buffer; stderr?: Buffer };
+    throw new Error(`The fixture build failed:\n${stdout ?? ''}${stderr ?? ''}`, { cause: err });
+  }
   console.log('[e2e] Build complete.');
 
   buildDone = true;
