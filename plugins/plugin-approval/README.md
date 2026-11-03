@@ -185,6 +185,10 @@ ApprovalPlugin.init({
 `webhook.url`, `webhook.callbackPath`, `webhook.includeJwt`, the `recheck` options, `enableAudit` and
 `maxDelegationDepth` are accepted and not used: nothing is sent, polled or served.
 
+In a browser build (`create()` in a web page, WebMCP), `storage: { type: 'redis' }` or `{ type: 'sqlite' }` throws
+`BrowserStoreUnavailableError` from `init()`, naming `storage: { type: 'memory' }`: a page has no TCP socket and no
+file. `{ type: 'auto' }` picks memory there.
+
 ## Webhook mode
 
 With `mode: 'webhook'`, `this.get(ChallengeServiceToken)` returns a `ChallengeService`: a store of one-time PKCE

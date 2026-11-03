@@ -130,8 +130,15 @@ export async function bundleWithVite(entryFile: string): Promise<ViteBuild> {
   }
 }
 
-/** A page's browser bundle of several entries that share chunks, from the built packages, written as ES modules Node can run. */
-export async function bundleEntriesWithSharedChunks(entries: Record<string, string>, outdir: string): Promise<void> {
+/**
+ * A page's browser bundle of several entries that share chunks, from the built packages, written as ES modules Node can
+ * run; `nodeRequire` gives each chunk the require() a CommonJS dependency (ioredis) loads Node's built-ins with.
+ */
+export async function bundleEntriesWithSharedChunks(
+  entries: Record<string, string>,
+  outdir: string,
+  { nodeRequire = false } = {},
+): Promise<void> {
   await build({
     entryPoints: entries,
     absWorkingDir: workspaceRoot,
@@ -145,6 +152,9 @@ export async function bundleEntriesWithSharedChunks(entries: Record<string, stri
     platform: 'browser',
     conditions: ['browser'],
     tsconfigRaw: {},
+    banner: nodeRequire
+      ? { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" }
+      : undefined,
     logLevel: 'silent',
     plugins: [externalNodeBuiltins, stubOptionalPeers],
   });

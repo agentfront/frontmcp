@@ -6,6 +6,7 @@ import {
   isAnonymousSubject,
   isVercelKvProvider,
   Plugin,
+  refusePluginStoreInBrowser,
   ToolHook,
   type FlowCtxOf,
   type FrontMcpConfigType,
@@ -44,6 +45,11 @@ function assertReadableBypassHeader(bypassHeader: string | undefined): void {
     `CachePlugin bypassHeader "${bypassHeader}" is never seen by the plugin: only request headers that start ` +
       `with "${BYPASS_HEADER_PREFIX}" reach it. Rename it, e.g. "${BYPASS_HEADER_PREFIX}no-cache".`,
   );
+}
+
+/** In a browser, refuse a cache that `option` puts on Redis, before it connects (#1033). */
+function refuseRedisInBrowser(option: string): void {
+  refusePluginStoreInBrowser({ plugin: 'CachePlugin', option, memory: "type: 'memory'" });
 }
 
 /**
@@ -105,6 +111,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
             }
 
             // Redis provider (including legacy format without provider field)
+            refuseRedisInBrowser("type: 'global-store'");
             return new CacheRedisProvider({
               type: 'redis',
               config: {
@@ -120,6 +127,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
         break;
       case 'redis':
       case 'redis-client':
+        refuseRedisInBrowser(`type: '${options.type}'`);
         providers.push({
           name: 'cache:redis',
           provide: CacheStoreToken,

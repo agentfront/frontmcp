@@ -66,7 +66,9 @@ class OrdersApp {}
 On an app, the plugin folds that app's tools; on `@FrontMcp({ plugins })`, every app's. It adds the `result_query`
 tool; on several apps the server lists one, and it reads the handles of every app's copy. `storage` goes to
 `createStorage()` from `@frontmcp/utils`; `{ type: 'sqlite', sqlite: { path } }` needs `@frontmcp/storage-sqlite`. A
-memory store holds 1000 answers at most and drops the oldest (`storage.memory.maxEntries`, `0` for no limit).
+memory store holds 1000 answers at most and drops the oldest (`storage.memory.maxEntries`, `0` for no limit). In a
+browser build, `{ type: 'redis' }` or `{ type: 'sqlite' }` throws `BrowserStoreUnavailableError` from `init()`, naming
+`storage: { type: 'memory' }`; `{ type: 'auto' }` picks memory in a page.
 
 ### Step 2: Let tools with an output schema fold
 
