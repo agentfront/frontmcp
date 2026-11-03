@@ -1,4 +1,4 @@
-import { hmacSha256 } from '@frontmcp/utils';
+import { getRuntimeContext, hmacSha256, type RuntimeContext } from '@frontmcp/utils';
 
 import { resolvePrincipal } from '../dispatcher';
 import {
@@ -12,6 +12,14 @@ import {
   warnIfRequestStateKeyNotShared,
   type RequestStateBinding,
 } from '../request-state';
+
+jest.mock('@frontmcp/utils', () => {
+  const actual = jest.requireActual('@frontmcp/utils');
+  return { ...actual, getRuntimeContext: jest.fn(actual.getRuntimeContext) };
+});
+
+const runtimeContext = getRuntimeContext as jest.MockedFunction<typeof getRuntimeContext>;
+const realRuntimeContext = jest.requireActual('@frontmcp/utils').getRuntimeContext as () => RuntimeContext;
 
 const BINDING: RequestStateBinding = {
   principal: 'user-1',
@@ -274,6 +282,15 @@ describe('warnIfRequestStateKeyNotShared', () => {
 
   it('stays quiet outside production', () => {
     const logger = setup({ nodeEnv: 'development' });
+
+    warnIfRequestStateKeyNotShared({ logger, metadata: REDIS });
+
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('stays quiet in a browser, a single instance whose config may keep a redis for its Node server', () => {
+    const logger = setup({ nodeEnv: 'production' });
+    runtimeContext.mockReturnValueOnce({ ...realRuntimeContext(), runtime: 'browser' });
 
     warnIfRequestStateKeyNotShared({ logger, metadata: REDIS });
 

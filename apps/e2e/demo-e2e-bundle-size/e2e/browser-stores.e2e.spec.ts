@@ -38,6 +38,7 @@ const SERVER_STORE_PACKAGES: Record<string, RegExp> = {
 interface Startup {
   result?: unknown;
   error?: { name: string; code: string; message: string };
+  stderr: string;
 }
 
 describe('stores in the browser build of create()', () => {
@@ -67,12 +68,12 @@ describe('stores in the browser build of create()', () => {
   });
 
   async function start(options: Record<string, unknown>): Promise<Startup> {
-    const { stdout } = await run(
+    const { stdout, stderr } = await run(
       process.execPath,
       [resolve(__dirname, 'helpers/greet-with-stores.mjs'), bundle, JSON.stringify(options)],
       { encoding: 'utf8' },
     );
-    return JSON.parse(stdout) as Startup;
+    return { ...(JSON.parse(stdout) as Omit<Startup, 'stderr'>), stderr };
   }
 
   async function expectNoStoreOpened(): Promise<void> {
@@ -113,7 +114,9 @@ describe('stores in the browser build of create()', () => {
       jobs: { enabled: true, store: false },
     });
 
-    expect(startup).toEqual({ result: expect.objectContaining({ structuredContent: { value: 'Hello, FrontMCP' } }) });
+    expect(startup.error).toBeUndefined();
+    expect(startup.result).toEqual(expect.objectContaining({ structuredContent: { value: 'Hello, FrontMCP' } }));
+    expect(startup.stderr).not.toContain('WARN');
     await expectNoStoreOpened();
   });
 
