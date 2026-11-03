@@ -19,9 +19,12 @@ import { LazyZodSchema, wrapLazy } from './lazy-schema';
  * target owns nothing, so no invariant applies; every trap forwards to
  * `namespace` instead. Exported for tests — the public entry point is `z`.
  */
-export type StandInFactory = (name: string, args: unknown[], build: (args: unknown[]) => ZodTypeAny) => unknown;
+export type SchemaFactory = (...args: unknown[]) => ZodTypeAny;
 
-const compoundStandIn: StandInFactory = (_name, args, build) => wrapLazy(new LazyZodSchema(() => build(args)));
+export type StandInFactory = (name: string, args: unknown[], factory: SchemaFactory, namespace: object) => unknown;
+
+const compoundStandIn: StandInFactory = (_name, args, factory, namespace) =>
+  wrapLazy(new LazyZodSchema(() => factory.apply(namespace, args)));
 
 export function createLazyZ(
   namespace: typeof realZ,
@@ -31,8 +34,8 @@ export function createLazyZ(
   return new Proxy({} as typeof realZ, {
     get(_target, key, receiver) {
       if (typeof key === 'string' && factories.has(key)) {
-        const realFactory = (namespace as unknown as Record<string, (...a: unknown[]) => ZodTypeAny>)[key];
-        return (...args: unknown[]) => standIn(key, args, (built) => realFactory.apply(namespace, built));
+        const realFactory = (namespace as unknown as Record<string, SchemaFactory>)[key];
+        return (...args: unknown[]) => standIn(key, args, realFactory, namespace);
       }
       return Reflect.get(namespace, key, receiver);
     },
