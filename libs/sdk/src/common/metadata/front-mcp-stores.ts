@@ -13,7 +13,7 @@ const STORE_SETTINGS: ReadonlyArray<readonly [string, string?]> = [
 type ConfigRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is ConfigRecord {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** A config without its store settings: a build reads a server without them, since it opens no store. */

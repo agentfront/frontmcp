@@ -21,6 +21,12 @@ describe('the store settings of a server config', () => {
     });
   });
 
+  it('leave a setting that is not an object as given, for the schema to refuse', () => {
+    const jobs = Object.assign([], { enabled: true, store: false });
+
+    expect(withoutStores({ jobs, tasks: 'all' })).toEqual({ jobs, tasks: 'all' });
+  });
+
   it('are put back as the source gives them', () => {
     expect(withStoresOf(withoutStores(stores), stores)).toEqual(stores);
   });
