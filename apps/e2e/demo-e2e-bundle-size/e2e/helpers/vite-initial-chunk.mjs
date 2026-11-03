@@ -22,8 +22,8 @@ const result = await build({
   },
 });
 
-const manifest = await readJSON(join(outDir, '.vite/manifest.json'));
-const sizeOf = async (chunk) => (await stat(join(outDir, chunk.file))).size;
+const manifest = await readJSON(join(outDir, '.vite', 'manifest.json'));
+const sizeOf = async (chunk) => (await stat(join(outDir, ...chunk.file.split('/')))).size;
 const entryKey = Object.keys(manifest).find((key) => manifest[key].isEntry);
 const initialKeys = new Set();
 const collectInitial = (key) => {

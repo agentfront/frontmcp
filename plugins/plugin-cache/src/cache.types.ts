@@ -1,4 +1,4 @@
-import { Redis as RedisClient } from 'ioredis';
+import type { Redis as RedisClient } from 'ioredis';
 
 declare global {
   interface ExtendFrontMcpToolMetadata {

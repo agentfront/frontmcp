@@ -1,7 +1,7 @@
 /**
  * The browser bundle of a FrontMCP server that create() builds in a web page (#827): what an app's bundler ships
  * for `create()` + one tool, from the built packages and without the optional peers. A feature the SDK loads on
- * demand must stay out of it until the config asks for it.
+ * demand must stay out of it until the config asks for it; what utils and auth load on demand stays out too.
  *
  * Needs the packages built: `nx run-many -t build -p sdk plugin-webmcp`.
  */
@@ -21,11 +21,11 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_295_679 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_302_551 },
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_280_452 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_287_325 },
 ];
 
-const VITE_INITIAL_CHUNK_MAX_BYTES = 761_267;
+const VITE_INITIAL_CHUNK_MAX_BYTES = 761_748;
 
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {

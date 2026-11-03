@@ -8,10 +8,19 @@
  * This enables distributed deployments to share the same encryption secret
  * without requiring manual configuration (for development/testing).
  */
-import * as path from 'path';
-
 import { z } from '@frontmcp/lazy-zod';
-import { base64urlEncode, mkdir, randomBytes, readFile, rename, unlink, writeFile } from '@frontmcp/utils';
+import {
+  base64urlEncode,
+  dirname,
+  isAbsolute,
+  mkdir,
+  pathResolve,
+  randomBytes,
+  readFile,
+  rename,
+  unlink,
+  writeFile,
+} from '@frontmcp/utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -121,12 +130,12 @@ export function resolveSecretPath(options?: SecretPersistenceOptions): string {
   const secretPath = options?.secretPath ?? DEFAULT_SECRET_FILE_PATH;
 
   // If absolute path, use as-is
-  if (path.isAbsolute(secretPath)) {
+  if (isAbsolute(secretPath)) {
     return secretPath;
   }
 
   // Relative paths are resolved from current working directory
-  return path.resolve(process.cwd(), secretPath);
+  return pathResolve(process.cwd(), secretPath);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -190,7 +199,7 @@ export async function saveRememberSecret(
   }
 
   const secretPath = resolveSecretPath(options);
-  const dir = path.dirname(secretPath);
+  const dir = dirname(secretPath);
   const tempPath = `${secretPath}.tmp.${Date.now()}.${base64urlEncode(randomBytes(8))}`;
 
   try {
