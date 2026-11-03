@@ -140,7 +140,11 @@ describe('QuestionStore', () => {
       expect(refused?.reason).toBeInstanceOf(QuestionAlreadyAnsweredError);
       const taken = await store.take('principal:alice', 'deploy', 'call-1');
       const kept = results.findIndex((result) => result.status === 'fulfilled') === 0;
-      expect(taken).toEqual({ kind: 'answered', answer: { status: 'accept', content: { approve: kept } } });
+      expect(taken).toEqual({
+        kind: 'answered',
+        answer: { status: 'accept', content: { approve: kept } },
+        expiresAt: expect.any(Number),
+      });
     });
 
     it('drops content from a decline', async () => {
@@ -151,6 +155,7 @@ describe('QuestionStore', () => {
       expect(await store.take('principal:alice', 'deploy', 'call-1')).toEqual({
         kind: 'answered',
         answer: { status: 'decline' },
+        expiresAt: expect.any(Number),
       });
     });
   });
@@ -175,7 +180,11 @@ describe('QuestionStore', () => {
 
       const next = await store.ask(request({ waiter: 'call-after-reconnect' }));
 
-      expect(next).toEqual({ kind: 'answered', answer: { status: 'accept', content: { approve: true } } });
+      expect(next).toEqual({
+        kind: 'answered',
+        answer: { status: 'accept', content: { approve: true } },
+        expiresAt: expect.any(Number),
+      });
       expect(await store.ask(request({ waiter: 'call-3' }))).toEqual({
         kind: 'waiting',
         question: expect.objectContaining({ answered: false }),
@@ -191,6 +200,7 @@ describe('QuestionStore', () => {
       expect(await store.take('principal:alice', 'deploy', 'session-2-call')).toEqual({
         kind: 'answered',
         answer: { status: 'accept', content: { approve: true } },
+        expiresAt: expect.any(Number),
       });
     });
 
@@ -221,12 +231,26 @@ describe('QuestionStore', () => {
   });
 
   describe('putting back an answer a call could not hand on', () => {
+    it('keeps the expiry of the question the answer belonged to', async () => {
+      const expiresAt = Date.now() + 60_000;
+      await store.restore(request(), { status: 'decline' }, expiresAt);
+
+      expect(await store.list('principal:alice')).toEqual([expect.objectContaining({ answered: true, expiresAt })]);
+    });
+
+    it('drops an answer whose question has expired', async () => {
+      await store.restore(request(), { status: 'decline' }, Date.now() - 1);
+
+      expect(await store.list('principal:alice')).toEqual([]);
+    });
+
     it('keeps it for the next call when the question is gone', async () => {
       await store.restore(request(), { status: 'accept', content: { approve: true } });
 
       expect(await store.ask(request({ waiter: 'next' }))).toEqual({
         kind: 'answered',
         answer: { status: 'accept', content: { approve: true } },
+        expiresAt: expect.any(Number),
       });
     });
 
@@ -238,6 +262,7 @@ describe('QuestionStore', () => {
       expect(await store.take('principal:alice', 'deploy', 'newer')).toEqual({
         kind: 'answered',
         answer: { status: 'decline' },
+        expiresAt: expect.any(Number),
       });
     });
 
@@ -250,6 +275,7 @@ describe('QuestionStore', () => {
       expect(await store.take('principal:alice', 'deploy', 'call-1')).toEqual({
         kind: 'answered',
         answer: { status: 'accept', content: { approve: true } },
+        expiresAt: expect.any(Number),
       });
     });
   });
@@ -296,6 +322,7 @@ describe('QuestionStore', () => {
       expect(await quiet.take('principal:alice', 'deploy', 'call-1')).toEqual({
         kind: 'answered',
         answer: { status: 'decline' },
+        expiresAt: expect.any(Number),
       });
       await quiet.close();
     });
@@ -347,6 +374,7 @@ describe('QuestionStore', () => {
       expect(await store.ask(request({ waiter: 'next' }))).toEqual({
         kind: 'answered',
         answer: { status: 'accept', content: { approve: true } },
+        expiresAt: expect.any(Number),
       });
     });
 
@@ -401,7 +429,7 @@ describe('QuestionStore on SQLite, shared by two processes', () => {
     const outcomes = await Promise.all([one.ask(request({ waiter: 'a' })), two.ask(request({ waiter: 'b' }))]);
 
     expect(outcomes.filter((outcome) => outcome.kind === 'answered')).toEqual([
-      { kind: 'answered', answer: { status: 'accept', content: { approve: true } } },
+      { kind: 'answered', answer: { status: 'accept', content: { approve: true } }, expiresAt: expect.any(Number) },
     ]);
     await Promise.all([answering.close(), one.close(), two.close()]);
   });

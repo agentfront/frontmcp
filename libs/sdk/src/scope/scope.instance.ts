@@ -389,9 +389,11 @@ export class Scope extends ScopeEntry {
           const questionsHelper = persistent
             ? await import('../elicitation/questions/question-scope.helper.js')
             : undefined;
-          // A Redis named only for persistent questions keeps the elicitation state too: on Edge it is the only
-          // distributed store. Other question stores (memory, sqlite) stay theirs alone.
-          const questionsStorage = questionsHelper?.parsePersistentQuestionsOptions(persistent).storage;
+          const onEdgeRuntime = isEdgeRuntime();
+          // Checked before either store opens: on an edge runtime, persistent questions fail startup with the reason.
+          // A Redis named only for persistent questions keeps the elicitation state too; other question stores (memory,
+          // sqlite) stay theirs alone.
+          const questionsStorage = questionsHelper?.persistentQuestionsSettings(persistent, onEdgeRuntime).storage;
           const questionsRedis = !elicitationRedis && questionsStorage?.type === 'redis' ? questionsStorage : undefined;
           const { createElicitationStore } = await import('../elicitation/store/elicitation-store.factory.js');
           const {
@@ -404,7 +406,7 @@ export class Scope extends ScopeEntry {
             sqlite: elicitationSqlite,
             keyPrefix: elicitationRedis?.keyPrefix ?? 'mcp:elicit:',
             logger: this.logger,
-            isEdgeRuntime: isEdgeRuntime(),
+            isEdgeRuntime: onEdgeRuntime,
           });
           this._elicitationStore = elicitStore;
           this.elicitationBackendType = elicitType;
@@ -421,6 +423,7 @@ export class Scope extends ScopeEntry {
               serverName: this.metadata.info.name,
               redis: elicitationRedis,
               sqlite: resolvedTopLevelSqlite,
+              onEdgeRuntime,
               logger: this.logger,
             });
             this._persistentQuestions = questions;

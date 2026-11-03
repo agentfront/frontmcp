@@ -46,7 +46,7 @@ export interface QuestionRequest {
 }
 
 export type QuestionOutcome =
-  | { kind: 'answered'; answer: ElicitResult }
+  | { kind: 'answered'; answer: ElicitResult; expiresAt: number }
   | { kind: 'waiting'; question: PersistentQuestion }
   | { kind: 'superseded' };
 
@@ -115,7 +115,9 @@ export class QuestionStore implements HttpRouteTopicSource {
       }
       const { record, raw } = current;
       if (record.answer) {
-        if (await this.claim(storageKey, raw)) return { kind: 'answered', answer: record.answer };
+        if (await this.claim(storageKey, raw)) {
+          return { kind: 'answered', answer: record.answer, expiresAt: record.expiresAt };
+        }
         continue;
       }
       if (record.waiter === request.waiter) return { kind: 'waiting', question: view(record) };
@@ -133,13 +135,19 @@ export class QuestionStore implements HttpRouteTopicSource {
       if (!current || current.record.waiter !== waiter) return { kind: 'superseded' };
       const { record, raw } = current;
       if (!record.answer) return { kind: 'waiting', question: view(record) };
-      if (await this.claim(storageKey, raw)) return { kind: 'answered', answer: record.answer };
+      if (await this.claim(storageKey, raw)) {
+        return { kind: 'answered', answer: record.answer, expiresAt: record.expiresAt };
+      }
     }
     throw new QuestionStoreBusyError();
   }
 
-  /** Put back an answer a call took but could not hand on, so the next call that asks gets it. */
-  async restore(request: QuestionRequest, answer: ElicitResult): Promise<void> {
+  /**
+   * Put back an answer a call took but could not hand on, so the next call that asks gets it. `expiresAt`, the expiry of
+   * the question it was taken from, is kept: an answer put back never outlives its question, and one past it is dropped.
+   */
+  async restore(request: QuestionRequest, answer: ElicitResult, expiresAt?: number): Promise<void> {
+    if (expiresAt !== undefined && expiresAt <= Date.now()) return;
     const storageKey = this.recordKey(request.subject, request.key);
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       const current = await this.read(storageKey, request.subject);
@@ -148,7 +156,7 @@ export class QuestionStore implements HttpRouteTopicSource {
         if (await this.replace(storageKey, current.raw, { ...current.record, answer })) return;
         continue;
       }
-      if (await this.create(storageKey, request, answer)) return;
+      if (await this.create(storageKey, request, answer, expiresAt)) return;
     }
     throw new QuestionStoreBusyError();
   }
@@ -195,6 +203,7 @@ export class QuestionStore implements HttpRouteTopicSource {
     storageKey: string,
     request: QuestionRequest,
     answer?: ElicitResult,
+    expiresAt?: number,
   ): Promise<QuestionRecord | undefined> {
     const now = Date.now();
     const record: QuestionRecord = {
@@ -204,7 +213,7 @@ export class QuestionStore implements HttpRouteTopicSource {
       message: request.message,
       requestedSchema: request.requestedSchema,
       createdAt: now,
-      expiresAt: now + request.ttlMs,
+      expiresAt: expiresAt ?? now + request.ttlMs,
       waiter: request.waiter,
       ...(answer ? { answer } : {}),
     };

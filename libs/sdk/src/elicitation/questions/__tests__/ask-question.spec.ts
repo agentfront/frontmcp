@@ -138,14 +138,80 @@ describe('askPersistentQuestion', () => {
     await new Promise((settle) => setTimeout(settle, 10));
 
     controller.abort();
-    deliver({ kind: 'answered', answer: { status: 'accept', content: { approve: true } } });
+    const expiresAt = Date.now() + DAY_MS;
+    deliver({ kind: 'answered', answer: { status: 'accept', content: { approve: true } }, expiresAt });
 
     await expect(call).rejects.toThrow(QuestionPendingError);
     await waitFor(async () => (restore.mock.calls.length > 0 ? true : undefined));
-    expect(restore).toHaveBeenCalledWith(expect.objectContaining({ subject: SUBJECT, key: 'deploy' }), {
-      status: 'accept',
-      content: { approve: true },
+    expect(restore).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: SUBJECT, key: 'deploy' }),
+      { status: 'accept', content: { approve: true } },
+      expiresAt,
+    );
+  });
+
+  /** A question of `deploy` with an answer waiting for the next call, and the expiry it was asked with. */
+  const answeredQuestion = async () => {
+    await expect(ask({ waitMs: 20 })).rejects.toThrow(QuestionPendingError);
+    const [question] = await store.list(SUBJECT);
+    await store.answer(SUBJECT, question.id, { status: 'accept', content: { approve: true } });
+    return question;
+  };
+
+  /** The answer of `deploy` is still waiting, with the expiry of its question, and the next call gets it. */
+  const expectAnswerKept = async (expiresAt: number) => {
+    expect(await store.list(SUBJECT)).toEqual([expect.objectContaining({ key: 'deploy', answered: true, expiresAt })]);
+    await expect(ask({ waitMs: 50 })).resolves.toEqual({ status: 'accept', content: { approve: true } });
+  };
+
+  it('leaves a waiting answer for the next call when its call was cancelled before it asked', async () => {
+    const question = await answeredQuestion();
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(ask({ signal: controller.signal })).rejects.toThrow(QuestionPendingError);
+
+    await expectAnswerKept(question.expiresAt);
+  });
+
+  it('leaves a waiting answer for the next call when its call is cancelled while it asks', async () => {
+    const question = await answeredQuestion();
+    const controller = new AbortController();
+    const racing = Object.create(store) as QuestionStore;
+    racing.ask = async (request) => {
+      const outcome = await store.ask(request);
+      controller.abort();
+      return outcome;
+    };
+
+    await expect(
+      askPersistentQuestion({ store: racing, subject: SUBJECT, signal: controller.signal }, 'Deploy v2?', schema, {
+        key: 'deploy',
+        ttlMs: DAY_MS,
+        waitMs: 10_000,
+      }),
+    ).rejects.toThrow(QuestionPendingError);
+
+    await expectAnswerKept(question.expiresAt);
+  });
+
+  it('leaves a waiting answer for the next call when its call is cancelled while the answer is checked', async () => {
+    const question = await answeredQuestion();
+    const controller = new AbortController();
+    const checking = z.object({ approve: z.boolean() }).refine(async () => {
+      controller.abort();
+      return true;
     });
+
+    await expect(
+      askPersistentQuestion({ store, subject: SUBJECT, signal: controller.signal }, 'Deploy v2?', checking, {
+        key: 'deploy',
+        ttlMs: DAY_MS,
+        waitMs: 10_000,
+      }),
+    ).rejects.toThrow(QuestionPendingError);
+
+    await expectAnswerKept(question.expiresAt);
   });
 
   it('does not wait at all for a call already aborted', async () => {

@@ -24,8 +24,9 @@ export interface PersistentQuestionsOptionsInterface {
   ttlMs?: number;
 
   /**
-   * Where questions are kept. Unset: the server's `redis`, else its `sqlite`, else a SQLite file in
-   * `$FRONTMCP_HOME` (`~/.frontmcp/questions.sqlite`), so a question outlives the process that asked it.
+   * Where questions are kept. Unset: `elicitation.redis`, else the server's `redis`, else its `sqlite`, else a SQLite
+   * file in `$FRONTMCP_HOME` (`~/.frontmcp/questions.sqlite`), so a question outlives the process that asked it. An edge
+   * runtime has none of these stores, so persistent questions fail startup there.
    */
   storage?: PersistentQuestionsStorage;
 

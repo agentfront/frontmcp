@@ -157,6 +157,17 @@ describe('openPersistentQuestions', () => {
     await Promise.all([custom?.store.close(), fallback?.store.close()]);
   });
 
+  it('refuses an edge runtime, which has no store a question outlives the isolate in, with the reason', async () => {
+    const opening = openPersistentQuestions({
+      persistent: { storage: { type: 'memory' } },
+      onEdgeRuntime: true,
+      logger,
+    });
+
+    await expect(opening).rejects.toThrow(InvalidQuestionStoreError);
+    await expect(opening).rejects.toThrow(/not available on an edge runtime.*Run the server on Node\.js/);
+  });
+
   it('keeps the questions of two servers on one store apart', async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), 'questions-servers-'));
     const storage = { type: 'sqlite', sqlite: { path: path.join(directory, 'questions.sqlite') } };

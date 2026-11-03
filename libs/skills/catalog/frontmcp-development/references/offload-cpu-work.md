@@ -88,7 +88,7 @@ export class CountWordsTool extends ToolContext {
 - **`options.signal`** (default `this.signal`) stops the work: the worker is terminated and the call rejects with
   `OffloadAbortedError` (`OFFLOAD_ABORTED`). A tool's `this.signal` aborts when the client cancels and when the tool's
   `timeout` passes, so a timed-out tool does not leave its worker running. An agent's aborts when its call is cancelled
-  or fails, its `execution.timeout` included.
+  or fails, a timeout included (`timeout.executeMs`, or `execution.timeout` where it applies: see `create-agent`).
 
 In development (`frontmcp dev`, which runs `tsx`), a worker loads `.ts` modules too: it registers tsx itself, since tsx
 hooks only the main thread (a tsx without the `tsx/cjs/api` and `tsx/esm/api` entry points is skipped, and the worker

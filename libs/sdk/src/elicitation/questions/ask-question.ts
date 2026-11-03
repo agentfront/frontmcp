@@ -19,6 +19,12 @@ export interface PersistentAskDeps {
   signal?: AbortSignal;
 }
 
+/** An answer a call took from the store, and the expiry of the question it answered. */
+interface TakenAnswer {
+  answer: ElicitResult;
+  expiresAt: number;
+}
+
 export interface PersistentAskOptions {
   key: string;
   /** How long the question, and an answer nobody took yet, are kept. */
@@ -61,11 +67,27 @@ export async function askPersistentQuestion<S extends ZodType>(
     ttlMs: options.ttlMs,
     waiter: `call-${randomUUID()}`,
   };
+  /**
+   * Hand this call an answer it took, checked against its schema. When the call was cancelled first, or while the answer
+   * was checked, the answer is put back for the next call, with its question's expiry, and the call gets
+   * `QuestionPendingError`.
+   */
+  const handOver = async (taken: TakenAnswer) => {
+    const putBack = async () => {
+      await store.restore(request, taken.answer, taken.expiresAt).catch(() => undefined);
+      return new QuestionPendingError(options.key, taken.expiresAt);
+    };
+    if (signal?.aborted) throw await putBack();
+    const result = await delivered(taken.answer, schema);
+    if (signal?.aborted) throw await putBack();
+    return result;
+  };
+
   const asked = await store.ask(request);
-  if (asked.kind === 'answered') return delivered(asked.answer, schema);
+  if (asked.kind === 'answered') return handOver(asked);
   const { expiresAt } = asked.question;
 
-  const answer = await new Promise<ElicitResult>((resolve, reject) => {
+  const answer = await new Promise<TakenAnswer>((resolve, reject) => {
     let settled = false;
     let queued = false;
     let chain: Promise<void> = Promise.resolve();
@@ -85,10 +107,10 @@ export async function askPersistentQuestion<S extends ZodType>(
       if (outcome.kind === 'answered') {
         if (settled || signal?.aborted) {
           pending();
-          void store.restore(request, outcome.answer).catch(() => undefined);
+          void store.restore(request, outcome.answer, outcome.expiresAt).catch(() => undefined);
           return;
         }
-        finish(() => resolve(outcome.answer));
+        finish(() => resolve(outcome));
       } else if (outcome.kind === 'superseded') {
         finish(() => reject(new QuestionSupersededError(options.key)));
       }
@@ -123,7 +145,7 @@ export async function askPersistentQuestion<S extends ZodType>(
     signal?.addEventListener('abort', onAbort, { once: true });
     check();
   });
-  return delivered(answer, schema);
+  return handOver(answer);
 }
 
 /** `this.elicit(message, schema, { persist })`: checks the call, then asks for the caller the request names. */

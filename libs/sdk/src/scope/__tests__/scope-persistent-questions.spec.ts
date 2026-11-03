@@ -1,12 +1,14 @@
 /**
- * On an edge runtime, elicitation needs a distributed store. A Redis named only for persistent questions
- * (`elicitation.persistent.storage`) is one: the scope keeps its elicitation state there too, instead of failing
- * to start before the questions open.
+ * The stores a scope opens for persistent questions. On Node.js, a Redis named only for persistent questions
+ * (`elicitation.persistent.storage`) keeps the elicitation state too, and both close with the scope. An edge runtime
+ * has no store a question can be kept in, so persistent questions fail startup there with a reason, before either
+ * store is opened.
  */
 
 import 'reflect-metadata';
 
 import { App } from '../../common/decorators/app.decorator';
+import { InvalidQuestionStoreError } from '../../elicitation/questions/question.errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 
 /** What the scope asked each store factory for. */
@@ -76,7 +78,7 @@ const QUESTIONS_REDIS = { type: 'redis', redis: { config: { host: 'redis.interna
 @App({ id: 'edge-questions', name: 'edge-questions' })
 class EdgeQuestionsApp {}
 
-describe('persistent questions on an edge runtime', () => {
+describe('the stores of persistent questions', () => {
   afterEach(async () => {
     await Promise.all(startedScopes.splice(0).map((scope) => scope.dispose()));
     mockStoreRequests.elicitation.length = 0;
@@ -84,14 +86,15 @@ describe('persistent questions on an edge runtime', () => {
     mockElicitationStorages.length = 0;
   });
 
-  it('keeps the elicitation state in the Redis named for persistent questions, and starts', async () => {
-    const instance = await withEdgeRuntime(() =>
-      FrontMcpInstance.createForGraph({
-        info: { name: 'edge-questions', version: '0.0.0' },
-        apps: [EdgeQuestionsApp],
-        elicitation: { enabled: true, persistent: { storage: QUESTIONS_REDIS } },
-      }),
-    );
+  const withQuestionsRedis = () =>
+    FrontMcpInstance.createForGraph({
+      info: { name: 'edge-questions', version: '0.0.0' },
+      apps: [EdgeQuestionsApp],
+      elicitation: { enabled: true, persistent: { storage: QUESTIONS_REDIS } },
+    });
+
+  it('keeps the elicitation state in the Redis named for persistent questions', async () => {
+    const instance = await withQuestionsRedis();
     const [scope] = instance.getScopes() as unknown as StartedScope[];
     startedScopes.push(scope);
 
@@ -101,13 +104,7 @@ describe('persistent questions on an edge runtime', () => {
   });
 
   it('closes the connection of the elicitation store it opened when the scope is disposed', async () => {
-    const instance = await withEdgeRuntime(() =>
-      FrontMcpInstance.createForGraph({
-        info: { name: 'edge-questions', version: '0.0.0' },
-        apps: [EdgeQuestionsApp],
-        elicitation: { enabled: true, persistent: { storage: QUESTIONS_REDIS } },
-      }),
-    );
+    const instance = await withQuestionsRedis();
     const [scope] = instance.getScopes() as unknown as StartedScope[];
     expect(mockElicitationStorages).toHaveLength(1);
 
@@ -116,16 +113,24 @@ describe('persistent questions on an edge runtime', () => {
     expect(mockElicitationStorages[0].disconnect).toHaveBeenCalledTimes(1);
   });
 
-  it('still refuses persistent questions kept in memory, which an edge runtime cannot share', async () => {
-    await expect(
-      withEdgeRuntime(() =>
+  it.each([
+    ['redis', QUESTIONS_REDIS],
+    ['memory', { type: 'memory' }],
+  ] as const)(
+    'refuses persistent questions on an edge runtime, with the reason, before opening a store (%s)',
+    async (_type, storage) => {
+      const starting = withEdgeRuntime(() =>
         FrontMcpInstance.createForGraph({
           info: { name: 'edge-questions', version: '0.0.0' },
           apps: [EdgeQuestionsApp],
-          elicitation: { enabled: true, persistent: { storage: { type: 'memory' } } },
+          elicitation: { enabled: true, persistent: { storage } },
         }),
-      ),
-    ).rejects.toThrow(/distributed storage when running on Edge runtime/);
-    expect(mockStoreRequests.elicitation).toEqual([expect.not.objectContaining({ storage: expect.anything() })]);
-  });
+      );
+
+      await expect(starting).rejects.toThrow(InvalidQuestionStoreError);
+      await expect(starting).rejects.toThrow(/not available on an edge runtime.*TCP connection/);
+      expect(mockStoreRequests.elicitation).toEqual([]);
+      expect(mockStoreRequests.questions).toEqual([]);
+    },
+  );
 });

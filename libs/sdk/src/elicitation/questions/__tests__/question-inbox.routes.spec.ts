@@ -132,6 +132,7 @@ describe('the question inbox', () => {
     expect(await store.take('principal:alice', 'answer-once', 'waiter-answer-once')).toEqual({
       kind: 'answered',
       answer: { status: 'accept', content: { approve: true } },
+      expiresAt: expect.any(Number),
     });
   });
 

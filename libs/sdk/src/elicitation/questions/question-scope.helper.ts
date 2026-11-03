@@ -50,6 +50,25 @@ export function parsePersistentQuestionsOptions(persistent: unknown): Persistent
   return { ...parsed.data, storage: parsed.data.storage as PersistentQuestionsStorage | undefined };
 }
 
+/**
+ * Why an edge runtime cannot keep questions. `upstash` and `vercel-kv` would reach it over HTTP, but they have no atomic
+ * compare-and-set (`setIfEquals`), which answering and handing over a question needs.
+ */
+const NOT_ON_EDGE_RUNTIME =
+  'it is not available on an edge runtime: a question must outlive the isolate that asked it, and none of its stores ' +
+  "runs there ('redis' needs a TCP connection, 'sqlite' a local file, and 'memory' ends with the isolate). Run the " +
+  'server on Node.js to keep questions, or turn elicitation.persistent off';
+
+/** `elicitation.persistent`, checked for where the server runs: a mistake, or an edge runtime, fails the boot. */
+export function persistentQuestionsSettings(
+  persistent: unknown,
+  onEdgeRuntime: boolean,
+): PersistentQuestionsOptionsInterface {
+  const settings = parsePersistentQuestionsOptions(persistent);
+  if (onEdgeRuntime) throw new InvalidQuestionStoreError(NOT_ON_EDGE_RUNTIME);
+  return settings;
+}
+
 /** A scope's persistent questions: the store, a question's default TTL, and where inbox links go. */
 export interface PersistentQuestions {
   store: QuestionStore;
@@ -65,11 +84,13 @@ export async function openPersistentQuestions(options: {
   serverName?: string;
   redis?: unknown;
   sqlite?: SqliteAdapterOptions;
+  /** Whether the server runs on an edge runtime, where no store of a question runs. */
+  onEdgeRuntime?: boolean;
   logger: FrontMcpLogger;
 }): Promise<PersistentQuestions | undefined> {
   const { persistent, serverName = '', logger } = options;
   if (!persistent) return undefined;
-  const settings = parsePersistentQuestionsOptions(persistent);
+  const settings = persistentQuestionsSettings(persistent, options.onEdgeRuntime ?? false);
   const storage = await resolveQuestionStorage({
     storage: settings.storage,
     redis: options.redis,

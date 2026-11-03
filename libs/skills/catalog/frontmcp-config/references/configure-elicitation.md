@@ -194,10 +194,12 @@ class InboxLinkTool extends ToolContext {
   call of the subject asks while one waits, the newer one waits for it and the older fails with
   `QuestionSupersededError`. Each answer is handed to one call only.
 - **Storage:** `persistent.storage` (memory, redis or sqlite), else `elicitation.redis`, else the server's `redis`, else
-  its `sqlite`, else `questions.sqlite` in `$FRONTMCP_HOME` (`~/.frontmcp`, made owner-only). Serverless and edge need
-  one named. A `persistent.storage` that names Redis, with neither `elicitation.redis` nor the server's `redis` set,
-  keeps the elicitation state too (under `mcp:elicit:`), so an edge server needs no other store; with the server's
-  `sqlite` set, the elicitation state stays there. With `MCP_ELICITATION_SECRET` (or `MCP_SESSION_SECRET` /
+  its `sqlite`, else `questions.sqlite` in `$FRONTMCP_HOME` (`~/.frontmcp`, made owner-only). Serverless needs one
+  named. An edge runtime cannot keep questions (`redis` needs a TCP connection, `sqlite` a local file, and `memory`
+  ends with the isolate), so `elicitation.persistent` fails startup there with `InvalidQuestionStoreError`
+  (`it is not available on an edge runtime ...`); run the server on Node.js to use it. A `persistent.storage` that
+  names Redis, with neither `elicitation.redis` nor the server's `redis` set, keeps the elicitation state too (under
+  `mcp:elicit:`); with the server's `sqlite` set, the elicitation state stays there. With `MCP_ELICITATION_SECRET` (or `MCP_SESSION_SECRET` /
   `MCP_SERVER_SECRET`) set, questions and answers are encrypted at rest (AES-256-GCM with a key derived from the secret
   and the subject, storage keys are HMACs); without one they are kept in the clear, so the default file is refused when
   the group or others could read it or replace it. Changing the secret drops the waiting questions (they expire with
