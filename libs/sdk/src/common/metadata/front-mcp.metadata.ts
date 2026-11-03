@@ -174,7 +174,8 @@ export interface FrontMcpBaseMetadata {
   offload?: OffloadOptionsInput;
 
   /**
-   * Development aids: `hookTrace` adds the hooks a call ran to its answer's `_meta['frontmcp/trace']`.
+   * Development aids: `hookTrace` adds the hooks a call ran to its answer's `_meta['frontmcp/trace']` (no key when
+   * no hook ran).
    * @default { hookTrace: true } when NODE_ENV is 'development', {} otherwise
    */
   devtools?: DevtoolsOptionsInput;

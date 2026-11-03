@@ -5,7 +5,8 @@ import type { RawZodShape } from '../../common.types';
 export interface DevtoolsOptionsInterface {
   /**
    * Add `_meta['frontmcp/trace']` to tool, resource and prompt answers: the hooks that ran for the call, in order,
-   * each as `{ owner, method, stage, type, ms, outcome }`, never with their arguments or answers.
+   * each as `{ owner, method, stage, type, ms, outcome }`, never with their arguments or answers. An answer for
+   * which no hook ran has no such key.
    * @default true when NODE_ENV is 'development', false otherwise
    */
   hookTrace?: boolean;
