@@ -19,6 +19,7 @@ export {
   ScopeDeniedError,
   InMemoryStoreRequiredError,
   OrchestratorJwksNotAvailableError,
+  SecureStoreConfigError,
   AuthInvalidInputError,
   CredentialStorageError,
   AuthFlowError,

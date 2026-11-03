@@ -556,6 +556,26 @@ const secureStoreCommonFields = {
   encryption: secureStoreEncryptionSchema.optional(),
 };
 
+const secureStoreBackingSchemas = {
+  sqlite: tokenStorageSqliteSchema,
+  redis: redisConfigSchema,
+  backend: secureStoreCustomBackendSchema,
+};
+
+/** Why the backing a secure-store config names cannot be used; a union alone says "Invalid input". */
+function secureStoreBackingError(issue: { input?: unknown }): string | undefined {
+  if (typeof issue.input !== 'object' || issue.input === null) return undefined;
+  const config = issue.input as Record<string, unknown>;
+  for (const [backing, schema] of Object.entries(secureStoreBackingSchemas)) {
+    if (config[backing] === undefined) continue;
+    const nested = schema.safeParse(config[backing]).error?.issues[0];
+    if (!nested) continue;
+    const where = ['secureStore', backing, ...nested.path.map(String)].join('.');
+    return nested.message.startsWith(where) ? nested.message : `${where}: ${nested.message}`;
+  }
+  return undefined;
+}
+
 /**
  * Secure-store configuration (#470). Mirrors the {@link tokenStorageConfigSchema}
  * selection pattern, plus a namespace `scope` and a pluggable custom `backend`:
@@ -569,17 +589,22 @@ const secureStoreCommonFields = {
  * The object forms additionally accept `scope`, `ttlMs`, and (for built-ins)
  * `encryption`.
  */
-export const secureStoreConfigSchema = z.union([
-  z.literal('memory'),
-  // Backing-bearing variants MUST precede the bare-object variant: Zod object
-  // schemas are non-strict (extra keys allowed), so a bare `z.object({ scope })`
-  // would otherwise match `{ sqlite, scope }` first and silently strip the
-  // backing. Ordering most-specific-first keeps sqlite/redis/custom intact.
-  z.object({ sqlite: tokenStorageSqliteSchema, ...secureStoreCommonFields }),
-  z.object({ redis: redisConfigSchema, ...secureStoreCommonFields }),
-  z.object({ backend: secureStoreCustomBackendSchema, ...secureStoreCommonFields }),
-  z.object({ ...secureStoreCommonFields }),
-]);
+export const secureStoreConfigSchema = z.union(
+  [
+    z.literal('memory'),
+    z.object({ sqlite: secureStoreBackingSchemas.sqlite, ...secureStoreCommonFields }),
+    z.object({ redis: secureStoreBackingSchemas.redis, ...secureStoreCommonFields }),
+    z.object({ backend: secureStoreBackingSchemas.backend, ...secureStoreCommonFields }),
+    // A backing it cannot use is refused, not swapped for the memory store
+    z.object({
+      sqlite: z.undefined().optional(),
+      redis: z.undefined().optional(),
+      backend: z.undefined().optional(),
+      ...secureStoreCommonFields,
+    }),
+  ],
+  { error: secureStoreBackingError },
+);
 
 export type SecureStoreConfig = z.infer<typeof secureStoreConfigSchema>;
 export type SecureStoreConfigInput = z.input<typeof secureStoreConfigSchema>;

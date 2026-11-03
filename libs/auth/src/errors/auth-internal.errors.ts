@@ -185,6 +185,15 @@ export class OrchestratorJwksNotAvailableError extends AuthInternalError {
 }
 
 /**
+ * Thrown when `auth.secureStore` names a backing that cannot be used, instead of keeping the secrets in memory.
+ */
+export class SecureStoreConfigError extends AuthInternalError {
+  constructor(message: string) {
+    super(`Invalid auth.secureStore: ${message}`, 'SECURE_STORE_CONFIG_INVALID');
+  }
+}
+
+/**
  * Thrown when invalid input is provided to an auth operation.
  */
 export class AuthInvalidInputError extends AuthInternalError {

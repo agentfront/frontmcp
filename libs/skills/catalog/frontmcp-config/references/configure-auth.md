@@ -311,6 +311,8 @@ Backings:
 - `{ sqlite: { path } }` / `{ redis: { ... } }` -- persistent; same `VaultEncryption` over the shared `StorageAdapter` (reuses `createTokenStorageAdapter`). When the backing matches `tokenStorage`, the same adapter/connection is shared.
 - `{ backend }` -- a **custom** backing implementing the four-method `SecureStoreBackend` (`get`/`set`/`delete`/`list`), e.g. an OS keychain. Used as-is — **no native dependency is bundled** by the framework (see below).
 
+A backing the store cannot use stops startup with a message naming it, such as `secureStore.sqlite.path: Too small: expected string to have >=1 characters`, `secureStore.redis.host: ...` (the secure store's `redis` takes `host` / `port`, not a `url`) or `secureStore.backend must implement get/set/delete/list (SecureStoreBackend)`; `createSecureStore()` refuses one with `SecureStoreConfigError` (`SECURE_STORE_CONFIG_INVALID`). Up to 1.10 such a config kept the secrets in memory, with no error. A backing left `undefined` still selects the memory store.
+
 Scope (`scope`, identity is hashed into the namespace, never stored raw):
 
 - `user` (default) -- keyed by the authenticated `sub`; anonymous requests read empty / skip writes.
