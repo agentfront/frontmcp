@@ -678,6 +678,21 @@ export type {
 } from './fetch';
 
 // ============================================
+// People Auth Module (sign-in for a server's own pages)
+// ============================================
+export { LoopbackTokenAuth, PEOPLE_SESSION_COOKIE, peopleAuthOptionsSchema, peopleSessionCookie } from './people';
+export type {
+  LoopbackTokenPeopleAuthOptions,
+  PeopleAuthOption,
+  PeopleAuthOptions,
+  PeopleCodeIssue,
+  PeopleSession,
+  PeopleSessionCookie,
+  PeopleSessionIssue,
+  PeopleSignInRefusal,
+} from './people';
+
+// ============================================
 // Shared Local Server Identity Module
 // ============================================
 export {

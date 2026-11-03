@@ -260,7 +260,7 @@ export class Scope extends ScopeEntry {
     this.scopeHooks = new HookRegistry(scopeProviders, []);
     this.scopeFlows = new FlowRegistry(
       scopeProviders,
-      httpServing ? [httpServing.HttpRequestFlow, httpServing.HttpIpFilterFlow] : [],
+      httpServing ? [httpServing.HttpRouteFlow, httpServing.HttpRequestFlow, httpServing.HttpIpFilterFlow] : [],
     );
     this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth, createPrimaryAuth);
     this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps, scopeRef);
@@ -992,6 +992,7 @@ export class Scope extends ScopeEntry {
     // reserved-path guard uses the resolved entryPath + routeBase, so it is
     // aware of split-by-app scope bases (e.g. /mcp/billing).
     if (httpServing) {
+      httpServing.attachHttpRoutes(this, this.globalProviders);
       httpServing.registerCustomHttpRoutes({
         routes: this.metadata.http?.routes,
         server: this.httpRouteRegistrar,
@@ -1942,6 +1943,7 @@ export class Scope extends ScopeEntry {
     }
     await this.closeHaRedisClient();
     await this.teardownChannels();
+    this.httpRouteTable?.closeStreams();
   }
 
   /** Disconnect service channels (`onDisconnect()`) and drop channel subscriptions, once. */

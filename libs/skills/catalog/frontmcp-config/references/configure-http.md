@@ -457,6 +457,25 @@ set their own content type **before** sending the body:
 > protocol stream and inflate token usage. The custom route delivers bytes on a
 > separate HTTP request the client fetches directly.
 
+### Pages for people: `@HttpRoute` and `http.auth.people`
+
+For pages, JSON APIs or live SSE views that need the app's providers, write `@HttpRoute` classes and list them in
+`@App({ routes })` (see `create-http-route` in `frontmcp-development`). They run through the hookable `http:route`
+flow: the IP filter, a same-origin check on `POST`/`PUT`/`PATCH`/`DELETE`, and people auth:
+
+```typescript
+http: {
+  port: 3000,
+  // A token printed once at startup buys one-time sign-in codes; a code posted from the server's own
+  // page buys an HttpOnly, SameSite=Strict cookie. Routes then need a signed-in person unless their `auth` is 'public'.
+  auth: { people: 'loopback-token' },
+  // or: auth: { people: { mode: 'loopback-token', codeTtlMs: 30_000, sessionTtlMs: 3_600_000, cookiePath: '/app' } },
+}
+```
+
+The sign-in routes are `POST /_frontmcp/people/code` (with `Authorization: Bearer <token>`), and
+`GET`/`POST /_frontmcp/people/login`. An invalid `http.auth.people` fails startup with `InvalidPeopleAuthOptionsError`.
+
 ## Forwarded Request Headers
 
 A tool reads the request's custom headers from `this.context.metadata.customHeaders`. By default only `x-frontmcp-*` headers are kept there. `http.forwardHeaders` keeps more: header names or globs (`*` any characters, `?` one), matched without regard to case. Names are stored lower-cased; a header name over 256 characters is never kept.

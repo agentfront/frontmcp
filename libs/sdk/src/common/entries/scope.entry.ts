@@ -13,6 +13,7 @@ import type { ChannelEventBus } from '../../channel/sources/app-event.source';
 import type { ElicitationStore } from '../../elicitation/store/elicitation.store';
 import type { HaManager } from '../../ha';
 import type HookRegistry from '../../hooks/hook.registry';
+import type { HttpRouteTable } from '../../http-route/http-route.table';
 import type JobRegistry from '../../job/job.registry';
 import type { NotificationService } from '../../notification';
 import type PromptRegistry from '../../prompt/prompt.registry';
@@ -104,6 +105,9 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
   abstract get eventStore(): EventStore | undefined;
 
   haManager?: HaManager;
+
+  /** The scope's `@HttpRoute`s, which the `http:route` flow serves; `undefined` when it has none. */
+  declare httpRouteTable?: HttpRouteTable;
 
   abstract get rateLimitManager(): GuardManager | undefined;
 

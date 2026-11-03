@@ -46,6 +46,7 @@ const fixtureFiles = [
   'materialized-resources-must-compile.ts',
   'duties-must-compile.ts',
   'offload-must-compile.ts',
+  'http-routes-must-compile.ts',
   'shared-server-must-compile.ts',
   'durable-jobs-must-compile.ts',
   'build-manifest-must-compile.ts',
@@ -215,6 +216,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types @Duty, its metadata and run context, and createContainer({ runDuties, info })', () => {
     expect(describeEach(inFixtureFile('duties-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types @HttpRoute, HttpRouteContext, SSE routes, HttpRouteHook and http.auth.people', () => {
+    expect(describeEach(inFixtureFile('http-routes-must-compile.ts'))).toEqual([]);
   });
 
   it('types this.offload() from the offloaded function, @Resource({ worker }) and the offload option', () => {

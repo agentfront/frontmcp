@@ -1847,6 +1847,11 @@
           "examples": []
         },
         {
+          "name": "create-http-route",
+          "description": "Serve pages, APIs and live SSE views for people beside the MCP endpoint with @HttpRoute classes that share the app's providers, behind people auth and a same-origin check",
+          "examples": []
+        },
+        {
           "name": "create-job",
           "description": "Create long-running background jobs with retry policies, timeouts, cancellation, cleanup, progress tracking, and permissions",
           "examples": [

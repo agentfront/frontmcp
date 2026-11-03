@@ -382,6 +382,12 @@ export type { OpenAIAdapterConfig, OpenAIApiMode, AnthropicAdapterConfig } from 
 export const ToolHook = /* @__PURE__ */ FlowHooksOf('tools:call-tool');
 export const ListToolsHook = /* @__PURE__ */ FlowHooksOf('tools:list-tools');
 export const HttpHook = /* @__PURE__ */ FlowHooksOf('http:request');
+// `@HttpRoute` requests: checkIpFilter, findRoute, acquireQuota, checkSameOrigin, authenticatePerson, handle
+export const HttpRouteHook = /* @__PURE__ */ FlowHooksOf('http:route');
+export type { default as HttpRouteFlow } from './http-route/flows/http.route.flow';
+// People sign-in for `@HttpRoute` pages: a tool hands a person a sign-in link with `this.get(LoopbackTokenAuth).createCode()`
+export { LoopbackTokenAuth, PEOPLE_SESSION_COOKIE } from '@frontmcp/auth';
+export type { PeopleAuthOption, PeopleSession } from '@frontmcp/auth';
 
 // Custom authorization-UI primitives (#469) are configured via the `auth.ui`
 // slot→file map + `auth.extras` name→handler map on the auth config — there is

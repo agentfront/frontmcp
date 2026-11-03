@@ -24,6 +24,7 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
        +-- @Job            (long-running job)
        +-- @Workflow       (multi-step workflow)
        +-- @Duty           (recurring work in one process, a provider)
+       +-- @HttpRoute      (page, API or SSE view for people)
        +-- @Flow           (custom flow)
        +-- @Hook (@Will, @Did, @Stage, @Around, @Finally)
 ```
@@ -755,26 +756,58 @@ class PruneCacheDuty {
 
 ---
 
+## 17. @HttpRoute
+
+**Purpose:** Serves an HTTP request beside the MCP endpoint, through the hookable `http:route` flow (IP filter, rate
+limit, same-origin check on mutations, people auth), with the app's providers.
+
+**When to use:** A page, JSON API or live SSE view for a person (see `create-http-route`).
+
+**Key fields:**
+
+| Field    | Description                                                                                   |
+| -------- | --------------------------------------------------------------------------------------------- |
+| `method` | `'GET'`, `'POST'`, `'PUT'`, `'PATCH'` or `'DELETE'`                                           |
+| `path`   | Express-style path, or a function returning it at startup                                     |
+| `auth?`  | `'people'` (default with `http.auth.people`) or `'public'`                                    |
+| `sse?`   | `{ store, topics, coalesceMs?, heartbeatMs? }`: `handle()` is the view, re-sent on each write |
+
+```typescript
+import { HttpRoute, HttpRouteContext } from '@frontmcp/sdk';
+
+@HttpRoute({ method: 'GET', path: '/board/:id' })
+class BoardPage extends HttpRouteContext {
+  async handle() {
+    return this.get(BoardService).find(this.params['id']);
+  }
+}
+
+// Register it on its app: @App({ providers: [BoardService], routes: [BoardPage] })
+```
+
+---
+
 ## Quick Reference Table
 
-| Decorator                            | Extends           | Registered In                   | Purpose                  |
-| ------------------------------------ | ----------------- | ------------------------------- | ------------------------ |
-| `@FrontMcp`                          | -                 | Root                            | Server configuration     |
-| `@App`                               | -                 | `@FrontMcp.apps`                | Module grouping          |
-| `@Tool`                              | `ToolContext`     | `@App.tools`                    | Executable action        |
-| `@Prompt`                            | `PromptContext`   | `@App.prompts`                  | Prompt template          |
-| `@Resource`                          | `ResourceContext` | `@App.resources`                | Static data              |
-| `@ResourceTemplate`                  | `ResourceContext` | `@App.resources`                | Parameterized data       |
-| `@Agent`                             | `AgentContext`    | `@App.agents`                   | Autonomous AI agent      |
-| `@Skill`                             | -                 | `@App.skills`                   | Knowledge package        |
-| `@Plugin`                            | -                 | `@App.plugins`                  | Cross-cutting concern    |
-| `@Adapter`                           | -                 | `@App.adapters`                 | External integration     |
-| `@Provider`                          | -                 | `@App.providers`                | DI binding               |
-| `@Flow`                              | -                 | `@App`                          | Custom flow              |
-| `@Job`                               | `JobContext`      | `@App.jobs`                     | Background task          |
-| `@Workflow`                          | -                 | `@App.workflows`                | Multi-step orchestration |
-| `@Duty`                              | -                 | `@App.providers`                | Recurring work           |
-| `@Will/@Did/@Stage/@Around/@Finally` | -                 | Plugin, provider or entry class | Flow stage hooks         |
+| Decorator                            | Extends            | Registered In                   | Purpose                  |
+| ------------------------------------ | ------------------ | ------------------------------- | ------------------------ |
+| `@FrontMcp`                          | -                  | Root                            | Server configuration     |
+| `@App`                               | -                  | `@FrontMcp.apps`                | Module grouping          |
+| `@Tool`                              | `ToolContext`      | `@App.tools`                    | Executable action        |
+| `@Prompt`                            | `PromptContext`    | `@App.prompts`                  | Prompt template          |
+| `@Resource`                          | `ResourceContext`  | `@App.resources`                | Static data              |
+| `@ResourceTemplate`                  | `ResourceContext`  | `@App.resources`                | Parameterized data       |
+| `@Agent`                             | `AgentContext`     | `@App.agents`                   | Autonomous AI agent      |
+| `@Skill`                             | -                  | `@App.skills`                   | Knowledge package        |
+| `@Plugin`                            | -                  | `@App.plugins`                  | Cross-cutting concern    |
+| `@Adapter`                           | -                  | `@App.adapters`                 | External integration     |
+| `@Provider`                          | -                  | `@App.providers`                | DI binding               |
+| `@Flow`                              | -                  | `@App`                          | Custom flow              |
+| `@Job`                               | `JobContext`       | `@App.jobs`                     | Background task          |
+| `@Workflow`                          | -                  | `@App.workflows`                | Multi-step orchestration |
+| `@Duty`                              | -                  | `@App.providers`                | Recurring work           |
+| `@HttpRoute`                         | `HttpRouteContext` | `@App.routes`                   | Page or API for people   |
+| `@Will/@Did/@Stage/@Around/@Finally` | -                  | Plugin, provider or entry class | Flow stage hooks         |
 
 ---
 
