@@ -604,6 +604,8 @@ A server with a top-level `sqlite` (or `redis`) and no `jobs.store` keeps its ru
 
 `jobs: { enabled: true, store: false }` keeps runs and dynamic definitions in this process memory although the server has a top-level `redis` or `sqlite`, which its other subsystems (sessions, tasks) keep using. `store` takes `false` or an object; any other value stops startup with `jobs.store must be false (runs kept in memory) or an object with redis or sqlite`. A `runner: 'detached'` job needs a store other processes share, so it cannot use `false`. The generated CLI (`frontmcp build --target cli`, `connect(config, { mode: 'cli' })`) validates `jobs` the same way; up to 1.10 it took an invalid `jobs.store` in a config object for unset and kept the runs in the top-level `redis` or `sqlite`, and accepted a `jobs` block without `enabled`.
 
+`jobs.store.redis` takes a Redis server: a Vercel KV one (`provider: 'vercel-kv'`) stops startup with `JobStoreNotSupportedError` (`JOB_STORE_NOT_SUPPORTED`), since the job stores connect over the Redis protocol; up to 1.10 they connected to a Redis on localhost instead. A top-level Vercel KV `redis` is passed over, as above.
+
 ```typescript
 @FrontMcp({
   info: { name: 'my-server', version: '1.0.0' },

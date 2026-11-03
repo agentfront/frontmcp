@@ -283,11 +283,15 @@ top-level `sqlite` and `jobs` as the server does; up to 1.10 it took an empty
 `sqlite.path` in a config object for the default path, and kept its tasks
 unencrypted on a missing `encryption.secret`.
 
-In the browser build (`create()` in a page), a subsystem that would open SQLite
-or Redis, its own or the top-level one, stops startup with
-`BrowserStoreUnavailableError` (`BROWSER_STORE_UNAVAILABLE`), which names its
-switch: a browser has no file system and no TCP socket. Leave `sqlite` and
-`redis` out of the browser build's config, or set the switches.
+In the browser build (`create()` in a page), every subsystem or plugin store
+that would open SQLite or Redis, its own or the top-level one, stops startup
+with one `BrowserStoreUnavailableError` (`BROWSER_STORE_UNAVAILABLE`), which
+names each store's switch: a browser has no file system and no TCP socket.
+Leave `sqlite` and `redis` out of the browser build's config, or set the
+switches. `sqliteStorageProvider()` is refused when its provider is built, with
+the same error inside the provider's `ProviderConstructionError`. A build
+(`frontmcp build`) reads the server without opening it, so the build writes no
+file; up to 1.10 it did.
 
 If you set the top-level `sqlite` block but disable every consuming subsystem,
 the SDK emits a WARN at startup so the no-op doesn't go silent:

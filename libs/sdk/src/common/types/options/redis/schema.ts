@@ -244,22 +244,30 @@ export const redisUrlSchema = z
     };
   });
 
-/** The branch errors a failed union reports, as far as the URL message needs them. */
+/** The input and branch errors a failed union reports, as far as its messages need them. */
 interface UnionIssueLike {
+  input?: unknown;
   errors?: ReadonlyArray<ReadonlyArray<{ code?: string; message?: string; path?: ReadonlyArray<PropertyKey> }>>;
+}
+
+/** A Redis server named by neither field, as when both come from unset variables. */
+function lacksHostAndUrl(input: unknown): boolean {
+  if (typeof input !== 'object' || input === null) return false;
+  const { host, url, provider } = input as Record<string, unknown>;
+  return host === undefined && url === undefined && (provider === undefined || provider === 'redis');
 }
 
 /**
  * A union reports "Invalid input" when no branch matches, burying the reason a
  * `url` was refused among the other branches' complaints about a missing
- * `host`. Surface the URL branch's own message instead.
+ * `host`. Surface the URL branch's own message instead, or what is missing.
  */
 function redisUnionError(issue: UnionIssueLike): string | undefined {
   for (const branch of issue.errors ?? []) {
     const urlIssue = branch.find((entry) => entry.code === 'custom' && entry.path?.[0] === 'url');
     if (urlIssue?.message) return urlIssue.message;
   }
-  return undefined;
+  return lacksHostAndUrl(issue.input) ? 'redis needs host or url' : undefined;
 }
 
 // ============================================
@@ -380,8 +388,8 @@ export function isRedisProvider(options: RedisOptions): options is RedisProvider
 /**
  * Check if options are for Vercel KV provider
  */
-export function isVercelKvProvider(options: RedisOptions): options is VercelKvProviderOptions {
-  return options.provider === 'vercel-kv';
+export function isVercelKvProvider(options: RedisOptions | RedisOptionsInput): options is VercelKvProviderOptions {
+  return 'provider' in options && options.provider === 'vercel-kv';
 }
 
 /**

@@ -9,9 +9,10 @@ import {
   FRONTMCP_CONTEXT,
   Plugin,
   ProviderScope,
-  refusePluginStoreInBrowser,
   ScopeEntry,
+  storeProvider,
   type FrontMcpContext,
+  type PluginStoreInBrowser,
   type ProviderType,
 } from '@frontmcp/sdk';
 import type { NamespacedStorage, RootStorage, StorageConfig } from '@frontmcp/utils';
@@ -106,16 +107,6 @@ export interface ApprovalPluginOptions {
   cleanupIntervalSeconds?: number;
 }
 
-/** In a browser, refuse a `storage` on Redis or SQLite before it opens (#1033). */
-function refuseRedisOrSqliteInBrowser({ storage, storageInstance }: ApprovalPluginOptions): void {
-  const type = storageInstance ? undefined : storage?.type;
-  refusePluginStoreInBrowser({
-    plugin: 'ApprovalPlugin',
-    option: type === 'redis' || type === 'sqlite' ? `storage: { type: '${type}' }` : undefined,
-    memory: "storage: { type: 'memory' }",
-  });
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // ApprovalPlugin
 // ─────────────────────────────────────────────────────────────────────────────
@@ -186,6 +177,18 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
     };
   }
 
+  /** A `storage` on Redis or SQLite, which a browser refuses at startup (#1033); a `storageInstance` replaces it. */
+  static override browserStores = ({ storage, storageInstance }: ApprovalPluginOptions): PluginStoreInBrowser[] => {
+    const type = storageInstance ? undefined : storage?.type;
+    return [
+      {
+        plugin: 'ApprovalPlugin',
+        option: type === 'redis' || type === 'sqlite' ? `storage: { type: '${type}' }` : undefined,
+        memory: "storage: { type: 'memory' }",
+      },
+    ];
+  };
+
   /**
    * Dynamic providers based on plugin options.
    */
@@ -195,48 +198,51 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
       ...ApprovalPlugin.defaultOptions,
       ...options,
     };
-    refuseRedisOrSqliteInBrowser(config);
 
     // ─────────────────────────────────────────────────────────────────────────
     // Approval Store
     // ─────────────────────────────────────────────────────────────────────────
 
-    providers.push({
-      name: 'approval:store',
-      provide: ApprovalStoreToken,
-      inject: () => [] as const,
-      useFactory: async () => {
-        const store = new ApprovalStorageStore({
-          storage: config.storage,
-          storageInstance: config.storageInstance,
-          namespace: config.namespace,
-          cleanupIntervalSeconds: config.cleanupIntervalSeconds,
-        });
-        await store.initialize();
-        return store;
-      },
-    });
+    providers.push(
+      storeProvider({
+        name: 'approval:store',
+        provide: ApprovalStoreToken,
+        inject: () => [] as const,
+        useFactory: async () => {
+          const store = new ApprovalStorageStore({
+            storage: config.storage,
+            storageInstance: config.storageInstance,
+            namespace: config.namespace,
+            cleanupIntervalSeconds: config.cleanupIntervalSeconds,
+          });
+          await store.initialize();
+          return store;
+        },
+      }),
+    );
 
     // ─────────────────────────────────────────────────────────────────────────
     // Challenge Service (for webhook mode)
     // ─────────────────────────────────────────────────────────────────────────
 
     if (config.mode === 'webhook') {
-      providers.push({
-        name: 'approval:challenge-service',
-        provide: ChallengeServiceToken,
-        inject: () => [] as const,
-        useFactory: async () => {
-          const service = new ChallengeService({
-            storage: config.storage,
-            storageInstance: config.storageInstance,
-            namespace: `${config.namespace}:challenge`,
-            defaultTtlSeconds: config.webhook?.challengeTtl ?? 300,
-          });
-          await service.initialize();
-          return service;
-        },
-      });
+      providers.push(
+        storeProvider({
+          name: 'approval:challenge-service',
+          provide: ChallengeServiceToken,
+          inject: () => [] as const,
+          useFactory: async () => {
+            const service = new ChallengeService({
+              storage: config.storage,
+              storageInstance: config.storageInstance,
+              namespace: `${config.namespace}:challenge`,
+              defaultTtlSeconds: config.webhook?.challengeTtl ?? 300,
+            });
+            await service.initialize();
+            return service;
+          },
+        }),
+      );
     }
 
     // ─────────────────────────────────────────────────────────────────────────

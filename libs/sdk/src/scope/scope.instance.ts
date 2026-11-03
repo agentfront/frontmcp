@@ -93,7 +93,7 @@ import type { SessionRelayHandle } from '../transport/relay/relay-scope.helper';
 import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import type { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
-import { elicitationServerStore, refuseServerStoresInBrowser, tasksServerStore } from './browser-stores';
+import { refuseServerStoresInBrowser, refuseStoresInBrowser } from './browser-stores';
 import { devEventsObservabilityConfig } from './dev-events-observability';
 import { registerServerEntries } from './server-entries.helper';
 import { reportStartup } from './startup-report.helper';
@@ -261,10 +261,7 @@ export class Scope extends ScopeEntry {
       : () => {};
 
     // A browser has no TCP socket for Redis and no file for SQLite: refused here, before any store opens
-    refuseServerStoresInBrowser({
-      tasks: tasksServerStore(this.metadata),
-      elicitation: elicitationServerStore(this.metadata),
-    });
+    await refuseStoresInBrowser(this.metadata);
 
     const httpServing = this.directOnly ? undefined : await import('./http-scope.helper.js');
     const createPrimaryAuth = await this.primaryAuthFactory();
@@ -339,7 +336,9 @@ export class Scope extends ScopeEntry {
       effectivePersistence = { sqlite: resolvedTopLevelSqlite };
     }
     if (httpServing) {
-      this.transportService = new httpServing.TransportService(this, effectivePersistence, transportBus);
+      const service = new httpServing.TransportService(this, effectivePersistence, transportBus);
+      this.transportService = service;
+      this.onDispose(() => service.destroy());
       httpServing.loadStreamableHttpTransportOnStart(this);
     }
     warnIfRequestStateKeyNotShared({ logger: this.logger, metadata: this.metadata });
@@ -404,9 +403,6 @@ export class Scope extends ScopeEntry {
           // A Redis named only for persistent questions keeps the elicitation state too; other question stores (memory,
           // sqlite) stay theirs alone.
           const questionsStorage = questionsHelper?.persistentQuestionsSettings(persistent, onEdgeRuntime).storage;
-          refuseServerStoresInBrowser({
-            questions: questionsHelper?.questionsServerStore(questionsStorage, this.metadata),
-          });
           const questionsRedis =
             !elicitationInMemory && !elicitationRedis && questionsStorage?.type === 'redis'
               ? questionsStorage

@@ -6,10 +6,12 @@ import {
   isAnonymousSubject,
   isVercelKvProvider,
   Plugin,
-  refusePluginStoreInBrowser,
+  storeProvider,
   ToolHook,
   type FlowCtxOf,
   type FrontMcpConfigType,
+  type PluginStoreInBrowser,
+  type PluginStoreServer,
   type ProviderType,
 } from '@frontmcp/sdk';
 import { sha256Hex } from '@frontmcp/utils';
@@ -45,11 +47,6 @@ function assertReadableBypassHeader(bypassHeader: string | undefined): void {
     `CachePlugin bypassHeader "${bypassHeader}" is never seen by the plugin: only request headers that start ` +
       `with "${BYPASS_HEADER_PREFIX}" reach it. Rename it, e.g. "${BYPASS_HEADER_PREFIX}no-cache".`,
   );
-}
-
-/** In a browser, refuse a cache that `option` puts on Redis, before it connects (#1033). */
-function refuseRedisInBrowser(option: string): void {
-  refusePluginStoreInBrowser({ plugin: 'CachePlugin', option, memory: "type: 'memory'" });
 }
 
 /**
@@ -88,52 +85,69 @@ function matchesToolPattern(toolName: string, patterns: string[]): boolean {
   ],
 })
 export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
+  /** A cache on Redis, which a browser refuses at startup (#1033): Vercel KV, over HTTPS, is not one. */
+  static override browserStores = (options: CachePluginOptions, server: PluginStoreServer): PluginStoreInBrowser[] => {
+    const onRedis =
+      options.type === 'redis' ||
+      options.type === 'redis-client' ||
+      (options.type === 'global-store' && server.redis !== undefined && !isVercelKvProvider(server.redis));
+    return [
+      { plugin: 'CachePlugin', option: onRedis ? `type: '${options.type}'` : undefined, memory: "type: 'memory'" },
+    ];
+  };
+
   static override dynamicProviders = (options: CachePluginOptions) => {
     const providers: ProviderType[] = [];
     switch (options.type) {
       case 'global-store':
         // Use inject/useFactory to access FrontMcpConfig at runtime
-        providers.push({
-          name: 'cache:global-store',
-          provide: CacheStoreToken,
-          inject: () => [FrontMcpConfig] as const,
-          useFactory: (config: FrontMcpConfigType) => {
-            const storeConfig = getGlobalStoreConfig('CachePlugin', config);
-            const globalOptions = options as GlobalStoreCachePluginOptions;
+        providers.push(
+          storeProvider({
+            name: 'cache:global-store',
+            provide: CacheStoreToken,
+            inject: () => [FrontMcpConfig] as const,
+            useFactory: (config: FrontMcpConfigType) => {
+              const storeConfig = getGlobalStoreConfig('CachePlugin', config);
+              const globalOptions = options as GlobalStoreCachePluginOptions;
 
-            if (isVercelKvProvider(storeConfig)) {
-              return new CacheVercelKvProvider({
-                url: storeConfig.url,
-                token: storeConfig.token,
-                keyPrefix: storeConfig.keyPrefix,
+              if (isVercelKvProvider(storeConfig)) {
+                return new CacheVercelKvProvider({
+                  url: storeConfig.url,
+                  token: storeConfig.token,
+                  keyPrefix: storeConfig.keyPrefix,
+                  defaultTTL: globalOptions.defaultTTL,
+                });
+              }
+
+              // Redis provider (including legacy format without provider field)
+              return new CacheRedisProvider({
+                type: 'redis',
+                config: {
+                  host: storeConfig.host ?? 'localhost',
+                  port: storeConfig.port ?? 6379,
+                  password: storeConfig.password,
+                  db: storeConfig.db,
+                },
                 defaultTTL: globalOptions.defaultTTL,
               });
-            }
-
-            // Redis provider (including legacy format without provider field)
-            refuseRedisInBrowser("type: 'global-store'");
-            return new CacheRedisProvider({
-              type: 'redis',
-              config: {
-                host: storeConfig.host ?? 'localhost',
-                port: storeConfig.port ?? 6379,
-                password: storeConfig.password,
-                db: storeConfig.db,
-              },
-              defaultTTL: globalOptions.defaultTTL,
-            });
-          },
-        });
+            },
+          }),
+        );
         break;
       case 'redis':
-      case 'redis-client':
-        refuseRedisInBrowser(`type: '${options.type}'`);
-        providers.push({
-          name: 'cache:redis',
-          provide: CacheStoreToken,
-          useValue: new CacheRedisProvider(options),
-        });
+      case 'redis-client': {
+        let store: CacheRedisProvider | undefined;
+        providers.push(
+          storeProvider({
+            name: 'cache:redis',
+            provide: CacheStoreToken,
+            // Built when the first server starts, after a browser's startup check; the servers of one `init()` share it.
+            inject: () => [] as const,
+            useFactory: () => (store ??= new CacheRedisProvider(options)),
+          }),
+        );
         break;
+      }
       case 'memory':
         providers.push({
           name: 'cache:memory',

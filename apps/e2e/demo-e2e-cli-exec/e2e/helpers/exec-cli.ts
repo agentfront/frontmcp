@@ -47,12 +47,17 @@ export async function ensureBuild(): Promise<string> {
   const frontmcpBin = path.join(rootDir, 'libs', 'cli', 'dist', 'src', 'core', 'cli.js');
 
   console.log('[e2e] Building CLI exec bundle...');
-  execFileSync('node', [frontmcpBin, 'build', '--target', 'cli', '--js'], {
-    cwd: FIXTURE_DIR,
-    stdio: 'pipe',
-    timeout: 90000,
-    env: { ...process.env, NODE_ENV: 'production' },
-  });
+  try {
+    execFileSync('node', [frontmcpBin, 'build', '--target', 'cli', '--js'], {
+      cwd: FIXTURE_DIR,
+      stdio: 'pipe',
+      timeout: 90000,
+      env: { ...process.env, NODE_ENV: 'production' },
+    });
+  } catch (err: unknown) {
+    const { stdout, stderr } = err as { stdout?: Buffer; stderr?: Buffer };
+    throw new Error(`The fixture build failed:\n${stdout ?? ''}${stderr ?? ''}`, { cause: err });
+  }
   console.log('[e2e] Build complete.');
 
   buildDone = true;
@@ -124,9 +129,17 @@ export function runFrontmcpCli(
 }
 
 /** `runFrontmcpCli()` without blocking: the test process keeps serving its sockets while the CLI runs. */
-export function runFrontmcpCliAsync(args: string[], cwd: string, timeoutMs: number): Promise<CliResult> {
+export function runFrontmcpCliAsync(
+  args: string[],
+  cwd: string,
+  timeoutMs: number,
+  extraEnv?: Record<string, string>,
+): Promise<CliResult> {
   return new Promise((resolve) => {
-    const child = spawn('node', [FRONTMCP_BIN, ...args], { cwd, env: { ...process.env, NODE_ENV: 'test' } });
+    const child = spawn('node', [FRONTMCP_BIN, ...args], {
+      cwd,
+      env: { ...process.env, NODE_ENV: 'test', ...extraEnv },
+    });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (data: Buffer) => {

@@ -4,6 +4,7 @@ import 'reflect-metadata';
 import { createGuardManager } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
 
+import { useMidRateLimitWindow } from '../../__test-utils__/helpers/rate-limit-window.helpers';
 import {
   App,
   FlowHooksOf,
@@ -484,6 +485,8 @@ class ReportsApp {}
 const guardManagers = jest.mocked(createGuardManager);
 
 describe('the startup checks of a lazy app loaded by a call', () => {
+  useMidRateLimitWindow(60_000);
+
   const guarded = billingImport({ GuardedBillingApp });
 
   /** Billing and reports, both lazy, each with a rate-limited tool. */

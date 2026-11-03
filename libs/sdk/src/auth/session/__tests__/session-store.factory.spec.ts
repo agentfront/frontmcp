@@ -16,13 +16,9 @@ const fakeSqliteStore = {
 
 const SqliteSessionStoreCtor = jest.fn().mockImplementation(() => fakeSqliteStore);
 
-jest.mock(
-  '@frontmcp/storage-sqlite',
-  () => ({
-    SqliteSessionStore: SqliteSessionStoreCtor,
-  }),
-  { virtual: true },
-);
+jest.mock('@frontmcp/storage-sqlite', () => ({
+  SqliteSessionStore: SqliteSessionStoreCtor,
+}));
 
 describe('createSessionStore — SQLite branch (issue #401)', () => {
   beforeEach(() => {

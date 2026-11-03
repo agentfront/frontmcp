@@ -151,6 +151,8 @@ redis: {
 
 The URL is the base: `host` / `port` / `password` / `db` / `tls` beside it only fill in what the URL leaves out (`{ url: 'redis://cache:6379', password }` adds the password; `tls: true` upgrades a `redis://` URL). A field that contradicts the URL — another host, port, password or db, or `tls: false` with `rediss://` — is a validation error naming the field, never silently dropped. The URL's password may also come from `?password=`; a URL naming only the user (`redis://default@cache`) leaves it out, so a `password` beside it is used. `pubsub`, `throttle.storage.redis` and the job stores' `store.redis` follow the same rule.
 
+A `redis` with neither `host` nor `url`, as when both come from unset variables, fails with `redis needs host or url`, on the server and in the generated CLI, wherever a `redis` option is read (`pubsub`, `jobs.store.redis`, `tasks.redis` and the others too); up to 1.10 the message was `Invalid input`.
+
 The generated CLI (`frontmcp build --target cli`) and the `createTaskStore()` / `createElicitationStore()` factories read every form too, and refuse an unusable one (`TaskStoreNotSupportedError` / `ElicitationNotSupportedError` from the factories) instead of falling back to memory or to `REDIS_URL`. Up to 1.10 they took a `redis` only with a `host` (the CLI when its server config was an object rather than a `@FrontMcp` class), so a `url` there kept the tasks in memory or in the Redis of `REDIS_URL` / `REDIS_HOST`.
 
 ### For Vercel KV
@@ -174,6 +176,8 @@ import { FrontMcp } from '@frontmcp/sdk';
 })
 export default class Server {}
 ```
+
+Jobs can't keep their runs in Vercel KV, since the job stores speak the Redis protocol: a `jobs.store.redis` with `provider: 'vercel-kv'` stops startup with `JobStoreNotSupportedError` (`JOB_STORE_NOT_SUPPORTED`), where up to 1.10 it connected to a Redis on localhost. A top-level Vercel KV `redis` is passed over by the jobs, which keep their runs in the top-level `sqlite`, or in memory.
 
 If you need to pass explicit credentials (e.g., in testing or non-Vercel environments):
 
@@ -264,7 +268,9 @@ When `redis` is configured, the SDK automatically enables transport session pers
 
 Jobs use the global redis too when `jobs.store` names no backend: their runs and dynamic definitions live under `<keyPrefix>jobs:` (`mcp:jobs:` by default). Servers that share one Redis keep them apart by setting different `keyPrefix` values.
 
-Background tasks, elicitation and persistent questions take the global redis as well. Each one stays in memory with its switch, while the others keep using Redis: `tasks.store: false`, `elicitation.store: false`, `elicitation.persistent.storage: { type: 'memory' }`, `jobs.store: false` (and `transport.persistence: false` for sessions). In the browser build a subsystem that would connect to Redis stops startup with `BrowserStoreUnavailableError` naming its switch, since a page has no TCP socket; leave `redis` out of the browser build's config.
+Background tasks, elicitation and persistent questions take the global redis as well. Each one stays in memory with its switch, while the others keep using Redis: `tasks.store: false`, `elicitation.store: false`, `elicitation.persistent.storage: { type: 'memory' }`, `jobs.store: false` (and `transport.persistence: false` for sessions). In the browser build every store that would connect to Redis (these, `throttle.storage`, `auth.tokenStorage`, `auth.secureStore`, `skillsConfig.cache.redis` and the plugins' stores) stops startup with one `BrowserStoreUnavailableError` naming each store's switch, since a page has no TCP socket; leave `redis` out of the browser build's config.
+
+> **Upstash or Vercel KV from a page exposes its token.** They are reached over HTTPS, so the browser build allows them, but the REST token (`UPSTASH_REDIS_REST_TOKEN`, `KV_REST_API_TOKEN`, or `token` in the config) goes into the page's bundle, where every visitor can read it and use it on the whole database. From a page, use only a token scoped to what every visitor may do (Upstash's read-only token, for example), or keep the store behind your server.
 
 This means you do not need to configure `transport.persistence` separately when using the top-level `redis` field.
 
@@ -395,6 +401,8 @@ throttle: {
 | Vercel KV `401 Unauthorized`                                                                      | Missing or invalid KV tokens in the environment                  | Verify `KV_REST_API_URL` and `KV_REST_API_TOKEN` in the Vercel dashboard and redeploy                         |
 | Sessions lost after container restart                                                             | Redis running without append-only persistence                    | Add `--appendonly yes` to the Redis command in docker-compose or use a managed Redis with persistence enabled |
 | Startup fails with `GuardStorageUnavailableError`                                                 | `throttle.storage` Redis is unreachable; rate limits fail closed | Bring Redis up, or set `throttle.storage.fallback: 'memory'` to start with per-instance counters              |
+| Startup fails with `redis needs host or url`                                                      | Both come from variables that are unset where the server starts  | Set `REDIS_URL` (or `REDIS_HOST`) in that environment                                                         |
+| Startup fails with `JobStoreNotSupportedError`                                                    | `jobs.store.redis` is Vercel KV, which the job stores cannot use | Point `jobs.store.redis` at a Redis server, or use `jobs.store.sqlite` or `jobs.store: false`                 |
 | Clients get 404 for a session they just used (load-balanced)                                      | Instances run with different `MCP_SESSION_SECRET` values         | Set the same `MCP_SESSION_SECRET` on every instance                                                           |
 | A 2026-07-28 tool repeats its first question; log shows `rejected requestState` / `bad-signature` | `VAULT_SECRET`/`JWT_SECRET` unset or different per instance      | Set `VAULT_SECRET` to the same value on every instance                                                        |
 

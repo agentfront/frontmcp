@@ -120,7 +120,9 @@ of these variables (`redis: { url: process.env['REDIS_URL'] }`, an
 `sqlite.encryption.secret`) builds without it set, from a `@FrontMcp` class as
 from a config object. The server validates it when the host starts it. Up to
 1.10, a `@FrontMcp` class validated it when the build loaded the entry, so the
-build machine needed the variable too.
+build machine needed the variable too. The plugins' stores are not built either
+(see `build-manifest`): a `CachePlugin` or `RememberPlugin` on `global-store`
+builds without the `redis`, where it failed the build up to 1.10.
 
 ```ts
 deployments: [

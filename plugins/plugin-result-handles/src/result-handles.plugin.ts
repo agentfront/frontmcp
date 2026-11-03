@@ -4,10 +4,11 @@ import {
   FrontMcpLogger,
   Plugin,
   ProviderScope,
-  refusePluginStoreInBrowser,
+  storeProvider,
   ToolHook,
   type CallToolResult,
   type FlowCtxOf,
+  type PluginStoreInBrowser,
   type ProviderType,
 } from '@frontmcp/sdk';
 
@@ -92,23 +93,29 @@ export default class ResultHandlesPlugin extends DynamicPlugin<
     this.options = parseResultHandlesOptions(options);
   }
 
+  /** A `storage` on Redis or SQLite, which a browser refuses at startup (#1033). */
+  static override browserStores = (input: ResultHandlesPluginOptionsInput): PluginStoreInBrowser[] => {
+    const { type } = parseResultHandlesOptions(input).storage;
+    return [
+      {
+        plugin: 'ResultHandlesPlugin',
+        option: type === 'redis' || type === 'sqlite' ? `storage: { type: '${type}' }` : undefined,
+        memory: "storage: { type: 'memory' }",
+      },
+    ];
+  };
+
   static override dynamicProviders = (input: ResultHandlesPluginOptionsInput): ProviderType[] => {
     const options = parseResultHandlesOptions(input);
-    const { type } = options.storage;
-    refusePluginStoreInBrowser({
-      plugin: 'ResultHandlesPlugin',
-      option: type === 'redis' || type === 'sqlite' ? `storage: { type: '${type}' }` : undefined,
-      memory: "storage: { type: 'memory' }",
-    });
     return [
       { name: 'result-handles:config', provide: ResultHandlesConfigToken, useValue: options },
-      {
+      storeProvider({
         name: 'result-handles:store',
         provide: ResultHandleStoreToken,
         scope: ProviderScope.GLOBAL,
         inject: () => [] as const,
         useFactory: () => createResultHandleStore(options),
-      },
+      }),
     ];
   };
 

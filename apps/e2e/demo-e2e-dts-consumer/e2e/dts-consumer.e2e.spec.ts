@@ -50,6 +50,7 @@ const fixtureFiles = [
   'shared-server-must-compile.ts',
   'durable-jobs-must-compile.ts',
   'memory-stores-must-compile.ts',
+  'store-provider-must-compile.ts',
   'job-runners-must-compile.ts',
   'build-manifest-must-compile.ts',
   'persistent-questions-must-compile.ts',
@@ -245,7 +246,7 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('durable-jobs-must-compile.ts'))).toEqual([]);
   });
 
-  it('types jobs.store: false, tasks.store: false, elicitation.store: false, BrowserStoreUnavailableError and refusePluginStoreInBrowser', () => {
+  it('types jobs.store: false, tasks.store: false, elicitation.store: false, BrowserStoreUnavailableError, refusePluginStoreInBrowser and static browserStores', () => {
     expect(describeEach(inFixtureFile('memory-stores-must-compile.ts'))).toEqual([]);
   });
 

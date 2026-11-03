@@ -67,8 +67,11 @@ On an app, the plugin folds that app's tools; on `@FrontMcp({ plugins })`, every
 tool; on several apps the server lists one, and it reads the handles of every app's copy. `storage` goes to
 `createStorage()` from `@frontmcp/utils`; `{ type: 'sqlite', sqlite: { path } }` needs `@frontmcp/storage-sqlite`. A
 memory store holds 1000 answers at most and drops the oldest (`storage.memory.maxEntries`, `0` for no limit). In a
-browser build, `{ type: 'redis' }` or `{ type: 'sqlite' }` throws `BrowserStoreUnavailableError` from `init()`, naming
-`storage: { type: 'memory' }`; `{ type: 'auto' }` picks memory in a page.
+browser build, `{ type: 'redis' }` or `{ type: 'sqlite' }` fails startup with `BrowserStoreUnavailableError`, in the
+one error that names the server's own stores too, naming `storage: { type: 'memory' }` (up to 1.10 it threw from
+`init()`); `{ type: 'auto' }` picks memory in a page. A build (`frontmcp build`) reads the server without opening the
+store: on Redis it connects to nothing and on SQLite it writes no file until the server starts (up to 1.10 the build
+opened it).
 
 ### Step 2: Let tools with an output schema fold
 

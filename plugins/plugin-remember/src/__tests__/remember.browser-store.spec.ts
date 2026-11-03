@@ -1,6 +1,6 @@
 /**
- * A browser has no TCP socket for Redis: in a browser, a RememberPlugin store on Redis is refused before it opens, with
- * BrowserStoreUnavailableError naming `type: 'memory'` (#1033). A Node server keeps its Redis.
+ * A browser has no TCP socket for Redis: in a browser, startup refuses a RememberPlugin store on Redis before it opens,
+ * in the server's one BrowserStoreUnavailableError, naming `type: 'memory'` (#1033). A Node server keeps its Redis.
  */
 import 'reflect-metadata';
 
@@ -89,10 +89,26 @@ describe('RememberPlugin in a browser', () => {
   it.each([
     ["type: 'redis'", { type: 'redis', config: { host: '127.0.0.1', port: 6379 } }],
     ["type: 'redis-client'", { type: 'redis-client', client: {} }],
-  ] as const)('refuses %s before it connects', (option, remember) => {
-    expect(() => RememberPlugin.init(remember as RememberPluginOptionsInput)).toThrow(
-      `RememberPlugin would use ${option} (set type: 'memory' in place of ${option})`,
-    );
+  ] as const)('refuses %s at startup, before it connects', async (option, remember) => {
+    const startup = startWith(remember as RememberPluginOptionsInput);
+
+    await expect(startup).rejects.toMatchObject({
+      code: 'BROWSER_STORE_UNAVAILABLE',
+      stores: [['RememberPlugin', option]],
+      message: `A browser cannot open Redis or SQLite: RememberPlugin would use ${option} (set type: 'memory' in place of ${option})`,
+    });
+    expect(redisClient).not.toHaveBeenCalled();
+  });
+
+  it("lists the store in the server's one refusal, with the stores that take the top-level redis", async () => {
+    const startup = startWith({ type: 'global-store' }, { redis, tasks: {} });
+
+    await expect(startup).rejects.toMatchObject({
+      stores: [
+        ['tasks', 'redis'],
+        ['RememberPlugin', "type: 'global-store'"],
+      ],
+    });
     expect(redisClient).not.toHaveBeenCalled();
   });
 
@@ -107,5 +123,37 @@ describe('RememberPlugin in a browser', () => {
 describe('RememberPlugin on Node', () => {
   it('keeps a global-store on the top-level redis', () => {
     expect(globalStoreFactory().useFactory({ redis })).toBeInstanceOf(RememberRedisProvider);
+  });
+
+  it('connects a redis store when the server starts, not when init() runs', async () => {
+    const config = { host: '127.0.0.1', port: 6379 };
+    RememberPlugin.init({ type: 'redis', config });
+    expect(redisClient).not.toHaveBeenCalled();
+
+    await startWith({ type: 'redis', config });
+    expect(redisClient).toHaveBeenCalledWith(expect.objectContaining(config));
+  });
+
+  it('gives the servers that install one redis init() its one client', async () => {
+    const remember = RememberPlugin.init({
+      skipLegacyPurge: true,
+      type: 'redis',
+      config: { host: '127.0.0.1', port: 6379 },
+    });
+
+    for (const id of ['first', 'second']) {
+      @App({ id: `remembering-${id}`, name: `Remembering ${id}`, plugins: [remember] })
+      class RememberingApp {}
+      started.push(
+        await FrontMcpInstance.createDirect({
+          info: { name: `remember-${id}`, version: '1.0.0' },
+          apps: [RememberingApp],
+          logging: { level: LogLevel.Off },
+          tasks: { store: false },
+        }),
+      );
+    }
+
+    expect(redisClient).toHaveBeenCalledTimes(1);
   });
 });

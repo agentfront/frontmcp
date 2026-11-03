@@ -1,6 +1,7 @@
 import { createRedisClient, createStorage, StorageConfigError, type SqliteAdapterOptions } from '@frontmcp/utils';
 
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
+import { JobStoreNotSupportedError } from '../../errors/job.errors';
 import { type JobStateStore } from './job-state.interface';
 import { MemoryJobStateStore } from './memory-job-state.store';
 import { RedisJobStateStore, type RedisStateStoreLike } from './redis-job-state.store';
@@ -27,6 +28,15 @@ export interface JobStateStoreResult {
   type: 'redis' | 'memory' | 'sqlite';
 }
 
+/** The job stores connect to `jobs.store.redis` over the Redis protocol, which Vercel KV's REST API does not serve. */
+export function refuseVercelKvJobStore(redis: JobStateStoreOptions['redis']): void {
+  if (redis?.provider !== 'vercel-kv') return;
+  throw new JobStoreNotSupportedError(
+    'Vercel KV is not supported for job stores: jobs.store.redis is opened over the Redis protocol, which Vercel KV ' +
+      'does not serve. Use a Redis server, jobs.store.sqlite, or jobs.store: false.',
+  );
+}
+
 /**
  * Factory function to create a JobStateStore: SQLite when `sqlite` is set (a mistake in it fails, with no
  * fallback), then Redis, falling back to memory when the Redis client cannot be created.
@@ -49,6 +59,7 @@ export async function createJobStateStore(
   }
 
   if (options?.redis) {
+    refuseVercelKvJobStore(options.redis);
     try {
       const { url, host, port, password, db, tls } = options.redis;
       const client = createRedisClient({ url, host, port, password, db, tls, label: 'JobStateStore', logger });

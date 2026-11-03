@@ -409,30 +409,71 @@ Listing the class itself (`plugins: [MyPlugin]`) is the same as `MyPlugin.init()
 ### A store a browser cannot open
 
 A browser build (`create()` in a web page, WebMCP) has no TCP socket for Redis and no file for SQLite. A plugin that
-opens either calls `refusePluginStoreInBrowser()` from `@frontmcp/sdk` where it builds the store: in a browser it
-throws `BrowserStoreUnavailableError` (`BROWSER_STORE_UNAVAILABLE`), the error the SDK's own stores throw, naming the
-option that brings in the store and the one that keeps it in memory. `option: undefined` (a memory store) and any other
-runtime refuse nothing.
+opens either declares it with `static browserStores(options, server)`: for the options it was configured with, each
+store names the option that brings it in (`undefined` when the store opens neither) and the one that keeps it in
+memory. In a browser, startup reads every plugin's declaration before any store opens, and refuses them all, with the
+SDK's own stores, in one `BrowserStoreUnavailableError` (`BROWSER_STORE_UNAVAILABLE`). `server.redis` is the server's
+top-level `redis`, for a store that takes it (`getGlobalStoreConfig()`); a Vercel KV one needs no TCP socket. Any other
+runtime refuses nothing.
 
 ```typescript
-import { refusePluginStoreInBrowser } from '@frontmcp/sdk';
+import {
+  DynamicPlugin,
+  isVercelKvProvider,
+  Plugin,
+  type PluginStoreInBrowser,
+  type PluginStoreServer,
+} from '@frontmcp/sdk';
 import type { StorageConfig } from '@frontmcp/utils';
 
-// Called from `static dynamicProviders(options)`, before it returns the store's provider
-function refuseRedisOrSqliteInBrowser(storage: StorageConfig | undefined): void {
-  const type = storage?.type;
-  refusePluginStoreInBrowser({
-    plugin: 'MyPlugin',
-    option: type === 'redis' || type === 'sqlite' ? `storage: { type: '${type}' }` : undefined,
-    memory: "storage: { type: 'memory' }",
-  });
+interface MyPluginOptions {
+  storage?: StorageConfig | 'global-store';
+}
+
+@Plugin({ name: 'my-plugin' })
+export default class MyPlugin extends DynamicPlugin<MyPluginOptions> {
+  static override browserStores = ({ storage }: MyPluginOptions, server: PluginStoreServer): PluginStoreInBrowser[] => {
+    const type = storage === 'global-store' ? undefined : storage?.type;
+    const onGlobalRedis = storage === 'global-store' && server.redis !== undefined && !isVercelKvProvider(server.redis);
+    const option =
+      type === 'redis' || type === 'sqlite'
+        ? `storage: { type: '${type}' }`
+        : onGlobalRedis
+          ? "storage: 'global-store'"
+          : undefined;
+    return [{ plugin: 'MyPlugin', option, memory: "storage: { type: 'memory' }" }];
+  };
 }
 ```
 
 The message reads `A browser cannot open Redis or SQLite: MyPlugin would use storage: { type: 'redis' } (set storage:
 { type: 'memory' } in place of storage: { type: 'redis' })`, and `error.stores` is `[['MyPlugin', "storage: { type:
-'redis' }"]]`. A store on the server's top-level `redis` (through `getGlobalStoreConfig()`) is known only at startup:
-call it in the provider's `useFactory`, before the client connects, unless that `redis` is Vercel KV.
+'redis' }"]]`, after the SDK's stores. A plugin listed as its class is read with `{}`, as it is built. One configured
+with `init({ useFactory })` is checked once its factory has returned the options, before its providers are built. Build
+the store in a provider (`useFactory`), not in `dynamicProviders` itself, which runs when `init()` does: the check runs
+at startup.
+
+Make that provider with `storeProvider()`, too. A build boots the server only to read it and opens no store: in a build,
+a `storeProvider()` is not built, so it needs none of what it reads at runtime (the top-level `redis` a `global-store`
+takes is left out of a build), and what injects it gets a stand-in that throws `StoreNotOpenedInBuildError` when it is
+called. Any other boot builds it as usual. It returns the provider as given.
+
+```typescript
+import { FrontMcpConfig, getGlobalStoreConfig, storeProvider, type FrontMcpConfigType } from '@frontmcp/sdk';
+
+static override dynamicProviders = (options: MyPluginOptions) => [
+  storeProvider({
+    name: 'my-plugin:store',
+    provide: MyStoreToken,
+    inject: () => [FrontMcpConfig] as const,
+    useFactory: (config: FrontMcpConfigType) => new MyRedisStore(getGlobalStoreConfig('MyPlugin', config)),
+  }),
+];
+```
+
+`refusePluginStoreInBrowser({ plugin, option, memory })` still throws the same error, for one store, where a plugin
+builds a store that no declaration can name ahead of time. `new BrowserStoreUnavailableError(stores, pluginMemory)`
+takes each plugin's memory option in its second argument; without it, only the SDK's store names type-check.
 
 ### Option-derived providers are registered before nested plugins
 

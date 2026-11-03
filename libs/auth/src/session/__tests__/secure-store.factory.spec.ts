@@ -71,6 +71,31 @@ describe('createSecureStore', () => {
     expect(calls).toEqual(['get']);
   });
 
+  it.each([
+    [{ sqlite: { path: '' } }, 'secureStore.sqlite.path'],
+    [{ redis: { url: 'redis://cache.internal' } }, 'secureStore.redis.host'],
+    [{ backend: { get: async () => null } }, 'secureStore.backend must implement'],
+  ])('refuses %j at startup instead of opening a store it cannot use', async (config, message) => {
+    await expect(createSecureStore({ config: config as never })).rejects.toThrow(
+      expect.objectContaining({
+        name: 'SecureStoreConfigError',
+        code: 'SECURE_STORE_CONFIG_INVALID',
+        message: expect.stringContaining(message),
+      }),
+    );
+  });
+
+  it('refuses a config that names more than one backing', async () => {
+    await expect(
+      createSecureStore({ config: { sqlite: { path: '/tmp/secrets.sqlite' }, backend: {} } as never }),
+    ).rejects.toThrow(
+      expect.objectContaining({
+        name: 'SecureStoreConfigError',
+        message: expect.stringContaining('secureStore takes one backing, not sqlite and backend'),
+      }),
+    );
+  });
+
   it('reuses a supplied StorageAdapter for a built-in backing', async () => {
     const adapter = new MemoryStorageAdapter();
     await adapter.connect();

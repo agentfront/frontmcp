@@ -74,7 +74,8 @@ describe('CLI built bundle — stdio mode (--stdio)', () => {
     const result = await client!.callTool({ name: 'add', arguments: { a: 2, b: 3 } });
     expect(result.isError).not.toBe(true);
 
-    const textContent = result.content.find((c: { type: string }) => c.type === 'text');
+    const content = result.content as Array<{ type: string; text?: string }>;
+    const textContent = content.find((c) => c.type === 'text');
     expect(textContent).toBeDefined();
     expect((textContent as { text: string }).text).toContain('5');
   }, 60000);

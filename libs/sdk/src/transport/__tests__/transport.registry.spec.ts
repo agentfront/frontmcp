@@ -181,13 +181,9 @@ describe('TransportService', () => {
       let originalRequire: NodeJS.Require['cache'];
 
       beforeEach(() => {
-        jest.doMock(
-          '@frontmcp/storage-sqlite',
-          () => ({
-            SqliteSessionStore: jest.fn().mockImplementation(() => fakeSqliteStore),
-          }),
-          { virtual: true },
-        );
+        jest.doMock('@frontmcp/storage-sqlite', () => ({
+          SqliteSessionStore: jest.fn().mockImplementation(() => fakeSqliteStore),
+        }));
         originalRequire = require.cache;
       });
 

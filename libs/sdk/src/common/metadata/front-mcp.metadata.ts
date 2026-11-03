@@ -972,11 +972,25 @@ export const frontMcpMetadataSchema = frontMcpMultiAppSchema
   .or(frontMcpSplitByAppSchema)
   .transform(applyAutoTransportPersistence);
 
+/** The server's schema checks the value of `key`, which CLI mode keeps as given: the server's defaults would change it. */
+function checkedAsServer(key: keyof typeof frontMcpBaseSchema.shape) {
+  return z
+    .unknown()
+    .superRefine((value, ctx) => {
+      if (value === undefined) return;
+      const issues = frontMcpBaseSchema.shape[key].safeParse(value).error?.issues ?? [];
+      for (const issue of issues) ctx.addIssue({ ...issue });
+    })
+    .optional();
+}
+
+/** Keys the server validates and CLI mode leaves off: checked, then left out of its config. */
+const CLI_OFF_KEYS = ['session', 'clients', 'observability', 'registry', 'channels'] as const;
+
 /**
  * Lite config parser for CLI mode.
- * Validates only fields needed for tool/resource execution, skipping
- * transport persistence, HTTP, elicitation, ext-apps, UI.
- * This reduces cold-start Zod parsing overhead by ~20-40ms.
+ * Fully parses only the fields needed for tool/resource execution; the others are checked with the server's schemas
+ * and kept as given, so CLI mode runs without the server's defaults for transport, HTTP, elicitation and the rest.
  */
 const frontMcpLiteSchema = z.object({
   info: serverInfoOptionsSchema,
@@ -1003,42 +1017,42 @@ const frontMcpLiteSchema = z.object({
   logging: loggingOptionsSchema.optional(),
   skillsConfig: skillsConfigOptionsSchema.optional(),
   loader: packageLoaderSchema.optional(),
-  // Pass through without deep validation — not used in CLI mode
-  http: z.any().optional(),
-  pubsub: z.any().optional(),
-  transport: z
-    .any()
-    .optional()
-    .transform((val) => val ?? transportOptionsSchema.parse({})),
-  pagination: z.any().optional(),
-  fetch: z.any().optional(),
-  elicitation: z.any().optional(),
-  extApps: z.any().optional(),
-  ui: z.any().optional(),
+  http: checkedAsServer('http'),
+  pubsub: checkedAsServer('pubsub'),
+  transport: checkedAsServer('transport').transform((val) => val ?? transportOptionsSchema.parse({})),
+  pagination: checkedAsServer('pagination'),
+  fetch: checkedAsServer('fetch'),
+  elicitation: checkedAsServer('elicitation'),
+  extApps: checkedAsServer('extApps'),
+  ui: checkedAsServer('ui'),
   // The CLI host picks the stores and runners of its tasks and jobs from these
   redis: frontMcpBaseSchema.shape.redis,
   sqlite: frontMcpBaseSchema.shape.sqlite,
   jobs: frontMcpBaseSchema.shape.jobs,
   tasks: frontMcpBaseSchema.shape.tasks,
-  throttle: z.any().optional(),
-  health: z.any().optional(),
-  metrics: z.any().optional(),
-  // Required by Scope.validateAuthoritiesConfig — when entries declare
-  // `authorities` metadata the engine still needs the top-level config
-  // to instantiate. Pass-through (`z.any()`) so CLI/MCPB builds work
-  // without forcing the full base-schema validation pipeline.
-  authorities: z.any().optional(),
+  throttle: checkedAsServer('throttle'),
+  health: checkedAsServer('health'),
+  metrics: checkedAsServer('metrics'),
+  // Kept as given, as the scope's authorities engine reads it (#366): the server's schema drops keys it doesn't know
+  authorities: checkedAsServer('authorities'),
   // Output-validation policy (see `frontMcpBaseSchema.output`). CLI mode
   // honors the same `allowNonFinite` switch as the full server.
   output: outputPolicySchema.optional(),
+  session: checkedAsServer('session'),
+  clients: checkedAsServer('clients'),
+  observability: checkedAsServer('observability'),
+  registry: checkedAsServer('registry'),
+  channels: checkedAsServer('channels'),
 });
 
 /**
- * Parse config with minimal validation for CLI mode.
- * Skips transport auto-persistence and deep validation of unused subsystems.
+ * Parse config for CLI mode: an invalid value fails as on the server, and a valid one is kept without the server's
+ * defaults or its transport auto-persistence.
  */
 export function parseFrontMcpConfigLite(input: FrontMcpConfigInput | FrontMcpConfigType): FrontMcpConfigType {
-  return frontMcpLiteSchema.parse(input) as unknown as FrontMcpConfigType;
+  const config: Record<string, unknown> = frontMcpLiteSchema.parse(input);
+  for (const key of CLI_OFF_KEYS) delete config[key];
+  return config as unknown as FrontMcpConfigType;
 }
 
 export type FrontMcpMultiAppConfig = z.infer<typeof frontMcpMultiAppSchema>;

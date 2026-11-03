@@ -99,7 +99,7 @@ describe('task-store.factory', () => {
     it.each([
       [{ url: 'http://cache.internal' }, 'redis.url must use the redis:// or rediss:// scheme, got "http://"'],
       [{ url: 'redis://cache.internal:6380', port: 6381 }, 'redis port contradicts redis.url'],
-      [{ port: 6379 }, 'Invalid Redis configuration: Invalid input'],
+      [{ port: 6379 }, 'Invalid Redis configuration: redis needs host or url'],
     ])('fails on the unusable %j instead of keeping the tasks elsewhere', async (redis, message) => {
       (createStorage as jest.Mock).mockClear();
 

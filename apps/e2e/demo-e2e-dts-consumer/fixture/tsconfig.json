@@ -36,6 +36,7 @@
     "shared-server-must-compile.ts",
     "durable-jobs-must-compile.ts",
     "memory-stores-must-compile.ts",
+    "store-provider-must-compile.ts",
     "job-runners-must-compile.ts",
     "materialized-resources-must-compile.ts",
     "duties-must-compile.ts",

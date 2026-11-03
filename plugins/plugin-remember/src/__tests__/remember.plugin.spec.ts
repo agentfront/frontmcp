@@ -157,11 +157,11 @@ describe('RememberPlugin', () => {
             password: 'secret',
           },
         });
-        const storeProvider = providers.find((p) => p.name === 'remember:store:redis') as ValueProvider;
+        const storeProvider = providers.find((p) => p.name === 'remember:store:redis') as FactoryProvider;
 
         expect(storeProvider).toBeDefined();
         expect(storeProvider.provide).toBe(RememberStoreToken);
-        expect(storeProvider.useValue).toBeInstanceOf(RememberRedisProvider);
+        expect(storeProvider.useFactory()).toBeInstanceOf(RememberRedisProvider);
       });
 
       it('should not create provider when config is missing', () => {

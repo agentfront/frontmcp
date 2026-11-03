@@ -1,4 +1,4 @@
-import Redis, { type Redis as RedisClient } from 'ioredis';
+import type { Redis as RedisClient, RedisOptions } from 'ioredis';
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 
@@ -10,6 +10,15 @@ import {
   SET_IF_NEITHER_KEY_EXISTS_SCRIPT,
 } from './remember-key-prefix';
 import type { RememberStoreInterface } from './remember-store.interface';
+
+type RedisConstructor = typeof import('ioredis').default;
+
+/** ioredis, loaded when a store on Redis is built, so a page that never builds one does not bundle it. */
+function createRedisClient(options: RedisOptions): RedisClient {
+  const ioredis = require('ioredis') as RedisConstructor & { default?: RedisConstructor };
+  const Redis = ioredis.default ?? ioredis;
+  return new Redis(options);
+}
 
 /**
  * Combined options type for Redis provider.
@@ -49,7 +58,7 @@ export default class RememberRedisProvider implements RememberStoreInterface {
 
     this.ownsClient = true;
 
-    this.client = new Redis({
+    this.client = createRedisClient({
       lazyConnect: false,
       maxRetriesPerRequest: 3,
       ...options.config,

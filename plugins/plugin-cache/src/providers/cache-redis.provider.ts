@@ -1,6 +1,17 @@
-import Redis, { Redis as RedisClient } from 'ioredis';
+import type { Redis as RedisClient, RedisOptions } from 'ioredis';
+
 import { Provider, ProviderScope } from '@frontmcp/sdk';
-import { CacheStoreInterface, RedisCacheOptions } from '../cache.types';
+
+import { type CacheStoreInterface, type RedisCacheOptions } from '../cache.types';
+
+type RedisConstructor = typeof import('ioredis').default;
+
+/** ioredis, loaded when a cache on Redis is built, so a page that never builds one does not bundle it. */
+function createRedisClient(options: RedisOptions): RedisClient {
+  const ioredis = require('ioredis') as RedisConstructor & { default?: RedisConstructor };
+  const Redis = ioredis.default ?? ioredis;
+  return new Redis(options);
+}
 
 @Provider({
   name: 'provider:cache:redis',
@@ -19,7 +30,7 @@ export default class CacheRedisProvider implements CacheStoreInterface {
       this.client = options.client;
       return;
     }
-    this.client = new Redis({
+    this.client = createRedisClient({
       lazyConnect: false,
       maxRetriesPerRequest: 3,
       ...options.config,

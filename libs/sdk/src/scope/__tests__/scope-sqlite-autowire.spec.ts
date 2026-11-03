@@ -18,15 +18,11 @@ import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 // for liveness.
 const fakeSqliteSessionStore = { ping: jest.fn().mockResolvedValue(true), close: jest.fn() };
 const fakeSqliteTaskStore = { close: jest.fn() };
-jest.mock(
-  '@frontmcp/storage-sqlite',
-  () => ({
-    SqliteSessionStore: jest.fn().mockImplementation(() => fakeSqliteSessionStore),
-    SqliteTaskStore: jest.fn().mockImplementation(() => fakeSqliteTaskStore),
-    SqliteElicitationStore: jest.fn().mockImplementation(() => ({})),
-  }),
-  { virtual: true },
-);
+jest.mock('@frontmcp/storage-sqlite', () => ({
+  SqliteSessionStore: jest.fn().mockImplementation(() => fakeSqliteSessionStore),
+  SqliteTaskStore: jest.fn().mockImplementation(() => fakeSqliteTaskStore),
+  SqliteElicitationStore: jest.fn().mockImplementation(() => ({})),
+}));
 
 describe('Scope sqlite auto-wire (issue #401)', () => {
   it('auto-threads top-level sqlite into transport persistence', async () => {

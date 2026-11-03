@@ -2,6 +2,7 @@
 import 'reflect-metadata';
 
 import { tokenName, type Ctor, type Token } from '@frontmcp/di';
+import { getRuntimeContext } from '@frontmcp/utils';
 
 import AdapterRegistry from '../adapter/adapter.registry';
 import {
@@ -28,6 +29,7 @@ import ProviderRegistry from '../provider/provider.registry';
 import { normalizeProvider } from '../provider/provider.utils';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import ResourceRegistry from '../resource/resource.registry';
+import { declaredPluginStores, refusePluginStoresInBrowser } from '../scope/browser-stores';
 import SkillRegistry from '../skill/skill.registry';
 import ToolRegistry from '../tool/tool.registry';
 import { normalizePlugin, pluginDiscoveryDeps } from './plugin.utils';
@@ -368,6 +370,12 @@ export default class PluginRegistry
     }
   }
 
+  /** In a browser, refuse the stores a plugin declares on Redis or SQLite for its options, before it builds them. */
+  private refuseStoresInBrowser(plugin: unknown, options: unknown): void {
+    if (getRuntimeContext().runtime !== 'browser') return;
+    refusePluginStoresInBrowser(declaredPluginStores(plugin, options, this.scope.metadata));
+  }
+
   /**
    * Builds the plugin instance and the providers it contributes; a factory's options exist only once
    * it has run, so the providers and tools a plugin derives from them are collected here (#678).
@@ -386,8 +394,10 @@ export default class PluginRegistry
 
     switch (rec.kind) {
       case PluginKind.CLASS:
+        this.refuseStoresInBrowser(rec.useClass, {});
         return instantiateClassPlugin(rec.useClass as Ctor<PluginInstance>, depsInstances, rec.providers);
       case PluginKind.CLASS_TOKEN:
+        this.refuseStoresInBrowser(rec.provide, {});
         return instantiateClassPlugin(rec.provide as Ctor<PluginInstance>, depsInstances, rec.providers);
       case PluginKind.VALUE: {
         // One `SomePlugin.init(options)` record can be installed by several registries (an app class
@@ -396,7 +406,9 @@ export default class PluginRegistry
         // registry, not to whichever installed the record last (#647). A hand-written value record
         // names its instance, so it stays that instance everywhere.
         const value = rec.useValue as PluginInstance;
-        const init = installedPluginValues.has(value) ? initOptionsOf(value) : undefined;
+        const recorded = initOptionsOf(value);
+        if (recorded) this.refuseStoresInBrowser(rec.provide, recorded.options);
+        const init = installedPluginValues.has(value) ? recorded : undefined;
         installedPluginValues.add(value);
         if (init && isDynamicPluginClass(rec.provide)) {
           return {
@@ -413,6 +425,7 @@ export default class PluginRegistry
         const produced: unknown = await rec.useFactory(...args);
         // DynamicPlugin.init({ useFactory }) factories return options; a hand-written factory may return the instance.
         if (isDynamicPluginClass(rec.provide) && !(produced instanceof rec.provide)) {
+          this.refuseStoresInBrowser(rec.provide, produced);
           const optionDerived = collectDynamicProviders(rec.provide, produced);
           return {
             pluginInstance: new rec.provide(produced) as PluginInstance,
