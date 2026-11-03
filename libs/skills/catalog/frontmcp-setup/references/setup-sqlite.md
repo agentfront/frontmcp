@@ -278,7 +278,10 @@ takes no `redis` or `sqlite` of its own beside it, and any other value than
 The generated CLI (`frontmcp build --target cli`) reads the `tasks` options too,
 and runs tasks only on a store its invocations share: with `tasks.store: false`
 it runs none. Up to 1.10 it ignored every `tasks` option: it ran tasks only
-with a top-level `sqlite` or `redis`, and kept them there.
+with a top-level `sqlite` or `redis`, and kept them there. It validates the
+top-level `sqlite` and `jobs` as the server does; up to 1.10 it took an empty
+`sqlite.path` in a config object for the default path, and kept its tasks
+unencrypted on a missing `encryption.secret`.
 
 In the browser build (`create()` in a page), a subsystem that would open SQLite
 or Redis, its own or the top-level one, stops startup with

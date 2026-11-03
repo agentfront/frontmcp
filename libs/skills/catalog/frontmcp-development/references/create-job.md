@@ -602,7 +602,7 @@ class MyLocalServer {}
 
 A server with a top-level `sqlite` (or `redis`) and no `jobs.store` keeps its runs there too. Up to 1.10 jobs ignored both and stayed in memory. On the top-level `redis`, the jobs' keys start with its `keyPrefix` followed by `jobs:` (`mcp:jobs:` by default; `jobs.store.keyPrefix` overrides it), so servers that share one Redis keep their runs and dynamic job definitions apart once each sets its own `redis.keyPrefix`. In Redis and SQLite a run record expires 24 hours after the run's last write.
 
-`jobs: { store: false }` keeps runs and dynamic definitions in this process memory although the server has a top-level `redis` or `sqlite`, which its other subsystems (sessions, tasks) keep using. `store` takes `false` or an object; any other value stops startup with `jobs.store must be false (runs kept in memory) or an object with redis or sqlite`. A `runner: 'detached'` job needs a store other processes share, so it cannot use `false`.
+`jobs: { store: false }` keeps runs and dynamic definitions in this process memory although the server has a top-level `redis` or `sqlite`, which its other subsystems (sessions, tasks) keep using. `store` takes `false` or an object; any other value stops startup with `jobs.store must be false (runs kept in memory) or an object with redis or sqlite`. A `runner: 'detached'` job needs a store other processes share, so it cannot use `false`. The generated CLI (`frontmcp build --target cli`, `connect(config, { mode: 'cli' })`) validates `jobs` the same way; up to 1.10 it took an invalid `jobs.store` in a config object for unset and kept the runs in the top-level `redis` or `sqlite`.
 
 ```typescript
 @FrontMcp({
