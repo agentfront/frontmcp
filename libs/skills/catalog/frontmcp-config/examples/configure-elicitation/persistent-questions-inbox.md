@@ -19,16 +19,21 @@ Keep a question for its caller past the session, answered in the inbox or the CL
 
 ```typescript
 // src/server.ts
-import { App, FrontMcp, printQuestionInboxLink, Tool, ToolContext, z } from '@frontmcp/sdk';
+import { App, FrontMcp, printQuestionInboxLink, Tool, ToolContext, ToolInputOf, ToolOutputOf, z } from '@frontmcp/sdk';
+
+const approveDeployInput = { version: z.string() };
+const approveDeployOutput = { approved: z.boolean() };
+type ApproveDeployInput = ToolInputOf<{ inputSchema: typeof approveDeployInput }>;
+type ApproveDeployOutput = ToolOutputOf<{ outputSchema: typeof approveDeployOutput }>;
 
 @Tool({
   name: 'approve_deploy',
   description: 'Ask the person to approve a deploy; the question waits for them',
-  inputSchema: { version: z.string() },
-  outputSchema: { approved: z.boolean() },
+  inputSchema: approveDeployInput,
+  outputSchema: approveDeployOutput,
 })
 class ApproveDeployTool extends ToolContext {
-  async execute(input: { version: string }) {
+  async execute(input: ApproveDeployInput): Promise<ApproveDeployOutput> {
     const answer = await this.elicit(`Deploy ${input.version} to production?`, z.object({ approve: z.boolean() }), {
       ttl: 60_000,
       persist: { key: `deploy-${input.version}`, ttlMs: 86_400_000 },
@@ -38,14 +43,17 @@ class ApproveDeployTool extends ToolContext {
   }
 }
 
+const inboxLinkOutput = { expiresAt: z.number() };
+type InboxLinkOutput = ToolOutputOf<{ outputSchema: typeof inboxLinkOutput }>;
+
 @Tool({
   name: 'inbox_link',
   description: 'Print a sign-in link to my questions on the server console',
   inputSchema: {},
-  outputSchema: { expiresAt: z.number() },
+  outputSchema: inboxLinkOutput,
 })
 class InboxLinkTool extends ToolContext {
-  async execute() {
+  async execute(): Promise<InboxLinkOutput> {
     return printQuestionInboxLink(this);
   }
 }

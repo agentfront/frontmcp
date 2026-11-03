@@ -137,11 +137,16 @@ class Server {}
 ```
 
 ```typescript
-import { printQuestionInboxLink, Tool, ToolContext, z } from '@frontmcp/sdk';
+import { printQuestionInboxLink, Tool, ToolContext, ToolInputOf, ToolOutputOf, z } from '@frontmcp/sdk';
 
-@Tool({ name: 'approve_deploy', inputSchema: { version: z.string() }, outputSchema: { approved: z.boolean() } })
+const approveDeployInput = { version: z.string() };
+const approveDeployOutput = { approved: z.boolean() };
+type ApproveDeployInput = ToolInputOf<{ inputSchema: typeof approveDeployInput }>;
+type ApproveDeployOutput = ToolOutputOf<{ outputSchema: typeof approveDeployOutput }>;
+
+@Tool({ name: 'approve_deploy', inputSchema: approveDeployInput, outputSchema: approveDeployOutput })
 class ApproveDeployTool extends ToolContext {
-  async execute(input: { version: string }) {
+  async execute(input: ApproveDeployInput): Promise<ApproveDeployOutput> {
     const answer = await this.elicit(`Deploy ${input.version}?`, z.object({ approve: z.boolean() }), {
       ttl: 60_000, // how long THIS call waits
       persist: { key: `deploy-${input.version}` }, // keep the question (default: elicitation.persistent.ttlMs, 24 h)
@@ -150,10 +155,13 @@ class ApproveDeployTool extends ToolContext {
   }
 }
 
+const inboxLinkOutput = { expiresAt: z.number() };
+type InboxLinkOutput = ToolOutputOf<{ outputSchema: typeof inboxLinkOutput }>;
+
 // Print a one-time sign-in link to the caller's inbox on the server console, for the person at the machine
-@Tool({ name: 'inbox_link', inputSchema: {}, outputSchema: { expiresAt: z.number() } })
+@Tool({ name: 'inbox_link', inputSchema: {}, outputSchema: inboxLinkOutput })
 class InboxLinkTool extends ToolContext {
-  async execute() {
+  async execute(): Promise<InboxLinkOutput> {
     return printQuestionInboxLink(this); // { expiresAt }: the link itself goes to stderr, never to the MCP client
   }
 }
