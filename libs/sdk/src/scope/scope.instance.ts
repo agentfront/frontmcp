@@ -984,7 +984,8 @@ export class Scope extends ScopeEntry {
       );
     }
 
-    if (this.metadata.sqlite && !topLevelSqliteUsed) {
+    // A browser opens no SQLite file, so a top-level `sqlite` kept for a server sharing the config is no mistake there
+    if (this.metadata.sqlite && !topLevelSqliteUsed && getRuntimeContext().runtime !== 'browser') {
       this.logger.warn(
         '[FrontMcp] Top-level `sqlite` config was provided but no subsystem consumes it ' +
           '(transport persistence, tasks, elicitation and jobs were all disabled or pre-configured with a different backend). ' +

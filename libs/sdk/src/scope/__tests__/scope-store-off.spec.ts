@@ -163,6 +163,8 @@ describe('stores in a browser', () => {
   });
 
   it('starts in memory when every store is switched off, with the top-level redis and sqlite left in', async () => {
+    const warn = jest.spyOn(console, 'warn');
+
     await expect(
       createDirect({
         redis,
@@ -173,5 +175,7 @@ describe('stores in a browser', () => {
       }),
     ).resolves.toBeUndefined();
     await expectNoSqliteTouched();
+    expect(warn.mock.calls.flat().join('\n')).not.toContain('no subsystem consumes it');
+    warn.mockRestore();
   });
 });
