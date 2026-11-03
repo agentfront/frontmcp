@@ -19,11 +19,11 @@ import { runOnSurface } from '../../context/call-surface';
 import { InternalMcpError, JobNotAuthorizedError, JobTimeoutError } from '../../errors';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
-import { outlasts } from '../../provider/provider.lifecycle';
 import { type JobAdmissionSlot } from '../job-admission';
 import {
   EXECUTE_JOB_FLOW,
   interruptReasonOf,
+  runJobCleanup,
   toJobError,
   untilAborted,
   willRetryJobAttempt,
@@ -33,10 +33,8 @@ import {
 } from '../job-attempt';
 import { jobContextProviders } from '../job-context-providers';
 import { JobPermissionGuard } from '../job-permission.guard';
+import { runnerOf } from '../runner/job-runner';
 import { type JobRunProgress } from '../store/job-state.interface';
-
-/** How long a job's `cleanup` may take when it sets no `timeoutMs`. */
-const DEFAULT_CLEANUP_TIMEOUT_MS = 3_000;
 
 /** A job's input once its `inputSchema` parsed it. */
 type JobInput = ReturnType<JobEntry['parseInput']>;
@@ -241,7 +239,8 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Run the job's `execute()` on the `'job'` surface. A value passed to `this.respond()` is its result.
+   * Run the job's `execute()` on the `'job'` surface, in a worker thread of the offload pool for a job on the
+   * worker runner. A value passed to `this.respond()` is its result.
    * Past `ctx.timeoutMs` the attempt is aborted with `JobTimeoutError`. An attempt that is aborted ends
    * at once with the abort's reason, however the job ends; `execute()` itself is not stopped.
    */
@@ -253,10 +252,20 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
     const timer = timeoutMs
       ? setTimeout(() => attemptAbort.abort(new JobTimeoutError(job.name, timeoutMs)), timeoutMs)
       : undefined;
+    const onWorker = runnerOf(job, this.scope.metadata.jobs?.runner) === 'worker';
     let output: unknown;
     try {
       output = await untilAborted(
-        runOnSurface('job', async () => jobContext.execute(parsedInput)),
+        runOnSurface('job', async () =>
+          onWorker
+            ? (await import('../../offload/run-job-in-worker.js')).runJobInWorker(
+                jobContext,
+                job,
+                parsedInput,
+                attemptAbort.signal,
+              )
+            : jobContext.execute(parsedInput),
+        ),
         attemptAbort.signal,
       );
     } catch (error) {
@@ -286,17 +295,8 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
   @Stage('cleanup')
   async cleanup() {
     const { job, jobContext, attemptAbort } = this.state;
-    const cleanup = job?.metadata.cleanup;
-    if (!cleanup || !jobContext || !attemptAbort?.signal.aborted) return;
-    const { run, timeoutMs = DEFAULT_CLEANUP_TIMEOUT_MS } = typeof cleanup === 'function' ? { run: cleanup } : cleanup;
-    const reason = interruptReasonOf(attemptAbort.signal.reason);
-    try {
-      if (await outlasts(() => run(jobContext, reason), timeoutMs)) {
-        this.logger.warn(`cleanup: the ${reason} cleanup did not finish within ${timeoutMs} ms`);
-      }
-    } catch (error) {
-      this.logger.warn(`cleanup: the ${reason} cleanup failed: ${toJobError(error).message}`);
-    }
+    if (!job || !jobContext || !attemptAbort?.signal.aborted) return;
+    await runJobCleanup(job, jobContext, interruptReasonOf(attemptAbort.signal.reason), this.logger);
   }
 
   /**

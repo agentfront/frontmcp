@@ -2,7 +2,8 @@ import type { AuthoritiesContextBuilder } from '@frontmcp/auth';
 
 import { FlowControl, type ScopeEntry } from '../common';
 import { type JobEntry } from '../common/entries/job.entry';
-import { type JobInterruptReason, type JobRetryConfig } from '../common/metadata/job.metadata';
+import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
+import { type JobCleanup, type JobInterruptReason, type JobRetryConfig } from '../common/metadata/job.metadata';
 import { FrontMcpContextStorage, type FrontMcpContext } from '../context';
 import {
   InvalidOutputError,
@@ -11,6 +12,7 @@ import {
   JobInterruptedError,
   JobNotAuthorizedError,
 } from '../errors';
+import { outlasts } from '../provider/provider.lifecycle';
 import { type JobAdmission, type JobAdmissionSlot } from './job-admission';
 import { type JobRunProgress } from './store/job-state.interface';
 
@@ -150,6 +152,31 @@ export function willRetryJobAttempt(error: unknown, attempt: number, maxAttempts
   return !FINAL_FAILURES.some((failure) => cause instanceof failure);
 }
 
+/** How long a job's `cleanup` may take when it sets no `timeoutMs`. */
+const DEFAULT_CLEANUP_TIMEOUT_MS = 3_000;
+
+/**
+ * Run the job's `cleanup` on an attempt's instance, bounded by its own time limit; a throw or an overrun is
+ * logged and changes nothing else.
+ */
+export async function runJobCleanup(
+  job: JobEntry,
+  jobContext: Parameters<JobCleanup>[0],
+  reason: JobInterruptReason,
+  logger: FrontMcpLogger,
+): Promise<void> {
+  const cleanup = job.metadata.cleanup;
+  if (!cleanup) return;
+  const { run, timeoutMs = DEFAULT_CLEANUP_TIMEOUT_MS } = typeof cleanup === 'function' ? { run: cleanup } : cleanup;
+  try {
+    if (await outlasts(() => run(jobContext, reason), timeoutMs)) {
+      logger.warn(`cleanup: the ${reason} cleanup did not finish within ${timeoutMs} ms`);
+    }
+  } catch (error) {
+    logger.warn(`cleanup: the ${reason} cleanup failed: ${toJobError(error).message}`);
+  }
+}
+
 /** What the job's `cleanup` is told about why its attempt stopped, from the reason its signal was aborted with. */
 export function interruptReasonOf(reason: unknown): JobInterruptReason {
   if (reason instanceof JobCancelledError) return 'cancel';
@@ -196,7 +223,7 @@ export function toJobError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-function contextStorageOf(scope: ScopeEntry): FrontMcpContextStorage | undefined {
+export function contextStorageOf(scope: ScopeEntry): FrontMcpContextStorage | undefined {
   try {
     return scope.providers.get(FrontMcpContextStorage);
   } catch {

@@ -1400,11 +1400,6 @@
           ]
         },
         {
-          "name": "build-manifest",
-          "description": "The frontmcp.manifest.json that frontmcp build writes for every target, its lint, and the instructionsBudget size limits",
-          "examples": []
-        },
-        {
           "name": "build-for-sdk",
           "description": "Build a FrontMCP server as an embeddable library with create() and connect() APIs",
           "examples": [
@@ -1442,6 +1437,11 @@
               ]
             }
           ]
+        },
+        {
+          "name": "build-manifest",
+          "description": "The frontmcp.manifest.json that frontmcp build writes for every target, its lint, and the instructionsBudget size limits",
+          "examples": []
         },
         {
           "name": "deploy-manifest-yaml",
@@ -1853,7 +1853,7 @@
         },
         {
           "name": "create-job",
-          "description": "Create long-running background jobs with retry policies, timeouts, cancellation, cleanup, progress tracking, and permissions",
+          "description": "Create long-running background jobs with retry policies, timeouts, cancellation, cleanup, progress tracking, permissions, and runners (inline, worker thread, or a detached process that outlives the server)",
           "examples": [
             {
               "name": "basic-report-job",
@@ -1864,6 +1864,19 @@
                 "Defining a job with `@Job` decorator including `inputSchema`, `outputSchema`, and `timeout`",
                 "Reporting progress at each stage using `this.progress(pct, total, message)`",
                 "Using `this.log()` for persistent, queryable log entries"
+              ]
+            },
+            {
+              "name": "detached-export-job",
+              "description": "An export job that runs in a process of its own, survives a server restart and is cancelled from any server.",
+              "level": "advanced",
+              "tags": ["development", "job", "detached", "worker", "sqlite", "cancel"],
+              "features": [
+                "`runner: 'detached'`: each run in a process of its own that outlives the server that started it",
+                "A store the runner and every server share (the top-level `sqlite`), which the runs live in",
+                "Reading and cancelling a run from a server started after it, and a `cleanup` the runner runs on a cancel",
+                "Runs whose runner died settled as `interrupted` when the next server boots, with their cleanup",
+                "`runner: 'worker'` for a CPU-heavy job that runs in a worker thread instead"
               ]
             },
             {

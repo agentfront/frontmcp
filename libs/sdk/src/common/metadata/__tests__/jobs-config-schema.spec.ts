@@ -96,3 +96,15 @@ describe('frontMcpMetadataSchema — durable jobs config', () => {
     ).toThrow('cleanup.timeoutMs must be at most 2147483647 ms (about 24.8 days)');
   });
 });
+
+describe('frontMcpMetadataSchema — job runners', () => {
+  it.each(['inline', 'worker', 'detached'])('keeps runner %s', (runner) => {
+    expect(parseJobs({ enabled: true, runner })?.['runner']).toBe(runner);
+  });
+
+  it('refuses an unknown runner with the runners it takes', () => {
+    expect(() => parseJobs({ enabled: true, runner: 'thread' })).toThrow(
+      /jobs\.runner must be 'inline', 'worker' or 'detached'/,
+    );
+  });
+});

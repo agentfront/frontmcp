@@ -57,9 +57,18 @@ function exportedFunction(namespace, name, url) {
   return found;
 }
 
+const log = (level, text) => parentPort.postMessage({ type: 'log', level, text });
+
 async function run(task) {
   await loaderReady;
   const namespace = await import(task.url);
+  if (task.kind === 'job') {
+    const runners = globalThis[Symbol.for('@frontmcp/sdk:worker-jobs')];
+    const runner = runners && runners.get(task.key);
+    if (!runner) throw new Error('Importing ' + task.url + ' in a worker registered no worker job "' + task.name + '"');
+    parentPort.postMessage({ type: 'started' });
+    return runner.run(task.input, task.attempt, log, (progress) => parentPort.postMessage({ type: 'progress', progress }));
+  }
   if (task.kind === 'function') {
     const fn = exportedFunction(namespace, task.exportName, task.url);
     parentPort.postMessage({ type: 'started' });
@@ -69,7 +78,7 @@ async function run(task) {
   const reader = readers && readers.get(task.key);
   if (!reader) throw new Error('Importing ' + task.url + ' in a worker registered no worker resource "' + task.name + '"');
   parentPort.postMessage({ type: 'started' });
-  return reader.read(task.uri, task.params, (level, text) => parentPort.postMessage({ type: 'log', level, text }));
+  return reader.read(task.uri, task.params, log);
 }
 
 parentPort.on('message', (task) => {
