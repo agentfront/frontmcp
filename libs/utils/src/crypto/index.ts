@@ -11,6 +11,7 @@ import * as platformCrypto from '#crypto-provider';
 import type { RsaJwk as RsaJwkNode, RsaKeyPair as RsaKeyPairNode } from './node';
 import { isNode } from './runtime';
 import type { CryptoProvider, EncBlob } from './types';
+import { rsaVerifyBrowser } from './web-rsa';
 
 export type RsaJwk = RsaJwkNode;
 export type RsaKeyPair = RsaKeyPairNode;
@@ -46,10 +47,7 @@ export function rsaVerify(
   if (isNode()) {
     return Promise.resolve(platformCrypto.rsaVerify(jwtAlg, data, publicJwk, signature));
   }
-  // Browser: use WebCrypto async API
-
-  const { rsaVerifyBrowser } = require('./browser');
-  return rsaVerifyBrowser(jwtAlg, data, publicJwk, signature) as Promise<boolean>;
+  return rsaVerifyBrowser(jwtAlg, data, publicJwk, signature);
 }
 
 /**

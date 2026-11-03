@@ -5,36 +5,44 @@
  *
  * Needs the packages built: `nx run-many -t build -p sdk plugin-webmcp`.
  */
-import { execFileSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-
-import { mkdtemp, rm } from '@frontmcp/utils';
+import { resolve } from 'node:path';
 
 import {
   bundleForBrowser,
+  bundleWithVite,
   DEFAULT_CONFIG_MODULES,
   fixtureDir,
   importChain,
   inputSizes,
   leakedFeatures,
-  OPTIONAL_PEERS,
   SERVER_MODULES,
   type BrowserBundle,
+  type ViteBuild,
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_342_403 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_349_731 },
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_295_507 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_302_379 },
 ];
 
-const VITE_INITIAL_CHUNK_MAX_BYTES = 965_502;
+const VITE_INITIAL_CHUNK_MAX_BYTES = 761_903;
 
-// Packages create() never needs: the JavaScript parser behind @enclave-vm/ast (#885) and the MCP client (#886)
+// What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {
   'JavaScript parser': /(^|\/)node_modules\/(acorn|acorn-walk|astring)\//,
   'MCP client':
     /(^|\/)node_modules\/@modelcontextprotocol\/sdk\/dist\/esm\/client\/|^libs\/protocol\/dist\/esm\/clients?\.mjs$/,
+  'single-file utils and auth': /^libs\/(utils|auth)\/dist\/(esm\/index\.mjs|index\.js)$/,
+  'CLI task runner':
+    /^libs\/sdk\/dist\/browser\/task\/helpers\/cli-task-runner\.mjs$|^libs\/utils\/dist\/browser\/process\/(owned-process|child-process)\.mjs$/,
+  'file log transport': /^libs\/sdk\/dist\/browser\/logger\/instances\/instance\.file-logger\.mjs$/,
+  'stdio bridge': /^libs\/utils\/dist\/browser\/stdio-bridge\//,
+  'storage change feed': /^libs\/utils\/dist\/browser\/storage\/change-feed\.mjs$/,
+  'people sign-in': /^libs\/auth\/dist\/browser\/people\//,
+  'shared server identity': /^libs\/auth\/dist\/browser\/shared-server\//,
+  'auth pages': /^libs\/auth\/dist\/browser\/ui\//,
+  'Redis and Vercel KV auth stores':
+    /^libs\/auth\/dist\/browser\/(session\/(redis|vercel-kv)-session\.store|cimd\/cimd-redis\.cache)\.mjs$/,
 };
 
 const sdkModule = (pattern: string) => new RegExp(`^libs/sdk/dist/browser/(${pattern})`);
@@ -80,11 +88,13 @@ function topInputs(bundle: BrowserBundle, count = 15): string {
 
 describe('the browser bundle of create()', () => {
   const bundles = new Map<string, BrowserBundle>();
+  let vite: ViteBuild;
 
   beforeAll(async () => {
     for (const { entry } of BUDGETS) {
       bundles.set(entry, await bundleForBrowser(resolve(fixtureDir, entry), DEFAULT_CONFIG_MODULES));
     }
+    vite = await bundleWithVite(resolve(fixtureDir, 'create-tool.ts'));
   });
 
   it.each(BUDGETS)('keeps $label within its budget', ({ entry, label, maxBytes }) => {
@@ -99,7 +109,7 @@ describe('the browser bundle of create()', () => {
     }
   });
 
-  it.each(BUDGETS)('leaves the JavaScript parser and the MCP client out of $label', ({ entry }) => {
+  it.each(BUDGETS)('leaves what create() never needs out of $label', ({ entry }) => {
     const bundle = bundles.get(entry) as BrowserBundle;
     const leaks = leakedFeatures(bundle.metafile, NEVER_BUNDLED);
     const leaked = [...leaks.keys()].sort();
@@ -122,27 +132,17 @@ describe('the browser bundle of create()', () => {
     expect({ leaked, importChains }).toEqual({ leaked: [], importChains: {} });
   });
 
-  it('keeps the initial chunk of a Vite app within its budget', async () => {
-    const outDir = await mkdtemp(join(tmpdir(), 'frontmcp-bundle-size-'));
-    try {
-      const output = execFileSync(
-        process.execPath,
-        [
-          resolve(__dirname, 'helpers/vite-initial-chunk.mjs'),
-          resolve(fixtureDir, 'create-tool.ts'),
-          outDir,
-          resolve(fixtureDir, 'missing-peer.mjs'),
-          ...OPTIONAL_PEERS,
-        ],
-        { encoding: 'utf8', env: { ...process.env, NODE_ENV: 'production' } },
-      );
-      const { initialBytes, totalBytes } = JSON.parse(output) as { initialBytes: number; totalBytes: number };
-      process.stdout.write(
-        `Vite, create() + one tool: initial chunk ${initialBytes.toLocaleString('en-US')} bytes, all chunks ${totalBytes.toLocaleString('en-US')} (budget ${VITE_INITIAL_CHUNK_MAX_BYTES.toLocaleString('en-US')})\n`,
-      );
-      expect(initialBytes).toBeLessThanOrEqual(VITE_INITIAL_CHUNK_MAX_BYTES);
-    } finally {
-      await rm(outDir, { recursive: true, force: true });
-    }
+  it('keeps the initial chunk of a Vite app within its budget', () => {
+    const { initialBytes, totalBytes } = vite;
+    process.stdout.write(
+      `Vite, create() + one tool: initial chunk ${initialBytes.toLocaleString('en-US')} bytes, all chunks ${totalBytes.toLocaleString('en-US')} (budget ${VITE_INITIAL_CHUNK_MAX_BYTES.toLocaleString('en-US')})\n`,
+    );
+    expect(initialBytes).toBeLessThanOrEqual(VITE_INITIAL_CHUNK_MAX_BYTES);
+  });
+
+  it('leaves what create() never needs out of the initial chunk of a Vite app', () => {
+    const neverBundled = Object.values(NEVER_BUNDLED);
+    expect(vite.initialModules.length).toBeGreaterThan(0);
+    expect(vite.initialModules.filter((module) => neverBundled.some((pattern) => pattern.test(module)))).toEqual([]);
   });
 });

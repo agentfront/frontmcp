@@ -52,13 +52,23 @@
         }
       }
     },
+    "build-browser-esm": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-cjs"],
+      "cache": true,
+      "inputs": ["production", "^production", "{workspaceRoot}/scripts/build-browser-modules.mjs"],
+      "outputs": ["{projectRoot}/dist/browser/**/*.mjs"],
+      "options": {
+        "command": "node scripts/build-browser-modules.mjs libs/auth/src/index.ts libs/auth/dist/browser libs/auth/tsconfig.lib.json"
+      }
+    },
     "build": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build-cjs", "build-esm"],
+      "dependsOn": ["build-cjs", "build-esm", "build-browser-esm"],
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/auth/dist/package.json",
-          "node scripts/inject-esm-require-banner.js libs/auth/dist/esm",
+          "node scripts/inject-esm-require-banner.js libs/auth/dist/esm libs/auth/dist/browser",
           "node scripts/escape-non-ascii.mjs libs/auth/dist"
         ],
         "parallel": false

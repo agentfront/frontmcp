@@ -516,10 +516,13 @@ export class Scope extends ScopeEntry {
       !tasksUnavailableOnVercelKv &&
       (!this.cliMode || tasksEnabledForCli || isTaskWorker);
 
-    let taskModule: typeof import('../task/index.js') | undefined;
+    const useCliRunner = !isTaskWorker && tasksConfig?.runner === 'cli';
+    let taskModule: typeof import('../task/task-scope.runtime.js') | undefined;
+    let cliTaskRunner: typeof import('../task/helpers/cli-task-runner.js').CliTaskRunner | undefined;
     const tasksPromise = shouldInitTasks
       ? (async () => {
-          taskModule = await import('../task/index.js');
+          taskModule = await import('../task/task-scope.runtime.js');
+          if (useCliRunner) cliTaskRunner = (await import('../task/helpers/cli-task-runner.js')).CliTaskRunner;
           const tasksRedis = tasksConfig?.redis ?? serverRedisForTasks;
           // Mirror the elicitation precedence: an explicit `tasks.sqlite` is
           // always honored, but the top-level `metadata.sqlite` fallback only
@@ -581,8 +584,6 @@ export class Scope extends ScopeEntry {
           if (!this._taskStore || !this._taskRegistry || !tasks) return;
           // Runner selection: explicit `tasks.runner` wins; a task worker is
           // ALWAYS in-process regardless of config (it's the worker itself).
-          const explicit = tasksConfig?.runner;
-          const useCliRunner = !isTaskWorker && explicit === 'cli';
           if (
             useCliRunner &&
             !tasksConfig?.sqlite &&
@@ -604,8 +605,8 @@ export class Scope extends ScopeEntry {
                 'cannot share an in-memory store with this host.',
             );
           }
-          const runner = useCliRunner
-            ? new tasks.CliTaskRunner({
+          const runner = cliTaskRunner
+            ? new cliTaskRunner({
                 store: this._taskStore,
                 command: tasksConfig?.cliRunnerCommand,
                 logger: this.logger,
