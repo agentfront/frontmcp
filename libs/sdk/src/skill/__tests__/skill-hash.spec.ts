@@ -4,8 +4,8 @@
  * Tests for deterministic skill content hashing used in change detection.
  */
 
-import { computeSkillHash, computeSkillHashComponents, areSkillsEqual } from '../sync/skill-hash';
 import type { SkillContent } from '../../common/interfaces';
+import { areSkillsEqual, computeSkillHash, computeSkillHashComponents } from '../sync/skill-hash';
 
 // Helper to create test skills
 const createTestSkill = (overrides: Partial<SkillContent> = {}): SkillContent => ({
@@ -19,6 +19,30 @@ const createTestSkill = (overrides: Partial<SkillContent> = {}): SkillContent =>
 
 describe('skill-hash', () => {
   describe('computeSkillHash', () => {
+    it("is the same whatever the machine's default locale", () => {
+      const skill = createTestSkill({
+        tools: [{ name: 'hash' }, { name: 'chart' }, { name: 'delete' }],
+        examples: [{ scenario: 'hash it' }, { scenario: 'chart it' }],
+      });
+      const hashes = () => ({ hash: computeSkillHash(skill), toolsHash: computeSkillHashComponents(skill).toolsHash });
+      const onThisMachine = hashes();
+      const localeCompare = String.prototype.localeCompare;
+      // A machine whose default locale is Czech, where "ch" sorts after "h"
+      jest.spyOn(String.prototype, 'localeCompare').mockImplementation(function (
+        this: string,
+        that: string,
+        locales?: Parameters<string['localeCompare']>[1],
+        options?: Parameters<string['localeCompare']>[2],
+      ) {
+        return localeCompare.call(this, that, locales ?? 'cs', options);
+      });
+      try {
+        expect(hashes()).toEqual(onThisMachine);
+      } finally {
+        jest.restoreAllMocks();
+      }
+    });
+
     it('should produce consistent hash for same content', () => {
       const skill = createTestSkill();
 

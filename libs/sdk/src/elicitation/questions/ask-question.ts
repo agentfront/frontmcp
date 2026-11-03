@@ -1,0 +1,188 @@
+import { toJSONSchema, internalZ as z, type ZodType } from '@frontmcp/lazy-zod';
+import { randomUUID } from '@frontmcp/utils';
+
+import { ElicitationNotSupportedError, InvalidInputError } from '../../errors';
+import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult, type PersistOptions } from '../elicitation.types';
+import { type ElicitHelperDeps } from '../helpers/elicit.helper';
+import { questionSubjectOf } from './question-subject';
+import { QuestionPendingError, QuestionSupersededError } from './question.errors';
+import { QUESTIONS_TOPIC, type QuestionOutcome, type QuestionRequest, type QuestionStore } from './question.store';
+
+/** How often a waiting call reads its question even without a change notification. */
+const RECHECK_MS = 5_000;
+const MAX_QUESTION_KEY_LENGTH = 256;
+
+export interface PersistentAskDeps {
+  store: QuestionStore;
+  subject: string;
+  /** Aborted when the call stops: the question stays for the next call. */
+  signal?: AbortSignal;
+}
+
+/** An answer a call took from the store, and the expiry of the question it answered. */
+interface TakenAnswer {
+  answer: ElicitResult;
+  expiresAt: number;
+}
+
+export interface PersistentAskOptions {
+  key: string;
+  /** How long the question, and an answer nobody took yet, are kept. */
+  ttlMs: number;
+  /** How long this call waits for the answer. */
+  waitMs: number;
+}
+
+async function delivered<S extends ZodType>(
+  answer: ElicitResult,
+  schema: S,
+): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
+  type Result = ElicitResult<S extends ZodType<infer O> ? O : unknown>;
+  if (answer.status !== 'accept') return { status: answer.status } as Result;
+  const parsed = await schema.safeParseAsync(answer.content);
+  if (!parsed.success) {
+    throw new InvalidInputError('The answer does not match the requested schema', parsed.error.issues);
+  }
+  return { status: 'accept', content: parsed.data } as Result;
+}
+
+/**
+ * Ask a question that outlives this call: kept for `subject` under `key`, answered in the inbox. Resolves with the
+ * answer once: at once when one is waiting, or when it arrives while this call waits. Rejects with
+ * `QuestionPendingError` when the call stops waiting (timer or abort), and `QuestionSupersededError` when a newer call
+ * of the subject asks the question; either way the question, and its answer, stay for the next call.
+ */
+export async function askPersistentQuestion<S extends ZodType>(
+  deps: PersistentAskDeps,
+  message: string,
+  schema: S,
+  options: PersistentAskOptions,
+): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
+  const { store, subject, signal } = deps;
+  const request: QuestionRequest = {
+    subject,
+    key: options.key,
+    message,
+    requestedSchema: toJSONSchema(schema) as Record<string, unknown>,
+    ttlMs: options.ttlMs,
+    waiter: `call-${randomUUID()}`,
+  };
+  /**
+   * Hand this call an answer it took, checked against its schema. When the call was cancelled first, or while the answer
+   * was checked, the answer is put back for the next call, with its question's expiry, and the call gets
+   * `QuestionPendingError`.
+   */
+  const handOver = async (taken: TakenAnswer) => {
+    const putBack = async () => {
+      await store.restore(request, taken.answer, taken.expiresAt).catch(() => undefined);
+      return new QuestionPendingError(options.key, taken.expiresAt);
+    };
+    if (signal?.aborted) throw await putBack();
+    const result = await delivered(taken.answer, schema);
+    if (signal?.aborted) throw await putBack();
+    return result;
+  };
+
+  const asked = await store.ask(request);
+  if (asked.kind === 'answered') return handOver(asked);
+  const { expiresAt } = asked.question;
+
+  const answer = await new Promise<TakenAnswer>((resolve, reject) => {
+    let settled = false;
+    let queued = false;
+    let chain: Promise<void> = Promise.resolve();
+
+    const finish = (settle: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearInterval(poll);
+      stop();
+      signal?.removeEventListener('abort', onAbort);
+      settle();
+    };
+    const pending = () => finish(() => reject(new QuestionPendingError(options.key, expiresAt)));
+
+    const handle = (outcome: QuestionOutcome) => {
+      if (outcome.kind === 'answered') {
+        if (settled || signal?.aborted) {
+          pending();
+          void store.restore(request, outcome.answer, outcome.expiresAt).catch(() => undefined);
+          return;
+        }
+        finish(() => resolve(outcome));
+      } else if (outcome.kind === 'superseded') {
+        finish(() => reject(new QuestionSupersededError(options.key)));
+      }
+    };
+
+    const serialized = (task: () => Promise<void>) => {
+      chain = chain.then(task).catch((error: unknown) => finish(() => reject(error)));
+    };
+    const take = () => store.take(subject, options.key, request.waiter);
+
+    const check = () => {
+      if (settled || queued) return;
+      queued = true;
+      serialized(async () => {
+        queued = false;
+        if (!settled) handle(await take());
+      });
+    };
+    const giveUp = () =>
+      serialized(async () => {
+        if (settled) return;
+        const outcome = await take();
+        handle(outcome);
+        if (outcome.kind === 'waiting') pending();
+      });
+
+    const onAbort = () => pending();
+    const timer = setTimeout(giveUp, options.waitMs);
+    const poll = setInterval(check, RECHECK_MS);
+    const stop = store.subscribe(QUESTIONS_TOPIC, check);
+    if (signal?.aborted) return onAbort();
+    signal?.addEventListener('abort', onAbort, { once: true });
+    check();
+  });
+  return handOver(answer);
+}
+
+/** `this.elicit(message, schema, { persist })`: checks the call, then asks for the caller the request names. */
+export async function elicitPersistent<S extends ZodType>(
+  deps: Pick<ElicitHelperDeps, 'questions' | 'signal' | 'tryGetContext'>,
+  message: string,
+  requestedSchema: S,
+  options: ElicitOptions & { persist: PersistOptions },
+): Promise<ElicitResult<S extends ZodType<infer O> ? O : unknown>> {
+  const { persist } = options;
+  if (typeof persist.key !== 'string' || persist.key.length === 0 || persist.key.length > MAX_QUESTION_KEY_LENGTH) {
+    throw new InvalidInputError(`persist.key must be a string of 1 to ${MAX_QUESTION_KEY_LENGTH} characters`);
+  }
+  if (options.mode === 'url') throw new InvalidInputError('a persistent question is a form: drop mode "url"');
+  const waitMs = options.ttl ?? DEFAULT_ELICIT_TTL;
+  const { questions } = deps;
+  if (!questions) {
+    throw new ElicitationNotSupportedError(
+      'Persistent questions are off: enable them with @FrontMcp({ elicitation: { enabled: true, persistent: true } })',
+    );
+  }
+  const ttlMs = persist.ttlMs ?? questions.ttlMs;
+  if (!Number.isInteger(ttlMs) || ttlMs <= waitMs) {
+    throw new InvalidInputError(
+      `persist.ttlMs (${ttlMs}) must be a whole number longer than ttl (${waitMs}), the wait`,
+    );
+  }
+  const subject = questionSubjectOf(deps.tryGetContext()?.authInfo);
+  if (!subject) {
+    throw new ElicitationNotSupportedError(
+      'A persistent question is kept for a signed-in user or a session, and this anonymous caller has neither',
+    );
+  }
+  const zodSchema = requestedSchema instanceof z.ZodType ? requestedSchema : z.object(requestedSchema as z.ZodRawShape);
+  return askPersistentQuestion({ store: questions.store, subject, signal: deps.signal }, message, zodSchema as S, {
+    key: persist.key,
+    ttlMs,
+    waitMs,
+  });
+}

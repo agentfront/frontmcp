@@ -11,16 +11,20 @@ import {
  */
 export class MemoryJobStateStore implements JobStateStore {
   private readonly runs = new Map<string, JobRunRecord | WorkflowRunRecord>();
+  private readonly cancelRequests = new Set<string>();
+  private readonly runnerExpiries = new Map<string, number>();
+  private readonly claims = new Set<string>();
 
   async createRun(record: JobRunRecord | WorkflowRunRecord): Promise<void> {
-    this.runs.set(record.runId, { ...record });
+    this.runs.set(record.runId, { ...record, revision: 1, updatedAt: Date.now() });
   }
 
   async updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
     const existing = this.runs.get(runId);
     if (!existing) return;
     const { runId: _ignoreRunId, ...safeUpdates } = updates;
-    this.runs.set(runId, { ...existing, ...safeUpdates });
+    const revision = (existing.revision ?? 0) + 1;
+    this.runs.set(runId, { ...existing, ...safeUpdates, revision, updatedAt: Date.now() });
   }
 
   async getRun(runId: string): Promise<JobRunRecord | WorkflowRunRecord | null> {
@@ -68,7 +72,32 @@ export class MemoryJobStateStore implements JobStateStore {
     return removed;
   }
 
+  async requestCancel(runId: string): Promise<void> {
+    this.cancelRequests.add(runId);
+  }
+
+  async isCancelRequested(runId: string): Promise<boolean> {
+    return this.cancelRequests.has(runId);
+  }
+
+  async touchRunner(runnerId: string, ttlSeconds: number): Promise<void> {
+    this.runnerExpiries.set(runnerId, Date.now() + ttlSeconds * 1000);
+  }
+
+  async isRunnerAlive(runnerId: string): Promise<boolean> {
+    return (this.runnerExpiries.get(runnerId) ?? 0) > Date.now();
+  }
+
+  async claimRun(runId: string): Promise<boolean> {
+    if (this.claims.has(runId)) return false;
+    this.claims.add(runId);
+    return true;
+  }
+
   async dispose(): Promise<void> {
     this.runs.clear();
+    this.cancelRequests.clear();
+    this.runnerExpiries.clear();
+    this.claims.clear();
   }
 }

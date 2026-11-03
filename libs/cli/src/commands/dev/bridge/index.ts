@@ -24,8 +24,22 @@
 import type { ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
 
+import {
+  createBridgeStateMachine,
+  createHttpUpstream,
+  createPipeUpstream,
+  createStdioFramer,
+  listChangedNotifications,
+  type BridgeLogger,
+  type BridgeStateMachine,
+  type JsonRpcFrame,
+  type StdioFramer,
+  type UpstreamClient,
+} from '@frontmcp/utils';
+
 import type { ParsedArgs } from '../../../core/args';
 import { resolveDevLaunch } from '../dev';
+import { createDevEventsWriter, startEventsFile, turnDevEventsOff, type DevEventsWriter } from '../dev-events-file';
 import {
   createChildSupervisor,
   resolveChildCommand,
@@ -34,10 +48,7 @@ import {
   type ChildSupervisor,
   type SupervisorMode,
 } from './child-supervisor';
-import { createBridgeLogger, type BridgeLogger } from './log';
-import { createBridgeStateMachine, type BridgeStateMachine } from './state-machine';
-import { createStdioFramer, type JsonRpcFrame, type StdioFramer } from './stdio-framer';
-import { createHttpUpstream, createPipeUpstream, type UpstreamClient } from './upstream-client';
+import { createBridgeLogger } from './log';
 import { createDevWatcher } from './watcher';
 
 interface RuntimeBridgeOptions {
@@ -48,13 +59,6 @@ interface RuntimeBridgeOptions {
 }
 
 const DEFAULT_LOG_FILE = path.join('.frontmcp', 'dev.log');
-
-/** `list_changed` notifications a reload may warrant, keyed by capability. */
-const LIST_CHANGED = {
-  tools: 'notifications/tools/list_changed',
-  resources: 'notifications/resources/list_changed',
-  prompts: 'notifications/prompts/list_changed',
-} as const;
 
 function normalizeOptions(opts: ParsedArgs): RuntimeBridgeOptions {
   const mode: SupervisorMode = opts.serve ? 'pipe' : 'http';
@@ -71,20 +75,6 @@ export function mcpPathOf(entryPath: string | undefined): string {
   return trimmed ? `/${trimmed}` : '/';
 }
 
-/** The `list_changed` notifications the capabilities of a fresh child advertise. */
-export function listChangedNotifications(initializeResult: Record<string, unknown> | undefined): JsonRpcFrame[] {
-  const capabilities = initializeResult?.['capabilities'];
-  if (typeof capabilities !== 'object' || capabilities === null) return [];
-  const frames: JsonRpcFrame[] = [];
-  for (const [capability, method] of Object.entries(LIST_CHANGED)) {
-    const entry = (capabilities as Record<string, unknown>)[capability];
-    if (typeof entry === 'object' && entry !== null && (entry as { listChanged?: unknown }).listChanged === true) {
-      frames.push({ jsonrpc: '2.0', method });
-    }
-  }
-  return frames;
-}
-
 export async function runDevBridge(opts: ParsedArgs): Promise<void> {
   const runtime = normalizeOptions(opts);
   // stdout carries JSON-RPC frames only: port notices go to stderr.
@@ -92,6 +82,7 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
     autoPortWhenUnset: true,
     listens: runtime.mode === 'http',
     log: (msg) => process.stderr.write(`${msg}\n`),
+    eventsOverIpc: runtime.mode === 'pipe',
   });
   // A relative --log-file was made absolute by resolveDevLaunch when the
   // command moved to the project root.
@@ -104,6 +95,14 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
   resolveChildCommand(launch.entry, runtime.mode, () => resolveProjectTsxLoader(launch.cwd));
 
   const log = await createBridgeLogger({ filePath: logFile });
+  let devEvents: DevEventsWriter | undefined;
+  if (launch.eventsFile) {
+    if (await startEventsFile(launch.eventsFile, (message) => log.warn('dev-events-off', { reason: message }))) {
+      if (runtime.mode === 'pipe') devEvents = createDevEventsWriter(launch.eventsFile, log);
+    } else {
+      turnDevEventsOff(launch.childEnv);
+    }
+  }
   log.info('bridge-start', {
     entry: launch.entry,
     cwd: launch.cwd,
@@ -135,7 +134,12 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
       log.info('upstream-url', { url });
       return createHttpUpstream({ url, log, onFrame: (frame: JsonRpcFrame) => fsm.relayUpstream(frame) });
     }
-    return createPipeUpstream({ child, log, onFrame: (frame: JsonRpcFrame) => fsm.relayUpstream(frame) });
+    return createPipeUpstream({
+      child,
+      log,
+      onFrame: (frame: JsonRpcFrame) => fsm.relayUpstream(frame),
+      onDevEvents: (events) => devEvents?.write(events),
+    });
   }
 
   // Teardown needs the supervisor + watcher, which are built after the framer.
@@ -301,6 +305,7 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
       log.error('supervisor-stop-error', { error: (err as Error).message });
     }
     framer.stop();
+    await devEvents?.flush();
     await log.close();
     resolveStopped();
   }

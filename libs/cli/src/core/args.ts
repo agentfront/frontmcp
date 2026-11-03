@@ -79,6 +79,9 @@ export interface ParsedArgs {
   js?: boolean;
   // Build --no-clean flag (keep whatever is already in outDir)
   clean?: boolean;
+  // Build --no-manifest (skip frontmcp.manifest.json) and --strict-lint (fail on a manifest lint finding)
+  manifest?: boolean;
+  strictLint?: boolean;
   // MCPB flags
   sea?: boolean;
   mergeFrom?: string;
@@ -114,6 +117,10 @@ export interface ParsedArgs {
   logFile?: string;
   bufferSize?: number;
   reloadDeadlineMs?: number;
+  /** `frontmcp dev --events-file`: where the dev events go (default `.frontmcp/dev-events.jsonl`). */
+  eventsFile?: string;
+  /** `frontmcp dev --no-events`: write no dev events. */
+  noEvents?: boolean;
   // Issue #400 — top-level config flag (forwarded from program.opts().config)
   config?: string;
   /** Internal: directory holding the resolved `frontmcp.config.*` (set by `build`). */

@@ -103,7 +103,8 @@ export class ReservedAppIdError extends InternalMcpError {
 export class DuplicateAppIdError extends InternalMcpError {
   constructor(appId: string) {
     super(
-      `Two apps share the id "${appId}": give each App.esm() / App.remote() its own \`name\` or \`namespace\`.`,
+      `Two apps share the id "${appId}": give each App.esm() / App.remote() its own \`name\` or \`namespace\`, ` +
+        'and each lazy app its own `id` or `name`.',
       'DUPLICATE_APP_ID',
     );
   }

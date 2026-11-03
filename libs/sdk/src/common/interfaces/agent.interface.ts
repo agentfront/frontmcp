@@ -184,6 +184,8 @@ export class AgentContext<
       providers,
       logger: logger.child(`agent:${metadata.id ?? metadata.name}`),
       authInfo: args.authInfo,
+      // Aborts when the call stops, as a tool's: a persistent question the agent waits on then stops waiting
+      signal: args.signal,
     });
     this.agentName = metadata.name;
     this.agentId = metadata.id ?? metadata.name;
@@ -731,6 +733,8 @@ export class AgentContext<
         entryName: this._agentNameInternal ?? this.agentName,
         entryInput: this._agentInputInternal ?? this.input,
         elicitationEnabled: this.scope.metadata.elicitation?.enabled === true,
+        questions: this.scope.persistentQuestions,
+        signal: this.signal,
       },
       message,
       requestedSchema,

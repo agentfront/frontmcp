@@ -38,11 +38,21 @@ const fixtureFiles = [
   'providers-must-compile.ts',
   'tool-aliases-must-compile.ts',
   'answer-shaping-must-compile.ts',
+  'stalls-dev-events-must-compile.ts',
   'call-recorder-must-compile.ts',
   'hook-ordering-must-compile.ts',
   'hook-ordering-must-fail.ts',
   'live-surface-must-compile.ts',
+  'materialized-resources-must-compile.ts',
+  'duties-must-compile.ts',
   'offload-must-compile.ts',
+  'http-routes-must-compile.ts',
+  'shared-server-must-compile.ts',
+  'durable-jobs-must-compile.ts',
+  'job-runners-must-compile.ts',
+  'build-manifest-must-compile.ts',
+  'persistent-questions-must-compile.ts',
+  'lazy-apps-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -172,6 +182,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('answer-shaping-must-compile.ts'))).toEqual([]);
   });
 
+  it('types observability.stalls and observability.devEvents, and a provider injecting FRONTMCP_LOGGER', () => {
+    expect(describeEach(inFixtureFile('stalls-dev-events-must-compile.ts'))).toEqual([]);
+  });
+
   it('types CallRecorderPlugin.init() options, on an app and on the server, and the CallRecord lines', () => {
     expect(describeEach(inFixtureFile('call-recorder-must-compile.ts'))).toEqual([]);
   });
@@ -199,8 +213,46 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('live-surface-must-compile.ts'))).toEqual([]);
   });
 
+  it('types resourceStore(), its keys and snapshots, @Resource({ from }) and MaterializedResourceContext', () => {
+    expect(describeEach(inFixtureFile('materialized-resources-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types @Duty, its metadata and run context, and createContainer({ runDuties, info })', () => {
+    expect(describeEach(inFixtureFile('duties-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types @HttpRoute, HttpRouteContext, SSE routes, HttpRouteHook and http.auth.people', () => {
+    expect(describeEach(inFixtureFile('http-routes-must-compile.ts'))).toEqual([]);
+  });
+
   it('types this.offload() from the offloaded function, @Resource({ worker }) and the offload option', () => {
     expect(describeEach(inFixtureFile('offload-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types persist, printQuestionInboxLink, the question errors and elicitation.persistent', () => {
+    expect(describeEach(inFixtureFile('persistent-questions-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types FrontMcpInstance.runShared(), its options and errors, and the shared:identify flow', () => {});
+
+  it('types FrontMcpInstance.runShared(), its options and errors, and the shared:identify and shared:drain flows', () => {
+    expect(describeEach(inFixtureFile('shared-server-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types @Job({ cleanup }), jobs.store.sqlite, jobs.defaultTimeoutMs, jobs.admission, CancelJobTool, the run states and a store without cancel requests', () => {
+    expect(describeEach(inFixtureFile('durable-jobs-must-compile.ts'))).toEqual([]);
+  });
+
+  it("types @Job({ runner }), jobs.runner, the run's runner, JOB_WORKER_MARKER and the runner errors", () => {
+    expect(describeEach(inFixtureFile('job-runners-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types instructionsBudget, buildManifest(), lintServerManifest() and the manifest schema', () => {
+    expect(describeEach(inFixtureFile('build-manifest-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types lazy apps, @FrontMcp({ manifest }) and the lazy app errors', () => {
+    expect(describeEach(inFixtureFile('lazy-apps-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

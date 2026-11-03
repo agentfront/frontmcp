@@ -6,6 +6,7 @@ import {
   ChannelSendHook,
   CompletionHook,
   HttpHook,
+  HttpRouteHook,
   JobHook,
   ListPromptsHook,
   ListResourcesHook,
@@ -43,6 +44,12 @@ export class EveryExportRejectsAParameterItsCtxDoesNotSatisfy {
   // @ts-expect-error the ctx has no notAField
   @HttpHook.Will('router')
   http(ctx: NotInAnyCtx) {
+    return ctx;
+  }
+
+  // @ts-expect-error the ctx has no notAField
+  @HttpRouteHook.Will('handle')
+  httpRoute(ctx: NotInAnyCtx) {
     return ctx;
   }
 

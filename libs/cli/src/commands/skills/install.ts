@@ -12,7 +12,7 @@ import { composeSkillMd, hasFrontmatter, readSkillInstructions } from '../build/
 import { getCatalogDir, loadCatalog } from './catalog';
 import { extractProjectSkills, resolvePackageEntry } from './from-entry';
 
-const PROVIDER_DIRS: Record<string, string> = {
+export const PROVIDER_DIRS: Record<'claude' | 'codex', string> = {
   claude: '.claude/skills',
   codex: '.codex/skills',
 };

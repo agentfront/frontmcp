@@ -22,6 +22,7 @@ describe('createProgram', () => {
       'doctor',
       // Issue #400 — `eject-mcp-config <client>` emits MCP-client snippets
       'eject-mcp-config',
+      'inbox',
       'init',
       'inspector',
       'install',

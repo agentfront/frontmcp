@@ -1,6 +1,7 @@
 import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
+import type { ServerManifest } from '../../manifest/server-manifest.schema';
 import { MAX_CONCURRENT_TASKS_PER_SESSION } from '../../task/task.types';
 import type { AdapterType, AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
 import {
@@ -20,6 +21,7 @@ import {
   extAppsOptionsSchema,
   healthOptionsSchema,
   httpOptionsSchema,
+  instructionsBudgetOptionsSchema,
   lifecycleOptionsSchema,
   loggingOptionsSchema,
   mcpRegistryOptionsSchema,
@@ -42,6 +44,7 @@ import {
   type ExtAppsOptionsInput,
   type HealthOptionsInput,
   type HttpOptionsInput,
+  type InstructionsBudgetOptionsInput,
   type LifecycleOptionsInput,
   type LoggingOptionsInput,
   type McpRegistryOptionsInput,
@@ -62,6 +65,7 @@ import {
 import { legacySessionOptionsSchema } from '../types/options/session/schema';
 import { packageLoaderSchema, type PackageLoader } from './app.metadata';
 import { channelsConfigSchema, type ChannelsConfigInput } from './channel.metadata';
+import { MAX_JOB_TIMER_MS, timerLimitMessage } from './job.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import type { WidgetServingMode } from './tool-ui.metadata';
 import { widgetServingModeSchema } from './ui-serving-mode';
@@ -105,6 +109,22 @@ export interface FrontMcpBaseMetadata {
    *   catalog and channel hints.
    */
   instructions?: string;
+
+  /**
+   * Size limits, in characters, for the `initialize` instructions and each tool's `description`. Some clients copy
+   * the instructions into every tool's description. Over a limit, the server logs a warning at startup and
+   * `frontmcp build` reports it in its manifest lint (an error with `--strict-lint`). `false` turns both off.
+   *
+   * @default { instructions: 1024, toolDescription: 1024 }
+   */
+  instructionsBudget?: InstructionsBudgetOptionsInput;
+
+  /**
+   * The `frontmcp.manifest.json` the server's lazy apps (`apps: [{ name, lazy }]`) are listed from until their first
+   * call: its path, or the manifest itself (a Worker or browser build imports it). By default the server reads the
+   * one next to its entry script, where `frontmcp build` writes it.
+   */
+  manifest?: string | ServerManifest;
 
   /**
    * Shared storage configuration
@@ -385,6 +405,15 @@ export interface FrontMcpBaseMetadata {
    *   store: { redis: { provider: 'redis', host: 'localhost' } }
    * }
    * ```
+   *
+   * @example Runs kept in a SQLite file, two at a time, each claiming 2 GB of free memory
+   * ```typescript
+   * jobs: {
+   *   enabled: true,
+   *   store: { sqlite: { path: '~/.my-server/jobs.db' } },
+   *   admission: { concurrency: 2, memoryMb: 2_048 },
+   * }
+   * ```
    */
   jobs?: {
     enabled: boolean;
@@ -395,9 +424,40 @@ export interface FrontMcpBaseMetadata {
      * @default false
      */
     allowDynamicRegistration?: boolean;
+    /**
+     * Where runs and dynamic definitions are kept: Redis, or a SQLite file the processes on one machine
+     * share (`@frontmcp/storage-sqlite`). Without one, the top-level `redis` (unless Vercel KV), then
+     * the top-level `sqlite`, then memory.
+     */
     store?: {
       redis?: RedisOptionsInput;
+      sqlite?: SqliteOptionsInput & { path: string };
       keyPrefix?: string;
+    };
+    /**
+     * How long an attempt of a job that sets no `timeout` may run, in ms, before it ends as `timed_out`;
+     * 0 for no limit.
+     *
+     * @default 300000
+     */
+    defaultTimeoutMs?: number;
+    /**
+     * Where the attempts of a job that sets no `runner` run: `'inline'` on the server's event loop, `'worker'` in a
+     * worker thread of the offload pool, `'detached'` in a process of their own that survives a server restart
+     * (Node only, from the server's entry, with a store other processes share).
+     *
+     * @default 'inline'
+     */
+    runner?: 'inline' | 'worker' | 'detached';
+    /**
+     * When job attempts (and workflow steps) may start in this process: at most `concurrency` at once,
+     * each claiming `memoryMb` of free memory. An attempt waits up to `maxWaitMs` (default 600000) and
+     * is then refused with `JOB_ADMISSION_TIMEOUT`.
+     */
+    admission?: {
+      concurrency?: number;
+      memoryMb?: number;
+      maxWaitMs?: number;
     };
   };
 
@@ -635,12 +695,20 @@ export interface FrontMcpBaseMetadata {
   };
 }
 
+/** A path, or the manifest itself: its fields are checked when a lazy app reads it. */
+const serverManifestOptionSchema = z.union(
+  [z.string().min(1), z.custom<ServerManifest>((value) => typeof value === 'object' && value !== null)],
+  { message: '`manifest` must be the path of a frontmcp.manifest.json, or the manifest itself' },
+);
+
 export const frontMcpBaseSchema = z.object({
   info: serverInfoOptionsSchema,
   // Captured call-site dir (#469 — anchors auth.ui relative paths). Passthrough
   // so it survives the strict-object parse and reaches the scope metadata.
   __sourceDir: z.string().optional(),
   instructions: z.string().optional(),
+  instructionsBudget: instructionsBudgetOptionsSchema.optional(),
+  manifest: serverManifestOptionSchema.optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   lifecycle: lifecycleOptionsSchema.optional(),
   offload: offloadOptionsSchema.optional(),
@@ -690,7 +758,25 @@ export const frontMcpBaseSchema = z.object({
       store: z
         .object({
           redis: redisOptionsSchema.optional(),
+          sqlite: sqliteOptionsSchema.extend({ path: z.string().min(1) }).optional(),
           keyPrefix: z.string().optional(),
+        })
+        .refine((store) => !(store.redis && store.sqlite), { message: 'jobs.store takes redis or sqlite, not both' })
+        .optional(),
+      defaultTimeoutMs: z
+        .number()
+        .int()
+        .nonnegative()
+        .max(MAX_JOB_TIMER_MS, timerLimitMessage('jobs.defaultTimeoutMs'))
+        .optional(),
+      runner: z
+        .enum(['inline', 'worker', 'detached'], { message: "jobs.runner must be 'inline', 'worker' or 'detached'" })
+        .optional(),
+      admission: z
+        .object({
+          concurrency: z.number().int().positive().optional(),
+          memoryMb: z.number().positive().optional(),
+          maxWaitMs: z.number().int().nonnegative().optional(),
         })
         .optional(),
     })
@@ -873,6 +959,8 @@ const frontMcpLiteSchema = z.object({
   // Server-level instructions injected into the MCP `initialize` response.
   // Must round-trip through the lite parser so CLI/MCPB builds preserve it.
   instructions: z.string().optional(),
+  instructionsBudget: instructionsBudgetOptionsSchema.optional(),
+  manifest: serverManifestOptionSchema.optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   lifecycle: lifecycleOptionsSchema.optional(),
   offload: offloadOptionsSchema.optional(),

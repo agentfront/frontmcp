@@ -4,6 +4,7 @@
   "sourceRoot": "apps/e2e/demo-e2e-standalone/src",
   "projectType": "application",
   "tags": ["scope:demo", "type:e2e", "feature:standalone"],
+  "implicitDependencies": ["observability"],
   "targets": {
     "build": {
       "executor": "@nx/webpack:webpack",

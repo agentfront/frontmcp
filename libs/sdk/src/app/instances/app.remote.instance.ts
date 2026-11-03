@@ -10,20 +10,17 @@ import { type Token } from '@frontmcp/di';
 
 import {
   AppEntry,
-  type AdapterEntry,
   type AdapterRegistryInterface,
   type AppRecord,
   type EntryOwnerRef,
   type FrontMcpLogger,
-  type PluginInstance,
   type PluginRegistryInterface,
   type ProviderRegistryInterface,
   type RemoteAppMetadata,
-  type SkillEntry,
   type ToolEntry,
 } from '../../common';
 import { isPrimitiveIncluded } from '../../common/utils/primitive-filter';
-import { InternalMcpError, ToolAliasConflictError } from '../../errors';
+import { ToolAliasConflictError } from '../../errors';
 import PromptRegistry from '../../prompt/prompt.registry';
 import type ProviderRegistry from '../../provider/provider.registry';
 import { type McpClientService } from '../../remote-mcp';
@@ -40,100 +37,7 @@ import ResourceRegistry from '../../resource/resource.registry';
 import type { SkillRegistryInterface } from '../../skill/skill.registry';
 import ToolRegistry from '../../tool/tool.registry';
 import { appIdOf } from '../app.utils';
-
-/**
- * Empty plugin registry for remote apps (remote apps don't have local plugins)
- */
-class EmptyPluginRegistry implements PluginRegistryInterface {
-  getPlugins(): PluginInstance[] {
-    return [];
-  }
-
-  getPluginNames(): string[] {
-    return [];
-  }
-}
-
-/**
- * Empty adapter registry for remote apps (remote apps don't have local adapters)
- */
-class EmptyAdapterRegistry implements AdapterRegistryInterface {
-  getAdapters(): AdapterEntry[] {
-    return [];
-  }
-}
-
-/**
- * Empty skill registry for remote apps (remote apps don't support skills yet)
- */
-class EmptySkillRegistry implements SkillRegistryInterface {
-  readonly owner = { kind: 'app' as const, id: '_remote', ref: EmptySkillRegistry };
-  getSkills(): SkillEntry[] {
-    return [];
-  }
-  getExecutableSkills(): SkillEntry[] {
-    return [];
-  }
-  getKnowledgeOnlySkills(): SkillEntry[] {
-    return [];
-  }
-  findByName(): SkillEntry | undefined {
-    return undefined;
-  }
-  findByQualifiedName(): SkillEntry | undefined {
-    return undefined;
-  }
-  async search(): Promise<[]> {
-    return [];
-  }
-  async loadSkill(): Promise<undefined> {
-    return undefined;
-  }
-  async listSkills() {
-    return { skills: [], total: 0, hasMore: false };
-  }
-  hasAny(): boolean {
-    return false;
-  }
-  async count(): Promise<number> {
-    return 0;
-  }
-  subscribe(): () => void {
-    return () => {};
-  }
-  getCapabilities() {
-    return {};
-  }
-  async validateAllTools() {
-    // Empty registry - no skills to validate
-    return {
-      results: [],
-      isValid: true,
-      totalSkills: 0,
-      failedCount: 0,
-      warningCount: 0,
-    };
-  }
-  async syncToExternal() {
-    // Empty registry - no skills to sync
-    return null;
-  }
-  setExternalProvider() {
-    return undefined;
-  }
-  getExternalProvider() {
-    return undefined;
-  }
-  hasExternalProvider() {
-    return false;
-  }
-  async registerSkillContent(): Promise<{ id: string; unregister: () => Promise<void> }> {
-    throw new InternalMcpError('registerSkillContent is not supported on remote apps', 'UNSUPPORTED_OPERATION');
-  }
-  async unregisterSkill(): Promise<boolean> {
-    return false;
-  }
-}
+import { EmptyAdapterRegistry, EmptyPluginRegistry, EmptySkillRegistry } from './empty-app-registries';
 
 // ═══════════════════════════════════════════════════════════════════
 // APP REMOTE INSTANCE

@@ -24,11 +24,23 @@
     "providers-must-compile.ts",
     "tool-aliases-must-compile.ts",
     "answer-shaping-must-compile.ts",
+    "stalls-dev-events-must-compile.ts",
     "live-surface-must-compile.ts",
     "offload-must-compile.ts",
+    "build-manifest-must-compile.ts",
     "call-recorder-must-compile.ts",
     "hook-ordering-must-compile.ts",
     "hook-ordering-must-fail.ts",
-    "live-surface-must-compile.ts"
+    "live-surface-must-compile.ts",
+    "duties-must-compile.ts",
+    "shared-server-must-compile.ts",
+    "durable-jobs-must-compile.ts",
+    "job-runners-must-compile.ts",
+    "materialized-resources-must-compile.ts",
+    "duties-must-compile.ts",
+    "http-routes-must-compile.ts",
+    "persistent-questions-must-compile.ts",
+    "lazy-apps-must-compile.ts",
+    "http-routes-must-compile.ts"
   ]
 }

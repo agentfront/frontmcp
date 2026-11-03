@@ -144,7 +144,10 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 
 ## Jobs & Workflows (if enabled)
 
-- [ ] Jobs Redis store is configured for production (`jobs: { enabled: true, store: { redis } }`)
+- [ ] Jobs keep their runs in a shared store for production: `jobs.store.redis` across machines, `jobs.store.sqlite` on one machine, or the top-level `redis` / `sqlite` they fall back to
+- [ ] Long jobs set `timeout` (or `jobs.defaultTimeoutMs`) and a `cleanup` for what they start; `jobs.admission` bounds heavy jobs (`concurrency`, `memoryMb`)
+- [ ] CPU-heavy jobs use `runner: 'worker'`; work that must finish across a restart uses `runner: 'detached'` on a shared store, from a server started from its entry (not on serverless or edge)
+- [ ] Detached runners are allowed to outlive the server (a container's restart stops them with it); `reapOrphans(JOB_WORKER_MARKER)` stops the ones left behind by a server that is gone for good
 - [ ] Job retry config has reasonable `maxAttempts` and `maxBackoffMs`
 - [ ] Workflow timeout is set to prevent runaway workflows
 - [ ] Job execution times are monitored (long-running jobs need alerting)
@@ -163,6 +166,8 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] Single-writer constraint respected (v1.2.0): writes routed to a single elected leader pod
 - [ ] `instructions` is set or `skillsConfig.injectInstructions` tuned for clients
 - [ ] With `injectInstructions: 'append'`, `'prepend'` or `'replace'`, the skill catalog summary stays within the 16 KB ceiling (the default `'compact'` sends one line)
+- [ ] The server logs no `instructionsBudget` warning at startup, and `frontmcp build --strict-lint` passes (instructions and tool descriptions within budget, every listed entry described)
+- [ ] Lazy apps: the `frontmcp.manifest.json` that `frontmcp build` wrote ships next to the server's entry (production refuses to start a lazy app without it), and no `does not match frontmcp.manifest.json` warning follows a lazy app's first call
 
 ## ExtApps / Widgets (if enabled)
 

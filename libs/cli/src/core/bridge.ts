@@ -32,6 +32,8 @@ export function toParsedArgs(
     if (options['stageOnly'] !== undefined) out.stageOnly = options['stageOnly'] as boolean;
     // #545 — commander turns `--no-clean` into `clean: false`; default stays true.
     if (options['clean'] === false) out.clean = false;
+    if (options['manifest'] === false) out.manifest = false;
+    if (options['strictLint'] !== undefined) out.strictLint = options['strictLint'] as boolean;
   }
 
   // Create
@@ -78,6 +80,8 @@ export function toParsedArgs(
   if (options['stdio'] !== undefined) out.stdio = options['stdio'] as boolean;
   if (options['serve'] !== undefined) out.serve = options['serve'] as boolean;
   if (options['logFile'] !== undefined) out.logFile = options['logFile'] as string;
+  if (options['eventsFile'] !== undefined) out.eventsFile = options['eventsFile'] as string;
+  if (options['events'] === false) out.noEvents = true;
   if (options['bufferSize'] !== undefined) {
     out.bufferSize =
       typeof options['bufferSize'] === 'number' ? options['bufferSize'] : parseInt(String(options['bufferSize']), 10);

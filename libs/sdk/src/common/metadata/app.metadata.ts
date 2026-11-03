@@ -8,6 +8,7 @@ import type {
   AgentType,
   AuthProviderType,
   ChannelType,
+  HttpRouteType,
   JobType,
   PluginType,
   PromptType,
@@ -33,6 +34,7 @@ import {
 } from '../schemas';
 import { type AuthOptionsInput, type RawZodShape } from '../types';
 import { appFilterConfigSchema, type AppFilterConfig } from './app-filter.metadata';
+import { enabledOptionSchema, type EnabledOption } from './enabled.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import { type EsmOptions, type RemoteOptions } from './remote-primitive.metadata';
 import type { WidgetServingMode } from './tool-ui.metadata';
@@ -146,6 +148,12 @@ export interface LocalAppMetadata {
   channels?: ChannelType[];
 
   /**
+   * `@HttpRoute` classes this app serves beside the MCP endpoint: pages, APIs and SSE streams for people, with the
+   * app's providers (`this.get()`), the ones its tools get.
+   */
+  routes?: HttpRouteType[];
+
+  /**
    * Configures the app's default authentication provider.
    * If not provided, the app will use the gateway's default auth provider.
    */
@@ -218,6 +226,11 @@ export const frontMcpLocalAppMetadataSchema = z.looseObject({
   jobs: z.array(z.lazy(() => annotatedFrontMcpJobsSchema)).optional(),
   workflows: z.array(z.lazy(() => annotatedFrontMcpWorkflowsSchema)).optional(),
   channels: z.array(z.lazy(() => annotatedFrontMcpChannelsSchema)).optional(),
+  routes: z
+    .array(
+      z.custom<HttpRouteType>((value) => typeof value === 'function', { message: 'routes takes @HttpRoute classes' }),
+    )
+    .optional(),
   auth: authOptionsSchema.optional(),
   output: outputPolicySchema.optional(),
   ui: z.object({ servingMode: widgetServingModeSchema.optional() }).optional(),
@@ -559,6 +572,31 @@ export const frontMcpRemoteAppMetadataSchema = z
     },
     { message: 'URL must have a valid scheme for url/worker types (e.g., https://, file://)' },
   );
+
+/**
+ * An app whose code is imported on its first call: `apps: [{ name: 'Billing', lazy: () => import('./billing.app') }]`.
+ * Until then `frontmcp.manifest.json` (written by `frontmcp build`) answers the lists for it.
+ */
+export interface LazyAppMetadata {
+  /** The id of the `@App` the import loads; defaults to one derived from `name`, as for that app. */
+  id?: string;
+  name: string;
+  description?: string;
+  /** Imports the app: resolves to its `@App` class, or a module whose default export (or only `@App` export) is one. */
+  lazy: () => Promise<unknown>;
+  /** Turns the whole app on and off. While it is off its entries are refused with `FEATURE_OFF` and it is never imported. */
+  enabled?: EnabledOption;
+}
+
+export const lazyAppMetadataSchema = z.strictObject({
+  id: z.string().min(1).optional(),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  lazy: z.custom<LazyAppMetadata['lazy']>((value) => typeof value === 'function', {
+    message: "`lazy` must be a function that imports the app, such as () => import('./billing.app')",
+  }),
+  enabled: enabledOptionSchema.optional(),
+} satisfies RawZodShape<LazyAppMetadata>);
 
 export type AppMetadata = LocalAppMetadata | RemoteAppMetadata;
 

@@ -8,6 +8,8 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   // Captured call-site dir (#469) — anchors auth.ui relative paths.
   __sourceDir: tokenFactory.meta('__sourceDir'),
   instructions: tokenFactory.meta('instructions'),
+  instructionsBudget: tokenFactory.meta('instructionsBudget'),
+  manifest: tokenFactory.meta('manifest'),
   apps: tokenFactory.meta('apps'),
   http: tokenFactory.meta('http'),
   redis: tokenFactory.meta('redis'),

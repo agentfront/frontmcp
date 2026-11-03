@@ -19,6 +19,7 @@ import { MCP_20260728_META, SUBSCRIPTIONS_ACKNOWLEDGED_METHOD, type Subscription
 
 import { CHANNEL_NOTIFICATION_METHOD } from '../../channel/channel.utils';
 import { type Scope } from '../../scope';
+import { listsUnchanged } from '../../surface/unchanged-lists';
 
 /** How often a bare SSE comment is emitted to hold the connection open. */
 const KEEPALIVE_INTERVAL_MS = 15_000;
@@ -36,6 +37,11 @@ export interface SubscriptionStreamOptions {
   channels?: readonly string[];
   /** Fires when the client disconnects so the registry listeners are released. */
   signal?: AbortSignal;
+  /**
+   * Whether the stream may be told of an update to `uri`, a resource under one of its acknowledged URIs (an exact
+   * match was checked when acknowledged). Without it, every such update is sent.
+   */
+  mayReceiveUpdate?: (uri: string) => Promise<boolean>;
 }
 
 /**
@@ -94,7 +100,7 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
   acknowledged: SubscriptionFilter;
   stream: AsyncIterable<Uint8Array>;
 } {
-  const { scope, subscriptionId, requested, channels, signal } = options;
+  const { scope, subscriptionId, requested, channels, signal, mayReceiveUpdate } = options;
   const acknowledged = resolveAcknowledgedFilter(scope, requested);
 
   const queue: QueuedNotification[] = [];
@@ -106,14 +112,17 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
     queue.push({ method, params });
     notify?.();
   };
+  const pushListChanged = (method: string): void => {
+    if (!listsUnchanged()) push(method);
+  };
 
   const unsubscribes: Array<() => void> = [];
 
   if (acknowledged.toolsListChanged) {
-    unsubscribes.push(scope.tools.subscribe({}, () => push('notifications/tools/list_changed')));
+    unsubscribes.push(scope.tools.subscribe({}, () => pushListChanged('notifications/tools/list_changed')));
   }
   if (acknowledged.promptsListChanged) {
-    unsubscribes.push(scope.prompts.subscribe({}, () => push('notifications/prompts/list_changed')));
+    unsubscribes.push(scope.prompts.subscribe({}, () => pushListChanged('notifications/prompts/list_changed')));
   }
 
   const watchedUris = new Set(acknowledged.resourceSubscriptions ?? []);
@@ -123,14 +132,21 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
         const updatedUri = (event as { updatedUri?: unknown }).updatedUri;
         const uri = typeof updatedUri === 'string' ? updatedUri : undefined;
         if (event.kind === 'updated') {
-          // A subscription is on a URI prefix, so a sub-resource update counts.
-          if (uri && [...watchedUris].some((watched) => uri === watched || uri.startsWith(watched))) {
+          if (!uri) return;
+          if (watchedUris.has(uri)) {
             push('notifications/resources/updated', { uri });
+            return;
           }
+          // A subscription is on a URI prefix, so a sub-resource update counts once the caller may receive it.
+          if (![...watchedUris].some((watched) => uri.startsWith(watched))) return;
+          void (mayReceiveUpdate?.(uri) ?? Promise.resolve(true)).then(
+            (allowed) => allowed && push('notifications/resources/updated', { uri }),
+            () => undefined,
+          );
           return;
         }
         if (acknowledged.resourcesListChanged) {
-          push('notifications/resources/list_changed');
+          pushListChanged('notifications/resources/list_changed');
         }
       }),
     );

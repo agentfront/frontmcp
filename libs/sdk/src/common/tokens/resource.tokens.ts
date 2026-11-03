@@ -14,6 +14,7 @@ export const FrontMcpResourceTokens = {
   _meta: tokenFactory.meta('_meta'),
   availableWhen: tokenFactory.meta('availableWhen'),
   enabled: tokenFactory.meta('enabled'),
+  from: tokenFactory.meta('from'),
   worker: tokenFactory.meta('worker'),
   metadata: tokenFactory.meta('metadata'), // used in resource({}) construction
 } as const satisfies RawMetadataShape<ResourceMetadata, ExtendFrontMcpResourceMetadata>;

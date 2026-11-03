@@ -20,6 +20,7 @@ export const FrontMcpLocalAppTokens: RawMetadataShape<LocalAppMetadata> = {
   jobs: tokenFactory.meta('jobs'),
   workflows: tokenFactory.meta('workflows'),
   channels: tokenFactory.meta('channels'),
+  routes: tokenFactory.meta('routes'),
   output: tokenFactory.meta('output'),
   // tool UI defaults (`ui.servingMode`) for the app's tools (#720)
   ui: tokenFactory.meta('ui'),
