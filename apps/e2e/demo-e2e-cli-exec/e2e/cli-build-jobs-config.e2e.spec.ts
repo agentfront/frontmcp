@@ -7,8 +7,8 @@ import * as path from 'path';
 
 import { ensureDir, fileExists, mkdtemp, rm, writeFile } from '@frontmcp/utils';
 
-import { sqliteKeys } from '../../demo-e2e-jobs/e2e/helpers/sqlite-keys';
 import { runCliBundle, runFrontmcpCli } from './helpers/exec-cli';
+import { sqliteKeys } from './helpers/sqlite-keys';
 
 // The scratch project lives inside this app so `node_modules` resolves upward to the repo root.
 const SCRATCH_ROOT = path.resolve(__dirname, '..');
