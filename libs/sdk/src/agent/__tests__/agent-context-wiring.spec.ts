@@ -167,11 +167,41 @@ class StalledAgent extends AgentContext {
   }
 }
 
+/** The `this.signal` of each run of the slow lookup the slow caller's model calls. */
+const lookupSignals: Array<AbortSignal | undefined> = [];
+
+@Tool({ name: 'slow_lookup', inputSchema: {} })
+class SlowLookupTool extends ToolContext {
+  async execute() {
+    lookupSignals.push(this.signal);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return { found: false };
+  }
+}
+
+@Agent({
+  name: 'slow_caller',
+  inputSchema: {},
+  llm: { adapter: callingModel('slow_caller', 'slow_lookup') },
+  tools: [SlowLookupTool],
+  timeout: { executeMs: 50 },
+})
+class SlowCallerAgent extends AgentContext {}
+
 @App({
   id: 'desk',
   name: 'Desk',
   providers: [TicketStore],
-  agents: [TriageAgent, RefuserAgent, DirectRefuserAgent, CallerAgent, OverridingAgent, TunedAgent, StalledAgent],
+  agents: [
+    TriageAgent,
+    RefuserAgent,
+    DirectRefuserAgent,
+    CallerAgent,
+    OverridingAgent,
+    TunedAgent,
+    StalledAgent,
+    SlowCallerAgent,
+  ],
 })
 class DeskApp {}
 
@@ -225,6 +255,15 @@ describe('agent context wiring', () => {
     expect(stalledSignals).toHaveLength(1);
     expect(stalledSignals[0]).toBeInstanceOf(AbortSignal);
     expect(stalledSignals[0]?.aborted).toBe(true);
+  });
+
+  it("aborts the signal of a tool the agent's model called when the agent's call stops", async () => {
+    lookupSignals.length = 0;
+    await expect(server.callTool('invoke_slow_caller', {})).rejects.toThrow(/timed out/);
+
+    expect(lookupSignals).toHaveLength(1);
+    expect(lookupSignals[0]).toBeInstanceOf(AbortSignal);
+    expect(lookupSignals[0]?.aborted).toBe(true);
   });
 
   it("runs the loop's completions through an overridden completion()", async () => {

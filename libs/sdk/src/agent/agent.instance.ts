@@ -953,6 +953,8 @@ export class AgentInstance<
         },
         ctx: {
           authInfo: ctx.authInfo,
+          // The tool stops with the agent's call: a persistent question it waits on then stops waiting
+          signal: ctx.signal,
           _skipUI: true, // Skip UI rendering - agent returns structured data
           surface: AGENT_SURFACE,
           ...(this.isAgentPrivateScope(scope) && { agentPrivateCall: true }),

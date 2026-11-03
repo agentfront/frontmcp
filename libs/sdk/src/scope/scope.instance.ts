@@ -385,9 +385,18 @@ export class Scope extends ScopeEntry {
           const elicitationRedis = this.metadata.elicitation?.redis ?? this.metadata.redis;
           // Top-level `sqlite` is the fallback when no Redis source is configured (issue #401).
           const elicitationSqlite = elicitationRedis ? undefined : resolvedTopLevelSqlite;
+          const persistent = this.metadata.elicitation?.persistent;
+          const questionsHelper = persistent
+            ? await import('../elicitation/questions/question-scope.helper.js')
+            : undefined;
+          // A Redis named only for persistent questions keeps the elicitation state too: on Edge it is the only
+          // distributed store. Other question stores (memory, sqlite) stay theirs alone.
+          const questionsStorage = questionsHelper?.parsePersistentQuestionsOptions(persistent).storage;
+          const questionsRedis = !elicitationRedis && questionsStorage?.type === 'redis' ? questionsStorage : undefined;
           const { createElicitationStore } = await import('../elicitation/store/elicitation-store.factory.js');
           const { store: elicitStore, type: elicitType } = await createElicitationStore({
             redis: elicitationRedis,
+            storage: questionsRedis,
             sqlite: elicitationSqlite,
             keyPrefix: elicitationRedis?.keyPrefix ?? 'mcp:elicit:',
             logger: this.logger,
@@ -395,10 +404,8 @@ export class Scope extends ScopeEntry {
           });
           this._elicitationStore = elicitStore;
           this.elicitationBackendType = elicitType;
-          const persistent = this.metadata.elicitation?.persistent;
-          if (persistent) {
-            const { openPersistentQuestions } = await import('../elicitation/questions/question-scope.helper.js');
-            const questions = await openPersistentQuestions({
+          if (questionsHelper) {
+            const questions = await questionsHelper.openPersistentQuestions({
               persistent,
               serverName: this.metadata.info.name,
               redis: elicitationRedis,

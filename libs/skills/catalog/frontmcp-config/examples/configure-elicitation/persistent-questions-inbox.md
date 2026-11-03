@@ -25,6 +25,7 @@ import { App, FrontMcp, printQuestionInboxLink, Tool, ToolContext, z } from '@fr
   name: 'approve_deploy',
   description: 'Ask the person to approve a deploy; the question waits for them',
   inputSchema: { version: z.string() },
+  outputSchema: { approved: z.boolean() },
 })
 class ApproveDeployTool extends ToolContext {
   async execute(input: { version: string }) {
@@ -41,6 +42,7 @@ class ApproveDeployTool extends ToolContext {
   name: 'inbox_link',
   description: 'Print a sign-in link to my questions on the server console',
   inputSchema: {},
+  outputSchema: { expiresAt: z.number() },
 })
 class InboxLinkTool extends ToolContext {
   async execute() {
