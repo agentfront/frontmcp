@@ -65,8 +65,8 @@
  *   / `#sse-transport`). They're baked to the node variant because each package
  *   is built with esbuild `bundle:true` under default (node) conditions. The fix
  *   is therefore a single build-pipeline change — a worker-conditioned dist build
- *   (esbuild `conditions: ['worker','browser']`) exposed via a `worker` export
- *   condition, consumed by this bundle with `conditions: ['worker']` — which
+ *   (esbuild `conditions: ['worker','browser']`) exposed via a `workerd` export
+ *   condition, consumed by this bundle with `conditions: ['workerd']` — which
  *   activates those existing browser variants across the board, NOT per-module
  *   lazy patching. Tracked under the ROADMAP "V8-isolate-compatible SDK build"
  *   item. Once it lands, flip `describe.skip` → `describe`.
