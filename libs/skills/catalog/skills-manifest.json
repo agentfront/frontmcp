@@ -2072,6 +2072,18 @@
               ]
             },
             {
+              "name": "materialized-resource",
+              "description": "A resource serving a stored value that another process updates, with live updates.",
+              "level": "intermediate",
+              "tags": ["development", "resource", "materialized", "subscribe", "sqlite"],
+              "features": [
+                "Declaring a `resourceStore()` on SQLite once, in a module the server and the writers import",
+                "Serving a key with `@Resource({ from })` and `MaterializedResourceContext`",
+                "Writing atomically with `set()` and `update()` from a tool and from another process",
+                "Subscribers get `notifications/resources/updated` after a revision change, and read the latest value"
+              ]
+            },
+            {
               "name": "parameterized-template",
               "description": "A resource template with typed URI parameters and argument autocompletion.",
               "level": "intermediate",
@@ -2320,6 +2332,11 @@
           ]
         },
         {
+          "name": "offload-cpu-work",
+          "description": "Run CPU-heavy work in a worker-thread pool with this.offload() and @Resource({ worker true }), so the server keeps answering",
+          "examples": []
+        },
+        {
           "name": "openapi-adapter",
           "description": "Convert OpenAPI 3.x specifications into MCP tools with authentication, polling, transforms, format resolution, and $ref security",
           "examples": [
@@ -2391,11 +2408,6 @@
         {
           "name": "result-handles-plugin",
           "description": "Fold large tool answers into a preview, a shape and a handle, and let the model read slices with result_query",
-          "examples": []
-        },
-        {
-          "name": "offload-cpu-work",
-          "description": "Run CPU-heavy work in a worker-thread pool with this.offload() and @Resource({ worker true }), so the server keeps answering",
           "examples": []
         }
       ]

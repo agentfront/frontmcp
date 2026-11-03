@@ -50,6 +50,7 @@ import {
   validate20260728Request,
   type JsonRpcErrorPayload,
 } from '../mcp-20260728';
+import { mcpRequestSurface } from '../mcp-handlers/mcp-surface';
 
 export const plan = {
   pre: ['parseInput', 'validate', 'router'],
@@ -66,13 +67,21 @@ export const plan = {
  * the 200 and the SSE headers are already committed — the client would see a
  * truncated stream instead of a JSON-RPC error.
  */
+/** The most resource URIs one `subscriptions/listen` may ask for: each one runs the `resources:subscribe` checks. */
+export const MAX_RESOURCE_SUBSCRIPTIONS = 1000;
+
 const subscriptionParamsSchema = z.object({
   notifications: z
     .object({
       toolsListChanged: z.boolean().optional(),
       promptsListChanged: z.boolean().optional(),
       resourcesListChanged: z.boolean().optional(),
-      resourceSubscriptions: z.array(z.string()).optional(),
+      resourceSubscriptions: z
+        .array(z.string())
+        .max(MAX_RESOURCE_SUBSCRIPTIONS, {
+          message: `subscriptions/listen takes at most ${MAX_RESOURCE_SUBSCRIPTIONS} resourceSubscriptions`,
+        })
+        .optional(),
     })
     .default({}),
 });
@@ -380,11 +389,23 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
     const parsedParams = subscriptionParamsSchema.safeParse((body['params'] as Record<string, unknown>) ?? {});
     if (!parsedParams.success) {
       this.respond(
-        errorResponse(400, { code: -32602, message: 'Invalid subscriptions/listen params' }, subscriptionId.data),
+        errorResponse(
+          400,
+          {
+            code: -32602,
+            message: `Invalid subscriptions/listen params: ${parsedParams.error.issues[0]?.message ?? 'not an object'}`,
+          },
+          subscriptionId.data,
+        ),
       );
       return;
     }
-    const requested: SubscriptionFilter = parsedParams.data.notifications;
+    const auth = request[ServerRequestTokens.auth] as Authorization | undefined;
+    const mayRead = this.resourceReadCheck(auth ? authInfoFromAuthorization(auth) : {});
+    const requested: SubscriptionFilter = {
+      ...parsedParams.data.notifications,
+      resourceSubscriptions: await this.readableUris(parsedParams.data.notifications.resourceSubscriptions, mayRead),
+    };
 
     // The client ends a listen stream by disconnecting (HTTP) or by cancelling
     // the request (stdio); there is no unsubscribe RPC. Tie the registry
@@ -402,6 +423,8 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       requested,
       channels: await this.listenedChannels((body['params'] as { _meta?: Record<string, unknown> } | undefined)?._meta),
       signal: controller.signal,
+      // An update of a URI no resource is named by belongs to the acknowledged resource it sits under.
+      mayReceiveUpdate: async (uri) => !this.scope.resources.findResourceForUri(uri) || mayRead(uri),
     });
 
     this.log.info('handleSubscriptions: stream opened', {
@@ -422,6 +445,37 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
         Connection: 'keep-alive',
       },
     });
+  }
+
+  /**
+   * Whether the caller of this request may subscribe to `uri`: the `resources:subscribe` flow's checks (availability,
+   * `enabled`, authorities), run in this request's context whenever it is called, as `resources/read` would run them.
+   */
+  private resourceReadCheck(authInfo: object): (uri: string) => Promise<boolean> {
+    const runInRequest = this.buildContextRunner();
+    const ctx = { authInfo, surface: mcpRequestSurface(this.scope) };
+    return async (uri) => {
+      let allowed = false;
+      await runInRequest(async () => {
+        const request = { method: 'resources/subscribe' as const, params: { uri } };
+        allowed = await this.scope.runFlow('resources:subscribe', { request, ctx }).then(
+          () => true,
+          () => false,
+        );
+      });
+      return allowed;
+    };
+  }
+
+  /** The requested resource subscriptions the caller may read; a refused one is left out of the acknowledgement. */
+  private async readableUris(
+    uris: string[] | undefined,
+    mayRead: (uri: string) => Promise<boolean>,
+  ): Promise<string[] | undefined> {
+    if (!uris) return undefined;
+    const unique = [...new Set(uris)];
+    const allowed = await Promise.all(unique.map(mayRead));
+    return unique.filter((_uri, index) => allowed[index]);
   }
 
   /**

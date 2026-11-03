@@ -493,19 +493,20 @@ export class McpTestClient {
     },
 
     /**
-     * Subscribe to resource changes (placeholder for future implementation)
+     * Subscribe to a resource: the server then sends `notifications/resources/updated` when it changes.
+     * Throws with the server's error when it refuses the subscription.
      */
-    subscribe: async (_uri: string): Promise<void> => {
-      // TODO: Implement resource subscription
-      this.log('warn', 'Resource subscription not yet implemented');
+    subscribe: async (uri: string): Promise<void> => {
+      const response = await this.request('resources/subscribe', { uri });
+      if (!response.success) throw new Error(`Failed to subscribe to ${uri}: ${response.error?.message}`);
     },
 
     /**
-     * Unsubscribe from resource changes (placeholder for future implementation)
+     * Unsubscribe from a resource's changes.
      */
-    unsubscribe: async (_uri: string): Promise<void> => {
-      // TODO: Implement resource unsubscription
-      this.log('warn', 'Resource unsubscription not yet implemented');
+    unsubscribe: async (uri: string): Promise<void> => {
+      const response = await this.request('resources/unsubscribe', { uri });
+      if (!response.success) throw new Error(`Failed to unsubscribe from ${uri}: ${response.error?.message}`);
     },
   };
 
