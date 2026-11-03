@@ -16,16 +16,30 @@ const manifest = JSON.parse(readFileSync(resolve(packageDir, 'package.json'), 'u
 const FORMAT_BY_CONDITION = { require: 'cjs', import: 'esm' };
 
 async function exportedNames(sourcePath) {
-  const { metafile, outputFiles } = await build({
+  const { outputFiles } = await build({
     entryPoints: [sourcePath],
+    bundle: true,
+    packages: 'external',
+    write: false,
+    format: 'esm',
+    platform: 'node',
+    logLevel: 'warning',
+  });
+  const code = outputFiles[0].text;
+  if (/^export \* from /m.test(code)) {
+    throw new Error(
+      `${sourcePath} re-exports another package with export *, so the names its subpath re-exports are unknown`,
+    );
+  }
+  // The metafile of the bundle also lists a type re-exported without `export type`; the bundled code leaves it out
+  const { metafile } = await build({
+    stdin: { contents: code, loader: 'js' },
+    outfile: 'names.js',
     write: false,
     metafile: true,
     format: 'esm',
     logLevel: 'warning',
   });
-  if (/^export \* from /m.test(outputFiles[0].text)) {
-    throw new Error(`${sourcePath} re-exports with export *, so the names its subpath re-exports are unknown`);
-  }
   return Object.values(metafile.outputs)[0].exports;
 }
 
