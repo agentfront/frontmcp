@@ -36,6 +36,12 @@ describe('frontmcp inbox', () => {
     );
   });
 
+  it('takes no link on the command line, to read it from FRONTMCP_INBOX_LINK or stdin', async () => {
+    await program().parseAsync(['inbox', '--url', 'http://127.0.0.1:3000'], { from: 'user' });
+
+    expect(runInbox).toHaveBeenCalledWith(undefined, expect.objectContaining({ url: 'http://127.0.0.1:3000' }));
+  });
+
   it('prints a refusal and exits with 1, without a stack', async () => {
     runInbox.mockRejectedValue(new InboxError('Sign-in refused (401): no'));
     const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
