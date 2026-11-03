@@ -93,8 +93,10 @@ async function jobsStore(options: BrowserStoreOptions): Promise<string | undefin
   return jobsServerStore(jobs?.store, options);
 }
 
-function rateLimitsStore({ throttle }: BrowserStoreOptions): string | undefined {
-  const type = throttle?.enabled ? throttle.storage?.type : undefined;
+/** The scope builds its guard on `throttle.storage` with throttle on, and with it off for `auth.publicAccess.rateLimit`. */
+function rateLimitsStore({ throttle, auth }: BrowserStoreOptions): string | undefined {
+  const publicAccess = (auth as { publicAccess?: { rateLimit?: unknown } } | undefined)?.publicAccess;
+  const type = throttle?.enabled || publicAccess?.rateLimit ? throttle?.storage?.type : undefined;
   return type === 'redis' || type === 'sqlite' ? `throttle.storage: { type: '${type}' }` : undefined;
 }
 

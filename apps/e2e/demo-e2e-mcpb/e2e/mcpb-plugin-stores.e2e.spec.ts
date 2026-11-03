@@ -92,7 +92,12 @@ export default class Server {}
   });
 
   it('builds the archive without the redis, and opens no plugin store', async () => {
-    expect({ exitCode: build.exitCode, stderr: build.stderr }).toEqual({ exitCode: 0, stderr: '' });
+    const stdoutOfFailure = build.exitCode === 0 ? '' : build.stdout;
+    expect({ exitCode: build.exitCode, stderr: build.stderr, stdoutOfFailure }).toEqual({
+      exitCode: 0,
+      stderr: '',
+      stdoutOfFailure: '',
+    });
     expect(build.stdout).not.toContain('not written');
     expect((await readArchive(archive)).entries).toContain('server/frontmcp.manifest.json');
     expect(await fileExists(approvalsPath)).toBe(false);

@@ -16,6 +16,7 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
+      "dependsOn": [{ "projects": ["plugin-approval", "plugin-cache"], "target": "build" }],
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-mcpb"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-mcpb/jest.e2e.config.ts",

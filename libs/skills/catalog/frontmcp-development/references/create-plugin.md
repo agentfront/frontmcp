@@ -453,8 +453,8 @@ with `init({ useFactory })` is checked once its factory has returned the options
 the store in a provider (`useFactory`), not in `dynamicProviders` itself, which runs when `init()` does: the check runs
 at startup.
 
-Make that provider with `storeProvider()`, too. A build boots the server only to read it and opens no store: there a
-`storeProvider()` is not built, so it needs none of what it reads at runtime (the top-level `redis` a `global-store`
+Make that provider with `storeProvider()`, too. A build boots the server only to read it and opens no store: in a build,
+a `storeProvider()` is not built, so it needs none of what it reads at runtime (the top-level `redis` a `global-store`
 takes is left out of a build), and what injects it gets a stand-in that throws `StoreNotOpenedInBuildError` when it is
 called. Any other boot builds it as usual. It returns the provider as given.
 

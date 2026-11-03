@@ -217,6 +217,27 @@ describe('refuseStoresInBrowser', () => {
     );
   });
 
+  it('lists the throttle.storage of the guard: with throttle on, and with it off for auth.publicAccess.rateLimit', async () => {
+    const onRedis = { stores: [['rateLimits', "throttle.storage: { type: 'redis' }"]] };
+    const storage = { type: 'redis' };
+
+    expect(await refusal({ throttle: { enabled: true, storage } })).toMatchObject(onRedis);
+    expect(
+      await refusal({
+        throttle: { enabled: false, storage },
+        auth: { mode: 'public', publicAccess: { rateLimit: 60 } },
+      }),
+    ).toMatchObject(onRedis);
+    expect(await refusal({ throttle: { enabled: false, storage } })).toBeUndefined();
+    expect(
+      await refusal({
+        throttle: { enabled: false, storage },
+        auth: { mode: 'public', publicAccess: { rateLimit: 0 } },
+      }),
+    ).toBeUndefined();
+    expect(await refusal({ throttle: { enabled: true, storage: { type: 'memory' } } })).toBeUndefined();
+  });
+
   it('lists persistent questions and jobs, enabled or declared on an app', async () => {
     @Job({ name: 'nightly', inputSchema: {}, outputSchema: {} })
     class NightlyJob extends JobContext {

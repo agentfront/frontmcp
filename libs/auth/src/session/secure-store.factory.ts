@@ -127,11 +127,12 @@ function toTokenStorageConfig(config: SecureStoreConfig | undefined): TokenStora
   return 'memory';
 }
 
-/** A config the schema refuses would keep the secrets in memory, or open a store that cannot hold them. */
-function refuseUnusableConfig(config: SecureStoreConfig | undefined): void {
-  if (config === undefined) return;
-  const issue = secureStoreConfigSchema.safeParse(config).error?.issues[0];
-  if (!issue) return;
+/** The config as the schema reads it, so the backing opened is the one it validated; a refused one throws. */
+function usableConfig(config: SecureStoreConfig | undefined): SecureStoreConfig | undefined {
+  if (config === undefined) return undefined;
+  const parsed = secureStoreConfigSchema.safeParse(config);
+  if (parsed.success) return parsed.data;
+  const [issue] = parsed.error.issues;
   const where = issue.path.length > 0 ? `secureStore.${issue.path.map(String).join('.')}: ` : '';
   throw new SecureStoreConfigError(`${where}${issue.message}`);
 }
@@ -141,8 +142,8 @@ function refuseUnusableConfig(config: SecureStoreConfig | undefined): void {
  * given `auth.secureStore` config.
  */
 export async function createSecureStore(options: CreateSecureStoreOptions): Promise<ResolvedSecureStore> {
-  const { config, pepper, storage, logger } = options;
-  refuseUnusableConfig(config);
+  const { pepper, storage, logger } = options;
+  const config = usableConfig(options.config);
   const scope = readScope(config);
   const ttlMs = readTtlMs(config);
 

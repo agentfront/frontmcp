@@ -85,6 +85,21 @@ describe('createSecureStore', () => {
     );
   });
 
+  it('opens the backing the schema validated when a config names two', async () => {
+    const adapter = new MemoryStorageAdapter();
+    await adapter.connect();
+    const resolved = await createSecureStore({
+      config: { sqlite: { path: '/tmp/secrets.sqlite' }, backend: {} } as never,
+      pepper: 'p-32-bytes-minimum-aaaaaaaaaaaa',
+      storage: adapter,
+    });
+
+    expect(resolved.kind).toBe('sqlite');
+    await resolved.backend.set('u:ns', 'k', 'v');
+    expect(await resolved.backend.get('u:ns', 'k')).toBe('v');
+    await adapter.disconnect();
+  });
+
   it('reuses a supplied StorageAdapter for a built-in backing', async () => {
     const adapter = new MemoryStorageAdapter();
     await adapter.connect();

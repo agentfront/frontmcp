@@ -108,6 +108,19 @@ describe('stores in a browser, at startup', () => {
     expect(openedStores).toEqual([]);
   });
 
+  it('refuses the guard publicAccess.rateLimit builds on throttle.storage with throttle off', async () => {
+    const throttle = {
+      enabled: false,
+      storage: { type: 'redis', redis: { config: { host: '127.0.0.1', port: 6379 } } },
+    };
+
+    await expect(start({ throttle, auth: { mode: 'public', publicAccess: { rateLimit: 60 } } })).rejects.toMatchObject({
+      code: 'BROWSER_STORE_UNAVAILABLE',
+      stores: [['rateLimits', "throttle.storage: { type: 'redis' }"]],
+    });
+    await expect(start({ throttle, auth: { mode: 'public' } })).resolves.toBeUndefined();
+  });
+
   it('starts a plugin on memory with the top-level redis left in the config', async () => {
     await start({ redis, tasks: { store: false }, plugins: [KvPlugin.init({ type: 'memory' })] });
 
