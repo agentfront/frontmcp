@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { createStorage } from '@frontmcp/utils';
+import { createMemoryStorage, createStorage } from '@frontmcp/utils';
 
 import {
   createMemoryTaskStore,
@@ -65,6 +65,50 @@ describe('task-store.factory', () => {
     expect(require.resolve('@frontmcp/storage-sqlite')).toBe(
       path.resolve(__dirname, '../../../../../storage-sqlite/src/index.ts'),
     );
+  });
+
+  describe('every form of the redis option (#1035)', () => {
+    const connection = { host: 'cache.internal', port: 6379, password: undefined, db: 0, tls: false };
+
+    it.each([
+      [{ url: 'redis://:secret@cache.internal:6380/2' }, { port: 6380, password: 'secret', db: 2 }],
+      [{ url: 'rediss://cache.internal' }, { tls: true }],
+      [
+        { provider: 'redis' as const, url: 'redis://cache.internal/1', password: 'secret' },
+        { password: 'secret', db: 1 },
+      ],
+      [
+        { provider: 'redis' as const, host: 'cache.internal', port: 6380, db: 2 },
+        { port: 6380, db: 2 },
+      ],
+      [
+        { host: 'cache.internal', password: 'secret', tls: true },
+        { password: 'secret', tls: true },
+      ],
+    ])('keeps the tasks in the Redis that %j names', async (redis, fields) => {
+      (createStorage as jest.Mock).mockClear().mockResolvedValueOnce(createMemoryStorage({ prefix: 'test:forms:' }));
+
+      const { type } = await createTaskStore({ redis, keyPrefix: 'test:forms:' });
+
+      expect(type).toBe('redis');
+      expect(createStorage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'redis', redis: { config: { ...connection, ...fields } } }),
+      );
+    });
+
+    it.each([
+      [{ url: 'http://cache.internal' }, 'redis.url must use the redis:// or rediss:// scheme, got "http://"'],
+      [{ url: 'redis://cache.internal:6380', port: 6381 }, 'redis port contradicts redis.url'],
+      [{ port: 6379 }, 'Invalid Redis configuration: Invalid input'],
+    ])('fails on the unusable %j instead of keeping the tasks elsewhere', async (redis, message) => {
+      (createStorage as jest.Mock).mockClear();
+
+      const created = createTaskStore({ redis: redis as never });
+
+      await expect(created).rejects.toBeInstanceOf(TaskStoreNotSupportedError);
+      await expect(created).rejects.toThrow(message);
+      expect(createStorage).not.toHaveBeenCalled();
+    });
   });
 
   it('createTaskStore throws for Edge runtime with memory-only config', async () => {

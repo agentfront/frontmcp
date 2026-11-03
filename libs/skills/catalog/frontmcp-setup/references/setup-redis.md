@@ -151,6 +151,8 @@ redis: {
 
 The URL is the base: `host` / `port` / `password` / `db` / `tls` beside it only fill in what the URL leaves out (`{ url: 'redis://cache:6379', password }` adds the password; `tls: true` upgrades a `redis://` URL). A field that contradicts the URL — another host, port, password or db, or `tls: false` with `rediss://` — is a validation error naming the field, never silently dropped. The URL's password may also come from `?password=`; a URL naming only the user (`redis://default@cache`) leaves it out, so a `password` beside it is used. `pubsub`, `throttle.storage.redis` and the job stores' `store.redis` follow the same rule.
 
+The generated CLI (`frontmcp build --target cli`) and the `createTaskStore()` / `createElicitationStore()` factories read every form too, and refuse an unusable one (`TaskStoreNotSupportedError` / `ElicitationNotSupportedError` from the factories) instead of falling back to memory or to `REDIS_URL`. Up to 1.10 they took a `redis` only with a `host` (the CLI when its server config was an object rather than a `@FrontMcp` class), so a `url` there kept the tasks in memory or in the Redis of `REDIS_URL` / `REDIS_HOST`.
+
 ### For Vercel KV
 
 ```typescript

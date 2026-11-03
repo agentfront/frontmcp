@@ -113,6 +113,16 @@ async function parseCliConfig(
   return parsedConfig;
 }
 
+/** A build reads a server without its stores: it opens none, so their env-var settings need not be set. */
+function withoutStores(options: FrontMcpConfigInput): FrontMcpConfigInput {
+  const { redis: _redis, pubsub: _pubsub, sqlite: _sqlite, jobs, tasks, ...config } = options;
+  return {
+    ...config,
+    ...(jobs && { jobs: { ...jobs, store: undefined } }),
+    ...(tasks && { tasks: { ...tasks, redis: undefined, sqlite: undefined } }),
+  } as FrontMcpConfigInput;
+}
+
 /** A detached job runner runs the server's entry again: it runs its one run instead of serving, then exits. */
 async function exitAfterDetachedRun(config: FrontMcpConfigInput | FrontMcpConfigType, runId: string): Promise<void> {
   const { runDetachedJob } = await import('../job/runner/detached-job.worker.js');
@@ -602,10 +612,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
   /** @internal What a build boots to read a server: CLI mode, in process only, no log file and no store to connect. */
   public static async createForManifest(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
-    const parsedConfig = await parseCliConfig(options, { fileLog: false });
-    const config = parsedConfig as Record<string, unknown> & { jobs?: Record<string, unknown> };
-    for (const backend of ['redis', 'pubsub', 'sqlite']) delete config[backend];
-    if (config.jobs) config.jobs = { ...config.jobs, store: undefined };
+    const parsedConfig = await parseCliConfig(withoutStores(options), { fileLog: false });
     markDirectOnly(parsedConfig);
     markManifestMode(parsedConfig);
     const frontMcp = new FrontMcpInstance(parsedConfig);

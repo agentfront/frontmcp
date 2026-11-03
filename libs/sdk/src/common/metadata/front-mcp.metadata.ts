@@ -975,7 +975,7 @@ export const frontMcpMetadataSchema = frontMcpMultiAppSchema
 /**
  * Lite config parser for CLI mode.
  * Validates only fields needed for tool/resource execution, skipping
- * transport persistence, HTTP, redis, elicitation, ext-apps, UI.
+ * transport persistence, HTTP, elicitation, ext-apps, UI.
  * This reduces cold-start Zod parsing overhead by ~20-40ms.
  */
 const frontMcpLiteSchema = z.object({
@@ -1005,7 +1005,6 @@ const frontMcpLiteSchema = z.object({
   loader: packageLoaderSchema.optional(),
   // Pass through without deep validation — not used in CLI mode
   http: z.any().optional(),
-  redis: z.any().optional(),
   pubsub: z.any().optional(),
   transport: z
     .any()
@@ -1017,6 +1016,7 @@ const frontMcpLiteSchema = z.object({
   extApps: z.any().optional(),
   ui: z.any().optional(),
   // The CLI host picks the stores and runners of its tasks and jobs from these
+  redis: frontMcpBaseSchema.shape.redis,
   sqlite: frontMcpBaseSchema.shape.sqlite,
   jobs: frontMcpBaseSchema.shape.jobs,
   tasks: frontMcpBaseSchema.shape.tasks,

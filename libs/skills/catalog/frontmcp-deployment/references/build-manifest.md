@@ -42,8 +42,11 @@ The boot reads the server; it does not run it:
 
 - Nothing serves: no port, no transport, no file log. `FrontMcpInstance.bootstrap()`, `runStdio()` and
   `runUnixSocket()` called while the entry module loads return without serving.
-- None of the config's stores is opened: `redis`, `pubsub`, `sqlite` and `jobs.store` are left out, so the build
-  connects to no Redis, writes no SQLite file, and a CI machine without them builds the same manifest.
+- None of the config's stores is opened: `redis`, `pubsub`, `sqlite`, `jobs.store`, `tasks.redis` and `tasks.sqlite`
+  are left out before the config is validated, so the build connects to no Redis, writes no SQLite file, and a CI
+  machine without them, or without the variables their URLs and secrets come from, builds the same manifest. A
+  `@FrontMcp` class validates its whole config when the entry loads, so there an unset variable (a
+  `redis: { url: process.env['REDIS_URL'] }`, an `encryption.secret`) stops the boot.
 - Providers are built and their `onBootstrap()` runs; `onReady()` never does, so nothing that starts once the server
   serves starts. `onShutdown()` runs when the manifest has been read.
 - Your own code still runs: module-level code, provider factories, plugins and adapters that connect while starting

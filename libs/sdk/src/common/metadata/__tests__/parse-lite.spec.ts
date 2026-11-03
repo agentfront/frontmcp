@@ -128,3 +128,31 @@ describe('parseFrontMcpConfigLite — validates jobs and the top-level sqlite as
     ]);
   });
 });
+
+describe('parseFrontMcpConfigLite — normalizes the top-level redis as the server does (#1035)', () => {
+  const parseLite = (redis: unknown) =>
+    (
+      parseFrontMcpConfigLite({
+        info: { name: 'demo', version: '0.1.0' },
+        apps: minimalApps,
+        redis,
+      } as never) as unknown as Record<string, unknown>
+    )['redis'];
+
+  it.each([
+    [
+      { url: 'redis://:secret@cache.internal:6380/2' },
+      { provider: 'redis', host: 'cache.internal', port: 6380, password: 'secret', db: 2, tls: false },
+    ],
+    [{ url: 'rediss://cache.internal' }, { provider: 'redis', host: 'cache.internal', port: 6379, db: 0, tls: true }],
+    [{ host: 'cache.internal' }, { provider: 'redis', host: 'cache.internal', port: 6379, db: 0, tls: false }],
+  ])('reads %j into the connection fields every store takes', (redis, connection) => {
+    expect(parseLite(redis)).toEqual(expect.objectContaining(connection));
+  });
+
+  it('refuses an unusable redis with the message of the full parser', () => {
+    expect(() => parseLite({ url: 'http://cache.internal:6379' })).toThrow(
+      'redis.url must use the redis:// or rediss:// scheme',
+    );
+  });
+});

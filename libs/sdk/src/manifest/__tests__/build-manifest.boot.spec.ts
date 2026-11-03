@@ -92,16 +92,39 @@ describe('buildManifest() boot', () => {
   it("connects to none of the config's stores and writes no database", async () => {
     const redisOptions = { provider: 'redis' as const, host: '127.0.0.1', port: redis.port };
     const sqlitePath = path.join(dir, 'sessions.sqlite');
+    const tasksSqlitePath = path.join(dir, 'tasks.sqlite');
 
     const withRedis = await buildManifest(
       config({ redis: redisOptions, jobs: { enabled: true, store: { redis: redisOptions } } }),
     );
+    const withTasksRedis = await buildManifest(config({ tasks: { enabled: true, redis: redisOptions } }));
     const withSqlite = await buildManifest(config({ sqlite: { path: sqlitePath } }));
+    const withTasksSqlite = await buildManifest(
+      config({ tasks: { enabled: true, sqlite: { path: tasksSqlitePath } } }),
+    );
 
-    expect(withRedis.tools.map((tool) => tool.name)).toContain('stock');
-    expect(withSqlite.tools.map((tool) => tool.name)).toContain('stock');
+    for (const manifest of [withRedis, withTasksRedis, withSqlite, withTasksSqlite]) {
+      expect(manifest.tools.map((tool) => tool.name)).toContain('stock');
+    }
     expect(redis.connections()).toBe(0);
     expect(await fileExists(sqlitePath)).toBe(false);
+    expect(await fileExists(tasksSqlitePath)).toBe(false);
+  });
+
+  const unset = process.env['MANIFEST_BOOT_UNSET_VAR'] as string;
+  const unsetSqlitePath = path.join(os.tmpdir(), 'frontmcp-manifest-boot-unset.sqlite');
+
+  it.each([
+    ['redis', { redis: { url: unset } }],
+    ['pubsub', { pubsub: { url: unset } }],
+    ['sqlite', { sqlite: { path: unsetSqlitePath, encryption: { secret: unset } } }],
+    ['jobs.store', { jobs: { enabled: true, store: { redis: { url: unset } } } }],
+    ['tasks.redis', { tasks: { redis: { url: unset } } }],
+    ['tasks.sqlite', { tasks: { sqlite: { path: unsetSqlitePath, encryption: { secret: unset } } } }],
+  ])('reads a server whose %s takes an env var the build has not set', async (_store, stores) => {
+    const manifest = await buildManifest(config(stores as Partial<FrontMcpConfigInput>));
+
+    expect(manifest.tools.map((tool) => tool.name)).toContain('stock');
   });
 
   it('never listens or runs onReady, and shuts the providers down when done', async () => {

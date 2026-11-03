@@ -70,4 +70,25 @@ describe('createElicitationStore — backend selection (#646)', () => {
     process.env['KV_REST_API_URL'] = 'https://kv.example.invalid';
     await expect(createElicitationStore({})).rejects.toBeInstanceOf(ElicitationNotSupportedError);
   });
+
+  it.each([
+    [
+      { url: 'rediss://:secret@cache.internal:6380/2' },
+      { host: 'cache.internal', port: 6380, password: 'secret', db: 2, tls: true },
+    ],
+    [{ host: 'cache.internal' }, { host: 'cache.internal', port: 6379, password: undefined, db: 0, tls: false }],
+  ])('keeps the elicitation state in the Redis that %j names (#1035)', async (redis, config) => {
+    const { type } = await createElicitationStore({ redis });
+
+    expect(type).toBe('redis');
+    expect(createStorageMock).toHaveBeenCalledWith(expect.objectContaining({ type: 'redis', redis: { config } }));
+  });
+
+  it('fails on an unusable redis instead of keeping the elicitation state elsewhere (#1035)', async () => {
+    const created = createElicitationStore({ redis: { url: 'http://cache.internal' } });
+
+    await expect(created).rejects.toBeInstanceOf(ElicitationNotSupportedError);
+    await expect(created).rejects.toThrow('redis.url must use the redis:// or rediss:// scheme, got "http://"');
+    expect(createStorageMock).not.toHaveBeenCalled();
+  });
 });
