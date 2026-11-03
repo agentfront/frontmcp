@@ -102,6 +102,7 @@ export default {
 
   describe('with a Redis', () => {
     let container: RedisContainerInfo | undefined;
+    let client: Redis | undefined;
     let monitor: Redis | undefined;
     const commands: MonitoredCommand[] = [];
 
@@ -111,7 +112,8 @@ export default {
       const admin = new Redis(container.url);
       await admin.config('SET', 'requirepass', PASSWORD);
       admin.disconnect();
-      monitor = await new Redis({ host: container.host, port: container.port, password: PASSWORD }).monitor();
+      client = new Redis({ host: container.host, port: container.port, password: PASSWORD });
+      monitor = await client.monitor();
       monitor.on('monitor', (_time: string, args: string[], _source: string, database: string) => {
         commands.push({ command: String(args[0]).toLowerCase(), database });
       });
@@ -119,6 +121,7 @@ export default {
 
     afterAll(async () => {
       monitor?.disconnect();
+      client?.disconnect();
       await container?.stop();
     });
 
