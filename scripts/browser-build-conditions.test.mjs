@@ -79,8 +79,8 @@ test('libs/sdk: a browser bundler gets the browser-conditioned build', () => {
   assert.ok(cjsBuild.options.esbuildOptions.conditions.includes('browser'));
   assert.deepEqual(
     [...cjsBuild.options.esbuildOptions.external].sort(),
-    [...project.targets['build-esm'].options.esbuildOptions.external].sort(),
-    'the browser bundle must keep the same packages external as the ESM bundle',
+    [...project.targets['build-esm'].options.esbuildOptions.external, '@frontmcp/storage-sqlite'].sort(),
+    'the browser bundle keeps the ESM bundle packages external, and @frontmcp/storage-sqlite, which only Node loads',
   );
 
   const esmBuild = project.targets['build-browser-esm'];
