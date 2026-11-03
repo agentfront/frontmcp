@@ -34,7 +34,7 @@ function serverWith(path: string) {
     info: { name: 'result-handles-build-stores', version: '1.0.0' },
     apps: [FoldingApp],
     logging: { level: LogLevel.Off },
-    tasks: { store: false },
+    tasks: { store: false as const },
   };
 }
 

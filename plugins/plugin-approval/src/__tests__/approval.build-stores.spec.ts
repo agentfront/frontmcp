@@ -34,7 +34,7 @@ function serverWith(path: string) {
     info: { name: 'approval-build-stores', version: '1.0.0' },
     apps: [ApprovingApp],
     logging: { level: LogLevel.Off },
-    tasks: { store: false },
+    tasks: { store: false as const },
   };
 }
 

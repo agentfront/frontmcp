@@ -25,7 +25,7 @@ function serverWith(cache: CachePluginOptions, options: Record<string, unknown> 
     info: { name: 'cache-build-stores', version: '1.0.0' },
     apps: [CachedApp],
     logging: { level: LogLevel.Off },
-    tasks: { store: false },
+    tasks: { store: false as const },
     ...options,
   };
 }

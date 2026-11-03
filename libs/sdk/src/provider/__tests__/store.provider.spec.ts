@@ -19,7 +19,11 @@ interface KeyValueStore {
 }
 
 const StoreToken: Token<KeyValueStore> = Symbol('kv-store');
-const ConsumerToken: Token<{ store: KeyValueStore }> = Symbol('kv-consumer');
+interface Consumer {
+  store: KeyValueStore;
+}
+
+const ConsumerToken: Token<Consumer> = Symbol('kv-consumer');
 
 @App({ name: 'store-app' })
 class StoreApp {}
@@ -59,7 +63,7 @@ describe('storeProvider()', () => {
     const open = jest.fn(() => ({ get: () => 'value' }));
     const instance = await FrontMcpInstance.createForManifest(serverWith(storeProviders(open)));
     const [scope] = instance.getScopes() as Scope[];
-    const { store } = scope.providers.get(ConsumerToken);
+    const { store } = scope.providers.get(ConsumerToken) as Consumer;
 
     expect(open).not.toHaveBeenCalled();
     expect(await Promise.resolve(store)).toBe(store);
@@ -74,11 +78,11 @@ describe('storeProvider()', () => {
     const open = jest.fn(() => ({ get: () => 'value' }));
     const server = await FrontMcpInstance.createForGraph(serverWith(storeProviders(open)));
     const [scope] = server.getScopes() as Scope[];
-    expect(scope.providers.get(ConsumerToken).store.get('key')).toBe('value');
+    expect((scope.providers.get(ConsumerToken) as Consumer).store.get('key')).toBe('value');
     await server.shutdown();
 
     const container = await createContainer({ providers: storeProviders(open), logging: { level: LogLevel.Off } });
-    expect(container.get(ConsumerToken).store.get('key')).toBe('value');
+    expect((container.get(ConsumerToken) as Consumer).store.get('key')).toBe('value');
     await container.dispose();
 
     expect(open).toHaveBeenCalledTimes(2);
