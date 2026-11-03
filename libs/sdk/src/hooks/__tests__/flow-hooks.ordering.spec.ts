@@ -110,6 +110,37 @@ class SummaryPrompt extends PromptContext {
 })
 class BillingApp {}
 
+@Tool({ name: 'plain_report', inputSchema: {} })
+class PlainReportTool extends ToolContext {
+  async execute() {
+    return 'plain';
+  }
+}
+
+@Resource({ name: 'plain-ledger', uri: 'plain://today' })
+class PlainLedgerResource extends ResourceContext {
+  async execute(uri: string): Promise<ReadResourceResult> {
+    return { contents: [{ uri, text: 'plain' }] };
+  }
+}
+
+@Prompt({ name: 'plain_summary', arguments: [] })
+class PlainSummaryPrompt extends PromptContext {
+  async execute(): Promise<GetPromptResult> {
+    return { messages: [{ role: 'user', content: { type: 'text', text: 'plain' } }] };
+  }
+}
+
+/** No plugins and no hooks: its answers run no hook, so they carry no trace. */
+@App({
+  id: 'plain',
+  name: 'Plain',
+  tools: [PlainReportTool],
+  resources: [PlainLedgerResource],
+  prompts: [PlainSummaryPrompt],
+})
+class PlainApp {}
+
 async function serve(
   apps: Parameters<typeof FrontMcpInstance.createDirect>[0]['apps'],
   extra: Partial<Parameters<typeof FrontMcpInstance.createDirect>[0]> = {},
@@ -356,6 +387,27 @@ describe('the dev hook trace in _meta', () => {
 
     expect(enabled.tool).toHaveLength(3);
     expect(disabled).toEqual({ tool: undefined, resource: undefined, prompt: undefined });
+  });
+
+  it('adds no trace key, and so no _meta, to the answers of a server that runs no hook, in dev mode or with devtools.hookTrace', async () => {
+    for (const [nodeEnv, devtools] of [
+      ['development', undefined],
+      ['production', { hookTrace: true }],
+    ] as const) {
+      process.env['NODE_ENV'] = nodeEnv;
+      const server = await serve([PlainApp], devtools ? { devtools } : {});
+      try {
+        const tool = await server.callTool('plain_report', {});
+        const resource = await server.readResource('plain://today');
+        const prompt = await server.getPrompt('plain_summary', {});
+
+        expect(tool).not.toHaveProperty('_meta');
+        expect(resource).toEqual({ contents: [{ uri: 'plain://today', text: 'plain' }] });
+        expect(prompt).not.toHaveProperty('_meta');
+      } finally {
+        await server.dispose();
+      }
+    }
   });
 
   it('refuses a devtools.hookTrace that is not a boolean', async () => {

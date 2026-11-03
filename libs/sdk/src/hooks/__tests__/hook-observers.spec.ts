@@ -254,6 +254,24 @@ describe('the dev hook trace', () => {
   });
 
   it('leaves an answer that is not an object as it is', () => {
-    expect(withHookTrace(undefined, [])).toBeUndefined();
+    const trace: HookTraceEntry[] = [
+      { owner: 'setup-gate', method: 'requireSetup', stage: 'execute', type: 'will', ms: 0.2, outcome: 'ok' },
+    ];
+
+    expect(withHookTrace(undefined, trace)).toBeUndefined();
+    expect(withHookTrace(null, trace)).toBeNull();
+    expect(withHookTrace('report', trace)).toBe('report');
+    const list = [{ type: 'text', text: 'report' }];
+    expect(withHookTrace(list, trace)).toBe(list);
+  });
+
+  it('leaves the answer as it is when no hook ran, adding no trace key', () => {
+    const answer = { contents: [{ uri: 'tickets://open', text: '[]' }] };
+    const withMeta = { content: [], _meta: { 'frontmcp/budget': { maxBytes: 10 } } };
+
+    expect(withHookTrace(answer, [])).toBe(answer);
+    expect(withHookTrace(answer, [])).toEqual({ contents: [{ uri: 'tickets://open', text: '[]' }] });
+    expect(withHookTrace(withMeta, [])).toBe(withMeta);
+    expect(withMeta._meta).not.toHaveProperty(HOOK_TRACE_META_KEY);
   });
 });
