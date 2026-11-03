@@ -1,4 +1,4 @@
-import { type Type } from '@frontmcp/di';
+import { type Token, type Type } from '@frontmcp/di';
 
 import { type LogLevel } from '../types';
 
@@ -51,3 +51,9 @@ export abstract class FrontMcpLogger {
    */
   abstract get error(): (...args: any[]) => void;
 }
+
+/**
+ * The server logger, as a token every copy of `@frontmcp/sdk` resolves: a plugin package another copy loads (the
+ * CommonJS build `require`d from a server run as ESM) injects this, as its `FrontMcpLogger` class is another token.
+ */
+export const FRONTMCP_LOGGER: Token<FrontMcpLogger> = Symbol.for('frontmcp:LOGGER');

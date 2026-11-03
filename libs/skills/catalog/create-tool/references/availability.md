@@ -142,6 +142,8 @@ const proOnly: EnabledSource = {
 };
 ```
 
+A lazy app (`apps: [{ name, lazy: () => import('./billing.app'), enabled }]`) takes the same `enabled` for all its entries: while it is off they are refused with `FEATURE_OFF`, and a server that lists the app from `frontmcp.manifest.json` does not import it (see `frontmcp-setup` → `multi-app-composition`, which says when development imports it anyway). Its own entries cannot have a source of their own, nor a `featureFlag`: give the lazy app `enabled: featureFlagSource(adapter, 'beta')` instead.
+
 With `@frontmcp/plugin-feature-flags`, `featureFlagSource(adapter, 'beta')` is the `EnabledSource` of a flag. Code that changes what a list shows some other way announces it the same coalesced way with `scope.surface?.listChanged('tools')`.
 
 ### The surface hash and stale tool lists

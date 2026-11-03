@@ -134,6 +134,26 @@ if (result.status === 'decline') {
 }
 ```
 
+## Questions that outlive the call (`persist`)
+
+With `elicitation.persistent` on, `persist: { key }` keeps the question for the caller after this call stops waiting.
+A person answers it in the inbox (`/_frontmcp/inbox` with `http.auth.people`, or `frontmcp inbox`), not the client's
+form, so it works with any client:
+
+```typescript
+const answer = await this.elicit('Deploy v2?', z.object({ approve: z.boolean() }), {
+  ttl: 60_000, // this call waits a minute
+  persist: { key: 'deploy-v2' }, // the question waits elicitation.persistent.ttlMs (24 h)
+});
+```
+
+The waiting call gets the answer; if it stopped waiting first it fails with `QuestionPendingError`, and the next call of
+the same signed-in user (any session) that asks `deploy-v2` gets the answer at once, and only that call. A caller with no
+signed-in principal has its questions kept for its session (`session:<id>`): only a later call in that session gets the
+answer, never a new session. Give the person a sign-in
+link to the caller's questions with `printQuestionInboxLink(this)`, which prints it on the server's terminal and returns only its expiry, so the agent cannot answer its own question (it prints nothing while stderr is a pipe or a file a client or an agent could read: see `inboxLinks`). See `configure-elicitation` (config skill) for the inbox,
+who may answer, and storage.
+
 ## Under MCP 2026-07-28
 
 There are no server-to-client requests in this revision. `this.elicit()` answers the first call with `resultType: 'input_required'` and a `requestState`; the client retries with `inputResponses`, and `execute()` runs again **from the top** with each asked `elicit()` returning its answer. Keep side effects after the last `elicit()`, or make them idempotent.

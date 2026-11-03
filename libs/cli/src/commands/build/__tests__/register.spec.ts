@@ -45,3 +45,20 @@ describe('registerBuildCommands', () => {
     expect(runBuild.mock.calls[0][0]).toMatchObject({ outDir: 'out' });
   });
 });
+
+describe('registerBuildCommands manifest flags', () => {
+  beforeEach(() => runBuild.mockClear());
+
+  it('writes the manifest and lints it leniently by default', async () => {
+    await makeProgram().parseAsync(['node', 'frontmcp', 'build']);
+
+    expect(runBuild.mock.calls[0][0].manifest).toBeUndefined();
+    expect(runBuild.mock.calls[0][0].strictLint).toBeUndefined();
+  });
+
+  it('passes --no-manifest and --strict-lint through', async () => {
+    await makeProgram().parseAsync(['node', 'frontmcp', 'build', '--no-manifest', '--strict-lint']);
+
+    expect(runBuild.mock.calls[0][0]).toMatchObject({ manifest: false, strictLint: true });
+  });
+});

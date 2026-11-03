@@ -115,14 +115,14 @@ export async function readFileBuffer(p: string): Promise<Buffer> {
  *
  * @param p - Path to write to
  * @param content - Content to write
- * @param options - Optional mode (permissions)
+ * @param options - Optional mode (permissions, applied when the file is created) and flag (e.g. `'a'` to append)
  *
  * @example
  * await writeFile('/path/to/file.txt', 'hello', { mode: 0o600 });
  */
-export async function writeFile(p: string, content: string, options?: { mode?: number }): Promise<void> {
+export async function writeFile(p: string, content: string, options?: { mode?: number; flag?: string }): Promise<void> {
   const fsp = getFsp();
-  await fsp.writeFile(p, content, { encoding: 'utf8', mode: options?.mode });
+  await fsp.writeFile(p, content, { encoding: 'utf8', mode: options?.mode, flag: options?.flag });
 }
 
 /**
@@ -242,6 +242,17 @@ export async function fileExists(p: string): Promise<boolean> {
  */
 export function fileExistsSync(p: string): boolean {
   return getFs().existsSync(p);
+}
+
+/** Whether `p` is known to be missing: a check that fails another way (no access, a timeout) can't tell. */
+export function isMissingSync(p: string): boolean {
+  try {
+    getFs().statSync(p);
+    return false;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'ENOENT' || code === 'ENOTDIR';
+  }
 }
 
 /**

@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import { ProviderScope, tokenName, type Token } from '@frontmcp/di';
 
 import {
+  FRONTMCP_LOGGER,
   FrontMcpLogger,
   loggingOptionsSchema,
   type LoggingConfigType,
@@ -111,6 +112,16 @@ export default class LoggerRegistry extends RegistryAbstract<LogTransportInterfa
         name: 'FrontMcpLogger',
         scope: ProviderScope.GLOBAL,
         description: 'Logger instance that transport logs to all registered transporters.',
+      },
+    });
+    this.providers.injectProvider({
+      provide: FRONTMCP_LOGGER,
+      value: logger,
+      metadata: {
+        id: 'frontmcp-logger-token',
+        name: 'FRONTMCP_LOGGER',
+        scope: ProviderScope.GLOBAL,
+        description: 'The same logger, under a token every copy of @frontmcp/sdk resolves.',
       },
     });
 

@@ -10,11 +10,14 @@ import type { AuthRegistry } from '../../auth/auth.registry';
 import type { ChannelNotificationService } from '../../channel/channel-notification.service';
 import type ChannelRegistry from '../../channel/channel.registry';
 import type { ChannelEventBus } from '../../channel/sources/app-event.source';
+import type { PersistentQuestions } from '../../elicitation/questions/question-scope.helper';
 import type { ElicitationStore } from '../../elicitation/store/elicitation.store';
 import type { HaManager } from '../../ha';
 import type HookRegistry from '../../hooks/hook.registry';
+import type { HttpRouteTable } from '../../http-route/http-route.table';
 import type JobRegistry from '../../job/job.registry';
 import type { NotificationService } from '../../notification';
+import type { EnforcedMetadataScope } from '../../plugin/enforced-metadata.check';
 import type PromptRegistry from '../../prompt/prompt.registry';
 import type ResourceRegistry from '../../resource/resource.registry';
 import type { SkillSessionManager } from '../../skill/session/skill-session.manager';
@@ -39,6 +42,9 @@ import type { FlowName, ScopeMetadata } from '../metadata';
 import type { ScopeRecord } from '../records';
 import { normalizeEntryPrefix, normalizeScopeBase } from '../utils';
 import { BaseEntry } from './base.entry';
+
+/** The registries of an app loaded after startup. */
+export type LateAppRegistries = Omit<EnforcedMetadataScope, 'hooks'>;
 
 export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMetadata> {
   abstract readonly id: string;
@@ -105,12 +111,18 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
 
   haManager?: HaManager;
 
+  /** The scope's `@HttpRoute`s, which the `http:route` flow serves; `undefined` when it has none. */
+  declare httpRouteTable?: HttpRouteTable;
+
   abstract get rateLimitManager(): GuardManager | undefined;
 
   /** The guard `publicAccess.rateLimit` counts on: the throttle's, else its own when `throttle.enabled` is `false`. */
   abstract get publicAccessGuard(): GuardManager | undefined;
 
   abstract get elicitationStore(): ElicitationStore | undefined;
+
+  /** The questions `elicitation.persistent` keeps; `undefined` while it is off. */
+  abstract get persistentQuestions(): PersistentQuestions | undefined;
 
   /** Persistent store for MCP 2025-11-25 background task records. */
   abstract get taskStore(): TaskStore | undefined;
@@ -141,6 +153,12 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
    * The PRM endpoint advertises them in `scopes_supported`.
    */
   abstract getAllSupportedScopes(): string[];
+
+  /**
+   * Run, for an app loaded after startup (a lazy app on its first call), the checks startup runs on every app:
+   * metadata only a plugin enforces, the hooks' order, and the guard its tools' limits need. Throws what startup would.
+   */
+  abstract checkLateApp(app: LateAppRegistries): Promise<void>;
 
   /**
    * Lifecycle callbacks registered by plugins via onServerStarted().

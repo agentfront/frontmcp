@@ -77,4 +77,32 @@ export interface ObservabilityOptionsInterface {
         includeSummaries?: boolean;
         onRequestComplete?: (log: unknown) => void | Promise<void>;
       };
+
+  /**
+   * Report event-loop stalls: a warning naming the calls in flight (never their inputs), the
+   * `frontmcp_event_loop_stall_seconds_total` counter and a dev event. GC pauses are counted apart.
+   *
+   * - `true` — report stalls of 200 ms or more
+   * - Object — `thresholdMs`, from 20 to 60000
+   *
+   * @default false
+   */
+  stalls?: boolean | { thresholdMs?: number };
+
+  /**
+   * The `frontmcp dev` event stream: call timings, failures and stalls as JSON Lines. On only in
+   * development (under `frontmcp dev`, or with `NODE_ENV=development` and a file or sink set).
+   *
+   * - `false` — no dev events
+   * - Object — `file` (JSON Lines), `sinks` (objects with `write(events)`), `maxQueue` (1000)
+   *
+   * @default true
+   */
+  devEvents?:
+    | boolean
+    | {
+        file?: string;
+        sinks?: Array<{ name?: string; write(events: readonly unknown[]): void | Promise<void> }>;
+        maxQueue?: number;
+      };
 }

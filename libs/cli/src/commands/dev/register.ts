@@ -26,6 +26,11 @@ export function registerDevCommands(program: Command): void {
     .option('--log-file <path>', 'Bridge log file path (default: .frontmcp/dev.log in the project root)')
     .option('--buffer-size <n>', 'Max RPCs buffered during reload', (v) => parseInt(v, 10))
     .option('--reload-deadline-ms <ms>', 'Time to wait for a reload to complete', (v) => parseInt(v, 10))
+    .option(
+      '--events-file <path>',
+      'Dev events file: call timings, failures, stalls (default: .frontmcp/dev-events.jsonl)',
+    )
+    .option('--no-events', 'Write no dev events')
     .action(async (options, cmd: { parent?: { opts?: () => Record<string, unknown> } }) => {
       const { runDev } = await import('./dev.js');
       // Issue #400 — forward the top-level --config flag into the command's

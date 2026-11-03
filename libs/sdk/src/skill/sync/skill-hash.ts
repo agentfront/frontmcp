@@ -1,6 +1,7 @@
 // file: libs/sdk/src/skill/sync/skill-hash.ts
 
 import { sha256Hex } from '@frontmcp/utils';
+
 import type { SkillContent } from '../../common/interfaces';
 
 /**
@@ -28,22 +29,23 @@ export interface SkillHashComponents {
   combinedHash: string;
 }
 
+/** Sorted in English order whatever the machine's locale, so every machine computes the same hash. */
+const byText = (a: string, b: string) => a.localeCompare(b, 'en');
+
 /**
  * Deterministically serialize skill content for hashing.
  * Ensures consistent hash output regardless of property order.
  */
 function serializeForHash(skill: SkillContent): string {
   // Sort tools by name for deterministic ordering
-  const sortedTools = [...skill.tools].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedTools = [...skill.tools].sort((a, b) => byText(a.name, b.name));
 
   // Sort parameters by name if present
-  const sortedParameters = skill.parameters
-    ? [...skill.parameters].sort((a, b) => a.name.localeCompare(b.name))
-    : undefined;
+  const sortedParameters = skill.parameters ? [...skill.parameters].sort((a, b) => byText(a.name, b.name)) : undefined;
 
   // Sort examples by scenario if present
   const sortedExamples = skill.examples
-    ? [...skill.examples].sort((a, b) => a.scenario.localeCompare(b.scenario))
+    ? [...skill.examples].sort((a, b) => byText(a.scenario, b.scenario))
     : undefined;
 
   const content = {
@@ -100,7 +102,7 @@ export function computeSkillHashComponents(skill: SkillContent): SkillHashCompon
   // Hash individual components
   const instructionsHash = sha256Hex(skill.instructions);
 
-  const sortedTools = [...skill.tools].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedTools = [...skill.tools].sort((a, b) => byText(a.name, b.name));
   const toolsHash = sha256Hex(JSON.stringify(sortedTools));
 
   const metadata = { id: skill.id, name: skill.name, description: skill.description };

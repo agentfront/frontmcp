@@ -25,10 +25,12 @@ import {
   type FlowOutputOf,
   type FlowType,
   type FrontMcpAuth,
+  type LateAppRegistries,
   type PublicAuthOptions,
   type ScopeRecord,
   type ServerRequest,
   type Token,
+  type ToolEntry,
   type Type,
   type WidgetServingMode,
 } from '../common';
@@ -43,10 +45,12 @@ import CompleteFlow from '../completion/flows/complete.flow';
 import { FrontMcpContextProvider, FrontMcpContextStorage } from '../context';
 import { proxyTrustOf } from '../context/metadata.utils';
 import type { ElicitationStore } from '../elicitation';
+import type { PersistentQuestions } from '../elicitation/questions/question-scope.helper';
 import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors';
 import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
 import { assertAuthoritiesRules } from '../front-mcp/authorities-rules.check';
+import { isEntryServer, isJobWorker } from '../front-mcp/detached-job.flag';
 import { isDirectOnly } from '../front-mcp/direct-only.flag';
 import type { HaManager } from '../ha';
 import type { HealthService } from '../health';
@@ -60,12 +64,14 @@ import { normalizeJob } from '../job/job.utils';
 import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
+import { describeBudgetOverruns } from '../manifest/instructions-budget.check';
 import { NotificationService } from '../notification';
 import { OffloadService } from '../offload/offload.service';
 import { agentToolMetadata, findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
 import PluginRegistry, { type PluginScopeInfo } from '../plugin/plugin.registry';
 import PromptRegistry from '../prompt/prompt.registry';
 import ProviderRegistry from '../provider/provider.registry';
+import { MaterializedResources } from '../resource/materialized/materialized-resources';
 import ResourceRegistry from '../resource/resource.registry';
 import type { HttpRouteRegistrar, RegisteredHttpRoute } from '../server/custom-routes.helper';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
@@ -87,6 +93,7 @@ import type { SessionRelayHandle } from '../transport/relay/relay-scope.helper';
 import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import type { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
+import { devEventsObservabilityConfig } from './dev-events-observability';
 import { registerServerEntries } from './server-entries.helper';
 import { reportStartup } from './startup-report.helper';
 
@@ -149,6 +156,7 @@ export class Scope extends ScopeEntry {
   private _elicitationStore?: ElicitationStore;
   /** Backend type for the elicitation store (used by the orphan-sqlite WARN guard). */
   private elicitationBackendType?: 'memory' | 'redis' | 'upstash' | 'sqlite' | 'auto';
+  private _persistentQuestions?: PersistentQuestions;
 
   /** Task store for MCP 2025-11-25 background tasks (optional). */
   private _taskStore?: TaskStore;
@@ -174,6 +182,8 @@ export class Scope extends ScopeEntry {
   /** Guard manager for rate limiting, concurrency, IP filtering (optional) */
   private _rateLimitManager?: GuardManager;
   private _publicAccessGuard?: GuardManager;
+  /** The guard setup of the lazy apps loaded so far, which the next one waits for. */
+  private lateGuardSetup: Promise<void> = Promise.resolve();
 
   /** Authorities engine for RBAC/ABAC/ReBAC enforcement (optional) */
   private _authoritiesEngine?: import('@frontmcp/auth').AuthoritiesEngine;
@@ -257,7 +267,7 @@ export class Scope extends ScopeEntry {
     this.scopeHooks = new HookRegistry(scopeProviders, []);
     this.scopeFlows = new FlowRegistry(
       scopeProviders,
-      httpServing ? [httpServing.HttpRequestFlow, httpServing.HttpIpFilterFlow] : [],
+      httpServing ? [httpServing.HttpRouteFlow, httpServing.HttpRequestFlow, httpServing.HttpIpFilterFlow] : [],
     );
     this.scopeAuth = new AuthRegistry(this, scopeProviders, [], scopeRef, this.metadata.auth, createPrimaryAuth);
     this.scopeApps = new AppRegistry(this.scopeProviders, this.metadata.apps, scopeRef);
@@ -375,16 +385,50 @@ export class Scope extends ScopeEntry {
           const elicitationRedis = this.metadata.elicitation?.redis ?? this.metadata.redis;
           // Top-level `sqlite` is the fallback when no Redis source is configured (issue #401).
           const elicitationSqlite = elicitationRedis ? undefined : resolvedTopLevelSqlite;
+          const persistent = this.metadata.elicitation?.persistent;
+          const questionsHelper = persistent
+            ? await import('../elicitation/questions/question-scope.helper.js')
+            : undefined;
+          const onEdgeRuntime = isEdgeRuntime();
+          // Checked before either store opens: on an edge runtime, persistent questions fail startup with the reason.
+          // A Redis named only for persistent questions keeps the elicitation state too; other question stores (memory,
+          // sqlite) stay theirs alone.
+          const questionsStorage = questionsHelper?.persistentQuestionsSettings(persistent, onEdgeRuntime).storage;
+          const questionsRedis = !elicitationRedis && questionsStorage?.type === 'redis' ? questionsStorage : undefined;
           const { createElicitationStore } = await import('../elicitation/store/elicitation-store.factory.js');
-          const { store: elicitStore, type: elicitType } = await createElicitationStore({
+          const {
+            store: elicitStore,
+            type: elicitType,
+            storage: elicitStorage,
+          } = await createElicitationStore({
             redis: elicitationRedis,
+            storage: questionsRedis,
             sqlite: elicitationSqlite,
             keyPrefix: elicitationRedis?.keyPrefix ?? 'mcp:elicit:',
             logger: this.logger,
-            isEdgeRuntime: isEdgeRuntime(),
+            isEdgeRuntime: onEdgeRuntime,
           });
           this._elicitationStore = elicitStore;
           this.elicitationBackendType = elicitType;
+          if (elicitStorage) {
+            // The scope opened this storage, so it closes it: a Redis connection left open outlives the scope
+            this.onDispose(async () => {
+              await elicitStore.destroy?.();
+              await elicitStorage.disconnect();
+            });
+          }
+          if (questionsHelper) {
+            const questions = await questionsHelper.openPersistentQuestions({
+              persistent,
+              serverName: this.metadata.info.name,
+              redis: elicitationRedis,
+              sqlite: resolvedTopLevelSqlite,
+              onEdgeRuntime,
+              logger: this.logger,
+            });
+            this._persistentQuestions = questions;
+            if (questions) this.onDispose(() => questions.store.close());
+          }
         })()
       : undefined;
 
@@ -594,28 +638,28 @@ export class Scope extends ScopeEntry {
     // who sets both top-level `redis` and `sqlite` still gets the warning:
     // redis wins everywhere, the stores exist, but sqlite is effectively
     // unused.
-    if (this.metadata.sqlite) {
-      const transportUsedSqlite =
-        this.transportService?.isSessionStoreConfigured() === true &&
-        this.transportService.getBackendKind() === 'sqlite';
-      const tasksUsedSqlite = this.taskBackendType === 'sqlite';
-      const elicitationUsedSqlite = this.elicitationBackendType === 'sqlite';
-      if (!transportUsedSqlite && !tasksUsedSqlite && !elicitationUsedSqlite) {
-        this.logger.warn(
-          '[FrontMcp] Top-level `sqlite` config was provided but no subsystem consumes it ' +
-            '(transport persistence, tasks, and elicitation were all disabled or pre-configured with a different backend). ' +
-            'Sessions will use in-memory storage. Remove the `sqlite` block or enable one of the subsystems.',
-        );
-      }
-    }
+    // The jobs, registered below, may consume the top-level sqlite too: the unused warning waits for them
+    let topLevelSqliteUsed =
+      (this.transportService?.isSessionStoreConfigured() === true &&
+        this.transportService.getBackendKind() === 'sqlite') ||
+      this.taskBackendType === 'sqlite' ||
+      this.elicitationBackendType === 'sqlite' ||
+      this._persistentQuestions?.type === 'sqlite';
 
     // ═══ BATCH 2: App-dependent registries (parallel) ═══
     // These call providers.getRegistries('AppRegistry') during initialize(),
     // so AppRegistry must be fully ready before they start.
     const serverPlugins = [...(this.metadata.plugins ?? [])];
+    const appPlugins = this.scopeApps
+      .getApps()
+      .flatMap((app) => ('plugins' in app.metadata ? (app.metadata.plugins ?? []) : []));
 
-    // Auto-load ObservabilityPlugin when observability config is present.
-    const observabilityConfig = this.metadata.observability;
+    // Auto-load ObservabilityPlugin when observability config is present, or for frontmcp dev's events.
+    const impliedObservability =
+      this.metadata.observability === undefined
+        ? devEventsObservabilityConfig([...serverPlugins, ...appPlugins])
+        : undefined;
+    const observabilityConfig = this.metadata.observability ?? impliedObservability;
     if (observabilityConfig) {
       const { observabilityPlugins } = await import('./observability-scope.helper.js');
       serverPlugins.push(
@@ -623,6 +667,7 @@ export class Scope extends ScopeEntry {
           config: observabilityConfig,
           logger: this.logger,
           globalProviders: this.globalProviders,
+          implied: impliedObservability !== undefined,
         }),
       );
     }
@@ -746,10 +791,7 @@ export class Scope extends ScopeEntry {
 
     // A plugin that registers skills at runtime (`@Plugin({ dynamicSkills: true })`) serves skills from
     // startup, before its first skill exists, so it gets the skill session manager and tool guard too.
-    const dynamicSkills = pluginsRegisterDynamicSkills([
-      ...serverPlugins,
-      ...this.scopeApps.getApps().flatMap((app) => ('plugins' in app.metadata ? (app.metadata.plugins ?? []) : [])),
-    ]);
+    const dynamicSkills = pluginsRegisterDynamicSkills([...serverPlugins, ...appPlugins]);
 
     // Initialize skill session manager if skills are available, or a plugin registers them at runtime
     if (this.scopeSkills.hasAny() || dynamicSkills) {
@@ -860,18 +902,24 @@ export class Scope extends ScopeEntry {
       if (autoEnabled) {
         this.logger.info(
           `Jobs auto-enabled: detected ${allJobs.length} job(s) and ${allWorkflows.length} workflow(s) in @App declarations. ` +
-            `Defaulting to in-memory stores — configure storage via @FrontMcp({ jobs: { store: ... } }) for multi-replica HA.`,
+            `Their runs are kept in jobs.store, else the top-level redis or sqlite, else in memory.`,
         );
       }
 
-      const effectiveConfig: JobsConfig = { ...(jobsConfig ?? {}), enabled: true };
       const notifyFn = async (data: Record<string, unknown>) => {
         if (this.notificationService) {
           this.logger.debug('Job notification', data);
         }
       };
 
-      const { registerJobCapabilities } = await import('../job/job-scope.helper.js');
+      const { registerJobCapabilities, resolveJobsStore } = await import('../job/job-scope.helper.js');
+      const effectiveConfig: JobsConfig = {
+        ...(jobsConfig ?? {}),
+        enabled: true,
+        store: resolveJobsStore(jobsConfig?.store, { redis: this.metadata.redis, sqlite: resolvedTopLevelSqlite }),
+      };
+      topLevelSqliteUsed ||=
+        Boolean(resolvedTopLevelSqlite) && effectiveConfig.store?.sqlite === resolvedTopLevelSqlite;
       const result = await registerJobCapabilities({
         providers: this.scopeProviders,
         flowRegistry: this.scopeFlows,
@@ -882,6 +930,8 @@ export class Scope extends ScopeEntry {
         jobsConfig: effectiveConfig,
         logger: this.logger,
         notifyFn,
+        entryServer: isEntryServer(this.metadata),
+        jobWorker: isJobWorker(this.metadata),
       });
 
       this._scopeJobs = result.jobRegistry as JobRegistry;
@@ -912,6 +962,14 @@ export class Scope extends ScopeEntry {
       );
     }
 
+    if (this.metadata.sqlite && !topLevelSqliteUsed) {
+      this.logger.warn(
+        '[FrontMcp] Top-level `sqlite` config was provided but no subsystem consumes it ' +
+          '(transport persistence, tasks, elicitation and jobs were all disabled or pre-configured with a different backend). ' +
+          'Sessions will use in-memory storage. Remove the `sqlite` block or enable one of the subsystems.',
+      );
+    }
+
     // Initialize notification service after all registries are ready
     this.notificationService = new NotificationService(this);
     await this.notificationService.initialize();
@@ -921,6 +979,10 @@ export class Scope extends ScopeEntry {
     liveSurface.start();
     this.liveSurface = liveSurface;
     this.onDispose(() => liveSurface.stop());
+
+    const materializedResources = new MaterializedResources(this);
+    await materializedResources.start();
+    this.onDispose(() => materializedResources.stop());
 
     // Install the task runner now that the notification service is available.
     // The runner needs it to deliver `notifications/tasks/status` events.
@@ -974,6 +1036,7 @@ export class Scope extends ScopeEntry {
     // reserved-path guard uses the resolved entryPath + routeBase, so it is
     // aware of split-by-app scope bases (e.g. /mcp/billing).
     if (httpServing) {
+      httpServing.attachHttpRoutes(this, this.globalProviders);
       httpServing.registerCustomHttpRoutes({
         routes: this.metadata.http?.routes,
         server: this.httpRouteRegistrar,
@@ -1035,7 +1098,8 @@ export class Scope extends ScopeEntry {
       this._channelTeardown = channelResult.teardown;
       // `dispose()` (what `create()` returns calls it) disconnects service channels, as `shutdown()` does.
       this.onDispose(() => this.teardownChannels());
-      await channelResult.connectServices();
+      // A detached job runner runs one run: the server that started it already listens to the services
+      if (!isJobWorker(this.metadata)) await channelResult.connectServices();
     }
 
     // Initialize health service (after all registries and stores are ready)
@@ -1044,6 +1108,8 @@ export class Scope extends ScopeEntry {
       this._healthService.autoDiscoverProbes(this);
       this.logger.verbose(`HealthService initialized (${this._healthService.getProbeCount()} probe(s))`);
     }
+
+    for (const message of await describeBudgetOverruns(this)) this.logger.warn(message);
 
     mark('batch3:finalization');
     this.logger.info(`Scope ready — ${this.formatScopeSummary()}`);
@@ -1485,6 +1551,10 @@ export class Scope extends ScopeEntry {
     return this._elicitationStore;
   }
 
+  get persistentQuestions(): PersistentQuestions | undefined {
+    return this._persistentQuestions;
+  }
+
   /**
    * Background-tasks record store (MCP 2025-11-25).
    * Returns `undefined` if tasks are not enabled for this scope.
@@ -1679,7 +1749,7 @@ export class Scope extends ScopeEntry {
    * without `throttle.enabled`, unless `throttle.enabled` is explicitly `false`. That includes the
    * tools declared inside an agent and its nested agents, at any depth.
    */
-  private async initGuardForDeclaredLimits(): Promise<void> {
+  private async initGuardForDeclaredLimits(lateTools: readonly ToolEntry[] = []): Promise<void> {
     const throttleConfig = this.metadata.throttle;
     if (this._rateLimitManager || this.cliMode) return;
     if (throttleConfig?.enabled === false) {
@@ -1687,7 +1757,7 @@ export class Scope extends ScopeEntry {
       return;
     }
 
-    const guardedEntries = [...this.scopeTools.getTools(true), ...this.scopeAgents.getAgents(true)];
+    const guardedEntries = [...this.scopeTools.getTools(true), ...lateTools, ...this.scopeAgents.getAgents(true)];
     const declaresLimits =
       guardedEntries.some((entry) => entry.metadata.rateLimit || entry.metadata.concurrency) ||
       // `publicAccess.rateLimit` counts anonymous calls per IP
@@ -1708,7 +1778,7 @@ export class Scope extends ScopeEntry {
    */
   private async initPublicAccessGuard(storage: GuardConfig['storage']): Promise<void> {
     const publicAccess = (this.auth.options as { publicAccess?: { rateLimit?: number } } | undefined)?.publicAccess;
-    if (!publicAccess?.rateLimit) return;
+    if (!publicAccess?.rateLimit || this._publicAccessGuard) return;
     this._publicAccessGuard = await createGuardManager({ config: { enabled: true, storage }, logger: this.logger });
   }
 
@@ -1780,6 +1850,17 @@ export class Scope extends ScopeEntry {
     }
 
     assertAuthoritiesRules(engine, entries);
+  }
+
+  async checkLateApp(app: LateAppRegistries): Promise<void> {
+    const { tools, resources, prompts, agents, skills } = app;
+    const problems = findUnenforcedMetadata({ hooks: this.scopeHooks, tools, resources, prompts, agents, skills });
+    if (problems.length > 0) throw new UnenforcedMetadataError(problems);
+    checkHookOrder(hookRunsOf(this.scopeHooks), (message) => this.logger.warn(message));
+    // One at a time: lazy apps loading at once must not each set up a guard manager, the last one replacing the others
+    const setup = this.lateGuardSetup.then(() => this.initGuardForDeclaredLimits(tools.getTools(true)));
+    this.lateGuardSetup = setup.catch(() => undefined);
+    await setup;
   }
 
   /**
@@ -1922,6 +2003,7 @@ export class Scope extends ScopeEntry {
     }
     await this.closeHaRedisClient();
     await this.teardownChannels();
+    this.httpRouteTable?.closeStreams();
   }
 
   /** Disconnect service channels (`onDisconnect()`) and drop channel subscriptions, once. */

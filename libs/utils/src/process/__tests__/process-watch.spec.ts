@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { PassThrough } from 'stream';
@@ -150,6 +150,42 @@ describe('watchPath', () => {
 
     rmSync(directory, { recursive: true, force: true });
     await new Promise((resolve) => setTimeout(resolve, 80));
+
+    expect(onGone).toHaveBeenCalledTimes(1);
+    watcher.close();
+  });
+
+  const posixUser = process.platform !== 'win32' && process.getuid?.() !== 0 ? it : it.skip;
+
+  posixUser(
+    'does not take a path it can not check, such as one under a folder it may not search, as removed',
+    async () => {
+      const checkout = join(directory, 'checkout');
+      mkdirSync(checkout);
+      const onGone = jest.fn();
+      const watcher = watchPath(checkout, { onGone, intervalMs: 10 });
+      chmodSync(directory, 0o000);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        expect(onGone).not.toHaveBeenCalled();
+      } finally {
+        chmodSync(directory, 0o700);
+        watcher.close();
+      }
+    },
+  );
+
+  it('reports a path whose folder was replaced by a file as removed', async () => {
+    const checkout = join(directory, 'checkout');
+    mkdirSync(join(checkout, 'src'), { recursive: true });
+    const onGone = jest.fn();
+    const watcher = watchPath(join(checkout, 'src'), { onGone, intervalMs: 10 });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(onGone).not.toHaveBeenCalled();
+
+    rmSync(checkout, { recursive: true, force: true });
+    writeFileSync(checkout, '');
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(onGone).toHaveBeenCalledTimes(1);
     watcher.close();

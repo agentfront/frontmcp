@@ -26,7 +26,7 @@ export async function readWorkerResource(
     metadata,
     uri,
     params,
-    providers: new WorkerProviders(metadata.name),
+    providers: new WorkerProviders(`resource "${metadata.name}" reads in a worker thread (worker: true)`),
     logger: workerLogger(log),
     authInfo: {},
   };
@@ -55,9 +55,9 @@ class WorkerFunctionResourceContext extends ResourceContext {
   }
 }
 
-/** A worker has no DI container: whatever a read asks of it names the resource and why. */
-class WorkerProviders implements ProviderRegistryInterface {
-  constructor(private readonly resourceName: string) {}
+/** A worker has no DI container: whatever is asked of it names the entry and why. */
+export class WorkerProviders implements ProviderRegistryInterface {
+  constructor(private readonly where: string) {}
 
   get<T>(token: Token<T>): T {
     throw this.unavailable(tokenName(token));
@@ -80,14 +80,11 @@ class WorkerProviders implements ProviderRegistryInterface {
   }
 
   private unavailable(what: string): ProviderNotAvailableError {
-    return new ProviderNotAvailableError(
-      what,
-      `resource "${this.resourceName}" reads in a worker thread (worker: true), which has no DI container, scope or request context`,
-    );
+    return new ProviderNotAvailableError(what, `${this.where}, which has no DI container, scope or request context`);
   }
 }
 
-function workerLogger(log: WorkerLog): FrontMcpLogger {
+export function workerLogger(log: WorkerLog): FrontMcpLogger {
   const at =
     (level: WorkerLogLevel) =>
     (...args: unknown[]) =>

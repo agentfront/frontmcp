@@ -4,7 +4,12 @@
 // ============================================
 // EXPLICIT INTERFACES (for better autocomplete)
 // ============================================
-export type { ElicitationOptionsInterface } from './interfaces';
+export type {
+  ElicitationOptionsInterface,
+  InboxLinks,
+  PersistentQuestionsOptionsInterface,
+  PersistentQuestionsStorage,
+} from './interfaces';
 
 // ============================================
 // SCHEMAS & DEFAULTS

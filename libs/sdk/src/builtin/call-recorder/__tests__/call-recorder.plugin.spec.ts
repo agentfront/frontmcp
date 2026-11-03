@@ -251,6 +251,23 @@ async function session(
   }
 }
 
+const WAIT_DEADLINE_MS = 5_000;
+/** A test that waits with {@link waitUntil} gets its deadline, its setup and its teardown. */
+const POLLING_TEST_TIMEOUT_MS = 3 * WAIT_DEADLINE_MS;
+
+/** Resolves once `condition` holds, checking every 10 ms; rejects naming `what` after 5 s. */
+async function waitUntil(condition: () => boolean | Promise<boolean>, what: string): Promise<void> {
+  const deadline = Date.now() + WAIT_DEADLINE_MS;
+  while (!(await condition())) {
+    if (Date.now() > deadline) throw new Error(`Timed out after 5 s waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+function completeLinesIn(file: string): number {
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').length - 1 : 0;
+}
+
 function recordsIn(file: string): CallRecord[] {
   if (!fs.existsSync(file)) return [];
   return fs
@@ -323,35 +340,37 @@ describe('CallRecorderPlugin', () => {
     expect(recordsIn(file)[0].error).toEqual({ code: -32601, message: expect.any(String) });
   });
 
-  it('records a task-augmented call once, with the answer of the task', async () => {
-    const file = path.join(dir, 'calls.jsonl');
-    const server = await createTestFetchServer({
-      ...config({ path: file }),
-      tasks: { enabled: true, defaultTtlMs: 60_000, defaultPollIntervalMs: 10 },
-    } as FrontMcpConfigInput);
-    const scope = server.instance.getScopes()[0];
-    const ctx = { authInfo: { sessionId: 'recorder-task-session' } };
-    const created = (await scope.runFlowForOutput('tools:call-tool', {
-      request: { method: 'tools/call', params: { name: 'long_report', arguments: {}, task: { ttl: 60_000 } } },
-      ctx,
-    })) as unknown as { task: { taskId: string } };
-    const statusOf = async () =>
-      (
-        (await scope.runFlowForOutput('tasks:get', {
-          request: { method: 'tasks/get', params: { taskId: created.task.taskId } },
-          ctx,
-        })) as unknown as { status: string }
-      ).status;
-    for (let attempt = 0; attempt < 100 && (await statusOf()) === 'working'; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    await server.instance.shutdown();
+  it(
+    'records a task-augmented call once, with the answer of the task',
+    async () => {
+      const file = path.join(dir, 'calls.jsonl');
+      const server = await createTestFetchServer({
+        ...config({ path: file }),
+        tasks: { enabled: true, defaultTtlMs: 60_000, defaultPollIntervalMs: 10 },
+      } as FrontMcpConfigInput);
+      const scope = server.instance.getScopes()[0];
+      const ctx = { authInfo: { sessionId: 'recorder-task-session' } };
+      const created = (await scope.runFlowForOutput('tools:call-tool', {
+        request: { method: 'tools/call', params: { name: 'long_report', arguments: {}, task: { ttl: 60_000 } } },
+        ctx,
+      })) as unknown as { task: { taskId: string } };
+      const statusOf = async () =>
+        (
+          (await scope.runFlowForOutput('tasks:get', {
+            request: { method: 'tasks/get', params: { taskId: created.task.taskId } },
+            ctx,
+          })) as unknown as { status: string }
+        ).status;
+      await waitUntil(async () => (await statusOf()) !== 'working', 'the task to finish');
+      await server.instance.shutdown();
 
-    const records = recordsIn(file);
-    expect(records.map(({ name, answer }) => ({ name, answer }))).toEqual([
-      { name: 'long_report', answer: expect.objectContaining({ structuredContent: { done: true } }) },
-    ]);
-  });
+      const records = recordsIn(file);
+      expect(records.map(({ name, answer }) => ({ name, answer }))).toEqual([
+        { name: 'long_report', answer: expect.objectContaining({ structuredContent: { done: true } }) },
+      ]);
+    },
+    POLLING_TEST_TIMEOUT_MS,
+  );
 
   it('records resource reads and prompts, and their JSON-RPC error codes', async () => {
     const file = path.join(dir, 'calls.jsonl');
@@ -542,30 +561,38 @@ describe('CallRecorderPlugin', () => {
     expect(warnings.filter((message) => message.includes('maxBytes'))).toHaveLength(1);
   });
 
-  it('counts what is in the file, also what another writer appended, against maxBytes', async () => {
-    const file = path.join(dir, 'calls.jsonl');
-    await session({ path: file, maxBytes: 4096 }, async (client) => {
-      await client.callTool('lookup', { key: 'a' });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      fs.appendFileSync(file, `${'x'.repeat(4096 - fs.statSync(file).size - 20)}\n`);
-      await client.callTool('lookup', { key: 'b' });
-    });
+  it(
+    'counts what is in the file, also what another writer appended, against maxBytes',
+    async () => {
+      const file = path.join(dir, 'calls.jsonl');
+      await session({ path: file, maxBytes: 4096 }, async (client) => {
+        await client.callTool('lookup', { key: 'a' });
+        await waitUntil(() => completeLinesIn(file) === 1, 'the first record');
+        fs.appendFileSync(file, `${'x'.repeat(4096 - fs.statSync(file).size - 20)}\n`);
+        await client.callTool('lookup', { key: 'b' });
+      });
 
-    expect(fs.statSync(file).size).toBe(4096 - 19);
-    expect(warnings.filter((message) => message.includes('maxBytes'))).toHaveLength(1);
-  });
+      expect(fs.statSync(file).size).toBe(4096 - 19);
+      expect(warnings.filter((message) => message.includes('maxBytes'))).toHaveLength(1);
+    },
+    POLLING_TEST_TIMEOUT_MS,
+  );
 
-  it('writes nothing more once the file is full', async () => {
-    const file = path.join(dir, 'calls.jsonl');
-    await session({ path: file, maxBytes: 1 }, async (client) => {
-      await client.callTool('lookup', { key: 'a' });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      await client.callTool('lookup', { key: 'b' });
-    });
+  it(
+    'writes nothing more once the file is full',
+    async () => {
+      const file = path.join(dir, 'calls.jsonl');
+      await session({ path: file, maxBytes: 1 }, async (client) => {
+        await client.callTool('lookup', { key: 'a' });
+        await waitUntil(() => warnings.some((message) => message.includes('maxBytes')), 'the maxBytes warning');
+        await client.callTool('lookup', { key: 'b' });
+      });
 
-    expect(fs.existsSync(file)).toBe(false);
-    expect(warnings.filter((message) => message.includes('maxBytes'))).toHaveLength(1);
-  });
+      expect(fs.existsSync(file)).toBe(false);
+      expect(warnings.filter((message) => message.includes('maxBytes'))).toHaveLength(1);
+    },
+    POLLING_TEST_TIMEOUT_MS,
+  );
 
   it('refuses options it cannot honour, naming each problem', () => {
     const init = () =>

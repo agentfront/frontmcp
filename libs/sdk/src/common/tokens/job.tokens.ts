@@ -10,6 +10,8 @@ export const FrontMcpJobTokens = {
   inputSchema: tokenFactory.meta('jobInputSchema'),
   outputSchema: tokenFactory.meta('jobOutputSchema'),
   timeout: tokenFactory.meta('jobTimeout'),
+  cleanup: tokenFactory.meta('jobCleanup'),
+  runner: tokenFactory.meta('jobRunner'),
   retry: tokenFactory.meta('jobRetry'),
   tags: tokenFactory.meta('jobTags'),
   labels: tokenFactory.meta('jobLabels'),

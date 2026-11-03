@@ -180,6 +180,27 @@ describe('HookRegistry order', () => {
     expect(methods(registry.getClsHooks(EntryClass))).toEqual(['early', 'late']);
   });
 
+  it('removes hooks from every index, keeping the others in order', async () => {
+    const registry = hookRegistry();
+    class EntryClass {}
+    const onEntry = (method: string) => record(method, 0, { target: EntryClass.prototype as HookMetadata['target'] });
+    await registry.registerHooks(false, record('a', 0), record('b', 1), record('c', 2));
+    await registry.registerHooks(true, onEntry('kept'), onEntry('dropped'));
+    const dropped = registry
+      .getHooks()
+      .filter((hook) => hook.metadata.method === 'b' || hook.metadata.method === 'dropped');
+
+    registry.removeHooks(dropped);
+    registry.removeHooks([]);
+
+    expect(methods(registry.getHooks()).sort()).toEqual(['a', 'c', 'kept']);
+    expect(methods(registry.getFlowHooks('tools:call-tool'))).toEqual(['a', 'c']);
+    expect(methods(registry.getFlowStageHooks('tools:call-tool', 'execute'))).toEqual(['a', 'c']);
+    expect(methods(registry.getClsHooks(EntryClass))).toEqual(['kept']);
+    const recordedMethods = [...registry.recordsByCls.values()].flat().map((rec) => rec.metadata.method);
+    expect(recordedMethods.sort()).toEqual(['a', 'c', 'kept']);
+  });
+
   it('serves inherited hooks in priority order, after its own hooks of the same priority', async () => {
     const parent = hookRegistry();
     const owner = { kind: 'app' as const, id: 'desk', ref: Symbol('desk') };

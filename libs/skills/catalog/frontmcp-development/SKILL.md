@@ -1,13 +1,13 @@
 ---
 name: frontmcp-development
-description: 'Use when building any FrontMCP server component other than a tool (for tools, use create-tool). Covers @Resource static resources and parameterized URI templates; @Prompt reusable prompts (RAG, multi-turn); @Provider singleton dependency-injection providers (database pools, API clients); @Agent autonomous LLM agents (Anthropic, OpenAI) and swarms; @Job background jobs (retry, progress, permissions) and @Workflow DAG pipelines; framework adapters and the OpenAPI adapter (turn OpenAPI 3.x specs into MCP tools with auth, polling, transforms); plugins, plugin lifecycle hooks (before / after / around / stage), and the official plugins; instruction-only skills and skills that reference tools; and the hierarchical decorator system from @FrontMcp down to @App. Triggers: create a resource, build a prompt, write a provider, add an agent, job, workflow, plugin, adapter, or OpenAPI integration.'
+description: 'Use when building any FrontMCP server component other than a tool (for tools, use create-tool). Covers @Resource static resources and parameterized URI templates; @Prompt reusable prompts (RAG, multi-turn); @Provider singleton dependency-injection providers (database pools, API clients); @Agent autonomous LLM agents (Anthropic, OpenAI) and swarms; @Job background jobs (retry, progress, permissions) and @Workflow DAG pipelines; @Duty recurring work that one process of the machine or project runs under a lease; framework adapters and the OpenAPI adapter (turn OpenAPI 3.x specs into MCP tools with auth, polling, transforms); plugins, plugin lifecycle hooks (before / after / around / stage), and the official plugins; instruction-only skills and skills that reference tools; and the hierarchical decorator system from @FrontMcp down to @App. Triggers: create a resource, build a prompt, write a provider, add an agent, job, workflow, duty, plugin, adapter, or OpenAPI integration.'
 when_to_use: |
   Trigger when creating or editing a non-tool FrontMCP component: a
   *.resource.ts, *.prompt.ts, *.provider.ts, *.agent.ts, *.job.ts,
-  *.workflow.ts, *.plugin.ts, or *.skill.ts file, or adding @Resource, @Prompt,
-  @Provider, @Agent, @Job, @Workflow, a plugin, an adapter, or an OpenAPI
-  integration. For tools (*.tool.ts) use create-tool instead.
-paths: '**/*.resource.ts, **/*.prompt.ts, **/*.provider.ts, **/*.agent.ts, **/*.job.ts, **/*.workflow.ts, **/*.plugin.ts, **/*.skill.ts'
+  *.workflow.ts, *.duty.ts, *.plugin.ts, or *.skill.ts file, or adding @Resource,
+  @Prompt, @Provider, @Agent, @Job, @Workflow, @Duty, a plugin, an adapter, or an
+  OpenAPI integration. For tools (*.tool.ts) use create-tool instead.
+paths: '**/*.resource.ts, **/*.prompt.ts, **/*.provider.ts, **/*.agent.ts, **/*.job.ts, **/*.workflow.ts, **/*.duty.ts, **/*.plugin.ts, **/*.skill.ts'
 tags: [router, development, tools, resources, prompts, agents, skills, guide]
 category: development
 targets: [all]
@@ -69,8 +69,10 @@ This is a router skill. The "steps" here are how to choose the right reference (
 | Create a reusable conversation template or system prompt                                                                                                                                        | `create-prompt`                                                | Prompt entries with arguments and multi-turn message sequences                                                                                                                                 |
 | Build an autonomous AI loop that orchestrates tools                                                                                                                                             | `create-agent`                                                 | Agent entries with LLM config, inner tools, and swarm handoff                                                                                                                                  |
 | Register shared services or configuration via DI                                                                                                                                                | `create-provider`                                              | Dependency injection tokens, `onBootstrap` / `onReady` / `onShutdown` hooks, factory providers, `createContainer()`                                                                            |
-| Run a background task with progress and retries                                                                                                                                                 | `create-job`                                                   | Job entries with attempt tracking, retry config, and progress                                                                                                                                  |
+| Run a background task with progress and retries                                                                                                                                                 | `create-job`                                                   | Job entries with attempt tracking, retry config, timeouts, cancel, cleanup, admission, runners, and progress on `job://runs/{runId}`                                                           |
 | Chain multiple jobs into a sequential pipeline                                                                                                                                                  | `create-workflow`                                              | Workflow entries that compose jobs with data passing                                                                                                                                           |
+| Run recurring work in one process of the machine or project                                                                                                                                     | `create-duty`                                                  | `@Duty({ every, scope, leaseMs })` providers: a lease one process holds, renewed while held, taken over when the holder dies                                                                   |
+| Serve pages, APIs or live SSE views for people beside the MCP endpoint                                                                                                                          | `create-http-route`                                            | `@HttpRoute` classes with the app's providers, people auth (`http.auth.people: 'loopback-token'`), same-origin check, SSE from a `resourceStore()`                                             |
 | Write instruction-only AI guidance (no code execution)                                                                                                                                          | `create-skill`                                                 | Skill entries with markdown instructions from files, strings, or URLs                                                                                                                          |
 | Write AI guidance that also orchestrates tools                                                                                                                                                  | `create-skill-with-tools`                                      | Skill entries that combine instructions with registered tools                                                                                                                                  |
 | Look up any decorator signature or option                                                                                                                                                       | `decorators-guide`                                             | Complete reference for @Tool, @Resource, @Prompt, @Agent, @App, @FrontMcp, and more                                                                                                            |
@@ -89,9 +91,9 @@ This is a router skill. The "steps" here are how to choose the right reference (
 2. **[`create-tool`](../create-tool/SKILL.md)** — The most common building block (top-level skill — covers schemas, DI, errors, throttling, auth, UI widgets, annotations); learn tools first
 3. **`create-resource`** — Expose data alongside tools
 4. **`create-prompt`** — Add reusable conversation templates
-5. **`create-provider`** — Share services across tools and resources via DI
+5. **`create-provider`** — Share services across tools and resources via DI (and with `create-http-route` pages)
 6. **`create-agent`** — Build autonomous AI loops (advanced)
-7. **`create-job`** / **`create-workflow`** — Background processing (advanced)
+7. **`create-job`** / **`create-workflow`** / **`create-duty`** — Background processing and recurring work (advanced)
 8. **`create-skill`** / **`create-skill-with-tools`** — Author your own skills (meta)
 9. **`official-adapters`** / **`openapi-adapter`** — Integrate external APIs via OpenAPI specs
 10. **`official-plugins`** — Add caching, session memory, feature flags, and more
@@ -121,6 +123,7 @@ This is a router skill. The "steps" here are how to choose the right reference (
 | Shared logic            | Extract to a `@Provider` and inject via DI                | Duplicate code across multiple tools                     | Providers are testable, lifecycle-managed, and scoped                 |
 | Complex orchestration   | Use `@Agent` with inner tools                             | Chain tool calls manually in a single tool               | Agents handle LLM loops, retries, and tool selection automatically    |
 | Background work         | Use `@Job` with retry config                              | Run long tasks inside a tool's `execute()`               | Jobs have progress tracking, attempt awareness, and timeout handling  |
+| Recurring work          | Use a `@Duty` provider                                    | `setInterval()` in every copy of the server              | A duty runs in one process, and another takes over when it exits      |
 
 ## Verification Checklist
 
@@ -178,6 +181,8 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 | [`basic-report-job`](./examples/create-job/basic-report-job.md)         | Basic        | A minimal job that generates a report with progress tracking and structured output.                                |
 | [`job-with-permissions`](./examples/create-job/job-with-permissions.md) | Advanced     | A data export job with declarative permission controls, plus a function-style job for simple tasks.                |
 | [`job-with-retry`](./examples/create-job/job-with-retry.md)             | Intermediate | A job that syncs data from an external API with automatic retry, exponential backoff, and batch progress tracking. |
+| [`durable-build-job`](./examples/create-job/durable-build-job.md)       | Advanced     | A build job on a SQLite store with a timeout, a cleanup, admission limits, cancel and a subscribed run handle.     |
+| [`detached-export-job`](./examples/create-job/detached-export-job.md)   | Advanced     | An export job that runs in a process of its own, survives a server restart and is cancelled from any server.       |
 
 ### `create-plugin-hooks`
 
@@ -217,6 +222,7 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 | [`basic-static-resource`](./examples/create-resource/basic-static-resource.md)       | Basic        | A static resource that exposes application configuration at a fixed URI.             |
 | [`binary-and-multi-content`](./examples/create-resource/binary-and-multi-content.md) | Advanced     | A resource serving binary blob data and a resource returning multiple content items. |
 | [`parameterized-template`](./examples/create-resource/parameterized-template.md)     | Intermediate | A resource template with typed URI parameters and argument autocompletion.           |
+| [`materialized-resource`](./examples/create-resource/materialized-resource.md)       | Intermediate | A resource serving a stored value that another process updates, with live updates.   |
 
 ### `create-skill-with-tools`
 

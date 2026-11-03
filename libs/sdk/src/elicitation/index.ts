@@ -24,6 +24,9 @@ export * from './store';
 // Helpers (for use by context classes)
 export * from './helpers';
 
+// Persistent questions (elicitation.persistent) and their inbox
+export * from './questions';
+
 // Note: Flows and hooks are NOT exported from this barrel to avoid circular dependencies.
 // Flows depend on FlowBase from common, but common depends on tool.interface which imports from elicitation.
 // Import flows directly from 'elicitation/flows' where needed:

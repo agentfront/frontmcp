@@ -2,8 +2,15 @@
 export * from './remote-mcp';
 export * from './esm-loader';
 export { McpStatelessClientAdapter, negotiateRemoteProtocol } from './remote-mcp/mcp-stateless-client.adapter';
-export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter } from './job';
-export { ExecuteJobTool, GetJobStatusTool, ListJobsTool, RegisterJobTool, RemoveJobTool } from './job/tools';
+export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter, JobRunResource } from './job';
+export {
+  ExecuteJobTool,
+  GetJobStatusTool,
+  CancelJobTool,
+  ListJobsTool,
+  RegisterJobTool,
+  RemoveJobTool,
+} from './job/tools';
 export { WorkflowRegistry, WorkflowInstance, WorkflowEngine, WorkflowStepExecutor, WorkflowEmitter } from './workflow';
 export {
   ExecuteWorkflowTool,

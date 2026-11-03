@@ -94,7 +94,7 @@ const MCP_RESERVED_PATH_PREFIXES = ['/mcp', '/sse', '/messages'];
 
 /** Default category → counter-prefix mapping used when `include` is set. */
 const COUNTER_CATEGORY_PREFIX: Record<MetricsCategory, string[]> = {
-  process: ['frontmcp_process_', 'frontmcp_nodejs_'],
+  process: ['frontmcp_process_', 'frontmcp_nodejs_', 'frontmcp_event_loop_'],
   skills: ['frontmcp_skills_'],
   tools: ['frontmcp_tool_'],
   resources: ['frontmcp_resource_'],

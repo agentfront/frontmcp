@@ -15,8 +15,10 @@ export type JobCtorArgs<In> = ExecutionContextBaseArgs & {
   metadata: JobMetadata;
   input: In;
   attempt: number;
-  /** Aborted when the workflow step running this attempt gives up on it (its `timeout` passed). */
+  /** Aborted when the attempt stops before it finishes: it timed out, the run was cancelled, or the server shut down. */
   signal?: AbortSignal;
+  /** Records what `progress()` reports on the attempt's run; a workflow step has none. */
+  onProgress?: (progress: { progress: number; total?: number; message?: string }) => Promise<void>;
 };
 
 export abstract class JobContext<
@@ -33,16 +35,19 @@ export abstract class JobContext<
   private _output?: Out;
   private readonly _attempt: number;
   private readonly _logs: string[] = [];
+  private readonly onProgress?: JobCtorArgs<In>['onProgress'];
 
   /**
-   * Aborted when the workflow step running this attempt gives up on it (its `timeout` passed), with
-   * the `WorkflowJobTimeoutError` as its reason; undefined outside a workflow step. The attempt is not
-   * stopped for the job: pass the signal to `fetch` and other cancellable work, or check it.
+   * Aborted when the attempt stops before it finishes, with the reason as `signal.reason`: a
+   * `JobTimeoutError` (or a workflow step's `WorkflowJobTimeoutError`), a `JobCancelledError` from
+   * `cancel_job`, or a `JobInterruptedError` when the server shuts down. The run ends at once, while
+   * `execute()` itself keeps going until it returns: pass the signal to `fetch` and other cancellable
+   * work, or check it, and undo what is left in the job's `cleanup`.
    */
   declare readonly signal?: AbortSignal;
 
   constructor(args: JobCtorArgs<In>) {
-    const { metadata, input, providers, logger, attempt, signal } = args;
+    const { metadata, input, providers, logger, attempt, signal, onProgress } = args;
     super({
       providers,
       logger: logger.child(`job:${metadata.id ?? metadata.name}`),
@@ -54,6 +59,7 @@ export abstract class JobContext<
     this.metadata = metadata;
     this._input = input;
     this._attempt = attempt;
+    this.onProgress = onProgress;
   }
 
   abstract execute(input: In): Promise<Out>;
@@ -88,14 +94,32 @@ export abstract class JobContext<
     this.logger.info(message);
   }
 
-  /** Report progress. Returns false if no session is available. A functional job calls it as `ctx.progress()`. */
+  /**
+   * Report progress: it is kept on the run (`job://runs/{runId}` subscribers are told) and sent to the
+   * session as a progress notification. Returns false when neither took it. A functional job calls it
+   * as `ctx.progress()`.
+   */
   async progress(pct: number, total?: number, msg?: string): Promise<boolean> {
+    const recorded = this.onProgress ? await this.recordProgress({ progress: pct, total, message: msg }) : false;
     const sessionId = this.authInfo.sessionId;
     if (!sessionId) {
       this.logger.debug('Cannot send progress: no session ID');
+      return recorded;
+    }
+    const sent = await this.scope.notifications.sendProgressNotification(sessionId, this.jobId, pct, total, msg);
+    return sent || recorded;
+  }
+
+  private async recordProgress(progress: { progress: number; total?: number; message?: string }): Promise<boolean> {
+    try {
+      await this.onProgress?.(progress);
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `Could not record progress on the run: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return false;
     }
-    return this.scope.notifications.sendProgressNotification(sessionId, this.jobId, pct, total, msg);
   }
 
   /** Immediately respond with a value and stop execution. */
@@ -107,6 +131,11 @@ export abstract class JobContext<
   /** Get all logs recorded during execution. */
   getLogs(): readonly string[] {
     return this._logs;
+  }
+
+  /** @internal Keep the log lines the job wrote where `execute()` ran, a worker thread. */
+  keepLogs(lines: readonly string[]): void {
+    this._logs.push(...lines);
   }
 
   /** A job (or a workflow step running it) calls tools on the `'job'` surface. */

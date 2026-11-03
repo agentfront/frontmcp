@@ -52,17 +52,17 @@ Entry point for project setup and scaffolding. This skill helps you find the rig
 
 ## Scenario Routing Table
 
-| Scenario                                      | Reference                                    | Description                                                                                    |
-| --------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Scaffold a new project with `frontmcp create` | `references/setup-project.md`                | CLI scaffolder (flags: `--target`, `--redis`, `--skills <bundle>`, `--cicd`, `--nx`, `--pm`)   |
-| Organize a standalone (non-Nx) project        | `references/project-structure-standalone.md` | File layout, naming conventions (`<name>.<type>.ts`), folder hierarchy                         |
-| Organize an Nx monorepo                       | `references/project-structure-nx.md`         | apps/, libs/, servers/ layout, generators, dependency rules                                    |
-| Set up Redis for production storage           | `references/setup-redis.md`                  | Docker Redis, Vercel KV, pub/sub for distributed subscriptions (single-server uses in-memory)  |
-| Set up SQLite for local development           | `references/setup-sqlite.md`                 | WAL mode, several processes on one file, app storage, encryption                               |
-| Compose multiple apps into one server         | `references/multi-app-composition.md`        | `@FrontMcp` with multiple `@App` classes, cross-app providers                                  |
-| Use Nx build, test, and CI commands           | `references/nx-workflow.md`                  | `nx build`, `nx test`, `nx run-many`, caching, affected commands                               |
-| Browse, install, and manage skills            | `references/frontmcp-skills-usage.md`        | CLI commands (search, list, install, read, export, publish), bundles, categories, bulk install |
-| Generate or update project README.md          | `references/readme-guide.md`                 | Deployment-target-aware README for npm, CLI, Docker, serverless                                |
+| Scenario                                      | Reference                                    | Description                                                                                     |
+| --------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Scaffold a new project with `frontmcp create` | `references/setup-project.md`                | CLI scaffolder (flags: `--target`, `--redis`, `--skills <bundle>`, `--cicd`, `--nx`, `--pm`)    |
+| Organize a standalone (non-Nx) project        | `references/project-structure-standalone.md` | File layout, naming conventions (`<name>.<type>.ts`), folder hierarchy                          |
+| Organize an Nx monorepo                       | `references/project-structure-nx.md`         | apps/, libs/, servers/ layout, generators, dependency rules                                     |
+| Set up Redis for production storage           | `references/setup-redis.md`                  | Docker Redis, Vercel KV, pub/sub for distributed subscriptions (single-server uses in-memory)   |
+| Set up SQLite for local development           | `references/setup-sqlite.md`                 | WAL mode, several processes on one file, app storage, encryption                                |
+| Compose multiple apps into one server         | `references/multi-app-composition.md`        | `@FrontMcp` with multiple `@App` classes, cross-app providers, lazy apps imported on first call |
+| Use Nx build, test, and CI commands           | `references/nx-workflow.md`                  | `nx build`, `nx test`, `nx run-many`, caching, affected commands                                |
+| Browse, install, and manage skills            | `references/frontmcp-skills-usage.md`        | CLI commands (search, list, install, read, export, publish), bundles, categories, bulk install  |
+| Generate or update project README.md          | `references/readme-guide.md`                 | Deployment-target-aware README for npm, CLI, Docker, serverless                                 |
 
 ## Recommended Reading Order
 
@@ -142,6 +142,7 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 
 | Example                                                                                            | Level        | Description                                                                                     |
 | -------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------- |
+| [`lazy-apps-from-the-manifest`](./examples/multi-app-composition/lazy-apps-from-the-manifest.md)   | Intermediate | Import apps on their first call, listed from `frontmcp.manifest.json` until then.               |
 | [`local-apps-with-shared-tools`](./examples/multi-app-composition/local-apps-with-shared-tools.md) | Basic        | Compose multiple local `@App` classes into a server with shared tools available to all apps.    |
 | [`per-app-auth-and-isolation`](./examples/multi-app-composition/per-app-auth-and-isolation.md)     | Advanced     | Configure mixed authentication modes and scope isolation for different apps in a single server. |
 | [`remote-and-esm-apps`](./examples/multi-app-composition/remote-and-esm-apps.md)                   | Intermediate | Compose local, ESM (npm package), and remote (external MCP server) apps into a single gateway.  |

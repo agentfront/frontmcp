@@ -15,7 +15,11 @@ import {
 } from '../redis-url';
 import type { MessageHandler, RedisAdapterOptions, SetOptions, Unsubscribe } from '../types';
 import { validateTTL } from '../utils';
-import { COMPARE_AND_DELETE_SCRIPT, COMPARE_AND_EXPIRE_SCRIPT } from '../utils/compare-and-delete';
+import {
+  COMPARE_AND_DELETE_SCRIPT,
+  COMPARE_AND_EXPIRE_SCRIPT,
+  COMPARE_AND_SET_SCRIPT,
+} from '../utils/compare-and-delete';
 import { BaseStorageAdapter } from './base';
 
 // Type imports for ioredis (dynamic import at runtime)
@@ -79,6 +83,7 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
   private connecting?: Promise<void>;
   private readonly keyPrefix: string;
   private readonly subscriptionHandlers = new Map<string, Set<MessageHandler>>();
+  private readonly reconnectListeners = new Set<() => void>();
   private readonly connectionUrl?: string;
   /** The connection options of a URL this adapter reads itself; undefined for one only ioredis reads. */
   private readonly urlOptions?: RedisOptions;
@@ -290,6 +295,17 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
     return extended === 1;
   }
 
+  override async setIfEquals(key: string, expectedValue: string, value: string): Promise<boolean> {
+    const stored = await this.getConnectedClient().eval(
+      COMPARE_AND_SET_SCRIPT,
+      1,
+      this.prefixKey(key),
+      expectedValue,
+      value,
+    );
+    return stored === 1;
+  }
+
   async exists(key: string): Promise<boolean> {
     const result = await this.getConnectedClient().exists(this.prefixKey(key));
     return result > 0;
@@ -449,6 +465,13 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
     };
   }
 
+  onPubSubReconnect(listener: () => void): () => void {
+    this.reconnectListeners.add(listener);
+    return () => {
+      this.reconnectListeners.delete(listener);
+    };
+  }
+
   // ============================================
   // Internal Helpers
   // ============================================
@@ -517,6 +540,20 @@ export class RedisStorageAdapter extends BaseStorageAdapter {
           }
         }
       }
+    });
+
+    let readyBefore = false;
+    subscriber.on('ready', () => {
+      if (readyBefore) {
+        for (const listener of [...this.reconnectListeners]) {
+          try {
+            listener();
+          } catch {
+            // A listener's failure must not reach ioredis's event loop
+          }
+        }
+      }
+      readyBefore = true;
     });
 
     this.subscriber = subscriber;

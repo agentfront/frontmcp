@@ -151,6 +151,15 @@ export abstract class BaseStorageAdapter implements StorageAdapter {
     );
   }
 
+  /** Default: not supported, for the same reason as {@link deleteIfEquals}. */
+  async setIfEquals(_key: string, _expectedValue: string, _value: string): Promise<boolean> {
+    throw new StorageNotSupportedError(
+      'setIfEquals',
+      this.backendName,
+      'Use the memory, Redis or SQLite adapter for an atomic compare-and-set.',
+    );
+  }
+
   // ============================================
   // Pub/Sub (default: not supported)
   // ============================================

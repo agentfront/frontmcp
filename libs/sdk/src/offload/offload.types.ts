@@ -35,7 +35,8 @@ export type OffloadFunction = (...args: never[]) => unknown;
 /** @internal What the pool runs. */
 export type OffloadTask =
   | { kind: 'function'; moduleRef: OffloadModuleRef; args: readonly unknown[] }
-  | { kind: 'resource'; file: string; key: string; name: string; uri: string; params: Record<string, string> };
+  | { kind: 'resource'; file: string; key: string; name: string; uri: string; params: Record<string, string> }
+  | { kind: 'job'; file: string; key: string; name: string; input: unknown; attempt: number };
 
 /** @internal How the pool runs it. */
 export interface OffloadRun {
@@ -43,6 +44,8 @@ export interface OffloadRun {
   label: string;
   budgetMs?: number;
   signal?: AbortSignal;
-  /** Receives the budget warning and the log lines a worker-side resource writes. */
+  /** Receives the budget warning and the log lines a worker-side resource or job writes. */
   logger: FrontMcpLogger;
+  /** Receives the progress a worker-side job reports. */
+  onProgress?: (progress: { progress: number; total?: number; message?: string }) => void;
 }

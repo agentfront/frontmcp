@@ -13,8 +13,10 @@ such work in a pool of `worker_threads` instead:
   an exported function of another module in a worker and resolves with its result.
 - `@Resource({ worker: true })` (and `@ResourceTemplate`, `resource()`, `resourceTemplate()`) runs the resource's whole
   read in a worker.
+- `@Job({ runner: 'worker' })` (or `jobs.runner: 'worker'`) runs a job's whole `execute()` in a worker, under the same
+  rules as a worker resource (see `create-job`).
 
-Both are Node only. The pool starts its first worker on the first call that needs one, and shuts down with the server.
+All three are Node only. The pool starts its first worker on the first call that needs one, and shuts down with the server.
 
 ## When to Use This Skill
 
@@ -85,7 +87,8 @@ export class CountWordsTool extends ToolContext {
   `offload.budgetMs`.
 - **`options.signal`** (default `this.signal`) stops the work: the worker is terminated and the call rejects with
   `OffloadAbortedError` (`OFFLOAD_ABORTED`). A tool's `this.signal` aborts when the client cancels and when the tool's
-  `timeout` passes, so a timed-out tool does not leave its worker running.
+  `timeout` passes, so a timed-out tool does not leave its worker running. An agent's aborts when its call is cancelled
+  or fails, a timeout included (`timeout.executeMs`, or `execution.timeout` where it applies: see `create-agent`).
 
 In development (`frontmcp dev`, which runs `tsx`), a worker loads `.ts` modules too: it registers tsx itself, since tsx
 hooks only the main thread (a tsx without the `tsx/cjs/api` and `tsx/esm/api` entry points is skipped, and the worker

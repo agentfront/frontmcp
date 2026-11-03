@@ -23,6 +23,8 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
        +-- @Adapter        (external source adapter)
        +-- @Job            (long-running job)
        +-- @Workflow       (multi-step workflow)
+       +-- @Duty           (recurring work in one process, a provider)
+       +-- @HttpRoute      (page, API or SSE view for people)
        +-- @Flow           (custom flow)
        +-- @Hook (@Will, @Did, @Stage, @Around, @Finally)
 ```
@@ -61,38 +63,40 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
 
 **Key fields:**
 
-| Field           | Description                                                                                                                                                                                                                                                                                                              |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `info`          | `serverInfo` of every `initialize`: `name`, `version`, optional `title` (else the name), `websiteUrl`, `icons`                                                                                                                                                                                                           |
-| `instructions?` | Top-level server-level instructions (system prompt) surfaced in the MCP `initialize` response and the 2026-07-28 `server/discover` result. Combined with the channel hint and the skills line or catalog per `skillsConfig.injectInstructions`; sent by every transport, `createFetchHandler()` and `connect()` included |
-| `apps`          | Array of `@App` classes to mount                                                                                                                                                                                                                                                                                         |
-| `serve?`        | Auto-start HTTP server (default: `true`). Set `false` for programmatic usage                                                                                                                                                                                                                                             |
-| `splitByApp?`   | If `true`, each app gets its own scope and basePath. Default: `false`                                                                                                                                                                                                                                                    |
-| `redis?`        | Redis / Vercel KV connection for sessions, transport persistence, auth tokens                                                                                                                                                                                                                                            |
-| `plugins?`      | Global plugins (instantiated per scope)                                                                                                                                                                                                                                                                                  |
-| `providers?`    | Global DI providers available to all apps                                                                                                                                                                                                                                                                                |
-| `tools?`        | Standalone tools (outside apps, merged with app tools)                                                                                                                                                                                                                                                                   |
-| `resources?`    | Standalone resources (merged with app resources)                                                                                                                                                                                                                                                                         |
-| `skills?`       | Standalone skills (merged with app skills)                                                                                                                                                                                                                                                                               |
-| `skillsConfig?` | Skills HTTP endpoints (`/llm.txt`, `/skills`), MCP tool config, `injectInstructions` policy, `SKILL.md` resource annotations, and tamper-evident `audit` log — see `configure-skills-http`                                                                                                                               |
-| `transport?`    | Transport preset (`'modern'`, `'legacy'`, `'stateless-api'`, `'full'`) or object                                                                                                                                                                                                                                         |
-| `auth?`         | Authentication mode: `'public'`, `'transparent'`, `'local'`, `'remote'`                                                                                                                                                                                                                                                  |
-| `http?`         | HTTP server options (port, host, cors, socketPath, `forwardHeaders` — request headers besides `x-frontmcp-*` kept in `customHeaders`; `authorization`, `cookie`, `proxy-*`, hop-by-hop and client-address headers such as `x-forwarded-*` are refused at startup)                                                        |
-| `output?`       | Output policy for every tool, overridable per `@App` / `@Tool`: `schemaMode`, `undeclaredKeys`, `allowNonFinite`, and `budget: { maxBytes, lists? }` (answer budget for tool answers and resource reads) — see `create-tool` → `output-schema`                                                                           |
-| `clients?`      | Per-client answer shaping keyed by a `clientInfo.name` glob: `structured` (`'both'` \| `'only'` \| `'text'`), `annotations` (`'full'` \| `'no-numbers'`), `instructions` (`'full'` \| `'compact'`) — see `frontmcp-config` → `configure-client-profiles`                                                                 |
-| `logging?`      | Logging configuration (transports and levels); without `level`, the level `FRONTMCP_LOG_LEVEL` names, else `info` (`warn` in a browser); per-request lines are at `verbose`                                                                                                                                              |
-| `elicitation?`  | Enable interactive user input during tool execution                                                                                                                                                                                                                                                                      |
-| `sqlite?`       | SQLite storage for local deployments (sessions, events)                                                                                                                                                                                                                                                                  |
-| `pubsub?`       | Redis pub/sub for distributed resource subscriptions across multiple instances (single-server deployments use in-memory subscriptions; falls back to `redis` config)                                                                                                                                                     |
-| `jobs?`         | Background jobs/workflows system (`{ enabled, store? }`)                                                                                                                                                                                                                                                                 |
-| `throttle?`     | Server-level guard config (see note below)                                                                                                                                                                                                                                                                               |
-| `pagination?`   | List operation pagination (`tools/list` endpoint)                                                                                                                                                                                                                                                                        |
-| `offload?`      | Worker-thread pool behind `this.offload()` and `worker: true` resources (Node only): `maxWorkers`, `idleTimeoutMs`, `budgetMs` (30000), `env` (`['NODE_ENV']`) — see `offload-cpu-work`                                                                                                                                  |
-| `fetch?`        | What `this.fetch()` adds upstream: `forwardCallerTokenTo` / `forwardCustomHeadersTo` origin allow-lists (default: none), `autoInjectTracingHeaders`, `requestTimeout`                                                                                                                                                    |
-| `ui?`           | UI rendering config (CDN overrides for widget imports)                                                                                                                                                                                                                                                                   |
-| `extApps?`      | MCP Apps widget requests on a session: `ui/open-link`, `ui/request-display-mode`, `ui/update-model-context`, `notifications/message` (or the earlier `ui/openLink`, `ui/setDisplayMode`, `ui/updateModelContext`, `ui/log`). `ui/callServerTool` returns the tool's data, no page; a no-result method, `result: {}`      |
-| `loader?`       | Default npm/ESM package loader for `App.esm()` / `App.remote()` apps                                                                                                                                                                                                                                                     |
-| `registry?`     | MCP Registry listing: `name` (`com.acme/weather`), `description`, `repository`, `publicKey` / `publicKeyEnv`. Serves the domain proof at `/.well-known/mcp-registry-auth`, the SEP-2127 server card at `<entryPath>/server-card` and `/.well-known/ai-catalog.json` — see `frontmcp-deployment`'s `list-in-mcp-registry` |
+| Field                 | Description                                                                                                                                                                                                                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `info`                | `serverInfo` of every `initialize`: `name`, `version`, optional `title` (else the name), `websiteUrl`, `icons`                                                                                                                                                                                                           |
+| `instructions?`       | Top-level server-level instructions (system prompt) surfaced in the MCP `initialize` response and the 2026-07-28 `server/discover` result. Combined with the channel hint and the skills line or catalog per `skillsConfig.injectInstructions`; sent by every transport, `createFetchHandler()` and `connect()` included |
+| `instructionsBudget?` | Size limits in characters, `{ instructions?, toolDescription? }` (default 1024 each), or `false`. Over a limit the server warns at startup and `frontmcp build` reports it in its manifest lint; an invalid value throws `InvalidDecoratorMetadataError`                                                                 |
+| `manifest?`           | The `frontmcp.manifest.json` lazy apps (`apps: [{ name, lazy: () => import(...) }]`) are listed from until their first call: a path (relative to the file that declares the server) or the manifest object. Default: the one next to the entry script, where `frontmcp build` writes it                                  |
+| `apps`                | Array of `@App` classes to mount                                                                                                                                                                                                                                                                                         |
+| `serve?`              | Auto-start HTTP server (default: `true`). Set `false` for programmatic usage                                                                                                                                                                                                                                             |
+| `splitByApp?`         | If `true`, each app gets its own scope and basePath. Default: `false`                                                                                                                                                                                                                                                    |
+| `redis?`              | Redis / Vercel KV connection for sessions, transport persistence, auth tokens                                                                                                                                                                                                                                            |
+| `plugins?`            | Global plugins (instantiated per scope)                                                                                                                                                                                                                                                                                  |
+| `providers?`          | Global DI providers available to all apps                                                                                                                                                                                                                                                                                |
+| `tools?`              | Standalone tools (outside apps, merged with app tools)                                                                                                                                                                                                                                                                   |
+| `resources?`          | Standalone resources (merged with app resources)                                                                                                                                                                                                                                                                         |
+| `skills?`             | Standalone skills (merged with app skills)                                                                                                                                                                                                                                                                               |
+| `skillsConfig?`       | Skills HTTP endpoints (`/llm.txt`, `/skills`), MCP tool config, `injectInstructions` policy, `SKILL.md` resource annotations, and tamper-evident `audit` log — see `configure-skills-http`                                                                                                                               |
+| `transport?`          | Transport preset (`'modern'`, `'legacy'`, `'stateless-api'`, `'full'`) or object                                                                                                                                                                                                                                         |
+| `auth?`               | Authentication mode: `'public'`, `'transparent'`, `'local'`, `'remote'`                                                                                                                                                                                                                                                  |
+| `http?`               | HTTP server options (port, host, cors, socketPath, `forwardHeaders` — request headers besides `x-frontmcp-*` kept in `customHeaders`; `authorization`, `cookie`, `proxy-*`, hop-by-hop and client-address headers such as `x-forwarded-*` are refused at startup)                                                        |
+| `output?`             | Output policy for every tool, overridable per `@App` / `@Tool`: `schemaMode`, `undeclaredKeys`, `allowNonFinite`, and `budget: { maxBytes, lists? }` (answer budget for tool answers and resource reads) — see `create-tool` → `output-schema`                                                                           |
+| `clients?`            | Per-client answer shaping keyed by a `clientInfo.name` glob: `structured` (`'both'` \| `'only'` \| `'text'`), `annotations` (`'full'` \| `'no-numbers'`), `instructions` (`'full'` \| `'compact'`) — see `frontmcp-config` → `configure-client-profiles`                                                                 |
+| `logging?`            | Logging configuration (transports and levels); without `level`, the level `FRONTMCP_LOG_LEVEL` names, else `info` (`warn` in a browser); per-request lines are at `verbose`                                                                                                                                              |
+| `elicitation?`        | Enable interactive user input during tool execution                                                                                                                                                                                                                                                                      |
+| `sqlite?`             | SQLite storage for local deployments (sessions, events)                                                                                                                                                                                                                                                                  |
+| `pubsub?`             | Redis pub/sub for distributed resource subscriptions across multiple instances (single-server deployments use in-memory subscriptions; falls back to `redis` config)                                                                                                                                                     |
+| `jobs?`               | Background jobs/workflows system (`{ enabled, store? }`)                                                                                                                                                                                                                                                                 |
+| `throttle?`           | Server-level guard config (see note below)                                                                                                                                                                                                                                                                               |
+| `pagination?`         | List operation pagination (`tools/list` endpoint)                                                                                                                                                                                                                                                                        |
+| `offload?`            | Worker-thread pool behind `this.offload()` and `worker: true` resources (Node only): `maxWorkers`, `idleTimeoutMs`, `budgetMs` (30000), `env` (`['NODE_ENV']`) — see `offload-cpu-work`                                                                                                                                  |
+| `fetch?`              | What `this.fetch()` adds upstream: `forwardCallerTokenTo` / `forwardCustomHeadersTo` origin allow-lists (default: none), `autoInjectTracingHeaders`, `requestTimeout`                                                                                                                                                    |
+| `ui?`                 | UI rendering config (CDN overrides for widget imports)                                                                                                                                                                                                                                                                   |
+| `extApps?`            | MCP Apps widget requests on a session: `ui/open-link`, `ui/request-display-mode`, `ui/update-model-context`, `notifications/message` (or the earlier `ui/openLink`, `ui/setDisplayMode`, `ui/updateModelContext`, `ui/log`). `ui/callServerTool` returns the tool's data, no page; a no-result method, `result: {}`      |
+| `loader?`             | Default npm/ESM package loader for `App.esm()` / `App.remote()` apps                                                                                                                                                                                                                                                     |
+| `registry?`           | MCP Registry listing: `name` (`com.acme/weather`), `description`, `repository`, `publicKey` / `publicKeyEnv`. Serves the domain proof at `/.well-known/mcp-registry-auth`, the SEP-2127 server card at `<entryPath>/server-card` and `/.well-known/ai-catalog.json` — see `frontmcp-deployment`'s `list-in-mcp-registry` |
 
 > **Throttle vs per-tool guards:** Server-level `throttle` is a `GuardConfig` object with `global`, `defaultRateLimit`, `defaultConcurrency`, `defaultTimeout` sub-fields that set server-wide defaults. Tool-level `rateLimit`, `concurrency`, `timeout` fields (on `@Tool`) override these defaults per tool.
 
@@ -557,9 +561,10 @@ class ApprovalFlow {}
 
 ## 13. @Job
 
-**Purpose:** Declares a long-running or scheduled background job.
+**Purpose:** Declares a long-running background job.
 
-**When to use:** When you need recurring tasks (cron), background processing, or deferred work.
+**When to use:** When you need background processing or deferred work with retries and progress. A job has no
+schedule: for recurring work, use `@Duty`.
 
 **Key fields:**
 
@@ -719,25 +724,91 @@ A hook declared on a `@Tool`, `@Resource` or `@Prompt` class runs only for that 
 
 ---
 
+## 16. @Duty
+
+**Purpose:** Marks a provider class whose `run()` the server calls every `every`, in one process of the machine or
+project: the one that holds the duty's lease. Another process takes it over when the holder dies.
+
+**When to use:** When recurring work must not run in every copy of the server (see `create-duty`).
+
+**Key fields:**
+
+| Field      | Description                                                                               |
+| ---------- | ----------------------------------------------------------------------------------------- |
+| `name?`    | Lease name in the server; defaults to the class name                                      |
+| `every`    | Milliseconds, or a duration: `'500ms'`, `'30s'`, `'5m'`, `'1h'`, `'1d'`                   |
+| `scope`    | `'machine'` (one holder per machine) or `'workspace'` (one per project root)              |
+| `leaseMs?` | How soon another process takes over from a dead holder; default three intervals, 3 s–60 s |
+
+```typescript
+import { Duty, type DutyRunContext } from '@frontmcp/sdk';
+
+@Duty({ name: 'prune-cache', every: '10m', scope: 'machine' })
+class PruneCacheDuty {
+  constructor(private readonly cache: CacheStore) {}
+
+  async run({ signal }: DutyRunContext) {
+    await this.cache.pruneExpired({ signal });
+  }
+}
+
+// Register it like a provider: @App({ providers: [CacheStore, PruneCacheDuty] })
+```
+
+---
+
+## 17. @HttpRoute
+
+**Purpose:** Serves an HTTP request beside the MCP endpoint, through the hookable `http:route` flow (IP filter, rate
+limit, same-origin check on mutations, people auth), with the app's providers.
+
+**When to use:** A page, JSON API or live SSE view for a person (see `create-http-route`).
+
+**Key fields:**
+
+| Field    | Description                                                                                   |
+| -------- | --------------------------------------------------------------------------------------------- |
+| `method` | `'GET'`, `'POST'`, `'PUT'`, `'PATCH'` or `'DELETE'`                                           |
+| `path`   | Express-style path, or a function returning it at startup                                     |
+| `auth?`  | `'people'` (default with `http.auth.people`) or `'public'`                                    |
+| `sse?`   | `{ store, topics, coalesceMs?, heartbeatMs? }`: `handle()` is the view, re-sent on each write |
+
+```typescript
+import { HttpRoute, HttpRouteContext } from '@frontmcp/sdk';
+
+@HttpRoute({ method: 'GET', path: '/board/:id' })
+class BoardPage extends HttpRouteContext {
+  async handle() {
+    return this.get(BoardService).find(this.params['id']);
+  }
+}
+
+// Register it on its app: @App({ providers: [BoardService], routes: [BoardPage] })
+```
+
+---
+
 ## Quick Reference Table
 
-| Decorator                            | Extends           | Registered In                   | Purpose                  |
-| ------------------------------------ | ----------------- | ------------------------------- | ------------------------ |
-| `@FrontMcp`                          | -                 | Root                            | Server configuration     |
-| `@App`                               | -                 | `@FrontMcp.apps`                | Module grouping          |
-| `@Tool`                              | `ToolContext`     | `@App.tools`                    | Executable action        |
-| `@Prompt`                            | `PromptContext`   | `@App.prompts`                  | Prompt template          |
-| `@Resource`                          | `ResourceContext` | `@App.resources`                | Static data              |
-| `@ResourceTemplate`                  | `ResourceContext` | `@App.resources`                | Parameterized data       |
-| `@Agent`                             | `AgentContext`    | `@App.agents`                   | Autonomous AI agent      |
-| `@Skill`                             | -                 | `@App.skills`                   | Knowledge package        |
-| `@Plugin`                            | -                 | `@App.plugins`                  | Cross-cutting concern    |
-| `@Adapter`                           | -                 | `@App.adapters`                 | External integration     |
-| `@Provider`                          | -                 | `@App.providers`                | DI binding               |
-| `@Flow`                              | -                 | `@App`                          | Custom flow              |
-| `@Job`                               | `JobContext`      | `@App.jobs`                     | Background task          |
-| `@Workflow`                          | -                 | `@App.workflows`                | Multi-step orchestration |
-| `@Will/@Did/@Stage/@Around/@Finally` | -                 | Plugin, provider or entry class | Flow stage hooks         |
+| Decorator                            | Extends            | Registered In                   | Purpose                  |
+| ------------------------------------ | ------------------ | ------------------------------- | ------------------------ |
+| `@FrontMcp`                          | -                  | Root                            | Server configuration     |
+| `@App`                               | -                  | `@FrontMcp.apps`                | Module grouping          |
+| `@Tool`                              | `ToolContext`      | `@App.tools`                    | Executable action        |
+| `@Prompt`                            | `PromptContext`    | `@App.prompts`                  | Prompt template          |
+| `@Resource`                          | `ResourceContext`  | `@App.resources`                | Static data              |
+| `@ResourceTemplate`                  | `ResourceContext`  | `@App.resources`                | Parameterized data       |
+| `@Agent`                             | `AgentContext`     | `@App.agents`                   | Autonomous AI agent      |
+| `@Skill`                             | -                  | `@App.skills`                   | Knowledge package        |
+| `@Plugin`                            | -                  | `@App.plugins`                  | Cross-cutting concern    |
+| `@Adapter`                           | -                  | `@App.adapters`                 | External integration     |
+| `@Provider`                          | -                  | `@App.providers`                | DI binding               |
+| `@Flow`                              | -                  | `@App`                          | Custom flow              |
+| `@Job`                               | `JobContext`       | `@App.jobs`                     | Background task          |
+| `@Workflow`                          | -                  | `@App.workflows`                | Multi-step orchestration |
+| `@Duty`                              | -                  | `@App.providers`                | Recurring work           |
+| `@HttpRoute`                         | `HttpRouteContext` | `@App.routes`                   | Page or API for people   |
+| `@Will/@Did/@Stage/@Around/@Finally` | -                  | Plugin, provider or entry class | Flow stage hooks         |
 
 ---
 
@@ -748,7 +819,8 @@ A hook declared on a `@Tool`, `@Resource` or `@Prompt` class runs only for that 
 | Grouping tools into modules | Place tools inside `@App({ tools: [...] })`                                                                                                                                 | Register tools directly in `@FrontMcp({ tools: [...] })` for large servers                                                                    | Apps provide logical grouping, scoped providers, and isolation; standalone tools in `@FrontMcp` are only appropriate for small servers or global utilities |
 | Exposing data to the LLM    | Use `@Resource` for fixed URIs, `@ResourceTemplate` for parameterized URIs                                                                                                  | Using `@Tool` to return static data that never changes                                                                                        | Resources are the MCP-standard way to expose readable data; tools are for actions with side effects or dynamic computation                                 |
 | Cross-cutting concerns      | Create a `@Plugin` with providers and context extensions                                                                                                                    | Adding logging/caching logic directly inside every tool's `execute()` method                                                                  | Plugins centralize shared behavior, reduce duplication, and can be reused across servers                                                                   |
-| Background processing       | Use `@Job` with a cron schedule for recurring work                                                                                                                          | Using `setTimeout` or manual polling inside a tool                                                                                            | Jobs integrate with the scheduler, support persistence, and are visible in server diagnostics                                                              |
+| Background processing       | Use `@Job` for work a client starts, with retries and progress                                                                                                              | Using `setTimeout` or manual polling inside a tool                                                                                            | Jobs track attempts and progress, and are visible in server diagnostics                                                                                    |
+| Recurring work              | Use a `@Duty({ every, scope })` provider                                                                                                                                    | `setInterval()` in a provider, which every copy of the server runs                                                                            | A duty runs in one process of the machine or project, and another takes over when it exits                                                                 |
 | Multi-step orchestration    | Use `@Workflow` with ordered steps referencing `@Job` classes                                                                                                               | Chaining multiple tool calls manually from the LLM                                                                                            | Workflows provide built-in ordering, error handling, and rollback semantics                                                                                |
 | Injecting services          | Decorate a service class with `@Provider({ name, scope })` and inject it via `this.get(MyClass)`, or use `AsyncProvider({ provide, useFactory })` for token-based factories | Passing `useFactory`/`useClass` directly to `@Provider` (the schema is strict and rejects them), or importing singletons / using global state | DI providers support testability, lifecycle management, and per-scope isolation                                                                            |
 

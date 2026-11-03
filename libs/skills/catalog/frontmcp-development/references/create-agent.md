@@ -97,6 +97,7 @@ class CodeReviewerAgent extends AgentContext {
 - `this.input` -- the validated input object
 - `this.output` -- the output (available after execute)
 - `this.llmAdapter` -- the configured LLM adapter instance
+- `this.signal` -- aborts when the call is cancelled or fails, a timeout included; the tools the model calls get it too, so a persistent question they wait on stops waiting. `timeout.executeMs` bounds the call; `execution.timeout` bounds the default run loop, and the call too when `timeout.executeMs` is unset, so an `execute()` override with `timeout.executeMs` set is bounded by `timeout.executeMs` alone
 - `this.toolDefinitions` -- definitions of inner tools available to the agent
 - `this.toolExecutor` -- executor for invoking inner tools
 - `this.metadata` -- the options given to `@Agent`, with defaults applied (there is no `this.options`)

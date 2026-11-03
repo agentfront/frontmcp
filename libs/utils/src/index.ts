@@ -106,6 +106,36 @@ export type {
   WatchPathOptions,
 } from './process';
 
+// The stdio bridge (Node.js only): a newline-delimited JSON-RPC framer, an upstream MCP client, and the state
+// machine that buffers a client's requests while its server starts or restarts
+export {
+  DEV_BUFFER_FULL,
+  DEV_ERROR_MESSAGE,
+  DEV_RELOAD_DEADLINE,
+  DEV_SERVER_UNREACHABLE,
+  makeDevError,
+  listChangedNotifications,
+  createBridgeStateMachine,
+  createStdioFramer,
+  createHttpUpstream,
+  createPipeUpstream,
+} from './stdio-bridge';
+export type {
+  BridgeState,
+  BridgeStateMachine,
+  BridgeStateMachineOptions,
+  InflightRequest,
+  JsonRpcFrame,
+  StdioFramer,
+  StdioFramerOptions,
+  BridgeLogger,
+  HttpUpstreamClient,
+  HttpUpstreamOptions,
+  PipeUpstreamOptions,
+  UpstreamClient,
+  UpstreamClientOptions,
+} from './stdio-bridge';
+
 // Redaction of sensitive fields in log entries and recorded calls
 export { redactFields, redactJson } from './redaction';
 export type { RedactedFields } from './redaction';
@@ -294,6 +324,10 @@ export {
   createStorage,
   createMemoryStorage,
   getDetectedStorageType,
+  // Change feed
+  createChangeFeed,
+  DEFAULT_CHANGE_FEED_COALESCE_MS,
+  DEFAULT_CHANGE_FEED_POLL_INTERVAL_MS,
   // Namespace
   NamespacedStorageImpl,
   createRootStorage,
@@ -375,6 +409,9 @@ export type {
   RedisUrlSiblingFields,
   CreateRedisClientOptions,
   ErrorEmitterClient,
+  ChangeFeed,
+  ChangeFeedKind,
+  ChangeFeedOptions,
 } from './storage';
 
 // LLM platform tool call processing (cross-platform: Node.js and browser)

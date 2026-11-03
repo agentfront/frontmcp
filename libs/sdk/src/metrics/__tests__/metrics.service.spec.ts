@@ -137,6 +137,19 @@ describe('MetricsService (issue #397)', () => {
       const body = service.getMetrics().body;
       expect(body).toContain('frontmcp_process_uptime_seconds 99');
     });
+
+    it("serves the event-loop stall counter under the 'process' category", () => {
+      const stall = { name: 'frontmcp_event_loop_stall_seconds_total', count: 0.6, attributes: {} };
+      const kept = new MetricsService({ enabled: true, include: ['process'] }, undefined, {
+        snapshotSource: () => [stall],
+      });
+      const dropped = new MetricsService({ enabled: true, include: ['tools'] }, undefined, {
+        snapshotSource: () => [stall],
+      });
+
+      expect(kept.getMetrics().body).toContain('frontmcp_event_loop_stall_seconds_total 0.6');
+      expect(dropped.getMetrics().body).not.toContain('frontmcp_event_loop_stall_seconds_total');
+    });
   });
 
   describe('createProcessStatsCollectorIfEnabled', () => {

@@ -18,6 +18,7 @@ export {
   StaleToolListError,
   InvalidFileSignalError,
   // Resource errors
+  InvalidResourceStoreError,
   ResourceNotFoundError,
   ResourceReadError,
   InvalidResourceUriError,
@@ -215,6 +216,27 @@ export {
 // Export decorator errors
 export { InvalidDecoratorMetadataError, HookTargetNotDefinedError } from './decorator.errors';
 
+// Export duty errors
+export { DutyNameConflictError, UnsafeDutyStoreError } from './duty.errors';
+
+// Export HTTP route errors
+export {
+  CrossOriginRequestError,
+  InvalidHttpRouteError,
+  InvalidPeopleAuthOptionsError,
+  PersonNotSignedInError,
+  SignInLockedError,
+  SignInRefusedError,
+} from './http-route.errors';
+
+// Export shared local server errors
+export {
+  InvalidSharedServerOptionsError,
+  SharedServerIdentityError,
+  SharedServerStartError,
+  UnsafeSharedServerDirectoryError,
+} from './shared-server.errors';
+
 // Export transport errors
 export {
   MethodNotImplementedError,
@@ -282,6 +304,8 @@ export {
   ExternalEntryNotSupportedError,
   type ExternalEntryKind,
 } from './external-entry.errors';
+
+export { LazyAppConfigurationError, LazyAppLoadError } from './lazy-app.errors';
 
 // Export SDK errors
 export {
