@@ -139,8 +139,12 @@ export function recordHookTrace(trace: HookTraceEntry[]): HookObserver {
   };
 }
 
-/** A copy of `answer` whose `_meta` carries `trace`; anything but an object is returned as it is. */
+/**
+ * A copy of `answer` whose `_meta` carries `trace`. An empty trace (no hook ran) and anything but an object are
+ * returned as they are, so a call that ran no hook answers the same with the trace on or off.
+ */
 export function withHookTrace<T>(answer: T, trace: HookTraceEntry[]): T {
+  if (trace.length === 0) return answer;
   if (typeof answer !== 'object' || answer === null || Array.isArray(answer)) return answer;
   const meta = (answer as { _meta?: Record<string, unknown> })._meta;
   return { ...answer, _meta: { ...meta, [HOOK_TRACE_META_KEY]: trace } };
