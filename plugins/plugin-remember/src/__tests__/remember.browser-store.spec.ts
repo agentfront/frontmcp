@@ -135,7 +135,11 @@ describe('RememberPlugin on Node', () => {
   });
 
   it('gives the servers that install one redis init() its one client', async () => {
-    const remember = RememberPlugin.init({ skipLegacyPurge: true, type: 'redis', config: { host: '127.0.0.1' } });
+    const remember = RememberPlugin.init({
+      skipLegacyPurge: true,
+      type: 'redis',
+      config: { host: '127.0.0.1', port: 6379 },
+    });
 
     for (const id of ['first', 'second']) {
       @App({ id: `remembering-${id}`, name: `Remembering ${id}`, plugins: [remember] })
