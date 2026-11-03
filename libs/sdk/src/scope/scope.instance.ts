@@ -45,6 +45,7 @@ import CompleteFlow from '../completion/flows/complete.flow';
 import { FrontMcpContextProvider, FrontMcpContextStorage } from '../context';
 import { proxyTrustOf } from '../context/metadata.utils';
 import type { ElicitationStore } from '../elicitation';
+import type { PersistentQuestions } from '../elicitation/questions/question-scope.helper';
 import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors';
 import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
@@ -155,6 +156,7 @@ export class Scope extends ScopeEntry {
   private _elicitationStore?: ElicitationStore;
   /** Backend type for the elicitation store (used by the orphan-sqlite WARN guard). */
   private elicitationBackendType?: 'memory' | 'redis' | 'upstash' | 'sqlite' | 'auto';
+  private _persistentQuestions?: PersistentQuestions;
 
   /** Task store for MCP 2025-11-25 background tasks (optional). */
   private _taskStore?: TaskStore;
@@ -383,16 +385,50 @@ export class Scope extends ScopeEntry {
           const elicitationRedis = this.metadata.elicitation?.redis ?? this.metadata.redis;
           // Top-level `sqlite` is the fallback when no Redis source is configured (issue #401).
           const elicitationSqlite = elicitationRedis ? undefined : resolvedTopLevelSqlite;
+          const persistent = this.metadata.elicitation?.persistent;
+          const questionsHelper = persistent
+            ? await import('../elicitation/questions/question-scope.helper.js')
+            : undefined;
+          const onEdgeRuntime = isEdgeRuntime();
+          // Checked before either store opens: on an edge runtime, persistent questions fail startup with the reason.
+          // A Redis named only for persistent questions keeps the elicitation state too; other question stores (memory,
+          // sqlite) stay theirs alone.
+          const questionsStorage = questionsHelper?.persistentQuestionsSettings(persistent, onEdgeRuntime).storage;
+          const questionsRedis = !elicitationRedis && questionsStorage?.type === 'redis' ? questionsStorage : undefined;
           const { createElicitationStore } = await import('../elicitation/store/elicitation-store.factory.js');
-          const { store: elicitStore, type: elicitType } = await createElicitationStore({
+          const {
+            store: elicitStore,
+            type: elicitType,
+            storage: elicitStorage,
+          } = await createElicitationStore({
             redis: elicitationRedis,
+            storage: questionsRedis,
             sqlite: elicitationSqlite,
             keyPrefix: elicitationRedis?.keyPrefix ?? 'mcp:elicit:',
             logger: this.logger,
-            isEdgeRuntime: isEdgeRuntime(),
+            isEdgeRuntime: onEdgeRuntime,
           });
           this._elicitationStore = elicitStore;
           this.elicitationBackendType = elicitType;
+          if (elicitStorage) {
+            // The scope opened this storage, so it closes it: a Redis connection left open outlives the scope
+            this.onDispose(async () => {
+              await elicitStore.destroy?.();
+              await elicitStorage.disconnect();
+            });
+          }
+          if (questionsHelper) {
+            const questions = await questionsHelper.openPersistentQuestions({
+              persistent,
+              serverName: this.metadata.info.name,
+              redis: elicitationRedis,
+              sqlite: resolvedTopLevelSqlite,
+              onEdgeRuntime,
+              logger: this.logger,
+            });
+            this._persistentQuestions = questions;
+            if (questions) this.onDispose(() => questions.store.close());
+          }
         })()
       : undefined;
 
@@ -607,7 +643,8 @@ export class Scope extends ScopeEntry {
       (this.transportService?.isSessionStoreConfigured() === true &&
         this.transportService.getBackendKind() === 'sqlite') ||
       this.taskBackendType === 'sqlite' ||
-      this.elicitationBackendType === 'sqlite';
+      this.elicitationBackendType === 'sqlite' ||
+      this._persistentQuestions?.type === 'sqlite';
 
     // ═══ BATCH 2: App-dependent registries (parallel) ═══
     // These call providers.getRegistries('AppRegistry') during initialize(),
@@ -1512,6 +1549,10 @@ export class Scope extends ScopeEntry {
    */
   get elicitationStore(): ElicitationStore | undefined {
     return this._elicitationStore;
+  }
+
+  get persistentQuestions(): PersistentQuestions | undefined {
+    return this._persistentQuestions;
   }
 
   /**

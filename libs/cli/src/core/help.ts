@@ -22,7 +22,7 @@ function getArgs(cmd: Command): CommanderArgument[] {
  */
 const GROUPS: [label: string, commands: string[]][] = [
   ['Getting Started', ['create', 'init', 'doctor']],
-  ['Development', ['dev', 'build', 'test', 'inspector']],
+  ['Development', ['dev', 'build', 'test', 'inspector', 'inbox']],
   ['Process Manager', ['start', 'stop', 'restart', 'status', 'list', 'logs', 'socket', 'service']],
   ['Package Manager', ['install', 'uninstall', 'configure']],
 ];

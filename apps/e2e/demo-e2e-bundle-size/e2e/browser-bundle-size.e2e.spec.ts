@@ -24,11 +24,11 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_339_169 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_346_034 },
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_340_056 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_346_921 },
 ];
 
-const VITE_INITIAL_CHUNK_MAX_BYTES = 960_928;
+const VITE_INITIAL_CHUNK_MAX_BYTES = 964_390;
 
 // Packages create() never needs: the JavaScript parser behind @enclave-vm/ast (#885) and the MCP client (#886)
 const NEVER_BUNDLED: Record<string, RegExp> = {
@@ -58,6 +58,7 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   'mcp registry': sdkModule('mcp-registry/flows/'),
   metrics: sdkModule('metrics/'),
   observability: sdkModule('scope/(observability-scope\\.helper|tracer-provider\\.utils)'),
+  'persistent questions': sdkModule('elicitation/questions/(?!question-subject)'),
   'worker offload': sdkModule('offload/(offload-pool|offload-worker\\.source|read-in-worker|worker-resource\\.reader)'),
   'remote and esm entries': sdkModule('remote-mcp/|esm-loader/(?!package-specifier)'),
   'shared local server': sdkModule('shared/'),

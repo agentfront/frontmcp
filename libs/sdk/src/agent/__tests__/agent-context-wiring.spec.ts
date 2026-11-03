@@ -150,11 +150,76 @@ class TunedAgent extends AgentContext {
   }
 }
 
+/** The `this.signal` each run of the stalled agent saw. */
+const stalledSignals: Array<AbortSignal | undefined> = [];
+
+@Agent({
+  name: 'stalled',
+  inputSchema: {},
+  llm: { adapter: answering },
+  timeout: { executeMs: 50 },
+})
+class StalledAgent extends AgentContext {
+  protected override async completion(): Promise<AgentCompletion> {
+    stalledSignals.push(this.signal);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return { content: 'late', finishReason: 'stop' };
+  }
+}
+
+/** The `this.signal` each run of the agent with only an `execution.timeout` saw. */
+const executionTimedSignals: Array<AbortSignal | undefined> = [];
+
+@Agent({
+  name: 'execution_timed',
+  inputSchema: {},
+  llm: { adapter: answering },
+  execution: { timeout: 50 },
+})
+class ExecutionTimedAgent extends AgentContext {
+  protected override async completion(): Promise<AgentCompletion> {
+    executionTimedSignals.push(this.signal);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return { content: 'late', finishReason: 'stop' };
+  }
+}
+
+/** The `this.signal` of each run of the slow lookup the slow caller's model calls. */
+const lookupSignals: Array<AbortSignal | undefined> = [];
+
+@Tool({ name: 'slow_lookup', inputSchema: {} })
+class SlowLookupTool extends ToolContext {
+  async execute() {
+    lookupSignals.push(this.signal);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return { found: false };
+  }
+}
+
+@Agent({
+  name: 'slow_caller',
+  inputSchema: {},
+  llm: { adapter: callingModel('slow_caller', 'slow_lookup') },
+  tools: [SlowLookupTool],
+  timeout: { executeMs: 50 },
+})
+class SlowCallerAgent extends AgentContext {}
+
 @App({
   id: 'desk',
   name: 'Desk',
   providers: [TicketStore],
-  agents: [TriageAgent, RefuserAgent, DirectRefuserAgent, CallerAgent, OverridingAgent, TunedAgent],
+  agents: [
+    TriageAgent,
+    RefuserAgent,
+    DirectRefuserAgent,
+    CallerAgent,
+    OverridingAgent,
+    TunedAgent,
+    StalledAgent,
+    SlowCallerAgent,
+    ExecutionTimedAgent,
+  ],
 })
 class DeskApp {}
 
@@ -199,6 +264,32 @@ describe('agent context wiring', () => {
       own: { tickets: ['T-1', 'T-2'] },
       dotted: { tickets: ['T-1', 'T-2'] },
     });
+  });
+
+  it("aborts the agent's this.signal when its call stops, as a tool's, so a question it waits on stops waiting", async () => {
+    stalledSignals.length = 0;
+    await expect(server.callTool('invoke_stalled', {})).rejects.toThrow(/timed out/);
+
+    expect(stalledSignals).toHaveLength(1);
+    expect(stalledSignals[0]).toBeInstanceOf(AbortSignal);
+    expect(stalledSignals[0]?.aborted).toBe(true);
+  });
+
+  it("aborts the agent's this.signal when its own execution.timeout stops the call", async () => {
+    executionTimedSignals.length = 0;
+    await expect(server.callTool('invoke_execution_timed', {})).rejects.toThrow(/timed out/);
+
+    expect(executionTimedSignals).toHaveLength(1);
+    expect(executionTimedSignals[0]?.aborted).toBe(true);
+  });
+
+  it("aborts the signal of a tool the agent's model called when the agent's call stops", async () => {
+    lookupSignals.length = 0;
+    await expect(server.callTool('invoke_slow_caller', {})).rejects.toThrow(/timed out/);
+
+    expect(lookupSignals).toHaveLength(1);
+    expect(lookupSignals[0]).toBeInstanceOf(AbortSignal);
+    expect(lookupSignals[0]?.aborted).toBe(true);
   });
 
   it("runs the loop's completions through an overridden completion()", async () => {

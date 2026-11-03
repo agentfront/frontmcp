@@ -19,6 +19,7 @@ import {
 } from '../../errors';
 import { supportsElicitation, type ClientCapabilities } from '../../notification';
 import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult } from '../elicitation.types';
+import { type QuestionStore } from '../questions/question.store';
 
 /**
  * Transport interface for elicitation.
@@ -57,6 +58,12 @@ export interface ElicitHelperDeps {
    * @default false
    */
   elicitationEnabled?: boolean;
+
+  /** The scope's persistent questions (`elicitation.persistent`), with their default TTL. */
+  questions?: { store: QuestionStore; ttlMs: number };
+
+  /** Aborts when the call stops; a persistent question then stops waiting. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -88,6 +95,11 @@ export async function performElicit<S extends ZodType>(
   // elicitationEnabled must be explicitly set to true (default is false)
   if (elicitationEnabled !== true) {
     throw new ElicitationDisabledError();
+  }
+
+  if (options?.persist) {
+    const { elicitPersistent } = await import('../questions/ask-question.js');
+    return elicitPersistent(deps, message, requestedSchema, { ...options, persist: options.persist });
   }
 
   // A URL-mode question names the page that answers it, and the id that correlates its completion

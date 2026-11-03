@@ -226,6 +226,43 @@ describe('LoopbackTokenAuth', () => {
       expect(auth.verifySession(cookieValue)).toBeUndefined();
     });
   });
+
+  describe('a code made for a subject', () => {
+    function signedInFor(subject: string): string {
+      const { code } = auth.createCode({ subject });
+      const result = auth.exchangeCode(code, 'client-a');
+      if (!result.ok) throw new Error('the code was refused');
+      return result.cookieValue;
+    }
+
+    it('signs the person in for that subject', () => {
+      const cookieValue = signedInFor('principal:alice');
+
+      expect(auth.verifySession(cookieValue)).toEqual({
+        expiresAt: 1_000_000 + 43_200_000,
+        subject: 'principal:alice',
+      });
+    });
+
+    it('keeps the subjects of two sessions apart', () => {
+      const alice = signedInFor('principal:alice');
+      const bob = signedInFor('principal:bob');
+
+      expect([auth.verifySession(alice)?.subject, auth.verifySession(bob)?.subject]).toEqual([
+        'principal:alice',
+        'principal:bob',
+      ]);
+    });
+
+    it('gives a session signed in with the token no subject', () => {
+      const issued = auth.exchangeToken(auth.takeToken(), 'client-a');
+      if (!issued.ok) throw new Error('the token was refused');
+      const session = auth.exchangeCode(issued.code, 'client-a');
+      if (!session.ok) throw new Error('the code was refused');
+
+      expect(auth.verifySession(session.cookieValue)).toEqual({ expiresAt: 1_000_000 + 43_200_000 });
+    });
+  });
 });
 
 describe('peopleSessionCookie', () => {

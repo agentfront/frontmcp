@@ -20,7 +20,9 @@ const httpRouteMetadataSchema = z
     path: z.custom<string | (() => string)>((value) => typeof value === 'function' || isHttpRoutePath(value), {
       message: HTTP_ROUTE_PATH_MESSAGE,
     }),
-    auth: z.enum(['people', 'public'], { message: "auth must be 'people' or 'public'" }).optional(),
+    auth: z
+      .enum(['people', 'subject', 'public'], { message: "auth must be 'people', 'subject' or 'public'" })
+      .optional(),
     sse: z
       .object({
         store: z.custom<HttpRouteTopicSource>(

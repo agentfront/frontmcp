@@ -10,6 +10,7 @@ import type { AuthRegistry } from '../../auth/auth.registry';
 import type { ChannelNotificationService } from '../../channel/channel-notification.service';
 import type ChannelRegistry from '../../channel/channel.registry';
 import type { ChannelEventBus } from '../../channel/sources/app-event.source';
+import type { PersistentQuestions } from '../../elicitation/questions/question-scope.helper';
 import type { ElicitationStore } from '../../elicitation/store/elicitation.store';
 import type { HaManager } from '../../ha';
 import type HookRegistry from '../../hooks/hook.registry';
@@ -119,6 +120,9 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
   abstract get publicAccessGuard(): GuardManager | undefined;
 
   abstract get elicitationStore(): ElicitationStore | undefined;
+
+  /** The questions `elicitation.persistent` keeps; `undefined` while it is off. */
+  abstract get persistentQuestions(): PersistentQuestions | undefined;
 
   /** Persistent store for MCP 2025-11-25 background task records. */
   abstract get taskStore(): TaskStore | undefined;

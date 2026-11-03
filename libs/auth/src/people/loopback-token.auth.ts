@@ -8,6 +8,8 @@ export const PEOPLE_SESSION_COOKIE = 'frontmcp_people';
 /** A signed-in browser. */
 export interface PeopleSession {
   readonly expiresAt: number;
+  /** The MCP subject this person answers for: set when the sign-in code was made for it (`createCode({ subject })`). */
+  readonly subject?: string;
 }
 
 export interface PeopleSignInRefusal {
@@ -23,6 +25,7 @@ export type PeopleSessionIssue = { ok: true; cookieValue: string; expiresAt: num
 interface StoredSecret {
   digest: Uint8Array;
   expiresAt: number;
+  subject?: string;
 }
 
 interface ClientFailures {
@@ -73,11 +76,15 @@ export class LoopbackTokenAuth {
     return token;
   }
 
-  /** A one-time sign-in code, for a caller this process already trusts, such as a tool. */
-  createCode(): { code: string; expiresAt: number } {
+  /**
+   * A one-time sign-in code, for a caller this process already trusts, such as a tool. A code made for a `subject`
+   * signs the person in for that subject only; a code without one, such as the token's, for none.
+   */
+  createCode(options: { subject?: string } = {}): { code: string; expiresAt: number } {
     const code = newSecret();
     const expiresAt = Date.now() + this.options.codeTtlMs;
-    this.codes = [...unexpired(this.codes), { digest: sha256(code), expiresAt }];
+    const { subject } = options;
+    this.codes = [...unexpired(this.codes), { digest: sha256(code), expiresAt, ...(subject ? { subject } : {}) }];
     return { code, expiresAt };
   }
 
@@ -95,11 +102,14 @@ export class LoopbackTokenAuth {
     this.codes = unexpired(this.codes);
     const index = presented === undefined ? -1 : this.codes.findIndex((code) => matches(presented, code.digest));
     if (index === -1) return this.refuse(client);
-    this.codes.splice(index, 1);
+    const [{ subject }] = this.codes.splice(index, 1);
     this.failures.delete(client);
     const cookieValue = newSecret();
     const expiresAt = Date.now() + this.options.sessionTtlMs;
-    this.sessions = [...unexpired(this.sessions), { digest: sha256(cookieValue), expiresAt }];
+    this.sessions = [
+      ...unexpired(this.sessions),
+      { digest: sha256(cookieValue), expiresAt, ...(subject ? { subject } : {}) },
+    ];
     return { ok: true, cookieValue, expiresAt };
   }
 
@@ -107,7 +117,10 @@ export class LoopbackTokenAuth {
     if (!presented) return undefined;
     this.sessions = unexpired(this.sessions);
     const session = this.sessions.find((stored) => matches(presented, stored.digest));
-    return session ? { expiresAt: session.expiresAt } : undefined;
+    if (!session) return undefined;
+    return session.subject
+      ? { expiresAt: session.expiresAt, subject: session.subject }
+      : { expiresAt: session.expiresAt };
   }
 
   endSession(presented: string | undefined): void {

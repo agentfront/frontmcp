@@ -322,6 +322,8 @@ export abstract class ToolContext<
         entryName: this._toolNameInternal ?? this.toolName,
         entryInput: this._toolInputInternal ?? this.input,
         elicitationEnabled: this.scope.metadata.elicitation?.enabled === true,
+        questions: this.scope.persistentQuestions,
+        signal: this.signal,
       },
       message,
       requestedSchema,

@@ -954,6 +954,18 @@
                 "Elicitation state is shared across server instances so the response can arrive at any replica",
                 "Loading Redis connection details from environment variables"
               ]
+            },
+            {
+              "name": "persistent-questions-inbox",
+              "description": "Keep a question for its caller past the session, answered in the inbox or the CLI.",
+              "level": "advanced",
+              "tags": ["config", "elicitation", "persistent", "inbox", "people-auth"],
+              "features": [
+                "Turning on `elicitation.persistent` next to `http.auth.people` for the inbox routes",
+                "Asking with `this.elicit(..., { ttl, persist: { key } })` so the question outlives the call",
+                "Printing a sign-in link bound to the caller on the server console with `printQuestionInboxLink(this)`",
+                "Answering with `frontmcp inbox --url <server>`, which reads the link from the prompt, stdin or `FRONTMCP_INBOX_LINK`, and the next call receiving the answer once"
+              ]
             }
           ]
         },

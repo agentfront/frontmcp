@@ -65,7 +65,7 @@ export class HomePage extends HttpRouteContext {
 ```
 
 `this.request` holds the method, path, headers, query and parsed body; `this.params` the path parameters;
-`this.person` the signed-in person on a route with people auth. `this.get()`, `this.tryGet()`, `this.scope`,
+`this.person` the signed-in person on a `'people'` or `'subject'` route. `this.get()`, `this.tryGet()`, `this.scope`,
 `this.fetch()` and `this.context` work as in a tool.
 
 What `handle()` returns becomes the response:
@@ -108,7 +108,12 @@ export default class Server {}
 ```
 
 With `http.auth.people` set, a route needs a signed-in person unless its `auth` is `'public'`. Without it, routes are
-public, and a route that says `auth: 'people'` fails startup with `InvalidHttpRouteError`.
+public, and a route that says `auth: 'people'` or `'subject'` fails startup with `InvalidHttpRouteError`.
+
+`auth: 'subject'` is for a page that shows one MCP caller's data, such as the persistent-question inbox: it takes only
+a person signed in with a code made by `createCode({ subject })`, and `this.person.subject` names the caller. Each kind
+of sign-in opens only its own routes: a subject's session gets `401` on a `'people'` route, and a session from the
+startup token gets `401` on a `'subject'` route, so a code sent to one person for their questions opens nothing else.
 
 ### Step 4 (optional): Serve a live view over SSE
 
@@ -166,7 +171,11 @@ app) serve one path, the first scope's serves it on every adapter.
 2. **A one-time code.** A CLI or another local process trades the token for a code:
    `POST /_frontmcp/people/code` with `Authorization: Bearer <token>` answers
    `{ "code", "expiresAt", "loginPath": "/_frontmcp/people/login?code=…" }`. A tool in the server needs no token:
-   `this.get(LoopbackTokenAuth).createCode()`.
+   `this.get(LoopbackTokenAuth).createCode()`. `createCode({ subject })` signs the person in for that MCP subject, on
+   `auth: 'subject'` routes only: `this.person.subject` there, which is how the persistent-question inbox shows a
+   person only their own caller's questions (`printQuestionInboxLink(this)` prints such a link for the calling user on
+   the server's console). Any code is a credential: send it to the person, never back to the MCP client, and never to
+   a log. Tool code can make one for any subject, so the binding is as strong as the tools that call `createCode`.
 3. **The sign-in page.** The person opens `/_frontmcp/people/login?code=<code>&next=/board`. The page signs nothing in:
    its form posts the code back from the server's own origin.
 4. **The cookie.** `POST /_frontmcp/people/login` (a form, or JSON `{ "code", "next" }`) spends the code and sets

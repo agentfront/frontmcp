@@ -92,6 +92,7 @@ import { assertEntryEnabled, isEntryEnabled } from '../../surface';
 import { generateTaskId } from '../../task/helpers/task-id';
 import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
+import { linkedAbortController } from '../../utils/abort.utils';
 import { hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
 import { toolOutputPolicies } from '../tool-output-policy';
 import { toolServingMode } from '../ui/serving-mode-default';
@@ -1846,14 +1847,4 @@ function declaredOutput(
   if (!parsed.success) return output;
   const structured = parsed.data.structuredContent;
   return typeof structured === 'object' && structured !== null && !Array.isArray(structured) ? structured : output;
-}
-
-/**
- * An AbortController that also aborts when the given signal does.
- */
-function linkedAbortController(signal: AbortSignal | undefined): AbortController {
-  const controller = new AbortController();
-  if (signal?.aborted) controller.abort(signal.reason);
-  else signal?.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
-  return controller;
 }
