@@ -167,6 +167,23 @@ class StalledAgent extends AgentContext {
   }
 }
 
+/** The `this.signal` each run of the agent with only an `execution.timeout` saw. */
+const executionTimedSignals: Array<AbortSignal | undefined> = [];
+
+@Agent({
+  name: 'execution_timed',
+  inputSchema: {},
+  llm: { adapter: answering },
+  execution: { timeout: 50 },
+})
+class ExecutionTimedAgent extends AgentContext {
+  protected override async completion(): Promise<AgentCompletion> {
+    executionTimedSignals.push(this.signal);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return { content: 'late', finishReason: 'stop' };
+  }
+}
+
 /** The `this.signal` of each run of the slow lookup the slow caller's model calls. */
 const lookupSignals: Array<AbortSignal | undefined> = [];
 
@@ -201,6 +218,7 @@ class SlowCallerAgent extends AgentContext {}
     TunedAgent,
     StalledAgent,
     SlowCallerAgent,
+    ExecutionTimedAgent,
   ],
 })
 class DeskApp {}
@@ -255,6 +273,14 @@ describe('agent context wiring', () => {
     expect(stalledSignals).toHaveLength(1);
     expect(stalledSignals[0]).toBeInstanceOf(AbortSignal);
     expect(stalledSignals[0]?.aborted).toBe(true);
+  });
+
+  it("aborts the agent's this.signal when its own execution.timeout stops the call", async () => {
+    executionTimedSignals.length = 0;
+    await expect(server.callTool('invoke_execution_timed', {})).rejects.toThrow(/timed out/);
+
+    expect(executionTimedSignals).toHaveLength(1);
+    expect(executionTimedSignals[0]?.aborted).toBe(true);
   });
 
   it("aborts the signal of a tool the agent's model called when the agent's call stops", async () => {

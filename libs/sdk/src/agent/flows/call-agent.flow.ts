@@ -35,6 +35,7 @@ import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { type SdkAuthInfo } from '../../server/server.types';
+import { linkedAbortController } from '../../utils/abort.utils';
 import { DEFAULT_MAX_AGENT_CALL_DEPTH, nextAgentCallDepth, runAsAgent } from '../agent-call-chain';
 
 // ============================================================================
@@ -91,6 +92,8 @@ const stateSchema = z.object({
   semaphoreTicket: z.any().optional(),
   // A timed-out execute() that is still running; its concurrency slot is released when it settles
   abandonedExecution: z.instanceof(Promise).optional(),
+  // Aborts the agent's this.signal: linked to the call's signal, and fired when execute() fails (its timeouts included)
+  executionAbort: z.instanceof(AbortController).optional(),
   // When execute() started, and the error it ended with (for the completion event)
   executionStartedAt: z.number().optional(),
   executionError: z.any().optional(),
@@ -411,7 +414,14 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
       const sessionKey = authInfo?.sessionId ?? 'anonymous';
       const agentViews = await agent.providers.buildViews(sessionKey, new Map(this.deps), this.scope.providers);
       const contextProviders = new FlowContextProviders(agent.providers, agentViews.context);
-      const context = agent.create(input.arguments, { ...ctx, progressToken, contextProviders });
+      const executionAbort = linkedAbortController((ctx as { signal?: AbortSignal }).signal);
+      this.state.set('executionAbort', executionAbort);
+      const context = agent.create(input.arguments, {
+        ...ctx,
+        progressToken,
+        contextProviders,
+        signal: executionAbort.signal,
+      });
       // `authorities.pipes` may be async: run them before any hook or execute() reads `this.auth`.
       await context.loadAuthContext();
       this.appendContextHooks(hooksBoundTo(this.scope.hooks.getClsHooks(agent.record.provide), context));
@@ -578,6 +588,9 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
 
       this.logger.verbose('execute:done');
     } catch (error) {
+      // The call failed: tell what of the agent's run still goes on (a step its run loop's own `execution.timeout`
+      // cut short, a tool its model called) to stop, so a persistent question it waits on stops waiting
+      this.state.executionAbort?.abort(error);
       this.state.set('executionError', error);
       if (error instanceof ExecutionTimeoutError) {
         this.logger.warn('execute: agent execution timed out', {

@@ -394,7 +394,11 @@ export class Scope extends ScopeEntry {
           const questionsStorage = questionsHelper?.parsePersistentQuestionsOptions(persistent).storage;
           const questionsRedis = !elicitationRedis && questionsStorage?.type === 'redis' ? questionsStorage : undefined;
           const { createElicitationStore } = await import('../elicitation/store/elicitation-store.factory.js');
-          const { store: elicitStore, type: elicitType } = await createElicitationStore({
+          const {
+            store: elicitStore,
+            type: elicitType,
+            storage: elicitStorage,
+          } = await createElicitationStore({
             redis: elicitationRedis,
             storage: questionsRedis,
             sqlite: elicitationSqlite,
@@ -404,6 +408,13 @@ export class Scope extends ScopeEntry {
           });
           this._elicitationStore = elicitStore;
           this.elicitationBackendType = elicitType;
+          if (elicitStorage) {
+            // The scope opened this storage, so it closes it: a Redis connection left open outlives the scope
+            this.onDispose(async () => {
+              await elicitStore.destroy?.();
+              await elicitStorage.disconnect();
+            });
+          }
           if (questionsHelper) {
             const questions = await questionsHelper.openPersistentQuestions({
               persistent,

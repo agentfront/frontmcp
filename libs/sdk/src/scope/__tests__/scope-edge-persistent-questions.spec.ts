@@ -15,6 +15,9 @@ const mockStoreRequests: { elicitation: Array<Record<string, unknown>>; question
   questions: [],
 };
 
+/** The storage each elicitation store the scope opened runs on, with its disconnects counted. */
+const mockElicitationStorages: Array<{ disconnect: jest.Mock }> = [];
+
 /** No Redis runs here: a Redis the scope names is stood in for by memory, once the request is recorded. */
 const mockMemoryForRedis = (options: Record<string, unknown>) => {
   const storage = options['storage'] as { type?: string } | undefined;
@@ -27,7 +30,13 @@ jest.mock('../../elicitation/store/elicitation-store.factory', () => {
     ...actual,
     createElicitationStore: jest.fn(async (options: Record<string, unknown>) => {
       mockStoreRequests.elicitation.push(options);
-      return actual.createElicitationStore(mockMemoryForRedis(options));
+      const result = await actual.createElicitationStore(mockMemoryForRedis(options));
+      if (result.storage) {
+        const disconnect = result.storage.disconnect.bind(result.storage);
+        result.storage.disconnect = jest.fn(disconnect);
+        mockElicitationStorages.push(result.storage);
+      }
+      return result;
     }),
   };
 });
@@ -72,6 +81,7 @@ describe('persistent questions on an edge runtime', () => {
     await Promise.all(startedScopes.splice(0).map((scope) => scope.dispose()));
     mockStoreRequests.elicitation.length = 0;
     mockStoreRequests.questions.length = 0;
+    mockElicitationStorages.length = 0;
   });
 
   it('keeps the elicitation state in the Redis named for persistent questions, and starts', async () => {
@@ -88,6 +98,22 @@ describe('persistent questions on an edge runtime', () => {
     expect(mockStoreRequests.elicitation).toEqual([expect.objectContaining({ storage: QUESTIONS_REDIS })]);
     expect(mockStoreRequests.questions).toEqual([expect.objectContaining({ storage: QUESTIONS_REDIS })]);
     expect(scope.persistentQuestions).toBeDefined();
+  });
+
+  it('closes the connection of the elicitation store it opened when the scope is disposed', async () => {
+    const instance = await withEdgeRuntime(() =>
+      FrontMcpInstance.createForGraph({
+        info: { name: 'edge-questions', version: '0.0.0' },
+        apps: [EdgeQuestionsApp],
+        elicitation: { enabled: true, persistent: { storage: QUESTIONS_REDIS } },
+      }),
+    );
+    const [scope] = instance.getScopes() as unknown as StartedScope[];
+    expect(mockElicitationStorages).toHaveLength(1);
+
+    await scope.dispose();
+
+    expect(mockElicitationStorages[0].disconnect).toHaveBeenCalledTimes(1);
   });
 
   it('still refuses persistent questions kept in memory, which an edge runtime cannot share', async () => {
