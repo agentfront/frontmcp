@@ -1,7 +1,8 @@
 /**
- * A server create() builds in a browser Web Worker (#1031). webpack's `target: 'webworker'`, and esbuild or Rollup given
- * the `worker` condition, resolve with `worker` and `browser`: the worker must get the browser variants of
- * @frontmcp/utils, @frontmcp/auth and @frontmcp/protocol, as a page does, and run without `process`.
+ * A server create() builds in a browser page and a browser Web Worker, with no Node fallbacks (#1031, #1034). webpack's
+ * `target: 'webworker'`, and esbuild or Rollup given the `worker` condition, resolve with `worker` and `browser`: the
+ * worker must get the browser variants of @frontmcp/utils, @frontmcp/auth and @frontmcp/protocol, as a page does, and run
+ * without `process`. webpack 5 has no Node polyfills, so neither build may reach a Node built-in.
  *
  * Needs the packages built: `nx run-many -t build -p sdk plugin-webmcp`.
  */
@@ -11,13 +12,20 @@ import { join, resolve } from 'node:path';
 
 import { mkdtemp, rm } from '@frontmcp/utils';
 
-import { bundleWebWorkerWithEsbuild, bundleWebWorkerWithWebpack, fixtureDir } from './helpers/browser-bundle';
+import { bundleWebWorkerWithEsbuild, bundleWithWebpack, fixtureDir } from './helpers/browser-bundle';
 
 const NODE_VARIANTS =
   /^libs\/(utils|auth)\/dist\/(esm\/index\.mjs|index\.js)$|^libs\/utils\/dist\/(esm\/)?(crypto\/node|env\/runtime-context|[a-z-]+\/node-[a-z-]+)\.m?js$|^libs\/protocol\/dist\/(esm\/)?node-[a-z-]+\.m?js$/;
 
 const BUNDLERS = [
-  { bundler: "webpack's target: 'webworker'", bundle: bundleWebWorkerWithWebpack },
+  {
+    bundler: "webpack's target: 'web'",
+    bundle: (entryFile: string, outfile: string) => bundleWithWebpack('web', entryFile, outfile),
+  },
+  {
+    bundler: "webpack's target: 'webworker'",
+    bundle: (entryFile: string, outfile: string) => bundleWithWebpack('webworker', entryFile, outfile),
+  },
   { bundler: "esbuild's conditions: ['worker']", bundle: bundleWebWorkerWithEsbuild },
 ];
 
@@ -32,7 +40,7 @@ function runInWebWorker(workerBundle: string): unknown {
   );
 }
 
-describe('create() + one tool in a browser Web Worker', () => {
+describe('create() + one tool in a browser page or Web Worker', () => {
   it.each(BUNDLERS)('serves the tool without process from a bundle made by $bundler', async ({ bundle }) => {
     const outDir = await mkdtemp(join(tmpdir(), 'frontmcp-web-worker-'));
     try {

@@ -12,14 +12,12 @@ import {
   SocketPermissionError,
   UnsafeSocketDirectoryError,
 } from '../../errors/transport.errors';
+import { findReplaceableDirectory } from './replaceable-directory';
 
 const OWNER_ONLY_MODE = 0o600;
 // Clears group and other bits only: the umask is process-wide, so a directory created meanwhile stays usable.
 const OWNER_ONLY_UMASK = 0o077;
-const GROUP_OR_OTHER_WRITE = 0o022;
 const GROUP_OR_OTHER_ACCESS = 0o077;
-const STICKY_BIT = 0o1000;
-const ROOT_UID = 0;
 
 /** A win32 socket path names a named pipe, which has no file mode. */
 export function hasSocketFileMode(): boolean {
@@ -44,23 +42,6 @@ export async function assertSafeSocketDirectory(socketPath: string): Promise<voi
       `the umask cannot be set here (a worker thread, or a cluster worker whose primary binds the socket), so its ` +
         `directory ${socketDirectory} must be owner-only (0700), not 0${(mode & 0o777).toString(8)}`,
     );
-  }
-}
-
-/** A directory whose entries another user could replace: `ownerUid` when another user owns it. */
-export interface ReplaceableDirectory {
-  directory: string;
-  mode: number;
-  ownerUid?: number;
-}
-
-/** The first of `start` and the directories above it that another user (not root) owns or the group or others can write without the sticky bit. */
-export async function findReplaceableDirectory(start: string): Promise<ReplaceableDirectory | undefined> {
-  for (let directory = start; ; directory = path.dirname(directory)) {
-    const { mode, uid } = await stat(directory);
-    if (uid !== ROOT_UID && uid !== process.getuid?.()) return { directory, mode, ownerUid: uid };
-    if (mode & GROUP_OR_OTHER_WRITE && !(mode & STICKY_BIT)) return { directory, mode };
-    if (path.dirname(directory) === directory) return undefined;
   }
 }
 
