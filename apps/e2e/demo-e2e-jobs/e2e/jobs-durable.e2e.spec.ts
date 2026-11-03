@@ -9,6 +9,8 @@ import * as os from 'node:os';
 import { expect, test, type McpTestClient } from '@frontmcp/testing';
 import { pathJoin } from '@frontmcp/utils';
 
+import { sqliteKeys } from './helpers/sqlite-keys';
+
 const RESOURCE_UPDATED = 'notifications/resources/updated';
 
 interface RunHandle {
@@ -55,12 +57,21 @@ async function start(mcp: McpTestClient, name: string, input: Record<string, unk
   return result.json<RunHandle>();
 }
 
+const sqlitePath = pathJoin(os.tmpdir(), `frontmcp-e2e-durable-jobs-${process.pid}.sqlite`);
+
 test.describe('Durable jobs E2E', () => {
   test.use({
     server: 'apps/e2e/demo-e2e-jobs/src/main.durable.ts',
     project: 'demo-e2e-jobs',
     publicMode: true,
-    env: { JOBS_SQLITE_PATH: pathJoin(os.tmpdir(), `frontmcp-e2e-durable-jobs-${process.pid}.sqlite`) },
+    env: { JOBS_SQLITE_PATH: sqlitePath },
+  });
+
+  test('keeps the runs in the top-level SQLite file', async ({ mcp }) => {
+    const handle = await start(mcp, 'answer-now', {});
+    await settled(mcp, handle.runId);
+
+    expect(await sqliteKeys(sqlitePath)).toEqual(expect.arrayContaining([expect.stringMatching(/^mcp:jobs:/)]));
   });
 
   test('a background run answers at once with its job://runs handle', async ({ mcp }) => {

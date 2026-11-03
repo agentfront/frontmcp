@@ -559,7 +559,7 @@ class DataApp {}
 
 ### Enabling the Jobs System
 
-**Auto-enable (issue #408):** declaring any `@App({ jobs: [...] })` (or `workflows: [...]`) is enough — the jobs subsystem comes up and the management tools (`execute_job`, `list_jobs`, `get_job_status`, `cancel_job`, `remove_job`) are registered automatically so agents can invoke them. Runs are kept in `jobs.store`, else the server's top-level `redis` (unless it is Vercel KV), else its top-level `sqlite`, else in memory. `register_job` is added only when `jobs.allowDynamicRegistration` is `true`. No `@FrontMcp({ jobs: { enabled: true } })` is required for the happy path.
+**Auto-enable (issue #408):** declaring any `@App({ jobs: [...] })` (or `workflows: [...]`) is enough — the jobs subsystem comes up and the management tools (`execute_job`, `list_jobs`, `get_job_status`, `cancel_job`, `remove_job`) are registered automatically so agents can invoke them. Runs are kept in `jobs.store`, else the server's top-level `redis` (unless it is Vercel KV), else its top-level `sqlite`, else in memory; `jobs.store: false` keeps them in memory whatever the top-level options say. `register_job` is added only when `jobs.allowDynamicRegistration` is `true`. No `@FrontMcp({ jobs: { enabled: true } })` is required for the happy path.
 
 **When to configure `@FrontMcp({ jobs })` explicitly:** pick the store (Redis for multi-replica HA, or a SQLite file the processes on one machine share) so job state, progress, logs, and outputs survive retries and server restarts, and set `defaultTimeoutMs` and `admission`.
 
@@ -601,6 +601,20 @@ class MyLocalServer {}
 ```
 
 A server with a top-level `sqlite` (or `redis`) and no `jobs.store` keeps its runs there too. Up to 1.10 jobs ignored both and stayed in memory. On the top-level `redis`, the jobs' keys start with its `keyPrefix` followed by `jobs:` (`mcp:jobs:` by default; `jobs.store.keyPrefix` overrides it), so servers that share one Redis keep their runs and dynamic job definitions apart once each sets its own `redis.keyPrefix`. In Redis and SQLite a run record expires 24 hours after the run's last write.
+
+`jobs: { store: false }` keeps runs and dynamic definitions in this process memory although the server has a top-level `redis` or `sqlite`, which its other subsystems (sessions, tasks) keep using. `store` takes `false` or an object; any other value stops startup with `jobs.store must be false (runs kept in memory) or an object with redis or sqlite`. A `runner: 'detached'` job needs a store other processes share, so it cannot use `false`.
+
+```typescript
+@FrontMcp({
+  info: { name: 'my-server', version: '1.0.0' },
+  apps: [DataApp],
+  sqlite: { path: '/var/lib/my-server/sessions.sqlite' }, // sessions and tasks persist here
+  jobs: { enabled: true, store: false }, // job runs stay in memory
+})
+class MemoryJobsServer {}
+```
+
+In the browser build (`create()` in a web page, WebMCP), a job store on Redis or SQLite, named in `jobs.store` or taken from the top-level `redis` or `sqlite`, stops startup with `BrowserStoreUnavailableError` (`BROWSER_STORE_UNAVAILABLE`), which names the option; a browser has no TCP socket and no file. Set `jobs.store: false` there.
 
 `store.redis` takes the same connection fields as the server's `redis` option (`host`, `port`, `password`, `db`, `tls`, or a `url` they fill in; a field that contradicts the `url` stops startup), and the job stores connect with all of them. Up to 1.9.2 they used the `url` alone, or `host` and `port` alone, dropping the separate `password`, `db` and `tls` fields, beside a `url` too; values written in the `url` itself were kept.
 

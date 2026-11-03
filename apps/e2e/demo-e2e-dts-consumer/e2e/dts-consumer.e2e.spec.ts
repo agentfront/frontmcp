@@ -49,6 +49,7 @@ const fixtureFiles = [
   'http-routes-must-compile.ts',
   'shared-server-must-compile.ts',
   'durable-jobs-must-compile.ts',
+  'memory-stores-must-compile.ts',
   'job-runners-must-compile.ts',
   'build-manifest-must-compile.ts',
   'persistent-questions-must-compile.ts',
@@ -242,6 +243,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types @Job({ cleanup }), jobs.store.sqlite, jobs.defaultTimeoutMs, jobs.admission, CancelJobTool, the run states and a store without cancel requests', () => {
     expect(describeEach(inFixtureFile('durable-jobs-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types jobs.store: false, tasks.store: false, elicitation.store: false and BrowserStoreUnavailableError', () => {
+    expect(describeEach(inFixtureFile('memory-stores-must-compile.ts'))).toEqual([]);
   });
 
   it("types @Job({ runner }), jobs.runner, the run's runner, JOB_WORKER_MARKER and the runner errors", () => {

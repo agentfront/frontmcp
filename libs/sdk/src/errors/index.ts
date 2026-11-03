@@ -219,6 +219,9 @@ export { InvalidDecoratorMetadataError, HookTargetNotDefinedError } from './deco
 // Export duty errors
 export { DutyNameConflictError, UnsafeDutyStoreError } from './duty.errors';
 
+// Export the error a browser startup throws for a store that would open Redis or SQLite
+export { BrowserStoreUnavailableError, type BrowserRefusedStore } from './browser-store.errors';
+
 // Export HTTP route errors
 export {
   CrossOriginRequestError,

@@ -21,6 +21,7 @@ import {
   base64urlDecode,
   base64urlEncode,
   getEnv,
+  getRuntimeContext,
   hmacSha256,
   isProduction,
   randomBytes,
@@ -125,7 +126,8 @@ export function warnIfRequestStateKeyNotShared(options: {
   logger: { warn(message: string): void };
   metadata: { redis?: unknown; transport?: { persistence?: unknown } };
 }): void {
-  if (warnedKeyNotShared || !isProduction()) return;
+  // A page is one instance, which may keep the redis of the Node server it shares a config with
+  if (warnedKeyNotShared || !isProduction() || getRuntimeContext().runtime === 'browser') return;
   const { metadata } = options;
   const persistence = metadata.transport?.persistence;
   const sharesState = Boolean(metadata.redis) || (typeof persistence === 'object' && persistence !== null);

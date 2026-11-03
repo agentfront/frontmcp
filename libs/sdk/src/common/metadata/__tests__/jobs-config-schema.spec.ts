@@ -64,6 +64,16 @@ describe('frontMcpMetadataSchema — durable jobs config', () => {
     ).toThrow(/jobs\.store takes redis or sqlite, not both/);
   });
 
+  it('keeps store: false, which keeps runs in memory', () => {
+    expect(parseJobs({ enabled: true, store: false })?.['store']).toBe(false);
+  });
+
+  it.each([true, 'memory', null])('refuses store: %j with the values it takes', (store) => {
+    expect(() => parseJobs({ enabled: true, store })).toThrow(
+      'jobs.store must be false (runs kept in memory) or an object with redis or sqlite',
+    );
+  });
+
   it('refuses a sqlite store without a path', () => {
     expect(() => parseJobs({ enabled: true, store: { sqlite: {} } })).toThrow();
   });

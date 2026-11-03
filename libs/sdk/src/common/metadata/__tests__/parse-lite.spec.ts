@@ -52,4 +52,19 @@ describe('parseFrontMcpConfigLite — preserves CLI-relevant fields', () => {
     };
     expect(() => parseFrontMcpConfigLite(input as never)).not.toThrow();
   });
+
+  it('keeps tasks, which the CLI host reads for its store and runner', () => {
+    const tasks = { store: false, runner: 'cli', defaultTtlMs: 60_000 };
+    const parsed = parseFrontMcpConfigLite({
+      info: { name: 'demo', version: '0.1.0' },
+      apps: minimalApps,
+      tasks,
+    } as never);
+    expect((parsed as unknown as Record<string, unknown>)['tasks']).toEqual(tasks);
+  });
+
+  it('refuses a tasks.store other than false, as the full parser does', () => {
+    const input = { info: { name: 'demo', version: '0.1.0' }, apps: minimalApps, tasks: { store: true } };
+    expect(() => parseFrontMcpConfigLite(input as never)).toThrow('tasks.store must be false (tasks kept in memory)');
+  });
 });

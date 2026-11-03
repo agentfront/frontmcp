@@ -427,13 +427,16 @@ export interface FrontMcpBaseMetadata {
     /**
      * Where runs and dynamic definitions are kept: Redis, or a SQLite file the processes on one machine
      * share (`@frontmcp/storage-sqlite`). Without one, the top-level `redis` (unless Vercel KV), then
-     * the top-level `sqlite`, then memory.
+     * the top-level `sqlite`, then memory. `false` keeps them in memory although the server has a top-level
+     * `redis` or `sqlite`.
      */
-    store?: {
-      redis?: RedisOptionsInput;
-      sqlite?: SqliteOptionsInput & { path: string };
-      keyPrefix?: string;
-    };
+    store?:
+      | false
+      | {
+          redis?: RedisOptionsInput;
+          sqlite?: SqliteOptionsInput & { path: string };
+          keyPrefix?: string;
+        };
     /**
      * How long an attempt of a job that sets no `timeout` may run, in ms, before it ends as `timed_out`;
      * 0 for no limit.
@@ -658,6 +661,8 @@ export interface FrontMcpBaseMetadata {
    */
   tasks?: {
     enabled?: boolean;
+    /** `false` keeps tasks in memory although the server has a top-level `redis` or `sqlite`. */
+    store?: false;
     redis?: RedisOptionsInput;
     keyPrefix?: string;
     defaultTtlMs?: number;
@@ -700,6 +705,14 @@ const serverManifestOptionSchema = z.union(
   [z.string().min(1), z.custom<ServerManifest>((value) => typeof value === 'object' && value !== null)],
   { message: '`manifest` must be the path of a frontmcp.manifest.json, or the manifest itself' },
 );
+
+/** Why `jobs.store` was refused: the field of its object that is wrong, or the values it takes. */
+function jobsStoreError(issue: { code?: string; errors?: Array<Array<{ path: PropertyKey[]; message: string }>> }) {
+  if (issue.code !== 'invalid_union') return undefined;
+  const nested = issue.errors?.flat().find((error) => error.path.length > 0);
+  if (nested) return `jobs.store.${nested.path.map(String).join('.')}: ${nested.message}`;
+  return 'jobs.store must be false (runs kept in memory) or an object with redis or sqlite';
+}
 
 export const frontMcpBaseSchema = z.object({
   info: serverInfoOptionsSchema,
@@ -756,12 +769,21 @@ export const frontMcpBaseSchema = z.object({
       // it, leaving the documented escape hatch permanently off.
       allowDynamicRegistration: z.boolean().optional(),
       store: z
-        .object({
-          redis: redisOptionsSchema.optional(),
-          sqlite: sqliteOptionsSchema.extend({ path: z.string().min(1) }).optional(),
-          keyPrefix: z.string().optional(),
-        })
-        .refine((store) => !(store.redis && store.sqlite), { message: 'jobs.store takes redis or sqlite, not both' })
+        .union(
+          [
+            z.literal(false),
+            z
+              .object({
+                redis: redisOptionsSchema.optional(),
+                sqlite: sqliteOptionsSchema.extend({ path: z.string().min(1) }).optional(),
+                keyPrefix: z.string().optional(),
+              })
+              .refine((store) => !(store.redis && store.sqlite), {
+                message: 'jobs.store takes redis or sqlite, not both',
+              }),
+          ],
+          { error: jobsStoreError },
+        )
         .optional(),
       defaultTimeoutMs: z
         .number()
@@ -808,6 +830,7 @@ export const frontMcpBaseSchema = z.object({
   tasks: z
     .object({
       enabled: z.boolean().optional(),
+      store: z.literal(false, { error: 'tasks.store must be false (tasks kept in memory)' }).optional(),
       redis: redisOptionsSchema.optional(),
       keyPrefix: z.string().optional(),
       defaultTtlMs: z.number().int().positive().optional(),
@@ -831,6 +854,9 @@ export const frontMcpBaseSchema = z.object({
           args: z.array(z.string()).optional(),
         })
         .optional(),
+    })
+    .refine((tasks) => !(tasks.store === false && (tasks.redis || tasks.sqlite)), {
+      message: 'tasks.store: false keeps tasks in memory, so it takes no tasks.redis or tasks.sqlite',
     })
     .optional(),
 } satisfies RawZodShape<FrontMcpBaseMetadata>);
@@ -992,6 +1018,8 @@ const frontMcpLiteSchema = z.object({
   sqlite: z.any().optional(),
   ui: z.any().optional(),
   jobs: z.any().optional(),
+  // The CLI host keeps tasks in `tasks.sqlite` / `tasks.redis` and runs them with `tasks.runner`
+  tasks: frontMcpBaseSchema.shape.tasks,
   throttle: z.any().optional(),
   health: z.any().optional(),
   metrics: z.any().optional(),
