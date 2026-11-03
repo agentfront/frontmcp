@@ -13,7 +13,8 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { ensureBuild, runCli, getDistDir } from './helpers/exec-cli';
+
+import { ensureBuild, getDistDir, runCli } from './helpers/exec-cli';
 
 describe('CLI Logging', () => {
   let tmpLogDir: string;
@@ -103,6 +104,7 @@ describe('CLI Logging', () => {
       expect(logFiles.length).toBeGreaterThan(0);
       const content = fs.readFileSync(path.join(tmpLogDir, logFiles[0]), 'utf-8');
 
+      // eslint-disable-next-line no-control-regex
       expect(content).not.toMatch(/\x1b\[/);
     });
 
@@ -161,8 +163,8 @@ describe('CLI Skill Asset Copying', () => {
     } catch {
       throw new Error(`Failed to parse CLI stdout as JSON (exitCode=${exitCode}):\n${stdout}`);
     }
-    const skills = (result.skills as unknown[]) || (result as unknown) || [];
-    const greetingSkill = skills.find((s: { name?: string; id?: string }) => (s.name || s.id) === 'greeting-helper');
+    const skills = (result.skills || result) as Array<{ name?: string; id?: string }>;
+    const greetingSkill = skills.find((s) => (s.name || s.id) === 'greeting-helper');
     expect(greetingSkill).toBeDefined();
   });
 });
