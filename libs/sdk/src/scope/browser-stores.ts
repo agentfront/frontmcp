@@ -1,8 +1,9 @@
 import { getMetadata, isClass } from '@frontmcp/di';
-import { getRuntimeContext } from '@frontmcp/utils';
+import type { GuardConfig } from '@frontmcp/guard';
+import { getRuntimeContext, isProduction } from '@frontmcp/utils';
 
 import { initOptionsOf, type PluginStoreInBrowser, type PluginStoreServer } from '../common/dynamic/dynamic.plugin';
-import type { AppType, PluginType } from '../common/interfaces';
+import type { AppType, FrontMcpLogger, PluginType } from '../common/interfaces';
 import { FrontMcpLocalAppTokens } from '../common/tokens';
 import type { RedisOptionsInput } from '../common/types/options/redis';
 import { BrowserStoreUnavailableError, type BrowserRefusedStore } from '../errors';
@@ -27,13 +28,21 @@ export interface BrowserStoreOptions extends StoreOptions {
   redis?: RedisOptionsInput;
   elicitation?: StoreOptions['elicitation'] & { persistent?: unknown };
   jobs?: { enabled?: boolean; store?: JobsStoreConfig | false };
-  throttle?: { enabled?: boolean; storage?: { type?: string } };
+  throttle?: { enabled?: boolean; storage?: GuardStorageOptions };
   auth?: object;
   skillsConfig?: { cache?: { enabled?: boolean; redis?: { provider?: string } } };
   plugins?: readonly PluginType[];
   apps?: readonly AppType[];
   jobTypes?: readonly unknown[];
   workflowTypes?: readonly unknown[];
+}
+
+/** The fields of the guard's `throttle.storage` (a `StorageConfig`) that decide whether a browser can start on it. */
+interface GuardStorageOptions {
+  type?: string;
+  /** `RedisAdapterOptions`, of which only `client` counts here. */
+  redis?: object;
+  fallback?: string;
 }
 
 /** Vercel KV, reached over HTTPS, is the one Redis option that needs no TCP socket. */
@@ -93,13 +102,58 @@ async function jobsStore(options: BrowserStoreOptions): Promise<string | undefin
   return jobsServerStore(jobs?.store, options);
 }
 
-/** The scope builds its guard on `throttle.storage` with throttle on, and with it off for `auth.publicAccess.rateLimit`. */
+/**
+ * The Redis or SQLite a guard on `storage` would open. A Redis client the caller built (`redis: { client }`) opens no
+ * connection of FrontMCP's, so it names none.
+ */
+function guardServerStore(storage: GuardStorageOptions | undefined): string | undefined {
+  const type = storage?.type;
+  const callerClient = (storage?.redis as { client?: unknown } | undefined)?.client;
+  if (type === 'sqlite' || (type === 'redis' && callerClient === undefined)) {
+    return `throttle.storage: { type: '${type}' }`;
+  }
+  return undefined;
+}
+
+/**
+ * Whether the guard starts on per-instance counters when it can't open its store: `fallback: 'memory'`, set or by
+ * default outside production (`createStorage`'s default).
+ */
+function guardFallsBackToMemory(storage: GuardStorageOptions): boolean {
+  return (storage.fallback ?? (isProduction() ? 'error' : 'memory')) === 'memory';
+}
+
+/**
+ * The scope builds its guard on `throttle.storage` with throttle on, and with it off for `auth.publicAccess.rateLimit`.
+ * A store the guard would fall back from to memory is not refused: {@link guardStorageInBrowser} starts it on memory.
+ */
 function rateLimitsStore({ throttle, auth }: BrowserStoreOptions): string | undefined {
   const publicAccess = (auth as { publicAccess?: { rateLimit?: unknown } } | undefined)?.publicAccess;
   // An app's own auth can arrive before its schema defaults `publicAccess.rateLimit` to 60
   const publicRateLimited = publicAccess !== undefined && publicAccess.rateLimit !== 0;
-  const type = throttle?.enabled || publicRateLimited ? throttle?.storage?.type : undefined;
-  return type === 'redis' || type === 'sqlite' ? `throttle.storage: { type: '${type}' }` : undefined;
+  const storage = throttle?.enabled || publicRateLimited ? throttle?.storage : undefined;
+  const store = guardServerStore(storage);
+  return store && storage && !guardFallsBackToMemory(storage) ? store : undefined;
+}
+
+/**
+ * The storage a guard opens. In a browser, a `throttle.storage` on a Redis or SQLite it can't open, with
+ * `fallback: 'memory'` (set, or the default outside production), is memory: the guard starts on per-instance counters
+ * and this logs it, as the guard does when its store can't be reached. Anything else is returned as it is.
+ */
+export function guardStorageInBrowser(
+  storage: GuardConfig['storage'],
+  logger: Pick<FrontMcpLogger, 'warn'>,
+  runtime = getRuntimeContext().runtime,
+): GuardConfig['storage'] {
+  if (runtime !== 'browser' || !storage) return storage;
+  const store = guardServerStore(storage);
+  if (!store || !guardFallsBackToMemory(storage)) return storage;
+  logger.warn(
+    `A browser cannot open Redis or SQLite: rate limits use per-instance counters in place of ${store} ` +
+      "(throttle.storage.fallback: 'memory')",
+  );
+  return { ...storage, type: 'memory' };
 }
 
 /** The backing an `auth` store setting names on Redis or SQLite. */
