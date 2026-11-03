@@ -151,6 +151,8 @@ redis: {
 
 The URL is the base: `host` / `port` / `password` / `db` / `tls` beside it only fill in what the URL leaves out (`{ url: 'redis://cache:6379', password }` adds the password; `tls: true` upgrades a `redis://` URL). A field that contradicts the URL — another host, port, password or db, or `tls: false` with `rediss://` — is a validation error naming the field, never silently dropped. The URL's password may also come from `?password=`; a URL naming only the user (`redis://default@cache`) leaves it out, so a `password` beside it is used. `pubsub`, `throttle.storage.redis` and the job stores' `store.redis` follow the same rule.
 
+A `redis` with neither `host` nor `url`, as when both come from unset variables, fails with `redis needs host or url`, on the server and in the generated CLI, wherever a `redis` option is read (`pubsub`, `jobs.store.redis`, `tasks.redis` and the others too); up to 1.10 the message was `Invalid input`.
+
 The generated CLI (`frontmcp build --target cli`) and the `createTaskStore()` / `createElicitationStore()` factories read every form too, and refuse an unusable one (`TaskStoreNotSupportedError` / `ElicitationNotSupportedError` from the factories) instead of falling back to memory or to `REDIS_URL`. Up to 1.10 they took a `redis` only with a `host` (the CLI when its server config was an object rather than a `@FrontMcp` class), so a `url` there kept the tasks in memory or in the Redis of `REDIS_URL` / `REDIS_HOST`.
 
 ### For Vercel KV
@@ -174,6 +176,8 @@ import { FrontMcp } from '@frontmcp/sdk';
 })
 export default class Server {}
 ```
+
+Jobs can't keep their runs in Vercel KV, since the job stores speak the Redis protocol: a `jobs.store.redis` with `provider: 'vercel-kv'` stops startup with `JobStoreNotSupportedError` (`JOB_STORE_NOT_SUPPORTED`), where up to 1.10 it connected to a Redis on localhost. A top-level Vercel KV `redis` is passed over by the jobs, which keep their runs in the top-level `sqlite`, or in memory.
 
 If you need to pass explicit credentials (e.g., in testing or non-Vercel environments):
 
@@ -395,6 +399,8 @@ throttle: {
 | Vercel KV `401 Unauthorized`                                                                      | Missing or invalid KV tokens in the environment                  | Verify `KV_REST_API_URL` and `KV_REST_API_TOKEN` in the Vercel dashboard and redeploy                         |
 | Sessions lost after container restart                                                             | Redis running without append-only persistence                    | Add `--appendonly yes` to the Redis command in docker-compose or use a managed Redis with persistence enabled |
 | Startup fails with `GuardStorageUnavailableError`                                                 | `throttle.storage` Redis is unreachable; rate limits fail closed | Bring Redis up, or set `throttle.storage.fallback: 'memory'` to start with per-instance counters              |
+| Startup fails with `redis needs host or url`                                                      | Both come from variables that are unset where the server starts  | Set `REDIS_URL` (or `REDIS_HOST`) in that environment                                                         |
+| Startup fails with `JobStoreNotSupportedError`                                                    | `jobs.store.redis` is Vercel KV, which the job stores cannot use | Point `jobs.store.redis` at a Redis server, or use `jobs.store.sqlite` or `jobs.store: false`                 |
 | Clients get 404 for a session they just used (load-balanced)                                      | Instances run with different `MCP_SESSION_SECRET` values         | Set the same `MCP_SESSION_SECRET` on every instance                                                           |
 | A 2026-07-28 tool repeats its first question; log shows `rejected requestState` / `bad-signature` | `VAULT_SECRET`/`JWT_SECRET` unset or different per instance      | Set `VAULT_SECRET` to the same value on every instance                                                        |
 
