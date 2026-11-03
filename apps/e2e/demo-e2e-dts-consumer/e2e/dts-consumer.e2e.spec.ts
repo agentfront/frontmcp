@@ -237,7 +237,7 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types FrontMcpInstance.runShared(), its options and errors, and the shared:identify flow', () => {});
 
-  it('types FrontMcpInstance.runShared(), its options and errors, and the shared:identify and shared:drain flows', () => {
+  it('types FrontMcpInstance.runShared(), its options and errors, BrowserEntryPointUnavailableError, and the shared:identify and shared:drain flows', () => {
     expect(describeEach(inFixtureFile('shared-server-must-compile.ts'))).toEqual([]);
   });
 
