@@ -14,7 +14,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import type { BridgeLogger } from './log';
+import type { BridgeLogger } from '@frontmcp/utils';
 
 export interface DevWatcherOptions {
   /** Directory to watch (typically the entry's parent). */

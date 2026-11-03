@@ -676,3 +676,16 @@ export type {
   FrontMcpCredentials,
   FrontMcpFetchInit,
 } from './fetch';
+
+// ============================================
+// Shared Local Server Identity Module
+// ============================================
+export {
+  createSharedServerNonce,
+  createSharedServerSecret,
+  deriveSharedServerKeys,
+  isSharedServerNonce,
+  proveSharedServerIdentity,
+  verifySharedServerIdentity,
+} from './shared-server';
+export type { SharedServerKeys } from './shared-server';

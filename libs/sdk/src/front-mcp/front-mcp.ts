@@ -23,6 +23,7 @@ import ProviderRegistry from '../provider/provider.registry';
 import { type Scope } from '../scope/scope.instance';
 import { ScopeRegistry } from '../scope/scope.registry';
 import { type FrontMcpServerInstance } from '../server/server.instance';
+import type { SharedServerOptions } from '../shared/shared-server.options';
 import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../task/task-scope.helper';
 import { createMcpServer } from '../transport/mcp-server.factory';
@@ -35,6 +36,7 @@ import {
   STDIO_DRAIN_MS,
   STDIO_SHUTDOWN_DEADLINE_MS,
 } from './shutdown-signals';
+import { redirectConsoleToStderr } from './stdio-console';
 
 /**
  * A `@FrontMcp`-decorated server class, or the raw config object it wraps.
@@ -789,19 +791,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // Redirect all stdout-bound console methods to stderr BEFORE anything
     // else runs — this catches direct console.log() calls in SDK code,
     // plugins, adapters, and third-party dependencies.
-    const { Console } = require('node:console');
-    const stderrConsole = new Console({ stdout: process.stderr, stderr: process.stderr });
-    console.log = stderrConsole.log.bind(stderrConsole);
-    console.info = stderrConsole.info.bind(stderrConsole);
-    console.debug = stderrConsole.debug.bind(stderrConsole);
-    console.dir = stderrConsole.dir.bind(stderrConsole);
-    console.table = stderrConsole.table.bind(stderrConsole);
-    console.time = stderrConsole.time.bind(stderrConsole);
-    console.timeLog = stderrConsole.timeLog.bind(stderrConsole);
-    console.group = stderrConsole.group.bind(stderrConsole);
-    console.groupEnd = stderrConsole.groupEnd.bind(stderrConsole);
-    console.count = stderrConsole.count.bind(stderrConsole);
-    // console.warn and console.error already go to stderr — leave them.
+    redirectConsoleToStderr();
 
     // Mark stdio mode so any @FrontMcp decorator imported from here on serves
     // over stdio rather than binding an HTTP port (#451). Guard against a
@@ -1005,5 +995,24 @@ export class FrontMcpInstance implements FrontMcpInterface {
         stdioServing = false;
       }
     }
+  }
+
+  /**
+   * Runs a stdio session of the shared local server `key`: the sessions of a key on this machine share one server
+   * process, which the first of them starts by running this entry again, detached. Needs `@frontmcp/storage-sqlite`.
+   *
+   * @example
+   * ```typescript
+   * import { FrontMcpInstance } from '@frontmcp/sdk';
+   * import { serverConfig } from './server-config';
+   *
+   * FrontMcpInstance.runShared(serverConfig, { key: 'my-server' });
+   * ```
+   */
+  public static async runShared(optionsOrClass: ConfigOrServerClass, shared: SharedServerOptions): Promise<void> {
+    if (isSchemaExtraction()) return;
+    const options = resolveConfigInput(optionsOrClass);
+    const { runShared } = await import('../shared/index.js');
+    await runShared(options, shared, (config) => new FrontMcpInstance(config));
   }
 }

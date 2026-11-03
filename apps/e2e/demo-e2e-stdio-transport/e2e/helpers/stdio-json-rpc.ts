@@ -41,17 +41,21 @@ export class StdioJsonRpcProcess {
     return new StdioJsonRpcProcess(child);
   }
 
+  get pid(): number | undefined {
+    return this.child.pid;
+  }
+
   send(message: JsonRpcMessage): void {
     this.child.stdin.write(`${JSON.stringify(message)}\n`);
   }
 
-  async request(message: JsonRpcMessage): Promise<JsonRpcMessage> {
+  async request(message: JsonRpcMessage, timeoutMs = RESPONSE_TIMEOUT_MS): Promise<JsonRpcMessage> {
     this.send(message);
-    return this.waitFor((received) => received.id === message.id && (!!received.result || !!received.error));
+    return this.waitFor((received) => received.id === message.id && (!!received.result || !!received.error), timeoutMs);
   }
 
-  async waitFor(match: (message: JsonRpcMessage) => boolean): Promise<JsonRpcMessage> {
-    const deadline = Date.now() + RESPONSE_TIMEOUT_MS;
+  async waitFor(match: (message: JsonRpcMessage) => boolean, timeoutMs = RESPONSE_TIMEOUT_MS): Promise<JsonRpcMessage> {
+    const deadline = Date.now() + timeoutMs;
     for (;;) {
       const found = this.received.find(match);
       if (found) return found;

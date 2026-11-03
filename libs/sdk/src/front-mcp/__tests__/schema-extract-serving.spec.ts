@@ -54,4 +54,15 @@ describe('serving while a build loads the entry for its metadata (FRONTMCP_SCHEM
     expect(console.log).toBe(log);
     expect(listen).not.toHaveBeenCalled();
   });
+
+  it('runShared() starts, attaches to and imports nothing', async () => {
+    const listen = jest.spyOn(net.Server.prototype, 'listen');
+    const readStdin = jest.spyOn(process.stdin, 'on');
+    process.env['FRONTMCP_SCHEMA_EXTRACT'] = '1';
+
+    await expect(FrontMcpInstance.runShared(config, { key: 'extract-serving' })).resolves.toBeUndefined();
+
+    expect(listen).not.toHaveBeenCalled();
+    expect(readStdin).not.toHaveBeenCalled();
+  });
 });

@@ -16,8 +16,8 @@
  */
 
 import { DEV_BUFFER_FULL, DEV_RELOAD_DEADLINE, DEV_SERVER_UNREACHABLE, makeDevError } from './errors';
-import type { BridgeLogger } from './log';
 import type { JsonRpcFrame } from './stdio-framer';
+import type { BridgeLogger } from './types';
 
 export type BridgeState = 'Idle' | 'Booting' | 'Ready' | 'Reloading' | 'Degraded' | 'Stopping';
 

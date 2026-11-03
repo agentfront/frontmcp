@@ -219,6 +219,14 @@ export { InvalidDecoratorMetadataError, HookTargetNotDefinedError } from './deco
 // Export duty errors
 export { DutyNameConflictError, UnsafeDutyStoreError } from './duty.errors';
 
+// Export shared local server errors
+export {
+  InvalidSharedServerOptionsError,
+  SharedServerIdentityError,
+  SharedServerStartError,
+  UnsafeSharedServerDirectoryError,
+} from './shared-server.errors';
+
 // Export transport errors
 export {
   MethodNotImplementedError,
