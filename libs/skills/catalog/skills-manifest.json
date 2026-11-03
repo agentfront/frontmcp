@@ -1843,7 +1843,7 @@
         },
         {
           "name": "create-job",
-          "description": "Create long-running background jobs with retry policies, progress tracking, and permissions",
+          "description": "Create long-running background jobs with retry policies, timeouts, cancellation, cleanup, progress tracking, and permissions",
           "examples": [
             {
               "name": "basic-report-job",
@@ -1854,6 +1854,19 @@
                 "Defining a job with `@Job` decorator including `inputSchema`, `outputSchema`, and `timeout`",
                 "Reporting progress at each stage using `this.progress(pct, total, message)`",
                 "Using `this.log()` for persistent, queryable log entries"
+              ]
+            },
+            {
+              "name": "durable-build-job",
+              "description": "A build job on a SQLite store with a timeout, a cleanup, admission limits, cancel and a subscribed run handle.",
+              "level": "advanced",
+              "tags": ["development", "job", "sqlite", "cancel", "timeout"],
+              "features": [
+                "Keeping runs in a SQLite file with `jobs.store.sqlite`, shared by the processes on one machine",
+                "A per-attempt `timeout`, and `@Job({ cleanup })` that runs on a timeout, a cancel or a shutdown",
+                "Passing `this.signal` to the work so a timeout or cancel stops it",
+                "`jobs.admission` with `concurrency`, `memoryMb` and `maxWaitMs`",
+                "Cancelling with `cancel_job`, and following progress on `job://runs/{runId}`"
               ]
             },
             {

@@ -35,3 +35,76 @@ export class DynamicJobRegistrationDisabledError extends PublicMcpError {
     );
   }
 }
+
+/** An attempt of a job ran past its `timeout` (or `jobs.defaultTimeoutMs`); a run whose last attempt did is `timed_out`. */
+export class JobTimeoutError extends PublicMcpError {
+  constructor(jobName: string, timeoutMs: number) {
+    super(`Job "${jobName}" timed out after ${timeoutMs} ms`, 'JOB_TIMEOUT', 504);
+  }
+}
+
+/** The run was cancelled with `cancel_job`; the run is `cancelled`. */
+export class JobCancelledError extends PublicMcpError {
+  constructor(runId: string) {
+    super(`Run "${runId}" was cancelled`, 'JOB_CANCELLED', 409);
+  }
+}
+
+/** The server shut down while the run was active; the run is `interrupted`. */
+export class JobInterruptedError extends PublicMcpError {
+  constructor(runId: string) {
+    super(`Run "${runId}" was interrupted: the server shut down`, 'JOB_INTERRUPTED', 503);
+  }
+}
+
+/** An attempt waited `jobs.admission.maxWaitMs` for a slot and was not admitted. */
+export class JobAdmissionTimeoutError extends PublicMcpError {
+  constructor(jobName: string, maxWaitMs: number, waitedFor: string) {
+    super(
+      `Job "${jobName}" waited ${maxWaitMs} ms to start and was not admitted: ${waitedFor}`,
+      'JOB_ADMISSION_TIMEOUT',
+      503,
+      undefined,
+      {
+        say: 'Retry once fewer job runs are active, or ask the operator to raise jobs.admission',
+      },
+    );
+  }
+}
+
+/** No run with this id, or one the caller may not see: both read the same, so run ids cannot be probed. */
+export class JobRunNotFoundError extends PublicMcpError {
+  constructor(runId: string) {
+    super(`Run "${runId}" not found`, 'JOB_RUN_NOT_FOUND', 404, undefined, {
+      say: 'Use a runId that execute_job returned to you',
+    });
+  }
+}
+
+/** The run already ended, so there is nothing to cancel. */
+export class JobRunFinishedError extends PublicMcpError {
+  constructor(runId: string, state: string) {
+    super(`Run "${runId}" already finished as ${state}`, 'JOB_RUN_FINISHED', 409, undefined, {
+      say: 'Read its outcome instead',
+      tool: 'get_job_status',
+      args: { runId },
+    });
+  }
+}
+
+/** `cancel_job` cancels job runs; a workflow run runs until it finishes. */
+export class JobRunNotCancellableError extends PublicMcpError {
+  constructor(runId: string) {
+    super(
+      `Run "${runId}" is a workflow run, which cancel_job does not cancel`,
+      'JOB_RUN_NOT_CANCELLABLE',
+      409,
+      undefined,
+      {
+        say: 'Wait for the workflow run to finish',
+        tool: 'get_workflow_status',
+        args: { runId },
+      },
+    );
+  }
+}

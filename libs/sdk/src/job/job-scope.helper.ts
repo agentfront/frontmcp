@@ -1,11 +1,13 @@
 import { type Token } from '@frontmcp/di';
+import { type SqliteAdapterOptions } from '@frontmcp/utils';
 
 import {
   completionEventsOf,
   completionOutputText,
   type ScopeCompletionEvents,
 } from '../channel/sources/completion-events';
-import { type EntryOwnerRef } from '../common';
+import { type JobCompletionEvent } from '../channel/sources/job-completion.source';
+import { type EntryOwnerRef, type RedisOptionsInput } from '../common';
 import { type JobType } from '../common/interfaces/job.interface';
 import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
@@ -19,11 +21,14 @@ import RemoveWorkflowTool from '../workflow/tools/remove-workflow.tool';
 import WorkflowRegistry, { type WorkflowRegistryInterface } from '../workflow/workflow.registry';
 import { JobExecutionManager } from './execution/job-execution.manager';
 import ExecuteJobFlow from './flows/execute-job.flow';
+import { JobAdmission, type JobAdmissionOptions } from './job-admission';
 import JobRegistry, { type JobRegistryInterface } from './job.registry';
-import { createJobDefinitionStore, type JobDefinitionStoreOptions } from './store/job-definition-store.factory';
+import { JobRunResource } from './resources/job-run.resource';
+import { createJobDefinitionStore } from './store/job-definition-store.factory';
 import { type JobDefinitionStore } from './store/job-definition.interface';
-import { createJobStateStore, type JobStateStoreOptions } from './store/job-state-store.factory';
+import { createJobStateStore } from './store/job-state-store.factory';
 import { type JobStateStore, type WorkflowRunRecord } from './store/job-state.interface';
+import CancelJobTool from './tools/cancel-job.tool';
 import ExecuteJobTool from './tools/execute-job.tool';
 import GetJobStatusTool from './tools/get-job-status.tool';
 // Import tools
@@ -45,16 +50,42 @@ export interface JobsConfig {
    * @default false
    */
   allowDynamicRegistration?: boolean;
-  store?: {
-    redis?: {
-      provider: string;
-      host?: string;
-      port?: number;
-      url?: string;
-      [key: string]: unknown;
-    };
-    keyPrefix?: string;
-  };
+  /** Where runs and dynamic definitions are kept; unset, the top-level `redis` or `sqlite` (see {@link resolveJobsStore}). */
+  store?: JobsStoreConfig;
+  /** How long an attempt of a job that sets no `timeout` may run, in ms; 0 for no limit. @default 300000 */
+  defaultTimeoutMs?: number;
+  /** When job attempts may start: at most `concurrency` at once, each claiming `memoryMb`, waiting up to `maxWaitMs`. */
+  admission?: JobAdmissionOptions;
+}
+
+/** `jobs.store`: Redis, or a SQLite file the processes on one machine share; memory when neither is set. */
+export interface JobsStoreConfig {
+  redis?: RedisOptionsInput;
+  sqlite?: SqliteAdapterOptions;
+  keyPrefix?: string;
+}
+
+/** How often an active run reads a shared store for a cancel another process wrote. */
+const CANCEL_POLL_MS = 1_000;
+
+/**
+ * The store jobs use: `jobs.store` when it names a backend, else the server's top-level `redis` (unless it
+ * is Vercel KV, which has no key listing) with keys under its `keyPrefix` + `jobs:`, else its top-level
+ * `sqlite`, else memory (undefined).
+ */
+export function resolveJobsStore(
+  store: JobsStoreConfig | undefined,
+  topLevel: { redis?: RedisOptionsInput; sqlite?: SqliteAdapterOptions },
+): JobsStoreConfig | undefined {
+  if (store?.redis || store?.sqlite) return store;
+  const redis = topLevel.redis;
+  const vercelKv = redis !== undefined && 'provider' in redis && redis.provider === 'vercel-kv';
+  if (redis && !vercelKv) {
+    const keyPrefix = store?.keyPrefix ?? (redis.keyPrefix === undefined ? undefined : `${redis.keyPrefix}jobs:`);
+    return { ...store, redis, ...(keyPrefix === undefined ? {} : { keyPrefix }) };
+  }
+  if (topLevel.sqlite) return { ...store, sqlite: topLevel.sqlite };
+  return store;
 }
 
 export interface RegisterJobCapabilitiesArgs {
@@ -91,20 +122,16 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
   await flowRegistry.registryFlows([ExecuteJobFlow]);
 
   // 1. Create stores
-  const storeOpts: JobStateStoreOptions = {
-    redis: jobsConfig.store?.redis,
-    keyPrefix: jobsConfig.store?.keyPrefix ?? 'mcp:jobs:',
-  };
+  const { redis, sqlite } = jobsConfig.store ?? {};
+  const keyPrefix = jobsConfig.store?.keyPrefix ?? 'mcp:jobs:';
 
-  const { store: stateStore, type: stateStoreType } = createJobStateStore(storeOpts, logger);
+  const { store: stateStore, type: stateStoreType } = await createJobStateStore({ redis, sqlite, keyPrefix }, logger);
   logger.info(`Job state store: ${stateStoreType}`);
 
-  const defOpts: JobDefinitionStoreOptions = {
-    redis: jobsConfig.store?.redis,
-    keyPrefix: (jobsConfig.store?.keyPrefix ?? 'mcp:jobs:') + 'def:',
-  };
-
-  const { store: definitionStore, type: defStoreType } = createJobDefinitionStore(defOpts, logger);
+  const { store: definitionStore, type: defStoreType } = await createJobDefinitionStore(
+    { redis, sqlite, keyPrefix: keyPrefix + 'def:' },
+    logger,
+  );
   logger.info(`Job definition store: ${defStoreType}`);
 
   // 2. Load dynamic definitions
@@ -140,7 +167,20 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
       await publishJobCompletion(data, stateStore, completions);
     },
     scope,
+    {
+      defaultTimeoutMs: jobsConfig.defaultTimeoutMs,
+      admission: jobsConfig.admission ? new JobAdmission(jobsConfig.admission) : undefined,
+      // A store other processes share can carry a cancel this process must notice
+      cancelPollMs: stateStoreType === 'memory' ? undefined : CANCEL_POLL_MS,
+    },
   );
+  // At shutdown the runs left are interrupted (their cleanup runs) before the stores close
+  scope.onDispose(async () => {
+    await executionManager.dispose(providers.shutdownHookTimeoutMs);
+    await stateStore.dispose();
+    await definitionStore.dispose();
+  });
+  scope.resources.registerDynamicResource(JobRunResource);
 
   // 5. Collect management tools. The dynamic-registration pair is omitted
   // unless the operator opted in — an unregistered tool cannot be called at
@@ -150,6 +190,7 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     ListJobsTool,
     ExecuteJobTool,
     GetJobStatusTool,
+    CancelJobTool,
     RemoveJobTool,
     ListWorkflowsTool,
     ExecuteWorkflowTool,
@@ -179,7 +220,7 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
 }
 
 /**
- * Publish a finished job or workflow run (a `completed` or `failed` status notification) as a job
+ * Publish a finished job or workflow run (the status notification of a run that ended) as a job
  * completion, read from its run record. The event names the session that ran it, if any.
  */
 async function publishJobCompletion(
@@ -189,7 +230,8 @@ async function publishJobCompletion(
 ): Promise<void> {
   const { type, state, runId } = data;
   if (type !== 'job:status' && type !== 'workflow:status') return;
-  if ((state !== 'completed' && state !== 'failed') || typeof runId !== 'string') return;
+  const status = completionStatusOf(state);
+  if (!status || typeof runId !== 'string') return;
 
   const run = await stateStore.getRun(runId);
   if (!run) return;
@@ -197,10 +239,27 @@ async function publishJobCompletion(
   completions.jobs.emit({
     jobName: workflowName ?? run.jobName,
     jobId: run.jobId,
-    status: state === 'completed' ? 'success' : 'error',
+    status,
     ...(run.completedAt !== undefined ? { durationMs: run.completedAt - run.startedAt } : {}),
-    ...(state === 'completed' ? { output: completionOutputText(run.result) } : { error: run.error?.message }),
+    ...(status === 'success' ? { output: completionOutputText(run.result) } : { error: run.error?.message }),
     attempt: run.attempt,
     ...(run.sessionId ? { sessionId: run.sessionId } : {}),
   });
+}
+
+/** How a run that ended in `state` reads as a job completion; undefined while it has not ended. */
+function completionStatusOf(state: unknown): JobCompletionEvent['status'] | undefined {
+  switch (state) {
+    case 'completed':
+      return 'success';
+    case 'failed':
+    case 'interrupted':
+      return 'error';
+    case 'timed_out':
+      return 'timeout';
+    case 'cancelled':
+      return 'cancelled';
+    default:
+      return undefined;
+  }
 }

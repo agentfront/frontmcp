@@ -183,7 +183,7 @@ export type { SqliteStorageProviderOptions } from './storage/sqlite-storage.prov
 export type { OffloadCallOptions, OffloadFunction, OffloadModuleRef } from './offload/offload.types';
 
 // Job exports - saved, discoverable, triggerable executions
-export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter } from './job';
+export { JobRegistry, JobInstance, JobPermissionGuard, JobExecutionManager, JobEmitter, JobRunResource } from './job';
 export type {
   JobRegistryInterface,
   IndexedJob,
@@ -194,13 +194,31 @@ export type {
   ExecuteWorkflowOptions,
   InlineJobResult,
   BackgroundJobResult,
+  JobExecutionManagerOptions,
+  JobAdmissionOptions,
+  JobsConfig,
+  JobsStoreConfig,
 } from './job';
-export type { JobStateStore, JobRunRecord, WorkflowRunRecord, JobExecutionState, JobDefinitionStore } from './job';
+export type {
+  JobStateStore,
+  JobRunRecord,
+  WorkflowRunRecord,
+  JobExecutionState,
+  JobRunProgress,
+  JobDefinitionStore,
+} from './job';
 
 // Job-management tool classes (issue #408 — opt-in manual registration via
 // @App({ tools: [...] }) when finer-grained control than auto-registration
 // is needed, e.g. to omit register_job / remove_job in production).
-export { ExecuteJobTool, GetJobStatusTool, ListJobsTool, RegisterJobTool, RemoveJobTool } from './job/tools';
+export {
+  ExecuteJobTool,
+  GetJobStatusTool,
+  CancelJobTool,
+  ListJobsTool,
+  RegisterJobTool,
+  RemoveJobTool,
+} from './job/tools';
 
 // Workflow exports - managed multi-step job pipelines
 export { WorkflowRegistry, WorkflowInstance, WorkflowEngine, WorkflowStepExecutor, WorkflowEmitter } from './workflow';
