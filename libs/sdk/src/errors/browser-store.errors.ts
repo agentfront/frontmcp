@@ -14,7 +14,8 @@ function refusal(
   [store, option]: readonly [BrowserRefusedStore, string],
   pluginMemory: Readonly<Record<string, string>>,
 ): string {
-  const { what, memory } = STORES[store] ?? { what: store, memory: pluginMemory[store] };
+  const sdkStore = Object.hasOwn(pluginMemory, store) ? undefined : STORES[store];
+  const { what, memory } = sdkStore ?? { what: store, memory: pluginMemory[store] };
   if (option === 'redis' || option === 'sqlite') {
     return `${what} would use the top-level ${option} (set ${memory} for memory, or leave ${option} out of the browser build)`;
   }

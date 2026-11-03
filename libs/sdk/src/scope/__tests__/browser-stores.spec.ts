@@ -108,6 +108,12 @@ describe('refusePluginStoreInBrowser', () => {
     );
   });
 
+  it("names the plugin's memory option for a plugin named like one of the SDK's stores", () => {
+    expect(() => refusePluginStoreInBrowser({ ...cacheOnRedis, plugin: 'jobs' }, 'browser')).toThrow(
+      "jobs would use type: 'global-store' (set type: 'memory' in place of type: 'global-store')",
+    );
+  });
+
   it('lets a browser start a plugin store that opens neither', () => {
     expect(() => refusePluginStoreInBrowser({ ...cacheOnRedis, option: undefined }, 'browser')).not.toThrow();
   });
