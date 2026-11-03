@@ -64,6 +64,20 @@ describe('job store factories with Redis', () => {
     expect(quit).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ['state', createJobStateStore],
+    ['definition', createJobDefinitionStore],
+  ])('refuses a Vercel KV redis for the %s store instead of connecting to localhost', async (_store, create) => {
+    await expect(create({ redis: { provider: 'vercel-kv' } })).rejects.toThrow(
+      expect.objectContaining({
+        name: 'JobStoreNotSupportedError',
+        code: 'JOB_STORE_NOT_SUPPORTED',
+        message: expect.stringContaining('Vercel KV is not supported for job stores'),
+      }),
+    );
+    expect(createRedisClient).not.toHaveBeenCalled();
+  });
+
   it('still falls back to memory when the client cannot be created', async () => {
     createRedisClient.mockImplementation(() => {
       throw new Error('ioredis is required for Redis storage adapter');

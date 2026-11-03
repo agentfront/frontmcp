@@ -1,4 +1,4 @@
-import { PublicMcpError } from './mcp.error';
+import { InternalMcpError, PublicMcpError } from './mcp.error';
 
 /**
  * The caller may not perform this action on the job or workflow
@@ -125,5 +125,13 @@ export class JobRunNotCancellableError extends PublicMcpError {
         args: { runId },
       },
     );
+  }
+}
+
+/** `jobs.store.redis` names a backend the job stores cannot open, such as Vercel KV; the server refuses to start. */
+export class JobStoreNotSupportedError extends InternalMcpError {
+  constructor(message: string) {
+    super(message, 'JOB_STORE_NOT_SUPPORTED');
+    this.name = 'JobStoreNotSupportedError';
   }
 }
