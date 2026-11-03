@@ -254,13 +254,33 @@ describe('refuseStoresInBrowser', () => {
     ).toBeUndefined();
   });
 
+  it("lists the secure store a local auth keeps on Redis or SQLite, naming auth.secureStore: 'memory'", async () => {
+    const error = await refusal({
+      tasks: { store: false },
+      auth: { mode: 'local', tokenStorage: { sqlite }, secureStore: { redis: { host: '127.0.0.1' } } },
+    });
+
+    expect(error).toMatchObject({
+      stores: [
+        ['authTokens', 'auth.tokenStorage.sqlite'],
+        ['secureStore', 'auth.secureStore.redis'],
+      ],
+    });
+    expect((error as Error).message).toContain(
+      "the secure store would use auth.secureStore.redis (set auth.secureStore: 'memory' in place of auth.secureStore.redis)",
+    );
+    expect(await refusal({ tasks: { store: false }, auth: { mode: 'local', secureStore: { sqlite } } })).toMatchObject({
+      stores: [['secureStore', 'auth.secureStore.sqlite']],
+    });
+  });
+
   it('lets a browser start with memory stores, Vercel KV and stores that are off', async () => {
     expect(
       await refusal({
         redis: vercelKv,
         plugins: [KvPlugin.init({ type: 'memory' }), KvPlugin],
         throttle: { enabled: false, storage: { type: 'redis' } },
-        auth: { mode: 'local', tokenStorage: 'memory' },
+        auth: { mode: 'local', tokenStorage: 'memory', secureStore: { sqlite: undefined, scope: 'session' } },
         skillsConfig: { cache: { enabled: true, redis: { provider: 'vercel-kv' } } },
         elicitation: { enabled: true, persistent: { storage: { type: 'memory' } } },
       }),

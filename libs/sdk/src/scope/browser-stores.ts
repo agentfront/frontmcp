@@ -98,11 +98,13 @@ function rateLimitsStore({ throttle }: BrowserStoreOptions): string | undefined 
   return type === 'redis' || type === 'sqlite' ? `throttle.storage: { type: '${type}' }` : undefined;
 }
 
-function authTokensStore({ auth }: BrowserStoreOptions): string | undefined {
-  const tokenStorage: unknown = auth && 'tokenStorage' in auth ? auth.tokenStorage : undefined;
-  if (typeof tokenStorage !== 'object' || tokenStorage === null) return undefined;
-  if ('redis' in tokenStorage) return 'auth.tokenStorage.redis';
-  return 'sqlite' in tokenStorage ? 'auth.tokenStorage.sqlite' : undefined;
+/** The backing an `auth` store setting names on Redis or SQLite. */
+function authStore({ auth }: BrowserStoreOptions, setting: 'tokenStorage' | 'secureStore'): string | undefined {
+  const value: unknown = auth && setting in auth ? (auth as Record<string, unknown>)[setting] : undefined;
+  if (typeof value !== 'object' || value === null) return undefined;
+  const { redis, sqlite } = value as { redis?: unknown; sqlite?: unknown };
+  if (redis !== undefined) return `auth.${setting}.redis`;
+  return sqlite !== undefined ? `auth.${setting}.sqlite` : undefined;
 }
 
 function skillsCacheStore({ skillsConfig }: BrowserStoreOptions): string | undefined {
@@ -170,7 +172,8 @@ export async function refuseStoresInBrowser(
       ['questions', await questionsStore(options)],
       ['jobs', await jobsStore(options)],
       ['rateLimits', rateLimitsStore(options)],
-      ['authTokens', authTokensStore(options)],
+      ['authTokens', authStore(options, 'tokenStorage')],
+      ['secureStore', authStore(options, 'secureStore')],
       ['skillsCache', skillsCacheStore(options)],
     ],
     plugins,

@@ -127,6 +127,19 @@ describe('stores in the browser build of create()', () => {
     expect(onVercelKv.error).toBeUndefined();
   });
 
+  it('refuses a secure store that a local auth keeps on SQLite', async () => {
+    const startup = await start({
+      tasks: { store: false },
+      auth: { mode: 'local', secureStore: { sqlite: { path: join(sqliteDir, 'secrets.sqlite') } } },
+    });
+
+    expect(startup.error).toMatchObject({ code: 'BROWSER_STORE_UNAVAILABLE' });
+    expect(startup.error?.message).toContain(
+      "the secure store would use auth.secureStore.sqlite (set auth.secureStore: 'memory' in place of auth.secureStore.sqlite)",
+    );
+    await expectNoStoreOpened();
+  });
+
   it('starts in memory with store: false while the config keeps the top-level redis and sqlite', async () => {
     const startup = await start({
       redis,

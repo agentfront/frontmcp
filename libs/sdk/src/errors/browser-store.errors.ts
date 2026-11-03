@@ -7,6 +7,7 @@ const STORES = {
   jobs: { what: 'jobs', memory: 'jobs.store: false' },
   rateLimits: { what: 'rate limits', memory: "throttle.storage: { type: 'memory' }" },
   authTokens: { what: 'auth tokens', memory: "auth.tokenStorage: 'memory'" },
+  secureStore: { what: 'the secure store', memory: "auth.secureStore: 'memory'" },
   skillsCache: { what: 'the skills HTTP cache', memory: 'a skillsConfig.cache without redis' },
   resourceStore: { what: 'a resource store', memory: "storage: { type: 'memory' }" },
   sqliteStorage: { what: 'a storage provider', memory: 'a provider of createMemoryStorage()' },
