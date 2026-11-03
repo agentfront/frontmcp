@@ -102,6 +102,12 @@ describe('stores in a browser, at startup', () => {
     expect(openedStores).toEqual([]);
   });
 
+  it('starts a plugin given as a hand-written value record, whose options are not recorded', async () => {
+    await start({ tasks: { store: false }, plugins: [{ provide: KvPlugin, useValue: new KvPlugin() }] });
+
+    expect(openedStores).toEqual([]);
+  });
+
   it('starts a plugin on memory with the top-level redis left in the config', async () => {
     await start({ redis, tasks: { store: false }, plugins: [KvPlugin.init({ type: 'memory' })] });
 

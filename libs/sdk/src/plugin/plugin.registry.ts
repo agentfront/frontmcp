@@ -406,8 +406,9 @@ export default class PluginRegistry
         // registry, not to whichever installed the record last (#647). A hand-written value record
         // names its instance, so it stays that instance everywhere.
         const value = rec.useValue as PluginInstance;
-        this.refuseStoresInBrowser(rec.provide, initOptionsOf(value)?.options);
-        const init = installedPluginValues.has(value) ? initOptionsOf(value) : undefined;
+        const recorded = initOptionsOf(value);
+        if (recorded) this.refuseStoresInBrowser(rec.provide, recorded.options);
+        const init = installedPluginValues.has(value) ? recorded : undefined;
         installedPluginValues.add(value);
         if (init && isDynamicPluginClass(rec.provide)) {
           return {
