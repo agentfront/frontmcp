@@ -9,6 +9,7 @@ import {
   FRONTMCP_CONTEXT,
   Plugin,
   ProviderScope,
+  refusePluginStoreInBrowser,
   ScopeEntry,
   type FrontMcpContext,
   type ProviderType,
@@ -105,6 +106,16 @@ export interface ApprovalPluginOptions {
   cleanupIntervalSeconds?: number;
 }
 
+/** In a browser, refuse a `storage` on Redis or SQLite before it opens (#1033). */
+function refuseRedisOrSqliteInBrowser({ storage, storageInstance }: ApprovalPluginOptions): void {
+  const type = storageInstance ? undefined : storage?.type;
+  refusePluginStoreInBrowser({
+    plugin: 'ApprovalPlugin',
+    option: type === 'redis' || type === 'sqlite' ? `storage: { type: '${type}' }` : undefined,
+    memory: "storage: { type: 'memory' }",
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ApprovalPlugin
 // ─────────────────────────────────────────────────────────────────────────────
@@ -184,6 +195,7 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
       ...ApprovalPlugin.defaultOptions,
       ...options,
     };
+    refuseRedisOrSqliteInBrowser(config);
 
     // ─────────────────────────────────────────────────────────────────────────
     // Approval Store

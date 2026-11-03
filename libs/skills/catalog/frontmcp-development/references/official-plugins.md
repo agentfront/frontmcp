@@ -286,6 +286,11 @@ class GlobalStoreServer {}
 - `vercel-kv` -- Vercel KV (Redis-compatible). Uses `@vercel/kv` package.
 - `global-store` -- Reuses the Redis connection from `@FrontMcp({ redis: {...} })`.
 
+A browser build (`create()` in a web page, WebMCP) has no TCP socket for Redis. There `redis` and `redis-client` throw
+`BrowserStoreUnavailableError` (`BROWSER_STORE_UNAVAILABLE`) from `init()`, and `global-store` on a Redis `redis` throws
+it when the server starts, before anything connects; the message names `type: 'memory'`. Vercel KV, over HTTPS, is
+allowed. Up to 1.10 the plugin opened the Redis client anyway, and its calls failed.
+
 Every type takes `defaultTTL`, in seconds: an entry stored without its own `ttl` expires that long after it is written.
 Up to 1.9.0 the memory and Redis stores (`global-store` on Redis included) ignored it, so those entries never expired;
 entries written before the upgrade keep no expiry until they are written again. It must be a whole number of seconds; `0` means no default expiry, and a negative or fractional value fails startup with `RememberConfigurationError`.
@@ -469,6 +474,10 @@ class WebhookServer {}
 to `plugins`; listing it as well is harmless and the check still runs once per call. Require
 1.8.1 or later: in 1.8.0 and earlier `ApprovalPlugin.init()` registered no check at all, so
 tools marked `approval` ran unapproved.
+
+In a browser build, `storage: { type: 'redis' }` or `{ type: 'sqlite' }` throws `BrowserStoreUnavailableError` from
+`init()`, naming `storage: { type: 'memory' }` (a `storageInstance` wins over `storage`). `{ type: 'auto' }` picks
+memory in a page.
 
 ### Modes
 
@@ -704,6 +713,10 @@ class GlobalCacheServer {}
 - `redis` -- Dedicated Redis connection with native TTL support. Plugin manages the client.
 - `redis-client` -- Bring your own ioredis client instance.
 - `global-store` -- Reuses the Redis connection from `@FrontMcp({ redis: {...} })`.
+
+In a browser build these refuse Redis as RememberPlugin's do: `redis` and `redis-client` throw
+`BrowserStoreUnavailableError` from `init()`, and `global-store` on a Redis `redis` when the server starts, naming
+`type: 'memory'`.
 
 ### Per-Tool Cache Metadata
 

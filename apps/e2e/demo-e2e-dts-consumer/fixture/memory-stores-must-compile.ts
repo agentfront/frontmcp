@@ -1,6 +1,12 @@
 import 'reflect-metadata';
 
-import { App, BrowserStoreUnavailableError, FrontMcp, type BrowserRefusedStore } from '@frontmcp/sdk';
+import {
+  App,
+  BrowserStoreUnavailableError,
+  FrontMcp,
+  refusePluginStoreInBrowser,
+  type BrowserRefusedStore,
+} from '@frontmcp/sdk';
 
 @App({ name: 'memory-stores' })
 class MemoryStoresApp {}
@@ -18,6 +24,12 @@ export class MemoryStoresServer {}
 
 export function refusedStores(error: unknown): BrowserRefusedStore[] {
   return error instanceof BrowserStoreUnavailableError ? error.stores.map(([store]) => store) : [];
+}
+
+export function refuseCacheOnRedisInBrowser(): void {
+  refusePluginStoreInBrowser({ plugin: 'CachePlugin', option: "type: 'redis'", memory: "type: 'memory'" });
+  // @ts-expect-error a plugin store names the option that keeps it in memory
+  refusePluginStoreInBrowser({ plugin: 'CachePlugin', option: "type: 'redis'" });
 }
 
 @FrontMcp({
