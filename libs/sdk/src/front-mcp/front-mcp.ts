@@ -91,7 +91,7 @@ async function loadFileLogTransport(): Promise<typeof FileLogTransportInstance> 
 
 /** A CLI-mode config: console only with `FRONTMCP_CLI_VERBOSE=1`, and the `~/.frontmcp/logs/` file with `fileLog`. */
 async function parseCliConfig(
-  options: FrontMcpConfigInput,
+  options: FrontMcpConfigInput | FrontMcpConfigType,
   { fileLog }: { fileLog: boolean },
 ): Promise<FrontMcpConfigType> {
   const parsedConfig = parseFrontMcpConfigLite(options);
@@ -596,7 +596,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * const scopes = instance.getScopes();
    */
   public static async createForCli(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
-    const frontMcp = new FrontMcpInstance(await parseCliConfig(options, { fileLog: true }));
+    // Under the build flag the decorator left the store settings unvalidated (#1041), and the lite schema skips some
+    const config = getEnvFlag('FRONTMCP_BUILD_EXTRACT') ? frontMcpMetadataSchema.parse(options) : options;
+    const frontMcp = new FrontMcpInstance(await parseCliConfig(config, { fileLog: true }));
     await frontMcp.ready;
     return frontMcp;
   }
