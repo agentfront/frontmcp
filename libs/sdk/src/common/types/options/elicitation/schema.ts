@@ -22,12 +22,17 @@ export type { ElicitationOptionsInterface };
  * Validates and provides defaults for elicitation options.
  * See `ElicitationOptionsInterface` for full documentation.
  */
-export const elicitationOptionsSchema = z.object({
-  enabled: z.boolean().optional().default(false),
-  redis: redisOptionsSchema.optional(),
-  // Checked when the server opens the store, so a browser bundle that does not use it carries no schema
-  persistent: z.unknown().optional(),
-} satisfies RawZodShape<ElicitationOptionsInterface>);
+export const elicitationOptionsSchema = z
+  .object({
+    enabled: z.boolean().optional().default(false),
+    store: z.literal(false, { error: 'elicitation.store must be false (elicitation kept in memory)' }).optional(),
+    redis: redisOptionsSchema.optional(),
+    // Checked when the server opens the store, so a browser bundle that does not use it carries no schema
+    persistent: z.unknown().optional(),
+  } satisfies RawZodShape<ElicitationOptionsInterface>)
+  .refine((elicitation) => !(elicitation.store === false && elicitation.redis), {
+    message: 'elicitation.store: false keeps elicitation in memory, so it takes no elicitation.redis',
+  });
 
 // ============================================
 // DEFAULT VALUES

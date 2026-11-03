@@ -93,6 +93,7 @@ import type { SessionRelayHandle } from '../transport/relay/relay-scope.helper';
 import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import type { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
+import { elicitationServerStore, refuseServerStoresInBrowser, tasksServerStore } from './browser-stores';
 import { devEventsObservabilityConfig } from './dev-events-observability';
 import { registerServerEntries } from './server-entries.helper';
 import { reportStartup } from './startup-report.helper';
@@ -259,6 +260,12 @@ export class Scope extends ScopeEntry {
       ? (label: string) => this.logger.info(`[PERF] ${label}: ${(performance.now() - t0).toFixed(1)}ms`)
       : () => {};
 
+    // A browser has no TCP socket for Redis and no file for SQLite: refused here, before any store opens
+    refuseServerStoresInBrowser({
+      tasks: tasksServerStore(this.metadata),
+      elicitation: elicitationServerStore(this.metadata),
+    });
+
     const httpServing = this.directOnly ? undefined : await import('./http-scope.helper.js');
     const createPrimaryAuth = await this.primaryAuthFactory();
 
@@ -382,9 +389,12 @@ export class Scope extends ScopeEntry {
     const elicitationEnabled = this.metadata.elicitation?.enabled === true && !this.cliMode;
     const elicitationPromise = elicitationEnabled
       ? (async () => {
-          const elicitationRedis = this.metadata.elicitation?.redis ?? this.metadata.redis;
+          const inheritedRedis = this.metadata.elicitation?.redis ?? this.metadata.redis;
+          // `elicitation.store: false` keeps the elicitation state in memory; persistent questions follow their own storage
+          const elicitationInMemory = this.metadata.elicitation?.store === false;
+          const elicitationRedis = elicitationInMemory ? undefined : inheritedRedis;
           // Top-level `sqlite` is the fallback when no Redis source is configured (issue #401).
-          const elicitationSqlite = elicitationRedis ? undefined : resolvedTopLevelSqlite;
+          const elicitationSqlite = elicitationInMemory || elicitationRedis ? undefined : resolvedTopLevelSqlite;
           const persistent = this.metadata.elicitation?.persistent;
           const questionsHelper = persistent
             ? await import('../elicitation/questions/question-scope.helper.js')
@@ -394,7 +404,13 @@ export class Scope extends ScopeEntry {
           // A Redis named only for persistent questions keeps the elicitation state too; other question stores (memory,
           // sqlite) stay theirs alone.
           const questionsStorage = questionsHelper?.persistentQuestionsSettings(persistent, onEdgeRuntime).storage;
-          const questionsRedis = !elicitationRedis && questionsStorage?.type === 'redis' ? questionsStorage : undefined;
+          refuseServerStoresInBrowser({
+            questions: questionsHelper?.questionsServerStore(questionsStorage, this.metadata),
+          });
+          const questionsRedis =
+            !elicitationInMemory && !elicitationRedis && questionsStorage?.type === 'redis'
+              ? questionsStorage
+              : undefined;
           const { createElicitationStore } = await import('../elicitation/store/elicitation-store.factory.js');
           const {
             store: elicitStore,
@@ -402,7 +418,7 @@ export class Scope extends ScopeEntry {
             storage: elicitStorage,
           } = await createElicitationStore({
             redis: elicitationRedis,
-            storage: questionsRedis,
+            storage: elicitationInMemory ? { type: 'memory' } : questionsRedis,
             sqlite: elicitationSqlite,
             keyPrefix: elicitationRedis?.keyPrefix ?? 'mcp:elicit:',
             logger: this.logger,
@@ -421,7 +437,7 @@ export class Scope extends ScopeEntry {
             const questions = await questionsHelper.openPersistentQuestions({
               persistent,
               serverName: this.metadata.info.name,
-              redis: elicitationRedis,
+              redis: inheritedRedis,
               sqlite: resolvedTopLevelSqlite,
               onEdgeRuntime,
               logger: this.logger,
@@ -443,11 +459,16 @@ export class Scope extends ScopeEntry {
     //    InProcessTaskRunner because we ARE the worker now.
     //  - Edge runtime: skip unless explicitly asked for (see below).
     const tasksConfig = this.metadata.tasks;
+    // `tasks.store: false` keeps tasks in memory: they take neither the top-level redis nor sqlite
+    const tasksInMemory = tasksConfig?.store === false;
+    const tasksMemoryStorage = tasksInMemory ? { type: 'memory' as const } : undefined;
+    const serverRedisForTasks = tasksInMemory ? undefined : this.metadata.redis;
+    const serverSqliteForTasks = tasksInMemory ? undefined : resolvedTopLevelSqlite;
     const tasksExplicitlyDisabled = tasksConfig?.enabled === false;
     const tasksExplicitlyEnabled = tasksConfig?.enabled === true;
     const isTaskWorker = !!(this.metadata as unknown as Record<string, unknown>)['__taskWorkerMode'];
     const hasPersistentBackend = Boolean(
-      tasksConfig?.sqlite || tasksConfig?.redis || this.metadata.redis || this.metadata.sqlite,
+      tasksConfig?.sqlite || tasksConfig?.redis || serverRedisForTasks || serverSqliteForTasks,
     );
     const tasksEnabledForCli = this.cliMode && hasPersistentBackend;
 
@@ -463,7 +484,7 @@ export class Scope extends ScopeEntry {
     // unusable feature is turned off rather than taking the server down.
     // An explicit `tasks: { enabled: true }` still initializes — and still
     // throws without a distributed store — because that was a real request.
-    const hasDistributedTaskBackend = Boolean(tasksConfig?.redis ?? this.metadata.redis);
+    const hasDistributedTaskBackend = Boolean(tasksConfig?.redis ?? serverRedisForTasks);
     const onEdgeRuntime = isEdgeRuntime();
     const tasksUnavailableOnEdge = onEdgeRuntime && !hasDistributedTaskBackend && !tasksExplicitlyEnabled;
     if (tasksUnavailableOnEdge) {
@@ -477,10 +498,10 @@ export class Scope extends ScopeEntry {
 
     // Vercel KV has no pub/sub, so it cannot back tasks. Unless tasks were
     // explicitly requested, skip them instead of crashing startup (#646).
-    const gateTasksRedis = tasksConfig?.redis ?? this.metadata.redis;
-    const tasksUseSqlite = Boolean(tasksConfig?.sqlite ?? (gateTasksRedis ? undefined : resolvedTopLevelSqlite));
+    const gateTasksRedis = tasksConfig?.redis ?? serverRedisForTasks;
+    const tasksUseSqlite = Boolean(tasksConfig?.sqlite ?? (gateTasksRedis ? undefined : serverSqliteForTasks));
     const tasksUnavailableOnVercelKv =
-      !tasksExplicitlyEnabled && !tasksUseSqlite && resolvesToVercelKvTaskBackend(gateTasksRedis);
+      !tasksExplicitlyEnabled && !tasksUseSqlite && resolvesToVercelKvTaskBackend(gateTasksRedis, tasksMemoryStorage);
     if (tasksUnavailableOnVercelKv && !tasksExplicitlyDisabled) {
       this.logger.warn(
         '[tasks] Background tasks are disabled: Vercel KV has no pub/sub, which task results and ' +
@@ -499,12 +520,12 @@ export class Scope extends ScopeEntry {
     const tasksPromise = shouldInitTasks
       ? (async () => {
           taskModule = await import('../task/index.js');
-          const tasksRedis = tasksConfig?.redis ?? this.metadata.redis;
+          const tasksRedis = tasksConfig?.redis ?? serverRedisForTasks;
           // Mirror the elicitation precedence: an explicit `tasks.sqlite` is
           // always honored, but the top-level `metadata.sqlite` fallback only
           // applies when there's no redis source — never pass both backends to
           // createTaskStore (issue #401 review).
-          const tasksSqlite = tasksConfig?.sqlite ?? (tasksRedis ? undefined : resolvedTopLevelSqlite);
+          const tasksSqlite = tasksConfig?.sqlite ?? (tasksRedis ? undefined : serverSqliteForTasks);
           const onEdge = onEdgeRuntime;
           if (onEdge) {
             const msg =
@@ -521,6 +542,7 @@ export class Scope extends ScopeEntry {
             type: taskType,
             storage: taskStorage,
           } = await taskModule.createTaskStore({
+            storage: tasksMemoryStorage,
             redis: tasksRedis,
             sqlite: tasksSqlite,
             keyPrefix: tasksConfig?.keyPrefix ?? 'mcp:task:',
@@ -565,8 +587,8 @@ export class Scope extends ScopeEntry {
             useCliRunner &&
             !tasksConfig?.sqlite &&
             !tasksConfig?.redis &&
-            !this.metadata.redis &&
-            !this.metadata.sqlite
+            !serverRedisForTasks &&
+            !serverSqliteForTasks
           ) {
             // The CLI runner spawns a detached worker that HAS to read task state
             // from a shared backend. Memory-backed storage can't be shared across
@@ -578,8 +600,8 @@ export class Scope extends ScopeEntry {
             // the CLI runner gets the same shared backend.
             throw new Error(
               '[tasks] runner: "cli" requires a persistent backend (`tasks.sqlite`, ' +
-                '`tasks.redis`, or a top-level `sqlite`) — the detached worker cannot share ' +
-                'an in-memory store with this host.',
+                '`tasks.redis`, or a top-level `sqlite` without `tasks.store: false`) — the detached worker ' +
+                'cannot share an in-memory store with this host.',
             );
           }
           const runner = useCliRunner
@@ -912,14 +934,14 @@ export class Scope extends ScopeEntry {
         }
       };
 
-      const { registerJobCapabilities, resolveJobsStore } = await import('../job/job-scope.helper.js');
-      const effectiveConfig: JobsConfig = {
-        ...(jobsConfig ?? {}),
-        enabled: true,
-        store: resolveJobsStore(jobsConfig?.store, { redis: this.metadata.redis, sqlite: resolvedTopLevelSqlite }),
-      };
-      topLevelSqliteUsed ||=
-        Boolean(resolvedTopLevelSqlite) && effectiveConfig.store?.sqlite === resolvedTopLevelSqlite;
+      const { registerJobCapabilities, resolveJobsStore, jobsServerStore } = await import('../job/job-scope.helper.js');
+      refuseServerStoresInBrowser({ jobs: jobsServerStore(jobsConfig?.store, this.metadata) });
+      const jobsStore = resolveJobsStore(jobsConfig?.store, {
+        redis: this.metadata.redis,
+        sqlite: resolvedTopLevelSqlite,
+      });
+      const effectiveConfig: JobsConfig = { ...(jobsConfig ?? {}), enabled: true, store: jobsStore };
+      topLevelSqliteUsed ||= Boolean(resolvedTopLevelSqlite) && jobsStore?.sqlite === resolvedTopLevelSqlite;
       const result = await registerJobCapabilities({
         providers: this.scopeProviders,
         flowRegistry: this.scopeFlows,
@@ -1145,7 +1167,8 @@ export class Scope extends ScopeEntry {
    */
   private async resolveTopLevelSqlite(): Promise<(SqliteOptionsInput & { path: string }) | undefined> {
     const raw = this.metadata.sqlite;
-    if (!raw) return undefined;
+    // A browser opens no SQLite file: a store that would take this one was refused at startup
+    if (!raw || getRuntimeContext().runtime === 'browser') return undefined;
     let finalPath = raw.path;
     if (!finalPath || finalPath.length === 0) {
       finalPath = resolveDefaultSqlitePath({

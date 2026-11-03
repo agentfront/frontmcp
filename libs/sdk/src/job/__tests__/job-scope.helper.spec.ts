@@ -1,4 +1,4 @@
-import { resolveJobsStore } from '../job-scope.helper';
+import { jobsServerStore, resolveJobsStore } from '../job-scope.helper';
 
 const sqlite = { path: '/var/lib/app/state.sqlite' };
 const redis = { provider: 'redis' as const, host: 'cache.internal', port: 6379 };
@@ -40,7 +40,29 @@ describe('resolveJobsStore', () => {
     expect(resolveJobsStore(undefined, { redis: vercelKv })).toBeUndefined();
   });
 
+  it('keeps runs in memory with jobs.store: false, whatever the top-level redis or sqlite', () => {
+    expect(resolveJobsStore(false, { redis, sqlite })).toBeUndefined();
+  });
+
   it('leaves the memory store when nothing is configured', () => {
     expect(resolveJobsStore(undefined, {})).toBeUndefined();
+  });
+});
+
+describe('jobsServerStore', () => {
+  const vercelKv = { provider: 'vercel-kv' as const };
+
+  it('names the option whose Redis or SQLite the jobs would open', () => {
+    expect(jobsServerStore({ sqlite }, { redis })).toBe('jobs.store.sqlite');
+    expect(jobsServerStore({ redis }, { sqlite })).toBe('jobs.store.redis');
+    expect(jobsServerStore({ keyPrefix: 'j:' }, { redis, sqlite })).toBe('redis');
+    expect(jobsServerStore(undefined, { redis: vercelKv, sqlite })).toBe('sqlite');
+  });
+
+  it('names none with jobs.store: false, on Vercel KV or with nothing set', () => {
+    expect(jobsServerStore(false, { redis, sqlite })).toBeUndefined();
+    expect(jobsServerStore({ redis: vercelKv }, { sqlite })).toBeUndefined();
+    expect(jobsServerStore(undefined, { redis: vercelKv })).toBeUndefined();
+    expect(jobsServerStore(undefined, {})).toBeUndefined();
   });
 });

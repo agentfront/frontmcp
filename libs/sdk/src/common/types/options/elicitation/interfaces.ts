@@ -103,6 +103,12 @@ export interface ElicitationOptionsInterface {
   enabled?: boolean;
 
   /**
+   * `false` keeps the elicitation state in memory although the server has a top-level `redis` or `sqlite`; it
+   * takes no `redis` of its own. Persistent questions follow `persistent.storage`.
+   */
+  store?: false;
+
+  /**
    * Redis configuration for elicitation store.
    *
    * Use this to specify a dedicated Redis instance for elicitation state,

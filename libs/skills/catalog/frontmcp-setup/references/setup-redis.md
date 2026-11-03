@@ -262,6 +262,8 @@ When `redis` is configured, the SDK automatically enables transport session pers
 
 Jobs use the global redis too when `jobs.store` names no backend: their runs and dynamic definitions live under `<keyPrefix>jobs:` (`mcp:jobs:` by default). Servers that share one Redis keep them apart by setting different `keyPrefix` values.
 
+Background tasks, elicitation and persistent questions take the global redis as well. Each one stays in memory with its switch, while the others keep using Redis: `tasks.store: false`, `elicitation.store: false`, `elicitation.persistent.storage: { type: 'memory' }`, `jobs.store: false` (and `transport.persistence: false` for sessions). In the browser build a subsystem that would connect to Redis stops startup with `BrowserStoreUnavailableError` naming its switch, since a page has no TCP socket; leave `redis` out of the browser build's config.
+
 This means you do not need to configure `transport.persistence` separately when using the top-level `redis` field.
 
 ## Step 6 -- Environment Variables
