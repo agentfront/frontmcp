@@ -11,7 +11,8 @@ import { workspaceRoot } from './helpers/browser-bundle';
 
 type Step = { step: string; initialized: string[] };
 
-const SUBSYSTEM_MODULE = /^libs\/sdk\/src\/(job|workflow|channel|remote-mcp|esm-loader)\//;
+const SUBSYSTEM_MODULE =
+  /^libs\/sdk\/src\/((job|workflow|channel|remote-mcp|esm-loader)\/|transport\/(event-stores\/|adapters\/(base-sse|sse|streamable-http)-transport\.ts))/;
 // Helpers the startup path itself uses: the decorators parse `Tool.esm()` specifiers, the scope normalizes app entries
 const STARTUP_HELPERS = [
   'libs/sdk/src/esm-loader/package-specifier.ts',
@@ -48,6 +49,9 @@ describe('the subsystems of the SDK under require()', () => {
     ['ChannelRegistry', 'libs/sdk/src/channel/channel.registry.ts'],
     ['McpClientService', 'libs/sdk/src/remote-mcp/mcp-client.service.ts'],
     ['EsmModuleLoader', 'libs/sdk/src/esm-loader/esm-module-loader.ts'],
+    ['RecreateableStreamableHTTPServerTransport', 'libs/sdk/src/transport/adapters/streamable-http-transport.ts'],
+    ['SSEServerTransport', 'libs/sdk/src/transport/adapters/base-sse-transport.ts'],
+    ['createEventStore', 'libs/sdk/src/transport/event-stores/event-store.factory.ts'],
   ])('are set up when %s is read', (exportName, source) => {
     const [, read] = initializedModules(`read:${exportName}`);
 

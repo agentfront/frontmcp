@@ -149,6 +149,8 @@ transport: {
 
 From 1.7.2 each session gets a view over the shared store scoped to its own session id: an event id belonging to another session replays nothing.
 
+Code that builds its own transport can import the stores and transports: `createEventStore`, `MemoryEventStore`, `RedisEventStore`, `RecreateableStreamableHTTPServerTransport`, `RecreateableSSEServerTransport` and `SSEServerTransport` come from `@frontmcp/sdk`, and from `@frontmcp/sdk/transport`, which re-exports them from the root entry. Up to 1.10 neither loaded them at runtime: the root did not export them, and the subpath shipped type declarations only (`MODULE_NOT_FOUND` under `require`, `ERR_MODULE_NOT_FOUND` under `import`).
+
 ## Target-Specific Recommendations
 
 | Target                   | Recommended Preset | Persistence | Event Store |
