@@ -4,6 +4,7 @@ import { App, DynamicPlugin, Job, JobContext, Plugin } from '../../common';
 import { BrowserStoreUnavailableError, InternalMcpError } from '../../errors';
 import {
   elicitationServerStore,
+  guardStorageInBrowser,
   refusePluginStoreInBrowser,
   refuseServerStoresInBrowser,
   refuseStoresInBrowser,
@@ -43,6 +44,65 @@ describe('elicitationServerStore', () => {
     expect(elicitationServerStore({ elicitation: { enabled: false }, redis, sqlite })).toBeUndefined();
     expect(elicitationServerStore({ redis, sqlite })).toBeUndefined();
     expect(elicitationServerStore({ elicitation: { enabled: true } })).toBeUndefined();
+  });
+});
+
+describe('guardStorageInBrowser', () => {
+  const { NODE_ENV } = process.env;
+  const onRedis = { type: 'redis' as const, redis: { config: { host: 'cache.internal', port: 6379 } } };
+
+  afterEach(() => {
+    process.env['NODE_ENV'] = NODE_ENV;
+  });
+
+  function guardStorage(storage: Parameters<typeof guardStorageInBrowser>[0], runtime?: 'browser' | 'node') {
+    const warnings: string[] = [];
+    const opened = guardStorageInBrowser(storage, { warn: (message: string) => warnings.push(message) }, runtime);
+    return { opened, warnings };
+  }
+
+  it("starts a Redis or SQLite a browser can't open on memory with fallback: 'memory', and says so once", () => {
+    const { opened, warnings } = guardStorage({ ...onRedis, fallback: 'memory', prefix: 'limits:' }, 'browser');
+
+    expect(opened).toEqual({ ...onRedis, fallback: 'memory', prefix: 'limits:', type: 'memory' });
+    expect(warnings).toEqual([
+      "A browser cannot open Redis or SQLite: rate limits use per-instance counters in place of throttle.storage: { type: 'redis' } (throttle.storage.fallback: 'memory')",
+    ]);
+    expect(guardStorage({ type: 'sqlite', sqlite, fallback: 'memory' }, 'browser').opened).toMatchObject({
+      type: 'memory',
+    });
+  });
+
+  it("starts on memory without a fallback outside production, where the guard's default is 'memory'", () => {
+    process.env['NODE_ENV'] = 'development';
+
+    expect(guardStorage(onRedis, 'browser').opened).toMatchObject({ type: 'memory' });
+  });
+
+  it("keeps a caller's Redis client, fallback: 'error', a store a browser opens, and any store outside a browser", () => {
+    const client = { ping: async () => 'PONG' };
+    const kept = [
+      { type: 'redis' as const, redis: { client }, fallback: 'memory' as const },
+      { ...onRedis, fallback: 'error' as const },
+      { type: 'memory' as const },
+      { type: 'vercel-kv' as const },
+    ];
+
+    for (const storage of kept) {
+      expect(guardStorage(storage, 'browser')).toEqual({ opened: storage, warnings: [] });
+    }
+    expect(guardStorage({ ...onRedis, fallback: 'memory' }, 'node')).toEqual({
+      opened: { ...onRedis, fallback: 'memory' },
+      warnings: [],
+    });
+    expect(guardStorage({ ...onRedis, fallback: 'memory' })).toMatchObject({ warnings: [] });
+    expect(guardStorage(undefined, 'browser')).toEqual({ opened: undefined, warnings: [] });
+  });
+
+  it("keeps a Redis without a fallback in production, where the guard's default is 'error'", () => {
+    process.env['NODE_ENV'] = 'production';
+
+    expect(guardStorage(onRedis, 'browser')).toEqual({ opened: onRedis, warnings: [] });
   });
 });
 
@@ -195,7 +255,7 @@ describe('refuseStoresInBrowser', () => {
       apps: [KvApp],
       plugins: [KvPlugin.init({ type: 'redis' })],
       elicitation: { enabled: true },
-      throttle: { enabled: true, storage: { type: 'redis' } },
+      throttle: { enabled: true, storage: { type: 'redis', fallback: 'error' } },
       auth: { mode: 'local', tokenStorage: { sqlite } },
       skillsConfig: { cache: { enabled: true, redis: { provider: 'redis' } } },
     });
@@ -219,7 +279,7 @@ describe('refuseStoresInBrowser', () => {
 
   it('lists the throttle.storage of the guard: with throttle on, and with it off for auth.publicAccess.rateLimit', async () => {
     const onRedis = { stores: [['rateLimits', "throttle.storage: { type: 'redis' }"]] };
-    const storage = { type: 'redis' };
+    const storage = { type: 'redis', fallback: 'error' };
 
     expect(await refusal({ throttle: { enabled: true, storage } })).toMatchObject(onRedis);
     expect(
@@ -239,6 +299,56 @@ describe('refuseStoresInBrowser', () => {
       }),
     ).toBeUndefined();
     expect(await refusal({ throttle: { enabled: true, storage: { type: 'memory' } } })).toBeUndefined();
+  });
+
+  describe('the guard on throttle.storage', () => {
+    const { NODE_ENV } = process.env;
+    const onRedis = { redis: { config: { host: 'cache.internal', port: 6379 } } };
+    const callerClient = { redis: { client: { ping: async () => 'PONG' } } };
+
+    afterEach(() => {
+      process.env['NODE_ENV'] = NODE_ENV;
+    });
+
+    function throttleOn(storage: { type: string; redis?: object; sqlite?: object; fallback?: string }) {
+      return { throttle: { enabled: true, storage } };
+    }
+
+    it('is not refused on a Redis client the caller built, which FrontMCP opens no connection for, whatever its fallback', async () => {
+      process.env['NODE_ENV'] = 'production';
+
+      expect(await refusal(throttleOn({ type: 'redis', ...callerClient, fallback: 'error' }))).toBeUndefined();
+      expect(await refusal(throttleOn({ type: 'redis', ...callerClient }))).toBeUndefined();
+    });
+
+    it("is not refused with fallback: 'memory', on which the guard starts on per-instance counters", async () => {
+      process.env['NODE_ENV'] = 'production';
+
+      expect(await refusal(throttleOn({ type: 'redis', ...onRedis, fallback: 'memory' }))).toBeUndefined();
+      expect(await refusal(throttleOn({ type: 'sqlite', sqlite, fallback: 'memory' }))).toBeUndefined();
+    });
+
+    it("is not refused without a fallback outside production, where the guard's default is 'memory'", async () => {
+      process.env['NODE_ENV'] = 'development';
+
+      expect(await refusal(throttleOn({ type: 'redis', ...onRedis }))).toBeUndefined();
+      expect(await refusal(throttleOn({ type: 'sqlite', sqlite }))).toBeUndefined();
+    });
+
+    it("is refused with fallback: 'error', set or by default in production", async () => {
+      process.env['NODE_ENV'] = 'development';
+      expect(await refusal(throttleOn({ type: 'redis', ...onRedis, fallback: 'error' }))).toMatchObject({
+        stores: [['rateLimits', "throttle.storage: { type: 'redis' }"]],
+      });
+
+      process.env['NODE_ENV'] = 'production';
+      expect(await refusal(throttleOn({ type: 'redis', ...onRedis }))).toMatchObject({
+        stores: [['rateLimits', "throttle.storage: { type: 'redis' }"]],
+      });
+      expect(await refusal(throttleOn({ type: 'sqlite', sqlite }))).toMatchObject({
+        stores: [['rateLimits', "throttle.storage: { type: 'sqlite' }"]],
+      });
+    });
   });
 
   it('lists persistent questions and jobs, enabled or declared on an app', async () => {

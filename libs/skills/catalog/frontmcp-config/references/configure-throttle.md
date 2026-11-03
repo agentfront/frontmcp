@@ -261,6 +261,8 @@ storage: {
 
 The top-level `redis` and `transport.persistence` behave differently: they fall back to in-memory storage with an error log.
 
+In a browser build, which can't open Redis or SQLite, a `throttle.storage` on either with `fallback: 'memory'` (set, or the default outside production) starts on per-instance counters with one warning; with `fallback: 'error'` startup rejects with `BrowserStoreUnavailableError` naming `throttle.storage: { type: 'memory' }`. A Redis client you built (`redis: { client }`) is used as it is in a browser too: FrontMCP opens no connection for it.
+
 ### Several processes on one machine
 
 When the server runs as many local processes (one per agent or terminal, say) with no Redis, share their limits through a SQLite file. Install `@frontmcp/storage-sqlite`; every process that names the same file shares the counters and concurrency slots:
