@@ -228,6 +228,9 @@ describe('refuseStoresInBrowser', () => {
         auth: { mode: 'public', publicAccess: { rateLimit: 60 } },
       }),
     ).toMatchObject(onRedis);
+    expect(
+      await refusal({ throttle: { enabled: false, storage }, auth: { mode: 'public', publicAccess: {} } }),
+    ).toMatchObject(onRedis);
     expect(await refusal({ throttle: { enabled: false, storage } })).toBeUndefined();
     expect(
       await refusal({

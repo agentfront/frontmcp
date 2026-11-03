@@ -566,6 +566,8 @@ const secureStoreBackingSchemas = {
 function secureStoreBackingError(issue: { input?: unknown }): string | undefined {
   if (typeof issue.input !== 'object' || issue.input === null) return undefined;
   const config = issue.input as Record<string, unknown>;
+  const named = Object.keys(secureStoreBackingSchemas).filter((backing) => config[backing] !== undefined);
+  if (named.length > 1) return `secureStore takes one backing, not ${named.join(' and ')}`;
   for (const [backing, schema] of Object.entries(secureStoreBackingSchemas)) {
     if (config[backing] === undefined) continue;
     const nested = schema.safeParse(config[backing]).error?.issues[0];
@@ -589,19 +591,20 @@ function secureStoreBackingError(issue: { input?: unknown }): string | undefined
  * The object forms additionally accept `scope`, `ttlMs`, and (for built-ins)
  * `encryption`.
  */
+// Each variant names at most one backing: a backing it cannot use, or a second one, is refused rather than ignored
+const noBacking = {
+  sqlite: z.undefined().optional(),
+  redis: z.undefined().optional(),
+  backend: z.undefined().optional(),
+};
+
 export const secureStoreConfigSchema = z.union(
   [
     z.literal('memory'),
-    z.object({ sqlite: secureStoreBackingSchemas.sqlite, ...secureStoreCommonFields }),
-    z.object({ redis: secureStoreBackingSchemas.redis, ...secureStoreCommonFields }),
-    z.object({ backend: secureStoreBackingSchemas.backend, ...secureStoreCommonFields }),
-    // A backing it cannot use is refused, not swapped for the memory store
-    z.object({
-      sqlite: z.undefined().optional(),
-      redis: z.undefined().optional(),
-      backend: z.undefined().optional(),
-      ...secureStoreCommonFields,
-    }),
+    z.object({ ...noBacking, sqlite: secureStoreBackingSchemas.sqlite, ...secureStoreCommonFields }),
+    z.object({ ...noBacking, redis: secureStoreBackingSchemas.redis, ...secureStoreCommonFields }),
+    z.object({ ...noBacking, backend: secureStoreBackingSchemas.backend, ...secureStoreCommonFields }),
+    z.object({ ...noBacking, ...secureStoreCommonFields }),
   ],
   { error: secureStoreBackingError },
 );

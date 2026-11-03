@@ -96,7 +96,9 @@ async function jobsStore(options: BrowserStoreOptions): Promise<string | undefin
 /** The scope builds its guard on `throttle.storage` with throttle on, and with it off for `auth.publicAccess.rateLimit`. */
 function rateLimitsStore({ throttle, auth }: BrowserStoreOptions): string | undefined {
   const publicAccess = (auth as { publicAccess?: { rateLimit?: unknown } } | undefined)?.publicAccess;
-  const type = throttle?.enabled || publicAccess?.rateLimit ? throttle?.storage?.type : undefined;
+  // An app's own auth can arrive before its schema defaults `publicAccess.rateLimit` to 60
+  const publicRateLimited = publicAccess !== undefined && publicAccess.rateLimit !== 0;
+  const type = throttle?.enabled || publicRateLimited ? throttle?.storage?.type : undefined;
   return type === 'redis' || type === 'sqlite' ? `throttle.storage: { type: '${type}' }` : undefined;
 }
 

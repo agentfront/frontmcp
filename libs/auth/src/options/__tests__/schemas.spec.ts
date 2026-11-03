@@ -371,6 +371,19 @@ describe('secureStoreConfigSchema', () => {
     expect(described).toEqual([message]);
   });
 
+  it.each([
+    [{ sqlite: { path: '/tmp/s.sqlite' }, redis: { host: 'localhost' } }, 'sqlite and redis'],
+    [{ sqlite: { path: '' }, redis: { host: 'localhost' } }, 'sqlite and redis'],
+    [{ sqlite: { path: '/tmp/s.sqlite' }, backend: {} }, 'sqlite and backend'],
+  ])('refuses %j, which names more than one backing', (config, backings) => {
+    const result = secureStoreConfigSchema.safeParse(config);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual([
+      `secureStore takes one backing, not ${backings}`,
+    ]);
+  });
+
   it('refuses an unusable backing where the server reads auth', () => {
     const result = authOptionsSchema.safeParse({ mode: 'local', secureStore: { redis: { url: 'redis://cache' } } });
 
