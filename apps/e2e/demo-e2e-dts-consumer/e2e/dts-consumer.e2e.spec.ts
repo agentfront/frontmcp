@@ -53,6 +53,7 @@ const fixtureFiles = [
   'build-manifest-must-compile.ts',
   'persistent-questions-must-compile.ts',
   'lazy-apps-must-compile.ts',
+  'subpath-exports-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -253,6 +254,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types lazy apps, @FrontMcp({ manifest }) and the lazy app errors', () => {
     expect(describeEach(inFixtureFile('lazy-apps-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types the transport, job/tools and workflow/tools subpaths as the root exports they re-export', () => {
+    expect(describeEach(inFixtureFile('subpath-exports-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {

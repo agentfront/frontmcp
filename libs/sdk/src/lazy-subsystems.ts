@@ -90,6 +90,16 @@
     ['ExecuteWorkflowTool', 'GetWorkflowStatusTool', 'ListWorkflowsTool', 'RegisterWorkflowTool', 'RemoveWorkflowTool'],
   );
   defineLazyExports(
+    () => require('./transport/adapters/streamable-http-transport'),
+    ['RecreateableStreamableHTTPServerTransport'],
+  );
+  defineLazyExports(() => require('./transport/adapters/sse-transport'), ['RecreateableSSEServerTransport']);
+  defineLazyExports(() => require('#sse-transport'), ['SSEServerTransport']);
+  defineLazyExports(
+    () => require('./transport/event-stores'),
+    ['createEventStore', 'MemoryEventStore', 'RedisEventStore'],
+  );
+  defineLazyExports(
     () => require('./channel'),
     [
       'ChannelInstance',

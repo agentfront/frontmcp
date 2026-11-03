@@ -15,7 +15,7 @@
  *
  * @example Memory EventStore (single-node)
  * ```typescript
- * import { createEventStore } from '@frontmcp/sdk/transport/event-stores';
+ * import { createEventStore } from '@frontmcp/sdk';
  *
  * const { eventStore, type } = createEventStore({
  *   enabled: true,
@@ -27,7 +27,7 @@
  *
  * @example Redis EventStore (distributed)
  * ```typescript
- * import { createEventStore } from '@frontmcp/sdk/transport/event-stores';
+ * import { createEventStore } from '@frontmcp/sdk';
  *
  * const { eventStore, type } = createEventStore({
  *   enabled: true,

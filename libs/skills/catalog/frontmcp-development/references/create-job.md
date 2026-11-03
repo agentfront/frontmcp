@@ -644,7 +644,7 @@ import { App, ExecuteJobTool, GetJobStatusTool, ListJobsTool } from '@frontmcp/s
 class DataApp {}
 ```
 
-The same classes are also reachable via the subpath `@frontmcp/sdk/job/tools` and `@frontmcp/sdk/workflow/tools` for bundlers that prefer narrower imports.
+The subpaths `@frontmcp/sdk/job/tools` and `@frontmcp/sdk/workflow/tools` export the same classes: they re-export them from the root entry, so `ExecuteJobTool` from either is the class `@frontmcp/sdk` exports, and a subpath import does not make a bundle smaller. Up to 1.10 the subpaths shipped type declarations only, so loading one failed with `MODULE_NOT_FOUND` under `require` and `ERR_MODULE_NOT_FOUND` under `import`; on those versions import the classes from `@frontmcp/sdk`.
 
 ## Nx Generator
 
