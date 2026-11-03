@@ -51,6 +51,14 @@ The boot reads the server; it does not run it:
   them when it starts, with the same message as before. Up to 1.10, a `@FrontMcp` class validated them when the
   build loaded the entry, so an unset variable stopped the boot, and the boot wrote the SQLite files of
   `auth.tokenStorage` and `auth.secureStore`.
+- No plugin store is opened either: a provider made with `storeProvider()` is not built, and what injects it gets a
+  stand-in that throws `StoreNotOpenedInBuildError` (`STORE_NOT_OPENED_IN_BUILD`) when it is called. The stores of
+  `CachePlugin`, `RememberPlugin`, `ApprovalPlugin` and `ResultHandlesPlugin`, and `sqliteStorageProvider()`, are
+  made that way, so a `global-store` cache or remember store builds without the top-level `redis` the build leaves out,
+  and a plugin store on Redis or SQLite connects to nothing and writes no file. The server builds them when it starts,
+  with the same messages as before (`Plugin "CachePlugin" requires global "redis" configuration` when it has no
+  `redis`). Up to 1.10, a `--target cli` or `mcpb` build of a server with a `global-store` plugin failed with that
+  message, and a plugin store on Redis or SQLite connected, or wrote its file, during the build.
 - Providers are built and their `onBootstrap()` runs; `onReady()` never does, so nothing that starts once the server
   serves starts. `onShutdown()` runs when the manifest has been read.
 - Your own code still runs: module-level code, provider factories, plugins and adapters that connect while starting

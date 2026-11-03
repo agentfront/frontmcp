@@ -453,6 +453,24 @@ with `init({ useFactory })` is checked once its factory has returned the options
 the store in a provider (`useFactory`), not in `dynamicProviders` itself, which runs when `init()` does: the check runs
 at startup.
 
+Make that provider with `storeProvider()`, too. A build boots the server only to read it and opens no store: there a
+`storeProvider()` is not built, so it needs none of what it reads at runtime (the top-level `redis` a `global-store`
+takes is left out of a build), and what injects it gets a stand-in that throws `StoreNotOpenedInBuildError` when it is
+called. Any other boot builds it as usual. It returns the provider as given.
+
+```typescript
+import { FrontMcpConfig, getGlobalStoreConfig, storeProvider, type FrontMcpConfigType } from '@frontmcp/sdk';
+
+static override dynamicProviders = (options: MyPluginOptions) => [
+  storeProvider({
+    name: 'my-plugin:store',
+    provide: MyStoreToken,
+    inject: () => [FrontMcpConfig] as const,
+    useFactory: (config: FrontMcpConfigType) => new MyRedisStore(getGlobalStoreConfig('MyPlugin', config)),
+  }),
+];
+```
+
 `refusePluginStoreInBrowser({ plugin, option, memory })` still throws the same error, for one store, where a plugin
 builds a store that no declaration can name ahead of time. `new BrowserStoreUnavailableError(stores, pluginMemory)`
 takes each plugin's memory option in its second argument; without it, only the SDK's store names type-check.

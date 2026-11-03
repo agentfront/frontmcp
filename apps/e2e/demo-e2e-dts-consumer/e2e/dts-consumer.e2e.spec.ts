@@ -50,6 +50,7 @@ const fixtureFiles = [
   'shared-server-must-compile.ts',
   'durable-jobs-must-compile.ts',
   'memory-stores-must-compile.ts',
+  'store-provider-must-compile.ts',
   'job-runners-must-compile.ts',
   'build-manifest-must-compile.ts',
   'persistent-questions-must-compile.ts',

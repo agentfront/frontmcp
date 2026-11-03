@@ -2,6 +2,7 @@ import type { Token } from '@frontmcp/di';
 import { createStorage, type RootStorage, type SqliteAdapterOptions } from '@frontmcp/utils';
 
 import { ProviderScope, type OnShutdown, type ProviderFactoryType } from '../common';
+import { storeProvider } from '../provider/store.provider';
 import { refuseServerStoresInBrowser } from '../scope/browser-stores';
 
 /** The SQLite storage `sqliteStorageProvider()` registers by default: `this.get(SqliteStorageToken)`. */
@@ -14,12 +15,12 @@ export interface SqliteStorageProviderOptions extends SqliteAdapterOptions {
   provide?: Token<RootStorage>;
 }
 
-/** A GLOBAL provider of a SQLite-backed storage, opened at boot and disconnected at shutdown. */
+/** A GLOBAL provider of a SQLite-backed storage, opened at boot (not in a build) and disconnected at shutdown. */
 export function sqliteStorageProvider(
   options: SqliteStorageProviderOptions,
 ): ProviderFactoryType<RootStorage & OnShutdown, []> {
   const { prefix, provide = SqliteStorageToken, ...sqlite } = options;
-  return {
+  return storeProvider({
     name: 'storage.sqlite',
     scope: ProviderScope.GLOBAL,
     provide,
@@ -29,5 +30,5 @@ export function sqliteStorageProvider(
       const storage = await createStorage({ type: 'sqlite', sqlite, prefix, fallback: 'error' });
       return Object.assign(storage, { onShutdown: () => storage.disconnect() });
     },
-  };
+  });
 }

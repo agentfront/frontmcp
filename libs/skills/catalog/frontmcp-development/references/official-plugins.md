@@ -295,6 +295,12 @@ KV does not bundle it, and on Node a `type: 'redis'` store connects when the fir
 servers that share one `init()` share its client. Up to 1.10 the plugin opened the Redis client anyway, and its calls
 failed; `redis` and `redis-client` threw from `init()`, and `ioredis` was in every page bundle.
 
+A build (`frontmcp build`) reads the server without building the store: a `global-store` builds without the top-level
+`redis` the build leaves out, and a `redis` store connects to nothing until the server starts. Up to 1.10 a
+`--target cli` or `mcpb` build with a `global-store` failed with `Plugin "RememberPlugin" requires global "redis"
+configuration`, and a `redis` store connected during the build. A server without `redis` still fails at startup with
+that message.
+
 Every type takes `defaultTTL`, in seconds: an entry stored without its own `ttl` expires that long after it is written.
 Up to 1.9.0 the memory and Redis stores (`global-store` on Redis included) ignored it, so those entries never expired;
 entries written before the upgrade keep no expiry until they are written again. It must be a whole number of seconds; `0` means no default expiry, and a negative or fractional value fails startup with `RememberConfigurationError`.
@@ -483,6 +489,10 @@ In a browser build, `storage: { type: 'redis' }` or `{ type: 'sqlite' }` fails s
 `BrowserStoreUnavailableError`, in the one error that names the server's own stores too, naming
 `storage: { type: 'memory' }` (a `storageInstance` wins over `storage`). `{ type: 'auto' }` picks memory in a page. Up
 to 1.10 it threw from `init()`.
+
+A build (`frontmcp build`) reads the server without opening the approval store or the webhook challenge store: a
+`storage` on Redis connects to nothing and one on SQLite writes no file until the server starts. Up to 1.10 the build
+opened them.
 
 ### Modes
 
@@ -724,6 +734,12 @@ In a browser build these refuse Redis as RememberPlugin's do: `redis`, `redis-cl
 1.10 `redis` and `redis-client` threw from `init()`). `ioredis` loads only when a Redis cache is built, so a page on
 memory or Vercel KV does not bundle it. A Vercel KV `global-store` works from a page, but its token is then in the
 bundle, readable by every visitor: use one that only allows what every visitor may do.
+
+A build (`frontmcp build`) reads the server without building the cache store: a `global-store` builds without the
+top-level `redis` the build leaves out, and a `redis` cache connects to nothing until the server starts. Up to 1.10 a
+`--target cli` or `mcpb` build with a `global-store` failed with `Plugin "CachePlugin" requires global "redis"
+configuration`, and a `redis` cache connected during the build. A server without `redis` still fails at startup with
+that message.
 
 ### Per-Tool Cache Metadata
 

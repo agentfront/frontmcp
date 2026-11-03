@@ -7,6 +7,7 @@ import {
   isVercelKvProvider,
   Plugin,
   ProviderScope,
+  storeProvider,
   type FrontMcpConfigType,
   type PluginStoreInBrowser,
   type PluginStoreServer,
@@ -150,55 +151,59 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
 
     switch (config.type) {
       case 'global-store':
-        providers.push({
-          name: 'remember:store:global',
-          provide: RememberStoreToken,
-          inject: () => [FrontMcpConfig] as const,
-          useFactory: (frontmcpConfig: FrontMcpConfigType) => {
-            const storeConfig = getGlobalStoreConfig('RememberPlugin', frontmcpConfig);
+        providers.push(
+          storeProvider({
+            name: 'remember:store:global',
+            provide: RememberStoreToken,
+            inject: () => [FrontMcpConfig] as const,
+            useFactory: (frontmcpConfig: FrontMcpConfigType) => {
+              const storeConfig = getGlobalStoreConfig('RememberPlugin', frontmcpConfig);
 
-            if (isVercelKvProvider(storeConfig)) {
-              return new RememberVercelKvProvider({
-                url: storeConfig.url,
-                token: storeConfig.token,
+              if (isVercelKvProvider(storeConfig)) {
+                return new RememberVercelKvProvider({
+                  url: storeConfig.url,
+                  token: storeConfig.token,
+                  keyPrefix: config.keyPrefix,
+                  defaultTTL: config.defaultTTL,
+                });
+              }
+
+              // Redis provider
+              return new RememberRedisProvider({
+                type: 'redis',
+                config: {
+                  host: storeConfig.host ?? 'localhost',
+                  port: storeConfig.port ?? 6379,
+                  password: storeConfig.password,
+                  db: storeConfig.db,
+                },
                 keyPrefix: config.keyPrefix,
                 defaultTTL: config.defaultTTL,
               });
-            }
-
-            // Redis provider
-            return new RememberRedisProvider({
-              type: 'redis',
-              config: {
-                host: storeConfig.host ?? 'localhost',
-                port: storeConfig.port ?? 6379,
-                password: storeConfig.password,
-                db: storeConfig.db,
-              },
-              keyPrefix: config.keyPrefix,
-              defaultTTL: config.defaultTTL,
-            });
-          },
-        });
+            },
+          }),
+        );
         break;
 
       case 'redis':
         if ('config' in config && config.config) {
           const redisConfig = config.config;
           let store: RememberRedisProvider | undefined;
-          providers.push({
-            name: 'remember:store:redis',
-            provide: RememberStoreToken,
-            // Built when the first server starts, after a browser's startup check; the servers of one `init()` share it.
-            inject: () => [] as const,
-            useFactory: () =>
-              (store ??= new RememberRedisProvider({
-                type: 'redis',
-                config: redisConfig,
-                keyPrefix: config.keyPrefix,
-                defaultTTL: config.defaultTTL,
-              })),
-          });
+          providers.push(
+            storeProvider({
+              name: 'remember:store:redis',
+              provide: RememberStoreToken,
+              // Built when the first server starts, after a browser's startup check; the servers of one `init()` share it.
+              inject: () => [] as const,
+              useFactory: () =>
+                (store ??= new RememberRedisProvider({
+                  type: 'redis',
+                  config: redisConfig,
+                  keyPrefix: config.keyPrefix,
+                  defaultTTL: config.defaultTTL,
+                })),
+            }),
+          );
         }
         break;
 

@@ -4,6 +4,7 @@ import {
   FrontMcpLogger,
   Plugin,
   ProviderScope,
+  storeProvider,
   ToolHook,
   type CallToolResult,
   type FlowCtxOf,
@@ -108,13 +109,13 @@ export default class ResultHandlesPlugin extends DynamicPlugin<
     const options = parseResultHandlesOptions(input);
     return [
       { name: 'result-handles:config', provide: ResultHandlesConfigToken, useValue: options },
-      {
+      storeProvider({
         name: 'result-handles:store',
         provide: ResultHandleStoreToken,
         scope: ProviderScope.GLOBAL,
         inject: () => [] as const,
         useFactory: () => createResultHandleStore(options),
-      },
+      }),
     ];
   };
 

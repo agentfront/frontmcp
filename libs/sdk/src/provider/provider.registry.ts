@@ -39,6 +39,8 @@ import {
   ProviderScopedAccessError,
   ProviderScopeMismatchError,
 } from '../errors';
+import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
+import { isManifestMode } from '../front-mcp/manifest-mode.flag';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { Scope } from '../scope';
 import { STATELESS_SESSION_ID } from '../transport/transport.types';
@@ -54,6 +56,7 @@ import {
 } from './provider.lifecycle';
 import { type ProviderViews } from './provider.types';
 import { normalizeProvider, providerDiscoveryDeps, providerInvocationTokens } from './provider.utils';
+import { opensStore, storeNotOpened } from './store.provider';
 
 /**
  * Configuration options for ProviderRegistry.
@@ -516,6 +519,17 @@ export default class ProviderRegistry
     throw new ProviderNotRegisteredError(tokenName(t), 'not registered in hierarchy and not constructable');
   }
 
+  /** Whether the server boots only to be read by a build (`createForManifest()`), which opens no store. */
+  private bootsForBuild(): boolean {
+    const config = this.lookupDefInHierarchy(FrontMcpConfig)?.rec;
+    return (
+      config?.kind === ProviderKind.VALUE &&
+      typeof config.useValue === 'object' &&
+      config.useValue !== null &&
+      isManifestMode(config.useValue)
+    );
+  }
+
   /** Build a single DEFAULT-scoped singleton (used by incremental instantiating). */
   private async initiateOne(token: Token, rec: ProviderRecord): Promise<void> {
     switch (rec.kind) {
@@ -524,6 +538,10 @@ export default class ProviderRegistry
         return;
       }
       case ProviderKind.FACTORY: {
+        if (opensStore(rec.useFactory) && this.bootsForBuild()) {
+          this.instances.set(token, storeNotOpened(rec.metadata?.name ?? tokenName(token)) as ProviderEntry);
+          return;
+        }
         const deps = this.invocationTokens(token, rec);
         const args: any[] = [];
         for (const d of deps) args.push(await this.resolveFactoryArg(d, this.instances));
