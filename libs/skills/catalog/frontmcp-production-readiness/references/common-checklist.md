@@ -163,6 +163,7 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] Single-writer constraint respected (v1.2.0): writes routed to a single elected leader pod
 - [ ] `instructions` is set or `skillsConfig.injectInstructions` tuned for clients
 - [ ] With `injectInstructions: 'append'`, `'prepend'` or `'replace'`, the skill catalog summary stays within the 16 KB ceiling (the default `'compact'` sends one line)
+- [ ] The server logs no `instructionsBudget` warning at startup, and `frontmcp build --strict-lint` passes (instructions and tool descriptions within budget, every listed entry described)
 
 ## ExtApps / Widgets (if enabled)
 

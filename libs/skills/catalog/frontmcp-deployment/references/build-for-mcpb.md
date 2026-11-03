@@ -76,11 +76,13 @@ frontmcp mcpb validate dist/mcpb/my-server-1.0.0.mcpb
 ```text
 dist/mcpb/
   my-server-1.0.0.mcpb              # the distributable artifact
+  frontmcp.manifest.json            # the server manifest (see build-manifest), unless --no-manifest
   __stage/                          # removed after successful zip
     manifest.json                   # MCPB v0.3 manifest (generated)
     server/
       index.js                      # esbuild single-file CJS bundle
       package.json                  # minimal { type: "commonjs" } marker
+      frontmcp.manifest.json        # the same server manifest, inside the archive
       _skills/                      # when capabilities.skills
       node_modules/                 # only build.dependencies.nativeAddons and their dependencies
     bin/                            # when --sea or --merge-from

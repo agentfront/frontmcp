@@ -20,6 +20,9 @@ let instanceCache = new WeakMap<object, Promise<FrontMcpInstance>>();
 /** How many connected clients share each cached server. */
 const instanceClients = new WeakMap<Promise<FrontMcpInstance>, number>();
 
+/** `'manifest'` boots a server only to read its entries: see `FrontMcpInstance.createForManifest()`. */
+type InstanceMode = 'full' | 'cli' | 'manifest';
+
 /**
  * Get or create the server for the given config.
  * Uses WeakMap caching to ensure singleton behavior per config object.
@@ -29,7 +32,7 @@ const instanceClients = new WeakMap<Promise<FrontMcpInstance>, number>();
  */
 function getInstance(
   config: FrontMcpConfigInput,
-  mode?: 'full' | 'cli',
+  mode?: InstanceMode,
 ): { cacheKey: object; instancePromise: Promise<FrontMcpInstance> } {
   // Handle @FrontMcp-decorated class (e.g., from schema-extractor loading a bundle).
   // `getDecoratorConfig` returns the parsed metadata via the SDK's stable accessor.
@@ -51,9 +54,9 @@ function getInstance(
         const { FrontMcpInstance } = await import('../front-mcp/front-mcp.js');
         // Create instance without starting HTTP server
         // CLI mode skips non-essential registries for faster startup
-        return mode === 'cli'
-          ? await FrontMcpInstance.createForCli(resolvedConfig)
-          : await FrontMcpInstance.createForConnect(resolvedConfig);
+        if (mode === 'cli') return await FrontMcpInstance.createForCli(resolvedConfig);
+        if (mode === 'manifest') return await FrontMcpInstance.createForManifest(resolvedConfig);
+        return await FrontMcpInstance.createForConnect(resolvedConfig);
       } catch (error) {
         // Remove from cache on failure to allow retry
         instanceCache.delete(cacheKey);
@@ -64,6 +67,30 @@ function getInstance(
   }
 
   return { cacheKey, instancePromise };
+}
+
+/**
+ * Use the in-process server of a config. Users of the same config share its server, which is disposed when the last
+ * of them releases it. The user is counted before any await, so another one leaving meanwhile cannot dispose the
+ * server under this one.
+ *
+ * @internal
+ */
+export function joinInstance(
+  config: FrontMcpConfigInput,
+  mode?: InstanceMode,
+): { instancePromise: Promise<FrontMcpInstance>; release: () => Promise<void> } {
+  const { cacheKey, instancePromise } = getInstance(config, mode);
+  instanceClients.set(instancePromise, (instanceClients.get(instancePromise) ?? 0) + 1);
+  const release = async () => {
+    const remaining = (instanceClients.get(instancePromise) ?? 1) - 1;
+    instanceClients.set(instancePromise, remaining);
+    if (remaining > 0) return;
+    if (instanceCache.get(cacheKey) === instancePromise) instanceCache.delete(cacheKey);
+    const instance = await instancePromise;
+    await Promise.all((instance.getScopes() as Scope[]).map((scope) => scope.dispose()));
+  };
+  return { instancePromise, release };
 }
 
 /**
@@ -88,7 +115,9 @@ async function endpointScope(instance: FrontMcpInstance, app?: string): Promise<
  *
  * @param config - FrontMCP configuration (same as @FrontMcp decorator)
  * @param options - Connection options including clientInfo, session, and authToken; `app` connects to the endpoint
- *   that app has of its own (each app's with `splitByApp`, a `standalone` app's otherwise) instead of the main one
+ *   that app has of its own (each app's with `splitByApp`, a `standalone` app's otherwise) instead of the main one;
+ *   `mode: 'manifest'` boots the server only to read it, as `frontmcp build` does: no store, no log file, and no
+ *   provider's `onReady()`
  * @returns Connected DirectClient instance
  *
  * @example Basic connection
@@ -125,28 +154,14 @@ async function endpointScope(instance: FrontMcpInstance, app?: string): Promise<
  */
 export async function connect(
   config: FrontMcpConfigInput,
-  options?: ConnectOptions & { mode?: 'full' | 'cli'; app?: string },
+  options?: ConnectOptions & { mode?: 'full' | 'cli' | 'manifest'; app?: string },
 ): Promise<DirectClient> {
   const { DirectClientImpl } = await import('./direct-client.js');
-  // Clients of the same config share its server, which is disposed when the last of them closes. The client is
-  // counted before any await, so another client closing meanwhile cannot dispose the server under this one.
-  const { cacheKey, instancePromise } = getInstance(config, options?.mode);
-  instanceClients.set(instancePromise, (instanceClients.get(instancePromise) ?? 0) + 1);
-  const leave = () => {
-    const remaining = (instanceClients.get(instancePromise) ?? 1) - 1;
-    instanceClients.set(instancePromise, remaining);
-    return remaining;
-  };
-  const release = async () => {
-    if (leave() > 0) return;
-    if (instanceCache.get(cacheKey) === instancePromise) instanceCache.delete(cacheKey);
-    const instance = await instancePromise;
-    await Promise.all((instance.getScopes() as Scope[]).map((scope) => scope.dispose()));
-  };
+  const { instancePromise, release } = joinInstance(config, options?.mode);
   try {
     const instance = await instancePromise;
     const scope = await endpointScope(instance, options?.app);
-    await instance.emitProvidersReady();
+    if (options?.mode !== 'manifest') await instance.emitProvidersReady();
     return await DirectClientImpl.create(scope, options, release);
   } catch (error) {
     // Best-effort like a client's close(), which runs the same release: the caller needs this error

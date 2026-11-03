@@ -18,6 +18,8 @@ export function registerBuildCommands(program: Command): void {
     .option('--no-deterministic', 'Disable deterministic archive output (mcpb target)')
     .option('--stage-only', 'Leave the MCPB staging directory intact and skip zipping (mcpb target)')
     .option('--no-clean', "Keep the output directory's existing contents instead of clearing it first")
+    .option('--no-manifest', 'Do not write frontmcp.manifest.json (the server manifest) or lint it')
+    .option('--strict-lint', 'Fail the build on a manifest lint finding (missing descriptions, instructionsBudget)')
     .action(async (options, cmd: { parent?: { opts?: () => Record<string, unknown> } }) => {
       // No `outDir` default here: `runBuild` applies `dist` relative to the
       // project root, which differs from the cwd when the config sits above it.

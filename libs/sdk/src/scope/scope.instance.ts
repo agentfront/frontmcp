@@ -60,6 +60,7 @@ import { normalizeJob } from '../job/job.utils';
 import { type JobDefinitionStore } from '../job/store/job-definition.interface';
 import { type JobStateStore } from '../job/store/job-state.interface';
 import SetLevelFlow from '../logging/flows/set-level.flow';
+import { describeBudgetOverruns } from '../manifest/instructions-budget.check';
 import { NotificationService } from '../notification';
 import { OffloadService } from '../offload/offload.service';
 import { agentToolMetadata, findUnenforcedMetadata } from '../plugin/enforced-metadata.check';
@@ -1055,6 +1056,8 @@ export class Scope extends ScopeEntry {
       this._healthService.autoDiscoverProbes(this);
       this.logger.verbose(`HealthService initialized (${this._healthService.getProbeCount()} probe(s))`);
     }
+
+    for (const message of await describeBudgetOverruns(this)) this.logger.warn(message);
 
     mark('batch3:finalization');
     this.logger.info(`Scope ready — ${this.formatScopeSummary()}`);
