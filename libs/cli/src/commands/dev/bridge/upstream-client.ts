@@ -184,6 +184,8 @@ export function createHttpUpstream(options: HttpUpstreamOptions): UpstreamClient
 export interface PipeUpstreamOptions extends UpstreamClientOptions {
   /** The spawned child; we write to / read from its IPC channel (FD 3). */
   child: ChildProcess;
+  /** Called with each batch of dev events the child sends (`{ __frontmcp: 'dev-events', events }`). */
+  onDevEvents?: (events: unknown[]) => void;
   /** How long a replayed `initialize` may take. */
   reinitializeTimeoutMs?: number;
 }
@@ -195,7 +197,7 @@ export interface PipeUpstreamOptions extends UpstreamClientOptions {
  * yields whatever the child writes back.
  */
 export function createPipeUpstream(options: PipeUpstreamOptions): UpstreamClient {
-  const { log, child, onFrame, reinitializeTimeoutMs = 10_000 } = options;
+  const { log, child, onFrame, onDevEvents, reinitializeTimeoutMs = 10_000 } = options;
   const pending = new Map<string, (frame: JsonRpcFrame) => void>();
 
   function handleMessage(msg: unknown): void {
@@ -203,8 +205,10 @@ export function createPipeUpstream(options: PipeUpstreamOptions): UpstreamClient
       log.warn('pipe-upstream-non-object', { type: typeof msg });
       return;
     }
-    // SDK control messages (`{ __frontmcp: 'ready' }`) are not JSON-RPC.
-    if ((msg as { __frontmcp?: unknown }).__frontmcp !== undefined) return;
+    // SDK control messages (`{ __frontmcp: 'ready' }`, the dev events) are not JSON-RPC.
+    const control = msg as { __frontmcp?: unknown; events?: unknown };
+    if (control.__frontmcp === 'dev-events' && Array.isArray(control.events)) onDevEvents?.(control.events);
+    if (control.__frontmcp !== undefined) return;
     const frame = msg as JsonRpcFrame;
     const waiter = typeof frame.id === 'string' ? pending.get(frame.id) : undefined;
     if (waiter) {

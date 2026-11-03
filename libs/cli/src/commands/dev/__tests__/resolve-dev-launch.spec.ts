@@ -103,6 +103,43 @@ describe('resolveDevLaunch', () => {
     }
   });
 
+  it('hands the child the events file: .frontmcp/dev-events.jsonl in the project root by default', async () => {
+    const launch = await resolveDevLaunch({ _: [], port: 4313 } as never);
+
+    const defaultFile = path.join(root, '.frontmcp', 'dev-events.jsonl');
+    expect(launch.eventsFile).toBe(defaultFile);
+    expect(launch.childEnv['FRONTMCP_DEV_EVENTS_FILE']).toBe(defaultFile);
+    expect(launch.childEnv['FRONTMCP_DEV_EVENTS_IPC']).toBe('');
+  });
+
+  it('resolves an --events-file typed in the subfolder from the subfolder', async () => {
+    const launch = await resolveDevLaunch({ _: [], port: 4314, eventsFile: 'logs/events.jsonl' } as never);
+
+    expect(launch.eventsFile).toBe(path.join(sub, 'logs', 'events.jsonl'));
+    expect(launch.childEnv['FRONTMCP_DEV_EVENTS_FILE']).toBe(path.join(sub, 'logs', 'events.jsonl'));
+  });
+
+  it('asks the child for its events over IPC when the bridge writes the file (--stdio --serve)', async () => {
+    const launch = await resolveDevLaunch({ _: [], port: 4315 } as never, { listens: false, eventsOverIpc: true });
+
+    expect(launch.eventsFile).toBe(path.join(root, '.frontmcp', 'dev-events.jsonl'));
+    expect(launch.childEnv['FRONTMCP_DEV_EVENTS_IPC']).toBe('1');
+    expect(launch.childEnv['FRONTMCP_DEV_EVENTS_FILE']).toBe('');
+  });
+
+  it('with --no-events, names no events file and clears one the shell set', async () => {
+    process.env['FRONTMCP_DEV_EVENTS_FILE'] = '/elsewhere/events.jsonl';
+    try {
+      const launch = await resolveDevLaunch({ _: [], port: 4316, noEvents: true } as never);
+
+      expect(launch.eventsFile).toBeUndefined();
+      expect(launch.childEnv['FRONTMCP_DEV_EVENTS_FILE']).toBe('');
+      expect(launch.childEnv['FRONTMCP_DEV_EVENTS_IPC']).toBe('');
+    } finally {
+      delete process.env['FRONTMCP_DEV_EVENTS_FILE'];
+    }
+  });
+
   it('with autoPortWhenUnset, picks a free port instead of failing on a busy default', async () => {
     const log = jest.fn();
     const launch = await resolveDevLaunch({ _: [] } as never, { autoPortWhenUnset: true, log });

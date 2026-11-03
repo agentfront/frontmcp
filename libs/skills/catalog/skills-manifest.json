@@ -2636,7 +2636,7 @@
     {
       "name": "frontmcp-observability",
       "category": "observability",
-      "description": "Use when adding tracing, structured logging, metrics, or monitoring to a FrontMCP server. Covers zero-config OpenTelemetry distributed tracing across all flows; the this.telemetry API for custom spans, events, and attributes in tools, plugins, agents, and skills; structured JSON logging with trace correlation and configurable sinks (Winston, Pino, stdout); the off-by-default /metrics endpoint (process and framework metrics, Prometheus-compatible); vendor integrations (Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend); and testing spans, log correlation, and instrumentation. Triggers: observability, telemetry, tracing, logging, monitoring, OpenTelemetry, OTel, spans, metrics, Prometheus, Datadog, Coralogix, Logz.io, Grafana, Winston, Pino.",
+      "description": "Use when adding tracing, structured logging, metrics, or monitoring to a FrontMCP server. Covers zero-config OpenTelemetry distributed tracing across all flows; the this.telemetry API for custom spans, events, and attributes in tools, plugins, agents, and skills; structured JSON logging with trace correlation and configurable sinks (Winston, Pino, stdout); the off-by-default /metrics endpoint (process and framework metrics, Prometheus-compatible); event-loop stall detection that names the calls in flight; vendor integrations (Coralogix, Datadog, Logz.io, Grafana Cloud, or any OTLP backend); and testing spans, log correlation, and instrumentation. Triggers: observability, telemetry, tracing, logging, monitoring, OpenTelemetry, OTel, spans, metrics, Prometheus, event loop stall, blocked event loop, Datadog, Coralogix, Logz.io, Grafana, Winston, Pino.",
       "path": "frontmcp-observability",
       "targets": ["all"],
       "hasResources": true,
@@ -2667,6 +2667,23 @@
                 "Setting `metrics: { enabled: true }` on `@FrontMcp` to register `GET /metrics`",
                 "Verifying the Prometheus text-exposition response with `curl`",
                 "Reading process metrics + framework counters from a single scrape"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "stall-detection",
+          "description": "Find what blocks the event loop - a warning naming the calls in flight during each stall, a stall-seconds counter per entry, and GC pauses counted apart",
+          "examples": [
+            {
+              "name": "find-a-blocking-tool",
+              "description": "Turn on stall detection and see the warning name a tool that blocks the event loop.",
+              "level": "basic",
+              "tags": ["observability", "stalls", "event-loop", "metrics"],
+              "features": [
+                "Setting `observability: { stalls: { thresholdMs } }` on `@FrontMcp`",
+                "Reading the `Event loop stalled for` warning that names the call in flight",
+                "Scraping `frontmcp_event_loop_stall_seconds_total` per entry from `/metrics`"
               ]
             }
           ]
