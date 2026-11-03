@@ -10,6 +10,7 @@ import {
 
 import type { ResourceKey, ResourceSnapshot, ResourceStoreHandle } from '../../common/metadata/materialized.metadata';
 import { InvalidResourceStoreError } from '../../errors/mcp.error';
+import { refuseServerStoresInBrowser } from '../../scope/browser-stores';
 
 /** The backends with an atomic `setIfEquals`, which every write uses. */
 const STORAGE_TYPES = ['memory', 'redis', 'sqlite'] as const;
@@ -162,6 +163,9 @@ export class ResourceStore implements ResourceStoreHandle {
 
   private async openStorage(): Promise<OpenStore> {
     const { storage = { type: 'memory' }, pollIntervalMs, coalesceMs } = this.options;
+    refuseServerStoresInBrowser({
+      resourceStore: storage.type === 'memory' ? undefined : `storage: { type: '${storage.type}' }`,
+    });
     const root = await createStorage({ fallback: 'error', ...storage });
     const namespaced = root.namespace(NAMESPACE);
     const feed = createChangeFeed(namespaced, {

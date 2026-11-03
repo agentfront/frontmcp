@@ -9,9 +9,9 @@ import {
   FRONTMCP_CONTEXT,
   Plugin,
   ProviderScope,
-  refusePluginStoreInBrowser,
   ScopeEntry,
   type FrontMcpContext,
+  type PluginStoreInBrowser,
   type ProviderType,
 } from '@frontmcp/sdk';
 import type { NamespacedStorage, RootStorage, StorageConfig } from '@frontmcp/utils';
@@ -106,16 +106,6 @@ export interface ApprovalPluginOptions {
   cleanupIntervalSeconds?: number;
 }
 
-/** In a browser, refuse a `storage` on Redis or SQLite before it opens (#1033). */
-function refuseRedisOrSqliteInBrowser({ storage, storageInstance }: ApprovalPluginOptions): void {
-  const type = storageInstance ? undefined : storage?.type;
-  refusePluginStoreInBrowser({
-    plugin: 'ApprovalPlugin',
-    option: type === 'redis' || type === 'sqlite' ? `storage: { type: '${type}' }` : undefined,
-    memory: "storage: { type: 'memory' }",
-  });
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // ApprovalPlugin
 // ─────────────────────────────────────────────────────────────────────────────
@@ -186,6 +176,18 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
     };
   }
 
+  /** A `storage` on Redis or SQLite, which a browser refuses at startup (#1033); a `storageInstance` replaces it. */
+  static override browserStores = ({ storage, storageInstance }: ApprovalPluginOptions): PluginStoreInBrowser[] => {
+    const type = storageInstance ? undefined : storage?.type;
+    return [
+      {
+        plugin: 'ApprovalPlugin',
+        option: type === 'redis' || type === 'sqlite' ? `storage: { type: '${type}' }` : undefined,
+        memory: "storage: { type: 'memory' }",
+      },
+    ];
+  };
+
   /**
    * Dynamic providers based on plugin options.
    */
@@ -195,7 +197,6 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
       ...ApprovalPlugin.defaultOptions,
       ...options,
     };
-    refuseRedisOrSqliteInBrowser(config);
 
     // ─────────────────────────────────────────────────────────────────────────
     // Approval Store

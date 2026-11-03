@@ -4,6 +4,7 @@ import { brandClass, isBrandedInstance } from '@frontmcp/utils';
 
 import { MethodNotImplementedError } from '../../errors/transport.errors';
 import { type PluginType, type ProviderType, type ToolType } from '../interfaces';
+import { type RedisOptionsInput } from '../types/options/redis';
 import {
   collectDynamicProviders,
   collectDynamicTools,
@@ -27,6 +28,19 @@ type InitOptions<TInput> =
       useFactory: (...args: any[]) => TInput | Promise<TInput>;
       providers?: readonly ProviderType[];
     };
+
+/** A plugin's store: the option that would open Redis or SQLite (none when it opens neither) and the one for memory. */
+export interface PluginStoreInBrowser {
+  plugin: string;
+  option: string | undefined;
+  memory: string;
+}
+
+/** The server's top-level stores, which a plugin's `global-store` takes: what a browser needs to know of them. */
+export interface PluginStoreServer {
+  redis?: RedisOptionsInput;
+  sqlite?: unknown;
+}
 
 type PluginClassWithOptions<TInput, TOptions> = {
   new (...args: any[]): any;
@@ -100,6 +114,12 @@ export abstract class DynamicPlugin<TOptions extends object, TInput extends obje
    * @param options
    */
   static dynamicTools?(options: any): readonly ToolType[];
+
+  /**
+   * Optional hook naming the stores these options open on Redis or SQLite. In a browser, startup refuses them all in
+   * one `BrowserStoreUnavailableError`, with the SDK's own, before any store opens.
+   */
+  static browserStores?(options: unknown, server: PluginStoreServer): readonly PluginStoreInBrowser[];
 
   get<T>(token: Reference<T>): T {
     throw new MethodNotImplementedError('DynamicPlugin', 'get');

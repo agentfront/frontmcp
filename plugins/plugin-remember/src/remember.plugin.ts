@@ -7,8 +7,9 @@ import {
   isVercelKvProvider,
   Plugin,
   ProviderScope,
-  refusePluginStoreInBrowser,
   type FrontMcpConfigType,
+  type PluginStoreInBrowser,
+  type PluginStoreServer,
   type ProviderType,
   type ToolType,
 } from '@frontmcp/sdk';
@@ -42,11 +43,6 @@ function withCheckedOptions(options: RememberPluginOptionsInput): RememberPlugin
     );
   }
   return options;
-}
-
-/** In a browser, refuse a store that `option` puts on Redis, before it connects (#1033). */
-function refuseRedisInBrowser(option: string): void {
-  refusePluginStoreInBrowser({ plugin: 'RememberPlugin', option, memory: "type: 'memory'" });
 }
 
 /**
@@ -125,6 +121,19 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
   static override dynamicTools = (options: RememberPluginOptionsInput): readonly ToolType[] =>
     options.tools?.enabled ? createRememberTools(options.tools.prefix) : [];
 
+  /** A store on Redis, which a browser refuses at startup (#1033): Vercel KV, over HTTPS, is not one. */
+  static override browserStores = (
+    options: RememberPluginOptionsInput,
+    server: PluginStoreServer,
+  ): PluginStoreInBrowser[] => {
+    const type = options.type ?? RememberPlugin.defaultOptions.type;
+    const onRedis =
+      type === 'redis' ||
+      type === 'redis-client' ||
+      (type === 'global-store' && server.redis !== undefined && !isVercelKvProvider(server.redis));
+    return [{ plugin: 'RememberPlugin', option: onRedis ? `type: '${type}'` : undefined, memory: "type: 'memory'" }];
+  };
+
   /**
    * Dynamic providers based on plugin options.
    */
@@ -158,7 +167,6 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
             }
 
             // Redis provider
-            refuseRedisInBrowser("type: 'global-store'");
             return new RememberRedisProvider({
               type: 'redis',
               config: {
@@ -176,23 +184,25 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
 
       case 'redis':
         if ('config' in config && config.config) {
-          refuseRedisInBrowser("type: 'redis'");
+          const redisConfig = config.config;
           providers.push({
             name: 'remember:store:redis',
             provide: RememberStoreToken,
-            useValue: new RememberRedisProvider({
-              type: 'redis',
-              config: config.config,
-              keyPrefix: config.keyPrefix,
-              defaultTTL: config.defaultTTL,
-            }),
+            // Built when the server starts, after a browser's startup check, not when `init()` runs.
+            inject: () => [] as const,
+            useFactory: () =>
+              new RememberRedisProvider({
+                type: 'redis',
+                config: redisConfig,
+                keyPrefix: config.keyPrefix,
+                defaultTTL: config.defaultTTL,
+              }),
           });
         }
         break;
 
       case 'redis-client':
         if ('client' in config && config.client) {
-          refuseRedisInBrowser("type: 'redis-client'");
           providers.push({
             name: 'remember:store:redis-client',
             provide: RememberStoreToken,

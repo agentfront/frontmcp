@@ -2,6 +2,7 @@ import type { Token } from '@frontmcp/di';
 import { createStorage, type RootStorage, type SqliteAdapterOptions } from '@frontmcp/utils';
 
 import { ProviderScope, type OnShutdown, type ProviderFactoryType } from '../common';
+import { refuseServerStoresInBrowser } from '../scope/browser-stores';
 
 /** The SQLite storage `sqliteStorageProvider()` registers by default: `this.get(SqliteStorageToken)`. */
 export const SqliteStorageToken: Token<RootStorage> = Symbol.for('frontmcp:storage.sqlite');
@@ -24,6 +25,7 @@ export function sqliteStorageProvider(
     provide,
     inject: () => [] as const,
     useFactory: async () => {
+      refuseServerStoresInBrowser({ sqliteStorage: 'sqliteStorageProvider()' });
       const storage = await createStorage({ type: 'sqlite', sqlite, prefix, fallback: 'error' });
       return Object.assign(storage, { onShutdown: () => storage.disconnect() });
     },

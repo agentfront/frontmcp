@@ -6,8 +6,6 @@ import CacheMemoryProvider from '../providers/cache-memory.provider';
 import CacheRedisProvider from '../providers/cache-redis.provider';
 import CacheVercelKvProvider from '../providers/cache-vercel-kv.provider';
 
-// Helper type for value providers returned by dynamicProviders
-type ValueProvider = { name: string; provide: symbol; useValue: unknown };
 // Helper type for the memory store's factory provider, which needs no injected dependencies
 type MemoryFactoryProvider = { name: string; provide: symbol; useFactory: () => unknown };
 // Helper type for factory providers returned by dynamicProviders
@@ -88,12 +86,12 @@ describe('CachePlugin', () => {
             db: 1,
           },
         });
-        const provider = providers[0] as ValueProvider;
+        const provider = providers[0] as FactoryProvider;
 
         expect(providers).toHaveLength(1);
         expect(provider.name).toBe('cache:redis');
         expect(provider.provide).toBe(CacheStoreToken);
-        expect(provider.useValue).toBeInstanceOf(CacheRedisProvider);
+        expect(provider.useFactory()).toBeInstanceOf(CacheRedisProvider);
       });
 
       it('should create redis provider with defaultTTL', () => {
@@ -102,10 +100,10 @@ describe('CachePlugin', () => {
           config: { host: 'localhost', port: 6379 },
           defaultTTL: 3600,
         });
-        const provider = providers[0] as ValueProvider;
+        const provider = providers[0] as FactoryProvider;
 
         expect(providers).toHaveLength(1);
-        expect(provider.useValue).toBeInstanceOf(CacheRedisProvider);
+        expect(provider.useFactory()).toBeInstanceOf(CacheRedisProvider);
       });
     });
 
@@ -124,11 +122,11 @@ describe('CachePlugin', () => {
           type: 'redis-client',
           client: mockClient,
         });
-        const provider = providers[0] as ValueProvider;
+        const provider = providers[0] as FactoryProvider;
 
         expect(providers).toHaveLength(1);
         expect(provider.name).toBe('cache:redis');
-        expect(provider.useValue).toBeInstanceOf(CacheRedisProvider);
+        expect(provider.useFactory()).toBeInstanceOf(CacheRedisProvider);
       });
     });
 

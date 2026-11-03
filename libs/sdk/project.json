@@ -108,6 +108,7 @@
             "@frontmcp/protocol",
             "@frontmcp/protocol/*",
             "@frontmcp/observability",
+            "@frontmcp/storage-sqlite",
             "@opentelemetry/api",
             "@opentelemetry/sdk-trace-base",
             "ioredis",

@@ -388,8 +388,8 @@ export function isRedisProvider(options: RedisOptions): options is RedisProvider
 /**
  * Check if options are for Vercel KV provider
  */
-export function isVercelKvProvider(options: RedisOptions): options is VercelKvProviderOptions {
-  return options.provider === 'vercel-kv';
+export function isVercelKvProvider(options: RedisOptions | RedisOptionsInput): options is VercelKvProviderOptions {
+  return 'provider' in options && options.provider === 'vercel-kv';
 }
 
 /**

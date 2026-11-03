@@ -1,6 +1,6 @@
 /**
- * A browser has no TCP socket for Redis: in a browser, a CachePlugin store on Redis is refused before it opens, with
- * BrowserStoreUnavailableError naming `type: 'memory'` (#1033). A Node server keeps its Redis.
+ * A browser has no TCP socket for Redis: in a browser, startup refuses a CachePlugin store on Redis before it opens, in
+ * the server's one BrowserStoreUnavailableError, naming `type: 'memory'` (#1033). A Node server keeps its Redis.
  */
 import 'reflect-metadata';
 
@@ -76,10 +76,26 @@ describe('CachePlugin in a browser', () => {
   it.each([
     ["type: 'redis'", { type: 'redis', config: redisConfig }],
     ["type: 'redis-client'", { type: 'redis-client', client: {} }],
-  ] as const)('refuses %s before it connects', (option, cache) => {
-    expect(() => CachePlugin.init(cache as CachePluginOptions)).toThrow(
-      `CachePlugin would use ${option} (set type: 'memory' in place of ${option})`,
-    );
+  ] as const)('refuses %s at startup, before it connects', async (option, cache) => {
+    const startup = startWith(cache as CachePluginOptions);
+
+    await expect(startup).rejects.toMatchObject({
+      code: 'BROWSER_STORE_UNAVAILABLE',
+      stores: [['CachePlugin', option]],
+      message: `A browser cannot open Redis or SQLite: CachePlugin would use ${option} (set type: 'memory' in place of ${option})`,
+    });
+    expect(redisClient).not.toHaveBeenCalled();
+  });
+
+  it("lists the cache in the server's one refusal, with the stores that take the top-level redis", async () => {
+    const startup = startWith({ type: 'global-store' }, { redis, tasks: {} });
+
+    await expect(startup).rejects.toMatchObject({
+      stores: [
+        ['tasks', 'redis'],
+        ['CachePlugin', "type: 'global-store'"],
+      ],
+    });
     expect(redisClient).not.toHaveBeenCalled();
   });
 
@@ -96,5 +112,23 @@ describe('CachePlugin on Node', () => {
     await startWith({ type: 'global-store' }, { redis });
 
     expect(redisClient).toHaveBeenCalledWith(expect.objectContaining({ host: '127.0.0.1', port: 6379 }));
+  });
+
+  it('connects a redis cache when the server starts, not when init() runs', async () => {
+    const cache = CachePlugin.init({ type: 'redis', config: redisConfig });
+    expect(redisClient).not.toHaveBeenCalled();
+
+    @App({ id: 'cached-on-redis', name: 'Cached on Redis', plugins: [cache] })
+    class CachedOnRedisApp {}
+    started.push(
+      await FrontMcpInstance.createDirect({
+        info: { name: 'cache-node-store', version: '1.0.0' },
+        apps: [CachedOnRedisApp],
+        logging: { level: LogLevel.Off },
+        tasks: { store: false },
+      }),
+    );
+
+    expect(redisClient).toHaveBeenCalledWith(expect.objectContaining(redisConfig));
   });
 });

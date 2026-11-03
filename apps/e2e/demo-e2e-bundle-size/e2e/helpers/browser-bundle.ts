@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { builtinModules } from 'node:module';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, posix, relative, resolve, sep } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 import { build, type Metafile, type Plugin } from 'esbuild';
@@ -19,6 +19,11 @@ export const SERVER_MODULES = ['front-mcp/front-mcp.mjs'];
 export const DEFAULT_CONFIG_MODULES = [...SERVER_MODULES, 'task/task-scope.runtime.mjs'];
 const nodeBuiltins = new Set(builtinModules);
 
+/** `file` relative to `root` with `/` separators, as esbuild's metafile and the patterns name inputs on every platform. */
+function inputPath(root: string, file: string): string {
+  return relative(root, file).split(sep).join(posix.sep);
+}
+
 export interface BrowserBundle {
   bytes: number;
   gzipBytes: number;
@@ -32,13 +37,23 @@ export interface ViteBuild {
   initialModules: string[];
 }
 
-function keepOnDemandModulesOut(sdkBrowserDist: string, loadedModules: readonly string[]): Plugin {
+/**
+ * Leaves out what a page's bundler puts in chunks of their own, loaded on first use: the modules the SDK's, utils' and
+ * auth's browser builds import with import(), except the SDK modules the config loads.
+ */
+function keepOnDemandModulesOut(
+  sdkBrowserDist: string,
+  libBrowserDists: readonly string[],
+  loadedModules: readonly string[],
+): Plugin {
   return {
     name: 'keep-on-demand-modules-out',
     setup(pluginBuild) {
       pluginBuild.onResolve({ filter: /^\./ }, (args) => {
-        if (args.kind !== 'dynamic-import' || !args.importer.startsWith(sdkBrowserDist)) return undefined;
-        const target = relative(sdkBrowserDist, resolve(dirname(args.importer), args.path));
+        if (args.kind !== 'dynamic-import') return undefined;
+        if (libBrowserDists.some((dist) => args.importer.startsWith(dist))) return { path: args.path, external: true };
+        if (!args.importer.startsWith(sdkBrowserDist)) return undefined;
+        const target = inputPath(sdkBrowserDist, resolve(dirname(args.importer), args.path));
         return loadedModules.includes(target) ? undefined : { path: args.path, external: true };
       });
     },
@@ -80,9 +95,12 @@ const stubOptionalPeers: Plugin = {
   },
 };
 
-/** An app's browser bundle of the entry from the built packages, without optional peers, with these on-demand SDK modules. */
+/** An app's browser bundle of the entry from the built packages, without optional peers or on-demand modules but these SDK ones. */
 export async function bundleForBrowser(entryFile: string, loadedModules: readonly string[]): Promise<BrowserBundle> {
   const sdkBrowserDist = await realpath(resolve(workspaceRoot, 'libs/sdk/dist/browser'));
+  const libBrowserDists = await Promise.all(
+    ['libs/utils/dist/browser', 'libs/auth/dist/browser'].map((dist) => realpath(resolve(workspaceRoot, dist))),
+  );
   const result = await build({
     entryPoints: [entryFile],
     absWorkingDir: workspaceRoot,
@@ -96,14 +114,18 @@ export async function bundleForBrowser(entryFile: string, loadedModules: readonl
     conditions: ['browser'],
     tsconfigRaw: {},
     logLevel: 'silent',
-    plugins: [keepOnDemandModulesOut(sdkBrowserDist, loadedModules), stubNodeBuiltins, stubOptionalPeers],
+    plugins: [
+      keepOnDemandModulesOut(sdkBrowserDist, libBrowserDists, loadedModules),
+      stubNodeBuiltins,
+      stubOptionalPeers,
+    ],
   });
   const output = result.outputFiles.find((file) => file.path.endsWith('.js'));
   if (!output) throw new Error(`esbuild emitted no JavaScript for ${entryFile}`);
   return {
     bytes: output.contents.byteLength,
     gzipBytes: gzipSync(output.contents).byteLength,
-    entryInput: relative(workspaceRoot, entryFile),
+    entryInput: inputPath(workspaceRoot, entryFile),
     metafile: result.metafile,
   };
 }
@@ -125,7 +147,7 @@ export async function bundleWithVite(entryFile: string): Promise<ViteBuild> {
       { encoding: 'utf8', env: { ...process.env, NODE_ENV: 'production' } },
     );
     const build = JSON.parse(output) as ViteBuild;
-    return { ...build, initialModules: build.initialModules.map((id) => relative(root, id)) };
+    return { ...build, initialModules: build.initialModules.map((id) => inputPath(root, resolve(id))) };
   } finally {
     await rm(outDir, { recursive: true, force: true });
   }
@@ -210,7 +232,7 @@ export async function bundleWithWebpack(
   await new Promise((closed) => compiler.close(closed));
   if (stats.hasErrors()) throw new Error(stats.toString('errors-only'));
   return [...stats.compilation.modules].flatMap((module) =>
-    module instanceof webpack.NormalModule ? [relative(workspaceRoot, module.resource)] : [],
+    module instanceof webpack.NormalModule ? [inputPath(workspaceRoot, module.resource)] : [],
   );
 }
 
