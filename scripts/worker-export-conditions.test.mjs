@@ -7,7 +7,7 @@
 // built-ins, so it gets the browser variants, as a page does (#1031). demo-e2e-cloudflare consumes workspace `src`
 // through the `development` condition, so this guard runs the condition-resolution algorithm itself.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -94,6 +94,36 @@ for (const [pkgDir, splits] of Object.entries(EXPECT)) {
     }
   });
 }
+
+function resolveNested(target, active) {
+  if (typeof target !== 'object' || target === null) return target;
+  for (const [key, value] of Object.entries(target)) {
+    if (key !== 'default' && !active.has(key)) continue;
+    const resolved = resolveNested(value, active);
+    if (resolved !== undefined) return resolved;
+  }
+  return undefined;
+}
+
+const workspacePackages = ['libs', 'plugins']
+  .flatMap((dir) => readdirSync(path.join(repoRoot, dir)).map((name) => `${dir}/${name}`))
+  .filter((pkgDir) => existsSync(path.join(repoRoot, pkgDir, 'package.json')));
+
+test('every workspace package gives a browser Web Worker the files it gives a page', () => {
+  for (const pkgDir of workspacePackages) {
+    const { imports = {}, exports = {} } = readPkg(pkgDir);
+    const entries = { ...imports, ...(typeof exports === 'object' ? exports : {}) };
+    for (const [specifier, entry] of Object.entries(entries)) {
+      for (const kind of [['import'], ['require'], ['import', 'module'], ['require', 'module']]) {
+        assert.equal(
+          resolveNested(entry, new Set([...BROWSER_WORKER, ...kind])),
+          resolveNested(entry, new Set([...BROWSER, ...kind])),
+          `${pkgDir} ${specifier} (${kind.join(' + ')})`,
+        );
+      }
+    }
+  }
+});
 
 // A browser bundler gets the per-module build of utils and auth; Cloudflare and Node keep the single-file ESM
 for (const pkgDir of ['libs/utils', 'libs/auth']) {
