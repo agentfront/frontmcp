@@ -131,4 +131,23 @@ describe('CachePlugin on Node', () => {
 
     expect(redisClient).toHaveBeenCalledWith(expect.objectContaining(redisConfig));
   });
+
+  it('gives the servers that install one redis init() its one client', async () => {
+    const cache = CachePlugin.init({ type: 'redis', config: redisConfig });
+
+    for (const id of ['first', 'second']) {
+      @App({ id: `cached-${id}`, name: `Cached ${id}`, plugins: [cache] })
+      class CachedApp {}
+      started.push(
+        await FrontMcpInstance.createDirect({
+          info: { name: `cache-${id}`, version: '1.0.0' },
+          apps: [CachedApp],
+          logging: { level: LogLevel.Off },
+          tasks: { store: false },
+        }),
+      );
+    }
+
+    expect(redisClient).toHaveBeenCalledTimes(1);
+  });
 });

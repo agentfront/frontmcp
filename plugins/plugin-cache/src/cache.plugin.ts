@@ -132,15 +132,17 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
         });
         break;
       case 'redis':
-      case 'redis-client':
+      case 'redis-client': {
+        let store: CacheRedisProvider | undefined;
         providers.push({
           name: 'cache:redis',
           provide: CacheStoreToken,
-          // Built when the server starts, after a browser's startup check, not when `init()` runs.
+          // Built when the first server starts, after a browser's startup check; the servers of one `init()` share it.
           inject: () => [] as const,
-          useFactory: () => new CacheRedisProvider(options),
+          useFactory: () => (store ??= new CacheRedisProvider(options)),
         });
         break;
+      }
       case 'memory':
         providers.push({
           name: 'cache:memory',

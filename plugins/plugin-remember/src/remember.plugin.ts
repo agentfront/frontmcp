@@ -185,18 +185,19 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
       case 'redis':
         if ('config' in config && config.config) {
           const redisConfig = config.config;
+          let store: RememberRedisProvider | undefined;
           providers.push({
             name: 'remember:store:redis',
             provide: RememberStoreToken,
-            // Built when the server starts, after a browser's startup check, not when `init()` runs.
+            // Built when the first server starts, after a browser's startup check; the servers of one `init()` share it.
             inject: () => [] as const,
             useFactory: () =>
-              new RememberRedisProvider({
+              (store ??= new RememberRedisProvider({
                 type: 'redis',
                 config: redisConfig,
                 keyPrefix: config.keyPrefix,
                 defaultTTL: config.defaultTTL,
-              }),
+              })),
           });
         }
         break;

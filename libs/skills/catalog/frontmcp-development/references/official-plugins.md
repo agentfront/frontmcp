@@ -291,9 +291,9 @@ A browser build (`create()` in a web page, WebMCP) has no TCP socket for Redis. 
 (`BROWSER_STORE_UNAVAILABLE`), the one error that names the server's own stores too; the message names `type: 'memory'`.
 Vercel KV, over HTTPS, is allowed, but its token is then in the page's bundle, readable by every visitor: use one that
 only allows what every visitor may do. `ioredis` loads only when a Redis store is built, so a page on memory or Vercel
-KV does not bundle it, and on Node a `type: 'redis'` store connects when the server starts. Up to 1.10 the plugin opened
-the Redis client anyway, and its calls failed; `redis` and `redis-client` threw from `init()`, and `ioredis` was in
-every page bundle.
+KV does not bundle it, and on Node a `type: 'redis'` store connects when the first server that installs it starts; the
+servers that share one `init()` share its client. Up to 1.10 the plugin opened the Redis client anyway, and its calls
+failed; `redis` and `redis-client` threw from `init()`, and `ioredis` was in every page bundle.
 
 Every type takes `defaultTTL`, in seconds: an entry stored without its own `ttl` expires that long after it is written.
 Up to 1.9.0 the memory and Redis stores (`global-store` on Redis included) ignored it, so those entries never expired;

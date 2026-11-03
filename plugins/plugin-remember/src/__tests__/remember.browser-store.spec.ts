@@ -133,4 +133,23 @@ describe('RememberPlugin on Node', () => {
     await startWith({ type: 'redis', config });
     expect(redisClient).toHaveBeenCalledWith(expect.objectContaining(config));
   });
+
+  it('gives the servers that install one redis init() its one client', async () => {
+    const remember = RememberPlugin.init({ skipLegacyPurge: true, type: 'redis', config: { host: '127.0.0.1' } });
+
+    for (const id of ['first', 'second']) {
+      @App({ id: `remembering-${id}`, name: `Remembering ${id}`, plugins: [remember] })
+      class RememberingApp {}
+      started.push(
+        await FrontMcpInstance.createDirect({
+          info: { name: `remember-${id}`, version: '1.0.0' },
+          apps: [RememberingApp],
+          logging: { level: LogLevel.Off },
+          tasks: { store: false },
+        }),
+      );
+    }
+
+    expect(redisClient).toHaveBeenCalledTimes(1);
+  });
 });
