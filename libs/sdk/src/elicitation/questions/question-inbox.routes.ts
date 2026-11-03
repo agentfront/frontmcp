@@ -41,47 +41,65 @@ async function inboxOf(route: HttpRouteContext, store: QuestionStore): Promise<{
   return { questions: subject ? await store.list(subject) : [] };
 }
 
-function printToConsole(message: string): void {
+function printToStderr(message: string): void {
   if (typeof process !== 'undefined' && typeof process.stderr?.write === 'function') process.stderr.write(message);
   else console.warn(message);
 }
 
+function stderrIsTerminal(): boolean {
+  return typeof process !== 'undefined' && process.stderr?.isTTY === true;
+}
+
 /**
  * Print a one-time sign-in link to the question inbox of the caller of `context` (a tool, an agent) on the server's
- * console (stderr), where the person at the machine reads it, as they read the startup token. The person who opens it,
- * in a browser or with `frontmcp inbox`, sees and answers that caller's questions, and no one else's. The caller gets
- * only the link's expiry, so an agent cannot sign in and answer its own question.
+ * stderr, where the person at the machine reads it, as they read the startup token. The person who opens it, in a
+ * browser or with `frontmcp inbox`, sees and answers that caller's questions, and no one else's. The caller gets only
+ * the link's expiry. By default (`elicitation.persistent.inboxLinks: 'terminal'`) the link is printed only while stderr
+ * is a terminal: stderr that goes to a log, an MCP client or an agent would let its reader answer the questions.
  */
 export function printQuestionInboxLink(context: ExecutionContextBase): { expiresAt: number } {
   const people = context.tryGet(LoopbackTokenAuth);
   if (!people) throw new ElicitationNotSupportedError('The question inbox needs people auth: set http.auth.people');
+  const questions = context.scope.persistentQuestions;
+  if (!questions) throw new ElicitationNotSupportedError('The question inbox needs elicitation.persistent');
+  if (questions.inboxLinks === 'off') {
+    throw new ElicitationNotSupportedError(
+      "Inbox links are off (elicitation.persistent.inboxLinks: 'off'): send createCode({ subject }) codes yourself",
+    );
+  }
+  if (questions.inboxLinks === 'terminal' && !stderrIsTerminal()) {
+    throw new ElicitationNotSupportedError(
+      "The server's stderr is not a terminal, so an inbox link printed there could reach a log or the client that " +
+        "started the server: set elicitation.persistent.inboxLinks: 'stderr' to print it anyway",
+    );
+  }
   const subject = questionSubjectOf(context.tryGetContext()?.authInfo);
   if (!subject) {
     throw new ElicitationNotSupportedError('The question inbox is for a signed-in user or a session, not this caller');
   }
   const { code, expiresAt } = people.createCode({ subject });
   const link = `${PEOPLE_LOGIN_PATH}?code=${code}&next=${encodeURIComponent(QUESTION_INBOX_PATH)}`;
-  printToConsole(
+  printToStderr(
     `[frontmcp] question inbox sign-in link: ${link}\n` +
       `[frontmcp] It works once, until ${new Date(expiresAt).toISOString()}: open it on this server, ` +
-      "or run frontmcp inbox --url <server> '<link>'.\n",
+      'or run frontmcp inbox --url <server> and paste it.\n',
   );
   return { expiresAt };
 }
 
-/** The inbox routes of a scope's persistent questions: people routes, which show a person their subject's questions. */
+/** The inbox routes of a scope's persistent questions: subject routes, which show a person their subject's questions. */
 export function questionInboxRoutes(store: QuestionStore): HttpRouteType[] {
-  @HttpRoute({ method: 'GET', path: QUESTIONS_PATH, auth: 'people' })
+  @HttpRoute({ method: 'GET', path: QUESTIONS_PATH, auth: 'subject' })
   class QuestionListRoute extends HttpRouteContext {
-    handle() {
-      return inboxOf(this, store);
+    async handle(): Promise<HttpOutput> {
+      return httpRespond.json(await inboxOf(this, store), { headers: { ...NO_STORE_HEADERS } });
     }
   }
 
   @HttpRoute({
     method: 'GET',
     path: `${QUESTIONS_PATH}/events`,
-    auth: 'people',
+    auth: 'subject',
     sse: { store, topics: [QUESTIONS_TOPIC] },
   })
   class QuestionEventsRoute extends HttpRouteContext {
@@ -90,7 +108,7 @@ export function questionInboxRoutes(store: QuestionStore): HttpRouteType[] {
     }
   }
 
-  @HttpRoute({ method: 'POST', path: `${QUESTIONS_PATH}/:id/answer`, auth: 'people' })
+  @HttpRoute({ method: 'POST', path: `${QUESTIONS_PATH}/:id/answer`, auth: 'subject' })
   class QuestionAnswerRoute extends HttpRouteContext {
     async handle() {
       const parsed = answerBodySchema.safeParse(parsedBody(this.request.body));
@@ -108,7 +126,7 @@ export function questionInboxRoutes(store: QuestionStore): HttpRouteType[] {
     }
   }
 
-  @HttpRoute({ method: 'GET', path: QUESTION_INBOX_PATH, auth: 'people' })
+  @HttpRoute({ method: 'GET', path: QUESTION_INBOX_PATH, auth: 'subject' })
   class QuestionInboxPageRoute extends HttpRouteContext {
     handle(): HttpOutput {
       const nonce = base64urlEncode(randomBytes(16));

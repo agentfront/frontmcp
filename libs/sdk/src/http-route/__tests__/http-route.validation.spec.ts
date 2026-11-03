@@ -75,10 +75,8 @@ describe('the routes of a server', () => {
     await expect(boot([class Plain {}])).rejects.toThrow(InvalidHttpRouteError);
   });
 
-  it('refuse a people route when http.auth.people is not set', async () => {
-    await expect(boot([routeClass({ method: 'GET', path: '/x', auth: 'people' })])).rejects.toThrow(
-      InvalidHttpRouteError,
-    );
+  it.each(['people', 'subject'] as const)('refuse a %s route when http.auth.people is not set', async (auth) => {
+    await expect(boot([routeClass({ method: 'GET', path: '/x', auth })])).rejects.toThrow(InvalidHttpRouteError);
   });
 
   it('refuse an http.auth.people the server cannot use', async () => {

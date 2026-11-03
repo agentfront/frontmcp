@@ -3,7 +3,9 @@ import {
   createStorage,
   getEnv,
   getRuntimeContext,
+  lstat,
   mkdir,
+  realpath,
   writeFile,
   type RootStorage,
   type SqliteAdapterOptions,
@@ -11,12 +13,14 @@ import {
 
 import { isRedisProvider, redisOptionsSchema, type FrontMcpLogger } from '../../common';
 import { type PersistentQuestionsStorage } from '../../common/types/options/elicitation';
+import { findReplaceableDirectory } from '../../server/security/unix-socket-guard';
 import { getElicitationSecret } from '../store/elicitation-encryption';
 import { InvalidQuestionStoreError } from './question.errors';
 import { QuestionStore } from './question.store';
 
 const OWNER_ONLY_DIRECTORY = 0o700;
 const OWNER_ONLY_FILE = 0o600;
+const GROUP_OR_OTHER_ACCESS = 0o077;
 
 export interface QuestionStoreFactoryOptions {
   storage: PersistentQuestionsStorage;
@@ -76,8 +80,9 @@ export interface QuestionStorageSources {
 
 /**
  * Where questions are kept: `elicitation.persistent.storage`, else the server's Redis, else its SQLite file, else
- * `questions.sqlite` in `$FRONTMCP_HOME` (`~/.frontmcp`), made owner-only. Serverless and edge runtimes have no
- * default: a question there must outlive the instance, so they need a store that is named.
+ * `questions.sqlite` in `$FRONTMCP_HOME` (`~/.frontmcp`), made owner-only, and refused when another user could read
+ * or replace it. Serverless and edge runtimes have no default: a question there must outlive the instance, so they
+ * need a store that is named.
  */
 export async function resolveQuestionStorage(sources: QuestionStorageSources): Promise<PersistentQuestionsStorage> {
   if (sources.storage) return sources.storage;
@@ -97,8 +102,38 @@ export async function resolveQuestionStorage(sources: QuestionStorageSources): P
   const home = getEnv('FRONTMCP_HOME') || path.join(nodeOs().homedir(), '.frontmcp');
   const file = path.join(home, 'questions.sqlite');
   await mkdir(home, { recursive: true, mode: OWNER_ONLY_DIRECTORY });
+  if (process.platform !== 'win32') await assertNoOtherUserCanReplace(home);
   await writeFile(file, '', { mode: OWNER_ONLY_FILE, flag: 'a' });
+  if (process.platform !== 'win32') await assertOwnerOnlyFile(file);
   return { type: 'sqlite', sqlite: { path: file } };
+}
+
+async function assertNoOtherUserCanReplace(home: string): Promise<void> {
+  for (const directory of new Set([home, await realpath(home)])) {
+    const replaceable = await findReplaceableDirectory(directory);
+    if (!replaceable) continue;
+    const { ownerUid } = replaceable;
+    const reason =
+      ownerUid === undefined ? 'the group or others can write to it' : `it belongs to another user (uid ${ownerUid})`;
+    throw new InvalidQuestionStoreError(
+      `refusing the default store under ${replaceable.directory}: ${reason}. ` +
+        'Set FRONTMCP_HOME to a folder only you can write to, or elicitation.persistent.storage',
+    );
+  }
+}
+
+async function assertOwnerOnlyFile(file: string): Promise<void> {
+  const stats = await lstat(file);
+  const reason = !stats.isFile()
+    ? 'it is not a regular file'
+    : stats.uid !== process.getuid?.()
+      ? `it belongs to another user (uid ${stats.uid})`
+      : stats.mode & GROUP_OR_OTHER_ACCESS
+        ? 'the group or others can read it'
+        : undefined;
+  if (reason) {
+    throw new InvalidQuestionStoreError(`refusing the default store ${file}: ${reason}; make it owner-only (0600)`);
+  }
 }
 
 /** Node's `os` and `path`, loaded on first use: the default file is Node-only and a browser bundle must not load them. */

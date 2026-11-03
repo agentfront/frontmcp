@@ -253,15 +253,17 @@ export class QuestionStore implements HttpRouteTopicSource {
     return records.filter((record): record is StoredRecord => record !== undefined);
   }
 
-  /** The record, unless it cannot be read or has expired (an expired one is deleted). */
+  /** The record, unless it cannot be read, belongs at another key, or has expired: such a record is deleted. */
   private async live(storageKey: string, raw: string, subject: string): Promise<StoredRecord | undefined> {
     const record = await this.decode(raw, subject);
-    if (!record || record.subject !== subject) return undefined;
-    if (record.expiresAt <= Date.now()) {
-      await this.options.storage.deleteIfEquals(storageKey, raw);
-      return undefined;
-    }
-    return { storageKey, raw, record };
+    const usable =
+      record !== undefined &&
+      record.subject === subject &&
+      this.recordKey(record.subject, record.key) === storageKey &&
+      record.expiresAt > Date.now();
+    if (usable) return { storageKey, raw, record };
+    await this.options.storage.deleteIfEquals(storageKey, raw);
+    return undefined;
   }
 
   private async encode(record: QuestionRecord): Promise<string> {

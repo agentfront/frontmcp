@@ -202,6 +202,28 @@ describe('Persistent questions E2E', () => {
     expect((await inbox(aliceCookie)).find((candidate) => candidate.id === question.id)?.answered).toBe(false);
   });
 
+  it("opens no inbox for a person signed in with the startup token's code", async () => {
+    const token = /people sign-in token: (\S+)/.exec(server.getLogs().join('\n'))?.[1] ?? '';
+    const issued = await fetch(`${server.info.baseUrl}/_frontmcp/people/code`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(issued.status).toBe(200);
+    const { code } = (await issued.json()) as { code: string };
+    const login = await fetch(`${server.info.baseUrl}/_frontmcp/people/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: server.info.baseUrl },
+      body: new URLSearchParams({ code }).toString(),
+      redirect: 'manual',
+    });
+    const operator = (login.headers.get('set-cookie') ?? '').split(';')[0];
+
+    const listed = await fetch(`${server.info.baseUrl}/_frontmcp/questions`, { headers: { Cookie: operator } });
+
+    expect(operator).toMatch(/^frontmcp_people=/);
+    expect(listed.status).toBe(401);
+  });
+
   it('refuses an answer posted from another site', async () => {
     const alice = await connect('alice');
     const cookie = await signIn(alice);
@@ -220,13 +242,16 @@ describe('Persistent questions E2E', () => {
     const cookie = await signIn(alice);
     const question = await waitForQuestion(cookie, 'deploy-6.0.0');
 
-    const listed = await run('node', [CLI, 'inbox', await inboxLink(alice)], { timeout: 60_000 });
+    const piped = run('node', [CLI, 'inbox'], { timeout: 60_000 });
+    piped.child.stdin?.end(`${await inboxLink(alice)}\n`);
+    const listed = await piped;
     expect(listed.stdout).toContain('Deploy 6.0.0 to production?');
     expect(listed.stdout).toContain(question.id);
 
     const link = await inboxLink(alice);
-    await run('node', [CLI, 'inbox', link, '--answer', question.id, '--content', '{"approve":true}'], {
+    await run('node', [CLI, 'inbox', '--answer', question.id, '--content', '{"approve":true}'], {
       timeout: 60_000,
+      env: { ...process.env, FRONTMCP_INBOX_LINK: link },
     });
     const reused = await run('node', [CLI, 'inbox', link], { timeout: 60_000 }).catch(
       (error: { stderr?: string }) => error,

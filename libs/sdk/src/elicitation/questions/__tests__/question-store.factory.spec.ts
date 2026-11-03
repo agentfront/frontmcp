@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import * as utils from '@frontmcp/utils';
-import { mkdtemp, rm, stat } from '@frontmcp/utils';
+import { chmod, mkdir, mkdtemp, rm, stat, symlink, writeFile } from '@frontmcp/utils';
 
 import { elicitationOptionsSchema } from '../../../common/types/options/elicitation';
 import {
@@ -71,6 +71,31 @@ describe('resolveQuestionStorage', () => {
     }
   });
 
+  const posixOnly = process.platform === 'win32' ? it.skip : it;
+
+  posixOnly('refuses a default file the group or others can read', async () => {
+    await resolveQuestionStorage({});
+    await chmod(path.join(home, 'nested', 'questions.sqlite'), 0o644);
+
+    await expect(resolveQuestionStorage({})).rejects.toThrow(/others can read/);
+  });
+
+  posixOnly('refuses a default file that is a link', async () => {
+    await mkdir(path.join(home, 'nested'), { recursive: true, mode: 0o700 });
+    await writeFile(path.join(home, 'elsewhere.sqlite'), '', { mode: 0o600 });
+    await symlink(path.join(home, 'elsewhere.sqlite'), path.join(home, 'nested', 'questions.sqlite'));
+
+    await expect(resolveQuestionStorage({})).rejects.toThrow(/not a regular file/);
+  });
+
+  posixOnly('refuses a FRONTMCP_HOME another user could replace the file in', async () => {
+    await mkdir(path.join(home, 'nested'), { recursive: true });
+    await chmod(path.join(home, 'nested'), 0o777);
+
+    await expect(resolveQuestionStorage({})).rejects.toThrow(InvalidQuestionStoreError);
+    await expect(resolveQuestionStorage({})).rejects.toThrow(/the group or others can write to it/);
+  });
+
   it.each([
     ['an edge runtime', { runtime: 'edge', deployment: 'standalone' }],
     ['a serverless deployment', { runtime: 'node', deployment: 'serverless' }],
@@ -128,7 +153,37 @@ describe('openPersistentQuestions', () => {
     const fallback = await openPersistentQuestions({ persistent: { storage: { type: 'memory' } }, logger });
 
     expect([custom?.ttlMs, custom?.type, fallback?.ttlMs]).toEqual([3_600_000, 'memory', DEFAULT_QUESTION_TTL_MS]);
+    expect([custom?.inboxLinks, fallback?.inboxLinks]).toEqual(['terminal', 'terminal']);
     await Promise.all([custom?.store.close(), fallback?.store.close()]);
+  });
+
+  it('keeps the questions of two servers on one store apart', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'questions-servers-'));
+    const storage = { type: 'sqlite', sqlite: { path: path.join(directory, 'questions.sqlite') } };
+    const open = (serverName: string) => openPersistentQuestions({ persistent: { storage }, serverName, logger });
+    const [deploys, billing] = await Promise.all([open('deploys'), open('billing')]);
+    const ask = (questions: typeof deploys, waiter: string) =>
+      questions?.store.ask({
+        subject: 'principal:alice',
+        key: 'approve',
+        message: `${waiter} asks`,
+        requestedSchema: { type: 'object' },
+        ttlMs: 60_000,
+        waiter,
+      });
+
+    const asked = [await ask(deploys, 'deploys'), await ask(billing, 'billing')];
+
+    const ids = asked.map((outcome) => (outcome?.kind === 'waiting' ? outcome.question.id : outcome?.kind));
+    expect(new Set(ids).size).toBe(2);
+    expect((await billing?.store.list('principal:alice'))?.map((question) => question.message)).toEqual([
+      'billing asks',
+    ]);
+    expect(await deploys?.store.take('principal:alice', 'approve', 'deploys')).toEqual(
+      expect.objectContaining({ kind: 'waiting' }),
+    );
+    await Promise.all([deploys?.store.close(), billing?.store.close()]);
+    await rm(directory, { recursive: true, force: true });
   });
 });
 
@@ -143,6 +198,8 @@ describe('elicitation.persistent options', () => {
   it.each([
     [true, {}],
     [{ ttlMs: 1000 }, { ttlMs: 1000 }],
+    [{ inboxLinks: 'stderr' }, { inboxLinks: 'stderr' }],
+    [{ inboxLinks: 'off' }, { inboxLinks: 'off' }],
   ])('reads %j as the settings %j', (persistent, settings) => {
     expect(parsePersistentQuestionsOptions(persistent)).toEqual(settings);
   });
@@ -152,6 +209,7 @@ describe('elicitation.persistent options', () => {
     [{ ttlMs: 1.5 }, 'elicitation.persistent: ttlMs must be a whole number of milliseconds'],
     [{ storage: { type: 'upstash' } }, "elicitation.persistent: storage.type must be 'memory', 'redis' or 'sqlite'"],
     [{ ttl: 5 }, 'elicitation.persistent: Unrecognized key: "ttl"'],
+    [{ inboxLinks: 'console' }, "elicitation.persistent: inboxLinks must be 'terminal', 'stderr' or 'off'"],
     ['yes', 'elicitation.persistent: it must be true, false or an object of settings'],
   ])('fails the boot on %j', async (persistent, message) => {
     const opening = openPersistentQuestions({ persistent, logger });

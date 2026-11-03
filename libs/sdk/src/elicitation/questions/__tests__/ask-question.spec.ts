@@ -189,6 +189,12 @@ describe('askPersistentQuestion', () => {
 describe('questionSubjectOf', () => {
   it.each([
     ['a signed-in user', { user: { sub: 'alice' }, sessionId: 's-1' }, 'principal:alice'],
+    ['a user of an issuer', { user: { sub: 'alice', iss: 'https://idp.one' } }, 'principal:https://idp.one#alice'],
+    [
+      'the same sub at another issuer',
+      { user: { sub: 'alice', iss: 'https://idp.two' } },
+      'principal:https://idp.two#alice',
+    ],
     ['an anonymous user with a session', { user: { sub: 'anon:123' }, sessionId: 's-1' }, 'session:s-1'],
     ['a session verified by the session flow', { extra: { sessionId: 's-2' } }, 'session:s-2'],
     ['an anonymous caller with no session', { user: { sub: 'anon:123' } }, undefined],

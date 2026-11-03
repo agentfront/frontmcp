@@ -38,7 +38,7 @@ export type HttpRouteType = abstract new (args: HttpRouteCtorArgs) => HttpRouteI
 export abstract class HttpRouteContext extends ExecutionContextBase<HttpRouteResult> implements HttpRouteInterface {
   /** The request: method, path, headers, query and parsed body. */
   readonly request: ServerRequest;
-  /** The signed-in person, on a route with people auth. */
+  /** The signed-in person, on a `'people'` or `'subject'` route; `person.subject` on a `'subject'` one. */
   readonly person?: PeopleSession;
 
   constructor(args: HttpRouteCtorArgs) {

@@ -395,6 +395,7 @@ export class Scope extends ScopeEntry {
             const { openPersistentQuestions } = await import('../elicitation/questions/question-scope.helper.js');
             const questions = await openPersistentQuestions({
               persistent,
+              serverName: this.metadata.info.name,
               redis: elicitationRedis,
               sqlite: resolvedTopLevelSqlite,
               logger: this.logger,

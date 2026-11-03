@@ -1,7 +1,11 @@
 export type HttpRouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-/** Who may call a route: a signed-in person (`http.auth.people`), or anyone. */
-export type HttpRouteAuth = 'people' | 'public';
+/**
+ * Who may call a route: a signed-in person (`http.auth.people`), a person signed in for an MCP subject (with a code
+ * from `createCode({ subject })`, such as the question inbox's), or anyone. Each kind of sign-in opens only its own
+ * routes, so a code made for one caller's questions opens no `'people'` page.
+ */
+export type HttpRouteAuth = 'people' | 'subject' | 'public';
 
 /** Where an SSE route hears that its view changed: a `resourceStore()`, whose keys publish their name as a topic. */
 export interface HttpRouteTopicSource {

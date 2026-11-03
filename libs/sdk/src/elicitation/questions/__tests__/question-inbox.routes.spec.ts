@@ -7,14 +7,21 @@ import 'reflect-metadata';
 import { LoopbackTokenAuth } from '@frontmcp/auth';
 
 import { createTestFetchServer } from '../../../__test-utils__/helpers/mcp-20260728.helpers';
-import { App, LogLevel, type FrontMcpConfigInput } from '../../../common';
+import { App, HttpRoute, HttpRouteContext, LogLevel, type FrontMcpConfigInput } from '../../../common';
 import { ElicitationNotSupportedError } from '../../../errors';
 import { type FrontMcpInstance } from '../../../front-mcp/front-mcp';
 import { type Scope } from '../../../scope/scope.instance';
 import { printQuestionInboxLink } from '../question-inbox.routes';
 import { type QuestionStore } from '../question.store';
 
-@App({ id: 'inbox', name: 'inbox' })
+@HttpRoute({ method: 'GET', path: '/board' })
+class BoardRoute extends HttpRouteContext {
+  handle() {
+    return { board: true };
+  }
+}
+
+@App({ id: 'inbox', name: 'inbox', routes: [BoardRoute] })
 class InboxApp {}
 
 const ORIGIN = 'http://localhost';
@@ -86,7 +93,18 @@ describe('the question inbox', () => {
 
   it('refuses a browser that has not signed in', async () => {
     expect((await send('/_frontmcp/questions')).status).toBe(401);
+    expect((await send('/_frontmcp/questions/events', { headers: { Accept: 'text/event-stream' } })).status).toBe(401);
     expect((await send('/_frontmcp/inbox')).status).toBe(401);
+  });
+
+  it("opens no other people page with a subject's sign-in, and no inbox with the startup token's", async () => {
+    const alice = await signInFor('principal:alice');
+    const operator = await signInFor();
+
+    expect((await send('/board', { headers: { Cookie: alice } })).status).toBe(401);
+    expect((await send('/board', { headers: { Cookie: operator } })).status).toBe(200);
+    expect((await send('/_frontmcp/questions', { headers: { Cookie: operator } })).status).toBe(401);
+    expect((await send('/_frontmcp/inbox', { headers: { Cookie: operator } })).status).toBe(401);
   });
 
   it("shows a person the questions of the subject their code was made for, and no one else's", async () => {
@@ -97,17 +115,9 @@ describe('the question inbox', () => {
     const response = await send('/_frontmcp/questions', { headers: { Cookie: alice } });
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
     expect(await response.json()).toEqual({
       questions: [expect.objectContaining({ key: 'deploy', message: 'principal:alice asks deploy', answered: false })],
-    });
-  });
-
-  it('shows a person signed in with the startup token no questions', async () => {
-    await ask('principal:alice', 'token-holder');
-    const operator = await signInFor();
-
-    expect(await (await send('/_frontmcp/questions', { headers: { Cookie: operator } })).json()).toEqual({
-      questions: [],
     });
   });
 
@@ -125,7 +135,7 @@ describe('the question inbox', () => {
     });
   });
 
-  it('gives another subject, and a person signed in with the token, "not found"', async () => {
+  it('gives another subject "not found", and refuses a person signed in with the token', async () => {
     const id = await ask('principal:alice', 'not-yours');
     const bob = await signInFor('principal:bob');
     const operator = await signInFor();
@@ -133,7 +143,7 @@ describe('the question inbox', () => {
     const asBob = await answer(bob, id, { action: 'decline' });
     const asOperator = await answer(operator, id, { action: 'decline' });
 
-    expect([asBob.status, asOperator.status]).toEqual([404, 404]);
+    expect([asBob.status, asOperator.status]).toEqual([404, 401]);
     expect((await store.list('principal:alice')).find((question) => question.id === id)?.answered).toBe(false);
   });
 
@@ -211,18 +221,38 @@ describe('printQuestionInboxLink', () => {
     lockoutMs: 60_000,
     cookiePath: '/',
   });
-  const context = (authInfo: unknown, withPeople = true) =>
-    ({ tryGet: () => (withPeople ? people : undefined), tryGetContext: () => ({ authInfo }) }) as never;
+  const stderrIsTerminal = process.stderr.isTTY;
+  const context = (
+    authInfo: unknown,
+    options: { withPeople?: boolean; inboxLinks?: string; questions?: boolean } = {},
+  ) =>
+    ({
+      tryGet: () => (options.withPeople === false ? undefined : people),
+      tryGetContext: () => ({ authInfo }),
+      scope: {
+        persistentQuestions: options.questions === false ? undefined : { inboxLinks: options.inboxLinks ?? 'terminal' },
+      },
+    }) as never;
+  let printed: string[];
+  let write: jest.SpyInstance;
 
-  it('prints a sign-in link for the subject of the call on the console, and gives the caller no code', () => {
-    const printed: string[] = [];
-    const write = jest.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+  beforeEach(() => {
+    printed = [];
+    write = jest.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
       printed.push(String(chunk));
       return true;
     });
+  });
+
+  afterEach(() => {
+    write.mockRestore();
+    process.stderr.isTTY = stderrIsTerminal;
+  });
+
+  it('prints a sign-in link for the subject of the call on the terminal, and gives the caller no code', () => {
+    process.stderr.isTTY = true;
 
     const result = printQuestionInboxLink(context({ user: { sub: 'alice' } }));
-    write.mockRestore();
     const link = /question inbox sign-in link: (\S+)/.exec(printed.join(''))?.[1] ?? '';
     const code = new URL(link, 'http://localhost').searchParams.get('code') ?? '';
     const session = people.exchangeCode(code, 'client');
@@ -233,11 +263,35 @@ describe('printQuestionInboxLink', () => {
     expect(session.ok && people.verifySession(session.cookieValue)?.subject).toBe('principal:alice');
   });
 
-  it('is refused without people auth, and for an anonymous caller', () => {
-    expect(() => printQuestionInboxLink(context({ user: { sub: 'alice' } }, false))).toThrow(
+  it('prints nothing while stderr is not a terminal, unless inboxLinks is stderr', () => {
+    process.stderr.isTTY = false;
+
+    expect(() => printQuestionInboxLink(context({ user: { sub: 'alice' } }))).toThrow(/stderr is not a terminal/);
+    expect(printed).toEqual([]);
+    printQuestionInboxLink(context({ user: { sub: 'alice' } }, { inboxLinks: 'stderr' }));
+    expect(printed.join('')).toContain('question inbox sign-in link: /_frontmcp/people/login?code=');
+  });
+
+  it("prints nothing with inboxLinks 'off'", () => {
+    process.stderr.isTTY = true;
+
+    expect(() => printQuestionInboxLink(context({ user: { sub: 'alice' } }, { inboxLinks: 'off' }))).toThrow(
+      /inboxLinks: 'off'/,
+    );
+    expect(printed).toEqual([]);
+  });
+
+  it('is refused without people auth, without persistent questions, and for an anonymous caller', () => {
+    process.stderr.isTTY = true;
+
+    expect(() => printQuestionInboxLink(context({ user: { sub: 'alice' } }, { withPeople: false }))).toThrow(
+      ElicitationNotSupportedError,
+    );
+    expect(() => printQuestionInboxLink(context({ user: { sub: 'alice' } }, { questions: false }))).toThrow(
       ElicitationNotSupportedError,
     );
     expect(() => printQuestionInboxLink(context({ user: { sub: 'anon:1' } }))).toThrow(ElicitationNotSupportedError);
+    expect(printed).toEqual([]);
   });
 });
 

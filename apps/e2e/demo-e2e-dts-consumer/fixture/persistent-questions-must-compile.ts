@@ -3,6 +3,8 @@ import 'reflect-metadata';
 import {
   App,
   FrontMcp,
+  HttpRoute,
+  HttpRouteContext,
   LoopbackTokenAuth,
   printQuestionInboxLink,
   QuestionPendingError,
@@ -10,6 +12,7 @@ import {
   ToolContext,
   z,
   type ElicitOptions,
+  type InboxLinks,
   type PeopleSession,
   type PersistentQuestion,
   type PersistOptions,
@@ -43,6 +46,13 @@ export function subjectOf(person: PeopleSession): string | undefined {
   return person.subject;
 }
 
+@HttpRoute({ method: 'GET', path: '/my-questions', auth: 'subject' })
+export class MyQuestionsRoute extends HttpRouteContext {
+  handle() {
+    return { subject: this.person?.subject };
+  }
+}
+
 export function waiting(questions: PersistentQuestion[]): string[] {
   return questions.filter((question) => !question.answered).map((question) => question.id);
 }
@@ -63,7 +73,11 @@ export class QuestionsServer {}
   apps: [QuestionsApp],
   elicitation: {
     enabled: true,
-    persistent: { ttlMs: 3_600_000, storage: { type: 'sqlite', sqlite: { path: '/var/lib/app/questions.sqlite' } } },
+    persistent: {
+      ttlMs: 3_600_000,
+      storage: { type: 'sqlite', sqlite: { path: '/var/lib/app/questions.sqlite' } },
+      inboxLinks: 'off',
+    },
   },
 })
 export class TunedQuestionsServer {}
@@ -71,4 +85,6 @@ export class TunedQuestionsServer {}
 export class InvalidPersist {
   // @ts-expect-error persist needs a key
   static readonly noKey: ElicitOptions = { persist: { ttlMs: 1000 } };
+  // @ts-expect-error inboxLinks is 'terminal', 'stderr' or 'off'
+  static readonly badLinks: InboxLinks = 'console';
 }

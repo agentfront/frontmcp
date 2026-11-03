@@ -28,7 +28,18 @@ export interface PersistentQuestionsOptionsInterface {
    * `$FRONTMCP_HOME` (`~/.frontmcp/questions.sqlite`), so a question outlives the process that asked it.
    */
   storage?: PersistentQuestionsStorage;
+
+  /**
+   * Where `printQuestionInboxLink()` prints a sign-in link, whose reader can answer the caller's questions. `'terminal'`
+   * prints it on stderr only while stderr is a terminal, so it never lands in a log, or in output an MCP client or an
+   * agent captured from this server; `'stderr'` prints it there always; `'off'` never (send
+   * `LoopbackTokenAuth.createCode({ subject })` codes to the person yourself). @default 'terminal'
+   */
+  inboxLinks?: InboxLinks;
 }
+
+/** `elicitation.persistent.inboxLinks`. */
+export type InboxLinks = 'terminal' | 'stderr' | 'off';
 
 // ============================================
 // ELICITATION OPTIONS INTERFACE

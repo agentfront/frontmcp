@@ -276,6 +276,10 @@ describe('QuestionStore', () => {
       for (const key of await storage.keys('*')) if (key.includes('q:')) await storage.set(key, '{not json');
 
       expect(await plain.list('principal:alice')).toEqual([]);
+      expect(await plain.ask(request({ waiter: 'call-2' }))).toEqual({
+        kind: 'waiting',
+        question: expect.objectContaining({ key: 'deploy', answered: false }),
+      });
       await plain.close();
     });
 
@@ -343,6 +347,28 @@ describe('QuestionStore', () => {
       expect(await store.ask(request({ waiter: 'next' }))).toEqual({
         kind: 'answered',
         answer: { status: 'accept', content: { approve: true } },
+      });
+    });
+
+    it("delivers no answer that was moved to another question's place in the store", async () => {
+      await store.close();
+      const { store: encrypted, storage } = await createQuestionStore({
+        storage: { type: 'memory' },
+        encryption: { enabled: true, secret: 'a-server-secret-of-some-length' },
+        coalesceMs: 0,
+      });
+      store = encrypted;
+      const recordKeys = async () => (await storage.keys('*')).filter((key) => key.includes('q:'));
+      await askedId(store, { key: 'deploy-prod', waiter: 'prod' });
+      const [prodKey] = await recordKeys();
+      const stagingId = await askedId(store, { key: 'deploy-staging', waiter: 'staging' });
+      await store.answer('principal:alice', stagingId, { status: 'accept', content: { approve: true } });
+      const stagingKey = (await recordKeys()).find((key) => key !== prodKey) ?? '';
+      await storage.set(prodKey, (await storage.get(stagingKey)) ?? '');
+
+      expect(await store.ask(request({ key: 'deploy-prod', waiter: 'prod-2' }))).toEqual({
+        kind: 'waiting',
+        question: expect.objectContaining({ key: 'deploy-prod', answered: false }),
       });
     });
   });

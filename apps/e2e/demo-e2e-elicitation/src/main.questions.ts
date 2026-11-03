@@ -26,6 +26,7 @@ const expectedAudience = process.env['IDP_EXPECTED_AUDIENCE'] || idpProviderUrl;
     requiredScopes: [],
     allowAnonymous: false,
   },
-  elicitation: { enabled: true, persistent: true },
+  // The test reads each inbox link from the server's piped stderr, which is no terminal
+  elicitation: { enabled: true, persistent: { inboxLinks: 'stderr' } },
 })
 export default class Server {}

@@ -154,7 +154,7 @@ export function attachHttpRoutes(scope: Scope, server: object): void {
     const path = typeof metadata.path === 'function' ? metadata.path() : metadata.path;
     if (!isHttpRoutePath(path)) throw new InvalidHttpRouteError(method, String(path), HTTP_ROUTE_PATH_MESSAGE);
     const auth = metadata.auth ?? (people ? 'people' : 'public');
-    if (auth === 'people' && !people) {
+    if (auth !== 'public' && !people) {
       throw new InvalidHttpRouteError(
         method,
         path,

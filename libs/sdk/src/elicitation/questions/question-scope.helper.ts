@@ -1,9 +1,10 @@
 import { internalZ as z } from '@frontmcp/lazy-zod';
-import { type SqliteAdapterOptions } from '@frontmcp/utils';
+import { sha256Hex, type SqliteAdapterOptions } from '@frontmcp/utils';
 
 import { type FrontMcpLogger } from '../../common';
 import { type RawZodShape } from '../../common/types/common.types';
 import {
+  type InboxLinks,
   type PersistentQuestionsOptionsInterface,
   type PersistentQuestionsStorage,
 } from '../../common/types/options/elicitation';
@@ -30,6 +31,9 @@ const persistentQuestionsOptionsSchema = z
         })
         .passthrough()
         .optional(),
+      inboxLinks: z
+        .enum(['terminal', 'stderr', 'off'], { message: "inboxLinks must be 'terminal', 'stderr' or 'off'" })
+        .optional(),
     } satisfies RawZodShape<PersistentQuestionsOptionsInterface>,
     {
       error: (issue) => (issue.code === 'invalid_type' ? 'it must be true, false or an object of settings' : undefined),
@@ -46,21 +50,24 @@ export function parsePersistentQuestionsOptions(persistent: unknown): Persistent
   return { ...parsed.data, storage: parsed.data.storage as PersistentQuestionsStorage | undefined };
 }
 
-/** A scope's persistent questions: the store, and how long a question is kept unless its call says otherwise. */
+/** A scope's persistent questions: the store, a question's default TTL, and where inbox links go. */
 export interface PersistentQuestions {
   store: QuestionStore;
   ttlMs: number;
   type: QuestionStoreResult['type'];
+  inboxLinks: InboxLinks;
 }
 
-/** Open the store `elicitation.persistent` asks for; undefined while it is off. */
+/** Open the store `elicitation.persistent` asks for, keyed apart from other servers on it; undefined while it is off. */
 export async function openPersistentQuestions(options: {
   persistent: unknown;
+  /** `info.name`: servers of another name that share the storage do not share its questions. */
+  serverName?: string;
   redis?: unknown;
   sqlite?: SqliteAdapterOptions;
   logger: FrontMcpLogger;
 }): Promise<PersistentQuestions | undefined> {
-  const { persistent, logger } = options;
+  const { persistent, serverName = '', logger } = options;
   if (!persistent) return undefined;
   const settings = parsePersistentQuestionsOptions(persistent);
   const storage = await resolveQuestionStorage({
@@ -68,7 +75,13 @@ export async function openPersistentQuestions(options: {
     redis: options.redis,
     sqlite: options.sqlite,
   });
-  const { store, type, encrypted } = await createQuestionStore({ storage, logger });
+  const keyPrefix = `mcp:questions:${sha256Hex(`server:${serverName}`).slice(0, 16)}:`;
+  const { store, type, encrypted } = await createQuestionStore({ storage, keyPrefix, logger });
   logger.info('Persistent questions are on', { type, encrypted });
-  return { store, type, ttlMs: settings.ttlMs ?? DEFAULT_QUESTION_TTL_MS };
+  return {
+    store,
+    type,
+    ttlMs: settings.ttlMs ?? DEFAULT_QUESTION_TTL_MS,
+    inboxLinks: settings.inboxLinks ?? 'terminal',
+  };
 }
