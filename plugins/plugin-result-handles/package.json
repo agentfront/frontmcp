@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugin-result-handles",
-  "version": "1.10.16",
+  "version": "1.11.0",
   "description": "Result handles plugin for FrontMCP: folds large tool answers into a preview, a shape and a handle, and lets the model read the rest with result_query",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -50,14 +50,14 @@
     }
   },
   "dependencies": {
-    "@frontmcp/utils": "1.10.16"
+    "@frontmcp/utils": "1.11.0"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.10.16",
-    "@frontmcp/sdk": "1.10.16"
+    "@frontmcp/lazy-zod": "1.11.0",
+    "@frontmcp/sdk": "1.11.0"
   },
   "devDependencies": {
-    "@frontmcp/sdk": "1.10.16",
+    "@frontmcp/sdk": "1.11.0",
     "reflect-metadata": "^0.2.2"
   }
 }
