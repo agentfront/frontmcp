@@ -9,12 +9,14 @@ import { fileExists, mkdtemp, rm } from '@frontmcp/utils';
 
 import {
   App,
+  FrontMcp,
   LogLevel,
   Provider,
   ProviderScope,
   Tool,
   ToolContext,
   type FrontMcpConfigInput,
+  type FrontMcpMetadata,
   type OnBootstrap,
   type OnReady,
   type OnShutdown,
@@ -125,6 +127,34 @@ describe('buildManifest() boot', () => {
     const manifest = await buildManifest(config(stores as Partial<FrontMcpConfigInput>));
 
     expect(manifest.tools.map((tool) => tool.name)).toContain('stock');
+  });
+
+  it('reads a @FrontMcp class whose stores take env vars the build has not set, and opens none of them', async () => {
+    const redisUrl = `redis://127.0.0.1:${redis.port}`;
+    const sqlitePath = path.join(dir, 'sessions.sqlite');
+    process.env['FRONTMCP_SCHEMA_EXTRACT'] = '1';
+    process.env['FRONTMCP_BUILD_EXTRACT'] = '1';
+    try {
+      @FrontMcp(
+        config({
+          redis: { url: unset },
+          sqlite: { path: sqlitePath, encryption: { secret: unset } },
+          jobs: { enabled: true, store: { redis: { url: redisUrl } } },
+          tasks: { enabled: true, redis: { url: redisUrl } },
+          transport: { persistence: { redis: { url: redisUrl } } },
+        }) as FrontMcpMetadata,
+      )
+      class Server {}
+
+      const manifest = await buildManifest(Server);
+
+      expect(manifest.tools.map((tool) => tool.name)).toContain('stock');
+      expect(redis.connections()).toBe(0);
+      expect(await fileExists(sqlitePath)).toBe(false);
+    } finally {
+      delete process.env['FRONTMCP_SCHEMA_EXTRACT'];
+      delete process.env['FRONTMCP_BUILD_EXTRACT'];
+    }
   });
 
   it('never listens or runs onReady, and shuts the providers down when done', async () => {

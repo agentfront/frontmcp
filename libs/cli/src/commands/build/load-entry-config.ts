@@ -15,6 +15,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { setBuildExtractFlags } from './build-extract-flags';
+
 const FRONTMCP_CONFIG_METADATA_KEY = '__frontmcp:config';
 
 /**
@@ -80,8 +82,7 @@ export async function loadEntryDecoratorConfig(entry: string): Promise<Record<st
  * time but the bundled output still ships a Node-only branch.
  */
 export async function loadEntryDecoratorInfo(entry: string): Promise<EntryDecoratorInfo> {
-  const prev = process.env['FRONTMCP_SCHEMA_EXTRACT'];
-  process.env['FRONTMCP_SCHEMA_EXTRACT'] = '1';
+  const restoreFlags = setBuildExtractFlags();
   let decoratorConfig: Record<string, unknown> | undefined;
   // Issue #537: `require()`-ing a TypeScript entry made Node print
   // "Warning: Failed to load the ES module: …/src/main.ts. Make sure to set
@@ -117,8 +118,7 @@ export async function loadEntryDecoratorInfo(entry: string): Promise<EntryDecora
       }
     }
   } finally {
-    if (prev === undefined) delete process.env['FRONTMCP_SCHEMA_EXTRACT'];
-    else process.env['FRONTMCP_SCHEMA_EXTRACT'] = prev;
+    restoreFlags();
   }
 
   // Source-level scan runs unconditionally (in addition to the runtime

@@ -115,6 +115,13 @@ Every `user_config` entry reaches the server as an environment variable: the
 manifest's `mcp_config.env` maps `ENV_NAME` to `${user_config.KEY}`, and the
 host substitutes the user's answer when it starts the server.
 
+The build reads the server without its stores, so a store setting that takes one
+of these variables (`redis: { url: process.env['REDIS_URL'] }`, an
+`sqlite.encryption.secret`) builds without it set, from a `@FrontMcp` class as
+from a config object. The server validates it when the host starts it. Up to
+1.10, a `@FrontMcp` class validated it when the build loaded the entry, so the
+build machine needed the variable too.
+
 ```ts
 deployments: [
   {

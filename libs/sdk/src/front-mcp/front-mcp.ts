@@ -12,6 +12,7 @@ import {
   type FrontMcpInterface,
   type ScopeEntry,
 } from '../common';
+import { withoutStores } from '../common/metadata/front-mcp-stores';
 import { type SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 import { DirectMcpServerImpl, type DirectMcpServer, type DirectServerOptions } from '../direct';
 import { describeConfigIssues, InternalMcpError, ScopeConfigurationError, ServerNotFoundError } from '../errors';
@@ -111,16 +112,6 @@ async function parseCliConfig(
     };
   }
   return parsedConfig;
-}
-
-/** A build reads a server without its stores: it opens none, so their env-var settings need not be set. */
-function withoutStores(options: FrontMcpConfigInput): FrontMcpConfigInput {
-  const { redis: _redis, pubsub: _pubsub, sqlite: _sqlite, jobs, tasks, ...config } = options;
-  return {
-    ...config,
-    ...(jobs && { jobs: { ...jobs, store: undefined } }),
-    ...(tasks && { tasks: { ...tasks, redis: undefined, sqlite: undefined } }),
-  } as FrontMcpConfigInput;
 }
 
 /** A detached job runner runs the server's entry again: it runs its one run instead of serving, then exits. */
