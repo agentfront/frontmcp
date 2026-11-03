@@ -1,9 +1,14 @@
+import 'reflect-metadata';
+
+import { App, DynamicPlugin, Job, JobContext, Plugin } from '../../common';
 import { BrowserStoreUnavailableError, InternalMcpError } from '../../errors';
 import {
   elicitationServerStore,
   refusePluginStoreInBrowser,
   refuseServerStoresInBrowser,
+  refuseStoresInBrowser,
   tasksServerStore,
+  type PluginStoreInBrowser,
 } from '../browser-stores';
 
 const redis = { provider: 'redis' as const, host: 'cache.internal', port: 6379 };
@@ -121,5 +126,150 @@ describe('refusePluginStoreInBrowser', () => {
   it('refuses nothing outside a browser', () => {
     expect(() => refusePluginStoreInBrowser(cacheOnRedis, 'node')).not.toThrow();
     expect(() => refusePluginStoreInBrowser(cacheOnRedis)).not.toThrow();
+  });
+});
+
+describe('BrowserStoreUnavailableError', () => {
+  it("reads without a switch for a plugin's store whose memory option is not given", () => {
+    const unnamed = BrowserStoreUnavailableError as unknown as new (stores: Array<[string, string]>) => Error;
+
+    expect(new unnamed([['MyPlugin', "type: 'redis'"]]).message).toBe(
+      "A browser cannot open Redis or SQLite: MyPlugin would use type: 'redis'",
+    );
+    expect(new BrowserStoreUnavailableError([['MyPlugin', "type: 'redis'"]], { OtherPlugin: 'x' }).message).toBe(
+      "A browser cannot open Redis or SQLite: MyPlugin would use type: 'redis'",
+    );
+  });
+
+  it("names the switch of the SDK's explicit stores", () => {
+    expect(
+      new BrowserStoreUnavailableError([
+        ['rateLimits', "throttle.storage: { type: 'redis' }"],
+        ['authTokens', 'auth.tokenStorage.sqlite'],
+        ['skillsCache', 'skillsConfig.cache.redis'],
+        ['resourceStore', "storage: { type: 'sqlite' }"],
+        ['sqliteStorage', 'sqliteStorageProvider()'],
+      ]).message,
+    ).toBe(
+      'A browser cannot open Redis or SQLite: ' +
+        "rate limits would use throttle.storage: { type: 'redis' } (set throttle.storage: { type: 'memory' } in place of throttle.storage: { type: 'redis' }); " +
+        "auth tokens would use auth.tokenStorage.sqlite (set auth.tokenStorage: 'memory' in place of auth.tokenStorage.sqlite); " +
+        'the skills HTTP cache would use skillsConfig.cache.redis (set a skillsConfig.cache without redis in place of skillsConfig.cache.redis); ' +
+        "a resource store would use storage: { type: 'sqlite' } (set storage: { type: 'memory' } in place of storage: { type: 'sqlite' }); " +
+        'a storage provider would use sqliteStorageProvider() (set a provider of createMemoryStorage() in place of sqliteStorageProvider())',
+    );
+  });
+});
+
+describe('refuseStoresInBrowser', () => {
+  interface KvOptions {
+    type?: 'redis' | 'memory' | 'global-store';
+  }
+
+  @Plugin({ name: 'kv' })
+  class KvPlugin extends DynamicPlugin<KvOptions> {
+    static override browserStores = ({ type }: KvOptions, server: { redis?: unknown }): PluginStoreInBrowser[] => [
+      {
+        plugin: 'KvPlugin',
+        option: type === 'redis' || (type === 'global-store' && server.redis) ? `type: '${type}'` : undefined,
+        memory: "type: 'memory'",
+      },
+    ];
+  }
+
+  async function refusal(options: Parameters<typeof refuseStoresInBrowser>[0]): Promise<unknown> {
+    try {
+      await refuseStoresInBrowser(options, 'browser');
+    } catch (error) {
+      return error;
+    }
+    return undefined;
+  }
+
+  it("lists every store in one refusal: the SDK's and those its plugins declare, on the server and on its apps", async () => {
+    @App({ name: 'kv-app', plugins: [KvPlugin.init({ type: 'global-store' })] })
+    class KvApp {}
+
+    const error = await refusal({
+      redis,
+      apps: [KvApp],
+      plugins: [KvPlugin.init({ type: 'redis' })],
+      elicitation: { enabled: true },
+      throttle: { enabled: true, storage: { type: 'redis' } },
+      auth: { mode: 'local', tokenStorage: { sqlite } },
+      skillsConfig: { cache: { enabled: true, redis: { provider: 'redis' } } },
+    });
+
+    expect(error).toBeInstanceOf(BrowserStoreUnavailableError);
+    expect(error).toMatchObject({
+      stores: [
+        ['tasks', 'redis'],
+        ['elicitation', 'redis'],
+        ['rateLimits', "throttle.storage: { type: 'redis' }"],
+        ['authTokens', 'auth.tokenStorage.sqlite'],
+        ['skillsCache', 'skillsConfig.cache.redis'],
+        ['KvPlugin', "type: 'redis'"],
+        ['KvPlugin', "type: 'global-store'"],
+      ],
+    });
+    expect((error as Error).message).toContain(
+      "KvPlugin would use type: 'redis' (set type: 'memory' in place of type: 'redis')",
+    );
+  });
+
+  it('lists persistent questions and jobs, enabled or declared on an app', async () => {
+    @Job({ name: 'nightly', inputSchema: {}, outputSchema: {} })
+    class NightlyJob extends JobContext {
+      async execute() {
+        return {};
+      }
+    }
+
+    @App({ name: 'job-app', jobs: [NightlyJob] })
+    class JobApp {}
+
+    @App({ name: 'no-job-app' })
+    class NoJobApp {}
+
+    expect(
+      await refusal({
+        sqlite,
+        tasks: { store: false },
+        elicitation: { enabled: true, store: false, persistent: true },
+        jobs: { enabled: true },
+        apps: [NoJobApp],
+      }),
+    ).toMatchObject({
+      stores: [
+        ['questions', 'sqlite'],
+        ['jobs', 'sqlite'],
+      ],
+    });
+    expect(await refusal({ sqlite, tasks: { store: false }, apps: [JobApp] })).toMatchObject({
+      stores: [['jobs', 'sqlite']],
+    });
+    expect(await refusal({ sqlite, tasks: { store: false }, apps: [NoJobApp] })).toBeUndefined();
+    expect(
+      await refusal({ sqlite, tasks: { store: false }, jobs: { enabled: false }, apps: [JobApp] }),
+    ).toBeUndefined();
+  });
+
+  it('lets a browser start with memory stores, Vercel KV and stores that are off', async () => {
+    expect(
+      await refusal({
+        redis: vercelKv,
+        plugins: [KvPlugin.init({ type: 'memory' }), KvPlugin],
+        throttle: { enabled: false, storage: { type: 'redis' } },
+        auth: { mode: 'local', tokenStorage: 'memory' },
+        skillsConfig: { cache: { enabled: true, redis: { provider: 'vercel-kv' } } },
+        elicitation: { enabled: true, persistent: { storage: { type: 'memory' } } },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('refuses nothing outside a browser', async () => {
+    await expect(
+      refuseStoresInBrowser({ redis, plugins: [KvPlugin.init({ type: 'redis' })] }, 'node'),
+    ).resolves.toBeUndefined();
   });
 });

@@ -3,10 +3,13 @@ import 'reflect-metadata';
 import {
   App,
   BrowserStoreUnavailableError,
+  DynamicPlugin,
   FrontMcp,
+  Plugin,
   refusePluginStoreInBrowser,
   type BrowserRefusedStore,
   type PluginStoreInBrowser,
+  type PluginStoreServer,
 } from '@frontmcp/sdk';
 
 @App({ name: 'memory-stores' })
@@ -41,6 +44,26 @@ export function refuseCacheOnRedisInBrowser(): void {
 export const cacheRefusal = new BrowserStoreUnavailableError([['CachePlugin', "type: 'redis'"]], {
   CachePlugin: "type: 'memory'",
 });
+
+export const tasksRefusal = new BrowserStoreUnavailableError([['tasks', 'redis']]);
+
+// @ts-expect-error a plugin's store names, in the second argument, the option that keeps it in memory
+export const unnamedRefusal = new BrowserStoreUnavailableError([['MyPlugin', "type: 'redis'"]]);
+
+interface KvOptions {
+  type?: 'redis' | 'memory' | 'global-store';
+}
+
+@Plugin({ name: 'kv' })
+export class KvPlugin extends DynamicPlugin<KvOptions> {
+  static override browserStores = ({ type }: KvOptions, server: PluginStoreServer): PluginStoreInBrowser[] => [
+    {
+      plugin: 'KvPlugin',
+      option: type === 'redis' || (type === 'global-store' && server.redis) ? `type: '${type}'` : undefined,
+      memory: "type: 'memory'",
+    },
+  ];
+}
 
 @FrontMcp({
   info: { name: 'memory-stores-bad', version: '1.0.0' },

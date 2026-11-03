@@ -245,7 +245,7 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('durable-jobs-must-compile.ts'))).toEqual([]);
   });
 
-  it('types jobs.store: false, tasks.store: false, elicitation.store: false, BrowserStoreUnavailableError and refusePluginStoreInBrowser', () => {
+  it('types jobs.store: false, tasks.store: false, elicitation.store: false, BrowserStoreUnavailableError, refusePluginStoreInBrowser and static browserStores', () => {
     expect(describeEach(inFixtureFile('memory-stores-must-compile.ts'))).toEqual([]);
   });
 

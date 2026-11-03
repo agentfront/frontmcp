@@ -6,10 +6,11 @@ import {
   isAnonymousSubject,
   isVercelKvProvider,
   Plugin,
-  refusePluginStoreInBrowser,
   ToolHook,
   type FlowCtxOf,
   type FrontMcpConfigType,
+  type PluginStoreInBrowser,
+  type PluginStoreServer,
   type ProviderType,
 } from '@frontmcp/sdk';
 import { sha256Hex } from '@frontmcp/utils';
@@ -45,11 +46,6 @@ function assertReadableBypassHeader(bypassHeader: string | undefined): void {
     `CachePlugin bypassHeader "${bypassHeader}" is never seen by the plugin: only request headers that start ` +
       `with "${BYPASS_HEADER_PREFIX}" reach it. Rename it, e.g. "${BYPASS_HEADER_PREFIX}no-cache".`,
   );
-}
-
-/** In a browser, refuse a cache that `option` puts on Redis, before it connects (#1033). */
-function refuseRedisInBrowser(option: string): void {
-  refusePluginStoreInBrowser({ plugin: 'CachePlugin', option, memory: "type: 'memory'" });
 }
 
 /**
@@ -88,6 +84,17 @@ function matchesToolPattern(toolName: string, patterns: string[]): boolean {
   ],
 })
 export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
+  /** A cache on Redis, which a browser refuses at startup (#1033): Vercel KV, over HTTPS, is not one. */
+  static override browserStores = (options: CachePluginOptions, server: PluginStoreServer): PluginStoreInBrowser[] => {
+    const onRedis =
+      options.type === 'redis' ||
+      options.type === 'redis-client' ||
+      (options.type === 'global-store' && server.redis !== undefined && !isVercelKvProvider(server.redis));
+    return [
+      { plugin: 'CachePlugin', option: onRedis ? `type: '${options.type}'` : undefined, memory: "type: 'memory'" },
+    ];
+  };
+
   static override dynamicProviders = (options: CachePluginOptions) => {
     const providers: ProviderType[] = [];
     switch (options.type) {
@@ -111,7 +118,6 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
             }
 
             // Redis provider (including legacy format without provider field)
-            refuseRedisInBrowser("type: 'global-store'");
             return new CacheRedisProvider({
               type: 'redis',
               config: {
@@ -127,11 +133,12 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
         break;
       case 'redis':
       case 'redis-client':
-        refuseRedisInBrowser(`type: '${options.type}'`);
         providers.push({
           name: 'cache:redis',
           provide: CacheStoreToken,
-          useValue: new CacheRedisProvider(options),
+          // Built when the server starts, after a browser's startup check, not when `init()` runs.
+          inject: () => [] as const,
+          useFactory: () => new CacheRedisProvider(options),
         });
         break;
       case 'memory':
