@@ -789,6 +789,7 @@ export class AgentInstance<
       agentInvoker: this.createAgentInvoker(ctx),
       ...(this.agentScope && { privateScope: this.agentScope }),
       progressToken: ctx.progressToken,
+      signal: ctx.signal,
     };
   }
 

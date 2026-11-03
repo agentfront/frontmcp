@@ -148,7 +148,9 @@ const answer = await this.elicit('Deploy v2?', z.object({ approve: z.boolean() }
 ```
 
 The waiting call gets the answer; if it stopped waiting first it fails with `QuestionPendingError`, and the next call of
-the same user (any session) that asks `deploy-v2` gets the answer at once, and only that call. Give the person a sign-in
+the same signed-in user (any session) that asks `deploy-v2` gets the answer at once, and only that call. A caller with no
+signed-in principal has its questions kept for its session (`session:<id>`): only a later call in that session gets the
+answer, never a new session. Give the person a sign-in
 link to the caller's questions with `printQuestionInboxLink(this)`, which prints it on the server's terminal and returns only its expiry, so the agent cannot answer its own question (it prints nothing while stderr is a pipe or a file a client or an agent could read: see `inboxLinks`). See `configure-elicitation` (config skill) for the inbox,
 who may answer, and storage.
 

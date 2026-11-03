@@ -8,7 +8,7 @@ features:
   - 'Turning on `elicitation.persistent` next to `http.auth.people` for the inbox routes'
   - 'Asking with `this.elicit(..., { ttl, persist: { key } })` so the question outlives the call'
   - 'Printing a sign-in link bound to the caller on the server console with `printQuestionInboxLink(this)`'
-  - 'Answering with `frontmcp inbox <link>`, and the next call receiving the answer once'
+  - 'Answering with `frontmcp inbox --url <server>`, which reads the link from the prompt, stdin or `FRONTMCP_INBOX_LINK`, and the next call receiving the answer once'
 ---
 
 # Persistent Questions with an Inbox
@@ -74,7 +74,7 @@ frontmcp inbox --url http://127.0.0.1:3000 --answer q-… --content '{"approve":
 - Turning on `elicitation.persistent` next to `http.auth.people` for the inbox routes
 - Asking with `this.elicit(..., { ttl, persist: { key } })` so the question outlives the call
 - Printing a sign-in link bound to the caller on the server console with `printQuestionInboxLink(this)`
-- Answering with `frontmcp inbox <link>`, and the next call receiving the answer once
+- Answering with `frontmcp inbox --url <server>`, which reads the link from the prompt, stdin or `FRONTMCP_INBOX_LINK`, and the next call receiving the answer once
 
 `approve_deploy` waits 60 s; if nobody answers by then it fails with `QuestionPendingError`, and the question stays for a
 day. `inbox_link` prints only while the server's stderr is a terminal (`elicitation.persistent.inboxLinks: 'terminal'`):

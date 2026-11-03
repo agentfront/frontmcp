@@ -184,6 +184,8 @@ export class AgentContext<
       providers,
       logger: logger.child(`agent:${metadata.id ?? metadata.name}`),
       authInfo: args.authInfo,
+      // Aborts when the call stops, as a tool's: a persistent question the agent waits on then stops waiting
+      signal: args.signal,
     });
     this.agentName = metadata.name;
     this.agentId = metadata.id ?? metadata.name;

@@ -150,11 +150,28 @@ class TunedAgent extends AgentContext {
   }
 }
 
+/** The `this.signal` each run of the stalled agent saw. */
+const stalledSignals: Array<AbortSignal | undefined> = [];
+
+@Agent({
+  name: 'stalled',
+  inputSchema: {},
+  llm: { adapter: answering },
+  timeout: { executeMs: 50 },
+})
+class StalledAgent extends AgentContext {
+  protected override async completion(): Promise<AgentCompletion> {
+    stalledSignals.push(this.signal);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return { content: 'late', finishReason: 'stop' };
+  }
+}
+
 @App({
   id: 'desk',
   name: 'Desk',
   providers: [TicketStore],
-  agents: [TriageAgent, RefuserAgent, DirectRefuserAgent, CallerAgent, OverridingAgent, TunedAgent],
+  agents: [TriageAgent, RefuserAgent, DirectRefuserAgent, CallerAgent, OverridingAgent, TunedAgent, StalledAgent],
 })
 class DeskApp {}
 
@@ -199,6 +216,15 @@ describe('agent context wiring', () => {
       own: { tickets: ['T-1', 'T-2'] },
       dotted: { tickets: ['T-1', 'T-2'] },
     });
+  });
+
+  it("aborts the agent's this.signal when its call stops, as a tool's, so a question it waits on stops waiting", async () => {
+    stalledSignals.length = 0;
+    await expect(server.callTool('invoke_stalled', {})).rejects.toThrow(/timed out/);
+
+    expect(stalledSignals).toHaveLength(1);
+    expect(stalledSignals[0]).toBeInstanceOf(AbortSignal);
+    expect(stalledSignals[0]?.aborted).toBe(true);
   });
 
   it("runs the loop's completions through an overridden completion()", async () => {
