@@ -69,14 +69,7 @@ import { importWithRequireFallback } from '../../utils/dynamic-import.utils';
 import { CimdService } from '../cimd';
 import { createCredentialsProviders } from '../credentials';
 import { credentialsContextExtension } from '../credentials/credentials.context-extension';
-import OauthAuthUiExtraFlow from '../flows/oauth.auth-ui.flow';
-import OauthAuthorizeFlow from '../flows/oauth.authorize.flow';
-import OauthCallbackFlow from '../flows/oauth.callback.flow';
-import OauthConnectFlow from '../flows/oauth.connect.flow';
-import OauthProviderCallbackFlow from '../flows/oauth.provider-callback.flow';
-import OauthRegisterFlow from '../flows/oauth.register.flow';
-import OauthTokenFlow from '../flows/oauth.token.flow';
-import OauthUserInfoFlow from '../flows/oauth.userinfo.flow';
+import { oauthFlows } from '../flows/oauth-flows';
 import SessionVerifyFlow from '../flows/session.verify.flow';
 import WellKnownJwksFlow from '../flows/well-known.jwks.flow';
 import WellKnownAsFlow from '../flows/well-known.oauth-authorization-server.flow';
@@ -1582,15 +1575,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       WellKnownAsFlow /** /.well-known/oauth-authorization-server */,
       WellKnownJwksFlow /** /.well-known/jwks.json */,
       SessionVerifyFlow /** Session verification flow */,
-
-      OauthAuthorizeFlow /** GET /oauth/authorize */,
-      OauthTokenFlow /** POST /oauth/token */,
-      OauthUserInfoFlow /** GET /oauth/userinfo - OIDC userinfo */,
-      OauthCallbackFlow /** GET /oauth/callback - login callback */,
-      OauthConnectFlow /** GET|POST /oauth/connect - mid-session add-credential (Checkpoint 3b) */,
-      OauthRegisterFlow /** POST /oauth/register */,
-      OauthProviderCallbackFlow /** GET /oauth/provider/:providerId/callback */,
-      OauthAuthUiExtraFlow /** POST /oauth/ui/extra — @AuthExtra validated-field submit (#469) */,
+      ...oauthFlows,
     );
   }
 

@@ -1446,3 +1446,5 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 </html>`;
   }
 }
+
+export { OauthAuthorizeFlow };

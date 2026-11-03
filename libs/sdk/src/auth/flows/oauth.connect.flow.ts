@@ -386,3 +386,5 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
 </body></html>`;
   }
 }
+
+export { OauthConnectFlow };

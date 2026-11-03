@@ -155,3 +155,5 @@ export default class OauthUserInfoFlow extends FlowBase<typeof name> {
     this.respond(httpRespond.json(body));
   }
 }
+
+export { OauthUserInfoFlow };
