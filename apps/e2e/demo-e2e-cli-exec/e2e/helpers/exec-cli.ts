@@ -129,9 +129,17 @@ export function runFrontmcpCli(
 }
 
 /** `runFrontmcpCli()` without blocking: the test process keeps serving its sockets while the CLI runs. */
-export function runFrontmcpCliAsync(args: string[], cwd: string, timeoutMs: number): Promise<CliResult> {
+export function runFrontmcpCliAsync(
+  args: string[],
+  cwd: string,
+  timeoutMs: number,
+  extraEnv?: Record<string, string>,
+): Promise<CliResult> {
   return new Promise((resolve) => {
-    const child = spawn('node', [FRONTMCP_BIN, ...args], { cwd, env: { ...process.env, NODE_ENV: 'test' } });
+    const child = spawn('node', [FRONTMCP_BIN, ...args], {
+      cwd,
+      env: { ...process.env, NODE_ENV: 'test', ...extraEnv },
+    });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (data: Buffer) => {
