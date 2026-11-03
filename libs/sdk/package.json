@@ -36,6 +36,11 @@
       "browser": "./src/server/adapters/polyfills/browser-express-host.ts",
       "default": "./src/server/adapters/polyfills/node-express-host.ts"
     },
+    "#shared-server": {
+      "worker": "./src/shared/browser-shared-server.ts",
+      "browser": "./src/shared/browser-shared-server.ts",
+      "default": "./src/shared/index.ts"
+    },
     "#import-computed": {
       "import": "./src/esm-loader/import-computed.ts",
       "default": "./src/esm-loader/import-computed.ts"

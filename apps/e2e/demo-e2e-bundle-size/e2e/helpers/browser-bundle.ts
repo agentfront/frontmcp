@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { builtinModules } from 'node:module';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 import { build, type Metafile, type Plugin } from 'esbuild';
+import webpack from 'webpack';
 
 import { mkdtemp, realpath, rm } from '@frontmcp/utils';
 
@@ -47,7 +48,7 @@ function keepOnDemandModulesOut(sdkBrowserDist: string, loadedModules: readonly 
 const stubNodeBuiltins: Plugin = {
   name: 'stub-node-builtins',
   setup(pluginBuild) {
-    pluginBuild.onResolve({ filter: /^[a-z_:/]+$/ }, (args) =>
+    pluginBuild.onResolve({ filter: /^[a-z0-9_:/]+$/ }, (args) =>
       args.path.startsWith('node:') || nodeBuiltins.has(args.path)
         ? { path: args.path, namespace: 'node-builtin' }
         : undefined,
@@ -130,8 +131,15 @@ export async function bundleWithVite(entryFile: string): Promise<ViteBuild> {
   }
 }
 
-/** A page's browser bundle of several entries that share chunks, from the built packages, written as ES modules Node can run. */
-export async function bundleEntriesWithSharedChunks(entries: Record<string, string>, outdir: string): Promise<void> {
+/**
+ * A page's browser bundle of several entries that share chunks, from the built packages, written as ES modules Node can
+ * run; `nodeRequire` gives each chunk the require() a CommonJS dependency (ioredis) loads Node's built-ins with.
+ */
+export async function bundleEntriesWithSharedChunks(
+  entries: Record<string, string>,
+  outdir: string,
+  { nodeRequire = false } = {},
+): Promise<void> {
   await build({
     entryPoints: entries,
     absWorkingDir: workspaceRoot,
@@ -145,6 +153,9 @@ export async function bundleEntriesWithSharedChunks(entries: Record<string, stri
     platform: 'browser',
     conditions: ['browser'],
     tsconfigRaw: {},
+    banner: nodeRequire
+      ? { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" }
+      : undefined,
     logLevel: 'silent',
     plugins: [externalNodeBuiltins, stubOptionalPeers],
   });
@@ -169,6 +180,56 @@ export async function bundleAsWorker(entryFile: string, outfile: string): Promis
     logLevel: 'silent',
     plugins: [externalNodeBuiltins, stubOptionalPeers],
   });
+}
+
+/**
+ * A page's (`target: 'web'`) or a browser Web Worker's (`target: 'webworker'`: the `worker` and `browser` conditions)
+ * bundle of the entry from the built packages, as webpack 5 makes it with no Node fallbacks: one file, with optional
+ * peers stubbed. Returns its inputs.
+ */
+export async function bundleWithWebpack(
+  target: 'web' | 'webworker',
+  entryFile: string,
+  outfile: string,
+): Promise<string[]> {
+  const compiler = webpack({
+    context: workspaceRoot,
+    mode: 'production',
+    target,
+    entry: entryFile,
+    output: { path: dirname(outfile), filename: basename(outfile) },
+    resolve: {
+      alias: Object.fromEntries(OPTIONAL_PEERS.map((peer) => [`${peer}$`, resolve(fixtureDir, 'missing-peer.mjs')])),
+    },
+    optimization: { minimize: false, concatenateModules: false },
+    plugins: [new webpack.optimize.LimitChunkCountPlugin({ maxChunks: 1 })],
+  });
+  const stats = await new Promise<webpack.Stats>((resolveStats, rejectStats) =>
+    compiler.run((error, result) => (result ? resolveStats(result) : rejectStats(error))),
+  );
+  await new Promise((closed) => compiler.close(closed));
+  if (stats.hasErrors()) throw new Error(stats.toString('errors-only'));
+  return [...stats.compilation.modules].flatMap((module) =>
+    module instanceof webpack.NormalModule ? [relative(workspaceRoot, module.resource)] : [],
+  );
+}
+
+/** A browser Web Worker's bundle of the entry from the built packages, as esbuild makes it with `conditions: ['worker']`. Returns its inputs. */
+export async function bundleWebWorkerWithEsbuild(entryFile: string, outfile: string): Promise<string[]> {
+  const result = await build({
+    entryPoints: [entryFile],
+    absWorkingDir: workspaceRoot,
+    outfile,
+    bundle: true,
+    metafile: true,
+    format: 'esm',
+    platform: 'browser',
+    conditions: ['worker'],
+    tsconfigRaw: {},
+    logLevel: 'silent',
+    plugins: [stubOptionalPeers],
+  });
+  return Object.keys(result.metafile.inputs);
 }
 
 /** The bytes each input contributes to the bundle, largest first. */

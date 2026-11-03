@@ -65,15 +65,15 @@
  *   / `#sse-transport`). They're baked to the node variant because each package
  *   is built with esbuild `bundle:true` under default (node) conditions. The fix
  *   is therefore a single build-pipeline change — a worker-conditioned dist build
- *   (esbuild `conditions: ['worker','browser']`) exposed via a `worker` export
- *   condition, consumed by this bundle with `conditions: ['worker']` — which
+ *   (esbuild `conditions: ['worker','browser']`) exposed via a `workerd` export
+ *   condition, consumed by this bundle with `conditions: ['workerd']` — which
  *   activates those existing browser variants across the board, NOT per-module
  *   lazy patching. Tracked under the ROADMAP "V8-isolate-compatible SDK build"
  *   item. Once it lands, flip `describe.skip` → `describe`.
  * ──────────────────────────────────────────────────────────────────────────
  */
 import { createServer, type Server } from 'node:http';
-import { AddressInfo } from 'node:net';
+import { type AddressInfo } from 'node:net';
 import * as path from 'node:path';
 
 import * as esbuild from 'esbuild';
@@ -163,10 +163,8 @@ describe.skip('managed edge auto-update on workerd (miniflare)', () => {
       outfile: bundlePath,
       banner: { js: BANNER },
       define: { __E2E_BUNDLE_ENDPOINT__: JSON.stringify(endpoint) },
-      // Worker/browser conditions → @frontmcp/utils resolves its `#`-subpath
-      // imports (fs/path/crypto/env) to non-Node variants, keeping `node:fs` out
-      // of the bundle.
-      conditions: ['worker', 'browser'],
+      // wrangler's conditions: `workerd` resolves the Node variants nodejs_compat serves.
+      conditions: ['workerd', 'worker', 'browser'],
       // Node-only optional deps referenced behind lazy `import()` but never
       // executed on the edge path: alias to an empty stub so their Node-only
       // module-eval (require('fs')/child_process + transitive @opentelemetry) is

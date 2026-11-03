@@ -72,7 +72,7 @@ if (pkg.imports) {
  * the CJS bundle, so a browser bundler resolving `#env` from it got the CJS file. Rollup (Vite 7)
  * cannot see the named exports of esbuild's CJS output and fails the build ("getEnv is not
  * exported by .../browser-env.js"). A browser bundler importing from the ESM bundle now gets the
- * `.mjs` twin; `require` still gets the `.js`. Only `browser` changes: Node and `worker` keep
+ * `.mjs` twin; `require` still gets the `.js`. Only `browser` changes: Node and `workerd` keep
  * resolving the files they resolved before.
  */
 function withEsmBrowserTargets(imports, distDir) {

@@ -7,12 +7,12 @@
   "targets": {
     "build": {
       "executor": "nx:noop",
-      "dependsOn": [{ "projects": ["sdk", "plugin-webmcp"], "target": "build" }]
+      "dependsOn": [{ "projects": ["sdk", "plugin-webmcp", "plugin-cache", "plugin-remember"], "target": "build" }]
     },
     "test": {
       "executor": "@nx/jest:jest",
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-bundle-size"],
-      "dependsOn": [{ "projects": ["sdk", "plugin-webmcp"], "target": "build" }],
+      "dependsOn": [{ "projects": ["sdk", "plugin-webmcp", "plugin-cache", "plugin-remember"], "target": "build" }],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-bundle-size/jest.e2e.config.ts",
         "runInBand": true,
@@ -22,7 +22,7 @@
     "test:e2e": {
       "executor": "@nx/jest:jest",
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-bundle-size-e2e"],
-      "dependsOn": [{ "projects": ["sdk", "plugin-webmcp"], "target": "build" }],
+      "dependsOn": [{ "projects": ["sdk", "plugin-webmcp", "plugin-cache", "plugin-remember"], "target": "build" }],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-bundle-size/jest.e2e.config.ts",
         "runInBand": true,

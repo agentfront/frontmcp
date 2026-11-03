@@ -310,7 +310,7 @@ class BuildProjectJob extends JobContext {
 
 ## Admission
 
-`@FrontMcp({ jobs: { admission: { concurrency, memoryMb, maxWaitMs } } })` bounds when job attempts (and workflow steps) start in this process: at most `concurrency` run at once, and each claims `memoryMb` of the memory the process may still use (`process.availableMemory()`: the free system memory, or what is left under a container's memory limit), so one starts only once that much is available beyond what the running ones claimed. Waiting attempts start in the order they arrived. One that waits `maxWaitMs` (default `600000`) is refused with `JobAdmissionTimeoutError` (code `JOB_ADMISSION_TIMEOUT`, with a remedy) and not retried: an inline call fails with it, and a background run ends as `failed`. A cancel or shutdown stops the wait. An attempt frees its slot when it ends, however it ends; an attempt aborted by a timeout or a cancel ends at once, so a job that ignores `this.signal` keeps running outside the limits. Admission is the `admit` stage of `jobs:execute-job`, so a hook can observe or replace it.
+`@FrontMcp({ jobs: { enabled: true, admission: { concurrency, memoryMb, maxWaitMs } } })` bounds when job attempts (and workflow steps) start in this process: at most `concurrency` run at once, and each claims `memoryMb` of the memory the process may still use (`process.availableMemory()`: the free system memory, or what is left under a container's memory limit), so one starts only once that much is available beyond what the running ones claimed. Waiting attempts start in the order they arrived. One that waits `maxWaitMs` (default `600000`) is refused with `JobAdmissionTimeoutError` (code `JOB_ADMISSION_TIMEOUT`, with a remedy) and not retried: an inline call fails with it, and a background run ends as `failed`. A cancel or shutdown stops the wait. An attempt frees its slot when it ends, however it ends; an attempt aborted by a timeout or a cancel ends at once, so a job that ignores `this.signal` keeps running outside the limits. Admission is the `admit` stage of `jobs:execute-job`, so a hook can observe or replace it.
 
 ```typescript
 @FrontMcp({
@@ -327,7 +327,7 @@ class CiServer {}
 
 ## Runners
 
-`@Job({ runner })`, or `@FrontMcp({ jobs: { runner } })` for the jobs that set none, picks where a job's attempts run. Any other value fails the decorator (`runner must be 'inline', 'worker' or 'detached'`).
+`@Job({ runner })`, or `@FrontMcp({ jobs: { enabled: true, runner } })` for the jobs that set none, picks where a job's attempts run. Any other value fails the decorator (`runner must be 'inline', 'worker' or 'detached'`).
 
 | Runner     | Where `execute()` runs                                  | Use for                                                                  |
 | ---------- | ------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -569,9 +569,9 @@ import { FrontMcp } from '@frontmcp/sdk';
 @FrontMcp({
   info: { name: 'my-server', version: '1.0.0' },
   apps: [DataApp],
-  // `enabled: true` is implied by `@App({ jobs })`. Set explicitly only to
-  // configure store, or set to `false` to opt out and suppress the tools.
+  // A `jobs` block needs `enabled`; `false` opts out and suppresses the tools.
   jobs: {
+    enabled: true,
     store: {
       redis: {
         provider: 'redis',
@@ -602,7 +602,7 @@ class MyLocalServer {}
 
 A server with a top-level `sqlite` (or `redis`) and no `jobs.store` keeps its runs there too. Up to 1.10 jobs ignored both and stayed in memory. On the top-level `redis`, the jobs' keys start with its `keyPrefix` followed by `jobs:` (`mcp:jobs:` by default; `jobs.store.keyPrefix` overrides it), so servers that share one Redis keep their runs and dynamic job definitions apart once each sets its own `redis.keyPrefix`. In Redis and SQLite a run record expires 24 hours after the run's last write.
 
-`jobs: { store: false }` keeps runs and dynamic definitions in this process memory although the server has a top-level `redis` or `sqlite`, which its other subsystems (sessions, tasks) keep using. `store` takes `false` or an object; any other value stops startup with `jobs.store must be false (runs kept in memory) or an object with redis or sqlite`. A `runner: 'detached'` job needs a store other processes share, so it cannot use `false`. The generated CLI (`frontmcp build --target cli`, `connect(config, { mode: 'cli' })`) validates `jobs` the same way; up to 1.10 it took an invalid `jobs.store` in a config object for unset and kept the runs in the top-level `redis` or `sqlite`.
+`jobs: { enabled: true, store: false }` keeps runs and dynamic definitions in this process memory although the server has a top-level `redis` or `sqlite`, which its other subsystems (sessions, tasks) keep using. `store` takes `false` or an object; any other value stops startup with `jobs.store must be false (runs kept in memory) or an object with redis or sqlite`. A `runner: 'detached'` job needs a store other processes share, so it cannot use `false`. The generated CLI (`frontmcp build --target cli`, `connect(config, { mode: 'cli' })`) validates `jobs` the same way; up to 1.10 it took an invalid `jobs.store` in a config object for unset and kept the runs in the top-level `redis` or `sqlite`, and accepted a `jobs` block without `enabled`.
 
 ```typescript
 @FrontMcp({
@@ -828,7 +828,7 @@ class DataServer {}
 ### Runtime
 
 - [ ] Jobs subsystem is active — either implicitly via `@App({ jobs: [...] })`
-      (auto-enable, issue #408) or explicitly via `@FrontMcp({ jobs: { store: { ... } } })`
+      (auto-enable, issue #408) or explicitly via `@FrontMcp({ jobs: { enabled: true, store: { ... } } })`
       when overriding the in-memory default
 - [ ] Job executes and returns output matching `outputSchema`
 - [ ] Progress is reported and queryable during execution

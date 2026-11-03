@@ -13,7 +13,7 @@ import {
 
 import { isRedisProvider, redisOptionsSchema, type FrontMcpLogger } from '../../common';
 import { type PersistentQuestionsStorage } from '../../common/types/options/elicitation';
-import { findReplaceableDirectory } from '../../server/security/unix-socket-guard';
+import { findReplaceableDirectory } from '../../server/security/replaceable-directory';
 import { getElicitationSecret } from '../store/elicitation-encryption';
 import { InvalidQuestionStoreError } from './question.errors';
 import { QuestionStore } from './question.store';

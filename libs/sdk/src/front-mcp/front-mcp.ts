@@ -1,5 +1,5 @@
 import { StdioServerTransport } from '@frontmcp/protocol';
-import { getEnv, getEnvFlag, isEdgeRuntime, randomUUID } from '@frontmcp/utils';
+import { getEnv, getEnvFlag, getRuntimeContext, isEdgeRuntime, randomUUID } from '@frontmcp/utils';
 
 import {
   FrontMcpLogger,
@@ -728,6 +728,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
     },
   ): Promise<{ close: () => Promise<void> }> {
     if (isSchemaExtraction()) return { close: async () => undefined };
+    if (getRuntimeContext().runtime === 'browser') {
+      const { BrowserEntryPointUnavailableError } = await import('../errors/browser-entry-point.errors.js');
+      throw new BrowserEntryPointUnavailableError('runUnixSocket');
+    }
     const { socketPath, sqlite, ...configInput } = options;
     const detachedRunId = detachedJobRunId();
     if (detachedRunId) {
@@ -1057,7 +1061,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
   public static async runShared(optionsOrClass: ConfigOrServerClass, shared: SharedServerOptions): Promise<void> {
     if (isSchemaExtraction()) return;
     const options = resolveConfigInput(optionsOrClass);
-    const { runShared } = await import('../shared/index.js');
+    const { runShared } = await import('#shared-server');
     await runShared(options, shared, (config) => new FrontMcpInstance(config));
   }
 }

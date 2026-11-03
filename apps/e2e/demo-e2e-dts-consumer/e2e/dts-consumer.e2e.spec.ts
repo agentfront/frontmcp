@@ -237,7 +237,7 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types FrontMcpInstance.runShared(), its options and errors, and the shared:identify flow', () => {});
 
-  it('types FrontMcpInstance.runShared(), its options and errors, and the shared:identify and shared:drain flows', () => {
+  it('types FrontMcpInstance.runShared(), its options and errors, BrowserEntryPointUnavailableError, and the shared:identify and shared:drain flows', () => {
     expect(describeEach(inFixtureFile('shared-server-must-compile.ts'))).toEqual([]);
   });
 
@@ -245,7 +245,7 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('durable-jobs-must-compile.ts'))).toEqual([]);
   });
 
-  it('types jobs.store: false, tasks.store: false, elicitation.store: false and BrowserStoreUnavailableError', () => {
+  it('types jobs.store: false, tasks.store: false, elicitation.store: false, BrowserStoreUnavailableError and refusePluginStoreInBrowser', () => {
     expect(describeEach(inFixtureFile('memory-stores-must-compile.ts'))).toEqual([]);
   });
 

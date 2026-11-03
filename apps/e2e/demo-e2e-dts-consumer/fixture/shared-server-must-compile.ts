@@ -1,9 +1,11 @@
 import {
+  BrowserEntryPointUnavailableError,
   FrontMcpInstance,
   InvalidSharedServerOptionsError,
   SharedServerIdentityError,
   SharedServerStartError,
   UnsafeSharedServerDirectoryError,
+  type BrowserRefusedEntryPoint,
   type SharedDrainFlow,
   type SharedIdentifyFlow,
   type SharedServerOptions,
@@ -35,7 +37,12 @@ export function sharedServerErrorCode(error: unknown): string | undefined {
   if (error instanceof UnsafeSharedServerDirectoryError) return error.code;
   if (error instanceof SharedServerStartError) return error.code;
   if (error instanceof SharedServerIdentityError) return error.code;
+  if (error instanceof BrowserEntryPointUnavailableError) return error.code;
   return undefined;
+}
+
+export function refusedEntryPoint(error: unknown): BrowserRefusedEntryPoint | undefined {
+  return error instanceof BrowserEntryPointUnavailableError ? error.entryPoint : undefined;
 }
 
 export type IdentifyFlow = SharedIdentifyFlow;
@@ -52,4 +59,6 @@ export class InvalidSharedServerOptions {
   static readonly idleTimeoutMs: SharedServerOptions = { key: 'my-server', idleTimeoutMs: true };
   // @ts-expect-error checkout is a folder or false
   static readonly checkout: SharedServerOptions = { key: 'my-server', checkout: true };
+  // @ts-expect-error a browser refuses runShared and runUnixSocket only
+  static readonly refusedEntryPoint: BrowserRefusedEntryPoint = 'runStdio';
 }

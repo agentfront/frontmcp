@@ -1,22 +1,13 @@
-// Guards the `worker` export-condition invariant on the @frontmcp packages that
-// split Node-only vs portable implementations via `imports` subpath maps.
+// Guards which variant each runtime resolves from the `imports` and `exports` maps of the @frontmcp packages.
 //
-// WHY THIS EXISTS: Cloudflare Workers (wrangler) and other workerd bundlers
-// activate the `worker` AND `browser` resolution conditions. workerd is NOT a
-// browser — it provides node builtins via `nodejs_compat` and needs the
-// web-fetch MCP transport, but it must NOT pull the Node-only host transports
-// (stdio/SSE/Express -> node:child_process / raw-body / express). Before the fix,
-// these maps only had {browser, default}; bundlers picked `browser`, which
-// resolves to THROWING STUBS (utils #env getEnvFlag()->false; protocol
-// #mcp-streamable-http ctor throws) and the worker 500'd at boot / transport.
-//
-// The fix adds a `worker` condition LISTED FIRST (so it wins when both `worker`
-// and `browser` are active) pointing at the impl that actually runs on workerd.
-// The monorepo's demo-e2e-cloudflare CANNOT catch a regression here because it
-// consumes workspace `src` via the `development` condition, masking the bug —
-// hence this dedicated guard over the real condition-resolution algorithm.
+// Cloudflare's bundlers resolve `workerd`, `worker` and `browser`. workerd provides the Node built-ins through
+// `nodejs_compat` and needs the web-fetch MCP transport, so a `workerd` condition listed before `browser` gives it the
+// Node variants, while the Node-only host transports (stdio, SSE, Express) stay stubs. A browser Web Worker (webpack's
+// `target: 'webworker'`, Parcel, or esbuild and Rollup given `worker`) resolves `worker` and `browser` and has no Node
+// built-ins, so it gets the browser variants, as a page does (#1031). demo-e2e-cloudflare consumes workspace `src`
+// through the `development` condition, so this guard runs the condition-resolution algorithm itself.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -36,11 +27,13 @@ function resolveCondition(entry, active) {
 }
 
 // Active named conditions per consumer (`default` is always the fallback).
-const WORKER = new Set(['worker', 'browser']); // wrangler / workerd bundlers
-const BROWSER = new Set(['browser']); // real web bundlers
+const CLOUDFLARE = new Set(['workerd', 'worker', 'browser']); // wrangler and @cloudflare/vite-plugin
+const BROWSER_WORKER = new Set(['worker', 'browser']); // webpack target: 'webworker', Parcel workers
+const VERCEL_EDGE = new Set(['edge-light', 'browser']); // Next.js (webpack, Turbopack) and @vercel/node
+const BROWSER = new Set(['browser']); // real web bundlers, Vite (pages and workers)
 const NODE = new Set(); // plain Node.js / jest
 
-// For each package: which impl a WORKER bundler MUST resolve to.
+// For each package: which impl Cloudflare MUST resolve to.
 // 'node' = the Node/default impl (workerd-safe via nodejs_compat / web-fetch);
 // 'stub' = the browser stub (host transport never used on a worker).
 const EXPECT = {
@@ -63,6 +56,7 @@ const EXPECT = {
   'libs/sdk': {
     '#sse-transport': 'stub',
     '#express-host': 'stub',
+    '#shared-server': 'stub',
   },
 };
 
@@ -71,67 +65,82 @@ const isBrowserPath = (p) => /(^|\/)browser[-/]|\/browser\.ts$/.test(p);
 for (const [pkgDir, splits] of Object.entries(EXPECT)) {
   const pkg = readPkg(pkgDir);
 
-  test(`${pkgDir}: imports map carries a worker condition for every split`, () => {
-    for (const imp of Object.keys(splits)) {
-      const entry = pkg.imports?.[imp];
-      assert.ok(entry, `${pkgDir} #${imp} missing from imports`);
-      assert.ok('worker' in entry, `${pkgDir} ${imp} must declare a "worker" condition`);
-      // `worker` MUST precede `browser`, else a worker bundler (both active) picks browser.
-      const keys = Object.keys(entry);
-      assert.ok(
-        !keys.includes('browser') || keys.indexOf('worker') < keys.indexOf('browser'),
-        `${pkgDir} ${imp}: "worker" must be listed before "browser"`,
-      );
-    }
-  });
-
-  test(`${pkgDir}: a worker bundler resolves to the workerd-correct impl`, () => {
+  test(`${pkgDir}: Cloudflare resolves the workerd-correct impl`, () => {
     for (const [imp, want] of Object.entries(splits)) {
-      const resolved = resolveCondition(pkg.imports[imp], WORKER);
+      const entry = pkg.imports?.[imp];
+      assert.ok(entry, `${pkgDir} ${imp} missing from imports`);
+      const resolved = resolveCondition(entry, CLOUDFLARE);
       if (want === 'node') {
         assert.ok(
           !isBrowserPath(resolved),
-          `${pkgDir} ${imp}: worker must NOT resolve to a browser stub (got ${resolved})`,
+          `${pkgDir} ${imp}: Cloudflare must NOT resolve to a browser stub (got ${resolved})`,
         );
-        assert.equal(resolved, pkg.imports[imp].default, `${pkgDir} ${imp}: worker should match the node/default impl`);
+        assert.equal(resolved, entry.default, `${pkgDir} ${imp}: Cloudflare should match the node/default impl`);
       } else {
         assert.ok(
           isBrowserPath(resolved),
-          `${pkgDir} ${imp}: worker must resolve to the browser stub (got ${resolved})`,
+          `${pkgDir} ${imp}: Cloudflare must resolve to the browser stub (got ${resolved})`,
         );
       }
     }
   });
 
-  test(`${pkgDir}: browser + node resolution are unchanged by the worker key`, () => {
+  test(`${pkgDir}: a browser Web Worker, Vercel Edge, a browser and Node resolve their impl`, () => {
     for (const imp of Object.keys(splits)) {
       const entry = pkg.imports[imp];
-      assert.equal(
-        resolveCondition(entry, BROWSER),
-        entry.browser,
-        `${pkgDir} ${imp}: browser builds must still get the browser impl`,
-      );
-      assert.equal(
-        resolveCondition(entry, NODE),
-        entry.default,
-        `${pkgDir} ${imp}: Node must still get the default impl`,
-      );
+      assert.equal(resolveCondition(entry, BROWSER_WORKER), entry.browser, `${pkgDir} ${imp}: a browser Web Worker`);
+      assert.equal(resolveCondition(entry, VERCEL_EDGE), entry.browser, `${pkgDir} ${imp}: Vercel Edge`);
+      assert.equal(resolveCondition(entry, BROWSER), entry.browser, `${pkgDir} ${imp}: a browser`);
+      assert.equal(resolveCondition(entry, NODE), entry.default, `${pkgDir} ${imp}: Node`);
     }
   });
 }
 
-// A browser bundler gets the per-module build of utils and auth; a worker bundler and Node keep the single-file ESM
+function resolveNested(target, active) {
+  if (typeof target !== 'object' || target === null) return target;
+  for (const [key, value] of Object.entries(target)) {
+    if (key !== 'default' && !active.has(key)) continue;
+    const resolved = resolveNested(value, active);
+    if (resolved !== undefined) return resolved;
+  }
+  return undefined;
+}
+
+const workspacePackages = ['libs', 'plugins']
+  .flatMap((dir) => readdirSync(path.join(repoRoot, dir)).map((name) => `${dir}/${name}`))
+  .filter((pkgDir) => existsSync(path.join(repoRoot, pkgDir, 'package.json')));
+
+test('every workspace package gives a browser Web Worker the files it gives a page', () => {
+  for (const pkgDir of workspacePackages) {
+    const { imports = {}, exports = {} } = readPkg(pkgDir);
+    const entries = { ...imports, ...(typeof exports === 'object' ? exports : {}) };
+    for (const [specifier, entry] of Object.entries(entries)) {
+      for (const kind of [['import'], ['require'], ['import', 'module'], ['require', 'module']]) {
+        assert.equal(
+          resolveNested(entry, new Set([...BROWSER_WORKER, ...kind])),
+          resolveNested(entry, new Set([...BROWSER, ...kind])),
+          `${pkgDir} ${specifier} (${kind.join(' + ')})`,
+        );
+      }
+    }
+  }
+});
+
+// A browser bundler gets the per-module build of utils and auth; Cloudflare and Node keep the single-file ESM
 for (const pkgDir of ['libs/utils', 'libs/auth']) {
-  test(`${pkgDir}: the root export gives a browser the per-module build and a worker the ESM bundle`, () => {
+  test(`${pkgDir}: the root export gives a browser the per-module build and Cloudflare the ESM bundle`, () => {
     const root = readPkg(pkgDir).exports['.'];
     const resolveAs = (kind, active) =>
       resolveCondition(resolveCondition(root, new Set([...active, kind])), new Set([kind]));
 
     assert.equal(resolveAs('import', BROWSER), './dist/browser/index.mjs');
-    assert.deepEqual(resolveAs('import', WORKER), root.import);
+    assert.equal(resolveAs('import', BROWSER_WORKER), './dist/browser/index.mjs');
+    assert.equal(resolveAs('import', VERCEL_EDGE), './dist/browser/index.mjs');
+    assert.deepEqual(resolveAs('import', CLOUDFLARE), root.import);
     assert.equal(resolveCondition(root, new Set(['import'])), root.import);
     // A require() with the browser condition and without `module` (jest-environment-jsdom) keeps the CommonJS build
     assert.equal(resolveAs('require', BROWSER), './dist/index.js');
-    assert.deepEqual(resolveAs('require', WORKER), root.require);
+    assert.equal(resolveAs('require', BROWSER_WORKER), './dist/index.js');
+    assert.deepEqual(resolveAs('require', CLOUDFLARE), root.require);
   });
 }

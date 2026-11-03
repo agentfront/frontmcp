@@ -25,7 +25,7 @@ import { findProjectRoot } from '../common/types/options/sqlite/resolve';
 import { DutyNameConflictError, UnsafeDutyStoreError } from '../errors/duty.errors';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 import type ProviderRegistry from '../provider/provider.registry';
-import { findReplaceableDirectory } from '../server/security/unix-socket-guard';
+import { findReplaceableDirectory } from '../server/security/replaceable-directory';
 import { DutyRunner } from './duty.runner';
 
 type DutyInstance = DutyInterface & Partial<OnBootstrap & OnReady & OnShutdown>;

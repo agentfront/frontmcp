@@ -119,13 +119,13 @@ test('#681: a browser subpath import resolves to its ESM twin for an ESM importe
     {
       name: 'x',
       imports: {
-        '#env': { worker: './src/env/node.ts', browser: './src/env/browser.ts', default: './src/env/node.ts' },
+        '#env': { workerd: './src/env/node.ts', browser: './src/env/browser.ts', default: './src/env/node.ts' },
       },
     },
     ['env/node.js', 'env/browser.js', 'esm/env/browser.mjs'],
   );
   assert.deepEqual(pkg.imports['#env'], {
-    worker: './env/node.js',
+    workerd: './env/node.js',
     browser: { import: './esm/env/browser.mjs', default: './env/browser.js' },
     default: './env/node.js',
   });
