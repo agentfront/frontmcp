@@ -47,14 +47,26 @@ export async function assertSafeSocketDirectory(socketPath: string): Promise<voi
   }
 }
 
-/** Refuse a directory, or one above it, that another user (not root) owns or the group or others can write without the sticky bit. */
-async function assertNoOtherUserCanReplace(start: string): Promise<void> {
+/** A directory whose entries another user could replace: `ownerUid` when another user owns it. */
+export interface ReplaceableDirectory {
+  directory: string;
+  mode: number;
+  ownerUid?: number;
+}
+
+/** The first of `start` and the directories above it that another user (not root) owns or the group or others can write without the sticky bit. */
+export async function findReplaceableDirectory(start: string): Promise<ReplaceableDirectory | undefined> {
   for (let directory = start; ; directory = path.dirname(directory)) {
     const { mode, uid } = await stat(directory);
-    if (uid !== ROOT_UID && uid !== process.getuid?.()) throw new UnsafeSocketDirectoryError(directory, mode, uid);
-    if (mode & GROUP_OR_OTHER_WRITE && !(mode & STICKY_BIT)) throw new UnsafeSocketDirectoryError(directory, mode);
-    if (path.dirname(directory) === directory) return;
+    if (uid !== ROOT_UID && uid !== process.getuid?.()) return { directory, mode, ownerUid: uid };
+    if (mode & GROUP_OR_OTHER_WRITE && !(mode & STICKY_BIT)) return { directory, mode };
+    if (path.dirname(directory) === directory) return undefined;
   }
+}
+
+async function assertNoOtherUserCanReplace(start: string): Promise<void> {
+  const replaceable = await findReplaceableDirectory(start);
+  if (replaceable) throw new UnsafeSocketDirectoryError(replaceable.directory, replaceable.mode, replaceable.ownerUid);
 }
 
 /** Whether this thread binds the socket under the umask it sets: a worker thread cannot set it, and a cluster primary binds a worker's socket. */

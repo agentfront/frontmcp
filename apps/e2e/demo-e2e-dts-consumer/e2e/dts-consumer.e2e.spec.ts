@@ -43,6 +43,7 @@ const fixtureFiles = [
   'hook-ordering-must-compile.ts',
   'hook-ordering-must-fail.ts',
   'live-surface-must-compile.ts',
+  'duties-must-compile.ts',
   'offload-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
@@ -202,6 +203,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types enabled as a boolean or an EnabledSource such as fileSignal(), and the surface key', () => {
     expect(describeEach(inFixtureFile('live-surface-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types @Duty, its metadata and run context, and createContainer({ runDuties, info })', () => {
+    expect(describeEach(inFixtureFile('duties-must-compile.ts'))).toEqual([]);
   });
 
   it('types this.offload() from the offloaded function, @Resource({ worker }) and the offload option', () => {

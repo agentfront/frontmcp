@@ -6,6 +6,8 @@ const projectRoot = join(__dirname, '..', '..');
 
 export interface Worker<Result> {
   readonly child: ChildProcess;
+  /** Every complete line the worker printed so far. */
+  readonly lines: readonly string[];
   /** Resolves when the worker prints `line`; rejects if it exits first. */
   waitFor(line: string): Promise<void>;
   send(line: string): void;
@@ -53,6 +55,7 @@ export function spawnWorker<Result>(script: string, env: Record<string, string> 
 
   return {
     child,
+    lines,
     result,
     send: (line) => child.stdin?.write(`${line}\n`),
     waitFor: (line) =>

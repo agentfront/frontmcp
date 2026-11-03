@@ -15,6 +15,7 @@ import {
 } from '@frontmcp/di';
 
 import {
+  dutyMetadataOf,
   FrontMcpServer,
   type ProviderEntry,
   type ProviderRegistryInterface,
@@ -339,7 +340,8 @@ export default class ProviderRegistry
 
   /** Run `onBootstrap()` on the instance just built for `token`, and keep it for the ready and shutdown phases. */
   private async bootstrapBuilt(token: Token): Promise<void> {
-    const instance = lifecycleHooksOf(this.instances.get(token));
+    const built = this.instances.get(token);
+    const instance = lifecycleHooksOf((await this.dutyLifecycleOf(built)) ?? built);
     if (!instance || this.heldEntries.some((held) => held.instance === instance)) return;
     const entry = { token, instance };
     const shared = this.sharedLifecycles.get(instance);
@@ -349,6 +351,14 @@ export default class ProviderRegistry
     await lifecycle.bootstrapped;
     if (!shared) this.lifecycleEntries.push(entry);
     this.heldEntries.push(entry);
+  }
+
+  /** A `@Duty` instance's lifecycle, which starts it on `onReady()`; the duty runtime loads only when one is built. */
+  private async dutyLifecycleOf(built: unknown): Promise<object | undefined> {
+    const metadata = dutyMetadataOf(built);
+    if (!metadata || typeof built !== 'object' || built === null) return undefined;
+    const { dutyLifecycleOf } = await import('../duty/duty.lifecycle.js');
+    return dutyLifecycleOf(built, metadata, this);
   }
 
   /** Run `onReady()` on the providers built here, then on those of the registries below, in build order; once. */
