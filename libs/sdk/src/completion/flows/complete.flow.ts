@@ -4,6 +4,7 @@ import { AuthorityDeniedError, resolveRequiredScopes, type AuthoritiesMetadata }
 import { internalZ as z } from '@frontmcp/lazy-zod';
 import { CompleteRequestSchema, CompleteResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
+import { loadAppOfPlaceholder } from '../../app/lazy/lazy-placeholders';
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { enforcePublicAccess, publicAccessFor } from '../../auth/public-access.utils';
 import {
@@ -135,6 +136,8 @@ export default class CompleteFlow extends FlowBase<typeof name> {
       await loadRemoteAppCapabilities(scope);
       reference = findCompletionReference(scope, ref);
     }
+    const referenced = reference.prompt ?? reference.resource;
+    if (referenced && (await loadAppOfPlaceholder(scope, referenced))) reference = findCompletionReference(scope, ref);
     const { prompt, resource } = reference;
     if (!prompt && !resource) return undefined;
     resolvedReferences.remember(rawInput, referenceKeyOf(ref), reference);

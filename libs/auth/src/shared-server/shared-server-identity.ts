@@ -54,24 +54,30 @@ export function deriveSharedServerKeys(secret: string): SharedServerKeys {
   };
 }
 
-function proofBytes(proofKey: Uint8Array, endpoint: string, nonce: string): Uint8Array {
-  return hmacSha256(proofKey, encoder.encode(JSON.stringify([PROOF_LABEL, endpoint, nonce])));
+/** What a proof vouches for: the endpoint the server listens on, the client's nonce, and the server's version. */
+export interface SharedServerIdentityStatement {
+  endpoint: string;
+  nonce: string;
+  version: string;
 }
 
-/** The server's answer to `nonce`: an HMAC over the nonce and the endpoint the server listens on. */
-export function proveSharedServerIdentity(proofKey: Uint8Array, endpoint: string, nonce: string): string {
-  return base64urlEncode(proofBytes(proofKey, endpoint, nonce));
+function proofBytes(proofKey: Uint8Array, { endpoint, nonce, version }: SharedServerIdentityStatement): Uint8Array {
+  return hmacSha256(proofKey, encoder.encode(JSON.stringify([PROOF_LABEL, endpoint, nonce, version])));
 }
 
-/** Whether `proof` answers `nonce` for `endpoint` with `proofKey`, compared in constant time. */
+/** The server's answer to a nonce: an HMAC over the nonce, the endpoint it listens on and the version it runs. */
+export function proveSharedServerIdentity(proofKey: Uint8Array, statement: SharedServerIdentityStatement): string {
+  return base64urlEncode(proofBytes(proofKey, statement));
+}
+
+/** Whether `proof` vouches for `statement` with `proofKey`, compared in constant time. */
 export function verifySharedServerIdentity(
   proofKey: Uint8Array,
-  endpoint: string,
-  nonce: string,
+  statement: SharedServerIdentityStatement,
   proof: unknown,
 ): boolean {
   if (!isBase64url32Bytes(proof)) return false;
-  const expected = proofBytes(proofKey, endpoint, nonce);
+  const expected = proofBytes(proofKey, statement);
   const presented = base64urlDecode(proof);
   return presented.length === expected.length && timingSafeEqual(presented, expected);
 }

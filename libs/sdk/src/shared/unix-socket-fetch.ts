@@ -9,7 +9,10 @@ function headersOf(init: RequestInit | undefined): Record<string, string> {
   return headers;
 }
 
-/** A `fetch` that sends every request to the HTTP server on `socketPath`, whatever host its URL names. */
+/**
+ * A `fetch` that sends every request to the HTTP server on `socketPath`, whatever host its URL names, each on a
+ * connection of its own: a server that exits refuses it, or nothing listens, and is never left to drop it.
+ */
 export function unixSocketFetch(socketPath: string): typeof fetch {
   return (input, init) =>
     new Promise<Response>((resolve, reject) => {
@@ -17,6 +20,7 @@ export function unixSocketFetch(socketPath: string): typeof fetch {
       const request = http.request(
         {
           socketPath,
+          agent: false,
           path: `${url.pathname}${url.search}`,
           method: init?.method ?? 'GET',
           headers: headersOf(init),

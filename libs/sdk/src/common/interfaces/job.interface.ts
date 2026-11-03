@@ -133,6 +133,11 @@ export abstract class JobContext<
     return this._logs;
   }
 
+  /** @internal Keep the log lines the job wrote where `execute()` ran, a worker thread. */
+  keepLogs(lines: readonly string[]): void {
+    this._logs.push(...lines);
+  }
+
   /** A job (or a workflow step running it) calls tools on the `'job'` surface. */
   protected override callToolSurface(): CallSurface {
     return 'job';

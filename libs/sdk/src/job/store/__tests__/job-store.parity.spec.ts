@@ -46,6 +46,15 @@ function run(runId: string, overrides: Partial<JobRunRecord> = {}): JobRunRecord
 /** The Redis commands the Redis job state store sends, kept in Maps. Its key patterns end in `*`. */
 function fakeRedis(): RedisStateStoreLike {
   const values = new Map<string, string>();
+  const expiries = new Map<string, number>();
+  function live(key: string): string | undefined {
+    const expiry = expiries.get(key);
+    if (expiry !== undefined && expiry <= Date.now()) {
+      values.delete(key);
+      expiries.delete(key);
+    }
+    return values.get(key);
+  }
   const sets = new Map<string, Set<string>>();
   function setOf(key: string): Set<string> {
     let set = sets.get(key);
@@ -56,8 +65,15 @@ function fakeRedis(): RedisStateStoreLike {
     return set;
   }
   return {
-    get: async (key) => values.get(key) ?? null,
-    set: async (key, value) => values.set(key, value),
+    get: async (key) => live(key) ?? null,
+    set: async (key, value, ...args) => {
+      if (args.includes('NX') && live(key) !== undefined) return null;
+      const ex = args.indexOf('EX');
+      if (ex >= 0) expiries.set(key, Date.now() + Number(args[ex + 1]) * 1000);
+      else expiries.delete(key);
+      values.set(key, value);
+      return 'OK';
+    },
     del: async (key) => (values.delete(String(key)) ? 1 : 0),
     sadd: async (key, ...members) => {
       members.forEach((member) => setOf(key).add(member));
@@ -154,6 +170,24 @@ describe.each(stateBackends)('%s job state store', (_backend, open) => {
     expect(await store.isCancelRequested?.('r1')).toBe(true);
     expect(await store.isCancelRequested?.('r2')).toBe(false);
   });
+
+  it('keeps a runner alive while its heartbeat lasts, and reads it as gone once the TTL lapses', async () => {
+    expect(await store.isRunnerAlive?.('runner-1')).toBe(false);
+    await store.touchRunner?.('runner-1', 1);
+
+    expect(await store.isRunnerAlive?.('runner-1')).toBe(true);
+    expect(await store.isRunnerAlive?.('runner-2')).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    expect(await store.isRunnerAlive?.('runner-1')).toBe(false);
+  });
+
+  it('lets one caller claim a run', async () => {
+    await store.createRun(run('r1'));
+
+    expect(await store.claimRun?.('r1')).toBe(true);
+    expect(await store.claimRun?.('r1')).toBe(false);
+    expect(await store.claimRun?.('r2')).toBe(true);
+  });
 });
 
 describe('sqlite job state store across processes', () => {
@@ -162,11 +196,15 @@ describe('sqlite job state store across processes', () => {
     await first.createRun(run('r1'));
     await first.updateRun('r1', { state: 'running' });
     await first.requestCancel?.('r1');
+    await first.touchRunner?.('runner-1', 60);
+    await first.claimRun?.('r1');
     await first.dispose();
 
     const second = (await createJobStateStore({ sqlite: { path: dbPath } })).store;
     expect(await second.getRun('r1')).toEqual(expect.objectContaining({ state: 'running', revision: 2 }));
     expect(await second.isCancelRequested?.('r1')).toBe(true);
+    expect(await second.isRunnerAlive?.('runner-1')).toBe(true);
+    expect(await second.claimRun?.('r1')).toBe(false);
     await second.dispose();
   });
 

@@ -1412,11 +1412,6 @@
           ]
         },
         {
-          "name": "build-manifest",
-          "description": "The frontmcp.manifest.json that frontmcp build writes for every target, its lint, and the instructionsBudget size limits",
-          "examples": []
-        },
-        {
           "name": "build-for-sdk",
           "description": "Build a FrontMCP server as an embeddable library with create() and connect() APIs",
           "examples": [
@@ -1454,6 +1449,11 @@
               ]
             }
           ]
+        },
+        {
+          "name": "build-manifest",
+          "description": "The frontmcp.manifest.json that frontmcp build writes for every target, its lint, and the instructionsBudget size limits",
+          "examples": []
         },
         {
           "name": "deploy-manifest-yaml",
@@ -1732,7 +1732,7 @@
         },
         {
           "name": "shared-local-server",
-          "description": "Serve every stdio session of a server on one machine from one shared local process with FrontMCP's FrontMcpInstance.runShared - one start per key, an owner-only Unix socket or loopback HTTP with a token, and a server identity proof before the token is sent",
+          "description": "Serve every stdio session of a server on one machine from one shared local process with FrontMCP's FrontMcpInstance.runShared - one start per key, an owner-only Unix socket or loopback HTTP with a token, a server identity and version proof before the token is sent, a newer session replacing an older server under live sessions, a fallback to running in the session's own process, and exit when idle or when the checkout is removed",
           "examples": []
         }
       ]
@@ -1865,7 +1865,7 @@
         },
         {
           "name": "create-job",
-          "description": "Create long-running background jobs with retry policies, timeouts, cancellation, cleanup, progress tracking, and permissions",
+          "description": "Create long-running background jobs with retry policies, timeouts, cancellation, cleanup, progress tracking, permissions, and runners (inline, worker thread, or a detached process that outlives the server)",
           "examples": [
             {
               "name": "basic-report-job",
@@ -1876,6 +1876,19 @@
                 "Defining a job with `@Job` decorator including `inputSchema`, `outputSchema`, and `timeout`",
                 "Reporting progress at each stage using `this.progress(pct, total, message)`",
                 "Using `this.log()` for persistent, queryable log entries"
+              ]
+            },
+            {
+              "name": "detached-export-job",
+              "description": "An export job that runs in a process of its own, survives a server restart and is cancelled from any server.",
+              "level": "advanced",
+              "tags": ["development", "job", "detached", "worker", "sqlite", "cancel"],
+              "features": [
+                "`runner: 'detached'`: each run in a process of its own that outlives the server that started it",
+                "A store the runner and every server share (the top-level `sqlite`), which the runs live in",
+                "Reading and cancelling a run from a server started after it, and a `cleanup` the runner runs on a cancel",
+                "Runs whose runner died settled as `interrupted` when the next server boots, with their cleanup",
+                "`runner: 'worker'` for a CPU-heavy job that runs in a worker thread instead"
               ]
             },
             {
@@ -3396,8 +3409,20 @@
         },
         {
           "name": "multi-app-composition",
-          "description": "Compose multiple @App classes, ESM packages, and remote MCP servers into a single FrontMCP gateway",
+          "description": "Compose multiple @App classes, lazy apps imported on their first call, ESM packages, and remote MCP servers into a single FrontMCP gateway",
           "examples": [
+            {
+              "name": "lazy-apps-from-the-manifest",
+              "description": "Import apps on their first call, listed from `frontmcp.manifest.json` until then.",
+              "level": "intermediate",
+              "tags": ["setup", "multi-app", "lazy", "manifest", "build", "startup"],
+              "features": [
+                "`{ name, lazy: () => import(...) }` in `apps` imports the app on its first call, once for concurrent calls",
+                "`frontmcp build` writes `frontmcp.manifest.json`, which lists the app until then; the server reads it next to its entry",
+                "The lazy app's `enabled` keeps it unimported while it is off, and refuses its entries with `FEATURE_OFF`",
+                "Without a manifest, development imports lazy apps at startup and production refuses to start"
+              ]
+            },
             {
               "name": "local-apps-with-shared-tools",
               "description": "Compose multiple local `@App` classes into a server with shared tools available to all apps.",

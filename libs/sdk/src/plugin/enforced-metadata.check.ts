@@ -28,11 +28,11 @@ import { normalizePlugin } from './plugin.utils';
 /** The registries of one scope whose entries the check covers. */
 export interface EnforcedMetadataScope {
   hooks: HookRegistry;
-  tools: ToolRegistry;
-  resources: ResourceRegistry;
-  prompts: PromptRegistry;
-  agents: AgentRegistry;
-  skills: SkillRegistry;
+  tools: Pick<ToolRegistry, 'getTools' | 'lineageOf'>;
+  resources: Pick<ResourceRegistry, 'getResources' | 'getResourceTemplates' | 'lineageOf'>;
+  prompts: Pick<PromptRegistry, 'getPrompts' | 'lineageOf'>;
+  agents: Pick<AgentRegistry, 'getAgents'>;
+  skills: Pick<SkillRegistry, 'getSkills'>;
 }
 
 /** Metadata keys a hook's plugin class declares with `@Plugin({ enforcesMetadata })`. */

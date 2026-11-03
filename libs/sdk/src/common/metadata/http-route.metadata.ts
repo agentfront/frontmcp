@@ -25,8 +25,8 @@ export interface HttpRouteSseOptions {
 export interface HttpRouteMetadata {
   method: HttpRouteMethod;
   /**
-   * The path, Express style (`/board/:id`), or a function that returns it when the server starts, for a path that
-   * comes from options. The MCP endpoint's paths are refused, except a `GET` on its own path: a page load there
+   * The path: literal segments and `:name` parameters (`/board/:id`), or a function that returns it when the server
+   * starts, for a path that comes from options. The MCP endpoint's paths are refused, except a `GET` on its own path: a page load there
    * reaches the route, and the MCP event stream stays the endpoint's.
    */
   path: string | (() => string);
@@ -43,8 +43,11 @@ export interface ResolvedHttpRouteMetadata {
   sse?: Required<HttpRouteSseOptions>;
 }
 
-const ROUTE_PATH = /^\/[^?#\s]*$/;
-export const HTTP_ROUTE_PATH_MESSAGE = 'path must start with "/" and hold no query, fragment or whitespace';
+/** Literal segments and `:name` parameters: what the route table matches. */
+const ROUTE_PATH = /^\/[^?#\s*(){}]*$/;
+export const HTTP_ROUTE_PATH_MESSAGE =
+  'path must start with "/" and hold no query, fragment or whitespace; it takes literal segments and :name ' +
+  'parameters, not the wildcards or groups (*, (), {}) of Express';
 
 export function isHttpRoutePath(path: unknown): path is string {
   return typeof path === 'string' && ROUTE_PATH.test(path);

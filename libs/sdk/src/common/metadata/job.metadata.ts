@@ -73,10 +73,33 @@ export interface JobCleanupOptions {
   timeoutMs?: number;
 }
 
+/** The longest delay `setTimeout` keeps: a longer one fires after 1 ms, so a job would time out at once. */
+export const MAX_JOB_TIMER_MS = 2_147_483_647;
+
+export const timerLimitMessage = (field: string) => `${field} must be at most ${MAX_JOB_TIMER_MS} ms (about 24.8 days)`;
+
 const jobCleanupSchema = z.union([
   z.function(),
-  z.object({ run: z.function(), timeoutMs: z.number().int().positive().optional() }),
+  z.object({
+    run: z.function(),
+    timeoutMs: z.number().int().positive().max(MAX_JOB_TIMER_MS, timerLimitMessage('cleanup.timeoutMs')).optional(),
+  }),
 ]);
+
+// ============================================
+// Job Runner
+// ============================================
+
+/**
+ * Where an attempt's `execute()` runs: `'inline'` on the server's event loop, `'worker'` in a worker thread of the
+ * server's offload pool (no DI container there, as for `this.offload()`), `'detached'` in a process of its own that
+ * outlives the server and keeps the run in the job store.
+ */
+export type JobRunner = 'inline' | 'worker' | 'detached';
+
+export const jobRunnerSchema = z.enum(['inline', 'worker', 'detached'], {
+  message: "runner must be 'inline', 'worker' or 'detached'",
+});
 
 // ============================================
 // Job Metadata
@@ -130,6 +153,9 @@ export interface JobMetadata<
    */
   cleanup?: JobCleanup | JobCleanupOptions;
 
+  /** Where the job's attempts run. Default: `jobs.runner`, else `'inline'`. */
+  runner?: JobRunner;
+
   /**
    * Retry configuration for failed executions.
    */
@@ -164,8 +190,9 @@ export const frontMcpJobMetadataSchema = z
     description: z.string().optional(),
     inputSchema: z.instanceof(Object),
     outputSchema: z.instanceof(Object),
-    timeout: z.number().int().min(0).optional(),
+    timeout: z.number().int().min(0).max(MAX_JOB_TIMER_MS, timerLimitMessage('timeout')).optional(),
     cleanup: jobCleanupSchema.optional(),
+    runner: jobRunnerSchema.optional(),
     retry: jobRetryConfigSchema.optional(),
     tags: z.array(z.string().min(1)).optional(),
     labels: z.record(z.string(), z.string()).optional(),

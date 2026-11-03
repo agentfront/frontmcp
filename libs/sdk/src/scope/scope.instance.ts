@@ -25,10 +25,12 @@ import {
   type FlowOutputOf,
   type FlowType,
   type FrontMcpAuth,
+  type LateAppRegistries,
   type PublicAuthOptions,
   type ScopeRecord,
   type ServerRequest,
   type Token,
+  type ToolEntry,
   type Type,
   type WidgetServingMode,
 } from '../common';
@@ -48,6 +50,7 @@ import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors'
 import { UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
 import { assertAuthoritiesRules } from '../front-mcp/authorities-rules.check';
+import { isEntryServer, isJobWorker } from '../front-mcp/detached-job.flag';
 import { isDirectOnly } from '../front-mcp/direct-only.flag';
 import type { HaManager } from '../ha';
 import type { HealthService } from '../health';
@@ -612,21 +615,13 @@ export class Scope extends ScopeEntry {
     // who sets both top-level `redis` and `sqlite` still gets the warning:
     // redis wins everywhere, the stores exist, but sqlite is effectively
     // unused.
-    if (this.metadata.sqlite) {
-      const transportUsedSqlite =
-        this.transportService?.isSessionStoreConfigured() === true &&
-        this.transportService.getBackendKind() === 'sqlite';
-      const tasksUsedSqlite = this.taskBackendType === 'sqlite';
-      const elicitationUsedSqlite =
-        this.elicitationBackendType === 'sqlite' || this._persistentQuestions?.type === 'sqlite';
-      if (!transportUsedSqlite && !tasksUsedSqlite && !elicitationUsedSqlite) {
-        this.logger.warn(
-          '[FrontMcp] Top-level `sqlite` config was provided but no subsystem consumes it ' +
-            '(transport persistence, tasks, and elicitation were all disabled or pre-configured with a different backend). ' +
-            'Sessions will use in-memory storage. Remove the `sqlite` block or enable one of the subsystems.',
-        );
-      }
-    }
+    // The jobs, registered below, may consume the top-level sqlite too: the unused warning waits for them
+    let topLevelSqliteUsed =
+      (this.transportService?.isSessionStoreConfigured() === true &&
+        this.transportService.getBackendKind() === 'sqlite') ||
+      this.taskBackendType === 'sqlite' ||
+      this.elicitationBackendType === 'sqlite' ||
+      this._persistentQuestions?.type === 'sqlite';
 
     // ═══ BATCH 2: App-dependent registries (parallel) ═══
     // These call providers.getRegistries('AppRegistry') during initialize(),
@@ -900,6 +895,8 @@ export class Scope extends ScopeEntry {
         enabled: true,
         store: resolveJobsStore(jobsConfig?.store, { redis: this.metadata.redis, sqlite: resolvedTopLevelSqlite }),
       };
+      topLevelSqliteUsed ||=
+        Boolean(resolvedTopLevelSqlite) && effectiveConfig.store?.sqlite === resolvedTopLevelSqlite;
       const result = await registerJobCapabilities({
         providers: this.scopeProviders,
         flowRegistry: this.scopeFlows,
@@ -910,6 +907,8 @@ export class Scope extends ScopeEntry {
         jobsConfig: effectiveConfig,
         logger: this.logger,
         notifyFn,
+        entryServer: isEntryServer(this.metadata),
+        jobWorker: isJobWorker(this.metadata),
       });
 
       this._scopeJobs = result.jobRegistry as JobRegistry;
@@ -937,6 +936,14 @@ export class Scope extends ScopeEntry {
 
       this.logger.info(
         `Jobs system initialized: ${this._scopeJobs.getJobs().length} jobs, ${this._scopeWorkflows.getWorkflows().length} workflows`,
+      );
+    }
+
+    if (this.metadata.sqlite && !topLevelSqliteUsed) {
+      this.logger.warn(
+        '[FrontMcp] Top-level `sqlite` config was provided but no subsystem consumes it ' +
+          '(transport persistence, tasks, elicitation and jobs were all disabled or pre-configured with a different backend). ' +
+          'Sessions will use in-memory storage. Remove the `sqlite` block or enable one of the subsystems.',
       );
     }
 
@@ -1068,7 +1075,8 @@ export class Scope extends ScopeEntry {
       this._channelTeardown = channelResult.teardown;
       // `dispose()` (what `create()` returns calls it) disconnects service channels, as `shutdown()` does.
       this.onDispose(() => this.teardownChannels());
-      await channelResult.connectServices();
+      // A detached job runner runs one run: the server that started it already listens to the services
+      if (!isJobWorker(this.metadata)) await channelResult.connectServices();
     }
 
     // Initialize health service (after all registries and stores are ready)
@@ -1718,7 +1726,7 @@ export class Scope extends ScopeEntry {
    * without `throttle.enabled`, unless `throttle.enabled` is explicitly `false`. That includes the
    * tools declared inside an agent and its nested agents, at any depth.
    */
-  private async initGuardForDeclaredLimits(): Promise<void> {
+  private async initGuardForDeclaredLimits(lateTools: readonly ToolEntry[] = []): Promise<void> {
     const throttleConfig = this.metadata.throttle;
     if (this._rateLimitManager || this.cliMode) return;
     if (throttleConfig?.enabled === false) {
@@ -1726,7 +1734,7 @@ export class Scope extends ScopeEntry {
       return;
     }
 
-    const guardedEntries = [...this.scopeTools.getTools(true), ...this.scopeAgents.getAgents(true)];
+    const guardedEntries = [...this.scopeTools.getTools(true), ...lateTools, ...this.scopeAgents.getAgents(true)];
     const declaresLimits =
       guardedEntries.some((entry) => entry.metadata.rateLimit || entry.metadata.concurrency) ||
       // `publicAccess.rateLimit` counts anonymous calls per IP
@@ -1819,6 +1827,14 @@ export class Scope extends ScopeEntry {
     }
 
     assertAuthoritiesRules(engine, entries);
+  }
+
+  async checkLateApp(app: LateAppRegistries): Promise<void> {
+    const { tools, resources, prompts, agents, skills } = app;
+    const problems = findUnenforcedMetadata({ hooks: this.scopeHooks, tools, resources, prompts, agents, skills });
+    if (problems.length > 0) throw new UnenforcedMetadataError(problems);
+    checkHookOrder(hookRunsOf(this.scopeHooks), (message) => this.logger.warn(message));
+    await this.initGuardForDeclaredLimits(tools.getTools(true));
   }
 
   /**

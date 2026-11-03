@@ -71,7 +71,7 @@ Entry point for deploying and building FrontMCP servers. This skill helps you ch
 | Connect MCP clients (Claude, Cursor, VS Code)     | `mcp-client-integration`           | Configure .mcp.json for stdio, HTTP, or Unix socket transport                                                                                    |
 | Serve or consume MCP protocol `2026-07-28`        | `protocol-versions`                | Stateless requests, `server/discover`, mirrored headers, MRTR, tasks extension, and the `McpStatelessClient`                                     |
 | List the server in the MCP Registry               | `list-in-mcp-registry`             | `@FrontMcp({ registry })`: domain proof, SEP-2127 server card and AI Catalog; `frontmcp registry keygen` / `publish` / `status`                  |
-| Several stdio sessions share one local server     | `shared-local-server`              | `FrontMcpInstance.runShared(config, { key })`: one start per key, owner-only socket or loopback HTTP with a token, server identity proof         |
+| Several stdio sessions share one local server     | `shared-local-server`              | `FrontMcpInstance.runShared(config, { key })`: one start per key, identity and version proof, live upgrade, embedded fallback, idle exit         |
 
 ### CLI Commands for Deployment and Operations
 

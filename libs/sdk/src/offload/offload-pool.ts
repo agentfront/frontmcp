@@ -23,7 +23,8 @@ const LOG_LEVELS: readonly WorkerLogLevel[] = ['verbose', 'debug', 'info', 'warn
 
 type WorkerTask =
   | { kind: 'function'; url: string; exportName: string; args: readonly unknown[] }
-  | { kind: 'resource'; url: string; key: string; name: string; uri: string; params: Record<string, string> };
+  | { kind: 'resource'; url: string; key: string; name: string; uri: string; params: Record<string, string> }
+  | { kind: 'job'; url: string; key: string; name: string; input: unknown; attempt: number };
 
 interface SerializedError {
   name: string;
@@ -39,6 +40,7 @@ interface SerializedError {
 type WorkerMessage =
   | { type: 'started' }
   | { type: 'log'; level: string; text: string }
+  | { type: 'progress'; progress: { progress: number; total?: number; message?: string } }
   | { type: 'result'; value: unknown }
   | { type: 'error'; error: SerializedError; notCloneable?: boolean };
 
@@ -192,6 +194,10 @@ export class OffloadPool {
       pending.call.logger[level](message.text);
       return;
     }
+    if (message.type === 'progress') {
+      pending.call.onProgress?.(message.progress);
+      return;
+    }
     pooled.running = undefined;
     this.release(pooled);
     if (message.type === 'result') {
@@ -268,6 +274,10 @@ export class OffloadPool {
 }
 
 function toWorkerTask(task: OffloadTask): WorkerTask {
+  if (task.kind === 'job') {
+    const { file, ...job } = task;
+    return { ...job, url: pathToFileURL(file).href };
+  }
   if (task.kind === 'resource') {
     return {
       kind: 'resource',

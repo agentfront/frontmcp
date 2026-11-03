@@ -63,10 +63,36 @@ posixOnly('FrontMcpInstance.runShared', () => {
     expect(fs.existsSync(path.join(home, 'shared'))).toBe(false);
   });
 
+  it.each([
+    ['empty', ''],
+    ['longer than 256 characters', '1'.repeat(257)],
+    ['not printable ASCII', '1.0.0\nforged log line'],
+  ])('refuses an info.version that is %s, which a shared server states to its sessions', async (_, version) => {
+    await expect(
+      FrontMcpInstance.runShared({ ...config, info: { ...config.info, version } }, { key: 'run' }),
+    ).rejects.toThrow(
+      new InvalidSharedServerOptionsError(
+        'info.version: a shared server states its version, which must be 1 to 256 printable ASCII characters',
+      ),
+    );
+    expect(attachSharedSession).not.toHaveBeenCalled();
+  });
+
+  it('refuses a checkout that is not a folder, which the server would take as removed at once', async () => {
+    const file = path.join(home, 'file');
+    fs.writeFileSync(file, '');
+    for (const checkout of [path.join(home, 'missing'), file]) {
+      await expect(FrontMcpInstance.runShared(config, { key: 'run', checkout })).rejects.toThrow(
+        new InvalidSharedServerOptionsError(`checkout: ${checkout} is not a folder`),
+      );
+    }
+    expect(attachSharedSession).not.toHaveBeenCalled();
+  });
+
   it('serves the key in the process a session started, which keeps the key out of its own children', async () => {
     process.env[SHARED_SERVE_ENV] = 'run';
     process.env[SHARED_START_LOCK_ENV] = 'the-launcher';
-    await FrontMcpInstance.runShared(config, { key: 'run', transport: 'http' });
+    await FrontMcpInstance.runShared(config, { key: 'run', transport: 'http', idleTimeoutMs: false, checkout: false });
 
     expect(process.env[SHARED_SERVE_ENV]).toBeUndefined();
     expect(process.env[SHARED_START_LOCK_ENV]).toBeUndefined();
@@ -90,8 +116,15 @@ posixOnly('FrontMcpInstance.runShared', () => {
     expect(attachSharedSession).toHaveBeenCalledWith({
       key: 'run',
       transport: 'unix',
+      attachBudgetMs: 15_000,
+      replaceOlder: true,
+      idleTimeoutMs: 600_000,
+      checkout: path.dirname(process.argv[1] ?? ''),
+      name: 'run-shared-spec',
+      version: '1.0.0',
       input: process.stdin,
       output: process.stdout,
+      embed: expect.any(Function),
     });
     const [[shutdown, options]] = jest.mocked(exitOnShutdownSignals).mock.calls;
     expect(options).toMatchObject({ whenOrphaned: { stdin: process.stdin } });

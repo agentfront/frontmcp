@@ -1,6 +1,7 @@
 import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
+import type { ServerManifest } from '../../manifest/server-manifest.schema';
 import { MAX_CONCURRENT_TASKS_PER_SESSION } from '../../task/task.types';
 import type { AdapterType, AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
 import {
@@ -64,6 +65,7 @@ import {
 import { legacySessionOptionsSchema } from '../types/options/session/schema';
 import { packageLoaderSchema, type PackageLoader } from './app.metadata';
 import { channelsConfigSchema, type ChannelsConfigInput } from './channel.metadata';
+import { MAX_JOB_TIMER_MS, timerLimitMessage } from './job.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import type { WidgetServingMode } from './tool-ui.metadata';
 import { widgetServingModeSchema } from './ui-serving-mode';
@@ -116,6 +118,13 @@ export interface FrontMcpBaseMetadata {
    * @default { instructions: 1024, toolDescription: 1024 }
    */
   instructionsBudget?: InstructionsBudgetOptionsInput;
+
+  /**
+   * The `frontmcp.manifest.json` the server's lazy apps (`apps: [{ name, lazy }]`) are listed from until their first
+   * call: its path, or the manifest itself (a Worker or browser build imports it). By default the server reads the
+   * one next to its entry script, where `frontmcp build` writes it.
+   */
+  manifest?: string | ServerManifest;
 
   /**
    * Shared storage configuration
@@ -433,6 +442,14 @@ export interface FrontMcpBaseMetadata {
      */
     defaultTimeoutMs?: number;
     /**
+     * Where the attempts of a job that sets no `runner` run: `'inline'` on the server's event loop, `'worker'` in a
+     * worker thread of the offload pool, `'detached'` in a process of their own that survives a server restart
+     * (Node only, from the server's entry, with a store other processes share).
+     *
+     * @default 'inline'
+     */
+    runner?: 'inline' | 'worker' | 'detached';
+    /**
      * When job attempts (and workflow steps) may start in this process: at most `concurrency` at once,
      * each claiming `memoryMb` of free memory. An attempt waits up to `maxWaitMs` (default 600000) and
      * is then refused with `JOB_ADMISSION_TIMEOUT`.
@@ -678,6 +695,12 @@ export interface FrontMcpBaseMetadata {
   };
 }
 
+/** A path, or the manifest itself: its fields are checked when a lazy app reads it. */
+const serverManifestOptionSchema = z.union(
+  [z.string().min(1), z.custom<ServerManifest>((value) => typeof value === 'object' && value !== null)],
+  { message: '`manifest` must be the path of a frontmcp.manifest.json, or the manifest itself' },
+);
+
 export const frontMcpBaseSchema = z.object({
   info: serverInfoOptionsSchema,
   // Captured call-site dir (#469 — anchors auth.ui relative paths). Passthrough
@@ -685,6 +708,7 @@ export const frontMcpBaseSchema = z.object({
   __sourceDir: z.string().optional(),
   instructions: z.string().optional(),
   instructionsBudget: instructionsBudgetOptionsSchema.optional(),
+  manifest: serverManifestOptionSchema.optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   lifecycle: lifecycleOptionsSchema.optional(),
   offload: offloadOptionsSchema.optional(),
@@ -739,7 +763,15 @@ export const frontMcpBaseSchema = z.object({
         })
         .refine((store) => !(store.redis && store.sqlite), { message: 'jobs.store takes redis or sqlite, not both' })
         .optional(),
-      defaultTimeoutMs: z.number().int().nonnegative().optional(),
+      defaultTimeoutMs: z
+        .number()
+        .int()
+        .nonnegative()
+        .max(MAX_JOB_TIMER_MS, timerLimitMessage('jobs.defaultTimeoutMs'))
+        .optional(),
+      runner: z
+        .enum(['inline', 'worker', 'detached'], { message: "jobs.runner must be 'inline', 'worker' or 'detached'" })
+        .optional(),
       admission: z
         .object({
           concurrency: z.number().int().positive().optional(),
@@ -928,6 +960,7 @@ const frontMcpLiteSchema = z.object({
   // Must round-trip through the lite parser so CLI/MCPB builds preserve it.
   instructions: z.string().optional(),
   instructionsBudget: instructionsBudgetOptionsSchema.optional(),
+  manifest: serverManifestOptionSchema.optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
   lifecycle: lifecycleOptionsSchema.optional(),
   offload: offloadOptionsSchema.optional(),

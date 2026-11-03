@@ -7,3 +7,4 @@ export {
   type LiveSurfaceOptions,
   type LiveSurfaceScope,
 } from './live-surface';
+export { keepingListsUnchanged, listsUnchanged } from './unchanged-lists';

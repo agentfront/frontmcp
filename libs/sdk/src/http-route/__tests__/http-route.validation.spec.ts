@@ -33,6 +33,9 @@ describe('@HttpRoute', () => {
     ['an unknown method', { method: 'TRACE', path: '/x' }, 'method'],
     ['a relative path', { method: 'GET', path: 'x' }, 'path'],
     ['a path with a query', { method: 'GET', path: '/x?y=1' }, 'path'],
+    ['a path with a wildcard', { method: 'GET', path: '/files/*path' }, 'path'],
+    ['a path with a regular-expression group', { method: 'GET', path: '/board/:id(\\d+)' }, 'path'],
+    ['a path with an optional group', { method: 'GET', path: '/board{/:id}' }, 'path'],
     ['an unknown auth', { method: 'GET', path: '/x', auth: 'mcp' }, 'auth'],
     [
       'an SSE route on POST',

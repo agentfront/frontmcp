@@ -1,11 +1,11 @@
 ---
 name: multi-app-composition
-description: Compose multiple @App classes, ESM packages, and remote MCP servers into a single FrontMCP gateway
+description: Compose multiple @App classes, lazy apps imported on their first call, ESM packages, and remote MCP servers into a single FrontMCP gateway
 ---
 
 # Multi-App Composition
 
-Compose multiple `@App` classes into a single `@FrontMcp` server. Each app contributes its own tools, resources, prompts, skills, and plugins. Apps can be local classes, npm packages loaded at runtime, or remote MCP servers proxied through your gateway.
+Compose multiple `@App` classes into a single `@FrontMcp` server. Each app contributes its own tools, resources, prompts, skills, and plugins. Apps can be local classes, lazy apps imported on their first call, npm packages loaded at runtime, or remote MCP servers proxied through your gateway.
 
 ## When to Use This Skill
 
@@ -14,6 +14,7 @@ Compose multiple `@App` classes into a single `@FrontMcp` server. Each app contr
 - Composing multiple `@App` classes with separate domains into a single `@FrontMcp` server
 - Aggregating external MCP servers via `app.remote()` or npm packages via `app.esm()` into a unified gateway
 - Configuring per-app authentication modes (e.g., one app public, another requiring OAuth)
+- Importing an app's code only on its first call (`{ name, lazy: () => import('./billing.app') }`), so a server with many apps starts fast
 
 ### Recommended
 
@@ -173,6 +174,80 @@ A call the remote refuses with HTTP `401` fails with `RemoteAuthError` (`REMOTE_
 On the default `'legacy'` revision, a redirect from the remote is followed only when it stays on the remote's origin (same scheme, host and port, or `http` to `https` on the same host) and keeps the request's method (`307` or `308`, or any redirect of a `GET`), with or without credentials. Any other redirect fails the request with `Redirect to <url> not followed`: point the remote's `url` at its final address. Up to 1.10.2 a request without credentials followed every redirect and a request with credentials followed none.
 
 `filter` matches the remote's entry names before the namespace prefix; resource templates match under `resources`.
+
+## Lazy Apps (Imported on First Call)
+
+A lazy app is imported on its first call instead of at startup, so a server with many apps starts with only the code
+it needs. Until then its tools, resources, resource templates and prompts are listed from `frontmcp.manifest.json`,
+which `frontmcp build` writes next to the server's entry (see `frontmcp-deployment` → `build-manifest`).
+
+```typescript
+import { App, fileSignal, FrontMcp } from '@frontmcp/sdk';
+
+@FrontMcp({
+  info: { name: 'gateway', version: '1.0.0' },
+  apps: [
+    CoreApp,
+    { id: 'billing', name: 'Billing', lazy: () => import('./billing.app') },
+    // Off: refused with FEATURE_OFF and never imported; turned on, imported on its first call
+    { name: 'Reports', lazy: () => import('./reports.app'), enabled: fileSignal('./features.json', 'reports') },
+  ],
+})
+export default class Server {}
+```
+
+| Option        | Type                       | Description                                                                                                               |
+| ------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | `string`                   | Required. The name of the `@App` the import loads                                                                         |
+| `id`          | `string`                   | The id of that `@App` (default: derived from `name`, as for the app). An import that loads another app fails to load      |
+| `description` | `string`                   | Human-readable description (default: the app's)                                                                           |
+| `lazy`        | `() => Promise<unknown>`   | Imports the app: resolves to its `@App` class, or a module whose default export (or only `@App` export) is one            |
+| `enabled`     | `boolean \| EnabledSource` | Turns the whole app on and off. While it is off, its entries are refused with `FEATURE_OFF` and the app is never imported |
+
+Any other field fails at startup with `LazyAppConfigurationError` (`A lazy app takes id, name, description, enabled and
+lazy; declare everything else on the @App class it imports.`).
+
+How it behaves:
+
+- **Lists**: `tools/list`, `resources/list`, `resources/templates/list` and `prompts/list` answer from the manifest's
+  entries through the normal list flows, so hooks, `enabled`, `availableWhen`, client profiles, output policies and
+  the surface hash apply exactly as they would to the loaded app. Its code is not imported.
+- **First call**: `tools/call`, `resources/read`, `prompts/get` or `completion/complete` on one of its entries imports
+  and initializes the app before the request's flow collects its hooks, so even the first request runs the app's own
+  entry with its plugins' hooks, its aliases, `enabled`, the output schema and the answer budget. Concurrent first
+  calls import it once. The checks startup runs on every app run then too (metadata only a plugin enforces, the hook
+  order, the guard a tool's `rateLimit` / `concurrency` needs), and its providers get `onReady()`.
+- **A stale manifest** (the app's entries differ from what it lists): the loaded entries replace the manifest's, the
+  server logs `App "billing" does not match frontmcp.manifest.json (tools): its entries are listed from its code from
+now on.` with the remedy to run `frontmcp build` again, and clients get `list_changed` for each list that changed. When they match, loading sends no `list_changed`.
+- **A failed import**: the call is answered `LAZY_APP_LOAD_FAILED` (`LazyAppLoadError`, `App "Billing" could not be
+loaded`, with a remedy), the server keeps serving, and the next call imports the app again; the log has the cause.
+  What the failed attempt set up is undone first: the hooks it registered are removed and its providers get
+  `onShutdown()`. A failure the app's code must fix (`LazyAppConfigurationError`, such as `cannot be lazy`, or
+  `UnenforcedMetadataError`) is not retried: every call gets it, with the remedy to fix the app and restart. An import
+  that finishes after the server began shutting down does not start the app.
+- **Where the manifest comes from**: `@FrontMcp({ manifest })`, a path (relative to the file that declares the
+  server) or the manifest object itself (what a Worker or browser build imports); else `frontmcp.manifest.json` next
+  to the entry script, where `frontmcp build` writes it. With none, development (`NODE_ENV` other than `production`)
+  imports lazy apps at startup and logs `No frontmcp.manifest.json (looked for <path>): lazy apps are loaded at
+startup. ...` once; production does not start: `App "billing" is lazy, and no frontmcp.manifest.json was found
+(looked for <path>). ...`, with the remedy to run `frontmcp build` and ship the manifest next to the server's entry,
+  or pass `@FrontMcp({ manifest })`. A manifest that does not list the app counts as none. `frontmcp build` imports lazy apps
+  to write the manifest.
+- **What a lazy app cannot have**: skills, agents, jobs, workflows, channels, duties (`@Duty` providers start with the
+  server), its own `auth`, `standalone`, app `ui` defaults, widget tools, entries with `authorities`, entries with an
+  `enabled` source of their own (give the lazy app the switch instead), and entries with `featureFlag` or `codecall`
+  metadata (the feature-flag and CodeCall plugins read them from the lists and CodeCall's policy, where a placeholder
+  carries only the manifest's fields). Nor hooks that run for more than its own calls: a plugin with
+  `scope: 'server'`, a hook with `appliesTo: 'all-apps'`, or a hook on any flow but `tools:call-tool`,
+  `resources:read-resource`, `prompts:get-prompt` and `completion:complete` (a list hook, say), since until the app is
+  imported they would guard and shape nothing. A lazy app that has one fails with
+  `LazyAppConfigurationError: App "billing" cannot be lazy: <what>. ...` when it loads (at startup in development, in
+  `frontmcp build`), or at startup when the manifest lists one for it. Its `id` must be no other app's
+  (`DuplicateAppIdError`).
+- **Before the first call**, code that reads a lazy app's entries outside their own calls (a list hook, a plugin's
+  own tools, CodeCall's `includeTools` filter) sees only the fields the manifest records; give such a filter the
+  entry's name, app, tags or annotations rather than other metadata.
 
 ## Scope Isolation
 
@@ -384,13 +459,15 @@ export default class Server {}
 
 ## Common Patterns
 
-| Pattern              | Correct                                                                         | Incorrect                                                                     | Why                                                                                               |
-| -------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Shared tools         | `@FrontMcp({ tools: [HealthCheckTool] })` (server-level)                        | Duplicating the tool class in every `@App` `tools` array                      | Server-level tools are automatically shared across all apps without duplication                   |
-| App namespacing      | `@App({ id: 'billing', name: 'Billing', tools: [ChargeTool] })`                 | Omitting `id` when multiple apps have tools with the same name                | The `id` field controls the namespace prefix (`billing:charge_card`); without it collisions occur |
-| Remote auth          | `remoteAuth: { mode: 'static', credentials: { type: 'bearer', value: token } }` | Passing the token directly as a string to `remoteAuth`                        | `remoteAuth` expects a structured object with `mode` and `credentials` fields                     |
-| Standalone isolation | `standalone: true` for fully isolated apps                                      | `standalone: true` when you still want tools visible in the parent server     | Use `standalone: 'includeInParent'` to get scope isolation with parent visibility                 |
-| Per-app auth         | `auth: { mode: 'remote', provider: '...', clientId: '...' }` on `@App`          | Configuring auth only at the `@FrontMcp` level when apps need different modes | Apps without their own `auth` inherit server-level config; set per-app `auth` for mixed modes     |
+| Pattern              | Correct                                                                                       | Incorrect                                                                     | Why                                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Shared tools         | `@FrontMcp({ tools: [HealthCheckTool] })` (server-level)                                      | Duplicating the tool class in every `@App` `tools` array                      | Server-level tools are automatically shared across all apps without duplication                        |
+| App namespacing      | `@App({ id: 'billing', name: 'Billing', tools: [ChargeTool] })`                               | Omitting `id` when multiple apps have tools with the same name                | The `id` field controls the namespace prefix (`billing:charge_card`); without it collisions occur      |
+| Remote auth          | `remoteAuth: { mode: 'static', credentials: { type: 'bearer', value: token } }`               | Passing the token directly as a string to `remoteAuth`                        | `remoteAuth` expects a structured object with `mode` and `credentials` fields                          |
+| Standalone isolation | `standalone: true` for fully isolated apps                                                    | `standalone: true` when you still want tools visible in the parent server     | Use `standalone: 'includeInParent'` to get scope isolation with parent visibility                      |
+| Per-app auth         | `auth: { mode: 'remote', provider: '...', clientId: '...' }` on `@App`                        | Configuring auth only at the `@FrontMcp` level when apps need different modes | Apps without their own `auth` inherit server-level config; set per-app `auth` for mixed modes          |
+| Lazy apps            | `{ name: 'Billing', lazy: () => import('./billing.app') }`, and ship `frontmcp.manifest.json` | A lazy app deployed without the manifest `frontmcp build` wrote               | Production refuses to start a lazy app with no manifest to list it from                                |
+| Turning an app off   | `enabled: fileSignal('./features.json', 'billing')` on the lazy app                           | An `enabled` source on each of the lazy app's tools                           | The app's switch keeps it unimported while off; a source on its own entries makes it unable to be lazy |
 
 ## Verification Checklist
 
@@ -409,6 +486,13 @@ export default class Server {}
 - [ ] `standalone: 'includeInParent'` apps have isolated scope but visible tools
 - [ ] Per-app auth modes are enforced independently per app
 
+### Lazy Apps
+
+- [ ] `frontmcp build` wrote `frontmcp.manifest.json`, and it ships next to the server's entry (or `@FrontMcp({ manifest })` names it)
+- [ ] Each lazy app's `id` (or `name`) is the id of the `@App` its import loads, and no other app's
+- [ ] Plugins that guard or filter every app (`scope: 'server'`, list hooks, `appliesTo: 'all-apps'`) are installed on the server or an app that is not lazy
+- [ ] The server logs no `does not match frontmcp.manifest.json` warning after a lazy app's first call
+
 ### Remote Apps
 
 - [ ] `app.remote()` URL is reachable and returns valid MCP capabilities
@@ -417,18 +501,23 @@ export default class Server {}
 
 ## Troubleshooting
 
-| Problem                                  | Cause                                                       | Solution                                                                                                 |
-| ---------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Tool name collision between apps         | Multiple apps register tools with the same name and no `id` | Set unique `id` on each `@App` or use `namespace` on ESM/remote apps                                     |
-| Remote app tools not appearing           | Remote server is unreachable or returns empty capabilities  | Verify the URL, check `transportOptions.timeout`, and ensure `remoteAuth` is correct                     |
-| Shared plugin not applied to an app      | Plugin declared on `@App` instead of `@FrontMcp`            | Move the plugin to the `@FrontMcp` `plugins` array for server-wide application                           |
-| `standalone: true` app tools not visible | Standalone apps are fully isolated by design                | Use `standalone: 'includeInParent'` to expose tools in the parent server while keeping scope isolation   |
-| Per-app auth not working                 | App does not declare its own `auth` field                   | Add `auth` configuration directly on the `@App` decorator; omitted `auth` inherits server-level defaults |
+| Problem                                              | Cause                                                                      | Solution                                                                                                 |
+| ---------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Tool name collision between apps                     | Multiple apps register tools with the same name and no `id`                | Set unique `id` on each `@App` or use `namespace` on ESM/remote apps                                     |
+| Remote app tools not appearing                       | Remote server is unreachable or returns empty capabilities                 | Verify the URL, check `transportOptions.timeout`, and ensure `remoteAuth` is correct                     |
+| Shared plugin not applied to an app                  | Plugin declared on `@App` instead of `@FrontMcp`                           | Move the plugin to the `@FrontMcp` `plugins` array for server-wide application                           |
+| `standalone: true` app tools not visible             | Standalone apps are fully isolated by design                               | Use `standalone: 'includeInParent'` to expose tools in the parent server while keeping scope isolation   |
+| Per-app auth not working                             | App does not declare its own `auth` field                                  | Add `auth` configuration directly on the `@App` decorator; omitted `auth` inherits server-level defaults |
+| `App "x" is lazy, and no frontmcp.manifest.json ...` | A production server with a lazy app found no manifest that lists it        | Run `frontmcp build` and ship the manifest next to the entry, or pass `@FrontMcp({ manifest })`          |
+| `App "x" cannot be lazy: ...`                        | The app has something its lists need its code for, or that startup sets up | Remove `lazy` to import it at startup, or move what the message names to an app that is not lazy         |
+| `App "x" does not match frontmcp.manifest.json`      | The app changed since the manifest was built                               | Run `frontmcp build` again; until then the app's own entries are listed once it loads                    |
+| `LAZY_APP_LOAD_FAILED` on a call                     | The app's import or initialization failed                                  | Read the cause in the server log; a failure other than a configuration error is retried on the next call |
 
 ## Examples
 
 | Example                                                                                             | Level        | Description                                                                                     |
 | --------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------- |
+| [`lazy-apps-from-the-manifest`](../examples/multi-app-composition/lazy-apps-from-the-manifest.md)   | Intermediate | Import apps on their first call, listed from `frontmcp.manifest.json` until then.               |
 | [`local-apps-with-shared-tools`](../examples/multi-app-composition/local-apps-with-shared-tools.md) | Basic        | Compose multiple local `@App` classes into a server with shared tools available to all apps.    |
 | [`per-app-auth-and-isolation`](../examples/multi-app-composition/per-app-auth-and-isolation.md)     | Advanced     | Configure mixed authentication modes and scope isolation for different apps in a single server. |
 | [`remote-and-esm-apps`](../examples/multi-app-composition/remote-and-esm-apps.md)                   | Intermediate | Compose local, ESM (npm package), and remote (external MCP server) apps into a single gateway.  |

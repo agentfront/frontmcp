@@ -190,6 +190,38 @@ export default class HookRegistry extends RegistryAbstract<HookEntry, HookRecord
     return Promise.all(readyArr);
   }
 
+  /** Unregister `hooks`, so no flow runs them again: what an app that failed to load had registered. */
+  removeHooks(hooks: Iterable<HookEntry>): void {
+    const removed = new Set(hooks);
+    if (removed.size === 0) return;
+    const removedTokens = new Set<Token>();
+    for (const [token, entry] of this.instances) {
+      if (!removed.has(entry)) continue;
+      removedTokens.add(token);
+      this.instances.delete(token);
+      this.defs.delete(token);
+      this.tokens.delete(token);
+      this.graph.delete(token);
+    }
+    const prune = <Key>(index: Map<Key, HookEntry[]>) => {
+      for (const [key, entries] of index) {
+        index.set(
+          key,
+          entries.filter((entry) => !removed.has(entry)),
+        );
+      }
+    };
+    prune(this.entriesByCls);
+    prune(this.hooksByFlow);
+    for (const stages of this.hooksByFlowStage.values()) prune(stages);
+    for (const [cls, records] of this.recordsByCls) {
+      this.recordsByCls.set(
+        cls,
+        records.filter((record) => !removedTokens.has(record.provide)),
+      );
+    }
+  }
+
   /**
    * Also serve the flow hooks `parent` runs for entries of `ownerId`, after this registry's own hooks
    * of the same priority. An `@Agent` with `execution.inheritPlugins` uses it: its tools run in the

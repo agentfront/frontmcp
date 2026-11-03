@@ -7,6 +7,7 @@ import {
   isSharedServerNonce,
   proveSharedServerIdentity,
   verifySharedServerIdentity,
+  type SharedServerIdentityStatement,
 } from '../shared-server-identity';
 
 const ENDPOINT = 'unix:/home/me/.frontmcp/shared/notes/server.sock';
@@ -44,42 +45,57 @@ describe('shared server identity', () => {
 
   describe('a proof', () => {
     const { proofKey } = deriveSharedServerKeys(createSharedServerSecret());
+    const VERSION = '1.2.0';
 
-    it('verifies for the key, endpoint and nonce it was made for', () => {
-      const nonce = createSharedServerNonce();
-      const proof = proveSharedServerIdentity(proofKey, ENDPOINT, nonce);
-      expect(verifySharedServerIdentity(proofKey, ENDPOINT, nonce, proof)).toBe(true);
+    function statement(overrides: Partial<SharedServerIdentityStatement> = {}): SharedServerIdentityStatement {
+      return { endpoint: ENDPOINT, nonce: createSharedServerNonce(), version: VERSION, ...overrides };
+    }
+
+    it('verifies for the key, endpoint, nonce and version it was made for', () => {
+      const made = statement();
+      const proof = proveSharedServerIdentity(proofKey, made);
+      expect(verifySharedServerIdentity(proofKey, made, proof)).toBe(true);
     });
 
     it('is refused when replayed for another nonce', () => {
-      const proof = proveSharedServerIdentity(proofKey, ENDPOINT, createSharedServerNonce());
-      expect(verifySharedServerIdentity(proofKey, ENDPOINT, createSharedServerNonce(), proof)).toBe(false);
+      const proof = proveSharedServerIdentity(proofKey, statement());
+      expect(verifySharedServerIdentity(proofKey, statement(), proof)).toBe(false);
     });
 
     it('is refused when made for another endpoint', () => {
-      const nonce = createSharedServerNonce();
-      const proof = proveSharedServerIdentity(proofKey, 'http://127.0.0.1:4000', nonce);
-      expect(verifySharedServerIdentity(proofKey, 'http://127.0.0.1:4001', nonce, proof)).toBe(false);
+      const made = statement({ endpoint: 'http://127.0.0.1:4000' });
+      const proof = proveSharedServerIdentity(proofKey, made);
+      expect(verifySharedServerIdentity(proofKey, { ...made, endpoint: 'http://127.0.0.1:4001' }, proof)).toBe(false);
+    });
+
+    it('is refused when it claims another version than it was made for', () => {
+      const made = statement({ version: '1.0.0' });
+      const proof = proveSharedServerIdentity(proofKey, made);
+      expect(verifySharedServerIdentity(proofKey, { ...made, version: '9.0.0' }, proof)).toBe(false);
     });
 
     it('is refused when stale: made with the key of an earlier server', () => {
       const earlier = deriveSharedServerKeys(createSharedServerSecret()).proofKey;
-      const nonce = createSharedServerNonce();
-      const proof = proveSharedServerIdentity(earlier, ENDPOINT, nonce);
-      expect(verifySharedServerIdentity(proofKey, ENDPOINT, nonce, proof)).toBe(false);
+      const made = statement();
+      const proof = proveSharedServerIdentity(earlier, made);
+      expect(verifySharedServerIdentity(proofKey, made, proof)).toBe(false);
     });
 
     it('is refused when it is not a proof at all', () => {
-      const nonce = createSharedServerNonce();
+      const made = statement();
       for (const proof of [undefined, 42, '', 'not base64url!', base64urlEncode(new Uint8Array(31))]) {
-        expect(verifySharedServerIdentity(proofKey, ENDPOINT, nonce, proof)).toBe(false);
+        expect(verifySharedServerIdentity(proofKey, made, proof)).toBe(false);
       }
     });
 
-    it('cannot be shifted between the endpoint and the nonce', () => {
+    it('cannot be shifted between the endpoint, the nonce and the version', () => {
       const nonce = createSharedServerNonce();
-      const proof = proveSharedServerIdentity(proofKey, `${ENDPOINT}\n`, nonce);
-      expect(verifySharedServerIdentity(proofKey, ENDPOINT, `\n${nonce}`, proof)).toBe(false);
+      const proof = proveSharedServerIdentity(proofKey, { endpoint: `${ENDPOINT}\n`, nonce, version: VERSION });
+      expect(
+        verifySharedServerIdentity(proofKey, { endpoint: ENDPOINT, nonce: `\n${nonce}`, version: VERSION }, proof),
+      ).toBe(false);
+      const shifted = proveSharedServerIdentity(proofKey, { endpoint: ENDPOINT, nonce: `${nonce}1`, version: '.0' });
+      expect(verifySharedServerIdentity(proofKey, { endpoint: ENDPOINT, nonce, version: '1.0' }, shifted)).toBe(false);
     });
   });
 });

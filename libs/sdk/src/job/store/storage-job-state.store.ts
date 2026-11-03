@@ -12,7 +12,7 @@ type RunRecord = JobRunRecord | WorkflowRunRecord;
 /**
  * A JobStateStore on a `@frontmcp/utils` storage, such as the SQLite storage several processes on one
  * machine share. Each run is one JSON value under `run:<runId>`, and a cancel request is its own key,
- * `cancel:<runId>`, so no write of the run record can drop it. The store owns the storage and
+ * `cancel:<runId>`, so no write of the run record can drop it; a runner's heartbeat is `runner:<id>`. The store owns the storage and
  * disconnects it on dispose.
  */
 export class StorageJobStateStore implements JobStateStore {
@@ -57,7 +57,9 @@ export class StorageJobStateStore implements JobStateStore {
     const cutoff = Date.now() - olderThanMs;
     const stale = (await this.allRuns()).filter((run) => run.startedAt < cutoff);
     if (stale.length > 0) {
-      await this.storage.mdelete(stale.flatMap((run) => [runKey(run.runId), cancelKey(run.runId)]));
+      await this.storage.mdelete(
+        stale.flatMap((run) => [runKey(run.runId), cancelKey(run.runId), claimKey(run.runId)]),
+      );
     }
     return stale.length;
   }
@@ -68,6 +70,20 @@ export class StorageJobStateStore implements JobStateStore {
 
   async isCancelRequested(runId: string): Promise<boolean> {
     return this.storage.exists(cancelKey(runId));
+  }
+
+  async touchRunner(runnerId: string, ttlSeconds: number): Promise<void> {
+    await this.storage.set(runnerKey(runnerId), '1', { ttlSeconds });
+  }
+
+  async isRunnerAlive(runnerId: string): Promise<boolean> {
+    return this.storage.exists(runnerKey(runnerId));
+  }
+
+  async claimRun(runId: string): Promise<boolean> {
+    const claimed = (await this.storage.incr(claimKey(runId))) === 1;
+    if (claimed) await this.storage.expire(claimKey(runId), this.ttlSeconds);
+    return claimed;
   }
 
   async dispose(): Promise<void> {
@@ -92,4 +108,12 @@ function runKey(runId: string): string {
 
 function cancelKey(runId: string): string {
   return `cancel:${runId}`;
+}
+
+function runnerKey(runnerId: string): string {
+  return `runner:${runnerId}`;
+}
+
+function claimKey(runId: string): string {
+  return `claim:${runId}`;
 }

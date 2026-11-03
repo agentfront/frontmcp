@@ -254,6 +254,29 @@ describe('WorkflowStepExecutor', () => {
     });
   });
 
+  describe('the timeout a step takes', () => {
+    it('sets no limit for a step whose timeout is 0', async () => {
+      const step = { id: 'step-1', jobName: 'started', timeout: 0, retry: { maxAttempts: 1 } } as WorkflowStep;
+      const executor = new WorkflowStepExecutor(jobs, logger, { authInfo: {} });
+
+      const running = executor.executeStep(step, {});
+      await waitForTrace(0);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      finishStartedJob();
+
+      await expect(running).resolves.toMatchObject({ state: 'completed', outputs: { ok: true } });
+    });
+
+    it("falls back to the server's jobs.defaultTimeoutMs when neither the step nor its job sets one", async () => {
+      const step = { id: 'step-1', jobName: 'started', retry: { maxAttempts: 1 } } as WorkflowStep;
+      const executor = new WorkflowStepExecutor(jobs, logger, { authInfo: {}, defaultTimeoutMs: 20 });
+
+      await expect(executor.executeStep(step, {})).rejects.toBeInstanceOf(WorkflowJobTimeoutError);
+      finishStartedJob();
+      await waitForTrace(2);
+    });
+  });
+
   describe('step timeout of a started job (#815)', () => {
     it("ends the abandoned attempt's flow as failed, so Did(execute) does not run and finalize sees the timeout", async () => {
       const step = { id: 'step-1', jobName: 'started', timeout: 20, retry: { maxAttempts: 1 } } as WorkflowStep;

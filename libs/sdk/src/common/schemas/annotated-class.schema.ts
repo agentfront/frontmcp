@@ -4,7 +4,11 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 import { isPackageSpecifier } from '../../esm-loader/package-specifier';
 import type { AdapterType, AgentType, PluginType, ProviderType } from '../interfaces';
 import { frontMcpAdapterMetadataSchema } from '../metadata/adapter.metadata';
-import { frontMcpRemoteAppMetadataSchema, type RemoteAppMetadata } from '../metadata/app.metadata';
+import {
+  frontMcpRemoteAppMetadataSchema,
+  type LazyAppMetadata,
+  type RemoteAppMetadata,
+} from '../metadata/app.metadata';
 import { frontMcpAuthProviderMetadataSchema } from '../metadata/auth-provider.metadata';
 import { frontMcpPluginMetadataSchema } from '../metadata/plugin.metadata';
 import { frontMcpProviderMetadataSchema } from '../metadata/provider.metadata';
@@ -60,8 +64,8 @@ export interface AnnotatedClass extends Type {}
 type PluginEntry = AnnotatedClass | Exclude<PluginType, Type | { useClass: unknown }>;
 type AdapterEntry = AnnotatedClass | Exclude<AdapterType, Type | { useClass: unknown }>;
 
-export const annotatedFrontMcpAppSchema = z.custom<AnnotatedClass | RemoteAppMetadata>(
-  (v): v is AnnotatedClass | RemoteAppMetadata => {
+export const annotatedFrontMcpAppSchema = z.custom<AnnotatedClass | RemoteAppMetadata | LazyAppMetadata>(
+  (v): v is AnnotatedClass | RemoteAppMetadata | LazyAppMetadata => {
     // Check for class-based @App() decorator
     if (typeof v === 'function' && hasMetadataCompat(FrontMcpLocalAppTokens.type, v)) {
       return true;
@@ -69,6 +73,8 @@ export const annotatedFrontMcpAppSchema = z.custom<AnnotatedClass | RemoteAppMet
     // Check for remote app configuration object
     if (typeof v === 'object' && v !== null) {
       const obj = v as Record<string, unknown>;
+      // A lazy app: its fields are checked when it is normalized, so a mistake names the field
+      if ('lazy' in obj) return true;
       // Remote app configs have urlType and url properties
       if (typeof obj['urlType'] === 'string' && typeof obj['url'] === 'string' && typeof obj['name'] === 'string') {
         // Validate against remote app schema
@@ -77,7 +83,10 @@ export const annotatedFrontMcpAppSchema = z.custom<AnnotatedClass | RemoteAppMet
     }
     return false;
   },
-  { message: 'apps items must be annotated with @App() | @FrontMcpApp() or be a valid remote app configuration.' },
+  {
+    message:
+      'apps items must be annotated with @App() | @FrontMcpApp(), or be a valid remote app or lazy app ({ name, lazy }) configuration.',
+  },
 );
 
 export const annotatedFrontMcpProvidersSchema = z.custom<ProviderType>(

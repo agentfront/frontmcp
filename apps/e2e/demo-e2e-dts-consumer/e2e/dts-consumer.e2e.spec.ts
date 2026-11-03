@@ -49,8 +49,10 @@ const fixtureFiles = [
   'http-routes-must-compile.ts',
   'shared-server-must-compile.ts',
   'durable-jobs-must-compile.ts',
+  'job-runners-must-compile.ts',
   'build-manifest-must-compile.ts',
   'persistent-questions-must-compile.ts',
+  'lazy-apps-must-compile.ts',
 ].map((fileName) => path.join(fixtureDir, fileName));
 
 function compileFixture(withoutExpectErrors?: string): { diagnostics: FixtureDiagnostic[]; sourceFiles: string[] } {
@@ -231,7 +233,9 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('persistent-questions-must-compile.ts'))).toEqual([]);
   });
 
-  it('types FrontMcpInstance.runShared(), its options and errors, and the shared:identify flow', () => {
+  it('types FrontMcpInstance.runShared(), its options and errors, and the shared:identify flow', () => {});
+
+  it('types FrontMcpInstance.runShared(), its options and errors, and the shared:identify and shared:drain flows', () => {
     expect(describeEach(inFixtureFile('shared-server-must-compile.ts'))).toEqual([]);
   });
 
@@ -239,8 +243,16 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
     expect(describeEach(inFixtureFile('durable-jobs-must-compile.ts'))).toEqual([]);
   });
 
+  it("types @Job({ runner }), jobs.runner, the run's runner, JOB_WORKER_MARKER and the runner errors", () => {
+    expect(describeEach(inFixtureFile('job-runners-must-compile.ts'))).toEqual([]);
+  });
+
   it('types instructionsBudget, buildManifest(), lintServerManifest() and the manifest schema', () => {
     expect(describeEach(inFixtureFile('build-manifest-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types lazy apps, @FrontMcp({ manifest }) and the lazy app errors', () => {
+    expect(describeEach(inFixtureFile('lazy-apps-must-compile.ts'))).toEqual([]);
   });
 
   it('ships declaration files that type-check with skipLibCheck disabled', () => {
