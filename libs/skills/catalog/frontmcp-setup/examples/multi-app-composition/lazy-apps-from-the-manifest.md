@@ -7,8 +7,8 @@ tags: [setup, multi-app, lazy, manifest, build, startup]
 features:
   - '`{ name, lazy: () => import(...) }` in `apps` imports the app on its first call, once for concurrent calls'
   - '`frontmcp build` writes `frontmcp.manifest.json`, which lists the app until then; the server reads it next to its entry'
-  - "The lazy app's `enabled` keeps it unimported while it is off, and refuses its entries with `FEATURE_OFF`"
-  - 'Without a manifest, development imports lazy apps at startup and production refuses to start'
+  - "The lazy app's `enabled` refuses its entries with `FEATURE_OFF` while it is off, and keeps it unimported once the manifest lists it"
+  - 'Without a manifest, development imports lazy apps at startup (an app whose `enabled` source is off too; only `enabled: false` is skipped) and production refuses to start'
 ---
 
 # Lazy Apps from the Build Manifest
@@ -64,16 +64,16 @@ export default class Server {}
 ```
 
 ```bash
-frontmcp build --target node        # writes dist/node/frontmcp.manifest.json next to the server
-NODE_ENV=production node dist/node/main.js
+frontmcp build --target node        # writes dist/node/gateway.bundle.js and dist/node/frontmcp.manifest.json next to it
+NODE_ENV=production node dist/node/gateway.bundle.js   # `gateway`: the name in frontmcp.config or package.json
 ```
 
 ## What This Demonstrates
 
 - `{ name, lazy: () => import(...) }` in `apps` imports the app on its first call, once for concurrent calls
 - `frontmcp build` writes `frontmcp.manifest.json`, which lists the app until then; the server reads it next to its entry
-- The lazy app's `enabled` keeps it unimported while it is off, and refuses its entries with `FEATURE_OFF`
-- Without a manifest, development imports lazy apps at startup and production refuses to start
+- The lazy app's `enabled` refuses its entries with `FEATURE_OFF` while it is off, and keeps it unimported once the manifest lists it
+- Without a manifest, development imports lazy apps at startup (an app whose `enabled` source is off too; only `enabled: false` is skipped) and production refuses to start
 
 ## Related
 

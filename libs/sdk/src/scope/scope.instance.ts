@@ -180,6 +180,8 @@ export class Scope extends ScopeEntry {
   /** Guard manager for rate limiting, concurrency, IP filtering (optional) */
   private _rateLimitManager?: GuardManager;
   private _publicAccessGuard?: GuardManager;
+  /** The guard setup of the lazy apps loaded so far, which the next one waits for. */
+  private lateGuardSetup: Promise<void> = Promise.resolve();
 
   /** Authorities engine for RBAC/ABAC/ReBAC enforcement (optional) */
   private _authoritiesEngine?: import('@frontmcp/auth').AuthoritiesEngine;
@@ -1735,7 +1737,7 @@ export class Scope extends ScopeEntry {
    */
   private async initPublicAccessGuard(storage: GuardConfig['storage']): Promise<void> {
     const publicAccess = (this.auth.options as { publicAccess?: { rateLimit?: number } } | undefined)?.publicAccess;
-    if (!publicAccess?.rateLimit) return;
+    if (!publicAccess?.rateLimit || this._publicAccessGuard) return;
     this._publicAccessGuard = await createGuardManager({ config: { enabled: true, storage }, logger: this.logger });
   }
 
@@ -1814,7 +1816,10 @@ export class Scope extends ScopeEntry {
     const problems = findUnenforcedMetadata({ hooks: this.scopeHooks, tools, resources, prompts, agents, skills });
     if (problems.length > 0) throw new UnenforcedMetadataError(problems);
     checkHookOrder(hookRunsOf(this.scopeHooks), (message) => this.logger.warn(message));
-    await this.initGuardForDeclaredLimits(tools.getTools(true));
+    // One at a time: lazy apps loading at once must not each set up a guard manager, the last one replacing the others
+    const setup = this.lateGuardSetup.then(() => this.initGuardForDeclaredLimits(tools.getTools(true)));
+    this.lateGuardSetup = setup.catch(() => undefined);
+    await setup;
   }
 
   /**
