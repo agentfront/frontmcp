@@ -59,9 +59,12 @@ describe('jobsServerStore', () => {
     expect(jobsServerStore(undefined, { redis: vercelKv, sqlite })).toBe('sqlite');
   });
 
-  it('names none with jobs.store: false, on Vercel KV or with nothing set', () => {
+  it('names jobs.store.redis whatever its provider: the job stores open it with the Redis client', () => {
+    expect(jobsServerStore({ redis: vercelKv }, { sqlite })).toBe('jobs.store.redis');
+  });
+
+  it('names none with jobs.store: false, on a top-level Vercel KV or with nothing set', () => {
     expect(jobsServerStore(false, { redis, sqlite })).toBeUndefined();
-    expect(jobsServerStore({ redis: vercelKv }, { sqlite })).toBeUndefined();
     expect(jobsServerStore(undefined, { redis: vercelKv })).toBeUndefined();
     expect(jobsServerStore(undefined, {})).toBeUndefined();
   });

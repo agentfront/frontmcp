@@ -102,12 +102,13 @@ export function jobsServerStore(
 ): string | undefined {
   if (store === false) return undefined;
   if (store?.sqlite) return 'jobs.store.sqlite';
-  if (store?.redis) return isVercelKv(store.redis) ? undefined : 'jobs.store.redis';
+  // The job stores open `jobs.store.redis` with the Redis client whatever its provider
+  if (store?.redis) return 'jobs.store.redis';
   if (topLevel.redis && !isVercelKv(topLevel.redis)) return 'redis';
   return topLevel.sqlite ? 'sqlite' : undefined;
 }
 
-/** Vercel KV has no key listing for jobs to keep runs in, and needs no TCP socket. */
+/** Vercel KV has no key listing for jobs to keep runs in, so jobs pass over a top-level one. */
 function isVercelKv(redis: RedisOptionsInput): boolean {
   return 'provider' in redis && redis.provider === 'vercel-kv';
 }
