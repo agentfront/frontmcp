@@ -73,7 +73,7 @@
  * ──────────────────────────────────────────────────────────────────────────
  */
 import { createServer, type Server } from 'node:http';
-import { AddressInfo } from 'node:net';
+import { type AddressInfo } from 'node:net';
 import * as path from 'node:path';
 
 import * as esbuild from 'esbuild';
@@ -163,10 +163,8 @@ describe.skip('managed edge auto-update on workerd (miniflare)', () => {
       outfile: bundlePath,
       banner: { js: BANNER },
       define: { __E2E_BUNDLE_ENDPOINT__: JSON.stringify(endpoint) },
-      // Worker/browser conditions → @frontmcp/utils resolves its `#`-subpath
-      // imports (fs/path/crypto/env) to non-Node variants, keeping `node:fs` out
-      // of the bundle.
-      conditions: ['worker', 'browser'],
+      // wrangler's conditions: `workerd` resolves the Node variants nodejs_compat serves.
+      conditions: ['workerd', 'worker', 'browser'],
       // Node-only optional deps referenced behind lazy `import()` but never
       // executed on the edge path: alias to an empty stub so their Node-only
       // module-eval (require('fs')/child_process + transitive @opentelemetry) is

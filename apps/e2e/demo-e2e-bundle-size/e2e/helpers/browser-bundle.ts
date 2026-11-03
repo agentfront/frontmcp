@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { builtinModules } from 'node:module';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 import { build, type Metafile, type Plugin } from 'esbuild';
+import webpack from 'webpack';
 
 import { mkdtemp, realpath, rm } from '@frontmcp/utils';
 
@@ -47,7 +48,7 @@ function keepOnDemandModulesOut(sdkBrowserDist: string, loadedModules: readonly 
 const stubNodeBuiltins: Plugin = {
   name: 'stub-node-builtins',
   setup(pluginBuild) {
-    pluginBuild.onResolve({ filter: /^[a-z_:/]+$/ }, (args) =>
+    pluginBuild.onResolve({ filter: /^[a-z0-9_:/]+$/ }, (args) =>
       args.path.startsWith('node:') || nodeBuiltins.has(args.path)
         ? { path: args.path, namespace: 'node-builtin' }
         : undefined,
@@ -169,6 +170,58 @@ export async function bundleAsWorker(entryFile: string, outfile: string): Promis
     logLevel: 'silent',
     plugins: [externalNodeBuiltins, stubOptionalPeers],
   });
+}
+
+/**
+ * A browser Web Worker's bundle of the entry from the built packages, as webpack's `target: 'webworker'` makes it (the
+ * `worker` and `browser` conditions): one file, with Node built-ins left empty and optional peers stubbed. Returns its
+ * inputs.
+ */
+export async function bundleWebWorkerWithWebpack(entryFile: string, outfile: string): Promise<string[]> {
+  const compiler = webpack({
+    context: workspaceRoot,
+    mode: 'production',
+    target: 'webworker',
+    entry: entryFile,
+    output: { path: dirname(outfile), filename: basename(outfile) },
+    resolve: {
+      alias: Object.fromEntries(OPTIONAL_PEERS.map((peer) => [`${peer}$`, resolve(fixtureDir, 'missing-peer.mjs')])),
+      fallback: Object.fromEntries(builtinModules.map((name) => [name, false])),
+    },
+    optimization: { minimize: false, concatenateModules: false },
+    plugins: [
+      new webpack.NormalModuleReplacementPlugin(/^node:/, (resolveData) => {
+        resolveData.request = resolveData.request.slice('node:'.length);
+      }),
+      new webpack.optimize.LimitChunkCountPlugin({ maxChunks: 1 }),
+    ],
+  });
+  const stats = await new Promise<webpack.Stats>((resolveStats, rejectStats) =>
+    compiler.run((error, result) => (result ? resolveStats(result) : rejectStats(error))),
+  );
+  await new Promise((closed) => compiler.close(closed));
+  if (stats.hasErrors()) throw new Error(stats.toString('errors-only'));
+  return [...stats.compilation.modules].flatMap((module) =>
+    module instanceof webpack.NormalModule ? [relative(workspaceRoot, module.resource)] : [],
+  );
+}
+
+/** A browser Web Worker's bundle of the entry from the built packages, as esbuild makes it with `conditions: ['worker']`. Returns its inputs. */
+export async function bundleWebWorkerWithEsbuild(entryFile: string, outfile: string): Promise<string[]> {
+  const result = await build({
+    entryPoints: [entryFile],
+    absWorkingDir: workspaceRoot,
+    outfile,
+    bundle: true,
+    metafile: true,
+    format: 'esm',
+    platform: 'browser',
+    conditions: ['worker'],
+    tsconfigRaw: {},
+    logLevel: 'silent',
+    plugins: [stubNodeBuiltins, stubOptionalPeers],
+  });
+  return Object.keys(result.metafile.inputs);
 }
 
 /** The bytes each input contributes to the bundle, largest first. */

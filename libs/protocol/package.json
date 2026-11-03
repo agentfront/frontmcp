@@ -31,18 +31,18 @@
   "imports": {
     "#mcp-streamable-http": {
       "types": "./src/node-mcp-streamable-http.ts",
-      "worker": "./src/node-mcp-streamable-http.ts",
+      "workerd": "./src/node-mcp-streamable-http.ts",
       "browser": "./src/browser-mcp-streamable-http.ts",
       "require": "./src/lazy-mcp-streamable-http.ts",
       "default": "./src/node-mcp-streamable-http.ts"
     },
     "#mcp-server": {
-      "worker": "./src/node-mcp-server.ts",
+      "workerd": "./src/node-mcp-server.ts",
       "browser": "./src/browser-mcp-server.ts",
       "default": "./src/node-mcp-server.ts"
     },
     "#server-types": {
-      "worker": "./src/node-server-types.ts",
+      "workerd": "./src/node-server-types.ts",
       "browser": "./src/browser-server-types.ts",
       "default": "./src/node-server-types.ts"
     },

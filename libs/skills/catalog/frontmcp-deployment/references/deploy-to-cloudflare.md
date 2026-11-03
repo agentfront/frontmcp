@@ -67,6 +67,8 @@ compiles with `--module esnext`. The legacy CommonJS `module.exports` shape is
 read by Cloudflare as a Service Worker, where `nodejs_compat` cannot externalize
 Node builtins and the deploy fails — do not force CommonJS for this target.
 
+wrangler and `@cloudflare/vite-plugin` bundle with the `workerd`, `worker` and `browser` conditions, and `workerd` gives the Worker the Node builds of `@frontmcp/utils`, `@frontmcp/auth` and `@frontmcp/protocol`, which `nodejs_compat` serves. A Worker you bundle yourself (esbuild, Rollup, webpack) must pass `workerd` too: with only `worker` and `browser` it gets the browser builds, which read no environment variables and have no Web-standard MCP transport. Up to 1.10 the `worker` condition selected the Node builds, which also broke browser Web Workers (see `build-for-browser`).
+
 > **Important:** The Cloudflare adapter sets `alwaysWriteConfig: true`, but it rewrites only the keys it manages. `main` is always overwritten (it has to track the build output); `name` and `compatibility_date` are written only when the file does not already declare them; `compatibility_flags` is merged. Hand-edited `[vars]`, `[[kv_namespaces]]`, `[[d1_databases]]`, `[triggers]` and comments survive every build. If `wrangler.toml` and `frontmcp.config` disagree on the worker name, the build keeps the file's value and warns instead of renaming your worker.
 
 ## Step 3: Configure wrangler.toml
@@ -322,6 +324,7 @@ OAuth sign-in works on the worker too, including `/oauth/provider/:providerId/ca
 | Worker exceeds size limit     | Too many bundled dependencies                  | Review dependencies and remove unused packages to reduce bundle size                                                                           |
 | Module format errors          | Worker bundled as a Service Worker             | FrontMCP Cloudflare builds emit an **ES Module Worker** (`export default { fetch }`); `nodejs_compat` requires it. Don't force `type`/CommonJS |
 | KV binding errors             | Namespace not created or binding name mismatch | Run `npx wrangler kv:namespace create` and copy the `id` into `wrangler.toml`                                                                  |
+| `not available in browser`    | Custom bundle without `workerd`                | Add `workerd` to the bundler's conditions (wrangler adds it)                                                                                   |
 | Timeout errors                | CPU time exceeds plan limit                    | Upgrade plan or offload heavy computation to Durable Objects                                                                                   |
 | CORS failures on MCP endpoint | Missing CORS headers in Worker response        | `@frontmcp/edge`: pass `cors: { origin: true }` to `createEdgeMcp({...})` (transport-level CORS)                                               |
 
