@@ -39,7 +39,7 @@
     "./package.json": "./package.json",
     ".": {
       "development": "./src/index.ts",
-      "worker": {
+      "workerd": {
         "require": {
           "types": "./dist/index.d.ts",
           "default": "./dist/index.js"
