@@ -275,6 +275,11 @@ the others use the file, set its switch from the last column; `store: false`
 takes no `redis` or `sqlite` of its own beside it, and any other value than
 `false` stops startup. To disable a subsystem, set its `enabled: false`.
 
+The generated CLI (`frontmcp build --target cli`) reads the `tasks` options too,
+and runs tasks only on a store its invocations share: with `tasks.store: false`
+it runs none. Up to 1.10 it ignored every `tasks` option: it ran tasks only
+with a top-level `sqlite` or `redis`, and kept them there.
+
 In the browser build (`create()` in a page), a subsystem that would open SQLite
 or Redis, its own or the top-level one, stops startup with
 `BrowserStoreUnavailableError` (`BROWSER_STORE_UNAVAILABLE`), which names its

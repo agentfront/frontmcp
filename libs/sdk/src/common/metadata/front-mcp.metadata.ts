@@ -1018,6 +1018,8 @@ const frontMcpLiteSchema = z.object({
   sqlite: z.any().optional(),
   ui: z.any().optional(),
   jobs: z.any().optional(),
+  // The CLI host keeps tasks in `tasks.sqlite` / `tasks.redis` and runs them with `tasks.runner`
+  tasks: frontMcpBaseSchema.shape.tasks,
   throttle: z.any().optional(),
   health: z.any().optional(),
   metrics: z.any().optional(),

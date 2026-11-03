@@ -95,6 +95,24 @@ describe('store: false with a top-level sqlite', () => {
       'a top-level `sqlite` without `tasks.store: false`',
     );
   });
+
+  it('keeps tasks off the sqlite with tasks.store: false in CLI mode too', async () => {
+    const startCli = async (options: Record<string, unknown>) => {
+      const instance = await FrontMcpInstance.createForCli({
+        info: { name: 'store-off', version: '0.0.0' },
+        apps: [StoreOffApp],
+        transport: { persistence: false },
+        sqlite,
+        ...options,
+      });
+      started.push(instance);
+      return instance.getScopes()[0] as unknown as ScopeBackends;
+    };
+
+    expect((await startCli({})).taskBackendType).toBe('sqlite');
+    expect((await startCli({ tasks: { store: false } })).taskBackendType).toBeUndefined();
+    expect(sqliteTaskStore).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('stores in a browser', () => {
