@@ -1037,7 +1037,7 @@ const frontMcpLiteSchema = z.object({
  * Parse config with minimal validation for CLI mode.
  * Skips transport auto-persistence and deep validation of unused subsystems.
  */
-export function parseFrontMcpConfigLite(input: FrontMcpConfigInput): FrontMcpConfigType {
+export function parseFrontMcpConfigLite(input: FrontMcpConfigInput | FrontMcpConfigType): FrontMcpConfigType {
   return frontMcpLiteSchema.parse(input) as unknown as FrontMcpConfigType;
 }
 

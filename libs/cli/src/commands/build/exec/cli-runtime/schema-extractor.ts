@@ -4,6 +4,8 @@
  * extracts tool/resource/prompt schemas, and serializes them for CLI code generation.
  */
 
+import { setBuildExtractFlags } from '../../build-extract-flags';
+
 export interface ExtractedTool {
   name: string;
   description: string;
@@ -186,18 +188,13 @@ export async function extractSchemas(bundlePath: string): Promise<ExtractedSchem
 
 async function extractSchemasFromBundle(bundlePath: string): Promise<ExtractedSchema> {
   // Suppress @FrontMcp() decorator bootstrap — we only need metadata, not a running server
-  const prev = process.env['FRONTMCP_SCHEMA_EXTRACT'];
-  process.env['FRONTMCP_SCHEMA_EXTRACT'] = '1';
+  const restoreFlags = setBuildExtractFlags();
 
   let mod: Record<string, unknown>;
   try {
     mod = require(bundlePath);
   } finally {
-    if (prev === undefined) {
-      delete process.env['FRONTMCP_SCHEMA_EXTRACT'];
-    } else {
-      process.env['FRONTMCP_SCHEMA_EXTRACT'] = prev;
-    }
+    restoreFlags();
   }
 
   const configOrClass = mod.default || mod;

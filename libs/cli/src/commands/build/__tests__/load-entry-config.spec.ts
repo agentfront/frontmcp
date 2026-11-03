@@ -197,3 +197,22 @@ export default { http };
     }
   });
 });
+
+describe('loadEntryDecoratorInfo — the flags the entry loads under (#1041)', () => {
+  it('loads the entry as a build reads it, then puts the flags back', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-entry-'));
+    const entry = path.join(dir, 'main.js');
+    await writeFile(
+      entry,
+      'module.exports = { extract: process.env.FRONTMCP_SCHEMA_EXTRACT, buildExtract: process.env.FRONTMCP_BUILD_EXTRACT };\n',
+    );
+    try {
+      const info = await loadEntryDecoratorInfo(entry);
+      expect(info.decoratorConfig).toEqual({ extract: '1', buildExtract: '1' });
+      expect(process.env['FRONTMCP_SCHEMA_EXTRACT']).toBeUndefined();
+      expect(process.env['FRONTMCP_BUILD_EXTRACT']).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

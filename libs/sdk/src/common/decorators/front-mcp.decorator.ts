@@ -11,6 +11,7 @@ import {
 } from '../../front-mcp/serverless-handler';
 import { isOffloadWorker } from '../../offload/offload-worker.globals';
 import { frontMcpMetadataSchema, type FrontMcpMetadata } from '../metadata';
+import { withoutStores, withStoresOf } from '../metadata/front-mcp-stores';
 import { FrontMcpTokens } from '../tokens';
 import { captureCallerDir } from '../utils/caller-dir.utils';
 
@@ -66,7 +67,11 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       sourceDir && !(providedMetadata as { __sourceDir?: string }).__sourceDir
         ? ({ ...providedMetadata, __sourceDir: sourceDir } as FrontMcpMetadata)
         : providedMetadata;
-    const { error, data: metadata } = frontMcpMetadataSchema.safeParse(withSourceDir);
+    // A build opens no store, so their settings are validated when the server starts (#1041)
+    const isBuildExtract = getEnvFlag('FRONTMCP_BUILD_EXTRACT');
+    const { error, data: parsed } = frontMcpMetadataSchema.safeParse(
+      isBuildExtract ? withoutStores(withSourceDir) : withSourceDir,
+    );
     if (error) {
       const formatted = error.format();
       if (formatted.apps) {
@@ -90,6 +95,7 @@ export function FrontMcp(providedMetadata: FrontMcpMetadata): ClassDecorator {
       }
       throw error;
     }
+    const metadata = isBuildExtract ? withStoresOf(parsed, withSourceDir) : parsed;
 
     Reflect.defineMetadata(FrontMcpTokens.type, true, target);
     for (const property in metadata) {

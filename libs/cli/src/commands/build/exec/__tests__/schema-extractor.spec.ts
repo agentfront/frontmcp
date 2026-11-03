@@ -34,6 +34,10 @@ jest.mock('/fake/no-default.js', () => ({
   config: { name: 'test' },
 }), { virtual: true });
 
+jest.mock('/fake/flags-bundle.js', () => ({
+  default: { flags: [process.env['FRONTMCP_SCHEMA_EXTRACT'], process.env['FRONTMCP_BUILD_EXTRACT']] },
+}), { virtual: true });
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockConnect.mockResolvedValue(mockClient);
@@ -73,6 +77,16 @@ describe('extractSchemas file logging (#642)', () => {
       if (before === undefined) delete process.env['FRONTMCP_LOGS_MAX'];
       else process.env['FRONTMCP_LOGS_MAX'] = before;
     }
+  });
+});
+
+describe('extractSchemas flags (#1041)', () => {
+  it('loads the bundle as a build reads it, then puts the flags back', async () => {
+    await extractSchemas('/fake/flags-bundle.js');
+
+    expect(mockConnect).toHaveBeenCalledWith({ flags: ['1', '1'] }, expect.anything());
+    expect(process.env['FRONTMCP_SCHEMA_EXTRACT']).toBeUndefined();
+    expect(process.env['FRONTMCP_BUILD_EXTRACT']).toBeUndefined();
   });
 });
 

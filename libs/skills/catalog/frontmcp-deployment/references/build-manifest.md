@@ -42,11 +42,15 @@ The boot reads the server; it does not run it:
 
 - Nothing serves: no port, no transport, no file log. `FrontMcpInstance.bootstrap()`, `runStdio()` and
   `runUnixSocket()` called while the entry module loads return without serving.
-- None of the config's stores is opened: `redis`, `pubsub`, `sqlite`, `jobs.store`, `tasks.redis` and `tasks.sqlite`
-  are left out before the config is validated, so the build connects to no Redis, writes no SQLite file, and a CI
-  machine without them, or without the variables their URLs and secrets come from, builds the same manifest. A
-  `@FrontMcp` class validates its whole config when the entry loads, so there an unset variable (a
-  `redis: { url: process.env['REDIS_URL'] }`, an `encryption.secret`) stops the boot.
+- None of the config's stores is opened: `redis`, `pubsub`, `sqlite`, `jobs.store`, `tasks.redis`, `tasks.sqlite`,
+  `transport.persistence`, `transport.eventStore`, `elicitation.redis`, `throttle.storage`, `auth.tokenStorage` and
+  `auth.secureStore` are left out before the config is validated, whether the entry exports a `@FrontMcp` class or a
+  config object. The build connects to no Redis, writes no SQLite file, and a CI
+  machine without them, or without the variables their URLs and secrets come from (a
+  `redis: { url: process.env['REDIS_URL'] }`, an `encryption.secret`), builds the same manifest. The server validates
+  them when it starts, with the same message as before. Up to 1.10, a `@FrontMcp` class validated them when the
+  build loaded the entry, so an unset variable stopped the boot, and the boot wrote the SQLite files of
+  `auth.tokenStorage` and `auth.secureStore`.
 - Providers are built and their `onBootstrap()` runs; `onReady()` never does, so nothing that starts once the server
   serves starts. `onShutdown()` runs when the manifest has been read.
 - Your own code still runs: module-level code, provider factories, plugins and adapters that connect while starting
@@ -149,7 +153,10 @@ it('ships described entries within budget', async () => {
 const manifest = serverManifestSchema.parse(JSON.parse(text));
 ```
 
-`buildManifest(config)` reuses a server `connect()` already serves in the process.
+`buildManifest(config)` reuses a server `connect()` already serves in the process. To read a `@FrontMcp` class without
+the variables its stores take, import it with `FRONTMCP_SCHEMA_EXTRACT=1` and `FRONTMCP_BUILD_EXTRACT=1` set, as
+`frontmcp build` does: the decorator then leaves the store settings to the server, which validates them when it
+starts.
 
 ## Common Patterns
 
