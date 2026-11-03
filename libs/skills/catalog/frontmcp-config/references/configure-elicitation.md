@@ -64,7 +64,7 @@ class Server {}
 interface ElicitationOptionsInput {
   enabled?: boolean; // default: false
   redis?: RedisOptionsInput; // storage for elicitation state
-  persistent?: boolean | { ttlMs?: number; storage?: StorageConfig }; // questions that outlive the session
+  persistent?: boolean | { ttlMs?: number; storage?: StorageConfig; inboxLinks?: 'terminal' | 'stderr' | 'off' }; // questions that outlive the session
 }
 ```
 
@@ -130,7 +130,7 @@ A question can wait longer than the call that asked it: a person answers it late
 @FrontMcp({
   info: { name: 'my-server', version: '1.0.0' },
   apps: [MyApp],
-  http: { port: 3000, auth: { people: 'loopback-token' } }, // the inbox is a people route
+  http: { port: 3000, auth: { people: 'loopback-token' } }, // the inbox's routes need people auth
   elicitation: { enabled: true, persistent: true }, // or { ttlMs: 86_400_000, storage: { type: 'sqlite', sqlite: { path } } }
 })
 class Server {}
@@ -159,23 +159,36 @@ class InboxLinkTool extends ToolContext {
 }
 ```
 
-- **Who a question belongs to (its subject):** `principal:<sub>` for a signed-in caller (a reconnect, or any session of
-  that user, gets the answer), else `session:<id>` for the verified session. An anonymous caller with neither is refused
-  (`ElicitationNotSupportedError`).
-- **Who may answer:** only a person signed in **for that subject**. `printQuestionInboxLink(this)` prints, on the
-  server's console (stderr, like the startup token), a one-time link whose code is bound to the caller's subject; the
-  session it buys sees and answers that subject's questions only. The caller gets only `{ expiresAt }`: a code in a tool
-  result would let the agent sign in and approve its own question. Another subject, and a person signed in with the
-  startup token, get an empty inbox and `404` for any question id. An app that reaches its people another way (email, a
-  chat) can make the code itself with `LoopbackTokenAuth.createCode({ subject })` and must send it to the person only.
-- **The inbox (people routes):** `GET /_frontmcp/inbox` (a page), `GET /_frontmcp/questions` (JSON),
-  `GET /_frontmcp/questions/events` (SSE of the same view, updated on every change),
+- **Who a question belongs to (its subject):** `principal:<iss>#<sub>` for a signed-in caller (`principal:<sub>` when
+  the token names no issuer), so a reconnect, or any session of that user, gets the answer and a user of the same `sub`
+  at another issuer does not; else `session:<id>` for the verified session. An anonymous caller with neither is refused
+  (`ElicitationNotSupportedError`). `questionSubjectOf(authInfo)` computes it. Questions are kept per server
+  (`info.name`): servers of another name that share the store, or the default file, do not share them.
+- **Who may answer:** only a person signed in **for that subject**. `printQuestionInboxLink(this)` prints a one-time
+  link whose code is bound to the caller's subject; the session it buys sees and answers that subject's questions only,
+  and opens no other people page. The caller gets only `{ expiresAt }`: a code in a tool result would let the agent sign
+  in and approve its own question. Another subject gets an empty inbox and `404` for any question id; a person signed in
+  with the startup token gets `401`. An app that reaches its people another way (email, a chat) can make the code
+  itself with `LoopbackTokenAuth.createCode({ subject })` and must send it to the person only.
+- **Where the link is printed (`persistent.inboxLinks`):** whoever reads the link can answer the caller's questions,
+  the agent included. `'terminal'` (default) prints it on stderr only while stderr is a terminal; with stderr going to a
+  pipe or a file (a stdio MCP client's log, `frontmcp dev --stdio`'s bridge log, an agent that started the server and
+  reads its output, a log collector) `printQuestionInboxLink()` fails with `ElicitationNotSupportedError` and prints
+  nothing. `'stderr'` prints it there anyway (stderr only the person reads, such as `docker logs` on their machine);
+  `'off'` never prints, for apps that send `createCode({ subject })` codes themselves. An agent that runs commands as the
+  OS user of the server can read its terminal, its store and its environment, and so answer its own questions whatever
+  this setting: give such an agent no persistent approvals, or run the server as another user.
+- **The inbox (`auth: 'subject'` routes):** `GET /_frontmcp/inbox` (a page), `GET /_frontmcp/questions` (JSON,
+  `no-store`), `GET /_frontmcp/questions/events` (SSE of the same view, updated on every change),
   `POST /_frontmcp/questions/:id/answer` with `{ "action": "accept" | "decline" | "cancel", "content"?: {...} }`. They run
   through the `http:route` flow, so the answer route gets the same-origin check (`403` from another site). An accept is
   validated against the question's schema (`400`); a second answer gets `409`.
-- **The CLI:** `frontmcp inbox <sign-in link>` (or the printed path with `--url <server>`) spends the link's one-time
-  code like a browser, lists the questions (and asks on a terminal); `--answer <id> --content '{"approve":true}'` (or
-  `--decline` / `--cancel`) answers one. Each run needs a fresh link.
+- **The CLI:** `frontmcp inbox --url <server>` asks for the link on a terminal, or reads it from stdin or
+  `FRONTMCP_INBOX_LINK`, so its code shows in no process list or shell history (`frontmcp inbox '<link>'` works too).
+  It spends the link's one-time code like a browser, lists the questions (and asks on a terminal);
+  `--answer <id> --content '{"approve":true}'` (or `--decline` / `--cancel`) answers one. Each run needs a fresh link. It
+  follows no redirect, takes plain `http` for a loopback server only, and strips terminal control characters from what
+  the server sends.
 - **Delivery, once:** the waiting call gets the answer; when it stopped waiting (its `ttl` passed, or the session ended),
   it fails with `QuestionPendingError` (`408`) and the answer waits for the next call that asks the same key. When a newer
   call of the subject asks while one waits, the newer one waits for it and the older fails with
@@ -183,7 +196,10 @@ class InboxLinkTool extends ToolContext {
 - **Storage:** `persistent.storage` (memory, redis or sqlite), else the server's `redis`, else its `sqlite`, else
   `questions.sqlite` in `$FRONTMCP_HOME` (`~/.frontmcp`, made owner-only). Serverless and edge need one named. With
   `MCP_ELICITATION_SECRET` (or `MCP_SESSION_SECRET` / `MCP_SERVER_SECRET`) set, questions and answers are encrypted at
-  rest with a key derived from the subject. An invalid `persistent` fails startup with `InvalidQuestionStoreError`.
+  rest (AES-256-GCM with a key derived from the secret and the subject, storage keys are HMACs); without one they are
+  kept in the clear, so the default file is refused when the group or others could read it or replace it. Changing the
+  secret drops the waiting questions (they expire with their TTL). An answer nobody took is dropped with its question
+  when `ttlMs` passes. An invalid `persistent` fails startup with `InvalidQuestionStoreError`.
 - `persist.ttlMs` must be longer than the call's `ttl`; URL mode cannot be persisted (`INVALID_INPUT`).
 
 ## Notes
@@ -236,15 +252,16 @@ frontmcp dev
 
 ## Troubleshooting
 
-| Problem                                           | Cause                                                                       | Solution                                                                                            |
-| ------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `this.elicit is not a function`                   | Elicitation is not enabled in the server configuration                      | Set `elicitation: { enabled: true }` in the `@FrontMcp` decorator                                   |
-| `this.elicit()` returns `undefined` immediately   | The connected MCP client does not support elicitation                       | Check client capabilities; provide a fallback code path for unsupported clients                     |
-| Elicitation works locally but fails in production | In-memory store loses state across multiple server instances                | Configure `elicitation.redis` to share elicitation state via Redis                                  |
-| User sees raw JSON instead of a form              | The MCP client renders the `requestedSchema` as raw data rather than a form | Use standard JSON Schema types (`boolean`, `string`, `enum`) that clients can render as UI controls |
-| Tool hangs indefinitely waiting for user response | No timeout configured and user never responds                               | Implement a timeout or cancellation mechanism in the tool logic to handle non-responsive users      |
-| `QuestionPendingError` from a persistent question | The call stopped waiting before anyone answered                             | Answer in the inbox, then call again with the same `persist.key`: that call gets the answer         |
-| The inbox is empty for the person                 | They signed in with the startup token, or for another caller                | Open the link `printQuestionInboxLink(this)` printed for a call of the caller that asked            |
+| Problem                                              | Cause                                                                       | Solution                                                                                            |
+| ---------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `this.elicit is not a function`                      | Elicitation is not enabled in the server configuration                      | Set `elicitation: { enabled: true }` in the `@FrontMcp` decorator                                   |
+| `this.elicit()` returns `undefined` immediately      | The connected MCP client does not support elicitation                       | Check client capabilities; provide a fallback code path for unsupported clients                     |
+| Elicitation works locally but fails in production    | In-memory store loses state across multiple server instances                | Configure `elicitation.redis` to share elicitation state via Redis                                  |
+| User sees raw JSON instead of a form                 | The MCP client renders the `requestedSchema` as raw data rather than a form | Use standard JSON Schema types (`boolean`, `string`, `enum`) that clients can render as UI controls |
+| Tool hangs indefinitely waiting for user response    | No timeout configured and user never responds                               | Implement a timeout or cancellation mechanism in the tool logic to handle non-responsive users      |
+| `QuestionPendingError` from a persistent question    | The call stopped waiting before anyone answered                             | Answer in the inbox, then call again with the same `persist.key`: that call gets the answer         |
+| The inbox is empty for the person                    | They signed in for another caller                                           | Open the link `printQuestionInboxLink(this)` printed for a call of the caller that asked            |
+| `printQuestionInboxLink()`: stderr is not a terminal | `inboxLinks: 'terminal'` and the server's stderr is a pipe or a file        | Run the server in a terminal, or set `inboxLinks: 'stderr'` when only the person reads that output  |
 
 ## Examples
 

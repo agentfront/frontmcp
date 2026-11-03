@@ -62,10 +62,11 @@ class Server {}
 ```
 
 ```bash
-# The agent called inbox_link; the person copies the link from the server's console and answers from a terminal
-frontmcp inbox --url http://127.0.0.1:3000 '/_frontmcp/people/login?code=…&next=%2F_frontmcp%2Finbox'
-# or, with a fresh link and the id the listing showed:
-frontmcp inbox '<link>' --answer q-… --content '{"approve":true}'
+# The agent called inbox_link; the person copies the link from the server's terminal and pastes it when asked,
+# so the one-time code shows in no process list or shell history
+frontmcp inbox --url http://127.0.0.1:3000
+# or, with a fresh link in FRONTMCP_INBOX_LINK (or piped in) and the id the listing showed:
+frontmcp inbox --url http://127.0.0.1:3000 --answer q-… --content '{"approve":true}'
 ```
 
 ## What This Demonstrates
@@ -76,7 +77,8 @@ frontmcp inbox '<link>' --answer q-… --content '{"approve":true}'
 - Answering with `frontmcp inbox <link>`, and the next call receiving the answer once
 
 `approve_deploy` waits 60 s; if nobody answers by then it fails with `QuestionPendingError`, and the question stays for a
-day. The person sees the questions of that signed-in user only; another user, or a person signed in with the startup
+day. `inbox_link` prints only while the server's stderr is a terminal (`elicitation.persistent.inboxLinks: 'terminal'`):
+output a client, a log or an agent captures would let its reader answer the questions. The person sees the questions of that signed-in user only; another user, or a person signed in with the startup
 token, sees none. The next `approve_deploy` call of the same user with the same version (another session, after a
 reconnect) returns the answer at once, and only that call gets it.
 
