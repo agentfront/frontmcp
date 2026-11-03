@@ -1,6 +1,7 @@
 /** A call to a lazy app's entry imports and initializes the app once, then runs through the normal flow. */
 import 'reflect-metadata';
 
+import { createGuardManager } from '@frontmcp/guard';
 import { z } from '@frontmcp/lazy-zod';
 
 import {
@@ -30,6 +31,12 @@ import {
   capturedLogs,
   lazyServer,
 } from './lazy-app.fixtures';
+
+// The real guard manager, counted: a scope must set up one, however many lazy apps load at once
+jest.mock('@frontmcp/guard', () => {
+  const actual = jest.requireActual<typeof import('@frontmcp/guard')>('@frontmcp/guard');
+  return { ...actual, createGuardManager: jest.fn(actual.createGuardManager) };
+});
 
 let manifest: ServerManifest;
 
@@ -414,13 +421,16 @@ describe('calls to a lazy app', () => {
     expect(lazy).toHaveBeenCalledTimes(1);
   });
 
-  it('answers a failed resource read and prompt get with the same typed error', async () => {
+  it('answers a failed resource read, prompt get and completion with the same typed error', async () => {
     const lazy = jest.fn<Promise<unknown>, []>().mockRejectedValue(new Error('disk on fire'));
     const client = await open(lazy);
 
     await expect(client.readResource('billing://plans')).rejects.toThrow(/App "Billing" could not be loaded/);
     await expect(client.getPrompt('dunning', { customer: 'acme' })).rejects.toThrow(/could not be loaded/);
-    expect(lazy).toHaveBeenCalledTimes(2);
+    await expect(
+      client.complete({ ref: { type: 'ref/prompt', name: 'dunning' }, argument: { name: 'customer', value: 'a' } }),
+    ).rejects.toThrow(/App "Billing" could not be loaded/);
+    expect(lazy).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -456,8 +466,88 @@ class ExportLedgerTool extends ToolContext {
 @App({ id: 'billing', name: 'Billing', tools: [PayoutTool, ExportLedgerTool] })
 class GuardedBillingApp {}
 
+@Tool({
+  name: 'export_report',
+  description: 'Export a report',
+  inputSchema: {},
+  rateLimit: { maxRequests: 1, windowMs: 60_000 },
+})
+class ExportReportTool extends ToolContext {
+  async execute() {
+    return 'reported';
+  }
+}
+
+@App({ id: 'reports', name: 'Reports', tools: [ExportReportTool] })
+class ReportsApp {}
+
+const guardManagers = jest.mocked(createGuardManager);
+
 describe('the startup checks of a lazy app loaded by a call', () => {
   const guarded = billingImport({ GuardedBillingApp });
+
+  /** Billing and reports, both lazy, each with a rate-limited tool. */
+  const twoLazyApps = (extra: Partial<FrontMcpConfigInput> = {}): FrontMcpConfigInput =>
+    ({
+      info: { name: 'lazy-apps', version: '1.0.0' },
+      apps: [
+        { id: 'billing', name: 'Billing', lazy: guarded },
+        { id: 'reports', name: 'Reports', lazy: async () => ({ ReportsApp }) },
+      ],
+      plugins: [ApprovalPlugin],
+      logging: { level: LogLevel.Off },
+      ...extra,
+    }) as FrontMcpConfigInput;
+
+  afterEach(() => {
+    guardManagers.mockImplementation(jest.requireActual('@frontmcp/guard').createGuardManager);
+  });
+
+  it('sets up one guard when two lazy apps with rate limits load at once', async () => {
+    const client = await connect(twoLazyApps({ manifest: await buildManifest(twoLazyApps()) }));
+    const actual = jest.requireActual<typeof import('@frontmcp/guard')>('@frontmcp/guard').createGuardManager;
+    // A guard that takes a while to set up, as one on Redis does
+    guardManagers.mockImplementation(async (options) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return actual(options);
+    });
+    guardManagers.mockClear();
+
+    const [ledger, report] = await Promise.all([
+      client.callTool('export_ledger', {}),
+      client.callTool('export_report', {}),
+    ]);
+    const [ledgerAgain, reportAgain] = await Promise.all([
+      client.callTool('export_ledger', {}),
+      client.callTool('export_report', {}),
+    ]);
+    await client.close();
+
+    expect(guardManagers).toHaveBeenCalledTimes(1);
+    expect(textOf(ledger)).toContain('exported');
+    expect(textOf(report)).toContain('reported');
+    expect(textOf(ledgerAgain)).toMatch(/rate limit/i);
+    expect(textOf(reportAgain)).toMatch(/rate limit/i);
+  });
+
+  it('keeps the publicAccess guard startup set up when throttle is off and a lazy app loads', async () => {
+    const config = (extra: Partial<FrontMcpConfigInput> = {}) =>
+      lazyServer(guarded, {
+        plugins: [ApprovalPlugin],
+        throttle: { enabled: false },
+        auth: { mode: 'public', publicAccess: { rateLimit: 5 } },
+        ...extra,
+      } as Partial<FrontMcpConfigInput>);
+    const manifestOfGuarded = await buildManifest(config());
+    guardManagers.mockClear();
+    const client = await connect(config({ manifest: manifestOfGuarded }));
+    expect(guardManagers).toHaveBeenCalledTimes(1);
+
+    await client.callTool('export_ledger', {});
+    await client.close();
+
+    expect(guardManagers).toHaveBeenCalledTimes(1);
+  });
 
   it('sets up the guard its tools rate limits need', async () => {
     const manifestOfGuarded = await buildManifest(lazyServer(guarded, { plugins: [ApprovalPlugin] }));

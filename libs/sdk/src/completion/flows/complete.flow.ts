@@ -4,7 +4,7 @@ import { AuthorityDeniedError, resolveRequiredScopes, type AuthoritiesMetadata }
 import { internalZ as z } from '@frontmcp/lazy-zod';
 import { CompleteRequestSchema, CompleteResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
-import { loadAppOfPlaceholder } from '../../app/lazy/lazy-placeholders';
+import { assertAppLoaded, loadAppOfPlaceholder } from '../../app/lazy/lazy-placeholders';
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { enforcePublicAccess, publicAccessFor } from '../../auth/public-access.utils';
 import {
@@ -63,7 +63,15 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput', 'findReference', 'checkEnabled', 'checkPublicAccess', 'checkEntryAuthorities', 'findWidgetTools'],
+  pre: [
+    'parseInput',
+    'findReference',
+    'checkEnabled',
+    'checkAppLoaded',
+    'checkPublicAccess',
+    'checkEntryAuthorities',
+    'findWidgetTools',
+  ],
   execute: ['complete'],
   finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
@@ -222,6 +230,16 @@ export default class CompleteFlow extends FlowBase<typeof name> {
     if (resource && !(await isEntryEnabled(resource.metadata.enabled, context, this.logger))) {
       this.state.set('resource', undefined);
     }
+  }
+
+  /**
+   * A lazy app's prompt or resource that is on and still a placeholder is answered `LAZY_APP_LOAD_FAILED`, as
+   * `prompts/get` and `resources/read` answer it: its app did not load.
+   */
+  @Stage('checkAppLoaded')
+  async checkAppLoaded() {
+    const entry = this.state.prompt ?? this.state.resource;
+    if (entry) assertAppLoaded(entry);
   }
 
   /** The caller's auth info, as the MCP handler passed it in the call context. */

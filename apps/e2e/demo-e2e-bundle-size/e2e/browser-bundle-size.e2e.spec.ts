@@ -24,11 +24,11 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_339_544 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_346_409 },
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_339_830 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_346_695 },
 ];
 
-const VITE_INITIAL_CHUNK_MAX_BYTES = 964_322;
+const VITE_INITIAL_CHUNK_MAX_BYTES = 964_390;
 
 // Packages create() never needs: the JavaScript parser behind @enclave-vm/ast (#885) and the MCP client (#886)
 const NEVER_BUNDLED: Record<string, RegExp> = {

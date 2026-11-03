@@ -189,20 +189,20 @@ import { App, fileSignal, FrontMcp } from '@frontmcp/sdk';
   apps: [
     CoreApp,
     { id: 'billing', name: 'Billing', lazy: () => import('./billing.app') },
-    // Off: refused with FEATURE_OFF and never imported; turned on, imported on its first call
+    // Off: refused with FEATURE_OFF, and not imported while the manifest lists it; turned on, imported on its first call
     { name: 'Reports', lazy: () => import('./reports.app'), enabled: fileSignal('./features.json', 'reports') },
   ],
 })
 export default class Server {}
 ```
 
-| Option        | Type                       | Description                                                                                                               |
-| ------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `name`        | `string`                   | Required. The name of the `@App` the import loads                                                                         |
-| `id`          | `string`                   | The id of that `@App` (default: derived from `name`, as for the app). An import that loads another app fails to load      |
-| `description` | `string`                   | Human-readable description (default: the app's)                                                                           |
-| `lazy`        | `() => Promise<unknown>`   | Imports the app: resolves to its `@App` class, or a module whose default export (or only `@App` export) is one            |
-| `enabled`     | `boolean \| EnabledSource` | Turns the whole app on and off. While it is off, its entries are refused with `FEATURE_OFF` and the app is never imported |
+| Option        | Type                       | Description                                                                                                                                                                                                                                                                                                                    |
+| ------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`        | `string`                   | Required. The name of the `@App` the import loads                                                                                                                                                                                                                                                                              |
+| `id`          | `string`                   | The id of that `@App` (default: derived from `name`, as for the app). An import that loads another app fails to load                                                                                                                                                                                                           |
+| `description` | `string`                   | Human-readable description (default: the app's)                                                                                                                                                                                                                                                                                |
+| `lazy`        | `() => Promise<unknown>`   | Imports the app: resolves to its `@App` class, or a module whose default export (or only `@App` export) is one                                                                                                                                                                                                                 |
+| `enabled`     | `boolean \| EnabledSource` | Turns the whole app on and off. While it is off, its entries are refused with `FEATURE_OFF`, and a server that lists the app from the manifest does not import it. Without a manifest that lists it, development imports it at startup unless `enabled` is `false`, an off source included; `frontmcp build` always imports it |
 
 Any other field fails at startup with `LazyAppConfigurationError` (`A lazy app takes id, name, description, enabled and
 lazy; declare everything else on the @App class it imports.`).
@@ -459,15 +459,15 @@ export default class Server {}
 
 ## Common Patterns
 
-| Pattern              | Correct                                                                                       | Incorrect                                                                     | Why                                                                                                    |
-| -------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Shared tools         | `@FrontMcp({ tools: [HealthCheckTool] })` (server-level)                                      | Duplicating the tool class in every `@App` `tools` array                      | Server-level tools are automatically shared across all apps without duplication                        |
-| App namespacing      | `@App({ id: 'billing', name: 'Billing', tools: [ChargeTool] })`                               | Omitting `id` when multiple apps have tools with the same name                | The `id` field controls the namespace prefix (`billing:charge_card`); without it collisions occur      |
-| Remote auth          | `remoteAuth: { mode: 'static', credentials: { type: 'bearer', value: token } }`               | Passing the token directly as a string to `remoteAuth`                        | `remoteAuth` expects a structured object with `mode` and `credentials` fields                          |
-| Standalone isolation | `standalone: true` for fully isolated apps                                                    | `standalone: true` when you still want tools visible in the parent server     | Use `standalone: 'includeInParent'` to get scope isolation with parent visibility                      |
-| Per-app auth         | `auth: { mode: 'remote', provider: '...', clientId: '...' }` on `@App`                        | Configuring auth only at the `@FrontMcp` level when apps need different modes | Apps without their own `auth` inherit server-level config; set per-app `auth` for mixed modes          |
-| Lazy apps            | `{ name: 'Billing', lazy: () => import('./billing.app') }`, and ship `frontmcp.manifest.json` | A lazy app deployed without the manifest `frontmcp build` wrote               | Production refuses to start a lazy app with no manifest to list it from                                |
-| Turning an app off   | `enabled: fileSignal('./features.json', 'billing')` on the lazy app                           | An `enabled` source on each of the lazy app's tools                           | The app's switch keeps it unimported while off; a source on its own entries makes it unable to be lazy |
+| Pattern              | Correct                                                                                       | Incorrect                                                                     | Why                                                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Shared tools         | `@FrontMcp({ tools: [HealthCheckTool] })` (server-level)                                      | Duplicating the tool class in every `@App` `tools` array                      | Server-level tools are automatically shared across all apps without duplication                                                    |
+| App namespacing      | `@App({ id: 'billing', name: 'Billing', tools: [ChargeTool] })`                               | Omitting `id` when multiple apps have tools with the same name                | The `id` field controls the namespace prefix (`billing:charge_card`); without it collisions occur                                  |
+| Remote auth          | `remoteAuth: { mode: 'static', credentials: { type: 'bearer', value: token } }`               | Passing the token directly as a string to `remoteAuth`                        | `remoteAuth` expects a structured object with `mode` and `credentials` fields                                                      |
+| Standalone isolation | `standalone: true` for fully isolated apps                                                    | `standalone: true` when you still want tools visible in the parent server     | Use `standalone: 'includeInParent'` to get scope isolation with parent visibility                                                  |
+| Per-app auth         | `auth: { mode: 'remote', provider: '...', clientId: '...' }` on `@App`                        | Configuring auth only at the `@FrontMcp` level when apps need different modes | Apps without their own `auth` inherit server-level config; set per-app `auth` for mixed modes                                      |
+| Lazy apps            | `{ name: 'Billing', lazy: () => import('./billing.app') }`, and ship `frontmcp.manifest.json` | A lazy app deployed without the manifest `frontmcp build` wrote               | Production refuses to start a lazy app with no manifest to list it from                                                            |
+| Turning an app off   | `enabled: fileSignal('./features.json', 'billing')` on the lazy app                           | An `enabled` source on each of the lazy app's tools                           | The app's switch keeps it unimported while off, once the manifest lists it; a source on its own entries makes it unable to be lazy |
 
 ## Verification Checklist
 
