@@ -108,7 +108,7 @@ describe('stores in the browser build of create()', () => {
   it('refuses the stores a config names on Redis or SQLite, Vercel KV aside', async () => {
     const startup = await start({
       tasks: { store: false },
-      throttle: { enabled: true, storage: { type: 'redis', redis: { config: redis } } },
+      throttle: { enabled: true, storage: { type: 'redis', redis: { config: redis }, fallback: 'error' } },
       skillsConfig: { cache: { enabled: true, redis: { provider: 'redis', ...redis } } },
     });
 
@@ -152,6 +152,20 @@ describe('stores in the browser build of create()', () => {
     expect(startup.error).toBeUndefined();
     expect(startup.result).toEqual(expect.objectContaining({ structuredContent: { value: 'Hello, FrontMCP' } }));
     expect(startup.stderr).not.toContain('WARN');
+    await expectNoStoreOpened();
+  });
+
+  it("starts rate limits on per-instance counters with fallback: 'memory', opening no Redis, and says so once", async () => {
+    const startup = await start({
+      tasks: { store: false },
+      throttle: { enabled: true, storage: { type: 'redis', redis: { config: redis }, fallback: 'memory' } },
+    });
+
+    expect(startup.error).toBeUndefined();
+    expect(startup.result).toEqual(expect.objectContaining({ structuredContent: { value: 'Hello, FrontMCP' } }));
+    expect(
+      startup.stderr.match(/A browser cannot open Redis or SQLite: rate limits use per-instance counters/g),
+    ).toHaveLength(1);
     await expectNoStoreOpened();
   });
 
