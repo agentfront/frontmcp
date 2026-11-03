@@ -63,7 +63,8 @@ class Server {}
 ```typescript
 interface ElicitationOptionsInput {
   enabled?: boolean; // default: false
-  redis?: RedisOptionsInput; // storage for elicitation state
+  store?: false; // keep the elicitation state in memory, whatever the top-level redis or sqlite
+  redis?: RedisOptionsInput; // storage for elicitation state; else the top-level redis, else the top-level sqlite
   persistent?: boolean | { ttlMs?: number; storage?: StorageConfig; inboxLinks?: 'terminal' | 'stderr' | 'off' }; // questions that outlive the session
 }
 ```
@@ -207,7 +208,10 @@ class InboxLinkTool extends ToolContext {
   ends with the isolate), so `elicitation.persistent` fails startup there with `InvalidQuestionStoreError`
   (`it is not available on an edge runtime ...`); run the server on Node.js to use it. A `persistent.storage` that
   names Redis, with neither `elicitation.redis` nor the server's `redis` set, keeps the elicitation state too (under
-  `mcp:elicit:`); with the server's `sqlite` set, the elicitation state stays there. With `MCP_ELICITATION_SECRET` (or `MCP_SESSION_SECRET` /
+  `mcp:elicit:`) unless `elicitation.store` is `false`; with the server's `sqlite` set, the elicitation state stays there.
+  `elicitation.store: false` keeps only the elicitation state in memory (it takes no `elicitation.redis` beside it);
+  the questions keep following `persistent.storage`. In the browser build, persistent questions need
+  `storage: { type: 'memory' }`: any other store fails startup with `BrowserStoreUnavailableError`. With `MCP_ELICITATION_SECRET` (or `MCP_SESSION_SECRET` /
   `MCP_SERVER_SECRET`) set, questions and answers are encrypted at rest (AES-256-GCM with a key derived from the secret
   and the subject, storage keys are HMACs); without one they are kept in the clear, so the default file is refused when
   the group or others could read it or replace it. Changing the secret drops the waiting questions (they expire with

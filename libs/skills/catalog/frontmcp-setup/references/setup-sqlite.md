@@ -259,19 +259,32 @@ You do not call any factory yourself. The SDK constructs the SQLite session stor
 ### How the wiring works (issue #401)
 
 Top-level `sqlite` is treated by the SDK as the **default SQLite backend** for
-four subsystems:
+these subsystems, unless a top-level `redis` comes first:
 
-| Subsystem                     | Default source     | Override                           |
-| ----------------------------- | ------------------ | ---------------------------------- |
-| Transport session persistence | top-level `sqlite` | `transport.persistence.sqlite`     |
-| Background task store         | top-level `sqlite` | `tasks.sqlite`                     |
-| Elicitation store             | top-level `sqlite` | `elicitation.sqlite`               |
-| Job runs and definitions      | top-level `sqlite` | `jobs.store` (`sqlite` or `redis`) |
+| Subsystem                     | Default source     | Override                           | Keep it in memory                                    |
+| ----------------------------- | ------------------ | ---------------------------------- | ---------------------------------------------------- |
+| Transport session persistence | top-level `sqlite` | `transport.persistence.sqlite`     | `transport.persistence: false`                       |
+| Background task store         | top-level `sqlite` | `tasks.sqlite` or `tasks.redis`    | `tasks.store: false`                                 |
+| Elicitation store             | top-level `sqlite` | `elicitation.redis`                | `elicitation.store: false`                           |
+| Persistent questions          | top-level `sqlite` | `elicitation.persistent.storage`   | `elicitation.persistent.storage: { type: 'memory' }` |
+| Job runs and definitions      | top-level `sqlite` | `jobs.store` (`sqlite` or `redis`) | `jobs.store: false`                                  |
 
-If you want different files per subsystem, set the subsystem's own `sqlite`
-block — it takes precedence over the top-level one. To disable a single
-subsystem, set its `enabled: false` (or set `transport.persistence: false` for
-transports).
+If you want different files per subsystem, set the subsystem's own backend — it
+takes precedence over the top-level one. To keep one subsystem in memory while
+the others use the file, set its switch from the last column; `store: false`
+takes no `redis` or `sqlite` of its own beside it, and any other value than
+`false` stops startup. To disable a subsystem, set its `enabled: false`.
+
+The generated CLI (`frontmcp build --target cli`) reads the `tasks` options too,
+and runs tasks only on a store its invocations share: with `tasks.store: false`
+it runs none. Up to 1.10 it ignored every `tasks` option: it ran tasks only
+with a top-level `sqlite` or `redis`, and kept them there.
+
+In the browser build (`create()` in a page), a subsystem that would open SQLite
+or Redis, its own or the top-level one, stops startup with
+`BrowserStoreUnavailableError` (`BROWSER_STORE_UNAVAILABLE`), which names its
+switch: a browser has no file system and no TCP socket. Leave `sqlite` and
+`redis` out of the browser build's config, or set the switches.
 
 If you set the top-level `sqlite` block but disable every consuming subsystem,
 the SDK emits a WARN at startup so the no-op doesn't go silent:

@@ -766,6 +766,17 @@ export type { PersistentSessionOwnerStore } from './transport/persistent-session
 // Transport types
 export type { TransportType, TransportKey } from './transport/transport.types';
 export { STATELESS_SESSION_ID } from './transport/transport.types';
+export { buildScopedServerOptions } from './transport/build-scoped-server-options';
+
+// The transports and SSE event stores `@frontmcp/sdk/transport` also exports, which the CommonJS build loads on first use
+export {
+  RecreateableStreamableHTTPServerTransport,
+  RecreateableSSEServerTransport,
+  SSEServerTransport,
+  createEventStore,
+  MemoryEventStore,
+  RedisEventStore,
+} from './subsystems';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MCP Apps (ext-apps) Support

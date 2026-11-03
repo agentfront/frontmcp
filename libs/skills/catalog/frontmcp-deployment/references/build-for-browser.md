@@ -58,7 +58,9 @@ Not all FrontMCP features are available in browser environments:
 | Direct client (`connect()`) | Yes             | In-memory connection                                                   |
 | `ConfigPlugin`              | Yes             | No `.env` / `config.yml` files: schema defaults and `process.env` only |
 
-In a page the server logs at `warn` unless `logging.level` is set, and it never prints the "No distributed storage backend detected in production" warning (a browser bundle has `NODE_ENV=production`, but there is no Redis to configure). Up to 1.9.4 it logged about 20 INFO lines while starting, an INFO block on every tool call, and that warning once per scope.
+A store never picks Redis or SQLite on its own in a page. When the config would give one to background tasks, elicitation, persistent questions or jobs (their own `redis`/`sqlite`, or the top-level `redis`/`sqlite` they take), `create()` fails at startup, before any store opens, with `BrowserStoreUnavailableError` (`BROWSER_STORE_UNAVAILABLE`); its message names each store and its switch: `tasks.store: false`, `elicitation.store: false`, `elicitation.persistent.storage: { type: 'memory' }`, `jobs.store: false`. With the switches set, the top-level `redis` and `sqlite` may stay in the config: those stores keep their state in memory (on Node too), and the page opens neither. Up to 1.10 a task, elicitation or job store on Redis fell back to memory with a console warning (the Redis client cannot load in a page), and a store on SQLite, or persistent questions, failed startup with a module or store error.
+
+In a page the server logs at `warn` unless `logging.level` is set, and it never prints the "No distributed storage backend detected in production" warning (a browser bundle has `NODE_ENV=production`, but there is no Redis to configure), nor the "requestState is signed with a per-process key" warning (a page is one instance). Up to 1.9.4 it logged about 20 INFO lines while starting, an INFO block on every tool call, and that warning once per scope.
 
 ### NODE_ENV in the browser
 
@@ -246,6 +248,7 @@ ls dist/browser/
 | Long task / Total Blocking Time on load with WebMCP                 | The server starts on page load to offer tools  | Register a build-time list with `registerWebMcpTools()` and load the server on the first agent call       |
 | `__vite-optional-peer-dep` chunk throws                             | An optional peer is not installed              | Install it if the page uses that feature (see What a Browser Bundle Leaves Out)                           |
 | `@frontmcp/utils` fs throws                                         | File system ops called in browser              | Remove fs calls; use API endpoints or in-memory alternatives                                              |
+| `BrowserStoreUnavailableError` at startup                           | A store would open Redis or SQLite             | Set the switch the message names (`tasks.store: false`, ...), or leave `redis`/`sqlite` out of the config |
 | `AsyncContextOverlapError`                                          | Concurrent tool calls inside one request       | Await the calls one after another (no `AsyncContext` in browser)                                          |
 | A call never returns                                                | A tool calls its own server via a client       | Call other tools through `this.scope` flows                                                               |
 | `create()` never settles (Vite 7)                                   | Top-level `await create()` in the entry module | Call `create()` from a function or `.then()`                                                              |

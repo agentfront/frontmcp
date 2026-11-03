@@ -11,6 +11,7 @@ import {
   DEFAULT_QUESTION_TTL_MS,
   openPersistentQuestions,
   parsePersistentQuestionsOptions,
+  questionsServerStore,
 } from '../question-scope.helper';
 import { createQuestionStore, resolveQuestionStorage } from '../question-store.factory';
 import { InvalidQuestionStoreError } from '../question.errors';
@@ -227,5 +228,22 @@ describe('elicitation.persistent options', () => {
 
     await expect(opening).rejects.toThrow(InvalidQuestionStoreError);
     await expect(opening).rejects.toThrow(message);
+  });
+});
+
+describe('questionsServerStore', () => {
+  const redis = { provider: 'redis', host: 'cache.internal' };
+  const sqlite = { path: '/var/lib/app/state.sqlite' };
+
+  it('names the storage, the Redis or the SQLite the questions would open, or their default file', () => {
+    expect(questionsServerStore({ type: 'sqlite', sqlite }, { redis })).toBe('elicitation.persistent.storage');
+    expect(questionsServerStore(undefined, { elicitation: { redis }, sqlite })).toBe('elicitation.redis');
+    expect(questionsServerStore(undefined, { redis, sqlite })).toBe('redis');
+    expect(questionsServerStore(undefined, { redis: { provider: 'vercel-kv' }, sqlite })).toBe('sqlite');
+    expect(questionsServerStore(undefined, {})).toBe('the default questions.sqlite file');
+  });
+
+  it('names none for a memory storage', () => {
+    expect(questionsServerStore({ type: 'memory' }, { redis, sqlite })).toBeUndefined();
   });
 });

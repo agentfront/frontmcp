@@ -19,6 +19,10 @@ export {
   RegisterWorkflowTool,
   RemoveWorkflowTool,
 } from './workflow/tools';
+export { RecreateableStreamableHTTPServerTransport } from './transport/adapters/streamable-http-transport';
+export { RecreateableSSEServerTransport } from './transport/adapters/sse-transport';
+export { SSEServerTransport } from '#sse-transport';
+export { createEventStore, MemoryEventStore, RedisEventStore } from './transport/event-stores';
 export {
   ChannelInstance,
   ChannelRegistry,

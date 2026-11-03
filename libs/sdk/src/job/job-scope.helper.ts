@@ -52,8 +52,11 @@ export interface JobsConfig {
    * @default false
    */
   allowDynamicRegistration?: boolean;
-  /** Where runs and dynamic definitions are kept; unset, the top-level `redis` or `sqlite` (see {@link resolveJobsStore}). */
-  store?: JobsStoreConfig;
+  /**
+   * Where runs and dynamic definitions are kept; unset, the top-level `redis` or `sqlite` (see {@link resolveJobsStore}).
+   * `false` keeps them in memory although the server has either.
+   */
+  store?: JobsStoreConfig | false;
   /** How long an attempt of a job that sets no `timeout` may run, in ms; 0 for no limit. @default 300000 */
   defaultTimeoutMs?: number;
   /** When job attempts may start: at most `concurrency` at once, each claiming `memoryMb`, waiting up to `maxWaitMs`. */
@@ -73,23 +76,41 @@ export interface JobsStoreConfig {
 const CANCEL_POLL_MS = 1_000;
 
 /**
- * The store jobs use: `jobs.store` when it names a backend, else the server's top-level `redis` (unless it
- * is Vercel KV, which has no key listing) with keys under its `keyPrefix` + `jobs:`, else its top-level
- * `sqlite`, else memory (undefined).
+ * The store jobs use: memory (undefined) with `jobs.store: false`; `jobs.store` when it names a backend, else the
+ * server's top-level `redis` (unless it is Vercel KV, which has no key listing) with keys under its `keyPrefix` +
+ * `jobs:`, else its top-level `sqlite`, else memory.
  */
 export function resolveJobsStore(
-  store: JobsStoreConfig | undefined,
+  store: JobsStoreConfig | false | undefined,
   topLevel: { redis?: RedisOptionsInput; sqlite?: SqliteAdapterOptions },
 ): JobsStoreConfig | undefined {
+  if (store === false) return undefined;
   if (store?.redis || store?.sqlite) return store;
   const redis = topLevel.redis;
-  const vercelKv = redis !== undefined && 'provider' in redis && redis.provider === 'vercel-kv';
-  if (redis && !vercelKv) {
+  if (redis && !isVercelKv(redis)) {
     const keyPrefix = store?.keyPrefix ?? (redis.keyPrefix === undefined ? undefined : `${redis.keyPrefix}jobs:`);
     return { ...store, redis, ...(keyPrefix === undefined ? {} : { keyPrefix }) };
   }
   if (topLevel.sqlite) return { ...store, sqlite: topLevel.sqlite };
   return store;
+}
+
+/** The option whose Redis or SQLite the jobs would open, as {@link resolveJobsStore} picks it: a browser opens neither. */
+export function jobsServerStore(
+  store: JobsStoreConfig | false | undefined,
+  topLevel: { redis?: RedisOptionsInput; sqlite?: unknown },
+): string | undefined {
+  if (store === false) return undefined;
+  if (store?.sqlite) return 'jobs.store.sqlite';
+  // The job stores open `jobs.store.redis` with the Redis client whatever its provider
+  if (store?.redis) return 'jobs.store.redis';
+  if (topLevel.redis && !isVercelKv(topLevel.redis)) return 'redis';
+  return topLevel.sqlite ? 'sqlite' : undefined;
+}
+
+/** Vercel KV has no key listing for jobs to keep runs in, so jobs pass over a top-level one. */
+function isVercelKv(redis: RedisOptionsInput): boolean {
+  return 'provider' in redis && redis.provider === 'vercel-kv';
 }
 
 export interface RegisterJobCapabilitiesArgs {
@@ -131,8 +152,7 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
   await flowRegistry.registryFlows([ExecuteJobFlow]);
 
   // 1. Create stores
-  const { redis, sqlite } = jobsConfig.store ?? {};
-  const keyPrefix = jobsConfig.store?.keyPrefix ?? 'mcp:jobs:';
+  const { redis, sqlite, keyPrefix = 'mcp:jobs:' } = jobsConfig.store || {};
 
   const { store: stateStore, type: stateStoreType } = await createJobStateStore({ redis, sqlite, keyPrefix }, logger);
   logger.info(`Job state store: ${stateStoreType}`);
@@ -260,7 +280,8 @@ function detachedUnavailable(
   if (storeType === 'memory') {
     return {
       why: 'job runs are kept in this process memory, which a detached process cannot read',
-      remedy: 'Give jobs a store other processes share: jobs.store.sqlite, a top-level sqlite or redis',
+      remedy:
+        'Give jobs a store other processes share: jobs.store.sqlite, or a top-level sqlite or redis without jobs.store: false',
     };
   }
   return undefined;

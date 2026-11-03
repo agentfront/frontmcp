@@ -116,6 +116,8 @@ When building for CLI distribution, configure your server for local/stdin transp
 class MyCLIServer {}
 ```
 
+The generated CLI runs background tasks only on a store its invocations share: the top-level `sqlite` or `redis`, or `tasks.sqlite` / `tasks.redis`. It reads the `tasks` options as the server does: `tasks.store: false` or `tasks.enabled: false` runs no tasks, and `tasks.runner: 'cli'` runs each one in a detached process. Up to 1.10 it ignored every `tasks` option.
+
 ## Verification
 
 ```bash

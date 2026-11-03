@@ -69,6 +69,21 @@ export function persistentQuestionsSettings(
   return settings;
 }
 
+/**
+ * The option whose Redis or SQLite the questions would open, as `resolveQuestionStorage` picks it, or their default
+ * SQLite file: a browser opens none of them.
+ */
+export function questionsServerStore(
+  storage: PersistentQuestionsStorage | undefined,
+  server: { redis?: unknown; sqlite?: unknown; elicitation?: { redis?: unknown } },
+): string | undefined {
+  if (storage) return storage.type === 'memory' ? undefined : 'elicitation.persistent.storage';
+  const elicitationRedis = server.elicitation?.redis;
+  const [option, redis] = elicitationRedis ? ['elicitation.redis', elicitationRedis] : ['redis', server.redis];
+  if (redis && (redis as { provider?: unknown }).provider !== 'vercel-kv') return option;
+  return server.sqlite ? 'sqlite' : 'the default questions.sqlite file';
+}
+
 /** A scope's persistent questions: the store, a question's default TTL, and where inbox links go. */
 export interface PersistentQuestions {
   store: QuestionStore;
