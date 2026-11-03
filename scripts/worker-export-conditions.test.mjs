@@ -124,11 +124,14 @@ for (const [pkgDir, splits] of Object.entries(EXPECT)) {
 for (const pkgDir of ['libs/utils', 'libs/auth']) {
   test(`${pkgDir}: the root export gives a browser the per-module build and a worker the ESM bundle`, () => {
     const root = readPkg(pkgDir).exports['.'];
-    const asImport = (active) =>
-      resolveCondition(resolveCondition(root, new Set([...active, 'import'])), new Set(['import']));
+    const resolveAs = (kind, active) =>
+      resolveCondition(resolveCondition(root, new Set([...active, kind])), new Set([kind]));
 
-    assert.equal(asImport(BROWSER), './dist/browser/index.mjs');
-    assert.deepEqual(asImport(WORKER), root.import);
+    assert.equal(resolveAs('import', BROWSER), './dist/browser/index.mjs');
+    assert.deepEqual(resolveAs('import', WORKER), root.import);
     assert.equal(resolveCondition(root, new Set(['import'])), root.import);
+    // A require() with the browser condition and without `module` (jest-environment-jsdom) keeps the CommonJS build
+    assert.equal(resolveAs('require', BROWSER), './dist/index.js');
+    assert.deepEqual(resolveAs('require', WORKER), root.require);
   });
 }

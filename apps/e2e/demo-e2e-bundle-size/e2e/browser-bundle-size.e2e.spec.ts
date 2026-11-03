@@ -32,7 +32,7 @@ const NEVER_BUNDLED: Record<string, RegExp> = {
   'JavaScript parser': /(^|\/)node_modules\/(acorn|acorn-walk|astring)\//,
   'MCP client':
     /(^|\/)node_modules\/@modelcontextprotocol\/sdk\/dist\/esm\/client\/|^libs\/protocol\/dist\/esm\/clients?\.mjs$/,
-  'single-file utils and auth': /^libs\/(utils|auth)\/dist\/esm\/index\.mjs$/,
+  'single-file utils and auth': /^libs\/(utils|auth)\/dist\/(esm\/index\.mjs|index\.js)$/,
   'CLI task runner':
     /^libs\/sdk\/dist\/browser\/task\/helpers\/cli-task-runner\.mjs$|^libs\/utils\/dist\/browser\/process\/(owned-process|child-process)\.mjs$/,
   'file log transport': /^libs\/sdk\/dist\/browser\/logger\/instances\/instance\.file-logger\.mjs$/,
