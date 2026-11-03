@@ -1000,6 +1000,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
   /**
    * Runs a stdio session of the shared local server `key`: the sessions of a key on this machine share one server
    * process, which the first of them starts by running this entry again, detached. Needs `@frontmcp/storage-sqlite`.
+   * A session never attaches to a server older than its `info.version`: it replaces it (`replaceOlder`), moving the
+   * sessions on it to the new one, or runs the server in its own process, as it does past `attachBudgetMs`. The
+   * server exits when idle (`idleTimeoutMs`) or once its `checkout` folder is removed.
    *
    * @example
    * ```typescript

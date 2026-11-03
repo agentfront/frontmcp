@@ -703,4 +703,4 @@ export {
   proveSharedServerIdentity,
   verifySharedServerIdentity,
 } from './shared-server';
-export type { SharedServerKeys } from './shared-server';
+export type { SharedServerIdentityStatement, SharedServerKeys } from './shared-server';

@@ -7,7 +7,7 @@
 
 import type { Readable } from 'stream';
 
-import { fileExistsSync } from '../fs/fs';
+import { isMissingSync } from '../fs/fs';
 import { isPidRunning, type ProcessTreeDeps } from './process-tree';
 
 const DEFAULT_INTERVAL_MS = 1000;
@@ -78,10 +78,13 @@ export function watchParent(options: WatchParentOptions, deps?: Partial<WatchPar
   return { close };
 }
 
-/** Report when `path` no longer exists, for example a checkout that was deleted. */
+/**
+ * Report when `path` no longer exists, for example a checkout that was deleted. A check that fails for another reason,
+ * such as a folder it may not search or a network file system timing out, is not taken as the path being gone.
+ */
 export function watchPath(path: string, options: WatchPathOptions): ProcessWatcher {
   const timer = setInterval(() => {
-    if (fileExistsSync(path)) return;
+    if (!isMissingSync(path)) return;
     clearInterval(timer);
     options.onGone();
   }, options.intervalMs ?? DEFAULT_INTERVAL_MS);

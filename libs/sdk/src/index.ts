@@ -445,6 +445,7 @@ export type { default as ElicitationRequestFlow } from './elicitation/flows/elic
 export type { default as ElicitationResultFlow } from './elicitation/flows/elicitation-result.flow';
 export type { default as SetLevelFlow } from './logging/flows/set-level.flow';
 export type { default as SharedIdentifyFlow } from './shared/flows/shared.identify.flow';
+export type { default as SharedDrainFlow } from './shared/flows/shared.drain.flow';
 export type { default as SubscribeResourceFlow } from './resource/flows/subscribe-resource.flow';
 export type { default as UnsubscribeResourceFlow } from './resource/flows/unsubscribe-resource.flow';
 export type { default as HttpIpFilterFlow } from './scope/flows/http.ip-filter.flow';

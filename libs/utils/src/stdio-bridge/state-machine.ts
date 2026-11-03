@@ -46,6 +46,10 @@ export interface BridgeStateMachine {
   onChildReady(): void;
   /** Child exited unexpectedly. If we were Ready, transition to Reloading. */
   onChildExit(reason: string): void;
+  /** The upstream went away while its requests in flight still settle on their own: buffer new frames until ready. */
+  onUpstreamLost(reason: string): void;
+  /** Put back a request the upstream never took: sent at once when Ready, otherwise first in the buffer. */
+  requeue(frame: JsonRpcFrame): Promise<void>;
   /** Watcher fired. Buffer inbound, start reload timer. */
   onWatcherEvent(trigger: string): void;
   /** Reload deadline elapsed without a ready signal. */
@@ -65,6 +69,8 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
   const { log, bufferSize, reloadDeadlineMs, respond, forward } = options;
   let state: BridgeState = 'Idle';
   const buffer: JsonRpcFrame[] = [];
+  // Frames `requeue` put back in front of the buffer: they were sent before the frames a drain had not sent yet
+  const requeued = new WeakSet<JsonRpcFrame>();
   const inflight = new Map<string | number, InflightRequest>();
   let reloadTimer: NodeJS.Timeout | undefined;
   let degradedDetail: Record<string, unknown> | undefined;
@@ -111,7 +117,7 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
     inflight.clear();
   }
 
-  return {
+  const machine: BridgeStateMachine = {
     get state() {
       return state;
     },
@@ -130,12 +136,16 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
       buffer.length = 0;
       const drainGen = readyGen;
       void (async () => {
-        for (const f of drain) {
+        for (const [index, f] of drain.entries()) {
           // Bail out if the FSM left Ready (watcher event, child exit,
           // or stop()) — otherwise this drain would forward into a
           // child that's already being killed and duplicate responses
-          // already sent by `failInflightAsResponses`.
-          if (readyGen !== drainGen) return;
+          // already sent by `failInflightAsResponses`. The frames it had
+          // not sent yet go back to the buffer, or are answered when stopping.
+          if (readyGen !== drainGen) {
+            await keepUnsent(drain.slice(index));
+            return;
+          }
           const requestId = typeof f.id === 'string' || typeof f.id === 'number' ? f.id : null;
           // Re-mark as inflight when forwarding; relayUpstream will clear it.
           if (requestId !== null) {
@@ -149,10 +159,9 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
             // reached the child must still resolve on the wire, otherwise
             // the MCP client sits on `Calling…` forever. Notifications
             // (`requestId === null`) have no caller waiting on a response.
-            // Only respond if we still own this generation — otherwise
+            // Only respond while it is still in flight — otherwise
             // failInflightAsResponses() already sent the error.
-            if (requestId !== null && readyGen === drainGen) {
-              inflight.delete(requestId);
+            if (requestId !== null && inflight.delete(requestId)) {
               await respond(makeDevError(requestId, DEV_SERVER_UNREACHABLE, { reason: 'forward_failed' }));
             }
           }
@@ -174,6 +183,24 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
       } else if (state === 'Reloading') {
         // Two exits in a row — keep waiting for boot
       }
+    },
+
+    onUpstreamLost(reason) {
+      if (state !== 'Ready' && state !== 'Booting') return;
+      readyGen++;
+      transition('Reloading', { trigger: 'upstream-lost', reason });
+      scheduleReloadDeadline();
+    },
+
+    async requeue(frame) {
+      if (frame.id !== undefined && frame.id !== null) inflight.delete(frame.id);
+      if (state === 'Ready') {
+        await machine.enqueue(frame);
+        return;
+      }
+      requeued.add(frame);
+      buffer.unshift(frame);
+      if (state === 'Degraded' || state === 'Stopping') await keepUnsent([]);
     },
 
     onWatcherEvent(trigger) {
@@ -210,8 +237,7 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
           await forward(frame);
         } catch (err) {
           log.error('forward-failed', { error: (err as Error).message });
-          if (isRequest) {
-            inflight.delete(frame.id as string | number);
+          if (isRequest && inflight.delete(frame.id as string | number)) {
             await respond(makeDevError(frame.id ?? null, DEV_SERVER_UNREACHABLE, { reason: 'forward_failed' }));
           }
         }
@@ -272,6 +298,20 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
       await flushBufferAsResponses(DEV_SERVER_UNREACHABLE, 'stopping');
     },
   };
+  return machine;
+
+  /** Frames taken from the buffer but not sent: sent when ready again, buffered, or answered once nothing will send them. */
+  async function keepUnsent(frames: JsonRpcFrame[]): Promise<void> {
+    if (state === 'Ready') {
+      for (const frame of frames) await machine.enqueue(frame);
+      return;
+    }
+    let at = 0;
+    while (at < buffer.length && requeued.has(buffer[at])) at++;
+    buffer.splice(at, 0, ...frames);
+    if (state === 'Stopping') await flushBufferAsResponses(DEV_SERVER_UNREACHABLE, 'stopping');
+    if (state === 'Degraded') await flushBufferAsResponses(DEV_RELOAD_DEADLINE, 'deadline', degradedDetail);
+  }
 
   function scheduleReloadDeadline(): void {
     clearReloadTimer();

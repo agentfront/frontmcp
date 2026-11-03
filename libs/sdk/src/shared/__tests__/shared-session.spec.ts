@@ -14,13 +14,16 @@ import { PassThrough } from 'node:stream';
 import { createSharedServerNonce, deriveSharedServerKeys, verifySharedServerIdentity } from '@frontmcp/auth';
 import type { RootStorage } from '@frontmcp/utils';
 
+import { clientOf, initialize, pidOf, post } from '../../__test-utils__/helpers/shared-session-client';
 import { App, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 import { SharedServerStartError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
-import { attachSharedSession } from '../shared-attach';
-import { SHARED_IDENTIFY_PATH } from '../shared-endpoint';
+import { attachSharedSession, type AttachSharedSessionOptions } from '../shared-attach';
+import { runEmbeddedServer } from '../shared-embedded';
+import { SHARED_DRAIN_PATH, SHARED_IDENTIFY_PATH } from '../shared-endpoint';
 import { prepareSharedDirectory, readServerRecord, sharedServerFiles, type SharedServerRecord } from '../shared-files';
-import { serveShared, type SharedServerHandle } from '../shared-serve';
+import { serveShared, type ServeSharedOptions, type SharedServerHandle } from '../shared-serve';
+import { parseSharedServerOptions, type ResolvedSharedServerOptions } from '../shared-server.options';
 import { openStartLockStorage, SharedStartLock } from '../start-lock';
 
 @Tool({ name: 'server_pid', inputSchema: {} })
@@ -55,6 +58,31 @@ const verboseConfig: FrontMcpConfigInput = { ...config, logging: { level: LogLev
 
 const create = (parsed: ConstructorParameters<typeof FrontMcpInstance>[0]) => new FrontMcpInstance(parsed);
 
+function sharedOptions(transport: 'unix' | 'http'): ResolvedSharedServerOptions {
+  return parseSharedServerOptions({ key: 'spec', transport, idleTimeoutMs: false, checkout: false });
+}
+
+function serving(transport: 'unix' | 'http', overrides: Partial<ServeSharedOptions> = {}): ServeSharedOptions {
+  return { config, options: sharedOptions(transport), create, exit: jest.fn(), ...overrides };
+}
+
+function sessionOptions(
+  transport: 'unix' | 'http',
+  input: PassThrough,
+  output: PassThrough,
+  overrides: Partial<AttachSharedSessionOptions> = {},
+): AttachSharedSessionOptions {
+  return {
+    ...sharedOptions(transport),
+    name: 'shared-spec',
+    version: '1.0.0',
+    input,
+    output,
+    embed: () => runEmbeddedServer(config, 'spec', create),
+    ...overrides,
+  };
+}
+
 /** `create`, with `beforeStart` run once the server is ready, just before it listens. */
 function createRunning(beforeStart: () => Promise<void>) {
   return (parsed: ConstructorParameters<typeof FrontMcpInstance>[0]) => {
@@ -68,81 +96,9 @@ function createRunning(beforeStart: () => Promise<void>) {
   };
 }
 
-interface Frame {
-  jsonrpc: '2.0';
-  id?: number;
-  method?: string;
-  params?: Record<string, unknown>;
-  result?: Record<string, unknown>;
-  error?: { code: number; message: string };
-}
-
-/** Speak newline-delimited JSON-RPC to a session through its stdio streams. */
-function clientOf(input: PassThrough, output: PassThrough) {
-  const received: Frame[] = [];
-  let pending = '';
-  output.on('data', (chunk: Buffer) => {
-    pending += chunk.toString();
-    const lines = pending.split('\n');
-    pending = lines.pop() ?? '';
-    for (const line of lines) if (line) received.push(JSON.parse(line) as Frame);
-  });
-  return {
-    send: (frame: Frame) => input.write(`${JSON.stringify(frame)}\n`),
-    async request(frame: Frame): Promise<Frame> {
-      input.write(`${JSON.stringify(frame)}\n`);
-      const deadline = Date.now() + 15_000;
-      for (;;) {
-        const answer = received.find(({ id }) => id === frame.id);
-        if (answer) return answer;
-        if (Date.now() > deadline) throw new Error(`no answer to ${frame.method}: ${JSON.stringify(received)}`);
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
-    },
-  };
-}
-
-const initialize: Frame = {
-  jsonrpc: '2.0',
-  id: 1,
-  method: 'initialize',
-  params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'shared-spec', version: '1.0.0' } },
-};
-
-function pidOf(answer: Frame): unknown {
-  const result = answer.result as { structuredContent?: { pid?: number }; content?: Array<{ text: string }> };
-  return result.structuredContent?.pid ?? (JSON.parse(result.content?.[0]?.text ?? '{}') as { pid?: number }).pid;
-}
-
-function post(
-  record: SharedServerRecord,
-  urlPath: string,
-  headers: Record<string, string>,
-  body: unknown,
-): Promise<{ status: number; body: string }> {
-  return new Promise((resolve, reject) => {
-    const request = http.request(
-      {
-        host: '127.0.0.1',
-        port: record.port,
-        path: urlPath,
-        method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...headers },
-      },
-      (response) => {
-        let text = '';
-        response.on('data', (chunk: Buffer) => (text += chunk.toString()));
-        response.on('end', () => resolve({ status: response.statusCode ?? 0, body: text }));
-      },
-    );
-    request.on('error', reject);
-    request.end(JSON.stringify(body));
-  });
-}
-
 const posixOnly = process.platform === 'win32' ? describe.skip : describe;
 
-// Each test starts a real server, with its SQLite start lock, and attaches sessions to it.
+// Each test starts real servers, with their SQLite start lock, and attaches sessions to them.
 jest.setTimeout(20_000);
 
 posixOnly('a shared local server', () => {
@@ -168,7 +124,7 @@ posixOnly('a shared local server', () => {
   });
 
   async function serve(transport: 'unix' | 'http', serverConfig = config): Promise<SharedServerRecord> {
-    servers.push(await serveShared(serverConfig, { key: 'spec', transport }, create));
+    servers.push(await serveShared(serving(transport, { config: serverConfig })));
     const record = await readServerRecord(sharedServerFiles('spec'));
     if (!record) throw new Error('the shared server wrote no record');
     return record;
@@ -179,15 +135,13 @@ posixOnly('a shared local server', () => {
       await serve(transport);
       const input = new PassThrough();
       const output = new PassThrough();
-      const session = attachSharedSession({
-        key: 'spec',
-        transport,
-        input,
-        output,
-        spawnServer: () => {
-          throw new Error('the running server should be found');
-        },
-      });
+      const session = attachSharedSession(
+        sessionOptions(transport, input, output, {
+          spawnServer: () => {
+            throw new Error('the running server should be found');
+          },
+        }),
+      );
       const client = clientOf(input, output);
       try {
         await session.attached;
@@ -209,19 +163,15 @@ posixOnly('a shared local server', () => {
       const input = new PassThrough();
       const output = new PassThrough();
       let spawned = 0;
-      const session = attachSharedSession({
-        key: 'spec',
-        transport,
-        input,
-        output,
-        spawnServer: (startLockHolder) => {
-          spawned++;
-          void serveShared(config, { key: 'spec', transport }, create, startLockHolder).then((server) =>
-            servers.push(server),
-          );
-          return { exitReason: undefined };
-        },
-      });
+      const session = attachSharedSession(
+        sessionOptions(transport, input, output, {
+          spawnServer: (startLockHolder) => {
+            spawned++;
+            void serveShared(serving(transport, { startLockHolder })).then((server) => servers.push(server));
+            return { exitReason: undefined };
+          },
+        }),
+      );
       const client = clientOf(input, output);
       try {
         expect((await client.request(initialize)).result).toBeDefined();
@@ -232,24 +182,55 @@ posixOnly('a shared local server', () => {
       }
     });
 
-    it('answers the requests it held, and fails, when it can not reach a server', async () => {
+    it('runs the server in its own process, announced once, when the server it started exits', async () => {
       const input = new PassThrough();
       const output = new PassThrough();
       const stderr = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
-      const session = attachSharedSession({
-        key: 'spec',
-        transport,
-        input,
-        output,
-        spawnServer: () => ({ exitReason: 'it exited with code 1' }),
-      });
+      const session = attachSharedSession(
+        sessionOptions(transport, input, output, { spawnServer: () => ({ exitReason: 'it exited with code 1' }) }),
+      );
+      const client = clientOf(input, output);
+      try {
+        expect((await client.request(initialize)).result).toBeDefined();
+        await session.attached;
+        const call = await client.request({
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'tools/call',
+          params: { name: 'server_pid', arguments: {} },
+        });
+        expect(pidOf(call)).toBe(process.pid);
+        const announced = stderr.mock.calls
+          .map(([line]) => String(line))
+          .filter((line) => line.includes('in this process'));
+        expect(announced).toEqual([
+          '[frontmcp shared] warn running the shared server "spec" in this process: ' +
+            'The shared server "spec" did not start: it exited with code 1\n',
+        ]);
+        expect(fs.existsSync(sharedServerFiles('spec').recordFile)).toBe(false);
+      } finally {
+        stderr.mockRestore();
+        await session.stop();
+      }
+    });
+
+    it('answers the requests it held, and fails, when it can not run the server either', async () => {
+      const input = new PassThrough();
+      const output = new PassThrough();
+      const stderr = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const session = attachSharedSession(
+        sessionOptions(transport, input, output, {
+          spawnServer: () => ({ exitReason: 'it exited with code 1' }),
+          embed: () => Promise.reject(new Error('the app failed to start')),
+        }),
+      );
       const client = clientOf(input, output);
       try {
         const answer = client.request(initialize);
-        await expect(session.attached).rejects.toThrow('The shared server "spec" did not start: it exited with code 1');
+        await expect(session.attached).rejects.toThrow('the app failed to start');
         expect((await answer).error).toMatchObject({
           message: 'dev_reload_deadline',
-          data: { error: 'The shared server "spec" did not start: it exited with code 1' },
+          data: { error: 'the app failed to start' },
         });
         expect(stderr.mock.calls.map(([line]) => String(line)).join('')).toContain('attach-failed');
       } finally {
@@ -276,7 +257,7 @@ posixOnly('a shared local server', () => {
     ])('refuses to start when %s has auth of its own, which its token would not guard', async (_, apps, app) => {
       const files = sharedServerFiles('spec');
       await expect(
-        serveShared({ ...config, ...apps } as FrontMcpConfigInput, { key: 'spec', transport }, create),
+        serveShared(serving(transport, { config: { ...config, ...apps } as FrontMcpConfigInput })),
       ).rejects.toThrow(
         new SharedServerStartError(
           'spec',
@@ -287,6 +268,25 @@ posixOnly('a shared local server', () => {
       expect(fs.existsSync(files.recordFile)).toBe(false);
       expect(fs.existsSync(files.socketPath)).toBe(false);
     });
+  });
+
+  it('shuts the server down when its scope cannot take the shared flows', async () => {
+    let shutdown: jest.SpyInstance | undefined;
+    const failing = (parsed: ConstructorParameters<typeof FrontMcpInstance>[0]) => {
+      const instance = create(parsed);
+      shutdown = jest.spyOn(instance, 'shutdown');
+      const getPrimaryScope = instance.getPrimaryScope.bind(instance);
+      jest.spyOn(instance, 'getPrimaryScope').mockImplementation(() => {
+        const scope = getPrimaryScope();
+        if (scope) jest.spyOn(scope, 'registryFlows').mockRejectedValue(new Error('flows refused'));
+        return scope;
+      });
+      return instance;
+    };
+
+    await expect(serveShared(serving('http', { create: failing }))).rejects.toThrow('flows refused');
+    expect(shutdown).toHaveBeenCalled();
+    expect(fs.existsSync(sharedServerFiles('spec').recordFile)).toBe(false);
   });
 
   describe('its start lock', () => {
@@ -311,7 +311,7 @@ posixOnly('a shared local server', () => {
       const starting = createRunning(async () => {
         otherTookItWhileStarting = await other.acquire();
       });
-      servers.push(await serveShared(config, { key: 'spec', transport: 'http' }, starting, launcher.holder));
+      servers.push(await serveShared(serving('http', { create: starting, startLockHolder: launcher.holder })));
 
       expect(otherTookItWhileStarting).toBe(false);
       expect(await other.acquire()).toBe(true);
@@ -328,38 +328,19 @@ posixOnly('a shared local server', () => {
         await launcher.release();
         expect(await other.acquire()).toBe(true);
       });
-      await expect(serveShared(config, { key: 'spec', transport: 'unix' }, overtaken, launcher.holder)).rejects.toThrow(
-        anotherStart,
-      );
+      await expect(
+        serveShared(serving('unix', { create: overtaken, startLockHolder: launcher.holder })),
+      ).rejects.toThrow(anotherStart);
 
       expect(fs.existsSync(files.recordFile)).toBe(false);
       expect(fs.existsSync(files.socketPath)).toBe(false);
-    });
-
-    it('shuts the server down when its scope cannot take the identify flow', async () => {
-      let shutdown: jest.SpyInstance | undefined;
-      const failing = (parsed: ConstructorParameters<typeof FrontMcpInstance>[0]) => {
-        const instance = create(parsed);
-        shutdown = jest.spyOn(instance, 'shutdown');
-        const getPrimaryScope = instance.getPrimaryScope.bind(instance);
-        jest.spyOn(instance, 'getPrimaryScope').mockImplementation(() => {
-          const scope = getPrimaryScope();
-          if (scope) jest.spyOn(scope, 'registryFlows').mockRejectedValue(new Error('flows refused'));
-          return scope;
-        });
-        return instance;
-      };
-
-      await expect(serveShared(config, { key: 'spec', transport: 'http' }, failing)).rejects.toThrow('flows refused');
-      expect(shutdown).toHaveBeenCalled();
-      expect(fs.existsSync(sharedServerFiles('spec').recordFile)).toBe(false);
     });
 
     it('does not start while another launcher starts the server of its key', async () => {
       const storage = await openLauncherLocks();
       expect(await new SharedStartLock(storage, 'spec').acquire()).toBe(true);
 
-      await expect(serveShared(config, { key: 'spec', transport: 'http' }, create)).rejects.toThrow(anotherStart);
+      await expect(serveShared(serving('http'))).rejects.toThrow(anotherStart);
       expect(fs.existsSync(sharedServerFiles('spec').recordFile)).toBe(false);
     });
   });
@@ -370,7 +351,7 @@ posixOnly('a shared local server', () => {
     const holder = net.createServer();
     await new Promise<void>((resolve) => holder.listen(files.socketPath, resolve));
     try {
-      await expect(serveShared(config, { key: 'spec', transport: 'unix' }, create)).rejects.toThrow('already in use');
+      await expect(serveShared(serving('unix'))).rejects.toThrow('already in use');
       expect(fs.existsSync(files.recordFile)).toBe(false);
     } finally {
       await new Promise<void>((resolve) => holder.close(() => resolve()));
@@ -381,7 +362,7 @@ posixOnly('a shared local server', () => {
     const files = sharedServerFiles('spec');
     fs.mkdirSync(`${files.recordFile}.${process.pid}.tmp`, { recursive: true });
 
-    await expect(serveShared(config, { key: 'spec', transport: 'unix' }, create)).rejects.toThrow();
+    await expect(serveShared(serving('unix'))).rejects.toThrow();
     expect(fs.existsSync(files.socketPath)).toBe(false);
     expect(fs.existsSync(files.recordFile)).toBe(false);
   });
@@ -392,7 +373,7 @@ posixOnly('a shared local server', () => {
       const sent = jest.spyOn(globalThis, 'fetch');
       const input = new PassThrough();
       const output = new PassThrough();
-      const session = attachSharedSession({ key: 'spec', transport: 'http', input, output });
+      const session = attachSharedSession(sessionOptions('http', input, output));
       try {
         await session.attached;
         await clientOf(input, output).request(initialize);
@@ -415,7 +396,7 @@ posixOnly('a shared local server', () => {
       expect((await post(record, record.path, { authorization: `Bearer ${token}` }, initialize)).status).toBe(200);
     });
 
-    it('proves its identity bound to its own endpoint, without the token', async () => {
+    it('proves its identity bound to its own endpoint and the version it runs, without the token', async () => {
       const record = await serve('http');
       const { proofKey } = deriveSharedServerKeys(record.secret);
       const nonce = createSharedServerNonce();
@@ -424,7 +405,8 @@ posixOnly('a shared local server', () => {
       const { proof } = JSON.parse(answer.body) as { proof: string };
 
       expect(answer.status).toBe(200);
-      expect(verifySharedServerIdentity(proofKey, `http://127.0.0.1:${record.port}`, nonce, proof)).toBe(true);
+      const statement = { endpoint: `http://127.0.0.1:${record.port}`, nonce, version: '1.0.0' };
+      expect(verifySharedServerIdentity(proofKey, statement, proof)).toBe(true);
       expect((await post(record, SHARED_IDENTIFY_PATH, {}, { nonce: 'short' })).status).toBe(400);
     });
 
@@ -488,6 +470,9 @@ posixOnly('a shared local server', () => {
         await post(record, record.path, { authorization: `Bearer ${token}` }, initialize);
         await post(record, record.path, { authorization: 'Bearer wrong' }, initialize);
         await post(record, SHARED_IDENTIFY_PATH, {}, { nonce: createSharedServerNonce() });
+        await post(record, SHARED_DRAIN_PATH, { authorization: 'Bearer wrong' }, { version: '9.0.0' });
+        await post(record, SHARED_DRAIN_PATH, { authorization: `Bearer ${token}` }, { version: '0.1.0' });
+        await post(record, SHARED_DRAIN_PATH, { authorization: `Bearer ${token}` }, { version: '9.0.0' });
         await (servers.pop() as SharedServerHandle).close();
 
         const logDirectory = path.join(home, 'logs');
