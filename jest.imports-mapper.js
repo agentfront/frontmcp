@@ -25,6 +25,7 @@ module.exports = {
   // @frontmcp/sdk conditionals
   '^#sse-transport$': path.resolve(root, 'libs/sdk/src/transport/adapters/polyfills/node-sse-transport.ts'),
   '^#express-host$': path.resolve(root, 'libs/sdk/src/server/adapters/polyfills/node-express-host.ts'),
+  '^#shared-server$': path.resolve(root, 'libs/sdk/src/shared/index.ts'),
   '^#import-computed$': path.resolve(root, 'libs/sdk/src/esm-loader/import-computed.ts'),
   '^#js-yaml$': path.resolve(root, 'libs/sdk/src/third-party/js-yaml.ts'),
   '^#semver$': path.resolve(root, 'libs/sdk/src/third-party/semver.ts'),

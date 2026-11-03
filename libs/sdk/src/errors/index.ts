@@ -222,6 +222,9 @@ export { DutyNameConflictError, UnsafeDutyStoreError } from './duty.errors';
 // Export the error a browser startup throws for a store that would open Redis or SQLite
 export { BrowserStoreUnavailableError, type BrowserRefusedStore } from './browser-store.errors';
 
+// Export the error a browser throws for an entry point that needs Node
+export { BrowserEntryPointUnavailableError, type BrowserRefusedEntryPoint } from './browser-entry-point.errors';
+
 // Export HTTP route errors
 export {
   CrossOriginRequestError,

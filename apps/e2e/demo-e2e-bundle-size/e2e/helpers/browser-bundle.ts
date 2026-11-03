@@ -173,28 +173,26 @@ export async function bundleAsWorker(entryFile: string, outfile: string): Promis
 }
 
 /**
- * A browser Web Worker's bundle of the entry from the built packages, as webpack's `target: 'webworker'` makes it (the
- * `worker` and `browser` conditions): one file, with Node built-ins left empty and optional peers stubbed. Returns its
- * inputs.
+ * A page's (`target: 'web'`) or a browser Web Worker's (`target: 'webworker'`: the `worker` and `browser` conditions)
+ * bundle of the entry from the built packages, as webpack 5 makes it with no Node fallbacks: one file, with optional
+ * peers stubbed. Returns its inputs.
  */
-export async function bundleWebWorkerWithWebpack(entryFile: string, outfile: string): Promise<string[]> {
+export async function bundleWithWebpack(
+  target: 'web' | 'webworker',
+  entryFile: string,
+  outfile: string,
+): Promise<string[]> {
   const compiler = webpack({
     context: workspaceRoot,
     mode: 'production',
-    target: 'webworker',
+    target,
     entry: entryFile,
     output: { path: dirname(outfile), filename: basename(outfile) },
     resolve: {
       alias: Object.fromEntries(OPTIONAL_PEERS.map((peer) => [`${peer}$`, resolve(fixtureDir, 'missing-peer.mjs')])),
-      fallback: Object.fromEntries(builtinModules.map((name) => [name, false])),
     },
     optimization: { minimize: false, concatenateModules: false },
-    plugins: [
-      new webpack.NormalModuleReplacementPlugin(/^node:/, (resolveData) => {
-        resolveData.request = resolveData.request.slice('node:'.length);
-      }),
-      new webpack.optimize.LimitChunkCountPlugin({ maxChunks: 1 }),
-    ],
+    plugins: [new webpack.optimize.LimitChunkCountPlugin({ maxChunks: 1 })],
   });
   const stats = await new Promise<webpack.Stats>((resolveStats, rejectStats) =>
     compiler.run((error, result) => (result ? resolveStats(result) : rejectStats(error))),
@@ -219,7 +217,7 @@ export async function bundleWebWorkerWithEsbuild(entryFile: string, outfile: str
     conditions: ['worker'],
     tsconfigRaw: {},
     logLevel: 'silent',
-    plugins: [stubNodeBuiltins, stubOptionalPeers],
+    plugins: [stubOptionalPeers],
   });
   return Object.keys(result.metafile.inputs);
 }

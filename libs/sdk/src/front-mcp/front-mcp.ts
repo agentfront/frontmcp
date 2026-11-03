@@ -1,5 +1,5 @@
 import { StdioServerTransport } from '@frontmcp/protocol';
-import { getEnv, getEnvFlag, isEdgeRuntime, randomUUID } from '@frontmcp/utils';
+import { getEnv, getEnvFlag, getRuntimeContext, isEdgeRuntime, randomUUID } from '@frontmcp/utils';
 
 import {
   FrontMcpLogger,
@@ -14,7 +14,13 @@ import {
 } from '../common';
 import { type SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 import { DirectMcpServerImpl, type DirectMcpServer, type DirectServerOptions } from '../direct';
-import { describeConfigIssues, InternalMcpError, ScopeConfigurationError, ServerNotFoundError } from '../errors';
+import {
+  BrowserEntryPointUnavailableError,
+  describeConfigIssues,
+  InternalMcpError,
+  ScopeConfigurationError,
+  ServerNotFoundError,
+} from '../errors';
 import type { HealthService } from '../health';
 import type { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
 import LoggerRegistry from '../logger/logger.registry';
@@ -721,6 +727,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     },
   ): Promise<{ close: () => Promise<void> }> {
     if (isSchemaExtraction()) return { close: async () => undefined };
+    if (getRuntimeContext().runtime === 'browser') throw new BrowserEntryPointUnavailableError('runUnixSocket');
     const { socketPath, sqlite, ...configInput } = options;
     const detachedRunId = detachedJobRunId();
     if (detachedRunId) {
@@ -1050,7 +1057,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
   public static async runShared(optionsOrClass: ConfigOrServerClass, shared: SharedServerOptions): Promise<void> {
     if (isSchemaExtraction()) return;
     const options = resolveConfigInput(optionsOrClass);
-    const { runShared } = await import('../shared/index.js');
+    const { runShared } = await import('#shared-server');
     await runShared(options, shared, (config) => new FrontMcpInstance(config));
   }
 }

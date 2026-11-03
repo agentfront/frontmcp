@@ -42,6 +42,7 @@
   "BUDGET_META_KEY": "string",
   "BaseConfig": "class",
   "BaseEntry": "class",
+  "BrowserEntryPointUnavailableError": "class",
   "BrowserStoreUnavailableError": "class",
   "CallRecorderConfigurationError": "class",
   "CallRecorderPlugin": "class",

@@ -220,6 +220,8 @@ next server.
 
 ## Limits
 
+- A browser has no shared local server: in a page, `runShared()` rejects with `BrowserEntryPointUnavailableError`
+  (`BROWSER_ENTRY_POINT_UNAVAILABLE`), and the browser builds leave the server's code out.
 - Idle means no request: a session that stays quiet past `idleTimeoutMs` finds the server gone, and its next request
   starts a new one (with the `initialize` replayed). Server-side state of that session (subscriptions, session memory)
   isn't carried over, nor is work the server runs in the background after a call returned.

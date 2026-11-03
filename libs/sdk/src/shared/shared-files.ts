@@ -6,7 +6,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { getEnv, lstat, mkdir, readFile, realpath, rename, unlink, writeFile } from '@frontmcp/utils';
 
 import { InvalidSharedServerOptionsError, UnsafeSharedServerDirectoryError } from '../errors/shared-server.errors';
-import { findReplaceableDirectory } from '../server/security/unix-socket-guard';
+import { findReplaceableDirectory } from '../server/security/replaceable-directory';
 
 const OWNER_ONLY_DIRECTORY = 0o700;
 const OWNER_ONLY_FILE = 0o600;
