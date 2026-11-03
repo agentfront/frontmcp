@@ -93,7 +93,7 @@ import type { SessionRelayHandle } from '../transport/relay/relay-scope.helper';
 import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import type { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
-import { refuseServerStoresInBrowser, refuseStoresInBrowser } from './browser-stores';
+import { guardStorageInBrowser, refuseServerStoresInBrowser, refuseStoresInBrowser } from './browser-stores';
 import { devEventsObservabilityConfig } from './dev-events-observability';
 import { registerServerEntries } from './server-entries.helper';
 import { reportStartup } from './startup-report.helper';
@@ -624,7 +624,7 @@ export class Scope extends ScopeEntry {
     const rateLimitPromise =
       throttleConfig?.enabled && !this.cliMode
         ? createGuardManager({
-            config: throttleConfig,
+            config: { ...throttleConfig, storage: guardStorageInBrowser(throttleConfig.storage, this.logger) },
             logger: this.logger,
           }).then((mgr) => {
             this._rateLimitManager = mgr;
@@ -1788,7 +1788,11 @@ export class Scope extends ScopeEntry {
     if (!declaresLimits) return;
 
     this._rateLimitManager = await createGuardManager({
-      config: { ...throttleConfig, enabled: true },
+      config: {
+        ...throttleConfig,
+        enabled: true,
+        storage: guardStorageInBrowser(throttleConfig?.storage, this.logger),
+      },
       logger: this.logger,
     });
   }
@@ -1800,7 +1804,10 @@ export class Scope extends ScopeEntry {
   private async initPublicAccessGuard(storage: GuardConfig['storage']): Promise<void> {
     const publicAccess = (this.auth.options as { publicAccess?: { rateLimit?: number } } | undefined)?.publicAccess;
     if (!publicAccess?.rateLimit || this._publicAccessGuard) return;
-    this._publicAccessGuard = await createGuardManager({ config: { enabled: true, storage }, logger: this.logger });
+    this._publicAccessGuard = await createGuardManager({
+      config: { enabled: true, storage: guardStorageInBrowser(storage, this.logger) },
+      logger: this.logger,
+    });
   }
 
   /**
