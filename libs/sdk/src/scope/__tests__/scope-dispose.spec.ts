@@ -1,5 +1,10 @@
 import 'reflect-metadata';
 
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { mkdtemp, rm } from '@frontmcp/utils';
+
 import { App, LogLevel, Tool, ToolContext } from '../../common';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import type { Scope } from '../scope.instance';
@@ -95,6 +100,26 @@ describe('scope.onDispose()', () => {
 
     expect(late).toHaveBeenCalledTimes(1);
     expect(() => remove()).not.toThrow();
+  });
+
+  it('destroys its transport service, which closes the session store', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'scope-dispose-'));
+    try {
+      const instance = await FrontMcpInstance.createForGraph({
+        ...serverConfig,
+        transport: { persistence: { sqlite: { path: join(dir, 'sessions.sqlite') } } },
+      });
+      const [scope] = instance.getScopes() as Scope[];
+      const transport = scope.transportService;
+      expect(await transport?.pingSessionStore()).toBe(true);
+
+      await scope.dispose();
+
+      expect(transport?.isSessionStoreConfigured()).toBe(true);
+      expect(await transport?.pingSessionStore()).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('fires from dispose() on the server createDirect() returns', async () => {

@@ -336,7 +336,9 @@ export class Scope extends ScopeEntry {
       effectivePersistence = { sqlite: resolvedTopLevelSqlite };
     }
     if (httpServing) {
-      this.transportService = new httpServing.TransportService(this, effectivePersistence, transportBus);
+      const service = new httpServing.TransportService(this, effectivePersistence, transportBus);
+      this.transportService = service;
+      this.onDispose(() => service.destroy());
       httpServing.loadStreamableHttpTransportOnStart(this);
     }
     warnIfRequestStateKeyNotShared({ logger: this.logger, metadata: this.metadata });
