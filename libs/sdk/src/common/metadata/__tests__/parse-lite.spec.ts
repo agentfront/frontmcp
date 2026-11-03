@@ -68,3 +68,63 @@ describe('parseFrontMcpConfigLite — preserves CLI-relevant fields', () => {
     expect(() => parseFrontMcpConfigLite(input as never)).toThrow('tasks.store must be false (tasks kept in memory)');
   });
 });
+
+describe('parseFrontMcpConfigLite — validates jobs and the top-level sqlite as the server does', () => {
+  const parseLite = (options: Record<string, unknown>) =>
+    parseFrontMcpConfigLite({ info: { name: 'demo', version: '0.1.0' }, apps: minimalApps, ...options } as never);
+
+  const issuePaths = (options: Record<string, unknown>): string[] => {
+    try {
+      parseLite(options);
+    } catch (error) {
+      return (error as { issues: Array<{ path: PropertyKey[] }> }).issues.map((issue) => issue.path.join('.'));
+    }
+    return [];
+  };
+
+  it('keeps jobs, which the CLI host reads for its store, runner and admission', () => {
+    const jobs = {
+      enabled: true,
+      store: false,
+      runner: 'worker',
+      defaultTimeoutMs: 60_000,
+      admission: { concurrency: 2 },
+    };
+    expect((parseLite({ jobs }) as unknown as Record<string, unknown>)['jobs']).toEqual(jobs);
+  });
+
+  it.each([
+    [{ store: 'memory' }, 'jobs.store must be false (runs kept in memory) or an object with redis or sqlite'],
+    [
+      { store: { redis: { provider: 'redis', host: 'localhost' }, sqlite: { path: '/tmp/jobs.sqlite' } } },
+      'jobs.store takes redis or sqlite, not both',
+    ],
+    [{ runner: 'thread' }, "jobs.runner must be 'inline', 'worker' or 'detached'"],
+    [{ defaultTimeoutMs: 2_147_483_648 }, 'jobs.defaultTimeoutMs must be at most 2147483647 ms'],
+  ])('refuses jobs %j with the message of the full parser', (jobs, message) => {
+    expect(() => parseLite({ jobs: { enabled: true, ...jobs } })).toThrow(message);
+  });
+
+  it('refuses jobs without enabled, a sqlite store without a path, or an admission limit below 1', () => {
+    expect(issuePaths({ jobs: { store: false } })).toEqual(['jobs.enabled']);
+    expect(issuePaths({ jobs: { enabled: true, store: { sqlite: { path: '' } } } })).toEqual([
+      'jobs.store.sqlite.path',
+    ]);
+    expect(issuePaths({ jobs: { enabled: true, admission: { concurrency: 0 } } })).toEqual([
+      'jobs.admission.concurrency',
+    ]);
+  });
+
+  it('keeps the top-level sqlite, which the CLI host gives its tasks and jobs', () => {
+    expect(
+      (parseLite({ sqlite: { path: '/tmp/state.sqlite' } }) as unknown as Record<string, unknown>)['sqlite'],
+    ).toEqual(expect.objectContaining({ path: '/tmp/state.sqlite' }));
+  });
+
+  it('refuses an empty sqlite.path or a missing encryption secret, which the CLI host took for no path or no encryption', () => {
+    expect(issuePaths({ sqlite: { path: '' } })).toEqual(['sqlite.path']);
+    expect(issuePaths({ sqlite: { path: '/tmp/state.sqlite', encryption: { secret: undefined } } })).toEqual([
+      'sqlite.encryption.secret',
+    ]);
+  });
+});
