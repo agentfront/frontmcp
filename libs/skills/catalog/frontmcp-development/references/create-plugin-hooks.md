@@ -223,7 +223,7 @@ With `NODE_ENV=development`, a tool, resource or prompt answer for which at leas
 - `owner` is the plugin's `name`, else the name of the class that declares the hook; `outcome` is `ok`, `respond`, `fail`, `abort`, `next`, `handled` or `error` (a thrown `Error`). An `@Around` hook's `ms` includes what it wraps.
 - It lists the hooks of plugins, providers, apps and entry classes, not the flow's own steps, and never a hook's arguments, the call's input or its answer.
 - It is added once the answer is final, after the answer budget (`output.budget`) and the cost meter, so neither counts it and an answer is fitted the same with or without it.
-- An answer for which no hook ran (a server with no plugins or hooks, say) has no `frontmcp/trace` key, and so answers the same in dev mode as outside it.
+- To an answer for which no hook ran (a server with no plugins or hooks, say) the trace adds no `frontmcp/trace` key, so hook tracing leaves that answer as it is.
 - `@FrontMcp({ devtools: { hookTrace: true } })` turns it on outside dev mode (a staging server, say), and `hookTrace: false` turns it off in dev mode. A value that is not a boolean stops the server at startup. Outside dev mode, without `hookTrace: true`, answers never carry it.
 - An exact-match test (`toEqual`) on an answer that hooks ran for sees the extra `_meta` key when it runs with `NODE_ENV=development`. Set `devtools: { hookTrace: false }` in that test's server, or match with `toMatchObject`.
 
