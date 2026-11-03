@@ -14,13 +14,7 @@ import {
 } from '../common';
 import { type SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 import { DirectMcpServerImpl, type DirectMcpServer, type DirectServerOptions } from '../direct';
-import {
-  BrowserEntryPointUnavailableError,
-  describeConfigIssues,
-  InternalMcpError,
-  ScopeConfigurationError,
-  ServerNotFoundError,
-} from '../errors';
+import { describeConfigIssues, InternalMcpError, ScopeConfigurationError, ServerNotFoundError } from '../errors';
 import type { HealthService } from '../health';
 import type { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
 import LoggerRegistry from '../logger/logger.registry';
@@ -727,7 +721,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
     },
   ): Promise<{ close: () => Promise<void> }> {
     if (isSchemaExtraction()) return { close: async () => undefined };
-    if (getRuntimeContext().runtime === 'browser') throw new BrowserEntryPointUnavailableError('runUnixSocket');
+    if (getRuntimeContext().runtime === 'browser') {
+      const { BrowserEntryPointUnavailableError } = await import('../errors/browser-entry-point.errors.js');
+      throw new BrowserEntryPointUnavailableError('runUnixSocket');
+    }
     const { socketPath, sqlite, ...configInput } = options;
     const detachedRunId = detachedJobRunId();
     if (detachedRunId) {
