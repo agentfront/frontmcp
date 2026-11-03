@@ -16,7 +16,7 @@ import { type SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 import { DirectMcpServerImpl, type DirectMcpServer, type DirectServerOptions } from '../direct';
 import { describeConfigIssues, InternalMcpError, ScopeConfigurationError, ServerNotFoundError } from '../errors';
 import type { HealthService } from '../health';
-import { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
+import type { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
 import LoggerRegistry from '../logger/logger.registry';
 import type { MetricsService } from '../metrics';
 import ProviderRegistry from '../provider/provider.registry';
@@ -83,22 +83,31 @@ function isSchemaExtraction(): boolean {
   return getEnvFlag('FRONTMCP_SCHEMA_EXTRACT');
 }
 
+/** The `~/.frontmcp/logs/` file transport, which only the Node entry points use. */
+async function loadFileLogTransport(): Promise<typeof FileLogTransportInstance> {
+  return (await import('../logger/instances/instance.file-logger.js')).FileLogTransportInstance;
+}
+
 /** A CLI-mode config: console only with `FRONTMCP_CLI_VERBOSE=1`, and the `~/.frontmcp/logs/` file with `fileLog`. */
-function parseCliConfig(options: FrontMcpConfigInput, { fileLog }: { fileLog: boolean }): FrontMcpConfigType {
+async function parseCliConfig(
+  options: FrontMcpConfigInput,
+  { fileLog }: { fileLog: boolean },
+): Promise<FrontMcpConfigType> {
   const parsedConfig = parseFrontMcpConfigLite(options);
+  const fileLogTransport = fileLog ? await loadFileLogTransport() : undefined;
   (parsedConfig as Record<string, unknown>)['__cliMode'] = true;
   const verbose = process.env['FRONTMCP_CLI_VERBOSE'] === '1';
   if (parsedConfig.logging) {
     parsedConfig.logging.enableConsole = verbose;
     const transports = parsedConfig.logging.transports ?? [];
-    if (fileLog && !transports.includes(FileLogTransportInstance)) {
-      transports.push(FileLogTransportInstance);
+    if (fileLogTransport && !transports.includes(fileLogTransport)) {
+      transports.push(fileLogTransport);
     }
     parsedConfig.logging.transports = transports;
   } else {
     (parsedConfig as Record<string, unknown>)['logging'] = {
       enableConsole: verbose,
-      transports: fileLog ? [FileLogTransportInstance] : [],
+      transports: fileLogTransport ? [fileLogTransport] : [],
     };
   }
   return parsedConfig;
@@ -586,14 +595,14 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * const scopes = instance.getScopes();
    */
   public static async createForCli(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
-    const frontMcp = new FrontMcpInstance(parseCliConfig(options, { fileLog: true }));
+    const frontMcp = new FrontMcpInstance(await parseCliConfig(options, { fileLog: true }));
     await frontMcp.ready;
     return frontMcp;
   }
 
   /** @internal What a build boots to read a server: CLI mode, in process only, no log file and no store to connect. */
   public static async createForManifest(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
-    const parsedConfig = parseCliConfig(options, { fileLog: false });
+    const parsedConfig = await parseCliConfig(options, { fileLog: false });
     const config = parsedConfig as Record<string, unknown> & { jobs?: Record<string, unknown> };
     for (const backend of ['redis', 'pubsub', 'sqlite']) delete config[backend];
     if (config.jobs) config.jobs = { ...config.jobs, store: undefined };
@@ -852,19 +861,20 @@ export class FrontMcpInstance implements FrontMcpInterface {
         http: undefined,
         serve: false,
       });
+      const fileLogTransport = await loadFileLogTransport();
       // Console transport on (writes to the stderr-rebound console) + file
       // transport on (same file pattern as createForCli).
       if (parsedConfig.logging) {
         parsedConfig.logging.enableConsole = true;
         const transports = parsedConfig.logging.transports ?? [];
-        if (!transports.includes(FileLogTransportInstance)) {
-          transports.push(FileLogTransportInstance);
+        if (!transports.includes(fileLogTransport)) {
+          transports.push(fileLogTransport);
         }
         parsedConfig.logging.transports = transports;
       } else {
         (parsedConfig as Record<string, unknown>)['logging'] = {
           enableConsole: true,
-          transports: [FileLogTransportInstance],
+          transports: [fileLogTransport],
         };
       }
 

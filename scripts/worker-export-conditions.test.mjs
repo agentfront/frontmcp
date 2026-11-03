@@ -119,3 +119,16 @@ for (const [pkgDir, splits] of Object.entries(EXPECT)) {
     }
   });
 }
+
+// A browser bundler gets the per-module build of utils and auth; a worker bundler and Node keep the single-file ESM
+for (const pkgDir of ['libs/utils', 'libs/auth']) {
+  test(`${pkgDir}: the root export gives a browser the per-module build and a worker the ESM bundle`, () => {
+    const root = readPkg(pkgDir).exports['.'];
+    const asImport = (active) =>
+      resolveCondition(resolveCondition(root, new Set([...active, 'import'])), new Set(['import']));
+
+    assert.equal(asImport(BROWSER), './dist/browser/index.mjs');
+    assert.deepEqual(asImport(WORKER), root.import);
+    assert.equal(resolveCondition(root, new Set(['import'])), root.import);
+  });
+}

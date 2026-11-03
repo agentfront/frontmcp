@@ -1,10 +1,12 @@
+import { execFileSync } from 'node:child_process';
 import { builtinModules } from 'node:module';
-import { dirname, relative, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, join, relative, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 import { build, type Metafile, type Plugin } from 'esbuild';
 
-import { realpath } from '@frontmcp/utils';
+import { mkdtemp, realpath, rm } from '@frontmcp/utils';
 
 export const workspaceRoot = resolve(__dirname, '../../../../..');
 export const fixtureDir = resolve(__dirname, '../../fixture');
@@ -13,7 +15,7 @@ export const OPTIONAL_PEERS = ['openai', '@anthropic-ai/sdk', '@vercel/kv', '@up
 // The modules create() always loads with import(): the server
 export const SERVER_MODULES = ['front-mcp/front-mcp.mjs'];
 // With the fixtures' config create() also loads tasks, which are on by default
-export const DEFAULT_CONFIG_MODULES = [...SERVER_MODULES, 'task/index.mjs'];
+export const DEFAULT_CONFIG_MODULES = [...SERVER_MODULES, 'task/task-scope.runtime.mjs'];
 const nodeBuiltins = new Set(builtinModules);
 
 export interface BrowserBundle {
@@ -21,6 +23,12 @@ export interface BrowserBundle {
   gzipBytes: number;
   entryInput: string;
   metafile: Metafile;
+}
+
+export interface ViteBuild {
+  initialBytes: number;
+  totalBytes: number;
+  initialModules: string[];
 }
 
 function keepOnDemandModulesOut(sdkBrowserDist: string, loadedModules: readonly string[]): Plugin {
@@ -97,6 +105,29 @@ export async function bundleForBrowser(entryFile: string, loadedModules: readonl
     entryInput: relative(workspaceRoot, entryFile),
     metafile: result.metafile,
   };
+}
+
+/** A Vite app's production build of the entry, without optional peers: the bytes of its initial chunks and the modules they render. */
+export async function bundleWithVite(entryFile: string): Promise<ViteBuild> {
+  const root = await realpath(workspaceRoot);
+  const outDir = await mkdtemp(join(tmpdir(), 'frontmcp-bundle-size-'));
+  try {
+    const output = execFileSync(
+      process.execPath,
+      [
+        resolve(__dirname, 'vite-initial-chunk.mjs'),
+        entryFile,
+        outDir,
+        resolve(fixtureDir, 'missing-peer.mjs'),
+        ...OPTIONAL_PEERS,
+      ],
+      { encoding: 'utf8', env: { ...process.env, NODE_ENV: 'production' } },
+    );
+    const build = JSON.parse(output) as ViteBuild;
+    return { ...build, initialModules: build.initialModules.map((id) => relative(root, id)) };
+  } finally {
+    await rm(outDir, { recursive: true, force: true });
+  }
 }
 
 /** A page's browser bundle of several entries that share chunks, from the built packages, written as ES modules Node can run. */

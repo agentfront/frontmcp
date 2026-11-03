@@ -95,13 +95,23 @@
         }
       }
     },
+    "build-browser-esm": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build-cjs"],
+      "cache": true,
+      "inputs": ["production", "^production", "{workspaceRoot}/scripts/build-browser-modules.mjs"],
+      "outputs": ["{projectRoot}/dist/browser/**/*.mjs"],
+      "options": {
+        "command": "node scripts/build-browser-modules.mjs libs/utils/src/index.ts libs/utils/dist/browser libs/utils/tsconfig.lib.json"
+      }
+    },
     "build": {
       "executor": "nx:run-commands",
-      "dependsOn": ["build-cjs", "build-esm"],
+      "dependsOn": ["build-cjs", "build-esm", "build-browser-esm"],
       "options": {
         "commands": [
           "node scripts/strip-dist-from-pkg.js libs/utils/dist/package.json",
-          "node scripts/inject-esm-require-banner.js libs/utils/dist/esm",
+          "node scripts/inject-esm-require-banner.js libs/utils/dist/esm libs/utils/dist/browser",
           "node scripts/escape-non-ascii.mjs libs/utils/dist"
         ],
         "parallel": false

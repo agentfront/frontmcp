@@ -90,6 +90,22 @@
     "./package.json": "./package.json",
     ".": {
       "development": "./src/index.ts",
+      "worker": {
+        "require": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.js"
+        },
+        "import": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/esm/index.mjs"
+        }
+      },
+      "browser": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/browser/index.mjs",
+        "module": "./dist/browser/index.mjs",
+        "default": "./dist/index.js"
+      },
       "require": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"

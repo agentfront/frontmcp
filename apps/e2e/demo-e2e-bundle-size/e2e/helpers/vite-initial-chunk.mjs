@@ -1,4 +1,4 @@
-// Builds an entry with Vite and prints the bytes of its initial chunks and of all its chunks: node vite-initial-chunk.mjs <entry> <outDir> <missingPeerStub> <peer>...
+// Builds an entry with Vite and prints the bytes of its initial chunks and of all its chunks, and the modules its initial chunks render: node vite-initial-chunk.mjs <entry> <outDir> <missingPeerStub> <peer>...
 import { join } from 'node:path';
 
 import { build } from 'vite';
@@ -8,7 +8,7 @@ import { readJSON, stat } from '@frontmcp/utils';
 const [entry, outDir, missingPeerStub, ...optionalPeers] = process.argv.slice(2);
 const exactly = (name) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`);
 
-await build({
+const result = await build({
   configFile: false,
   logLevel: 'silent',
   resolve: { alias: optionalPeers.map((peer) => ({ find: exactly(peer), replacement: missingPeerStub })) },
@@ -41,4 +41,11 @@ for (const [key, chunk] of Object.entries(manifest)) {
   totalBytes += bytes;
   if (initialKeys.has(key)) initialBytes += bytes;
 }
-process.stdout.write(JSON.stringify({ initialBytes, totalBytes }));
+const initialFiles = new Set([...initialKeys].map((key) => manifest[key].file));
+const initialModules = (Array.isArray(result) ? result : [result])
+  .flatMap(({ output }) => output)
+  .filter((chunk) => chunk.type === 'chunk' && initialFiles.has(chunk.fileName))
+  .flatMap((chunk) => Object.entries(chunk.modules))
+  .filter(([, module]) => module.renderedLength > 0)
+  .map(([id]) => id);
+process.stdout.write(JSON.stringify({ initialBytes, totalBytes, initialModules }));
