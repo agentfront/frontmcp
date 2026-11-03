@@ -4,6 +4,7 @@ import {
   FrontMcpLogger,
   Plugin,
   ProviderScope,
+  refusePluginStoreInBrowser,
   ToolHook,
   type CallToolResult,
   type FlowCtxOf,
@@ -93,6 +94,12 @@ export default class ResultHandlesPlugin extends DynamicPlugin<
 
   static override dynamicProviders = (input: ResultHandlesPluginOptionsInput): ProviderType[] => {
     const options = parseResultHandlesOptions(input);
+    const { type } = options.storage;
+    refusePluginStoreInBrowser({
+      plugin: 'ResultHandlesPlugin',
+      option: type === 'redis' || type === 'sqlite' ? `storage: { type: '${type}' }` : undefined,
+      memory: "storage: { type: 'memory' }",
+    });
     return [
       { name: 'result-handles:config', provide: ResultHandlesConfigToken, useValue: options },
       {

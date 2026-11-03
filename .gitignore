@@ -109,3 +109,4 @@ planning/
 /cloudflare-sandbox
 # Draft GHSA replies — describe unpatched behaviour until release. Never commit.
 advisories/replies/
+/.playwright-mcp/

@@ -128,6 +128,10 @@ class CatalogApp {}
 export default class Server {}
 ```
 
+A browser build (`create()` in a web page, WebMCP) has no TCP socket for Redis: there `'redis'` and `'redis-client'`
+throw `BrowserStoreUnavailableError` from `init()`, and `'global-store'` on a Redis `redis` throws it when the server
+starts, before anything connects. The message names `type: 'memory'`. Vercel KV, over HTTPS, is allowed.
+
 ## Docs
 
 - [Cache plugin reference](https://frontmcp.dev/reference/plugins/cache): every option, the key, hits, bypassing and

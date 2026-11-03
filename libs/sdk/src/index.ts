@@ -24,6 +24,7 @@ export type { ConfigOrServerClass } from './front-mcp';
 export type { SharedServerOptions, SharedServerTransport } from './shared/shared-server.options';
 export { assertStaticStartupConfig } from './front-mcp/static-startup.check';
 export { registerOptionalModule } from './scope/optional-dependency.util';
+export { refusePluginStoreInBrowser, type PluginStoreInBrowser } from './scope/browser-stores';
 export {
   getServerlessHandler,
   getServerlessHandlerAsync,

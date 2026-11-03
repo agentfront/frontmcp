@@ -17,6 +17,7 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
+      "dependsOn": ["^build", { "projects": ["cli"], "target": "build" }],
       "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-cli-exec"],
       "options": {
         "jestConfig": "apps/e2e/demo-e2e-cli-exec/jest.e2e.config.ts",

@@ -157,7 +157,9 @@ ResultHandlesPlugin.init({ storage: { type: 'redis', redis: { url: process.env.R
 ResultHandlesPlugin.init({ storage: { type: 'sqlite', sqlite: { path: '/var/lib/my-server/results.sqlite' } } });
 ```
 
-SQLite needs `@frontmcp/storage-sqlite`.
+SQLite needs `@frontmcp/storage-sqlite`. In a browser build (`create()` in a web page, WebMCP), Redis and SQLite
+throw `BrowserStoreUnavailableError` from `init()`, naming `storage: { type: 'memory' }`: a page has no TCP socket and
+no file. `{ type: 'auto' }` picks memory there.
 
 Each folded answer is kept, encrypted, until its TTL runs out. A memory store holds 1000 answers at most
 (`DEFAULT_MEMORY_MAX_ENTRIES`) and drops the oldest past that; set `storage.memory.maxEntries` to change it, or to `0`

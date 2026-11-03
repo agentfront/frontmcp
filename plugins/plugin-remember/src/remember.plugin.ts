@@ -7,6 +7,7 @@ import {
   isVercelKvProvider,
   Plugin,
   ProviderScope,
+  refusePluginStoreInBrowser,
   type FrontMcpConfigType,
   type ProviderType,
   type ToolType,
@@ -41,6 +42,11 @@ function withCheckedOptions(options: RememberPluginOptionsInput): RememberPlugin
     );
   }
   return options;
+}
+
+/** In a browser, refuse a store that `option` puts on Redis, before it connects (#1033). */
+function refuseRedisInBrowser(option: string): void {
+  refusePluginStoreInBrowser({ plugin: 'RememberPlugin', option, memory: "type: 'memory'" });
 }
 
 /**
@@ -152,6 +158,7 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
             }
 
             // Redis provider
+            refuseRedisInBrowser("type: 'global-store'");
             return new RememberRedisProvider({
               type: 'redis',
               config: {
@@ -169,6 +176,7 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
 
       case 'redis':
         if ('config' in config && config.config) {
+          refuseRedisInBrowser("type: 'redis'");
           providers.push({
             name: 'remember:store:redis',
             provide: RememberStoreToken,
@@ -184,6 +192,7 @@ export default class RememberPlugin extends DynamicPlugin<RememberPluginOptions,
 
       case 'redis-client':
         if ('client' in config && config.client) {
+          refuseRedisInBrowser("type: 'redis-client'");
           providers.push({
             name: 'remember:store:redis-client',
             provide: RememberStoreToken,

@@ -118,6 +118,8 @@ class MyCLIServer {}
 
 The generated CLI runs background tasks only on a store its invocations share: the top-level `sqlite` or `redis`, or `tasks.sqlite` / `tasks.redis`. It reads the `tasks` options as the server does: `tasks.store: false` or `tasks.enabled: false` runs no tasks, and `tasks.runner: 'cli'` runs each one in a detached process. Up to 1.10 it ignored every `tasks` option.
 
+It validates the `jobs` options and the top-level `sqlite` as the server does too, so a wrong value stops it at startup with the server's message, such as `jobs.store must be false (runs kept in memory) or an object with redis or sqlite`. `jobs.store: false` keeps job runs in memory beside a top-level `sqlite`. Up to 1.10, a server config given as an object (rather than through `@FrontMcp`, which validates it) could carry a wrong value there: the CLI took an invalid `jobs.store` for unset and kept the runs in the top-level `redis` or `sqlite`, it took an empty `sqlite.path` for the default path, and kept its tasks unencrypted on a missing `sqlite.encryption.secret`.
+
 ## Verification
 
 ```bash

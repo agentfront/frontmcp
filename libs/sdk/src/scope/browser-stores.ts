@@ -56,3 +56,19 @@ export function refuseServerStoresInBrowser(
   );
   if (refused.length > 0) throw new BrowserStoreUnavailableError(refused);
 }
+
+/** A plugin's store: the option that would open Redis or SQLite (none when it opens neither) and the one for memory. */
+export interface PluginStoreInBrowser {
+  plugin: string;
+  option: string | undefined;
+  memory: string;
+}
+
+/** In a browser, refuse a plugin's store that would open Redis or SQLite: call it where the plugin builds the store. */
+export function refusePluginStoreInBrowser(
+  { plugin, option, memory }: PluginStoreInBrowser,
+  runtime = getRuntimeContext().runtime,
+): void {
+  if (runtime !== 'browser' || option === undefined) return;
+  throw new BrowserStoreUnavailableError([[plugin, option]], { [plugin]: memory });
+}

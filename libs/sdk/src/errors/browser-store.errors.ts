@@ -1,17 +1,21 @@
 import { InternalMcpError } from './mcp.error';
 
-/** A store a browser refuses, and the option that keeps it in memory. */
-export type BrowserRefusedStore = 'tasks' | 'elicitation' | 'questions' | 'jobs';
+/** A store a browser refuses: background tasks, elicitation, persistent questions, jobs, or a plugin's, by its name. */
+export type BrowserRefusedStore = 'tasks' | 'elicitation' | 'questions' | 'jobs' | (string & {});
 
-const STORES: Record<BrowserRefusedStore, { what: string; memory: string }> = {
+const STORES: Readonly<Record<string, { what: string; memory: string } | undefined>> = {
   tasks: { what: 'background tasks', memory: 'tasks.store: false' },
   elicitation: { what: 'elicitation', memory: 'elicitation.store: false' },
   questions: { what: 'persistent questions', memory: "elicitation.persistent.storage: { type: 'memory' }" },
   jobs: { what: 'jobs', memory: 'jobs.store: false' },
 };
 
-function refusal([store, option]: readonly [BrowserRefusedStore, string]): string {
-  const { what, memory } = STORES[store];
+function refusal(
+  [store, option]: readonly [BrowserRefusedStore, string],
+  pluginMemory: Readonly<Record<string, string>>,
+): string {
+  const sdkStore = Object.hasOwn(pluginMemory, store) ? undefined : STORES[store];
+  const { what, memory } = sdkStore ?? { what: store, memory: pluginMemory[store] };
   if (option === 'redis' || option === 'sqlite') {
     return `${what} would use the top-level ${option} (set ${memory} for memory, or leave ${option} out of the browser build)`;
   }
@@ -22,8 +26,15 @@ function refusal([store, option]: readonly [BrowserRefusedStore, string]): strin
 export class BrowserStoreUnavailableError extends InternalMcpError {
   readonly stores: ReadonlyArray<readonly [BrowserRefusedStore, string]>;
 
-  constructor(stores: ReadonlyArray<readonly [BrowserRefusedStore, string]>) {
-    super(`A browser cannot open Redis or SQLite: ${stores.map(refusal).join('; ')}`, 'BROWSER_STORE_UNAVAILABLE');
+  /** `pluginMemory` gives each plugin's store the plugin option that keeps it in memory. */
+  constructor(
+    stores: ReadonlyArray<readonly [BrowserRefusedStore, string]>,
+    pluginMemory: Readonly<Record<string, string>> = {},
+  ) {
+    super(
+      `A browser cannot open Redis or SQLite: ${stores.map((store) => refusal(store, pluginMemory)).join('; ')}`,
+      'BROWSER_STORE_UNAVAILABLE',
+    );
     this.stores = stores;
   }
 }
