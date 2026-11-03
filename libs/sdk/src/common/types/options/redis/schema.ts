@@ -321,6 +321,12 @@ export const redisOptionsSchema = z.union(
  */
 export type RedisOptions = z.infer<typeof redisOptionsSchema>;
 
+/** A `redis` option in any form it takes, normalized as the server's config is, or the reason it cannot be used. */
+export function normalizeRedisOptions(redis: unknown): RedisOptions | string {
+  const parsed = redisOptionsSchema.safeParse(redis);
+  return parsed.success ? parsed.data : parsed.error.issues.map((issue) => issue.message).join('; ');
+}
+
 /**
  * Storage configuration input type (for user configuration).
  * Uses explicit interface for better IDE autocomplete.

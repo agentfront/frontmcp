@@ -12,7 +12,8 @@
 
 import { createMemoryStorage, createStorage, getEnv, type RootStorage, type StorageConfig } from '@frontmcp/utils';
 
-import { type FrontMcpLogger, type RedisOptionsInput, type SqliteOptionsInput } from '../../common';
+import { isVercelKvProvider, type FrontMcpLogger, type RedisOptionsInput, type SqliteOptionsInput } from '../../common';
+import { normalizeRedisOptions } from '../../common/types/options/redis/schema';
 import { ElicitationNotSupportedError } from '../../errors/elicitation.error';
 import { isElicitationEncryptionAvailable } from './elicitation-encryption';
 import { type ElicitationStore } from './elicitation.store';
@@ -280,55 +281,21 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
   // Build final storage config, merging redis option if provided
   let finalStorageConfig: StorageConfig | undefined = storageConfig;
 
-  // Handle legacy redis option - convert to storage config
   if (redis && !storageConfig) {
-    // Check for Vercel KV provider (not supported)
-    if ('provider' in redis && redis.provider === 'vercel-kv') {
+    const redisOptions = normalizeRedisOptions(redis);
+    if (typeof redisOptions === 'string') {
+      throw new ElicitationNotSupportedError(`Invalid Redis configuration: ${redisOptions}`);
+    }
+    if (isVercelKvProvider(redisOptions)) {
       throw new ElicitationNotSupportedError(
         'Vercel KV is not supported for elicitation stores. ' +
           'Elicitation requires pub/sub for cross-node result routing, which Vercel KV does not support. ' +
           'Use Redis provider instead: { provider: "redis", host: "...", port: ... }',
       );
     }
-
-    // Convert redis option to storage config
-    const isNewRedisFormat = 'provider' in redis && redis.provider === 'redis' && 'host' in redis;
-    const isLegacyRedisFormat = !('provider' in redis) && 'host' in redis && typeof redis.host === 'string';
-
-    if (isNewRedisFormat || isLegacyRedisFormat) {
-      // Safely extract Redis config with type validation
-      const redisConfig = redis as unknown as Record<string, unknown>;
-      const redisHost = typeof redisConfig['host'] === 'string' ? redisConfig['host'] : undefined;
-      const redisPort = typeof redisConfig['port'] === 'number' ? redisConfig['port'] : 6379;
-      const redisPassword = typeof redisConfig['password'] === 'string' ? redisConfig['password'] : undefined;
-      const redisDb = typeof redisConfig['db'] === 'number' ? redisConfig['db'] : 0;
-      const redisTls = typeof redisConfig['tls'] === 'boolean' ? redisConfig['tls'] : false;
-
-      // Validate that host is present (required for Redis connection)
-      if (!redisHost) {
-        throw new ElicitationNotSupportedError(
-          'Invalid Redis configuration: host is required. ' + 'Provide a valid Redis host in the redis configuration.',
-        );
-      }
-
-      finalStorageConfig = {
-        type: 'redis',
-        redis: {
-          config: {
-            host: redisHost,
-            port: redisPort,
-            password: redisPassword,
-            db: redisDb,
-            tls: redisTls,
-          },
-        },
-      };
-
-      logger?.debug('[ElicitationStoreFactory] Converted redis option to storage config', {
-        host: redisHost,
-        port: redisPort,
-      });
-    }
+    const { host, port, password, db, tls } = redisOptions;
+    finalStorageConfig = { type: 'redis', redis: { config: { host, port, password, db, tls } } };
+    logger?.debug('[ElicitationStoreFactory] Converted redis option to storage config', { host, port });
   }
 
   // Check for Vercel KV - not supported for elicitation (no pub/sub)

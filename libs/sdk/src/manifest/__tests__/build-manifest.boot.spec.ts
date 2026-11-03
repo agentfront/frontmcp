@@ -104,6 +104,14 @@ describe('buildManifest() boot', () => {
     expect(await fileExists(sqlitePath)).toBe(false);
   });
 
+  it('reads a server whose redis url comes from an env var the build has not set (#1035)', async () => {
+    const manifest = await buildManifest(
+      config({ redis: { url: process.env['MANIFEST_BOOT_UNSET_REDIS_URL'] as string } }),
+    );
+
+    expect(manifest.tools.map((tool) => tool.name)).toContain('stock');
+  });
+
   it('never listens or runs onReady, and shuts the providers down when done', async () => {
     const listen = jest.spyOn(net.Server.prototype, 'listen');
 

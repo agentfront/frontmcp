@@ -12,7 +12,8 @@
 
 import { createMemoryStorage, createStorage, getEnv, type RootStorage, type StorageConfig } from '@frontmcp/utils';
 
-import { type FrontMcpLogger, type RedisOptionsInput } from '../../common';
+import { isVercelKvProvider, type FrontMcpLogger, type RedisOptionsInput } from '../../common';
+import { normalizeRedisOptions } from '../../common/types/options/redis/schema';
 import { StorageTaskStore } from './storage-task.store';
 import { isExplicitStorage } from './task-backend.utils';
 import { type TaskStore } from './task.store';
@@ -121,32 +122,17 @@ export async function createTaskStore(options: TaskStoreOptions = {}): Promise<T
   let finalStorageConfig: StorageConfig | undefined = storageConfig;
 
   if (redis && !isExplicitStorage(storageConfig)) {
-    if ('provider' in redis && redis.provider === 'vercel-kv') {
+    const redisOptions = normalizeRedisOptions(redis);
+    if (typeof redisOptions === 'string') {
+      throw new TaskStoreNotSupportedError(`Invalid Redis configuration: ${redisOptions}`);
+    }
+    if (isVercelKvProvider(redisOptions)) {
       throw new TaskStoreNotSupportedError(
         'Vercel KV is not supported for task stores. Task result blocking and cancel signalling require pub/sub. Use Redis or Upstash instead.',
       );
     }
-    const isNewRedisFormat = 'provider' in redis && redis.provider === 'redis' && 'host' in redis;
-    const isLegacyRedisFormat = !('provider' in redis) && 'host' in redis && typeof redis.host === 'string';
-    if (isNewRedisFormat || isLegacyRedisFormat) {
-      const cfg = redis as unknown as Record<string, unknown>;
-      const host = typeof cfg['host'] === 'string' ? cfg['host'] : undefined;
-      if (!host) {
-        throw new TaskStoreNotSupportedError('Invalid Redis configuration: host is required.');
-      }
-      finalStorageConfig = {
-        type: 'redis',
-        redis: {
-          config: {
-            host,
-            port: typeof cfg['port'] === 'number' ? cfg['port'] : 6379,
-            password: typeof cfg['password'] === 'string' ? cfg['password'] : undefined,
-            db: typeof cfg['db'] === 'number' ? cfg['db'] : 0,
-            tls: typeof cfg['tls'] === 'boolean' ? cfg['tls'] : false,
-          },
-        },
-      };
-    }
+    const { host, port, password, db, tls } = redisOptions;
+    finalStorageConfig = { type: 'redis', redis: { config: { host, port, password, db, tls } } };
   }
 
   // The ambient `KV_REST_API_URL` only selects Vercel KV when nothing else was

@@ -602,9 +602,11 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
   /** @internal What a build boots to read a server: CLI mode, in process only, no log file and no store to connect. */
   public static async createForManifest(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
-    const parsedConfig = await parseCliConfig(options, { fileLog: false });
+    // Dropped before parsing: a build opens no store, so the env var a redis url comes from need not be set
+    const { redis: _redis, ...withoutRedis } = options;
+    const parsedConfig = await parseCliConfig(withoutRedis, { fileLog: false });
     const config = parsedConfig as Record<string, unknown> & { jobs?: Record<string, unknown> };
-    for (const backend of ['redis', 'pubsub', 'sqlite']) delete config[backend];
+    for (const backend of ['pubsub', 'sqlite']) delete config[backend];
     if (config.jobs) config.jobs = { ...config.jobs, store: undefined };
     markDirectOnly(parsedConfig);
     markManifestMode(parsedConfig);

@@ -120,6 +120,8 @@ The generated CLI runs background tasks only on a store its invocations share: t
 
 It validates the `jobs` options and the top-level `sqlite` as the server does too, so a wrong value stops it at startup with the server's message, such as `jobs.store must be false (runs kept in memory) or an object with redis or sqlite`. `jobs.store: false` keeps job runs in memory beside a top-level `sqlite`. Up to 1.10, a server config given as an object (rather than through `@FrontMcp`, which validates it) could carry a wrong value there: the CLI took an invalid `jobs.store` for unset and kept the runs in the top-level `redis` or `sqlite`, it took an empty `sqlite.path` for the default path, and kept its tasks unencrypted on a missing `sqlite.encryption.secret`.
 
+The top-level `redis` is read as the server reads it too, in every form (`url`, `host` / `port`, with or without `provider: 'redis'`), so the CLI's tasks go to that Redis, with the URL's password, database and TLS (`rediss://`), and the detached workers of `tasks.runner: 'cli'` find them there. An unusable `redis`, such as a `url` with another scheme, stops it at startup with the server's message. `frontmcp build` leaves the top-level `redis` out when it reads a server config given as an object, so a `redis: { url: process.env['REDIS_URL'] }` there builds without the variable set (`@FrontMcp` validates it when the entry loads). Up to 1.10, a config object's `redis` with a `url` didn't reach the CLI's task store, which kept the tasks in memory or in the Redis of `REDIS_URL` / `REDIS_HOST`.
+
 ## Verification
 
 ```bash
