@@ -69,6 +69,8 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
   const { log, bufferSize, reloadDeadlineMs, respond, forward } = options;
   let state: BridgeState = 'Idle';
   const buffer: JsonRpcFrame[] = [];
+  // Frames `requeue` put back in front of the buffer: they were sent before the frames a drain had not sent yet
+  const requeued = new WeakSet<JsonRpcFrame>();
   const inflight = new Map<string | number, InflightRequest>();
   let reloadTimer: NodeJS.Timeout | undefined;
   let degradedDetail: Record<string, unknown> | undefined;
@@ -196,6 +198,7 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
         await machine.enqueue(frame);
         return;
       }
+      requeued.add(frame);
       buffer.unshift(frame);
       if (state === 'Degraded' || state === 'Stopping') await keepUnsent([]);
     },
@@ -303,7 +306,9 @@ export function createBridgeStateMachine(options: BridgeStateMachineOptions): Br
       for (const frame of frames) await machine.enqueue(frame);
       return;
     }
-    buffer.unshift(...frames);
+    let at = 0;
+    while (at < buffer.length && requeued.has(buffer[at])) at++;
+    buffer.splice(at, 0, ...frames);
     if (state === 'Stopping') await flushBufferAsResponses(DEV_SERVER_UNREACHABLE, 'stopping');
     if (state === 'Degraded') await flushBufferAsResponses(DEV_RELOAD_DEADLINE, 'deadline', degradedDetail);
   }

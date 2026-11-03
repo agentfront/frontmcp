@@ -306,6 +306,34 @@ describe('bridge state machine (issue #399)', () => {
       expect(rec.responses).toEqual([]);
     });
 
+    it('keeps the order when the upstream is lost while a drain sends its first frame, which is requeued', async () => {
+      const forwarded: JsonRpcFrame[] = [];
+      let lostOnce = false;
+      const fsm: BridgeStateMachine = createBridgeStateMachine({
+        log: makeLog(),
+        bufferSize: 8,
+        reloadDeadlineMs: 30_000,
+        respond: () => undefined,
+        forward: async (frame) => {
+          forwarded.push(frame);
+          if (frame.id === 1 && !lostOnce) {
+            lostOnce = true;
+            fsm.onUpstreamLost('drained');
+            await fsm.requeue(frame);
+          }
+        },
+      });
+      fsm.onBootStart();
+      for (const id of [1, 2, 3]) await fsm.enqueue({ jsonrpc: '2.0', id, method: 'tools/call' });
+
+      fsm.onChildReady();
+      await new Promise((r) => setImmediate(r));
+      fsm.onChildReady();
+      await new Promise((r) => setImmediate(r));
+
+      expect(forwarded.map((f) => f.id)).toEqual([1, 1, 2, 3]);
+    });
+
     it('sends a requeued request at once when it is ready again', async () => {
       const { fsm, rec } = makeFsm();
       fsm.onBootStart();
