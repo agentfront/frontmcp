@@ -223,4 +223,25 @@ describe('LOCAL-mode session secure-secret store E2E (#470)', () => {
       }
     }, 120000);
   });
+
+  describe('an unusable backing', () => {
+    it('stops the server at startup, where the secrets went to the memory store', async () => {
+      const outcome = await TestServer.start({
+        command: `npx tsx ${SERVER_ENTRY}`,
+        project: 'demo-e2e-local-auth',
+        port: 53591,
+        startupTimeout: 60000,
+        debug: process.env['DEBUG'] === '1',
+        env: { PORT: '53591', SECURE_STORE_BACKING: 'sqlite', SECURE_STORE_SQLITE_PATH: '', JWT_SECRET, VAULT_SECRET },
+      }).then(
+        async (server) => {
+          await server.stop();
+          return 'started';
+        },
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      );
+
+      expect(outcome).toMatch(/secureStore[\s\S]*Too small: expected string to have >=1 characters/);
+    }, 90000);
+  });
 });

@@ -303,6 +303,7 @@
   "JobRunResource": "class",
   "JobRunnerBootError": "class",
   "JobRunnerUnavailableError": "class",
+  "JobStoreNotSupportedError": "class",
   "JobTimeoutError": "class",
   "JwtSecretRequiredError": "class",
   "JwtSecretWeakError": "class",

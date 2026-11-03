@@ -1,6 +1,6 @@
 // common/types/options/__tests__/redis.options.spec.ts
 
-import { frontMcpMetadataSchema } from '../../../metadata/front-mcp.metadata';
+import { frontMcpMetadataSchema, parseFrontMcpConfigLite } from '../../../metadata/front-mcp.metadata';
 import {
   parseRedisUrl,
   pubsubOptionsSchema,
@@ -384,5 +384,38 @@ describe('redis url beside connection fields (#768)', () => {
   it('applies the same rule to pubsub', () => {
     expect(pubsubOptionsSchema.parse({ url: 'redis://cache', password: 'p' })).toMatchObject({ password: 'p' });
     expect(pubsubOptionsSchema.safeParse({ url: 'redis://cache', host: 'other' }).success).toBe(false);
+  });
+});
+
+describe('a redis with neither host nor url', () => {
+  const messagesOf = (schema: typeof redisOptionsSchema | typeof pubsubOptionsSchema, input: unknown) => {
+    const result = schema.safeParse(input);
+    return result.success ? [] : result.error.issues.map((issue) => issue.message);
+  };
+
+  it.each([[{}], [{ port: 6380 }], [{ provider: 'redis' }], [{ host: undefined, url: undefined }]])(
+    'is refused for %j with a message that names what is missing',
+    (input) => {
+      expect(messagesOf(redisOptionsSchema, input)).toEqual(['redis needs host or url']);
+      expect(messagesOf(pubsubOptionsSchema, input)).toEqual(['redis needs host or url']);
+    },
+  );
+
+  it('says so where the server and the CLI read redis', () => {
+    const config = { info: { name: 'redis-missing', version: '1.0.0' }, apps: [], redis: { port: 6380 } };
+    const result = frontMcpMetadataSchema.safeParse(config);
+    const issues = JSON.stringify(result.error?.issues);
+
+    expect(issues).toContain('redis needs host or url');
+    expect(() => parseFrontMcpConfigLite(config as never)).toThrow('redis needs host or url');
+  });
+
+  it.each([
+    [{ host: '' }],
+    [{ provider: 'vercel-kv', keyPrefix: 5 }],
+    [{ provider: 'upstash' }],
+    ['redis://localhost'],
+  ])('keeps the message of another mistake, such as %j', (input) => {
+    expect(messagesOf(redisOptionsSchema, input)).toEqual(['Invalid input']);
   });
 });

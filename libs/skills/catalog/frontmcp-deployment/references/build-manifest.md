@@ -64,7 +64,9 @@ frontmcp build --target node --no-manifest # no manifest, no lint
 ```
 
 When the manifest cannot be built (the entry fails to boot in Node, an older `@frontmcp/sdk`), the build prints
-`frontmcp.manifest.json not written: <reason>` and goes on; with `--strict-lint` that fails the build too.
+`frontmcp.manifest.json not written: <reason>` and goes on; with `--strict-lint` that fails the build too. When the
+server's schema refused its config, the reason names each invalid field as `path: message`, such as
+`redis: redis needs host or url`; up to 1.10 it printed the validation error as JSON.
 
 ## What the Manifest Holds
 

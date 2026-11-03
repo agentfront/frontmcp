@@ -51,7 +51,7 @@ function holdPort(): Promise<{ port: number; release: () => Promise<void> }> {
 async function makeFakeEntry(): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), 'fix-398-e2e-'));
   const file = path.join(dir, 'main.ts');
-  await writeFile(file, 'setTimeout(() => {}, 60_000);\n', 'utf-8');
+  await writeFile(file, 'setTimeout(() => {}, 60_000);\n');
   return file;
 }
 

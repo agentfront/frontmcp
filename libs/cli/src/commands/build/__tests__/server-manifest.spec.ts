@@ -1,6 +1,7 @@
 import * as os from 'os';
 import * as path from 'path';
 
+import { z } from '@frontmcp/lazy-zod';
 import { mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
 
 const mockExtract = jest.fn();
@@ -89,5 +90,47 @@ describe('emitServerManifest()', () => {
     mockExtract.mockResolvedValue({});
     await emit('dist/node', false, 'bare.ts');
     expect(logged.join('\n')).toContain(`${SERVER_MANIFEST_FILE} not written: no manifest was built`);
+  });
+
+  it('names each invalid field of a config the schema refused, instead of printing the error as JSON', async () => {
+    const server = z.object({ info: z.object({ name: z.string() }), redis: z.object({ host: z.string() }) });
+    const serverConfig = z.union([server, server.extend({ splitByApp: z.literal(true) })]);
+    const parsed = serverConfig.safeParse({ info: { name: 1 }, redis: {} });
+    await writeFile(path.join(project, 'invalid.ts'), 'export default {};');
+    mockExtract.mockRejectedValue(parsed.error);
+
+    await emit('dist/node', false, 'invalid.ts');
+
+    const warning = logged.find((line) => line.includes('not written')) ?? '';
+    expect(warning).toContain(
+      `${SERVER_MANIFEST_FILE} not written: info.name: Invalid input: expected string, received number; ` +
+        'redis.host: Invalid input: expected string, received undefined',
+    );
+    expect(warning).not.toContain('"code"');
+  });
+
+  it("keeps a union's own message when it says more than Invalid input", async () => {
+    const redis = z.union([z.object({ url: z.string() }), z.object({ host: z.string() })], {
+      error: () => 'redis needs host or url',
+    });
+    const parsed = z.object({ redis }).safeParse({ redis: {} });
+    await writeFile(path.join(project, 'union.ts'), 'export default {};');
+    mockExtract.mockRejectedValue(parsed.error);
+
+    await emit('dist/node', false, 'union.ts');
+
+    expect(logged.join('\n')).toContain(`${SERVER_MANIFEST_FILE} not written: redis: redis needs host or url`);
+  });
+
+  it('names the config itself when the whole of it was refused, and prints a thrown value as it is', async () => {
+    await writeFile(path.join(project, 'root.ts'), 'export default {};');
+    mockExtract.mockRejectedValue(z.object({}).safeParse('server').error);
+    await emit('dist/node', false, 'root.ts');
+    expect(logged.join('\n')).toContain(`${SERVER_MANIFEST_FILE} not written: (root): Invalid input: expected object`);
+
+    await writeFile(path.join(project, 'thrown.ts'), 'export default {};');
+    mockExtract.mockRejectedValue('the bundle threw');
+    await emit('dist/node', false, 'thrown.ts');
+    expect(logged.join('\n')).toContain(`${SERVER_MANIFEST_FILE} not written: the bundle threw`);
   });
 });

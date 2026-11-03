@@ -57,7 +57,7 @@ const unsetStores: Array<[string, Record<string, unknown>]> = [
   ['auth.tokenStorage', { auth: { mode: 'local', tokenStorage: { redis: { host: unset } } } }],
 ];
 
-/** Store settings the CLI host never opens, so its lite schema does not validate them. */
+/** Store settings the server opens, and the CLI host validates with the server's schema. */
 const unsetServerStores: Array<[string, Record<string, unknown>]> = [
   ['transport.persistence', { transport: { persistence: { redis: { url: unset } } } }],
   ['transport.eventStore', { transport: { eventStore: { enabled: true, provider: 'redis', redis: { url: unset } } } }],
@@ -65,7 +65,7 @@ const unsetServerStores: Array<[string, Record<string, unknown>]> = [
 ];
 
 describe('store settings a build recorded unvalidated', () => {
-  it.each(unsetStores)('stop the CLI host on an unset %s', async (_store, stores) => {
+  it.each([...unsetStores, ...unsetServerStores])('stop the CLI host on an unset %s', async (_store, stores) => {
     await expect(connect(readByBuild(stores) as unknown as FrontMcpConfigInput, { mode: 'cli' })).rejects.toThrow();
   });
 

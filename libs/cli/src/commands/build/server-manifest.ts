@@ -45,6 +45,36 @@ export async function writeServerManifest(dir: string, manifest: ExtractedManife
   return manifestPath;
 }
 
+interface SchemaIssue {
+  path?: ReadonlyArray<PropertyKey>;
+  message?: string;
+  /** The branches of a failed union, each with its own issues. */
+  errors?: ReadonlyArray<ReadonlyArray<SchemaIssue>>;
+}
+
+/** A union that says no more than "Invalid input" is read through its branch with the fewest issues. */
+function flattenIssue(
+  issue: SchemaIssue,
+  parentPath: ReadonlyArray<PropertyKey>,
+): Array<{ path: PropertyKey[]; message?: string }> {
+  const path = [...parentPath, ...(issue.path ?? [])];
+  const branches = issue.errors?.filter((branch) => branch.length > 0) ?? [];
+  if (branches.length === 0 || issue.message !== 'Invalid input') return [{ path, message: issue.message }];
+  const closest = branches.reduce((fewest, branch) => (branch.length < fewest.length ? branch : fewest));
+  return closest.flatMap((nested) => flattenIssue(nested, path));
+}
+
+/** Why the server could not be read: for a config its schema refused, the `path: message` of each invalid field. */
+function describeError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const issues = (err as { issues?: unknown }).issues;
+  if (err.name !== 'ZodError' || !Array.isArray(issues)) return err.message;
+  return (issues as SchemaIssue[])
+    .flatMap((issue) => flattenIssue(issue, []))
+    .map(({ path, message }) => `${path.length ? path.map(String).join('.') : '(root)'}: ${message ?? 'invalid'}`)
+    .join('; ');
+}
+
 function report(message: string, strict: boolean | undefined): void {
   if (strict) {
     console.log(c('red', message));
@@ -60,7 +90,7 @@ export async function emitServerManifest(options: EmitServerManifestOptions): Pr
   try {
     schema = await extractionOf(await resolveEntry(options.cwd, options.entry), options.cwd);
   } catch (err) {
-    report(`[build] ${SERVER_MANIFEST_FILE} not written: ${err instanceof Error ? err.message : String(err)}`, options.strictLint);
+    report(`[build] ${SERVER_MANIFEST_FILE} not written: ${describeError(err)}`, options.strictLint);
     return;
   }
   if (!schema.manifest) {

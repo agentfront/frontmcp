@@ -20,7 +20,9 @@
 import { MemoryStorageAdapter, type StorageAdapter } from '@frontmcp/utils';
 
 import { type AuthLogger } from '../common/auth-logger.interface';
+import { SecureStoreConfigError } from '../errors/auth-internal.errors';
 import { type SecureStoreConfig, type TokenStorageConfig, type TokenStorageSqliteConfig } from '../options/interfaces';
+import { secureStoreConfigSchema } from '../options/shared.schemas';
 import { type SecureStoreBackend, type SecureStoreScope } from './secure-store';
 import { EncryptedStorageSecureStoreBackend } from './secure-store-backends';
 import { createTokenStorageAdapter } from './token-storage.factory';
@@ -125,12 +127,22 @@ function toTokenStorageConfig(config: SecureStoreConfig | undefined): TokenStora
   return 'memory';
 }
 
+/** A config the schema refuses would keep the secrets in memory, or open a store that cannot hold them. */
+function refuseUnusableConfig(config: SecureStoreConfig | undefined): void {
+  if (config === undefined) return;
+  const issue = secureStoreConfigSchema.safeParse(config).error?.issues[0];
+  if (!issue) return;
+  const where = issue.path.length > 0 ? `secureStore.${issue.path.map(String).join('.')}: ` : '';
+  throw new SecureStoreConfigError(`${where}${issue.message}`);
+}
+
 /**
  * Create a {@link SecureStoreBackend} (plus resolved scope/ttl/kind) for the
  * given `auth.secureStore` config.
  */
 export async function createSecureStore(options: CreateSecureStoreOptions): Promise<ResolvedSecureStore> {
   const { config, pepper, storage, logger } = options;
+  refuseUnusableConfig(config);
   const scope = readScope(config);
   const ttlMs = readTtlMs(config);
 

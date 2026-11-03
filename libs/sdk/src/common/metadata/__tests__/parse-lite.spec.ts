@@ -8,7 +8,8 @@
  * and MCPB build.
  */
 
-import { parseFrontMcpConfigLite } from '../front-mcp.metadata';
+import { transportOptionsSchema } from '../../types/options/transport/schema';
+import { frontMcpBaseSchema, parseFrontMcpConfigLite } from '../front-mcp.metadata';
 
 // Remote-app form is the easiest valid `apps` entry to construct in a test —
 // no decorator metadata required, only the documented fields below.
@@ -43,14 +44,14 @@ describe('parseFrontMcpConfigLite — preserves CLI-relevant fields', () => {
     expect(parsed['authorities']).toBeUndefined();
   });
 
-  it('does not validate the inner shape (pass-through)', () => {
+  it('keeps keys the server schema does not know (pass-through)', () => {
     const input = {
       info: { name: 'demo', version: '0.1.0' },
       apps: minimalApps,
-      // Intentionally weird inner shape — lite parse must NOT reject it.
       authorities: { custom: { engine: 'opa', endpoint: 'http://opa' } },
     };
-    expect(() => parseFrontMcpConfigLite(input as never)).not.toThrow();
+    const parsed = parseFrontMcpConfigLite(input as never) as unknown as Record<string, unknown>;
+    expect(parsed['authorities']).toBe(input.authorities);
   });
 
   it('keeps tasks, which the CLI host reads for its store and runner', () => {
@@ -154,5 +155,82 @@ describe('parseFrontMcpConfigLite — normalizes the top-level redis as the serv
     expect(() => parseLite({ url: 'http://cache.internal:6379' })).toThrow(
       'redis.url must use the redis:// or rediss:// scheme',
     );
+  });
+});
+
+describe('parseFrontMcpConfigLite — validates every key the server validates', () => {
+  const base = { info: { name: 'demo', version: '0.1.0' }, apps: minimalApps };
+  const parseLite = (options: Record<string, unknown>) =>
+    parseFrontMcpConfigLite({ ...base, ...options } as never) as unknown as Record<string, unknown>;
+
+  const issuesOf = (parse: () => unknown): unknown[] => {
+    try {
+      parse();
+    } catch (error) {
+      return (error as { issues: unknown[] }).issues;
+    }
+    return [];
+  };
+
+  const invalid: Array<[string, unknown]> = [
+    ['http', { port: '4100' }],
+    ['pubsub', { port: 6379 }],
+    ['transport', { protocol: 'grpc' }],
+    ['transport', { persistence: { sqlite: { path: '' } } }],
+    ['transport', { persistence: { sqlite: { path: '/tmp/s.sqlite', encryption: { secret: undefined } } } }],
+    ['pagination', { tools: { pageSize: 0 } }],
+    ['fetch', { forwardCallerTokenTo: ['ftp://files.example.com'] }],
+    ['elicitation', { store: true }],
+    ['extApps', { enabled: 'yes' }],
+    ['ui', { servingMode: 'bogus' }],
+    ['throttle', { storage: {} }],
+    ['health', { readyz: { timeoutMs: 0 } }],
+    ['metrics', { format: 'xml' }],
+    ['authorities', { claimsMapping: { roles: 5 } }],
+    ['session', { sessionMode: 'sometimes' }],
+    ['clients', { '': {} }],
+    ['observability', 'yes'],
+    ['registry', { name: 'weather' }],
+    ['channels', { enabled: 'yes' }],
+  ];
+
+  it.each(invalid)('refuses an invalid %s (%j) with the issues of the server', (key, value) => {
+    const serverIssues = issuesOf(() => frontMcpBaseSchema.parse({ ...base, [key]: value }));
+
+    expect(serverIssues).not.toEqual([]);
+    expect(issuesOf(() => parseLite({ [key]: value }))).toEqual(serverIssues);
+  });
+
+  const kept: Array<[string, unknown]> = [
+    ['http', { port: 4100 }],
+    ['pubsub', { url: 'redis://cache.internal:6380' }],
+    ['transport', { persistence: { redis: { host: 'cache.internal' } } }],
+    ['pagination', { tools: { pageSize: 10 } }],
+    ['fetch', { forwardCallerTokenTo: ['https://api.example.com/v1'] }],
+    ['elicitation', { enabled: true }],
+    ['extApps', { enabled: false }],
+    ['ui', { escapeStringResults: true }],
+    ['throttle', { enabled: true, storage: { type: 'memory' } }],
+    ['health', { enabled: false }],
+    ['metrics', { enabled: true }],
+    ['authorities', { claimsMapping: { roles: 'roles' }, custom: { engine: 'opa' } }],
+  ];
+
+  it.each(kept)('keeps a valid %s as given, without the defaults of the server', (key, value) => {
+    expect(parseLite({ [key]: value })[key]).toBe(value);
+  });
+
+  it('gives an unset transport the defaults of the server, as before', () => {
+    expect(parseLite({})['transport']).toEqual(transportOptionsSchema.parse({}));
+  });
+
+  it.each([
+    ['session', { sessionMode: 'stateful' }],
+    ['clients', { 'codex*': { structured: 'only' } }],
+    ['observability', true],
+    ['registry', { name: 'com.acme/weather', description: 'Weather' }],
+    ['channels', { enabled: true }],
+  ])('leaves out a valid %s, which CLI mode does not turn on', (key, value) => {
+    expect(parseLite({ [key]: value })).not.toHaveProperty(key);
   });
 });

@@ -2,6 +2,7 @@ import { createRedisClient, createStorage, StorageConfigError, type SqliteAdapte
 
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobDefinitionStore } from './job-definition.interface';
+import { refuseVercelKvJobStore } from './job-state-store.factory';
 import { MemoryJobDefinitionStore } from './memory-job-definition.store';
 import { RedisJobDefinitionStore } from './redis-job-definition.store';
 import { StorageJobDefinitionStore } from './storage-job-definition.store';
@@ -69,6 +70,7 @@ export async function createJobDefinitionStore(
   }
 
   if (options?.redis) {
+    refuseVercelKvJobStore(options.redis);
     try {
       const { url, host, port, password, db, tls } = options.redis;
       const client = createRedisClient({

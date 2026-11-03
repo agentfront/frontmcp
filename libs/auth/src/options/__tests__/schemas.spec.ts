@@ -346,12 +346,43 @@ describe('secureStoreConfigSchema', () => {
     expect(data['backend']).toBe(backend);
   });
 
-  it('does not preserve an incomplete custom backend', () => {
-    const result = secureStoreConfigSchema.safeParse({ backend: { get: async () => null } });
-    // The incomplete backend fails the custom check; it must NOT round-trip as a
-    // backing (the bare-object member strips the unknown `backend` key).
-    const data = result.success ? (result.data as Record<string, unknown>) : {};
-    expect(data['backend']).toBeUndefined();
+  it.each([
+    [{ sqlite: { path: '' } }, 'secureStore.sqlite.path: Too small: expected string to have >=1 characters'],
+    [
+      { sqlite: { path: '/tmp/s.sqlite', encryption: { secret: undefined } }, scope: 'user' },
+      'secureStore.sqlite.encryption.secret: Invalid input: expected string, received undefined',
+    ],
+    [
+      { redis: { url: 'redis://cache.internal' } },
+      'secureStore.redis.host: Invalid input: expected string, received undefined',
+    ],
+    [{ redis: { host: '' } }, 'secureStore.redis.host: Too small: expected string to have >=1 characters'],
+    [
+      { backend: { get: async () => null } },
+      'secureStore.backend must implement get/set/delete/list (SecureStoreBackend)',
+    ],
+  ])('refuses %j, which it kept in memory, naming the backing', (config, message) => {
+    const result = secureStoreConfigSchema.safeParse(config);
+    const described = result.error?.issues.map(
+      (issue) => (issue.path.length ? `secureStore.${issue.path.join('.')}: ` : '') + issue.message,
+    );
+
+    expect(result.success).toBe(false);
+    expect(described).toEqual([message]);
+  });
+
+  it('refuses an unusable backing where the server reads auth', () => {
+    const result = authOptionsSchema.safeParse({ mode: 'local', secureStore: { redis: { url: 'redis://cache' } } });
+
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error?.issues)).toContain('secureStore.redis.host: Invalid input');
+  });
+
+  it('keeps the memory store for a backing left undefined', () => {
+    const result = secureStoreConfigSchema.safeParse({ sqlite: undefined, scope: 'session' });
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({ sqlite: undefined, scope: 'session' });
   });
 
   it('rejects an invalid scope value', () => {
