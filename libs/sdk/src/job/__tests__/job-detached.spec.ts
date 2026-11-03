@@ -339,6 +339,7 @@ describe('a detached run', () => {
     await expect(refusal).rejects.toHaveProperty('remedy.say', expect.stringMatching(/entry/));
   });
 
+  // The first CLI-mode server of a test run imports the CLI-only modules, which takes seconds under coverage
   it('is refused by a CLI-mode server, whose command (`<bin> job run`) a runner would only run again', async () => {
     const cli = await FrontMcpInstance.createForCli(config());
     try {
@@ -353,7 +354,7 @@ describe('a detached run', () => {
     } finally {
       await cli.shutdown();
     }
-  });
+  }, 30_000);
 
   it('stops within its cancel poll when another process ended its run, such as a runner taken for gone', async () => {
     const server = await open();
