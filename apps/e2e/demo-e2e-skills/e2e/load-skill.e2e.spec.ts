@@ -30,14 +30,14 @@ interface SkillResult {
   id: string;
   name: string;
   description: string;
-  instructions: string;
+  instructions?: string;
   tools: SkillTool[];
   parameters?: SkillParameter[];
   availableTools: string[];
   missingTools: string[];
   isComplete: boolean;
   warning?: string;
-  formattedContent: string;
+  formattedContent?: string;
 }
 
 interface LoadSkillsResult {
@@ -90,18 +90,18 @@ test.describe('loadSkills E2E', () => {
       expect(skill.instructions).toContain('github_add_comment');
     });
 
-    test('should include formatted content for LLM', async ({ mcp }) => {
+    test('should include formatted content for LLM with the markdown format', async ({ mcp }) => {
       const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
+        format: 'markdown',
       });
 
       expect(result).toBeDefined();
 
       const content = result as LoadSkillsResult;
       const skill = content.skills[0];
-      expect(skill.formattedContent).toBeDefined();
       expect(typeof skill.formattedContent).toBe('string');
-      expect(skill.formattedContent.length).toBeGreaterThan(0);
+      expect(skill.formattedContent?.length).toBeGreaterThan(0);
     });
   });
 
@@ -256,9 +256,9 @@ test.describe('loadSkills E2E', () => {
 
       const content = result as LoadSkillsResult;
       const skill = content.skills[0];
-      // Full format includes formattedContent with full skill details
-      expect(skill.formattedContent).toBeDefined();
       expect(skill.id).toBeDefined();
+      expect(skill.instructions).toContain('PR Review Process');
+      expect(skill.formattedContent).toBeUndefined();
     });
 
     test('should return instructions-only format when requested', async ({ mcp }) => {
@@ -271,10 +271,9 @@ test.describe('loadSkills E2E', () => {
 
       const content = result as LoadSkillsResult;
       const skill = content.skills[0];
-      // Instructions-only format has simpler formattedContent
-      expect(skill.formattedContent).toBeDefined();
-      // formattedContent should be the raw instructions
-      expect(skill.formattedContent).toContain('PR Review Process');
+      expect(skill.instructions).toContain('PR Review Process');
+      expect(skill.tools.every((tool) => tool.inputSchema === undefined)).toBe(true);
+      expect(skill.formattedContent).toBeUndefined();
     });
   });
 

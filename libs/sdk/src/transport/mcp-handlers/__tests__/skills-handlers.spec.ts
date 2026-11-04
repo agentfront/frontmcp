@@ -327,10 +327,8 @@ describe('Skills MCP Handlers', () => {
       expect(result.skills).toHaveLength(1);
       // When format is 'instructions-only', inputSchema should not be included
       expect(result.skills[0].tools[0].inputSchema).toBeUndefined();
-      // ... in the markdown either (#1066)
-      expect(result.skills[0].formattedContent).not.toContain('Input Schema');
-      expect(result.skills[0].formattedContent).not.toContain('"foo"');
-      expect(result.skills[0].formattedContent).toContain('Do the thing');
+      expect(result.skills[0].instructions).toBe('Do the thing');
+      expect(result.skills[0].formattedContent).toBeUndefined();
     });
   });
 

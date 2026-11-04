@@ -19,12 +19,12 @@ interface SkillResult {
   id: string;
   name: string;
   description: string;
-  instructions: string;
+  instructions?: string;
   tools: Array<{ name: string; available: boolean }>;
   availableTools: string[];
   missingTools: string[];
   isComplete: boolean;
-  formattedContent: string;
+  formattedContent?: string;
 }
 
 interface LoadSkillsResult {
@@ -124,7 +124,7 @@ test.describe('MCP Skills-Only Mode E2E', () => {
         expect(content.skills).toBeDefined();
         expect(content.skills.length).toBe(1);
         expect(content.skills[0].id).toBe('review-pr');
-        expect(content.skills[0].formattedContent).toBeDefined();
+        expect(content.skills[0].instructions).toBeDefined();
       } finally {
         await client.disconnect();
       }
