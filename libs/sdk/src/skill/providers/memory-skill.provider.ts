@@ -110,7 +110,6 @@ interface SkillDocumentMetadata extends DocumentMetadata {
  * Used internally for storing skills with tags, priority, and visibility.
  */
 interface StoredSkillContent extends SkillContent {
-  tags?: string[];
   priority?: number;
   hideFromDiscovery?: boolean;
   visibility?: SkillVisibility;
@@ -754,9 +753,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
    * We store them in a custom property for now.
    */
   private getSkillTags(skill: SkillContent): string[] {
-    // Tags are stored in the metadata but not directly in SkillContent
-    // We need to access them from the original metadata if available
-    return (skill as StoredSkillContent).tags ?? [];
+    return skill.tags ?? [];
   }
 
   /**
