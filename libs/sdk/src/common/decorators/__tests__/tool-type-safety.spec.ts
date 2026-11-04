@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
+import type { CallToolResult } from '@frontmcp/protocol';
 
 import { Tool, ToolContext } from '../../';
 
@@ -35,6 +36,25 @@ class ValidInputOnly extends ToolContext {
 class ValidWithOutput extends ToolContext {
   async execute(input: { a: number; b: number }) {
     return { result: input.a + input.b };
+  }
+}
+
+// ── Valid: outputSchema + a CallToolResult that reports a failure ──
+
+@Tool({
+  name: 'valid-with-output-error-result',
+  inputSchema: { a: z.number() },
+  outputSchema: { result: z.number(), error: z.string().optional() },
+})
+class ValidWithOutputErrorResult extends ToolContext {
+  async execute(input: { a: number }): Promise<{ result: number } | CallToolResult> {
+    if (input.a >= 0) return { result: input.a };
+    const structured = { result: 0, error: 'a must not be negative' };
+    return {
+      content: [{ type: 'text', text: JSON.stringify(structured) }],
+      structuredContent: structured,
+      isError: true,
+    };
   }
 }
 
@@ -167,6 +187,7 @@ function _testNotToolContext() {
 // Suppress unused variable/function warnings
 void ValidInputOnly;
 void ValidWithOutput;
+void ValidWithOutputErrorResult;
 void ValidEmptySchema;
 void _testExecuteWithNeverParam;
 void ValidWithGuards;

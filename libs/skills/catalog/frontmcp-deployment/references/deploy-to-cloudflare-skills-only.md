@@ -29,6 +29,16 @@ input)` invokes a loaded skill's operation. The bundle is pulled from a SaaS
 endpoint, cached in KV, and refreshed on a Cron Trigger; with
 `managed.enableWebhook`, the SaaS can also push a new bundle to the Worker.
 
+A failed call throws an error that names the API's status and error body
+(compacted JSON or text, redacted, cut at 2 KB), such as `action
+"refundInvoice" failed with status 422: {"error":"refund_too_large"}`;
+`outbound.errorBodies: 'status-only'` names the status alone. `callTool(actionId,
+input, { throwOnError: false })` returns `{ ok, status, data }` instead, `data`
+being the error body on a failure and `status` 0 (with an `error`) when no
+answer came. A workflow that fails is an `isError: true` result with the same
+`structuredContent`. Up to 1.11.0 the error named the status alone, and the
+result had no `isError`.
+
 The meta-tools only show what the caller may use: a skill whose
 `requiredAuthorities` the caller doesn't satisfy is left out of `search_skill`
 (and its catalog) and is `SKILL_NOT_FOUND` for `load_skill`, and `load_skill`
@@ -301,6 +311,8 @@ Action outputs:
 - **Forgetting to declare `signing.replay.nonceKv`.** The cross-validator requires the value to match a binding in `bindings.kvNamespaces[]`. Without it the Worker can't dedupe replays.
 - **Mixing `acme-api` as both a spec id AND an AgentScript namespace.** Dashes aren't valid JS identifiers — add `bindingName: acmeApi` on the spec entry, or rename the spec.
 - **Assuming `notifications/resources/updated` carries no URI.** It does — `notifications/resources/list_changed` is the one with empty params.
+- **Wrapping `callTool` in `try`/`catch`.** AgentScript has none (`Unsupported statement: TryStatement`). Pass `{ throwOnError: false }` and branch on `ok` and `status`.
+- **Expecting the API's error body with `outbound.errorBodies: 'status-only'`.** With it, the thrown error names the status alone, and a `{ throwOnError: false }` result has no `data`.
 
 ## See Also
 

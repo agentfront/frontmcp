@@ -2,6 +2,7 @@ import 'reflect-metadata';
 
 import { type ConcurrencyConfigInput, type RateLimitConfigInput, type TimeoutConfigInput } from '@frontmcp/guard';
 import type z from '@frontmcp/lazy-zod';
+import type { CallToolResult } from '@frontmcp/protocol';
 
 import { parsePackageSpecifier } from '../../esm-loader/package-specifier';
 import { type ToolContext } from '../interfaces';
@@ -356,7 +357,7 @@ type __MustParam<C extends __Ctor, In> =
               actual_parameter_type: __Param<C>;
             };
 
-// execute return must be Out or Promise<Out> (and not be any)
+// execute return must be Out or Promise<Out>, or a CallToolResult the flow sends as is (and not be any)
 type __MustReturn<C extends __Ctor, Out> =
   // 1. If 'Out' (from schema) is 'any', no check is needed.
   __IsAny<Out> extends true
@@ -364,8 +365,8 @@ type __MustReturn<C extends __Ctor, Out> =
     : // 2. If the actual return type is 'any', reject it.
       __IsAny<__Unwrap<__Return<C>>> extends true
       ? { 'execute() return type error': "Return type must not be 'any'."; expected_output_type: Out }
-      : // 3. Check if the unwrapped return type is assignable to Out.
-        __Unwrap<__Return<C>> extends Out
+      : // 3. Check if the unwrapped return type is assignable to Out (or is a complete CallToolResult).
+        __Unwrap<__Return<C>> extends Out | CallToolResult
         ? unknown // OK
         : {
             'execute() return type error': "The method's return type is not assignable to the expected output schema type.";

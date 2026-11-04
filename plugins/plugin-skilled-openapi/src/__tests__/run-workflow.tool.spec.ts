@@ -9,11 +9,13 @@
 import 'reflect-metadata';
 
 import { SkillAuditWriterToken } from '@frontmcp/adapters/skills';
+import type { CallToolResult } from '@frontmcp/sdk';
 
 import { HiddenOpRegistry, type HiddenOpEntry } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
 import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
 import { BundleSyncService } from '../sync/bundle-sync.service';
+import { runWorkflowDescription, type RunWorkflowOutput } from '../tools/run-workflow.schema';
 import RunWorkflowTool from '../tools/run-workflow.tool';
 
 // ── Controllable mocks (factories may only reference `mock`-prefixed vars) ──
@@ -21,8 +23,9 @@ import RunWorkflowTool from '../tools/run-workflow.tool';
 type FakeStats = { duration: number; toolCallCount: number; iterationCount: number };
 type FakeResult = { success: boolean; value?: unknown; error?: { message: string }; stats: FakeStats };
 type FakeCtx = { toolHandler: (actionId: string, input: Record<string, unknown>) => Promise<unknown> };
+type TransformConfig = { transformLoops?: boolean; additionalIdentifiers?: string[] };
 
-let mockTransformImpl: (code: string, cfg?: { transformLoops?: boolean }) => string;
+let mockTransformImpl: (code: string, cfg?: TransformConfig) => string;
 let mockExecuteImpl: (code: string, ctx: FakeCtx) => Promise<FakeResult>;
 // When set, the mocked `@enclave-vm/core/worker` module throws on (re)load,
 // simulating the optional sandbox peer being absent. Re-evaluated only after
@@ -32,7 +35,7 @@ let mockExecuteImpl: (code: string, ctx: FakeCtx) => Promise<FakeResult>;
 let mockEnclaveCoreThrows = false;
 
 jest.mock('@enclave-vm/ast', () => ({
-  transformAgentScript: (code: string, cfg?: { transformLoops?: boolean }) => mockTransformImpl(code, cfg),
+  transformAgentScript: (code: string, cfg?: TransformConfig) => mockTransformImpl(code, cfg),
 }));
 jest.mock('@enclave-vm/core/worker', () => {
   if (mockEnclaveCoreThrows) throw new Error('Cannot find module @enclave-vm/core/worker');
@@ -135,6 +138,17 @@ function makeRunWorkflowThis(
 
 const run = (ctx: RunWorkflowTool, script: string) => RunWorkflowTool.prototype.execute.call(ctx, { script });
 
+/** A failed run comes back as an error result; its structured content is the workflow's output. */
+function isErrorResult(result: RunWorkflowOutput | CallToolResult): result is CallToolResult {
+  return 'isError' in result && result.isError === true;
+}
+
+/** The workflow's output, whether the run succeeded or came back as an error result. */
+async function runOutput(ctx: RunWorkflowTool, script: string): Promise<RunWorkflowOutput> {
+  const result = await run(ctx, script);
+  return isErrorResult(result) ? (result.structuredContent as RunWorkflowOutput) : result;
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockEnclaveCoreThrows = false;
@@ -147,7 +161,16 @@ beforeEach(() => {
   });
 });
 
+/** The longest tool description a server lists without a manifest lint finding (`instructionsBudget.toolDescription`). */
+const TOOL_DESCRIPTION_BUDGET = 1024;
+
 describe('run_workflow', () => {
+  it('has a description within the tool-description budget, naming throwOnError and the error body', () => {
+    expect(runWorkflowDescription.length).toBeLessThanOrEqual(TOOL_DESCRIPTION_BUDGET);
+    expect(runWorkflowDescription).toContain('{ throwOnError: false }');
+    expect(runWorkflowDescription).toContain('failed with status 404: {"error":"not found"}');
+  });
+
   it('returns success + mapped stats for a completed workflow', async () => {
     const ctx = makeRunWorkflowThis();
     const res = await run(ctx, 'return 1');
@@ -158,21 +181,33 @@ describe('run_workflow', () => {
     });
   });
 
-  it('passes transformLoops:false to the AgentScript transform', async () => {
-    const seen: Array<{ transformLoops?: boolean } | undefined> = [];
+  it('passes transformLoops:false to the AgentScript transform, and leaves callTool to the prelude', async () => {
+    const seen: Array<TransformConfig | undefined> = [];
     mockTransformImpl = (code, cfg) => {
       seen.push(cfg);
       return code;
     };
     await run(makeRunWorkflowThis(), 'return 1');
-    expect(seen[0]).toEqual({ transformLoops: false });
+    expect(seen[0]).toEqual({ transformLoops: false, additionalIdentifiers: ['callTool'] });
+  });
+
+  it('runs the program after a callTool that takes options', async () => {
+    let interpreted = '';
+    mockTransformImpl = () => 'async function __ag_main() { return 1; }';
+    mockExecuteImpl = async (code) => {
+      interpreted = code;
+      return { success: true, value: 1, stats: { duration: 0, toolCallCount: 0, iterationCount: 1 } };
+    };
+    await run(makeRunWorkflowThis(), 'return 1');
+    expect(interpreted).toMatch(/^async function callTool\(actionId, input, options\) \{/);
+    expect(interpreted.endsWith('\nasync function __ag_main() { return 1; }')).toBe(true);
   });
 
   it('returns failure when AgentScript is rejected (Error)', async () => {
     mockTransformImpl = () => {
       throw new Error('forbidden token');
     };
-    const res = await run(makeRunWorkflowThis(), 'eval("x")');
+    const res = await runOutput(makeRunWorkflowThis(), 'eval("x")');
     expect(res.success).toBe(false);
     expect(res.error).toBe('AgentScript rejected: forbidden token');
   });
@@ -181,23 +216,29 @@ describe('run_workflow', () => {
     mockTransformImpl = () => {
       throw 'plain string blow-up';
     };
-    const res = await run(makeRunWorkflowThis(), 'bad');
+    const res = await runOutput(makeRunWorkflowThis(), 'bad');
     expect(res.success).toBe(false);
     expect(res.error).toBe('AgentScript rejected: plain string blow-up');
   });
 
-  it('surfaces a failed workflow run with its error message + stats', async () => {
+  it('reports a failed workflow run as an error result, with its error message + stats as structured content', async () => {
     mockExecuteImpl = async () => ({
       success: false,
       error: { message: 'boom at step 4' },
       stats: { duration: 7, toolCallCount: 1, iterationCount: 9 },
     });
     const res = await run(makeRunWorkflowThis(), 'return 1');
+    const output = { success: false, error: 'boom at step 4', stats: { durationMs: 7, toolCalls: 1, steps: 9 } };
     expect(res).toEqual({
-      success: false,
-      error: 'boom at step 4',
-      stats: { durationMs: 7, toolCalls: 1, steps: 9 },
+      content: [{ type: 'text', text: JSON.stringify(output) }],
+      structuredContent: output,
+      isError: true,
     });
+  });
+
+  it('answers a completed workflow without isError', async () => {
+    const res = await run(makeRunWorkflowThis(), 'return 1');
+    expect(res).not.toHaveProperty('isError');
   });
 
   it('falls back to a generic message when a failed run has no error', async () => {
@@ -205,7 +246,7 @@ describe('run_workflow', () => {
       success: false,
       stats: { duration: 0, toolCallCount: 0, iterationCount: 0 },
     });
-    const res = await run(makeRunWorkflowThis(), 'return 1');
+    const res = await runOutput(makeRunWorkflowThis(), 'return 1');
     expect(res.success).toBe(false);
     expect(res.error).toBe('workflow failed');
   });
@@ -221,7 +262,7 @@ describe('run_workflow', () => {
       return { success: true, value: bridged, stats: { duration: 1, toolCallCount: 1, iterationCount: 1 } };
     };
 
-    const res = await run(makeRunWorkflowThis({ hiddenOps }), 'return await callTool("createInvoice", {})');
+    const res = await runOutput(makeRunWorkflowThis({ hiddenOps }), 'return await callTool("createInvoice", {})');
     expect(bridged).toEqual({ id: 'inv_1' });
     expect(res.success).toBe(true);
     expect(mockExecuteSkillAction).toHaveBeenCalledWith(
@@ -312,6 +353,111 @@ describe('run_workflow', () => {
   });
 });
 
+describe('run_workflow — what a failed action call gives the script', () => {
+  const stats = { duration: 1, toolCallCount: 1, iterationCount: 1 };
+  const refundTooLarge = {
+    error: 'refund_too_large',
+    message: 'Refund 500 exceeds the paid amount 120.',
+    maxRefund: 120,
+  };
+  const QUIET = { __callToolOptions: { throwOnError: false } };
+
+  const workflowWithRefunds = (config?: SkilledOpenApiConfig) => {
+    const hiddenOps = new HiddenOpRegistry();
+    hiddenOps.set(buildEntry('billing', 'refundInvoice'));
+    return makeRunWorkflowThis({ hiddenOps, config });
+  };
+
+  /** What the script's one call to `actionId` resolved to, or the message it threw. */
+  async function callFromScript(
+    ctx: RunWorkflowTool,
+    actionId: string,
+    input: Record<string, unknown>,
+  ): Promise<{ value?: unknown; thrown?: string }> {
+    let outcome: { value?: unknown; thrown?: string } = {};
+    mockExecuteImpl = async (_code, fakeCtx) => {
+      outcome = await fakeCtx.toolHandler(actionId, input).then(
+        (value) => ({ value }),
+        (error: Error) => ({ thrown: error.message }),
+      );
+      return { success: true, stats };
+    };
+    await run(ctx, 'x');
+    return outcome;
+  }
+
+  it("throws an HTTP failure with the API's error body", async () => {
+    mockExecuteSkillAction.mockResolvedValue({ ok: false, status: 422, data: refundTooLarge });
+
+    const outcome = await callFromScript(workflowWithRefunds(), 'refundInvoice', { amount: 500 });
+
+    expect(outcome.thrown).toBe(`action "refundInvoice" failed with status 422: ${JSON.stringify(refundTooLarge)}`);
+  });
+
+  it("throws an HTTP failure with its status alone under errorBodies 'status-only'", async () => {
+    mockExecuteSkillAction.mockResolvedValue({ ok: false, status: 422, data: refundTooLarge });
+    const config = baseConfig({
+      outbound: {
+        allowPrivateNetworks: true,
+        maxConcurrencyPerHost: 10,
+        defaultTimeoutMs: 5_000,
+        defaultMaxResponseBytes: 256 * 1024,
+        allowHttp: true,
+        errorBodies: 'status-only',
+      },
+    });
+
+    const outcome = await callFromScript(workflowWithRefunds(config), 'refundInvoice', { amount: 500 });
+
+    expect(outcome.thrown).toBe('action "refundInvoice" failed with status 422');
+  });
+
+  it('with throwOnError false, returns ok, the status and the data of a success', async () => {
+    mockExecuteSkillAction.mockResolvedValue({ ok: true, status: 201, data: { refundId: 'rfnd_1' } });
+
+    const outcome = await callFromScript(workflowWithRefunds(), 'refundInvoice', { amount: 50, ...QUIET });
+
+    expect(outcome.value).toEqual({ ok: true, status: 201, data: { refundId: 'rfnd_1' } });
+    expect(mockExecuteSkillAction).toHaveBeenCalledWith(expect.objectContaining({ input: { amount: 50 } }));
+  });
+
+  it("with throwOnError false, returns an HTTP failure's status and the API's error body as data", async () => {
+    mockExecuteSkillAction.mockResolvedValue({ ok: false, status: 422, data: refundTooLarge });
+
+    const outcome = await callFromScript(workflowWithRefunds(), 'refundInvoice', { amount: 500, ...QUIET });
+
+    expect(outcome.value).toEqual({ ok: false, status: 422, data: refundTooLarge });
+  });
+
+  it('with throwOnError false, returns status 0 and the reason of a failure with no answer', async () => {
+    mockExecuteSkillAction.mockResolvedValue({ ok: false, status: 0, error: 'input validation failed: id: Required' });
+
+    const outcome = await callFromScript(workflowWithRefunds(), 'refundInvoice', QUIET);
+
+    expect(outcome.value).toEqual({ ok: false, status: 0, error: 'input validation failed: id: Required' });
+  });
+
+  it('with throwOnError false, returns status 0 for an unknown action', async () => {
+    const outcome = await callFromScript(workflowWithRefunds(), 'ghost', QUIET);
+
+    expect(outcome.value).toEqual({
+      ok: false,
+      status: 0,
+      error: expect.stringMatching(/^unknown action "ghost"/),
+    });
+  });
+
+  it('throws with any other options', async () => {
+    mockExecuteSkillAction.mockResolvedValue({ ok: false, status: 404, data: { error: 'invoice not found' } });
+
+    const outcome = await callFromScript(workflowWithRefunds(), 'refundInvoice', {
+      __callToolOptions: { throwOnError: true },
+    });
+
+    expect(outcome.thrown).toBe('action "refundInvoice" failed with status 404: {"error":"invoice not found"}');
+  });
+});
+
 describe('run_workflow — the requests of a workflow that has ended', () => {
   const stats = { duration: 1, toolCallCount: 1, iterationCount: 1 };
   const WORKFLOW_ENDED = 'request aborted: the workflow ended before the request finished';
@@ -343,7 +489,7 @@ describe('run_workflow — the requests of a workflow that has ended', () => {
       return { success: false, error: { message: 'Execution timed out after 8000ms' }, stats };
     };
 
-    const res = await run(workflowWithInvoices(), 'return await callTool("createInvoice", {})');
+    const res = await runOutput(workflowWithInvoices(), 'return await callTool("createInvoice", {})');
 
     expect(res).toMatchObject({ success: false, error: 'Execution timed out after 8000ms' });
     await expect(inFlight).resolves.toBe(WORKFLOW_ENDED);
@@ -427,7 +573,9 @@ describe('run_workflow — enclave sandbox unavailable', () => {
       authInfo: { user: { sub: 'u' } },
     } as unknown as RunWorkflowTool;
     const res = await IsolatedTool.prototype.execute.call(ctx, { script: 'return 1' });
-    expect(res.success).toBe(false);
-    expect(res.error).toMatch(/@enclave-vm sandbox is not installed/);
+    expect(res).toMatchObject({
+      isError: true,
+      structuredContent: { success: false, error: expect.stringMatching(/@enclave-vm sandbox is not installed/) },
+    });
   });
 });

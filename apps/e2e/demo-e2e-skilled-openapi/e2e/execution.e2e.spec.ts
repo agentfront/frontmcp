@@ -10,6 +10,7 @@ import {
   runWorkflow,
   sharedOperationAccess,
   SKILLED_SERVER,
+  type ActionOutcome,
 } from './helpers/skilled-client';
 
 const environment = new ProductionEnvironment();
@@ -103,10 +104,64 @@ test.describe('errors the agent can act on (E2)', () => {
     expect(environment.billingApi.requests).toEqual([]);
   });
 
-  test('a 4xx answer names the status', async ({ mcp }) => {
+  test("a 4xx answer names the status and carries the API's error body", async ({ mcp }) => {
     const result = await runWorkflow(mcp, "return await callTool('getInvoice', { id: 'inv_missing' });");
 
-    expect(result).toMatchObject({ success: false, error: 'action "getInvoice" failed with status 404' });
+    expect(result).toMatchObject({
+      success: false,
+      error: 'action "getInvoice" failed with status 404: {"error":"invoice not found"}',
+    });
+  });
+
+  test("a 422 answer's JSON body reaches the model's error text", async ({ server, auth }) => {
+    const result = await runWorkflow(
+      await asAdmin({ server, auth }),
+      [
+        "const created = await callTool('createInvoice', { customerId: 'cus_e2e', amount: 120 });",
+        "return await callTool('refundInvoice', { id: created.id, amount: 500 });",
+      ].join('\n'),
+    );
+
+    expect(result).toMatchObject({
+      success: false,
+      error:
+        'action "refundInvoice" failed with status 422: {"error":"refund_too_large","message":"Refund 500 exceeds the paid amount 120.","maxRefund":120}',
+    });
+  });
+
+  test('a script with throwOnError false branches on a 404 and returns a fallback', async ({ mcp }) => {
+    const result = await runWorkflow(
+      mcp,
+      [
+        "const found = await callTool('getInvoice', { id: 'inv_missing' }, { throwOnError: false });",
+        'if (!found.ok && found.status === 404) return { invoice: null, reason: found.data.error, outcome: found };',
+        'return { invoice: found.data };',
+      ].join('\n'),
+    );
+
+    const outcome: ActionOutcome = { ok: false, status: 404, data: { error: 'invoice not found' } };
+    expect(result).toMatchObject({ success: true, value: { invoice: null, reason: 'invoice not found', outcome } });
+  });
+
+  test('a failed workflow is an error result, with the same structured content', async ({ mcp }) => {
+    const result = await mcp.tools.call('run_workflow', {
+      script: "return await callTool('getInvoice', { id: 'inv_missing' });",
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.raw.isError).toBe(true);
+    expect(result.raw.structuredContent).toMatchObject({
+      success: false,
+      error: 'action "getInvoice" failed with status 404: {"error":"invoice not found"}',
+      stats: { toolCalls: 1 },
+    });
+  });
+
+  test('a workflow that succeeds is not an error result', async ({ mcp }) => {
+    const result = await mcp.tools.call('run_workflow', { script: "return await callTool('getAccountPlan', {});" });
+
+    expect(result.isError).toBe(false);
+    expect(result.raw.isError).toBeFalsy();
   });
 
   test("an answer that doesn't match the action's output schema", async ({ mcp }) => {

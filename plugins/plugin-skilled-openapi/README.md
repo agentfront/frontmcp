@@ -73,12 +73,39 @@ loading a skill, the model runs its operations with a script:
 | -------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `search_skill` | `query`, `limit?` (default 20), `tags?`, `notQuery?` | Searches the skills and returns `{ skills: [{ skillId, name, description, score, bundleVersion }] }`, where `bundleVersion` is the version of the bundle the skill comes from. Its description lists the skills the caller may use, so the model sees what the server can do, and loads a skill it names with `load_skill` directly, without searching.           |
 | `load_skill`   | `skillId`, or `skillIds` (up to 10)                  | Returns the skill's markdown instructions and its `actions`, with their input and output JSON Schemas: the `actionId`s a script calls. `skillId` takes the name the catalog shows, or an id; `skillIds` loads several, under `skills`. Its description tells the model to load each skill once per conversation, and again only when its `bundleVersion` changes. |
-| `run_workflow` | `script`                                             | Runs an AgentScript program (a subset of JavaScript) in the `@enclave-vm` sandbox. Each `await callTool(actionId, input)` calls an operation; the script's `return` value is the result.                                                                                                                                                                          |
+| `run_workflow` | `script`                                             | Runs an AgentScript program (a subset of JavaScript) in the `@enclave-vm` sandbox. Each `await callTool(actionId, input)` calls an operation, and `callTool(actionId, input, { throwOnError: false })` returns `{ ok, status, data }` instead of throwing; the script's `return` value is the result.                                                             |
 
 For each `callTool`, the plugin checks the caller against the operation's and skill's `requiredAuthorities`, validates
 the input against the operation's `inputSchema`, sends the request with the credential from the bundle's auth binding,
-and checks a JSON answer against `outputSchema`. The first failure ends the script with `success: false`. A script may
-make up to 25 calls and run for up to 8 seconds.
+and checks a JSON answer against `outputSchema`. A failed call throws, which ends the script with `success: false`. A
+script may make up to 25 calls and run for up to 8 seconds.
+
+When your API answers with an error status, the error includes its error body, so the model can correct the call. A
+JSON body is compacted, a text body is kept as it is, and a body over 2 KB is cut and ends with `…`. Credentials found
+in it (a `Bearer` value, a JWT, the field the operation's credential is sent in) are replaced with `[REDACTED]`:
+
+```text
+action "refundInvoice" failed with status 422: {"error":"refund_too_large","message":"Refund 500 exceeds the paid amount 120.","maxRefund":120}
+```
+
+Set `outbound.errorBodies: 'status-only'` for an API whose error bodies hold internal details: the error then names the
+status alone, as up to 1.11.0.
+
+To branch on a failure instead, call `callTool(actionId, input, { throwOnError: false })`. It returns
+`{ ok, status, data }`: on success, `ok: true` and the data; on an error status, `ok: false`, the status and the error
+body as `data` (a body over 2 KB as its cut text). A failure with no answer (authorization, input validation, timeout,
+abort, an unknown action) has `status: 0` and an `error` string. AgentScript has no `try`/`catch`. The call is checked
+and audited the same way: a failure is still audited as one.
+
+```js
+const invoice = await callTool('getInvoice', { id: 'INV-1' }, { throwOnError: false });
+if (invoice.status === 404) return { invoice: null };
+return { invoice: invoice.data };
+```
+
+A workflow that fails (`success: false`) is an error result: `isError: true`, with the same `structuredContent`, so
+an MCP client sees a failed tool call and the generated CLI's `run-workflow` exits 1. Up to 1.11.0 the result had no
+`isError`, and the CLI exited 0.
 
 When a script ends, whatever ends it, the plugin aborts the requests it still has in flight and sends none after, so a
 request can't reach your API once the model has been told the workflow failed. A cancelled `run_workflow` call does
@@ -150,14 +177,15 @@ for a bad one.
 
 `outbound`:
 
-| Field                     | Default  | Description                                                                                                             |
-| ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `allowHttp`               | `false`  | Allow `http:` services. `dev: true` turns it on.                                                                        |
-| `allowPrivateNetworks`    | `false`  | Allow services on private and loopback addresses. Link-local and cloud metadata addresses stay blocked. Logs a warning. |
-| `defaultTimeoutMs`        | `30000`  | How long a request may take, in milliseconds. An operation's `timeoutMs` overrides it.                                  |
-| `defaultMaxResponseBytes` | `262144` | The largest response read (256 KB). An operation's `maxResponseBytes` overrides it.                                     |
-| `maxConcurrencyPerHost`   | `10`     | Requests in flight to one host; more wait their turn.                                                                   |
-| `egressProxy`             |          | A proxy URL every request to your API goes through. Needs `undici` on Node.js.                                          |
+| Field                     | Default     | Description                                                                                                                         |
+| ------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `allowHttp`               | `false`     | Allow `http:` services. `dev: true` turns it on.                                                                                    |
+| `allowPrivateNetworks`    | `false`     | Allow services on private and loopback addresses. Link-local and cloud metadata addresses stay blocked. Logs a warning.             |
+| `defaultTimeoutMs`        | `30000`     | How long a request may take, in milliseconds. An operation's `timeoutMs` overrides it.                                              |
+| `defaultMaxResponseBytes` | `262144`    | The largest response read (256 KB). An operation's `maxResponseBytes` overrides it.                                                 |
+| `maxConcurrencyPerHost`   | `10`        | Requests in flight to one host; more wait their turn.                                                                               |
+| `egressProxy`             |             | A proxy URL every request to your API goes through. Needs `undici` on Node.js.                                                      |
+| `errorBodies`             | `'include'` | `'include'` adds your API's error body, redacted and cut to 2 KB, to a failed call's error; `'status-only'` names the status alone. |
 
 ### Sources
 
@@ -233,7 +261,9 @@ response compiled to `{ "type": "null" }`, which every JSON answer failed, and e
   `unprotectedOps: 'deny'` in production. Each caller is shown only the skills and actions their rules allow. A skill's
   rule doesn't protect an operation that another skill, without that rule, also lists: put the rule on the operation.
 - **Credentials.** Credentials stay on the server: the plugin adds them to each request, and the script gets only the
-  API's answer. Redirects aren't followed, so a credential isn't sent elsewhere.
+  API's answer. Redirects aren't followed, so a credential isn't sent elsewhere. An error body your API echoes a
+  credential in has it redacted; use `outbound.errorBodies: 'status-only'` when error bodies hold other internal
+  details.
 - **Outbound requests.** URLs must be `https:` (unless `allowHttp`) and on the operation's service host. The host's
   addresses are checked before sending: private and loopback addresses are refused unless `allowPrivateNetworks`, and
   link-local and cloud metadata addresses always. Responses are size- and time-limited.
