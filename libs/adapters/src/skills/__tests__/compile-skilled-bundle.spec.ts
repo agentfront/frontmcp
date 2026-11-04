@@ -63,7 +63,12 @@ const billingSpec = {
     '/v1/invoices/{id}': {
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       head: { operationId: 'invoiceExists', responses: { '200': { description: 'The invoice exists' } } },
-      delete: { operationId: 'voidInvoice', responses: { '204': { description: 'Voided' } } },
+      delete: {
+        operationId: 'voidInvoice',
+        tags: ['invoices', 'destructive'],
+        'x-frontmcp': { tags: ['destructive', 'irreversible'] },
+        responses: { '204': { description: 'Voided' } },
+      },
       put: { operationId: 'resetInvoice', responses: { '205': { description: 'Reset' } } },
       patch: {
         operationId: 'patchInvoice',
@@ -165,11 +170,22 @@ describe('compileSkilledBundleFromOpenApi', () => {
     ]);
   });
 
+  it("keeps an operation's OpenAPI tags and x-frontmcp tags, each once, and no tags for an operation without any", async () => {
+    const operations = await compileOperations(['voidInvoice', 'getAccountPlan']);
+
+    expect(operations['voidInvoice']?.tags).toEqual(['invoices', 'destructive', 'irreversible']);
+    expect(operations['getAccountPlan']).not.toHaveProperty('tags');
+  });
+
   it('builds a bundle the strict bundle schema accepts', async () => {
-    const bundle = await compileSkilledBundleFromOpenApi(billingSpec, [skillFor(['listInvoices', 'getAccountPlan'])], {
-      bundleId: 'e2e:billing',
-      version: '1.0.0',
-    });
+    const bundle = await compileSkilledBundleFromOpenApi(
+      billingSpec,
+      [skillFor(['listInvoices', 'getAccountPlan', 'voidInvoice'])],
+      {
+        bundleId: 'e2e:billing',
+        version: '1.0.0',
+      },
+    );
     const parsed = resolvedBundleSchema.parse(bundle);
 
     expect(crossValidate(parsed)).toEqual({ ok: true });

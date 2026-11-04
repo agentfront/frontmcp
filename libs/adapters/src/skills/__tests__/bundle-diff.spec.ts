@@ -121,6 +121,17 @@ describe('diffBundles', () => {
     expect(diff.changedOperationIds).toEqual(['o1']);
   });
 
+  it("detects changed operation when its tags change, which the plugin's confirm option matches", () => {
+    const a = buildBundle();
+    const b = buildBundle({
+      operations: {
+        o1: { ...a.operations['o1']!, tags: ['destructive'] },
+      },
+    });
+    const diff = diffBundles(a, b);
+    expect(diff.changedOperationIds).toEqual(['o1']);
+  });
+
   it('formats summary for non-no-op diffs', () => {
     const a = buildBundle();
     const b = buildBundle({ skills: [] });
