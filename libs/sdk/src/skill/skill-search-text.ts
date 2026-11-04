@@ -192,8 +192,29 @@ export function skillSearchText(skill: SkillContent): string {
   return parts.join(' ');
 }
 
-/** A query's terms for {@link queryTermShare}: its lowercase words that aren't stop words. */
-export function queryTerms(query: string): string[] {
+/** Splits text into the terms the skill index counts. */
+export type SkillTokenizer = (text: string) => string[];
+
+/**
+ * The id the skill index records for its tokenizer in snapshots, joined with the id of the vectoriadb tokenizer it
+ * wraps. Change it whenever {@link skillTokenizer} gives other terms, so cached snapshots are re-indexed.
+ */
+export const SKILL_TOKENIZER_ID = 'frontmcp-skills-1';
+
+/**
+ * The skill index's tokenizer: vectoriadb's, which keeps the letters of every script (#1065), without stop words
+ * (#1061), for the index and the query alike.
+ */
+export function skillTokenizer(tokenize: SkillTokenizer): SkillTokenizer {
+  return (text) => tokenize(text).filter((term) => !SKILL_STOP_WORDS.has(term));
+}
+
+/**
+ * A query's terms for {@link queryTermShare}: its tokenizer's terms when there is one, or else its lowercase words
+ * that aren't stop words.
+ */
+export function queryTerms(query: string, tokenize?: SkillTokenizer): string[] {
+  if (tokenize) return [...new Set(tokenize(query))];
   return query
     .toLowerCase()
     .split(/\s+/)
@@ -202,11 +223,14 @@ export function queryTerms(query: string): string[] {
 
 /**
  * The share of a query's terms that the text contains, from 0 to 1: the score of the keyword matches that back up
- * the index (a skill the index has no terms for, or one registered at runtime that it hasn't indexed yet).
+ * the index (a skill the index has no terms for, or one registered at runtime that it hasn't indexed yet). A term
+ * matches a part of a word, so `refund` matches `refunds`. With a tokenizer the text is matched as the index sees it,
+ * its words folded and split the same way as the query's (`vogel` matches `Vögel`).
  */
-export function queryTermShare(terms: readonly string[], text: string): number {
+export function queryTermShare(terms: readonly string[], text: string, tokenize?: SkillTokenizer): number {
   if (terms.length === 0) return 0;
-  const haystack = text.toLowerCase();
+  // Terms hold no spaces, so a term found in the space-joined terms lies within one of them
+  const haystack = tokenize ? ` ${tokenize(text).join(' ')} ` : text.toLowerCase();
   return terms.filter((term) => haystack.includes(term)).length / terms.length;
 }
 
@@ -215,8 +239,12 @@ export function queryTermShare(terms: readonly string[], text: string): number {
  * The keyword matches subtract `negativeWeight` times this from their score, as the index does with its own
  * similarity, so a skill the anti-query demotes stays demoted.
  */
-export function negativeQueryShare(negativeQuery: string | readonly string[] | undefined, text: string): number {
+export function negativeQueryShare(
+  negativeQuery: string | readonly string[] | undefined,
+  text: string,
+  tokenize?: SkillTokenizer,
+): number {
   if (negativeQuery === undefined) return 0;
   const queries = typeof negativeQuery === 'string' ? [negativeQuery] : negativeQuery;
-  return queries.reduce((max, query) => Math.max(max, queryTermShare(queryTerms(query), text)), 0);
+  return queries.reduce((max, query) => Math.max(max, queryTermShare(queryTerms(query, tokenize), text, tokenize)), 0);
 }

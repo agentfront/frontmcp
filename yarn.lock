@@ -2563,7 +2563,7 @@ __metadata:
     "@frontmcp/sdk": "npm:1.11.0"
     acorn: "npm:^8.15.0"
     reflect-metadata: "npm:^0.2.2"
-    vectoriadb: "npm:^2.3.3"
+    vectoriadb: "npm:^2.3.4"
   peerDependencies:
     "@frontmcp/lazy-zod": 1.11.0
     "@frontmcp/plugin-cache": 1.11.0
@@ -2738,7 +2738,7 @@ __metadata:
     reflect-metadata: "npm:^0.2.2"
     semver: "npm:^7.6.0"
     typescript: "npm:^5.9.3"
-    vectoriadb: "npm:^2.3.3"
+    vectoriadb: "npm:^2.3.4"
   peerDependencies:
     "@anthropic-ai/sdk": ^0.30.0 || ^0.78.0
     "@enclave-vm/core": ^2.16.0
@@ -2868,7 +2868,7 @@ __metadata:
     tslib: "npm:^2.8.1"
     typescript: "npm:~5.9.2"
     typescript-eslint: "npm:^8.61.0"
-    vectoriadb: "npm:^2.3.3"
+    vectoriadb: "npm:^2.3.4"
     verdaccio: "npm:6.7.2"
     vite: "npm:^8.0.16"
     webpack: "npm:^5.101.3"
@@ -13060,7 +13060,7 @@ __metadata:
     tslib: "npm:^2.3.0"
     tsx: "npm:^4.20.6"
     typescript: "npm:^5.5.3"
-    vectoriadb: "npm:^2.3.3"
+    vectoriadb: "npm:^2.3.4"
     yauzl: "npm:^3.2.0"
     yazl: "npm:^3.3.1"
   bin:
@@ -22753,9 +22753,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"vectoriadb@npm:^2.3.3":
-  version: 2.3.3
-  resolution: "vectoriadb@npm:2.3.3"
+"vectoriadb@npm:^2.3.4":
+  version: 2.3.4
+  resolution: "vectoriadb@npm:2.3.4"
   dependencies:
     tslib: "npm:^2.8.1"
   peerDependencies:
@@ -22763,7 +22763,7 @@ __metadata:
   peerDependenciesMeta:
     "@huggingface/transformers":
       optional: true
-  checksum: 10c0/a58edd9eccb513dc0e7b21025461ea80395f7e305c4e1fe38531be38dbfd94f6fd1b24d3e4dea70edf8b91cfee7c6d539ca4c909ce96195e14b26f692ac7ba5d
+  checksum: 10c0/737de9fa3912830fa437881aab45d653182c1d8dce236840622617f2b471c9bbec1ea448c8f5a78bc3fc61cb5fd77582c73dc1a77bca6376961847b398ee8461
   languageName: node
   linkType: hard
 
