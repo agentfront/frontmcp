@@ -11,7 +11,7 @@ import { mkdtemp, realpath, rm } from '@frontmcp/utils';
 
 export const workspaceRoot = resolve(__dirname, '../../../../..');
 export const fixtureDir = resolve(__dirname, '../../fixture');
-export const OPTIONAL_PEERS = ['openai', '@anthropic-ai/sdk', '@vercel/kv', '@upstash/redis', '@enclave-vm/core'];
+export const OPTIONAL_PEERS = ['openai', '@anthropic-ai/sdk', '@vercel/kv', '@upstash/redis'];
 
 // The modules create() always loads with import(): the server
 export const SERVER_MODULES = ['front-mcp/front-mcp.mjs'];
@@ -207,12 +207,13 @@ export async function bundleAsWorker(entryFile: string, outfile: string): Promis
 /**
  * A page's (`target: 'web'`) or a browser Web Worker's (`target: 'webworker'`: the `worker` and `browser` conditions)
  * bundle of the entry from the built packages, as webpack 5 makes it with no Node fallbacks: one file, with optional
- * peers stubbed. Returns its inputs.
+ * peers stubbed and the app's own `plugins` added. Returns its inputs.
  */
 export async function bundleWithWebpack(
   target: 'web' | 'webworker',
   entryFile: string,
   outfile: string,
+  plugins: NonNullable<webpack.Configuration['plugins']> = [],
 ): Promise<string[]> {
   const compiler = webpack({
     context: workspaceRoot,
@@ -224,7 +225,7 @@ export async function bundleWithWebpack(
       alias: Object.fromEntries(OPTIONAL_PEERS.map((peer) => [`${peer}$`, resolve(fixtureDir, 'missing-peer.mjs')])),
     },
     optimization: { minimize: false, concatenateModules: false },
-    plugins: [new webpack.optimize.LimitChunkCountPlugin({ maxChunks: 1 })],
+    plugins: [new webpack.optimize.LimitChunkCountPlugin({ maxChunks: 1 }), ...plugins],
   });
   const stats = await new Promise<webpack.Stats>((resolveStats, rejectStats) =>
     compiler.run((error, result) => (result ? resolveStats(result) : rejectStats(error))),
