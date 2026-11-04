@@ -20,6 +20,8 @@ import { InvalidSkillError, PublicMcpError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { EntryLineageIndex, ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
+import type { SkillDecisionRanker } from './decision/skill-decision.ranker';
+import type { SkillDecisionOptions } from './decision/skill-decision.types';
 import {
   SkillValidationError,
   type SkillValidationReport,
@@ -135,6 +137,11 @@ export interface SkillRegistryOptions {
    * when the cache binding only exists at request time (e.g. Cloudflare KV).
    */
   indexCache?: SkillIndexCache;
+  /**
+   * Rank search results with a decision model instead of the index alone (`skillsConfig.decision`, #1062): the
+   * index supplies the candidates, and the model a probability for each.
+   */
+  decision?: SkillDecisionOptions;
 }
 
 /**
@@ -463,6 +470,12 @@ export default class SkillRegistry
 
   /** Registry-level options for validation behavior */
   private readonly options: SkillRegistryOptions;
+
+  /**
+   * Ranks search results with `options.decision`'s model. Loaded with the first search that uses it, so a server
+   * without a decision model doesn't carry the module.
+   */
+  private decisionRankerLoading?: Promise<SkillDecisionRanker | undefined>;
 
   /** SEP-2640 §Discovery — additional `mcp-resource-template` index entries. */
   private sep2640IndexTemplates: SkillIndexEntry[] = [];
@@ -829,6 +842,37 @@ export default class SkillRegistry
   }
 
   async search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]> {
+    const ranker = query.trim().length > 0 ? await this.decisionRanker() : undefined;
+    if (!ranker) return this.searchIndex(query, options);
+    // The decision model chooses among the index's best matches, every skill when there are no more than it takes:
+    // a threshold of 0 keeps the skills that share no word with the query, which the model may still choose.
+    const pool = await this.searchIndex(query, { ...options, topK: ranker.maxCandidates, minScore: 0 });
+    const ranked = await ranker.rank(query, options?.negativeQuery, pool, options?.topK);
+    return ranked ?? this.searchIndex(query, options);
+  }
+
+  /** The ranker for `options.decision`, built once; `undefined` without one, or when its module fails to load. */
+  private decisionRanker(): Promise<SkillDecisionRanker | undefined> {
+    const decision = this.options.decision;
+    if (!decision) return Promise.resolve(undefined);
+    this.decisionRankerLoading ??= import('./decision/skill-decision.ranker.js').then(
+      ({ SkillDecisionRanker }) =>
+        new SkillDecisionRanker(decision, { warn: (message, meta) => this.scope.logger.warn(message, meta) }),
+      (error: unknown) => {
+        this.scope.logger.warn(
+          'skill search: the decision model could not be loaded; results are ranked by the index',
+          {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        );
+        return undefined;
+      },
+    );
+    return this.decisionRankerLoading;
+  }
+
+  /** {@link search} by the index alone: the storage provider, then the dynamic skills it doesn't hold. */
+  private async searchIndex(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]> {
     const topK = options?.topK;
     const hidden = this.hiddenFromProviderRead();
     // Ask for as many more as could be withdrawn, so skipping them still leaves `topK` results.
