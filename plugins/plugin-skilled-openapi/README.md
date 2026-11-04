@@ -282,7 +282,8 @@ for a bad one.
 | `saas`   | `endpoint`, `authToken`, `expectedAudience`, `jwksUrl`, `expectedIssuer`, `pollIntervalMs?`, `enableWebhook?` | Pulls the bundle over HTTPS at startup and every `pollIntervalMs` (default 5 minutes), after checking `authToken` against `jwksUrl`, `expectedIssuer` and `expectedAudience`. With `enableWebhook: true`, also takes pushed bundles (below). |
 
 A new bundle from `static` (with `watch`) or `saas` is checked like the first, then replaces the skills and operations
-at once. A bundle that fails its checks isn't applied, and the reason is logged; the bundle already loaded stays.
+at once. A bundle that fails its checks isn't applied, and the reason is logged; the bundle already loaded stays. A
+`run_workflow` already running when a new bundle is applied finishes on the operations of the bundle it started on.
 
 A `static` file that fails to load at startup is still watched (with `watch: true`), and a `saas` source keeps polling
 after a failed first pull, so the next good bundle loads without a restart.

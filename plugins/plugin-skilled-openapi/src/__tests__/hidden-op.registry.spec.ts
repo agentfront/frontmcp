@@ -56,6 +56,19 @@ describe('HiddenOpRegistry', () => {
     expect(r.delete('a', 'op1')).toBe(false);
   });
 
+  it('snapshot keeps the entries it was taken with when the registry changes after', () => {
+    const r = new HiddenOpRegistry();
+    r.set(buildEntry('reports', 'getAccountPlan'));
+    const snapshot = r.snapshot();
+
+    r.clear();
+    r.set(buildEntry('refunds', 'refundInvoice'));
+
+    expect(snapshot.listingsOf('getAccountPlan')?.map((entry) => entry.skillId)).toEqual(['reports']);
+    expect(snapshot.listingsOf('refundInvoice')).toBeUndefined();
+    expect(r.listingsOf('getAccountPlan')).toBeUndefined();
+  });
+
   it('deleteSkill removes only the matching skill entries', () => {
     const r = new HiddenOpRegistry();
     r.set(buildEntry('a', 'op1'));
