@@ -952,6 +952,47 @@ describe('BundleSyncService pushed bundles', () => {
     expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '2' });
   });
 
+  it('keeps a pushed bundle once it is applied, before the next queued apply starts', async () => {
+    const sync = makeSync();
+    sync.attachSource(pullingSource(buildBundle({ version: '1' })));
+    const events: string[] = [];
+    const keepApplied = async (bundle: ResolvedBundle) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      events.push(`kept ${bundle.version}`);
+    };
+    const applySpy = jest.spyOn(sync, 'apply');
+    applySpy.mockImplementation(async (bundle) => {
+      events.push(`apply ${bundle.version}`);
+      return { applied: true, bundleId: bundle.bundleId, bundleVersion: bundle.version };
+    });
+
+    await Promise.all([
+      sync.applyPushed(buildBundle({ version: '2' }), keepApplied),
+      sync.applyPushed(buildBundle({ version: '3' }), keepApplied),
+    ]);
+
+    expect(events.filter((event) => event !== 'apply 1')).toEqual(['apply 2', 'kept 2', 'apply 3', 'kept 3']);
+  });
+
+  it('does not keep a pushed bundle that is not applied, and a failure to keep one leaves it applied', async () => {
+    const registry = new FakeRegistry();
+    registry.failOn.add('refunds');
+    const sync = makeSync(registry);
+    sync.attachSource(pullingSource(buildBundle({ version: '1' })));
+    const refunds = { id: 'refunds', name: 'Refunds', description: 'd', instructions: '# R', operationIds: [] };
+    const keepApplied = jest.fn(async () => {
+      throw new Error('KV unavailable');
+    });
+
+    const refused = await sync.applyPushed(buildBundle({ version: '2', skills: [refunds] }), keepApplied);
+    const applied = await sync.applyPushed(buildBundle({ version: '3' }), keepApplied);
+
+    expect(refused).toMatchObject({ applied: false });
+    expect(applied).toMatchObject({ applied: true, bundleVersion: '3' });
+    expect(keepApplied).toHaveBeenCalledTimes(1);
+    expect(loggerMocks.warn).toHaveBeenCalledWith(expect.stringContaining('keeping it as the last good bundle failed'));
+  });
+
   it('reports a pushed bundle that is not applied, and keeps serving the bundle before it', async () => {
     const registry = new FakeRegistry();
     registry.failOn.add('refunds');
