@@ -81,8 +81,9 @@ What `handle()` returns becomes the response:
 | Any other throw                                      | `500 Internal Server Error`, message not sent |
 
 `httpRespond.redirect(location)` answers `302` with that `Location`: an absolute URL, or a reference relative to the
-request such as `/board`. Characters outside ASCII are sent percent-encoded as UTF-8, so `/board/東京` is sent as
-`/board/%E6%9D%B1%E4%BA%AC`; the rest of the location is sent as given. A location with whitespace or a control
+request such as `/board`. Characters a URL does not carry are sent percent-encoded as UTF-8, as Express encodes
+them: those outside ASCII, `"`, `<`, `>`, `` ` ``, `{`, `}`, and a `%` that starts no `%XX` escape. So `/board/東京` is
+sent as `/board/%E6%9D%B1%E4%BA%AC`, and the rest of the location as given. A location with whitespace or a control
 character is not valid. A browser takes `//other.example` or `/\other.example` to another site, so check a location
 that comes from the request against your own list of paths before redirecting to it.
 
