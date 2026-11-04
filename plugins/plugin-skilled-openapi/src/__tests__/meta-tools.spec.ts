@@ -204,9 +204,57 @@ describe('load_skill', () => {
     hiddenOps.set(buildEntry('s1', 'a1'));
     const ctx = makeToolThis({ scopeSkills: { loadSkill, hasAny: jest.fn(() => true) }, hiddenOps });
     const result = await LoadSkillTool.prototype.execute.call(ctx, { skillId: 's1' });
-    expect(result.skill.actions?.[0]?.actionId).toBe('a1');
-    expect(result.skill.bundleVersion).toBe('v9');
+    expect(result.skill?.actions?.[0]?.actionId).toBe('a1');
+    expect(result.skill?.bundleVersion).toBe('v9');
     expect(result.isComplete).toBe(true);
+  });
+
+  it('loads several skills at once with skillIds, each once, in the order asked for (#1068)', async () => {
+    const content = (id: string, name: string): SkillContent => ({
+      id,
+      name,
+      description: 'd',
+      instructions: `# ${name}`,
+      tools: [],
+    });
+    const byKey: Record<string, SkillContent> = {
+      s1: content('s1', 'S1'),
+      S1: content('s1', 'S1'),
+      s2: content('s2', 'S2'),
+    };
+    const loadSkill = jest.fn(async (key: string) =>
+      byKey[key] ? { skill: byKey[key], availableTools: [], missingTools: [], isComplete: true } : undefined,
+    );
+    const ctx = makeToolThis({ scopeSkills: { loadSkill, hasAny: jest.fn(() => true) } });
+    const result = await LoadSkillTool.prototype.execute.call(ctx, { skillIds: ['s2', 'S1', 's1'] });
+
+    expect(result.skills?.map((r) => r.skill.id)).toEqual(['s2', 's1']);
+    expect(result.skill).toBeUndefined();
+  });
+
+  it('refuses a call with neither skillId nor skillIds, or with both', async () => {
+    const ctx = makeToolThis({ scopeSkills: { loadSkill: jest.fn(), hasAny: jest.fn(() => true) } });
+    await expect(LoadSkillTool.prototype.execute.call(ctx, {})).rejects.toThrow('Pass either skillId or skillIds');
+    await expect(LoadSkillTool.prototype.execute.call(ctx, { skillId: 's1', skillIds: ['s1'] })).rejects.toThrow(
+      'Pass either skillId or skillIds',
+    );
+  });
+
+  it('answers not found for skillIds when one of them is not found', async () => {
+    const loadSkill = jest.fn(async (key: string) =>
+      key === 's1'
+        ? {
+            skill: { id: 's1', name: 'S1', description: 'd', instructions: '', tools: [] },
+            availableTools: [],
+            missingTools: [],
+            isComplete: true,
+          }
+        : undefined,
+    );
+    const ctx = makeToolThis({ scopeSkills: { loadSkill, hasAny: jest.fn(() => true) } });
+    await expect(LoadSkillTool.prototype.execute.call(ctx, { skillIds: ['s1', 'nope'] })).rejects.toThrow(
+      'Skill "nope" not found',
+    );
   });
 
   it('throws when skill is not found', async () => {
