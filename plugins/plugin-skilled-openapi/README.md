@@ -234,6 +234,8 @@ names only the `vaultRef`, and the server decides where its credential comes fro
 - A mapped `vaultRef` never falls back to `credentials`, to a resolver, or to another caller's credential.
 - The error ends a `run_workflow` run even when the script passes `{ throwOnError: false }`, since the script can't
   fix it. From `this.callTool()`, the operation tool throws it, so your tool's call fails with it unless you catch it.
+  `execute_action` raises it as it comes from the operation tool, whose name is its `tool` (`execute_action` with
+  `exposeOperationsAsInternalTools: false`).
 - The credential is read on each request and kept only for that request. An auth provider with `global` scope is
   shared by every caller: map a provider with `user` or `session` scope.
 - An auth providers credential of type `oauth`, `oauth_pkce` or `bearer` sends its token, and `api_key` its key; other

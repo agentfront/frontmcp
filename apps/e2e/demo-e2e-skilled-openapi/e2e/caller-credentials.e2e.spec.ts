@@ -1,4 +1,4 @@
-// Scenario F4: the billing API receives each caller's own token, the one they connected at sign-in, never the server's.
+// Scenarios F4 E6: the billing API receives each caller's own token, the one they connected at sign-in, never the server's.
 import { expect, test, type ServerFixture } from '@frontmcp/testing';
 
 import { signIn } from './helpers/local-sign-in';
@@ -59,5 +59,24 @@ test.describe("a binding that sends the caller's own credential", () => {
     expect(result.error?.data).toMatchObject({ tool: 'run_workflow', providers: ['billing'] });
     expect((result.error?.data as { authUrl?: string } | undefined)?.authUrl).toContain('/oauth/connect?token=');
     expect(authorizationsSent()).toEqual([]);
+  });
+
+  test("execute_action sends the caller's own token, and asks a caller without one to connect it (E6)", async ({
+    server,
+  }) => {
+    const { alice: aliceToken } = environment.callerBillingTokens;
+    const alice = await signedInClient(server, { user: 'alice', billingToken: aliceToken });
+    const carol = await signedInClient(server, { user: 'carol' });
+
+    const plan = await alice.tools.call('execute_action', { actionId: 'getAccountPlan' });
+    const refused = await carol.tools.call('execute_action', { actionId: 'getAccountPlan' });
+
+    expect(plan.raw.structuredContent).toEqual({ plan: 'growth', seats: 5 });
+    expect(refused.isError).toBe(true);
+    expect(refused.error?.code).toBe(-32001);
+    expect(refused.error?.message).not.toContain('/oauth/connect');
+    expect(refused.error?.data).toMatchObject({ tool: 'e2e:billing.getAccountPlan', providers: ['billing'] });
+    expect((refused.error?.data as { authUrl?: string } | undefined)?.authUrl).toContain('/oauth/connect?token=');
+    expect(authorizationsSent()).toEqual([`Bearer ${aliceToken}`]);
   });
 });
