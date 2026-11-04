@@ -1913,6 +1913,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@enclave-vm/browser@npm:^2.17.0":
+  version: 2.17.0
+  resolution: "@enclave-vm/browser@npm:2.17.0"
+  dependencies:
+    "@enclave-vm/ast": "npm:2.17.0"
+    acorn: "npm:8.15.0"
+    astring: "npm:1.9.0"
+    zod: "npm:^4.3.6"
+  checksum: 10c0/f7994ce30a743db53310b307fda4b13fb655785f9506e29421f8c98b8da055e2713ae28e304fd2bde3510dc83d9522a49072004ef6e1ed301b95faba19a4917d
+  languageName: node
+  linkType: hard
+
 "@enclave-vm/core@npm:^2.17.0":
   version: 2.17.0
   resolution: "@enclave-vm/core@npm:2.17.0"
@@ -2784,6 +2796,7 @@ __metadata:
     "@anthropic-ai/sdk": "npm:^0.104.1"
     "@emotion/react": "npm:^11.14.0"
     "@emotion/styled": "npm:^11.14.1"
+    "@enclave-vm/browser": "npm:^2.17.0"
     "@enclave-vm/core": "npm:^2.17.0"
     "@eslint/js": "npm:^10.0.1"
     "@huggingface/transformers": "npm:^3.2.2"

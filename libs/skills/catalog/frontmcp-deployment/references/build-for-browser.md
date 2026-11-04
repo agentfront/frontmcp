@@ -58,6 +58,7 @@ Not all FrontMCP features are available in browser environments:
 | Direct client (`connect()`) | Yes             | In-memory connection                                                   |
 | `ConfigPlugin`              | Yes             | No `.env` / `config.yml` files: schema defaults and `process.env` only |
 | Shared server, Unix socket  | No              | `runShared()` and `runUnixSocket()` reject in a page                   |
+| Skilled OpenAPI plugin      | Yes             | See [Skilled OpenAPI in a Page](#skilled-openapi-in-a-page)            |
 
 A store never picks Redis or SQLite on its own in a page. When the config would give one to a store, `create()` fails at startup, before any store opens, with one `BrowserStoreUnavailableError` (`BROWSER_STORE_UNAVAILABLE`) that names every such store and its switch:
 
@@ -201,6 +202,19 @@ const server = await create({
 - An agent gets each result once: the tool's `structuredContent` alone when its content only repeats it (one text block with the same JSON or primitive), otherwise `{ content }` (plus `structuredContent`, so distinct text and images are kept). `WebMcpPlugin.init({ result: 'both' })` gives `{ content, structuredContent }`, the shape up to 1.9.4.
 - Don't start the server on page load just to offer its tools: `create()` with one tool is about 1.5 MB minified (Vite puts about 1.1 MB of it in the page's first chunk and loads about 0.4 MB more when `create()` runs), and evaluating it is one long task (Lighthouse's Total Blocking Time sees it, since Chrome for Testing has WebMCP on). Generate the list at build time with `listWebMcpTools()` and register it with `registerWebMcpTools()` from `@frontmcp/plugin-webmcp/register`, a chunk without the SDK; the server loads on an agent's first call. See `official-plugins` → WebMCP → "Registering tools before the server loads".
 
+## Skilled OpenAPI in a Page
+
+`@frontmcp/plugin-skilled-openapi` runs in a page's `create()` server, so an agent in the page can use a REST API through `search_skill`, `load_skill`, `execute_action` and `run_workflow`. Install `@enclave-vm/browser` and `@enclave-vm/ast` for `run_workflow`; without them it answers `workflow execution unavailable: the @enclave-vm sandbox is not installed. Install @enclave-vm/browser and @enclave-vm/ast to enable run_workflow.`
+
+- `run_workflow` runs its script in `@enclave-vm/browser`'s two nested sandboxed iframes, whose content security policy blocks `eval`, the `Function` constructor and network access. In a browser Web Worker (no DOM) it uses `@enclave-vm/core`'s interpreter, as on Node.js.
+- The limits (25 calls, 8 seconds), `callTool(actionId, input, { throwOnError: false })` and its `{ ok, status, data, error? }`, the error texts, `isError` and the `confirm` question are the same as on Node.js. The iframe sandbox also validates the script: `callTool`'s action id must be a string literal, and `fetch` or any other name AgentScript lacks fails the run with `AgentScript validation failed: …`.
+- The outbound check keeps `https:` only (unless `allowHttp`), the operation's service host, and the IP-literal checks (private and loopback refused unless `allowPrivateNetworks`, link-local and metadata always). It skips DNS, which a browser can't do: CORS and Private Network Access decide the connection. On Node.js and Workers an unresolvable name is still refused.
+- The API must answer the page's CORS requests, including the preflight for an `authorization` header.
+- Every visitor can read the page's credentials and bundle, and change what runs: give the page only a credential the visitor may use (their own token, through `passthroughCallerToken` or a resolver), and let the API authorize each request.
+- Vite builds the page as it is. esbuild needs `external: ['node:http', 'node:https', 'path', 'fs/promises']`, and webpack 5 `new webpack.IgnorePlugin({ resourceRegExp: /^(node:)?(dns|http|https|path|fs\/promises)$/, contextRegExp: /mcp-from-openapi/ })`: `mcp-from-openapi`, under the plugin's OpenAPI runtime, imports them inside `try`/`catch`.
+
+Up to 1.11.0 the plugin failed to start in a page (`setImmediate is not defined`), refused every request to a named host, read answers with `Buffer`, and `run_workflow` needed `@enclave-vm/core`; the SDK's browser build imported `@enclave-vm/core`, so webpack failed on its `vm` and `worker_threads` when it was installed.
+
 ## What a Browser Bundle Leaves Out
 
 FrontMCP's optional integrations are optional peer dependencies. In a browser bundle that doesn't install them, the code that would load them is still there, and it fails only when the feature is used:
@@ -209,7 +223,7 @@ FrontMCP's optional integrations are optional peer dependencies. In a browser bu
 | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------ |
 | `openai`, `@anthropic-ai/sdk`                                                                                           | Agents' built-in LLM adapters                       | Vite emits a stub chunk; an agent call with that adapter throws                |
 | `@vercel/kv`, `@upstash/redis`                                                                                          | `@frontmcp/utils` storage providers                 | Vite emits a stub chunk; a page uses memory storage anyway                     |
-| `@enclave-vm/core`                                                                                                      | Jobs' sandbox                                       | Vite emits a stub chunk; running a sandboxed job throws                        |
+| `@enclave-vm/core`                                                                                                      | Jobs' sandbox                                       | Not imported; running a sandboxed job throws `Dynamic jobs need Node.js`       |
 | `ioredis`, `@frontmcp/storage-sqlite`, `@frontmcp/observability`, `@opentelemetry/api`, `@opentelemetry/sdk-trace-base` | Redis/SQLite stores, metrics, tracing (`require()`) | Not bundled; reached only on server configurations, never by default in a page |
 
 Nothing warns at build time: Vite's stubs for missing optional peers are silent. Install a package only if the page uses that feature.
@@ -266,23 +280,25 @@ ls dist/browser/
 
 ## Troubleshooting
 
-| Problem                                                             | Cause                                          | Solution                                                                                                    |
-| ------------------------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `Module not found: fs`                                              | Node.js module imported in browser bundle      | Use a separate browser entry point that avoids Node-only imports                                            |
-| `crypto is not defined`                                             | Using `node:crypto` instead of WebCrypto       | Switch to `@frontmcp/utils` crypto functions                                                                |
-| `node:crypto` or `@upstash/redis` unresolved from `@frontmcp/utils` | `@frontmcp/utils` 1.9.2                        | Upgrade: its browser build no longer imports `node:crypto`, and Vite stubs its uninstalled optional peers   |
-| `process is not defined` in a Web Worker                            | `@frontmcp/utils` up to 1.10 in a Web Worker   | Upgrade; with Rollup, pass `browser: true` to `@rollup/plugin-node-resolve`                                 |
-| webpack: `UnhandledSchemeError: Reading from "node:net"`            | `@frontmcp/sdk` up to 1.10                     | Upgrade, and drop the Node fallbacks the app added for FrontMCP                                             |
-| `BrowserEntryPointUnavailableError`                                 | `runShared()` or `runUnixSocket()` in a page   | Call it from a Node entry; a page serves its tools with `create()`                                          |
-| CORS errors on tool calls                                           | MCP server missing CORS headers                | Configure CORS middleware on the MCP server                                                                 |
-| Bundle too large                                                    | All server-side code included                  | Use `--target browser` and a dedicated client entry file                                                    |
-| Long task / Total Blocking Time on load with WebMCP                 | The server starts on page load to offer tools  | Register a build-time list with `registerWebMcpTools()` and load the server on the first agent call         |
-| `__vite-optional-peer-dep` chunk throws                             | An optional peer is not installed              | Install it if the page uses that feature (see What a Browser Bundle Leaves Out)                             |
-| `@frontmcp/utils` fs throws                                         | File system ops called in browser              | Remove fs calls; use API endpoints or in-memory alternatives                                                |
-| `BrowserStoreUnavailableError` at startup                           | A store would open Redis or SQLite             | Set every switch the message names (`tasks.store: false`, ...), or leave `redis`/`sqlite` out of the config |
-| `AsyncContextOverlapError`                                          | Concurrent tool calls inside one request       | Await the calls one after another (no `AsyncContext` in browser)                                            |
-| A call never returns                                                | A tool calls its own server via a client       | Call other tools through `this.scope` flows                                                                 |
-| `create()` never settles (Vite 7)                                   | Top-level `await create()` in the entry module | Call `create()` from a function or `.then()`                                                                |
+| Problem                                                                         | Cause                                           | Solution                                                                                                    |
+| ------------------------------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `Module not found: fs`                                                          | Node.js module imported in browser bundle       | Use a separate browser entry point that avoids Node-only imports                                            |
+| `crypto is not defined`                                                         | Using `node:crypto` instead of WebCrypto        | Switch to `@frontmcp/utils` crypto functions                                                                |
+| `node:crypto` or `@upstash/redis` unresolved from `@frontmcp/utils`             | `@frontmcp/utils` 1.9.2                         | Upgrade: its browser build no longer imports `node:crypto`, and Vite stubs its uninstalled optional peers   |
+| `process is not defined` in a Web Worker                                        | `@frontmcp/utils` up to 1.10 in a Web Worker    | Upgrade; with Rollup, pass `browser: true` to `@rollup/plugin-node-resolve`                                 |
+| webpack: `UnhandledSchemeError: Reading from "node:net"`                        | `@frontmcp/sdk` up to 1.10                      | Upgrade, and drop the Node fallbacks the app added for FrontMCP                                             |
+| `BrowserEntryPointUnavailableError`                                             | `runShared()` or `runUnixSocket()` in a page    | Call it from a Node entry; a page serves its tools with `create()`                                          |
+| webpack: `UnhandledSchemeError: Reading from "node:http"` in `mcp-from-openapi` | The Skilled OpenAPI plugin's OpenAPI runtime    | Add the `IgnorePlugin` in [Skilled OpenAPI in a Page](#skilled-openapi-in-a-page)                           |
+| `setImmediate is not defined` with the Skilled OpenAPI plugin                   | `@frontmcp/plugin-skilled-openapi` up to 1.11.0 | Upgrade                                                                                                     |
+| CORS errors on tool calls                                                       | MCP server missing CORS headers                 | Configure CORS middleware on the MCP server                                                                 |
+| Bundle too large                                                                | All server-side code included                   | Use `--target browser` and a dedicated client entry file                                                    |
+| Long task / Total Blocking Time on load with WebMCP                             | The server starts on page load to offer tools   | Register a build-time list with `registerWebMcpTools()` and load the server on the first agent call         |
+| `__vite-optional-peer-dep` chunk throws                                         | An optional peer is not installed               | Install it if the page uses that feature (see What a Browser Bundle Leaves Out)                             |
+| `@frontmcp/utils` fs throws                                                     | File system ops called in browser               | Remove fs calls; use API endpoints or in-memory alternatives                                                |
+| `BrowserStoreUnavailableError` at startup                                       | A store would open Redis or SQLite              | Set every switch the message names (`tasks.store: false`, ...), or leave `redis`/`sqlite` out of the config |
+| `AsyncContextOverlapError`                                                      | Concurrent tool calls inside one request        | Await the calls one after another (no `AsyncContext` in browser)                                            |
+| A call never returns                                                            | A tool calls its own server via a client        | Call other tools through `this.scope` flows                                                                 |
+| `create()` never settles (Vite 7)                                               | Top-level `await create()` in the entry module  | Call `create()` from a function or `.then()`                                                                |
 
 ## Examples
 

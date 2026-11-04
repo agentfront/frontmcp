@@ -17,12 +17,14 @@ npm install @frontmcp/plugin-skilled-openapi @enclave-vm/core @enclave-vm/ast
 ```
 
 The plugin runs inside a FrontMCP server, so your app needs `@frontmcp/sdk`, at the same version as this package, and
-Node.js 24 or later. Its peer dependency `@frontmcp/lazy-zod` comes with the SDK. The other peers are optional:
+Node.js 24 or later, or a web page (see [Browser](#browser)). Its peer dependency `@frontmcp/lazy-zod` comes with the
+SDK. The other peers are optional:
 
-| Package                               | Enables                                                                                                                                                                                            |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@enclave-vm/core`, `@enclave-vm/ast` | `run_workflow`. Without them, `search_skill`, `load_skill` and `execute_action` still work, and `run_workflow` answers `workflow execution unavailable: the @enclave-vm sandbox is not installed`. |
-| `undici`                              | `outbound.egressProxy` on Node.js. The plugin loads it only when that option is set.                                                                                                               |
+| Package                                  | Enables                                                                                                                                                                                                                      |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@enclave-vm/core`, `@enclave-vm/ast`    | `run_workflow`. Without them, `search_skill`, `load_skill` and `execute_action` still work, and `run_workflow` answers `workflow execution unavailable: the @enclave-vm sandbox is not installed`.                           |
+| `undici`                                 | `outbound.egressProxy` on Node.js. The plugin loads it only when that option is set.                                                                                                                                         |
+| `@enclave-vm/browser`, `@enclave-vm/ast` | `run_workflow` in a web page. Without them, `run_workflow` there answers `workflow execution unavailable: the @enclave-vm sandbox is not installed. Install @enclave-vm/browser and @enclave-vm/ast to enable run_workflow.` |
 
 ## Usage
 
@@ -385,6 +387,56 @@ query parameter's `style` and `explode` are kept in the operation's `mapper`, an
 an array repeats its key (`ids=1&ids=2`), and `explode: false` joins it with commas. Up to 1.11.0 a description-only
 response compiled to `{ "type": "null" }`, which every JSON answer failed, and every array was sent comma-joined.
 
+## Browser
+
+The plugin also runs in a web page, in a server the SDK's browser `create()` builds, so an agent in the page can use
+your API:
+
+```ts
+import { SkilledOpenApiPlugin } from '@frontmcp/plugin-skilled-openapi';
+import { create } from '@frontmcp/sdk';
+
+const server = await create({
+  info: { name: 'billing', version: '1.0.0' },
+  plugins: [SkilledOpenApiPlugin.init({ source: { type: 'inline', content: bundle }, requireSignature: false })],
+});
+const { structuredContent } = await server.callTool('search_skill', { query: 'invoice' });
+```
+
+```bash
+npm install @frontmcp/plugin-skilled-openapi @enclave-vm/browser @enclave-vm/ast
+```
+
+- **What works.** `search_skill`, `load_skill` and `execute_action` work as on Node.js. `run_workflow` runs its script
+  in `@enclave-vm/browser`'s sandbox: two nested sandboxed iframes whose content security policy blocks `eval`, the
+  `Function` constructor and network access. In a browser Web Worker, which has no DOM for the iframes, it uses
+  `@enclave-vm/core`'s interpreter, as on Node.js.
+- **The same workflows.** The limits (25 calls, 8 seconds), `callTool` and its `{ throwOnError: false }` result, the
+  error texts, `isError`, and the question `confirm` asks before the script starts are the same as on Node.js. The
+  browser sandbox also checks the script against AgentScript's rules before it runs, so `callTool`'s action id must be
+  a string literal (`callTool('getInvoice', …)`, not a variable), and a name AgentScript doesn't have, such as
+  `fetch`, fails the run with `AgentScript validation failed: …`.
+- **The outbound check.** URLs must still be `https:` (unless `allowHttp`) and on the operation's service host, and an
+  IP-literal host is still checked: private and loopback addresses are refused unless `allowPrivateNetworks`, and
+  link-local and cloud metadata addresses always. A host name is not resolved, since a browser has no DNS resolver:
+  the browser's own rules (CORS, Private Network Access) decide whether the page may connect. On Node.js and Workers, a
+  name that can't be resolved is still refused.
+- **CORS.** The page calls your API from its own origin, so the API must allow it: `Access-Control-Allow-Origin` with
+  the page's origin and, for a request with a credential header, a preflight answer that allows the header
+  (`Access-Control-Allow-Headers: authorization`).
+- **Credentials are in the page.** Every visitor can read what the page holds: the `credentials` option, what a
+  resolver returns, the bundle. Give the page only a credential the visitor may use anyway, such as the visitor's own
+  token (a `passthroughCallerToken` binding, or a resolver that returns the signed-in user's token), never a server
+  secret. The visitor can also change what runs in the page, so `requiredAuthorities` there decide what the agent is
+  shown, not what reaches your API: the API must authorize each request itself.
+- **Bundlers.** Vite builds the page as it is. `mcp-from-openapi`, which the plugin's OpenAPI runtime uses, imports
+  Node's `dns`, `http`, `https`, `path` and `fs/promises` inside `try`/`catch`, which esbuild and webpack 5 try to
+  resolve: give esbuild `external: ['node:http', 'node:https', 'path', 'fs/promises']`, and webpack
+  `new webpack.IgnorePlugin({ resourceRegExp: /^(node:)?(dns|http|https|path|fs\/promises)$/, contextRegExp: /mcp-from-openapi/ })`.
+
+Up to 1.11.0 the plugin didn't start in a browser (`setImmediate is not defined`), refused every request to a named
+host, and `run_workflow` needed `@enclave-vm/core`.
+
 ## Security
 
 - **Signing.** With `requireSignature` (the default), a bundle is applied only if its `integrity` signature, RS256 or
@@ -401,7 +453,8 @@ response compiled to `{ "type": "null" }`, which every JSON answer failed, and e
   internal details.
 - **Outbound requests.** URLs must be `https:` (unless `allowHttp`) and on the operation's service host. The host's
   addresses are checked before sending: private and loopback addresses are refused unless `allowPrivateNetworks`, and
-  link-local and cloud metadata addresses always. Responses are size- and time-limited.
+  link-local and cloud metadata addresses always. In a browser, which can't resolve a name, only an IP-literal host's
+  address is checked (see [Browser](#browser)). Responses are size- and time-limited.
 - **What reaches the model.** The model sees only what the script returns, but the content of your API's answers isn't
   checked. Treat text your API returns, like ticket bodies or notes, as you would user input.
 

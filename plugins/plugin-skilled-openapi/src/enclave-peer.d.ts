@@ -8,8 +8,18 @@
 declare module '@enclave-vm/ast' {
   export function transformAgentScript(
     code: string,
-    config?: { transformLoops?: boolean; additionalIdentifiers?: string[] },
+    config?: {
+      wrapInMain?: boolean;
+      transformCallTool?: boolean;
+      transformLoops?: boolean;
+      additionalIdentifiers?: string[];
+    },
   ): string;
+  export class JSAstValidator {
+    constructor(rules?: unknown[]);
+    validate(source: string): Promise<{ valid: boolean; ast?: unknown; parseError?: Error }>;
+  }
+  export function generateCode(ast: unknown): string;
 }
 
 declare module '@enclave-vm/core/worker' {
@@ -29,6 +39,23 @@ declare module '@enclave-vm/core/worker' {
   export class InterpreterAdapter {
     constructor(options?: { maxSteps?: number; maxCallDepth?: number });
     execute<T = unknown>(code: string, context: ExecutionContext): Promise<ExecutionResult<T>>;
+    dispose(): void;
+  }
+}
+
+declare module '@enclave-vm/browser' {
+  export interface ExecutionResult<T = unknown> {
+    success: boolean;
+    value?: T;
+    error?: { message: string; name: string; code?: string };
+    stats: { duration: number; toolCallCount: number; iterationCount: number; startTime: number; endTime: number };
+  }
+  export class BrowserEnclave {
+    constructor(options?: { timeout?: number; maxToolCalls?: number });
+    run<T = unknown>(
+      code: string,
+      toolHandler?: (toolName: string, args: Record<string, unknown>) => Promise<unknown>,
+    ): Promise<ExecutionResult<T>>;
     dispose(): void;
   }
 }

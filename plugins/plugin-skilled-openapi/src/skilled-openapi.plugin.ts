@@ -468,16 +468,17 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
           if (source.push) await scope.registryFlows(BundlePushFlow);
           // Proactively boot on runtimes WITH a background event loop (Node) so
           // the catalog is ready without an explicit meta-tool call (preserves
-          // startup-time sync + skill:// resources). Deferred via setImmediate so
+          // startup-time sync + skill:// resources). Deferred to a later task, with
+          // setTimeout as every runtime has it (a browser has no setImmediate), so
           // scope.skills is wired first. SKIPPED on stateless workers
-          // (`disablePolling`): setImmediate never fires there, and a promise
+          // (`disablePolling`): a deferred task never runs there, and a promise
           // created in this scope-init context is canceled when later awaited from
           // a request context — the meta-tools / list-tools hook drive
           // `ensureReady()` in-request instead.
           if (!runtimeDeps?.disablePolling) {
-            setImmediate(() => {
+            setTimeout(() => {
               void sync.ensureReady();
-            });
+            }, 0);
           }
           builtSyncs.add(sync);
           return sync;
