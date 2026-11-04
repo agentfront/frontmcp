@@ -7,6 +7,8 @@
  */
 import 'reflect-metadata';
 
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+
 import { App, Tool, ToolContext, z } from '@frontmcp/sdk';
 
 import { createEdgeMcp } from './index';
@@ -212,6 +214,123 @@ describe('createEdgeMcp', () => {
 
     expect(response.status).toBe(status);
   });
+});
+
+describe('a managed edge Cron run in an isolate that has served no request', () => {
+  const ISSUER = 'https://cloud.example.dev';
+  const ENDPOINT = `${ISSUER}/v1/bundles/acme`;
+  const JWKS_URL = `${ISSUER}/.well-known/jwks.json`;
+  const AUDIENCE = 'acme:prod';
+  const KEY_ID = 'edge-cron';
+  let publishedVersion = '1.0.0';
+  let pulls = 0;
+  let fetchMock: jest.SpyInstance;
+  let pullToken: string;
+
+  const billingBundle = (version: string) => ({
+    schemaVersion: 1,
+    bundleId: 'edge:billing',
+    version,
+    generatedAt: '2026-11-04T12:00:00.000Z',
+    sourceDigest: '0'.repeat(64),
+    services: [{ id: 'billing', baseUrl: 'https://billing.example.dev' }],
+    authBindings: { none: { kind: 'none' } },
+    skills: [
+      {
+        id: 'invoices',
+        name: 'Invoices',
+        description: 'Create invoices.',
+        instructions: '# Invoices',
+        operationIds: [],
+      },
+    ],
+    operations: {},
+  });
+
+  beforeAll(async () => {
+    const { publicKey, privateKey } = await generateKeyPair('ES256');
+    const jwks = { keys: [{ ...(await exportJWK(publicKey)), kid: KEY_ID, alg: 'ES256', use: 'sig' }] };
+    pullToken = await new SignJWT({ iss: ISSUER, aud: AUDIENCE })
+      .setProtectedHeader({ alg: 'ES256', kid: KEY_ID })
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey);
+    fetchMock = jest.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === JWKS_URL) return Response.json(jwks);
+      if (url !== ENDPOINT) return new Response('not found', { status: 404 });
+      pulls++;
+      return Response.json(billingBundle(publishedVersion));
+    });
+  });
+
+  afterAll(() => {
+    fetchMock.mockRestore();
+  });
+
+  it.each([
+    ['whose build starts the bundle sync (the instructions budget check)', {}],
+    ['whose build does not start it', { instructionsBudget: false as const }],
+  ])(
+    'in a server %s, applies the bundle it pulls and keeps it, with one pull; the next run pulls again',
+    async (_label, settings) => {
+      publishedVersion = '1.0.0';
+      pulls = 0;
+      const keptVersions: string[] = [];
+      let keptBundle: unknown;
+      const managed = createEdgeMcp({
+        info: { name: 'managed-cron', version: '1.0.0' },
+        apps: [],
+        tasks: { enabled: false },
+        http: { entryPath: '/mcp' },
+        ...settings,
+        managed: {
+          endpoint: ENDPOINT,
+          authToken: pullToken,
+          expectedAudience: AUDIENCE,
+          jwksUrl: JWKS_URL,
+          expectedIssuer: ISSUER,
+          requireSignature: false,
+          cache: {
+            read: async () => keptBundle,
+            write: async (bundle) => {
+              keptBundle = bundle;
+              keptVersions.push((bundle as { version: string }).version);
+            },
+          },
+        },
+      });
+      if (!managed.scheduled) throw new Error('expected a scheduled handler in managed mode');
+
+      await managed.scheduled({}, {});
+      const afterFirstRun = { pulls, keptVersions: [...keptVersions] };
+      const search = await readMcp<{ result?: { content?: Array<{ text?: string }> } }>(
+        await managed.fetch(
+          new Request('https://worker.example.com/mcp', {
+            method: 'POST',
+            headers: MCP_HEADERS,
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'tools/call',
+              params: { name: 'search_skill', arguments: { query: 'invoices' } },
+            }),
+          }),
+        ),
+      );
+      const pullsAfterRequest = pulls;
+      publishedVersion = '2.0.0';
+      await managed.scheduled({}, {});
+
+      expect(afterFirstRun).toEqual({ pulls: 1, keptVersions: ['1.0.0'] });
+      expect(JSON.parse(search.result?.content?.[0]?.text ?? '{}')).toMatchObject({
+        skills: [{ skillId: 'invoices', bundleVersion: '1.0.0' }],
+      });
+      expect(pullsAfterRequest).toBe(1);
+      expect(pulls).toBe(2);
+      expect(keptVersions).toEqual(['1.0.0', '2.0.0']);
+    },
+  );
 });
 
 /**

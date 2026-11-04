@@ -7,7 +7,6 @@ import {
   type BundleStoreCounter,
   type BundleStoreSpan,
   type BundleStoreTelemetry,
-  type SkillBundleSource,
 } from '@frontmcp/adapters/skills';
 import {
   buildSkillsCatalogSummary,
@@ -74,8 +73,8 @@ const FilterSkillsHook = FlowHooksOf('skills:filter');
  *
  * `@frontmcp/edge` uses it to (a) swap the on-disk last-good cache for a
  * KV-backed store and disable background polling (no filesystem / no background
- * execution on a Worker), and (b) receive the live source so a Cron Trigger /
- * Durable Object alarm can drive {@link SkillBundleSource.refresh}.
+ * execution on a Worker), and (b) receive what a Cron Trigger / Durable Object
+ * alarm drives ({@link BundleSyncService.refresh}).
  */
 export const SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN = Symbol.for('frontmcp:skilled-openapi:runtime-deps');
 
@@ -83,15 +82,16 @@ export const SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN = Symbol.for('frontmcp:skilled-o
  * Runtime dependencies a host injects under {@link
  * SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN}. Extends the generic {@link
  * BundleSourceDeps} (pluggable cache + `disablePolling`) with an `attach`
- * callback that hands back the live source for external refresh scheduling.
+ * callback that hands back what an external scheduler runs.
  */
 export interface SkilledOpenApiRuntimeDeps extends BundleSourceDeps {
   /**
-   * Invoked once with the live bundle source right after it's constructed, so
-   * an external scheduler (Cloudflare Cron Trigger / DO alarm) can call
-   * `source.refresh()` on a runtime with no background timers.
+   * Invoked once, right after the bundle source is constructed, with what an external scheduler (Cloudflare Cron
+   * Trigger / DO alarm) calls on a runtime with no background timers. `start()` makes sure the bundle sync has started
+   * and loaded a bundle, for a run that also built the server; `refresh()` pulls a fresh bundle, or starts the sync
+   * when nothing has ({@link BundleSyncService.refresh}). Both resolve once the bundle is applied and kept.
    */
-  attach?(source: SkillBundleSource): void;
+  attach?(scheduler: { start(): Promise<void>; refresh(): Promise<void> }): void;
 }
 
 /**
@@ -438,13 +438,12 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
             builtSyncs.add(sync);
             return sync;
           }
-          // Hand the live source back to the host so an external scheduler
-          // (Cron Trigger / DO alarm) can drive refresh() where there are no
-          // background timers. Best-effort: a throwing attach must not abort
-          // sync wiring.
+          // Hand the host what an external scheduler (Cron Trigger / DO alarm)
+          // drives where there are no background timers. Best-effort: a
+          // throwing attach must not abort sync wiring.
           if (runtimeDeps?.attach) {
             try {
-              runtimeDeps.attach(source);
+              runtimeDeps.attach({ start: () => sync.ensureLoaded(), refresh: () => sync.refresh() });
             } catch (e) {
               logger.warn(`runtime-deps attach threw: ${(e as Error).message}`);
             }
