@@ -410,6 +410,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
         availableTools: validation?.available ?? toolNames,
         missingTools: validation?.missing ?? [],
         source: 'local',
+        ...(skill.bundleVersion !== undefined && { bundleVersion: skill.bundleVersion }),
       });
     }
 

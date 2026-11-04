@@ -162,6 +162,20 @@ describe('HealthService', () => {
       // session-store + 1 valid user probe
       expect(service.getProbeCount()).toBe(2);
     });
+
+    it('runs the probes a plugin registered on the scope in /readyz', async () => {
+      const service = new HealthService(defaultConfig, defaultServerInfo);
+      const bundleProbe = {
+        name: 'skill-bundle',
+        check: jest.fn().mockResolvedValue({ status: 'unhealthy', error: 'no skill bundle is loaded' }),
+      };
+
+      service.autoDiscoverProbes(createMockScope({ transportService: undefined, healthProbes: [bundleProbe] }));
+      const result = await service.getReadyz();
+
+      expect(result.status).toBe('not_ready');
+      expect(result.probes?.['skill-bundle']).toEqual({ status: 'unhealthy', error: 'no skill bundle is loaded' });
+    });
   });
 
   describe('getReadyz', () => {
