@@ -384,17 +384,18 @@ export class Scope extends ScopeEntry {
       });
     }
 
-    // Elicitation store (conditional, skipped in CLI mode)
-    const elicitationEnabled = this.metadata.elicitation?.enabled === true && !this.cliMode;
-    const elicitationPromise = elicitationEnabled
+    // Elicitation store: in CLI mode it stays in memory, since the process asks its own user and ends with the command
+    const elicitationConfigured = this.metadata.elicitation?.enabled === true;
+    const elicitationEnabled = elicitationConfigured && !this.cliMode;
+    const elicitationPromise = elicitationConfigured
       ? (async () => {
           const inheritedRedis = this.metadata.elicitation?.redis ?? this.metadata.redis;
           // `elicitation.store: false` keeps the elicitation state in memory; persistent questions follow their own storage
-          const elicitationInMemory = this.metadata.elicitation?.store === false;
+          const elicitationInMemory = this.cliMode || this.metadata.elicitation?.store === false;
           const elicitationRedis = elicitationInMemory ? undefined : inheritedRedis;
           // Top-level `sqlite` is the fallback when no Redis source is configured (issue #401).
           const elicitationSqlite = elicitationInMemory || elicitationRedis ? undefined : resolvedTopLevelSqlite;
-          const persistent = this.metadata.elicitation?.persistent;
+          const persistent = this.cliMode ? undefined : this.metadata.elicitation?.persistent;
           const questionsHelper = persistent
             ? await import('../elicitation/questions/question-scope.helper.js')
             : undefined;

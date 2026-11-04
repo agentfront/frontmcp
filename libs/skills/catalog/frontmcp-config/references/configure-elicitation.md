@@ -248,8 +248,9 @@ class Server {}
 - A decline sends nothing and fails the call with `the user declined: <actionId>`.
 - A client without the elicitation capability, or a server with `enabled: false`, can't be asked: the action is
   refused (`whenUnsupported: 'refuse'`, the default) or runs unasked (`'allow'`). The plugin doesn't use the
-  elicitation fallback, where the model would answer for the user. The generated CLI declares no elicitation
-  capability, so it is refused too.
+  elicitation fallback, where the model would answer for the user.
+- The generated CLI (`frontmcp build --target cli`) asks in the terminal (`y/N`), in-process and through its daemon;
+  `--yes` answers yes, and with no terminal and no `--yes` it declines. See `build-for-cli`.
 
 ## Notes
 

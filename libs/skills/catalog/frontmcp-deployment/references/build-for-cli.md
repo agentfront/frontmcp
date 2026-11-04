@@ -111,30 +111,74 @@ daemon needs `MCP_SESSION_SECRET` like any server. Up to 1.11.0, the commands
 posted to `/mcp` without a session, so they never reached the daemon and always
 ran in-process.
 
-`<bin> skills read <name>` and `<bin> skills load <ids...>` exit 1 when a skill
-is not found, and name it on stderr; `skills load` prints how many of the
-requested skills it loaded. Up to 1.11.0 both exited 0.
+On a server without the Skilled OpenAPI plugin, `<bin> skills read <name>` and
+`<bin> skills load <ids...>` exit 1 when a skill is not found, and name it on
+stderr; `skills load` prints how many of the requested skills it loaded. Up to
+1.11.0 both exited 0.
 
-On a Skilled OpenAPI server, `<bin> run-workflow --script '<AgentScript>'`
-exits 1 when the workflow fails (`success: false`), as for any tool that
-answers `isError: true`, and `--output json` prints the result with its
-`structuredContent` (`success`, `error`, `stats`). The error names a failed
-action's status and the API's error body. Up to 1.11.0 a failed workflow
-exited 0.
+### Skilled OpenAPI commands
 
-`<bin> execute-action --action-id <actionId> --input '<JSON>'` runs one action
-with no script (`--input` can be left out for an action that takes none). It
-prints the action's data and exits 0, or exits 1 when the action fails: an
-authority denial, a failed input or output check, a timeout, an unknown action,
-or an error status, whose text names the API's status and error body. With
-`--output json`, a failure's `structuredContent` is `{ ok: false, status,
-data?, error? }`, `data` being the API's error body.
+When the server uses the Skilled OpenAPI plugin (its tools include
+`search_skill`, `load_skill`, `execute_action` and `run_workflow`), the bundle's
+skills are tools, not standard skills. The build detects the plugin's four
+tools and generates these commands in place of the standard `skills` commands:
 
-An action the plugin's `confirm` option names asks the user through an MCP
-elicitation, which the CLI can't show, in-process or through the daemon: its
-`execute-action` and `run-workflow` exit 1 with `the user's confirmation is
-needed for <actionId>, and this client can't ask for it`, and send nothing,
-unless the server sets `confirm.whenUnsupported: 'allow'`.
+| Command                     | What it does                                                                                                                                                              |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `skills search <query...>`  | `search_skill`, with `--limit <n>`, `--tags a,b` and `--not-query <text>`: each skill's name, id, score and description                                                   |
+| `skills load <skill...>`    | `load_skill`: the instructions, then each action with its summary, a ready `<bin> execute <actionId> --input '<json>'` line (its required fields) and its optional fields |
+| `skills execute <actionId>` | `execute_action`, with `--input '<json>'`, `--input -` (standard input) or `--input-file <path>`: the action's data                                                       |
+| `skills run [script]`       | `run_workflow`, with the script as the argument, `--file <path>`, or `-` for standard input: the value the script returns                                                 |
+| `skills read <skill>`       | The skill's `skill://<name>/SKILL.md` resource                                                                                                                            |
+| `skills list`               | The skills the caller can use, from `skill://index.json`                                                                                                                  |
+
+```bash
+mymcp search_skill "refund an invoice"
+mymcp load_skill invoices
+mymcp execute getInvoice --input '{"id":"INV-1001"}'
+mymcp run_workflow --file refund.js
+```
+
+- On a server whose only tools are the plugin's, the commands are also
+  top-level: `search_skill`, `load_skill`, `execute` and `run_workflow`. They
+  answer to `search-skill`, `load-skill`, `execute_action` / `execute-action`
+  and `run-workflow` too, and take the 1.11.0 flags `--query`, `--skill-id` and
+  `--script`.
+- A server with tools of its own has them only under `skills`. Scripts that
+  use `skills ...` keep working if the server later gains tools.
+- The plugin's tools are never generated as tool commands. `cli.excludeTools`
+  naming one of them leaves its command out.
+- `--output json` prints the tool's structured content (the whole result when
+  it has none).
+- Exit codes: 0 on success; 1 when the tool fails (a failed action or
+  workflow, a skill not found, an authority denial); 2 for a usage error (no
+  query or script, an input that is not a JSON object, two script sources).
+  The error goes to stderr.
+
+Up to 1.11.0, the plugin's tools were plain tool commands
+(`search-skill --query`, `load-skill --skill-id`, `run-workflow --script`),
+`skills search` and `skills load` showed no actions, and nothing ran one
+action.
+
+### Questions from the server
+
+The CLI answers a tool's `this.elicit()` questions, in-process and through the
+daemon. The server needs `elicitation: { enabled: true }`.
+
+- A yes/no question, such as the Skilled OpenAPI plugin's confirmation of an
+  action its `confirm` option names, is printed on stderr and answered `y/N`
+  when standard input is a terminal.
+- The global `--yes`, before or after the command, answers every yes/no
+  question with yes, without asking.
+- With no terminal and no `--yes`, the CLI declines and prints the question and
+  `Declined: there is no terminal to ask on. Run the command again with --yes
+to confirm.` The action is not sent, and the command exits 1 with
+  `the user declined: <actionId>`.
+- A question with other fields asks each one in the terminal.
+
+Up to 1.11.0, the CLI could not answer: a confirmation was refused with
+`this client can't ask for it`, and the server's `sendElicitationResult`
+fallback tool was a command. That tool is no longer one.
 
 ## Requirements
 
@@ -276,8 +320,9 @@ frontmcp service uninstall my-server
 | Binary too large             | All dependencies bundled including dev deps | Review dependencies and remove unused packages from bundle               |
 | Permission denied on binary  | Missing execute permission                  | Run `chmod +x dist/my-server`                                            |
 | Binary fails on different OS | SEA binaries are platform-specific          | Build on the target OS or use CI matrix builds                           |
-| `run-workflow` exits 1       | The workflow failed (`success: false`)      | Read `error` (`--output json`); it names the API's status and error body |
-| `execute-action` exits 1     | The action failed                           | Read the text, or `structuredContent` (`--output json`): status and body |
+| `run_workflow` exits 1       | The workflow failed (`success: false`)      | Read the error on stderr; it names the API's status and error body       |
+| `execute` exits 1            | The action failed, or the user declined it  | Read the error on stderr; `--output json` prints `{ ok, status, data? }` |
+| `execute` exits 1, declined  | No terminal to confirm a destructive action | Run it again with `--yes`                                                |
 
 ## Examples
 
