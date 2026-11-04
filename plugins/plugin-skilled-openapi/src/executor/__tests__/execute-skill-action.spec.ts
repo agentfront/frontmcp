@@ -2,8 +2,9 @@
 // `callTool(actionId, input)` bridge: authorize → validate input → execute →
 // validate output → envelope, plus opt-in audit. The outbound call
 // (`executeOperation`) is mocked so these tests stay hermetic.
-import type { HiddenOpEntry } from '../../registry/hidden-op.registry';
-import { executeSkillAction, type SkillActionDeps } from '../execute-skill-action';
+import type { HiddenOpEntry, OperationListings } from '../../registry/hidden-op.registry';
+import { AuthorityGuard, type UnprotectedOpsPolicy } from '../../security/authority-guard';
+import { authorizeAction, executeSkillAction, type SkillActionDeps } from '../execute-skill-action';
 import { clearCompiledSchemaCache } from '../schema-cache';
 
 const mockExecuteOperation = jest.fn();
@@ -72,14 +73,14 @@ describe('executeSkillAction', () => {
       data: { id: 1, name: 'thing' },
       contentType: 'application/json',
     });
-    const res = await executeSkillAction({ entry: makeEntry(), input: { id: 1 }, authInfo: {}, deps: makeDeps() });
+    const res = await executeSkillAction({ listings: [makeEntry()], input: { id: 1 }, authInfo: {}, deps: makeDeps() });
     expect(res).toEqual({ ok: true, status: 200, data: { id: 1, name: 'thing' }, contentType: 'application/json' });
     expect(mockExecuteOperation).toHaveBeenCalledTimes(1);
   });
 
   it('denies when the authority guard rejects (executeOperation never runs)', async () => {
     const res = await executeSkillAction({
-      entry: makeEntry({ requiredAuthorities: { allOf: ['admin'] } as never }),
+      listings: [makeEntry({ requiredAuthorities: { allOf: ['admin'] } as never })],
       input: { id: 1 },
       authInfo: {},
       deps: makeDeps({ granted: false, deniedBy: 'missing admin' }),
@@ -91,7 +92,7 @@ describe('executeSkillAction', () => {
 
   it('rejects input that fails the op input schema (no outbound call)', async () => {
     const res = await executeSkillAction({
-      entry: makeEntry(),
+      listings: [makeEntry()],
       input: { id: 'not-a-number' },
       authInfo: {},
       deps: makeDeps(),
@@ -108,7 +109,7 @@ describe('executeSkillAction', () => {
       data: { id: 'wrong-type' },
       contentType: 'application/json',
     });
-    const res = await executeSkillAction({ entry: makeEntry(), input: { id: 1 }, authInfo: {}, deps: makeDeps() });
+    const res = await executeSkillAction({ listings: [makeEntry()], input: { id: 1 }, authInfo: {}, deps: makeDeps() });
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/output schema/);
   });
@@ -116,14 +117,14 @@ describe('executeSkillAction', () => {
   it('reports a bodyless JSON answer (a 204) as a success, without checking it against the output schema', async () => {
     mockExecuteOperation.mockResolvedValue({ ok: true, status: 204, data: null, contentType: 'application/json' });
 
-    const res = await executeSkillAction({ entry: makeEntry(), input: { id: 1 }, authInfo: {}, deps: makeDeps() });
+    const res = await executeSkillAction({ listings: [makeEntry()], input: { id: 1 }, authInfo: {}, deps: makeDeps() });
 
     expect(res).toEqual({ ok: true, status: 204, contentType: 'application/json' });
   });
 
   it('passes an upstream ok:false envelope through unchanged (no output validation)', async () => {
     mockExecuteOperation.mockResolvedValue({ ok: false, status: 404, error: 'not found' });
-    const res = await executeSkillAction({ entry: makeEntry(), input: { id: 1 }, authInfo: {}, deps: makeDeps() });
+    const res = await executeSkillAction({ listings: [makeEntry()], input: { id: 1 }, authInfo: {}, deps: makeDeps() });
     expect(res).toMatchObject({ ok: false, status: 404, error: 'not found' });
   });
 
@@ -141,7 +142,7 @@ describe('executeSkillAction', () => {
       writeHttpCallFailure: jest.fn(async () => undefined),
     };
     const res = await executeSkillAction({
-      entry: makeEntry(),
+      listings: [makeEntry()],
       input: { id: 1 },
       authInfo: {},
       deps: makeDeps({ audit: { writer: writer as never, subject: 'user-1' } }),
@@ -166,7 +167,7 @@ describe('executeSkillAction', () => {
       writeHttpCallFailure: jest.fn(async () => undefined),
     };
     await executeSkillAction({
-      entry: makeEntry({ requiredAuthorities: { allOf: ['admin'] } as never }),
+      listings: [makeEntry({ requiredAuthorities: { allOf: ['admin'] } as never })],
       input: { id: 1 },
       authInfo: {},
       deps: makeDeps({ granted: false, deniedBy: 'nope', audit: { writer: writer as never, subject: 'u' } }),
@@ -187,7 +188,7 @@ describe('executeSkillAction', () => {
     };
     await expect(
       executeSkillAction({
-        entry: makeEntry(),
+        listings: [makeEntry()],
         input: { id: 1 },
         authInfo: {},
         deps: makeDeps({ audit: { writer: writer as never, subject: 'u' } }),
@@ -206,7 +207,7 @@ describe('executeSkillAction', () => {
     });
     const entry = makeEntry();
     entry.service = { ...entry.service, baseUrl: 'http://[not a url' } as HiddenOpEntry['service'];
-    const res = await executeSkillAction({ entry, input: { id: 1 }, authInfo: {}, deps: makeDeps() });
+    const res = await executeSkillAction({ listings: [entry], input: { id: 1 }, authInfo: {}, deps: makeDeps() });
     expect(res.ok).toBe(true);
     const passed = mockExecuteOperation.mock.calls[0][0] as { deps: { allowedHosts: Set<string> } };
     expect(passed.deps.allowedHosts.size).toBe(0);
@@ -221,7 +222,7 @@ describe('executeSkillAction', () => {
       writeHttpCallFailure: jest.fn(async () => undefined),
     };
     const res = await executeSkillAction({
-      entry: makeEntry(),
+      listings: [makeEntry()],
       input: { id: 1 },
       authInfo: {},
       deps: makeDeps({ audit: { writer: writer as never, subject: 'u' } }),
@@ -253,9 +254,92 @@ describe('executeSkillAction', () => {
     };
     const deps = makeDeps({ audit: { writer: writer as never, subject: 'u' } });
     (deps.logger as unknown as { warn: jest.Mock }).warn = warn;
-    const res = await executeSkillAction({ entry: makeEntry(), input: { id: 1 }, authInfo: {}, deps });
+    const res = await executeSkillAction({ listings: [makeEntry()], input: { id: 1 }, authInfo: {}, deps });
     expect(res.ok).toBe(true);
     await new Promise((r) => setTimeout(r, 0));
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('authority-pass write failed'));
+  });
+});
+
+describe('authorizeAction: an operation several skills list', () => {
+  const ADMIN = { roles: { any: ['admin'] } };
+  const VIEWER = { user: { sub: 'viewer', roles: ['viewer'] } };
+
+  const listing = (
+    skillId: string,
+    skillRequiredAuthorities?: HiddenOpEntry['skillRequiredAuthorities'],
+    op: Partial<HiddenOpEntry['op']> = {},
+  ): HiddenOpEntry => ({
+    ...makeEntry(op),
+    skillId,
+    ...(skillRequiredAuthorities ? { skillRequiredAuthorities } : {}),
+  });
+
+  const authorize = (listings: OperationListings, unprotectedOps: UnprotectedOpsPolicy = 'allow') =>
+    authorizeAction({ listings, guard: new AuthorityGuard(), unprotectedOps, authInfo: VIEWER, input: { id: 1 } });
+
+  it.each([
+    ['the admin skill first', [listing('billing-admin', ADMIN), listing('invoices')]],
+    ['the public skill first', [listing('invoices'), listing('billing-admin', ADMIN)]],
+  ] as const)('runs under the skill that admits the caller, with %s', async (_order, listings) => {
+    const { entry, result } = await authorize(listings);
+
+    expect(result.granted).toBe(true);
+    expect(entry.skillId).toBe('invoices');
+  });
+
+  it("returns the first listing's denial when no listing admits the caller", async () => {
+    const { entry, result } = await authorize([
+      listing('billing-admin', ADMIN),
+      listing('finance', { roles: { any: ['finance'] } }),
+    ]);
+
+    expect(result.granted).toBe(false);
+    expect(result.deniedBy).toEqual(expect.any(String));
+    expect(entry.skillId).toBe('billing-admin');
+  });
+
+  it("applies the operation's own rule under every listing", async () => {
+    const { result } = await authorize([listing('invoices', undefined, { requiredAuthorities: ADMIN })]);
+
+    expect(result.granted).toBe(false);
+  });
+
+  it('keeps unprotectedOps "deny" and public: true as they are for one listing', async () => {
+    const denied = await authorize([listing('invoices'), listing('billing-admin', ADMIN)], 'deny');
+    const allowed = await authorize(
+      [listing('invoices', undefined, { public: true }), listing('billing-admin', ADMIN, { public: true })],
+      'deny',
+    );
+
+    expect(denied.result).toMatchObject({ granted: false, deniedBy: 'unprotected_operation_denied' });
+    expect(allowed.result.granted).toBe(true);
+    expect(allowed.entry.skillId).toBe('invoices');
+  });
+
+  it('audits the call under the skill that admitted the caller', async () => {
+    mockExecuteOperation.mockResolvedValue({ ok: true, status: 200, data: { id: 1 }, contentType: 'application/json' });
+    const writer = {
+      writeAuthorityPass: jest.fn(async (_record: unknown) => undefined),
+      writeAuthorityFail: jest.fn(async () => undefined),
+      writeHttpCallSuccess: jest.fn(async (_record: unknown) => undefined),
+      writeHttpCallFailure: jest.fn(async () => undefined),
+    };
+    const deps = {
+      ...makeDeps({ audit: { writer: writer as never, subject: 'viewer' } }),
+      guard: new AuthorityGuard(),
+    };
+
+    const res = await executeSkillAction({
+      listings: [listing('billing-admin', ADMIN), listing('invoices')],
+      input: { id: 1 },
+      authInfo: VIEWER,
+      deps,
+    });
+
+    expect(res.ok).toBe(true);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(writer.writeAuthorityPass.mock.calls[0][0]).toMatchObject({ skillId: 'invoices', actionId: 'getThing' });
+    expect(writer.writeHttpCallSuccess.mock.calls[0][0]).toMatchObject({ skillId: 'invoices' });
   });
 });

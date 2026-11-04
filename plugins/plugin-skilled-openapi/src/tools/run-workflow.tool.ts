@@ -79,13 +79,13 @@ export default class RunWorkflowTool extends ToolContext {
     // The bridge the sandboxed script reaches as `await callTool(actionId, input)`.
     // It is the ONLY way the script touches the outside world.
     const toolHandler = async (actionId: string, actionInput: Record<string, unknown>): Promise<unknown> => {
-      const entry = hiddenOps.getByActionId(actionId);
-      if (!entry) {
+      const listings = hiddenOps.listingsOf(actionId);
+      if (!listings) {
         throw new Error(
           `unknown action "${actionId}" — run search_skill then load_skill to discover available actions`,
         );
       }
-      const res = await executeSkillAction({ entry, input: actionInput ?? {}, authInfo: this.authInfo, deps });
+      const res = await executeSkillAction({ listings, input: actionInput ?? {}, authInfo: this.authInfo, deps });
       if (!res.ok) {
         throw new Error(res.error ?? `action "${actionId}" failed with status ${res.status}`);
       }
