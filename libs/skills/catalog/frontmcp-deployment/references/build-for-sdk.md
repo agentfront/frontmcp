@@ -142,8 +142,9 @@ create({
   providers?: ProviderType[],
   adapters?: AdapterType[],
 
-  // Server-level: every other @FrontMcp option, passed on as it is (except http and splitByApp)
+  // Server-level: every other @FrontMcp option, passed on as it is (except splitByApp, and http beyond forwardHeaders)
   auth?: AuthOptionsInput, // the server's auth, as @FrontMcp({ auth })
+  http?: { forwardHeaders?: string[] }, // request headers a call's metadata.customHeaders keeps, as @FrontMcp({ http })
   redis?: RedisOptionsInput,
   transport?: TransportOptionsInput,
   logging?: LoggingOptionsInput, // without it: `warn`, or the level FRONTMCP_LOG_LEVEL names
@@ -162,7 +163,7 @@ create({
 
 A `create()` server builds one scope, the root scope, which holds the synthetic app (`standalone: false`) and applies `auth` as the server's auth. A server-scoped plugin (`@Plugin({ scope: 'server' })`) in `plugins` installs there. Up to 1.9.4 the synthetic app had a scope of its own and an empty root scope started too, so every `create()` server ran two task stores, two task runners and their timers, and a server-scoped plugin failed with `InvalidPluginScopeError`.
 
-A `create()`, `createDirect()` or `connect()` server is reached in process only, so its scopes set up nothing that serves HTTP: no transport (`scope.transportService` is `undefined`), no `http:*` flows, custom `http.routes`, channel webhook routes or health checks (`scope.healthService` is `undefined`). Without `auth`, the scope's auth is public mode without the OAuth, discovery and session flows (`scope.auth.options.mode` is `'public'`); with `auth`, it is the auth of that mode with its flows, as before. To serve the same config over HTTP, use `FrontMcpInstance.bootstrap()`, `createHandler()` or `createFetchHandler()`.
+A `create()`, `createDirect()` or `connect()` server is reached in process only, so its scopes set up nothing that serves HTTP: no transport (`scope.transportService` is `undefined`), no `http:*` flows, custom `http.routes`, channel webhook routes or health checks (`scope.healthService` is `undefined`). Of `http`, only `forwardHeaders` applies: a `create()` or `createDirect()` call's `DirectCallOptions.metadata.customHeaders` keeps the headers it names, as an HTTP request does. A `connect()` client's `callTool()` takes no per-call metadata. Without `auth`, the scope's auth is public mode without the OAuth, discovery and session flows (`scope.auth.options.mode` is `'public'`); with `auth`, it is the auth of that mode with its flows, as before. To serve the same config over HTTP, use `FrontMcpInstance.bootstrap()`, `createHandler()` or `createFetchHandler()`.
 
 ## Platform-Specific Connections
 

@@ -19,7 +19,7 @@ import type {
   WorkflowType,
 } from '../common/interfaces';
 import type { FrontMcpConfigInput } from '../common/metadata';
-import type { AuthOptionsInput } from '../common/types';
+import type { AuthOptionsInput, HttpOptionsInput } from '../common/types';
 import type { DirectServerOptions } from './direct.types';
 
 /** The `@FrontMcp` options of a server whose apps share one endpoint, as `FrontMcpInstance.createDirect()` takes them. */
@@ -95,6 +95,12 @@ export interface CreateConfig extends Omit<ServerConfigInput, CreateOwnedServerO
 
   /** Authentication configuration for the server (`@FrontMcp({ auth })`) */
   auth?: AuthOptionsInput;
+
+  /**
+   * The request headers an in-process call keeps in `customHeaders`, besides `x-frontmcp-*`, as `@FrontMcp({ http })`
+   * does for an HTTP request. An in-process server has no HTTP host, so it takes no other `http` option.
+   */
+  http?: Pick<HttpOptionsInput, 'forwardHeaders'>;
 
   /** Job definitions for the app */
   jobDefinitions?: JobType[];
