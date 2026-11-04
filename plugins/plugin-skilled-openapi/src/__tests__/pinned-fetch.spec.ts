@@ -282,6 +282,7 @@ describe('executeOperation without an injected fetch', () => {
       maxConcurrencyPerHost: 10,
       defaultTimeoutMs: 5_000,
       defaultMaxResponseBytes: 256 * 1024,
+      errorBodies: 'include',
       ...outbound,
     },
     resolver: new MemoryCredentialResolver({ billing: 'sk_live_x' }),

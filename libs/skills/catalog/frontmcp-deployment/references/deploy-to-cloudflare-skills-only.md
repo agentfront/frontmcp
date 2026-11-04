@@ -27,6 +27,16 @@ short AgentScript program in the Worker isolate, where each `callTool(actionId,
 input)` invokes a loaded skill's operation. The bundle is pulled from a SaaS
 endpoint, cached in KV, and refreshed on a Cron Trigger.
 
+A failed call throws an error that names the API's status and error body
+(compacted JSON or text, redacted, cut at 2 KB), such as `action
+"refundInvoice" failed with status 422: {"error":"refund_too_large"}`;
+`outbound.errorBodies: 'status-only'` names the status alone. `callTool(actionId,
+input, { throwOnError: false })` returns `{ ok, status, data }` instead, `data`
+being the error body on a failure and `status` 0 (with an `error`) when no
+answer came. A workflow that fails is an `isError: true` result with the same
+`structuredContent`. Up to 1.11.0 the error named the status alone, and the
+result had no `isError`.
+
 The meta-tools only show what the caller may use: a skill whose
 `requiredAuthorities` the caller doesn't satisfy is left out of `search_skill`
 (and its catalog) and is `SKILL_NOT_FOUND` for `load_skill`, and `load_skill`

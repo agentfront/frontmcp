@@ -115,6 +115,13 @@ ran in-process.
 is not found, and name it on stderr; `skills load` prints how many of the
 requested skills it loaded. Up to 1.11.0 both exited 0.
 
+On a Skilled OpenAPI server, `<bin> run-workflow --script '<AgentScript>'`
+exits 1 when the workflow fails (`success: false`), as for any tool that
+answers `isError: true`, and `--output json` prints the result with its
+`structuredContent` (`success`, `error`, `stats`). The error names a failed
+action's status and the API's error body. Up to 1.11.0 a failed workflow
+exited 0.
+
 ## Requirements
 
 - **Node.js 24+** required for the SEA path (`frontmcp build --target cli`). The plain JS bundle path (`--target cli --js`) only requires the Node version your entry file supports.

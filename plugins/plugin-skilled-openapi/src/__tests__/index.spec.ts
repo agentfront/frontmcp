@@ -75,4 +75,14 @@ describe('public package surface', () => {
     });
     expect(r.success).toBe(true);
   });
+
+  it("options schema defaults outbound.errorBodies to 'include', takes 'status-only' and rejects anything else", () => {
+    const parse = (outbound?: Record<string, unknown>) =>
+      plugin.skilledOpenApiPluginOptionsSchema.safeParse({ source: { type: 'static', path: '/x' }, outbound });
+
+    expect(parse().data?.outbound.errorBodies).toBe('include');
+    expect(parse({ defaultTimeoutMs: 1000 }).data?.outbound.errorBodies).toBe('include');
+    expect(parse({ errorBodies: 'status-only' }).data?.outbound.errorBodies).toBe('status-only');
+    expect(parse({ errorBodies: 'none' }).success).toBe(false);
+  });
 });

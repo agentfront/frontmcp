@@ -52,6 +52,12 @@ export const outboundOptionsSchema = z
      * for local dev where the mock REST server doesn't have a TLS cert.
      */
     allowHttp: z.boolean().default(false),
+    /**
+     * What a failed action reports to the workflow script (and so to the model): `'include'` adds the API's error
+     * body, redacted and cut to 2 KB, to the status; `'status-only'` reports the status alone, for APIs whose error
+     * bodies hold internal details.
+     */
+    errorBodies: z.enum(['include', 'status-only']).default('include'),
   })
   .default({
     allowPrivateNetworks: false,
@@ -59,9 +65,13 @@ export const outboundOptionsSchema = z
     defaultTimeoutMs: 30_000,
     defaultMaxResponseBytes: 256 * 1024,
     allowHttp: false,
+    errorBodies: 'include',
   });
 
 export type OutboundOptions = z.infer<typeof outboundOptionsSchema>;
+
+/** Whether a failed action reports the API's error body with its status, or the status alone. */
+export type ErrorBodiesPolicy = OutboundOptions['errorBodies'];
 
 // ─── Plugin-level options ──────────────────────────────────────────────────
 
@@ -150,6 +160,7 @@ const DEFAULT_OUTBOUND_OPTIONS: OutboundOptions = {
   defaultTimeoutMs: 30_000,
   defaultMaxResponseBytes: 256 * 1024,
   allowHttp: false,
+  errorBodies: 'include',
 };
 
 export const skilledOpenApiPluginOptionsSchema = skilledOpenApiPluginOptionsObjectSchema.transform((opts) => {
