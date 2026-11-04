@@ -102,6 +102,7 @@ function makeRunWorkflowThis(
     auditWriter?: unknown;
     config?: SkilledOpenApiConfig;
     omitAuthInfo?: boolean;
+    signal?: AbortSignal;
   } = {},
 ) {
   const resolver = { resolve: jest.fn(async () => ({ token: 'sk_x' })) };
@@ -128,6 +129,7 @@ function makeRunWorkflowThis(
     },
     logger: fakeLogger,
     authInfo: args.omitAuthInfo ? undefined : (args.authInfo ?? { user: { sub: 'u', roles: [], permissions: [] } }),
+    signal: args.signal,
   } as unknown as RunWorkflowTool;
 }
 
@@ -307,6 +309,96 @@ describe('run_workflow', () => {
     await run(makeRunWorkflowThis({ hiddenOps }), 'x');
     const args = mockExecuteSkillAction.mock.calls[0][0] as { deps: { audit?: unknown } };
     expect(args.deps.audit).toBeUndefined();
+  });
+});
+
+describe('run_workflow — the requests of a workflow that has ended', () => {
+  const stats = { duration: 1, toolCallCount: 1, iterationCount: 1 };
+  const WORKFLOW_ENDED = 'request aborted: the workflow ended before the request finished';
+
+  const workflowWithInvoices = (signal?: AbortSignal) => {
+    const hiddenOps = new HiddenOpRegistry();
+    hiddenOps.set(buildEntry('billing', 'createInvoice'));
+    return makeRunWorkflowThis({ hiddenOps, signal });
+  };
+
+  /** Each call answers only when its signal fires, with the failure the outbound call reports for it. */
+  const callsWaitForTheirSignal = () =>
+    mockExecuteSkillAction.mockImplementation(
+      ({ signal }: { signal: AbortSignal }) =>
+        new Promise((resolve) => {
+          signal.addEventListener('abort', () =>
+            resolve({ ok: false, status: 0, error: `request aborted: ${(signal.reason as Error).message}` }),
+          );
+        }),
+    );
+
+  const signalOfCall = (index: number): AbortSignal => mockExecuteSkillAction.mock.calls[index][0].signal;
+
+  it('aborts a call still in flight when the workflow times out, and still reports the timeout', async () => {
+    callsWaitForTheirSignal();
+    let inFlight: Promise<unknown> = Promise.resolve();
+    mockExecuteImpl = async (_code, ctx) => {
+      inFlight = ctx.toolHandler('createInvoice', {}).catch((error: Error) => error.message);
+      return { success: false, error: { message: 'Execution timed out after 8000ms' }, stats };
+    };
+
+    const res = await run(workflowWithInvoices(), 'return await callTool("createInvoice", {})');
+
+    expect(res).toMatchObject({ success: false, error: 'Execution timed out after 8000ms' });
+    await expect(inFlight).resolves.toBe(WORKFLOW_ENDED);
+  });
+
+  it.each([
+    ['returns', { success: true, value: 1, stats }],
+    ['fails', { success: false, error: { message: 'Tool call limit exceeded (25)' }, stats }],
+  ])('aborts the signal its calls run with once the workflow %s', async (_end, outcome) => {
+    mockExecuteSkillAction.mockResolvedValue({ ok: true, status: 200, data: 1 });
+    let abortedDuringCall: boolean | undefined;
+    mockExecuteImpl = async (_code, ctx) => {
+      await ctx.toolHandler('createInvoice', {});
+      abortedDuringCall = signalOfCall(0).aborted;
+      return outcome;
+    };
+
+    await run(workflowWithInvoices(), 'return await callTool("createInvoice", {})');
+
+    expect(abortedDuringCall).toBe(false);
+    expect(signalOfCall(0).aborted).toBe(true);
+  });
+
+  it('hands a call made after the workflow ended a signal that has already fired', async () => {
+    let abortedWhenCalled: boolean | undefined;
+    mockExecuteSkillAction.mockImplementation(async ({ signal }: { signal: AbortSignal }) => {
+      abortedWhenCalled = signal.aborted;
+      return { ok: true, status: 200, data: 1 };
+    });
+    let lateCall: () => Promise<unknown> = async () => undefined;
+    mockExecuteImpl = async (_code, ctx) => {
+      lateCall = () => ctx.toolHandler('createInvoice', {});
+      return { success: true, value: 1, stats };
+    };
+
+    await run(workflowWithInvoices(), 'return 1');
+    await lateCall();
+
+    expect(abortedWhenCalled).toBe(true);
+  });
+
+  it('aborts its calls when the run_workflow call itself is cancelled', async () => {
+    callsWaitForTheirSignal();
+    const request = new AbortController();
+    let callError: unknown;
+    mockExecuteImpl = async (_code, ctx) => {
+      const inFlight = ctx.toolHandler('createInvoice', {}).catch((error: Error) => error.message);
+      request.abort(new Error('the client cancelled the call'));
+      callError = await inFlight;
+      return { success: false, error: { message: String(callError) }, stats };
+    };
+
+    await run(workflowWithInvoices(request.signal), 'x');
+
+    expect(callError).toBe('request aborted: the client cancelled the call');
   });
 });
 
