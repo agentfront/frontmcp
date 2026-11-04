@@ -76,7 +76,6 @@ export default class RunWorkflowTool extends ToolContext {
     // sandboxed script resolves actions via callTool (stateless workers have no
     // background loop to finish a deferred sync).
     await this.get(BundleSyncService).ensureLoaded();
-    const hiddenOps = this.get(HiddenOpRegistry);
 
     // The enclave is an OPTIONAL peer: lazy-import so installs that never run
     // workflows don't need it, and a missing install surfaces as a clear error
@@ -94,6 +93,9 @@ export default class RunWorkflowTool extends ToolContext {
         'workflow execution unavailable: the @enclave-vm sandbox is not installed. Install @enclave-vm/core and @enclave-vm/ast to enable run_workflow.',
       );
     }
+
+    // The operations of the bundle the workflow starts on: a swap while it runs doesn't change them.
+    const hiddenOps = this.get(HiddenOpRegistry).snapshot();
 
     // Transform user AgentScript → wrapped form. `transformLoops:false` because
     // the interpreter enforces its OWN step budget (the loop-rewrite helpers are

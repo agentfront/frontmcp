@@ -270,6 +270,26 @@ describe('run_workflow', () => {
     );
   });
 
+  it('callTool bridge resolves the actions of the bundle the workflow started on, when a swap lands while it runs', async () => {
+    const hiddenOps = new HiddenOpRegistry();
+    hiddenOps.set(buildEntry('reports', 'getAccountPlan'));
+    mockExecuteSkillAction.mockResolvedValue({ ok: true, status: 200, data: { plan: 'growth' } });
+
+    let bridged: unknown;
+    mockExecuteImpl = async (_code, ctx) => {
+      hiddenOps.clear();
+      hiddenOps.set(buildEntry('refunds', 'refundInvoice'));
+      bridged = await ctx.toolHandler('getAccountPlan', {});
+      return { success: true, value: bridged, stats: { duration: 1, toolCallCount: 1, iterationCount: 1 } };
+    };
+
+    const res = await runOutput(makeRunWorkflowThis({ hiddenOps }), 'return await callTool("getAccountPlan", {})');
+    expect(res).toMatchObject({ success: true, value: { plan: 'growth' } });
+    expect(mockExecuteSkillAction).toHaveBeenCalledWith(
+      expect.objectContaining({ listings: [expect.objectContaining({ skillId: 'reports' })] }),
+    );
+  });
+
   it('callTool bridge throws for an unknown action', async () => {
     mockExecuteImpl = async (_code, ctx) => {
       await ctx.toolHandler('ghost', {});
