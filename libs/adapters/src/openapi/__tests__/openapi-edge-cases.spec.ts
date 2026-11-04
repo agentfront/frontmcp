@@ -1,6 +1,8 @@
-import { buildRequest, parseResponse } from '../openapi.utils';
-import { validateBaseUrl } from '@frontmcp/utils';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
+
+import { validateBaseUrl } from '@frontmcp/utils';
+
+import { buildRequest, parseResponse } from '../openapi.utils';
 
 // Helper to create a basic tool for testing
 function createTestTool(overrides: Partial<McpOpenAPITool> = {}): McpOpenAPITool {
@@ -165,7 +167,7 @@ describe('OpenapiAdapter - Edge Cases', () => {
   });
 
   describe('buildRequest - Array Handling', () => {
-    it('should handle empty arrays in query params', () => {
+    it('sends no query parameter for an empty array, which form style explodes by default', () => {
       const tool = createTestTool({
         mapper: [{ inputKey: 'tags', key: 'tags', type: 'query', required: false }],
       });
@@ -176,8 +178,7 @@ describe('OpenapiAdapter - Edge Cases', () => {
         { headers: {}, query: {}, cookies: {} },
         'https://api.example.com',
       );
-      // Empty array becomes empty string
-      expect(result.url).toBe('https://api.example.com/test?tags=');
+      expect(result.url).toBe('https://api.example.com/test');
     });
 
     it('should throw error for arrays in header params', () => {
@@ -246,7 +247,7 @@ describe('OpenapiAdapter - Edge Cases', () => {
   });
 
   describe('buildRequest - Query Parameters', () => {
-    it('should handle array values in query parameters', () => {
+    it('repeats the key for each item of an array, as form style explodes by default', () => {
       const tool: McpOpenAPITool = {
         name: 'searchUsers',
         description: 'Search users',
@@ -264,7 +265,7 @@ describe('OpenapiAdapter - Edge Cases', () => {
 
       const result = buildRequest(tool, input, security, 'https://api.example.com');
 
-      expect(result.url).toBe('https://api.example.com/users?tags=admin%2Cuser%2Cguest');
+      expect(result.url).toBe('https://api.example.com/users?tags=admin&tags=user&tags=guest');
     });
 
     it('should throw error for object values in path parameters', () => {
