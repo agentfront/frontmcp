@@ -56,7 +56,7 @@
     "@enclave-vm/core": "^2.17.0",
     "@frontmcp/protocol": "1.11.0",
     "acorn": "^8.15.0",
-    "vectoriadb": "^2.3.3"
+    "vectoriadb": "^2.3.4"
   },
   "peerDependencies": {
     "@frontmcp/lazy-zod": "1.11.0",

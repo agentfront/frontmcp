@@ -1,3 +1,5 @@
+import { defaultTokenizer } from 'vectoriadb';
+
 import { type SkillContent } from '../../common/interfaces';
 import {
   identifierWords,
@@ -7,6 +9,7 @@ import {
   queryTerms,
   queryTermShare,
   skillSearchText,
+  skillTokenizer,
 } from '../skill-search-text';
 
 const skill = (overrides: Partial<SkillContent> = {}): SkillContent => ({
@@ -103,5 +106,24 @@ describe('negativeQueryShare', () => {
     expect(negativeQueryShare('stock', 'count the pets in stock')).toBe(1);
     expect(negativeQueryShare(['orders', 'stock levels'], 'count the pets in stock')).toBe(0.5);
     expect(negativeQueryShare(undefined, 'count the pets in stock')).toBe(0);
+  });
+});
+
+describe('skillTokenizer (#1061, #1065)', () => {
+  const tokenize = skillTokenizer(defaultTokenizer);
+
+  it("leaves out stop words, and keeps vectoriadb's terms in every script", () => {
+    expect(tokenize('Show me the cats')).toEqual(['show', 'cats']);
+    expect(tokenize('מציאת חתולים')).toEqual(['מציאת', 'חתולים']);
+    expect(tokenize('查找狗')).toEqual(['查', '查找', '找', '找狗', '狗']);
+    expect(tokenize('Vögel')).toEqual(['vogel']);
+  });
+
+  it('matches the text as the index sees it, a term within a word included', () => {
+    expect(queryTermShare(queryTerms('Vogel', tokenize), 'Hunde, Katzen und Vögel finden.', tokenize)).toBe(1);
+    expect(queryTermShare(queryTerms('refund', tokenize), 'Process refunds', tokenize)).toBe(1);
+    expect(queryTermShare(queryTerms('猫', tokenize), '查找狗、猫和鸟。', tokenize)).toBe(1);
+    expect(queryTermShare(queryTerms('show me the cats', tokenize), 'Find dogs and cats', tokenize)).toBe(0.5);
+    expect(queryTermShare(queryTerms('the', tokenize), 'the store', tokenize)).toBe(0);
   });
 });
