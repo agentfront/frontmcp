@@ -10,6 +10,7 @@ import {
   verifyBundleSignature,
   type AuthBinding,
   type BundleDiff,
+  type BundlePushReceiver,
   type BundleStore,
   type OperationDescriptor,
   type ResolvedBundle,
@@ -72,6 +73,7 @@ export interface BundleApplyResult {
 interface StartableBundleSource {
   start(): Promise<void>;
   onChange(listener: (bundle: ResolvedBundle) => void): () => void;
+  readonly push?: BundlePushReceiver;
 }
 
 export class BundleSyncService {
@@ -82,6 +84,8 @@ export class BundleSyncService {
   private readyPromise?: Promise<void>;
   /** Why the last load failed, in a form clients may read; cleared when a bundle is applied. */
   private loadFailure?: string;
+  /** The last queued apply: the source's bundles and pushed ones apply one at a time, in the order they arrive. */
+  private applyQueue?: Promise<BundleApplyResult>;
 
   constructor(
     private readonly skillRegistry: SkillRegistryInterface,
@@ -122,15 +126,26 @@ export class BundleSyncService {
   }
 
   /**
-   * {@link ensureReady}, then refuse with a public error while loading failed and no bundle is loaded, so a
-   * meta-tool says why the server has no skills instead of answering as if it had none.
+   * {@link ensureReady}, then refuse with a public error while no bundle is loaded, so a meta-tool says why the
+   * server has no skills instead of answering as if it had none.
    */
   async ensureLoaded(): Promise<void> {
     await this.ensureReady();
     const state = this.loadState();
-    if (state.status === 'failed') {
-      throw new PublicMcpError(`No skill bundle is loaded: ${state.reason}`, 'SKILL_BUNDLE_NOT_LOADED', 503);
-    }
+    if (state.status === 'loaded') return;
+    const reason = state.status === 'failed' ? state.reason : 'the first bundle has not loaded yet';
+    throw new PublicMcpError(`No skill bundle is loaded: ${reason}`, 'SKILL_BUNDLE_NOT_LOADED', 503);
+  }
+
+  /** The source's checks for pushed bundles, when it takes them (`saas` with `enableWebhook`). */
+  get pushReceiver(): BundlePushReceiver | undefined {
+    return this.source?.push;
+  }
+
+  /** Apply a pushed bundle once the first bundle and those queued before it are applied. */
+  async applyPushed(bundle: ResolvedBundle): Promise<BundleApplyResult> {
+    await this.ensureReady();
+    return this.enqueueApply(bundle);
   }
 
   /** The bundle being served, or why there is none: a failed load counts only while no bundle is loaded. */
@@ -164,36 +179,13 @@ export class BundleSyncService {
     const firstApply = new Promise<void>((resolve) => {
       resolveFirst = resolve;
     });
-    // SERIALIZE applies: emissions can arrive back-to-back (an initial pull + a
-    // Cron-driven refresh / hot-swap) and apply() mutates the registry, the
-    // bundle store, and unregister handles — overlapping applies would interleave
-    // and leave that state inconsistent. Chaining through `applyTail` keeps them
-    // ordered. Each link swallows its own failure so the chain never breaks.
-    let applyTail: Promise<void> = Promise.resolve();
     // Wire onChange HERE (request context). The first emit drives `firstApply`;
     // later emits re-apply in order.
     source.onChange((bundle) => {
-      applyTail = applyTail.then(async () => {
-        try {
-          const result = await this.apply(bundle);
-          if (result.applied) {
-            this.loadFailure = undefined;
-          } else {
-            this.logger.warn(`[bundle-sync] bundle ${bundle.bundleId}@${bundle.version} not applied: ${result.reason}`);
-            this.recordLoadFailure(`bundle ${bundle.bundleId}@${bundle.version} was not applied: ${result.reason}`);
-          }
-        } catch (e) {
-          this.logger.error(
-            `[bundle-sync] bundle ${bundle.bundleId}@${bundle.version} apply threw: ${(e as Error).message}`,
-          );
-          this.recordLoadFailure(
-            `bundle ${bundle.bundleId}@${bundle.version} was not applied: ${describeLoadError(e)}`,
-          );
-        }
-      });
+      const applied = this.enqueueApply(bundle);
       if (!firstSettled) {
         firstSettled = true;
-        void applyTail.then(() => resolveFirst());
+        void applied.then(() => resolveFirst());
       }
     });
     try {
@@ -213,8 +205,39 @@ export class BundleSyncService {
     }
   }
 
-  private recordLoadFailure(reason: string): void {
+  /** Record why no bundle could be loaded; clients read it through {@link ensureLoaded} and `/readyz`. */
+  recordLoadFailure(reason: string): void {
     this.loadFailure = publicLoadFailureReason(reason);
+  }
+
+  /**
+   * Apply after every apply queued before: apply() mutates the registry, the bundle store and the unregister
+   * handles, so two at once would leave them inconsistent. Never rejects, so the queue never breaks.
+   */
+  private enqueueApply(bundle: ResolvedBundle): Promise<BundleApplyResult> {
+    const previous = this.applyQueue ?? Promise.resolve(undefined);
+    const applied = previous.then(() => this.applyAndRecord(bundle));
+    this.applyQueue = applied;
+    return applied;
+  }
+
+  /** {@link apply}, recording why a bundle was not applied as the load state reports it. */
+  private async applyAndRecord(bundle: ResolvedBundle): Promise<BundleApplyResult> {
+    const label = `bundle ${bundle.bundleId}@${bundle.version}`;
+    try {
+      const result = await this.apply(bundle);
+      if (result.applied) {
+        this.loadFailure = undefined;
+      } else {
+        this.logger.warn(`[bundle-sync] ${label} not applied: ${result.reason}`);
+        this.recordLoadFailure(`${label} was not applied: ${result.reason}`);
+      }
+      return result;
+    } catch (e) {
+      this.logger.error(`[bundle-sync] ${label} apply threw: ${(e as Error).message}`);
+      this.recordLoadFailure(`${label} was not applied: ${describeLoadError(e)}`);
+      return { applied: false, reason: describeLoadError(e), bundleId: bundle.bundleId, bundleVersion: bundle.version };
+    }
   }
 
   /**

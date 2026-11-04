@@ -1462,7 +1462,7 @@
         },
         {
           "name": "deploy-to-cloudflare-skills-only",
-          "description": "Deploy an auto-updating FrontMCP server to Cloudflare Workers with @frontmcp/edge createEdgeMcp — managed skilled-OpenAPI bundle pulled from a SaaS endpoint, cached in KV, refreshed on a Cron Trigger",
+          "description": "Deploy an auto-updating FrontMCP server to Cloudflare Workers with @frontmcp/edge createEdgeMcp — managed skilled-OpenAPI bundle pulled from a SaaS endpoint, cached in KV, refreshed on a Cron Trigger or pushed to the Worker",
           "examples": []
         },
         {

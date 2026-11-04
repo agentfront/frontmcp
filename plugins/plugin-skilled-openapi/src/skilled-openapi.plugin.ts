@@ -29,6 +29,7 @@ import {
 
 import { registerSkillAuditModule } from './audit/skill-audit-module';
 import { MemoryCredentialResolver } from './executor/credential-resolver';
+import BundlePushFlow from './push/bundle-push.flow';
 import { HiddenOpRegistry } from './registry/hidden-op.registry';
 import { AuthorityGuard } from './security/authority-guard';
 import { bundleSkillPolicies, SkillVisibility } from './security/skill-visibility';
@@ -432,6 +433,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
             source = createBundleSource(parsed.source, parsed.bundleCacheDir, logger, runtimeDeps);
           } catch (e) {
             logger.error(`failed to construct bundle source: ${(e as Error).message}`);
+            sync.recordLoadFailure(`the bundle source could not be created: ${(e as Error).message}`);
             builtSyncs.add(sync);
             return sync;
           }
@@ -461,6 +463,8 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
           // (This replaces the old `setImmediate(source.start())` + fire-and-
           // forget `onChange` apply, which never completed on a stateless worker.)
           sync.attachSource(source);
+          // A source that takes pushed bundles is served at POST /__skilled_openapi/push, through a hookable flow.
+          if (source.push) await scope.registryFlows(BundlePushFlow);
           // Proactively boot on runtimes WITH a background event loop (Node) so
           // the catalog is ready without an explicit meta-tool call (preserves
           // startup-time sync + skill:// resources). Deferred via setImmediate so

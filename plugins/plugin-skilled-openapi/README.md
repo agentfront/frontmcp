@@ -114,8 +114,9 @@ the request finished`, and the audit log records it as a failed call. An operati
 the script's time limit.
 
 An operation that several skills list runs when the caller satisfies the operation's rule and the rule of any one of
-those skills. That is the answer `load_skill` gives, so an action it shows in any skill can be run, whatever the order
-of the skills in the bundle.
+those skills, whatever the order of the skills in the bundle. `load_skill` judges each skill the same way, so the call
+and the listing agree. A rule that depends on the action's input can't be judged until the call, though: `load_skill`
+still lists such an action, and the call can be refused once its input is known.
 
 With `exposeOperationsAsInternalTools` (the default), each operation is also an internal tool named
 `<bundleId>.<operationId>`, which your own tools can call with `this.callTool()`. It checks the caller the same way,
@@ -188,18 +189,33 @@ for a bad one.
 
 ### Sources
 
-| `type`   | Fields                                                                                      | What it does                                                                                                                                                                                           |
-| -------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `inline` | `content`                                                                                   | The bundle object itself. For tests, bundles built in code, and runtimes without a file system.                                                                                                        |
-| `static` | `path`, `watch?`                                                                            | A JSON or YAML bundle file, resolved from the working directory. With `watch: true`, the plugin reloads it when it changes.                                                                            |
-| `npm`    | `packageName`, `exportName?`, `verifyProvenance?`                                           | Imports a package and uses one of its exports. Provenance checks aren't implemented yet, so the default `verifyProvenance: true` refuses to load it; set `false` only for a package you pin and trust. |
-| `saas`   | `endpoint`, `authToken`, `expectedAudience`, `jwksUrl`, `expectedIssuer`, `pollIntervalMs?` | Pulls the bundle over HTTPS at startup and every `pollIntervalMs` (default 5 minutes), after checking `authToken` against `jwksUrl`, `expectedIssuer` and `expectedAudience`.                          |
+| `type`   | Fields                                                                                                        | What it does                                                                                                                                                                                                                                 |
+| -------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inline` | `content`                                                                                                     | The bundle object itself. For tests, bundles built in code, and runtimes without a file system.                                                                                                                                              |
+| `static` | `path`, `watch?`                                                                                              | A JSON or YAML bundle file, resolved from the working directory. With `watch: true`, the plugin reloads it when it changes.                                                                                                                  |
+| `npm`    | `packageName`, `exportName?`, `verifyProvenance?`                                                             | Imports a package and uses one of its exports. Provenance checks aren't implemented yet, so the default `verifyProvenance: true` refuses to load it; set `false` only for a package you pin and trust.                                       |
+| `saas`   | `endpoint`, `authToken`, `expectedAudience`, `jwksUrl`, `expectedIssuer`, `pollIntervalMs?`, `enableWebhook?` | Pulls the bundle over HTTPS at startup and every `pollIntervalMs` (default 5 minutes), after checking `authToken` against `jwksUrl`, `expectedIssuer` and `expectedAudience`. With `enableWebhook: true`, also takes pushed bundles (below). |
 
 A new bundle from `static` (with `watch`) or `saas` is checked like the first, then replaces the skills and operations
 at once. A bundle that fails its checks isn't applied, and the reason is logged; the bundle already loaded stays.
 
 A `static` file that fails to load at startup is still watched (with `watch: true`), and a `saas` source keeps polling
 after a failed first pull, so the next good bundle loads without a restart.
+
+### Pushed bundles
+
+With `enableWebhook: true` on a `saas` source, the server takes bundles the SaaS pushes at
+`POST /__skilled_openapi/push`, through the hookable `skilled-openapi:bundle-push` flow, on Node and on a Worker:
+
+- The `Authorization: Bearer` token is checked as `authToken` is, and must also carry a `jti` of 8 or more characters
+  that no push used and an `iat` within five minutes. A missing or refused token answers `401 invalid_token`, a used
+  `jti` answers `409 push_replayed`, and a JWKS that can't be read answers `503 temporarily_unavailable`.
+- The body is the bundle as JSON, checked as a pulled bundle is: `400 invalid_bundle` when it is not a bundle,
+  `422 bundle_not_applied` when its signature or its other checks fail.
+- An applied bundle answers `200 { applied: true, bundleId, bundleVersion }` and is kept as the last good bundle. Pushes
+  and pulls apply one at a time, in the order they arrive.
+
+The used `jti`s are kept in memory: replicas, and the isolates of a Worker, don't share them.
 
 ### When no bundle loads
 

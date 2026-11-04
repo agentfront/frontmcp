@@ -46,8 +46,19 @@ export interface SkillBundleSource {
    */
   refresh?(): Promise<ResolvedBundle | undefined>;
 
+  /** Present on a source that takes pushed bundles: the `saas` source with `enableWebhook`. */
+  readonly push?: BundlePushReceiver;
+
   /** Halt background work; idempotent. */
   stop(): Promise<void>;
+}
+
+/** The checks a pushed bundle passes before it is applied, and where it is kept after. */
+export interface BundlePushReceiver {
+  /** Resolves when the push token is accepted; throws when it is refused or can't be checked. */
+  verifyPushToken(token: string): Promise<void>;
+  /** Keep an applied pushed bundle as the last good one. */
+  keepBundle(bundle: ResolvedBundle): Promise<void>;
 }
 
 export type BundleSourceListener = (bundle: ResolvedBundle) => void;

@@ -19,8 +19,8 @@
  * ```
  *
  * **Managed mode** (auto-updating): point it at a SaaS endpoint serving a
- * signed skilled-openapi bundle (OpenAPI → skills + tools), pulled on boot and
- * refreshed by polling — no redeploy on capability changes.
+ * signed skilled-openapi bundle (OpenAPI → skills + tools), pulled on the first
+ * request and refreshed from a Cron Trigger — no redeploy on capability changes.
  *
  * ```ts
  * export default createEdgeMcp({
@@ -240,7 +240,7 @@ export interface EdgeMcp {
   fetch: (request: Request, env?: unknown, ctx?: unknown) => Promise<Response>;
   /**
    * Cloudflare **Cron Trigger** entrypoint — present only in managed mode.
-   * Wire a `[triggers] crontabs = ["*&#47;5 * * * *"]` in `wrangler.toml` and
+   * Wire a `[triggers] crons = ["*&#47;5 * * * *"]` in `wrangler.toml` and
    * the runtime calls this on schedule; it pulls a fresh bundle and hot-swaps
    * it (Workers have no background timers, so this replaces internal polling).
    */

@@ -39,6 +39,18 @@ describe('publicLoadFailureReason', () => {
     );
   });
 
+  it('removes an absolute file path, and keeps the host and path of a URL', () => {
+    expect(publicLoadFailureReason("ENOENT: no such file or directory, open '/srv/app/billing.bundle.json'")).toBe(
+      "ENOENT: no such file or directory, open '[path]'",
+    );
+    expect(publicLoadFailureReason('EACCES: permission denied, open C:\\bundles\\billing.json')).toBe(
+      'EACCES: permission denied, open [path]',
+    );
+    expect(publicLoadFailureReason('pull https://bundles.example/v1/billing.json responded 404')).toBe(
+      'pull https://bundles.example/v1/billing.json responded 404',
+    );
+  });
+
   it('caps a long reason', () => {
     expect(publicLoadFailureReason('x'.repeat(600))).toBe(`${'x'.repeat(500)}...`);
   });
