@@ -218,6 +218,7 @@ describe('SkilledOpenApiPlugin host-injected runtime deps (attach)', () => {
       const runtimeDeps = { attach, disablePolling: true };
       const fakeScope = {
         logger,
+        registerHealthProbe: jest.fn(),
         skills: { registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })) },
         providers: {
           get: jest.fn((token: unknown) => (token === SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN ? runtimeDeps : undefined)),
@@ -245,6 +246,7 @@ describe('SkilledOpenApiPlugin host-injected runtime deps (attach)', () => {
       const runtimeDeps = { attach };
       const fakeScope = {
         logger,
+        registerHealthProbe: jest.fn(),
         skills: { registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })) },
         providers: {
           get: jest.fn((token: unknown) => (token === SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN ? runtimeDeps : undefined)),
@@ -265,6 +267,7 @@ describe('SkilledOpenApiPlugin host-injected runtime deps (attach)', () => {
       const logger = fakeLogger();
       const fakeScope = {
         logger,
+        registerHealthProbe: jest.fn(),
         skills: { registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })) },
         providers: {
           // Returns a non-object => resolveRuntimeDeps yields undefined; no attach.
@@ -289,6 +292,7 @@ describe('SkilledOpenApiPlugin host-injected runtime deps (attach)', () => {
       const logger = fakeLogger();
       const fakeScope = {
         logger,
+        registerHealthProbe: jest.fn(),
         skills: { registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })) },
         providers: {
           get: jest.fn(() => {

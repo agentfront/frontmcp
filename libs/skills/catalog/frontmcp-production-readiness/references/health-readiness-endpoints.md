@@ -82,6 +82,7 @@ The health service automatically registers probes for:
 
 - **Session store** (Redis/Vercel KV) via `TransportService.pingSessionStore()`
 - **Remote MCP apps** via the existing `HealthCheckManager` background checks. Until the first check completes the probe is `degraded` (`state: unknown`), so `/readyz` stays 200; a remote that fails its checks is `unhealthy` and gives 503.
+- **Checks plugins register** with `scope.registerHealthProbe({ name, check })` from a provider factory, while the server starts (see `create-plugin-hooks`). `@frontmcp/plugin-skilled-openapi` registers `skilled-openapi`: `healthy` with `details: { state: 'loaded', bundleId, bundleVersion }` once its bundle is loaded, and `unhealthy` (503) with `error: 'no skill bundle is loaded: <reason>'` while loading failed and no bundle is loaded. The check waits for the first load.
 
 The fetch handler (Workers, Vercel Edge, Deno) honours the same `health` settings (`healthzPath`, `readyzPath`, `readyz.enabled`, `enabled: false` gives 404).
 

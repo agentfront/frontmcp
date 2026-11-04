@@ -38,6 +38,7 @@ import {
   type SkilledOpenApiPluginOptions,
   type SkilledOpenApiPluginOptionsInput,
 } from './skilled-openapi.types';
+import { bundleHealth } from './sync/bundle-load-state';
 import { BundleSyncService } from './sync/bundle-sync.service';
 import LoadSkillTool from './tools/load-skill.tool';
 import { OperationToolFactory } from './tools/operation-tool.factory';
@@ -410,6 +411,13 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
             logger,
             opToolFactory,
           );
+          scope.registerHealthProbe({
+            name: 'skilled-openapi',
+            check: async () => {
+              await sync.ensureReady();
+              return bundleHealth(sync.loadState());
+            },
+          });
           // Host-injected runtime deps (e.g. `@frontmcp/edge` supplies a
           // KV-backed cache + `disablePolling` on a Worker). `undefined` on the
           // standard Node path — createBundleSource then keeps its fs cache and
