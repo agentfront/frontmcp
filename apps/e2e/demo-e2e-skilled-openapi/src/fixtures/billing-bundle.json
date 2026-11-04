@@ -7,8 +7,8 @@
   "services": [
     {
       "id": "billing",
-      "baseUrl": "http://127.0.0.1:9876",
-      "description": "Mock billing REST API used by the e2e suite"
+      "baseUrl": "https://localhost",
+      "description": "Mock billing REST API used by the e2e suite; the specs set its address before signing"
     }
   ],
   "authBindings": {
@@ -16,19 +16,29 @@
   },
   "skills": [
     {
+      "id": "billing-admin",
+      "name": "Billing administration",
+      "description": "Look up and void invoices, and check the billing service. For administrators only.",
+      "instructions": "# Billing administration\n\nLook up an invoice with getInvoice, void it with voidInvoice, and check the service with adminPing.",
+      "tags": ["admin"],
+      "operationIds": ["getInvoice", "voidInvoice", "adminPing"],
+      "requiredAuthorities": { "roles": { "any": ["admin"] } }
+    },
+    {
       "id": "invoices",
       "name": "Invoices",
       "description": "Issue, query, and refund invoices on the demo billing service.",
-      "instructions": "# Invoices skill\n\nThree operations: createInvoice, getInvoice, refundInvoice.",
-      "tags": ["billing", "demo"],
-      "operationIds": ["createInvoice", "getInvoice", "refundInvoice"]
+      "instructions": "# Invoices skill\n\nCreate an invoice with createInvoice, read it with getInvoice, list its history with listInvoiceEvents, and refund it with refundInvoice. Refunds above 100 need an administrator.",
+      "tags": ["billing", "invoices"],
+      "operationIds": ["createInvoice", "getInvoice", "listInvoiceEvents", "refundInvoice"]
     },
     {
-      "id": "guarded",
-      "name": "Guarded action",
-      "description": "An action gated by an admin role for testing ABAC denial.",
-      "instructions": "Requires the `admin` role.",
-      "operationIds": ["adminPing"]
+      "id": "reports",
+      "name": "Reports",
+      "description": "Revenue and usage reports for the billing account.",
+      "instructions": "# Reports skill\n\nRead the revenue report with getRevenueReport and the account balance with getAccountBalance.",
+      "tags": ["reports"],
+      "operationIds": ["getRevenueReport", "getAccountBalance", "getUsageStats"]
     }
   ],
   "operations": {
@@ -38,6 +48,7 @@
       "httpMethod": "POST",
       "pathTemplate": "/v1/invoices",
       "summary": "Create a new invoice",
+      "public": true,
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -67,6 +78,7 @@
       "httpMethod": "GET",
       "pathTemplate": "/v1/invoices/{id}",
       "summary": "Fetch an invoice by id",
+      "public": true,
       "inputSchema": {
         "type": "object",
         "properties": { "id": { "type": "string" } },
@@ -85,12 +97,39 @@
       "mapper": [{ "inputKey": "id", "type": "path", "key": "id", "required": true }],
       "authBindingRef": "default"
     },
+    "listInvoiceEvents": {
+      "operationId": "listInvoiceEvents",
+      "serviceId": "billing",
+      "httpMethod": "GET",
+      "pathTemplate": "/v1/invoices/{id}/events",
+      "summary": "List the history of an invoice",
+      "public": true,
+      "maxResponseBytes": 1024,
+      "inputSchema": {
+        "type": "object",
+        "properties": { "id": { "type": "string" } },
+        "required": ["id"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "events": { "type": "array", "items": { "type": "object" } } },
+        "required": ["events"]
+      },
+      "mapper": [{ "inputKey": "id", "type": "path", "key": "id", "required": true }],
+      "authBindingRef": "default"
+    },
     "refundInvoice": {
       "operationId": "refundInvoice",
       "serviceId": "billing",
       "httpMethod": "POST",
       "pathTemplate": "/v1/invoices/{id}/refunds",
       "summary": "Issue a refund",
+      "requiredAuthorities": {
+        "anyOf": [
+          { "roles": { "any": ["admin"] } },
+          { "attributes": { "conditions": [{ "path": "input.amount", "op": "lte", "value": 100 }] } }
+        ]
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -114,12 +153,81 @@
       ],
       "authBindingRef": "default"
     },
+    "getRevenueReport": {
+      "operationId": "getRevenueReport",
+      "serviceId": "billing",
+      "httpMethod": "GET",
+      "pathTemplate": "/v1/reports/revenue",
+      "summary": "Monthly revenue totals, per currency",
+      "public": true,
+      "timeoutMs": 250,
+      "inputSchema": { "type": "object", "properties": {} },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "total": { "type": "number" },
+          "currency": { "type": "string" }
+        },
+        "required": ["total", "currency"]
+      },
+      "mapper": [],
+      "authBindingRef": "default"
+    },
+    "getAccountBalance": {
+      "operationId": "getAccountBalance",
+      "serviceId": "billing",
+      "httpMethod": "GET",
+      "pathTemplate": "/v1/account/balance",
+      "summary": "Read the account balance",
+      "public": true,
+      "inputSchema": { "type": "object", "properties": {} },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "balance": { "type": "number" },
+          "currency": { "type": "string" }
+        },
+        "required": ["balance", "currency"]
+      },
+      "mapper": [],
+      "authBindingRef": "default"
+    },
+    "getUsageStats": {
+      "operationId": "getUsageStats",
+      "serviceId": "billing",
+      "httpMethod": "GET",
+      "pathTemplate": "/v1/reports/usage",
+      "summary": "API usage statistics",
+      "inputSchema": { "type": "object", "properties": {} },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "calls": { "type": "number" } },
+        "required": ["calls"]
+      },
+      "mapper": [],
+      "authBindingRef": "default"
+    },
+    "voidInvoice": {
+      "operationId": "voidInvoice",
+      "serviceId": "billing",
+      "httpMethod": "DELETE",
+      "pathTemplate": "/v1/invoices/{id}",
+      "summary": "Void an invoice; answers 204 No Content",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "id": { "type": "string" } },
+        "required": ["id"]
+      },
+      "outputSchema": { "type": "object" },
+      "mapper": [{ "inputKey": "id", "type": "path", "key": "id", "required": true }],
+      "authBindingRef": "default"
+    },
     "adminPing": {
       "operationId": "adminPing",
       "serviceId": "billing",
       "httpMethod": "GET",
       "pathTemplate": "/v1/admin/ping",
-      "summary": "Admin-only ping (used to test ABAC denial)",
+      "summary": "Check that the billing service answers",
       "inputSchema": { "type": "object", "properties": {} },
       "outputSchema": {
         "type": "object",
@@ -128,8 +236,7 @@
         "additionalProperties": false
       },
       "mapper": [],
-      "authBindingRef": "default",
-      "requiredAuthorities": { "roles": { "all": ["admin"] } }
+      "authBindingRef": "default"
     }
   }
 }
