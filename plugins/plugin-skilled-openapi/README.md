@@ -403,6 +403,8 @@ your API:
 import { SkilledOpenApiPlugin } from '@frontmcp/plugin-skilled-openapi';
 import { create } from '@frontmcp/sdk';
 
+import bundle from './billing.bundle.json';
+
 const server = await create({
   info: { name: 'billing', version: '1.0.0' },
   plugins: [SkilledOpenApiPlugin.init({ source: { type: 'inline', content: bundle }, requireSignature: false })],
