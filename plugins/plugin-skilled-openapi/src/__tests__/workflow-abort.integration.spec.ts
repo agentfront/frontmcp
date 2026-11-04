@@ -15,8 +15,8 @@ jest.mock('@enclave-vm/core/worker', () => {
   const worker = jest.requireActual<typeof import('@enclave-vm/core/worker')>('@enclave-vm/core/worker');
   type ExecuteArgs = Parameters<InstanceType<typeof worker.InterpreterAdapter>['execute']>;
   class InterpreterAdapterWithShortTimeLimit extends worker.InterpreterAdapter {
-    override execute(...[code, context]: ExecuteArgs) {
-      return super.execute(code, { ...context, config: { ...context.config, timeout: mockWorkflowTimeLimitMs } });
+    override execute<T = unknown>(code: ExecuteArgs[0], context: ExecuteArgs[1]) {
+      return super.execute<T>(code, { ...context, config: { ...context.config, timeout: mockWorkflowTimeLimitMs } });
     }
   }
   return { ...worker, InterpreterAdapter: InterpreterAdapterWithShortTimeLimit };
