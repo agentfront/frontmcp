@@ -13,6 +13,7 @@ import 'reflect-metadata';
 
 import { createProviderRegistryWithScope } from '../../__test-utils__/fixtures/scope.fixtures';
 import { type SkillAction, type SkillContent } from '../../common/interfaces';
+import { ExternalSkillProviderBase } from '../providers/external-skill.provider';
 import { MemorySkillProvider } from '../providers/memory-skill.provider';
 import SkillRegistry from '../skill.registry';
 
@@ -106,6 +107,117 @@ describe('SkillRegistry — dynamic registration', () => {
     const results = await registry.search('refund');
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].metadata.id).toBe('invoices');
+  });
+
+  it("filters and ranks a skill by the tags it's registered with (#1058)", async () => {
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+
+    await registry.registerSkillContent(
+      buildSkillContent({ id: 'pets', name: 'pets', description: 'Find dogs and cats', tags: ['puppies'] }),
+    );
+    await registry.registerSkillContent(
+      buildSkillContent({ id: 'store', name: 'store', description: 'Count dogs in stock' }),
+    );
+
+    expect((await registry.search('dogs', { tags: ['puppies'] })).map((r) => r.metadata.id)).toEqual(['pets']);
+    expect((await registry.search('puppies')).map((r) => r.metadata.id)).toEqual(['pets']);
+    expect(registry.findByName('pets')?.metadata.tags).toEqual(['puppies']);
+    expect((await registry.listSkills({ tags: ['puppies'] })).skills.map((s) => s.id)).toEqual(['pets']);
+  });
+
+  it("finds a runtime skill the index doesn't hold by its actions (#1060)", async () => {
+    /** A read-only store that knows none of the runtime skills, so only the registry's overlay can find them. */
+    class EmptyStore extends ExternalSkillProviderBase {
+      protected async fetchSkill(): Promise<SkillContent | null> {
+        return null;
+      }
+      protected async fetchSkills(): Promise<SkillContent[]> {
+        return [];
+      }
+      protected async searchExternal() {
+        return [];
+      }
+      protected async upsertSkill(): Promise<void> {
+        return undefined;
+      }
+      protected async deleteSkill(): Promise<void> {
+        return undefined;
+      }
+      protected async countExternal(): Promise<number> {
+        return 0;
+      }
+      protected async existsExternal(): Promise<boolean> {
+        return false;
+      }
+    }
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+    registry.setExternalProvider(new EmptyStore({ mode: 'read-only' }));
+
+    await registry.registerSkillContent(
+      buildSkillContent({
+        id: 'store',
+        name: 'Store',
+        description: 'Count the pets in stock',
+        actions: [buildAction({ actionId: 'getInventory', summary: 'Returns pet inventories by status.' })],
+      }),
+    );
+
+    expect((await registry.search('inventories')).map((r) => r.metadata.id)).toEqual(['store']);
+  });
+
+  it('leaves a runtime skill the index scored to the index, so the anti-query keeps it demoted (#1059)', async () => {
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+    await registry.registerSkillContent(
+      buildSkillContent({ id: 'pets', name: 'pets', description: 'Find dogs, cats and birds' }),
+    );
+    await registry.registerSkillContent(
+      buildSkillContent({ id: 'store', name: 'store', description: 'Count the pets in stock, and read an order' }),
+    );
+
+    expect((await registry.search('order')).map((r) => r.metadata.id)).toEqual(['store']);
+    expect(await registry.search('order', { negativeQuery: 'stock' })).toEqual([]);
+  });
+
+  it("demotes a runtime skill the index doesn't hold by the anti-query (#1059)", async () => {
+    class EmptyStore extends ExternalSkillProviderBase {
+      protected async fetchSkill(): Promise<SkillContent | null> {
+        return null;
+      }
+      protected async fetchSkills(): Promise<SkillContent[]> {
+        return [];
+      }
+      protected async searchExternal() {
+        return [];
+      }
+      protected async upsertSkill(): Promise<void> {
+        return undefined;
+      }
+      protected async deleteSkill(): Promise<void> {
+        return undefined;
+      }
+      protected async countExternal(): Promise<number> {
+        return 0;
+      }
+      protected async existsExternal(): Promise<boolean> {
+        return false;
+      }
+    }
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+    registry.setExternalProvider(new EmptyStore({ mode: 'read-only' }));
+    await registry.registerSkillContent(
+      buildSkillContent({ id: 'store', name: 'store', description: 'Count the pets in stock' }),
+    );
+
+    expect((await registry.search('pets')).map((r) => r.metadata.id)).toEqual(['store']);
+    expect(await registry.search('pets', { negativeQuery: 'stock' })).toEqual([]);
   });
 
   it('replaces a skill when registered again with the same id', async () => {

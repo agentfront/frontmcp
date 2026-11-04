@@ -161,6 +161,8 @@ class ApiStandardsSkill extends SkillContext {}
 > **When file and URL instructions are read:** when the server starts, for every skill — the server indexes each skill for `skills/search` and checks its tools then, so a URL is fetched at every start whether or not a client reads the skill. A read that fails is logged (`Failed to load skill <name>: …`) and tried again the first time the skill is loaded; the content is kept once a read succeeds.
 
 > **Search index:** `skills/search` ranks with TF-IDF from `vectoriadb`, a dependency of `@frontmcp/sdk`. Under the `browser` and `worker` export conditions it resolves to its TF-IDF/BM25 entry (no Node built-ins), so search works the same in Node, on edge runtimes and in the browser build. The index is created the first time a search runs, not at server start.
+>
+> A skill is matched by its description (weighted 3x), its tags (2x), its name, tools, parameters and examples, and, for a skill registered at runtime such as a Skilled OpenAPI bundle skill, its actions: each action's id split into words (`getInventory` is "get inventory"), summary and description. Its instructions count at a lower weight: their distinct words, up to 48, once each.
 
 ## SkillContext: loadInstructions() and build()
 
@@ -191,6 +193,7 @@ interface SkillContent {
   description: string;
   instructions: string; // resolved instruction text
   tools: Array<{ name: string; purpose?: string; required?: boolean }>;
+  tags?: string[]; // search_skill's and skills/search's tags filter, and search ranking
   parameters?: SkillParameter[];
   examples?: Array<{ scenario: string; parameters?: Record<string, unknown>; expectedOutcome?: string }>;
   license?: string;

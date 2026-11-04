@@ -30,6 +30,7 @@ import type { MemorySkillProvider } from './providers/memory-skill.provider';
 import type { SkillIndexEntry } from './sep-2640';
 import { SEP_2640_EXTENSION_ID } from './sep-2640/sep-2640.constants';
 import { type SkillIndexCache, type SkillIndexScoring } from './skill-index-cache.interface';
+import { negativeQueryShare, queryTerms, queryTermShare, skillSearchText } from './skill-search-text';
 import {
   type MutableSkillStorageProvider,
   type SkillListOptions,
@@ -415,6 +416,12 @@ export default class SkillRegistry
 
   /** The last storage-provider write queued per skill id ({@link syncProvider}). */
   private readonly providerWrites = new Map<string, Promise<void>>();
+
+  /**
+   * Dynamic skills the storage provider holds as registered: their last write to it completed. The index has
+   * scored them, so the dynamic overlay of {@link search} leaves them to it (#1059).
+   */
+  private readonly providerIndexed = new Set<string>();
 
   /** Whether a plugin registers skills at runtime ({@link expectDynamicSkills}). */
   private dynamicSkillsExpected = false;
@@ -1102,6 +1109,7 @@ export default class SkillRegistry
         ...(t.purpose !== undefined && { purpose: t.purpose }),
         ...(t.required !== undefined && { required: t.required }),
       })),
+      ...(content.tags !== undefined && { tags: [...content.tags] }),
       ...(content.parameters !== undefined && { parameters: content.parameters }),
       ...(content.examples !== undefined && { examples: content.examples }),
       ...(content.license !== undefined && { license: content.license }),
@@ -1147,6 +1155,9 @@ export default class SkillRegistry
       const id = content.id;
       if (excludeIds.has(id)) continue;
       if (options?.excludeIds?.includes(id)) continue;
+      // The index holds this skill and scored it: it fell under the threshold, or the anti-query demoted it.
+      // An empty query the index answers with nothing, so the overlay still lists every skill for it.
+      if (q.length > 0 && this.providerIndexed.has(id)) continue;
       const meta = this.dynamicSkillMetadata(content);
       if (options?.tags?.length) {
         const tags = meta.tags ?? [];
@@ -1177,7 +1188,13 @@ export default class SkillRegistry
       } else if (desc.includes(q)) {
         score = 0.5;
       } else {
-        continue;
+        // The rest of the skill's searchable text: its tags, actions, instructions (#1060)
+        const share = queryTermShare(queryTerms(q), skillSearchText(content));
+        if (share === 0) continue;
+        score = 0.5 * share;
+      }
+      if (options?.negativeQuery !== undefined) {
+        score -= (options.negativeWeight ?? 1) * negativeQueryShare(options.negativeQuery, skillSearchText(content));
       }
       if (score < minScore) continue;
 
@@ -1444,6 +1461,7 @@ export default class SkillRegistry
         ...(t.purpose !== undefined && { purpose: t.purpose }),
         ...(t.required !== undefined && { required: t.required }),
       })),
+      ...(content.tags && { tags: [...content.tags] }),
       ...(content.parameters && { parameters: content.parameters }),
       ...(content.examples && { examples: content.examples }),
       ...(content.license && { license: content.license }),
@@ -1528,6 +1546,8 @@ export default class SkillRegistry
     // skills visible regardless of provider mutability. The writes are queued
     // before the change is announced, so a change a subscriber makes in
     // response is queued after them rather than overtaken by them.
+    // Until this content is written, the provider holds the version it replaces, or nothing.
+    this.providerIndexed.delete(id);
     const providerWrites = mutable
       ? [
           ...removed.map((removedId) => this.removeFromProvider(removedId)),
@@ -1537,6 +1557,7 @@ export default class SkillRegistry
             } else {
               await mutable.add(content);
             }
+            if (this.dynamicGenerations.get(id) === generation) this.providerIndexed.add(id);
           }).catch((error: unknown) => {
             this.scope.logger.warn(
               `[SkillRegistry] Failed to index dynamic skill ${id} in storage provider: ${(error as Error).message}`,
@@ -1599,6 +1620,7 @@ export default class SkillRegistry
       1,
     );
     this.dynamicContents.delete(id);
+    this.providerIndexed.delete(id);
     this.dynamicGenerations.set(id, (this.dynamicGenerations.get(id) ?? 0) + 1);
     if (mutable) this.withdrawn.set(id, ++this.withdrawals);
   }

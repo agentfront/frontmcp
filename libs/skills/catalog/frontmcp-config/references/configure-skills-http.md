@@ -84,11 +84,21 @@ This server has 3 skills: find one with the `skills/search` request and load it 
 
 With a read-only `externalProvider` the line names no number (`This server has skills: …`): the provider's skills are listed by `skill://index.json` and found by `skills/search`, not held by the registry, so they can't be counted. The line is sent even when the server declares no skill itself.
 
+On a server with the Skilled OpenAPI plugin, the line and the catalog summary point to the plugin's tools, because a bundle skill's `SKILL.md` has its instructions but not the actions a `run_workflow` script calls:
+
+```text
+This server has 3 skills: load one by name with `load_skill`, or find one with `search_skill`.
+```
+
+The summary is headed ``Available skills (load one by name with `load_skill`; `search_skill` finds others):``. `initialize` waits for the plugin's bundle to load first, so a client's first connection counts its skills (up to 1.11.0, a client that initialized before the bundle loaded got no line, and the line pointed to `skill://index.json`).
+
+A plugin that registers skills at runtime does the same by providing a `SkillCatalogSource` under `SkillCatalogSourceToken` (both from `@frontmcp/sdk`): `ready()` resolves once its skills are registered, and is awaited before the instructions are composed (a rejection is logged, and the instructions are composed anyway). Its optional `pointers` (`header`, `truncationHint`, `compact`) replace the default wording.
+
 **Default change (1.10.16):** up to 1.10.15 the default was `'append'`, which lists every skill's name and description (up to 16 KB). Some clients copy the server's instructions into every tool's description, so a large catalog was repeated once per tool. Set `injectInstructions: 'append'` to get the full catalog back.
 
 The composed instructions count against `@FrontMcp({ instructionsBudget })`, 1024 characters by default: over it, the server logs a warning at startup and `frontmcp build` reports it in its manifest lint (see `frontmcp-deployment` → `build-manifest`).
 
-The catalog summary is built by `composeInitializeInstructions(...)` and `buildSkillsCatalogSummary(...)` (exported from `@frontmcp/sdk`). It is bounded at **16 KB** with a truncation footer. Its header and footer point clients at `skill://index.json` (SEP-2640 — singular scheme), which lists each skill's `skill://<skillPath>/SKILL.md` URI. With `mcpResources: false` no `skill://` resource is served, so they point at the `skills/load` and `skills/search` methods instead, and `sep2640InInstructions` is ignored.
+The catalog summary is built by `composeInitializeInstructions(...)` and `buildSkillsCatalogSummary(...)` (exported from `@frontmcp/sdk`). It is bounded at **16 KB** with a truncation footer. Its header and footer point clients at `skill://index.json` (SEP-2640 — singular scheme), which lists each skill's `skill://<skillPath>/SKILL.md` URI, unless a plugin's `SkillCatalogSource` gives its own `pointers` (above). `buildSkillsCatalogSummary(registry, { pointers })` takes them too. With `mcpResources: false` no `skill://` resource is served, so they point at the `skills/load` and `skills/search` methods instead, and `sep2640InInstructions` is ignored.
 
 > **Dynamic skills:** because the composer recomputes the summary on every `initialize` request, skills registered after server boot **are** picked up automatically. Their `skill://<skillPath>/SKILL.md` resources follow too: a skill registered or removed after boot (`this.scope.skills.registerSkillContent()` / `unregisterSkill()`, a skill-bundle plugin) is added to or dropped from `resources/list`, and clients get `notifications/resources/list_changed`. Up to 1.9.4 `resources/list` named only the skills present at startup.
 
