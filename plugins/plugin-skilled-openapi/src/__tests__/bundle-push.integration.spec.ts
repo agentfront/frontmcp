@@ -1,69 +1,14 @@
 // A real server whose saas source has enableWebhook takes pushed bundles at POST /__skilled_openapi/push.
 import 'reflect-metadata';
 
-import { exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
-
-import { bundleDigest, BundleStore, canonicalize, type ResolvedBundle } from '@frontmcp/adapters/skills';
+import { BundleStore } from '@frontmcp/adapters/skills';
 import { createWebFetchHandler, FrontMcpInstance, LogLevel, type WebFetchHandler } from '@frontmcp/sdk';
-import { generateRsaKeyPair, randomUUID, rsaSignBase64Url } from '@frontmcp/utils';
 
 import { SkilledOpenApiPlugin } from '../index';
 import { SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN } from '../skilled-openapi.plugin';
+import { AUDIENCE, bundle, ENDPOINT, ISSUER, JWKS_URL, signed, tokenIssuer, trustedKey } from './saas-bundles.fixture';
 
-const ISSUER = 'https://cloud.example.dev';
-const JWKS_URL = `${ISSUER}/.well-known/jwks.json`;
-const ENDPOINT = `${ISSUER}/v1/bundles/acme`;
-const AUDIENCE = 'acme:prod';
 const PUSH_URL = 'http://localhost/__skilled_openapi/push';
-const SIGNING_KEY_ID = 'push-test-signing';
-
-const signingKeys = generateRsaKeyPair();
-const trustedKey = {
-  keyId: SIGNING_KEY_ID,
-  alg: 'RS256' as const,
-  publicKeyPem: String(signingKeys.publicKey.export({ type: 'spki', format: 'pem' })),
-};
-
-function bundle(version: string, skillIds: string[]): ResolvedBundle {
-  return {
-    schemaVersion: 1,
-    bundleId: 'acme:billing',
-    version,
-    generatedAt: '2026-11-04T12:00:00.000Z',
-    sourceDigest: '0'.repeat(64),
-    services: [{ id: 'billing', baseUrl: 'https://billing.example.dev' }],
-    authBindings: { none: { kind: 'none' } },
-    skills: skillIds.map((id) => ({
-      id,
-      name: id,
-      description: `The ${id} skill.`,
-      instructions: `# ${id}`,
-      operationIds: [],
-    })),
-    operations: {},
-  };
-}
-
-function signed(unsigned: ResolvedBundle): ResolvedBundle {
-  const signature = rsaSignBase64Url(
-    'RS256',
-    new TextEncoder().encode(canonicalize(unsigned)),
-    signingKeys.privateKey.export({ format: 'jwk' }),
-  );
-  return { ...unsigned, integrity: { alg: 'RS256', keyId: SIGNING_KEY_ID, digest: bundleDigest(unsigned), signature } };
-}
-
-async function tokenIssuer(kid: string) {
-  const { publicKey, privateKey } = await generateKeyPair('ES256');
-  const jwk: JWK = { ...(await exportJWK(publicKey)), kid, alg: 'ES256', use: 'sig' };
-  const sign = (claims: Record<string, unknown>) =>
-    new SignJWT({ iss: ISSUER, aud: AUDIENCE, ...claims })
-      .setProtectedHeader({ alg: 'ES256', kid })
-      .setIssuedAt()
-      .setExpirationTime('5m')
-      .sign(privateKey);
-  return { jwks: { keys: [jwk] }, sign, pushToken: () => sign({ jti: randomUUID() }) };
-}
 
 interface PushServer {
   handler: WebFetchHandler;

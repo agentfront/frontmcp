@@ -11,12 +11,15 @@ import type { ResolvedBundle } from '../bundle/bundle.types';
  *     its initial fetch and begins any background polling/watching.
  *   - `onChange()` registers a listener invoked every time a new bundle is
  *     available (initial fetch + every refresh).
+ *   - `keepBundle()`, on a source with a last-good cache, keeps a bundle once
+ *     the plugin has applied it.
  *   - `stop()` halts all background work and releases resources.
  *
  * Sources are responsible for parsing/validating their input into a
  * ResolvedBundle (typically by calling `parseOverlay` from bundle/overlay-parser).
  * They MUST NOT verify signatures themselves — the bundle-sync service applies
- * the signature gate before swapping the bundle into the registry.
+ * the signature gate before swapping the bundle into the registry. For the same
+ * reason they never cache a bundle they fetched until they are asked to keep it.
  */
 export interface SkillBundleSource {
   /** Stable id of this source (e.g. 'static:/path/to/bundle.yaml'). */
@@ -41,10 +44,17 @@ export interface SkillBundleSource {
    * remote/pulling sources implement it. On runtimes with no background
    * execution (Cloudflare Workers) a Cron Trigger / Durable Object alarm
    * calls this instead of relying on an internal timer. Resolves to the new
-   * bundle, or `undefined` if a pull is already in flight / the source is
-   * stopped.
+   * bundle once its listeners are done with it (the plugin has applied it, or
+   * refused it), or to `undefined` if a pull is already in flight / the source
+   * is stopped.
    */
   refresh?(): Promise<ResolvedBundle | undefined>;
+
+  /**
+   * Keep a bundle the plugin applied as the last good one, which a start that can't fetch falls back to. Present on
+   * a source with a last-good cache: the `saas` source.
+   */
+  keepBundle?(bundle: ResolvedBundle): Promise<void>;
 
   /** Present on a source that takes pushed bundles: the `saas` source with `enableWebhook`. */
   readonly push?: BundlePushReceiver;
@@ -53,15 +63,14 @@ export interface SkillBundleSource {
   stop(): Promise<void>;
 }
 
-/** The checks a pushed bundle passes before it is applied, and where it is kept after. */
+/** The check a pushed bundle's token passes before the bundle is applied. */
 export interface BundlePushReceiver {
   /** Resolves when the push token is accepted; throws when it is refused or can't be checked. */
   verifyPushToken(token: string): Promise<void>;
-  /** Keep an applied pushed bundle as the last good one. */
-  keepBundle(bundle: ResolvedBundle): Promise<void>;
 }
 
-export type BundleSourceListener = (bundle: ResolvedBundle) => void;
+/** Takes each new bundle; a pulling source waits for a promise it returns before its pull counts as done. */
+export type BundleSourceListener = (bundle: ResolvedBundle) => unknown;
 
 /**
  * Pluggable last-good bundle cache. The default (Node) implementation writes to

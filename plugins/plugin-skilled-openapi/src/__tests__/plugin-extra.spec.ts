@@ -3,7 +3,7 @@
  * does not reach:
  *   - the `injectSkillCatalogIntoSearchTool` ListTools.Did hook (all branches)
  *   - host-injected runtime deps (`SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN`) and the
- *     `attach(source)` callback (success + throwing) via the bundle-sync factory
+ *     `attach(refresher)` callback (success + throwing) via the bundle-sync factory
  *   - `resolveRuntimeDeps` rejecting a non-object / throwing provider lookup
  */
 
@@ -209,7 +209,7 @@ describe('SkilledOpenApiPlugin host-injected runtime deps (attach)', () => {
     };
   }
 
-  it('invokes runtimeDeps.attach with the live source when a host registers them', async () => {
+  it('invokes runtimeDeps.attach with a refresh when a host registers them', async () => {
     const { dir, bundlePath } = await makeBundleFile();
     try {
       const factory = syncFactory({ source: { type: 'static', path: bundlePath } });
@@ -227,9 +227,9 @@ describe('SkilledOpenApiPlugin host-injected runtime deps (attach)', () => {
       const sync = await factory.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore());
       expect(sync).toBeInstanceOf(BundleSyncService);
       expect(attach).toHaveBeenCalledTimes(1);
-      // attach receives the live SkillBundleSource (has a `start`/`onChange` API).
-      const [source] = attach.mock.calls[0];
-      expect(typeof source.onChange).toBe('function');
+      const [scheduler] = attach.mock.calls[0];
+      expect(typeof scheduler.start).toBe('function');
+      expect(typeof scheduler.refresh).toBe('function');
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }

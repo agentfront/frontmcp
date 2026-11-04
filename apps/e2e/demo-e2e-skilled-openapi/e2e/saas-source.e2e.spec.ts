@@ -259,7 +259,10 @@ test.describe('a bundle pulled from the bundle server', () => {
   }) => {
     bundleServer.published = JSON.stringify({ ...billingBundle('4.0.0', ['invoices']), skills: [{ id: 'broken' }] });
 
-    await waitForLog(server, '[saas-source] poll failed: Bundle schema validation failed');
+    await waitForLog(
+      server,
+      '[saas-source] poll failed: Bundle schema validation failed (4 issue(s)): skills.0.name: ',
+    );
 
     expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
     expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
@@ -352,6 +355,28 @@ test.describe('a bundle server that is down at startup', () => {
 
       await server.restart();
 
+      expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'reports'], versions: ['1.0.0'] });
+      expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
+      expect((await readiness(server.info.baseUrl)).httpStatus).toBe(200);
+      expect(server.getLogs().join('\n')).toContain('[saas-source] using cached bundle "e2e:billing@1.0.0"');
+    });
+  });
+
+  test.describe('after a new version was refused for its signature', () => {
+    const env = useSaasServer();
+
+    test('serves the version before it from the cache: a refused version is never cached', async ({ mcp, server }) => {
+      expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
+      const signed = environment.sign(billingBundle('2.0.0', V1_SKILLS));
+      bundleServer.published = { ...signed, skills: [...signed.skills, REFUNDS_SKILL] };
+      await waitForLog(server, '[bundle-sync] rejected bundle e2e:billing@2.0.0: digest mismatch');
+      const cachedBeforeRestart = await cachedBundleVersion(env);
+      bundleServer.mode = 'outage';
+      server.clearLogs();
+
+      await server.restart();
+
+      expect(cachedBeforeRestart).toBe('1.0.0');
       expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'reports'], versions: ['1.0.0'] });
       expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
       expect((await readiness(server.info.baseUrl)).httpStatus).toBe(200);
