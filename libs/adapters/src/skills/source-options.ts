@@ -67,8 +67,9 @@ export const saasSourceSchema = z.object({
   /** Polling interval in ms (boot pull is always immediate). Default 300000 (5 min). */
   pollIntervalMs: z.number().int().positive().default(300_000),
   /**
-   * Mount a webhook handler at `POST /__skilled_openapi/push` so the SaaS can push
-   * updates synchronously. Default false in v1.2 (interval polling only).
+   * Also take bundles the SaaS pushes, at `POST /__skilled_openapi/push`. The push token is checked as `authToken`
+   * is, and must carry a `jti` no push used and an `iat` within five minutes; the body is the bundle as JSON, checked
+   * and applied as a pulled one. Default false.
    */
   enableWebhook: z.boolean().default(false),
   /** JWKS URL for verifying SaaS-issued tokens (fetched without credentials, redirects refused). */

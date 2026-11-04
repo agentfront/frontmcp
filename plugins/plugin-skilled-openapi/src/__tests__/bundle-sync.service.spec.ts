@@ -901,3 +901,124 @@ describe('BundleSyncService', () => {
     expect(error).toHaveBeenCalledWith(expect.stringMatching(/failed to restore prior skill/));
   });
 });
+
+describe('BundleSyncService pushed bundles', () => {
+  const pushReceiver = { verifyPushToken: jest.fn(), keepBundle: jest.fn() };
+
+  const makeSync = (registry = new FakeRegistry()) =>
+    new BundleSyncService(
+      registry as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      new BundleStore(),
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+
+  /** A source that emits `pulled` when it starts, and takes pushed bundles. */
+  const pullingSource = (pulled: ResolvedBundle) => {
+    const listeners = new Set<(b: ResolvedBundle) => void>();
+    return {
+      push: pushReceiver,
+      async start() {
+        for (const fn of listeners) fn(pulled);
+      },
+      onChange(fn: (b: ResolvedBundle) => void) {
+        listeners.add(fn);
+        return () => listeners.delete(fn);
+      },
+    };
+  };
+
+  it("exposes the source's push checks, and none without a source that takes pushes", () => {
+    const pushing = makeSync();
+    pushing.attachSource(pullingSource(buildBundle()));
+    const pullOnly = makeSync();
+    pullOnly.attachSource({ start: async () => undefined, onChange: () => () => undefined });
+
+    expect(pushing.pushReceiver).toBe(pushReceiver);
+    expect(pullOnly.pushReceiver).toBeUndefined();
+    expect(makeSync().pushReceiver).toBeUndefined();
+  });
+
+  it('applies a pushed bundle after the bundle the source pulls when it starts', async () => {
+    const registry = new FakeRegistry();
+    const sync = makeSync(registry);
+    sync.attachSource(pullingSource(buildBundle({ version: '1' })));
+
+    const result = await sync.applyPushed(buildBundle({ version: '2' }));
+
+    expect(result).toMatchObject({ applied: true, bundleId: 'acme:prod', bundleVersion: '2' });
+    expect(registry.registered.map((skill) => skill.bundleVersion)).toEqual(['1', '2']);
+    expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '2' });
+  });
+
+  it('keeps a pushed bundle once it is applied, before the next queued apply starts', async () => {
+    const sync = makeSync();
+    sync.attachSource(pullingSource(buildBundle({ version: '1' })));
+    const events: string[] = [];
+    const keepApplied = async (bundle: ResolvedBundle) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      events.push(`kept ${bundle.version}`);
+    };
+    const applySpy = jest.spyOn(sync, 'apply');
+    applySpy.mockImplementation(async (bundle) => {
+      events.push(`apply ${bundle.version}`);
+      return { applied: true, bundleId: bundle.bundleId, bundleVersion: bundle.version };
+    });
+
+    await Promise.all([
+      sync.applyPushed(buildBundle({ version: '2' }), keepApplied),
+      sync.applyPushed(buildBundle({ version: '3' }), keepApplied),
+    ]);
+
+    expect(events.filter((event) => event !== 'apply 1')).toEqual(['apply 2', 'kept 2', 'apply 3', 'kept 3']);
+  });
+
+  it('does not keep a pushed bundle that is not applied, and a failure to keep one leaves it applied', async () => {
+    const registry = new FakeRegistry();
+    registry.failOn.add('refunds');
+    const sync = makeSync(registry);
+    sync.attachSource(pullingSource(buildBundle({ version: '1' })));
+    const refunds = { id: 'refunds', name: 'Refunds', description: 'd', instructions: '# R', operationIds: [] };
+    const keepApplied = jest.fn(async () => {
+      throw new Error('KV unavailable');
+    });
+
+    const refused = await sync.applyPushed(buildBundle({ version: '2', skills: [refunds] }), keepApplied);
+    const applied = await sync.applyPushed(buildBundle({ version: '3' }), keepApplied);
+
+    expect(refused).toMatchObject({ applied: false });
+    expect(applied).toMatchObject({ applied: true, bundleVersion: '3' });
+    expect(keepApplied).toHaveBeenCalledTimes(1);
+    expect(loggerMocks.warn).toHaveBeenCalledWith(expect.stringContaining('keeping it as the last good bundle failed'));
+  });
+
+  it('reports a pushed bundle that is not applied, and keeps serving the bundle before it', async () => {
+    const registry = new FakeRegistry();
+    registry.failOn.add('refunds');
+    const sync = makeSync(registry);
+    sync.attachSource(pullingSource(buildBundle({ version: '1' })));
+    const refunds = { id: 'refunds', name: 'Refunds', description: 'd', instructions: '# R', operationIds: [] };
+
+    const result = await sync.applyPushed(buildBundle({ version: '2', skills: [refunds] }));
+
+    expect(result).toMatchObject({ applied: false, bundleVersion: '2' });
+    expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '1' });
+  });
+
+  it('reports a pushed bundle whose apply throws as not applied', async () => {
+    const sync = makeSync();
+    jest.spyOn(sync, 'apply').mockRejectedValueOnce(new Error('registry offline'));
+
+    const result = await sync.applyPushed(buildBundle({ version: '3' }));
+
+    expect(result).toMatchObject({
+      applied: false,
+      bundleVersion: '3',
+      reason: expect.stringContaining('registry offline'),
+    });
+    expect(loggerMocks.error).toHaveBeenCalledWith(
+      expect.stringContaining('acme:prod@3 apply threw: registry offline'),
+    );
+  });
+});
