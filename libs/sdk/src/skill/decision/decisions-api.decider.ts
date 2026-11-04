@@ -29,6 +29,13 @@ interface DecisionAnswer {
   probabilities?: Array<{ value: string | boolean; probability: number }>;
 }
 
+/** `url` without its trailing `/`s. A loop, not a regular expression, so a long run of `/` costs linear time. */
+function withoutTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') end--;
+  return url.slice(0, end);
+}
+
 /** The catalog the model reads: the part of the request that stays the same for a skill set, so it can be cached. */
 function catalogText(candidates: readonly SkillDecisionCandidate[]): string {
   const lines = candidates.map((c) => {
@@ -45,7 +52,7 @@ function catalogText(candidates: readonly SkillDecisionCandidate[]): string {
  * query in the question.
  */
 export function decisionsApiDecider(options: DecisionsApiDeciderOptions): SkillDecider {
-  const baseUrl = (options.baseUrl ?? 'https://api.openai.com/v1').replace(/\/+$/, '');
+  const baseUrl = withoutTrailingSlashes(options.baseUrl ?? 'https://api.openai.com/v1');
   const model = options.model ?? 'gpt-6-luna';
   return async ({ query, notQuery, candidates, signal }): Promise<SkillDecision[]> => {
     if (candidates.length === 0) return [];
