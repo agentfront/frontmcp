@@ -44,6 +44,12 @@ not count, so a new skill can take the name of a skill the bundle drops or
 renames (`registerSkillContent`'s `supersedes` option, which the bundle sync
 fills in).
 
+A bundle skill's `SKILL.md` ends with an `## Actions` section listing the
+actions the caller may run, as `load_skill` does: each action's id, summary,
+description, and input and output JSON Schemas, after a line on running them
+with `run_workflow`. Up to 1.11.0 it had the instructions only, so a client
+that read the resource had to call `load_skill` to learn the actions.
+
 For the conceptual picture, see [Skills-Only Deployment](https://frontmcp.dev/reference/sdk/skill#connecting-for-skills-only).
 For the production-ready decorator build, see [`deploy-to-cloudflare.md`](./deploy-to-cloudflare.md).
 

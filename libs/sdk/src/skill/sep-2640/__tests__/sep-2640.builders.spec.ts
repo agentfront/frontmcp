@@ -152,5 +152,43 @@ describe('SEP-2640 builders', () => {
       expect(md).toContain('# Original\noriginal body');
       expect(md).not.toContain('body with auto-appended references');
     });
+
+    const refunds: SkillContent = {
+      id: 'refunds',
+      name: 'refunds',
+      description: 'Refund orders.',
+      instructions: '# Refunds',
+      tools: [],
+    };
+    const refundOrder = {
+      actionId: 'refundOrder',
+      summary: 'Refunds an order.',
+      description: 'Up to the amount paid.',
+      inputJsonSchema: { type: 'object', properties: { orderId: { type: 'string' } } },
+      outputJsonSchema: { type: 'object' },
+    };
+
+    it('lists actions after the body, each with its summary, description and schemas', () => {
+      const md = serializeSkillMd(refunds, undefined, { hint: 'Run one with `run`.', actions: [refundOrder] });
+
+      expect(md.slice(md.indexOf('# Refunds'))).toBe(
+        [
+          '# Refunds',
+          '## Actions',
+          'Run one with `run`.',
+          '### refundOrder',
+          'Refunds an order.',
+          'Up to the amount paid.',
+          'Input:\n\n```json\n' + JSON.stringify(refundOrder.inputJsonSchema, null, 2) + '\n```',
+          'Output:\n\n```json\n{\n  "type": "object"\n}\n```',
+        ].join('\n\n') + '\n',
+      );
+    });
+
+    it('has no Actions section when there are no actions to list', () => {
+      expect(serializeSkillMd(refunds, undefined, { hint: 'Run one with `run`.', actions: [] })).toBe(
+        serializeSkillMd(refunds),
+      );
+    });
   });
 });

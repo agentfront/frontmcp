@@ -6,13 +6,13 @@ import { ResourceTemplate } from '../../../common';
 import { ResourceContext, type ResourceCompletionResult, type SkillContent } from '../../../common/interfaces';
 import { assertSkillAuthorized, filterSkillsByAuthorities } from '../../skill-authorities.helper';
 import { filterServableSkills } from '../../skill-filter.helper';
-import { serializeSkillMd } from '../sep-2640.builders';
 import { SKILL_MD_MIME_TYPE } from '../sep-2640.constants';
 import {
   findAndLoadSkillByPath,
   findSkillByPath,
   getSepVisibleSkills,
   loadExternalProviderSkill,
+  renderSkillMd,
 } from '../sep-2640.resource-helpers';
 
 type Params = { skillPath: string };
@@ -52,7 +52,7 @@ export class Sep2640SkillMdResource extends ResourceContext<Params> {
   }
 
   async execute(uri: string, params: Params): Promise<ReadResourceResult> {
-    const raw = serializeSkillMd(await this.readSkill(params.skillPath));
+    const raw = await renderSkillMd(this.scope, await this.readSkill(params.skillPath), this.getAuthInfo());
 
     return {
       contents: [
