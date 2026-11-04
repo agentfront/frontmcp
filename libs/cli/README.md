@@ -421,6 +421,20 @@ A server with skills also gets `skills list`, `skills search`, `skills read` and
 
 They answer to `search-skill`, `load-skill`, `execute_action` and `run-workflow` too. `--output json` prints the tool's structured content. They exit 1 when the tool fails or a skill is not found, and 2 for a usage error, with the error on stderr.
 
+**Teaching a coding agent the skills:** `install -p claude` writes a Claude Code plugin and `install -p codex` writes the skills to `.codex/skills/<bin>/` (`~/.codex/skills/<bin>/` with `--scope user`), beside the Codex MCP entry. Each gets the two kinds of skill, kept apart:
+
+- the server's own `@Skill`s, from the metadata the build recorded;
+- the Skilled OpenAPI bundle's skills, read from the running server (in-process or the daemon) as the logged-in caller, so only the skills and actions that caller may use are written. Each `SKILL.md` has the skill's instructions, each action with a ready `./myapp execute <actionId> --input '<json>'` line, and how to chain actions with `run_workflow`. Its frontmatter `metadata` names the bundle version it was generated for. A skill named `Guarded action` goes in `skills/guarded-action/`, and a folder already taken gets `-2`, `-3` and so on.
+
+```bash
+./myapp install -p claude                   # Both kinds of skill, the prompts, and the MCP server
+./myapp install -p claude --dry-run         # What it would write, by kind
+./myapp install --status                    # What is installed, by kind, and the bundle version
+./myapp install --refresh-skills            # After a new bundle: rewrite only the bundle skills
+```
+
+`--refresh-skills` rewrites the bundle skills of each install it finds (or of the `-p` providers), removes the folder of a skill the bundle no longer has, and leaves the shipped skills, the commands and the MCP entry as they are. With `cli.authRequired`, run `login` first: install and refresh read the bundle skills as that caller. Up to 1.11.0 install wrote a copy of the bundle skills made at build time, with no actions, and stopped on a skill name with a space.
+
 **Questions from the server:** a tool's `this.elicit()` question, such as the confirmation of a destructive action, is asked in the terminal (`y/N`), in-process and through the daemon. `--yes` answers yes without asking; with no terminal and no `--yes`, the CLI declines.
 
 **Daemon:** while `daemon start`'s server runs, every command goes to it over its Unix socket (at the server's `http.entryPath`) instead of starting the server in-process. A daemon that does not answer is reported on stderr, and the command runs in-process.

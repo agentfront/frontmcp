@@ -66,6 +66,8 @@ export interface ExtractedSkillAsset {
   tags?: string[];
   /** Mirrors `SkillAssetEntry.license`. */
   license?: string;
+  /** Mirrors `SkillAssetEntry.bundleVersion`: set for a bundle skill, which the running server serves. */
+  bundleVersion?: string;
 }
 
 export interface ExtractedSchema {
@@ -234,6 +236,7 @@ async function extractSchemasFromBundle(bundlePath: string): Promise<ExtractedSc
         description?: string;
         tags?: string[];
         license?: string;
+        bundleVersion?: string;
       }>;
     }>;
     close(): Promise<void>;
@@ -337,6 +340,7 @@ async function extractSchemasFromBundle(bundlePath: string): Promise<ExtractedSc
           description: e.description,
           tags: e.tags,
           license: e.license,
+          bundleVersion: e.bundleVersion,
         }));
       } catch {
         // Skill asset collection not available

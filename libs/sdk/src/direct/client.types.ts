@@ -871,6 +871,11 @@ export interface SkillAssetEntry {
   tags?: string[];
   /** Skill license from `@Skill({ license })`. */
   license?: string;
+  /**
+   * The bundle version of a skill a plugin registered at runtime from a bundle, such as a Skilled OpenAPI skill.
+   * Such a skill comes from the running server, not from files a build copies.
+   */
+  bundleVersion?: string;
 }
 
 /**
