@@ -8,21 +8,22 @@
  * - Skill deactivation (specific and full)
  * - Session state updates after skill changes
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
+
 import { loadSkills } from './helpers/skills-protocol';
 
 interface SkillResult {
   id: string;
   name: string;
   description: string;
-  instructions: string;
+  instructions?: string;
   tools: Array<{ name: string; purpose?: string; available: boolean }>;
   parameters?: Array<{ name: string; description?: string; required?: boolean; type?: string }>;
   availableTools: string[];
   missingTools: string[];
   isComplete: boolean;
   warning?: string;
-  formattedContent: string;
+  formattedContent?: string;
   session?: {
     activated: boolean;
     sessionId?: string;
@@ -330,9 +331,9 @@ test.describe('Multi-Skill Loading E2E', () => {
 
       const content = result as LoadSkillsResult;
       const skill = content.skills[0];
-      expect(skill.formattedContent).toBeDefined();
       expect(skill.id).toBeDefined();
       expect(skill.instructions).toContain('PR Review Process');
+      expect(skill.formattedContent).toBeUndefined();
     });
 
     test('should return instructions-only format when requested', async ({ mcp }) => {
@@ -345,9 +346,19 @@ test.describe('Multi-Skill Loading E2E', () => {
 
       const content = result as LoadSkillsResult;
       const skill = content.skills[0];
-      expect(skill.formattedContent).toBeDefined();
-      // Instructions-only format should be the raw instructions
+      expect(skill.instructions).toContain('PR Review Process');
+      expect(skill.formattedContent).toBeUndefined();
+    });
+
+    test('should return the skill as markdown, and the instructions only there, when requested', async ({ mcp }) => {
+      const result = await loadSkills(mcp, {
+        skillIds: ['review-pr'],
+        format: 'markdown',
+      });
+
+      const skill = (result as LoadSkillsResult).skills[0];
       expect(skill.formattedContent).toContain('PR Review Process');
+      expect(skill.instructions).toBeUndefined();
     });
   });
 

@@ -19,13 +19,13 @@ interface SkillResult {
   id: string;
   name: string;
   description: string;
-  instructions: string;
+  instructions?: string;
   tools: Array<{ name: string; purpose?: string; available: boolean }>;
   availableTools: string[];
   missingTools: string[];
   isComplete: boolean;
   warning?: string;
-  formattedContent: string;
+  formattedContent?: string;
   session?: {
     activated: boolean;
     sessionId?: string;
