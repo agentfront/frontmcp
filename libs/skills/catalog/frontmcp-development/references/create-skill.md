@@ -191,6 +191,7 @@ interface SkillContent {
   description: string;
   instructions: string; // resolved instruction text
   tools: Array<{ name: string; purpose?: string; required?: boolean }>;
+  tags?: string[]; // search_skill's and skills/search's tags filter, and search ranking
   parameters?: SkillParameter[];
   examples?: Array<{ scenario: string; parameters?: Record<string, unknown>; expectedOutcome?: string }>;
   license?: string;
