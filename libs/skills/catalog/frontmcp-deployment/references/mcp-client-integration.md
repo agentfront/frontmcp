@@ -246,14 +246,14 @@ Connect to a FrontMCP daemon running on a Unix socket. Start the daemon first wi
   "mcpServers": {
     "my-server": {
       "type": "http",
-      "url": "http://localhost/mcp",
+      "url": "http://localhost/",
       "socketPath": "/Users/you/.frontmcp/sockets/my-server.sock"
     }
   }
 }
 ```
 
-The `url` hostname is ignored for Unix sockets; only the path (`/mcp`) is used for HTTP routing.
+The `url` hostname is ignored for Unix sockets; only the path is used for HTTP routing. It must be the server's `http.entryPath`: `/` by default, `/mcp` with `@FrontMcp({ http: { entryPath: '/mcp' } })`.
 
 ## Publishing to npm
 
@@ -394,13 +394,13 @@ the planned tree before writing.
 
 ## Common Patterns
 
-| Pattern     | Correct                       | Incorrect              | Why                                                 |
-| ----------- | ----------------------------- | ---------------------- | --------------------------------------------------- |
-| Stdio flag  | `["--stdio"]` as arg          | `"--stdio"` in env var | Flag must be in process argv                        |
-| HTTP path   | `url` ends with `/mcp`        | `url` ends with `/`    | FrontMCP serves MCP protocol at `/mcp` by default   |
-| Socket URL  | Include `url` field with path | Only `socketPath`      | HTTP routing needs the URL path even for sockets    |
-| npx flag    | `"-y"` to auto-confirm        | Omit `-y`              | Without `-y`, npx prompts and blocks the MCP client |
-| Env secrets | Use `env` in config           | Hardcode in args       | Env vars are not visible in process listings        |
+| Pattern     | Correct                        | Incorrect              | Why                                                      |
+| ----------- | ------------------------------ | ---------------------- | -------------------------------------------------------- |
+| Stdio flag  | `["--stdio"]` as arg           | `"--stdio"` in env var | Flag must be in process argv                             |
+| HTTP path   | `url` path is `http.entryPath` | another path           | FrontMCP serves MCP at `http.entryPath` (`/` by default) |
+| Socket URL  | Include `url` field with path  | Only `socketPath`      | HTTP routing needs the URL path even for sockets         |
+| npx flag    | `"-y"` to auto-confirm         | Omit `-y`              | Without `-y`, npx prompts and blocks the MCP client      |
+| Env secrets | Use `env` in config            | Hardcode in args       | Env vars are not visible in process listings             |
 
 ## Troubleshooting
 
