@@ -68,7 +68,7 @@ describe('skill action audit records', () => {
   it('records an action whose input fails its schema as a failure', async () => {
     const { deps, writer } = auditedDeps();
 
-    await executeSkillAction({ entry: getThing, input: { id: 'not-a-number' }, authInfo: {}, deps });
+    await executeSkillAction({ listings: [getThing], input: { id: 'not-a-number' }, authInfo: {}, deps });
 
     expect(writer.writeHttpCallFailure).toHaveBeenCalledWith(
       expect.anything(),
@@ -85,7 +85,7 @@ describe('skill action audit records', () => {
       contentType: 'application/json',
     });
 
-    await executeSkillAction({ entry: getThing, input: { id: 1 }, authInfo: {}, deps });
+    await executeSkillAction({ listings: [getThing], input: { id: 1 }, authInfo: {}, deps });
 
     expect(writer.writeHttpCallSuccess).not.toHaveBeenCalled();
     expect(writer.writeHttpCallFailure).toHaveBeenCalledWith(

@@ -25,9 +25,10 @@ import {
 } from '@frontmcp/sdk';
 
 import { callerTokenOf } from '../executor/caller-token';
+import { authorizeAction } from '../executor/execute-skill-action';
 import { executeOperation, type OpenApiRuntimeDeps } from '../executor/openapi-runtime';
 import { getCompiledOpSchemas } from '../executor/schema-cache';
-import { type HiddenOpEntry } from '../registry/hidden-op.registry';
+import { type HiddenOpEntry, type OperationListings } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
 import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
 
@@ -135,17 +136,22 @@ interface ToolCtxLike {
  * Skilled OpenAPI plugin instance.
  */
 export class OperationToolFactory {
-  /** Map (bundleId|opId) → the executor function that doubles as registry token. */
-  private registered = new Map<string, OperationExecutor>();
+  /** Map (bundleId|opId) → the executor function that doubles as registry token, and the skills that list the op. */
+  private registered = new Map<
+    string,
+    { executor: OperationExecutor; listings: [HiddenOpEntry, ...HiddenOpEntry[]] }
+  >();
   /** Tool names this factory has pushed into the classification registry. */
   private classificationKeys = new Set<string>();
 
   constructor(private readonly deps: OperationToolFactoryDeps) {}
 
   /**
-   * Register one operation as an internal tool. Idempotent — calling twice
-   * with the same `(bundleId, operationId)` is a no-op (the existing
-   * registration is left in place).
+   * Register one skill's listing of an operation as an internal tool. The
+   * first listing of a `(bundleId, operationId)` registers the tool; another
+   * skill's listing is added to it, so the tool admits a caller that any of
+   * its listing skills admits (as `run_workflow` does). Registering the same
+   * skill's listing again is a no-op.
    *
    * When the factory was constructed with a `classificationRegistry` AND
    * the caller supplies `ctx.pathsWithGet`, the factory also classifies the
@@ -156,9 +162,14 @@ export class OperationToolFactory {
    */
   register(entry: HiddenOpEntry, ctx?: OperationRegisterContext): void {
     const key = `${entry.bundleId}|${entry.op.operationId}`;
-    if (this.registered.has(key)) return;
+    const existing = this.registered.get(key);
+    if (existing) {
+      if (!existing.listings.some((listing) => listing.skillId === entry.skillId)) existing.listings.push(entry);
+      return;
+    }
 
-    const executor = this.makeExecutor(entry);
+    const listings: [HiddenOpEntry, ...HiddenOpEntry[]] = [entry];
+    const executor = this.makeExecutor(listings);
     const metadata = buildOperationMetadata(entry);
     const record: ToolFunctionTokenRecord = {
       kind: ToolKind.FUNCTION,
@@ -168,7 +179,7 @@ export class OperationToolFactory {
 
     const instance = new ToolInstance(record, this.deps.providers, OPERATION_TOOL_OWNER);
     this.deps.toolRegistry.registerToolInstance(instance);
-    this.registered.set(key, executor);
+    this.registered.set(key, { executor, listings });
 
     // Optional classification registration. Both the registry and per-call
     // pathsWithGet must be present; absent either, this is a no-op so the
@@ -203,7 +214,7 @@ export class OperationToolFactory {
    * classification entries this factory pushed.
    */
   unregisterAll(): void {
-    for (const executor of this.registered.values()) {
+    for (const { executor } of this.registered.values()) {
       try {
         // For ToolKind.FUNCTION the provide function IS the registry token.
         this.deps.toolRegistry.unregisterToolInstance(executor as unknown as Token);
@@ -235,20 +246,19 @@ export class OperationToolFactory {
    * reaching the op via `callTool` get the same security gates as callers
    * going through `run_workflow`.
    */
-  private makeExecutor(entry: HiddenOpEntry): OperationExecutor {
+  private makeExecutor(listings: OperationListings): OperationExecutor {
     return async (input, ctx) => {
       const config = ctx.get(SkilledOpenApiConfig);
       const guard = ctx.get(AuthorityGuard);
       const resolver = ctx.get(SkilledOpenApiCredentialResolver);
 
-      // 1) Authority gate (same policy plumbing as executeSkillAction): skill-
-      //    level AND op-level policies; default-deny per config for unprotected ops.
-      const authResult = await guard.check({
-        policy: entry.op.requiredAuthorities,
-        skillPolicy: entry.skillRequiredAuthorities,
-        isPublic: entry.op.public,
+      // 1) Authority gate, the same as executeSkillAction's: the op's rule and one
+      //    listing skill's rule; default-deny per config for unprotected ops.
+      const { entry, result: authResult } = await authorizeAction({
+        listings,
+        guard,
         unprotectedOps: config.unprotectedOps,
-        authInfo: (ctx.authInfo ?? {}) as Parameters<AuthorityGuard['check']>[0]['authInfo'],
+        authInfo: ctx.authInfo,
         input: (input ?? {}) as Record<string, unknown>,
       });
       if (!authResult.granted) {

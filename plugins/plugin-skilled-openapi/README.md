@@ -73,8 +73,14 @@ the input against the operation's `inputSchema`, sends the request with the cred
 and checks a JSON answer against `outputSchema`. The first failure ends the script with `success: false`. A script may
 make up to 25 calls and run for up to 8 seconds.
 
+An operation that several skills list runs when the caller satisfies the operation's rule and the rule of any one of
+those skills, whatever the order of the skills in the bundle. `load_skill` judges each skill the same way, so the call
+and the listing agree. A rule that depends on the action's input can't be judged until the call, though: `load_skill`
+still lists such an action, and the call can be refused once its input is known.
+
 With `exposeOperationsAsInternalTools` (the default), each operation is also an internal tool named
-`<bundleId>.<operationId>`, which your own tools can call with `this.callTool()`. Clients can't list or call it.
+`<bundleId>.<operationId>`, which your own tools can call with `this.callTool()`. It checks the caller the same way.
+Clients can't list or call it.
 
 ## Options
 
@@ -133,7 +139,8 @@ A bundle is a JSON or YAML object with `schemaVersion`, `bundleId`, `version`, `
   checked for shape: unknown fields are errors, and path templates and header names are restricted.
 - **Authorization.** `requiredAuthorities` on skills and operations are checked on every `callTool`. Skills organize
   what the model reads; they don't limit what a script can call, so protect operations with rules and use
-  `unprotectedOps: 'deny'` in production. Each caller is shown only the skills and actions their rules allow.
+  `unprotectedOps: 'deny'` in production. Each caller is shown only the skills and actions their rules allow. A skill's
+  rule doesn't protect an operation that another skill, without that rule, also lists: put the rule on the operation.
 - **Credentials.** Credentials stay on the server: the plugin adds them to each request, and the script gets only the
   API's answer. Redirects aren't followed, so a credential isn't sent elsewhere.
 - **Outbound requests.** URLs must be `https:` (unless `allowHttp`) and on the operation's service host. The host's
