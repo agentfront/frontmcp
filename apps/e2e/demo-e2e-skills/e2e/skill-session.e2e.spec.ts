@@ -10,21 +10,22 @@
  * to be configured in the app. These tests focus on the
  * observable behavior through the MCP protocol.
  */
-import { test, expect } from '@frontmcp/testing';
-import { searchSkills, loadSkills } from './helpers/skills-protocol';
+import { expect, test } from '@frontmcp/testing';
+
+import { loadSkills, searchSkills } from './helpers/skills-protocol';
 
 interface SkillResult {
   id: string;
   name: string;
   description: string;
-  instructions: string;
+  instructions?: string;
   tools: Array<{ name: string; purpose?: string; available: boolean }>;
   parameters?: Array<{ name: string; description?: string; required?: boolean; type?: string }>;
   availableTools: string[];
   missingTools: string[];
   isComplete: boolean;
   warning?: string;
-  formattedContent: string;
+  formattedContent?: string;
   session?: {
     activated: boolean;
     sessionId?: string;
@@ -210,7 +211,7 @@ test.describe('Skill Session E2E', () => {
       const loadContent = loadResult as LoadSkillsResult;
       const skill = loadContent.skills[0];
       expect(skill.instructions).toBeDefined();
-      expect(skill.formattedContent).toBeDefined();
+      expect(skill.formattedContent).toBeUndefined();
 
       // Step 3: Use a tool mentioned in the skill
       if (skill.availableTools.includes('github_get_pr')) {

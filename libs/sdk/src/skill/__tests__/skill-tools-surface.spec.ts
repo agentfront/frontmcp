@@ -92,8 +92,11 @@ describe('loading a skill reports the tools the caller can use', () => {
         missingTools: ['reindex_orders'],
         isComplete: false,
       });
-      expect(skill.formattedContent).not.toContain(AGENT_ONLY_FIELD);
-      expect(skill.formattedContent).toContain('orderId');
+      const {
+        skills: [asMarkdown],
+      } = await client.loadSkills(['order-support'], { format: 'markdown' });
+      expect(asMarkdown.formattedContent).not.toContain(AGENT_ONLY_FIELD);
+      expect(asMarkdown.formattedContent).toContain('orderId');
     });
   });
 

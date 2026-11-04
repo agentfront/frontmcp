@@ -1,6 +1,6 @@
 /**
- * `skills/load`'s `format`: `'full'` sends each tool's input schema, in `tools[].inputSchema` and in
- * `formattedContent`, and `'instructions-only'` leaves the schemas out of both (#1066).
+ * `skills/load`'s `format` sends each part of a skill once (#1066): `'full'` the structured fields with the tool
+ * schemas, `'markdown'` the `formattedContent` rendering in their place, `'instructions-only'` no tool schemas.
  */
 import 'reflect-metadata';
 
@@ -40,25 +40,41 @@ afterAll(async () => {
 });
 
 describe('skills/load format', () => {
-  it("'full' sends the tool's input schema with the tool and in the markdown", async () => {
+  it("'full' (the default) sends the instructions and the tool's input schema once, with no markdown", async () => {
     const {
       skills: [loaded],
-    } = await client.loadSkills(['stock-check'], { format: 'full' });
+    } = await client.loadSkills(['stock-check']);
 
+    expect(loaded.instructions).toContain('Call count_pets with the status');
     expect(loaded.tools[0].inputSchema).toMatchObject({ properties: { status: { type: 'string' } } });
-    expect(loaded.formattedContent).toContain('**Input Schema:**');
-    expect(loaded.formattedContent).toContain('Call count_pets with the status');
+    expect(loaded.formattedContent).toBeUndefined();
   });
 
-  it("'instructions-only' leaves the schema out of the tool and of the markdown", async () => {
+  it("'markdown' sends the rendering, which holds the instructions and the schema, in place of the fields", async () => {
+    const {
+      skills: [loaded],
+    } = await client.loadSkills(['stock-check'], { format: 'markdown' });
+
+    expect(loaded.formattedContent).toContain('**Input Schema:**');
+    expect(loaded.formattedContent).toContain('Call count_pets with the status');
+    expect(loaded.instructions).toBeUndefined();
+    expect(loaded.tools[0]).toEqual({ name: 'count_pets', available: true });
+  });
+
+  it("'instructions-only' sends the instructions without the tool schema, and no markdown", async () => {
     const {
       skills: [loaded],
     } = await client.loadSkills(['stock-check'], { format: 'instructions-only' });
 
+    expect(loaded.instructions).toContain('Call count_pets with the status');
     expect(loaded.tools[0].inputSchema).toBeUndefined();
-    expect(loaded.formattedContent).not.toContain('Input Schema');
-    expect(loaded.formattedContent).not.toContain('"status"');
-    expect(loaded.formattedContent).toContain('- [✓] `count_pets`');
-    expect(loaded.formattedContent).toContain('Call count_pets with the status');
+    expect(loaded.formattedContent).toBeUndefined();
+  });
+
+  it('sends each part once: the instructions appear once in every format', async () => {
+    for (const format of ['full', 'markdown', 'instructions-only'] as const) {
+      const json = JSON.stringify(await client.loadSkills(['stock-check'], { format }));
+      expect(json.split('Call count_pets with the status').length - 1).toBe(1);
+    }
   });
 });

@@ -119,8 +119,12 @@ export interface SearchSkillsResult {
  * Options for loading skills.
  */
 export interface LoadSkillsOptions {
-  /** Format of the returned content */
-  format?: 'full' | 'instructions-only';
+  /**
+   * What each skill is sent as, each part once. `'full'` (default): `instructions`, `parameters` and each tool's
+   * `inputSchema`. `'markdown'`: `formattedContent`, a markdown rendering that holds them all, in their place.
+   * `'instructions-only'`: as `'full'` without the tool schemas.
+   */
+  format?: 'full' | 'markdown' | 'instructions-only';
   /** Whether to activate a skill session */
   activateSession?: boolean;
   /** Policy mode for the skill session */
@@ -137,8 +141,8 @@ export interface LoadedSkillItem {
   name: string;
   /** Description of what the skill does */
   description: string;
-  /** Instructions for using the skill */
-  instructions: string;
+  /** Instructions for using the skill; absent with `format: 'markdown'`, where `formattedContent` holds them */
+  instructions?: string;
   /** Tools used by this skill with their schemas */
   tools: Array<{
     name: string;
@@ -160,8 +164,8 @@ export interface LoadedSkillItem {
   missingTools: string[];
   /** Whether all required tools are available */
   isComplete: boolean;
-  /** Formatted content for LLM consumption */
-  formattedContent: string;
+  /** The skill rendered as markdown for a model, with `format: 'markdown'` only */
+  formattedContent?: string;
   /** Session info if activateSession was true */
   session?: {
     activated: boolean;

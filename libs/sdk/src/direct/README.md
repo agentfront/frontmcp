@@ -198,7 +198,7 @@ const result: SearchSkillsResult = await client.searchSkills('code review', opti
 import type { LoadSkillsOptions, LoadSkillsResult } from '@frontmcp/sdk/direct';
 
 const options: LoadSkillsOptions = {
-  format: 'full', // 'full' | 'instructions-only' (no tool schemas, in `tools` or `formattedContent`)
+  format: 'full', // 'full' (default) | 'markdown' (formattedContent in place of the fields) | 'instructions-only' (no tool schemas)
   activateSession: true, // Activate skill session
   policyMode: 'approval', // 'strict' | 'approval' | 'permissive'
 };
@@ -208,13 +208,14 @@ const result: LoadSkillsResult = await client.loadSkills(['skill-1', 'skill-2'],
 // Result structure:
 // {
 //   skills: [{
-//     id, name, description, instructions,
-//     tools: [{ name, purpose, available, inputSchema, outputSchema }],
-//     parameters: [{ name, description, required, type }],
+//     id, name, description,
+//     instructions,                                                // not with 'markdown'
+//     tools: [{ name, purpose, available, inputSchema, outputSchema }], // inputSchema with 'full' only
+//     parameters: [{ name, description, required, type }],         // not with 'markdown'
 //     availableTools: string[],
 //     missingTools: string[],
 //     isComplete: boolean,
-//     formattedContent: string,
+//     formattedContent: string,                                    // with 'markdown' only
 //     session?: { activated, sessionId, policyMode, allowedTools }
 //   }],
 //   summary: { totalSkills, totalTools, allToolsAvailable, combinedWarnings },
