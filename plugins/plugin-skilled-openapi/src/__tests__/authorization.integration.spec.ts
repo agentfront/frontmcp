@@ -90,6 +90,11 @@ const ALICE: DirectAuthContext = {
   sessionId: 'alice',
   user: { sub: 'alice', realm_access: { roles: ['admin'] } },
 };
+// In finance, by the server's claimsMapping.
+const FRAN: DirectAuthContext = {
+  sessionId: 'fran',
+  user: { sub: 'fran', realm_access: { roles: ['finance'] } },
+};
 
 @Skill({ name: 'server-notes', description: 'Notes about this server.', instructions: 'Nothing secret.' })
 class ServerNotesSkill {}
@@ -275,5 +280,47 @@ describe("the SDK's skill surfaces hide a bundle skill the caller may not use", 
     const byId = 'skill://billing-admin/SKILL.md';
     await expect(server.readResource(byId, { authContext: MALLORY })).rejects.toThrow(/not found/i);
     expect(text(await server.readResource(byId, { authContext: ALICE }))).toContain('Secret runbook');
+  });
+});
+
+describe("a bundle skill's SKILL.md lists the actions the caller may run", () => {
+  const text = (result: Awaited<ReturnType<DirectMcpServer['readResource']>>) =>
+    result.contents.map((c) => ('text' in c ? c.text : '')).join('');
+  const actionIds = (skillMd: string) => [...skillMd.matchAll(/^### (\S+)$/gm)].map((match) => match[1]);
+
+  beforeAll(async () => {
+    await server.callTool('search_skill', { query: 'invoices' }, { authContext: ALICE });
+  });
+
+  it.each(['skill://Invoices/SKILL.md', 'skill://invoices/SKILL.md'])(
+    '%s leaves out the actions the caller cannot run, as load_skill does',
+    async (uri) => {
+      const asMallory = text(await server.readResource(uri, { authContext: MALLORY }));
+      const asFran = text(await server.readResource(uri, { authContext: FRAN }));
+
+      expect(asMallory).toContain('## Actions\n\nRun these with `run_workflow`');
+      expect(actionIds(asMallory)).toEqual(['getInvoice', 'refundInvoice']);
+      expect(actionIds(asFran)).toEqual(['getInvoice', 'refundInvoice', 'exportInvoices']);
+    },
+  );
+
+  it("gives each action load_skill's summary and schemas", async () => {
+    const skillMd = text(await server.readResource('skill://Invoices/SKILL.md', { authContext: MALLORY }));
+    const { skill } = structured<{
+      skill: {
+        actions: Array<{ actionId: string; summary: string; inputJsonSchema: unknown; outputJsonSchema: unknown }>;
+      };
+    }>(await loadSkill(MALLORY, 'invoices'));
+
+    for (const action of skill.actions) {
+      expect(skillMd).toContain(
+        [
+          `### ${action.actionId}`,
+          action.summary,
+          'Input:\n\n```json\n' + JSON.stringify(action.inputJsonSchema, null, 2) + '\n```',
+          'Output:\n\n```json\n' + JSON.stringify(action.outputJsonSchema, null, 2) + '\n```',
+        ].join('\n\n'),
+      );
+    }
   });
 });

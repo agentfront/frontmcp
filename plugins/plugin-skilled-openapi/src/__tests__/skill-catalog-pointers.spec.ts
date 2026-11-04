@@ -1,7 +1,7 @@
 /**
- * On a Skilled OpenAPI server the skill catalog points to `load_skill` and `search_skill`, not to the
- * `skill://index.json` resource, whose `SKILL.md` has a skill's instructions but not its actions; and the
- * `initialize` instructions wait for the bundle, so they count its skills (#1067).
+ * On a Skilled OpenAPI server the skill catalog points to `load_skill` and `search_skill`, which every client can
+ * call, not to the `skill://index.json` resource; and the `initialize` instructions wait for the bundle, so they
+ * count its skills (#1067).
  *
  * The host turns off background loading (`disablePolling`, as `@frontmcp/edge` does), so nothing but a request
  * loads the bundle: the first `initialize` runs strictly before anything else could have loaded it.
