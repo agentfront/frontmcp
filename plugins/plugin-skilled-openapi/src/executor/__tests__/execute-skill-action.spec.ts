@@ -278,7 +278,7 @@ describe('executeSkillAction', () => {
 
 describe('authorizeAction: an operation several skills list', () => {
   const ADMIN = { roles: { any: ['admin'] } };
-  const VIEWER = { user: { sub: 'viewer', roles: ['viewer'] } };
+  const VIEWER = { user: { iss: 'test', sub: 'viewer', roles: ['viewer'] } };
 
   const listing = (
     skillId: string,

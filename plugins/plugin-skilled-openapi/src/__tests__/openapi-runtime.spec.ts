@@ -1,3 +1,4 @@
+import { ToolCredentialsRequiredError } from '@frontmcp/sdk';
 import { base64urlEncode } from '@frontmcp/utils';
 
 import { MemoryCredentialResolver } from '../executor/credential-resolver';
@@ -149,6 +150,37 @@ describe('executeOperation', () => {
     expect(result.error).toMatch(/auth resolution failed/);
   });
 
+  it('asks the resolver for the binding credential of the bundle and the caller', async () => {
+    const resolve = jest.fn(async () => 'sk_for_caller');
+    const authInfo = { sessionId: 'session-1', user: { sub: 'u1', iss: 'test', tenant: 'acme' } };
+    const calls: { headers?: Headers }[] = [];
+    await executeOperation({
+      entry: buildEntry(),
+      bundleId: 'acme',
+      input: { id: '1' },
+      authInfo,
+      deps: buildDeps({ resolver: { resolve }, fetchImpl: makeFetch({ capture: (c) => calls.push(c) }) as never }),
+    });
+
+    expect(resolve).toHaveBeenCalledWith('stripe', { bundleId: 'acme', authInfo });
+    expect(calls[0].headers?.get('Authorization')).toBe('Bearer sk_for_caller');
+  });
+
+  it('throws, sending nothing, when the caller has not connected the credential the binding sends', async () => {
+    const notConnected = new ToolCredentialsRequiredError({ toolId: 'run_workflow', providers: ['stripe'] });
+    const fetchImpl = jest.fn();
+
+    const call = executeOperation({
+      entry: buildEntry(),
+      bundleId: 'acme',
+      input: { id: '1' },
+      deps: buildDeps({ resolver: { resolve: async () => Promise.reject(notConnected) }, fetchImpl }),
+    });
+
+    await expect(call).rejects.toBe(notConnected);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('passthroughCallerToken uses the supplied caller token instead of the vault', async () => {
     const entry = buildEntry();
     entry.authBinding = { kind: 'bearer', vaultRef: 'unused', passthroughCallerToken: true };
@@ -158,7 +190,7 @@ describe('executeOperation', () => {
       entry,
       bundleId: 'acme',
       input: { id: '1' },
-      callerToken: callerJwt,
+      authInfo: { token: callerJwt },
       deps: buildDeps({
         resolver: new MemoryCredentialResolver({}),
         fetchImpl: makeFetch({ body: {}, capture: (c) => calls.push(c) }) as never,
@@ -175,7 +207,7 @@ describe('executeOperation', () => {
       entry,
       bundleId: 'acme',
       input: { id: '1' },
-      callerToken: jwtWith({ sub: 'u1', aud: 'https://mcp.example.com' }),
+      authInfo: { token: jwtWith({ sub: 'u1', aud: 'https://mcp.example.com' }) },
       deps: buildDeps({ fetchImpl: fetchImpl as never }),
     });
     expect(result.ok).toBe(false);
@@ -433,7 +465,7 @@ describe('executeOperation — a passthrough caller token and the URL the reques
       entry,
       bundleId: 'acme',
       input: { id },
-      callerToken,
+      authInfo: { token: callerToken },
       deps: buildDeps({ resolver: new MemoryCredentialResolver({}), fetchImpl: fetchImpl as never }),
     });
     return { result, sent, fetchImpl };

@@ -8,11 +8,10 @@
 // What this module adds on top of the adapter:
 //   1. Projection from our `OperationDescriptor` to the upstream `McpOpenAPITool`
 //      shape that buildRequest expects.
-//   2. Direct `SecurityContext` construction from our `AuthBinding` + a
-//      vault-resolved credential. (We bypass the adapter's
-//      `createSecurityContextFromAuth` because that path requires a full
-//      FrontMcpContext / authProviderMapper, which is over-engineered for the
-//      bundle-driven case where the credential is already pinned per binding.)
+//   2. Direct `SecurityContext` construction from our `AuthBinding` + the
+//      credential the resolver gives for the binding's `vaultRef` and the caller.
+//      (We bypass the adapter's `createSecurityContextFromAuth`: a bundle names
+//      its credential by `vaultRef`, not by the spec's security scheme.)
 //   3. Layered SSRF defenses (post-DNS IP blocklist + cloud metadata host
 //      block) on top of the adapter's `validateBaseUrl`.
 
@@ -26,13 +25,13 @@ import {
   type SecurityContext,
 } from '@frontmcp/adapters/openapi';
 import type { AuthBinding } from '@frontmcp/adapters/skills';
-import type { FrontMcpLogger } from '@frontmcp/sdk';
+import { ToolCredentialsRequiredError, type FrontMcpLogger } from '@frontmcp/sdk';
 import { isEdgeRuntime, isRedirectResponse } from '@frontmcp/utils';
 
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
 import type { OutboundOptions } from '../skilled-openapi.types';
-import { callerTokenRefusal } from './caller-token';
-import type { CredentialResolver } from './credential-resolver';
+import { callerTokenOf, callerTokenRefusal } from './caller-token';
+import type { CallerAuthInfo, CredentialResolver } from './credential-resolver';
 import { proxiedFetch } from './egress-proxy';
 import { withHostConcurrency } from './host-concurrency';
 import { pinnedFetch } from './pinned-fetch';
@@ -70,14 +69,16 @@ async function buildSecurityContext(args: {
   resolver: CredentialResolver;
   /** The service the request goes to; a passed-through caller token must have been issued for it. */
   serviceBaseUrl: string;
-  callerToken?: string;
+  authInfo: CallerAuthInfo;
 }): Promise<ResolvedAuth> {
-  const { binding, bundleId, resolver, serviceBaseUrl, callerToken } = args;
+  const { binding, bundleId, resolver, serviceBaseUrl, authInfo } = args;
+  const resolveOptions = { bundleId, authInfo };
   switch (binding.kind) {
     case 'none':
       return { context: {} };
     case 'bearer': {
       if (binding.passthroughCallerToken) {
+        const callerToken = callerTokenOf(authInfo);
         if (!callerToken) throw new Error('passthrough caller token requested but the caller presented none');
         // Refused here when the token does not cover the service at all; `executeOperation` checks the
         // URL the request is built for as well, which a path parameter can move.
@@ -85,12 +86,12 @@ async function buildSecurityContext(args: {
         if (refusal) throw new Error(`passthrough caller token refused: ${refusal}`);
         return { context: { jwt: callerToken }, forwardedCallerToken: callerToken };
       }
-      const token = await resolver.resolve(binding.vaultRef, { bundleId });
+      const token = await resolver.resolve(binding.vaultRef, resolveOptions);
       if (!token) throw new Error(`bearer vaultRef "${binding.vaultRef}" did not resolve`);
       return { context: { jwt: token } };
     }
     case 'apiKey': {
-      const value = await resolver.resolve(binding.vaultRef, { bundleId });
+      const value = await resolver.resolve(binding.vaultRef, resolveOptions);
       if (!value) throw new Error(`apiKey vaultRef "${binding.vaultRef}" did not resolve`);
       // Use named apiKeys so the SecurityResolver routes it to the declared
       // header / query slot named in the bundle (the mapper carries the slot).
@@ -98,7 +99,7 @@ async function buildSecurityContext(args: {
       return { context: { apiKeys: { [binding.name]: value }, apiKey: value } };
     }
     case 'oauth2': {
-      const token = await resolver.resolve(binding.vaultRef, { bundleId });
+      const token = await resolver.resolve(binding.vaultRef, resolveOptions);
       if (!token) throw new Error(`oauth2 vaultRef "${binding.vaultRef}" did not resolve`);
       return { context: { oauth2Token: token } };
     }
@@ -188,17 +189,20 @@ export interface OpenApiRuntimeDeps {
 /**
  * Execute one hidden operation against the customer's REST API. Returns a
  * structured envelope; never raw-stringifies the response into model context.
+ * Throws `ToolCredentialsRequiredError` when the caller hasn't connected the
+ * credential the operation's binding sends, so the caller is asked to connect it.
  */
 export async function executeOperation(args: {
   entry: HiddenOpEntry;
   bundleId: string;
   input: OperationInput;
-  callerToken?: string;
+  /** The caller the request is made for (anonymous when omitted): the resolver picks its credential, and a passthrough binding sends its token. */
+  authInfo?: CallerAuthInfo;
   /** Aborts the request in flight, and keeps one from starting, once the call it belongs to has ended. */
   signal?: AbortSignal;
   deps: OpenApiRuntimeDeps;
 }): Promise<ExecutionResult> {
-  const { entry, bundleId, input, callerToken, signal, deps } = args;
+  const { entry, bundleId, input, authInfo = {}, signal, deps } = args;
   const { outbound, resolver, allowedHosts, logger } = deps;
 
   let mcpTool: McpOpenAPITool;
@@ -215,9 +219,10 @@ export async function executeOperation(args: {
       bundleId,
       resolver,
       serviceBaseUrl: entry.service.baseUrl,
-      callerToken,
+      authInfo,
     });
   } catch (e) {
+    if (e instanceof ToolCredentialsRequiredError) throw e;
     return failure(0, `auth resolution failed: ${(e as Error).message}`);
   }
 
