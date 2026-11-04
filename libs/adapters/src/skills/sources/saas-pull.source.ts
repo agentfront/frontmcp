@@ -62,7 +62,8 @@ function isUsableSigningKey(key: unknown): boolean {
  *   - If the pull fails AND a cached bundle exists on disk, falls back to it
  *     and emits a warning. This prevents a SaaS outage at boot from killing
  *     the customer's MCP server.
- *   - If both pull and cache fail, `start()` throws.
+ *   - If both pull and cache fail, `start()` throws. Polling still starts, so a
+ *     later pull that succeeds loads the bundle.
  *
  * Refresh: poll on `pollIntervalMs`. Single-flight per source — overlapping
  * polls are skipped, never queued. Webhook support is gated behind
@@ -134,8 +135,8 @@ export class SaasPullSource implements SkillBundleSource {
       this.notify(bundle);
     } finally {
       this.inFlight = false;
+      this.schedulePoll();
     }
-    this.schedulePoll();
   }
 
   onChange(listener: BundleSourceListener): () => void {

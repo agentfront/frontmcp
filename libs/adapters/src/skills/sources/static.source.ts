@@ -15,7 +15,8 @@ import type { BundleSourceListener, SkillBundleSource } from './skill-bundle-sou
 
 /**
  * Loads a bundle from a local file (YAML or JSON). Optionally watches the
- * file for changes via `fs.watch` and re-fetches on edit.
+ * file for changes via `fs.watch` and re-fetches on edit. The watch starts
+ * before the first read, so fixing a file that failed to load reloads it.
  *
  * Bundle file extensions:
  *   - `.yaml` / `.yml` — parsed as YAML
@@ -38,11 +39,11 @@ export class StaticSource implements SkillBundleSource {
   }
 
   async start(): Promise<void> {
-    const bundle = await this.fetchOnce();
-    this.notify(bundle);
     if (this.options.watch) {
       this.beginWatch();
     }
+    const bundle = await this.fetchOnce();
+    this.notify(bundle);
   }
 
   onChange(listener: BundleSourceListener): () => void {
