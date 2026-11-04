@@ -53,6 +53,18 @@ export const asAdmin = (fixtures: Pick<TestFixtures, 'auth' | 'server'>) =>
 export const asViewer = (fixtures: Pick<TestFixtures, 'auth' | 'server'>) =>
   connectWithRoles(fixtures, 'vera', ['viewer']);
 
+export interface Readiness {
+  httpStatus: number;
+  status: string;
+  probes?: Record<string, { status: string; details?: Record<string, unknown>; error?: string }>;
+}
+
+/** What the server's `/readyz` answers. */
+export async function readiness(baseUrl: string): Promise<Readiness> {
+  const response = await fetch(`${baseUrl}/readyz`);
+  return { httpStatus: response.status, ...((await response.json()) as Omit<Readiness, 'httpStatus'>) };
+}
+
 export async function searchSkillIds(client: McpTestClient, args: Record<string, unknown>): Promise<string[]> {
   const result = await client.tools.call('search_skill', args);
   return result.json<SearchSkillResponse>().skills.map((skill) => skill.skillId);

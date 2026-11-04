@@ -141,12 +141,7 @@ export async function executeSkillAction(args: {
   detach(audit?.writer.writeAuthorityPass(auditCtx), 'authority-pass');
 
   // 2) Compile (cached) input/output schemas, then validate input strictly.
-  const schemas = getCompiledOpSchemas({
-    bundleVersion: entry.bundleVersion,
-    operationId: entry.op.operationId,
-    inputSchema: entry.op.inputSchema,
-    outputSchema: entry.op.outputSchema,
-  });
+  const schemas = getCompiledOpSchemas(entry.op);
   const inputParse = schemas.input.safeParse(input ?? {});
   if (!inputParse.success) {
     const error = `input validation failed: ${formatZodIssues(inputParse.error.issues)}`;

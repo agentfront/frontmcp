@@ -97,6 +97,13 @@ export class HiddenOpRegistry {
     return removed;
   }
 
+  /** A copy of the registry as it is now: a later bundle swap changes this registry, never the copy. */
+  snapshot(): HiddenOpRegistry {
+    const copy = new HiddenOpRegistry();
+    copy.entries = new Map(this.entries);
+    return copy;
+  }
+
   /** Iterate all entries. Used by `/healthz` and audit log. */
   values(): IterableIterator<HiddenOpEntry> {
     return this.entries.values();

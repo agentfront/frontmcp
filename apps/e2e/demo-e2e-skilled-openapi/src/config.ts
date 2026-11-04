@@ -1,4 +1,4 @@
-// The config both entrypoints run, with the plugin set up as in production; e2e/helpers/production-environment.ts makes its inputs.
+// The config the entrypoints run, with the plugin set up as in production; e2e/helpers/production-environment.ts makes its inputs.
 
 import SkilledOpenApiPlugin, {
   SkilledOpenApiCredentialResolver,
@@ -26,10 +26,32 @@ class EnvironmentCredentialResolver extends SkilledOpenApiCredentialResolver {
   }
 }
 
-export function skilledOpenApiPlugin(callerCredentials: Pick<SkilledOpenApiPluginOptionsInput, 'authProviders'> = {}) {
+type PluginSetup = Partial<Pick<SkilledOpenApiPluginOptionsInput, 'authProviders' | 'source' | 'bundleCacheDir'>>;
+
+function staticBundleSource() {
+  return { type: 'static' as const, path: requiredEnv('SKILLED_BUNDLE_PATH'), watch: false };
+}
+
+/** The bundle pulled from the SaaS bundle server that e2e/helpers/mock-bundle-server.ts runs, and where it is cached. */
+export function saasBundleSetup(): PluginSetup {
+  return {
+    source: {
+      type: 'saas' as const,
+      endpoint: requiredEnv('SKILLED_SAAS_ENDPOINT'),
+      jwksUrl: requiredEnv('SKILLED_SAAS_JWKS_URL'),
+      authToken: requiredEnv('SKILLED_SAAS_PULL_TOKEN'),
+      expectedIssuer: requiredEnv('SKILLED_SAAS_ISSUER'),
+      expectedAudience: requiredEnv('SKILLED_SAAS_AUDIENCE'),
+      pollIntervalMs: Number(requiredEnv('SKILLED_SAAS_POLL_INTERVAL_MS')),
+    },
+    bundleCacheDir: requiredEnv('SKILLED_BUNDLE_CACHE_DIR'),
+  };
+}
+
+export function skilledOpenApiPlugin({ source = staticBundleSource(), ...setup }: PluginSetup = {}) {
   return SkilledOpenApiPlugin.init({
-    ...callerCredentials,
-    source: { type: 'static' as const, path: requiredEnv('SKILLED_BUNDLE_PATH'), watch: false },
+    ...setup,
+    source,
     requireSignature: true,
     trustedKeys: [JSON.parse(requiredEnv('SKILLED_TRUSTED_KEY')) as SignatureKey],
     unprotectedOps: 'deny' as const,
