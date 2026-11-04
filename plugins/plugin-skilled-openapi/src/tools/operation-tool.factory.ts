@@ -129,6 +129,7 @@ interface ToolCtxLike {
   get<T>(token: Token<T>): T;
   logger: FrontMcpLogger;
   authInfo?: unknown;
+  signal?: AbortSignal;
 }
 
 /**
@@ -313,6 +314,7 @@ export class OperationToolFactory {
         input: inputParse.data as Record<string, unknown>,
         // For a bearer binding with `passthroughCallerToken: true`.
         callerToken: callerTokenOf(ctx.authInfo),
+        signal: ctx.signal,
         deps,
       });
 

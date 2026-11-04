@@ -497,6 +497,98 @@ describe('executeOperation — a passthrough caller token and the URL the reques
   });
 });
 
+describe('executeOperation — the signal of the call the request belongs to', () => {
+  const WORKFLOW_ENDED = new Error('the workflow ended before the request finished');
+
+  /** A `fetch` that never answers on its own: it rejects, as `fetch` does, once its signal fires. */
+  function stalledFetch() {
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const fetchImpl = jest.fn(
+      (_input: string | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+          markStarted();
+        }),
+    );
+    const signalOfCall = (index: number): AbortSignal | null | undefined => fetchImpl.mock.calls[index]?.[1]?.signal;
+    return { fetchImpl, started, signalOfCall };
+  }
+
+  const callWith = (signal: AbortSignal, fetchImpl: typeof fetch, outbound = baseOutbound()) =>
+    executeOperation({
+      entry: buildEntry(),
+      bundleId: 'acme',
+      input: { id: '1' },
+      signal,
+      deps: buildDeps({ outbound, fetchImpl }),
+    });
+
+  it('aborts the request in flight when the signal fires, and says why', async () => {
+    const callEnded = new AbortController();
+    const { fetchImpl, started, signalOfCall } = stalledFetch();
+
+    const pending = callWith(callEnded.signal, fetchImpl as never);
+    await started;
+    callEnded.abort(WORKFLOW_ENDED);
+
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      status: 0,
+      error: 'request aborted: the workflow ended before the request finished',
+    });
+    expect(signalOfCall(0)?.aborted).toBe(true);
+  });
+
+  it('sends nothing once the signal has fired', async () => {
+    const callEnded = new AbortController();
+    callEnded.abort('the caller cancelled');
+    const fetchImpl = jest.fn();
+
+    const result = await callWith(callEnded.signal, fetchImpl as never);
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: false, status: 0, error: 'request aborted: the caller cancelled' });
+  });
+
+  it('sends nothing for a request that was waiting for a host slot when the signal fired', async () => {
+    const callEnded = new AbortController();
+    const { fetchImpl, started } = stalledFetch();
+    const oneAtATime = baseOutbound({ maxConcurrencyPerHost: 1 });
+
+    const inFlight = callWith(callEnded.signal, fetchImpl as never, oneAtATime);
+    const waiting = callWith(callEnded.signal, fetchImpl as never, oneAtATime);
+    await started;
+    callEnded.abort(WORKFLOW_ENDED);
+
+    const results = await Promise.all([inFlight, waiting]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(results.map((result) => result.error)).toEqual([
+      'request aborted: the workflow ended before the request finished',
+      'request aborted: the workflow ended before the request finished',
+    ]);
+  });
+
+  it("still ends the request at the operation's timeout while the signal has not fired", async () => {
+    const callEnded = new AbortController();
+    const { fetchImpl, signalOfCall } = stalledFetch();
+
+    const result = await executeOperation({
+      entry: buildEntry({ timeoutMs: 50 }),
+      bundleId: 'acme',
+      input: { id: '1' },
+      signal: callEnded.signal,
+      deps: buildDeps({ fetchImpl: fetchImpl as never }),
+    });
+
+    expect(result).toMatchObject({ ok: false, status: 0, error: 'timeout after 50ms' });
+    expect(signalOfCall(0)?.aborted).toBe(true);
+    expect(callEnded.signal.aborted).toBe(false);
+  });
+});
+
 describe('executeOperation — IPv6-literal service hosts (GHSA-4r57-gvgj-5crm)', () => {
   it.each([
     ['https://[::ffff:169.254.169.254]', true],

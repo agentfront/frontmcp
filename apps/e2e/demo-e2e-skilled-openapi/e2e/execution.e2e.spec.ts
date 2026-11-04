@@ -130,6 +130,17 @@ test.describe('limits (E3)', () => {
     expect(result).toMatchObject({ success: false, error: 'timeout after 250ms' });
     expect(result.stats?.durationMs).toBeLessThan(SLOW_REPORT_DELAY_MS);
   });
+
+  test('a workflow that runs out of time aborts the request it is waiting on', async ({ mcp }) => {
+    const result = await runWorkflow(mcp, "return await callTool('exportRevenueReport', { month: '2026-10' });");
+
+    expect(result).toMatchObject({ success: false, error: 'Execution timed out after 8000ms' });
+    expect(environment.billingApi.heldExports).toHaveLength(1);
+    const [held] = environment.billingApi.heldExports;
+    const closedAt = await held.closedAt;
+    expect(held.answered).toBe(false);
+    expect(closedAt - held.receivedAt).toBeLessThan(9_000);
+  });
 });
 
 test.describe('the upstream credential (F1)', () => {

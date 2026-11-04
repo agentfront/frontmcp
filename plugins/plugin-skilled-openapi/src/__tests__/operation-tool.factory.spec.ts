@@ -57,7 +57,9 @@ class FakeToolRegistry {
   }
 }
 
-function buildFakeCtx(overrides: { granted?: boolean; deniedBy?: string; guard?: AuthorityGuard } = {}) {
+function buildFakeCtx(
+  overrides: { granted?: boolean; deniedBy?: string; guard?: AuthorityGuard; signal?: AbortSignal } = {},
+) {
   const guard = overrides.guard ?? {
     check: jest.fn(async () => ({ granted: overrides.granted ?? true, deniedBy: overrides.deniedBy })),
   };
@@ -76,6 +78,7 @@ function buildFakeCtx(overrides: { granted?: boolean; deniedBy?: string; guard?:
   return {
     logger: noopLogger,
     authInfo: {},
+    signal: overrides.signal,
     get: jest.fn((token: unknown) => {
       if (token === SkilledOpenApiConfig) return config;
       if (token === AuthorityGuard) return guard;
@@ -435,6 +438,16 @@ describe('OperationToolFactory', () => {
       const result = await exec({ id: 'x' }, buildFakeCtx());
       expect(result).toEqual({ ok: true, status: 200, data: { ok: true }, contentType: 'application/json' });
       expect(mockExecuteOperation).toHaveBeenCalledTimes(1);
+    });
+
+    it("sends the request under the tool call's signal", async () => {
+      const toolCall = new AbortController();
+      const { factory, toolRegistry } = makeFactory();
+      factory.register(buildEntry());
+
+      await lastExecutor(toolRegistry)({ id: 'x' }, buildFakeCtx({ signal: toolCall.signal }));
+
+      expect(mockExecuteOperation).toHaveBeenCalledWith(expect.objectContaining({ signal: toolCall.signal }));
     });
 
     it('preserves error and contentType from upstream failure', async () => {
