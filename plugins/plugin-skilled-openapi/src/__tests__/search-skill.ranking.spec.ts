@@ -85,3 +85,18 @@ describe('a bundle skill’s tags (#1058)', () => {
     expect(await search({ query: 'puppies' })).toEqual(['pet-catalog']);
   });
 });
+
+describe('a bundle skill’s operations and instructions (#1060)', () => {
+  it('find it by a word of an operation’s summary', async () => {
+    expect(await search({ query: 'inventories by status' })).toEqual(['store']);
+  });
+
+  it('find it by an operation id, whole or as words', async () => {
+    expect(await search({ query: 'getInventory' })).toEqual(['store']);
+    expect(await search({ query: 'inventory' })).toEqual(['store']);
+  });
+
+  it('rank it first when they match more of the query than another skill’s name', async () => {
+    expect((await search({ query: 'pet inventories' }))[0]).toBe('store');
+  });
+});

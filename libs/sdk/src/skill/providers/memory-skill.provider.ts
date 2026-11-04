@@ -8,6 +8,7 @@ import { type SkillContent } from '../../common/interfaces';
 import { type SkillMetadata, type SkillVisibility } from '../../common/metadata';
 import { importWithRequireFallback } from '../../utils/dynamic-import.utils';
 import { type SkillIndexCache, type SkillIndexScoring } from '../skill-index-cache.interface';
+import { queryTerms, queryTermShare, skillSearchText } from '../skill-search-text';
 import {
   type MutableSkillStorageProvider,
   type SkillListOptions,
@@ -18,83 +19,6 @@ import {
   type SkillStorageProviderType,
 } from '../skill-storage.interface';
 import { type SkillToolValidator, type ToolValidationResult } from '../skill-validator';
-
-/**
- * Stop words to filter from search queries and indexing.
- * Optimized for skill discovery context.
- */
-const STOP_WORDS: ReadonlySet<string> = new Set([
-  // Articles & Determiners
-  'the',
-  'a',
-  'an',
-  'this',
-  'that',
-  'these',
-  'those',
-  // Prepositions
-  'in',
-  'on',
-  'at',
-  'to',
-  'for',
-  'of',
-  'with',
-  'by',
-  'from',
-  'into',
-  // Conjunctions
-  'and',
-  'or',
-  'but',
-  'so',
-  'as',
-  'if',
-  'when',
-  'where',
-  // Pronouns
-  'i',
-  'me',
-  'my',
-  'you',
-  'your',
-  'it',
-  'its',
-  'we',
-  'our',
-  'they',
-  'their',
-  // Auxiliary verbs
-  'is',
-  'was',
-  'are',
-  'were',
-  'be',
-  'been',
-  'being',
-  'have',
-  'has',
-  'had',
-  'do',
-  'does',
-  'did',
-  'will',
-  'would',
-  'can',
-  'could',
-  'should',
-  'may',
-  'might',
-  // Common fillers
-  'please',
-  'help',
-  'want',
-  'need',
-  'like',
-  'just',
-  'how',
-  'what',
-]);
 
 /**
  * Metadata stored with each skill document in the vector database.
@@ -312,7 +236,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   private toDocument(skill: SkillContent): { id: string; text: string; metadata: SkillDocumentMetadata } {
     return {
       id: skill.id,
-      text: this.buildSearchableText(skill),
+      text: skillSearchText(skill),
       metadata: { id: skill.id, skillId: skill.id, skill },
     };
   }
@@ -324,7 +248,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
    */
   private async computeIndexKey(): Promise<string> {
     const parts = Array.from(this.skills.values())
-      .map((s) => `${s.id}\u0000${this.buildSearchableText(s)}`)
+      .map((s) => `${s.id}\u0000${skillSearchText(s)}`)
       .sort();
     const canonical = `frontmcp-skill-index:v1|${this.scoring}|${this.skills.size}|${parts.join('')}`;
     return sha256Hex(canonical);
@@ -602,72 +526,6 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   }
 
   /**
-   * Build searchable text for TF-IDF indexing.
-   * Uses term weighting to improve relevance:
-   * - Description: 3x weight (most important for matching)
-   * - Tags: 2x weight
-   * - Tools: 1x weight
-   * - Name: 1x weight
-   */
-  private buildSearchableText(skill: SkillContent): string {
-    const parts: string[] = [];
-
-    // Name (tokenized)
-    if (skill.name) {
-      const nameParts = skill.name.split(/[:\-_.\s]/).filter(Boolean);
-      parts.push(...nameParts);
-    }
-
-    // Description (3x weight)
-    if (skill.description) {
-      parts.push(skill.description, skill.description, skill.description);
-
-      // Extract key terms from description
-      const keyTerms = skill.description
-        .toLowerCase()
-        .split(/\s+/)
-        .filter((word) => word.length >= 4 && !STOP_WORDS.has(word));
-      parts.push(...keyTerms);
-    }
-
-    // Tags (2x weight)
-    const tags = this.getSkillTags(skill);
-    for (const tag of tags) {
-      parts.push(tag, tag);
-    }
-
-    // Tools (1x weight)
-    for (const tool of skill.tools) {
-      parts.push(tool.name);
-      if (tool.purpose) {
-        parts.push(tool.purpose);
-      }
-    }
-
-    // Parameters (1x weight)
-    if (skill.parameters) {
-      for (const param of skill.parameters) {
-        parts.push(param.name);
-        if (param.description) {
-          parts.push(param.description);
-        }
-      }
-    }
-
-    // Examples (1x weight)
-    if (skill.examples) {
-      for (const example of skill.examples) {
-        parts.push(example.scenario);
-        if (example.expectedOutcome) {
-          parts.push(example.expectedOutcome);
-        }
-      }
-    }
-
-    return parts.join(' ');
-  }
-
-  /**
    * Fallback text search when TF-IDF produces no results (e.g., single-document corpus).
    * Performs case-insensitive substring matching on the searchable text.
    */
@@ -676,12 +534,9 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     topK: number,
     filter: (metadata: SkillDocumentMetadata) => boolean,
   ): Array<{ id: string; text: string; score: number; metadata: SkillDocumentMetadata }> {
-    const queryTerms = query
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((t) => t.length > 0 && !STOP_WORDS.has(t));
+    const terms = queryTerms(query);
 
-    if (queryTerms.length === 0) {
+    if (terms.length === 0) {
       return [];
     }
 
@@ -694,14 +549,14 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
         return;
       }
 
-      const searchableText = this.buildSearchableText(skill);
-      const matchCount = queryTerms.filter((term) => searchableText.toLowerCase().includes(term)).length;
+      const searchableText = skillSearchText(skill);
+      const score = queryTermShare(terms, searchableText);
 
-      if (matchCount > 0) {
+      if (score > 0) {
         matches.push({
           id: skill.id,
           text: searchableText,
-          score: matchCount / queryTerms.length,
+          score,
           metadata,
         });
       }
