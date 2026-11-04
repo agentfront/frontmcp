@@ -57,6 +57,7 @@ const EXPECT = {
     '#sse-transport': 'stub',
     '#express-host': 'stub',
     '#shared-server': 'stub',
+    '#enclave-core': 'stub',
   },
 };
 

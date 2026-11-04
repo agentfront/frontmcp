@@ -145,7 +145,7 @@ interface UnloadedAnswers {
   errors: boolean[];
   codes: unknown[];
   /** The distinct texts the meta-tools answer. */
-  reasons: string[];
+  reasons: Array<string | undefined>;
   ready: Readiness;
 }
 

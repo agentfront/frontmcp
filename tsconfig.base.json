@@ -121,6 +121,7 @@
       "#sse-transport": ["libs/sdk/src/transport/adapters/polyfills/node-sse-transport.ts"],
       "#express-host": ["libs/sdk/src/server/adapters/polyfills/node-express-host.ts"],
       "#shared-server": ["libs/sdk/src/shared/index.ts"],
+      "#enclave-core": ["libs/sdk/src/job/enclave/enclave-core.ts"],
       "#import-computed": ["libs/sdk/src/esm-loader/import-computed.ts"],
       "#js-yaml": ["libs/sdk/src/third-party/js-yaml.ts"],
       "#semver": ["libs/sdk/src/third-party/semver.ts"],

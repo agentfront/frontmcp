@@ -56,6 +56,19 @@
         "runInBand": true,
         "passWithNoTests": true
       }
+    },
+    "test:pw": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        {
+          "projects": ["sdk", "plugin-skilled-openapi"],
+          "target": "build"
+        }
+      ],
+      "options": {
+        "command": "npx playwright test --config=apps/e2e/demo-e2e-skilled-openapi/playwright.config.ts",
+        "cwd": "{workspaceRoot}"
+      }
     }
   }
 }
