@@ -408,14 +408,16 @@ An object field takes a JSON string; an array field takes the flag once per valu
 ./myapp uninstall                 # Remove what install added
 ```
 
-A server with skills also gets `skills list`, `skills search`, `skills read` and `skills load`.
+A server with skills also gets `skills list`, `skills search`, `skills read` and `skills load`; `skills read` and `skills load` exit 1 when a skill is not found.
+
+**Daemon:** while `daemon start`'s server runs, every command goes to it over its Unix socket (at the server's `http.entryPath`) instead of starting the server in-process. A daemon that does not answer is reported on stderr, and the command runs in-process.
 
 **Global options:** `--output <text|json>` sets the output format (the default comes from `cli.outputDefault`);
 `--verbose` and `--log-dir <path>` control logging.
 
 **Tool name conflict resolution:** if a tool name collides with a built-in command (e.g., `login`, `serve`), the tool subcommand is automatically suffixed with `-tool` (e.g., `login-tool`).
 
-**Auth token injection:** when `cli.authRequired` is `true` in config, the active session's stored token is sent with every tool/resource/prompt call, and those commands refuse to run (exit 1) until `login` or `connect --token` has stored one.
+**Auth token injection:** when `cli.authRequired` is `true` in config, the active session's stored token is sent with every tool/resource/prompt call, and those commands refuse to run (exit 1) until `login` or `connect --token` has stored one. The server verifies the token as an HTTP Bearer token, per its `auth` mode, so its claims are the caller that `authorities` rules see, and a token it rejects fails the command.
 
 ### `frontmcp.config` — `cli` deployment options
 

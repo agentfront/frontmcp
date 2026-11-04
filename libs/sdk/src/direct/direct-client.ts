@@ -70,6 +70,7 @@ import {
   type FormattedToolResult,
   type FormattedTools,
 } from './llm-platform';
+import { authInfoForToken } from './token-auth-info';
 
 /**
  * DirectClient implementation that wraps an MCP client.
@@ -157,6 +158,9 @@ export class DirectClientImpl implements DirectClient {
     }
     if (options?.session?.scopes) {
       authInfo['scopes'] = options.session.scopes;
+    }
+    if (options?.authToken) {
+      Object.assign(authInfo, await authInfoForToken(scope, options.authToken));
     }
 
     // Create in-memory server with auth context

@@ -406,7 +406,7 @@ interface ConnectOptions {
     };
   };
 
-  // Auth token for protected servers
+  // Verified like an HTTP Bearer token, per the server's auth mode: its claims become the caller
   authToken?: string;
 
   // Client capabilities
