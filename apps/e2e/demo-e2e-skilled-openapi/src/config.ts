@@ -3,6 +3,7 @@
 import SkilledOpenApiPlugin, {
   SkilledOpenApiCredentialResolver,
   type SignatureKey,
+  type SkilledOpenApiPluginOptionsInput,
 } from '@frontmcp/plugin-skilled-openapi';
 import { LogLevel } from '@frontmcp/sdk';
 
@@ -25,8 +26,9 @@ class EnvironmentCredentialResolver extends SkilledOpenApiCredentialResolver {
   }
 }
 
-export function skilledOpenApiPlugin() {
+export function skilledOpenApiPlugin(callerCredentials: Pick<SkilledOpenApiPluginOptionsInput, 'authProviders'> = {}) {
   return SkilledOpenApiPlugin.init({
+    ...callerCredentials,
     source: { type: 'static' as const, path: requiredEnv('SKILLED_BUNDLE_PATH'), watch: false },
     requireSignature: true,
     trustedKeys: [JSON.parse(requiredEnv('SKILLED_TRUSTED_KEY')) as SignatureKey],

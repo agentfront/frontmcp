@@ -9,10 +9,7 @@ export default SkilledOpenApiPlugin;
 // KV cache + disable polling on a Worker and receive the live source for
 // Cron-driven refresh). Hosts may also just provide a value under the matching
 // `Symbol.for(...)` without importing this plugin.
-export {
-  SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN,
-  type SkilledOpenApiRuntimeDeps,
-} from './skilled-openapi.plugin';
+export { SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN, type SkilledOpenApiRuntimeDeps } from './skilled-openapi.plugin';
 
 export { skilledOpenApiPluginOptionsSchema } from './skilled-openapi.types';
 export type {
@@ -26,3 +23,4 @@ export type {
   OutboundOptions,
 } from './skilled-openapi.types';
 export { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from './skilled-openapi.symbols';
+export type { CallerAuthInfo, CredentialResolveOptions } from './executor/credential-resolver';

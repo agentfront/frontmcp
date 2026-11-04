@@ -145,6 +145,12 @@ With no `authProviderMapper`, `securityResolver` or `staticAuth`, the adapter se
 
 Resolution order: `securityResolver` → `authProviderMapper` → `staticAuth` (fills every credential no mapper function returned; a mapped value wins) → `passthroughCallerToken`. A security scheme with no `authProviderMapper` entry is refused at startup unless `staticAuth` covers it, `additionalHeaders` carries its credential, `headersMapper` may set it (a header or cookie scheme, checked on each request), or `passthroughCallerToken` does for an HTTP bearer scheme (it sends the caller's token for it and logs a `SECURITY WARNING`; the caller's token never fills an API key, basic, OAuth2 or OpenID Connect scheme). An operation that requires auth is sent only with a credential for one of its own schemes, from a credential option, the tool input (`securitySchemesInInput`, or `includeSecurityInInput`: `true` for every scheme, a list for the schemes it names, like `securitySchemesInInput`; the schemes a list leaves out still need a credential source), `additionalHeaders` or `headersMapper`; otherwise it fails with `Authentication required for tool '…'`. A tool-input credential is used for a scheme only when no other source supplies one (a server credential always wins).
 
+The operations of `@frontmcp/plugin-skilled-openapi` name their credential by their bundle auth binding's `vaultRef`,
+not by security scheme. For a binding that sends each caller's own credential, its `authProviders` option maps the
+`vaultRef` to the auth provider the caller connected (`authProviders: { 'billing-token': 'billing' }`), read from
+`this.authProviders`, else `this.credentials`; a caller who hasn't connected it gets `-32001` with the connect URL.
+A `SkilledOpenApiCredentialResolver` is told the caller as `opts.authInfo`, to pick a per-tenant credential.
+
 ## Spec Polling
 
 Auto-refresh tool definitions when the upstream API changes:

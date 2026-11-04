@@ -24,8 +24,7 @@ import {
   type ToolRegistry,
 } from '@frontmcp/sdk';
 
-import { callerTokenOf } from '../executor/caller-token';
-import { credentialResolverOf } from '../executor/credential-resolver';
+import { credentialResolverOf, type CallerAuthInfo } from '../executor/credential-resolver';
 import { authorizeAction } from '../executor/execute-skill-action';
 import { executeOperation, type OpenApiRuntimeDeps } from '../executor/openapi-runtime';
 import { getCompiledOpSchemas } from '../executor/schema-cache';
@@ -130,8 +129,9 @@ interface ToolCtxLike {
   get<T>(token: Token<T>): T;
   tryGet<T>(token: Token<T>): T | undefined;
   logger: FrontMcpLogger;
-  authInfo?: unknown;
+  authInfo?: CallerAuthInfo;
   signal?: AbortSignal;
+  metadata: { name: string };
 }
 
 /**
@@ -314,8 +314,7 @@ export class OperationToolFactory {
         entry,
         bundleId: entry.bundleId,
         input: inputParse.data as Record<string, unknown>,
-        // For a bearer binding with `passthroughCallerToken: true`.
-        callerToken: callerTokenOf(ctx.authInfo),
+        authInfo: ctx.authInfo,
         signal: ctx.signal,
         deps,
       });

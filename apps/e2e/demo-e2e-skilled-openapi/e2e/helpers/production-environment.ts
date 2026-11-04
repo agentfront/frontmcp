@@ -21,10 +21,14 @@ import { startMockBillingApi, type MockBillingApi } from './mock-billing-api';
 const BUNDLE_TEMPLATE_PATH = join(__dirname, '../../src/fixtures/billing-bundle.json');
 const SIGNING_KEY_ID = 'e2e-signing-key';
 
+/** The callers who connect their own billing account (e2e/caller-credentials.e2e.spec.ts). */
+export type ConnectedCaller = 'alice' | 'bob';
+
 interface RunningEnvironment {
   directory: string;
   billingApi: MockBillingApi;
   billingToken: string;
+  callerBillingTokens: Readonly<Record<ConnectedCaller, string>>;
 }
 
 /** Keys, certificate, signed bundle and credentials made per run in a temporary directory: nothing secret is committed. */
@@ -44,6 +48,11 @@ export class ProductionEnvironment {
   /** The credential the server sends the billing API, which no result or log may show. */
   get billingToken(): string {
     return this.requireRunning().billingToken;
+  }
+
+  /** The billing token each connected caller signs in with, which the billing API also accepts. */
+  get callerBillingTokens(): Readonly<Record<ConnectedCaller, string>> {
+    return this.requireRunning().callerBillingTokens;
   }
 
   async start(): Promise<void> {
@@ -71,11 +80,12 @@ export class ProductionEnvironment {
     ]);
 
     const billingToken = base64urlEncode(randomBytes(32));
+    const callerBillingTokens = { alice: base64urlEncode(randomBytes(32)), bob: base64urlEncode(randomBytes(32)) };
     const billingApi = await startMockBillingApi({
-      bearerToken: billingToken,
+      bearerTokens: [billingToken, ...Object.values(callerBillingTokens)],
       tls: { key: await readFile(keyPath), cert: await readFile(certPath) },
     });
-    this.running = { directory, billingApi, billingToken };
+    this.running = { directory, billingApi, billingToken, callerBillingTokens };
 
     const template = JSON.parse(await readFile(BUNDLE_TEMPLATE_PATH)) as ResolvedBundle;
     const bundle: ResolvedBundle = {
