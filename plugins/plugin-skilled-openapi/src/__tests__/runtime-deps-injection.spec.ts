@@ -5,9 +5,9 @@
  * `SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN`, the plugin's bundle-source factory:
  *   1. feeds the injected cache to the source — so the boot fallback uses KV
  *      (not the filesystem) when a fresh pull fails, and
- *   2. hands the live source back via `attach`, so an external scheduler
- *      (Cloudflare Cron Trigger / DO alarm) can drive `refresh()` to pull +
- *      hot-swap a new bundle.
+ *   2. hands back `start()` and `refresh()` via `attach`, so an external
+ *      scheduler (Cloudflare Cron Trigger / DO alarm) can start the bundle sync
+ *      in an isolate that has served no request, and pull + hot-swap a new bundle.
  *
  * This is the plugin half of the edge auto-update keystone; the
  * SaasPullSource-level behavior (no fs, single-flight, disablePolling) is
@@ -151,23 +151,24 @@ describe('skilled-openapi runtime-deps injection', () => {
     expect(store.current()?.bundleId).toBe('plugin:cached');
     expect(controller.cache?.read).toHaveBeenCalled();
 
-    // And the live source was handed back, exposing a Cron-drivable refresh().
+    // And a Cron-drivable start() and refresh() were handed back.
     expect(attach).toHaveBeenCalledTimes(1);
-    const source = attach.mock.calls[0][0] as { refresh?: () => Promise<unknown> };
-    expect(typeof source.refresh).toBe('function');
+    const scheduler = attach.mock.calls[0][0] as { start?: () => Promise<unknown>; refresh?: () => Promise<unknown> };
+    expect(typeof scheduler.start).toBe('function');
+    expect(typeof scheduler.refresh).toBe('function');
   });
 
-  it('attach exposes a refreshable source that pulls + persists + hot-swaps', async () => {
+  it('attach exposes a refresh that pulls + hot-swaps + keeps the new bundle', async () => {
     // Boot fails → cache fallback (as above), then the Cron path pulls fresh.
     fetchMock.mockRejectedValue(new Error('network down'));
     const cached = bundle({ bundleId: 'plugin:cached', version: '1' });
     const write = jest.fn(async () => {});
-    let captured: { refresh?: () => Promise<unknown> } | undefined;
+    let captured: { refresh(): Promise<void> } | undefined;
     const controller: SkilledOpenApiRuntimeDeps = {
       cache: { read: jest.fn(async () => cached as never), write },
       disablePolling: true,
-      attach: (s) => {
-        captured = s as never;
+      attach: (refresher) => {
+        captured = refresher;
       },
     };
 
@@ -181,7 +182,7 @@ describe('skilled-openapi runtime-deps injection', () => {
     // Cron Trigger fires → fresh bundle now available from the endpoint.
     const fresh = bundle({ bundleId: 'plugin:fresh', version: '2' });
     fetchMock.mockImplementation(saasServing(fresh) as never);
-    await captured?.refresh?.();
+    await captured?.refresh();
 
     await waitFor(() => store.current()?.bundleId === 'plugin:fresh');
     expect(store.current()?.bundleId).toBe('plugin:fresh');

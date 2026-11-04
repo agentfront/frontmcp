@@ -79,46 +79,58 @@ export {
 /**
  * Well-known DI token `@frontmcp/plugin-skilled-openapi` reads to pick up
  * host-injected runtime deps (KV cache + `disablePolling`) and to hand back the
- * live bundle source. Resolved via `Symbol.for(...)` on both sides so the edge
+ * refresh a Cron run calls. Resolved via `Symbol.for(...)` on both sides so the edge
  * needs no static import of the (optional-peer) plugin. Must match
  * `SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN` in the plugin.
  */
 const RUNTIME_DEPS_TOKEN = Symbol.for('frontmcp:skilled-openapi:runtime-deps');
 
-/** A bundle source that can be refreshed on demand (Cron/alarm-driven). */
-interface RefreshableSource {
-  refresh?(): Promise<unknown>;
+/**
+ * What the plugin hands back for Cron runs. `start()` makes sure its bundle sync has started and loaded a bundle;
+ * `refresh()` pulls a fresh one, or starts the sync when nothing has. Both resolve once the bundle is applied and kept.
+ */
+interface BundleScheduler {
+  start(): Promise<unknown>;
+  refresh(): Promise<unknown>;
 }
 
 /**
  * Carries the KV cache + `disablePolling` flag into the skilled-openapi plugin
- * and captures the live source so {@link EdgeMcp.scheduled} can refresh it. A
+ * and captures the plugin's scheduler so {@link EdgeMcp.scheduled} can run it. A
  * Worker has no background timers, so polling is disabled and a Cron Trigger /
  * Durable Object alarm drives refresh instead.
  */
 class EdgeRefreshController {
-  private source?: RefreshableSource;
+  private scheduler?: BundleScheduler;
 
   constructor(
     readonly cache?: EdgeBundleCacheStore,
     readonly disablePolling = true,
   ) {}
 
-  attach(source: RefreshableSource): void {
-    this.source = source;
+  attach(scheduler: BundleScheduler): void {
+    this.scheduler = scheduler;
   }
 
-  async refresh(): Promise<unknown> {
-    if (!this.source) {
-      // The scope built but the skilled-openapi plugin never attached a source
-      // — it failed to construct one (see earlier logs). Throw so the Cron run
+  start(): Promise<unknown> {
+    return this.attached().start();
+  }
+
+  refresh(): Promise<unknown> {
+    return this.attached().refresh();
+  }
+
+  private attached(): BundleScheduler {
+    if (!this.scheduler) {
+      // The scope built but the skilled-openapi plugin never attached its scheduler
+      // — its bundle source failed to construct (see earlier logs). Throw so the Cron run
       // surfaces as a FAILED scheduled invocation instead of silently
       // "succeeding" while the bundle stays stale forever.
       throw new Error(
         'createEdgeMcp(managed): no bundle source attached — the skilled-openapi plugin failed to construct it; Cron refresh cannot run.',
       );
     }
-    return this.source.refresh?.();
+    return this.scheduler;
   }
 }
 
@@ -282,7 +294,7 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
   assertStaticStartupConfig(config);
 
   // In managed mode a controller carries the KV cache + `disablePolling` into
-  // the plugin and captures the live source for Cron-driven refresh. It's
+  // the plugin and captures the plugin's scheduler for Cron runs. It's
   // created inside `build(env)` — not here — because the cache may be a factory
   // that resolves a binding from the per-request `env` (CF bindings don't exist
   // at module-eval). Shared between `fetch` and `scheduled` via this closure.
@@ -317,7 +329,7 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
       // Provide the controller under the well-known token. Config-level
       // providers register (and instantiate) before plugin dynamicProviders, so
       // the plugin's bundle-source factory sees it — supplying the KV cache +
-      // `disablePolling` and attaching the live source back onto the controller.
+      // `disablePolling` and attaching its scheduler back onto the controller.
       const existingProviders = ((base as { providers?: unknown[] }).providers ?? []) as unknown[];
       frontmcpConfig = {
         ...base,
@@ -371,7 +383,12 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
         error,
       ),
   });
-  const ensureHandler = (env: unknown): Promise<WebFetchHandler> => server.get(env);
+  let serverBuilt = false;
+  const ensureHandler = async (env: unknown): Promise<WebFetchHandler> => {
+    const handler = await server.get(env);
+    serverBuilt = true;
+    return handler;
+  };
 
   const mcp: EdgeMcp = {
     async fetch(request: Request, env?: unknown, ctx?: unknown): Promise<Response> {
@@ -400,9 +417,11 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
     mcp.scheduled = async (_event?: unknown, env?: unknown): Promise<void> => {
       bridgeEnvToProcessEnv(env);
       // Ensure the scope is built (which resolves the cache from `env` and
-      // attaches the live source to the controller), then pull + hot-swap.
+      // attaches the plugin's scheduler to the controller), then pull + hot-swap.
+      // A run that builds it only starts the bundle sync: its first pull is this run's pull.
+      const buildsServer = !serverBuilt;
       await ensureHandler(env);
-      await controller?.refresh();
+      await (buildsServer ? controller?.start() : controller?.refresh());
     };
   }
 
