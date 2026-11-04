@@ -5,9 +5,18 @@ Measures whether a real model completes tasks with the Skilled OpenAPI plugin. T
 does it find the right skill with `search_skill`, load it with `load_skill`, run the action with `execute_action` or
 `run_workflow`, and tell the user the right thing?
 
-The eval sends real requests to the Claude API, so it costs money and needs your API key. It never runs in CI. Its dry
-run, which plays a fixed script in place of a model, does: it runs in this project's `test` target, so the harness
-can't break unnoticed.
+The eval sends real requests to the Claude API, so it costs money and needs an API key. Its dry run, which plays a
+fixed script in place of a model, runs in this project's `test` target with the unit tests, so the harness can't break
+unnoticed.
+
+In CI, the real eval runs next to the E2E tests, in the "Skilled OpenAPI eval" job of the On Push workflow, when:
+
+- the repository has an `ANTHROPIC_API_KEY` secret (a pull request from a fork never gets it, so its run skips), and
+- the change affects this project (`nx show projects --affected`), as a change to the plugin, the SDK or the e2e
+  helpers it reuses does.
+
+The job never fails the workflow. It writes the summary on its job page and uploads the JSON report as the
+`skilled-openapi-eval-report` artifact. Each run costs one eval run, about 15–30 requests.
 
 ## What a run does
 
