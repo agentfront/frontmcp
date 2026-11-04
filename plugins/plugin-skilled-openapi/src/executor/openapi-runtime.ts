@@ -194,9 +194,11 @@ export async function executeOperation(args: {
   bundleId: string;
   input: OperationInput;
   callerToken?: string;
+  /** Aborts the request in flight, and keeps one from starting, once the call it belongs to has ended. */
+  signal?: AbortSignal;
   deps: OpenApiRuntimeDeps;
 }): Promise<ExecutionResult> {
-  const { entry, bundleId, input, callerToken, deps } = args;
+  const { entry, bundleId, input, callerToken, signal, deps } = args;
   const { outbound, resolver, allowedHosts, logger } = deps;
 
   let mcpTool: McpOpenAPITool;
@@ -281,16 +283,18 @@ export async function executeOperation(args: {
   })();
 
   return withHostConcurrency(host, outbound.maxConcurrencyPerHost, async () => {
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), timeoutMs);
+    if (signal?.aborted) return abortedFailure(signal);
+    const timeoutController = new AbortController();
+    const timer = setTimeout(() => timeoutController.abort(), timeoutMs);
     timer.unref?.();
+    const requestSignal = signal ? AbortSignal.any([signal, timeoutController.signal]) : timeoutController.signal;
 
     try {
       const response = await fetchImpl(req.url, {
         method: entry.op.httpMethod,
         headers: req.headers,
         body,
-        signal: ac.signal,
+        signal: requestSignal,
         // SECURITY: never auto-follow redirects. `fetch` defaults to
         // `redirect: 'follow'`, which re-sends the request — INCLUDING the
         // vault-injected `Authorization`/api-key headers — to the redirect
@@ -349,7 +353,8 @@ export async function executeOperation(args: {
         responseBytes: received,
       };
     } catch (e) {
-      return failure(0, ac.signal.aborted ? `timeout after ${timeoutMs}ms` : (e as Error).message);
+      if (signal?.aborted) return abortedFailure(signal);
+      return failure(0, timeoutController.signal.aborted ? `timeout after ${timeoutMs}ms` : (e as Error).message);
     } finally {
       clearTimeout(timer);
     }
@@ -368,4 +373,9 @@ async function outboundFetch(outbound: OutboundOptions, ssrf: SsrfCheckResult): 
 
 function failure(status: number, error: string): ExecutionResult {
   return { ok: false, status, data: null, error, responseBytes: 0 };
+}
+
+function abortedFailure(signal: AbortSignal): ExecutionResult {
+  const reason = signal.reason instanceof Error ? signal.reason.message : String(signal.reason);
+  return failure(0, `request aborted: ${reason}`);
 }

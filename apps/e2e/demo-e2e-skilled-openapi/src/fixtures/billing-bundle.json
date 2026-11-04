@@ -36,9 +36,15 @@
       "id": "reports",
       "name": "Reports",
       "description": "Revenue and usage reports for the billing account.",
-      "instructions": "# Reports skill\n\nRead the revenue report with getRevenueReport, the account balance with getAccountBalance, and the account plan with getAccountPlan.",
+      "instructions": "# Reports skill\n\nRead the revenue report with getRevenueReport, export it with exportRevenueReport, read the account balance with getAccountBalance, and the account plan with getAccountPlan.",
       "tags": ["reports"],
-      "operationIds": ["getRevenueReport", "getAccountBalance", "getAccountPlan", "getUsageStats"]
+      "operationIds": [
+        "getRevenueReport",
+        "exportRevenueReport",
+        "getAccountBalance",
+        "getAccountPlan",
+        "getUsageStats"
+      ]
     }
   ],
   "operations": {
@@ -218,6 +224,27 @@
         "required": ["total", "currency"]
       },
       "mapper": [],
+      "authBindingRef": "default"
+    },
+    "exportRevenueReport": {
+      "operationId": "exportRevenueReport",
+      "serviceId": "billing",
+      "httpMethod": "POST",
+      "pathTemplate": "/v1/reports/exports",
+      "summary": "Export a month's revenue report",
+      "public": true,
+      "timeoutMs": 20000,
+      "inputSchema": {
+        "type": "object",
+        "properties": { "month": { "type": "string" } },
+        "required": ["month"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "exportId": { "type": "string" } },
+        "required": ["exportId"]
+      },
+      "mapper": [{ "inputKey": "month", "type": "body", "key": "month", "required": true }],
       "authBindingRef": "default"
     },
     "getAccountBalance": {

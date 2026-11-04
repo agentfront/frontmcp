@@ -73,13 +73,19 @@ the input against the operation's `inputSchema`, sends the request with the cred
 and checks a JSON answer against `outputSchema`. The first failure ends the script with `success: false`. A script may
 make up to 25 calls and run for up to 8 seconds.
 
+When a script ends, whatever ends it, the plugin aborts the requests it still has in flight and sends none after, so a
+request can't reach your API once the model has been told the workflow failed. A cancelled `run_workflow` call does
+the same. An aborted request fails with `request aborted: <reason>`, such as `request aborted: the workflow ended before
+the request finished`, and the audit log records it as a failed call. An operation's `timeoutMs` still applies within
+the script's time limit.
+
 An operation that several skills list runs when the caller satisfies the operation's rule and the rule of any one of
 those skills. That is the answer `load_skill` gives, so an action it shows in any skill can be run, whatever the order
 of the skills in the bundle.
 
 With `exposeOperationsAsInternalTools` (the default), each operation is also an internal tool named
-`<bundleId>.<operationId>`, which your own tools can call with `this.callTool()`. It checks the caller the same way.
-Clients can't list or call it.
+`<bundleId>.<operationId>`, which your own tools can call with `this.callTool()`. It checks the caller the same way,
+and aborts its request when the tool call is cancelled or times out. Clients can't list or call it.
 
 ## Options
 

@@ -16,11 +16,20 @@ export interface RecordedRequest {
   authorization: string | undefined;
 }
 
+/** A revenue export the API is holding: when it arrived, when its connection closed, and whether it was answered. */
+export interface HeldExport {
+  readonly receivedAt: number;
+  readonly closedAt: Promise<number>;
+  answered: boolean;
+}
+
 export interface MockBillingApi {
   /** The address the bundle's billing service points to. */
   readonly url: string;
   /** Every request received since the last reset, rejected ones included. */
   readonly requests: readonly RecordedRequest[];
+  /** Every revenue export received since the last reset. */
+  readonly heldExports: readonly HeldExport[];
   reset(): void;
   stop(): Promise<void>;
 }
@@ -33,6 +42,9 @@ export interface MockBillingApiOptions {
 
 /** How long the revenue report takes, longer than the operation's `timeoutMs`. */
 export const SLOW_REPORT_DELAY_MS = 2_000;
+
+/** How long a revenue export holds its answer: past the 8 s a workflow may run, within the operation's `timeoutMs`. */
+export const HELD_EXPORT_DELAY_MS = 12_000;
 
 /** How many events an invoice's history holds, more than the operation's `maxResponseBytes` lets through. */
 const INVOICE_EVENT_COUNT = 200;
@@ -71,6 +83,7 @@ function parseJsonBody(raw: string): Record<string, unknown> | undefined {
 export async function startMockBillingApi(options: MockBillingApiOptions): Promise<MockBillingApi> {
   const invoices = new Map<string, MockInvoice>();
   const requests: RecordedRequest[] = [];
+  const heldExports: HeldExport[] = [];
   let invoiceSequence = 1;
   let refundSequence = 1;
 
@@ -129,6 +142,18 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
       return;
     }
 
+    if (method === 'POST' && path === '/v1/reports/exports') {
+      const closedAt = new Promise<number>((resolve) => res.on('close', () => resolve(Date.now())));
+      const held: HeldExport = { receivedAt: Date.now(), closedAt, answered: false };
+      heldExports.push(held);
+      const timer = setTimeout(() => {
+        held.answered = true;
+        reply(res, 201, { exportId: 'exp_1' });
+      }, HELD_EXPORT_DELAY_MS);
+      res.on('close', () => clearTimeout(timer));
+      return;
+    }
+
     if (method === 'GET' && path === '/v1/account/balance') {
       return reply(res, 200, { balance: '12.50', currency: 'USD' });
     }
@@ -163,9 +188,11 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
   return {
     url: `https://localhost:${port}`,
     requests,
+    heldExports,
     reset() {
       invoices.clear();
       requests.length = 0;
+      heldExports.length = 0;
       invoiceSequence = 1;
       refundSequence = 1;
     },

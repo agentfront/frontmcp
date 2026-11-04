@@ -236,6 +236,21 @@ describe('executeSkillAction', () => {
     );
   });
 
+  it('sends the request under the signal of the workflow that made the call', async () => {
+    mockExecuteOperation.mockResolvedValue({ ok: true, status: 200, data: { id: 1 }, contentType: 'application/json' });
+    const workflowEnded = new AbortController();
+
+    await executeSkillAction({
+      listings: [makeEntry()],
+      input: { id: 1 },
+      authInfo: {},
+      signal: workflowEnded.signal,
+      deps: makeDeps(),
+    });
+
+    expect(mockExecuteOperation).toHaveBeenCalledWith(expect.objectContaining({ signal: workflowEnded.signal }));
+  });
+
   it('logs a warning (never throws) when a detached audit write rejects', async () => {
     mockExecuteOperation.mockResolvedValue({
       ok: true,
