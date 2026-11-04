@@ -124,9 +124,15 @@ describe('OperationToolFactory', () => {
       expect(operationToolName('acme', 'createInvoice')).toBe('acme.createInvoice');
     });
 
-    it('falls back to bare operationId when namespaced form exceeds 64 chars', () => {
+    it('keeps a long name within 64 chars, unique per operation, and never the bare operationId', () => {
       const longBundle = 'a'.repeat(70);
-      expect(operationToolName(longBundle, 'opX')).toBe('opX');
+      const name = operationToolName(longBundle, 'opX');
+
+      expect(name.length).toBe(64);
+      expect(name).not.toBe('opX');
+      expect(name).toMatch(/^a+\.[0-9a-f]{16}$/);
+      expect(operationToolName(longBundle, 'opY')).not.toBe(name);
+      expect(operationToolName(longBundle, 'opX')).toBe(name);
     });
 
     it('keeps namespaced form when total length is exactly 64', () => {
@@ -135,12 +141,11 @@ describe('OperationToolFactory', () => {
       expect(`${bundle}.opX`.length).toBe(64);
     });
 
-    it('truncates the bare operationId when it itself exceeds 64 chars', () => {
-      const bundle = 'short';
-      const longOpId = 'op_' + 'x'.repeat(80);
-      const out = operationToolName(bundle, longOpId);
-      expect(out.length).toBe(64);
-      expect(out).toBe(longOpId.slice(0, 64));
+    it('gives two long operationIds that share their first 64 chars different names', () => {
+      const shared = 'op_' + 'x'.repeat(80);
+
+      expect(operationToolName('short', `${shared}A`)).not.toBe(operationToolName('short', `${shared}B`));
+      expect(operationToolName('short', `${shared}A`).length).toBe(64);
     });
   });
 

@@ -24,6 +24,7 @@ import {
   type ToolMetadata,
   type ToolRegistry,
 } from '@frontmcp/sdk';
+import { sha256Hex } from '@frontmcp/utils';
 
 import { runSkillAction, type OperationToolResult, type SkillActionContext } from '../executor/run-skill-action';
 import { type HiddenOpEntry, type OperationListings } from '../registry/hidden-op.registry';
@@ -35,20 +36,19 @@ const OPERATION_TOOL_OWNER: EntryOwnerRef = {
   ref: OPERATION_TOOL_OWNER_TOKEN,
 };
 
+const MAX_TOOL_NAME_LENGTH = 64;
+const NAME_HASH_LENGTH = 16;
+
 /**
- * Compute the registered tool name for an OpenAPI operation.
- * Format: `<bundleId>.<operationId>` — bundle-namespaced so multiple bundles
- * can register operations with overlapping operationIds without collision.
+ * The registered tool name of an OpenAPI operation: `<bundleId>.<operationId>`, so bundles can share operationIds.
+ * Tool names have at most 64 characters, so a longer one keeps its start and ends with a hash of the full name: it
+ * stays unique, and never equals the name of another tool, such as a server tool named like the operationId.
  */
 export function operationToolName(bundleId: string, operationId: string): string {
-  // Tool names are constrained to 1..64 chars by the call-tool flow's input
-  // schema. Prefer the namespaced form; if it overflows, fall back to opId
-  // alone (the flow's findByName checks both `fullName` and `name`). When
-  // operationId itself exceeds 64 chars, deterministically truncate so the
-  // returned name is always valid.
   const namespaced = `${bundleId}.${operationId}`;
-  if (namespaced.length <= 64) return namespaced;
-  return operationId.length <= 64 ? operationId : operationId.slice(0, 64);
+  if (namespaced.length <= MAX_TOOL_NAME_LENGTH) return namespaced;
+  const hash = sha256Hex(namespaced).slice(0, NAME_HASH_LENGTH);
+  return `${namespaced.slice(0, MAX_TOOL_NAME_LENGTH - NAME_HASH_LENGTH - 1)}.${hash}`;
 }
 
 /** Build the ToolMetadata block for an operation entry. */
