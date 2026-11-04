@@ -13,6 +13,7 @@ import 'reflect-metadata';
 
 import { createProviderRegistryWithScope } from '../../__test-utils__/fixtures/scope.fixtures';
 import { type SkillAction, type SkillContent } from '../../common/interfaces';
+import { ExternalSkillProviderBase } from '../providers/external-skill.provider';
 import { MemorySkillProvider } from '../providers/memory-skill.provider';
 import SkillRegistry from '../skill.registry';
 
@@ -124,6 +125,48 @@ describe('SkillRegistry — dynamic registration', () => {
     expect((await registry.search('puppies')).map((r) => r.metadata.id)).toEqual(['pets']);
     expect(registry.findByName('pets')?.metadata.tags).toEqual(['puppies']);
     expect((await registry.listSkills({ tags: ['puppies'] })).skills.map((s) => s.id)).toEqual(['pets']);
+  });
+
+  it("finds a runtime skill the index doesn't hold by its actions (#1060)", async () => {
+    /** A read-only store that knows none of the runtime skills, so only the registry's overlay can find them. */
+    class EmptyStore extends ExternalSkillProviderBase {
+      protected async fetchSkill(): Promise<SkillContent | null> {
+        return null;
+      }
+      protected async fetchSkills(): Promise<SkillContent[]> {
+        return [];
+      }
+      protected async searchExternal() {
+        return [];
+      }
+      protected async upsertSkill(): Promise<void> {
+        return undefined;
+      }
+      protected async deleteSkill(): Promise<void> {
+        return undefined;
+      }
+      protected async countExternal(): Promise<number> {
+        return 0;
+      }
+      protected async existsExternal(): Promise<boolean> {
+        return false;
+      }
+    }
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+    registry.setExternalProvider(new EmptyStore({ mode: 'read-only' }));
+
+    await registry.registerSkillContent(
+      buildSkillContent({
+        id: 'store',
+        name: 'Store',
+        description: 'Count the pets in stock',
+        actions: [buildAction({ actionId: 'getInventory', summary: 'Returns pet inventories by status.' })],
+      }),
+    );
+
+    expect((await registry.search('inventories')).map((r) => r.metadata.id)).toEqual(['store']);
   });
 
   it('replaces a skill when registered again with the same id', async () => {
