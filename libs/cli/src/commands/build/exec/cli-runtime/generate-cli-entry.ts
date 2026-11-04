@@ -114,7 +114,7 @@ export function generateCliEntry(options: CliEntryOptions): string {
     ] : []),
     generateServeCommand(serverBundleFilename, selfContained),
     generateDoctorCommand(appName, options.nativeDeps, minNodeMajor),
-    generateInstallCommand(appName, options.nativeDeps, selfContained),
+    generateInstallCommand(appName, options.nativeDeps, selfContained, skilledToolNames && { toolNames: skilledToolNames, topLevel: skilledTopLevel }),
     generateDaemonCommands(appName, appVersion, serverBundleFilename, selfContained),
     generateFooter(),
   ];
@@ -1549,10 +1549,17 @@ ${checks.join(',\n')}
   });`;
 }
 
+/** The Skilled OpenAPI commands the CLI has, which the bundle skills `install` writes run their actions with. */
+interface SkilledInstall {
+  toolNames: string[];
+  topLevel: boolean;
+}
+
 function generateInstallCommand(
   appName: string,
   nativeDeps: NonNullable<CliConfig['nativeDeps']>,
   selfContained?: boolean,
+  skilled?: SkilledInstall,
 ): string {
   const depEntries: string[] = [];
   if (nativeDeps.brew?.length) {
@@ -1575,7 +1582,7 @@ program
   .option('--bin-dir <path>', 'Directory for symlink (default: ~/.local/bin or /usr/local/bin)')
   .option('-p, --provider <provider>', 'Emit plugin for provider: claude | codex (repeatable)', _frontmcpCollectArg, [])
   .option('--scope <scope>', 'Plugin scope when -p is set: project | user', 'project')
-  .option('--no-skills', 'Skip the skills/ subtree (when -p claude)')
+  .option('--no-skills', 'Skip the skills: the shipped ones and the bundle ones')
   .option('--no-commands', 'Skip the commands/ subtree (when -p claude)')
   .option('--only-mcp', 'Skip plugin folder; just register the MCP server')
   .option('--command <cmd>', 'MCP server invocation: a program, optionally with its arguments (quoted as in a shell)')
@@ -1583,17 +1590,20 @@ program
   .option('--dir <dir>', 'Override plugin destination root')
   .option('--dry-run', 'Print plan; do not write')
   .option('--status', 'Print install status per provider; exit 0')
+  .option('--refresh-skills', 'Rewrite only the bundle skills an install wrote, from the bundle the server has now')
   .action(async function(opts) {
     var fs = require('fs');
     var pathMod = require('path');
     var os = require('os');
     var exec = require('child_process').execSync;
 
-    // Issue #411 — when -p is set OR --status is set, run the plugin-install
+    // Issue #411 — when -p, --status or --refresh-skills is set, run the plugin-install
     // path instead of the legacy bundle-copy + symlink behavior.
     var providers = Array.isArray(opts.provider) ? opts.provider : [];
-    if (opts.status || providers.length > 0) {
+    if (opts.status || opts.refreshSkills || providers.length > 0) {
       var emitter = require('./plugin-emitter');
+      var skillTree = require('./skill-tree');
+      var SKILLED = ${JSON.stringify(skilled ?? null)};
       var binMetaPath = pathMod.join(SCRIPT_DIR, 'bin-meta.json');
       var meta;
       try { meta = JSON.parse(fs.readFileSync(binMetaPath, 'utf8')); }
@@ -1608,6 +1618,12 @@ program
         if (opts.scope === 'user') return pathMod.join(os.homedir(), '.claude', 'plugins');
         return pathMod.join(process.cwd(), '.claude', 'plugins');
       }
+      function codexSkillsRoot() {
+        return opts.scope === 'user' ? pathMod.join(os.homedir(), '.codex', 'skills') : pathMod.join(process.cwd(), '.codex', 'skills');
+      }
+      function printSkillLines(lines) {
+        for (var li = 0; li < lines.length; li++) console.log('             ' + lines[li]);
+      }
 
       if (opts.status) {
         console.log(meta.name + ' install --status');
@@ -1617,6 +1633,7 @@ program
         if (installed) {
           var tag = installed === meta.version ? 'installed' : 'outdated';
           console.log('  claude:    ' + tag + ' v' + installed + (tag === 'outdated' ? ' (bin at v' + meta.version + ')' : '') + ' at ' + pluginDirSt);
+          printSkillLines(skillTree.describeSkillRecord(await emitter.readClaudePluginSkills(pluginDirSt)));
         } else {
           console.log('  claude:    not installed at ' + pluginDirSt);
         }
@@ -1625,6 +1642,11 @@ program
           console.log('  codex:     installed entry for ' + meta.name + ' in ' + codexConfigSt);
         } else {
           console.log('  codex:     not installed in ' + codexConfigSt);
+        }
+        var codexSkillsSt = await emitter.readCodexSkills(codexSkillsRoot(), meta.name);
+        if (codexSkillsSt) {
+          console.log('             skills at ' + pathMod.join(codexSkillsRoot(), meta.name));
+          printSkillLines(skillTree.describeSkillRecord(codexSkillsSt));
         }
         return;
       }
@@ -1654,15 +1676,95 @@ program
         return out;
       }
 
+      function selfInvocation(args) {
+        return emitter.resolveSelfInvocation({
+          invokedPath: process.argv[1],
+          execPath: process.execPath,
+          scriptPath: ${selfContained ? 'undefined' : '__filename'},
+          pathEnv: process.env.PATH,
+          args: args,
+        });
+      }
+
+      // The bundle skills: read once from the running server, as the logged-in caller, and written for each provider
+      var bundleSkillsModule = SKILLED ? require('./bundle-skills') : null;
+      var cliInvocation = selfInvocation([]);
+      var cliCommand = bundleSkillsModule ? bundleSkillsModule.shellCommandLine([cliInvocation.command].concat(cliInvocation.args)) : '';
+      var bundleSkillsRead = null;
+      if (opts.refreshSkills && !SKILLED) {
+        console.error('Error: ' + meta.name + ' serves no Skilled OpenAPI bundle, so it has no bundle skills to refresh.');
+        process.exitCode = 1;
+        return;
+      }
+      if (SKILLED && (opts.refreshSkills || (opts.skills !== false && !opts.onlyMcp))) {
+        try {
+          bundleSkillsRead = await bundleSkillsModule.readBundleSkills(await getClient());
+        } catch (err) {
+          console.error('Error: could not read the bundle skills from ' + meta.name + ': ' + ((err && err.message) || err));
+          process.exitCode = 1;
+          return;
+        }
+      }
+      function refreshCommand(provider) {
+        var flags = ' install -p ' + provider + (opts.scope === 'user' ? ' --scope user' : '');
+        if (opts.dir && provider === 'claude') flags += ' --dir ' + bundleSkillsModule.shellCommandLine([resolveDestRoot()]);
+        return cliCommand + flags + ' --refresh-skills';
+      }
+      function bundleSkillsFor(provider) {
+        if (!bundleSkillsRead) return undefined;
+        return bundleSkillsModule.bundleSkillFiles(bundleSkillsRead, {
+          bin: meta.name,
+          cli: cliCommand,
+          toolNames: SKILLED.toolNames,
+          topLevel: SKILLED.topLevel,
+          refresh: refreshCommand(provider),
+        });
+      }
+      function printPlannedSkills(result, bundle) {
+        var lines = skillTree.describeSkills(result.shippedSkills, bundle && { bundleVersion: bundle.bundleVersion, skills: result.bundleSkills });
+        for (var li = 0; li < lines.length; li++) console.log('  ' + lines[li]);
+      }
+
+      if (opts.refreshSkills) {
+        var refreshProviders = providers.slice();
+        if (refreshProviders.length === 0) {
+          if (await emitter.readClaudePluginSkills(pathMod.join(resolveDestRoot(), meta.name))) refreshProviders.push('claude');
+          if (await emitter.readCodexSkills(codexSkillsRoot(), meta.name)) refreshProviders.push('codex');
+        }
+        if (refreshProviders.length === 0) {
+          console.error('Error: no install of ' + meta.name + ' to refresh here: run "' + meta.name + ' install -p claude" (or -p codex) first.');
+          process.exitCode = 1;
+          return;
+        }
+        for (var ri = 0; ri < refreshProviders.length; ri++) {
+          var refreshProvider = refreshProviders[ri];
+          var refreshOptions = { name: meta.name, bundleSkills: bundleSkillsFor(refreshProvider), dryRun: opts.dryRun };
+          var refreshed;
+          try {
+            if (refreshProvider === 'claude') refreshed = await emitter.refreshClaudeBundleSkills(Object.assign({ destRoot: resolveDestRoot() }, refreshOptions));
+            else if (refreshProvider === 'codex') refreshed = await emitter.refreshCodexBundleSkills(Object.assign({ destRoot: codexSkillsRoot() }, refreshOptions));
+            else throw new Error('unknown provider: ' + refreshProvider);
+          } catch (err) {
+            console.error('Error: ' + ((err && err.message) || err));
+            process.exitCode = 1;
+            return;
+          }
+          var fromVersion = refreshed.bundleVersion ? ' from bundle ' + refreshed.bundleVersion : '';
+          var summary = skillTree.describeBundleRefresh(refreshed);
+          if (opts.dryRun) {
+            console.log('[install:' + refreshProvider + '] dry-run plan: refresh the bundle skills in ' + refreshed.installDir + fromVersion);
+            console.log('  ' + summary);
+            for (var rwi = 0; rwi < refreshed.filesWritten.length; rwi++) console.log('    + ' + refreshed.filesWritten[rwi]);
+          } else {
+            console.log('✓ Refreshed the bundle skills in ' + refreshed.installDir + fromVersion + ': ' + summary);
+          }
+        }
+        return;
+      }
+
       var invocation = opts.command
         ? emitter.applyCommandOverride(opts.command, meta.mcpDefault.args)
-        : emitter.resolveSelfInvocation({
-            invokedPath: process.argv[1],
-            execPath: process.execPath,
-            scriptPath: ${selfContained ? 'undefined' : '__filename'},
-            pathEnv: process.env.PATH,
-            args: meta.mcpDefault.args,
-          });
+        : selfInvocation(meta.mcpDefault.args);
       console.log('MCP server command: ' + [invocation.command].concat(invocation.args).join(' '));
 
       function buildCommands() {
@@ -1676,6 +1778,7 @@ program
         var provider = providers[pi];
         if (provider === 'claude') {
           var destRoot = resolveDestRoot();
+          var claudeBundle = bundleSkillsFor('claude');
           var result = await emitter.emitClaudePlugin({
             destRoot: destRoot,
             name: meta.name,
@@ -1685,6 +1788,7 @@ program
             mcpArgs: invocation.args,
             envHints: Array.isArray(opts.env) ? opts.env : [],
             skills: buildSkills(),
+            bundleSkills: claudeBundle,
             commands: buildCommands(),
             cliVersion: cliVersion,
             dryRun: opts.dryRun,
@@ -1695,10 +1799,12 @@ program
           if (opts.dryRun) {
             console.log('[install:claude] dry-run plan');
             console.log('  pluginDir: ' + result.pluginDir);
+            printPlannedSkills(result, claudeBundle);
             console.log('  filesWritten (planned):');
             for (var fwi = 0; fwi < result.filesWritten.length; fwi++) console.log('    + ' + result.filesWritten[fwi]);
           } else {
             console.log('✓ Wrote ' + result.pluginDir + '/ (' + (result.manifest.skills || []).length + ' skills, ' + ((result.manifest.commands || []).length) + ' commands, 1 MCP server)');
+            printPlannedSkills(result, claudeBundle);
             console.log('  Restart Claude Code (or run /plugins reload) to pick up the plugin.');
           }
         } else if (provider === 'codex') {
@@ -1711,12 +1817,33 @@ program
             envVars: Array.isArray(opts.env) ? opts.env : [],
             dryRun: opts.dryRun,
           });
+          var codexBundle = bundleSkillsFor('codex');
+          var codexSkills = await emitter.emitCodexSkills({
+            destRoot: codexSkillsRoot(),
+            name: meta.name,
+            version: meta.version,
+            cliVersion: cliVersion,
+            skills: buildSkills(),
+            bundleSkills: codexBundle,
+            dryRun: opts.dryRun,
+          });
+          for (var cski = 0; cski < codexSkills.skillsSkipped.length; cski++) {
+            console.error('  Skipped skill ' + codexSkills.skillsSkipped[cski].name + ': ' + codexSkills.skillsSkipped[cski].reason);
+          }
+          var codexSkillCount = codexSkills.shippedSkills.length + codexSkills.bundleSkills.length;
           if (opts.dryRun) {
             console.log('[install:codex] dry-run plan');
             console.log('  configPath: ' + codexConfig);
             console.log(codexResult.configContent);
+            console.log('  skillsDir: ' + codexSkills.skillsDir);
+            printPlannedSkills(codexSkills, codexBundle);
+            for (var cfi = 0; cfi < codexSkills.filesWritten.length; cfi++) console.log('    + ' + codexSkills.filesWritten[cfi]);
           } else {
             console.log('✓ Updated ' + codexConfig + ' with [mcp_servers.' + meta.name + ']');
+            if (codexSkillCount > 0) {
+              console.log('✓ Wrote ' + codexSkillCount + ' skills to ' + codexSkills.skillsDir + '/');
+              printPlannedSkills(codexSkills, codexBundle);
+            }
           }
         } else {
           console.error('Unknown provider: ' + provider);
@@ -1834,6 +1961,11 @@ program
             console.log('✓ Removed [mcp_servers.' + meta.name + '] from ' + codexConfig);
           } else {
             console.log('  codex: no entry for ' + meta.name + ' in ' + codexConfig);
+          }
+          var codexSkillsRoot = opts.scope === 'user' ? pathMod.join(os.homedir(), '.codex', 'skills') : pathMod.join(process.cwd(), '.codex', 'skills');
+          var codexSkillsResult = await emitter.removeCodexSkills({ destRoot: codexSkillsRoot, name: meta.name });
+          if (codexSkillsResult.removed.length > 0) {
+            console.log('✓ Removed ' + codexSkillsResult.removed.length + ' file(s) from ' + codexSkillsResult.skillsDir);
           }
         } else {
           console.error('Unknown provider: ' + provider);

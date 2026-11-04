@@ -218,6 +218,16 @@ CLI couldn't ask, and the action was refused.
 Operation tags come from the bundle: `compileSkilledBundleFromOpenApi()` keeps each operation's OpenAPI `tags` and its
 `x-frontmcp.tags`. Skill tags are the bundle skill's `tags`.
 
+### Through the generated CLI
+
+The generated CLI has a command for each tool (`search_skill`, `load_skill`, `execute`, `run_workflow`), and
+`<bin> install -p claude` or `-p codex` teaches a coding agent the bundle's skills: it reads them from the running
+server as the logged-in caller, through `load_skill`, and writes each as a `SKILL.md` with its instructions and a ready
+`<bin> execute <actionId> --input '<json>'` line per action the caller may run. Its frontmatter `metadata` names the
+bundle version, and `<bin> install --refresh-skills` rewrites these skills after the bundle changes, leaving the
+server's own `@Skill`s as installed. The skills catalog's `frontmcp-deployment` skill (`build-for-cli`) has the
+details.
+
 ## Credentials
 
 For each request, the plugin asks a credential resolver for the secret of the operation's auth binding, by its

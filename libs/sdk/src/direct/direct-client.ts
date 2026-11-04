@@ -720,6 +720,10 @@ export class DirectClientImpl implements DirectClient {
           // Left unset so the installer reports the skill as skipped rather than writing an empty body
         }
       }
+      if (typeof meta.instructions === 'string') {
+        const loaded = await scope.skills.loadSkill(meta.id ?? meta.name).catch(() => undefined);
+        if (loaded?.skill.bundleVersion !== undefined) entry.bundleVersion = loaded.skill.bundleVersion;
+      }
 
       // Collect resource directory paths
       const resources = skill.getResources?.();

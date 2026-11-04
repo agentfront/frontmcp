@@ -76,6 +76,8 @@ export interface SkilledCliProject {
  * @param options.cli - The cli deployment's `cli` block
  * @param options.serviceBaseUrl - The base URL of a plain-HTTP API on loopback the bundle's service points to
  * @param options.ownTool - Give the server a tool of its own, `ping`, beside the plugin's
+ * @param options.shippedSkill - Give the server a skill of its own, the `@Skill` `billing-guide`
+ * @param options.bundle - The bundle the plugin serves, in place of `SKILLED_BUNDLE`
  */
 export async function buildSkilledCliProject(options: {
   prefix: string;
@@ -84,10 +86,13 @@ export async function buildSkilledCliProject(options: {
   cli?: Record<string, unknown>;
   serviceBaseUrl?: string;
   ownTool?: boolean;
+  shippedSkill?: boolean;
+  bundle?: Record<string, unknown>;
 }): Promise<SkilledCliProject> {
+  const servedBundle = options.bundle ?? SKILLED_BUNDLE;
   const bundle = options.serviceBaseUrl
-    ? { ...SKILLED_BUNDLE, services: [{ id: 'billing', baseUrl: options.serviceBaseUrl }] }
-    : SKILLED_BUNDLE;
+    ? { ...servedBundle, services: [{ id: 'billing', baseUrl: options.serviceBaseUrl }] }
+    : servedBundle;
   const dir = await createScratchProject(options.prefix, {
     'bundle.json': JSON.stringify(bundle),
     'src/main.ts': '',
@@ -119,6 +124,7 @@ export async function buildSkilledCliProject(options: {
       serverConfig: options.serverConfig ?? "auth: { mode: 'public' },",
       loopbackService: options.serviceBaseUrl !== undefined,
       ownTool: options.ownTool ?? false,
+      shippedSkill: options.shippedSkill ?? false,
     }),
   );
 
@@ -141,19 +147,35 @@ class PingTool extends ToolContext {
 class OpsApp {}
 `;
 
+const SHIPPED_SKILL_APP = `
+@Skill({
+  name: 'billing-guide',
+  description: 'How billing works at Acme',
+  instructions: '# Billing guide\\n\\nInvoices are due in 30 days.',
+})
+class BillingGuideSkill {}
+
+@App({ name: 'docs', skills: [BillingGuideSkill] })
+class DocsApp {}
+`;
+
 function serverSource(
   bundlePath: string,
-  options: { serverConfig: string; loopbackService: boolean; ownTool: boolean },
+  options: { serverConfig: string; loopbackService: boolean; ownTool: boolean; shippedSkill: boolean },
 ): string {
   const outbound = options.loopbackService ? '\n      outbound: { allowHttp: true, allowPrivateNetworks: true },' : '';
-  const sdkImports = options.ownTool ? 'App, FrontMcp, LogLevel, Tool, ToolContext' : 'FrontMcp, LogLevel';
+  const sdkImports = ['FrontMcp', 'LogLevel'];
+  if (options.ownTool || options.shippedSkill) sdkImports.push('App');
+  if (options.ownTool) sdkImports.push('Tool', 'ToolContext');
+  if (options.shippedSkill) sdkImports.push('Skill');
+  const apps = [options.ownTool ? 'OpsApp' : '', options.shippedSkill ? 'DocsApp' : ''].filter(Boolean);
   return `import 'reflect-metadata';
 import SkilledOpenApiPlugin from '@frontmcp/plugin-skilled-openapi';
-import { ${sdkImports} } from '@frontmcp/sdk';
-${options.ownTool ? OWN_TOOL_APP : ''}
+import { ${sdkImports.sort().join(', ')} } from '@frontmcp/sdk';
+${options.ownTool ? OWN_TOOL_APP : ''}${options.shippedSkill ? SHIPPED_SKILL_APP : ''}
 @FrontMcp({
   info: { name: 'Billing CLI', version: '1.0.0' },
-  apps: [${options.ownTool ? 'OpsApp' : ''}],
+  apps: [${apps.join(', ')}],
   logging: { level: LogLevel.Warn, enableConsole: false },
   authorities: { claimsMapping: { roles: 'roles' } },
   plugins: [
