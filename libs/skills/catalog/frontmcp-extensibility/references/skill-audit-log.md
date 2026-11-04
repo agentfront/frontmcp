@@ -33,6 +33,8 @@ The `write*` methods queue the record and never reject: a failed sign or append 
 
 Each record matches the outcome the caller got. An action whose input fails its schema is recorded as `http-call-failure` with `status: 0` (no request is sent), and an answer that fails the operation's `outputSchema` as `http-call-failure` with the upstream status, both with the reason in `errorMessage`. `http-call-success` is written only for an answer the caller receives.
 
+An operation can be listed by several skills. Its records name the first of those skills whose rules admit the caller, the skill the call ran under; when none admits the caller, the `authority-check-fail` record names the first skill that lists it.
+
 Each `SkillAuditRecord` carries:
 
 | Field            | Description                                                                                             |
@@ -45,7 +47,7 @@ Each `SkillAuditRecord` carries:
 | `signatureKeyId` | The signer key identifier — used by verifiers to look up the public key                                 |
 | `signatureAlg`   | `'HS256'` or `'RS256'`                                                                                  |
 | `phase`          | `'authority-check-pass' \| 'authority-check-fail' \| 'http-call-success' \| 'http-call-failure'`        |
-| `skillId`        | The skill that owns the action                                                                          |
+| `skillId`        | The skill the action ran under                                                                          |
 | `actionId`       | The action that was executed                                                                            |
 | `subject`        | Authenticated principal — redacted per `subjectMode`                                                    |
 | `bundleId`       | The bundle the action was resolved against                                                              |

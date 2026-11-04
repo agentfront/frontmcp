@@ -8,9 +8,10 @@
 // returned as `{ ok:false, error }` envelopes — they never throw.
 
 import { type SkillAuditWriter } from '@frontmcp/adapters/skills';
+import type { AuthoritiesResult } from '@frontmcp/auth';
 import type { FrontMcpLogger } from '@frontmcp/sdk';
 
-import { type HiddenOpEntry } from '../registry/hidden-op.registry';
+import { type HiddenOpEntry, type OperationListings } from '../registry/hidden-op.registry';
 import { type AuthorityGuard, type UnprotectedOpsPolicy } from '../security/authority-guard';
 import { callerTokenOf } from './caller-token';
 import { executeOperation, type OpenApiRuntimeDeps } from './openapi-runtime';
@@ -48,20 +49,70 @@ function formatZodIssues(issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey
     .join('; ');
 }
 
+/** The listing a call runs under, and the guard's answer for it. */
+export interface ActionAuthorization {
+  entry: HiddenOpEntry;
+  result: AuthoritiesResult;
+}
+
 /**
- * Execute a single resolved skill action. `entry` is the pinned operation
- * descriptor (resolved via `HiddenOpRegistry.get`/`getByActionId`); `authInfo`
- * is the caller's verified auth context (checked against the op's required
- * authorities).
+ * Authorize a call to an operation that one or more skills list. The caller
+ * must satisfy the operation's rule and the skill-level rule of at least one
+ * listing skill, the answer discovery gives. The call runs, and is audited,
+ * under the first listing that admits the caller; when none does, the first
+ * listing's denial is returned.
+ */
+export async function authorizeAction(args: {
+  listings: OperationListings;
+  guard: AuthorityGuard;
+  unprotectedOps: UnprotectedOpsPolicy;
+  authInfo: unknown;
+  input: Record<string, unknown>;
+}): Promise<ActionAuthorization> {
+  const { listings, guard, unprotectedOps, authInfo, input } = args;
+  const checkListing = (entry: HiddenOpEntry): Promise<AuthoritiesResult> =>
+    guard.check({
+      policy: entry.op.requiredAuthorities,
+      skillPolicy: entry.skillRequiredAuthorities,
+      isPublic: entry.op.public,
+      unprotectedOps,
+      authInfo: (authInfo ?? {}) as Parameters<AuthorityGuard['check']>[0]['authInfo'],
+      input,
+    });
+
+  const [firstListing, ...otherListings] = listings;
+  const firstResult = await checkListing(firstListing);
+  if (firstResult.granted) return { entry: firstListing, result: firstResult };
+  for (const entry of otherListings) {
+    const result = await checkListing(entry);
+    if (result.granted) return { entry, result };
+  }
+  return { entry: firstListing, result: firstResult };
+}
+
+/**
+ * Execute a single resolved skill action. `listings` are the pinned entries of
+ * every skill that lists the operation (`HiddenOpRegistry.get`/`listingsOf`);
+ * `authInfo` is the caller's verified auth context (see {@link authorizeAction}).
  */
 export async function executeSkillAction(args: {
-  entry: HiddenOpEntry;
+  listings: OperationListings;
   input: Record<string, unknown>;
   authInfo: unknown;
   deps: SkillActionDeps;
 }): Promise<SkillActionResult> {
-  const { entry, input, authInfo, deps } = args;
+  const { listings, input, authInfo, deps } = args;
   const { config, resolver, guard, logger, audit } = deps;
+
+  // 1) Authority check: the operation's rule and one listing skill's rule must
+  //    both grant; a policy-less op is allowed/denied per `unprotectedOps` (C1/C2/C3).
+  const { entry, result: authResult } = await authorizeAction({
+    listings,
+    guard,
+    unprotectedOps: config.unprotectedOps,
+    authInfo,
+    input: input ?? {},
+  });
 
   // Audit context shared by every write; writes are detached (a slow/failing
   // audit backend must never block or fail the caller).
@@ -77,16 +128,6 @@ export async function executeSkillAction(args: {
     op?.catch((e) => logger.warn(`[skill-audit] ${phase} write failed: ${e instanceof Error ? e.message : String(e)}`));
   };
 
-  // 1) Authority check: skill-level AND op-level policies must both grant; a
-  //    policy-less op is allowed/denied per `unprotectedOps` (C1/C2/C3).
-  const authResult = await guard.check({
-    policy: entry.op.requiredAuthorities,
-    skillPolicy: entry.skillRequiredAuthorities,
-    isPublic: entry.op.public,
-    unprotectedOps: config.unprotectedOps,
-    authInfo: (authInfo ?? {}) as never as Parameters<AuthorityGuard['check']>[0]['authInfo'],
-    input: input ?? {},
-  });
   if (!authResult.granted) {
     detach(
       audit?.writer.writeAuthorityFail(auditCtx, { reason: authResult.deniedBy ?? 'policy not satisfied' }),

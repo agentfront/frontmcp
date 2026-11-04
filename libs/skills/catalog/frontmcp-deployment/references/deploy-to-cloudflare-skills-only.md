@@ -32,7 +32,10 @@ The meta-tools only show what the caller may use: a skill whose
 (and its catalog) and is `SKILL_NOT_FOUND` for `load_skill`, and `load_skill`
 leaves out actions the caller can never run. When the server configures
 `authorities`, bundle rules are evaluated with the server's engine (its
-`claimsMapping`, resolvers and custom evaluators).
+`claimsMapping`, resolvers and custom evaluators). An operation that several
+skills list runs when the caller satisfies the operation's rule and the rule of
+any one of those skills, so an action `load_skill` shows can be run whatever
+the order of the skills in the bundle.
 
 A bundle skill's `SKILL.md` is listed in `skill://index.json` at its name
 (`skill://Invoices/SKILL.md`, as SEP-2640 requires) and is also served at the

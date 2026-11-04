@@ -57,8 +57,8 @@ class FakeToolRegistry {
   }
 }
 
-function buildFakeCtx(overrides: { granted?: boolean; deniedBy?: string } = {}) {
-  const guard = {
+function buildFakeCtx(overrides: { granted?: boolean; deniedBy?: string; guard?: AuthorityGuard } = {}) {
+  const guard = overrides.guard ?? {
     check: jest.fn(async () => ({ granted: overrides.granted ?? true, deniedBy: overrides.deniedBy })),
   };
   const resolver = {
@@ -404,6 +404,28 @@ describe('OperationToolFactory', () => {
       expect(result.status).toBe(0);
       expect(result.error).toMatch(/input validation failed/);
       expect(mockExecuteOperation).not.toHaveBeenCalled();
+    });
+
+    it("adds another skill's listing to the operation's tool, which admits a caller either skill admits", async () => {
+      const { factory, toolRegistry } = makeFactory();
+      const adminOnly = { roles: { any: ['admin'] } };
+      factory.register(buildEntry({ skillId: 'billing-admin', skillRequiredAuthorities: adminOnly }));
+      const adminListingOnly = lastExecutor(toolRegistry);
+      const deniedBeforePublicListing = await adminListingOnly(
+        { id: 'x' },
+        buildFakeCtx({ guard: new AuthorityGuard() }),
+      );
+      factory.register(buildEntry({ skillId: 'invoices' }));
+
+      expect(toolRegistry.registered).toHaveLength(1);
+      expect(deniedBeforePublicListing).toEqual({
+        ok: false,
+        status: 0,
+        error: expect.stringMatching(/authority denied/),
+      });
+      await expect(
+        lastExecutor(toolRegistry)({ id: 'x' }, buildFakeCtx({ guard: new AuthorityGuard() })),
+      ).resolves.toMatchObject({ ok: true });
     });
 
     it('passes through executeOperation envelope on success', async () => {
