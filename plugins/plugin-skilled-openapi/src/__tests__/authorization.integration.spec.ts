@@ -252,6 +252,25 @@ describe("the SDK's skill surfaces hide a bundle skill the caller may not use", 
     expect(text(await server.readResource(ADMIN_SKILL_MD, { authContext: ALICE }))).toContain('Secret runbook');
   });
 
+  it('resources/list lists its SKILL.md only for a caller who satisfies its requiredAuthorities', async () => {
+    const listed = async (caller: DirectAuthContext) =>
+      (await server.listResources({ authContext: caller })).resources.map((resource) => resource.uri);
+
+    expect(await listed(MALLORY)).toContain('skill://Invoices/SKILL.md');
+    expect(await listed(MALLORY)).not.toContain(ADMIN_SKILL_MD);
+    expect(await listed(ALICE)).toContain(ADMIN_SKILL_MD);
+    expect(await listed(MALLORY)).not.toContain(ADMIN_SKILL_MD);
+  });
+
+  it("resources/list leaves out an @Skill's SKILL.md for a caller who doesn't satisfy its authorities", async () => {
+    const listed = async (caller: DirectAuthContext) =>
+      (await server.listResources({ authContext: caller })).resources.map((resource) => resource.uri);
+
+    expect(await listed(MALLORY)).toContain('skill://server-notes/SKILL.md');
+    expect(await listed(MALLORY)).not.toContain('skill://ops-runbook/SKILL.md');
+    expect(await listed(ALICE)).toContain('skill://ops-runbook/SKILL.md');
+  });
+
   it('is refused the same way at the URI with its id', async () => {
     const byId = 'skill://billing-admin/SKILL.md';
     await expect(server.readResource(byId, { authContext: MALLORY })).rejects.toThrow(/not found/i);
