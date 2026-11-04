@@ -7,7 +7,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { TestTokenFactory } from '@frontmcp/testing';
-import { mkdtemp, rename, rm } from '@frontmcp/utils';
+import { fileExists, mkdtemp, rename, rm } from '@frontmcp/utils';
 
 import { removeScratchProject } from './helpers/dev-cli';
 import { runCliBundle, type CliResult } from './helpers/exec-cli';
@@ -57,6 +57,16 @@ describeWithFileCredentials('a logged-in CLI caller is the caller authorization 
     await removeScratchProject(project.dir);
   });
 
+  it('refuses to install the bundle skills before login, and writes nothing', async () => {
+    const destRoot = path.join(homeDir, 'plugins-before-login');
+
+    const { stderr, exitCode } = run(['install', '-p', 'claude', '--dir', destRoot]);
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain(`Error: could not read the bundle skills from ${APP_NAME}: Not logged in.`);
+    expect(await fileExists(destRoot)).toBe(false);
+  });
+
   it("lists the admin skill for an admin's token", async () => {
     await logInAs(['admin']);
 
@@ -73,6 +83,22 @@ describeWithFileCredentials('a logged-in CLI caller is the caller authorization 
     expect(exitCode).toBe(0);
     expect(stdout).toContain('Invoices');
     expect(stdout).not.toContain('Admin');
+  });
+
+  it('installs the bundle skills the logged-in caller may use, and a refresh as another caller follows them', async () => {
+    const destRoot = path.join(homeDir, 'plugins');
+    const adminSkill = path.join(destRoot, APP_NAME, 'skills', 'admin', 'SKILL.md');
+    await logInAs(['admin']);
+
+    expect(run(['install', '-p', 'claude', '--dir', destRoot])).toMatchObject({ exitCode: 0 });
+    expect(await fileExists(adminSkill)).toBe(true);
+
+    await logInAs(['viewer']);
+    const refreshed = run(['install', '--refresh-skills', '--dir', destRoot]);
+
+    expect(refreshed).toMatchObject({ exitCode: 0, stdout: expect.stringContaining('1 removed (admin)') });
+    expect(await fileExists(adminSkill)).toBe(false);
+    expect(await fileExists(path.join(destRoot, APP_NAME, 'skills', 'invoices', 'SKILL.md'))).toBe(true);
   });
 
   it('fails a command whose stored token the server did not sign', async () => {

@@ -225,15 +225,17 @@ describe('cli-exec-demo install -p claude / -p codex (issue #411 follow-up)', ()
     expect(second.exitCode).toBe(0);
   });
 
-  it('install -p codex --dry-run plans an [mcp_servers.<name>] table', () => {
-    const { stdout, exitCode } = runCli(['install', '-p', 'codex', '--dry-run'], {
+  it('install -p codex --dry-run plans an [mcp_servers.<name>] table and the skills', () => {
+    const { stdout, exitCode } = runCli(['install', '-p', 'codex', '--scope', 'user', '--dry-run'], {
       HOME: codexHome,
     });
     expect(exitCode).toBe(0);
     expect(stdout).toContain('dry-run plan');
     expect(stdout).toContain(`[mcp_servers.${appName}]`);
     expect(stdout).not.toContain('[[mcp_servers]]');
-    expect(fs.existsSync(path.join(codexHome, '.codex', 'config.toml'))).toBe(false);
+    expect(stdout).toContain(`skillsDir: ${path.join(codexHome, '.codex', 'skills', appName)}`);
+    expect(stdout).toContain('shipped skills: greeting-helper, math-helper');
+    expect(fs.existsSync(path.join(codexHome, '.codex'))).toBe(false);
   });
 
   it('install -p codex repairs an older [[mcp_servers]] block and keeps the user servers; uninstall removes only its table', () => {
@@ -250,9 +252,11 @@ describe('cli-exec-demo install -p claude / -p codex (issue #411 follow-up)', ()
     ].join('\n');
     fs.writeFileSync(codexConfig, `${userSettings}\n${legacyBlock}\n`);
 
-    const install = runCli(['install', '-p', 'codex', '--env', 'DESK_TOKEN'], { HOME: codexHome });
+    const codexSkill = path.join(codexHome, '.codex', 'skills', appName, 'math-helper', 'SKILL.md');
+    const install = runCli(['install', '-p', 'codex', '--scope', 'user', '--env', 'DESK_TOKEN'], { HOME: codexHome });
     expect(install.exitCode).toBe(0);
     expect(install.stdout).toContain(`[mcp_servers.${appName}]`);
+    expect(fs.readFileSync(codexSkill, 'utf8')).toContain('name: math-helper');
     const installed = parseToml(fs.readFileSync(codexConfig, 'utf8'));
     expect(installed['model']).toBe('o3');
     expect(installed['mcp_servers']).toEqual({
@@ -264,12 +268,13 @@ describe('cli-exec-demo install -p claude / -p codex (issue #411 follow-up)', ()
       },
     });
 
-    const reinstall = runCli(['install', '-p', 'codex', '--env', 'DESK_TOKEN'], { HOME: codexHome });
+    const reinstall = runCli(['install', '-p', 'codex', '--scope', 'user', '--env', 'DESK_TOKEN'], { HOME: codexHome });
     expect(reinstall.exitCode).toBe(0);
     expect(parseToml(fs.readFileSync(codexConfig, 'utf8'))['mcp_servers']).toEqual(installed['mcp_servers']);
 
-    const uninstall = runCli(['uninstall', '-p', 'codex'], { HOME: codexHome });
+    const uninstall = runCli(['uninstall', '-p', 'codex', '--scope', 'user'], { HOME: codexHome });
     expect(uninstall.exitCode).toBe(0);
+    expect(fs.existsSync(path.join(codexHome, '.codex', 'skills', appName))).toBe(false);
     const remaining = fs.readFileSync(codexConfig, 'utf8');
     expect(remaining.startsWith(userSettings)).toBe(true);
     expect(parseToml(remaining)['mcp_servers']).toEqual({ other: { command: 'other-server' } });
