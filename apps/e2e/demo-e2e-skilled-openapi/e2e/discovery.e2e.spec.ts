@@ -10,6 +10,7 @@ import {
   searchSkillIds,
   SKILLED_SERVER,
   type LoadSkillResponse,
+  type SearchSkillResponse,
 } from './helpers/skilled-client';
 
 const ADMIN_SKILL_NAME = 'Billing administration';
@@ -95,6 +96,16 @@ test.describe('search_skill (C3)', () => {
 
   test('returns at most limit skills', async ({ mcp }) => {
     expect(await searchSkillIds(mcp, { query: 'billing', limit: 1 })).toHaveLength(1);
+  });
+
+  test("reports each result's bundleVersion, the version load_skill tells the model to watch", async ({ mcp }) => {
+    const result = await mcp.tools.call('search_skill', { query: 'billing' });
+    const versions = result.json<SearchSkillResponse>().skills.map((skill) => [skill.skillId, skill.bundleVersion]);
+
+    expect(versions.sort()).toEqual([
+      ['invoices', '1.0.0'],
+      ['reports', '1.0.0'],
+    ]);
   });
 
   test('leaves out a skill whose rule the caller does not satisfy (G2)', async ({ mcp, server, auth }) => {
