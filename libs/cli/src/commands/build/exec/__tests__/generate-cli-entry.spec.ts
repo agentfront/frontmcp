@@ -582,26 +582,58 @@ describe('generateCliEntry', () => {
     it('should not inject auth token when authRequired is false', () => {
       const source = generateCliEntry(makeOptions({ authRequired: false }));
       expect(source).not.toContain('credBlob');
-      expect(source).not.toContain('authToken');
       expect(source).not.toContain('Not logged in');
+      expect(source).toContain("return { mode: 'cli' };");
     });
 
     it('refuses to connect without a stored credential, before trying the daemon', () => {
       const source = generateCliEntry(makeOptions({ authRequired: true }));
-      const getClient = source.slice(source.indexOf('async function getClient()'), source.indexOf('async function closeClient()'));
-      const guardIdx = getClient.indexOf('if (!credBlob || !credBlob.token)');
-      expect(guardIdx).toBeGreaterThan(-1);
-      expect(getClient).toContain(
+      const connectOptions = source.slice(source.indexOf('async function connectOptions()'), source.indexOf('async function connectInProcess('));
+      expect(connectOptions).toContain('if (!credBlob || !credBlob.token)');
+      expect(connectOptions).toContain(
         `throw new Error('Not logged in. Run "' + APP_NAME + ' login" or "' + APP_NAME + ' connect --token <token>" first.');`,
       );
-      expect(guardIdx).toBeLessThan(getClient.indexOf("require('./daemon-client')"));
+      const getClient = source.slice(source.indexOf('async function getClient()'), source.indexOf('async function closeClient()'));
+      expect(getClient.indexOf('await connectOptions()')).toBeGreaterThan(-1);
+      expect(getClient.indexOf('await connectOptions()')).toBeLessThan(getClient.indexOf("require('./daemon-client')"));
     });
 
     it('sends the stored token on the daemon path and the in-process path alike', () => {
       const source = generateCliEntry(makeOptions({ authRequired: true }));
-      expect(source).toContain('daemonClient.createDaemonClient(socketPath, { authToken: credBlob.token })');
-      expect(source).toContain("var connectOpts = { authToken: credBlob.token, mode: 'cli' };");
-      expect(source).toContain('_client = await connect(configOrClass, connectOpts);');
+      expect(source).toContain("return { authToken: credBlob.token, mode: 'cli' };");
+      expect(source).toContain('authToken: connectOpts.authToken,');
+      expect(source).toContain('_client = await connectInProcess(connectOpts);');
+      expect(source).toContain('return connect(configOrClass, connectOpts);');
+    });
+  });
+
+  describe('daemon routing', () => {
+    function getClientOf(source: string): string {
+      return source.slice(source.indexOf('async function getClient()'), source.indexOf('async function closeClient()'));
+    }
+
+    it('sends the commands to the http.entryPath the server was built with', () => {
+      const source = generateCliEntry(makeOptions({ schema: makeSchema({ httpEntryPath: '/mcp' }) }));
+      expect(source).toContain('var BUILT_ENTRY_PATH = "/mcp";');
+      expect(getClientOf(source)).toContain("entryPath: '/' + daemonEntryPath().replace(/^\\/+|\\/+$/g, '')");
+    });
+
+    it('falls back to the entry path the SDK defaults to when the server sets none', () => {
+      const source = generateCliEntry(makeOptions());
+      expect(source).toContain('var BUILT_ENTRY_PATH = null;');
+      expect(source).toContain("(process.env.FRONTMCP_HTTP_ENTRY_PATH || '')");
+    });
+
+    it('starts the daemon on the entry path the commands send to', () => {
+      const source = generateCliEntry(makeOptions());
+      expect(source).toContain('FRONTMCP_HTTP_ENTRY_PATH: daemonEntryPath()');
+    });
+
+    it('connects to the daemon before using it, and says why when it falls back to in-process', () => {
+      const getClient = getClientOf(generateCliEntry(makeOptions()));
+      expect(getClient).toContain('await dc.connect();');
+      expect(getClient).toContain("'); running the command in-process.'");
+      expect(getClient.indexOf('await dc.connect();')).toBeLessThan(getClient.indexOf('connectInProcess(connectOpts)'));
     });
   });
 
@@ -758,6 +790,26 @@ describe('generateCliEntry', () => {
       expect(source).toContain('searchSkills');
       expect(source).toContain('loadSkills');
       expect(source).toContain('listSkills');
+    });
+
+    it('exits 1 when skills load finds fewer skills than it was asked for, naming the missing ones', () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({ capabilities: { skills: true, jobs: false, workflows: false } }),
+      }));
+      const load = source.slice(source.indexOf("'load <ids...>'"), source.indexOf("'read <name>'"));
+      expect(load).toContain("console.log('Loaded ' + loaded.length + ' of ' + ids.length + ' skill(s).');");
+      expect(load).toContain('if (loaded.length < ids.length) {');
+      expect(load).toContain('warnings.forEach(function(warning) { console.error(warning); });');
+      expect(load).toContain('process.exitCode = 1;');
+    });
+
+    it('exits 1 when skills read finds no skill, in text and json output', () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({ capabilities: { skills: true, jobs: false, workflows: false } }),
+      }));
+      const read = source.slice(source.indexOf("'read <name>'"), source.indexOf("'List available skills'"));
+      expect(read).toContain("if ((result.skills || []).length === 0) process.exitCode = 1;");
+      expect(read).toContain(`console.error('Skill "' + name + '" not found.');`);
     });
 
     it('should not generate skills commands when skills capability is false', () => {
@@ -1363,11 +1415,10 @@ describe('subscribe commands', () => {
     expect(source).toContain('client._isDaemon');
   });
 
-  it('should reconnect via in-process when daemon is detected', () => {
-    const source = generateCliEntry(makeOptions());
-    // When daemon detected, should clear cached client and use connect()
-    expect(source).toContain('_client = null');
-    expect(source).toContain("connect(configOrClass, { mode: 'cli' })");
+  it('should reconnect via in-process when daemon is detected, with the same credentials', () => {
+    const source = generateCliEntry(makeOptions({ authRequired: true }));
+    const subscribeClient = source.slice(source.indexOf('async function getSubscribeClient()'));
+    expect(subscribeClient).toContain('_client = await connectInProcess(await connectOptions());');
   });
 });
 

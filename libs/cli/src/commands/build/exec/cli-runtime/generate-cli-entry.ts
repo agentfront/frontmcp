@@ -80,7 +80,7 @@ export function generateCliEntry(options: CliEntryOptions): string {
   const selfContained = !!options.selfContained;
 
   const sections: string[] = [
-    generateHeader(appName, appVersion, description, serverBundleFilename, outputDefault, authRequired, capabilities, oauthConfig, selfContained, options.env),
+    generateHeader(appName, appVersion, description, serverBundleFilename, outputDefault, authRequired, capabilities, oauthConfig, selfContained, options.env, schema.httpEntryPath),
     generateToolCommands(filteredTools, appName),
     generateResourceCommands(schema),
     generateTemplateCommands(schema.resourceTemplates),
@@ -115,6 +115,7 @@ function generateHeader(
   oauthConfig?: OAuthConfig,
   selfContained?: boolean,
   env?: Record<string, string>,
+  httpEntryPath?: string,
 ): string {
   const hasOAuth = !!oauthConfig;
 
@@ -209,29 +210,22 @@ var SERVER_BUNDLE = '../${serverBundleFilename}';`
     : `var SERVER_BUNDLE = path.join(SCRIPT_DIR, ${JSON.stringify(serverBundleFilename)});`}
 
 var _client = null;
-async function getClient() {
-  if (_client) return _client;
-${authRequired ? `
+// The path the daemon serves MCP at: the server's http.entryPath, else what the SDK defaults it to.
+var BUILT_ENTRY_PATH = ${JSON.stringify(httpEntryPath ?? null)};
+function daemonEntryPath() {
+  return BUILT_ENTRY_PATH !== null ? BUILT_ENTRY_PATH : (process.env.FRONTMCP_HTTP_ENTRY_PATH || '');
+}
+
+async function connectOptions() {${authRequired ? `
   var credBlob = await creds.createCredentialStore().get(sessions.getActiveSessionName());
   if (!credBlob || !credBlob.token) {
     throw new Error('Not logged in. Run "' + APP_NAME + ' login" or "' + APP_NAME + ' connect --token <token>" first.');
   }
-  var connectOpts = { authToken: credBlob.token, mode: 'cli' };` : `
-  var connectOpts = { mode: 'cli' };`}
+  return { authToken: credBlob.token, mode: 'cli' };` : `
+  return { mode: 'cli' };`}
+}
 
-  // Try daemon first — Unix socket HTTP (~5-15ms vs ~420ms in-process)
-  var socketPath = path.join(FRONTMCP_HOME, 'sockets', APP_NAME + '.sock');
-  if (fs.existsSync(socketPath)) {
-    try {
-      var daemonClient = require('./daemon-client');
-      var dc = daemonClient.createDaemonClient(socketPath${authRequired ? ', { authToken: credBlob.token }' : ''});
-      await dc.ping();
-      _client = dc;
-      return _client;
-    } catch (_) { /* daemon not available, fall through */ }
-  }
-
-  // Fallback: in-process connect (with CLI mode for faster init)
+async function connectInProcess(connectOpts) {
   // Suppress @FrontMcp decorator bootstrap — we only need config metadata, not a running server.
   process.env.FRONTMCP_SCHEMA_EXTRACT = '1';
   var mod = require(${selfContained ? `'../${serverBundleFilename}'` : 'SERVER_BUNDLE'});
@@ -239,7 +233,30 @@ ${authRequired ? `
   var configOrClass = mod.default || mod;
   var sdk = require('@frontmcp/sdk');
   var connect = sdk.connect || sdk.direct.connect;
-  _client = await connect(configOrClass, connectOpts);
+  return connect(configOrClass, connectOpts);
+}
+
+async function getClient() {
+  if (_client) return _client;
+  var connectOpts = await connectOptions();
+
+  // A running daemon serves the command over its Unix socket, without loading the server here
+  var socketPath = path.join(FRONTMCP_HOME, 'sockets', APP_NAME + '.sock');
+  if (fs.existsSync(socketPath)) {
+    var dc = require('./daemon-client').createDaemonClient(socketPath, {
+      authToken: connectOpts.authToken,
+      entryPath: '/' + daemonEntryPath().replace(/^\\/+|\\/+$/g, '')
+    });
+    try {
+      await dc.connect();
+      _client = dc;
+      return _client;
+    } catch (err) {
+      console.error('The daemon at ' + socketPath + ' did not answer (' + (err && err.message) + '); running the command in-process.');
+    }
+  }
+
+  _client = await connectInProcess(connectOpts);
   return _client;
 }
 
@@ -809,14 +826,18 @@ skillsCmd
     try {
       var client = await getClient();
       var result = await client.loadSkills(ids);
+      var loaded = result.skills || [];
       var mode = program.opts().output || 'text';
       if (mode === 'json') {
         console.log(JSON.stringify(result, null, 2));
-      } else {
-        console.log('Loaded ' + ids.length + ' skill(s).');
-        if (result && typeof result === 'object') {
-          console.log(JSON.stringify(result, null, 2));
-        }
+      } else if (loaded.length > 0) {
+        console.log('Loaded ' + loaded.length + ' of ' + ids.length + ' skill(s).');
+        console.log(JSON.stringify(result, null, 2));
+      }
+      if (loaded.length < ids.length) {
+        var warnings = (result.summary && result.summary.combinedWarnings) || [];
+        if (mode !== 'json') warnings.forEach(function(warning) { console.error(warning); });
+        process.exitCode = 1;
       }
     } catch (err) {
       _exitWithError(err, 1);
@@ -833,9 +854,14 @@ skillsCmd
       var mode = program.opts().output || 'text';
       if (mode === 'json') {
         console.log(JSON.stringify(result, null, 2));
+        if ((result.skills || []).length === 0) process.exitCode = 1;
       } else {
         var skills = result.skills || [];
-        if (skills.length === 0) { console.log('Skill "' + name + '" not found.'); return; }
+        if (skills.length === 0) {
+          console.error('Skill "' + name + '" not found.');
+          process.exitCode = 1;
+          return;
+        }
         var sk = skills[0];
         console.log('\\n  ' + sk.name);
         if (sk.description) console.log('  ' + sk.description);
@@ -1154,12 +1180,7 @@ async function getSubscribeClient() {
   if (client._isDaemon) {
     // Close the daemon client before replacing with in-process client
     if (typeof client.close === 'function') { try { await client.close(); } catch (_) {} }
-    _client = null;
-    var mod = require(SERVER_BUNDLE);
-    var configOrClass = mod.default || mod;
-    var sdk = require('@frontmcp/sdk');
-    var connect = sdk.connect || sdk.direct.connect;
-    _client = await connect(configOrClass, { mode: 'cli' });
+    _client = await connectInProcess(await connectOptions());
     return _client;
   }
   return client;
@@ -1848,8 +1869,10 @@ daemonCmd
     // Only once no daemon runs: removing the socket of a running one would cut it off
     if (!usePort) { try { fs.unlinkSync(socketPath); } catch (_) { /* ok */ } }
 
+    // The daemon serves MCP at the path the commands send to
     var env = Object.assign({}, process.env, {
-      FRONTMCP_DAEMON_IDLE_TIMEOUT: String(opts.idleTimeout)
+      FRONTMCP_DAEMON_IDLE_TIMEOUT: String(opts.idleTimeout),
+      FRONTMCP_HTTP_ENTRY_PATH: daemonEntryPath()
     });
     if (usePort) {
       env.FRONTMCP_DAEMON_PORT = String(opts.port);

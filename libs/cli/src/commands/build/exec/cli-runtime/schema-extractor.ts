@@ -89,6 +89,8 @@ export interface ExtractedSchema {
    * actually listen on, not a hard-coded SDK default.
    */
   httpPort?: number;
+  /** `@FrontMcp({ http: { entryPath } })`: where the daemon of a `--target cli` build serves MCP. */
+  httpEntryPath?: string;
 }
 
 /** The parts of the SDK's `ServerManifest` the CLI reads; the rest is written to the file as it is. */
@@ -345,6 +347,7 @@ async function extractSchemasFromBundle(bundlePath: string): Promise<ExtractedSc
     // undefined when the entry is a plain config object (no decorator) or
     // when no port was declared — caller falls back to its own default.
     let httpPort: number | undefined;
+    let httpEntryPath: string | undefined;
     try {
       const sdk = require('@frontmcp/sdk') as { getDecoratorConfig?: (t: unknown) => Record<string, unknown> | undefined };
       const cfg = typeof sdk.getDecoratorConfig === 'function'
@@ -352,11 +355,13 @@ async function extractSchemasFromBundle(bundlePath: string): Promise<ExtractedSc
         : (configOrClass as Record<string, unknown> | undefined);
       const http = cfg?.['http'] as { port?: number } | undefined;
       if (http && typeof http.port === 'number') httpPort = http.port;
+      const servedConfig = (cfg ?? configOrClass) as { http?: { entryPath?: unknown } } | undefined;
+      if (typeof servedConfig?.http?.entryPath === 'string') httpEntryPath = servedConfig.http.entryPath;
     } catch {
       // best-effort — manifest writer will fall back to its own default
     }
 
-    return { tools, resources, resourceTemplates, prompts, jobs, capabilities, skillAssets, httpPort, ...manifest };
+    return { tools, resources, resourceTemplates, prompts, jobs, capabilities, skillAssets, httpPort, httpEntryPath, ...manifest };
   } finally {
     await client.close().catch(() => {});
   }
