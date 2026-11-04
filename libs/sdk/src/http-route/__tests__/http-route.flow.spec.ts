@@ -191,6 +191,20 @@ class BackRedirectRoute extends HttpRouteContext {
   }
 }
 
+@HttpRoute({ method: 'GET', path: '/to/tokyo', auth: 'public' })
+class UnicodeRedirectRoute extends HttpRouteContext {
+  handle() {
+    return httpRespond.redirect('/board/東京?city=Zürich');
+  }
+}
+
+@HttpRoute({ method: 'GET', path: '/to/default', auth: 'public' })
+class StatuslessRedirectRoute extends HttpRouteContext {
+  handle() {
+    return { kind: 'redirect', location: '/board' };
+  }
+}
+
 @App({
   id: 'web',
   name: 'web',
@@ -214,6 +228,8 @@ class BackRedirectRoute extends HttpRouteContext {
     CardRoute,
     MessagePartRoute,
     BackRedirectRoute,
+    UnicodeRedirectRoute,
+    StatuslessRedirectRoute,
   ],
 })
 class WebApp {}
@@ -470,6 +486,20 @@ describe.each([
 
       expect(response.status).toBe(302);
       expect(response.headers.get('location')).toBe('https://desk.example.com/board');
+    });
+
+    it('redirects with 302 when a redirect output has no status', async () => {
+      const response = await harness.send('/to/default', { redirect: 'manual' });
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get('location')).toBe('/board');
+    });
+
+    it('sends a location with characters outside ASCII percent-encoded as UTF-8', async () => {
+      const response = await harness.send('/to/tokyo', { redirect: 'manual' });
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get('location')).toBe('/board/%E6%9D%B1%E4%BA%AC?city=Z%C3%BCrich');
     });
 
     it("answers a redirect with the output's status", async () => {

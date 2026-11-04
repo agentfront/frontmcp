@@ -2,6 +2,7 @@
 import { base64Decode } from '@frontmcp/utils';
 
 import { httpOutputSchema, serializeHttpCookie, type HttpCookie, type ServerResponse } from '../common';
+import { toLocationHeader } from '../utils/http-location.utils';
 
 /* ----------------------- helpers ----------------------- */
 
@@ -97,7 +98,7 @@ export async function writeHttpResponse(res: ServerResponse, value: any): Promis
   switch (out.kind) {
     case 'redirect': {
       // Not `res.redirect()`: Express 4 reads the location `back` as the request's Referer
-      res.setHeader('Location', out.location);
+      res.setHeader('Location', toLocationHeader(out.location));
       res.status(out.status).end();
       return;
     }

@@ -80,16 +80,17 @@ What `handle()` returns becomes the response:
 | A thrown `PublicMcpError`                            | Its status, `{ "error": "<its message>" }`    |
 | Any other throw                                      | `500 Internal Server Error`, message not sent |
 
-`httpRespond.redirect(location)` answers `302` with that `Location`, sent as given: an absolute URL, or a reference
-relative to the request such as `/board`. A location with whitespace or a control character is not valid. A browser
-takes `//other.example` or `/\other.example` to another site, so check a location that comes from the request
-against your own list of paths before redirecting to it.
+`httpRespond.redirect(location)` answers `302` with that `Location`: an absolute URL, or a reference relative to the
+request such as `/board`. Characters outside ASCII are sent percent-encoded as UTF-8, so `/board/東京` is sent as
+`/board/%E6%9D%B1%E4%BA%AC`; the rest of the location is sent as given. A location with whitespace or a control
+character is not valid. A browser takes `//other.example` or `/\other.example` to another site, so check a location
+that comes from the request against your own list of paths before redirecting to it.
 
-An object whose `kind` is an `httpRespond` kind (`redirect`, `json`, `text`, `html`, `empty`, …) and that has a
-`status`, as every `httpRespond` output does, is a response. One that fails its schema, such as
-`{ ...httpRespond.json(body), status: 301 }`, fails the request with `500` and logs an `InvalidHttpRouteResponseError`
-naming the route and the problem; it is never sent to the client as data. Any other object, such as
-`{ kind: 'text', text: 'hello' }`, is sent as JSON.
+An object whose `kind` is an `httpRespond` kind (`redirect`, `json`, `text`, `html`, `empty`, …) and that is valid
+for that kind is a response, with the kind's defaults: `{ kind: 'redirect', location: '/board' }` is a `302`. One that
+is not valid and has a `status`, as every `httpRespond` output has, such as `{ ...httpRespond.json(body), status: 301 }`,
+fails the request with `500` and logs an `InvalidHttpRouteResponseError` naming the route and the problem; it is never
+sent to the client as data. Any other object, such as `{ kind: 'text', text: 'hello' }`, is sent as JSON.
 
 ### Step 2: List it in the app
 

@@ -157,8 +157,9 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * What `handle()` returned, as the response. A value with a response `kind` and a `status`, as every `httpRespond`
-   * output that can be invalid has, fails when it is not a valid response (#1053); other objects are data.
+   * What `handle()` returned, as the response. A value with a response `kind` that is valid for that kind is a
+   * response, with the kind's defaults (a redirect without a `status` is a 302). One that is not valid and has a
+   * `status`, as every `httpRespond` output has, fails (#1053); other objects are data.
    */
   private toHttpOutput(route: HttpRouteEntry, result: HttpRouteResult): HttpOutput {
     if (result === undefined) return httpRespond.noContent();
