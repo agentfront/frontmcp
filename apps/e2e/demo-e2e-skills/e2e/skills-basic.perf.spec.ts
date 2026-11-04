@@ -8,8 +8,7 @@
  * - Tool discovery performance
  */
 import { perfTest } from '@frontmcp/testing';
-
-import { loadSkills as loadSkillsRaw, searchSkills as searchSkillsRaw } from './helpers/skills-protocol';
+import { searchSkills as searchSkillsRaw, loadSkills as loadSkillsRaw } from './helpers/skills-protocol';
 
 perfTest.describe('Skills Basic Performance', () => {
   perfTest.use({

@@ -8,8 +8,7 @@
  * - /skills/{id} - Get specific skill by ID
  * - Visibility filtering (mcp-only, http-only, both)
  */
-import { expect, test } from '@frontmcp/testing';
-
+import { test, expect } from '@frontmcp/testing';
 import { searchSkills } from './helpers/skills-protocol';
 
 interface SkillApiResponse {
