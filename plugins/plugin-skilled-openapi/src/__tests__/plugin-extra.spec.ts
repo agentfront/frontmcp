@@ -125,7 +125,7 @@ describe('SkilledOpenApiPlugin.injectSkillCatalogIntoSearchTool', () => {
     expect(target.tool.metadata.description).toBe('orig');
   });
 
-  it('points at the skills/* methods, not skill://, when mcpResources is disabled', async () => {
+  it('points at load_skill and search_skill, whether or not mcpResources is enabled (#1067)', async () => {
     const target = { tool: { metadata: { name: 'search_skill', description: 'orig' } } };
     const skills = fakeSkillRegistryWithOne();
     const plugin = makePluginWithGet((token) => {
@@ -139,7 +139,10 @@ describe('SkilledOpenApiPlugin.injectSkillCatalogIntoSearchTool', () => {
     await plugin.injectSkillCatalogIntoSearchTool(ctx as never);
 
     expect(listedDescription(ctx)).toContain('billing');
-    expect(listedDescription(ctx)).toContain('skills/load');
+    expect(listedDescription(ctx)).toContain(
+      'Available skills (load one by name with `load_skill`; `search_skill` finds others):',
+    );
+    expect(listedDescription(ctx)).not.toContain('skills/load');
     expect(listedDescription(ctx)).not.toContain('skill://');
   });
 

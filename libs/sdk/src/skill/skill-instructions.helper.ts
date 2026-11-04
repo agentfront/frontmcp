@@ -31,9 +31,11 @@
 import { resolveClientProfile } from '../answer/client-profile';
 import type { ScopeEntry, SkillEntry } from '../common';
 import { callSurfaceOf } from '../common/availability';
+import { DependencyNotFoundError, ProviderNotAvailableError, ProviderNotRegisteredError } from '../errors';
 import { mcpRequestSurface } from '../transport/mcp-handlers/mcp-surface';
 import { SKILL_INDEX_URI } from './sep-2640/sep-2640.constants';
 import { filterSkillsByAuthorities } from './skill-authorities.helper';
+import { SkillCatalogSourceToken, type SkillCatalogPointers, type SkillCatalogSource } from './skill-catalog-source';
 import { filterServableSkills } from './skill-filter.helper';
 import type { SkillRegistryInterface } from './skill.registry';
 
@@ -69,6 +71,8 @@ interface ComposeOptions {
   mcpResources?: boolean;
   /** The skills the catalog lists; defaults to every MCP-visible skill in `skillRegistry`. */
   skills?: readonly SkillEntry[];
+  /** How the catalog tells a model to load skills; defaults by `mcpResources`. */
+  pointers?: SkillCatalogPointers;
 }
 
 export interface SkillsCatalogSummaryOptions {
@@ -76,12 +80,17 @@ export interface SkillsCatalogSummaryOptions {
   mcpResources?: boolean;
   /** The skills to list, such as those a caller may see; defaults to every MCP-visible skill in the registry. */
   skills?: readonly SkillEntry[];
+  /**
+   * How the catalog tells a model to load and find skills, such as a plugin's own tools. Defaults to the
+   * `skill://index.json` resource, or the `skills/*` requests when `mcpResources` is false.
+   */
+  pointers?: SkillCatalogPointers;
 }
 
-interface CatalogPointers {
-  header: string;
-  truncationHint: string;
-  compact: string;
+type CatalogPointers = SkillCatalogPointers;
+
+function pointersFor(options: SkillsCatalogSummaryOptions): CatalogPointers {
+  return options.pointers ?? (options.mcpResources === false ? METHOD_POINTERS : RESOURCE_POINTERS);
 }
 
 const RESOURCE_POINTERS: CatalogPointers = {
@@ -187,7 +196,7 @@ export function buildSkillsCatalogSummary(
   const skills = listedSkills(skillRegistry, options);
   if (skills.length === 0) return '';
 
-  const pointers = options.mcpResources === false ? METHOD_POINTERS : RESOURCE_POINTERS;
+  const pointers = pointersFor(options);
   const lines: string[] = [pointers.header, ''];
 
   let truncated = false;
@@ -230,8 +239,7 @@ function buildCompactSkillsLine(
   if (count === 0 && !servesExternalSkills) return '';
   let skills = count === 1 ? '1 skill' : `${count} skills`;
   if (servesExternalSkills) skills = 'skills';
-  const pointers = options.mcpResources === false ? METHOD_POINTERS : RESOURCE_POINTERS;
-  return `This server has ${skills}: ${pointers.compact}`;
+  return `This server has ${skills}: ${pointersFor(options).compact}`;
 }
 
 /**
@@ -272,7 +280,11 @@ export function composeInitializeInstructions(options: ComposeOptions): string {
     return joinSections([user, channel]);
   }
 
-  const summaryOptions: SkillsCatalogSummaryOptions = { mcpResources: options.mcpResources, skills: options.skills };
+  const summaryOptions: SkillsCatalogSummaryOptions = {
+    mcpResources: options.mcpResources,
+    skills: options.skills,
+    pointers: options.pointers,
+  };
   if (policy === 'compact') {
     return joinSections([user, channel, buildCompactSkillsLine(options.skillRegistry, summaryOptions)]);
   }
@@ -320,7 +332,11 @@ export type InstructionsScope = Pick<
   | 'authoritiesEngine'
   | 'authoritiesContextBuilder'
   | 'authoritiesScopeMapping'
-> & { readonly channels?: ChannelRegistryLike };
+> & {
+  readonly channels?: ChannelRegistryLike;
+  /** Where a plugin's {@link SkillCatalogSource} is provided, under `SkillCatalogSourceToken`. */
+  readonly providers?: ScopeEntry['providers'];
+};
 
 export interface CallerInstructionsOptions {
   /** The caller's MCP handler context (`{ authInfo }`); omit inside a request flow, which already carries it. */
@@ -355,12 +371,25 @@ export async function composeCallerInstructions(
   options: CallerInstructionsOptions = {},
 ): Promise<string> {
   const skillsConfig = scope.metadata.skillsConfig;
+  // A plugin's runtime skills (a Skilled OpenAPI bundle) are registered once it is ready; wait, so the
+  // instructions count and list them, and point to the plugin's tools if it serves skills through them (#1067).
+  const source = skillCatalogSourceOf(scope);
+  if (source) {
+    try {
+      await source.ready();
+    } catch (error) {
+      scope.logger.warn('initialize instructions: a skill source failed to load; composed without its skills', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
   const composeOptions: ComposeOptions = {
     userInstructions: scope.metadata.instructions,
     channelInstructions: buildChannelInstructions(scope.channels),
     skillRegistry: scope.skills,
     policy: instructionsPolicyFor(scope, options.clientName),
     mcpResources: skillsConfig?.mcpResources,
+    pointers: source?.pointers,
   };
   const withUriHints = options.skillUriHints === true && skillUriHintsEnabled(scope);
   const listsSkills = withUriHints || includesSkillCatalog(composeOptions);
@@ -379,6 +408,29 @@ export async function composeCallerInstructions(
   const composed = composeInitializeInstructions({ ...composeOptions, skills });
   const uriHints = withUriHints ? buildSkillUriHints(skills, scope.skills?.getSep2640InstructionUris?.() ?? []) : '';
   return [composed, uriHints].filter((section) => section.length > 0).join('\n\n---\n\n');
+}
+
+/**
+ * The plugin skill source provided in the scope, if any. Not registered is the usual case and means none; a provider
+ * that fails to build is logged and treated as none, so `initialize` still answers.
+ */
+function skillCatalogSourceOf(scope: InstructionsScope): SkillCatalogSource | undefined {
+  if (!scope.providers) return undefined;
+  try {
+    return scope.providers.get(SkillCatalogSourceToken);
+  } catch (error) {
+    if (
+      error instanceof ProviderNotRegisteredError ||
+      error instanceof ProviderNotAvailableError ||
+      error instanceof DependencyNotFoundError
+    ) {
+      return undefined;
+    }
+    scope.logger.warn('initialize instructions: the skill source provider failed; composed without it', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
 }
 
 /**

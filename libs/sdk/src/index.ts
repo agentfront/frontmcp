@@ -417,6 +417,8 @@ export {
   composeInitializeInstructions,
   composeCallerInstructions,
   buildChannelInstructions,
+  // A plugin's runtime skills, which the initialize instructions wait for and point to
+  SkillCatalogSourceToken,
   // Skill audit log helper (Edge-runtime-safe factory injection)
   setSkillAuditFactory,
   hasSkillAuditFactory,
@@ -466,6 +468,8 @@ export type {
   InjectInstructionsPolicy,
   CallerInstructionsOptions,
   InstructionsScope,
+  SkillCatalogSource,
+  SkillCatalogPointers,
   SkillIndexCache,
   SkillIndexScoring,
   SkillValidationReport,
