@@ -326,6 +326,9 @@ Three things worth knowing before they surprise you:
   that contains the merge commit and cherry-picks from there. It builds on the parent's cherry-pick
   branch while that PR is open, so the cherry-picks stack on `main` the way the PRs did. A stacked
   PR merged only into its parent's branch has landed nowhere yet: the parent's merge carries it.
+  An upper PR's change can also land as a commit of its own, with the PR's merge commit after it
+  and empty, as #1056's did. `scripts/cherry-pick-commits.mjs` finds the commits that hold the
+  change by the PR's `(#N)` subject suffix, and the workflow cherry-picks those.
 - The cherry-pick PRs are authored by `github-actions[bot]`, and **CodeRabbit skips them**
   ("Bot user detected"). Review has to happen on the original PR against the release branch.
 - `publish-release.yml` only runs from a `release/X.Y.x` branch, so a fix that exists solely on
