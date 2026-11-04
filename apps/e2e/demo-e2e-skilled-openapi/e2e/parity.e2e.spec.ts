@@ -1,4 +1,4 @@
-// Scenarios J1 G3: streamable HTTP and stdio, on the same config and signed bundle, give the same answers.
+// Scenarios J1 G3 E6: streamable HTTP and stdio, on the same config and signed bundle, give the same answers.
 import { join } from 'node:path';
 
 import { expect, McpClient, McpStdioClientTransport, test, type CallToolResult } from '@frontmcp/testing';
@@ -82,6 +82,16 @@ const TOOL_CALLS: readonly ParityCall[] = [
     succeeds: false,
   },
   { name: 'run_workflow', args: { script: "return await callTool('adminPing', {});" }, succeeds: false },
+  { name: 'execute_action', args: { actionId: 'getAccountPlan' }, succeeds: true },
+  {
+    name: 'execute_action',
+    args: { actionId: 'createInvoice', input: { customerId: 'cus_e2e', amount: 5 } },
+    succeeds: true,
+  },
+  { name: 'execute_action', args: { actionId: 'getInvoice', input: { id: 'inv_missing' } }, succeeds: false },
+  { name: 'execute_action', args: { actionId: 'getInvoice', input: {} }, succeeds: false },
+  { name: 'execute_action', args: { actionId: 'adminPing', input: {} }, succeeds: false },
+  { name: 'execute_action', args: { actionId: 'doesNotExist', input: {} }, succeeds: false },
 ];
 
 const environment = new ProductionEnvironment();
@@ -122,7 +132,12 @@ test.describe('Skilled-OpenAPI cross-runtime parity', () => {
     const httpTools = normaliseTools(await mcp.tools.list());
     const stdioTools = normaliseTools((await stdio.listTools()).tools);
 
-    expect(httpTools.map((tool) => tool.name)).toEqual(['load_skill', 'run_workflow', 'search_skill']);
+    expect(httpTools.map((tool) => tool.name)).toEqual([
+      'execute_action',
+      'load_skill',
+      'run_workflow',
+      'search_skill',
+    ]);
     expect(stdioTools).toEqual(httpTools);
   });
 
@@ -142,7 +157,9 @@ test.describe('Skilled-OpenAPI cross-runtime parity', () => {
     expect(stdio.getInstructions()).toBe(mcp.instructions);
   });
 
-  test('search_skill, load_skill and run_workflow give the same results and errors', async ({ mcp }) => {
+  test('search_skill, load_skill, execute_action and run_workflow give the same results and errors', async ({
+    mcp,
+  }) => {
     const stdio = await connectStdio();
 
     for (const { name, args, succeeds } of TOOL_CALLS) {
@@ -169,7 +186,7 @@ test.describe('Skilled-OpenAPI cross-runtime parity', () => {
 
     const overStdio = await sharedOperationAccess(callToolOverStdio);
 
-    expect(overStdio).toEqual({ shown: ['getInvoice'], runnable: ['getInvoice'] });
+    expect(overStdio).toEqual({ shown: ['getInvoice'], runnable: ['getInvoice'], executable: ['getInvoice'] });
     expect(overStdio).toEqual(await sharedOperationAccess(callToolOver(mcp)));
   });
 });
