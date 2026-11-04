@@ -17,6 +17,8 @@
 
 import { OpenAPIToolGenerator, type McpOpenAPITool } from 'mcp-from-openapi';
 
+import { outputSchemaOf } from '../../openapi/openapi.output-schema';
+
 /** A hand-authored skill that declares which OpenAPI operations it serves. */
 export interface SkillOpenApiRef {
   /** Stable skill id (kebab-case). */
@@ -103,7 +105,9 @@ export async function compileSkilledBundleFromOpenApi(
   const serviceId = options.serviceId ?? 'api';
   const baseUrl = options.baseUrl ?? (openapi as OpenApiDocLike).servers?.[0]?.url;
   if (!baseUrl) {
-    throw new Error('compileSkilledBundleFromOpenApi: no baseUrl — pass options.baseUrl or declare servers[] in the OpenAPI doc.');
+    throw new Error(
+      'compileSkilledBundleFromOpenApi: no baseUrl — pass options.baseUrl or declare servers[] in the OpenAPI doc.',
+    );
   }
 
   // Parse the OpenAPI → tools (operations) with live input/output JSON schemas.
@@ -125,7 +129,9 @@ export async function compileSkilledBundleFromOpenApi(
   for (const opId of referenced) {
     const tool = byOperationId.get(opId);
     if (!tool) {
-      throw new Error(`compileSkilledBundleFromOpenApi: operationId "${opId}" is referenced by a skill but not defined in the OpenAPI document.`);
+      throw new Error(
+        `compileSkilledBundleFromOpenApi: operationId "${opId}" is referenced by a skill but not defined in the OpenAPI document.`,
+      );
     }
     operations[opId] = {
       operationId: opId,
@@ -134,7 +140,7 @@ export async function compileSkilledBundleFromOpenApi(
       pathTemplate: tool.metadata.path,
       summary: tool.metadata.operationSummary ?? tool.description,
       inputSchema: tool.inputSchema,
-      outputSchema: tool.outputSchema ?? { type: 'object' },
+      outputSchema: outputSchemaOf(tool) ?? {},
       mapper: tool.mapper as unknown[],
       authBindingRef: 'default',
     };

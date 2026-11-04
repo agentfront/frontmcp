@@ -1,4 +1,4 @@
-import type { McpOpenAPITool, SecurityResolver } from 'mcp-from-openapi';
+import type { McpOpenAPITool, ParameterMapper, SecurityResolver } from 'mcp-from-openapi';
 
 import { PublicMcpError } from '@frontmcp/sdk';
 import { trimTrailing, validateBaseUrl } from '@frontmcp/utils';
@@ -27,15 +27,45 @@ function coerceToString(value: unknown, paramName: string, location: string): st
   }
   if (typeof value === 'object') {
     if (Array.isArray(value)) {
-      // Arrays in query params are common - join with comma
-      if (location === 'query') {
-        return value.map(String).join(',');
-      }
       throw new Error(`${location} parameter '${paramName}' cannot be an array. Received: ${JSON.stringify(value)}`);
     }
     throw new Error(`${location} parameter '${paramName}' cannot be an object. Received: ${JSON.stringify(value)}`);
   }
   return String(value);
+}
+
+type QueryPair = [name: string, value: string];
+
+/** What joins the items of a query array, or an object's names and values, when they are not exploded. */
+const QUERY_DELIMITERS: Record<string, string> = { form: ',', spaceDelimited: ' ', pipeDelimited: '|' };
+
+/**
+ * The query pairs a parameter is sent as, by its OpenAPI `style` and `explode`. With `form` (the default) and
+ * `explode: true` (its default) an array repeats the key and an object sends each property as its own parameter;
+ * unexploded, the items are joined by the style's delimiter. `deepObject` sends `name[property]=value`.
+ */
+function serializeQueryParameter(mapper: ParameterMapper, value: unknown): QueryPair[] {
+  const style = mapper.style ?? 'form';
+  const explode = mapper.explode ?? style === 'form';
+  const name = mapper.key;
+  const delimiter = QUERY_DELIMITERS[style] ?? ',';
+
+  if (Array.isArray(value)) {
+    const items = value.map((item) => coerceToString(item, name, 'query'));
+    return explode ? items.map((item): QueryPair => [name, item]) : [[name, items.join(delimiter)]];
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const properties = Object.entries(value)
+      .filter(([, propertyValue]) => propertyValue !== undefined)
+      .map(([property, propertyValue]): QueryPair => [property, coerceToString(propertyValue, name, 'query')]);
+    if (style === 'deepObject') {
+      return properties.map(([property, propertyValue]): QueryPair => [`${name}[${property}]`, propertyValue]);
+    }
+    return explode ? properties : [[name, properties.flat().join(delimiter)]];
+  }
+
+  return [[name, coerceToString(value, name, 'query')]];
 }
 
 /**
@@ -150,7 +180,9 @@ export function buildRequest(
       }
 
       case 'query':
-        queryParams.set(mapper.key, coerceToString(value, mapper.key, 'query'));
+        for (const [queryName, queryValue] of serializeQueryParameter(mapper, value)) {
+          queryParams.append(queryName, queryValue);
+        }
         break;
 
       case 'header': {

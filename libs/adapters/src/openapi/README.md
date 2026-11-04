@@ -1204,12 +1204,22 @@ paths:
 }
 ```
 
+The tool's output schema lists the API's answer under `data`, built from the operation's responses. A 2xx response
+the spec documents with a description only (no `content`) accepts any answer; a 204, a 205 and a `HEAD` operation stay
+`null`. Several status codes give an `anyOf` of their schemas, so an answer that fits more than one passes. Up to
+1.11.0 a description-only response was listed as `{ "type": "null" }`, which every JSON answer failed, and the union
+was a `oneOf`.
+
 ### 3. Request Building
 
 The adapter automatically builds requests using the parameter mapper:
 
 - **Path parameters** → URL path (`/users/{id}` → `/users/123`)
-- **Query parameters** → Query string (`?page=1&limit=10`)
+- **Query parameters** → Query string (`?page=1&limit=10`), by each parameter's `style` and `explode`. By default
+  (`form`, `explode: true`) an array repeats its key (`?ids=1&ids=2`) and an object sends each property as its own
+  parameter. With `explode: false` the items are joined: by commas for `form`, spaces for `spaceDelimited`, pipes for
+  `pipeDelimited`. `deepObject` sends `?filter[status]=open`. Up to 1.11.0 every array was sent comma-joined and an
+  object was refused.
 - **Header parameters** → HTTP headers
 - **Body parameters** → Request body (JSON)
 - **Security** → Authentication headers (resolved from context)
