@@ -35,8 +35,8 @@ export interface MockBillingApi {
 }
 
 export interface MockBillingApiOptions {
-  /** The only bearer credential the API accepts. */
-  bearerToken: string;
+  /** The bearer credentials the API accepts: the server's own and each caller's. */
+  bearerTokens: readonly string[];
   tls: { key: string; cert: string };
 }
 
@@ -79,7 +79,7 @@ function parseJsonBody(raw: string): Record<string, unknown> | undefined {
   }
 }
 
-/** The billing API the e2e bundle describes, over HTTPS on loopback: it answers only the configured bearer credential. */
+/** The billing API the e2e bundle describes, over HTTPS on loopback: it answers only the configured bearer credentials. */
 export async function startMockBillingApi(options: MockBillingApiOptions): Promise<MockBillingApi> {
   const invoices = new Map<string, MockInvoice>();
   const requests: RecordedRequest[] = [];
@@ -177,7 +177,7 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
     const authorization = req.headers['authorization'];
     requests.push({ method: req.method ?? 'GET', path: url.pathname, query: url.search.slice(1), authorization });
 
-    if (authorization !== `Bearer ${options.bearerToken}`) {
+    if (!options.bearerTokens.some((token) => authorization === `Bearer ${token}`)) {
       return reply(res, 401, { error: 'invalid bearer token' });
     }
     // A JSON body sent as text/plain (the #690 regression) must fail, not parse anyway.

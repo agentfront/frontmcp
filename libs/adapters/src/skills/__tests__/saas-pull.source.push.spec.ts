@@ -136,6 +136,33 @@ describe('SaasPullSource push checks', () => {
     expect((error as Error).message).toContain('responded 503');
   });
 
+  it('reads the JWKS once for concurrent pushes, reuses it for a minute, and never caches a failed read', async () => {
+    let jwksReads = 0;
+    let jwksAvailable = true;
+    const counted = new StubbedSaasSource(sourceOptions(true), async (url) => {
+      if (url !== SAAS_JWKS_URL) return { status: 404, body: '' };
+      jwksReads++;
+      return jwksAvailable ? { status: 200, body: JSON.stringify(issuer.jwks) } : { status: 503, body: '' };
+    });
+    const stranger = await createSaasTokenIssuer();
+    const strangerTokens = await Promise.all([1, 2, 3, 4, 5].map((n) => stranger.token({ jti: `junk-${n}` })));
+
+    await Promise.all(strangerTokens.map((token) => counted.verifyPushToken(token).catch(() => undefined)));
+    await counted.verifyPushToken(await issuer.token({ jti: 'push-0010' }));
+    expect(jwksReads).toBe(1);
+
+    const later = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000);
+    try {
+      jwksAvailable = false;
+      await expect(counted.verifyPushToken(strangerTokens[0])).rejects.toThrow('responded 503');
+      jwksAvailable = true;
+      await expect(counted.verifyPushToken(strangerTokens[1])).rejects.toBeInstanceOf(SaasPushRefusedError);
+    } finally {
+      later.mockRestore();
+    }
+    expect(jwksReads).toBe(3);
+  });
+
   it('keeps an applied pushed bundle in the bundle cache', async () => {
     const bundle = { bundleId: 'saas:test', version: '2' } as ResolvedBundle;
 

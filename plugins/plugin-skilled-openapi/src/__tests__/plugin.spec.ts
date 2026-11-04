@@ -631,7 +631,7 @@ describe('SkilledOpenApiPlugin', () => {
     it('asCredentialResolverToken returns the resolver typed as the abstract token', async () => {
       const resolver = new MemoryCredentialResolver({ k: 'v' });
       const token = asCredentialResolverToken(resolver);
-      expect(await token.resolve('k', { bundleId: 'b' })).toBe('v');
+      expect(await token.resolve('k', { bundleId: 'b', authInfo: {} })).toBe('v');
     });
 
     it('SkilledOpenApiConfig.outbound exposes the parsed outbound options', () => {

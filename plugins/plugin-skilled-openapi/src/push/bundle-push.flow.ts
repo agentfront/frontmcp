@@ -139,7 +139,7 @@ export default class BundlePushFlow extends FlowBase<typeof name> {
   @Stage('applyBundle')
   async applyBundle() {
     const { receiver, bundle } = this.state.required;
-    const result = await this.get(BundleSyncService).applyPushed(bundle);
+    const result = await this.get(BundleSyncService).applyPushed(bundle, (applied) => receiver.keepBundle(applied));
     if (!result.applied) {
       return this.respond(
         refusal(
@@ -149,7 +149,6 @@ export default class BundlePushFlow extends FlowBase<typeof name> {
         ),
       );
     }
-    await receiver.keepBundle(bundle);
     this.logger.info(`applied pushed bundle ${bundle.bundleId}@${bundle.version}`);
     this.respond(httpRespond.json({ applied: true, bundleId: result.bundleId, bundleVersion: result.bundleVersion }));
   }

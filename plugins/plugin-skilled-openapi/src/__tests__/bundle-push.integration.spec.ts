@@ -182,14 +182,19 @@ describe('pushed bundles on a server with enableWebhook', () => {
     expect(server.servedVersion()).toBe('3.0.0');
   });
 
-  it("answers 503 when the issuer's JWKS cannot be read", async () => {
+  it("answers 503 when the issuer's JWKS cannot be read once its cached keys are a minute old", async () => {
     const token = await issuer.pushToken();
     jwksAvailable = false;
+    const minuteLater = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000);
 
-    const response = await push(server, `Bearer ${token}`, signed(bundle('5.0.0', ['refunds'])));
+    try {
+      const response = await push(server, `Bearer ${token}`, signed(bundle('5.0.0', ['refunds'])));
 
-    expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({ error: 'temporarily_unavailable' });
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({ error: 'temporarily_unavailable' });
+    } finally {
+      minuteLater.mockRestore();
+    }
   });
 
   it('refuses a body that is not a bundle, with 400', async () => {

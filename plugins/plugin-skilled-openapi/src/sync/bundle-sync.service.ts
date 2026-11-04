@@ -143,9 +143,12 @@ export class BundleSyncService {
   }
 
   /** Apply a pushed bundle once the first bundle and those queued before it are applied. */
-  async applyPushed(bundle: ResolvedBundle): Promise<BundleApplyResult> {
+  async applyPushed(
+    bundle: ResolvedBundle,
+    keepApplied?: (applied: ResolvedBundle) => Promise<void>,
+  ): Promise<BundleApplyResult> {
     await this.ensureReady();
-    return this.enqueueApply(bundle);
+    return this.enqueueApply(bundle, keepApplied);
   }
 
   /** The bundle being served, or why there is none: a failed load counts only while no bundle is loaded. */
@@ -214,11 +217,32 @@ export class BundleSyncService {
    * Apply after every apply queued before: apply() mutates the registry, the bundle store and the unregister
    * handles, so two at once would leave them inconsistent. Never rejects, so the queue never breaks.
    */
-  private enqueueApply(bundle: ResolvedBundle): Promise<BundleApplyResult> {
+  private enqueueApply(
+    bundle: ResolvedBundle,
+    keepApplied?: (applied: ResolvedBundle) => Promise<void>,
+  ): Promise<BundleApplyResult> {
     const previous = this.applyQueue ?? Promise.resolve(undefined);
-    const applied = previous.then(() => this.applyAndRecord(bundle));
+    const applied = previous.then(async () => {
+      const result = await this.applyAndRecord(bundle);
+      if (result.applied && keepApplied) await this.keepAppliedBundle(bundle, keepApplied);
+      return result;
+    });
     this.applyQueue = applied;
     return applied;
+  }
+
+  /** Keep an applied bundle as the last good one; a failure to keep it leaves the bundle applied. */
+  private async keepAppliedBundle(
+    bundle: ResolvedBundle,
+    keepApplied: (applied: ResolvedBundle) => Promise<void>,
+  ): Promise<void> {
+    try {
+      await keepApplied(bundle);
+    } catch (e) {
+      this.logger.warn(
+        `[bundle-sync] bundle ${bundle.bundleId}@${bundle.version} is applied, but keeping it as the last good bundle failed: ${(e as Error).message}`,
+      );
+    }
   }
 
   /** {@link apply}, recording why a bundle was not applied as the load state reports it. */

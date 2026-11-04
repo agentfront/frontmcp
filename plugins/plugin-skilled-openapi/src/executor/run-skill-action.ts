@@ -6,14 +6,15 @@ import { type OperationListings } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
 import { SkilledOpenApiConfig } from '../skilled-openapi.symbols';
 import { actionOutcome, type ActionOutcome } from './action-outcome';
-import { credentialResolverOf } from './credential-resolver';
+import { credentialResolverOf, type CallerAuthInfo } from './credential-resolver';
 import { executeSkillAction, type SkillActionDeps } from './execute-skill-action';
 
-/** What a tool's context lends an action call: its providers, the caller and the call's signal. */
+/** What a tool's context lends an action call: its providers, its name, the caller and the call's signal. */
 export interface SkillActionContext {
   get<T>(token: Token<T>): T;
   tryGet<T>(token: Token<T>): T | undefined;
-  authInfo?: { user?: { sub?: string } };
+  metadata: { name: string };
+  authInfo: CallerAuthInfo;
   signal?: AbortSignal;
 }
 

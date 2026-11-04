@@ -21,6 +21,8 @@ import type {
 const DEFAULT_CACHE_DIR = '.frontmcp/skilled-openapi';
 const DEFAULT_PULL_TIMEOUT_MS = 30_000;
 const USER_AGENT = 'frontmcp-skilled-openapi';
+/** How long the push path reuses the issuer's signing keys, so unauthenticated pushes can't each fetch the JWKS. */
+const PUSH_SIGNING_KEYS_TTL_MS = 60_000;
 
 /**
  * The pinned pull token failed verification against `jwksUrl`, `expectedIssuer`
@@ -112,6 +114,8 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
   private stopped = false;
   private readonly jwksService = new JwksService({});
   private readonly replayGuard?: WebhookReplayGuard;
+  private pushSigningKeys?: { keys: unknown[]; fetchedAt: number };
+  private pushSigningKeysLoading?: Promise<unknown[]>;
 
   constructor(
     private readonly options: SaasSourceOptions,
@@ -140,7 +144,7 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
         'this source does not take pushed bundles (enableWebhook is off)',
       );
     }
-    const verdict = await this.verifyIssuedToken(token);
+    const verdict = await this.verifyIssuedToken(token, await this.signingKeysForPush());
     if (!verdict.ok) throw new SaasPushRefusedError('invalid-token', verdict.reason);
     const { iat, jti } = verdict.claims;
     if (typeof iat !== 'number' || typeof jti !== 'string') {
@@ -299,13 +303,31 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
    * plain Error when the JWKS can't be fetched (an outage).
    */
   private async verifyPullToken(): Promise<void> {
-    const verdict = await this.verifyIssuedToken(this.options.authToken);
+    const verdict = await this.verifyIssuedToken(this.options.authToken, await this.fetchSigningKeys());
     if (!verdict.ok) throw new SaasPullTokenRejectedError(verdict.reason);
   }
 
   /** Check a token the issuer signed, against its JWKS, issuer and audience; throws only when the JWKS can't be read. */
-  private async verifyIssuedToken(token: string): Promise<TokenVerdict> {
-    const { jwksUrl, expectedIssuer, expectedAudience } = this.options;
+  /**
+   * The issuer's signing keys for checking a push token: fetched at most once a minute, and shared by concurrent
+   * pushes. A pull always fetches them, so a key the issuer removed stops a pull at once.
+   */
+  private signingKeysForPush(): Promise<unknown[]> {
+    const cached = this.pushSigningKeys;
+    if (cached && Date.now() - cached.fetchedAt < PUSH_SIGNING_KEYS_TTL_MS) return Promise.resolve(cached.keys);
+    this.pushSigningKeysLoading ??= this.fetchSigningKeys()
+      .then((keys) => {
+        this.pushSigningKeys = { keys, fetchedAt: Date.now() };
+        return keys;
+      })
+      .finally(() => {
+        this.pushSigningKeysLoading = undefined;
+      });
+    return this.pushSigningKeysLoading;
+  }
+
+  private async fetchSigningKeys(): Promise<unknown[]> {
+    const { jwksUrl } = this.options;
     // The JWKS is public: never send the pull token with it.
     const { status, body } = await this.httpGet(jwksUrl, { Accept: 'application/json', 'User-Agent': USER_AGENT });
     if (status < 200 || status >= 300) {
@@ -327,7 +349,11 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
     if (signingKeys.length === 0) {
       throw new Error(`JWKS ${jwksUrl} has no usable signing keys`);
     }
+    return signingKeys;
+  }
 
+  private async verifyIssuedToken(token: string, signingKeys: unknown[]): Promise<TokenVerdict> {
+    const { jwksUrl, expectedIssuer, expectedAudience } = this.options;
     const verified = await this.jwksService.verifyTransparentToken(token, [
       { id: 'skilled-openapi-saas', issuerUrl: expectedIssuer, jwks: { keys: signingKeys } as JSONWebKeySet },
     ]);
