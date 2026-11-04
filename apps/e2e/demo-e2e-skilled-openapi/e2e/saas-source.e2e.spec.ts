@@ -407,6 +407,10 @@ test.describe('a bundle endpoint that answers with a redirect', () => {
 });
 
 test.describe('a cache directory the server cannot write, as on a serverless cold start', () => {
+  test.skip(
+    process.getuid?.() === 0 || process.platform === 'win32',
+    'mode bits do not stop root or Windows from writing to the directory',
+  );
   const env = useSaasServer({ readOnlyCache: true });
 
   test('does not stop the pulled bundle from serving, and the log says it was not cached', async ({ mcp, server }) => {
