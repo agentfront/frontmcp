@@ -130,12 +130,16 @@ For each request, the plugin asks a credential resolver for the secret of the op
 `init({ providers })`. The nearest one replaces the built-in resolver:
 
 ```ts
-import { SkilledOpenApiCredentialResolver, SkilledOpenApiPlugin } from '@frontmcp/plugin-skilled-openapi';
+import {
+  SkilledOpenApiCredentialResolver,
+  SkilledOpenApiPlugin,
+  type CredentialResolveOptions,
+} from '@frontmcp/plugin-skilled-openapi';
 import { FrontMcp } from '@frontmcp/sdk';
 
 class VaultCredentialResolver extends SkilledOpenApiCredentialResolver {
-  async resolve(ref: string, { bundleId }: { bundleId: string }): Promise<string | undefined> {
-    return vault.read(`${bundleId}/${ref}`);
+  async resolve(ref: string, { bundleId, authInfo }: CredentialResolveOptions): Promise<string | undefined> {
+    return vault.read(`${bundleId}/${authInfo.user?.['tenant']}/${ref}`);
   }
 }
 
@@ -149,31 +153,64 @@ export default class Server {}
 ```
 
 The resolver is asked on every request, so a rotated secret is sent from the next request on, without a restart. A
-request whose secret doesn't resolve fails, and isn't sent.
+request whose secret doesn't resolve fails, and isn't sent. `authInfo` is the caller the request is for (its token,
+`user` claims and `sessionId`), so a resolver that serves several tenants can pick each one's credential, as above. A
+resolver that caches credentials must key its cache by the caller too.
 
 An operation your own tool calls with `this.callTool()` uses the resolver the server's providers declare. When the plugin
 is installed in an `@App`, declare it in `init({ providers })` or in `@FrontMcp({ providers })` for those calls.
 
 Up to 1.11.0 a resolver declared in `@FrontMcp({ providers })` or `@App({ providers })` was ignored, and the built-in
-one kept answering: only `init({ providers })` replaced it.
+one kept answering: only `init({ providers })` replaced it. It was told only `bundleId`, not the caller.
+
+### Each caller's own credential
+
+When each caller has an account of their own with the API, map the binding's `vaultRef` to the auth provider the
+caller connects it as, with `authProviders`. Each request then sends the credential the caller connected, read from
+the same vaults `@Tool({ authProviders })` reads: the auth providers vault (`this.authProviders`), else the session
+credential vault (`this.credentials`), where `local` and `remote` modes keep what `authenticate()` returns.
+
+```ts
+SkilledOpenApiPlugin.init({
+  source: { type: 'static', path: './billing.bundle.json' },
+  authProviders: { 'billing-token': 'billing' },
+});
+```
+
+In `local` mode a caller connects it at sign-in when `authenticate()` returns
+`credentials: [{ key: 'billing', secret }]`, or later through the connect link below. The bundle stays portable: it
+names only the `vaultRef`, and the server decides where its credential comes from.
+
+- A caller who hasn't connected the provider gets `ToolCredentialsRequiredError` (JSON-RPC `-32001`), with
+  `data: { tool, providers, authUrl }`, as a tool whose `authProviders` the caller hasn't connected does. `authUrl`, the
+  session vault's `/oauth/connect` link, is there when the server can make one. The message names the provider but not
+  the link, which lets its holder connect a credential for the caller. Nothing is sent to the API.
+- A mapped `vaultRef` never falls back to `credentials`, to a resolver, or to another caller's credential.
+- The error ends a `run_workflow` run even when the script passes `{ throwOnError: false }`, since the script can't
+  fix it. From `this.callTool()`, the operation tool throws it, so your tool's call fails with it unless you catch it.
+- The credential is read on each request and kept only for that request. An auth provider with `global` scope is
+  shared by every caller: map a provider with `user` or `session` scope.
+- An auth providers credential of type `oauth`, `oauth_pkce` or `bearer` sends its token, and `api_key` its key; other
+  types fail the request.
 
 ## Options
 
 `init()` checks the options with a Zod schema, exported as `skilledOpenApiPluginOptionsSchema`, and throws a `ZodError`
 for a bad one.
 
-| Option                            | Type                                                     | Default                             | Description                                                                                                                                              |
-| --------------------------------- | -------------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `source`                          | `{ type: 'inline' \| 'static' \| 'npm' \| 'saas', ... }` | required                            | Where the bundle comes from. See [Sources](#sources).                                                                                                    |
-| `requireSignature`                | `boolean`                                                | `true`, or `false` with `dev: true` | Apply only bundles signed by one of `trustedKeys`. An explicit value wins over `dev`.                                                                    |
-| `trustedKeys`                     | `{ keyId, alg: 'RS256' \| 'EdDSA', publicKeyPem }[]`     | `[]`                                | Public keys a bundle may be signed with, matched by `keyId`.                                                                                             |
-| `credentials`                     | `Record<string, string>`                                 |                                     | Secrets for the bundle's auth bindings, keyed by `vaultRef`. To read them from a vault instead, declare a resolver as [Credentials](#credentials) shows. |
-| `unprotectedOps`                  | `'allow' \| 'deny'`                                      | `'allow'`                           | Whether an operation with no `requiredAuthorities`, on itself or its skill, may be called. `'deny'` blocks it unless it's marked `public: true`.         |
-| `outbound`                        | `OutboundOptions`                                        | see below                           | Limits on the requests to your API.                                                                                                                      |
-| `dev`                             | `boolean`                                                | `false`                             | For development only: turns off signature checks (unless `requireSignature` is set) and allows `http:` URLs. Logs a warning.                             |
-| `bundleCacheDir`                  | `string`                                                 | `'.frontmcp/skilled-openapi/'`      | Where the `saas` source keeps the last bundle it pulled, used when a pull fails at startup.                                                              |
-| `exposeOperationsAsInternalTools` | `boolean`                                                | `true`                              | Register each operation as an internal tool for `this.callTool()`.                                                                                       |
-| `sourceConflictPolicy`            | `'static-wins' \| 'last-wins' \| 'reject'`               | `'static-wins'`                     | Accepted and currently unused: the plugin has one source.                                                                                                |
+| Option                            | Type                                                     | Default                             | Description                                                                                                                                                    |
+| --------------------------------- | -------------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`                          | `{ type: 'inline' \| 'static' \| 'npm' \| 'saas', ... }` | required                            | Where the bundle comes from. See [Sources](#sources).                                                                                                          |
+| `requireSignature`                | `boolean`                                                | `true`, or `false` with `dev: true` | Apply only bundles signed by one of `trustedKeys`. An explicit value wins over `dev`.                                                                          |
+| `trustedKeys`                     | `{ keyId, alg: 'RS256' \| 'EdDSA', publicKeyPem }[]`     | `[]`                                | Public keys a bundle may be signed with, matched by `keyId`.                                                                                                   |
+| `credentials`                     | `Record<string, string>`                                 |                                     | Secrets for the bundle's auth bindings, keyed by `vaultRef`. To read them from a vault instead, declare a resolver as [Credentials](#credentials) shows.       |
+| `authProviders`                   | `Record<string, string>`                                 |                                     | Bindings that send each caller's own credential: the auth provider name for each `vaultRef`. See [Each caller's own credential](#each-callers-own-credential). |
+| `unprotectedOps`                  | `'allow' \| 'deny'`                                      | `'allow'`                           | Whether an operation with no `requiredAuthorities`, on itself or its skill, may be called. `'deny'` blocks it unless it's marked `public: true`.               |
+| `outbound`                        | `OutboundOptions`                                        | see below                           | Limits on the requests to your API.                                                                                                                            |
+| `dev`                             | `boolean`                                                | `false`                             | For development only: turns off signature checks (unless `requireSignature` is set) and allows `http:` URLs. Logs a warning.                                   |
+| `bundleCacheDir`                  | `string`                                                 | `'.frontmcp/skilled-openapi/'`      | Where the `saas` source keeps the last bundle it pulled, used when a pull fails at startup.                                                                    |
+| `exposeOperationsAsInternalTools` | `boolean`                                                | `true`                              | Register each operation as an internal tool for `this.callTool()`.                                                                                             |
+| `sourceConflictPolicy`            | `'static-wins' \| 'last-wins' \| 'reject'`               | `'static-wins'`                     | Accepted and currently unused: the plugin has one source.                                                                                                      |
 
 `outbound`:
 
@@ -261,9 +298,10 @@ response compiled to `{ "type": "null" }`, which every JSON answer failed, and e
   `unprotectedOps: 'deny'` in production. Each caller is shown only the skills and actions their rules allow. A skill's
   rule doesn't protect an operation that another skill, without that rule, also lists: put the rule on the operation.
 - **Credentials.** Credentials stay on the server: the plugin adds them to each request, and the script gets only the
-  API's answer. Redirects aren't followed, so a credential isn't sent elsewhere. An error body your API echoes a
-  credential in has it redacted; use `outbound.errorBodies: 'status-only'` when error bodies hold other internal
-  details.
+  API's answer. With `authProviders`, a caller's request carries only that caller's credential, and one who hasn't
+  connected it is asked to. Redirects aren't followed, so a credential isn't sent elsewhere. An error body your API
+  echoes a credential in has it redacted; use `outbound.errorBodies: 'status-only'` when error bodies hold other
+  internal details.
 - **Outbound requests.** URLs must be `https:` (unless `allowHttp`) and on the operation's service host. The host's
   addresses are checked before sending: private and loopback addresses are refused unless `allowPrivateNetworks`, and
   link-local and cloud metadata addresses always. Responses are size- and time-limited.

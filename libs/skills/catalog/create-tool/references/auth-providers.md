@@ -105,6 +105,11 @@ This is handled by the framework — you don't write any of this in `execute()`.
 > requests — so adding `authProviders` never changes behavior unless a credential
 > vault is actually configured and a required credential is genuinely missing.
 
+`@frontmcp/plugin-skilled-openapi` reads the same providers for a bundle's auth
+bindings: `SkilledOpenApiPlugin.init({ authProviders: { 'billing-token': 'billing' } })`
+sends each caller the credential they connected as `billing`, and a caller who
+hasn't connected it gets the same `-32001` error, from the action that needed it.
+
 ## Reading auth in execute()
 
 Two patterns:
