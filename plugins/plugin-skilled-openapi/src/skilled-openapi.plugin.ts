@@ -42,7 +42,11 @@ import { BundleSyncService } from './sync/bundle-sync.service';
 import LoadSkillTool from './tools/load-skill.tool';
 import { OperationToolFactory } from './tools/operation-tool.factory';
 import RunWorkflowTool from './tools/run-workflow.tool';
-import { searchSkillDescription, SKILL_TOOL_CATALOG_POINTERS } from './tools/search-skill.schema';
+import {
+  searchSkillDescription,
+  SKILL_MD_ACTIONS_HINT,
+  SKILL_TOOL_CATALOG_POINTERS,
+} from './tools/search-skill.schema';
 import SearchSkillTool from './tools/search-skill.tool';
 
 /**
@@ -464,15 +468,31 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
       },
       {
         // The server's initialize instructions wait for the bundle, so they count and list its skills, and point
-        // to load_skill and search_skill rather than to skill://index.json (#1067).
+        // to load_skill and search_skill rather than to skill://index.json (#1067). A skill's SKILL.md resource
+        // lists the actions the caller may run, as load_skill does.
         name: 'skilled-openapi:skill-catalog-source',
         provide: SkillCatalogSourceToken,
-        useValue: {
-          ready: async () => {
-            await Promise.all([...builtSyncs].map((sync) => sync.ensureReady()));
-          },
-          pointers: SKILL_TOOL_CATALOG_POINTERS,
-        } satisfies SkillCatalogSource,
+        inject: () => [ScopeEntry, AuthorityGuard, BundleStore, HiddenOpRegistry] as const,
+        useFactory: (scope: ScopeEntry, guard: AuthorityGuard, bundleStore: BundleStore, hiddenOps: HiddenOpRegistry) =>
+          ({
+            ready: async () => {
+              await Promise.all([...builtSyncs].map((sync) => sync.ensureReady()));
+            },
+            pointers: SKILL_TOOL_CATALOG_POINTERS,
+            actions: {
+              hint: SKILL_MD_ACTIONS_HINT,
+              visibleTo: (skill, authInfo) => {
+                const visibility = new SkillVisibility({
+                  scope,
+                  guard,
+                  bundle: bundleStore.current(),
+                  unprotectedOps: parsed.unprotectedOps,
+                  authInfo,
+                });
+                return visibility.visibleActions(skill.id, skill.actions ?? [], hiddenOps);
+              },
+            },
+          }) satisfies SkillCatalogSource,
       },
     ];
   }

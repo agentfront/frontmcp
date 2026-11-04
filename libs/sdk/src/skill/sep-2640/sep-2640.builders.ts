@@ -10,7 +10,7 @@
 
 import * as yaml from '#js-yaml';
 
-import type { SkillContent } from '../../common/interfaces';
+import type { SkillAction, SkillContent } from '../../common/interfaces';
 import type { SkillMetadata } from '../../common/metadata';
 import { SKILL_INDEX_SCHEMA_URI, type SkillIndexDocument, type SkillIndexEntry } from './sep-2640.constants';
 import { buildSkillUri } from './sep-2640.uri';
@@ -128,7 +128,7 @@ function buildFrontmatter(skill: SkillContent): SerializableFrontmatter {
  * SKILL.md file) should pass `rawInstructions` to bypass any reconstructed
  * content.
  */
-export function serializeSkillMd(skill: SkillContent, rawInstructions?: string): string {
+export function serializeSkillMd(skill: SkillContent, rawInstructions?: string, actions?: SkillMdActions): string {
   const fm = buildFrontmatter(skill);
   const yamlBlock = yaml
     .dump(fm, {
@@ -139,7 +139,31 @@ export function serializeSkillMd(skill: SkillContent, rawInstructions?: string):
     .trimEnd();
 
   const body = (rawInstructions ?? skill.instructions).trimEnd();
-  return `---\n${yamlBlock}\n---\n\n${body}\n`;
+  const actionsSection = actions && actions.actions.length > 0 ? `\n\n${buildActionsSection(actions)}` : '';
+  return `---\n${yamlBlock}\n---\n\n${body}${actionsSection}\n`;
+}
+
+/** The actions `SKILL.md` lists after the instructions, and the hint on how to run them. */
+export interface SkillMdActions {
+  hint: string;
+  actions: readonly SkillAction[];
+}
+
+function buildActionsSection({ hint, actions }: SkillMdActions): string {
+  const sections = actions.map((action) =>
+    [
+      `### ${action.actionId}`,
+      action.summary,
+      ...(action.description ? [action.description.trimEnd()] : []),
+      `Input:\n\n${jsonBlock(action.inputJsonSchema)}`,
+      `Output:\n\n${jsonBlock(action.outputJsonSchema)}`,
+    ].join('\n\n'),
+  );
+  return ['## Actions', hint, ...sections].join('\n\n');
+}
+
+function jsonBlock(value: unknown): string {
+  return '```json\n' + JSON.stringify(value, null, 2) + '\n```';
 }
 
 /**

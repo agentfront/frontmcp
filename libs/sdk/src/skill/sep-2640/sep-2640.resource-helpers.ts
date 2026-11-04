@@ -15,9 +15,11 @@ import type { SkillLoadResult } from '../../common/entries/skill.entry';
 import type { SkillContent } from '../../common/interfaces';
 import type { SkillMetadata } from '../../common/metadata/skill.metadata';
 import { PublicMcpError, ResourceNotFoundError } from '../../errors';
+import { findSkillCatalogSource } from '../skill-catalog-source';
 import { isSkillServable } from '../skill-filter.helper';
 import { parseSkillMdFrontmatter } from '../skill-md-parser';
 import type { SkillInstance } from '../skill.instance';
+import { serializeSkillMd } from './sep-2640.builders';
 
 /**
  * Get all skills visible under MCP that the SEP-2640 transport binding
@@ -110,6 +112,17 @@ export async function findAndLoadSkillByPath(
   }
 
   return { loadResult, instance: entry as SkillInstance };
+}
+
+/**
+ * A skill's `SKILL.md`, which lists the actions the caller may run when a plugin's skill source judges them, as
+ * Skilled OpenAPI's does for its bundle skills.
+ */
+export async function renderSkillMd(scope: ScopeEntry, skill: SkillContent, authInfo: unknown): Promise<string> {
+  const catalogActions = findSkillCatalogSource(scope)?.actions;
+  if (!catalogActions || !skill.actions?.length) return serializeSkillMd(skill);
+  const actions = await catalogActions.visibleTo(skill, authInfo);
+  return serializeSkillMd(skill, undefined, { hint: catalogActions.hint, actions });
 }
 
 /**
