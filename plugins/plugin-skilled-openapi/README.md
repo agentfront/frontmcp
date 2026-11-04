@@ -74,8 +74,9 @@ and checks a JSON answer against `outputSchema`. The first failure ends the scri
 make up to 25 calls and run for up to 8 seconds.
 
 An operation that several skills list runs when the caller satisfies the operation's rule and the rule of any one of
-those skills. That is the answer `load_skill` gives, so an action it shows in any skill can be run, whatever the order
-of the skills in the bundle.
+those skills, whatever the order of the skills in the bundle. `load_skill` judges each skill the same way, so the call
+and the listing agree. A rule that depends on the action's input can't be judged until the call, though: `load_skill`
+still lists such an action, and the call can be refused once its input is known.
 
 With `exposeOperationsAsInternalTools` (the default), each operation is also an internal tool named
 `<bundleId>.<operationId>`, which your own tools can call with `this.callTool()`. It checks the caller the same way.
