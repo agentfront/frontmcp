@@ -47,11 +47,7 @@ export function askingBeforeEachCall(askUser: AskUser, whenUnsupported: WhenConf
   return (call) => confirmWithUser(askUser, [call], whenUnsupported);
 }
 
-/**
- * The confirmation of a workflow, asked once before its script starts, about the actions that need it which the
- * script names as strings and the caller may run. Their calls then go ahead; a call of another action that needs
- * confirmation is refused, since the user wasn't asked about it.
- */
+/** Asks once, before the script starts, about the matching actions it names and the caller may run; others are refused. */
 export async function confirmWorkflow(args: {
   script: string;
   config: SkilledOpenApiConfig;

@@ -41,10 +41,7 @@ export function skillActionDepsOf(
   };
 }
 
-/**
- * Run one action with the checks and audit records of a `run_workflow` call, and the error body `outbound.errorBodies`
- * allows. An action the `confirm` option names asks the user, through `askUser`, before its request.
- */
+/** Run one action with the checks, confirmation, audit records and error body of a `run_workflow` call. */
 export async function runSkillAction(args: {
   ctx: SkillActionContext;
   logger: FrontMcpLogger;

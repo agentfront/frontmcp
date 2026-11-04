@@ -184,12 +184,7 @@ const skilledOpenApiPluginOptionsObjectSchema = z.object({
    */
   exposeOperationsAsInternalTools: z.boolean().default(true),
 
-  /**
-   * Actions that ask the user before their request is sent, through an MCP elicitation the client shows as a yes/no
-   * question: an action matches by its HTTP method, a tag of its operation or of a skill listing it, or its id. A
-   * workflow asks once, before its script starts. Needs `elicitation: { enabled: true }` on the server. Without this
-   * option nothing asks.
-   */
+  /** Actions that ask the user, through an MCP elicitation, before their request; without it nothing asks. */
   confirm: confirmOptionsSchema.optional(),
 });
 
