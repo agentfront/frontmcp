@@ -272,6 +272,26 @@ describe('BundleSyncService', () => {
       expect(loggerMocks.error).toHaveBeenCalledWith(`[skilled-openapi] initial bundle sync failed: ${reason}`);
     });
 
+    it('refuses while the source has started without a first bundle', async () => {
+      const sync = makeSync();
+      const { source } = makeDrivenSource(async () => undefined);
+      sync.attachSource(source);
+
+      await expect(sync.ensureLoaded()).rejects.toMatchObject({
+        message: 'No skill bundle is loaded: the first bundle has not loaded yet',
+        code: 'SKILL_BUNDLE_NOT_LOADED',
+      });
+    });
+
+    it('refuses with the recorded reason when the bundle source could not be created', async () => {
+      const sync = makeSync();
+      sync.recordLoadFailure("the bundle source could not be created: ENOENT: no such file, open '/srv/b.json'");
+
+      await expect(sync.ensureLoaded()).rejects.toThrow(
+        "No skill bundle is loaded: the bundle source could not be created: ENOENT: no such file, open '[path]'",
+      );
+    });
+
     it('refuses, naming the bundle and why, when the first bundle is not applied', async () => {
       const sync = makeSync(true);
       const { source } = makeDrivenSource(async (emit) => emit(buildBundle()));

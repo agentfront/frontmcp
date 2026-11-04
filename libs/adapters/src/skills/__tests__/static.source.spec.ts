@@ -177,6 +177,24 @@ operations: {}
     expect(events.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('watch=true applies nothing when the file is rewritten with the same content', async () => {
+    const file = path.join(tmpDir, 'bundle.json');
+    const content = JSON.stringify(baseBundle);
+    await fs.writeFile(file, content, 'utf8');
+
+    const source = new StaticSource({ type: 'static', path: file, watch: true }, fakeLogger);
+    const events: ResolvedBundle[] = [];
+    source.onChange((b) => events.push(b));
+    await source.start();
+
+    await new Promise((r) => setTimeout(r, 50));
+    await fs.writeFile(file, content, 'utf8');
+    await new Promise((r) => setTimeout(r, 600));
+    await source.stop();
+
+    expect(events).toHaveLength(1);
+  });
+
   it('watch=true reloads a file that failed to load at start once it is fixed', async () => {
     const file = path.join(tmpDir, 'bundle.json');
     await fs.writeFile(file, '{ broken json', 'utf8');
