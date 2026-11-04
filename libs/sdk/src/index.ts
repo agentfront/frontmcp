@@ -296,8 +296,11 @@ export {
   JobInstance,
   JobPermissionGuard,
   JobExecutionManager,
+  JobAdmission,
   JobEmitter,
   JobRunResource,
+  jobRunUri,
+  mayAccessRun,
 } from './subsystems';
 export type {
   JobRegistryInterface,
@@ -311,6 +314,7 @@ export type {
   BackgroundJobResult,
   JobExecutionManagerOptions,
   JobAdmissionOptions,
+  JobAdmissionSlot,
   JobsConfig,
   JobsStoreConfig,
 } from './job';
