@@ -565,6 +565,7 @@ export class BundleSyncService {
           ...(skill.requiredAuthorities !== undefined && {
             skillRequiredAuthorities: skill.requiredAuthorities,
           }),
+          ...(skill.tags?.length ? { skillTags: skill.tags } : {}),
           op,
           service,
           authBinding,

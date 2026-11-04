@@ -31,7 +31,8 @@ const opEqual = (a: OperationDescriptor, b: OperationDescriptor): boolean =>
   JSON.stringify(a.requiredAuthorities ?? null) === JSON.stringify(b.requiredAuthorities ?? null) &&
   (a.public ?? false) === (b.public ?? false) &&
   a.maxResponseBytes === b.maxResponseBytes &&
-  a.timeoutMs === b.timeoutMs;
+  a.timeoutMs === b.timeoutMs &&
+  JSON.stringify(a.tags ?? []) === JSON.stringify(b.tags ?? []);
 
 const skillEqual = (a: ResolvedBundle['skills'][number], b: ResolvedBundle['skills'][number]): boolean =>
   a.id === b.id &&

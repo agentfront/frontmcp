@@ -9,6 +9,7 @@
 // prior single-shot execute tool with a composable, sandboxed executor.
 import { Tool, ToolContext, ToolCredentialsRequiredError, type CallToolResult } from '@frontmcp/sdk';
 
+import { confirmationSchema, confirmWorkflow } from '../executor/action-confirmation';
 import {
   actionFailureMessage,
   actionOutcome,
@@ -18,6 +19,8 @@ import {
 import { executeSkillAction } from '../executor/execute-skill-action';
 import { skillActionDepsOf } from '../executor/run-skill-action';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
+import { AuthorityGuard } from '../security/authority-guard';
+import { SkilledOpenApiConfig } from '../skilled-openapi.symbols';
 import { BundleSyncService } from '../sync/bundle-sync.service';
 import {
   runWorkflowDescription,
@@ -91,9 +94,30 @@ export default class RunWorkflowTool extends ToolContext {
       );
     }
 
-    const deps = skillActionDepsOf(this, this.logger);
     // The operations of the bundle the workflow starts on: a swap while it runs doesn't change them.
     const hiddenOps = this.get(HiddenOpRegistry).snapshot();
+
+    // Transform user AgentScript → wrapped form. `transformLoops:false` because
+    // the interpreter enforces its OWN step budget (the loop-rewrite helpers are
+    // unavailable in its scope).
+    let transformed: string;
+    try {
+      transformed = transformAgentScript(input.script, { transformLoops: false, additionalIdentifiers: ['callTool'] });
+    } catch (error) {
+      return failedWorkflow(`AgentScript rejected: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    // Asked before the script starts: time spent waiting for the user would count against the script's time limit.
+    const confirmation = await confirmWorkflow({
+      script: input.script,
+      config: this.get(SkilledOpenApiConfig),
+      guard: this.get(AuthorityGuard),
+      hiddenOps,
+      authInfo: this.authInfo,
+      askUser: (message) => this.elicit(message, confirmationSchema),
+    });
+    if ('refusal' in confirmation) return failedWorkflow(confirmation.refusal);
+    const deps = skillActionDepsOf(this, this.logger, confirmation.confirmAction);
 
     // Aborted once the workflow ends, whatever ends it, so no request it started outlives it.
     const workflowEnded = new AbortController();
@@ -135,16 +159,6 @@ export default class RunWorkflowTool extends ToolContext {
       if (!outcome.ok) throw new Error(actionFailureMessage(actionId, outcome));
       return outcome.data;
     };
-
-    // Transform user AgentScript → wrapped form. `transformLoops:false` because
-    // the interpreter enforces its OWN step budget (the loop-rewrite helpers are
-    // unavailable in its scope).
-    let transformed: string;
-    try {
-      transformed = transformAgentScript(input.script, { transformLoops: false, additionalIdentifiers: ['callTool'] });
-    } catch (error) {
-      return failedWorkflow(`AgentScript rejected: ${error instanceof Error ? error.message : String(error)}`);
-    }
 
     const adapter = new InterpreterAdapter({ maxSteps: MAX_STEPS });
     const context = {

@@ -42,7 +42,9 @@ answer came. A workflow that fails is an `isError: true` result with the same
 result had no `isError`. A failed `execute_action` is an `isError: true` result
 whose text is that same error and whose `structuredContent` is the `{ ok:
 false, status, data?, error? }` outcome; on success its `structuredContent` is
-the action's data.
+the action's data. Managed mode doesn't set the plugin's `confirm` option, so
+no action asks the user first; a server built with `SkilledOpenApiPlugin.init({
+confirm })` and `elicitation: { enabled: true }` can make actions ask.
 
 The meta-tools only show what the caller may use: a skill whose
 `requiredAuthorities` the caller doesn't satisfy is left out of `search_skill`

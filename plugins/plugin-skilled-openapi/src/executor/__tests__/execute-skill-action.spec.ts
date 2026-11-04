@@ -40,7 +40,13 @@ function makeEntry(overrides: Partial<HiddenOpEntry['op']> = {}): HiddenOpEntry 
 }
 
 function makeDeps(
-  over: { granted?: boolean; deniedBy?: string; audit?: SkillActionDeps['audit'] } = {},
+  over: {
+    granted?: boolean;
+    deniedBy?: string;
+    audit?: SkillActionDeps['audit'];
+    confirm?: SkillActionDeps['config']['confirm'];
+    confirmAction?: SkillActionDeps['confirmAction'];
+  } = {},
 ): SkillActionDeps & { bundleStore: unknown } {
   return {
     config: {
@@ -51,7 +57,9 @@ function makeDeps(
         defaultMaxResponseBytes: 262144,
         maxConcurrencyPerHost: 10,
       },
+      ...(over.confirm ? { confirm: over.confirm } : {}),
     } as SkillActionDeps['config'],
+    confirmAction: over.confirmAction ?? jest.fn(async () => undefined),
     resolver: { resolve: jest.fn(async () => undefined) as never },
     guard: { check: jest.fn(async () => ({ granted: over.granted ?? true, deniedBy: over.deniedBy })) } as never,
     bundleStore: { current: () => undefined } as never,
@@ -273,6 +281,96 @@ describe('executeSkillAction', () => {
     expect(res.ok).toBe(true);
     await new Promise((r) => setTimeout(r, 0));
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('authority-pass write failed'));
+  });
+});
+
+describe('executeSkillAction: an action the confirm option names', () => {
+  const DELETES = { methods: ['DELETE' as const], whenUnsupported: 'refuse' as const };
+  const deleteThing = () => makeEntry({ operationId: 'deleteThing', httpMethod: 'DELETE' });
+
+  beforeEach(() => {
+    mockExecuteOperation.mockReset();
+    mockExecuteOperation.mockResolvedValue({ ok: true, status: 204 });
+    clearCompiledSchemaCache();
+  });
+
+  it('asks with the listing and the validated input after authorization, and sends the request once confirmed', async () => {
+    const confirmAction = jest.fn(async () => undefined);
+    const entry = deleteThing();
+
+    const res = await executeSkillAction({
+      listings: [entry],
+      input: { id: 7 },
+      authInfo: {},
+      deps: makeDeps({ confirm: DELETES, confirmAction }),
+    });
+
+    expect(res).toEqual({ ok: true, status: 204 });
+    expect(confirmAction).toHaveBeenCalledWith({ entry, input: { id: 7 } });
+    expect(mockExecuteOperation).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails a refused call with the reason, sending nothing, and audits it as a failed call', async () => {
+    const writer = {
+      writeAuthorityPass: jest.fn(async () => undefined),
+      writeAuthorityFail: jest.fn(async () => undefined),
+      writeHttpCallSuccess: jest.fn(async () => undefined),
+      writeHttpCallFailure: jest.fn(async () => undefined),
+    };
+    const deps = makeDeps({
+      confirm: DELETES,
+      confirmAction: jest.fn(async () => 'the user declined: deleteThing'),
+      audit: { writer: writer as never, subject: 'u' },
+    });
+
+    const res = await executeSkillAction({ listings: [deleteThing()], input: { id: 7 }, authInfo: {}, deps });
+
+    expect(res).toEqual({ ok: false, status: 0, error: 'the user declined: deleteThing' });
+    expect(mockExecuteOperation).not.toHaveBeenCalled();
+    expect(writer.writeAuthorityPass).toHaveBeenCalledTimes(1);
+    expect(writer.writeHttpCallFailure).toHaveBeenCalledWith(expect.objectContaining({ actionId: 'deleteThing' }), {
+      status: 0,
+      error: 'the user declined: deleteThing',
+    });
+    expect(writer.writeHttpCallSuccess).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['the caller is denied', { granted: false, deniedBy: 'role:admin' }, { id: 7 }],
+    ['the input is invalid', {}, { id: 'seven' }],
+  ])('does not ask when %s', async (_case, guard, input) => {
+    const confirmAction = jest.fn(async () => undefined);
+
+    const res = await executeSkillAction({
+      listings: [deleteThing()],
+      input,
+      authInfo: {},
+      deps: makeDeps({ ...guard, confirm: DELETES, confirmAction }),
+    });
+
+    expect(res.ok).toBe(false);
+    expect(confirmAction).not.toHaveBeenCalled();
+    expect(mockExecuteOperation).not.toHaveBeenCalled();
+  });
+
+  it('does not ask for an action no rule names, nor when there is no confirm option', async () => {
+    const confirmAction = jest.fn(async () => undefined);
+
+    await executeSkillAction({
+      listings: [makeEntry()],
+      input: { id: 1 },
+      authInfo: {},
+      deps: makeDeps({ confirm: DELETES, confirmAction }),
+    });
+    await executeSkillAction({
+      listings: [deleteThing()],
+      input: { id: 1 },
+      authInfo: {},
+      deps: makeDeps({ confirmAction }),
+    });
+
+    expect(confirmAction).not.toHaveBeenCalled();
+    expect(mockExecuteOperation).toHaveBeenCalledTimes(2);
   });
 });
 

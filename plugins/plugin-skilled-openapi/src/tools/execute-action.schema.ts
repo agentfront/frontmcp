@@ -4,7 +4,7 @@ export const executeActionDescription = `Run one action from \`load_skill\` dire
 
 INPUT: { actionId, input? }: an \`actionId\` from \`load_skill\`, and an \`input\` matching that action's \`inputJsonSchema\` ({} or left out for an action that takes none).
 
-Returns the action's data. A failure is an error result whose text says why: authority denied, invalid input, a timeout, or the API's status and error body, as in \`action "getTodo" failed with status 404: {"error":"not found"}\`. Its structured content is { ok: false, status, data?, error? }: \`data\` is the API's error body, \`status\` 0 means no answer.
+Returns the action's data. An action the server makes ask for confirmation asks the user first. A failure is an error result whose text says why: authority denied, invalid input, \`the user declined: <actionId>\`, a timeout, or the API's status and error body, as in \`action "getTodo" failed with status 404: {"error":"not found"}\`. Its structured content is { ok: false, status, data?, error? }: \`data\` is the API's error body, \`status\` 0 means no answer.
 
 To chain several actions in one call, passing data from one to the next, use \`run_workflow\`.`;
 

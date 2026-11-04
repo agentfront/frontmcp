@@ -83,8 +83,9 @@ script:
 | `run_workflow`   | `script`                                             | Runs an AgentScript program (a subset of JavaScript) in the `@enclave-vm` sandbox. Each `await callTool(actionId, input)` calls an operation, and `callTool(actionId, input, { throwOnError: false })` returns `{ ok, status, data }` instead of throwing; the script's `return` value is the result.                                                             |
 
 For each `callTool`, and for each `execute_action` call, the plugin checks the caller against the operation's and
-skill's `requiredAuthorities`, validates the input against the operation's `inputSchema`, sends the request with the
-credential from the bundle's auth binding, checks a JSON answer against `outputSchema`, and writes the audit records.
+skill's `requiredAuthorities`, validates the input against the operation's `inputSchema`, asks the user when
+[`confirm`](#asking-the-user-before-an-action) names the action, sends the request with the credential from the
+bundle's auth binding, checks a JSON answer against `outputSchema`, and writes the audit records.
 A failed call throws, which ends the script with `success: false`. A script may make up to 25 calls and run for up to
 8 seconds.
 
@@ -166,6 +167,52 @@ cut to 2 KB, or left out with `outbound.errorBodies: 'status-only'`.
 Up to 1.11.0 an operation tool skipped the output schema check and the audit log, so an answer that didn't match the
 schema came back as `ok: true`, and its `data` on an HTTP failure was the API's whole error body, whatever
 `errorBodies` said.
+
+### Asking the user before an action
+
+To have the user say yes before an action's request is sent, name the action in `confirm`. An action matches when any
+rule names it: its HTTP method, a tag of its operation or of a skill that lists it, or its operationId. Without
+`confirm`, nothing asks, as up to 1.11.0, so destructive actions keep running unasked until you configure it.
+
+```ts
+@FrontMcp({
+  info: { name: 'billing', version: '1.0.0' },
+  apps: [],
+  elicitation: { enabled: true },
+  plugins: [
+    SkilledOpenApiPlugin.init({
+      source: { type: 'static', path: './bundle.json' },
+      confirm: { methods: ['DELETE'], tags: ['destructive'], operations: ['refundInvoice'] },
+    }),
+  ],
+})
+export default class Server {}
+```
+
+The question is an MCP elicitation, so the server needs `elicitation: { enabled: true }`, and the client shows it as a
+yes/no form:
+
+- **One action**, through `execute_action` or an operation tool, asks after the call is authorized and its input
+  checked, and before its request: `Run voidInvoice: Void an invoice (DELETE /invoices/{id}) with {"id":"inv_1"}?`.
+  A call that is refused or has invalid input doesn't ask.
+- **A workflow** asks once, before its script starts, about the matching actions the script names as strings, such as
+  `callTool('voidInvoice', …)`, and the caller may run. A yes covers every call of those actions in that run, so a
+  script that voids twelve invoices asks once. It asks before the script because the wait would count against the
+  script's 8-second limit. A matching action the question didn't name, such as one whose id the script computes, fails
+  with an error that tells the model to write the id as a string.
+- **A decline** sends nothing. The call fails with `the user declined: voidInvoice` (`isError: true`), and a declined
+  workflow runs none of its script, reads included. The audit log records a declined call as `http-call-failure` with
+  status 0 and that error; a confirmed call's records are those of any call.
+- **A client that can't show the question**, because it declared no elicitation capability or the server has
+  elicitation disabled, is refused: `the user's confirmation is needed for voidInvoice, and this client can't ask for
+it: it doesn't support elicitation; nothing was sent`. With `whenUnsupported: 'allow'` the action runs unasked
+  there instead. The plugin doesn't use the SDK's elicitation fallback, in which the model would answer for the user.
+
+The generated CLI can't show the question, in-process or through its daemon, so its `execute-action` and
+`run-workflow` exit 1 for such an action, with that refusal.
+
+Operation tags come from the bundle: `compileSkilledBundleFromOpenApi()` keeps each operation's OpenAPI `tags` and its
+`x-frontmcp.tags`. Skill tags are the bundle skill's `tags`.
 
 ## Credentials
 
@@ -258,6 +305,7 @@ for a bad one.
 | `dev`                             | `boolean`                                                | `false`                             | For development only: turns off signature checks (unless `requireSignature` is set) and allows `http:` URLs. Logs a warning.                                   |
 | `bundleCacheDir`                  | `string`                                                 | `'.frontmcp/skilled-openapi/'`      | Where the `saas` source keeps the last bundle the plugin applied, served when a pull fails at startup.                                                         |
 | `exposeOperationsAsInternalTools` | `boolean`                                                | `true`                              | Register each operation as an internal tool for `this.callTool()`, which `execute_action` runs an action through.                                              |
+| `confirm`                         | `{ methods?, tags?, operations?, whenUnsupported? }`     |                                     | Actions that ask the user before their request; `whenUnsupported` is `'refuse'` or `'allow'`. See [Asking the user](#asking-the-user-before-an-action).        |
 | `sourceConflictPolicy`            | `'static-wins' \| 'last-wins' \| 'reject'`               | `'static-wins'`                     | Accepted and currently unused: the plugin has one source.                                                                                                      |
 
 `outbound`:
