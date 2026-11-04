@@ -2659,12 +2659,15 @@ __metadata:
     reflect-metadata: "npm:^0.2.2"
   peerDependencies:
     "@enclave-vm/ast": "*"
+    "@enclave-vm/browser": "*"
     "@enclave-vm/core": "*"
     "@frontmcp/lazy-zod": 1.11.0
     "@frontmcp/sdk": 1.11.0
     undici: ">=6"
   peerDependenciesMeta:
     "@enclave-vm/ast":
+      optional: true
+    "@enclave-vm/browser":
       optional: true
     "@enclave-vm/core":
       optional: true
