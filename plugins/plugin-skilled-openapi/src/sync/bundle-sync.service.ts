@@ -450,6 +450,7 @@ export class BundleSyncService {
       description: skill.description,
       instructions: skill.instructions,
       tools: [],
+      ...(skill.tags?.length ? { tags: [...skill.tags] } : {}),
       actions,
       bundleVersion: bundle.version,
     };

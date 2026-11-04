@@ -135,6 +135,12 @@ export interface SkillContent {
   tools: Array<{ name: string; purpose?: string; required?: boolean }>;
 
   /**
+   * Tags for categorization and search, as `@Skill({ tags })` has. A skill registered at runtime
+   * (`SkillRegistry.registerSkillContent()`, a Skilled OpenAPI bundle) is filtered and ranked by them.
+   */
+  tags?: string[];
+
+  /**
    * Input parameters that customize skill behavior.
    */
   parameters?: SkillParameter[];
