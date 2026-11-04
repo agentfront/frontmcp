@@ -209,3 +209,14 @@ export function queryTermShare(terms: readonly string[], text: string): number {
   const haystack = text.toLowerCase();
   return terms.filter((term) => haystack.includes(term)).length / terms.length;
 }
+
+/**
+ * How much of an anti-query the text matches: the highest {@link queryTermShare} of any of its queries, from 0 to 1.
+ * The keyword matches subtract `negativeWeight` times this from their score, as the index does with its own
+ * similarity, so a skill the anti-query demotes stays demoted.
+ */
+export function negativeQueryShare(negativeQuery: string | readonly string[] | undefined, text: string): number {
+  if (negativeQuery === undefined) return 0;
+  const queries = typeof negativeQuery === 'string' ? [negativeQuery] : negativeQuery;
+  return queries.reduce((max, query) => Math.max(max, queryTermShare(queryTerms(query), text)), 0);
+}

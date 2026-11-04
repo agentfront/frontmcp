@@ -100,3 +100,15 @@ describe('a bundle skill’s operations and instructions (#1060)', () => {
     expect((await search({ query: 'pet inventories' }))[0]).toBe('store');
   });
 });
+
+describe('the anti-query (#1059)', () => {
+  it('keeps the skill it demotes demoted', async () => {
+    expect((await search({ query: 'pets' })).sort()).toEqual(['pet-catalog', 'store']);
+    expect(await search({ query: 'pets', notQuery: 'stock' })).toEqual(['pet-catalog']);
+  });
+
+  it('never brings back the only match with a higher score', async () => {
+    expect(await search({ query: 'order' })).toEqual(['store']);
+    expect(await search({ query: 'order', notQuery: 'stock' })).toEqual([]);
+  });
+});
