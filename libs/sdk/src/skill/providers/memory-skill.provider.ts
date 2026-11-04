@@ -8,7 +8,7 @@ import { type SkillContent } from '../../common/interfaces';
 import { type SkillMetadata, type SkillVisibility } from '../../common/metadata';
 import { importWithRequireFallback } from '../../utils/dynamic-import.utils';
 import { type SkillIndexCache, type SkillIndexScoring } from '../skill-index-cache.interface';
-import { queryTerms, queryTermShare, skillSearchText } from '../skill-search-text';
+import { negativeQueryShare, queryTerms, queryTermShare, skillSearchText } from '../skill-search-text';
 import {
   type MutableSkillStorageProvider,
   type SkillListOptions,
@@ -346,7 +346,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     // Fallback: if TF-IDF returns nothing (common with single-doc corpus where IDF=0),
     // do substring match against stored skills
     if (results.length === 0 && query.trim().length > 0 && this.skills.size > 0) {
-      results = this.fallbackTextSearch(query, topK, filter);
+      results = this.fallbackTextSearch(query, topK, filter, options.negativeQuery, options.negativeWeight);
     }
 
     // Transform and enrich results
@@ -533,6 +533,8 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     query: string,
     topK: number,
     filter: (metadata: SkillDocumentMetadata) => boolean,
+    negativeQuery?: string | string[],
+    negativeWeight = 1,
   ): Array<{ id: string; text: string; score: number; metadata: SkillDocumentMetadata }> {
     const terms = queryTerms(query);
 
@@ -550,7 +552,10 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
       }
 
       const searchableText = skillSearchText(skill);
-      const score = queryTermShare(terms, searchableText);
+      // The anti-query demotes here as it does in the index, so this fallback never brings back a skill the
+      // index demoted (#1059).
+      const score =
+        queryTermShare(terms, searchableText) - negativeWeight * negativeQueryShare(negativeQuery, searchableText);
 
       if (score > 0) {
         matches.push({
