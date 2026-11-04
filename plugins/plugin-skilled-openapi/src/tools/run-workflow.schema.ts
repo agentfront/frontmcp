@@ -1,35 +1,27 @@
 import { z } from '@frontmcp/lazy-zod';
 
-export const runWorkflowDescription = `Execute a task by running a short AgentScript program in a secure sandbox (enclave).
+export const runWorkflowDescription = `Run an AgentScript program in a sandbox, the step after \`search_skill\` and \`load_skill\`. Chain actions in one call; each is authorized, schema-checked and sent with credentials the server adds and never shows.
 
-This is the EXECUTE step of the skill mechanism. After \`search_skill\` (to find a
-skill) and \`load_skill\` (to read its instructions + the actions it offers), write
-a program that calls those actions to accomplish the user's task — chaining
-several calls in ONE round-trip, with each call authorized, schema-validated, and
-sent to the real upstream API (credentials injected from the vault, never echoed).
+In the script:
+  - \`await callTool(actionId, input)\` runs an action from \`load_skill\` and returns its data. A failure throws and ends the run; an HTTP failure includes the API's message: \`action "getTodo" failed with status 404: {"error":"not found"}\`.
+  - \`await callTool(actionId, input, { throwOnError: false })\` returns \`{ ok, status, data, error? }\` instead: \`data\` is the API's error body, \`status\` 0 means no answer. There is no try/catch.
+  - Only \`Math\` and \`JSON\` are available. End with \`return <value>\`.
 
-Inside the script:
-  - \`await callTool(actionId, input)\` invokes a loaded skill's action (the
-    \`actionId\` is what \`load_skill\` lists under \`actions[]\`). It returns the
-    action's response \`data\`, or throws if the action is unknown / unauthorized /
-    fails validation.
-  - \`Math\` and \`JSON\` are available. There is NO host access and NO network
-    except through \`callTool\`.
-  - The script's final \`return <value>\` is the result.
-
-Example (after loading a skill exposing getTodo + getUser):
+Example:
   const t = await callTool("getTodo", { id: 1 });
-  const u = await callTool("getUser", { id: t.userId });
-  return { todo: t.title, owner: u.name };
+  const u = await callTool("getUser", { id: t.userId }, { throwOnError: false });
+  return { todo: t.title, owner: u.ok ? u.data.name : null };
 
-OUTPUT: { success, value?, error?, stats }`;
+Returns { success, value?, error?, stats }; a failed run is an error result.`;
 
 export const runWorkflowInputSchema = {
   script: z
     .string()
     .min(1)
     .max(20000)
-    .describe('AgentScript source. Use `await callTool(actionId, input)` for loaded skill actions; end with `return <value>`.'),
+    .describe(
+      'AgentScript source. Use `await callTool(actionId, input)` for loaded skill actions; end with `return <value>`.',
+    ),
 };
 
 export const runWorkflowOutputSchema = {

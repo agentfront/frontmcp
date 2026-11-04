@@ -6,7 +6,10 @@
 // while keeping the import specifiers literal so a bundler can alias them.
 
 declare module '@enclave-vm/ast' {
-  export function transformAgentScript(code: string, config?: { transformLoops?: boolean }): string;
+  export function transformAgentScript(
+    code: string,
+    config?: { transformLoops?: boolean; additionalIdentifiers?: string[] },
+  ): string;
 }
 
 declare module '@enclave-vm/core/worker' {

@@ -1,7 +1,7 @@
 /**
  * E2E: a CLI built for a server whose skills a plugin registers at runtime (a Skilled OpenAPI bundle). A one-shot
- * command sees those skills, `skills read` / `skills load` exit 1 for a skill they do not find, and a running daemon
- * serves the commands from the bundle it loaded once.
+ * command sees those skills, `skills read` / `skills load` exit 1 for a skill they do not find, `run-workflow` exits 1
+ * for a workflow that fails, and a running daemon serves the commands from the bundle it loaded once.
  */
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -84,6 +84,29 @@ describe('a CLI whose skills a plugin registers at runtime', () => {
 
     expect(exitCode).toBe(1);
     expect(JSON.parse(stdout)).toMatchObject({ skills: [] });
+  });
+
+  it('exits 0 from run-workflow for a workflow that succeeds', () => {
+    const { stdout, exitCode } = run(['--output', 'json', 'run-workflow', '--script', 'return 1 + 1;']);
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({ structuredContent: { success: true, value: 2 } });
+  });
+
+  it('exits 1 from run-workflow for a workflow that fails, with its error', () => {
+    const { stdout, exitCode } = run([
+      '--output',
+      'json',
+      'run-workflow',
+      '--script',
+      "return await callTool('refundInvoice', { id: 'inv_1' });",
+    ]);
+
+    expect(exitCode).toBe(1);
+    expect(JSON.parse(stdout)).toMatchObject({
+      isError: true,
+      structuredContent: { success: false, error: expect.stringContaining('unknown action "refundInvoice"') },
+    });
   });
 
   describe('with its daemon running', () => {

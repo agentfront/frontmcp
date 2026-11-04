@@ -38,6 +38,7 @@ function runRefund(id: string) {
       defaultTimeoutMs: 5_000,
       defaultMaxResponseBytes: 256 * 1024,
       allowHttp: true,
+      errorBodies: 'include',
     },
     resolver: new MemoryCredentialResolver({ 'billing-token': 'sk_live_x' }),
     allowedHosts: new Set(['localhost']),

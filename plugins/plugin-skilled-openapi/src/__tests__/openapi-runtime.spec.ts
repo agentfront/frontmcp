@@ -26,6 +26,7 @@ const baseOutbound = (overrides: Partial<OutboundOptions> = {}): OutboundOptions
   defaultTimeoutMs: 5_000,
   defaultMaxResponseBytes: 256 * 1024,
   allowHttp: true,
+  errorBodies: 'include',
   ...overrides,
 });
 

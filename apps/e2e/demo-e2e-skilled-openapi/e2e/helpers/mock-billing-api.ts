@@ -132,6 +132,13 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
       }
       if (!invoice) return reply(res, 404, { error: 'invoice not found' });
       if (invoice.status !== 'open') return reply(res, 409, { error: `invoice is ${invoice.status}` });
+      if (amount > invoice.amount) {
+        return reply(res, 422, {
+          error: 'refund_too_large',
+          message: `Refund ${amount} exceeds the paid amount ${invoice.amount}.`,
+          maxRefund: invoice.amount,
+        });
+      }
       invoice.status = 'refunded';
       return reply(res, 201, { refundId: `rfnd_${refundSequence++}`, invoiceId: invoice.id });
     }

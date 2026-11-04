@@ -48,6 +48,7 @@ function auditedDeps() {
         defaultTimeoutMs: 5000,
         defaultMaxResponseBytes: 262144,
         maxConcurrencyPerHost: 10,
+        errorBodies: 'include',
       },
       unprotectedOps: 'allow',
     },
