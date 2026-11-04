@@ -344,6 +344,12 @@ describe('relay-http', () => {
       expect(fallback.events[0]).toEqual({ type: 'head', status: 307, headers: { location: '/' } });
     });
 
+    it('redirects to a location with characters outside ASCII percent-encoded, as Express does', () => {
+      const { sink, events } = createSink();
+      new RelayServerResponse(sink).redirect('/board/東京');
+      expect(events[0]).toEqual({ type: 'head', status: 302, headers: { location: '/board/%E6%9D%B1%E4%BA%AC' } });
+    });
+
     it('end() accepts the Node argument forms and runs only once', () => {
       const { sink, events } = createSink();
       const response = new RelayServerResponse(sink);

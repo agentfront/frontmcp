@@ -17,6 +17,7 @@ import { base64Decode, base64Encode } from '@frontmcp/utils';
 
 import { ServerRequestTokens, type ServerRequest, type ServerResponse } from '../../common';
 import type { RelayedHttpRequest } from '../../ha/relay-messages';
+import { toLocationHeader } from '../../utils/http-location.utils';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -371,7 +372,7 @@ export class RelayServerResponse extends RelayEmitter {
     const status = typeof statusOrUrl === 'number' ? statusOrUrl : 302;
     const location = typeof statusOrUrl === 'string' ? statusOrUrl : (maybeUrl ?? '/');
     this.statusCode = status;
-    this.setHeader('Location', location);
+    this.setHeader('Location', toLocationHeader(location));
     return this.end();
   }
 

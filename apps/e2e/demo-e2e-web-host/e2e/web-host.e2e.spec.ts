@@ -111,6 +111,13 @@ test.describe('Web host E2E', () => {
     expect(await (await fetch(`${baseUrl}/status`)).json()).toEqual({ ok: true });
   });
 
+  test('a page redirects to a path on the same server (#1053)', async ({ server }) => {
+    const response = await fetch(`${server.info.baseUrl}/home`, { redirect: 'manual' });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe('/board');
+  });
+
   test('refuses a code posted from another site', async ({ server }) => {
     const code = await signInCode(server, startupToken(server));
 
