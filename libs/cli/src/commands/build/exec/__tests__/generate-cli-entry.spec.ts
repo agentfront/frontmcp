@@ -2,10 +2,11 @@ import {
   generateCliEntry,
   type CliEntryOptions,
   resolveToolCommandName,
+  skilledOpenApiToolNames,
   extractTemplateParams,
   RESERVED_COMMANDS,
 } from '../cli-runtime/generate-cli-entry';
-import { type ExtractedSchema } from '../cli-runtime/schema-extractor';
+import { type ExtractedSchema, type ExtractedTool } from '../cli-runtime/schema-extractor';
 
 function makeSchema(overrides?: Partial<ExtractedSchema>): ExtractedSchema {
   return {
@@ -583,7 +584,7 @@ describe('generateCliEntry', () => {
       const source = generateCliEntry(makeOptions({ authRequired: false }));
       expect(source).not.toContain('credBlob');
       expect(source).not.toContain('Not logged in');
-      expect(source).toContain("return { mode: 'cli' };");
+      expect(source).toContain("return Object.assign({ mode: 'cli' }, QUESTION_OPTIONS);");
     });
 
     it('refuses to connect without a stored credential, before trying the daemon', () => {
@@ -600,7 +601,7 @@ describe('generateCliEntry', () => {
 
     it('sends the stored token on the daemon path and the in-process path alike', () => {
       const source = generateCliEntry(makeOptions({ authRequired: true }));
-      expect(source).toContain("return { authToken: credBlob.token, mode: 'cli' };");
+      expect(source).toContain("return Object.assign({ authToken: credBlob.token, mode: 'cli' }, QUESTION_OPTIONS);");
       expect(source).toContain('authToken: connectOpts.authToken,');
       expect(source).toContain('_client = await connectInProcess(connectOpts);');
       expect(source).toContain('return connect(configOrClass, connectOpts);');
@@ -819,6 +820,85 @@ describe('generateCliEntry', () => {
 
       expect(source).not.toContain('searchSkills');
       expect(source).not.toContain('listSkills');
+    });
+  });
+
+  describe('Skilled OpenAPI commands', () => {
+    const metaTools: ExtractedTool[] = [
+      { name: 'search_skill', description: 'Search skills', inputSchema: { type: 'object', properties: { query: { type: 'string' } } } },
+      { name: 'load_skill', description: 'Load skills', inputSchema: { type: 'object', properties: { skillId: { type: 'string' } } } },
+      { name: 'execute_action', description: 'Run one action', inputSchema: { type: 'object', properties: { actionId: { type: 'string' } } } },
+      { name: 'run_workflow', description: 'Run a script', inputSchema: { type: 'object', properties: { script: { type: 'string' } } } },
+    ];
+    const ownTool: ExtractedTool = { name: 'create_invoice', description: 'Create an invoice', inputSchema: { type: 'object', properties: {} } };
+    const fallbackTool: ExtractedTool = { name: 'sendElicitationResult', description: 'Answer a question', inputSchema: { type: 'object', properties: {} } };
+    const skillCapabilities = { skills: true, jobs: false, workflows: false };
+
+    function sourceFor(tools: ExtractedTool[], overrides?: Partial<CliEntryOptions>): string {
+      return generateCliEntry(makeOptions({ schema: makeSchema({ tools, capabilities: skillCapabilities }), ...overrides }));
+    }
+
+    it('adds the commands at the top level and under skills for a server whose only tools are the plugin\'s', () => {
+      const source = sourceFor([...metaTools, fallbackTool]);
+
+      expect(source).toContain(`require('./skilled-commands').registerSkilledCommands(program, {
+  getClient: getClient,
+  toolNames: ["search_skill","load_skill","execute_action","run_workflow"],
+  topLevel: true
+});`);
+      expect(source).toContain(`else if (["search_skill","load_skill","execute","run_workflow","skills"].indexOf(name) !== -1) groups['Skills'].push(sub);`);
+      expect(source).toContain('program._toolCommandNames = [];');
+      expect(source).not.toContain('searchSkills');
+    });
+
+    it('adds them only under skills for a server with tools of its own, which keep their commands', () => {
+      const source = sourceFor([ownTool, ...metaTools]);
+
+      expect(source).toContain('topLevel: false');
+      expect(source).toContain(`else if (["skills"].indexOf(name) !== -1) groups['Skills'].push(sub);`);
+      expect(source).toContain('program._toolCommandNames = ["create-invoice"];');
+      expect(source).not.toContain('.command("search-skill")');
+      expect(source).not.toContain('callTool("run_workflow"');
+    });
+
+    it('keeps the standard skills commands for a server without the plugin', () => {
+      const source = sourceFor([ownTool, metaTools[0]]);
+
+      expect(source).not.toContain('registerSkilledCommands');
+      expect(source).toContain('searchSkills');
+      expect(source).toContain('.command("search-skill")');
+    });
+
+    it('leaves out the command of a meta-tool cli.excludeTools names', () => {
+      const source = sourceFor(metaTools, { excludeTools: ['run_workflow'] });
+
+      expect(source).toContain('toolNames: ["search_skill","load_skill","execute_action"],');
+      expect(source).toContain(`["search_skill","load_skill","execute","skills"].indexOf(name)`);
+    });
+
+    it('finds the plugin when its four meta-tools are listed', () => {
+      expect(skilledOpenApiToolNames(metaTools, [])).toEqual(['search_skill', 'load_skill', 'execute_action', 'run_workflow']);
+      expect(skilledOpenApiToolNames(metaTools.slice(0, 3), [])).toBeUndefined();
+    });
+  });
+
+  describe('questions from the server', () => {
+    it('answers them in the terminal, with --yes for every yes/no one, in-process and through the daemon', () => {
+      const source = generateCliEntry(makeOptions());
+
+      expect(source).toContain("var elicitation = require('./terminal-elicitation');");
+      expect(source).toContain("onElicitation: elicitation.createElicitationHandler({ assumeYes: function() { return !!program.opts().yes; } }),");
+      expect(source).toContain('capabilities: { elicitation: { form: {} } }');
+      expect(source).toContain('onElicitation: connectOpts.onElicitation');
+      expect(source).toContain(".option('--yes', 'Answer yes to the questions the server asks, such as confirming a destructive action')");
+    });
+
+    it('has no command for the tool a server lists for clients that cannot answer', () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({ tools: [{ name: 'sendElicitationResult', description: 'Answer', inputSchema: { type: 'object' } }] }),
+      }));
+
+      expect(source).toContain('// No tools extracted');
     });
   });
 

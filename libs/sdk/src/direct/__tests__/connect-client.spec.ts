@@ -85,6 +85,20 @@ describe('connect() clients', () => {
     expect(result.structuredContent).toEqual({ action: 'accept', confirmed: true });
   });
 
+  it("asks the onElicitation handler in cli mode, which keeps the questions' state in memory", async () => {
+    const client = await connect(config(), {
+      mode: 'cli',
+      onElicitation: async () => ({ action: 'accept', content: { confirmed: true } }),
+    });
+
+    const result = (await client.callTool('confirm_delete', { path: 'notes.txt' })) as {
+      structuredContent?: unknown;
+    };
+    await client.close();
+
+    expect(result.structuredContent).toEqual({ action: 'accept', confirmed: true });
+  });
+
   it('sends the questions to a handler registered later when the client declares elicitation', async () => {
     const client = await connect(config(), { capabilities: { elicitation: { form: {} } } });
     client.onElicitation(async () => ({ action: 'accept', content: { confirmed: true } }));

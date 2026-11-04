@@ -89,6 +89,18 @@ describe('generated CLI smoke tests', () => {
       expect(() => new Function(stripShebang(source))).not.toThrow();
     });
 
+    it('should produce valid JavaScript for a Skilled OpenAPI server', () => {
+      const metaTool = (name: string) => ({ name, description: name, inputSchema: { type: 'object', properties: {} } });
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({
+          tools: ['search_skill', 'load_skill', 'execute_action', 'run_workflow'].map(metaTool),
+          capabilities: { skills: true, jobs: false, workflows: false },
+        }),
+      }));
+
+      expect(() => new Function(stripShebang(source))).not.toThrow();
+    });
+
     it('should produce valid JavaScript with prompts', () => {
       const source = generateCliEntry(makeOptions({
         schema: makeSchema({
