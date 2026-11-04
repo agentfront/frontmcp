@@ -130,6 +130,22 @@ describe('SkillDecisionRanker (#1062)', () => {
     expect(log.warn).toHaveBeenCalledWith(expect.any(String), { error: 'no decision within 20 ms' });
   });
 
+  it.each([NaN, Infinity, -0.2, 1.5, '0.9' as unknown as number])(
+    'answers undefined, for the index ranking, when a probability is %p, and logs it',
+    async (probability) => {
+      const log = logger();
+      const decider = jest.fn(async () => [{ id: 'store', probability }]);
+      const ranker = new SkillDecisionRanker({ decider }, log);
+
+      expect(await ranker.rank('q', undefined, pool)).toBeUndefined();
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('the decision model failed'), {
+        error: 'the decision for "store" has no probability from 0 to 1',
+      });
+      await ranker.rank('q', undefined, pool);
+      expect(decider).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it('makes no call for an empty pool', async () => {
     const decider = jest.fn(async () => []);
     expect(await new SkillDecisionRanker({ decider }, logger()).rank('q', undefined, [])).toEqual([]);
