@@ -113,6 +113,57 @@ describe('the anti-query (#1059)', () => {
   });
 });
 
+describe('stop words (#1061)', () => {
+  it('match nothing, so a query with them ranks as the query without them', async () => {
+    expect(await search({ query: 'show me the cats' })).toEqual(['pet-catalog']);
+    expect(await search({ query: 'show me three of the cats' })).toEqual(['pet-catalog']);
+    expect(await search({ query: 'the' })).toEqual([]);
+  });
+});
+
+describe('words in every script (#1065)', () => {
+  let multilingual: DirectMcpServer;
+
+  beforeAll(async () => {
+    multilingual = await petShop([
+      PET_SHOP[0],
+      { ...PET_SHOP[0], id: 'katalog', name: 'Katalog', description: 'Hunde, Katzen und Vögel finden.', tags: [] },
+      { ...PET_SHOP[0], id: 'katalog-he', name: 'קטלוג', description: 'מציאת כלבים, חתולים וציפורים.', tags: [] },
+      { ...PET_SHOP[0], id: 'mulu', name: '目录', description: '查找狗、猫和鸟。', tags: [] },
+      PET_SHOP[1],
+    ]);
+  });
+
+  afterAll(async () => {
+    await multilingual?.dispose();
+  });
+
+  const scored = async (query: string) =>
+    ((await multilingual.callTool('search_skill', { query })).structuredContent as unknown as Found).skills;
+
+  it('ranks a skill by a word in its own script, not by a keyword match', async () => {
+    for (const [query, id] of [
+      ['חתולים', 'katalog-he'],
+      ['猫', 'mulu'],
+      ['查找', 'mulu'],
+      ['Katzen', 'katalog'],
+    ]) {
+      const found = await scored(query);
+      expect(found.map((s) => s.skillId)).toEqual([id]);
+      expect(found[0].score).toBeLessThan(1);
+    }
+  });
+
+  it('ranks every skill a query in two scripts matches', async () => {
+    expect((await scored('חתולים cats')).map((s) => s.skillId).sort()).toEqual(['katalog-he', 'pet-catalog']);
+  });
+
+  it('matches a word with or without its accent, and not by a fragment of another word', async () => {
+    expect((await scored('Vogel')).map((s) => s.skillId)).toEqual(['katalog']);
+    expect(await scored('Nägel schneiden')).toEqual([]);
+  });
+});
+
 describe('a decision model (#1062)', () => {
   let decided: DirectMcpServer;
   const requests: Array<{ query: string; candidates: string[] }> = [];
