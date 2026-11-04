@@ -16,7 +16,7 @@ import {
   writeFile,
 } from '@frontmcp/utils';
 
-import { startMockBillingApi, type MockBillingApi } from './mock-billing-api';
+import { startMockBillingApi, type MockBillingApi, type MockBillingApiOptions } from './mock-billing-api';
 
 const BUNDLE_TEMPLATE_PATH = join(__dirname, '../../src/fixtures/billing-bundle.json');
 const SIGNING_KEY_ID = 'e2e-signing-key';
@@ -40,6 +40,9 @@ interface RunningEnvironment {
   signingKey: JsonWebKey;
 }
 
+/** How the billing API behaves: its invoices and report delays. */
+export type BillingApiBehavior = Pick<MockBillingApiOptions, 'seedInvoices' | 'revenueReportDelayMs' | 'exportDelayMs'>;
+
 /** Keys, certificate, signed bundle and credentials made per run in a temporary directory: nothing secret is committed. */
 export class ProductionEnvironment {
   /** The server's environment; pass it to `test.use({ env })` before `start()` fills it. */
@@ -49,6 +52,8 @@ export class ProductionEnvironment {
   /** The same environment with the signed bundle written as YAML, as `yaml.stringify` writes it. */
   readonly yamlBundleEnv: Record<string, string> = {};
   private running?: RunningEnvironment;
+
+  constructor(private readonly billingApiBehavior: BillingApiBehavior = {}) {}
 
   get billingApi(): MockBillingApi {
     return this.requireRunning().billingApi;
@@ -112,6 +117,7 @@ export class ProductionEnvironment {
     const callerBillingTokens = { alice: base64urlEncode(randomBytes(32)), bob: base64urlEncode(randomBytes(32)) };
     const tls = { key: await readFile(keyPath), cert: await readFile(certPath) };
     const billingApi = await startMockBillingApi({
+      ...this.billingApiBehavior,
       bearerTokens: [billingToken, ...Object.values(callerBillingTokens)],
       tls,
     });

@@ -384,6 +384,71 @@ jobs:
           retention-days: 1
           if-no-files-found: warn
 
+  # The real-model eval of Skilled OpenAPI, run with the E2E tests. It calls the model API, so it runs only
+  # when the change affects it and the ANTHROPIC_API_KEY secret is set (never for a fork), and it reports
+  # without failing the workflow.
+  skilled-openapi-eval:
+    name: "Skilled OpenAPI eval"
+    needs: [setup, build, discover-e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NX_DAEMON: "false"
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SKILLED_EVAL_REPORT_DIR: dist/evals/skilled-openapi
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node + Yarn
+        uses: ./.github/actions/setup-node-yarn
+        with:
+          node-version: ${{ needs.setup.outputs.node-version }}
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+
+      - name: Restore Nx cache
+        uses: ./.github/actions/nx-cache-restore
+
+      - name: Set Nx SHAs
+        uses: nrwl/nx-set-shas@v5
+
+      - name: Decide whether to run
+        id: decide
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Skipped: the ANTHROPIC_API_KEY secret is not available to this run." >> "$GITHUB_STEP_SUMMARY"
+          elif npx nx show projects --affected --json | jq -e 'index("evals-skilled-openapi")' > /dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Skipped: nothing this change touches affects the Skilled OpenAPI eval." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Run the eval
+        if: steps.decide.outputs.run == 'true'
+        continue-on-error: true
+        run: npx nx run evals-skilled-openapi:eval
+
+      - name: Add the summary to the job page
+        if: steps.decide.outputs.run == 'true' && always()
+        run: cat "$SKILLED_EVAL_REPORT_DIR"/*.txt >> "$GITHUB_STEP_SUMMARY" || echo "The eval wrote no summary." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the eval report
+        if: steps.decide.outputs.run == 'true' && always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: skilled-openapi-eval-report
+          path: dist/evals/skilled-openapi/
+          retention-days: 14
+          if-no-files-found: warn
+
   # `frontmcp dev` on Windows (#731): spawning npm/npx/tsx/tsc and stopping the
   # child process tree work differently there, and nothing else runs on Windows.
   # Lean on purpose: it reuses the Linux build's dist artifact (plain JS) and runs

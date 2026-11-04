@@ -1,0 +1,28 @@
+{
+  "name": "evals-skilled-openapi",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/evals/skilled-openapi/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:eval", "feature:skilled-openapi"],
+  "targets": {
+    "eval": {
+      "executor": "nx:run-commands",
+      "dependsOn": [{ "projects": ["plugin-skilled-openapi", "testing"], "target": "build" }],
+      "options": {
+        "command": "tsx apps/evals/skilled-openapi/src/main.ts",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "eval:dry-run": {
+      "executor": "nx:run-commands",
+      "dependsOn": [{ "projects": ["plugin-skilled-openapi", "testing"], "target": "build" }],
+      "options": {
+        "command": "tsx apps/evals/skilled-openapi/src/main.ts --dry-run",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "dependsOn": [{ "projects": ["plugin-skilled-openapi"], "target": "build" }]
+    }
+  }
+}

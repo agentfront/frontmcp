@@ -493,6 +493,11 @@ Source:
 Issues and pull requests are welcome; see
 [CONTRIBUTING.md](https://github.com/agentfront/frontmcp/blob/main/CONTRIBUTING.md).
 
+To measure whether a real model completes tasks with the plugin (search, load, then execute or run a workflow), run the
+model evaluation in
+[`apps/evals/skilled-openapi`](https://github.com/agentfront/frontmcp/tree/main/apps/evals/skilled-openapi). It calls
+the Claude API, so it is not part of CI; its dry run, which needs no API key, is.
+
 ## License
 
 Apache-2.0. See [LICENSE](https://github.com/agentfront/frontmcp/blob/main/LICENSE).

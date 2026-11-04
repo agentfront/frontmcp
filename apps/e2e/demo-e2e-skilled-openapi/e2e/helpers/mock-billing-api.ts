@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as https from 'node:https';
 import type { AddressInfo } from 'node:net';
 
-interface MockInvoice {
+export interface MockInvoice {
   id: string;
   status: 'open' | 'refunded' | 'void';
   amount: number;
@@ -14,6 +14,10 @@ export interface RecordedRequest {
   /** The query string as it arrived, without the `?`. */
   query: string;
   authorization: string | undefined;
+  /** The JSON body the API read, on the routes that read one. */
+  body?: unknown;
+  /** The status the API answered with, once it has. */
+  status?: number;
 }
 
 /** A revenue export the API is holding: when it arrived, when its connection closed, and whether it was answered. */
@@ -38,6 +42,12 @@ export interface MockBillingApiOptions {
   /** The bearer credentials the API accepts: the server's own and each caller's. */
   bearerTokens: readonly string[];
   tls: { key: string; cert: string };
+  /** The invoices the API holds when it starts and after each reset. */
+  seedInvoices?: readonly MockInvoice[];
+  /** How long the revenue report takes (default SLOW_REPORT_DELAY_MS). */
+  revenueReportDelayMs?: number;
+  /** How long a revenue export holds its answer (default HELD_EXPORT_DELAY_MS). */
+  exportDelayMs?: number;
 }
 
 /** How long the revenue report takes, longer than the operation's `timeoutMs`. */
@@ -58,6 +68,15 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
+}
+
+async function readRecordedBody(
+  req: IncomingMessage,
+  record: RecordedRequest,
+): Promise<Record<string, unknown> | undefined> {
+  const body = parseJsonBody(await readBody(req));
+  record.body = body;
+  return body;
 }
 
 function reply(res: ServerResponse, status: number, body?: unknown): void {
@@ -87,14 +106,19 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
   let invoiceSequence = 1;
   let refundSequence = 1;
 
-  async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+  function seedInvoices(): void {
+    for (const invoice of options.seedInvoices ?? []) invoices.set(invoice.id, { ...invoice });
+  }
+  seedInvoices();
+
+  async function route(req: IncomingMessage, res: ServerResponse, url: URL, record: RecordedRequest): Promise<void> {
     const path = url.pathname;
     const method = req.method ?? 'GET';
     const invoiceId = path.match(/^\/v1\/invoices\/([^/]+)/)?.[1];
     const invoice = invoiceId ? invoices.get(invoiceId) : undefined;
 
     if (method === 'POST' && path === '/v1/invoices') {
-      const body = parseJsonBody(await readBody(req));
+      const body = await readRecordedBody(req, record);
       if (!body) return reply(res, 400, { error: 'invalid json body' });
       const id = `inv_${invoiceSequence++}`;
       invoices.set(id, { id, status: 'open', amount: Number(body['amount'] ?? 0) });
@@ -125,7 +149,7 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
     }
 
     if (method === 'POST' && invoiceId && path === `/v1/invoices/${invoiceId}/refunds`) {
-      const body = parseJsonBody(await readBody(req));
+      const body = await readRecordedBody(req, record);
       const amount = body?.['amount'];
       if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
         return reply(res, 400, { error: 'invalid amount' });
@@ -144,19 +168,21 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
     }
 
     if (method === 'GET' && path === '/v1/reports/revenue') {
-      const timer = setTimeout(() => reply(res, 200, { total: 1234, currency: 'USD' }), SLOW_REPORT_DELAY_MS);
+      const delayMs = options.revenueReportDelayMs ?? SLOW_REPORT_DELAY_MS;
+      const timer = setTimeout(() => reply(res, 200, { total: 1234, currency: 'USD' }), delayMs);
       res.on('close', () => clearTimeout(timer));
       return;
     }
 
     if (method === 'POST' && path === '/v1/reports/exports') {
+      await readRecordedBody(req, record);
       const closedAt = new Promise<number>((resolve) => res.on('close', () => resolve(Date.now())));
       const held: HeldExport = { receivedAt: Date.now(), closedAt, answered: false };
       heldExports.push(held);
       const timer = setTimeout(() => {
         held.answered = true;
         reply(res, 201, { exportId: 'exp_1' });
-      }, HELD_EXPORT_DELAY_MS);
+      }, options.exportDelayMs ?? HELD_EXPORT_DELAY_MS);
       res.on('close', () => clearTimeout(timer));
       return;
     }
@@ -175,7 +201,16 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
   const server = https.createServer(options.tls, (req, res) => {
     const url = new URL(req.url ?? '/', 'https://localhost');
     const authorization = req.headers['authorization'];
-    requests.push({ method: req.method ?? 'GET', path: url.pathname, query: url.search.slice(1), authorization });
+    const record: RecordedRequest = {
+      method: req.method ?? 'GET',
+      path: url.pathname,
+      query: url.search.slice(1),
+      authorization,
+    };
+    requests.push(record);
+    res.on('finish', () => {
+      record.status = res.statusCode;
+    });
 
     if (!options.bearerTokens.some((token) => authorization === `Bearer ${token}`)) {
       return reply(res, 401, { error: 'invalid bearer token' });
@@ -184,7 +219,7 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
     if (req.method === 'POST' && !JSON_MEDIA_TYPE.test(req.headers['content-type'] ?? '')) {
       return reply(res, 415, { error: 'expected an application/json body' });
     }
-    route(req, res, url).catch((error: unknown) => {
+    route(req, res, url, record).catch((error: unknown) => {
       reply(res, 500, { error: error instanceof Error ? error.message : String(error) });
     });
   });
@@ -198,6 +233,7 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
     heldExports,
     reset() {
       invoices.clear();
+      seedInvoices();
       requests.length = 0;
       heldExports.length = 0;
       invoiceSequence = 1;
