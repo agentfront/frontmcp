@@ -48,7 +48,14 @@ export default class Server {}
 ```
 
 `requireSignature: false` lets an unsigned bundle load while you develop. In production, sign the bundle in CI, list the
-public key in `trustedKeys`, and set `unprotectedOps: 'deny'`; see [Security](#security).
+public key in `trustedKeys`, and set `unprotectedOps: 'deny'`; see [Security](#security). For the credentials, see
+[Credentials](#credentials).
+
+A server runs one Skilled OpenAPI plugin. One bundle can describe several services, each with its own base URL and auth
+binding, so put them in one bundle. A second instance, in the same `plugins` list or in another one (the server's and an
+app's, or two apps'), makes the server fail at startup with a `DuplicatePluginError` that says so. To serve separate
+bundles, give each its own app with `splitByApp: true`: each app is then a server of its own. Up to 1.11.0 a second
+instance started without an error, and only one of the bundles was served.
 
 `tools/list` then returns `search_skill`, `load_skill` and `run_workflow`, and none of the bundle's operations. After
 loading a skill, the model runs its operations with a script:
@@ -87,6 +94,41 @@ With `exposeOperationsAsInternalTools` (the default), each operation is also an 
 `<bundleId>.<operationId>`, which your own tools can call with `this.callTool()`. It checks the caller the same way,
 and aborts its request when the tool call is cancelled or times out. Clients can't list or call it.
 
+## Credentials
+
+For each request, the plugin asks a credential resolver for the secret of the operation's auth binding, by its
+`vaultRef`. The built-in resolver reads the `credentials` option. To read a vault instead, provide a
+`SkilledOpenApiCredentialResolver` in `@FrontMcp({ providers })`, in the `@App` that installs the plugin, or in
+`init({ providers })`. The nearest one replaces the built-in resolver:
+
+```ts
+import { SkilledOpenApiCredentialResolver, SkilledOpenApiPlugin } from '@frontmcp/plugin-skilled-openapi';
+import { FrontMcp } from '@frontmcp/sdk';
+
+class VaultCredentialResolver extends SkilledOpenApiCredentialResolver {
+  async resolve(ref: string, { bundleId }: { bundleId: string }): Promise<string | undefined> {
+    return vault.read(`${bundleId}/${ref}`);
+  }
+}
+
+@FrontMcp({
+  info: { name: 'billing', version: '1.0.0' },
+  apps: [],
+  plugins: [SkilledOpenApiPlugin.init({ source: { type: 'static', path: './billing.bundle.json' } })],
+  providers: [{ provide: SkilledOpenApiCredentialResolver, useValue: new VaultCredentialResolver() }],
+})
+export default class Server {}
+```
+
+The resolver is asked on every request, so a rotated secret is sent from the next request on, without a restart. A
+request whose secret doesn't resolve fails, and isn't sent.
+
+An operation your own tool calls with `this.callTool()` uses the resolver the server's providers declare. When the plugin
+is installed in an `@App`, declare it in `init({ providers })` or in `@FrontMcp({ providers })` for those calls.
+
+Up to 1.11.0 a resolver declared in `@FrontMcp({ providers })` or `@App({ providers })` was ignored, and the built-in
+one kept answering: only `init({ providers })` replaced it.
+
 ## Options
 
 `init()` checks the options with a Zod schema, exported as `skilledOpenApiPluginOptionsSchema`, and throws a `ZodError`
@@ -97,7 +139,7 @@ for a bad one.
 | `source`                          | `{ type: 'inline' \| 'static' \| 'npm' \| 'saas', ... }` | required                            | Where the bundle comes from. See [Sources](#sources).                                                                                                    |
 | `requireSignature`                | `boolean`                                                | `true`, or `false` with `dev: true` | Apply only bundles signed by one of `trustedKeys`. An explicit value wins over `dev`.                                                                    |
 | `trustedKeys`                     | `{ keyId, alg: 'RS256' \| 'EdDSA', publicKeyPem }[]`     | `[]`                                | Public keys a bundle may be signed with, matched by `keyId`.                                                                                             |
-| `credentials`                     | `Record<string, string>`                                 |                                     | Secrets for the bundle's auth bindings, keyed by `vaultRef`. To read them from a vault instead, replace the `SkilledOpenApiCredentialResolver` provider. |
+| `credentials`                     | `Record<string, string>`                                 |                                     | Secrets for the bundle's auth bindings, keyed by `vaultRef`. To read them from a vault instead, declare a resolver as [Credentials](#credentials) shows. |
 | `unprotectedOps`                  | `'allow' \| 'deny'`                                      | `'allow'`                           | Whether an operation with no `requiredAuthorities`, on itself or its skill, may be called. `'deny'` blocks it unless it's marked `public: true`.         |
 | `outbound`                        | `OutboundOptions`                                        | see below                           | Limits on the requests to your API.                                                                                                                      |
 | `dev`                             | `boolean`                                                | `false`                             | For development only: turns off signature checks (unless `requireSignature` is set) and allows `http:` URLs. Logs a warning.                             |
