@@ -1,5 +1,6 @@
 // common/types/options/skills-http/interfaces.ts
 
+import type { SkillDecisionOptions } from '../../../../skill/decision/skill-decision.types';
 import type { ExternalSkillProviderBase } from '../../../../skill/providers/external-skill.provider';
 
 /**
@@ -421,6 +422,22 @@ export interface SkillsConfigOptions {
    * @default 'cosine'
    */
   scoring?: 'cosine' | 'bm25';
+
+  /**
+   * Rank skill search results with a decision model (#1062): a model that answers a bounded choice with a
+   * probability per option, without embeddings, such as OpenAI's Decisions API (`gpt-6-luna`) or TypeSafe's Jev. The
+   * index supplies up to `maxCandidates` skills (all of them in a smaller catalog, so a query that shares no word
+   * with a skill can still find it), the model a probability for each, and results are ranked by it. A decision that
+   * fails, is refused or takes longer than `timeoutMs` leaves the results ranked by the index, and is logged.
+   *
+   * @example
+   * ```ts
+   * import { decisionsApiDecider } from '@frontmcp/sdk';
+   *
+   * skillsConfig: { decision: { decider: decisionsApiDecider({ apiKey: process.env.OPENAI_API_KEY! }) } }
+   * ```
+   */
+  decision?: SkillDecisionOptions;
 
   /**
    * Whether a skill with `toolValidation: 'strict'` that names a tool no one serves stops the server

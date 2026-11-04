@@ -163,3 +163,43 @@ describe('words in every script (#1065)', () => {
     expect(await scored('Nägel schneiden')).toEqual([]);
   });
 });
+
+describe('a decision model (#1062)', () => {
+  let decided: DirectMcpServer;
+  const requests: Array<{ query: string; candidates: string[] }> = [];
+
+  beforeAll(async () => {
+    const bundle = await compileSkilledBundleFromOpenApi(spec, PET_SHOP, {
+      bundleId: 'shop',
+      version: '1.0.0',
+      baseUrl: 'https://shop.example',
+    });
+    decided = await FrontMcpInstance.createDirect({
+      info: { name: 'shop', version: '1.0.0' },
+      apps: [],
+      logging: { level: LogLevel.Off },
+      skillsConfig: {
+        decision: {
+          // A decision model that knows kittens are cats
+          decider: async ({ query, candidates }) => {
+            requests.push({ query, candidates: candidates.map((c) => c.id).sort() });
+            return query === 'kittens' ? [{ id: 'pet-catalog', probability: 0.93 }] : [];
+          },
+        },
+      },
+      plugins: [SkilledOpenApiPlugin.init({ source: { type: 'inline', content: bundle }, requireSignature: false })],
+    });
+  });
+
+  afterAll(async () => {
+    await decided?.dispose();
+  });
+
+  it('finds a skill by meaning, for a query that shares no word with it', async () => {
+    const found = ((await decided.callTool('search_skill', { query: 'kittens' })).structuredContent as unknown as Found)
+      .skills;
+
+    expect(found.map((s) => [s.skillId, s.score])).toEqual([['pet-catalog', 0.93]]);
+    expect(requests.at(-1)).toEqual({ query: 'kittens', candidates: ['pet-catalog', 'store'] });
+  });
+});

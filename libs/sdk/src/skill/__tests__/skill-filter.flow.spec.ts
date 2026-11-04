@@ -236,6 +236,14 @@ describe('skills:filter flow', () => {
       expect(index.skills.map((entry) => entry.name)).not.toContain('restricted-guide');
     });
 
+    it('leaves the SKILL.md of a skill the flow drops out of resources/list', async () => {
+      const { resources } = await client.listResources();
+      const uris = resources.map((resource) => resource.uri);
+
+      expect(uris).toContain('skill://public-guide/SKILL.md');
+      expect(uris).not.toContain('skill://restricted-guide/SKILL.md');
+    });
+
     it('does not serve the SKILL.md of a skill the flow drops', async () => {
       expect(await rejectionOf(client.readResource('skill://restricted-guide/SKILL.md'))).toBeInstanceOf(Error);
     });
