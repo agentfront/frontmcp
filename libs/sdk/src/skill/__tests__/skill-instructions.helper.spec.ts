@@ -1,4 +1,6 @@
 import type { SkillEntry } from '../../common';
+import { ProviderNotRegisteredError } from '../../errors';
+import { SkillCatalogSourceToken, type SkillCatalogSource } from '../skill-catalog-source';
 import {
   buildChannelInstructions,
   buildSkillsCatalogSummary,
@@ -431,6 +433,107 @@ describe('skill-instructions.helper', () => {
       } as unknown as InstructionsScope;
 
       expect(await composeCallerInstructions(scope)).toBe('Server prompt.');
+    });
+  });
+
+  describe("a plugin's skill catalog source (#1067)", () => {
+    const resourceLine = (skills: string) =>
+      `This server has ${skills}: the \`skill://index.json\` resource lists each skill's \`SKILL.md\` URI.`;
+
+    const pointers = {
+      header: 'Available skills (load one with `load_skill`):',
+      truncationHint: 'use `search_skill` to find the rest',
+      compact: 'load one with `load_skill`.',
+    };
+
+    const scopeWith = (registry: SkillRegistryInterface, get: (token: unknown) => unknown, instructions?: string) =>
+      ({
+        metadata: { ...(instructions ? { instructions } : {}) },
+        skills: registry,
+        logger: { warn: jest.fn() },
+        runFlowForOutput: async (_flow: string, input: { skills: SkillEntry[] }) => ({ skills: input.skills }),
+        providers: { get },
+      }) as unknown as InstructionsScope & { logger: { warn: jest.Mock } };
+
+    const providing = (source: SkillCatalogSource) => (token: unknown) => {
+      if (token === SkillCatalogSourceToken) return source;
+      throw new ProviderNotRegisteredError(String(token), 'not registered');
+    };
+
+    it('waits for the source, so the instructions count the skills it registers, and uses its pointers', async () => {
+      const { registry, add } = makeMutableRegistry([]);
+      const scope = scopeWith(
+        registry,
+        providing({
+          ready: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            add({ metadata: { name: 'invoices', description: 'Look up invoices.' } });
+          },
+          pointers,
+        }),
+      );
+
+      expect(await composeCallerInstructions(scope)).toBe('This server has 1 skill: load one with `load_skill`.');
+    });
+
+    it('lists the skills under the source’s heading', async () => {
+      const scope = scopeWith(
+        makeRegistry([{ metadata: { name: 'invoices', description: 'Look up invoices.' } }]),
+        providing({
+          ready: async () => undefined,
+          pointers,
+        }),
+      );
+      scope.metadata.skillsConfig = { injectInstructions: 'append' } as never;
+
+      expect(await composeCallerInstructions(scope)).toBe(
+        'Available skills (load one with `load_skill`):\n\n- **invoices**: Look up invoices.',
+      );
+    });
+
+    it('composes the instructions when the source fails to load, and logs it', async () => {
+      const scope = scopeWith(
+        makeRegistry([{ metadata: { name: 'deploy', description: 'Deploy.' } }]),
+        providing({ ready: async () => Promise.reject(new Error('bundle pull failed')), pointers }),
+      );
+
+      expect(await composeCallerInstructions(scope)).toBe('This server has 1 skill: load one with `load_skill`.');
+      expect(scope.logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('a skill source failed to load'),
+        expect.objectContaining({ error: 'bundle pull failed' }),
+      );
+    });
+
+    it('uses the default pointers when no source is registered', async () => {
+      const scope = scopeWith(makeRegistry([{ metadata: { name: 'deploy', description: 'Deploy.' } }]), (token) => {
+        throw new ProviderNotRegisteredError(String(token), 'not registered');
+      });
+
+      expect(await composeCallerInstructions(scope)).toBe(resourceLine('1 skill'));
+      expect(scope.logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('uses the default pointers, and logs it, when the source provider fails to build', async () => {
+      const scope = scopeWith(makeRegistry([{ metadata: { name: 'deploy', description: 'Deploy.' } }]), () => {
+        throw new Error('factory threw');
+      });
+
+      expect(await composeCallerInstructions(scope)).toBe(resourceLine('1 skill'));
+      expect(scope.logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('the skill source provider failed'),
+        expect.objectContaining({ error: 'factory threw' }),
+      );
+    });
+
+    it('buildSkillsCatalogSummary takes the pointers too', () => {
+      const catalog = buildSkillsCatalogSummary(
+        makeRegistry([{ metadata: { name: 'deploy', description: 'Deploy.' } }]),
+        {
+          pointers,
+        },
+      );
+
+      expect(catalog).toBe('Available skills (load one with `load_skill`):\n\n- **deploy**: Deploy.');
     });
   });
 

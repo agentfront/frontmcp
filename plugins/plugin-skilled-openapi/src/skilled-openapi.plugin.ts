@@ -18,9 +18,11 @@ import {
   ListToolsHook,
   Plugin,
   ScopeEntry,
+  SkillCatalogSourceToken,
   type FlowCtxOf,
   type ProviderRegistry,
   type ProviderType,
+  type SkillCatalogSource,
   type SkillRegistryInterface,
   type ToolRegistry,
 } from '@frontmcp/sdk';
@@ -40,7 +42,7 @@ import { BundleSyncService } from './sync/bundle-sync.service';
 import LoadSkillTool from './tools/load-skill.tool';
 import { OperationToolFactory } from './tools/operation-tool.factory';
 import RunWorkflowTool from './tools/run-workflow.tool';
-import { searchSkillDescription } from './tools/search-skill.schema';
+import { searchSkillDescription, SKILL_TOOL_CATALOG_POINTERS } from './tools/search-skill.schema';
 import SearchSkillTool from './tools/search-skill.tool';
 
 /**
@@ -233,6 +235,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
     const catalog = buildSkillsCatalogSummary(scope.skills, {
       mcpResources: scope.metadata?.skillsConfig?.mcpResources,
       skills: visible,
+      pointers: SKILL_TOOL_CATALOG_POINTERS,
     });
     const description = catalog ? `${searchSkillDescription}\n\n---\n\n${catalog}` : searchSkillDescription;
     // The catalog is per caller: answer this list with a per-request view of the tool
@@ -316,6 +319,9 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
 
   static override dynamicProviders(options: SkilledOpenApiPluginOptionsInput): ProviderType[] {
     const parsed = skilledOpenApiPluginOptionsSchema.parse(options);
+    // The sync services the bundle-sync factory builds. The skill catalog source waits for them through this set:
+    // that factory is async, so the source can't inject the service it builds.
+    const builtSyncs = new Set<BundleSyncService>();
     const config = new SkilledOpenApiConfig(parsed);
 
     return [
@@ -410,6 +416,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
             source = createBundleSource(parsed.source, parsed.bundleCacheDir, logger, runtimeDeps);
           } catch (e) {
             logger.error(`failed to construct bundle source: ${(e as Error).message}`);
+            builtSyncs.add(sync);
             return sync;
           }
           // Hand the live source back to the host so an external scheduler
@@ -451,8 +458,21 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
               void sync.ensureReady();
             });
           }
+          builtSyncs.add(sync);
           return sync;
         },
+      },
+      {
+        // The server's initialize instructions wait for the bundle, so they count and list its skills, and point
+        // to load_skill and search_skill rather than to skill://index.json (#1067).
+        name: 'skilled-openapi:skill-catalog-source',
+        provide: SkillCatalogSourceToken,
+        useValue: {
+          ready: async () => {
+            await Promise.all([...builtSyncs].map((sync) => sync.ensureReady()));
+          },
+          pointers: SKILL_TOOL_CATALOG_POINTERS,
+        } satisfies SkillCatalogSource,
       },
     ];
   }

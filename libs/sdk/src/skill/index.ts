@@ -271,6 +271,10 @@ export type {
   InstructionsScope,
 } from './skill-instructions.helper';
 
+// A plugin's runtime skills: what the initialize instructions wait for, and how the catalog points to its tools
+export { SkillCatalogSourceToken } from './skill-catalog-source';
+export type { SkillCatalogSource, SkillCatalogPointers } from './skill-catalog-source';
+
 // HTTP Authentication
 export { SkillHttpAuthValidator, authorizeSkillHttpRequest, createSkillHttpAuthValidator } from './auth';
 export type { SkillHttpAccess, SkillHttpAuthContext, SkillHttpAuthResult, SkillHttpAuthValidatorOptions } from './auth';
