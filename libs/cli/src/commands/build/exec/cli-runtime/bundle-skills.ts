@@ -1,0 +1,172 @@
+/**
+ * The Skilled OpenAPI skills `<bin> install` teaches a coding agent: read from the running server as the caller, and
+ * each written as a SKILL.md whose actions run through the CLI. Compiled with the CLI, then bundled into each
+ * generated CLI whose server uses the plugin.
+ */
+import { renderFrontmatter } from './skill-md-compose';
+import {
+  actionCommandLine,
+  exampleInput,
+  optionalInputNames,
+  resourceText,
+  SKILLED_OPENAPI_TOOLS,
+  skilledCommandLine,
+  shellQuoted,
+  toolErrorText,
+  type SkillAction,
+  type SkilledClient,
+} from './skilled-commands';
+
+/** The most skills one `load_skill` call loads. */
+const SKILLS_PER_LOAD = 10;
+
+export interface BundleSkillAction extends SkillAction {
+  description?: string;
+}
+
+/** A skill of the bundle the server has loaded, as `load_skill` answers it for the caller. */
+export interface BundleSkill {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  bundleVersion: string;
+  /** The actions the caller may run. */
+  actions: BundleSkillAction[];
+}
+
+/** The commands a bundle skill's SKILL.md names. */
+export interface BundleSkillCommands {
+  /** The CLI's name. */
+  bin: string;
+  /** How the CLI is started: its name, or the path the agent runs it by. */
+  cli: string;
+  /** The plugin's tools the CLI has commands for. */
+  toolNames: readonly string[];
+  /** Whether the commands are top-level (`<bin> execute`) or under `skills` (`<bin> skills execute`). */
+  topLevel: boolean;
+  /** The command that rewrites the bundle skills after the bundle changes. */
+  refresh: string;
+}
+
+/** What `install` writes for a bundle skill: its id and name, which its folder is named after, and its SKILL.md. */
+export interface BundleSkillFile {
+  id: string;
+  name: string;
+  skillMd: string;
+}
+
+interface SkillIndex {
+  skills?: Array<{ type?: string; name?: string }>;
+}
+
+interface LoadSkillsOutput {
+  skills?: Array<{
+    skill: Omit<BundleSkill, 'bundleVersion' | 'actions'> & { bundleVersion?: string; actions?: BundleSkillAction[] };
+  }>;
+}
+
+/**
+ * The skills of the bundle the server has loaded that the caller may use, sorted by id, with the actions the caller
+ * may run: the skills `skill://index.json` lists for the caller, loaded with `load_skill`. A skill with no bundle
+ * version, such as the server's own `@Skill`, is left out. Throws when no bundle is loaded.
+ */
+export async function readBundleSkills(client: SkilledClient): Promise<BundleSkill[]> {
+  // Fails when no bundle is loaded, so a missing bundle is never taken for one with no skills
+  const probe = await client.callTool(SKILLED_OPENAPI_TOOLS.search, { query: 'skills', limit: 1 });
+  if (probe.isError) throw new Error(toolErrorText(probe));
+  const index = JSON.parse(resourceText(await client.readResource('skill://index.json'))) as SkillIndex;
+  const names = (index.skills ?? []).flatMap((entry) => (entry.type === 'skill-md' && entry.name ? [entry.name] : []));
+  const skills: BundleSkill[] = [];
+  for (let start = 0; start < names.length; start += SKILLS_PER_LOAD) {
+    const skillIds = names.slice(start, start + SKILLS_PER_LOAD);
+    const result = await client.callTool(SKILLED_OPENAPI_TOOLS.load, { skillIds });
+    if (result.isError) throw new Error(toolErrorText(result));
+    for (const { skill } of (result.structuredContent as LoadSkillsOutput | undefined)?.skills ?? []) {
+      if (skill.bundleVersion !== undefined) {
+        skills.push({ ...skill, bundleVersion: skill.bundleVersion, actions: skill.actions ?? [] });
+      }
+    }
+  }
+  return skills.sort((first, second) => first.id.localeCompare(second.id));
+}
+
+/** The SKILL.md of each bundle skill, and the bundle version they were read from. */
+export function bundleSkillFiles(
+  skills: BundleSkill[],
+  commands: BundleSkillCommands,
+): { bundleVersion?: string; skills: BundleSkillFile[] } {
+  return {
+    bundleVersion: skills[0]?.bundleVersion,
+    skills: skills.map((skill) => ({ id: skill.id, name: skill.name, skillMd: composeBundleSkillMd(skill, commands) })),
+  };
+}
+
+/** Words joined into a command line a shell runs as they are: a word with other characters than these is quoted. */
+export function shellCommandLine(words: string[]): string {
+  return words.map((word) => (/^[\w./:=@%+,-]+$/.test(word) ? word : shellQuoted(word))).join(' ');
+}
+
+/**
+ * A bundle skill's SKILL.md: its name and description, marked as generated from the bundle version; its
+ * instructions; each action with a ready command; and how to chain several actions in one workflow.
+ */
+export function composeBundleSkillMd(skill: BundleSkill, commands: BundleSkillCommands): string {
+  const frontmatter = renderFrontmatter({
+    name: skill.name,
+    description: skill.description,
+    metadata: {
+      source: 'skilled-openapi-bundle',
+      'bundle-version': skill.bundleVersion,
+      'generated-by': `${commands.bin} install`,
+    },
+  });
+  const sections = [
+    `> Generated by \`${commands.bin} install\` from version ${skill.bundleVersion} of the server's skill bundle. ` +
+      `Don't edit it: after the bundle changes, run \`${commands.refresh}\` to write it again.`,
+    skill.instructions.trim() || `# ${skill.name}`,
+    actionsSection(skill.actions, commands),
+    workflowSection(skill.actions, commands),
+  ];
+  return `${frontmatter}\n${sections.filter((section) => section !== undefined).join('\n\n')}\n`;
+}
+
+function offers(commands: BundleSkillCommands, verb: 'execute' | 'run'): boolean {
+  return commands.toolNames.includes(SKILLED_OPENAPI_TOOLS[verb]);
+}
+
+function actionsSection(actions: BundleSkillAction[], commands: BundleSkillCommands): string {
+  if (actions.length === 0) return '## Actions\n\nThis skill has no actions you may run.';
+  const executeCommand = skilledCommandLine(commands.cli, 'execute', commands.topLevel);
+  const intro = offers(commands, 'execute')
+    ? `Run an action with \`${executeCommand} <actionId> --input '<json>'\`: it prints the action's data. ` +
+      'An action the server asks to confirm fails with `the user declined` when there is no terminal to ask on: ' +
+      'ask the user, then run the command again with `--yes`.'
+    : 'Run these actions in a workflow, below.';
+  const entries = actions.map((action) => {
+    const lines = [`### ${action.actionId}`, '', action.summary];
+    if (action.description && action.description !== action.summary) lines.push('', action.description);
+    if (offers(commands, 'execute')) {
+      lines.push('', '```bash', actionCommandLine(executeCommand, action), '```');
+    }
+    const optional = optionalInputNames(action.inputJsonSchema);
+    if (optional.length > 0) lines.push('', `Optional input: ${optional.map((name) => `\`${name}\``).join(', ')}.`);
+    return lines.join('\n');
+  });
+  return ['## Actions', intro, ...entries].join('\n\n');
+}
+
+function workflowSection(actions: BundleSkillAction[], commands: BundleSkillCommands): string | undefined {
+  if (!offers(commands, 'run') || actions.length === 0) return undefined;
+  const runCommand = skilledCommandLine(commands.cli, 'run', commands.topLevel);
+  const [firstAction] = actions;
+  const exampleArguments = [firstAction.actionId, exampleInput(firstAction.inputJsonSchema)].map((value) => JSON.stringify(value));
+  const script = `return await callTool(${exampleArguments.join(', ')});`;
+  return [
+    '## Several actions at once',
+    `\`${runCommand} '<script>'\` runs a script that chains actions: each \`await callTool(actionId, input)\` runs ` +
+      'one and returns its data, and the value the script returns is printed. Pass a longer script with ' +
+      '`--file <path>`, or `-` to read it from standard input.',
+    ['```bash', `${runCommand} ${shellQuoted(script)}`, '```'].join('\n'),
+  ].join('\n\n');
+}

@@ -238,9 +238,11 @@ export async function buildExec(
     if (capabilities.jobs) console.log(`${c('cyan', '[build:exec]')} capability: jobs`);
     if (capabilities.workflows) console.log(`${c('cyan', '[build:exec]')} capability: workflows`);
 
-    // Copy skill content files via shared helper (flat _skills/ layout).
+    // Copy skill content files via shared helper (flat _skills/ layout). A bundle skill is left out: `<bin> install`
+    // reads it from the running server, so it matches the bundle and the caller.
     const { copySkillAssets } = await import('./skill-assets.js');
-    const { copiedCount } = copySkillAssets(outDir, schema.skillAssets);
+    const shippedSchema = { ...schema, skillAssets: schema.skillAssets.filter((asset) => asset.bundleVersion === undefined) };
+    const { copiedCount } = copySkillAssets(outDir, shippedSchema.skillAssets);
     if (copiedCount > 0) {
       console.log(`${c('green', '[build:exec]')} copied ${copiedCount} skill content file(s) to _skills/`);
     }
@@ -251,7 +253,7 @@ export async function buildExec(
     // this file + the staged _skills/ directory and hands the result to the
     // shared plugin-emitter.
     const { writeBinMeta } = await import('./bin-meta.js');
-    await writeBinMeta(outDir, config, schema);
+    await writeBinMeta(outDir, config, shippedSchema);
 
     // Log tool name conflicts
     const cliConfig = config.cli || { enabled: true };
@@ -313,9 +315,11 @@ export async function buildExec(
     // final CLI bundle. The emitter imports `./skill-md-compose`, so the
     // sibling file has to land in __cli_temp/ too — otherwise the esbuild
     // step that produces the bin's CLI bundle fails with a missing-module
-    // error. The Skilled OpenAPI commands (`./skilled-commands`) are a
-    // compiled module as well. Tolerate absence in test/source-only contexts.
-    for (const compiledModule of ['plugin-emitter.js', 'skill-md-compose.js', 'skilled-commands.js']) {
+    // error. The Skilled OpenAPI commands (`./skilled-commands`) and the
+    // bundle skills `install` writes (`./bundle-skills`) are compiled modules
+    // as well. Tolerate absence in test/source-only contexts.
+    const compiledModules = ['plugin-emitter.js', 'skill-tree.js', 'skill-md-compose.js', 'skilled-commands.js', 'bundle-skills.js'];
+    for (const compiledModule of compiledModules) {
       const compiledModulePath = path.join(__dirname, 'cli-runtime', compiledModule);
       if (fs.existsSync(compiledModulePath)) {
         fs.copyFileSync(compiledModulePath, path.join(tempDir, compiledModule));

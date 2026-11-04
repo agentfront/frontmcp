@@ -314,9 +314,17 @@ behavior under its `install` verb (no new top-level verb):
 my-bin install -p claude              # write .claude/plugins/my-bin/
 my-bin install -p claude --scope user # ~/.claude/plugins/my-bin/
 my-bin install -p claude -p codex     # both providers in one call
-my-bin install --status               # report state per provider
+my-bin install --status               # report state per provider, and the skills by kind
+my-bin install --refresh-skills       # rewrite only the Skilled OpenAPI bundle skills
 my-bin uninstall -p claude            # remove only managed files
 ```
+
+On a server that uses the Skilled OpenAPI plugin, install also writes the
+bundle's skills, read from the running server as the logged-in caller, each
+with ready `my-bin execute <actionId> --input '<json>'` lines. They are kept
+apart from the server's own `@Skill`s, and `--refresh-skills` rewrites only
+them after the bundle changes. See `build-for-cli`, "Teaching a coding agent
+the bundle skills".
 
 The MCP server entry restarts the bin that ran `install`:
 
@@ -337,7 +345,11 @@ built the bin.
 ### Codex entry
 
 `-p codex` / `--codex` adds a table to `~/.codex/config.toml`, between markers
-so uninstall removes exactly what install wrote:
+so uninstall removes exactly what install wrote. The per-bin `<bin> install -p codex`
+also writes the skills, both kinds, to `.codex/skills/<bin>/<skill>/SKILL.md`
+(`~/.codex/skills/<bin>/` with `--scope user`), recorded in
+`.codex/skills/<bin>/.frontmcp.json`; `<bin> uninstall -p codex` removes them.
+Up to 1.11.0 it wrote no skills.
 
 ```toml
 # frontmcp:codex-start:my-bin
@@ -362,8 +374,12 @@ env_vars = ["MY_TOKEN"]          # one per --env; Codex forwards them from its e
 .claude/plugins/<bin>/
 ├── .claude-plugin/plugin.json   # name, version, mcpServers, skills, _meta.frontmcp.managedFiles
 ├── commands/<prompt>.md         # one per @Prompt the server advertises
-└── skills/<name>/SKILL.md       # one per @Skill, with references/examples/scripts/assets subdirs
+└── skills/<name>/SKILL.md       # one per @Skill, with references/examples/scripts/assets subdirs,
+                                 # and one per Skilled OpenAPI bundle skill (per-bin install)
 ```
+
+`plugin.json` lists both kinds in `skills`; `_meta.frontmcp.bundleSkills`
+names the bundle skills' folders and the bundle version they were read from.
 
 ### SKILL.md frontmatter synthesis
 
@@ -383,7 +399,10 @@ writing the file:
 
 Skill names are validated against the same allowlist as plugin names
 (`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`) before any filesystem write, so a malicious
-`@Skill({ name: '../escape' })` cannot land outside the plugin tree.
+`@Skill({ name: '../escape' })` cannot land outside the plugin tree. A
+Skilled OpenAPI bundle skill's folder is its name in kebab-case instead
+(`Guarded action` → `guarded-action`), with `-2`, `-3` and so on for a folder
+already taken, and its `SKILL.md` keeps the display name.
 
 ### Idempotency
 
