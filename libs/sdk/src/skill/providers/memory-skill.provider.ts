@@ -284,7 +284,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
    */
   private async computeIndexKey(): Promise<string> {
     const parts = Array.from(this.skills.values())
-      .map((s) => `${s.id}\u0000${skillSearchText(s)}`)
+      .map((s) => `${s.id}\u0000${s.bundleVersion ?? ''}\u0000${skillSearchText(s)}`)
       .sort();
     const tokenizer = this.tokenizerId ?? 'ascii';
     const canonical = `frontmcp-skill-index:v1|${this.scoring}|${tokenizer}|${this.skills.size}|${parts.join('')}`;
@@ -410,6 +410,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
         availableTools: validation?.available ?? toolNames,
         missingTools: validation?.missing ?? [],
         source: 'local',
+        ...(skill.bundleVersion !== undefined && { bundleVersion: skill.bundleVersion }),
       });
     }
 

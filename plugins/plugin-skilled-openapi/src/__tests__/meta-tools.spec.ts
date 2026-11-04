@@ -102,9 +102,9 @@ function makeToolThis(args: {
   const scope = fakeScopeEntry(skills);
   const map = new Map<unknown, unknown>();
   // Use class identity as the DI key; each meta-tool calls this.get(Token).
-  // Meta-tools `await this.get(BundleSyncService).ensureReady()` before reading
+  // Meta-tools `await this.get(BundleSyncService).ensureLoaded()` before reading
   // the registry; the registry here is pre-seeded, so the sync is a no-op.
-  map.set(BundleSyncService, { ensureReady: async () => {} });
+  map.set(BundleSyncService, { ensureLoaded: async () => {} });
   map.set(SkilledOpenApiConfig, args.config ?? baseConfig());
   map.set(HiddenOpRegistry, args.hiddenOps ?? new HiddenOpRegistry());
   map.set(BundleStore, args.bundleStore ?? new BundleStore());
@@ -154,11 +154,12 @@ describe('search_skill', () => {
   it('maps registry results to search response shape', async () => {
     const search = jest.fn(async () => [
       {
-        metadata: { id: 's1', name: 'S1', description: 'D1', bundleVersion: 'v3' },
+        metadata: { id: 's1', name: 'S1', description: 'D1' },
         score: 0.9,
         availableTools: [],
         missingTools: [],
         source: 'local' as const,
+        bundleVersion: 'v3',
       },
     ]);
     const ctx = makeToolThis({ scopeSkills: { search, hasAny: jest.fn(() => true) } });

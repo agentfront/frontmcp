@@ -64,7 +64,7 @@ loading a skill, the model runs its operations with a script:
 
 | Tool           | Input                                                | What it does                                                                                                                                                                                                                                                                                                                                                      |
 | -------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_skill` | `query`, `limit?` (default 20), `tags?`, `notQuery?` | Searches the skills and returns `{ skills: [{ skillId, name, description, score, bundleVersion }] }`. Its description lists the skills the caller may use, so the model sees what the server can do, and loads a skill it names with `load_skill` directly, without searching.                                                                                    |
+| `search_skill` | `query`, `limit?` (default 20), `tags?`, `notQuery?` | Searches the skills and returns `{ skills: [{ skillId, name, description, score, bundleVersion }] }`, where `bundleVersion` is the version of the bundle the skill comes from. Its description lists the skills the caller may use, so the model sees what the server can do, and loads a skill it names with `load_skill` directly, without searching.           |
 | `load_skill`   | `skillId`, or `skillIds` (up to 10)                  | Returns the skill's markdown instructions and its `actions`, with their input and output JSON Schemas: the `actionId`s a script calls. `skillId` takes the name the catalog shows, or an id; `skillIds` loads several, under `skills`. Its description tells the model to load each skill once per conversation, and again only when its `bundleVersion` changes. |
 | `run_workflow` | `script`                                             | Runs an AgentScript program (a subset of JavaScript) in the `@enclave-vm` sandbox. Each `await callTool(actionId, input)` calls an operation; the script's `return` value is the result.                                                                                                                                                                          |
 
@@ -127,13 +127,34 @@ for a bad one.
 | `saas`   | `endpoint`, `authToken`, `expectedAudience`, `jwksUrl`, `expectedIssuer`, `pollIntervalMs?` | Pulls the bundle over HTTPS at startup and every `pollIntervalMs` (default 5 minutes), after checking `authToken` against `jwksUrl`, `expectedIssuer` and `expectedAudience`.                          |
 
 A new bundle from `static` (with `watch`) or `saas` is checked like the first, then replaces the skills and operations
-at once. A bundle that fails its checks isn't applied, and the reason is logged.
+at once. A bundle that fails its checks isn't applied, and the reason is logged; the bundle already loaded stays.
+
+A `static` file that fails to load at startup is still watched (with `watch: true`), and a `saas` source keeps polling
+after a failed first pull, so the next good bundle loads without a restart.
+
+### When no bundle loads
+
+If the bundle fails to load (a bad signature, a schema error, an unreachable source) and no bundle was loaded before,
+the server keeps running, and:
+
+- `search_skill`, `load_skill` and `run_workflow` answer an error, code `SKILL_BUNDLE_NOT_LOADED`:
+  `No skill bundle is loaded: <reason>`, for example
+  `No skill bundle is loaded: bundle acme:billing@1.4.0 was not applied: unknown signing keyId "ci-2026" — not in trustedKeys allowlist`.
+  The reason is the first line of the error, with each URL cut to its scheme, host and path, and tokens removed. The
+  log has the full reason.
+- `/readyz` answers 503: its `skilled-openapi` check is `unhealthy`, with the same reason in `error`.
+
+Once a bundle loads (a watched file is fixed, a poll succeeds), the tools work again and the check is `healthy`, with
+`details: { state: 'loaded', bundleId, bundleVersion }`.
 
 ### The bundle
 
 A bundle is a JSON or YAML object with `schemaVersion`, `bundleId`, `version`, `services`, `authBindings`, `skills`,
-`operations` and, when signed, `integrity`. It can also be wrapped in an OpenAPI Overlay document, under
-`info["x-frontmcp-bundle"]`, so it can live next to the spec it describes. `compileSkilledBundleFromOpenApi()` from
+`operations` and, when signed, `integrity`. YAML is read with the YAML 1.2 core schema, so it means what the same JSON
+would: an unquoted timestamp such as `generatedAt: 2026-05-04T12:00:00.000Z`, as `yaml.stringify` writes it, stays
+the string that was signed, and merge keys (`<<`) and tags such as `!!binary` aren't supported. A bundle can also be
+wrapped in an OpenAPI Overlay document, under `info["x-frontmcp-bundle"]`, so it can live next to the spec it
+describes. `compileSkilledBundleFromOpenApi()` from
 `@frontmcp/adapters/skills` builds the services and operations from an OpenAPI spec, and the same entry point exports
 `canonicalize()`, `bundleDigest()` and `verifyBundleSignature()` for signing in CI. See
 [The bundle](https://frontmcp.dev/reference/plugins/skilled-openapi#the-bundle) for every field.

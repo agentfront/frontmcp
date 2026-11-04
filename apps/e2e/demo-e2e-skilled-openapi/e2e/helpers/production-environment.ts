@@ -1,6 +1,8 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { stringify as toYaml } from 'yaml';
+
 import { bundleDigest, canonicalize, type ResolvedBundle, type SignatureKey } from '@frontmcp/adapters/skills';
 import {
   base64urlEncode,
@@ -31,6 +33,8 @@ export class ProductionEnvironment {
   readonly env: Record<string, string> = {};
   /** The same environment with a bundle changed after it was signed. */
   readonly tamperedBundleEnv: Record<string, string> = {};
+  /** The same environment with the signed bundle written as YAML, as `yaml.stringify` writes it. */
+  readonly yamlBundleEnv: Record<string, string> = {};
   private running?: RunningEnvironment;
 
   get billingApi(): MockBillingApi {
@@ -92,8 +96,10 @@ export class ProductionEnvironment {
 
     const signedPath = join(directory, 'billing-bundle.signed.json');
     const tamperedPath = join(directory, 'billing-bundle.tampered.json');
+    const yamlPath = join(directory, 'billing-bundle.signed.yaml');
     await writeFile(signedPath, JSON.stringify(signed));
     await writeFile(tamperedPath, JSON.stringify(tampered));
+    await writeFile(yamlPath, toYaml(signed));
 
     Object.assign(this.env, {
       SKILLED_BUNDLE_PATH: signedPath,
@@ -104,6 +110,7 @@ export class ProductionEnvironment {
       MCP_SESSION_SECRET: base64urlEncode(randomBytes(32)),
     });
     Object.assign(this.tamperedBundleEnv, { SKILLED_BUNDLE_PATH: tamperedPath });
+    Object.assign(this.yamlBundleEnv, { SKILLED_BUNDLE_PATH: yamlPath });
   }
 
   async stop(): Promise<void> {

@@ -1,6 +1,10 @@
 import * as yaml from 'js-yaml';
 
+import { generateRsaKeyPair, rsaSignBase64Url } from '@frontmcp/utils';
+
+import type { ResolvedBundle } from '../bundle/bundle.types';
 import { OverlayParseError, parseOverlay } from '../bundle/overlay-parser';
+import { bundleDigest, canonicalize, verifyBundleSignature } from '../security/bundle-signature';
 
 const baseBundle = {
   schemaVersion: 1,
@@ -56,6 +60,51 @@ describe('parseOverlay', () => {
     const yamlContent = yaml.dump(baseBundle);
     const bundle = parseOverlay({ kind: 'yaml', content: yamlContent });
     expect(bundle.bundleId).toBe('acme:prod');
+  });
+
+  it('keeps an unquoted ISO timestamp the string it was written as', () => {
+    const yamlContent = yaml.dump(baseBundle, { schema: yaml.CORE_SCHEMA });
+
+    const bundle = parseOverlay({ kind: 'yaml', content: yamlContent });
+
+    expect(yamlContent).toMatch(/^generatedAt: 2026-05-01T12:00:00\.000Z$/m);
+    expect(bundle.generatedAt).toBe('2026-05-01T12:00:00.000Z');
+  });
+
+  it('verifies a signed bundle written as YAML with an unquoted generatedAt', () => {
+    const keys = generateRsaKeyPair();
+    const signature = rsaSignBase64Url(
+      'RS256',
+      new TextEncoder().encode(canonicalize(baseBundle)),
+      keys.privateKey.export({ format: 'jwk' }),
+    );
+    const signed = {
+      ...baseBundle,
+      integrity: { alg: 'RS256', keyId: 'ci', digest: bundleDigest(baseBundle as ResolvedBundle), signature },
+    };
+    const trustedKey = {
+      keyId: 'ci',
+      alg: 'RS256' as const,
+      publicKeyPem: String(keys.publicKey.export({ type: 'spki', format: 'pem' })),
+    };
+
+    const bundle = parseOverlay({ kind: 'yaml', content: yaml.dump(signed, { schema: yaml.CORE_SCHEMA }) });
+
+    expect(verifyBundleSignature(bundle, [trustedKey])).toMatchObject({ ok: true, keyId: 'ci' });
+  });
+
+  it('reads YAML with the core schema, so a merge key (<<) stays a key, which the bundle schema refuses', () => {
+    const yamlContent = yaml
+      .dump(baseBundle)
+      .replace(
+        'authBindings:\n  default:\n    kind: bearer\n    vaultRef: stripe-key\n',
+        'authBindings:\n  none: &none\n    kind: none\n  default:\n    <<: *none\n',
+      );
+
+    const mergedByDefaultSchema = parseOverlay({ kind: 'object', content: yaml.load(yamlContent) });
+
+    expect(mergedByDefaultSchema.authBindings['default']).toEqual({ kind: 'none' });
+    expect(() => parseOverlay({ kind: 'yaml', content: yamlContent })).toThrow('Bundle schema validation failed');
   });
 
   it('parses JSON input', () => {

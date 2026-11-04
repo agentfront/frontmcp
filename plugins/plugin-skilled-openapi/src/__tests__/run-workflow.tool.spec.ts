@@ -107,9 +107,9 @@ function makeRunWorkflowThis(
 ) {
   const resolver = { resolve: jest.fn(async () => ({ token: 'sk_x' })) };
   const map = new Map<unknown, unknown>();
-  // run_workflow `await`s ensureReady() before resolving actions; the hidden-op
+  // run_workflow `await`s ensureLoaded() before resolving actions; the hidden-op
   // registry here is pre-seeded, so the sync is a no-op in this unit test.
-  map.set(BundleSyncService, { ensureReady: async () => {} });
+  map.set(BundleSyncService, { ensureLoaded: async () => {} });
   map.set(SkilledOpenApiConfig, args.config ?? baseConfig());
   map.set(HiddenOpRegistry, args.hiddenOps ?? new HiddenOpRegistry());
   map.set(AuthorityGuard, new AuthorityGuard());
@@ -419,9 +419,9 @@ describe('run_workflow — enclave sandbox unavailable', () => {
     // Re-importing gives the tool fresh DI token identities, so a key-matched
     // map would miss. The tool returns at the enclave-import catch BEFORE it
     // uses any of these singletons, so a permissive `get()` is enough — it just
-    // needs an `ensureReady()` for the bundle-sync await at the top of execute().
+    // needs an `ensureLoaded()` for the bundle-sync await at the top of execute().
     const ctx = {
-      get: () => ({ ensureReady: async () => {} }),
+      get: () => ({ ensureLoaded: async () => {} }),
       tryGet: () => undefined,
       logger: fakeLogger,
       authInfo: { user: { sub: 'u' } },

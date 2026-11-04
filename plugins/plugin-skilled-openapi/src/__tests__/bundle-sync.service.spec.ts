@@ -1,5 +1,6 @@
-import { BundleStore, type ResolvedBundle } from '@frontmcp/adapters/skills';
+import { BundleStore, OverlayParseError, type ResolvedBundle } from '@frontmcp/adapters/skills';
 import {
+  PublicMcpError,
   type RegisteredSkillContent,
   type RegisterSkillContentOptions,
   type SkillContent,
@@ -199,6 +200,152 @@ describe('BundleSyncService', () => {
       });
       await expect(sync.ensureReady()).resolves.toBeUndefined();
       expect(reg.registered).toHaveLength(0);
+    });
+  });
+
+  describe('load state and ensureLoaded', () => {
+    /** A source the test drives: `start()` runs `onStart`, and `emit()` hands a bundle to the listeners later. */
+    const makeDrivenSource = (onStart: (emit: (bundle: ResolvedBundle) => void) => Promise<void>) => {
+      const listeners = new Set<(b: ResolvedBundle) => void>();
+      const emit = (bundle: ResolvedBundle) => {
+        for (const fn of listeners) fn(bundle);
+      };
+      return {
+        emit,
+        source: {
+          start: () => onStart(emit),
+          onChange(fn: (b: ResolvedBundle) => void) {
+            listeners.add(fn);
+            return () => listeners.delete(fn);
+          },
+        },
+      };
+    };
+
+    const makeSync = (requireSignature = false) =>
+      new BundleSyncService(
+        new FakeRegistry() as unknown as SkillRegistryInterface,
+        new HiddenOpRegistry(),
+        new BundleStore(),
+        { requireSignature, trustedKeys: [], exposeOperationsAsInternalTools: false },
+        fakeLogger,
+      );
+
+    const untilLoaded = async (sync: BundleSyncService) => {
+      const deadline = Date.now() + 1000;
+      while (Date.now() < deadline && sync.loadState().status !== 'loaded') {
+        await new Promise((r) => setTimeout(r, 5));
+      }
+    };
+
+    it('is loading before the first load, then loaded with the bundle id and version', async () => {
+      const sync = makeSync();
+      const { source } = makeDrivenSource(async (emit) => emit(buildBundle({ version: '2.0.0' })));
+      sync.attachSource(source);
+
+      const before = sync.loadState();
+      await sync.ensureLoaded();
+
+      expect(before).toEqual({ status: 'loading' });
+      expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '2.0.0' });
+    });
+
+    it('refuses with the reason, and the issues the schema check found, when the source fails to start', async () => {
+      const sync = makeSync();
+      const { source } = makeDrivenSource(async () => {
+        throw new OverlayParseError('Bundle schema validation failed (1 issue(s))', [
+          'generatedAt: Invalid input: expected string, received Date',
+        ]);
+      });
+      sync.attachSource(source);
+      const reason =
+        'Bundle schema validation failed (1 issue(s)): generatedAt: Invalid input: expected string, received Date';
+
+      const refusal = sync.ensureLoaded();
+
+      await expect(refusal).rejects.toBeInstanceOf(PublicMcpError);
+      await expect(refusal).rejects.toMatchObject({
+        message: `No skill bundle is loaded: ${reason}`,
+        code: 'SKILL_BUNDLE_NOT_LOADED',
+      });
+      expect(sync.loadState()).toEqual({ status: 'failed', reason });
+      expect(loggerMocks.error).toHaveBeenCalledWith(`[skilled-openapi] initial bundle sync failed: ${reason}`);
+    });
+
+    it('refuses while the source has started without a first bundle', async () => {
+      const sync = makeSync();
+      const { source } = makeDrivenSource(async () => undefined);
+      sync.attachSource(source);
+
+      await expect(sync.ensureLoaded()).rejects.toMatchObject({
+        message: 'No skill bundle is loaded: the first bundle has not loaded yet',
+        code: 'SKILL_BUNDLE_NOT_LOADED',
+      });
+    });
+
+    it('refuses with the recorded reason when the bundle source could not be created', async () => {
+      const sync = makeSync();
+      sync.recordLoadFailure("the bundle source could not be created: ENOENT: no such file, open '/srv/b.json'");
+
+      await expect(sync.ensureLoaded()).rejects.toThrow(
+        "No skill bundle is loaded: the bundle source could not be created: ENOENT: no such file, open '[path]'",
+      );
+    });
+
+    it('refuses, naming the bundle and why, when the first bundle is not applied', async () => {
+      const sync = makeSync(true);
+      const { source } = makeDrivenSource(async (emit) => emit(buildBundle()));
+      sync.attachSource(source);
+
+      await expect(sync.ensureLoaded()).rejects.toThrow(
+        'No skill bundle is loaded: bundle acme:prod@1 was not applied: bundle missing integrity envelope',
+      );
+    });
+
+    it('serves again once a later bundle is applied', async () => {
+      const sync = makeSync();
+      const { source, emit } = makeDrivenSource(async () => {
+        throw new Error('pull responded 503');
+      });
+      sync.attachSource(source);
+      await expect(sync.ensureLoaded()).rejects.toThrow('No skill bundle is loaded: pull responded 503');
+
+      emit(buildBundle({ version: '1.0.1' }));
+      await untilLoaded(sync);
+
+      await expect(sync.ensureLoaded()).resolves.toBeUndefined();
+      expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '1.0.1' });
+    });
+
+    it('keeps serving the loaded bundle when a later one is not applied', async () => {
+      const sync = makeSync();
+      const { source, emit } = makeDrivenSource(async (next) => next(buildBundle({ version: '1.0.0' })));
+      sync.attachSource(source);
+      await sync.ensureLoaded();
+      const unknownOperation = buildBundle({ version: '1.1.0' });
+      unknownOperation.skills[0].operationIds = ['missingOperation'];
+
+      emit(unknownOperation);
+      const deadline = Date.now() + 1000;
+      while (Date.now() < deadline && !String(loggerMocks.warn.mock.calls.at(-1)?.[0]).includes('1.1.0 not applied')) {
+        await new Promise((r) => setTimeout(r, 5));
+      }
+
+      expect(loggerMocks.warn).toHaveBeenLastCalledWith(expect.stringContaining('acme:prod@1.1.0 not applied'));
+      await expect(sync.ensureLoaded()).resolves.toBeUndefined();
+      expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '1.0.0' });
+    });
+
+    it('gives clients a reason without the credentials and query of a URL in the error', async () => {
+      const sync = makeSync();
+      const { source } = makeDrivenSource(async () => {
+        throw new Error('fetch https://puller:s3cret@cloud.example.dev/v1/bundles?token=abc123 failed');
+      });
+      sync.attachSource(source);
+
+      await expect(sync.ensureLoaded()).rejects.toThrow(
+        'No skill bundle is loaded: fetch https://cloud.example.dev/v1/bundles failed',
+      );
     });
   });
 

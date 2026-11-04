@@ -212,9 +212,40 @@ describe('MemorySkillProvider', () => {
       // Deploy app should be excluded because it has missing tools
       expect(results.find((r) => r.metadata.id === 'deploy-app')).toBeUndefined();
     });
+
+    it('reports the bundleVersion of a skill a bundle registered, and none for a skill without one', async () => {
+      await provider.add(
+        createTestSkill({
+          id: 'refunds',
+          name: 'Refunds',
+          description: 'Refund charges billed through GitHub',
+          bundleVersion: '2026.11.04-1',
+        }),
+      );
+
+      const results = await provider.search('GitHub');
+
+      expect(results.find((r) => r.metadata.id === 'refunds')?.bundleVersion).toBe('2026.11.04-1');
+      expect(results.find((r) => r.metadata.id === 'github-pr')).not.toHaveProperty('bundleVersion');
+    });
   });
 
   describe('search (single-document corpus)', () => {
+    it('reports the bundleVersion of the one skill it finds', async () => {
+      await provider.add(
+        createTestSkill({
+          id: 'math-helper',
+          name: 'Math Helper',
+          description: 'Perform mathematical calculations',
+          bundleVersion: '3.1.0',
+        }),
+      );
+
+      const results = await provider.search('math');
+
+      expect(results.map((r) => r.bundleVersion)).toEqual(['3.1.0']);
+    });
+
     it('should find matching skill in single-document corpus', async () => {
       await provider.add(
         createTestSkill({
