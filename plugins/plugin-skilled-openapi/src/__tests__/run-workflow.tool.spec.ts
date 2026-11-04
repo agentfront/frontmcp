@@ -14,7 +14,6 @@ import { HiddenOpRegistry, type HiddenOpEntry } from '../registry/hidden-op.regi
 import { AuthorityGuard } from '../security/authority-guard';
 import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
 import { BundleSyncService } from '../sync/bundle-sync.service';
-// eslint-disable-next-line import/first -- must import AFTER the jest.mock calls above
 import RunWorkflowTool from '../tools/run-workflow.tool';
 
 // ── Controllable mocks (factories may only reference `mock`-prefixed vars) ──
@@ -224,7 +223,7 @@ describe('run_workflow', () => {
     expect(bridged).toEqual({ id: 'inv_1' });
     expect(res.success).toBe(true);
     expect(mockExecuteSkillAction).toHaveBeenCalledWith(
-      expect.objectContaining({ entry: expect.objectContaining({ skillId: 'billing' }), input: { amount: 10 } }),
+      expect.objectContaining({ listings: [expect.objectContaining({ skillId: 'billing' })], input: { amount: 10 } }),
     );
   });
 

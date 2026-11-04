@@ -66,6 +66,22 @@ describe('HiddenOpRegistry', () => {
     expect(r.get('b', 'op1')).toBeDefined();
   });
 
+  it('listingsOf returns the entry of every skill that lists the action, in the order they were set', () => {
+    const r = new HiddenOpRegistry();
+    r.set(buildEntry('billing-admin', 'getInvoice'));
+    r.set(buildEntry('billing-admin', 'voidInvoice'));
+    r.set(buildEntry('invoices', 'getInvoice'));
+
+    expect(r.listingsOf('getInvoice')?.map((entry) => entry.skillId)).toEqual(['billing-admin', 'invoices']);
+    expect(r.listingsOf('voidInvoice')?.map((entry) => entry.skillId)).toEqual(['billing-admin']);
+  });
+
+  it('listingsOf returns undefined for an action no skill lists', () => {
+    const r = new HiddenOpRegistry();
+    r.set(buildEntry('invoices', 'getInvoice'));
+    expect(r.listingsOf('voidInvoice')).toBeUndefined();
+  });
+
   it('values yields all entries', () => {
     const r = new HiddenOpRegistry();
     r.set(buildEntry('a', 'op1'));
