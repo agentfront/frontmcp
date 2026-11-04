@@ -10,6 +10,10 @@ export const MAX_DECISION_CANDIDATES = 254;
 
 const DEFAULTS = { maxCandidates: 50, minProbability: 0.1, timeoutMs: 5000, ttlMs: 600_000, maxEntries: 500 };
 
+function isProbability(value: unknown): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
 interface CachedDecision {
   expiresAt: number;
   decisions: SkillDecision[];
@@ -102,6 +106,8 @@ export class SkillDecisionRanker {
         this.options.decider({ query, notQuery, candidates, signal: controller.signal }),
         timeout,
       ]);
+      const invalid = decisions.find((decision) => !isProbability(decision.probability));
+      if (invalid) throw new Error(`the decision for "${invalid.id}" has no probability from 0 to 1`);
     } catch (error) {
       this.logger.warn('skill search: the decision model failed; results are ranked by the index', {
         error: error instanceof Error ? error.message : String(error),

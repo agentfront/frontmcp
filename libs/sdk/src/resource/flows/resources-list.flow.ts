@@ -269,9 +269,8 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
     this.state.set(
       'resources',
       resources.filter((item) => {
-        if (!skillOfResource.has(item)) return true;
         const skill = skillOfResource.get(item);
-        return skill !== undefined && servableSkills.has(skill);
+        return skill === undefined || servableSkills.has(skill);
       }),
     );
   }

@@ -216,7 +216,7 @@ CodeCallPlugin.init({
 
 ### Power Features
 
-- **TF-IDF Search** -- Term frequency-inverse document frequency scoring indexes tool names, descriptions, and tags. No external embedding service required. Words in any script are terms (`vectoriadb` 2.3.4 and later): Hebrew, Arabic and Cyrillic words whole, Chinese and Japanese as characters and pairs, and accents on Latin and Greek letters folded. Up to 1.11.0 only `[A-Za-z0-9_]` made terms.
+- **TF-IDF Search** -- Term frequency-inverse document frequency scoring indexes tool names, descriptions, and tags. No external embedding service required. Words in any script are terms (`vectoriadb` 2.3.4 and later): Hebrew, Arabic and Cyrillic words whole, Chinese as characters and pairs, Japanese kana and Thai as pairs, and accents on Latin and Greek letters folded. Up to 1.11.0 only `[A-Za-z0-9_]` made terms.
 - **Synonym Expansion** -- Automatically expands search queries with synonyms (e.g., "delete" also matches "remove", "erase"). Enable via `embedding.synonymExpansion.enabled`.
 - **Pass-by-Reference via Sidecar** -- Large results are stored in a sidecar map and passed by reference between tool calls in AgentScript, avoiding serialization overhead.
 

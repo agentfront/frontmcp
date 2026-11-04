@@ -130,6 +130,9 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
    */
   private tokenizer?: SkillTokenizer;
 
+  /** The id of {@link tokenizer}, part of the snapshot cache key; unset with an older vectoriadb's tokenizer. */
+  private tokenizerId?: string;
+
   /**
    * The index is rebuilt from `skills` when it is stale: adds/removes bump
    * `skillsVersion`, and the FIRST search after a mutation builds (or restores)
@@ -179,6 +182,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
       this.tokenizer = skillTokenizer(defaultTokenizer);
       dbConfig.tokenizer = this.tokenizer;
       dbConfig.tokenizerId = `${SKILL_TOKENIZER_ID}+${DEFAULT_TOKENIZER_ID ?? 'unknown'}`;
+      this.tokenizerId = dbConfig.tokenizerId;
     }
     return new TFIDFVectoria<SkillDocumentMetadata>(dbConfig);
   }
@@ -274,15 +278,16 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   }
 
   /**
-   * Stable content hash of the indexed skill set + scoring mode. Changing any
-   * skill's searchable text, the set of skills, or the scoring mode changes the
-   * key, so a stale snapshot is never restored.
+   * Stable content hash of the indexed skill set, scoring mode and tokenizer. Changing any skill's searchable text,
+   * the set of skills, the scoring mode or the tokenizer changes the key, so a stale snapshot is never restored, and
+   * the snapshot built for a new tokenizer is saved under a key the next cold start finds.
    */
   private async computeIndexKey(): Promise<string> {
     const parts = Array.from(this.skills.values())
       .map((s) => `${s.id}\u0000${skillSearchText(s)}`)
       .sort();
-    const canonical = `frontmcp-skill-index:v1|${this.scoring}|${this.skills.size}|${parts.join('')}`;
+    const tokenizer = this.tokenizerId ?? 'ascii';
+    const canonical = `frontmcp-skill-index:v1|${this.scoring}|${tokenizer}|${this.skills.size}|${parts.join('')}`;
     return sha256Hex(canonical);
   }
 
