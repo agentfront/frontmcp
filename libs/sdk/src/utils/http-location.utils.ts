@@ -8,5 +8,5 @@ const UNSAFE_IN_URL = /(?:[^\x21\x23-\x3b\x3d\x3f-\x5f\x61-\x7a\x7c\x7e]|%(?![0-
  * A lone surrogate, which `encodeURI()` cannot encode, becomes U+FFFD.
  */
 export function toLocationHeader(location: string): string {
-  return location.replace(UNSAFE_IN_URL, (chars) => encodeURI(chars.replace(/\p{Cs}/gu, '�')));
+  return location.replace(UNSAFE_IN_URL, (chars) => encodeURI(chars.replace(/\p{Cs}/gu, '\uFFFD')));
 }
