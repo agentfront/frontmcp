@@ -271,6 +271,17 @@ export type {
   InstructionsScope,
 } from './skill-instructions.helper';
 
+// Ranking skill search with a decision model (skillsConfig.decision)
+export { decisionsApiDecider } from './decision/decisions-api.decider';
+export type { DecisionsApiDeciderOptions } from './decision/decisions-api.decider';
+export type {
+  SkillDecider,
+  SkillDecision,
+  SkillDecisionCandidate,
+  SkillDecisionOptions,
+  SkillDecisionRequest,
+} from './decision/skill-decision.types';
+
 // A plugin's runtime skills: what the initialize instructions wait for, and how the catalog points to its tools
 export { SkillCatalogSourceToken } from './skill-catalog-source';
 export type { SkillCatalogSource, SkillCatalogPointers } from './skill-catalog-source';
