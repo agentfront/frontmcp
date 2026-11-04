@@ -390,3 +390,23 @@ test.describe('one action with execute_action (E6)', () => {
     );
   });
 });
+
+test.describe('a server without the confirm option (E7)', () => {
+  test('voids an invoice, by execute_action and in a workflow, without asking the user', async ({ server, auth }) => {
+    const admin = await asAdmin({ server, auth });
+    const asked: string[] = [];
+    admin.onElicitation((request) => {
+      asked.push(request.message);
+      return { action: 'decline' };
+    });
+    await executeAction(admin, 'createInvoice', { customerId: 'cus_e2e', amount: 10 });
+
+    const voided = await executeAction(admin, 'voidInvoice', { id: 'inv_1' });
+    const workflow = await runWorkflow(admin, "return await callTool('voidInvoice', { id: 'inv_1' });");
+
+    expect(voided.isError).toBe(false);
+    expect(workflow.success).toBe(true);
+    expect(asked).toEqual([]);
+    expect(requestsTo('/v1/invoices/inv_1')).toBe(2);
+  });
+});
