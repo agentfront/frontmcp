@@ -8,7 +8,7 @@ import type { FrontMcpLogger } from '@frontmcp/sdk';
 import { dirname, ensureDir, isRedirectResponse, pathResolve, readFile, writeFile } from '@frontmcp/utils';
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
-import { parseOverlay } from '../bundle/overlay-parser';
+import { OverlayParseError, parseOverlay } from '../bundle/overlay-parser';
 import { WebhookReplayGuard } from '../security/webhook-replay-guard';
 import type { SaasSourceOptions } from '../source-options';
 import type {
@@ -23,6 +23,7 @@ const DEFAULT_PULL_TIMEOUT_MS = 30_000;
 const USER_AGENT = 'frontmcp-skilled-openapi';
 /** How long the push path reuses the issuer's signing keys, so unauthenticated pushes can't each fetch the JWKS. */
 const PUSH_SIGNING_KEYS_TTL_MS = 60_000;
+const MAX_LISTED_ISSUES = 3;
 
 /**
  * The pinned pull token failed verification against `jwksUrl`, `expectedIssuer`
@@ -51,6 +52,13 @@ export class SaasPushRefusedError extends Error {
 }
 
 type TokenVerdict = { ok: true; claims: Record<string, unknown> } | { ok: false; reason: string };
+
+/** Why a pull failed, with the first issues the bundle checks found when the bundle was the problem. */
+function describePullFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!(error instanceof OverlayParseError) || !error.errors?.length) return message;
+  return `${message}: ${error.errors.slice(0, MAX_LISTED_ISSUES).join('; ')}`;
+}
 
 /** Claim values as a list: RFC 7519 allows a single string or an array. */
 function claimValues(claim: unknown): unknown[] {
@@ -85,7 +93,9 @@ function isUsableSigningKey(key: unknown): boolean {
  *   - Always attempts a fresh pull on `start()`.
  *   - If the pull fails AND a cached bundle exists on disk, falls back to it
  *     and emits a warning. This prevents a SaaS outage at boot from killing
- *     the customer's MCP server.
+ *     the customer's MCP server. The cache holds the last bundle the plugin
+ *     applied ({@link SaasPullSource.keepBundle}): a pulled bundle that fails
+ *     its signature or apply never replaces it.
  *   - If both pull and cache fail, `start()` throws. Polling still starts, so a
  *     later pull that succeeds loads the bundle.
  *
@@ -157,7 +167,7 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
     }
   }
 
-  /** Keep an applied pushed bundle as the last good one, as a pulled bundle is kept. */
+  /** Keep a bundle the plugin applied, pulled or pushed, as the last good one a start falls back to. */
   keepBundle(bundle: ResolvedBundle): Promise<void> {
     return this.persistCache(bundle);
   }
@@ -178,24 +188,22 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
     try {
       try {
         bundle = await this.fetchOnce();
-        await this.persistCache(bundle);
       } catch (e) {
         // A rejected pull token means the SaaS is not the one this server trusts:
         // serving the cached bundle would hide that, so fail instead.
         if (e instanceof SaasPullTokenRejectedError) throw e;
-        this.logger.warn(
-          `[saas-source] initial pull failed (${(e as Error).message}); attempting cached bundle fallback`,
-        );
+        const failure = describePullFailure(e);
+        this.logger.warn(`[saas-source] initial pull failed (${failure}); attempting cached bundle fallback`);
         bundle = await this.loadCache();
         if (!bundle) {
           throw new Error(
-            `[saas-source] initial pull failed and no cached bundle is available ${this.cacheLocation()}: ${(e as Error).message}`,
+            `[saas-source] initial pull failed and no cached bundle is available ${this.cacheLocation()}: ${failure}`,
             { cause: e },
           );
         }
         this.logger.warn(`[saas-source] using cached bundle "${bundle.bundleId}@${bundle.version}"`);
       }
-      this.notify(bundle);
+      await this.notify(bundle);
     } finally {
       this.inFlight = false;
       this.schedulePoll();
@@ -233,7 +241,8 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
   }
 
   /**
-   * Manually pull a fresh bundle, persist it, and notify listeners. Drive this
+   * Manually pull a fresh bundle and notify listeners, resolving once they are
+   * done with it (the plugin applied and kept it, or refused it). Drive this
    * from a Cron Trigger / Durable Object alarm on runtimes without background
    * timers (where `disablePolling` is set). Single-flight: returns `undefined`
    * if a pull is already in flight; throws if the pull itself fails (the caller
@@ -244,8 +253,7 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
     this.inFlight = true;
     try {
       const bundle = await this.fetchOnce();
-      await this.persistCache(bundle);
-      this.notify(bundle);
+      await this.notify(bundle);
       return bundle;
     } finally {
       this.inFlight = false;
@@ -262,13 +270,12 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
     this.inFlight = true;
     try {
       const bundle = await this.fetchOnce();
-      await this.persistCache(bundle);
-      this.notify(bundle);
+      await this.notify(bundle);
     } catch (e) {
       if (e instanceof SaasPullTokenRejectedError) {
         this.logger.error(`[saas-source] poll refused: ${e.message}; keeping the current bundle`);
       } else {
-        this.logger.warn(`[saas-source] poll failed: ${(e as Error).message}`);
+        this.logger.warn(`[saas-source] poll failed: ${describePullFailure(e)}`);
       }
     } finally {
       this.inFlight = false;
@@ -307,7 +314,6 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
     if (!verdict.ok) throw new SaasPullTokenRejectedError(verdict.reason);
   }
 
-  /** Check a token the issuer signed, against its JWKS, issuer and audience; throws only when the JWKS can't be read. */
   /**
    * The issuer's signing keys for checking a push token: fetched at most once a minute, and shared by concurrent
    * pushes. A pull always fetches them, so a key the issuer removed stops a pull at once.
@@ -352,6 +358,7 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
     return signingKeys;
   }
 
+  /** Check a token the issuer signed, against its JWKS, issuer and audience. */
   private async verifyIssuedToken(token: string, signingKeys: unknown[]): Promise<TokenVerdict> {
     const { jwksUrl, expectedIssuer, expectedAudience } = this.options;
     const verified = await this.jwksService.verifyTransparentToken(token, [
@@ -436,10 +443,10 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
     }
   }
 
-  private notify(bundle: ResolvedBundle): void {
+  private async notify(bundle: ResolvedBundle): Promise<void> {
     for (const fn of this.listeners) {
       try {
-        fn(bundle);
+        await fn(bundle);
       } catch (e) {
         this.logger.warn(`[saas-source] listener threw: ${(e as Error).message}`);
       }

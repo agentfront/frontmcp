@@ -902,8 +902,97 @@ describe('BundleSyncService', () => {
   });
 });
 
+describe('BundleSyncService last good bundle', () => {
+  const makeSync = (registry = new FakeRegistry()) =>
+    new BundleSyncService(
+      registry as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      new BundleStore(),
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+
+  /** A source that pulls `first` when it starts, hands later pulls to `pull()`, and records the bundles it keeps. */
+  const cachingSource = (first: ResolvedBundle) => {
+    const listeners = new Set<(b: ResolvedBundle) => Promise<void>>();
+    const kept: string[] = [];
+    const notify = async (bundle: ResolvedBundle) => {
+      for (const fn of listeners) await fn(bundle);
+    };
+    return {
+      kept,
+      pull: notify,
+      source: {
+        start: () => notify(first),
+        onChange(fn: (b: ResolvedBundle) => Promise<void>) {
+          listeners.add(fn);
+          return () => listeners.delete(fn);
+        },
+        async keepBundle(bundle: ResolvedBundle) {
+          kept.push(bundle.version);
+        },
+      },
+    };
+  };
+
+  const refunds = { id: 'refunds', name: 'Refunds', description: 'd', instructions: '# R', operationIds: [] };
+
+  it('keeps each pulled bundle it applies, before the pull counts as done, and never one it refuses', async () => {
+    const registry = new FakeRegistry();
+    registry.failOn.add('refunds');
+    const sync = makeSync(registry);
+    const { source, pull, kept } = cachingSource(buildBundle({ version: '1' }));
+    sync.attachSource(source);
+    await sync.ensureLoaded();
+
+    await pull(buildBundle({ version: '2', skills: [refunds] }));
+    const keptAfterRefusal = [...kept];
+    await pull(buildBundle({ version: '3' }));
+
+    expect(keptAfterRefusal).toEqual(['1']);
+    expect(kept).toEqual(['1', '3']);
+    expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '3' });
+  });
+
+  it('does not keep a pulled bundle whose signature check fails', async () => {
+    const sync = new BundleSyncService(
+      new FakeRegistry() as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      new BundleStore(),
+      { requireSignature: true, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+    const { source, kept } = cachingSource(buildBundle({ version: '1' }));
+    sync.attachSource(source);
+
+    await sync.ensureReady();
+
+    expect(kept).toEqual([]);
+    expect(sync.loadState()).toMatchObject({ status: 'failed' });
+  });
+
+  it('does not keep a pulled bundle while the bundle store is pinned', async () => {
+    const store = new BundleStore();
+    const sync = new BundleSyncService(
+      new FakeRegistry() as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      store,
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+    const { source, pull, kept } = cachingSource(buildBundle({ version: '1' }));
+    sync.attachSource(source);
+    await sync.ensureLoaded();
+    store.pin('1');
+
+    await pull(buildBundle({ version: '2' }));
+
+    expect(kept).toEqual(['1']);
+  });
+});
+
 describe('BundleSyncService pushed bundles', () => {
-  const pushReceiver = { verifyPushToken: jest.fn(), keepBundle: jest.fn() };
+  const pushReceiver = { verifyPushToken: jest.fn() };
 
   const makeSync = (registry = new FakeRegistry()) =>
     new BundleSyncService(
@@ -914,11 +1003,12 @@ describe('BundleSyncService pushed bundles', () => {
       fakeLogger,
     );
 
-  /** A source that emits `pulled` when it starts, and takes pushed bundles. */
-  const pullingSource = (pulled: ResolvedBundle) => {
+  /** A source that emits `pulled` when it starts, takes pushed bundles, and keeps applied ones with `keepBundle`. */
+  const pullingSource = (pulled: ResolvedBundle, keepBundle?: (bundle: ResolvedBundle) => Promise<void>) => {
     const listeners = new Set<(b: ResolvedBundle) => void>();
     return {
       push: pushReceiver,
+      keepBundle,
       async start() {
         for (const fn of listeners) fn(pulled);
       },
@@ -954,12 +1044,12 @@ describe('BundleSyncService pushed bundles', () => {
 
   it('keeps a pushed bundle once it is applied, before the next queued apply starts', async () => {
     const sync = makeSync();
-    sync.attachSource(pullingSource(buildBundle({ version: '1' })));
     const events: string[] = [];
     const keepApplied = async (bundle: ResolvedBundle) => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       events.push(`kept ${bundle.version}`);
     };
+    sync.attachSource(pullingSource(buildBundle({ version: '1' }), keepApplied));
     const applySpy = jest.spyOn(sync, 'apply');
     applySpy.mockImplementation(async (bundle) => {
       events.push(`apply ${bundle.version}`);
@@ -967,29 +1057,30 @@ describe('BundleSyncService pushed bundles', () => {
     });
 
     await Promise.all([
-      sync.applyPushed(buildBundle({ version: '2' }), keepApplied),
-      sync.applyPushed(buildBundle({ version: '3' }), keepApplied),
+      sync.applyPushed(buildBundle({ version: '2' })),
+      sync.applyPushed(buildBundle({ version: '3' })),
     ]);
 
-    expect(events.filter((event) => event !== 'apply 1')).toEqual(['apply 2', 'kept 2', 'apply 3', 'kept 3']);
+    expect(events.filter((event) => !event.endsWith(' 1'))).toEqual(['apply 2', 'kept 2', 'apply 3', 'kept 3']);
   });
 
   it('does not keep a pushed bundle that is not applied, and a failure to keep one leaves it applied', async () => {
     const registry = new FakeRegistry();
     registry.failOn.add('refunds');
     const sync = makeSync(registry);
-    sync.attachSource(pullingSource(buildBundle({ version: '1' })));
-    const refunds = { id: 'refunds', name: 'Refunds', description: 'd', instructions: '# R', operationIds: [] };
     const keepApplied = jest.fn(async () => {
       throw new Error('KV unavailable');
     });
+    sync.attachSource(pullingSource(buildBundle({ version: '1' }), keepApplied));
+    const refunds = { id: 'refunds', name: 'Refunds', description: 'd', instructions: '# R', operationIds: [] };
 
-    const refused = await sync.applyPushed(buildBundle({ version: '2', skills: [refunds] }), keepApplied);
-    const applied = await sync.applyPushed(buildBundle({ version: '3' }), keepApplied);
+    const refused = await sync.applyPushed(buildBundle({ version: '2', skills: [refunds] }));
+    const applied = await sync.applyPushed(buildBundle({ version: '3' }));
 
     expect(refused).toMatchObject({ applied: false });
     expect(applied).toMatchObject({ applied: true, bundleVersion: '3' });
-    expect(keepApplied).toHaveBeenCalledTimes(1);
+    expect(keepApplied).toHaveBeenCalledTimes(2);
+    expect(keepApplied).toHaveBeenLastCalledWith(expect.objectContaining({ version: '3' }));
     expect(loggerMocks.warn).toHaveBeenCalledWith(expect.stringContaining('keeping it as the last good bundle failed'));
   });
 

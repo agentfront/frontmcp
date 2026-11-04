@@ -72,7 +72,8 @@ export interface BundleApplyResult {
 /** Minimal slice of a bundle source that {@link BundleSyncService} drives. */
 interface StartableBundleSource {
   start(): Promise<void>;
-  onChange(listener: (bundle: ResolvedBundle) => void): () => void;
+  onChange(listener: (bundle: ResolvedBundle) => Promise<void>): () => void;
+  keepBundle?(bundle: ResolvedBundle): Promise<void>;
   readonly push?: BundlePushReceiver;
 }
 
@@ -143,12 +144,9 @@ export class BundleSyncService {
   }
 
   /** Apply a pushed bundle once the first bundle and those queued before it are applied. */
-  async applyPushed(
-    bundle: ResolvedBundle,
-    keepApplied?: (applied: ResolvedBundle) => Promise<void>,
-  ): Promise<BundleApplyResult> {
+  async applyPushed(bundle: ResolvedBundle): Promise<BundleApplyResult> {
     await this.ensureReady();
-    return this.enqueueApply(bundle, keepApplied);
+    return this.enqueueApply(bundle);
   }
 
   /** The bundle being served, or why there is none: a failed load counts only while no bundle is loaded. */
@@ -183,13 +181,15 @@ export class BundleSyncService {
       resolveFirst = resolve;
     });
     // Wire onChange HERE (request context). The first emit drives `firstApply`;
-    // later emits re-apply in order.
-    source.onChange((bundle) => {
+    // later emits re-apply in order. The source waits for each apply, so a Cron
+    // refresh ends once its bundle is applied and kept.
+    source.onChange(async (bundle) => {
       const applied = this.enqueueApply(bundle);
       if (!firstSettled) {
         firstSettled = true;
         void applied.then(() => resolveFirst());
       }
+      await applied;
     });
     try {
       await source.start();
@@ -215,16 +215,15 @@ export class BundleSyncService {
 
   /**
    * Apply after every apply queued before: apply() mutates the registry, the bundle store and the unregister
-   * handles, so two at once would leave them inconsistent. Never rejects, so the queue never breaks.
+   * handles, so two at once would leave them inconsistent. An applied bundle, pulled or pushed, is kept by the source
+   * before the next apply starts, so the last good bundle is always the last one applied. Never rejects, so the queue
+   * never breaks.
    */
-  private enqueueApply(
-    bundle: ResolvedBundle,
-    keepApplied?: (applied: ResolvedBundle) => Promise<void>,
-  ): Promise<BundleApplyResult> {
+  private enqueueApply(bundle: ResolvedBundle): Promise<BundleApplyResult> {
     const previous = this.applyQueue ?? Promise.resolve(undefined);
     const applied = previous.then(async () => {
       const result = await this.applyAndRecord(bundle);
-      if (result.applied && keepApplied) await this.keepAppliedBundle(bundle, keepApplied);
+      if (result.applied) await this.keepAppliedBundle(bundle);
       return result;
     });
     this.applyQueue = applied;
@@ -232,12 +231,10 @@ export class BundleSyncService {
   }
 
   /** Keep an applied bundle as the last good one; a failure to keep it leaves the bundle applied. */
-  private async keepAppliedBundle(
-    bundle: ResolvedBundle,
-    keepApplied: (applied: ResolvedBundle) => Promise<void>,
-  ): Promise<void> {
+  private async keepAppliedBundle(bundle: ResolvedBundle): Promise<void> {
+    if (!this.source?.keepBundle) return;
     try {
-      await keepApplied(bundle);
+      await this.source.keepBundle(bundle);
     } catch (e) {
       this.logger.warn(
         `[bundle-sync] bundle ${bundle.bundleId}@${bundle.version} is applied, but keeping it as the last good bundle failed: ${(e as Error).message}`,

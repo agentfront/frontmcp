@@ -91,7 +91,7 @@ describe('a managed edge Worker on workerd', () => {
     expect(result.text).not.toContain(billingToken);
   });
 
-  it('picks up a new bundle version on a Cron run: the skills change and KV keeps the new version', async () => {
+  it('picks up a new bundle version on a Cron run, applied and kept in KV by the time the run ends', async () => {
     publish('2.0.0', ['invoices', 'refunds']);
 
     const run = await worker.scheduled();
@@ -99,6 +99,17 @@ describe('a managed edge Worker on workerd', () => {
     expect(run.outcome).toBe('ok');
     expect(await servedSkills()).toEqual(['invoices', 'refunds']);
     expect((await searchBilling()).every((skill) => skill.bundleVersion === '2.0.0')).toBe(true);
+    expect(await worker.cachedBundleVersion()).toBe('2.0.0');
+  });
+
+  it('neither applies nor keeps a bundle changed after it was signed on a Cron run: KV keeps the version before', async () => {
+    const signed = signer.sign(billingBundle('2.1.0', ['reports']));
+    internet.bundle = { ...signed, skills: [...signed.skills, ...billingBundle('2.1.0', ['invoices']).skills] };
+
+    const run = await worker.scheduled();
+
+    expect(run.outcome).toBe('ok');
+    expect(await servedSkills()).toEqual(['invoices', 'refunds']);
     expect(await worker.cachedBundleVersion()).toBe('2.0.0');
   });
 

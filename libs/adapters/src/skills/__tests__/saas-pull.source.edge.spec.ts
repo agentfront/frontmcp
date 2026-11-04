@@ -3,7 +3,8 @@
  *   - a pluggable `cache` replaces the disk cache (no `fs` on a Worker),
  *   - `disablePolling` skips the `setInterval` loop (Workers have no background
  *     execution; a Cron Trigger / DO alarm drives refresh instead),
- *   - `refresh()` is the manual, Cron-driven pull (fetch → cache → notify).
+ *   - `refresh()` is the manual, Cron-driven pull (fetch → notify, resolving once listeners are done),
+ *   - the cache holds only the bundles the plugin keeps, after applying them.
  */
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import type { SaasSourceOptions } from '../source-options';
@@ -88,15 +89,19 @@ const fail = async () => {
 };
 
 describe('SaasPullSource — edge (worker-safe + Cron-refreshable)', () => {
-  it('uses the injected cache instead of the filesystem', async () => {
+  it('keeps a bundle in the injected cache, not on the filesystem, and only when asked to', async () => {
     const cache = memoryCache();
     const src = new EdgeFakeSource(options(), ok, { cache, disablePolling: true });
     const seen: ResolvedBundle[] = [];
     src.onChange((b) => seen.push(b));
 
     await src.start();
-    expect(cache.writes).toBe(1); // persisted to KV-like cache, not fs
-    expect(seen).toHaveLength(1);
+    const writesAfterPull = cache.writes;
+    await src.keepBundle(seen[0]);
+
+    expect(writesAfterPull).toBe(0);
+    expect(cache.writes).toBe(1);
+    expect(await cache.read()).toBe(seen[0]);
     await src.stop();
   });
 
@@ -126,16 +131,37 @@ describe('SaasPullSource — edge (worker-safe + Cron-refreshable)', () => {
     await src.stop();
   });
 
-  it('refresh() pulls, persists to cache, and notifies (Cron path)', async () => {
+  it('refresh() pulls, and resolves once its listener has applied and kept the bundle (Cron path)', async () => {
     const cache = memoryCache();
     const src = new EdgeFakeSource(options(), ok, { cache, disablePolling: true });
-    const seen: ResolvedBundle[] = [];
-    src.onChange((b) => seen.push(b));
+    src.onChange(async (b) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await src.keepBundle(b);
+    });
 
     const bundle = await src.refresh();
+
     expect(bundle?.bundleId).toBe('saas:test');
     expect(cache.writes).toBe(1);
-    expect(seen).toHaveLength(1);
+    await src.stop();
+  });
+
+  it('refresh() leaves the cache alone when its listener refuses the bundle', async () => {
+    const cache = memoryCache(baseBundle);
+    const src = new EdgeFakeSource(
+      options(),
+      async () => ({ status: 200, body: JSON.stringify({ ...baseBundle, version: '2' }) }),
+      {
+        cache,
+        disablePolling: true,
+      },
+    );
+    src.onChange(async () => undefined);
+
+    await src.refresh();
+
+    expect(cache.writes).toBe(0);
+    expect((await cache.read())?.version).toBe('1');
     await src.stop();
   });
 

@@ -136,10 +136,12 @@ crons = ["*/5 * * * *"]
 | `endpoint`                                                          | HTTPS URL that serves the signed bundle                                                        |
 | `authToken`                                                         | The token the bundle server issued for this server                                             |
 | `expectedAudience`, `jwksUrl`, `expectedIssuer`                     | How the bundle server's tokens are verified                                                    |
-| `cache`                                                             | Where the last good bundle is kept: `kvBundleCacheFromEnv('BINDING')`, or a store of your own  |
+| `cache`                                                             | Keeps the last bundle applied: `kvBundleCacheFromEnv('BINDING')`, or a store of your own       |
 | `enableWebhook`                                                     | Also take bundles pushed to `POST /__skilled_openapi/push`, as below                           |
 | `requireSignature`, `trustedKeys`, `dev`, `credentials`, `outbound` | Passed to the Skilled OpenAPI plugin. `dev` skips signature checks: never use it in production |
 | `pollIntervalMs`, `bundleCacheDir`                                  | Ignored on a Worker, which has no timers or file system                                        |
+
+A Cron run ends once the bundle it pulled is applied and kept in `cache`. A bundle that fails its signature or its other checks is not applied and not kept, so a cold start that can't reach the bundle server serves the last bundle the Worker applied.
 
 Each operation call checks the API's host first: on a Worker, `node:dns` resolves it over DNS over HTTPS, so the host must resolve publicly.
 

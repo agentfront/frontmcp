@@ -256,7 +256,7 @@ for a bad one.
 | `unprotectedOps`                  | `'allow' \| 'deny'`                                      | `'allow'`                           | Whether an operation with no `requiredAuthorities`, on itself or its skill, may be called. `'deny'` blocks it unless it's marked `public: true`.               |
 | `outbound`                        | `OutboundOptions`                                        | see below                           | Limits on the requests to your API.                                                                                                                            |
 | `dev`                             | `boolean`                                                | `false`                             | For development only: turns off signature checks (unless `requireSignature` is set) and allows `http:` URLs. Logs a warning.                                   |
-| `bundleCacheDir`                  | `string`                                                 | `'.frontmcp/skilled-openapi/'`      | Where the `saas` source keeps the last bundle it pulled, used when a pull fails at startup.                                                                    |
+| `bundleCacheDir`                  | `string`                                                 | `'.frontmcp/skilled-openapi/'`      | Where the `saas` source keeps the last bundle the plugin applied, served when a pull fails at startup.                                                         |
 | `exposeOperationsAsInternalTools` | `boolean`                                                | `true`                              | Register each operation as an internal tool for `this.callTool()`, which `execute_action` runs an action through.                                              |
 | `sourceConflictPolicy`            | `'static-wins' \| 'last-wins' \| 'reject'`               | `'static-wins'`                     | Accepted and currently unused: the plugin has one source.                                                                                                      |
 
@@ -282,8 +282,13 @@ for a bad one.
 | `saas`   | `endpoint`, `authToken`, `expectedAudience`, `jwksUrl`, `expectedIssuer`, `pollIntervalMs?`, `enableWebhook?` | Pulls the bundle over HTTPS at startup and every `pollIntervalMs` (default 5 minutes), after checking `authToken` against `jwksUrl`, `expectedIssuer` and `expectedAudience`. With `enableWebhook: true`, also takes pushed bundles (below). |
 
 A new bundle from `static` (with `watch`) or `saas` is checked like the first, then replaces the skills and operations
-at once. A bundle that fails its checks isn't applied, and the reason is logged; the bundle already loaded stays. A
-`run_workflow` already running when a new bundle is applied finishes on the operations of the bundle it started on.
+at once. A bundle that fails its checks isn't applied, and the reason is logged, with the first issues a schema check
+found; the bundle already loaded stays. A `run_workflow` already running when a new bundle is applied finishes on the
+operations of the bundle it started on.
+
+The `saas` source keeps the last bundle the plugin applied, pulled or pushed, in `bundleCacheDir` (on a Worker, in the
+injected cache). A bundle that fails its signature or its other checks is never kept, so a server that restarts while
+the bundle server is down serves the last bundle it applied.
 
 A `static` file that fails to load at startup is still watched (with `watch: true`), and a `saas` source keeps polling
 after a failed first pull, so the next good bundle loads without a restart.

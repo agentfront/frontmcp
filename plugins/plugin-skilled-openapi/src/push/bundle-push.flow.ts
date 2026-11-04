@@ -2,13 +2,7 @@
 
 import 'reflect-metadata';
 
-import {
-  OverlayParseError,
-  parseOverlay,
-  SaasPushRefusedError,
-  type BundlePushReceiver,
-  type ResolvedBundle,
-} from '@frontmcp/adapters/skills';
+import { OverlayParseError, parseOverlay, SaasPushRefusedError, type ResolvedBundle } from '@frontmcp/adapters/skills';
 import { extractBearerToken } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import {
@@ -35,7 +29,6 @@ const plan = {
 } as const satisfies FlowPlan<string>;
 
 export const bundlePushStateSchema = z.object({
-  receiver: z.custom<BundlePushReceiver>(),
   bundle: z.custom<ResolvedBundle>(),
 });
 
@@ -116,7 +109,6 @@ export default class BundlePushFlow extends FlowBase<typeof name> {
           : invalidToken('the push token was refused'),
       );
     }
-    this.state.set('receiver', receiver);
   }
 
   @Stage('parseBundle')
@@ -138,8 +130,8 @@ export default class BundlePushFlow extends FlowBase<typeof name> {
 
   @Stage('applyBundle')
   async applyBundle() {
-    const { receiver, bundle } = this.state.required;
-    const result = await this.get(BundleSyncService).applyPushed(bundle, (applied) => receiver.keepBundle(applied));
+    const { bundle } = this.state.required;
+    const result = await this.get(BundleSyncService).applyPushed(bundle);
     if (!result.applied) {
       return this.respond(
         refusal(

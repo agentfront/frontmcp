@@ -104,7 +104,7 @@ describe('SaasPullSource', () => {
     expect(seenHeaders['Authorization']).toBe(`Bearer ${pullToken}`);
   });
 
-  it('persists pulled bundle to cacheDir', async () => {
+  it('does not cache a pulled bundle until it is asked to keep it', async () => {
     const source = new FakeSaasSource(baseOptions(), tmpDir, async () => ({
       status: 200,
       body: JSON.stringify(baseBundle),
@@ -113,9 +113,40 @@ describe('SaasPullSource', () => {
     await source.start();
     await source.stop();
 
-    const cachedPath = path.join(tmpDir, 'acme_prod.json');
-    const cached = JSON.parse(await fs.readFile(cachedPath, 'utf8'));
+    await expect(fs.readdir(tmpDir)).resolves.toEqual([]);
+  });
+
+  it('keeps a bundle it is asked to keep at <cacheDir>/<expectedAudience>.json', async () => {
+    const source = new FakeSaasSource(baseOptions(), tmpDir, async () => ({
+      status: 200,
+      body: JSON.stringify(baseBundle),
+    }));
+    source.onChange((bundle) => source.keepBundle(bundle));
+    await source.start();
+    await source.stop();
+
+    const cached = JSON.parse(await fs.readFile(path.join(tmpDir, 'acme_prod.json'), 'utf8'));
     expect(cached.bundleId).toBe('saas:test');
+  });
+
+  it('finishes a pull only once its listeners are done with the bundle', async () => {
+    const source = new FakeSaasSource(baseOptions(), tmpDir, async () => ({
+      status: 200,
+      body: JSON.stringify(baseBundle),
+    }));
+    const events: string[] = [];
+    source.onChange(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      events.push('applied');
+    });
+
+    await source.start();
+    events.push('start resolved');
+    await source.refresh();
+    events.push('refresh resolved');
+    await source.stop();
+
+    expect(events).toEqual(['applied', 'start resolved', 'applied', 'refresh resolved']);
   });
 
   it('falls back to cached bundle when pull fails on boot', async () => {
@@ -179,6 +210,49 @@ describe('SaasPullSource', () => {
     expect(events.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('logs the issues the schema check found in a polled bundle', async () => {
+    let calls = 0;
+    const warn = jest.fn();
+    const logger = { ...fakeLogger, warn } as unknown as never;
+    const source = new (class extends SaasPullSource {
+      constructor() {
+        super(baseOptions({ pollIntervalMs: 20 }), tmpDir, logger);
+      }
+      protected override async httpGet(url: string, headers: Record<string, string>) {
+        return withSaasJwks(issuer, async () => {
+          calls++;
+          const skills = calls === 1 ? baseBundle.skills : [{ id: 'broken' }];
+          return { status: 200, body: JSON.stringify({ ...baseBundle, skills }) };
+        })(url, headers);
+      }
+    })();
+    source.onChange(() => {});
+    await source.start();
+    const deadline = Date.now() + 1500;
+    while (Date.now() < deadline && warn.mock.calls.length === 0) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    await source.stop();
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^\[saas-source\] poll failed: Bundle schema validation failed \(\d+ issue\(s\)\): skills\.0\.name: /,
+      ),
+    );
+  });
+
+  it('names the issues the schema check found when the first pull fails it and nothing is cached', async () => {
+    const source = new FakeSaasSource(baseOptions(), tmpDir, async () => ({
+      status: 200,
+      body: JSON.stringify({ ...baseBundle, skills: [{ id: 'broken' }] }),
+    }));
+
+    await expect(source.start()).rejects.toThrow(
+      /no cached bundle is available at .+: Bundle schema validation failed \(\d+ issue\(s\)\): skills\.0\.name: /,
+    );
+    await source.stop();
+  });
+
   it('logs poll failures without throwing', async () => {
     let calls = 0;
     const warn = jest.fn();
@@ -227,7 +301,7 @@ describe('SaasPullSource', () => {
     expect(maxConcurrent).toBe(1);
   });
 
-  it('persistCache failures (unwritable cacheDir) are logged but do not abort the pull', async () => {
+  it('logs a bundle it cannot keep (unwritable cacheDir) without failing the pull', async () => {
     const warn = jest.fn();
     const logger = { ...fakeLogger, warn } as unknown as never;
     // /dev/null/badpath is not writable — mkdir will fail.
@@ -239,9 +313,14 @@ describe('SaasPullSource', () => {
         return withSaasJwks(issuer, async () => ({ status: 200, body: JSON.stringify(baseBundle) }))(url, headers);
       }
     })();
-    sourceCustom.onChange(() => {});
+    const events: ResolvedBundle[] = [];
+    sourceCustom.onChange(async (bundle) => {
+      await sourceCustom.keepBundle(bundle);
+      events.push(bundle);
+    });
     await sourceCustom.start();
     await sourceCustom.stop();
+    expect(events).toHaveLength(1);
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/cache persist failed/));
   });
 
@@ -260,12 +339,12 @@ describe('SaasPullSource', () => {
   });
 
   it('falls back to cached bundle on second start when fresh pull fails', async () => {
-    // First run: persist cache
+    // First run: the bundle is applied, so it is kept.
     const seedSource = new FakeSaasSource(baseOptions(), tmpDir, async () => ({
       status: 200,
       body: JSON.stringify(baseBundle),
     }));
-    seedSource.onChange(() => {});
+    seedSource.onChange((bundle) => seedSource.keepBundle(bundle));
     await seedSource.start();
     await seedSource.stop();
 
@@ -280,6 +359,31 @@ describe('SaasPullSource', () => {
     await followupSource.stop();
     expect(events).toHaveLength(1);
     expect(events[0].bundleId).toBe('saas:test');
+  });
+
+  it('falls back to the last bundle kept on a start that cannot pull, not to a later pull that was never kept', async () => {
+    let version = '1.0.0';
+    const firstRun = new FakeSaasSource(baseOptions(), tmpDir, async () => ({
+      status: 200,
+      body: JSON.stringify({ ...baseBundle, version }),
+    }));
+    firstRun.onChange(async (bundle) => {
+      if (bundle.version === '1.0.0') await firstRun.keepBundle(bundle);
+    });
+    await firstRun.start();
+    version = '2.0.0';
+    await firstRun.refresh();
+    await firstRun.stop();
+
+    const offlineRun = new FakeSaasSource(baseOptions(), tmpDir, async () => ({ status: 503, body: '' }));
+    const events: ResolvedBundle[] = [];
+    offlineRun.onChange((bundle) => {
+      events.push(bundle);
+    });
+    await offlineRun.start();
+    await offlineRun.stop();
+
+    expect(events.map((bundle) => bundle.version)).toEqual(['1.0.0']);
   });
 
   it('parses YAML response body', async () => {
