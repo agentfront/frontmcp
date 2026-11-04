@@ -24,11 +24,20 @@ const SIGNING_KEY_ID = 'e2e-signing-key';
 /** The callers who connect their own billing account (e2e/caller-credentials.e2e.spec.ts). */
 export type ConnectedCaller = 'alice' | 'bob';
 
+/** A certificate for localhost and 127.0.0.1, and its key, in PEM. */
+export interface TlsMaterial {
+  key: string;
+  cert: string;
+}
+
 interface RunningEnvironment {
   directory: string;
+  tls: TlsMaterial;
   billingApi: MockBillingApi;
   billingToken: string;
   callerBillingTokens: Readonly<Record<ConnectedCaller, string>>;
+  unsignedBundle: ResolvedBundle;
+  signingKey: JsonWebKey;
 }
 
 /** Keys, certificate, signed bundle and credentials made per run in a temporary directory: nothing secret is committed. */
@@ -53,6 +62,26 @@ export class ProductionEnvironment {
   /** The billing token each connected caller signs in with, which the billing API also accepts. */
   get callerBillingTokens(): Readonly<Record<ConnectedCaller, string>> {
     return this.requireRunning().callerBillingTokens;
+  }
+
+  /** The certificate the server trusts through NODE_EXTRA_CA_CERTS, for any other mock it calls over HTTPS. */
+  get tls(): TlsMaterial {
+    return this.requireRunning().tls;
+  }
+
+  /** The billing bundle, pointing at the billing API, before it is signed. */
+  get unsignedBundle(): ResolvedBundle {
+    return this.requireRunning().unsignedBundle;
+  }
+
+  /** Sign a bundle with the key the server trusts. */
+  sign(bundle: ResolvedBundle): ResolvedBundle {
+    return signBundle(bundle, this.requireRunning().signingKey);
+  }
+
+  /** A new empty directory, removed by `stop()`. */
+  makeDirectory(prefix: string): Promise<string> {
+    return mkdtemp(join(this.requireRunning().directory, prefix));
   }
 
   async start(): Promise<void> {
@@ -81,19 +110,21 @@ export class ProductionEnvironment {
 
     const billingToken = base64urlEncode(randomBytes(32));
     const callerBillingTokens = { alice: base64urlEncode(randomBytes(32)), bob: base64urlEncode(randomBytes(32)) };
+    const tls = { key: await readFile(keyPath), cert: await readFile(certPath) };
     const billingApi = await startMockBillingApi({
       bearerTokens: [billingToken, ...Object.values(callerBillingTokens)],
-      tls: { key: await readFile(keyPath), cert: await readFile(certPath) },
+      tls,
     });
-    this.running = { directory, billingApi, billingToken, callerBillingTokens };
 
     const template = JSON.parse(await readFile(BUNDLE_TEMPLATE_PATH)) as ResolvedBundle;
-    const bundle: ResolvedBundle = {
+    const unsignedBundle: ResolvedBundle = {
       ...template,
       services: template.services.map((service) => ({ ...service, baseUrl: billingApi.url })),
     };
     const signingKeys = generateRsaKeyPair();
-    const signed = signBundle(bundle, signingKeys.privateKey.export({ format: 'jwk' }));
+    const signingKey = signingKeys.privateKey.export({ format: 'jwk' });
+    this.running = { directory, tls, billingApi, billingToken, callerBillingTokens, unsignedBundle, signingKey };
+    const signed = signBundle(unsignedBundle, signingKey);
     const tampered: ResolvedBundle = {
       ...signed,
       skills: signed.skills.map(({ requiredAuthorities: _opened, ...skill }) => skill),

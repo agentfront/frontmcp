@@ -5,7 +5,6 @@
 import type { HiddenOpEntry, OperationListings } from '../../registry/hidden-op.registry';
 import { AuthorityGuard, type UnprotectedOpsPolicy } from '../../security/authority-guard';
 import { authorizeAction, executeSkillAction, type SkillActionDeps } from '../execute-skill-action';
-import { clearCompiledSchemaCache } from '../schema-cache';
 
 const mockExecuteOperation = jest.fn();
 jest.mock('../openapi-runtime', () => ({
@@ -63,7 +62,6 @@ function makeDeps(
 describe('executeSkillAction', () => {
   beforeEach(() => {
     mockExecuteOperation.mockReset();
-    clearCompiledSchemaCache();
   });
 
   it('returns the data envelope on a successful, schema-valid call', async () => {
