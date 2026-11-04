@@ -46,9 +46,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
+
+          # The commits that hold the change: the merge commit, or, for a stacked PR whose change
+          # landed before an empty merge commit, the change's own commit (scripts/cherry-pick-commits.mjs).
+          COMMITS=$(node scripts/cherry-pick-commits.mjs "$MERGE_SHA" "$PR_NUMBER" | tr '\n' ' ' | sed 's/ *$//') || COMMITS=""
+          if [ -z "$COMMITS" ]; then
+            echo "::warning::Could not list the commits of #$PR_NUMBER; cherry-picking its merge commit."
+            COMMITS="$MERGE_SHA"
+          fi
+          echo "commits=$COMMITS" >> "$GITHUB_OUTPUT"
+          echo "Commits holding the change of #$PR_NUMBER: $COMMITS"
 
           case "$BASE_REF" in
             release/*|next/*)
@@ -83,7 +94,7 @@ jobs:
             fi
             sleep 20
           done
-          echo "Cherry-picking $MERGE_SHA from $LANDED onto $CHERRY_BASE"
+          echo "Cherry-picking $COMMITS from $LANDED onto $CHERRY_BASE"
           echo "cherry_base=$CHERRY_BASE" >> "$GITHUB_OUTPUT"
 
       - name: Prepare cherry-pick branch
@@ -94,7 +105,7 @@ jobs:
           ORIGINAL_BRANCH: ${{ github.event.pull_request.head.ref }}
           RELEASE_BRANCH: ${{ steps.target.outputs.release_branch }}
           CHERRY_BASE: ${{ steps.target.outputs.cherry_base }}
-          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          COMMITS: ${{ steps.target.outputs.commits }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
@@ -130,10 +141,11 @@ jobs:
           git checkout -b "$CHERRY_BRANCH"
 
           # Attempt cherry-pick
-          echo "Attempting cherry-pick of $MERGE_SHA..."
+          echo "Attempting cherry-pick of $COMMITS..."
 
-          # Detect if merge commit (has multiple parents)
-          PARENT_COUNT=$(git rev-list --parents -n1 "$MERGE_SHA" | wc -w)
+          # Detect a merge commit (several parents); the script prints one alone
+          read -r FIRST_COMMIT _ <<< "$COMMITS"
+          PARENT_COUNT=$(git rev-list --parents -n1 "$FIRST_COMMIT" | wc -w)
           PARENT_COUNT=$((PARENT_COUNT - 1))  # Subtract the commit itself
 
           CHERRY_PICK_ARGS="--no-commit"
@@ -142,7 +154,8 @@ jobs:
             CHERRY_PICK_ARGS="-m 1 --no-commit"
           fi
 
-          if git cherry-pick $CHERRY_PICK_ARGS "$MERGE_SHA"; then
+          # shellcheck disable=SC2086 # COMMITS is a space-separated list of SHAs
+          if git cherry-pick $CHERRY_PICK_ARGS $COMMITS; then
             echo "conflict=false" >> "$GITHUB_OUTPUT"
 
             # The target already has these changes (e.g. a stacked cherry-pick carried them): nothing to commit
@@ -157,7 +170,7 @@ jobs:
           Cherry-pick: $PR_TITLE
 
           Cherry-picked from #$PR_NUMBER (merged to $RELEASE_BRANCH)
-          Original commit: $MERGE_SHA
+          Original commit: $COMMITS
 
           Co-Authored-By: ${{ github.event.pull_request.user.login }} <${{ github.event.pull_request.user.id }}+${{ github.event.pull_request.user.login }}@users.noreply.github.com>
           EOF
@@ -291,12 +304,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ORIGINAL_PR: ${{ github.event.pull_request.number }}
           CHERRY_BASE: ${{ steps.target.outputs.cherry_base }}
-          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          COMMITS: ${{ steps.target.outputs.commits }}
         run: |
           gh pr comment "$ORIGINAL_PR" --body "$(cat <<EOF
           ## No cherry-pick needed
 
-          \`$CHERRY_BASE\` already has the changes of this PR: cherry-picking $MERGE_SHA onto it leaves nothing to commit. No cherry-pick PR or issue was created.
+          \`$CHERRY_BASE\` already has the changes of this PR: cherry-picking $COMMITS onto it leaves nothing to commit. No cherry-pick PR or issue was created.
           EOF
           )"
 
@@ -309,7 +322,7 @@ jobs:
           ORIGINAL_PR: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          COMMITS: ${{ steps.target.outputs.commits }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
@@ -330,7 +343,7 @@ jobs:
           - **Title:** $PR_TITLE
           - **Author:** @$PR_AUTHOR
           - **Merged to:** \`$RELEASE_BRANCH\`
-          - **Commit:** \`$MERGE_SHA\`
+          - **Commits:** \`$COMMITS\`
 
           ### Manual Cherry-pick Instructions
 
@@ -342,10 +355,10 @@ jobs:
           # Create a new branch for the cherry-pick
           git checkout -b cherry-pick-pr-$ORIGINAL_PR
 
-          # Cherry-pick the commit (use -m 1 for merge commits)
-          git cherry-pick $MERGE_SHA
-          # OR for merge commits:
-          # git cherry-pick -m 1 $MERGE_SHA
+          # Cherry-pick the commits (use -m 1 for a merge commit)
+          git cherry-pick $COMMITS
+          # OR for a merge commit:
+          # git cherry-pick -m 1 $COMMITS
 
           # Resolve conflicts manually, then:
           git add .
