@@ -397,24 +397,43 @@ describe('createEdgeMcp — managed mode', () => {
     expect(provider).toBeDefined();
   });
 
-  it('scheduled() builds the scope then refreshes via the attached source', async () => {
-    mockScopeBuild(makeScope());
-    // Capture the controller passed to the plugin provider and attach a source.
-    let attachedRefresh: jest.Mock | undefined;
+  /** Capture the controller passed to the plugin provider, and attach the scheduler the plugin would hand it. */
+  function attachScheduler(): { start: jest.Mock; refresh: jest.Mock } {
+    const scheduler = { start: jest.fn(async () => undefined), refresh: jest.fn(async () => undefined) };
     createForGraph.mockImplementation(async (cfg: { providers?: Array<{ provide: symbol; useValue: unknown }> }) => {
       const provider = (cfg.providers ?? []).find((p) => typeof p.provide === 'symbol');
-      const controller = provider?.useValue as { attach: (s: { refresh: jest.Mock }) => void };
-      attachedRefresh = jest.fn(async () => ({ refreshed: true }));
-      controller.attach({ refresh: attachedRefresh });
+      const controller = provider?.useValue as { attach: (attached: typeof scheduler) => void };
+      controller.attach(scheduler);
       return builtInstance(makeScope());
     });
+    return scheduler;
+  }
 
+  it('scheduled() that builds the scope starts the bundle sync instead of pulling again; the next run refreshes', async () => {
+    const scheduler = attachScheduler();
     const edge = createEdgeMcp({ ...BASE, managed: MANAGED } as EdgeMcpConfig);
     if (!edge.scheduled) throw new Error('expected scheduled handler in managed mode');
+
+    await edge.scheduled({}, { SECRET: 'x' });
+    const firstRun = { start: scheduler.start.mock.calls.length, refresh: scheduler.refresh.mock.calls.length };
     await edge.scheduled({}, { SECRET: 'x' });
 
     expect(createForGraph).toHaveBeenCalledTimes(1);
-    expect(attachedRefresh).toHaveBeenCalledTimes(1);
+    expect(firstRun).toEqual({ start: 1, refresh: 0 });
+    expect(scheduler.refresh).toHaveBeenCalledTimes(1);
+    expect(scheduler.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('scheduled() after a request has built the scope refreshes the bundle', async () => {
+    const scheduler = attachScheduler();
+    const edge = createEdgeMcp({ ...BASE, managed: MANAGED } as EdgeMcpConfig);
+    if (!edge.scheduled) throw new Error('expected scheduled handler in managed mode');
+
+    await edge.fetch(new Request('https://worker.example.com/healthz'), {});
+    await edge.scheduled({}, {});
+
+    expect(scheduler.start).not.toHaveBeenCalled();
+    expect(scheduler.refresh).toHaveBeenCalledTimes(1);
   });
 
   it('scheduled() throws when no bundle source was attached (controller has no source)', async () => {

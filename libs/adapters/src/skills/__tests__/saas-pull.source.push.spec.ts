@@ -163,7 +163,7 @@ describe('SaasPullSource push checks', () => {
     expect(jwksReads).toBe(3);
   });
 
-  it('keeps an applied pushed bundle in the bundle cache', async () => {
+  it('keeps a bundle it is asked to keep in the bundle cache', async () => {
     const bundle = { bundleId: 'saas:test', version: '2' } as ResolvedBundle;
 
     await source.keepBundle(bundle);
