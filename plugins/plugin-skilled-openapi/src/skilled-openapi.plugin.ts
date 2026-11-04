@@ -428,6 +428,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
             source = createBundleSource(parsed.source, parsed.bundleCacheDir, logger, runtimeDeps);
           } catch (e) {
             logger.error(`failed to construct bundle source: ${(e as Error).message}`);
+            sync.recordLoadFailure(`the bundle source could not be created: ${(e as Error).message}`);
             builtSyncs.add(sync);
             return sync;
           }

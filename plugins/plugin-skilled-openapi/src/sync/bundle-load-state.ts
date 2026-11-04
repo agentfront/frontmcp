@@ -13,6 +13,7 @@ const MAX_LISTED_ISSUES = 3;
 const MAX_PUBLIC_REASON_LENGTH = 500;
 const URL_PATTERN = /\b[a-z][a-z\d+.-]*:\/\/[^\s'"<>()]+/gi;
 const JWT_PATTERN = /\beyJ[\w-]+\.[\w-]+\.[\w-]*/g;
+const FILE_PATH_PATTERN = /(^|[\s'"(=,])(?:\/[^\s'"<>()]+|[a-z]:\\[^\s'"<>()]+)/gi;
 
 /** Why a bundle failed to load, with the first issues the bundle's checks found. */
 export function describeLoadError(error: unknown): string {
@@ -22,10 +23,13 @@ export function describeLoadError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** A load failure clients may read: its first line, with URLs cut to scheme, host and path, and no tokens. */
+/** A load failure clients may read: its first line, with URLs cut to scheme, host and path, no tokens and no file paths. */
 export function publicLoadFailureReason(reason: string): string {
   const [firstLine = ''] = reason.split('\n', 1);
-  const redacted = firstLine.replace(JWT_PATTERN, '[token]').replace(URL_PATTERN, urlWithoutSecrets);
+  const redacted = firstLine
+    .replace(JWT_PATTERN, '[token]')
+    .replace(FILE_PATH_PATTERN, '$1[path]')
+    .replace(URL_PATTERN, urlWithoutSecrets);
   return redacted.length > MAX_PUBLIC_REASON_LENGTH ? `${redacted.slice(0, MAX_PUBLIC_REASON_LENGTH)}...` : redacted;
 }
 

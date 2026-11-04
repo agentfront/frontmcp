@@ -59,4 +59,30 @@ describe('the skill index snapshot cache and the tokenizer (#1065)', () => {
       reindex.mockRestore();
     }
   });
+
+  it('re-indexes when only the bundleVersion changes, so a restored index never reports the old one', async () => {
+    const cache = mapCache();
+    const other: SkillContent = {
+      id: 'orders',
+      name: 'orders',
+      description: 'Track customer orders',
+      instructions: '',
+      tools: [],
+    };
+    const first = new MemorySkillProvider({ indexCache: cache });
+    await first.initialize();
+    await first.add({ ...skill, bundleVersion: '1.0.0' });
+    await first.add(other);
+    await first.search('חתולים');
+
+    const second = new MemorySkillProvider({ indexCache: cache });
+    await second.initialize();
+    await second.add({ ...skill, bundleVersion: '2.0.0' });
+    await second.add(other);
+    const [result] = await second.search('חתולים');
+
+    expect(result.metadata.id).toBe('katalog-he');
+    expect(result.bundleVersion).toBe('2.0.0');
+    expect(cache.entries.size).toBe(2);
+  });
 });

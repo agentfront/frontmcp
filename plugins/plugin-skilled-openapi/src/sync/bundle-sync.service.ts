@@ -122,15 +122,15 @@ export class BundleSyncService {
   }
 
   /**
-   * {@link ensureReady}, then refuse with a public error while loading failed and no bundle is loaded, so a
-   * meta-tool says why the server has no skills instead of answering as if it had none.
+   * {@link ensureReady}, then refuse with a public error while no bundle is loaded, so a meta-tool says why the
+   * server has no skills instead of answering as if it had none.
    */
   async ensureLoaded(): Promise<void> {
     await this.ensureReady();
     const state = this.loadState();
-    if (state.status === 'failed') {
-      throw new PublicMcpError(`No skill bundle is loaded: ${state.reason}`, 'SKILL_BUNDLE_NOT_LOADED', 503);
-    }
+    if (state.status === 'loaded') return;
+    const reason = state.status === 'failed' ? state.reason : 'the first bundle has not loaded yet';
+    throw new PublicMcpError(`No skill bundle is loaded: ${reason}`, 'SKILL_BUNDLE_NOT_LOADED', 503);
   }
 
   /** The bundle being served, or why there is none: a failed load counts only while no bundle is loaded. */
@@ -213,7 +213,8 @@ export class BundleSyncService {
     }
   }
 
-  private recordLoadFailure(reason: string): void {
+  /** Record why no bundle could be loaded; clients read it through {@link ensureLoaded} and `/readyz`. */
+  recordLoadFailure(reason: string): void {
     this.loadFailure = publicLoadFailureReason(reason);
   }
 
