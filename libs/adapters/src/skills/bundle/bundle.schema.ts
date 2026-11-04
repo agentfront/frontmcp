@@ -120,6 +120,7 @@ const operationDescriptorSchema = z
     timeoutMs: z.number().int().positive().max(600_000).optional(),
     summary: z.string().max(512).optional(),
     description: z.string().max(8192).optional(),
+    tags: z.array(z.string().max(256)).max(64).optional(),
   })
   .strict();
 

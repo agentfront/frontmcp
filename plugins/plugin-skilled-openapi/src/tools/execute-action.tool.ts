@@ -1,6 +1,7 @@
 import { z } from '@frontmcp/lazy-zod';
 import { Tool, ToolContext, type CallToolResult } from '@frontmcp/sdk';
 
+import { confirmationSchema } from '../executor/action-confirmation';
 import { actionFailureMessage, unknownActionError, type ActionOutcome } from '../executor/action-outcome';
 import { runSkillAction } from '../executor/run-skill-action';
 import { HiddenOpRegistry, type OperationListings } from '../registry/hidden-op.registry';
@@ -62,7 +63,8 @@ export default class ExecuteActionTool extends ToolContext {
     if (!listings) return failedAction(actionId, { ok: false, status: 0, error: unknownActionError(actionId) });
 
     if (!this.get(SkilledOpenApiConfig).options.exposeOperationsAsInternalTools) {
-      return actionResult(actionId, await runSkillAction({ ctx: this, logger: this.logger, listings, input }));
+      const askUser = (message: string) => this.elicit(message, confirmationSchema);
+      return actionResult(actionId, await runSkillAction({ ctx: this, logger: this.logger, listings, input, askUser }));
     }
     return this.callOperationTool(actionId, listings, input);
   }

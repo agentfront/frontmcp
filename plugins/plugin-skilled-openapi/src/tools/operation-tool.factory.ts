@@ -13,20 +13,22 @@
 //     request ctx with `internalCall: true`
 
 import { classifyOne, type ClassificationRegistry } from '@frontmcp/adapters/skills';
-import { type Token } from '@frontmcp/di';
+import { type Token, type Type } from '@frontmcp/di';
 import {
+  ToolContext,
   ToolInstance,
   ToolKind,
   type EntryOwnerRef,
   type FrontMcpLogger,
   type ProviderRegistry,
-  type ToolFunctionTokenRecord,
+  type ToolClassTokenRecord,
   type ToolMetadata,
   type ToolRegistry,
 } from '@frontmcp/sdk';
 import { sha256Hex } from '@frontmcp/utils';
 
-import { runSkillAction, type OperationToolResult, type SkillActionContext } from '../executor/run-skill-action';
+import { confirmationSchema } from '../executor/action-confirmation';
+import { runSkillAction, type OperationToolResult } from '../executor/run-skill-action';
 import { type HiddenOpEntry, type OperationListings } from '../registry/hidden-op.registry';
 
 const OPERATION_TOOL_OWNER_TOKEN = Symbol.for('skilled-openapi:operation-tool-owner');
@@ -105,20 +107,30 @@ export interface OperationRegisterContext {
   pathsWithGet: ReadonlySet<string>;
 }
 
-/** The tool context an operation's function runs in. */
-type OperationToolContext = SkillActionContext & { logger: FrontMcpLogger };
-
-type OperationExecutor = (input: Record<string, unknown>, ctx: OperationToolContext) => Promise<OperationToolResult>;
+/** The tool an operation runs as: the shared path of a `run_workflow` call, asking the user first when `confirm` names it. */
+function operationToolClass(listings: OperationListings): Type<ToolContext> {
+  return class OperationTool extends ToolContext {
+    execute(input: Record<string, unknown> | undefined): Promise<OperationToolResult> {
+      return runSkillAction({
+        ctx: this,
+        logger: this.logger,
+        listings,
+        input: input ?? {},
+        askUser: (message) => this.elicit(message, confirmationSchema),
+      });
+    }
+  };
+}
 
 /**
  * Manages the lifecycle of synthetic per-operation internal tools for one
  * Skilled OpenAPI plugin instance.
  */
 export class OperationToolFactory {
-  /** Map (bundleId|opId) → the executor function that doubles as registry token, and the skills that list the op. */
+  /** Map (bundleId|opId) → the tool class that doubles as registry token, and the skills that list the op. */
   private registered = new Map<
     string,
-    { executor: OperationExecutor; listings: [HiddenOpEntry, ...HiddenOpEntry[]] }
+    { toolClass: Type<ToolContext>; listings: [HiddenOpEntry, ...HiddenOpEntry[]] }
   >();
   /** Tool names this factory has pushed into the classification registry. */
   private classificationKeys = new Set<string>();
@@ -148,17 +160,17 @@ export class OperationToolFactory {
     }
 
     const listings: [HiddenOpEntry, ...HiddenOpEntry[]] = [entry];
-    const executor = this.makeExecutor(listings);
+    const toolClass = operationToolClass(listings);
     const metadata = buildOperationMetadata(entry);
-    const record: ToolFunctionTokenRecord = {
-      kind: ToolKind.FUNCTION,
-      provide: executor,
+    const record: ToolClassTokenRecord = {
+      kind: ToolKind.CLASS_TOKEN,
+      provide: toolClass,
       metadata,
     };
 
     const instance = new ToolInstance(record, this.deps.providers, OPERATION_TOOL_OWNER);
     this.deps.toolRegistry.registerToolInstance(instance);
-    this.registered.set(key, { executor, listings });
+    this.registered.set(key, { toolClass, listings });
 
     // Optional classification registration. Both the registry and per-call
     // pathsWithGet must be present; absent either, this is a no-op so the
@@ -193,10 +205,10 @@ export class OperationToolFactory {
    * classification entries this factory pushed.
    */
   unregisterAll(): void {
-    for (const { executor } of this.registered.values()) {
+    for (const { toolClass } of this.registered.values()) {
       try {
-        // For ToolKind.FUNCTION the provide function IS the registry token.
-        this.deps.toolRegistry.unregisterToolInstance(executor as unknown as Token);
+        // For ToolKind.CLASS_TOKEN the provided class IS the registry token.
+        this.deps.toolRegistry.unregisterToolInstance(toolClass as Token);
       } catch (e) {
         this.deps.logger.warn(`unregister failed: ${(e as Error).message}`);
       }
@@ -216,10 +228,5 @@ export class OperationToolFactory {
   /** Number of currently-registered internal operation tools (test/audit hook). */
   get size(): number {
     return this.registered.size;
-  }
-
-  /** The function that runs one op: the shared path of a `run_workflow` call, with its checks, audit and error body. */
-  private makeExecutor(listings: OperationListings): OperationExecutor {
-    return (input, ctx) => runSkillAction({ ctx, logger: ctx.logger, listings, input: input ?? {} });
   }
 }

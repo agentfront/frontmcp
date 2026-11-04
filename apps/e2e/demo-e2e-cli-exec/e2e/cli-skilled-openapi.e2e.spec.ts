@@ -1,7 +1,8 @@
 /**
  * E2E: a CLI built for a server whose skills a plugin registers at runtime (a Skilled OpenAPI bundle). A one-shot
  * command sees those skills, `skills read` / `skills load` exit 1 for a skill they do not find, `run-workflow` and
- * `execute-action` exit 1 for a call that fails, and a running daemon serves the commands from the bundle it loaded once.
+ * `execute-action` exit 1 for a call that fails, an action that needs the user's confirmation is refused, since the
+ * CLI can't ask, and a running daemon serves the commands from the bundle it loaded once.
  */
 import { createServer } from 'node:http';
 import * as os from 'node:os';
@@ -44,6 +45,7 @@ describe('a CLI whose skills a plugin registers at runtime', () => {
       prefix: 'skilled-cli',
       appName: APP_NAME,
       serviceBaseUrl: `http://127.0.0.1:${address.port}/v1`,
+      serverConfig: "auth: { mode: 'public' },\n  elicitation: { enabled: true },",
     });
     // Short: the daemon's socket path must fit the platform's limit
     homeDir = await mkdtemp(path.join(os.tmpdir(), 'fmcp-sk-'));
@@ -186,11 +188,44 @@ describe('a CLI whose skills a plugin registers at runtime', () => {
     expect(apiRequests).toEqual([]);
   });
 
+  async function voidInvoice(): Promise<CliResult> {
+    return runReachingTheApi([
+      '--output',
+      'json',
+      'execute-action',
+      '--action-id',
+      'voidInvoice',
+      '--input',
+      '{"id":"inv_1"}',
+    ]);
+  }
+
+  function expectConfirmationRefused({ stdout, exitCode }: CliResult): void {
+    expect(exitCode).toBe(1);
+    expect(JSON.parse(stdout)).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        status: 0,
+        error: expect.stringContaining("needed for voidInvoice, and this client can't ask for it"),
+      },
+    });
+    expect(apiRequests).toEqual([]);
+  }
+
+  it("exits 1 from execute-action for an action that needs the user's confirmation, which the CLI can't ask for", async () => {
+    expectConfirmationRefused(await voidInvoice());
+  });
+
   describe('with its daemon running', () => {
     const movedBundlePath = () => `${project.bundlePath}.moved`;
 
     beforeAll(() => {
       expect(run(['daemon', 'start'])).toMatchObject({ exitCode: 0 });
+    });
+
+    it("refuses an action that needs the user's confirmation through the daemon too", async () => {
+      expectConfirmationRefused(await voidInvoice());
     });
 
     afterAll(async () => {

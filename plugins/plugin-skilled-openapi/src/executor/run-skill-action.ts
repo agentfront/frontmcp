@@ -5,6 +5,7 @@ import type { FrontMcpLogger } from '@frontmcp/sdk';
 import { type OperationListings } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
 import { SkilledOpenApiConfig } from '../skilled-openapi.symbols';
+import { askingBeforeEachCall, type AskUser, type ConfirmAction } from './action-confirmation';
 import { actionOutcome, type ActionOutcome } from './action-outcome';
 import { credentialResolverOf, type CallerAuthInfo } from './credential-resolver';
 import { executeSkillAction, type SkillActionDeps } from './execute-skill-action';
@@ -21,13 +22,18 @@ export interface SkillActionContext {
 /** What an operation tool answers: the outcome a script's `callTool(..., { throwOnError: false })` gets, and the answer's content type. */
 export type OperationToolResult = ActionOutcome & { contentType?: string };
 
-/** The shared executor's dependencies, resolved from a tool's context. */
-export function skillActionDepsOf(ctx: SkillActionContext, logger: FrontMcpLogger): SkillActionDeps {
+/** The shared executor's dependencies, resolved from a tool's context, with how the tool confirms an action. */
+export function skillActionDepsOf(
+  ctx: SkillActionContext,
+  logger: FrontMcpLogger,
+  confirmAction: ConfirmAction,
+): SkillActionDeps {
   const config = ctx.get(SkilledOpenApiConfig);
   const resolver = credentialResolverOf(ctx);
   const auditWriter = ctx.tryGet<SkillAuditWriter>(SkillAuditWriterToken);
   return {
-    config: { outbound: config.outbound, unprotectedOps: config.unprotectedOps },
+    config: { outbound: config.outbound, unprotectedOps: config.unprotectedOps, confirm: config.confirm },
+    confirmAction,
     resolver: { resolve: (ref, opts) => resolver.resolve(ref, opts) },
     guard: ctx.get(AuthorityGuard),
     logger,
@@ -35,15 +41,17 @@ export function skillActionDepsOf(ctx: SkillActionContext, logger: FrontMcpLogge
   };
 }
 
-/** Run one action with the checks and audit records of a `run_workflow` call, and the error body `outbound.errorBodies` allows. */
+/** Run one action with the checks, confirmation, audit records and error body of a `run_workflow` call. */
 export async function runSkillAction(args: {
   ctx: SkillActionContext;
   logger: FrontMcpLogger;
   listings: OperationListings;
   input: Record<string, unknown>;
+  askUser: AskUser;
 }): Promise<OperationToolResult> {
-  const { ctx, logger, listings, input } = args;
-  const deps = skillActionDepsOf(ctx, logger);
+  const { ctx, logger, listings, input, askUser } = args;
+  const whenUnsupported = ctx.get(SkilledOpenApiConfig).confirm?.whenUnsupported ?? 'refuse';
+  const deps = skillActionDepsOf(ctx, logger, askingBeforeEachCall(askUser, whenUnsupported));
   const result = await executeSkillAction({ listings, input, authInfo: ctx.authInfo, signal: ctx.signal, deps });
   const outcome = actionOutcome(result, deps.config.outbound.errorBodies, listings[0].authBinding);
   return result.contentType ? { ...outcome, contentType: result.contentType } : outcome;

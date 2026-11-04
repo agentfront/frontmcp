@@ -6,7 +6,7 @@
 
 import { type CredentialResolveOptions, type CredentialResolver } from './executor/credential-resolver';
 import { type UnprotectedOpsPolicy } from './security/authority-guard';
-import { type OutboundOptions, type SkilledOpenApiPluginOptions } from './skilled-openapi.types';
+import { type ConfirmOptions, type OutboundOptions, type SkilledOpenApiPluginOptions } from './skilled-openapi.types';
 
 /**
  * Resolved-at-construction config for the plugin. Mirrors plugin options after
@@ -25,6 +25,10 @@ export class SkilledOpenApiConfig {
   /** Default-deny policy for ops with no required-authorities (C1/C3). */
   get unprotectedOps(): UnprotectedOpsPolicy {
     return this.options.unprotectedOps;
+  }
+  /** The actions that ask the user before their request; undefined when none do. */
+  get confirm(): ConfirmOptions | undefined {
+    return this.options.confirm;
   }
 }
 

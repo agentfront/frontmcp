@@ -21,6 +21,7 @@ export type {
   SaasSourceOptions,
   SignatureKey,
   OutboundOptions,
+  ConfirmOptions,
 } from './skilled-openapi.types';
 export { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from './skilled-openapi.symbols';
 export type { CallerAuthInfo, CredentialResolveOptions } from './executor/credential-resolver';
