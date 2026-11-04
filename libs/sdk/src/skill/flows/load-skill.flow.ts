@@ -250,9 +250,11 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
         availableTools,
         missingTools,
         isComplete,
-        formattedContent: toolRegistry
-          ? formatSkillForLLMWithSchemas(skill, availableTools, missingTools, toolRegistry)
-          : formatSkillForLLM(skill, availableTools, missingTools),
+        // `'instructions-only'` leaves the tool schemas out of the markdown too, not only out of `tools` (#1066)
+        formattedContent:
+          toolRegistry && withSchemas
+            ? formatSkillForLLMWithSchemas(skill, availableTools, missingTools, toolRegistry)
+            : formatSkillForLLM(skill, availableTools, missingTools),
         session: activateSession ? session : undefined,
       };
     });
