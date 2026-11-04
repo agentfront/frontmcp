@@ -441,7 +441,12 @@ export interface ConnectOptions {
   clientInfo?: ClientInfo;
   /** Session configuration */
   session?: SessionOptions;
-  /** Direct auth token injection (e.g., JWT) */
+  /**
+   * The caller's token, verified as the HTTP transport verifies a Bearer token, per the server's `auth` mode: its
+   * claims become the caller (`authInfo.user`, read by authorities through `claimsMapping`), and a token the server
+   * rejects fails the connection. A token that names no caller, such as an opaque one on a public server, is only
+   * passed to the tools.
+   */
   authToken?: string;
   /** Optional client capabilities override */
   capabilities?: Partial<ClientCapabilities>;
@@ -478,7 +483,12 @@ export interface LLMConnectOptions {
    * served at `<entryPath>/<app>` over HTTP, instead of the server's main endpoint.
    */
   app?: string;
-  /** Direct auth token injection (e.g., JWT) */
+  /**
+   * The caller's token, verified as the HTTP transport verifies a Bearer token, per the server's `auth` mode: its
+   * claims become the caller (`authInfo.user`, read by authorities through `claimsMapping`), and a token the server
+   * rejects fails the connection. A token that names no caller, such as an opaque one on a public server, is only
+   * passed to the tools.
+   */
   authToken?: string;
   /** Optional client capabilities override */
   capabilities?: Partial<ClientCapabilities>;
