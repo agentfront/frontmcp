@@ -186,6 +186,32 @@ describe('createEdgeMcp', () => {
     expect(typeof managed.fetch).toBe('function');
     expect(typeof managed.scheduled).toBe('function');
   });
+
+  it.each([
+    [true, 401],
+    [false, 404],
+  ])('with managed.enableWebhook %s, answers a push without a token with %s', async (enableWebhook, status) => {
+    const managed = createEdgeMcp({
+      info: { name: 'managed', version: '1.0.0' },
+      apps: [],
+      tasks: { enabled: false },
+      managed: {
+        endpoint: 'https://cloud.example.dev/v1/bundles/acme',
+        authToken: 'tok',
+        expectedAudience: 'acme:prod',
+        jwksUrl: 'https://cloud.example.dev/.well-known/jwks.json',
+        expectedIssuer: 'https://cloud.example.dev',
+        enableWebhook,
+      },
+    });
+
+    const response = await managed.fetch(
+      new Request('https://worker.example.com/__skilled_openapi/push', { method: 'POST', body: '{}' }),
+      {},
+    );
+
+    expect(response.status).toBe(status);
+  });
 });
 
 /**

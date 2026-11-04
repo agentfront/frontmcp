@@ -3,8 +3,9 @@
  *
  * Points the edge runtime at a SaaS endpoint that serves a signed
  * **skilled-openapi** bundle (OpenAPI specs compiled into MCP skills + tools).
- * The bundle is pulled on boot and kept fresh by polling (and/or a push
- * webhook), so the server's capabilities update **without redeploying** —
+ * The bundle is pulled on the first request and refreshed from a Cron Trigger
+ * (and by pushes, with `enableWebhook`), so the server's capabilities update
+ * **without redeploying** —
  * backed by the existing `@frontmcp/plugin-skilled-openapi` SaaS-pull source
  * (which handles signature verification, replay/SSRF guards, and last-good
  * cache fallback).
@@ -29,10 +30,10 @@ export interface ManagedEdgeOptions {
    * NOTE: IGNORED on the edge. `createEdgeMcp` disables the internal poll loop
    * (Workers have no background execution between requests); a Cron Trigger
    * drives {@link EdgeMcp.scheduled} → refresh instead. Set your refresh cadence
-   * via `[triggers] crontabs` in `wrangler.toml`, not this field.
+   * via `[triggers] crons` in `wrangler.toml`, not this field.
    */
   pollIntervalMs?: number;
-  /** Also mount a push webhook (`POST /__skilled_openapi/push`) for synchronous updates. */
+  /** Also take bundles the bundle server pushes, at `POST /__skilled_openapi/push`; see the README for the request. */
   enableWebhook?: boolean;
   /** Require a signed bundle. Default true. */
   requireSignature?: boolean;
