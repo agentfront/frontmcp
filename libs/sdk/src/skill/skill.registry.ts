@@ -30,6 +30,7 @@ import type { MemorySkillProvider } from './providers/memory-skill.provider';
 import type { SkillIndexEntry } from './sep-2640';
 import { SEP_2640_EXTENSION_ID } from './sep-2640/sep-2640.constants';
 import { type SkillIndexCache, type SkillIndexScoring } from './skill-index-cache.interface';
+import { queryTerms, queryTermShare, skillSearchText } from './skill-search-text';
 import {
   type MutableSkillStorageProvider,
   type SkillListOptions,
@@ -1178,7 +1179,10 @@ export default class SkillRegistry
       } else if (desc.includes(q)) {
         score = 0.5;
       } else {
-        continue;
+        // The rest of the skill's searchable text: its tags, actions, instructions (#1060)
+        const share = queryTermShare(queryTerms(q), skillSearchText(content));
+        if (share === 0) continue;
+        score = 0.5 * share;
       }
       if (score < minScore) continue;
 
