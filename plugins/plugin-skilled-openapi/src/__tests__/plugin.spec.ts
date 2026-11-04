@@ -133,7 +133,8 @@ describe('SkilledOpenApiPlugin', () => {
       expect(tokens).toContain(SkilledOpenApiConfig);
       expect(tokens).toContain(HiddenOpRegistry);
       expect(tokens).toContain(BundleStore);
-      expect(tokens).toContain(SkilledOpenApiCredentialResolver);
+      expect(tokens).toContain(MemoryCredentialResolver);
+      expect(tokens).not.toContain(SkilledOpenApiCredentialResolver);
       expect(tokens).toContain(AuthorityGuard);
       expect(tokens).toContain(BundleSyncService);
     });
@@ -143,9 +144,9 @@ describe('SkilledOpenApiPlugin', () => {
         source: { type: 'static', path: '/x' },
         credentials: { 'demo-token': 'sk_xxx' },
       });
-      const credProvider = providers.find(
-        (p) => (p as { provide: unknown }).provide === SkilledOpenApiCredentialResolver,
-      ) as { useValue: SkilledOpenApiCredentialResolver };
+      const credProvider = providers.find((p) => (p as { provide: unknown }).provide === MemoryCredentialResolver) as {
+        useValue: MemoryCredentialResolver;
+      };
       const value = await credProvider.useValue.resolve('demo-token', { bundleId: 'b' });
       expect(value).toBe('sk_xxx');
     });

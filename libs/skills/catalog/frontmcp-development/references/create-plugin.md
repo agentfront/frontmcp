@@ -54,6 +54,7 @@ interface PluginMetadata {
   contextExtensions?: ContextExtension[];
   enforcesMetadata?: string[];
   dynamicSkills?: boolean;
+  oncePerServer?: string; // why a second install in one server fails startup
 }
 
 interface ContextExtension {
@@ -535,6 +536,22 @@ class OpsApp {}
 ```
 
 An app that does not install the plugin does not get its providers: there, `this.get(Token)` throws and `this.tryGet(Token)` returns `undefined`. Install the plugin on the server (`@FrontMcp({ plugins })`) to share it with every app. Up to 1.8.7 the providers a plugin derives from its options (`dynamicProviders(options)`, `init({ providers })`) leaked to every other app on the server.
+
+Because the nearest definition wins, a provider the plugin registers under a public token hides the one the app or the server declares under that token. For a default the user may replace, register the default under a token of the plugin's own and resolve the public one first: `this.tryGet(PublicToken) ?? this.get(DefaultToken)`. `@frontmcp/plugin-skilled-openapi` does this for `SkilledOpenApiCredentialResolver`.
+
+### A plugin that runs once per server
+
+A plugin whose tools, skills or providers are the server's, such as `@frontmcp/plugin-skilled-openapi` with its three meta-tools, can't run twice in one server. Declare it with `oncePerServer`, giving the reason:
+
+```typescript
+@Plugin({
+  name: 'catalog',
+  oncePerServer: 'One catalog can hold several sources: list them in one CatalogPlugin.init().',
+})
+export default class CatalogPlugin extends DynamicPlugin<CatalogOptions> {}
+```
+
+A server that installs it twice then fails at startup with `DuplicatePluginError` (code `DUPLICATE_PLUGIN`): `Plugin "catalog" can be installed once per server, and this server installs it twice.` followed by the reason. That covers the same `plugins` list naming it twice, the server and an app each installing it, and two apps of the server each installing it. An app with an endpoint of its own (`splitByApp`, or `standalone`) is a server of its own, so each such app may install one. Without `oncePerServer`, a plugin listed twice in one `plugins` list is installed once, from its last entry.
 
 ## Step 5: Extend Metadata and Execution Context
 

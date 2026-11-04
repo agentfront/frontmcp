@@ -123,9 +123,9 @@ const skilledOpenApiPluginOptionsObjectSchema = z.object({
   /**
    * Static credential map seeded into the in-memory `CredentialResolver` for
    * dev / demo / single-tenant deployments. Keys match `vaultRef` strings on
-   * the bundle's `authBindings`. Production deployments should override the
-   * `SkilledOpenApiCredentialResolver` provider with a libs/auth-vault-backed
-   * resolver instead of using this option.
+   * the bundle's `authBindings`. Production deployments should provide a
+   * `SkilledOpenApiCredentialResolver` that reads a vault instead, in
+   * `init({ providers })`, the app or the server: it replaces this map.
    */
   credentials: z.record(z.string().min(1).max(256), z.string().min(1)).optional(),
 

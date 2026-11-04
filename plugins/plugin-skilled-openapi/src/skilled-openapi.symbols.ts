@@ -4,8 +4,8 @@
 // built by the plugin's `dynamicProviders()` and injected into the meta-tools
 // via the standard `this.get(Token)` API.
 
-import { type UnprotectedOpsPolicy } from './security/authority-guard';
 import { type CredentialResolver } from './executor/credential-resolver';
+import { type UnprotectedOpsPolicy } from './security/authority-guard';
 import { type OutboundOptions, type SkilledOpenApiPluginOptions } from './skilled-openapi.types';
 
 /**
@@ -24,8 +24,9 @@ export class SkilledOpenApiConfig {
 }
 
 /**
- * Token for the plugin-private credential resolver. Production wiring backs
- * it with `libs/auth`'s vault; v1.2.0 OSS demos use the in-memory resolver.
+ * Token for the resolver that turns a bundle's `vaultRef` into a credential, such as one reading a vault.
+ * Provide it in `init({ providers })`, the `@App` that installs the plugin or `@FrontMcp({ providers })`;
+ * without one, the plugin's built-in resolver reads the `credentials` option.
  */
 export abstract class SkilledOpenApiCredentialResolver {
   abstract resolve(ref: string, opts: { bundleId: string }): Promise<string | undefined>;
