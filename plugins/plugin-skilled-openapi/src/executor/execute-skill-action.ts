@@ -99,9 +99,11 @@ export async function executeSkillAction(args: {
   listings: OperationListings;
   input: Record<string, unknown>;
   authInfo: unknown;
+  /** Aborts the request in flight, and keeps one from starting, once the call it belongs to has ended. */
+  signal?: AbortSignal;
   deps: SkillActionDeps;
 }): Promise<SkillActionResult> {
-  const { listings, input, authInfo, deps } = args;
+  const { listings, input, authInfo, signal, deps } = args;
   const { config, resolver, guard, logger, audit } = deps;
 
   // 1) Authority check: the operation's rule and one listing skill's rule must
@@ -180,6 +182,7 @@ export async function executeSkillAction(args: {
       input: inputParse.data as Record<string, unknown>,
       // For a bearer binding with `passthroughCallerToken: true`.
       callerToken: callerTokenOf(authInfo),
+      signal,
       deps: runtimeDeps,
     });
   } catch (e) {

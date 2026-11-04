@@ -31,7 +31,7 @@ run_workflow → callTool(action)
 
 The `write*` methods queue the record and never reject: a failed sign or append is logged as a `[skill-audit]` warning and the tool call carries on.
 
-Each record matches the outcome the caller got. An action whose input fails its schema is recorded as `http-call-failure` with `status: 0` (no request is sent), and an answer that fails the operation's `outputSchema` as `http-call-failure` with the upstream status, both with the reason in `errorMessage`. `http-call-success` is written only for an answer the caller receives.
+Each record matches the outcome the caller got. An action whose input fails its schema is recorded as `http-call-failure` with `status: 0` (no request is sent), and an answer that fails the operation's `outputSchema` as `http-call-failure` with the upstream status, both with the reason in `errorMessage`. A request aborted because its workflow ended first (the script hit its time limit, or the `run_workflow` call was cancelled) is recorded as `http-call-failure` with `status: 0` and an `errorMessage` such as `request aborted: the workflow ended before the request finished`. `http-call-success` is written only for an answer the caller receives.
 
 An operation can be listed by several skills. Its records name the first of those skills whose rules admit the caller, the skill the call ran under; when none admits the caller, the `authority-check-fail` record names the first skill that lists it.
 

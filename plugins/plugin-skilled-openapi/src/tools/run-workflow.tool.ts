@@ -76,6 +76,10 @@ export default class RunWorkflowTool extends ToolContext {
       ...(auditWriter ? { audit: { writer: auditWriter, subject: this.authInfo?.user?.sub ?? 'anonymous' } } : {}),
     };
 
+    // Aborted once the workflow ends, whatever ends it, so no request it started outlives it.
+    const workflowEnded = new AbortController();
+    const requestSignal = this.signal ? AbortSignal.any([workflowEnded.signal, this.signal]) : workflowEnded.signal;
+
     // The bridge the sandboxed script reaches as `await callTool(actionId, input)`.
     // It is the ONLY way the script touches the outside world.
     const toolHandler = async (actionId: string, actionInput: Record<string, unknown>): Promise<unknown> => {
@@ -85,7 +89,13 @@ export default class RunWorkflowTool extends ToolContext {
           `unknown action "${actionId}" — run search_skill then load_skill to discover available actions`,
         );
       }
-      const res = await executeSkillAction({ listings, input: actionInput ?? {}, authInfo: this.authInfo, deps });
+      const res = await executeSkillAction({
+        listings,
+        input: actionInput ?? {},
+        authInfo: this.authInfo,
+        signal: requestSignal,
+        deps,
+      });
       if (!res.ok) {
         throw new Error(res.error ?? `action "${actionId}" failed with status ${res.status}`);
       }
@@ -118,7 +128,9 @@ export default class RunWorkflowTool extends ToolContext {
     // `toolHandler` from the context at runtime (the rest come from the adapter
     // options/defaults). Cast to the adapter's own param type — runtime is
     // unchanged and the extra config fields are genuinely unused here.
-    const result = await adapter.execute(transformed, context as Parameters<typeof adapter.execute>[1]);
+    const result = await adapter
+      .execute(transformed, context as Parameters<typeof adapter.execute>[1])
+      .finally(() => workflowEnded.abort(new Error('the workflow ended before the request finished')));
 
     const stats = {
       durationMs: result.stats.duration,
