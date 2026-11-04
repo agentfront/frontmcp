@@ -83,6 +83,7 @@ npm install @frontmcp/sdk
 
 ```typescript
 import { connect } from '@frontmcp/sdk/direct';
+
 import { MyServer } from './server';
 
 // Get your FrontMCP scope
@@ -104,7 +105,7 @@ await client.close();
 For automatic tool/result formatting based on LLM platform:
 
 ```typescript
-import { connectOpenAI, connectClaude, connectLangChain, connectVercelAI } from '@frontmcp/sdk/direct';
+import { connectClaude, connectLangChain, connectOpenAI, connectVercelAI } from '@frontmcp/sdk/direct';
 
 // OpenAI format (function calling)
 const openaiClient = await connectOpenAI(scope, {
@@ -197,7 +198,7 @@ const result: SearchSkillsResult = await client.searchSkills('code review', opti
 import type { LoadSkillsOptions, LoadSkillsResult } from '@frontmcp/sdk/direct';
 
 const options: LoadSkillsOptions = {
-  format: 'full', // 'full' | 'instructions-only'
+  format: 'full', // 'full' | 'instructions-only' (no tool schemas, in `tools` or `formattedContent`)
   activateSession: true, // Activate skill session
   policyMode: 'approval', // 'strict' | 'approval' | 'permissive'
 };
@@ -422,35 +423,31 @@ All types are exported from `@frontmcp/sdk/direct`:
 
 ```typescript
 import type {
-  // Core
-  DirectClient,
-  ConnectOptions,
-  LLMConnectOptions,
-  SessionOptions,
   ClientInfo,
-  LLMPlatform,
-
-  // Skills
-  SearchSkillsOptions,
-  SearchSkillsResult,
-  SkillSearchResultItem,
-  LoadSkillsOptions,
-  LoadSkillsResult,
-  LoadedSkillItem,
-  ListSkillsOptions,
-  ListSkillsResult,
-
-  // Elicitation
-  ElicitationRequest,
-  ElicitationResponse,
-  ElicitationHandler,
-
   // Completion
   CompleteOptions,
   CompleteResult,
-
+  ConnectOptions,
+  // Core
+  DirectClient,
+  ElicitationHandler,
+  // Elicitation
+  ElicitationRequest,
+  ElicitationResponse,
+  ListSkillsOptions,
+  ListSkillsResult,
+  LLMConnectOptions,
+  LLMPlatform,
+  LoadedSkillItem,
+  LoadSkillsOptions,
+  LoadSkillsResult,
   // Logging
   McpLogLevel,
+  // Skills
+  SearchSkillsOptions,
+  SearchSkillsResult,
+  SessionOptions,
+  SkillSearchResultItem,
 } from '@frontmcp/sdk/direct';
 ```
 
