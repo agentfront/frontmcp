@@ -500,7 +500,7 @@ class WhoAmITool extends ToolContext {
 ```
 
 - `authorization`, `cookie`, `set-cookie`, `proxy-*`, hop-by-hop headers (`connection`, `keep-alive`, `te`, `trailer`, `transfer-encoding`, `upgrade`), `content-length` (an outbound request's body has its own) and the client-address headers (`host`, `forwarded`, `x-forwarded-*`, `x-real-ip`, which a client could forge for an upstream that trusts this server) are never kept. A name or glob that matches one (`'authorization'`, `'proxy-*'`, `'x-forwarded-port'`, `'content-*'`, `'x-*'`, `'*'`) stops `@FrontMcp` at startup with `InvalidDecoratorMetadataError` (`@FrontMcp invalid metadata for "http"`), naming the header. Read the caller's identity from `this.auth` instead.
-- A direct call to a `FrontMcpInstance.createDirect()` server built from the same config keeps the same headers from `DirectCallOptions.metadata.customHeaders`. `create()` takes no `http` option, so its calls keep `x-frontmcp-*` only.
+- An in-process call keeps the same headers from `DirectCallOptions.metadata.customHeaders`: a `FrontMcpInstance.createDirect()` server built from the same config, and `create({ http: { forwardHeaders } })`, whose `http` takes only `forwardHeaders`. Both never listen, so they ignore the rest of `http`.
 - The debug request log still redacts credential-looking headers (`x-acme-api-key`, `x-acme-token`).
 - `this.fetch()` sends the kept headers upstream only to the origins `fetch.forwardCustomHeadersTo` lists; other origins get none of them.
 

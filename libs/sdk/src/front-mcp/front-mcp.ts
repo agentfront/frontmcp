@@ -630,6 +630,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * `options.workerEnv` sets the platform bindings every call reads as `this.workerEnv` unless the call
    * (`DirectCallOptions.workerEnv`) or client (`ConnectOptions.workerEnv`) passes its own (#706).
    *
+   * The server never listens, so of `http` it takes only `forwardHeaders`: a call's `metadata.customHeaders` keeps
+   * the headers it names, besides `x-frontmcp-*`, as an HTTP request does (#1052).
+   *
    * @example
    * ```typescript
    * import { FrontMcpInstance } from '@frontmcp/sdk';
@@ -658,8 +661,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // Parse config through Zod to apply defaults, then disable HTTP server
     const parsedConfig = frontMcpMetadataSchema.parse({
       ...config,
-      // Direct access never listens: no HTTP config and no HTTP host (a browser build has no Express)
-      http: undefined,
+      // Direct access never listens: no HTTP host (a browser build has no Express), so of `http` only the
+      // headers in-process calls keep apply (#1052)
+      http: config.http?.forwardHeaders ? { forwardHeaders: config.http.forwardHeaders } : undefined,
       serve: false,
     });
     markDirectOnly(parsedConfig);
