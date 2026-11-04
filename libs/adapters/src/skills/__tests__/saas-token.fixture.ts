@@ -11,7 +11,7 @@ export const SAAS_AUDIENCE = 'acme:prod';
 export interface SaasTokenIssuer {
   /** The JWKS the issuer serves at `SAAS_JWKS_URL`. */
   jwks: { keys: JWK[] };
-  /** A pull token for `SAAS_AUDIENCE`, signed by the issuer; `claims` override the defaults. */
+  /** A token for `SAAS_AUDIENCE`, signed by the issuer and issued now; `claims` override the defaults, `iat` too. */
   token(claims?: JWTPayload & { exp?: number | string }): Promise<string>;
 }
 
@@ -21,10 +21,10 @@ export async function createSaasTokenIssuer(kid = 'saas-2026'): Promise<SaasToke
   return {
     jwks: { keys: [jwk] },
     token: async (claims = {}) => {
-      const { exp, ...rest } = claims;
+      const { exp, iat, ...rest } = claims;
       return new SignJWT({ iss: SAAS_ISSUER, aud: SAAS_AUDIENCE, sub: 'frontmcp-server', ...rest })
         .setProtectedHeader({ alg: 'RS256', kid })
-        .setIssuedAt()
+        .setIssuedAt(iat)
         .setExpirationTime(exp ?? '1h')
         .sign(privateKey);
     },

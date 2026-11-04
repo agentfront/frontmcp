@@ -18,6 +18,21 @@ describe('WebhookReplayGuard', () => {
     expect(ok2.reason).toMatch(/replay/);
   });
 
+  it('names each rejection with a code', () => {
+    const guard = new WebhookReplayGuard({ windowMs: 1_000 });
+    guard.setNowProvider(() => 1_000_000);
+    guard.check({ timestampMs: 1_000_000, nonce: 'seen-nonce' });
+
+    const codes = [
+      guard.check({ timestampMs: Number.NaN, nonce: 'nonce-0001' }).code,
+      guard.check({ timestampMs: 1_000_000, nonce: 'short' }).code,
+      guard.check({ timestampMs: 1_000_000 - 60_000, nonce: 'nonce-0002' }).code,
+      guard.check({ timestampMs: 1_000_000, nonce: 'seen-nonce' }).code,
+    ];
+
+    expect(codes).toEqual(['invalid_timestamp', 'invalid_nonce', 'outside_window', 'nonce_replay']);
+  });
+
   it('rejects timestamps outside the window', () => {
     const guard = new WebhookReplayGuard({ windowMs: 1_000 });
     guard.setNowProvider(() => 1_000_000);

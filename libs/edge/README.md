@@ -1,6 +1,6 @@
 # @frontmcp/edge
 
-Run a FrontMCP server on Cloudflare Workers from a plain configuration object. The Worker's entry file calls `createEdgeMcp()` with the configuration you'd give `@FrontMcp` and exports what it returns; `wrangler` bundles that file as it is, with no `frontmcp build` step and no `@FrontMcp` class. Compared with `frontmcp build --target cloudflare`, it adds sessions kept in a Durable Object and a managed mode that pulls a Skilled OpenAPI bundle and refreshes it from a Cron Trigger.
+Run a FrontMCP server on Cloudflare Workers from a plain configuration object. The Worker's entry file calls `createEdgeMcp()` with the configuration you'd give `@FrontMcp` and exports what it returns; `wrangler` bundles that file as it is, with no `frontmcp build` step and no `@FrontMcp` class. Compared with `frontmcp build --target cloudflare`, it adds sessions kept in a Durable Object and a managed mode that pulls a Skilled OpenAPI bundle, refreshes it from a Cron Trigger, and can take bundles pushed to it.
 
 [![npm](https://img.shields.io/npm/v/@frontmcp/edge.svg)](https://www.npmjs.com/package/@frontmcp/edge) [![License](https://img.shields.io/npm/l/@frontmcp/edge.svg)](https://github.com/agentfront/frontmcp/blob/main/LICENSE)
 
@@ -137,9 +137,38 @@ crons = ["*/5 * * * *"]
 | `authToken`                                                         | The token the bundle server issued for this server                                             |
 | `expectedAudience`, `jwksUrl`, `expectedIssuer`                     | How the bundle server's tokens are verified                                                    |
 | `cache`                                                             | Where the last good bundle is kept: `kvBundleCacheFromEnv('BINDING')`, or a store of your own  |
-| `enableWebhook`                                                     | Also accept pushed updates at `POST /__skilled_openapi/push`                                   |
+| `enableWebhook`                                                     | Also take bundles pushed to `POST /__skilled_openapi/push`, as below                           |
 | `requireSignature`, `trustedKeys`, `dev`, `credentials`, `outbound` | Passed to the Skilled OpenAPI plugin. `dev` skips signature checks: never use it in production |
 | `pollIntervalMs`, `bundleCacheDir`                                  | Ignored on a Worker, which has no timers or file system                                        |
+
+Each operation call checks the API's host first: on a Worker, `node:dns` resolves it over DNS over HTTPS, so the host must resolve publicly.
+
+### Pushed bundles
+
+With `enableWebhook: true`, the bundle server can push a new bundle instead of waiting for the next Cron run:
+
+```http
+POST /__skilled_openapi/push
+Authorization: Bearer <JWT>
+Content-Type: application/json
+
+{ "schemaVersion": 1, "bundleId": "billing", "version": "4.2.0", ..., "integrity": { ... } }
+```
+
+- **The token** is checked as `authToken` is (signed by a key at `jwksUrl`, `iss` equal to `expectedIssuer`, `aud` including `expectedAudience`, not expired). It must also carry a `jti` of 8 or more characters that no push used, and an `iat` within five minutes, so the pull token, issued long before, can't push.
+- **The body** is the bundle as JSON, checked as a pulled bundle is: its schema, then its signature against `trustedKeys` (unless `requireSignature: false`).
+- **It is applied** after the first pull and after any bundle already queued, so a push and a Cron run never apply at once, and then kept in `cache`.
+
+| Status | Body                                                                                                      |
+| ------ | --------------------------------------------------------------------------------------------------------- |
+| `200`  | `{ "applied": true, "bundleId", "bundleVersion" }`                                                        |
+| `400`  | `{ "error": "invalid_bundle" }`: the body is not a bundle                                                 |
+| `401`  | `{ "error": "invalid_token" }`, with `WWW-Authenticate: Bearer error="invalid_token"`                     |
+| `409`  | `{ "error": "push_replayed" }`: a push already used this token                                            |
+| `422`  | `{ "error": "bundle_not_applied" }`: the signature or the bundle's checks failed; the served bundle stays |
+| `503`  | `{ "error": "temporarily_unavailable" }`: the JWKS could not be read                                      |
+
+The endpoint is a hookable flow, `skilled-openapi:bundle-push`, behind the same IP filter and rate limit as the server's other HTTP flows. The `jti`s it has seen are kept in memory, per isolate, so two isolates of a Worker don't share them: keep push tokens short-lived.
 
 ## API
 

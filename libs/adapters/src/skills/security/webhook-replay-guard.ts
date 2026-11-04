@@ -1,12 +1,16 @@
 // file: libs/adapters/src/skills/security/webhook-replay-guard.ts
 //
-// Timestamp-window and nonce replay checks for a host-built bundle-push webhook; FrontMCP calls none.
+// Timestamp-window and nonce replay checks for bundle pushes: the `saas` source checks each push token's `iat` and `jti`.
 
 import { sha256Hex } from '@frontmcp/utils';
+
+/** Why a check refused: also the `reason` label of `frontmcp_skills_replay_rejects_total`. */
+export type ReplayRejectCode = 'invalid_timestamp' | 'invalid_nonce' | 'outside_window' | 'nonce_replay';
 
 export interface ReplayCheckResult {
   ok: boolean;
   reason?: string;
+  code?: ReplayRejectCode;
 }
 
 /**
@@ -32,17 +36,6 @@ export interface WebhookReplayGuardOptions {
    * `{ reason }` attribute. When omitted, the guard emits no telemetry.
    */
   telemetry?: ReplayGuardTelemetry;
-}
-
-/**
- * Map a free-text reject reason to a low-cardinality counter label.
- */
-function classifyReplayReason(reason: string): string {
-  if (reason.includes('not finite')) return 'invalid_timestamp';
-  if (reason.includes('too short')) return 'invalid_nonce';
-  if (reason.includes('outside')) return 'outside_window';
-  if (reason.includes('replay')) return 'nonce_replay';
-  return 'other';
 }
 
 const DEFAULT_WINDOW_MS = 5 * 60 * 1000;
@@ -93,21 +86,21 @@ export class WebhookReplayGuard {
    */
   check(args: { timestampMs: number; nonce: string }): ReplayCheckResult {
     const { timestampMs, nonce } = args;
-    const reject = (reason: string): ReplayCheckResult => {
-      this.rejectsCounter?.inc(1, { reason: classifyReplayReason(reason) });
+    const reject = (code: ReplayRejectCode, reason: string): ReplayCheckResult => {
+      this.rejectsCounter?.inc(1, { reason: code });
       this.checksCounter?.inc(1, { status: 'error' });
-      return { ok: false, reason };
+      return { ok: false, reason, code };
     };
     if (!Number.isFinite(timestampMs)) {
-      return reject('timestamp not finite');
+      return reject('invalid_timestamp', 'timestamp not finite');
     }
     if (typeof nonce !== 'string' || nonce.length < 8) {
-      return reject('nonce too short');
+      return reject('invalid_nonce', 'nonce too short');
     }
 
     const now = this.now();
     if (Math.abs(now - timestampMs) > this.windowMs) {
-      return reject(`timestamp outside ${this.windowMs}ms window`);
+      return reject('outside_window', `timestamp outside ${this.windowMs}ms window`);
     }
 
     // Dedupe by nonce, NOT by (timestamp, nonce). The class contract is "the
@@ -122,7 +115,7 @@ export class WebhookReplayGuard {
     // (abs(now - timestampMs) === windowMs) where a nonce could be accepted
     // and then immediately replayed. Treat the boundary as still-tracked.
     if (expiresAt !== undefined && expiresAt >= now) {
-      return reject('nonce replay detected within freshness window');
+      return reject('nonce_replay', 'nonce replay detected within freshness window');
     }
 
     // Capacity eviction: drop expired entries first; if still at capacity,
