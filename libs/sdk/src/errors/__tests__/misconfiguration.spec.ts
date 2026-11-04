@@ -1,4 +1,9 @@
-import { JwtSecretRequiredError, SessionSecretRequiredError, ToolAliasConflictError } from '../index';
+import {
+  DuplicatePluginError,
+  JwtSecretRequiredError,
+  SessionSecretRequiredError,
+  ToolAliasConflictError,
+} from '../index';
 import {
   describeConfigIssues,
   findMisconfiguration,
@@ -32,6 +37,12 @@ describe('misconfiguration classification (#646)', () => {
     );
     expect(found?.code).toBe('TOOL_ALIAS_CONFLICT');
     expect(found?.remedy).not.toContain('secret_tool');
+  });
+
+  it('recognizes a plugin installed twice in a server that allows one', () => {
+    const found = findMisconfiguration(new DuplicatePluginError('catalog', 'One catalog holds every source.'));
+    expect(found?.code).toBe('DUPLICATE_PLUGIN');
+    expect(found?.remedy).toContain('Install it once');
   });
 
   it('maps a ZodError to CONFIG_INVALID', () => {

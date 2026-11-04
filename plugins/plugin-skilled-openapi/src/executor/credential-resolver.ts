@@ -1,5 +1,9 @@
 // file: plugins/plugin-skilled-openapi/src/executor/credential-resolver.ts
 
+import { type Token } from '@frontmcp/di';
+
+import { SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
+
 /**
  * Resolves a `vaultRef` string from an `AuthBinding` to a credential value.
  *
@@ -61,6 +65,20 @@ export class MemoryCredentialResolver implements CredentialResolver {
     const fallback = this.defaults.get(ref);
     return typeof fallback === 'string' ? fallback : undefined;
   }
+}
+
+/** The providers a tool's context resolves. */
+interface ProviderLookup {
+  get<T>(token: Token<T>): T;
+  tryGet<T>(token: Token<T>): T | undefined;
+}
+
+/**
+ * The nearest resolver declared as `SkilledOpenApiCredentialResolver`, in `init({ providers })`, the `@App` that
+ * installs the plugin or `@FrontMcp({ providers })`; without one, the built-in resolver, which reads `credentials`.
+ */
+export function credentialResolverOf(providers: ProviderLookup): CredentialResolver {
+  return providers.tryGet(SkilledOpenApiCredentialResolver) ?? providers.get(MemoryCredentialResolver);
 }
 
 // Strip a single trailing CR/LF that a file-sourced secret commonly picks up,

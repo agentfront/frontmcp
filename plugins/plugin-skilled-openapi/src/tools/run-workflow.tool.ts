@@ -10,10 +10,11 @@
 import { SkillAuditWriterToken, type SkillAuditWriter } from '@frontmcp/adapters/skills';
 import { Tool, ToolContext } from '@frontmcp/sdk';
 
+import { credentialResolverOf } from '../executor/credential-resolver';
 import { executeSkillAction, type SkillActionDeps } from '../executor/execute-skill-action';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
-import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
+import { SkilledOpenApiConfig } from '../skilled-openapi.symbols';
 import { BundleSyncService } from '../sync/bundle-sync.service';
 import {
   runWorkflowDescription,
@@ -48,7 +49,7 @@ export default class RunWorkflowTool extends ToolContext {
     const config = this.get(SkilledOpenApiConfig);
     const hiddenOps = this.get(HiddenOpRegistry);
     const guard = this.get(AuthorityGuard);
-    const resolver = this.get(SkilledOpenApiCredentialResolver);
+    const resolver = credentialResolverOf(this);
 
     // The enclave is an OPTIONAL peer: lazy-import so installs that never run
     // workflows don't need it, and a missing install surfaces as a clear error

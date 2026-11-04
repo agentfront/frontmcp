@@ -32,7 +32,7 @@ import { MemoryCredentialResolver } from './executor/credential-resolver';
 import { HiddenOpRegistry } from './registry/hidden-op.registry';
 import { AuthorityGuard } from './security/authority-guard';
 import { bundleSkillPolicies, SkillVisibility } from './security/skill-visibility';
-import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from './skilled-openapi.symbols';
+import { SkilledOpenApiConfig } from './skilled-openapi.symbols';
 import {
   skilledOpenApiPluginOptionsSchema,
   type SkilledOpenApiPluginOptions,
@@ -183,6 +183,9 @@ function resolveBundleTelemetry(scope: ScopeEntry): BundleStoreTelemetry | undef
   // The bundle's skills are registered after startup: serve the skills capability and methods from
   // startup, answering with the skills loaded so far.
   dynamicSkills: true,
+  oncePerServer:
+    'One bundle can describe several services, each with its own base URL and auth binding: serve them from one ' +
+    'bundle. To serve separate bundles, give each its own app with splitByApp.',
 })
 export default class SkilledOpenApiPlugin extends DynamicPlugin<
   SkilledOpenApiPluginOptions,
@@ -345,9 +348,10 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
         useFactory: (scope: ScopeEntry) => new BundleStore({ telemetry: resolveBundleTelemetry(scope) }),
       },
       {
+        // Not under SkilledOpenApiCredentialResolver, so one declared by the app or the server is not shadowed.
         name: 'skilled-openapi:credential-resolver',
-        provide: SkilledOpenApiCredentialResolver,
-        useValue: new MemoryCredentialResolver(parsed.credentials ?? {}) as unknown as SkilledOpenApiCredentialResolver,
+        provide: MemoryCredentialResolver,
+        useValue: new MemoryCredentialResolver(parsed.credentials ?? {}),
       },
       {
         name: 'skilled-openapi:authority-guard',
