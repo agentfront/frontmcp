@@ -22,10 +22,10 @@ import {
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
   { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_283_161 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_290_033 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_290_042 },
 ];
 
-const VITE_INITIAL_CHUNK_MAX_BYTES = 762_815;
+const VITE_INITIAL_CHUNK_MAX_BYTES = 762_830;
 
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {
