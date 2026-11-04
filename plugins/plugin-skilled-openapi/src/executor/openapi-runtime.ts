@@ -342,9 +342,8 @@ export async function executeOperation(args: {
           }
         }
       }
-      const buf = Buffer.concat(chunks.map((c) => Buffer.from(c)));
       // Re-create Response so parseResponse can do its own content-type handling.
-      const synthetic = new Response(buf, {
+      const synthetic = new Response(concatChunks(chunks, received), {
         status: response.status,
         headers: response.headers,
       });
@@ -374,6 +373,17 @@ async function outboundFetch(outbound: OutboundOptions, ssrf: SsrfCheckResult): 
   if (outbound.egressProxy) return proxiedFetch(outbound.egressProxy);
   if (ssrf.addresses?.length && !isEdgeRuntime()) return pinnedFetch(ssrf.addresses);
   return fetch;
+}
+
+/** The body read in chunks, as one array of bytes: a browser has no `Buffer`. */
+function concatChunks(chunks: readonly Uint8Array[], byteLength: number): Uint8Array<ArrayBuffer> {
+  const body = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
 }
 
 function failure(status: number, error: string): ExecutionResult {

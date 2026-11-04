@@ -66,7 +66,7 @@ export default [
             '@frontmcp/protocol/client',
             '@frontmcp/testing',
             '@frontmcp/observability',
-            '^#(mcp-.+|crypto-.+|async-.+|event-.+|langchain-.+|sse-.+|express-.+|server-.+|shared-server|stdio-.+|env|runtime-context|path|client|import-computed|js-yaml|semver|uipack-render|protocol-client)$',
+            '^#(mcp-.+|crypto-.+|async-.+|event-.+|langchain-.+|sse-.+|express-.+|server-.+|shared-server|enclave-core|stdio-.+|env|runtime-context|path|client|import-computed|js-yaml|semver|uipack-render|protocol-client)$',
           ],
           depConstraints: [
             {

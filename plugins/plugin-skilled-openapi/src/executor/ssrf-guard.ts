@@ -20,6 +20,10 @@
 // are validated DIRECTLY without DNS — so the metadata/private checks apply on
 // every runtime, including V8 isolates where `node:dns` is absent.
 //
+// In a browser (a page or a Web Worker) a name host passes without being
+// resolved: a browser has no resolver, and its own rules (CORS, private network
+// access) govern the connection. Checks 1–3 and the IP-literal checks still apply.
+//
 // SECURITY (GHSA-4r57-gvgj-5crm): addresses are classified by `@frontmcp/utils`
 // on their parsed value, never their spelling. WHATWG URL canonicalises
 // `[::ffff:169.254.169.254]` to `[::ffff:a9fe:a9fe]`, and IPv6 has further
@@ -30,17 +34,18 @@
 // request connects to those addresses only (`pinned-fetch.ts`), so it reaches
 // the addresses checked here rather than the answer of a second lookup.
 
-import type { LookupAddress } from 'node:dns';
+import type * as Dns from 'node:dns';
 
 import { classifyIpAddress, parseIpv4, type IpAddressClassification, type IpAddressRange } from '@frontmcp/utils';
 
 import type { OutboundOptions } from '../skilled-openapi.types';
+import { isBrowserRuntime } from './browser-runtime';
 
 export interface SsrfCheckResult {
   ok: boolean;
   reason?: string;
   /** For a hostname resolved here, the addresses it resolved to, all checked: the ones to connect to. */
-  addresses?: LookupAddress[];
+  addresses?: Dns.LookupAddress[];
 }
 
 // ALWAYS forbidden, regardless of `allowPrivateNetworks`. These ranges host
@@ -170,13 +175,17 @@ export async function checkOutboundUrl(
     return { ok: true };
   }
 
+  if (isBrowserRuntime()) return { ok: true };
+
   // NAME host: resolve to IP(s) and check the blocklist. `node:dns` is imported
   // lazily — only when we actually need to resolve — so a V8-isolate runtime
   // (Cloudflare Worker), where `node:dns` is absent and egress is already
-  // platform-sandboxed, never loads it at module-eval.
-  let addresses: LookupAddress[];
+  // platform-sandboxed, never loads it at module-eval. The module name is not a
+  // literal, so a browser bundler doesn't try to resolve it.
+  let addresses: Dns.LookupAddress[];
   try {
-    const { promises: dns } = await import('node:dns');
+    const dnsModuleName = 'node:dns';
+    const { promises: dns } = (await import(dnsModuleName)) as typeof Dns;
     addresses = await dns.lookup(literal.address, { all: true });
   } catch (e) {
     if (!outbound.allowPrivateNetworks) {
