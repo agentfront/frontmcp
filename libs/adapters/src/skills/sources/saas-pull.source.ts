@@ -120,7 +120,8 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
 
   private listeners = new Set<BundleSourceListener>();
   private pollHandle: NodeJS.Timeout | undefined;
-  private inFlight = false;
+  /** The pull running now, from start, a poll or a refresh; only one runs at a time. */
+  private inFlightPull: Promise<unknown> | undefined;
   private stopped = false;
   private readonly jwksService = new JwksService({});
   private readonly replayGuard?: WebhookReplayGuard;
@@ -173,41 +174,48 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
   }
 
   async start(): Promise<void> {
-    // Participate in the single-flight guard. On edge runtimes the plugin
-    // defers boot via `setImmediate(() => source.start())`; if a Cron Trigger
-    // fires during cold-start and calls `refresh()` first, that pull holds
-    // `inFlight` — so start() must skip its own pull (otherwise two concurrent
-    // pulls + cache writes + notifies race, last-writer-wins). The check+set is
-    // atomic (no await between), so it's a correct mutex in single-threaded JS.
-    if (this.stopped || this.inFlight) {
+    // Single flight: a Cron Trigger can call refresh() during a cold start, and its pull is then the one in
+    // flight, so start() skips its own rather than race it. The check and the set have no await between them.
+    if (this.stopped || this.inFlightPull) {
       this.schedulePoll();
       return;
     }
-    this.inFlight = true;
-    let bundle: ResolvedBundle | undefined;
     try {
-      try {
-        bundle = await this.fetchOnce();
-      } catch (e) {
-        // A rejected pull token means the SaaS is not the one this server trusts:
-        // serving the cached bundle would hide that, so fail instead.
-        if (e instanceof SaasPullTokenRejectedError) throw e;
-        const failure = describePullFailure(e);
-        this.logger.warn(`[saas-source] initial pull failed (${failure}); attempting cached bundle fallback`);
-        bundle = await this.loadCache();
-        if (!bundle) {
-          throw new Error(
-            `[saas-source] initial pull failed and no cached bundle is available ${this.cacheLocation()}: ${failure}`,
-            { cause: e },
-          );
-        }
-        this.logger.warn(`[saas-source] using cached bundle "${bundle.bundleId}@${bundle.version}"`);
-      }
-      await this.notify(bundle);
+      await this.exclusivePull(() => this.pullAtStart());
     } finally {
-      this.inFlight = false;
       this.schedulePoll();
     }
+  }
+
+  private async pullAtStart(): Promise<void> {
+    let bundle: ResolvedBundle | undefined;
+    try {
+      bundle = await this.fetchOnce();
+    } catch (e) {
+      // A rejected pull token means the SaaS is not the one this server trusts:
+      // serving the cached bundle would hide that, so fail instead.
+      if (e instanceof SaasPullTokenRejectedError) throw e;
+      const failure = describePullFailure(e);
+      this.logger.warn(`[saas-source] initial pull failed (${failure}); attempting cached bundle fallback`);
+      bundle = await this.loadCache();
+      if (!bundle) {
+        throw new Error(
+          `[saas-source] initial pull failed and no cached bundle is available ${this.cacheLocation()}: ${failure}`,
+          { cause: e },
+        );
+      }
+      this.logger.warn(`[saas-source] using cached bundle "${bundle.bundleId}@${bundle.version}"`);
+    }
+    await this.notify(bundle);
+  }
+
+  /** Run `pull` as the one pull in flight, so a start, a poll and a refresh never pull at once. */
+  private exclusivePull<T>(pull: () => Promise<T>): Promise<T> {
+    const running = pull().finally(() => {
+      this.inFlightPull = undefined;
+    });
+    this.inFlightPull = running;
+    return running;
   }
 
   onChange(listener: BundleSourceListener): () => void {
@@ -244,33 +252,36 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
    * Manually pull a fresh bundle and notify listeners, resolving once they are
    * done with it (the plugin applied and kept it, or refused it). Drive this
    * from a Cron Trigger / Durable Object alarm on runtimes without background
-   * timers (where `disablePolling` is set). Single-flight: returns `undefined`
-   * if a pull is already in flight; throws if the pull itself fails (the caller
-   * — e.g. a scheduled handler — decides how to surface it).
+   * timers (where `disablePolling` is set). Single-flight: while a pull is
+   * already in flight it waits for that pull to finish, applied and kept, and
+   * returns `undefined` without pulling again; throws if its own pull fails (the
+   * caller — e.g. a scheduled handler — decides how to surface it).
    */
   async refresh(): Promise<ResolvedBundle | undefined> {
-    if (this.stopped || this.inFlight) return undefined;
-    this.inFlight = true;
-    try {
+    if (this.stopped) return undefined;
+    if (this.inFlightPull) {
+      await this.inFlightPull.catch(() => undefined);
+      return undefined;
+    }
+    return this.exclusivePull(async () => {
       const bundle = await this.fetchOnce();
       await this.notify(bundle);
       return bundle;
-    } finally {
-      this.inFlight = false;
-    }
+    });
   }
 
   private async pollOnce(): Promise<void> {
     if (this.stopped) return;
-    if (this.inFlight) {
+    if (this.inFlightPull) {
       // Skip; previous poll still running.
       this.schedulePoll();
       return;
     }
-    this.inFlight = true;
     try {
-      const bundle = await this.fetchOnce();
-      await this.notify(bundle);
+      await this.exclusivePull(async () => {
+        const bundle = await this.fetchOnce();
+        await this.notify(bundle);
+      });
     } catch (e) {
       if (e instanceof SaasPullTokenRejectedError) {
         this.logger.error(`[saas-source] poll refused: ${e.message}; keeping the current bundle`);
@@ -278,14 +289,13 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
         this.logger.warn(`[saas-source] poll failed: ${describePullFailure(e)}`);
       }
     } finally {
-      this.inFlight = false;
       this.schedulePoll();
     }
   }
 
   // Indirected so tests can stub the network call.
   protected async httpGet(url: string, headers: Record<string, string>): Promise<{ status: number; body: string }> {
-    // Bound the request so a hung SaaS endpoint can't pin `inFlight=true`
+    // Bound the request so a hung SaaS endpoint can't pin the in-flight pull
     // forever and silently disable polling. AbortError surfaces as a normal
     // fetch failure to the caller, which the surrounding catch already
     // treats as a pull failure with optional cache fallback.

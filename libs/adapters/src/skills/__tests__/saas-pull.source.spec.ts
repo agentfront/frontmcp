@@ -301,6 +301,32 @@ describe('SaasPullSource', () => {
     expect(maxConcurrent).toBe(1);
   });
 
+  it('makes a refresh that overlaps a pull wait for that pull to be applied, without pulling again', async () => {
+    let pulls = 0;
+    const source = new FakeSaasSource(baseOptions({ pollIntervalMs: 60_000 }), tmpDir, async () => {
+      pulls++;
+      await new Promise((r) => setTimeout(r, 100));
+      return { status: 200, body: JSON.stringify(baseBundle) };
+    });
+    const events: string[] = [];
+    source.onChange(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+      events.push('applied');
+    });
+
+    const firstRefresh = source.refresh();
+    const overlapping = source.refresh().then((bundle) => {
+      events.push('overlapping refresh resolved');
+      return bundle;
+    });
+    await Promise.all([firstRefresh, overlapping]);
+    await source.stop();
+
+    expect(pulls).toBe(1);
+    expect(events).toEqual(['applied', 'overlapping refresh resolved']);
+    await expect(overlapping).resolves.toBeUndefined();
+  });
+
   it('logs a bundle it cannot keep (unwritable cacheDir) without failing the pull', async () => {
     const warn = jest.fn();
     const logger = { ...fakeLogger, warn } as unknown as never;
