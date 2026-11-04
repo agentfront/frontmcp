@@ -26,7 +26,9 @@ class EnvironmentCredentialResolver extends SkilledOpenApiCredentialResolver {
   }
 }
 
-type PluginSetup = Partial<Pick<SkilledOpenApiPluginOptionsInput, 'authProviders' | 'source' | 'bundleCacheDir'>>;
+type PluginSetup = Partial<
+  Pick<SkilledOpenApiPluginOptionsInput, 'authProviders' | 'source' | 'bundleCacheDir' | 'confirm'>
+>;
 
 function staticBundleSource() {
   return { type: 'static' as const, path: requiredEnv('SKILLED_BUNDLE_PATH'), watch: false };

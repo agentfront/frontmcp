@@ -130,6 +130,12 @@ or an error status, whose text names the API's status and error body. With
 `--output json`, a failure's `structuredContent` is `{ ok: false, status,
 data?, error? }`, `data` being the API's error body.
 
+An action the plugin's `confirm` option names asks the user through an MCP
+elicitation, which the CLI can't show, in-process or through the daemon: its
+`execute-action` and `run-workflow` exit 1 with `the user's confirmation is
+needed for <actionId>, and this client can't ask for it`, and send nothing,
+unless the server sets `confirm.whenUnsupported: 'allow'`.
+
 ## Requirements
 
 - **Node.js 24+** required for the SEA path (`frontmcp build --target cli`). The plain JS bundle path (`--target cli --js`) only requires the Node version your entry file supports.

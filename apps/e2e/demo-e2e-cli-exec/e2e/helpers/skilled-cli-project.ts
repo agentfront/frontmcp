@@ -23,6 +23,15 @@ const getInvoice = {
   authBindingRef: 'none',
 };
 
+/** A DELETE action, which the server's `confirm` option makes ask the user first. */
+const voidInvoice = {
+  ...getInvoice,
+  operationId: 'voidInvoice',
+  httpMethod: 'DELETE',
+  summary: 'Void an invoice.',
+  outputSchema: {},
+};
+
 /** Two skills: `Invoices` for everyone, `Admin` only for callers with the `admin` role. */
 export const SKILLED_BUNDLE = {
   schemaVersion: 1,
@@ -38,7 +47,7 @@ export const SKILLED_BUNDLE = {
       name: 'Invoices',
       description: 'Look up invoices.',
       instructions: '# Invoices\n\nFind an invoice by its id.',
-      operationIds: ['getInvoice'],
+      operationIds: ['getInvoice', 'voidInvoice'],
     },
     {
       id: 'admin',
@@ -49,7 +58,7 @@ export const SKILLED_BUNDLE = {
       requiredAuthorities: { roles: { any: ['admin'] } },
     },
   ],
-  operations: { getInvoice },
+  operations: { getInvoice, voidInvoice },
 };
 
 export interface SkilledCliProject {
@@ -128,7 +137,8 @@ import { FrontMcp, LogLevel } from '@frontmcp/sdk';
   plugins: [
     SkilledOpenApiPlugin.init({
       source: { type: 'static', path: ${JSON.stringify(bundlePath)}, watch: false },
-      requireSignature: false,${outbound}
+      requireSignature: false,
+      confirm: { methods: ['DELETE'] },${outbound}
     }),
   ],
   ${serverConfig}

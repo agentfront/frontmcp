@@ -219,6 +219,38 @@ class InboxLinkTool extends ToolContext {
   startup with `InvalidQuestionStoreError`.
 - `persist.ttlMs` must be longer than the call's `ttl`; URL mode cannot be persisted (`INVALID_INPUT`).
 
+## Confirming Skilled OpenAPI Actions
+
+`@frontmcp/plugin-skilled-openapi` asks through elicitation before an action's request when its `confirm` option names
+the action, by HTTP method, by a tag of the operation or of a skill that lists it, or by operationId. Without
+`confirm` nothing asks, so destructive actions run unasked until you configure it.
+
+```typescript
+@FrontMcp({
+  info: { name: 'billing', version: '1.0.0' },
+  apps: [],
+  elicitation: { enabled: true },
+  plugins: [
+    SkilledOpenApiPlugin.init({
+      source: { type: 'static', path: './bundle.json' },
+      confirm: { methods: ['DELETE'], tags: ['destructive'], whenUnsupported: 'refuse' },
+    }),
+  ],
+})
+class Server {}
+```
+
+- The question is `{ confirmed: boolean }`. `execute_action` and an operation tool ask after the call is authorized
+  and its input checked, naming the action, its summary and its input.
+- `run_workflow` asks once, before its script starts, about the matching actions the script names as strings, so a
+  script that deletes twelve records asks once. A matching action the question didn't name fails with an error that
+  tells the model to write its id as a string.
+- A decline sends nothing and fails the call with `the user declined: <actionId>`.
+- A client without the elicitation capability, or a server with `enabled: false`, can't be asked: the action is
+  refused (`whenUnsupported: 'refuse'`, the default) or runs unasked (`'allow'`). The plugin doesn't use the
+  elicitation fallback, where the model would answer for the user. The generated CLI declares no elicitation
+  capability, so it is refused too.
+
 ## Notes
 
 - When `enabled: false` (default), `this.elicit()` is not available — keeps resource overhead low

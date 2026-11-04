@@ -42,6 +42,16 @@ describe('bundle.schema', () => {
       expect(result.success).toBe(false);
     });
 
+    it("accepts an operation's tags, and rejects one over 256 characters", () => {
+      const withTags = (tags: string[]) => ({
+        ...validBundle,
+        operations: { createInvoice: { ...validBundle.operations.createInvoice, tags } },
+      });
+
+      expect(resolvedBundleSchema.safeParse(withTags(['invoices', 'destructive'])).success).toBe(true);
+      expect(resolvedBundleSchema.safeParse(withTags(['x'.repeat(257)])).success).toBe(false);
+    });
+
     it('rejects unknown top-level fields (strict mode)', () => {
       const result = resolvedBundleSchema.safeParse({ ...validBundle, mysteryField: 1 });
       expect(result.success).toBe(false);

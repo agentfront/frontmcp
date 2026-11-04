@@ -1,5 +1,5 @@
 import type { Token } from '@frontmcp/di';
-import type { ProviderRegistry, ToolFunctionTokenRecord, ToolRegistry } from '@frontmcp/sdk';
+import type { ProviderRegistry, ToolClassTokenRecord, ToolContext, ToolRegistry } from '@frontmcp/sdk';
 
 import { executeOperation, type ExecutionResult } from '../executor/openapi-runtime';
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
@@ -39,14 +39,14 @@ class FakeProviderRegistry {
 }
 
 class FakeToolRegistry {
-  registered: { token: Token; executor: unknown; metadataName: string; visibility: unknown }[] = [];
+  registered: { token: Token; record: ToolClassTokenRecord; metadataName: string; visibility: unknown }[] = [];
   unregistered: Token[] = [];
 
-  registerToolInstance(tool: { record: ToolFunctionTokenRecord }) {
+  registerToolInstance(tool: { record: ToolClassTokenRecord }) {
     const token = tool.record.provide as unknown as Token;
     this.registered.push({
       token,
-      executor: tool.record.provide,
+      record: tool.record,
       metadataName: tool.record.metadata.name,
       visibility: (tool.record.metadata as { visibility?: unknown }).visibility,
     });
@@ -57,9 +57,16 @@ class FakeToolRegistry {
   }
 }
 
+/** The providers and call an operation tool is constructed with. */
+interface FakeToolCall {
+  providers: { get(token: unknown): unknown };
+  authInfo: Record<string, unknown>;
+  signal?: AbortSignal;
+}
+
 function buildFakeCtx(
   overrides: { granted?: boolean; deniedBy?: string; guard?: AuthorityGuard; signal?: AbortSignal } = {},
-) {
+): FakeToolCall {
   const guard = overrides.guard ?? {
     check: jest.fn(async () => ({ granted: overrides.granted ?? true, deniedBy: overrides.deniedBy })),
   };
@@ -75,17 +82,16 @@ function buildFakeCtx(
       allowHttp: false,
     },
   };
+  const byToken = new Map<unknown, unknown>([
+    [SkilledOpenApiConfig, config],
+    [AuthorityGuard, guard],
+    [SkilledOpenApiCredentialResolver, resolver],
+  ]);
   return {
-    logger: noopLogger,
     authInfo: {},
     signal: overrides.signal,
-    get: jest.fn((token: unknown) => {
-      if (token === SkilledOpenApiConfig) return config;
-      if (token === AuthorityGuard) return guard;
-      return undefined;
-    }),
-    tryGet: jest.fn((token: unknown) => (token === SkilledOpenApiCredentialResolver ? resolver : undefined)),
-  } as never;
+    providers: { get: (token: unknown) => byToken.get(token) },
+  };
 }
 
 const buildEntry = (overrides: Partial<HiddenOpEntry> = {}): HiddenOpEntry => ({
@@ -166,12 +172,10 @@ describe('OperationToolFactory', () => {
       const toolRegistry = new FakeToolRegistry();
       const providers = new FakeProviderRegistry();
       // Capture the metadata block by intercepting registerToolInstance.
-      let captured: ToolFunctionTokenRecord['metadata'] | undefined;
-      jest
-        .spyOn(toolRegistry, 'registerToolInstance')
-        .mockImplementation((tool: { record: ToolFunctionTokenRecord }) => {
-          captured = tool.record.metadata;
-        });
+      let captured: ToolClassTokenRecord['metadata'] | undefined;
+      jest.spyOn(toolRegistry, 'registerToolInstance').mockImplementation((tool: { record: ToolClassTokenRecord }) => {
+        captured = tool.record.metadata;
+      });
       const factory = new OperationToolFactory({
         toolRegistry: toolRegistry as unknown as ToolRegistry,
         providers: providers as unknown as ProviderRegistry,
@@ -379,18 +383,19 @@ describe('OperationToolFactory', () => {
       noopLogger.child.mockClear();
     });
 
+    /** Runs the last registered operation tool, as the call-tool flow does: its class built for the call, then executed. */
     function lastExecutor(toolRegistry: FakeToolRegistry) {
-      const last = toolRegistry.registered[toolRegistry.registered.length - 1];
-      return last.executor as (
-        input: Record<string, unknown>,
-        ctx: never,
-      ) => Promise<{
-        ok: boolean;
-        status: number;
-        error?: string;
-        data?: unknown;
-        contentType?: string;
-      }>;
+      const { record } = toolRegistry.registered[toolRegistry.registered.length - 1];
+      return (input: Record<string, unknown>, call: FakeToolCall) => {
+        const tool: ToolContext = new record.provide({ ...call, metadata: record.metadata, input, logger: noopLogger });
+        return tool.execute(input) as Promise<{
+          ok: boolean;
+          status: number;
+          error?: string;
+          data?: unknown;
+          contentType?: string;
+        }>;
+      };
     }
 
     it('returns an envelope with ok:false when authority denies the call', async () => {
