@@ -10,12 +10,12 @@
 //   2. Boots a FrontMCP server on :3010 with `SkilledOpenApiPlugin` configured
 //      to load `billing-bundle.json` from disk (static source, dev mode so we
 //      skip signature verification for the demo)
-//   3. The MCP client only sees `search_skill`, `load_skill`, `run_workflow`
+//   3. The MCP client only sees `search_skill`, `load_skill`, `execute_action`, `run_workflow`
 //      — the three OpenAPI operations are HIDDEN behind the `invoices` skill.
 //
 // Suggested verification flow:
 //   - Connect MCP Inspector to http://localhost:3010
-//   - tools/list → expect [search_skill, load_skill, run_workflow]
+//   - tools/list → expect [search_skill, load_skill, execute_action, run_workflow]
 //   - search_skill({ query: "create invoice" }) → returns the `invoices` skill
 //   - load_skill({ skillId: "invoices" }) → instructions + 3 actions w/ schemas
 //   - run_workflow({ script: 'return await callTool("createInvoice", { customerId: "cus_1", amount: 4200 })' })

@@ -1,8 +1,9 @@
 // file: plugins/plugin-skilled-openapi/src/tools/operation-tool.factory.ts
 //
 // Builds a synthetic `ToolInstance` per OpenAPI operation so other in-process
-// callers (skilled tools, agents, CodeCall scripts, jobs) can compose with the
-// operation via `this.callTool(name, args)` from `ExecutionContextBase`.
+// callers (skilled tools, agents, CodeCall scripts, jobs, and the plugin's own
+// `execute_action`) can compose with the operation via
+// `this.callTool(name, args)` from `ExecutionContextBase`.
 //
 // These tools are registered with `metadata.visibility: 'internal'`:
 //   - never advertised in `tools/list`
@@ -24,14 +25,8 @@ import {
   type ToolRegistry,
 } from '@frontmcp/sdk';
 
-import { callerTokenOf } from '../executor/caller-token';
-import { credentialResolverOf } from '../executor/credential-resolver';
-import { authorizeAction } from '../executor/execute-skill-action';
-import { executeOperation, type OpenApiRuntimeDeps } from '../executor/openapi-runtime';
-import { getCompiledOpSchemas } from '../executor/schema-cache';
+import { runSkillAction, type OperationToolResult, type SkillActionContext } from '../executor/run-skill-action';
 import { type HiddenOpEntry, type OperationListings } from '../registry/hidden-op.registry';
-import { AuthorityGuard } from '../security/authority-guard';
-import { SkilledOpenApiConfig } from '../skilled-openapi.symbols';
 
 const OPERATION_TOOL_OWNER_TOKEN = Symbol.for('skilled-openapi:operation-tool-owner');
 const OPERATION_TOOL_OWNER: EntryOwnerRef = {
@@ -110,29 +105,10 @@ export interface OperationRegisterContext {
   pathsWithGet: ReadonlySet<string>;
 }
 
-/**
- * Stable result envelope produced by every operation executor. Mirrors the
- * shape returned by the shared `executeSkillAction` executor so call-site code
- * (via `callTool`) can branch on `ok` uniformly regardless of which surface the
- * operation was reached through.
- */
-export interface OperationToolResult {
-  ok: boolean;
-  status: number;
-  data?: unknown;
-  contentType?: string;
-  error?: string;
-}
+/** The tool context an operation's function runs in. */
+type OperationToolContext = SkillActionContext & { logger: FrontMcpLogger };
 
-type OperationExecutor = (input: Record<string, unknown>, ctx: ToolCtxLike) => Promise<OperationToolResult>;
-
-interface ToolCtxLike {
-  get<T>(token: Token<T>): T;
-  tryGet<T>(token: Token<T>): T | undefined;
-  logger: FrontMcpLogger;
-  authInfo?: unknown;
-  signal?: AbortSignal;
-}
+type OperationExecutor = (input: Record<string, unknown>, ctx: OperationToolContext) => Promise<OperationToolResult>;
 
 /**
  * Manages the lifecycle of synthetic per-operation internal tools for one
@@ -242,92 +218,8 @@ export class OperationToolFactory {
     return this.registered.size;
   }
 
-  /**
-   * Build the actual function executor for one op. Mirrors the skill-action
-   * executor (`executeSkillAction`):
-   * authority check + input validation + `executeOperation` — so callers
-   * reaching the op via `callTool` get the same security gates as callers
-   * going through `run_workflow`.
-   */
+  /** The function that runs one op: the shared path of a `run_workflow` call, with its checks, audit and error body. */
   private makeExecutor(listings: OperationListings): OperationExecutor {
-    return async (input, ctx) => {
-      const config = ctx.get(SkilledOpenApiConfig);
-      const guard = ctx.get(AuthorityGuard);
-      const resolver = credentialResolverOf(ctx);
-
-      // 1) Authority gate, the same as executeSkillAction's: the op's rule and one
-      //    listing skill's rule; default-deny per config for unprotected ops.
-      const { entry, result: authResult } = await authorizeAction({
-        listings,
-        guard,
-        unprotectedOps: config.unprotectedOps,
-        authInfo: ctx.authInfo,
-        input: (input ?? {}) as Record<string, unknown>,
-      });
-      if (!authResult.granted) {
-        return {
-          ok: false,
-          status: 0,
-          error: `authority denied: ${authResult.deniedBy ?? 'policy not satisfied'}`,
-        };
-      }
-
-      // 2) Input schema validation. Internal callers can't ship malformed
-      // arguments any more than external callers can — run the same
-      // compiled-schema check here.
-      const schemas = getCompiledOpSchemas({
-        bundleVersion: entry.bundleVersion,
-        operationId: entry.op.operationId,
-        inputSchema: entry.op.inputSchema,
-        outputSchema: entry.op.outputSchema,
-      });
-      const inputParse = schemas.input.safeParse(input ?? {});
-      if (!inputParse.success) {
-        return {
-          ok: false,
-          status: 0,
-          error: `input validation failed: ${inputParse.error.issues
-            .slice(0, 3)
-            .map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`)
-            .join('; ')}`,
-        };
-      }
-
-      // 3) Execute. Allowed-hosts is just the pinned service URL — internal
-      // tool calls don't need the live-bundle union because there's no
-      // meta-tool indirection where a bundle swap could race.
-      const allowedHosts = new Set<string>();
-      try {
-        allowedHosts.add(new URL(entry.service.baseUrl).hostname.toLowerCase());
-      } catch {
-        // pinned service URL malformed — execute path will fail SSRF anyway
-      }
-
-      const deps: OpenApiRuntimeDeps = {
-        outbound: config.outbound,
-        resolver: { resolve: (ref, opts) => resolver.resolve(ref, opts) },
-        allowedHosts,
-        logger: ctx.logger,
-      };
-
-      const result = await executeOperation({
-        entry,
-        bundleId: entry.bundleId,
-        input: inputParse.data as Record<string, unknown>,
-        // For a bearer binding with `passthroughCallerToken: true`.
-        callerToken: callerTokenOf(ctx.authInfo),
-        signal: ctx.signal,
-        deps,
-      });
-
-      // 4) Same envelope shape as executeSkillAction so call-site code is uniform.
-      return {
-        ok: result.ok,
-        status: result.status,
-        ...(result.data !== undefined && result.data !== null ? { data: result.data } : {}),
-        ...(result.contentType ? { contentType: result.contentType } : {}),
-        ...(result.error ? { error: result.error } : {}),
-      };
-    };
+    return (input, ctx) => runSkillAction({ ctx, logger: ctx.logger, listings, input: input ?? {} });
   }
 }

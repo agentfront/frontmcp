@@ -7,8 +7,8 @@ import type { AuthBinding, AuthoritiesPolicy, OperationDescriptor, ServiceDescri
  *
  * This is the SOLE resolution path for hidden operations. The registry is NOT
  * exported from the plugin's public surface and is NOT a DI provider that
- * other code paths can inject — it's reachable ONLY through the plugin's three
- * meta-tools, which act as the authorization checkpoint.
+ * other code paths can inject — it's reachable ONLY through the plugin's
+ * meta-tools and operation tools, which act as the authorization checkpoint.
  *
  * The registry also holds the bundle's services map and auth bindings so the
  * executor can resolve outbound URLs and credentials from the same source of

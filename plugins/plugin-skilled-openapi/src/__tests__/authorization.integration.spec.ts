@@ -298,7 +298,7 @@ describe("a bundle skill's SKILL.md lists the actions the caller may run", () =>
       const asMallory = text(await server.readResource(uri, { authContext: MALLORY }));
       const asFran = text(await server.readResource(uri, { authContext: FRAN }));
 
-      expect(asMallory).toContain('## Actions\n\nRun these with `run_workflow`');
+      expect(asMallory).toContain('## Actions\n\nRun one with `execute_action` ({ actionId, input })');
       expect(actionIds(asMallory)).toEqual(['getInvoice', 'refundInvoice']);
       expect(actionIds(asFran)).toEqual(['getInvoice', 'refundInvoice', 'exportInvoices']);
     },

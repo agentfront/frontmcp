@@ -3,25 +3,22 @@ import type { SkillCatalogPointers } from '@frontmcp/sdk';
 
 export const searchSkillDescription = `Search the available skills by free-form query.
 
-A "skill" is a curated bundle of REST operations exposed to you behind a single
-named capability — instead of seeing each individual API endpoint, you see one
-skill that knows how to do something useful (e.g. "billing", "customers").
+A "skill" is a curated bundle of REST operations behind one named capability:
+instead of each API endpoint, you see one skill that knows how to do something
+useful (e.g. "billing", "customers").
 
 The catalog below lists the skills you may use, by name. When it names the
 skill the user's request needs, call \`load_skill\` with that name directly: no
 search is needed. Search when the catalog shows no fitting skill, or is
-truncated. Then call \`load_skill\` to read a skill's instructions and the
-actions it offers, and \`run_workflow\` to execute — a short sandboxed script
-that calls the skill's actions via \`callTool(actionId, input)\` (chaining
-several in one round-trip).
+truncated. \`load_skill\` returns a skill's instructions and actions; run one
+action with \`execute_action\`, or chain several in one call with \`run_workflow\`.
 
 INPUT:
 - query: short natural-language description of what you want to do
 - limit?: max results (default 20, max 50)
 - tags?: filter to skills carrying these tags
 - notQuery?: anti-query — describe what you do NOT want; matching skills are
-  demoted (e.g. query "rate limiting", notQuery "enforcement" to prefer guidance
-  over enforcement skills)
+  demoted (e.g. query "rate limiting", notQuery "enforcement")
 
 OUTPUT: { skills: Array<{ skillId, name, description, score, bundleVersion? }> }`;
 
@@ -74,9 +71,12 @@ export type SearchSkillOutput = {
 export const SKILL_TOOL_CATALOG_POINTERS: SkillCatalogPointers = {
   header: 'Available skills (load one by name with `load_skill`; `search_skill` finds others):',
   truncationHint: 'use `search_skill` to find the rest',
-  compact: 'load one by name with `load_skill`, or find one with `search_skill`.',
+  compact:
+    'load one by name with `load_skill`, or find one with `search_skill`; then run an action with `execute_action`, ' +
+    'or chain several with `run_workflow`.',
 };
 
 /** Opens the "Actions" section of a bundle skill's `SKILL.md` resource. */
 export const SKILL_MD_ACTIONS_HINT =
-  'Run these with `run_workflow`: in its script, `await callTool(actionId, input)` calls an action and returns its response.';
+  'Run one with `execute_action` ({ actionId, input }), or chain several with `run_workflow`: in its script, ' +
+  '`await callTool(actionId, input)` calls an action and returns its response.';
