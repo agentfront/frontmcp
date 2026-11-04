@@ -232,6 +232,7 @@ export { BrowserEntryPointUnavailableError, type BrowserRefusedEntryPoint } from
 export {
   CrossOriginRequestError,
   InvalidHttpRouteError,
+  InvalidHttpRouteResponseError,
   InvalidPeopleAuthOptionsError,
   PersonNotSignedInError,
   SignInLockedError,

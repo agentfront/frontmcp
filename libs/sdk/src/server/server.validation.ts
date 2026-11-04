@@ -98,7 +98,7 @@ export async function writeHttpResponse(res: ServerResponse, value: any): Promis
     case 'redirect': {
       res.setHeader('Location', out.location);
       if ('redirect' in res && typeof res.redirect === 'function') {
-        res.redirect(out.location);
+        res.redirect(out.status, out.location);
       } else {
         res.status(out.status).end();
       }

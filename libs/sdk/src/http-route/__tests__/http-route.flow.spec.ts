@@ -135,6 +135,48 @@ class FailingRoute extends HttpRouteContext {
   }
 }
 
+@HttpRoute({ method: 'GET', path: '/to/board', auth: 'public' })
+class RelativeRedirectRoute extends HttpRouteContext {
+  handle() {
+    return httpRespond.redirect('/board');
+  }
+}
+
+@HttpRoute({ method: 'GET', path: '/to/desk', auth: 'public' })
+class AbsoluteRedirectRoute extends HttpRouteContext {
+  handle() {
+    return httpRespond.redirect('https://desk.example.com/board');
+  }
+}
+
+@HttpRoute({ method: 'GET', path: '/moved', auth: 'public' })
+class MovedRoute extends HttpRouteContext {
+  handle() {
+    return { ...httpRespond.redirect('/board'), status: 301 as const };
+  }
+}
+
+@HttpRoute({ method: 'GET', path: '/to/split', auth: 'public' })
+class SplitHeaderRedirectRoute extends HttpRouteContext {
+  handle() {
+    return httpRespond.redirect('/board\r\nSet-Cookie: session=forged');
+  }
+}
+
+@HttpRoute({ method: 'GET', path: '/json-redirect', auth: 'public' })
+class InvalidJsonRoute extends HttpRouteContext {
+  handle() {
+    return { ...httpRespond.json({ board: 'kanban' }), status: 301 };
+  }
+}
+
+@HttpRoute({ method: 'GET', path: '/card', auth: 'public' })
+class CardRoute extends HttpRouteContext {
+  handle() {
+    return { kind: 'card', title: 'Ship 1.11.1' };
+  }
+}
+
 @App({
   id: 'web',
   name: 'web',
@@ -150,6 +192,12 @@ class FailingRoute extends HttpRouteContext {
     MyNoteEvents,
     HomeRoute,
     FailingRoute,
+    RelativeRedirectRoute,
+    AbsoluteRedirectRoute,
+    MovedRoute,
+    SplitHeaderRedirectRoute,
+    InvalidJsonRoute,
+    CardRoute,
   ],
 })
 class WebApp {}
@@ -392,6 +440,52 @@ describe.each([
 
       expect(response.status).toBe(500);
       expect(await response.text()).not.toContain('the route failed');
+    });
+
+    it('redirects to a path, as httpRespond.redirect() names it (#1053)', async () => {
+      const response = await harness.send('/to/board', { redirect: 'manual' });
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get('location')).toBe('/board');
+    });
+
+    it('redirects to an absolute URL', async () => {
+      const response = await harness.send('/to/desk', { redirect: 'manual' });
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get('location')).toBe('https://desk.example.com/board');
+    });
+
+    it("answers a redirect with the output's status", async () => {
+      const response = await harness.send('/moved', { redirect: 'manual' });
+
+      expect(response.status).toBe(301);
+      expect(response.headers.get('location')).toBe('/board');
+    });
+
+    it.each([
+      ['a redirect whose location would split the header', '/to/split'],
+      ['a JSON output with a redirect status', '/json-redirect'],
+    ])('answers 500 and logs the error for %s, never the output as data', async (_case, path) => {
+      const logged = jest.spyOn(harness.instance.getPrimaryScope()?.logger as Scope['logger'], 'error');
+      try {
+        const response = await harness.send(path, { redirect: 'manual' });
+
+        expect(response.status).toBe(500);
+        expect(response.headers.get('location')).toBeNull();
+        expect(response.headers.get('set-cookie')).toBeNull();
+        expect(await response.text()).not.toContain('kind');
+        expect(logged).toHaveBeenCalledWith(expect.stringContaining(`GET ${path}`));
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it('sends an object whose kind is not an httpRespond kind as JSON', async () => {
+      const response = await harness.send('/card');
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ kind: 'card', title: 'Ship 1.11.1' });
     });
   });
 

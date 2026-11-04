@@ -1,4 +1,4 @@
-import { HttpRoute, HttpRouteContext } from '@frontmcp/sdk';
+import { httpRespond, HttpRoute, HttpRouteContext } from '@frontmcp/sdk';
 
 import { board, boardStore } from './board.store';
 import { VisitCounter } from './visit-counter.provider';
@@ -32,5 +32,12 @@ export class BoardEvents extends HttpRouteContext {
 export class StatusRoute extends HttpRouteContext {
   handle() {
     return { ok: true };
+  }
+}
+
+@HttpRoute({ method: 'GET', path: '/home', auth: 'public' })
+export class HomeRedirect extends HttpRouteContext {
+  handle() {
+    return httpRespond.redirect('/board');
   }
 }
