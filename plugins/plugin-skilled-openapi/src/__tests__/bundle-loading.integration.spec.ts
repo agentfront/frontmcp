@@ -89,13 +89,14 @@ afterAll(async () => {
 });
 
 describe('a server whose bundle failed to load', () => {
-  it('answers search_skill, load_skill and run_workflow with why no skill bundle is loaded', async () => {
+  it('answers search_skill, load_skill, execute_action and run_workflow with why no skill bundle is loaded', async () => {
     const server = await startServer({ source: { type: 'inline', content: bundle }, requireSignature: true });
     const reason =
       'No skill bundle is loaded: bundle acme:billing@4.2.0 was not applied: bundle missing integrity envelope';
 
     await expect(server.callTool('search_skill', { query: 'invoices' })).rejects.toThrow(reason);
     await expect(server.callTool('load_skill', { skillId: 'invoices' })).rejects.toThrow(reason);
+    await expect(server.callTool('execute_action', { actionId: 'getInvoice' })).rejects.toThrow(reason);
     await expect(server.callTool('run_workflow', { script: 'return 1' })).rejects.toThrow(reason);
   });
 

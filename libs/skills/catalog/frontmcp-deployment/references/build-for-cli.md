@@ -122,6 +122,14 @@ answers `isError: true`, and `--output json` prints the result with its
 action's status and the API's error body. Up to 1.11.0 a failed workflow
 exited 0.
 
+`<bin> execute-action --action-id <actionId> --input '<JSON>'` runs one action
+with no script (`--input` can be left out for an action that takes none). It
+prints the action's data and exits 0, or exits 1 when the action fails: an
+authority denial, a failed input or output check, a timeout, an unknown action,
+or an error status, whose text names the API's status and error body. With
+`--output json`, a failure's `structuredContent` is `{ ok: false, status,
+data?, error? }`, `data` being the API's error body.
+
 ## Requirements
 
 - **Node.js 24+** required for the SEA path (`frontmcp build --target cli`). The plain JS bundle path (`--target cli --js`) only requires the Node version your entry file supports.
@@ -263,6 +271,7 @@ frontmcp service uninstall my-server
 | Permission denied on binary  | Missing execute permission                  | Run `chmod +x dist/my-server`                                            |
 | Binary fails on different OS | SEA binaries are platform-specific          | Build on the target OS or use CI matrix builds                           |
 | `run-workflow` exits 1       | The workflow failed (`success: false`)      | Read `error` (`--output json`); it names the API's status and error body |
+| `execute-action` exits 1     | The action failed                           | Read the text, or `structuredContent` (`--output json`): status and body |
 
 ## Examples
 

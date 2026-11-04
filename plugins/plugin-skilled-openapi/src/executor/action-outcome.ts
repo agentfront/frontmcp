@@ -40,6 +40,11 @@ export function actionFailureMessage(actionId: string, outcome: ActionOutcome): 
   return `action "${actionId}" failed with status ${outcome.status}${body}`;
 }
 
+/** The error for an action no skill of the bundle offers, which tells the model how to find the ones it can call. */
+export function unknownActionError(actionId: string): string {
+  return `unknown action "${actionId}" — run search_skill then load_skill to discover available actions`;
+}
+
 function cappedErrorBody(body: unknown, credentialFields: string[]): unknown {
   if (body === undefined || body === null || body === '') return undefined;
   const redacted = redactJson(body, credentialFields);

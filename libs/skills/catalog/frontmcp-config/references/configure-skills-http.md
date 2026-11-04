@@ -88,7 +88,7 @@ With a read-only `externalProvider` the line names no number (`This server has s
 On a server with the Skilled OpenAPI plugin, the line and the catalog summary point to the plugin's tools, which every client can call:
 
 ```text
-This server has 3 skills: load one by name with `load_skill`, or find one with `search_skill`.
+This server has 3 skills: load one by name with `load_skill`, or find one with `search_skill`; then run an action with `execute_action`, or chain several with `run_workflow`.
 ```
 
 The summary is headed ``Available skills (load one by name with `load_skill`; `search_skill` finds others):``. `initialize` waits for the plugin's bundle to load first, so a client's first connection counts its skills (up to 1.11.0, a client that initialized before the bundle loaded got no line, and the line pointed to `skill://index.json`).

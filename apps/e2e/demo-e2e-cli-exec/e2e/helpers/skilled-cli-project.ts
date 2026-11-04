@@ -65,15 +65,20 @@ export interface SkilledCliProject {
  *
  * @param options.serverConfig - Extra `@FrontMcp()` fields, as TypeScript source (such as an `auth` block)
  * @param options.cli - The cli deployment's `cli` block
+ * @param options.serviceBaseUrl - The base URL of a plain-HTTP API on loopback the bundle's service points to
  */
 export async function buildSkilledCliProject(options: {
   prefix: string;
   appName: string;
   serverConfig?: string;
   cli?: Record<string, unknown>;
+  serviceBaseUrl?: string;
 }): Promise<SkilledCliProject> {
+  const bundle = options.serviceBaseUrl
+    ? { ...SKILLED_BUNDLE, services: [{ id: 'billing', baseUrl: options.serviceBaseUrl }] }
+    : SKILLED_BUNDLE;
   const dir = await createScratchProject(options.prefix, {
-    'bundle.json': JSON.stringify(SKILLED_BUNDLE),
+    'bundle.json': JSON.stringify(bundle),
     'src/main.ts': '',
     'frontmcp.config.js': `module.exports = {
   name: '${options.appName}',
@@ -99,7 +104,7 @@ export async function buildSkilledCliProject(options: {
   const bundlePath = path.join(dir, 'bundle.json');
   await writeFile(
     path.join(dir, 'src', 'main.ts'),
-    serverSource(bundlePath, options.serverConfig ?? "auth: { mode: 'public' },"),
+    serverSource(bundlePath, options.serverConfig ?? "auth: { mode: 'public' },", options.serviceBaseUrl !== undefined),
   );
 
   const build = await runFrontmcpCliAsync(['build', '--target', 'cli', '--js'], dir, BUILD_TIMEOUT_MS);
@@ -109,7 +114,8 @@ export async function buildSkilledCliProject(options: {
   return { dir, bundlePath, cliBundle: path.join(dir, 'dist', 'cli', `${options.appName}-cli.bundle.js`) };
 }
 
-function serverSource(bundlePath: string, serverConfig: string): string {
+function serverSource(bundlePath: string, serverConfig: string, loopbackService: boolean): string {
+  const outbound = loopbackService ? '\n      outbound: { allowHttp: true, allowPrivateNetworks: true },' : '';
   return `import 'reflect-metadata';
 import SkilledOpenApiPlugin from '@frontmcp/plugin-skilled-openapi';
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
@@ -122,7 +128,7 @@ import { FrontMcp, LogLevel } from '@frontmcp/sdk';
   plugins: [
     SkilledOpenApiPlugin.init({
       source: { type: 'static', path: ${JSON.stringify(bundlePath)}, watch: false },
-      requireSignature: false,
+      requireSignature: false,${outbound}
     }),
   ],
   ${serverConfig}

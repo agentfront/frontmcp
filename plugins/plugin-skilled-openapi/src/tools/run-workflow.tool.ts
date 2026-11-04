@@ -7,15 +7,17 @@
 // across loaded skills and runs it through the SAME authorize → validate →
 // outbound-HTTPS → validate path as a direct action call. This replaces the
 // prior single-shot execute tool with a composable, sandboxed executor.
-import { SkillAuditWriterToken, type SkillAuditWriter } from '@frontmcp/adapters/skills';
 import { Tool, ToolContext, ToolCredentialsRequiredError, type CallToolResult } from '@frontmcp/sdk';
 
-import { actionFailureMessage, actionOutcome, type ActionOutcome } from '../executor/action-outcome';
-import { credentialResolverOf } from '../executor/credential-resolver';
-import { executeSkillAction, type SkillActionDeps } from '../executor/execute-skill-action';
+import {
+  actionFailureMessage,
+  actionOutcome,
+  unknownActionError,
+  type ActionOutcome,
+} from '../executor/action-outcome';
+import { executeSkillAction } from '../executor/execute-skill-action';
+import { skillActionDepsOf } from '../executor/run-skill-action';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
-import { AuthorityGuard } from '../security/authority-guard';
-import { SkilledOpenApiConfig } from '../skilled-openapi.symbols';
 import { BundleSyncService } from '../sync/bundle-sync.service';
 import {
   runWorkflowDescription,
@@ -71,10 +73,7 @@ export default class RunWorkflowTool extends ToolContext {
     // sandboxed script resolves actions via callTool (stateless workers have no
     // background loop to finish a deferred sync).
     await this.get(BundleSyncService).ensureLoaded();
-    const config = this.get(SkilledOpenApiConfig);
     const hiddenOps = this.get(HiddenOpRegistry);
-    const guard = this.get(AuthorityGuard);
-    const resolver = credentialResolverOf(this);
 
     // The enclave is an OPTIONAL peer: lazy-import so installs that never run
     // workflows don't need it, and a missing install surfaces as a clear error
@@ -93,15 +92,7 @@ export default class RunWorkflowTool extends ToolContext {
       );
     }
 
-    // Opt-in tamper-evident audit (registered when skillsConfig.audit.enabled).
-    const auditWriter = this.tryGet<SkillAuditWriter>(SkillAuditWriterToken);
-    const deps: SkillActionDeps = {
-      config: { outbound: config.outbound, unprotectedOps: config.unprotectedOps },
-      resolver: { resolve: (ref, opts) => resolver.resolve(ref, opts) },
-      guard,
-      logger: this.logger,
-      ...(auditWriter ? { audit: { writer: auditWriter, subject: this.authInfo?.user?.sub ?? 'anonymous' } } : {}),
-    };
+    const deps = skillActionDepsOf(this, this.logger);
 
     // Aborted once the workflow ends, whatever ends it, so no request it started outlives it.
     const workflowEnded = new AbortController();
@@ -118,7 +109,7 @@ export default class RunWorkflowTool extends ToolContext {
         return {
           ok: false,
           status: 0,
-          error: `unknown action "${actionId}" — run search_skill then load_skill to discover available actions`,
+          error: unknownActionError(actionId),
         };
       }
       const result = await executeSkillAction({
@@ -131,7 +122,7 @@ export default class RunWorkflowTool extends ToolContext {
         if (error instanceof ToolCredentialsRequiredError) missingCredential ??= error;
         throw error;
       });
-      return actionOutcome(result, config.outbound.errorBodies, listings[0].authBinding);
+      return actionOutcome(result, deps.config.outbound.errorBodies, listings[0].authBinding);
     };
     const toolHandler = async (
       actionId: string,

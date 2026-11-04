@@ -541,7 +541,7 @@ Because the nearest definition wins, a provider the plugin registers under a pub
 
 ### A plugin that runs once per server
 
-A plugin whose tools, skills or providers are the server's, such as `@frontmcp/plugin-skilled-openapi` with its three meta-tools, can't run twice in one server. Declare it with `oncePerServer`, giving the reason:
+A plugin whose tools, skills or providers are the server's, such as `@frontmcp/plugin-skilled-openapi` with its four meta-tools, can't run twice in one server. Declare it with `oncePerServer`, giving the reason:
 
 ```typescript
 @Plugin({

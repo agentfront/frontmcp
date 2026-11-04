@@ -38,7 +38,7 @@ function skillMdActionIds(skillMd: string): string[] {
 }
 
 test.describe('tools/list (C1)', () => {
-  test('lists exactly search_skill, load_skill and run_workflow, and no bundle operation', async ({
+  test('lists exactly search_skill, load_skill, execute_action and run_workflow, and no bundle operation', async ({
     mcp,
     server,
     auth,
@@ -46,7 +46,7 @@ test.describe('tools/list (C1)', () => {
     const names = (await mcp.tools.list()).map((tool) => tool.name).sort();
     const adminNames = (await (await asAdmin({ server, auth })).tools.list()).map((tool) => tool.name).sort();
 
-    expect(names).toEqual(['load_skill', 'run_workflow', 'search_skill']);
+    expect(names).toEqual(['execute_action', 'load_skill', 'run_workflow', 'search_skill']);
     expect(adminNames).toEqual(names);
   });
 
@@ -64,12 +64,14 @@ test.describe('tools/list (C1)', () => {
 });
 
 test.describe('initialize instructions (C2)', () => {
-  test('count the skills the caller may use and point to load_skill and search_skill', async ({
+  test('count the skills the caller may use and point to the tools that load and run them', async ({
     mcp,
     server,
     auth,
   }) => {
-    const pointers = 'load one by name with `load_skill`, or find one with `search_skill`.';
+    const pointers =
+      'load one by name with `load_skill`, or find one with `search_skill`; ' +
+      'then run an action with `execute_action`, or chain several with `run_workflow`.';
 
     expect(mcp.instructions).toBe(`This server has 2 skills: ${pointers}`);
     expect((await asViewer({ server, auth })).instructions).toBe(`This server has 2 skills: ${pointers}`);
@@ -209,7 +211,8 @@ test.describe('skill:// resources (C5)', () => {
 
     expect(skillMd).toMatch(/^---\nname: Reports\n/);
     expect(skillMd).toContain(
-      '## Actions\n\nRun these with `run_workflow`: in its script, `await callTool(actionId, input)` calls an action',
+      '## Actions\n\nRun one with `execute_action` ({ actionId, input }), or chain several with `run_workflow`: ' +
+        'in its script, `await callTool(actionId, input)` calls an action',
     );
     expect(skillMdActionIds(skillMd)).toEqual([
       'getRevenueReport',
