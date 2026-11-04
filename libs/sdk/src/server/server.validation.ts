@@ -96,12 +96,9 @@ export async function writeHttpResponse(res: ServerResponse, value: any): Promis
 
   switch (out.kind) {
     case 'redirect': {
+      // Not `res.redirect()`: Express 4 reads the location `back` as the request's Referer
       res.setHeader('Location', out.location);
-      if ('redirect' in res && typeof res.redirect === 'function') {
-        res.redirect(out.status, out.location);
-      } else {
-        res.status(out.status).end();
-      }
+      res.status(out.status).end();
       return;
     }
 

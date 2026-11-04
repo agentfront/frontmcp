@@ -177,6 +177,20 @@ class CardRoute extends HttpRouteContext {
   }
 }
 
+@HttpRoute({ method: 'GET', path: '/message-part', auth: 'public' })
+class MessagePartRoute extends HttpRouteContext {
+  handle() {
+    return { kind: 'text', text: 'hello' };
+  }
+}
+
+@HttpRoute({ method: 'GET', path: '/to/back', auth: 'public' })
+class BackRedirectRoute extends HttpRouteContext {
+  handle() {
+    return httpRespond.redirect('back');
+  }
+}
+
 @App({
   id: 'web',
   name: 'web',
@@ -198,6 +212,8 @@ class CardRoute extends HttpRouteContext {
     SplitHeaderRedirectRoute,
     InvalidJsonRoute,
     CardRoute,
+    MessagePartRoute,
+    BackRedirectRoute,
   ],
 })
 class WebApp {}
@@ -481,11 +497,24 @@ describe.each([
       }
     });
 
-    it('sends an object whose kind is not an httpRespond kind as JSON', async () => {
-      const response = await harness.send('/card');
+    it.each([
+      ['whose kind is not an httpRespond kind', '/card', { kind: 'card', title: 'Ship 1.11.1' }],
+      ['with an httpRespond kind and no status', '/message-part', { kind: 'text', text: 'hello' }],
+    ])('sends an object %s as JSON', async (_case, path, body) => {
+      const response = await harness.send(path);
 
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ kind: 'card', title: 'Ship 1.11.1' });
+      expect(await response.json()).toEqual(body);
+    });
+
+    it('sends the location as given, never reading it from the Referer', async () => {
+      const response = await harness.send('/to/back', {
+        redirect: 'manual',
+        headers: { Referer: 'https://evil.example/phish' },
+      });
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get('location')).toBe('back');
     });
   });
 

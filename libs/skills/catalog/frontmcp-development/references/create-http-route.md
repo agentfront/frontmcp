@@ -73,19 +73,23 @@ What `handle()` returns becomes the response:
 | Return value                                         | Response                                      |
 | ---------------------------------------------------- | --------------------------------------------- |
 | An output from `httpRespond` (`html`, `redirect`, …) | As it is, status and headers included         |
-| An output of an `httpRespond` kind that is not valid | `500`, and the error is logged                |
+| An `httpRespond` output that is not valid            | `500`, and the error is logged                |
 | An object or an array                                | `200` JSON                                    |
 | A string                                             | `200` `text/plain`                            |
 | Nothing                                              | `204`                                         |
 | A thrown `PublicMcpError`                            | Its status, `{ "error": "<its message>" }`    |
 | Any other throw                                      | `500 Internal Server Error`, message not sent |
 
-`httpRespond.redirect(location)` answers `302` with that `Location`: an absolute URL, or a path such as `/board` to
-stay on this server. A location with whitespace or a control character is not valid. An object whose `kind` is an
-`httpRespond` kind (`redirect`, `json`, `text`, `html`, `empty`, …) is always taken as a response, so one that fails
-its schema, such as `{ ...httpRespond.json(body), status: 301 }`, fails the request with `500` and logs an
-`InvalidHttpRouteResponseError` naming the route and the problem; it is never sent to the client as data. An object
-with another `kind`, or none, is sent as JSON.
+`httpRespond.redirect(location)` answers `302` with that `Location`, sent as given: an absolute URL, or a reference
+relative to the request such as `/board`. A location with whitespace or a control character is not valid. A browser
+takes `//other.example` or `/\other.example` to another site, so check a location that comes from the request
+against your own list of paths before redirecting to it.
+
+An object whose `kind` is an `httpRespond` kind (`redirect`, `json`, `text`, `html`, `empty`, …) and that has a
+`status`, as every `httpRespond` output does, is a response. One that fails its schema, such as
+`{ ...httpRespond.json(body), status: 301 }`, fails the request with `500` and logs an `InvalidHttpRouteResponseError`
+naming the route and the problem; it is never sent to the client as data. Any other object, such as
+`{ kind: 'text', text: 'hello' }`, is sent as JSON.
 
 ### Step 2: List it in the app
 

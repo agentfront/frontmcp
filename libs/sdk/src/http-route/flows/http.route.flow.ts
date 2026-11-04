@@ -58,8 +58,8 @@ const { Stage } = FlowHooksOf(name);
 const MUTATIONS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 /**
- * The kinds of output that answer a request: a route's value of one of them is a response, never data. A `next` or
- * `consumed` output would leave the request unanswered, so a route's value of that kind is sent as JSON.
+ * The kinds of output that answer a request. A `next` or `consumed` output would leave the request unanswered, so a
+ * route's value of that kind is sent as JSON.
  */
 const RESPONSE_KINDS: ReadonlySet<string> = new Set(
   Object.keys({
@@ -156,27 +156,31 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
     );
   }
 
-  /** What `handle()` returned, as the response. An output of a response kind that is not a valid one fails (#1053). */
+  /**
+   * What `handle()` returned, as the response. A value with a response `kind` and a `status`, as every `httpRespond`
+   * output that can be invalid has, fails when it is not a valid response (#1053); other objects are data.
+   */
   private toHttpOutput(route: HttpRouteEntry, result: HttpRouteResult): HttpOutput {
     if (result === undefined) return httpRespond.noContent();
     if (typeof result === 'string') {
       return { kind: 'text', status: 200, body: result, contentType: 'text/plain; charset=utf-8' };
     }
     const kind = (result as { kind?: unknown }).kind;
-    if (typeof kind !== 'string' || !RESPONSE_KINDS.has(kind)) {
-      return {
-        kind: 'json',
-        status: 200,
-        body: result as Record<string, unknown>,
-        contentType: 'application/json; charset=utf-8',
-      };
+    const parsed =
+      typeof kind === 'string' && RESPONSE_KINDS.has(kind) ? httpOutputSchema.safeParse(result) : undefined;
+    if (parsed?.success) return parsed.data;
+    if (parsed && 'status' in result) {
+      const problems = parsed.error.issues.map((issue) => `${issue.path.join('.') || 'kind'}: ${issue.message}`);
+      const error = new InvalidHttpRouteResponseError(route.method, route.path, String(kind), problems.join('; '));
+      this.scope.logger.error(error.message);
+      throw FlowControl.fail(error);
     }
-    const parsed = httpOutputSchema.safeParse(result);
-    if (parsed.success) return parsed.data;
-    const problems = parsed.error.issues.map((issue) => `${issue.path.join('.') || 'kind'}: ${issue.message}`);
-    const error = new InvalidHttpRouteResponseError(route.method, route.path, kind, problems.join('; '));
-    this.scope.logger.error(error.message);
-    throw FlowControl.fail(error);
+    return {
+      kind: 'json',
+      status: 200,
+      body: result as Record<string, unknown>,
+      contentType: 'application/json; charset=utf-8',
+    };
   }
 
   /** The person signed in for routes of `auth`: a session for a subject opens `'subject'` routes only. */
