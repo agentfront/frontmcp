@@ -98,10 +98,11 @@ export function customManager(store: JobStateStore, logger: FrontMcpLogger, scop
   return new JobExecutionManager(store, logger, undefined, scope, { admission });
 }
 
+/** `authInfo` is the caller's, as the job tools get it: the owner's subject, or the session of a run without one. */
 export async function readableRunUri(
   scope: ScopeEntry,
   run: JobRunRecord,
-  sessionId: string,
+  authInfo: Partial<Record<string, unknown>>,
 ): Promise<string | undefined> {
-  return (await mayAccessRun(scope, run, 'read', { sessionId })) ? jobRunUri(run.runId) : undefined;
+  return (await mayAccessRun(scope, run, 'read', authInfo)) ? jobRunUri(run.runId) : undefined;
 }
