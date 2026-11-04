@@ -169,6 +169,57 @@ describe('SkillRegistry — dynamic registration', () => {
     expect((await registry.search('inventories')).map((r) => r.metadata.id)).toEqual(['store']);
   });
 
+  it('leaves a runtime skill the index scored to the index, so the anti-query keeps it demoted (#1059)', async () => {
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+    await registry.registerSkillContent(
+      buildSkillContent({ id: 'pets', name: 'pets', description: 'Find dogs, cats and birds' }),
+    );
+    await registry.registerSkillContent(
+      buildSkillContent({ id: 'store', name: 'store', description: 'Count the pets in stock, and read an order' }),
+    );
+
+    expect((await registry.search('order')).map((r) => r.metadata.id)).toEqual(['store']);
+    expect(await registry.search('order', { negativeQuery: 'stock' })).toEqual([]);
+  });
+
+  it("demotes a runtime skill the index doesn't hold by the anti-query (#1059)", async () => {
+    class EmptyStore extends ExternalSkillProviderBase {
+      protected async fetchSkill(): Promise<SkillContent | null> {
+        return null;
+      }
+      protected async fetchSkills(): Promise<SkillContent[]> {
+        return [];
+      }
+      protected async searchExternal() {
+        return [];
+      }
+      protected async upsertSkill(): Promise<void> {
+        return undefined;
+      }
+      protected async deleteSkill(): Promise<void> {
+        return undefined;
+      }
+      protected async countExternal(): Promise<number> {
+        return 0;
+      }
+      protected async existsExternal(): Promise<boolean> {
+        return false;
+      }
+    }
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+    registry.setExternalProvider(new EmptyStore({ mode: 'read-only' }));
+    await registry.registerSkillContent(
+      buildSkillContent({ id: 'store', name: 'store', description: 'Count the pets in stock' }),
+    );
+
+    expect((await registry.search('pets')).map((r) => r.metadata.id)).toEqual(['store']);
+    expect(await registry.search('pets', { negativeQuery: 'stock' })).toEqual([]);
+  });
+
   it('replaces a skill when registered again with the same id', async () => {
     const providers = await createProviderRegistryWithScope();
     const registry = new SkillRegistry(providers, [], owner());
