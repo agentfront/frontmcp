@@ -218,6 +218,7 @@ export async function buildExec(
     const { generateCredentialStoreSource } = await import('./cli-runtime/credential-store.js');
     const { generateOAuthHelperSource } = await import('./cli-runtime/oauth-helper.js');
     const { generateDaemonClientSource } = await import('./cli-runtime/daemon-client.js');
+    const { generateTerminalElicitationSource } = await import('./cli-runtime/terminal-elicitation.js');
     const { bundleCliWithEsbuild } = await import('./cli-runtime/cli-bundler.js');
 
     // Reuse the schema extracted in step 6 (single extraction per build).
@@ -301,6 +302,10 @@ export async function buildExec(
       path.join(tempDir, 'daemon-client.js'),
       generateDaemonClientSource(),
     );
+    fs.writeFileSync(
+      path.join(tempDir, 'terminal-elicitation.js'),
+      generateTerminalElicitationSource(),
+    );
 
     // Issue #411 — copy the compiled plugin-emitter so the per-bin
     // `<bin> install -p claude|codex` can `require('./plugin-emitter')`.
@@ -308,14 +313,13 @@ export async function buildExec(
     // final CLI bundle. The emitter imports `./skill-md-compose`, so the
     // sibling file has to land in __cli_temp/ too — otherwise the esbuild
     // step that produces the bin's CLI bundle fails with a missing-module
-    // error. Tolerate absence in test/source-only contexts.
-    const pluginEmitterSrc = path.join(__dirname, 'cli-runtime', 'plugin-emitter.js');
-    if (fs.existsSync(pluginEmitterSrc)) {
-      fs.copyFileSync(pluginEmitterSrc, path.join(tempDir, 'plugin-emitter.js'));
-    }
-    const skillMdComposeSrc = path.join(__dirname, 'cli-runtime', 'skill-md-compose.js');
-    if (fs.existsSync(skillMdComposeSrc)) {
-      fs.copyFileSync(skillMdComposeSrc, path.join(tempDir, 'skill-md-compose.js'));
+    // error. The Skilled OpenAPI commands (`./skilled-commands`) are a
+    // compiled module as well. Tolerate absence in test/source-only contexts.
+    for (const compiledModule of ['plugin-emitter.js', 'skill-md-compose.js', 'skilled-commands.js']) {
+      const compiledModulePath = path.join(__dirname, 'cli-runtime', compiledModule);
+      if (fs.existsSync(compiledModulePath)) {
+        fs.copyFileSync(compiledModulePath, path.join(tempDir, compiledModule));
+      }
     }
 
     // Generate CLI entry

@@ -9,6 +9,7 @@ import { type CliConfig, type OAuthConfig } from '../config';
 import { EXTRACT_PUBLIC_MESSAGE_SNIPPET } from './extract-public-message.snippet';
 import { type ExtractedSchema, type ExtractedTool, type ExtractedPrompt, type ExtractedResourceTemplate, type ExtractedCapabilities, type ExtractedJob, SYSTEM_TOOL_NAMES } from './schema-extractor';
 import { schemaToCommander, generateOptionCode, camelToKebab } from './schema-to-commander';
+import { SKILLED_OPENAPI_TOOLS, TOP_LEVEL_SKILL_COMMANDS } from './skilled-commands';
 import { envDefaultStatements } from '../../../../config/deployment-env';
 import { getSelfNodeRange, minNodeMajorOf } from '../../../../core/version';
 
@@ -39,6 +40,17 @@ export interface CliEntryOptions {
   env?: Record<string, string>;
   /** The app's Node.js range; the generated `doctor` checks its minimum major. Defaults to the CLI's own. */
   nodeVersion?: string;
+}
+
+/** The tool a server lists for clients that can't answer its questions: the CLI answers them itself. */
+const ELICITATION_FALLBACK_TOOL = 'sendElicitationResult';
+
+/** The Skilled OpenAPI meta-tools the CLI offers, when the server has all four of the plugin's; undefined otherwise. */
+export function skilledOpenApiToolNames(tools: ExtractedTool[], excludeTools: string[]): string[] | undefined {
+  const serverToolNames = new Set(tools.map((tool) => tool.name));
+  const metaToolNames: string[] = Object.values(SKILLED_OPENAPI_TOOLS);
+  if (!metaToolNames.every((name) => serverToolNames.has(name))) return undefined;
+  return metaToolNames.filter((name) => !excludeTools.includes(name));
 }
 
 /**
@@ -72,20 +84,26 @@ export function generateCliEntry(options: CliEntryOptions): string {
   const minNodeMajor = minNodeMajorOf(nodeVersion ?? getSelfNodeRange());
 
   const capabilities = schema.capabilities;
+  const skilledToolNames = skilledOpenApiToolNames(schema.tools, excludeTools);
 
   const filteredTools = schema.tools.filter(
-    (t) => !excludeTools.includes(t.name) && !SYSTEM_TOOL_NAMES.has(t.name),
+    (t) =>
+      !excludeTools.includes(t.name) &&
+      !SYSTEM_TOOL_NAMES.has(t.name) &&
+      t.name !== ELICITATION_FALLBACK_TOOL &&
+      !(skilledToolNames && Object.values<string>(SKILLED_OPENAPI_TOOLS).includes(t.name)),
   );
+  const skilledTopLevel = !!skilledToolNames && filteredTools.length === 0;
 
   const selfContained = !!options.selfContained;
 
   const sections: string[] = [
-    generateHeader(appName, appVersion, description, serverBundleFilename, outputDefault, authRequired, capabilities, oauthConfig, selfContained, options.env, schema.httpEntryPath),
+    generateHeader(appName, appVersion, description, serverBundleFilename, outputDefault, authRequired, capabilities, skillCommandNames(skilledToolNames, skilledTopLevel, capabilities), oauthConfig, selfContained, options.env, schema.httpEntryPath),
     generateToolCommands(filteredTools, appName),
     generateResourceCommands(schema),
     generateTemplateCommands(schema.resourceTemplates),
     generatePromptCommands(schema.prompts),
-    capabilities.skills ? generateSkillsCommands() : '',
+    skilledToolNames ? generateSkilledCommands(skilledToolNames, skilledTopLevel) : capabilities.skills ? generateSkillsCommands() : '',
     capabilities.jobs ? generateJobCommands(schema.jobs) : '',
     capabilities.workflows ? generateWorkflowCommands() : '',
     generateSubscribeCommands(),
@@ -104,6 +122,23 @@ export function generateCliEntry(options: CliEntryOptions): string {
   return sections.filter(Boolean).join('\n\n');
 }
 
+/** The root commands `--help` lists under Skills. */
+function skillCommandNames(skilledToolNames: string[] | undefined, skilledTopLevel: boolean, capabilities: ExtractedCapabilities): string[] {
+  if (!skilledToolNames) return capabilities.skills ? ['skills'] : [];
+  const topLevelNames = (Object.keys(SKILLED_OPENAPI_TOOLS) as Array<keyof typeof SKILLED_OPENAPI_TOOLS>)
+    .filter((verb) => skilledTopLevel && skilledToolNames.includes(SKILLED_OPENAPI_TOOLS[verb]))
+    .map((verb) => TOP_LEVEL_SKILL_COMMANDS[verb].name);
+  return [...topLevelNames, 'skills'];
+}
+
+function generateSkilledCommands(toolNames: string[], topLevel: boolean): string {
+  return `require('./skilled-commands').registerSkilledCommands(program, {
+  getClient: getClient,
+  toolNames: ${JSON.stringify(toolNames)},
+  topLevel: ${topLevel}
+});`;
+}
+
 function generateHeader(
   appName: string,
   appVersion: string,
@@ -112,6 +147,7 @@ function generateHeader(
   outputDefault: string,
   authRequired: boolean,
   capabilities: ExtractedCapabilities,
+  skillCommands: string[],
   oauthConfig?: OAuthConfig,
   selfContained?: boolean,
   env?: Record<string, string>,
@@ -120,7 +156,7 @@ function generateHeader(
   const hasOAuth = !!oauthConfig;
 
   // Build the group routing map dynamically
-  const skillsRouting = capabilities.skills ? `\n      else if (name === 'skills') groups['Skills'].push(sub);` : '';
+  const skillsRouting = skillCommands.length > 0 ? `\n      else if (${JSON.stringify(skillCommands)}.indexOf(name) !== -1) groups['Skills'].push(sub);` : '';
   const jobsRouting = capabilities.jobs ? `\n      else if (name === 'job') groups['Jobs'].push(sub);` : '';
   const workflowsRouting = capabilities.workflows ? `\n      else if (name === 'workflow') groups['Workflows'].push(sub);` : '';
   const authRouting = authRequired ? `\n      else if (['login', 'logout', 'sessions', 'connect'].indexOf(name) !== -1) groups['Auth'].push(sub);` : '';
@@ -130,7 +166,7 @@ function generateHeader(
     `      'Tools': []`,
     `      'Resources & Prompts': []`,
   ];
-  if (capabilities.skills) groupEntries.push(`      'Skills': []`);
+  if (skillCommands.length > 0) groupEntries.push(`      'Skills': []`);
   if (capabilities.jobs) groupEntries.push(`      'Jobs': []`);
   if (capabilities.workflows) groupEntries.push(`      'Workflows': []`);
   if (authRequired) groupEntries.push(`      'Auth': []`);
@@ -196,6 +232,7 @@ var path = require('path');
 var fs = require('fs');
 var os = require('os');
 var fmt = require('./output-formatter');
+var elicitation = require('./terminal-elicitation');
 ${authRequired ? "var sessions = require('./session-manager');\nvar creds = require('./credential-store');" : ''}
 ${hasOAuth ? "var oauthHelper = require('./oauth-helper');" : ''}
 
@@ -216,13 +253,19 @@ function daemonEntryPath() {
   return BUILT_ENTRY_PATH !== null ? BUILT_ENTRY_PATH : (process.env.FRONTMCP_HTTP_ENTRY_PATH || '');
 }
 
+// The server's questions are asked in the terminal; --yes answers the yes/no ones without asking
+var QUESTION_OPTIONS = {
+  onElicitation: elicitation.createElicitationHandler({ assumeYes: function() { return !!program.opts().yes; } }),
+  capabilities: { elicitation: { form: {} } }
+};
+
 async function connectOptions() {${authRequired ? `
   var credBlob = await creds.createCredentialStore().get(sessions.getActiveSessionName());
   if (!credBlob || !credBlob.token) {
     throw new Error('Not logged in. Run "' + APP_NAME + ' login" or "' + APP_NAME + ' connect --token <token>" first.');
   }
-  return { authToken: credBlob.token, mode: 'cli' };` : `
-  return { mode: 'cli' };`}
+  return Object.assign({ authToken: credBlob.token, mode: 'cli' }, QUESTION_OPTIONS);` : `
+  return Object.assign({ mode: 'cli' }, QUESTION_OPTIONS);`}
 }
 
 async function connectInProcess(connectOpts) {
@@ -245,7 +288,8 @@ async function getClient() {
   if (fs.existsSync(socketPath)) {
     var dc = require('./daemon-client').createDaemonClient(socketPath, {
       authToken: connectOpts.authToken,
-      entryPath: '/' + daemonEntryPath().replace(/^\\/+|\\/+$/g, '')
+      entryPath: '/' + daemonEntryPath().replace(/^\\/+|\\/+$/g, ''),
+      onElicitation: connectOpts.onElicitation
     });
     try {
       await dc.connect();
@@ -300,6 +344,7 @@ program
   .version(${JSON.stringify(appVersion)})
   .description(${JSON.stringify(description || `${appName} CLI`)})
   .option('--output <mode>', 'Output format: text or json', ${JSON.stringify(outputDefault)})
+  .option('--yes', 'Answer yes to the questions the server asks, such as confirming a destructive action')
   .option('--verbose', 'Enable verbose console logging (logs always go to ~/.frontmcp/logs/)')
   .option('--log-dir <path>', 'Directory for log files (default: ~/.frontmcp/logs/)');
 

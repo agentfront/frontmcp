@@ -15,8 +15,16 @@ interface DaemonClient {
   close(): Promise<void>;
 }
 
+interface ElicitationAnswer {
+  action: string;
+  content?: Record<string, unknown>;
+}
+
 interface DaemonClientModule {
-  createDaemonClient(socketPath: string, options?: { authToken?: string; entryPath?: string }): DaemonClient;
+  createDaemonClient(
+    socketPath: string,
+    options?: { authToken?: string; entryPath?: string; onElicitation?: (request: unknown) => Promise<ElicitationAnswer> },
+  ): DaemonClient;
 }
 
 interface ReceivedRequest {
@@ -29,6 +37,17 @@ interface ReceivedRequest {
 type Reply = (res: http.ServerResponse, message: { id?: number; method?: string; params?: Record<string, unknown> }) => void;
 
 const SESSION_ID = 'session-1';
+
+/** The question the `confirm` tool asks; its id is the call's own, which only the method tells apart. */
+const CONFIRM_QUESTION = {
+  jsonrpc: '2.0',
+  id: 2,
+  method: 'elicitation/create',
+  params: { message: 'Run voidInvoice?', requestedSchema: { type: 'object', properties: { confirmed: { type: 'boolean' } } } },
+};
+
+/** Ends the `confirm` call with the answer the client sent to its question. */
+let finishConfirm: ((answer: unknown) => void) | undefined;
 
 function loadDaemonClient(): DaemonClientModule {
   const loadedModule = { exports: {} as DaemonClientModule };
@@ -55,6 +74,13 @@ const replies: Record<string, Reply> = {
   'tools/call': (res, message) => {
     if (message.params?.['name'] === 'list_jobs') {
       replyJson(res, { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: '{"jobs":[],"count":0}' }] } });
+      return;
+    }
+    if (message.params?.['name'] === 'confirm') {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Mcp-Session-Id': SESSION_ID });
+      res.write(`event: message\ndata: ${JSON.stringify(CONFIRM_QUESTION)}\n\n`);
+      finishConfirm = (answer) =>
+        res.end(`event: message\ndata: ${JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { answer } })}\n\n`);
       return;
     }
     if (message.params?.['name'] === 'broken') {
@@ -100,6 +126,12 @@ describe('generateDaemonClientSource', () => {
         }
         if (req.method === 'DELETE') {
           res.writeHead(200);
+          res.end();
+          return;
+        }
+        if (body.method === undefined) {
+          finishConfirm?.(body);
+          res.writeHead(202);
           res.end();
           return;
         }
@@ -187,6 +219,45 @@ describe('generateDaemonClientSource', () => {
       undefined,
       undefined,
     ]);
+  });
+
+  it('answers the question the server asks during a call, then reads the call result', async () => {
+    const questions: unknown[] = [];
+    const client = createDaemonClient(socketPath, {
+      entryPath: '/mcp',
+      onElicitation: async (question) => {
+        questions.push(question);
+        return { action: 'accept', content: { confirmed: true } };
+      },
+    });
+    await client.connect();
+
+    await expect(client.callTool('confirm', {})).resolves.toEqual({
+      answer: { jsonrpc: '2.0', id: 2, result: { action: 'accept', content: { confirmed: true } } },
+    });
+    expect(questions).toEqual([{ mode: 'form', ...CONFIRM_QUESTION.params }]);
+    expect(received[0].body?.params?.['capabilities']).toEqual({ elicitation: { form: {} } });
+    expect(received[3].headers['mcp-session-id']).toBe(SESSION_ID);
+  });
+
+  it('declines a question its handler fails to answer', async () => {
+    const client = createDaemonClient(socketPath, {
+      entryPath: '/mcp',
+      onElicitation: () => Promise.reject(new Error('no terminal')),
+    });
+    await client.connect();
+
+    await expect(client.callTool('confirm', {})).resolves.toMatchObject({ answer: { result: { action: 'decline' } } });
+  });
+
+  it('declares no elicitation without a handler, and answers a question with method not found', async () => {
+    const client = createDaemonClient(socketPath, { entryPath: '/mcp' });
+    await client.connect();
+
+    await expect(client.callTool('confirm', {})).resolves.toMatchObject({
+      answer: { id: 2, error: { code: -32601, message: 'Method not found: elicitation/create' } },
+    });
+    expect(received[0].body?.params?.['capabilities']).toEqual({});
   });
 
   it('ends the session on close', async () => {

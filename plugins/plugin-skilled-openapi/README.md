@@ -115,7 +115,7 @@ return { invoice: invoice.data };
 ```
 
 A workflow that fails (`success: false`) is an error result: `isError: true`, with the same `structuredContent`, so
-an MCP client sees a failed tool call and the generated CLI's `run-workflow` exits 1. Up to 1.11.0 the result had no
+an MCP client sees a failed tool call and the generated CLI's `run_workflow` exits 1. Up to 1.11.0 the result had no
 `isError`, and the CLI exited 0.
 
 When a script ends, whatever ends it, the plugin aborts the requests it still has in flight and sends none after, so a
@@ -135,7 +135,7 @@ still lists such an action, and the call can be refused once its input is known.
 so it works without `@enclave-vm/core`. It runs the same checks as a script's `callTool`. On success its structured
 content is the operation's data: a JSON object as it is, anything else under `value`; a bodyless answer, such as a 204,
 has no structured content and a text that names the status. A failure is an error result, so an MCP client sees a
-failed call and the generated CLI's `execute-action` exits 1:
+failed call and the generated CLI's `execute` exits 1:
 
 ```jsonc
 // execute_action { "actionId": "refundInvoice", "input": { "id": "INV-1", "amount": 500 } }
@@ -210,8 +210,10 @@ yes/no form:
 it: it doesn't support elicitation; nothing was sent`. With `whenUnsupported: 'allow'` the action runs unasked
   there instead. The plugin doesn't use the SDK's elicitation fallback, in which the model would answer for the user.
 
-The generated CLI can't show the question, in-process or through its daemon, so its `execute-action` and
-`run-workflow` exit 1 for such an action, with that refusal.
+The generated CLI (`frontmcp build --target cli`) asks the question in the terminal, in-process and through its daemon:
+it reads `y/N` when standard input is a terminal, and `--yes` answers yes without asking. With no terminal and no
+`--yes` it declines, so `execute` and `run_workflow` exit 1 with `the user declined: voidInvoice`. Up to 1.11.0 the
+CLI couldn't ask, and the action was refused.
 
 Operation tags come from the bundle: `compileSkilledBundleFromOpenApi()` keeps each operation's OpenAPI `tags` and its
 `x-frontmcp.tags`. Skill tags are the bundle skill's `tags`.
