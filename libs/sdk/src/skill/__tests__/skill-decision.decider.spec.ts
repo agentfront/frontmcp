@@ -96,6 +96,19 @@ describe('decisionsApiDecider (#1062)', () => {
     expect(JSON.parse(init.body as string).model).toBe('jev-1.13.0');
   });
 
+  it('drops any number of trailing slashes from the base URL, in linear time', async () => {
+    const fetchMock = fakeFetch(200, answer([['store', 0.7]]));
+    const decide = decisionsApiDecider({
+      apiKey: 'k',
+      baseUrl: `https://gateway.example/v1${'/'.repeat(50_000)}`,
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+
+    await decide({ query: 'order', notQuery: [], candidates, signal: new AbortController().signal });
+
+    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe('https://gateway.example/v1/decisions');
+  });
+
   it('leaves out answers for values that are not candidates', async () => {
     const fetchMock = fakeFetch(
       200,
