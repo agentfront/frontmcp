@@ -255,13 +255,14 @@ frontmcp service uninstall my-server
 
 ## Troubleshooting
 
-| Problem                      | Cause                                       | Solution                                                    |
-| ---------------------------- | ------------------------------------------- | ----------------------------------------------------------- |
-| SEA build fails              | Node.js version below 24                    | Upgrade to Node.js 24+                                      |
-| Binary crashes on startup    | Missing `@FrontMcp` decorated entry         | Ensure entry file exports or instantiates a decorated class |
-| Binary too large             | All dependencies bundled including dev deps | Review dependencies and remove unused packages from bundle  |
-| Permission denied on binary  | Missing execute permission                  | Run `chmod +x dist/my-server`                               |
-| Binary fails on different OS | SEA binaries are platform-specific          | Build on the target OS or use CI matrix builds              |
+| Problem                      | Cause                                       | Solution                                                                 |
+| ---------------------------- | ------------------------------------------- | ------------------------------------------------------------------------ |
+| SEA build fails              | Node.js version below 24                    | Upgrade to Node.js 24+                                                   |
+| Binary crashes on startup    | Missing `@FrontMcp` decorated entry         | Ensure entry file exports or instantiates a decorated class              |
+| Binary too large             | All dependencies bundled including dev deps | Review dependencies and remove unused packages from bundle               |
+| Permission denied on binary  | Missing execute permission                  | Run `chmod +x dist/my-server`                                            |
+| Binary fails on different OS | SEA binaries are platform-specific          | Build on the target OS or use CI matrix builds                           |
+| `run-workflow` exits 1       | The workflow failed (`success: false`)      | Read `error` (`--output json`); it names the API's status and error body |
 
 ## Examples
 

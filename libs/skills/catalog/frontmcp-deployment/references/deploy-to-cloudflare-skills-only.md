@@ -311,6 +311,8 @@ Action outputs:
 - **Forgetting to declare `signing.replay.nonceKv`.** The cross-validator requires the value to match a binding in `bindings.kvNamespaces[]`. Without it the Worker can't dedupe replays.
 - **Mixing `acme-api` as both a spec id AND an AgentScript namespace.** Dashes aren't valid JS identifiers — add `bindingName: acmeApi` on the spec entry, or rename the spec.
 - **Assuming `notifications/resources/updated` carries no URI.** It does — `notifications/resources/list_changed` is the one with empty params.
+- **Wrapping `callTool` in `try`/`catch`.** AgentScript has none (`Unsupported statement: TryStatement`). Pass `{ throwOnError: false }` and branch on `ok` and `status`.
+- **Expecting the API's error body with `outbound.errorBodies: 'status-only'`.** With it, the thrown error names the status alone, and a `{ throwOnError: false }` result has no `data`.
 
 ## See Also
 
