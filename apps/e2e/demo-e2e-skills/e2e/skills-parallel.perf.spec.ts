@@ -4,8 +4,9 @@
  * Tests skills system under parallel load using multiple clients
  * to achieve higher throughput (400-2000+ req/s)
  */
-import { perfTest, expect } from '@frontmcp/testing';
-import { searchSkills as searchSkillsRaw, loadSkills as loadSkillsRaw } from './helpers/skills-protocol';
+import { expect, perfTest } from '@frontmcp/testing';
+
+import { loadSkills as loadSkillsRaw, searchSkills as searchSkillsRaw } from './helpers/skills-protocol';
 
 perfTest.describe('Skills Parallel Stress Testing', () => {
   perfTest.use({

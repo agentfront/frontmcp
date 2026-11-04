@@ -30,7 +30,7 @@ interface LoadResultWithActivation {
 
 const stateSchema = z.object({
   skillIds: z.array(z.string()),
-  format: z.enum(['full', 'instructions-only']),
+  format: z.enum(['full', 'markdown', 'instructions-only']),
   activateSession: z.boolean(),
   policyMode: z.enum(['strict', 'approval', 'permissive']).optional(),
   loadResults: z.unknown().optional() as z.ZodType<LoadResultWithActivation[] | undefined>,
@@ -209,7 +209,8 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
     const { loadResults = [], warnings = [], format, activateSession } = this.state.required;
 
     const toolRegistry = this.scope.tools;
-    const withSchemas = format !== 'instructions-only';
+    const asMarkdown = format === 'markdown';
+    const withSchemas = format === 'full';
     const toolsByName = new Map(
       withSchemas && toolRegistry ? toolRegistry.getTools(false).map((t) => [t.name, t]) : [],
     );
@@ -235,26 +236,31 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
           }
         : { activated: false };
 
+      const content = asMarkdown
+        ? {
+            formattedContent: toolRegistry
+              ? formatSkillForLLMWithSchemas(skill, availableTools, missingTools, toolRegistry)
+              : formatSkillForLLM(skill, availableTools, missingTools),
+          }
+        : {
+            instructions: skill.instructions,
+            parameters: skill.parameters?.map(({ name, description, required, type }) => ({
+              name,
+              description,
+              required,
+              type,
+            })),
+          };
+
       return {
         id: skill.id,
         name: skill.name,
         description: skill.description ?? '',
-        instructions: skill.instructions,
         tools,
-        parameters: skill.parameters?.map(({ name, description, required, type }) => ({
-          name,
-          description,
-          required,
-          type,
-        })),
+        ...content,
         availableTools,
         missingTools,
         isComplete,
-        // `'instructions-only'` leaves the tool schemas out of the markdown too, not only out of `tools` (#1066)
-        formattedContent:
-          toolRegistry && withSchemas
-            ? formatSkillForLLMWithSchemas(skill, availableTools, missingTools, toolRegistry)
-            : formatSkillForLLM(skill, availableTools, missingTools),
         session: activateSession ? session : undefined,
       };
     });
@@ -269,7 +275,7 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
       },
       nextSteps:
         skills.length > 0
-          ? `Loaded ${skills.length} skill(s). Follow the instructions to complete the task.`
+          ? `Loaded ${skills.length} skill(s). Follow ${asMarkdown ? 'each formattedContent' : 'the instructions'} to complete the task.`
           : 'No skills were loaded. Check the skill IDs and try again.',
     });
     this.logger.verbose('finalize:done');

@@ -59,7 +59,12 @@ export const SkillsLoadRequestSchema = z.object({
   method: z.literal('skills/load'),
   params: z.object({
     skillIds: z.array(z.string()).min(1).describe('Array of skill IDs to load'),
-    format: z.enum(['full', 'instructions-only']).optional().describe('Content format'),
+    format: z
+      .enum(['full', 'markdown', 'instructions-only'])
+      .optional()
+      .describe(
+        "'full' (default): structured fields with tool schemas; 'markdown': formattedContent instead; 'instructions-only': no tool schemas",
+      ),
     activateSession: z.boolean().optional().describe('Whether to activate a skill session'),
     policyMode: z.enum(['strict', 'approval', 'permissive']).optional().describe('Policy mode for session'),
   }),
@@ -76,7 +81,7 @@ export const SkillsLoadResultSchema = z.object({
       id: z.string(),
       name: z.string(),
       description: z.string(),
-      instructions: z.string(),
+      instructions: z.string().optional(),
       tools: z.array(
         z.object({
           name: z.string(),
@@ -99,7 +104,7 @@ export const SkillsLoadResultSchema = z.object({
       availableTools: z.array(z.string()),
       missingTools: z.array(z.string()),
       isComplete: z.boolean(),
-      formattedContent: z.string(),
+      formattedContent: z.string().optional(),
       session: z
         .object({
           activated: z.boolean(),
