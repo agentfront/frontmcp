@@ -73,11 +73,25 @@ What `handle()` returns becomes the response:
 | Return value                                         | Response                                      |
 | ---------------------------------------------------- | --------------------------------------------- |
 | An output from `httpRespond` (`html`, `redirect`, …) | As it is, status and headers included         |
+| An `httpRespond` output that is not valid            | `500`, and the error is logged                |
 | An object or an array                                | `200` JSON                                    |
 | A string                                             | `200` `text/plain`                            |
 | Nothing                                              | `204`                                         |
 | A thrown `PublicMcpError`                            | Its status, `{ "error": "<its message>" }`    |
 | Any other throw                                      | `500 Internal Server Error`, message not sent |
+
+`httpRespond.redirect(location)` answers `302` with that `Location`: an absolute URL, or a reference relative to the
+request such as `/board`. Characters a URL does not carry are sent percent-encoded as UTF-8, as Express encodes
+them: those outside ASCII, `"`, `<`, `>`, `` ` ``, `{`, `}`, and a `%` that starts no `%XX` escape. So `/board/東京` is
+sent as `/board/%E6%9D%B1%E4%BA%AC`, and the rest of the location as given. A location with whitespace or a control
+character is not valid. A browser takes `//other.example` or `/\other.example` to another site, so check a location
+that comes from the request against your own list of paths before redirecting to it.
+
+An object whose `kind` is an `httpRespond` kind (`redirect`, `json`, `text`, `html`, `empty`, …) and that is valid
+for that kind is a response, with the kind's defaults: `{ kind: 'redirect', location: '/board' }` is a `302`. One that
+is not valid and has a `status`, as every `httpRespond` output has, such as `{ ...httpRespond.json(body), status: 301 }`,
+fails the request with `500` and logs an `InvalidHttpRouteResponseError` naming the route and the problem; it is never
+sent to the client as data. Any other object, such as `{ kind: 'text', text: 'hello' }`, is sent as JSON.
 
 ### Step 2: List it in the app
 

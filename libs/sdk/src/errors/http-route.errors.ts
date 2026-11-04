@@ -7,6 +7,16 @@ export class InvalidHttpRouteError extends InternalMcpError {
   }
 }
 
+/** A route's `handle()` returned an output of an `httpRespond` kind that is not a valid one; the request fails with 500. */
+export class InvalidHttpRouteResponseError extends InternalMcpError {
+  constructor(method: string, path: string, kind: string, problems: string) {
+    super(
+      `HTTP route ${method} ${path} returned an invalid "${kind}" response: ${problems}`,
+      'INVALID_HTTP_ROUTE_RESPONSE',
+    );
+  }
+}
+
 /** Thrown at boot for an `http.auth.people` the server cannot use. */
 export class InvalidPeopleAuthOptionsError extends InternalMcpError {
   constructor(problems: readonly string[]) {
