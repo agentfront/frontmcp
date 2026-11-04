@@ -108,6 +108,24 @@ describe('SkillRegistry — dynamic registration', () => {
     expect(results[0].metadata.id).toBe('invoices');
   });
 
+  it("filters and ranks a skill by the tags it's registered with (#1058)", async () => {
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+
+    await registry.registerSkillContent(
+      buildSkillContent({ id: 'pets', name: 'pets', description: 'Find dogs and cats', tags: ['puppies'] }),
+    );
+    await registry.registerSkillContent(
+      buildSkillContent({ id: 'store', name: 'store', description: 'Count dogs in stock' }),
+    );
+
+    expect((await registry.search('dogs', { tags: ['puppies'] })).map((r) => r.metadata.id)).toEqual(['pets']);
+    expect((await registry.search('puppies')).map((r) => r.metadata.id)).toEqual(['pets']);
+    expect(registry.findByName('pets')?.metadata.tags).toEqual(['puppies']);
+    expect((await registry.listSkills({ tags: ['puppies'] })).skills.map((s) => s.id)).toEqual(['pets']);
+  });
+
   it('replaces a skill when registered again with the same id', async () => {
     const providers = await createProviderRegistryWithScope();
     const registry = new SkillRegistry(providers, [], owner());
