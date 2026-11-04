@@ -52,6 +52,7 @@ const fakeLogger = {
 function scopeWith(controller: SkilledOpenApiRuntimeDeps) {
   return {
     logger: fakeLogger,
+    registerHealthProbe: jest.fn(),
     skills: {
       registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })),
       unregisterSkill: jest.fn(async () => false),
@@ -194,6 +195,7 @@ describe('skilled-openapi runtime-deps injection', () => {
     // No `providers` resolving the token → resolveRuntimeDeps returns undefined.
     const scope = {
       logger: fakeLogger,
+      registerHealthProbe: jest.fn(),
       skills: { registerSkillContent: jest.fn(), unregisterSkill: jest.fn() },
     };
     const store = new BundleStore();

@@ -36,6 +36,31 @@ const buildAction = (overrides: Partial<SkillAction> = {}): SkillAction => ({
   ...overrides,
 });
 
+/** A read-only store that holds no skill, so only the registry's overlay serves the runtime skills. */
+class EmptyReadOnlyStore extends ExternalSkillProviderBase {
+  protected async fetchSkill(): Promise<SkillContent | null> {
+    return null;
+  }
+  protected async fetchSkills(): Promise<SkillContent[]> {
+    return [];
+  }
+  protected async searchExternal() {
+    return [];
+  }
+  protected async upsertSkill(): Promise<void> {
+    return undefined;
+  }
+  protected async deleteSkill(): Promise<void> {
+    return undefined;
+  }
+  protected async countExternal(): Promise<number> {
+    return 0;
+  }
+  protected async existsExternal(): Promise<boolean> {
+    return false;
+  }
+}
+
 describe('SkillRegistry — dynamic registration', () => {
   it('builds its search provider again when the first build fails', async () => {
     const providers = await createProviderRegistryWithScope();
@@ -107,6 +132,38 @@ describe('SkillRegistry — dynamic registration', () => {
     const results = await registry.search('refund');
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].metadata.id).toBe('invoices');
+  });
+
+  it('reports the bundleVersion a skill was registered with in its search result, and the new one after a swap', async () => {
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+    const invoices = buildSkillContent({
+      id: 'invoices',
+      name: 'invoices',
+      description: 'Manage invoices and refunds',
+    });
+
+    await registry.registerSkillContent({ ...invoices, bundleVersion: '1.0.0' });
+    const firstVersions = (await registry.search('refunds')).map((r) => r.bundleVersion);
+    await registry.registerSkillContent({ ...invoices, bundleVersion: '1.1.0' });
+    const swappedVersions = (await registry.search('refunds')).map((r) => r.bundleVersion);
+
+    expect(firstVersions).toEqual(['1.0.0']);
+    expect(swappedVersions).toEqual(['1.1.0']);
+  });
+
+  it("reports the bundleVersion of a runtime skill the index doesn't hold", async () => {
+    const providers = await createProviderRegistryWithScope();
+    const registry = new SkillRegistry(providers, [], owner());
+    await registry.ready;
+    registry.setExternalProvider(new EmptyReadOnlyStore({ mode: 'read-only' }));
+
+    await registry.registerSkillContent(
+      buildSkillContent({ id: 'store', name: 'Store', description: 'Count the pets in stock', bundleVersion: '2.0.0' }),
+    );
+
+    expect((await registry.search('pets')).map((r) => r.bundleVersion)).toEqual(['2.0.0']);
   });
 
   it("filters and ranks a skill by the tags it's registered with (#1058)", async () => {

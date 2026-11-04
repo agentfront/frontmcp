@@ -46,6 +46,8 @@ export interface HealthScopeView {
     isNodeAlive(nodeId: string): Promise<boolean>;
     getNodeId(): string;
   };
+  /** Checks plugins added with `scope.registerHealthProbe()`. */
+  readonly healthProbes?: readonly HealthProbeDefinition[];
 }
 
 export class HealthService {
@@ -76,6 +78,7 @@ export class HealthService {
    * Walks the scope's stores and registries to create built-in probes:
    * - Session store (if transport persistence is configured)
    * - Remote MCP apps (via existing HealthCheckManager)
+   * - Probes plugins registered on the scope
    * - User-defined probes from config
    */
   autoDiscoverProbes(scope: HealthScopeView): void {
@@ -109,6 +112,10 @@ export class HealthService {
           };
         },
       });
+    }
+
+    for (const probe of scope.healthProbes ?? []) {
+      this.registerProbe(probe);
     }
 
     // User-defined probes

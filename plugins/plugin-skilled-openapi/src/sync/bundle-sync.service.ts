@@ -16,11 +16,12 @@ import {
   type ServiceDescriptor,
   type SignatureVerifyTelemetry,
 } from '@frontmcp/adapters/skills';
-import { type FrontMcpLogger, type SkillContent, type SkillRegistryInterface } from '@frontmcp/sdk';
+import { PublicMcpError, type FrontMcpLogger, type SkillContent, type SkillRegistryInterface } from '@frontmcp/sdk';
 
 import { type HiddenOpEntry, type HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { type SignatureKey } from '../skilled-openapi.types';
 import { type OperationToolFactory } from '../tools/operation-tool.factory';
+import { describeLoadError, publicLoadFailureReason, type BundleLoadState } from './bundle-load-state';
 
 export interface BundleSyncOptions {
   requireSignature: boolean;
@@ -79,6 +80,8 @@ export class BundleSyncService {
   /** The configured bundle source; wired by the DI factory via {@link attachSource}. */
   private source?: StartableBundleSource;
   private readyPromise?: Promise<void>;
+  /** Why the last load failed, in a form clients may read; cleared when a bundle is applied. */
+  private loadFailure?: string;
 
   constructor(
     private readonly skillRegistry: SkillRegistryInterface,
@@ -119,6 +122,26 @@ export class BundleSyncService {
   }
 
   /**
+   * {@link ensureReady}, then refuse with a public error while no bundle is loaded, so a meta-tool says why the
+   * server has no skills instead of answering as if it had none.
+   */
+  async ensureLoaded(): Promise<void> {
+    await this.ensureReady();
+    const state = this.loadState();
+    if (state.status === 'loaded') return;
+    const reason = state.status === 'failed' ? state.reason : 'the first bundle has not loaded yet';
+    throw new PublicMcpError(`No skill bundle is loaded: ${reason}`, 'SKILL_BUNDLE_NOT_LOADED', 503);
+  }
+
+  /** The bundle being served, or why there is none: a failed load counts only while no bundle is loaded. */
+  loadState(): BundleLoadState {
+    const active = this.bundleStore.current();
+    if (active) return { status: 'loaded', bundleId: active.bundleId, bundleVersion: active.version };
+    if (this.loadFailure !== undefined) return { status: 'failed', reason: this.loadFailure };
+    return { status: 'loading' };
+  }
+
+  /**
    * Start the source and await its FIRST bundle apply.
    *
    * CRITICAL — every promise here (the `apply()`, the `firstApply` latch, and
@@ -132,8 +155,8 @@ export class BundleSyncService {
    *   2. There is no background event loop, so a deferred/fire-and-forget apply
    *      (the old `setImmediate(source.start())`) can never complete after the
    *      response is sent — the awaiting tool drives it to completion inline.
-   * A failed first sync is swallowed (logged) so it degrades to "no skills"
-   * instead of hanging or 500-ing every call.
+   * A failed first sync is logged and recorded instead of hanging or 500-ing
+   * every call: {@link ensureLoaded} then answers why there are no skills.
    */
   private async bootstrap(source: StartableBundleSource): Promise<void> {
     let resolveFirst!: () => void;
@@ -153,12 +176,18 @@ export class BundleSyncService {
       applyTail = applyTail.then(async () => {
         try {
           const result = await this.apply(bundle);
-          if (!result.applied) {
+          if (result.applied) {
+            this.loadFailure = undefined;
+          } else {
             this.logger.warn(`[bundle-sync] bundle ${bundle.bundleId}@${bundle.version} not applied: ${result.reason}`);
+            this.recordLoadFailure(`bundle ${bundle.bundleId}@${bundle.version} was not applied: ${result.reason}`);
           }
         } catch (e) {
           this.logger.error(
             `[bundle-sync] bundle ${bundle.bundleId}@${bundle.version} apply threw: ${(e as Error).message}`,
+          );
+          this.recordLoadFailure(
+            `bundle ${bundle.bundleId}@${bundle.version} was not applied: ${describeLoadError(e)}`,
           );
         }
       });
@@ -178,8 +207,15 @@ export class BundleSyncService {
       // first request sees an as-yet-unpopulated registry (the pre-fix behavior).
       if (firstSettled) await firstApply;
     } catch (e) {
-      this.logger.error(`[skilled-openapi] initial bundle sync failed: ${(e as Error).message}`);
+      const reason = describeLoadError(e);
+      this.logger.error(`[skilled-openapi] initial bundle sync failed: ${reason}`);
+      this.recordLoadFailure(reason);
     }
+  }
+
+  /** Record why no bundle could be loaded; clients read it through {@link ensureLoaded} and `/readyz`. */
+  recordLoadFailure(reason: string): void {
+    this.loadFailure = publicLoadFailureReason(reason);
   }
 
   /**

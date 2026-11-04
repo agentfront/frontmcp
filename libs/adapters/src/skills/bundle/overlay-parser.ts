@@ -45,7 +45,8 @@ function parseRaw(input: OverlayInput): unknown {
   switch (input.kind) {
     case 'yaml':
       try {
-        return yaml.load(input.content);
+        // The YAML 1.2 core schema keeps a timestamp the string that was signed, rather than a Date.
+        return yaml.load(input.content, { schema: yaml.CORE_SCHEMA });
       } catch (e) {
         throw new OverlayParseError(`Overlay YAML parse failed: ${(e as Error).message}`);
       }

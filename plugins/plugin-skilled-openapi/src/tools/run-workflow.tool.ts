@@ -44,7 +44,7 @@ export default class RunWorkflowTool extends ToolContext {
     // Await the bundle sync so the hidden-op registry is populated before the
     // sandboxed script resolves actions via callTool (stateless workers have no
     // background loop to finish a deferred sync).
-    await this.get(BundleSyncService).ensureReady();
+    await this.get(BundleSyncService).ensureLoaded();
     const config = this.get(SkilledOpenApiConfig);
     const hiddenOps = this.get(HiddenOpRegistry);
     const guard = this.get(AuthorityGuard);
