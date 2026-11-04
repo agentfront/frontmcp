@@ -8,7 +8,15 @@ import { type SkillContent } from '../../common/interfaces';
 import { type SkillMetadata, type SkillVisibility } from '../../common/metadata';
 import { importWithRequireFallback } from '../../utils/dynamic-import.utils';
 import { type SkillIndexCache, type SkillIndexScoring } from '../skill-index-cache.interface';
-import { negativeQueryShare, queryTerms, queryTermShare, skillSearchText } from '../skill-search-text';
+import {
+  negativeQueryShare,
+  queryTerms,
+  queryTermShare,
+  SKILL_TOKENIZER_ID,
+  skillSearchText,
+  skillTokenizer,
+  type SkillTokenizer,
+} from '../skill-search-text';
 import {
   type MutableSkillStorageProvider,
   type SkillListOptions,
@@ -117,6 +125,12 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
   private indexCache?: SkillIndexCache;
 
   /**
+   * The index's tokenizer, set when the index is created: vectoriadb's (2.3.4 and later), without stop words. The
+   * text fallback matches with it too. Unset on an older vectoriadb, which tokenizes ASCII only.
+   */
+  private tokenizer?: SkillTokenizer;
+
+  /**
    * The index is rebuilt from `skills` when it is stale: adds/removes bump
    * `skillsVersion`, and the FIRST search after a mutation builds (or restores)
    * the index exactly once. This keeps the expensive IDF/embedding pass off the
@@ -135,19 +149,37 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
 
   private async createVectorDB(): Promise<TFIDFVectoria<SkillDocumentMetadata>> {
     // Loaded with the first search, so a server that never searches skills never loads it.
-    const { TFIDFVectoria } = await importWithRequireFallback(
+    const vectoriadb = await importWithRequireFallback(
       () => import('vectoriadb'),
       () => require('vectoriadb') as typeof import('vectoriadb'),
     );
+    const { TFIDFVectoria } = vectoriadb;
     // `scoring` is read by newer vectoriadb versions; older ones ignore the
     // extra field and use cosine. Built as a typed variable (not an object
     // literal) so passing it to the older constructor type isn't an excess-
     // property error.
-    const dbConfig: { defaultTopK: number; defaultSimilarityThreshold: number; scoring?: SkillIndexScoring } = {
+    const dbConfig: {
+      defaultTopK: number;
+      defaultSimilarityThreshold: number;
+      scoring?: SkillIndexScoring;
+      tokenizer?: SkillTokenizer;
+      tokenizerId?: string;
+    } = {
       defaultTopK: this.defaultTopK,
       defaultSimilarityThreshold: this.defaultMinScore,
     };
     if (this.scoring !== 'cosine') dbConfig.scoring = this.scoring;
+    // vectoriadb 2.3.4 and later export a tokenizer that keeps the letters of every script (#1065); the index uses
+    // it without stop words (#1061). An older vectoriadb has none and ignores these fields.
+    const { defaultTokenizer, DEFAULT_TOKENIZER_ID } = vectoriadb as {
+      defaultTokenizer?: SkillTokenizer;
+      DEFAULT_TOKENIZER_ID?: string;
+    };
+    if (typeof defaultTokenizer === 'function') {
+      this.tokenizer = skillTokenizer(defaultTokenizer);
+      dbConfig.tokenizer = this.tokenizer;
+      dbConfig.tokenizerId = `${SKILL_TOKENIZER_ID}+${DEFAULT_TOKENIZER_ID ?? 'unknown'}`;
+    }
     return new TFIDFVectoria<SkillDocumentMetadata>(dbConfig);
   }
 
@@ -536,7 +568,7 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
     negativeQuery?: string | string[],
     negativeWeight = 1,
   ): Array<{ id: string; text: string; score: number; metadata: SkillDocumentMetadata }> {
-    const terms = queryTerms(query);
+    const terms = queryTerms(query, this.tokenizer);
 
     if (terms.length === 0) {
       return [];
@@ -555,7 +587,8 @@ export class MemorySkillProvider implements MutableSkillStorageProvider {
       // The anti-query demotes here as it does in the index, so this fallback never brings back a skill the
       // index demoted (#1059).
       const score =
-        queryTermShare(terms, searchableText) - negativeWeight * negativeQueryShare(negativeQuery, searchableText);
+        queryTermShare(terms, searchableText, this.tokenizer) -
+        negativeWeight * negativeQueryShare(negativeQuery, searchableText, this.tokenizer);
 
       if (score > 0) {
         matches.push({
