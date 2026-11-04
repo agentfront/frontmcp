@@ -259,6 +259,7 @@
   "InvalidFileSignalError": "class",
   "InvalidHookFlowError": "class",
   "InvalidHttpRouteError": "class",
+  "InvalidHttpRouteResponseError": "class",
   "InvalidInputError": "class",
   "InvalidInstructionSourceError": "class",
   "InvalidMethodError": "class",

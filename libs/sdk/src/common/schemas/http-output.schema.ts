@@ -77,13 +77,29 @@ const HttpMeta = z.object({
 const statusAllowsBody = (s: number) => !NO_BODY_STATUSES.includes(s as (typeof NO_BODY_STATUSES)[number]);
 
 /**
+ * A `Location`: an absolute URL or a reference relative to the request, such as `/board` (RFC 9110 section 10.2.2),
+ * with no whitespace or control character, which could end the header.
+ */
+function isLocation(location: string): boolean {
+  if (/[\s\p{Cc}]/u.test(location)) return false;
+  try {
+    new URL(location, 'http://localhost');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Redirect (3xx)
  */
 export const HttpRedirectSchema = z
   .object({
     kind: z.literal('redirect'),
     status: HttpRedirectStatus.default(302),
-    location: z.string().url(),
+    location: z.string().min(1).refine(isLocation, {
+      message: 'A redirect location is an absolute URL or a path, with no whitespace or control characters',
+    }),
   })
   .merge(HttpMeta);
 

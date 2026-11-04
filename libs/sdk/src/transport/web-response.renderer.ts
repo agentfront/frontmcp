@@ -9,6 +9,7 @@
  * `consumed`) so the caller can fall through (e.g. to a 404).
  */
 import { serializeHttpCookie, type HttpCookie, type HttpOutput } from '../common/schemas/http-output.schema';
+import { toLocationHeader } from '../utils/http-location.utils';
 
 const encoder = new TextEncoder();
 
@@ -84,14 +85,17 @@ export function renderHttpOutputToWebResponse(output: HttpOutput): Response | un
 
     case 'redirect': {
       const headers = buildHeaders(out);
-      headers.set('Location', out.location);
+      headers.set('Location', toLocationHeader(out.location));
       return new Response(null, { status: out.status, headers });
     }
 
     case 'json':
     case 'jsonrpc':
     case 'problem':
-      return new Response(JSON.stringify(out.body), { status: out.status, headers: buildHeaders(out, out.contentType) });
+      return new Response(JSON.stringify(out.body), {
+        status: out.status,
+        headers: buildHeaders(out, out.contentType),
+      });
 
     case 'text':
     case 'html':

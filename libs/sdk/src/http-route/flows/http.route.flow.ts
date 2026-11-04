@@ -7,6 +7,7 @@ import {
   enforceIpFilter,
   Flow,
   FlowBase,
+  FlowControl,
   FlowHooksOf,
   httpInputSchema,
   httpOutputSchema,
@@ -22,7 +23,7 @@ import {
   type ScopeEntry,
   type ServerRequest,
 } from '../../common';
-import { CrossOriginRequestError, PersonNotSignedInError } from '../../errors';
+import { CrossOriginRequestError, InvalidHttpRouteResponseError, PersonNotSignedInError } from '../../errors';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { corsAllowedOrigins } from '../../server/security/resolve-allowed-hosts';
 import { isSameOriginRequest } from '../../server/security/same-origin';
@@ -55,25 +56,27 @@ const name = 'http:route' as const;
 const { Stage } = FlowHooksOf(name);
 
 const MUTATIONS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-/** A `next` or `consumed` output would leave the request unanswered: a route's value is sent as JSON instead. */
-function isResponse(result: object): result is HttpOutput {
-  const kind = (result as { kind?: unknown }).kind;
-  return kind !== 'next' && kind !== 'consumed' && httpOutputSchema.safeParse(result).success;
-}
 
-function toHttpOutput(result: HttpRouteResult): HttpOutput {
-  if (result === undefined) return httpRespond.noContent();
-  if (typeof result === 'string') {
-    return { kind: 'text', status: 200, body: result, contentType: 'text/plain; charset=utf-8' };
-  }
-  if (isResponse(result)) return result;
-  return {
-    kind: 'json',
-    status: 200,
-    body: result as Record<string, unknown>,
-    contentType: 'application/json; charset=utf-8',
-  };
-}
+/**
+ * The kinds of output that answer a request. A `next` or `consumed` output would leave the request unanswered, so a
+ * route's value of that kind is sent as JSON.
+ */
+const RESPONSE_KINDS: ReadonlySet<string> = new Set(
+  Object.keys({
+    redirect: true,
+    json: true,
+    text: true,
+    html: true,
+    binary: true,
+    image: true,
+    stream: true,
+    sse: true,
+    jsonrpc: true,
+    problem: true,
+    empty: true,
+    'web-response': true,
+  } satisfies Record<Exclude<HttpOutput['kind'], 'next' | 'consumed'>, true>),
+);
 
 /**
  * Serves an `@HttpRoute`: the IP filter, the global rate limit, a same-origin check on mutations, people auth, then
@@ -148,7 +151,37 @@ export default class HttpRouteFlow extends FlowBase<typeof name> {
       request: this.httpRequest,
       person,
     });
-    this.respond(route.sse ? this.openStream(route, route.sse, context) : toHttpOutput(await context.handle()));
+    this.respond(
+      route.sse ? this.openStream(route, route.sse, context) : this.toHttpOutput(route, await context.handle()),
+    );
+  }
+
+  /**
+   * What `handle()` returned, as the response. A value with a response `kind` that is valid for that kind is a
+   * response, with the kind's defaults (a redirect without a `status` is a 302). One that is not valid and has a
+   * `status`, as every `httpRespond` output has, fails (#1053); other objects are data.
+   */
+  private toHttpOutput(route: HttpRouteEntry, result: HttpRouteResult): HttpOutput {
+    if (result === undefined) return httpRespond.noContent();
+    if (typeof result === 'string') {
+      return { kind: 'text', status: 200, body: result, contentType: 'text/plain; charset=utf-8' };
+    }
+    const kind = (result as { kind?: unknown }).kind;
+    const parsed =
+      typeof kind === 'string' && RESPONSE_KINDS.has(kind) ? httpOutputSchema.safeParse(result) : undefined;
+    if (parsed?.success) return parsed.data;
+    if (parsed && 'status' in result) {
+      const problems = parsed.error.issues.map((issue) => `${issue.path.join('.') || 'kind'}: ${issue.message}`);
+      const error = new InvalidHttpRouteResponseError(route.method, route.path, String(kind), problems.join('; '));
+      this.scope.logger.error(error.message);
+      throw FlowControl.fail(error);
+    }
+    return {
+      kind: 'json',
+      status: 200,
+      body: result as Record<string, unknown>,
+      contentType: 'application/json; charset=utf-8',
+    };
   }
 
   /** The person signed in for routes of `auth`: a session for a subject opens `'subject'` routes only. */
