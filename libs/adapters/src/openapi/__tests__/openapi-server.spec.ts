@@ -10,6 +10,7 @@ import * as http from 'node:http';
 
 import type { OpenAPIV3 } from 'openapi-types';
 
+import { z } from '@frontmcp/lazy-zod';
 import { FrontMcpToolTokens } from '@frontmcp/sdk';
 
 import OpenapiAdapter from '../openapi.adapter';
@@ -755,7 +756,7 @@ describe('OpenAPI Adapter - Real HTTP Server Integration', () => {
       }
     });
 
-    it('should have a data property when no response schema is defined', async () => {
+    it('lists a data schema that accepts any answer when the response has a description only', async () => {
       // Create a spec with an endpoint that has no response schema
       const specWithNoSchema: OpenAPIV3.Document = {
         openapi: '3.0.0',
@@ -782,11 +783,10 @@ describe('OpenAPI Adapter - Real HTTP Server Integration', () => {
       expect(tool).toBeDefined();
       expect(tool.metadata.rawOutputSchema).toBeDefined();
 
-      // When no schema is specified, mcp-from-openapi may return null/string/any type
-      const outputSchema = tool.metadata.rawOutputSchema;
-      expect(outputSchema.properties.data).toBeDefined();
-      // The default type could be string or null depending on mcp-from-openapi behavior
-      expect(['string', 'null', undefined]).toContain(outputSchema.properties.data.type);
+      // Up to 1.11.0 the generator's `{ type: 'null' }` was listed, which every JSON answer fails.
+      expect(tool.metadata.rawOutputSchema.properties.data).toEqual({ description: 'OK', 'x-status-code': 200 });
+      const listedSchema = z.fromJSONSchema(tool.metadata.rawOutputSchema);
+      expect(listedSchema.safeParse({ status: 200, ok: true, data: { id: 'user-1' } }).success).toBe(true);
     });
   });
 
