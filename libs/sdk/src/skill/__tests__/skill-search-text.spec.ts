@@ -3,6 +3,7 @@ import {
   identifierWords,
   instructionTerms,
   MAX_INSTRUCTION_TERMS,
+  negativeQueryShare,
   queryTerms,
   queryTermShare,
   skillSearchText,
@@ -94,5 +95,13 @@ describe('queryTermShare', () => {
     expect(queryTermShare(queryTerms('show me the inventories by status'), 'pet inventories')).toBe(1 / 3);
     expect(queryTermShare(queryTerms('inventories'), 'pet inventories')).toBe(1);
     expect(queryTermShare(queryTerms('the'), 'the store')).toBe(0);
+  });
+});
+
+describe('negativeQueryShare', () => {
+  it('is the highest share of any anti-query', () => {
+    expect(negativeQueryShare('stock', 'count the pets in stock')).toBe(1);
+    expect(negativeQueryShare(['orders', 'stock levels'], 'count the pets in stock')).toBe(0.5);
+    expect(negativeQueryShare(undefined, 'count the pets in stock')).toBe(0);
   });
 });

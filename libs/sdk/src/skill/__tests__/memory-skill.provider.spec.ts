@@ -4,11 +4,11 @@
  * Tests for in-memory skill storage provider with TF-IDF search.
  */
 
+import { type ToolEntry } from '../../common';
+import { type SkillContent } from '../../common/interfaces';
+import type ToolRegistry from '../../tool/tool.registry';
 import { MemorySkillProvider } from '../providers/memory-skill.provider';
 import { SkillToolValidator } from '../skill-validator';
-import { SkillContent } from '../../common/interfaces';
-import type ToolRegistry from '../../tool/tool.registry';
-import { ToolEntry } from '../../common';
 
 // Helper to create test skills
 const createTestSkill = (
@@ -263,6 +263,19 @@ describe('MemorySkillProvider', () => {
 
       const wrongTag = await provider.search('math', { tags: ['devops'] });
       expect(wrongTag.length).toBe(0);
+    });
+
+    it('demotes by the anti-query in the fallback search, as the index does (#1059)', async () => {
+      await provider.add(
+        createTestSkill({ id: 'store', name: 'Store', description: 'Count the pets in stock', tools: [] }),
+      );
+
+      expect((await provider.search('pets')).map((r) => r.metadata.id)).toEqual(['store']);
+      expect(await provider.search('pets', { negativeQuery: 'stock' })).toEqual([]);
+      // Half the anti-query's terms, at half the weight: demoted, still found
+      const halfDemoted = await provider.search('pets', { negativeQuery: 'stock levels', negativeWeight: 0.5 });
+      expect(halfDemoted.map((r) => r.metadata.id)).toEqual(['store']);
+      expect(halfDemoted[0].score).toBeCloseTo(0.75);
     });
 
     it('should respect hidden filter in fallback search', async () => {
