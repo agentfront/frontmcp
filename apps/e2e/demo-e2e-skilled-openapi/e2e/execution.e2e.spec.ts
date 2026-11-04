@@ -1,0 +1,211 @@
+// Scenarios E1 E2 E3 F1 G1: run_workflow against the mock billing API over HTTPS, with the production settings.
+import { expect, test } from '@frontmcp/testing';
+
+import { SLOW_REPORT_DELAY_MS } from './helpers/mock-billing-api';
+import { ProductionEnvironment } from './helpers/production-environment';
+import { asAdmin, asViewer, runWorkflow, SKILLED_SERVER } from './helpers/skilled-client';
+
+const environment = new ProductionEnvironment();
+
+test.use({ ...SKILLED_SERVER, env: environment.env });
+test.beforeAll(() => environment.start());
+test.afterAll(() => environment.stop());
+test.beforeEach(() => environment.billingApi.reset());
+
+function requestsTo(path: string): number {
+  return environment.billingApi.requests.filter((request) => request.path === path).length;
+}
+
+test.describe('a chained workflow (E1)', () => {
+  test('passes data between calls and returns the value the script shapes', async ({ mcp }) => {
+    const result = await runWorkflow(
+      mcp,
+      [
+        "const created = await callTool('createInvoice', { customerId: 'cus_e2e', amount: 1234 });",
+        "const fetched = await callTool('getInvoice', { id: created.id });",
+        "const refund = await callTool('refundInvoice', { id: created.id, amount: 50 });",
+        'return { created: created, fetched: fetched, refund: refund };',
+      ].join('\n'),
+    );
+
+    expect(result).toMatchObject({ success: true, stats: { toolCalls: 3 } });
+    expect(result.value).toEqual({
+      created: { id: 'inv_1', status: 'open' },
+      fetched: { id: 'inv_1', status: 'open', amount: 1234 },
+      refund: { refundId: 'rfnd_1', invoiceId: 'inv_1' },
+    });
+  });
+});
+
+test.describe('errors the agent can act on (E2)', () => {
+  test('an unknown action', async ({ mcp }) => {
+    const result = await runWorkflow(mcp, "return await callTool('doesNotExist', {});");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/unknown action "doesNotExist"/);
+  });
+
+  test('an input the action schema refuses, before any request is sent', async ({ mcp }) => {
+    const result = await runWorkflow(mcp, "return await callTool('getInvoice', {});");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/input validation failed.*id/i);
+    expect(environment.billingApi.requests).toEqual([]);
+  });
+
+  test('a path parameter of .. or ., before any request is sent', async ({ mcp }) => {
+    for (const id of ['..', '.']) {
+      const result = await runWorkflow(mcp, `return await callTool('refundInvoice', { id: '${id}', amount: 1 });`);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Path parameter 'id' of operation 'refundInvoice' cannot be '.' or '..'");
+    }
+    expect(environment.billingApi.requests).toEqual([]);
+  });
+
+  test('a 4xx answer names the status', async ({ mcp }) => {
+    const result = await runWorkflow(mcp, "return await callTool('getInvoice', { id: 'inv_missing' });");
+
+    expect(result).toMatchObject({ success: false, error: 'action "getInvoice" failed with status 404' });
+  });
+
+  test("an answer that doesn't match the action's output schema", async ({ mcp }) => {
+    const result = await runWorkflow(mcp, "return await callTool('getAccountBalance', {});");
+
+    expect(result).toMatchObject({
+      success: false,
+      error: 'upstream response failed output schema: balance: Invalid input: expected number, received string',
+    });
+  });
+
+  test('a 204 answer succeeds with no data', async ({ server, auth }) => {
+    const result = await runWorkflow(
+      await asAdmin({ server, auth }),
+      [
+        "const created = await callTool('createInvoice', { customerId: 'cus_e2e', amount: 10 });",
+        "const voided = await callTool('voidInvoice', { id: created.id });",
+        "const after = await callTool('getInvoice', { id: created.id });",
+        'return { voided: voided, status: after.status };',
+      ].join('\n'),
+    );
+
+    expect(result).toMatchObject({ success: true, value: { status: 'void' } });
+    expect(result.value).not.toHaveProperty('voided');
+  });
+});
+
+test.describe('limits (E3)', () => {
+  test('a workflow makes at most 25 calls', async ({ mcp }) => {
+    const result = await runWorkflow(
+      mcp,
+      [
+        "const created = await callTool('createInvoice', { customerId: 'cus_e2e', amount: 10 });",
+        'for (let call = 0; call < 30; call += 1) {',
+        "  await callTool('getInvoice', { id: created.id });",
+        '}',
+        "return 'unreachable';",
+      ].join('\n'),
+    );
+
+    expect(result).toMatchObject({ success: false, error: 'Tool call limit exceeded (25)' });
+    expect(environment.billingApi.requests).toHaveLength(25);
+  });
+
+  test("an answer larger than the operation's maxResponseBytes is refused", async ({ mcp }) => {
+    const result = await runWorkflow(mcp, "return await callTool('listInvoiceEvents', { id: 'inv_1' });");
+
+    expect(result).toMatchObject({ success: false, error: 'response exceeded maxResponseBytes (1024)' });
+  });
+
+  test("a request that outlasts the operation's timeoutMs is abandoned", async ({ mcp }) => {
+    const result = await runWorkflow(mcp, "return await callTool('getRevenueReport', {});");
+
+    expect(result).toMatchObject({ success: false, error: 'timeout after 250ms' });
+    expect(result.stats?.durationMs).toBeLessThan(SLOW_REPORT_DELAY_MS);
+  });
+});
+
+test.describe('the upstream credential (F1)', () => {
+  test('reaches the billing API by value, on every request', async ({ mcp }) => {
+    const result = await runWorkflow(
+      mcp,
+      "const created = await callTool('createInvoice', { customerId: 'cus_e2e', amount: 10 }); return await callTool('getInvoice', { id: created.id });",
+    );
+
+    expect(result.success).toBe(true);
+    expect(environment.billingApi.requests.map((request) => request.authorization)).toEqual([
+      `Bearer ${environment.billingToken}`,
+      `Bearer ${environment.billingToken}`,
+    ]);
+  });
+
+  test('never appears in a result, an error or the server log', async ({ mcp, server }) => {
+    const scripts = [
+      "return await callTool('createInvoice', { customerId: 'cus_e2e', amount: 10 });",
+      "return await callTool('getInvoice', { id: 'inv_missing' });",
+      "return await callTool('getAccountBalance', {});",
+      "return await callTool('getRevenueReport', {});",
+      "return await callTool('adminPing', {});",
+    ];
+    const outputs: unknown[] = [];
+    for (const script of scripts) outputs.push(await runWorkflow(mcp, script));
+    outputs.push((await mcp.tools.call('load_skill', { skillId: 'invoices' })).raw);
+
+    expect(environment.billingApi.requests.length).toBeGreaterThan(0);
+    expect(JSON.stringify(outputs)).not.toContain(environment.billingToken);
+    expect(server.getLogs().filter((line) => line.includes(environment.billingToken))).toEqual([]);
+  });
+});
+
+test.describe('caller authorization (G1)', () => {
+  test('an action of a skill gated by a role runs only for a caller with the role', async ({ mcp, server, auth }) => {
+    const script = "return await callTool('adminPing', {});";
+
+    const asAnonymous = await runWorkflow(mcp, script);
+    const asViewerResult = await runWorkflow(await asViewer({ server, auth }), script);
+    const asAdminResult = await runWorkflow(await asAdmin({ server, auth }), script);
+
+    expect(asAnonymous).toMatchObject({
+      success: false,
+      error: "authority denied: roles.any: user has none of 'admin'",
+    });
+    expect(asViewerResult).toMatchObject({
+      success: false,
+      error: "authority denied: roles.any: user has none of 'admin'",
+    });
+    expect(asAdminResult).toMatchObject({ success: true, value: { ok: true } });
+    expect(requestsTo('/v1/admin/ping')).toBe(1);
+  });
+
+  test('unprotectedOps "deny" blocks an operation with no rule that is not public, for every caller', async ({
+    mcp,
+    server,
+    auth,
+  }) => {
+    const script = "return await callTool('getUsageStats', {});";
+
+    for (const client of [mcp, await asAdmin({ server, auth })]) {
+      expect(await runWorkflow(client, script)).toMatchObject({
+        success: false,
+        error: 'authority denied: unprotected_operation_denied',
+      });
+    }
+    expect(environment.billingApi.requests).toEqual([]);
+  });
+
+  test("a rule on the action's input is checked when the action runs", async ({ mcp, server, auth }) => {
+    const refund = (amount: number) =>
+      [
+        "const created = await callTool('createInvoice', { customerId: 'cus_e2e', amount: 1000 });",
+        `return await callTool('refundInvoice', { id: created.id, amount: ${amount} });`,
+      ].join('\n');
+
+    expect(await runWorkflow(mcp, refund(50))).toMatchObject({ success: true });
+    expect(await runWorkflow(await asViewer({ server, auth }), refund(500))).toMatchObject({
+      success: false,
+      error: "authority denied: attributes.conditions: 'input.amount' failed 'lte' check against '100'",
+    });
+    expect(await runWorkflow(await asAdmin({ server, auth }), refund(500))).toMatchObject({ success: true });
+    expect(requestsTo('/v1/invoices/inv_2/refunds')).toBe(0);
+  });
+});

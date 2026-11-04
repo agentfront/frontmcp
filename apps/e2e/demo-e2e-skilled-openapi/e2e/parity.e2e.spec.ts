@@ -1,36 +1,11 @@
-/**
- * Cross-runtime parity for `@frontmcp/plugin-skilled-openapi`.
- *
- * The plugin doesn't care about the underlying MCP transport — it just
- * augments the server's tools / resources / prompts registries with the
- * skilled-openapi meta-tools and (depending on classification) any
- * GET-with-path-param operations surfaced as resource templates.
- *
- * That decoupling has to be enforced by a test: if a regression couples
- * the plugin to a particular transport, the contract that "the same
- * deploy bundle yields the same MCP discovery output everywhere" silently
- * breaks. This spec runs the SAME `buildServerConfig(...)` through two
- * different transports and asserts the discovery responses match.
- *
- * Transports compared:
- *   - **streamable-HTTP** (existing `main.ts` over the test harness)
- *   - **stdio** (`stdio-entrypoint.ts` spawned as a subprocess; client
- *     connects via `McpStdioClientTransport`)
- *
- * Methods asserted byte-equal (after dropping per-instance ids):
- *   - `tools/list`
- *   - `resources/templates/list`
- *
- * `tools/call` is NOT included here because it talks to the mock REST
- * upstream — the parity claim is about the discovery surface, which is
- * pure data over the static-source bundle.
- */
-
+// Scenario J1: streamable HTTP and stdio, on the same config and signed bundle, give the same answers.
 import { join } from 'node:path';
 
-import { expect, McpClient, McpStdioClientTransport, test } from '@frontmcp/testing';
+import { expect, McpClient, McpStdioClientTransport, test, type CallToolResult } from '@frontmcp/testing';
 
-/** Stable shape we extract from each transport's response for diffing. */
+import { ProductionEnvironment } from './helpers/production-environment';
+import { SKILLED_SERVER } from './helpers/skilled-client';
+
 interface NormalizedTool {
   readonly name: string;
   readonly description?: string;
@@ -44,84 +19,78 @@ interface NormalizedResourceTemplate {
   readonly mimeType?: string;
 }
 
-/**
- * Normalise an MCP `tools/list` result to a stable shape — sorted by name,
- * description trimmed. The harness and the protocol both occasionally add
- * per-instance metadata (e.g. server-side request ids surfaced via headers
- * in some transports); the normaliser strips anything not part of the MCP
- * data contract.
- */
-function normaliseTools(raw: unknown): readonly NormalizedTool[] {
-  const tools = extractToolArray(raw);
+function normaliseTools(tools: ReadonlyArray<NormalizedTool>): readonly NormalizedTool[] {
   return tools
     .map(
-      (t): NormalizedTool => ({
-        name: t.name,
-        ...(t.description !== undefined && { description: t.description }),
-        ...(t.inputSchema !== undefined && { inputSchema: t.inputSchema }),
+      (tool): NormalizedTool => ({
+        name: tool.name,
+        ...(tool.description !== undefined && { description: tool.description }),
+        ...(tool.inputSchema !== undefined && { inputSchema: tool.inputSchema }),
       }),
     )
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function normaliseResourceTemplates(raw: unknown): readonly NormalizedResourceTemplate[] {
-  const templates = extractTemplateArray(raw);
+function normaliseResourceTemplates(
+  templates: ReadonlyArray<NormalizedResourceTemplate>,
+): readonly NormalizedResourceTemplate[] {
   return templates
     .map(
-      (t): NormalizedResourceTemplate => ({
-        uriTemplate: t.uriTemplate,
-        ...(t.name !== undefined && { name: t.name }),
-        ...(t.description !== undefined && { description: t.description }),
-        ...(t.mimeType !== undefined && { mimeType: t.mimeType }),
+      (template): NormalizedResourceTemplate => ({
+        uriTemplate: template.uriTemplate,
+        ...(template.name !== undefined && { name: template.name }),
+        ...(template.description !== undefined && { description: template.description }),
+        ...(template.mimeType !== undefined && { mimeType: template.mimeType }),
       }),
     )
     .sort((a, b) => a.uriTemplate.localeCompare(b.uriTemplate));
 }
 
-function extractToolArray(raw: unknown): Array<{ name: string; description?: string; inputSchema?: unknown }> {
-  if (raw && typeof raw === 'object' && 'tools' in raw && Array.isArray((raw as { tools: unknown }).tools)) {
-    return (raw as { tools: Array<{ name: string; description?: string; inputSchema?: unknown }> }).tools;
-  }
-  if (Array.isArray(raw)) return raw as Array<{ name: string }>;
-  return [];
+/** A tool result as both transports should give it: a workflow's run time is the one field that may differ. */
+function comparableResult(result: CallToolResult): unknown {
+  const structured = result.structuredContent;
+  const stats = structured?.['stats'] as Record<string, unknown> | undefined;
+  if (!structured || !stats) return { isError: result.isError === true, content: result.content };
+  const { durationMs: _durationMs, ...statsWithoutDuration } = stats;
+  return { isError: result.isError === true, structured: { ...structured, stats: statsWithoutDuration } };
 }
 
-function extractTemplateArray(
-  raw: unknown,
-): Array<{ uriTemplate: string; name?: string; description?: string; mimeType?: string }> {
-  // The raw client returns `{ resourceTemplates: [...] }` (matches the wire
-  // shape); the harness's `mcp.resources.listTemplates()` unwraps to a
-  // bare array. Handle both so the parity spec doesn't need transport-
-  // specific glue.
-  if (
-    raw &&
-    typeof raw === 'object' &&
-    'resourceTemplates' in raw &&
-    Array.isArray((raw as { resourceTemplates: unknown }).resourceTemplates)
-  ) {
-    return (
-      raw as {
-        resourceTemplates: Array<{ uriTemplate: string; name?: string; description?: string; mimeType?: string }>;
-      }
-    ).resourceTemplates;
-  }
-  if (Array.isArray(raw)) {
-    return raw as Array<{ uriTemplate: string; name?: string; description?: string; mimeType?: string }>;
-  }
-  return [];
+/** Whether a call did what it asked: no tool error, and no `success: false` from a workflow. */
+function succeeded(result: CallToolResult): boolean {
+  return result.isError !== true && result.structuredContent?.['success'] !== false;
 }
+
+interface ParityCall {
+  name: string;
+  args: Record<string, unknown>;
+  succeeds: boolean;
+}
+
+const CREATE_THEN_GET_INVOICE =
+  "const created = await callTool('createInvoice', { customerId: 'cus_e2e', amount: 1234 }); return await callTool('getInvoice', { id: created.id });";
+
+const TOOL_CALLS: readonly ParityCall[] = [
+  { name: 'search_skill', args: { query: 'refund invoice' }, succeeds: true },
+  { name: 'search_skill', args: { query: 'billing', tags: ['reports'] }, succeeds: true },
+  { name: 'load_skill', args: { skillId: 'Invoices' }, succeeds: true },
+  { name: 'load_skill', args: { skillIds: ['invoices', 'reports'] }, succeeds: true },
+  { name: 'load_skill', args: { skillId: 'billing-admin' }, succeeds: false },
+  { name: 'run_workflow', args: { script: CREATE_THEN_GET_INVOICE }, succeeds: true },
+  {
+    name: 'run_workflow',
+    args: { script: "return await callTool('getInvoice', { id: 'inv_missing' });" },
+    succeeds: false,
+  },
+  { name: 'run_workflow', args: { script: "return await callTool('adminPing', {});" }, succeeds: false },
+];
+
+const environment = new ProductionEnvironment();
 
 test.describe('Skilled-OpenAPI cross-runtime parity', () => {
-  // The HTTP-side server is booted by the test harness — same as the rest
-  // of this app's e2e suite.
-  test.use({
-    server: 'apps/e2e/demo-e2e-skilled-openapi/src/main.ts',
-    project: 'demo-e2e-skilled-openapi',
-    publicMode: true,
-  });
+  test.use({ ...SKILLED_SERVER, env: environment.env });
+  test.beforeAll(() => environment.start());
+  test.afterAll(() => environment.stop());
 
-  // The stdio entrypoint lives next to `main.ts`; we spawn it on-demand per
-  // test so a flaky run doesn't leak a long-lived subprocess across tests.
   const stdioEntrypoint = join(__dirname, '../src/stdio-entrypoint.ts');
   const stdioCwd = join(__dirname, '..');
 
@@ -129,29 +98,17 @@ test.describe('Skilled-OpenAPI cross-runtime parity', () => {
   let stdioTransport: McpStdioClientTransport | null = null;
 
   test.afterEach(async () => {
-    if (stdioClient) {
-      try {
-        await stdioClient.close();
-      } catch {
-        // Subprocess may have already exited; safe to ignore.
-      }
-      stdioClient = null;
-    }
-    if (stdioTransport) {
-      try {
-        await stdioTransport.close();
-      } catch {
-        // Transport may have already detached.
-      }
-      stdioTransport = null;
-    }
+    await stdioClient?.close().catch(() => undefined);
+    await stdioTransport?.close().catch(() => undefined);
+    stdioClient = null;
+    stdioTransport = null;
   });
 
   async function connectStdio(): Promise<McpClient> {
     stdioTransport = new McpStdioClientTransport({
       command: 'npx',
       args: ['tsx', stdioEntrypoint],
-      env: process.env as Record<string, string>,
+      env: { ...(process.env as Record<string, string>), ...environment.env },
       cwd: stdioCwd,
     });
     stdioClient = new McpClient({ name: 'parity-stdio-client', version: '1.0.0' }, { capabilities: {} });
@@ -162,41 +119,44 @@ test.describe('Skilled-OpenAPI cross-runtime parity', () => {
   test('tools/list matches between streamable-HTTP and stdio transports', async ({ mcp }) => {
     const stdio = await connectStdio();
 
-    const httpRaw = await mcp.tools.list();
-    const stdioRaw = await stdio.listTools();
+    const httpTools = normaliseTools(await mcp.tools.list());
+    const stdioTools = normaliseTools((await stdio.listTools()).tools);
 
-    const httpTools = normaliseTools(httpRaw);
-    const stdioTools = normaliseTools(stdioRaw);
-
-    // Sanity: both surfaces must expose the three skilled-openapi meta-tools.
-    const expectedMeta = ['load_skill', 'run_workflow', 'search_skill'];
-    const httpNames = httpTools.map((t) => t.name);
-    const stdioNames = stdioTools.map((t) => t.name);
-    for (const name of expectedMeta) {
-      expect(httpNames).toContain(name);
-      expect(stdioNames).toContain(name);
-    }
-
-    // The parity assertion itself — the discovery surface is data-only,
-    // so deep equality is the right contract.
+    expect(httpTools.map((tool) => tool.name)).toEqual(['load_skill', 'run_workflow', 'search_skill']);
     expect(stdioTools).toEqual(httpTools);
   });
 
   test('resources/templates/list matches between streamable-HTTP and stdio transports', async ({ mcp }) => {
     const stdio = await connectStdio();
 
-    // The harness's `mcp` fixture exposes a Resources surface; both names
-    // exist in the codebase, so call whichever the client supports.
-    const httpRaw = await mcp.resources.listTemplates();
-    const stdioRaw = await stdio.listResourceTemplates();
+    const httpTemplates = normaliseResourceTemplates(await mcp.resources.listTemplates());
+    const stdioTemplates = normaliseResourceTemplates((await stdio.listResourceTemplates()).resourceTemplates);
 
-    const httpTemplates = normaliseResourceTemplates(httpRaw);
-    const stdioTemplates = normaliseResourceTemplates(stdioRaw);
-
-    // If the bundle declares zero GET-with-path-param operations after
-    // classification, both surfaces emit an empty list — that's still a
-    // valid parity assertion (an empty array on one side and three
-    // templates on the other would catch a regression).
     expect(stdioTemplates).toEqual(httpTemplates);
+  });
+
+  test('the initialize instructions match', async ({ mcp }) => {
+    const stdio = await connectStdio();
+
+    expect(mcp.instructions).toContain('This server has 2 skills');
+    expect(stdio.getInstructions()).toBe(mcp.instructions);
+  });
+
+  test('search_skill, load_skill and run_workflow give the same results and errors', async ({ mcp }) => {
+    const stdio = await connectStdio();
+
+    for (const { name, args, succeeds } of TOOL_CALLS) {
+      environment.billingApi.reset();
+      const overHttp = (await mcp.tools.call(name, args)).raw;
+      environment.billingApi.reset();
+      const overStdio = (await stdio.callTool({ name, arguments: args })) as CallToolResult;
+
+      expect({ name, args, succeeded: succeeded(overHttp) }).toEqual({ name, args, succeeded: succeeds });
+      expect({ name, args, result: comparableResult(overStdio) }).toEqual({
+        name,
+        args,
+        result: comparableResult(overHttp),
+      });
+    }
   });
 });
