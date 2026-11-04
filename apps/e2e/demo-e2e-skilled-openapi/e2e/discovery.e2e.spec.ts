@@ -121,7 +121,7 @@ test.describe('load_skill (D1)', () => {
     const skill = await loadSkill(mcp, 'reports');
 
     expect(skill).toMatchObject({ id: 'reports', name: 'Reports', bundleVersion: '1.0.0' });
-    expect(actionIdsOf(skill)).toEqual(['getAccountBalance', 'getRevenueReport']);
+    expect(actionIdsOf(skill)).toEqual(['exportRevenueReport', 'getAccountBalance', 'getRevenueReport']);
   });
 
   test('loads several skills with skillIds, each once, in the order asked for', async ({ mcp }) => {
@@ -189,7 +189,7 @@ test.describe('skill:// resources (C5)', () => {
     expect(skillMd).toContain(
       '## Actions\n\nRun these with `run_workflow`: in its script, `await callTool(actionId, input)` calls an action',
     );
-    expect(skillMdActionIds(skillMd)).toEqual(['getRevenueReport', 'getAccountBalance']);
+    expect(skillMdActionIds(skillMd)).toEqual(['getRevenueReport', 'exportRevenueReport', 'getAccountBalance']);
   });
 
   test("a gated skill's SKILL.md is not found for a caller without the role, by name or by id (G2)", async ({
