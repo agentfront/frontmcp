@@ -114,14 +114,20 @@ test.describe('load_skill (D1)', () => {
 
     expect(skill).toMatchObject({ id: 'invoices', name: 'Invoices', bundleVersion: '1.0.0' });
     expect(skill?.instructions).toContain('# Invoices skill');
-    expect(actionIdsOf(skill)).toEqual(['createInvoice', 'getInvoice', 'listInvoiceEvents', 'refundInvoice']);
+    expect(actionIdsOf(skill)).toEqual([
+      'createInvoice',
+      'getInvoice',
+      'listInvoiceEvents',
+      'listInvoices',
+      'refundInvoice',
+    ]);
   });
 
   test('loads a skill by id, without the operation unprotectedOps "deny" blocks (G2)', async ({ mcp }) => {
     const skill = await loadSkill(mcp, 'reports');
 
     expect(skill).toMatchObject({ id: 'reports', name: 'Reports', bundleVersion: '1.0.0' });
-    expect(actionIdsOf(skill)).toEqual(['getAccountBalance', 'getRevenueReport']);
+    expect(actionIdsOf(skill)).toEqual(['getAccountBalance', 'getAccountPlan', 'getRevenueReport']);
   });
 
   test('loads several skills with skillIds, each once, in the order asked for', async ({ mcp }) => {
@@ -189,7 +195,7 @@ test.describe('skill:// resources (C5)', () => {
     expect(skillMd).toContain(
       '## Actions\n\nRun these with `run_workflow`: in its script, `await callTool(actionId, input)` calls an action',
     );
-    expect(skillMdActionIds(skillMd)).toEqual(['getRevenueReport', 'getAccountBalance']);
+    expect(skillMdActionIds(skillMd)).toEqual(['getRevenueReport', 'getAccountBalance', 'getAccountPlan']);
   });
 
   test("a gated skill's SKILL.md is not found for a caller without the role, by name or by id (G2)", async ({

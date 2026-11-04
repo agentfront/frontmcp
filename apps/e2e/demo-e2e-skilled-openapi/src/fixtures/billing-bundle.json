@@ -28,17 +28,17 @@
       "id": "invoices",
       "name": "Invoices",
       "description": "Issue, query, and refund invoices on the demo billing service.",
-      "instructions": "# Invoices skill\n\nCreate an invoice with createInvoice, read it with getInvoice, list its history with listInvoiceEvents, and refund it with refundInvoice. Refunds above 100 need an administrator.",
+      "instructions": "# Invoices skill\n\nCreate an invoice with createInvoice, read it with getInvoice, read several with listInvoices, list its history with listInvoiceEvents, and refund it with refundInvoice. Refunds above 100 need an administrator.",
       "tags": ["billing", "invoices"],
-      "operationIds": ["createInvoice", "getInvoice", "listInvoiceEvents", "refundInvoice"]
+      "operationIds": ["createInvoice", "getInvoice", "listInvoices", "listInvoiceEvents", "refundInvoice"]
     },
     {
       "id": "reports",
       "name": "Reports",
       "description": "Revenue and usage reports for the billing account.",
-      "instructions": "# Reports skill\n\nRead the revenue report with getRevenueReport and the account balance with getAccountBalance.",
+      "instructions": "# Reports skill\n\nRead the revenue report with getRevenueReport, the account balance with getAccountBalance, and the account plan with getAccountPlan.",
       "tags": ["reports"],
-      "operationIds": ["getRevenueReport", "getAccountBalance", "getUsageStats"]
+      "operationIds": ["getRevenueReport", "getAccountBalance", "getAccountPlan", "getUsageStats"]
     }
   ],
   "operations": {
@@ -95,6 +95,53 @@
         "additionalProperties": false
       },
       "mapper": [{ "inputKey": "id", "type": "path", "key": "id", "required": true }],
+      "authBindingRef": "default"
+    },
+    "listInvoices": {
+      "operationId": "listInvoices",
+      "serviceId": "billing",
+      "httpMethod": "GET",
+      "pathTemplate": "/v1/invoices",
+      "summary": "List the invoices with the given ids",
+      "public": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "x-parameter-location": "query",
+            "x-parameter-style": "form",
+            "x-parameter-explode": true
+          }
+        },
+        "required": ["ids"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "invoices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "status": { "type": "string" },
+                "amount": { "type": "number" }
+              },
+              "required": ["id", "status", "amount"]
+            }
+          }
+        },
+        "required": ["invoices"],
+        "x-status-code": 200,
+        "description": "The invoices",
+        "x-content-type": "application/json"
+      },
+      "mapper": [
+        { "inputKey": "ids", "type": "query", "key": "ids", "required": true, "style": "form", "explode": true }
+      ],
       "authBindingRef": "default"
     },
     "listInvoiceEvents": {
@@ -189,6 +236,18 @@
         },
         "required": ["balance", "currency"]
       },
+      "mapper": [],
+      "authBindingRef": "default"
+    },
+    "getAccountPlan": {
+      "operationId": "getAccountPlan",
+      "serviceId": "billing",
+      "httpMethod": "GET",
+      "pathTemplate": "/v1/account/plan",
+      "summary": "Read the plan the account is on",
+      "public": true,
+      "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "outputSchema": { "description": "The account plan", "x-status-code": 200 },
       "mapper": [],
       "authBindingRef": "default"
     },

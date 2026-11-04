@@ -11,6 +11,8 @@ interface MockInvoice {
 export interface RecordedRequest {
   method: string;
   path: string;
+  /** The query string as it arrived, without the `?`. */
+  query: string;
   authorization: string | undefined;
 }
 
@@ -72,7 +74,8 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
   let invoiceSequence = 1;
   let refundSequence = 1;
 
-  async function route(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
+  async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+    const path = url.pathname;
     const method = req.method ?? 'GET';
     const invoiceId = path.match(/^\/v1\/invoices\/([^/]+)/)?.[1];
     const invoice = invoiceId ? invoices.get(invoiceId) : undefined;
@@ -83,6 +86,11 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
       const id = `inv_${invoiceSequence++}`;
       invoices.set(id, { id, status: 'open', amount: Number(body['amount'] ?? 0) });
       return reply(res, 201, { id, status: 'open' });
+    }
+
+    if (method === 'GET' && path === '/v1/invoices') {
+      const listed = url.searchParams.getAll('ids').flatMap((id) => invoices.get(id) ?? []);
+      return reply(res, 200, { invoices: listed });
     }
 
     if (invoiceId && path === `/v1/invoices/${invoiceId}`) {
@@ -125,6 +133,7 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
       return reply(res, 200, { balance: '12.50', currency: 'USD' });
     }
 
+    if (method === 'GET' && path === '/v1/account/plan') return reply(res, 200, { plan: 'growth', seats: 5 });
     if (method === 'GET' && path === '/v1/reports/usage') return reply(res, 200, { calls: 42 });
     if (method === 'GET' && path === '/v1/admin/ping') return reply(res, 200, { ok: true });
 
@@ -132,9 +141,9 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
   }
 
   const server = https.createServer(options.tls, (req, res) => {
-    const path = new URL(req.url ?? '/', 'https://localhost').pathname;
+    const url = new URL(req.url ?? '/', 'https://localhost');
     const authorization = req.headers['authorization'];
-    requests.push({ method: req.method ?? 'GET', path, authorization });
+    requests.push({ method: req.method ?? 'GET', path: url.pathname, query: url.search.slice(1), authorization });
 
     if (authorization !== `Bearer ${options.bearerToken}`) {
       return reply(res, 401, { error: 'invalid bearer token' });
@@ -143,7 +152,7 @@ export async function startMockBillingApi(options: MockBillingApiOptions): Promi
     if (req.method === 'POST' && !JSON_MEDIA_TYPE.test(req.headers['content-type'] ?? '')) {
       return reply(res, 415, { error: 'expected an application/json body' });
     }
-    route(req, res, path).catch((error: unknown) => {
+    route(req, res, url).catch((error: unknown) => {
       reply(res, 500, { error: error instanceof Error ? error.message : String(error) });
     });
   });
