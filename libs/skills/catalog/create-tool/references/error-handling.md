@@ -142,6 +142,30 @@ In production, raw `Error`s have their messages **redacted** before reaching the
 
 The same holds for a tool that runs as a task (`execution.taskSupport`): `tasks/get` / `tasks/result` carry exactly the result an inline call returns, so `this.fail()` and a thrown `PublicMcpError` keep their message and code, and a raw `Error` is redacted in the task too.
 
+## A failure the caller reads as structured content
+
+`this.fail()` answers with text only. When a failed call should keep its structured result, so the model or a script
+reads the same fields a success has, return a complete `CallToolResult` with `isError: true`. The flow sends it as it
+is, without checking it against the `outputSchema`, and `execute()` may declare it next to the output type:
+
+```typescript
+import { type CallToolResult } from '@frontmcp/sdk';
+
+@Tool({ name: 'import_rows', inputSchema, outputSchema: { imported: z.number(), error: z.string().optional() } })
+class ImportRowsTool extends ToolContext {
+  async execute(input: { rows: string[] }): Promise<{ imported: number } | CallToolResult> {
+    const failedAt = input.rows.findIndex((row) => row.trim() === '');
+    if (failedAt === -1) return { imported: input.rows.length };
+    const output = { imported: failedAt, error: `row ${failedAt} is empty` };
+    return { content: [{ type: 'text', text: JSON.stringify(output) }], structuredContent: output, isError: true };
+  }
+}
+```
+
+Keep `structuredContent` valid for the `outputSchema`: a client that lists it may still check it. A generated CLI
+exits 1 for an `isError` result. Up to 1.11.0, `@Tool` refused a `CallToolResult` return type on a tool with an
+`outputSchema`, though the flow already sent one as it is.
+
 ## Non-null assertions are forbidden
 
 ```typescript

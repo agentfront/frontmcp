@@ -68,6 +68,14 @@ export async function runWorkflow(client: McpTestClient, script: string): Promis
   return result.json<RunWorkflowResponse>();
 }
 
+/** What `callTool(actionId, input, { throwOnError: false })` returns in a script. */
+export interface ActionOutcome {
+  ok: boolean;
+  status: number;
+  data?: unknown;
+  error?: string;
+}
+
 export function actionIdsOf(skill: LoadedSkill | undefined): string[] {
   return (skill?.actions ?? []).map((action) => action.actionId).sort();
 }
