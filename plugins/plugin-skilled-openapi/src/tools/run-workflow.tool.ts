@@ -73,7 +73,6 @@ export default class RunWorkflowTool extends ToolContext {
     // sandboxed script resolves actions via callTool (stateless workers have no
     // background loop to finish a deferred sync).
     await this.get(BundleSyncService).ensureLoaded();
-    const hiddenOps = this.get(HiddenOpRegistry);
 
     // The enclave is an OPTIONAL peer: lazy-import so installs that never run
     // workflows don't need it, and a missing install surfaces as a clear error
@@ -93,6 +92,8 @@ export default class RunWorkflowTool extends ToolContext {
     }
 
     const deps = skillActionDepsOf(this, this.logger);
+    // The operations of the bundle the workflow starts on: a swap while it runs doesn't change them.
+    const hiddenOps = this.get(HiddenOpRegistry).snapshot();
 
     // Aborted once the workflow ends, whatever ends it, so no request it started outlives it.
     const workflowEnded = new AbortController();

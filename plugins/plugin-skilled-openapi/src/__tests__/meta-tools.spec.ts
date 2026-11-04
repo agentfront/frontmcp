@@ -11,7 +11,6 @@ import { BundleStore, SkillAuditWriterToken } from '@frontmcp/adapters/skills';
 import { ScopeEntry, type SkillContent } from '@frontmcp/sdk';
 
 import { MemoryCredentialResolver } from '../executor/credential-resolver';
-import { clearCompiledSchemaCache } from '../executor/schema-cache';
 import { HiddenOpRegistry, type HiddenOpEntry } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
 import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
@@ -22,7 +21,6 @@ import SearchSkillTool from '../tools/search-skill.tool';
 // Clear the per-(bundleVersion, opId) compiled-schema cache between tests so
 // one test's `inputSchema` override doesn't get stamped onto the next test
 // that reuses the same skillId/actionId pair.
-beforeEach(() => clearCompiledSchemaCache());
 
 const fakeLogger = {
   warn: jest.fn(),

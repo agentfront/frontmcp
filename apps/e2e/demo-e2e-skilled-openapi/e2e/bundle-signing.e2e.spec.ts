@@ -4,18 +4,7 @@ import { expect, test } from '@frontmcp/testing';
 import { readFile } from '@frontmcp/utils';
 
 import { ProductionEnvironment } from './helpers/production-environment';
-import { loadSkill, runWorkflow, searchSkillIds, SKILLED_SERVER } from './helpers/skilled-client';
-
-interface Readiness {
-  httpStatus: number;
-  status: string;
-  probes?: Record<string, { status: string; details?: Record<string, unknown>; error?: string }>;
-}
-
-async function readiness(baseUrl: string): Promise<Readiness> {
-  const response = await fetch(`${baseUrl}/readyz`);
-  return { httpStatus: response.status, ...((await response.json()) as Omit<Readiness, 'httpStatus'>) };
-}
+import { loadSkill, readiness, runWorkflow, searchSkillIds, SKILLED_SERVER } from './helpers/skilled-client';
 
 const environment = new ProductionEnvironment();
 

@@ -122,6 +122,7 @@ export default createEdgeMcp({
 
 `createEdgeMcp` returns `{ fetch, scheduled }`: `fetch` serves MCP; `scheduled`
 is the **Cron Trigger** entrypoint that pulls a fresh bundle and hot-swaps it.
+A `run_workflow` already running when the new bundle is applied finishes on the operations of the bundle it started on.
 Managed mode runs on `@frontmcp/plugin-skilled-openapi`, which `@frontmcp/edge` depends on. When the boot pull fails and the KV cache is empty, the error says no bundle is available in the injected bundle cache (no file path), and `search_skill`, `load_skill` and `run_workflow` answer `No skill bundle is loaded: <that reason>` (code `SKILL_BUNDLE_NOT_LOADED`) until a Cron refresh loads a bundle.
 Its `outbound.egressProxy` option needs Node.js (undici's `ProxyAgent`); on a
 Worker a configured proxy makes every operation call fail with
