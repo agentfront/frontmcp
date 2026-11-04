@@ -991,6 +991,86 @@ describe('BundleSyncService last good bundle', () => {
   });
 });
 
+describe('BundleSyncService refresh, as a scheduler runs it', () => {
+  const makeSync = () =>
+    new BundleSyncService(
+      new FakeRegistry() as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      new BundleStore(),
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+
+  /** A source whose start and refresh each pull the next bundle of `versions`, and that records what it kept. */
+  const pullingSource = (versions: string[]) => {
+    const listeners = new Set<(b: ResolvedBundle) => Promise<void>>();
+    const calls = { start: 0, refresh: 0 };
+    const kept: string[] = [];
+    const pullNext = async () => {
+      const version = versions.shift();
+      if (!version) throw new Error('pull responded 503');
+      for (const fn of listeners) await fn(buildBundle({ version }));
+    };
+    return {
+      calls,
+      kept,
+      source: {
+        async start() {
+          calls.start++;
+          await pullNext();
+        },
+        async refresh() {
+          calls.refresh++;
+          await pullNext();
+        },
+        onChange(fn: (b: ResolvedBundle) => Promise<void>) {
+          listeners.add(fn);
+          return () => listeners.delete(fn);
+        },
+        async keepBundle(bundle: ResolvedBundle) {
+          kept.push(bundle.version);
+        },
+      },
+    };
+  };
+
+  it('starts the source when nothing started it, and applies and keeps that pull without pulling again', async () => {
+    const sync = makeSync();
+    const { source, calls, kept } = pullingSource(['1']);
+    sync.attachSource(source);
+
+    await sync.refresh();
+
+    expect(calls).toEqual({ start: 1, refresh: 0 });
+    expect(kept).toEqual(['1']);
+    expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '1' });
+  });
+
+  it('pulls again through the source once it has started, and waits for that bundle to be applied and kept', async () => {
+    const sync = makeSync();
+    const { source, calls, kept } = pullingSource(['1', '2']);
+    sync.attachSource(source);
+    await sync.ensureReady();
+
+    await sync.refresh();
+
+    expect(calls).toEqual({ start: 1, refresh: 1 });
+    expect(kept).toEqual(['1', '2']);
+    expect(sync.loadState()).toMatchObject({ status: 'loaded', bundleVersion: '2' });
+  });
+
+  it('throws when the start it runs leaves no bundle loaded, or when a later pull fails', async () => {
+    const coldSync = makeSync();
+    coldSync.attachSource(pullingSource([]).source);
+    const warmSync = makeSync();
+    warmSync.attachSource(pullingSource(['1']).source);
+    await warmSync.ensureReady();
+
+    await expect(coldSync.refresh()).rejects.toThrow('No skill bundle is loaded: pull responded 503');
+    await expect(warmSync.refresh()).rejects.toThrow('pull responded 503');
+  });
+});
+
 describe('BundleSyncService pushed bundles', () => {
   const pushReceiver = { verifyPushToken: jest.fn() };
 

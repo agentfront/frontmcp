@@ -141,7 +141,7 @@ crons = ["*/5 * * * *"]
 | `requireSignature`, `trustedKeys`, `dev`, `credentials`, `outbound` | Passed to the Skilled OpenAPI plugin. `dev` skips signature checks: never use it in production |
 | `pollIntervalMs`, `bundleCacheDir`                                  | Ignored on a Worker, which has no timers or file system                                        |
 
-A Cron run ends once the bundle it pulled is applied and kept in `cache`. A bundle that fails its signature or its other checks is not applied and not kept, so a cold start that can't reach the bundle server serves the last bundle the Worker applied.
+A Cron run ends once the bundle it pulled is applied and kept in `cache`, also when it is the first event an isolate gets: it then starts the bundle sync, whose first pull is the run's pull. A bundle that fails its signature or its other checks is not applied and not kept, so a cold start that can't reach the bundle server serves the last bundle the Worker applied.
 
 Each operation call checks the API's host first: on a Worker, `node:dns` resolves it over DNS over HTTPS, so the host must resolve publicly.
 

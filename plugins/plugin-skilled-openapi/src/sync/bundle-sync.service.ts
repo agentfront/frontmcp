@@ -73,6 +73,7 @@ export interface BundleApplyResult {
 interface StartableBundleSource {
   start(): Promise<void>;
   onChange(listener: (bundle: ResolvedBundle) => Promise<void>): () => void;
+  refresh?(): Promise<unknown>;
   keepBundle?(bundle: ResolvedBundle): Promise<void>;
   readonly push?: BundlePushReceiver;
 }
@@ -136,6 +137,17 @@ export class BundleSyncService {
     if (state.status === 'loaded') return;
     const reason = state.status === 'failed' ? state.reason : 'the first bundle has not loaded yet';
     throw new PublicMcpError(`No skill bundle is loaded: ${reason}`, 'SKILL_BUNDLE_NOT_LOADED', 503);
+  }
+
+  /**
+   * Refresh the bundle as a host's scheduler does, such as a Worker's Cron run: the source pulls a fresh bundle, and
+   * this resolves once it is applied and kept. When nothing has started the source yet, this starts it instead, as
+   * {@link ensureLoaded} does: its start pulls, applies and keeps the bundle, so no second pull follows.
+   */
+  async refresh(): Promise<void> {
+    if (this.readyPromise === undefined) return this.ensureLoaded();
+    await this.ensureReady();
+    await this.source?.refresh?.();
   }
 
   /** The source's checks for pushed bundles, when it takes them (`saas` with `enableWebhook`). */

@@ -1,4 +1,5 @@
-// A managed @frontmcp/edge Worker in workerd: pull over https, Cron refresh, token rejection, workflows and pushes.
+// A managed @frontmcp/edge Worker in workerd: pull over https, Cron refresh (also as an isolate's first event), token
+// rejection, workflows and pushes.
 import { base64urlEncode, randomBytes } from '@frontmcp/utils';
 
 import {
@@ -187,5 +188,64 @@ describe('a managed edge Worker on workerd', () => {
       expect(await notBundle.json()).toMatchObject({ error: 'invalid_bundle' });
       expect(await servedSkills()).toEqual(['invoices']);
     });
+  });
+});
+
+describe('a managed edge Worker whose first event is a Cron run', () => {
+  const signer = new BundleSigner();
+  const billingToken = base64urlEncode(randomBytes(32));
+  let internet: ManagedInternet;
+  let worker: ManagedWorker;
+
+  beforeAll(async () => {
+    const issuer = await BundleTokenIssuer.create('e2e-issuer-cold');
+    const pullToken = await issuer.pullToken();
+    internet = new ManagedInternet({ jwks: issuer.jwks, pullToken, billingToken });
+    internet.bundle = signer.sign(billingBundle('1.0.0', ['invoices', 'reports']));
+    worker = await ManagedWorker.start({
+      bindings: {
+        BUNDLE_PULL_TOKEN: pullToken,
+        BUNDLE_TRUSTED_KEY: JSON.stringify(signer.trustedKey),
+        BILLING_API_TOKEN: billingToken,
+      },
+      outbound: internet.fetch,
+    });
+  }, 170_000);
+
+  afterAll(async () => {
+    await worker?.dispose();
+  });
+
+  it('applies the bundle it pulls and keeps it in KV, with one pull, and serves it to the first request', async () => {
+    const run = await worker.scheduled();
+    const cachedAfterRun = await worker.cachedBundleVersion();
+    const pullsAfterRun = internet.requestsTo(BUNDLE_URL).length;
+
+    const search = await worker.callTool<SearchSkillResponse>('search_skill', { query: 'billing' });
+
+    expect(run.outcome).toBe('ok');
+    expect(cachedAfterRun).toBe('1.0.0');
+    expect(pullsAfterRun).toBe(1);
+    expect(search.isError).toBe(false);
+    expect(
+      search
+        .json()
+        .skills.map((skill) => [skill.skillId, skill.bundleVersion])
+        .sort(),
+    ).toEqual([
+      ['invoices', '1.0.0'],
+      ['reports', '1.0.0'],
+    ]);
+    expect(internet.requestsTo(BUNDLE_URL)).toHaveLength(1);
+  });
+
+  it('pulls again on the next Cron run, and keeps the new version', async () => {
+    internet.bundle = signer.sign(billingBundle('2.0.0', ['invoices', 'refunds']));
+
+    const run = await worker.scheduled();
+
+    expect(run.outcome).toBe('ok');
+    expect(internet.requestsTo(BUNDLE_URL)).toHaveLength(2);
+    expect(await worker.cachedBundleVersion()).toBe('2.0.0');
   });
 });
