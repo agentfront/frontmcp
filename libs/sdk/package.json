@@ -41,6 +41,11 @@
       "browser": "./src/shared/browser-shared-server.ts",
       "default": "./src/shared/index.ts"
     },
+    "#enclave-core": {
+      "worker": "./src/job/enclave/browser-enclave-core.ts",
+      "browser": "./src/job/enclave/browser-enclave-core.ts",
+      "default": "./src/job/enclave/enclave-core.ts"
+    },
     "#import-computed": {
       "import": "./src/esm-loader/import-computed.ts",
       "default": "./src/esm-loader/import-computed.ts"
