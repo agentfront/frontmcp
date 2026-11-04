@@ -30,3 +30,14 @@ export class UnenforcedMetadataError extends PublicMcpError {
     return `${this.message}\n\nTo fix this issue:\n${this.suggestion}`;
   }
 }
+
+/** Thrown at startup when a server installs twice a plugin that can be installed once per server (`@Plugin({ oncePerServer })`). */
+export class DuplicatePluginError extends PublicMcpError {
+  constructor(pluginName: string, reason: string) {
+    super(
+      `Plugin "${pluginName}" can be installed once per server, and this server installs it twice. ${reason}`,
+      'DUPLICATE_PLUGIN',
+      500,
+    );
+  }
+}

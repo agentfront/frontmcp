@@ -175,6 +175,14 @@ export interface PluginMetadata {
    * far, even when no other skill exists.
    */
   dynamicSkills?: boolean;
+
+  /**
+   * The plugin can be installed once per server, for this reason. A server that installs it twice, in the
+   * same plugins list or in two of them (the server's and an app's, or two apps'), fails at startup with an
+   * error that names the plugin and gives this reason. An app with an endpoint of its own (`splitByApp`, or
+   * `standalone`) counts as a server of its own.
+   */
+  oncePerServer?: string;
 }
 
 // Schema for context extensions (uses passthrough since token is a Symbol)
@@ -203,5 +211,6 @@ export const frontMcpPluginMetadataSchema = z
     contextExtensions: z.array(contextExtensionSchema).optional(),
     enforcesMetadata: z.array(z.string().min(1)).optional(),
     dynamicSkills: z.boolean().optional(),
+    oncePerServer: z.string().min(1).optional(),
   } satisfies RawZodShape<PluginMetadata>)
   .passthrough();

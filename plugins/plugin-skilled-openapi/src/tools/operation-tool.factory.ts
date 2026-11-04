@@ -25,12 +25,13 @@ import {
 } from '@frontmcp/sdk';
 
 import { callerTokenOf } from '../executor/caller-token';
+import { credentialResolverOf } from '../executor/credential-resolver';
 import { authorizeAction } from '../executor/execute-skill-action';
 import { executeOperation, type OpenApiRuntimeDeps } from '../executor/openapi-runtime';
 import { getCompiledOpSchemas } from '../executor/schema-cache';
 import { type HiddenOpEntry, type OperationListings } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
-import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
+import { SkilledOpenApiConfig } from '../skilled-openapi.symbols';
 
 const OPERATION_TOOL_OWNER_TOKEN = Symbol.for('skilled-openapi:operation-tool-owner');
 const OPERATION_TOOL_OWNER: EntryOwnerRef = {
@@ -127,6 +128,7 @@ type OperationExecutor = (input: Record<string, unknown>, ctx: ToolCtxLike) => P
 
 interface ToolCtxLike {
   get<T>(token: Token<T>): T;
+  tryGet<T>(token: Token<T>): T | undefined;
   logger: FrontMcpLogger;
   authInfo?: unknown;
   signal?: AbortSignal;
@@ -251,7 +253,7 @@ export class OperationToolFactory {
     return async (input, ctx) => {
       const config = ctx.get(SkilledOpenApiConfig);
       const guard = ctx.get(AuthorityGuard);
-      const resolver = ctx.get(SkilledOpenApiCredentialResolver);
+      const resolver = credentialResolverOf(ctx);
 
       // 1) Authority gate, the same as executeSkillAction's: the op's rule and one
       //    listing skill's rule; default-deny per config for unprotected ops.
