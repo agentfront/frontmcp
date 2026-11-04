@@ -1,6 +1,6 @@
 ---
 name: deploy-to-cloudflare-skills-only
-description: Deploy an auto-updating FrontMCP server to Cloudflare Workers with @frontmcp/edge createEdgeMcp — managed skilled-OpenAPI bundle pulled from a SaaS endpoint, cached in KV, refreshed on a Cron Trigger
+description: Deploy an auto-updating FrontMCP server to Cloudflare Workers with @frontmcp/edge createEdgeMcp — managed skilled-OpenAPI bundle pulled from a SaaS endpoint, cached in KV, refreshed on a Cron Trigger or pushed to the Worker
 ---
 
 # Deploy to Cloudflare Workers (Managed / Skills-Only Model)
@@ -8,24 +8,26 @@ description: Deploy an auto-updating FrontMCP server to Cloudflare Workers with 
 > **⚠️ Status — experimental.** `@frontmcp/edge` `createEdgeMcp` **boots under
 > `wrangler dev` and deploys and serves on real Cloudflare**, managed mode
 > included, with no bundler stubs: since 1.9.1 wrangler resolves the SDK's
-> `browser` build, and `createEdgeMcp` sets `serve: false` itself. NOTE:
-> **miniflare local-dev is stricter than production** and rejects
-> `node:http2`/`node:fs` that real Cloudflare's `nodejs_compat` provides, so the
-> local managed e2e is skipped. Managed mode (this page) needs a SaaS bundle
+> `browser` build, and `createEdgeMcp` sets `serve: false` itself. The managed
+> e2e bundles its Worker with `wrangler deploy --dry-run` and runs it in workerd
+> (Miniflare): the pull, the Cron refresh, pushes and `run_workflow` calls.
+> Managed mode (this page) needs a SaaS bundle
 > endpoint; `@frontmcp/plugin-skilled-openapi` is a dependency of
 > `@frontmcp/edge`, installed with it. A config that fails validation answers
 > `500 CONFIG_INVALID` and the worker log names the invalid fields. For the
 > simplest production path, the decorator build in
 > [`deploy-to-cloudflare.md`](./deploy-to-cloudflare.md) needs none of this.
-> The GitHub Action / signed-resync-webhook / Durable Object stores / Frontegg
-> edge auth described below remain ROADMAP — not yet implemented.
+> The GitHub Action / `POST /_frontmcp/resync` / Durable Object stores / Frontegg
+> edge auth described below remain ROADMAP — not yet implemented. Pushing a
+> bundle to `POST /__skilled_openapi/push` (`managed.enableWebhook`) is implemented.
 
 The managed model hosts FrontMCP where the MCP surface is a small set of
 meta-tools (`search_skill`, `load_skill`, `run_workflow`) and every capability
 is reached through a skill compiled from an OpenAPI spec. `run_workflow` runs a
 short AgentScript program in the Worker isolate, where each `callTool(actionId,
 input)` invokes a loaded skill's operation. The bundle is pulled from a SaaS
-endpoint, cached in KV, and refreshed on a Cron Trigger.
+endpoint, cached in KV, and refreshed on a Cron Trigger; with
+`managed.enableWebhook`, the SaaS can also push a new bundle to the Worker.
 
 The meta-tools only show what the caller may use: a skill whose
 `requiredAuthorities` the caller doesn't satisfy is left out of `search_skill`
@@ -122,9 +124,42 @@ pulled, and the KV cache is **not** used in its place. An unreachable JWKS, or
 one with no usable signing key (no RSA, EC or OKP public key for signatures),
 counts as an ordinary pull failure, so the cache fallback still applies.
 
+On a Worker, the outbound check of each operation call resolves the API's host
+with workerd's `node:dns`, which asks DNS over HTTPS (`cloudflare-dns.com`): the
+host must resolve publicly, and a name that resolves to a private address is
+refused as on Node.
+
+## Pushed Bundles
+
+With `enableWebhook: true` in `managed`, the Worker also takes bundles at
+`POST /__skilled_openapi/push`, through the hookable
+`skilled-openapi:bundle-push` flow (IP filter and rate limit first, as every
+HTTP flow). The request:
+
+- `Authorization: Bearer <JWT>`: checked as `authToken` is (a key at
+  `jwksUrl`, `iss`, `aud`, `resource`, `exp`), and it must also carry a `jti`
+  of 8 or more characters that no push used and an `iat` within five minutes,
+  so the pull token, issued long before, can't push;
+- the body: the bundle as JSON, checked as a pulled bundle is (schema, then
+  signature against `trustedKeys` unless `requireSignature: false`).
+
+| Answer | When                                                                                       |
+| ------ | ------------------------------------------------------------------------------------------ |
+| `200`  | `{ applied: true, bundleId, bundleVersion }`: applied, and kept in the KV cache            |
+| `400`  | `invalid_bundle`: the body is not a bundle                                                 |
+| `401`  | `invalid_token`, with `WWW-Authenticate: Bearer error="invalid_token"`                     |
+| `409`  | `push_replayed`: a push already used this token's `jti`                                    |
+| `422`  | `bundle_not_applied`: the signature or the bundle's checks failed; the served bundle stays |
+| `503`  | `temporarily_unavailable`: the JWKS could not be read                                      |
+
+A pushed bundle is applied after the first pull and after bundles already
+queued, so a push and a Cron refresh never apply at once. The replay guard keeps
+the `jti`s it has seen in memory, per isolate: two isolates of the same Worker
+don't share them, so keep push tokens short-lived.
+
 This path is bundled by **wrangler** (not `frontmcp build`), so you maintain
 `wrangler.toml` yourself — it needs a `[[kv_namespaces]] binding = "BUNDLE_CACHE"`
-and a `[triggers] crontabs = [...]` (the `managed.pollIntervalMs` option is
+and a `[triggers] crons = [...]` (the `managed.pollIntervalMs` option is
 ignored on edge — Workers have no background timers; the Cron drives refresh):
 
 ```toml
@@ -138,7 +173,7 @@ binding = "BUNDLE_CACHE"
 id = "<your-kv-namespace-id>"
 
 [triggers]
-crontabs = ["*/5 * * * *"]
+crons = ["*/5 * * * *"]
 ```
 
 ## Storage Layout (Opinionated Default)

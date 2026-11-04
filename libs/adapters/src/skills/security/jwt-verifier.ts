@@ -1,6 +1,6 @@
 // file: libs/adapters/src/skills/security/jwt-verifier.ts
 //
-// Bundle-push JWT checks (signature, iss, aud, RFC 8707 resource, roles) for a host-built push endpoint; FrontMCP calls none.
+// Bundle-push JWT checks (signature, iss, aud, RFC 8707 resource, roles) for a host that serves its own push endpoint.
 
 import { JwksService, type ProviderVerifyRef, type VerifyResult } from '@frontmcp/auth';
 import type { FrontMcpLogger } from '@frontmcp/sdk';
@@ -31,7 +31,7 @@ export interface PushJwtVerifyResult {
 
 const DEFAULT_REQUIRED_ROLES = ['frontmcp:cloud:push'];
 
-/** Not wired to any route: a host serving its own push endpoint calls `verify` and refuses on `ok: false`. */
+/** For a host serving its own push endpoint: `saas` with `enableWebhook` checks its pushes as it checks the pull token. */
 export class BundlePushJwtVerifier {
   private readonly providerRef: ProviderVerifyRef;
   private readonly jwks: JwksService;

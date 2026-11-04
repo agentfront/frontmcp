@@ -9,8 +9,14 @@ import { dirname, ensureDir, isRedirectResponse, pathResolve, readFile, writeFil
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import { parseOverlay } from '../bundle/overlay-parser';
+import { WebhookReplayGuard } from '../security/webhook-replay-guard';
 import type { SaasSourceOptions } from '../source-options';
-import type { BundleSourceDeps, BundleSourceListener, SkillBundleSource } from './skill-bundle-source.interface';
+import type {
+  BundlePushReceiver,
+  BundleSourceDeps,
+  BundleSourceListener,
+  SkillBundleSource,
+} from './skill-bundle-source.interface';
 
 const DEFAULT_CACHE_DIR = '.frontmcp/skilled-openapi';
 const DEFAULT_PULL_TIMEOUT_MS = 30_000;
@@ -27,6 +33,22 @@ export class SaasPullTokenRejectedError extends Error {
     this.name = 'SaasPullTokenRejectedError';
   }
 }
+
+/**
+ * The token of a pushed bundle was refused: it fails the checks the pull token passes (`invalid-token`), or a push
+ * already used it (`replayed`). The pushed bundle is not applied.
+ */
+export class SaasPushRefusedError extends Error {
+  constructor(
+    readonly refusal: 'invalid-token' | 'replayed',
+    reason: string,
+  ) {
+    super(`[saas-source] push refused: ${reason}`);
+    this.name = 'SaasPushRefusedError';
+  }
+}
+
+type TokenVerdict = { ok: true; claims: Record<string, unknown> } | { ok: false; reason: string };
 
 /** Claim values as a list: RFC 7519 allows a single string or an array. */
 function claimValues(claim: unknown): unknown[] {
@@ -66,9 +88,9 @@ function isUsableSigningKey(key: unknown): boolean {
  *     later pull that succeeds loads the bundle.
  *
  * Refresh: poll on `pollIntervalMs`. Single-flight per source — overlapping
- * polls are skipped, never queued. Webhook support is gated behind
- * `enableWebhook` and deferred to v1.2.x (route mounting requires plugin HTTP
- * infrastructure not yet in scope).
+ * polls are skipped, never queued. With `enableWebhook` the source also takes
+ * pushed bundles ({@link SaasPullSource.verifyPushToken}): the plugin serves
+ * them at `POST /__skilled_openapi/push`.
  *
  * Before every pull the pinned `authToken` is verified: it must be a JWT signed
  * by a key in the issuer's JWKS (`jwksUrl`), with `iss` equal to
@@ -81,7 +103,7 @@ function isUsableSigningKey(key: unknown): boolean {
  * NOTE: Bundle signature verification is applied by the bundle-sync service
  * before the bundle becomes active.
  */
-export class SaasPullSource implements SkillBundleSource {
+export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
   readonly id: string;
 
   private listeners = new Set<BundleSourceListener>();
@@ -89,6 +111,7 @@ export class SaasPullSource implements SkillBundleSource {
   private inFlight = false;
   private stopped = false;
   private readonly jwksService = new JwksService({});
+  private readonly replayGuard?: WebhookReplayGuard;
 
   constructor(
     private readonly options: SaasSourceOptions,
@@ -97,6 +120,42 @@ export class SaasPullSource implements SkillBundleSource {
     private readonly deps: BundleSourceDeps = {},
   ) {
     this.id = `saas:${this.options.endpoint}`;
+    if (options.enableWebhook) this.replayGuard = new WebhookReplayGuard();
+  }
+
+  /** This source, when `enableWebhook` is on: it then takes bundles pushed to the server. */
+  get push(): BundlePushReceiver | undefined {
+    return this.replayGuard ? this : undefined;
+  }
+
+  /**
+   * Check the token of a pushed bundle: by the rules the pull token passes (a key in `jwksUrl`, `iss`, `aud`,
+   * `resource`, expiry), then by the replay guard, so its `iat` must be within five minutes and its `jti` unused.
+   * Throws {@link SaasPushRefusedError}, or a plain Error when the JWKS can't be read.
+   */
+  async verifyPushToken(token: string): Promise<void> {
+    if (!this.replayGuard) {
+      throw new SaasPushRefusedError(
+        'invalid-token',
+        'this source does not take pushed bundles (enableWebhook is off)',
+      );
+    }
+    const verdict = await this.verifyIssuedToken(token);
+    if (!verdict.ok) throw new SaasPushRefusedError('invalid-token', verdict.reason);
+    const { iat, jti } = verdict.claims;
+    if (typeof iat !== 'number' || typeof jti !== 'string') {
+      throw new SaasPushRefusedError('invalid-token', 'a push token needs "iat" and "jti" claims');
+    }
+    const replay = this.replayGuard.check({ timestampMs: iat * 1000, nonce: jti });
+    if (!replay.ok) {
+      const refusal = replay.code === 'nonce_replay' ? 'replayed' : 'invalid-token';
+      throw new SaasPushRefusedError(refusal, `its "jti" or "iat" claim: ${replay.reason}`);
+    }
+  }
+
+  /** Keep an applied pushed bundle as the last good one, as a pulled bundle is kept. */
+  keepBundle(bundle: ResolvedBundle): Promise<void> {
+    return this.persistCache(bundle);
   }
 
   async start(): Promise<void> {
@@ -240,7 +299,13 @@ export class SaasPullSource implements SkillBundleSource {
    * plain Error when the JWKS can't be fetched (an outage).
    */
   private async verifyPullToken(): Promise<void> {
-    const { jwksUrl, expectedIssuer, expectedAudience, authToken } = this.options;
+    const verdict = await this.verifyIssuedToken(this.options.authToken);
+    if (!verdict.ok) throw new SaasPullTokenRejectedError(verdict.reason);
+  }
+
+  /** Check a token the issuer signed, against its JWKS, issuer and audience; throws only when the JWKS can't be read. */
+  private async verifyIssuedToken(token: string): Promise<TokenVerdict> {
+    const { jwksUrl, expectedIssuer, expectedAudience } = this.options;
     // The JWKS is public: never send the pull token with it.
     const { status, body } = await this.httpGet(jwksUrl, { Accept: 'application/json', 'User-Agent': USER_AGENT });
     if (status < 200 || status >= 300) {
@@ -263,23 +328,25 @@ export class SaasPullSource implements SkillBundleSource {
       throw new Error(`JWKS ${jwksUrl} has no usable signing keys`);
     }
 
-    const verified = await this.jwksService.verifyTransparentToken(authToken, [
+    const verified = await this.jwksService.verifyTransparentToken(token, [
       { id: 'skilled-openapi-saas', issuerUrl: expectedIssuer, jwks: { keys: signingKeys } as JSONWebKeySet },
     ]);
     if (!verified.ok || !verified.payload) {
-      throw new SaasPullTokenRejectedError(
-        `not a valid token from issuer "${expectedIssuer}" signed by a key in ${jwksUrl} (${verified.error ?? 'verification failed'})`,
-      );
+      return {
+        ok: false,
+        reason: `not a valid token from issuer "${expectedIssuer}" signed by a key in ${jwksUrl} (${verified.error ?? 'verification failed'})`,
+      };
     }
     const payload = verified.payload;
     if (!claimValues(payload['aud']).includes(expectedAudience)) {
-      throw new SaasPullTokenRejectedError(`its "aud" claim does not include "${expectedAudience}"`);
+      return { ok: false, reason: `its "aud" claim does not include "${expectedAudience}"` };
     }
     // RFC 8707: a token that names its resource must name this audience too.
     const resource = claimValues(payload['resource']);
     if (resource.length > 0 && !resource.includes(expectedAudience)) {
-      throw new SaasPullTokenRejectedError(`its "resource" claim does not include "${expectedAudience}"`);
+      return { ok: false, reason: `its "resource" claim does not include "${expectedAudience}"` };
     }
+    return { ok: true, claims: payload };
   }
 
   private async fetchOnce(): Promise<ResolvedBundle> {

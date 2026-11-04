@@ -53,7 +53,14 @@ export {
 } from './source-options';
 
 // Sources
-export { createBundleSource, InlineSource, NpmSource, SaasPullSource, StaticSource } from './sources';
+export {
+  createBundleSource,
+  InlineSource,
+  NpmSource,
+  SaasPullSource,
+  SaasPushRefusedError,
+  StaticSource,
+} from './sources';
 
 // OpenAPI → skilled-bundle compiler (operationId ↔ skill linkage). First-party
 // in-repo compiler; the SaaS control plane reuses it to produce signed manifests.
@@ -65,6 +72,7 @@ export {
 } from './openapi/compile-skilled-bundle';
 export type {
   BundleCacheStore,
+  BundlePushReceiver,
   BundleSourceDeps,
   BundleSourceListener,
   SkillBundleSource,
@@ -98,6 +106,7 @@ export {
   type ReplayCheckResult,
   type ReplayGuardCounter,
   type ReplayGuardTelemetry,
+  type ReplayRejectCode,
   type WebhookReplayGuardOptions,
 } from './security/webhook-replay-guard';
 
