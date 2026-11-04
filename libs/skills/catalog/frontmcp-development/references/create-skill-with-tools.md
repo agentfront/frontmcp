@@ -176,6 +176,8 @@ In `'strict'` mode the server refuses to start, with `SkillValidationError: Skil
 
 When a caller loads the skill (`skills/load`, the `skills:load` flow, `GET /skills/{id}`, `/llm_full.txt`), a referenced tool that `availableWhen.surface` doesn't offer that caller (an agent-only tool, for an MCP client) is reported as missing, without its input schema, just as `tools/list` leaves it out. The same skill loaded by an agent lists it as available.
 
+`skills/load` sends each available tool's input schema twice by default (`format: 'full'`): with the tool, in `tools[].inputSchema`, and in `formattedContent`, the markdown rendering of the skill. `format: 'instructions-only'` leaves the schemas out of both, so `formattedContent` lists the tools by name and purpose only (up to 1.11.0 it still carried the schemas).
+
 ## Instruction Sources
 
 Skills support three ways to provide instructions.
