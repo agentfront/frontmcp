@@ -320,6 +320,12 @@ the injected one is sent (in 1.9.2 such a call was refused with `Unrecognized ke
 
 Each tool starts from what `mcp-from-openapi` derives for its operation, and `tools/list` lists it: `annotations` inferred from the HTTP method (`GET` → `readOnlyHint`, `DELETE` → `destructiveHint`; turn off with `generateOptions: { inferAnnotations: false }`), the `title` from the operation summary, `icons` from `x-frontmcp.icons` / `x-mcp.icons` (or `info['x-logo']` with `generateOptions: { inheritDocumentIcons: true }`), and `_meta` with `dev.agentfront.openapi/operation` when `generateOptions: { emitMeta: true }`. `x-frontmcp` annotations merge over the derived ones and `toolTransforms` over both. Up to 1.9.1 the adapter dropped all four. `x-frontmcp` takes `annotations`, `cache`, `codecall`, `tags`, `hideFromDiscovery`, `examples`, `icons` and `meta`; any other field is ignored with an `Unknown field` warning (up to 1.9.2 `icons` and `meta` were warned about too, though they worked).
 
+The tool's `outputSchema` lists the API's answer under `data`, built from the operation's responses. A 2xx response
+the spec documents with a description only (no `content`) accepts any answer; a 204, a 205 and a `HEAD` operation
+stay `null`. When the operation lists several status codes, `data` is an `anyOf` of their schemas, so an answer that
+fits more than one passes. Up to 1.11.0 a description-only response was listed as `{ "type": "null" }`, so a client
+that checks `structuredContent` refused every JSON answer, and the union was a `oneOf`.
+
 ## Format Resolution
 
 Enrich generated tool schemas with concrete constraints from OpenAPI `format` values (uuid, date-time, email, int32, etc.):
@@ -472,6 +478,27 @@ one that doesn't (for example two adjacent parameters that together form `..`) f
 merely contain dots or encoded dots (`v1.2`, `...`, `%2e%2e`, `..%2Fadmin`) are encoded and sent as before. The
 same request builder runs the operations of `@frontmcp/plugin-skilled-openapi`, where the refusal reads
 `request build failed: Path parameter …`.
+
+### Query parameters
+
+A query parameter is sent by its OpenAPI `style` and `explode`:
+
+| `style`          | `explode`        | `ids: [1, 2]` | `filter: { status: 'open' }` |
+| ---------------- | ---------------- | ------------- | ---------------------------- |
+| `form` (default) | `true` (default) | `ids=1&ids=2` | `status=open`                |
+| `form`           | `false`          | `ids=1,2`     | `filter=status,open`         |
+| `spaceDelimited` | `false`          | `ids=1 2`     | `filter=status open`         |
+| `pipeDelimited`  | `false`          | `ids=1\|2`    | `filter=status\|open`        |
+| `deepObject`     | `true`           |               | `filter[status]=open`        |
+
+The values are shown before percent-encoding: a comma is sent as `%2C`, a space as `+`, a pipe as `%7C` and the
+brackets as `%5B` and `%5D`. An array item or object property that is itself an array or an object is refused, and a
+path, header or cookie parameter still takes a single value.
+
+Up to 1.11.0 every array was sent comma-joined, even with the default `explode: true`, and an object was refused. An
+API that reads a comma-joined list and whose spec doesn't say `explode: false` now gets the key repeated: declare
+`explode: false` on that parameter. The operations of `@frontmcp/plugin-skilled-openapi` are sent the same way:
+`compileSkilledBundleFromOpenApi` keeps each parameter's `style` and `explode` in the operation's `mapper`.
 
 ## Load Options
 

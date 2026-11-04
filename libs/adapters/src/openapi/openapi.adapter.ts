@@ -8,6 +8,7 @@ import {
 import { Adapter, DynamicAdapter, type FrontMcpAdapterResponse, type FrontMcpLogger } from '@frontmcp/sdk';
 
 import { OpenApiSpecPoller } from './openapi-spec-poller';
+import { outputSchemaOf } from './openapi.output-schema';
 import {
   formatMissingSecurityMappingsError,
   inputSecuritySchemes,
@@ -135,6 +136,7 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
       includeAllResponses: generateOptions?.includeAllResponses ?? true,
       includeSecurityInInput,
     });
+    openapiTools = openapiTools.map((tool) => ({ ...tool, outputSchema: outputSchemaOf(tool) }));
 
     // If per-scheme control is enabled, filter security inputs
     if (hasPerSchemeControl) {

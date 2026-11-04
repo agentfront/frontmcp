@@ -1,4 +1,4 @@
-// Scenarios E1 E2 E3 F1 G1 G3: run_workflow against the mock billing API over HTTPS, with the production settings.
+// Scenarios A2 E1 E2 E3 F1 G1 G3: run_workflow against the mock billing API over HTTPS, with the production settings.
 import { expect, test } from '@frontmcp/testing';
 
 import { SLOW_REPORT_DELAY_MS } from './helpers/mock-billing-api';
@@ -41,6 +41,39 @@ test.describe('a chained workflow (E1)', () => {
       fetched: { id: 'inv_1', status: 'open', amount: 1234 },
       refund: { refundId: 'rfnd_1', invoiceId: 'inv_1' },
     });
+  });
+});
+
+test.describe('operations as compileSkilledBundleFromOpenApi emits them (A2)', () => {
+  test('a response the spec documents with a description only passes the JSON answer through', async ({ mcp }) => {
+    const result = await runWorkflow(mcp, "return await callTool('getAccountPlan', {});");
+
+    expect(result).toMatchObject({ success: true, value: { plan: 'growth', seats: 5 } });
+  });
+
+  test('an array query parameter with explode: true sends its key once per item', async ({ mcp }) => {
+    const result = await runWorkflow(
+      mcp,
+      [
+        "const first = await callTool('createInvoice', { customerId: 'cus_e2e', amount: 10 });",
+        "const second = await callTool('createInvoice', { customerId: 'cus_e2e', amount: 20 });",
+        "return await callTool('listInvoices', { ids: [first.id, second.id] });",
+      ].join('\n'),
+    );
+
+    expect(result).toMatchObject({
+      success: true,
+      value: {
+        invoices: [
+          { id: 'inv_1', amount: 10 },
+          { id: 'inv_2', amount: 20 },
+        ],
+      },
+    });
+    const listRequest = environment.billingApi.requests.find(
+      (request) => request.method === 'GET' && request.path === '/v1/invoices',
+    );
+    expect(listRequest?.query).toBe('ids=inv_1&ids=inv_2');
   });
 });
 

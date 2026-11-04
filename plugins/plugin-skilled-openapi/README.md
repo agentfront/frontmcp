@@ -158,6 +158,13 @@ describes. `compileSkilledBundleFromOpenApi()` from
 `canonicalize()`, `bundleDigest()` and `verifyBundleSignature()` for signing in CI. See
 [The bundle](https://frontmcp.dev/reference/plugins/skilled-openapi#the-bundle) for every field.
 
+An operation it compiles checks a JSON answer against the schema of the operation's responses. A 2xx response the spec
+documents with a description only, or with a media type that names no schema, accepts any answer; a 204, a 205 and a
+`HEAD` operation stay bodyless. Several status codes give an `anyOf`, so an answer that fits more than one passes. Each
+query parameter's `style` and `explode` are kept in the operation's `mapper`, and its requests follow them: by default
+an array repeats its key (`ids=1&ids=2`), and `explode: false` joins it with commas. Up to 1.11.0 a description-only
+response compiled to `{ "type": "null" }`, which every JSON answer failed, and every array was sent comma-joined.
+
 ## Security
 
 - **Signing.** With `requireSignature` (the default), a bundle is applied only if its `integrity` signature, RS256 or
