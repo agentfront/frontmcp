@@ -10,12 +10,19 @@ import {
   assertValidPluginName,
   emitClaudePlugin,
   emitCodexEntry,
+  emitCodexSkills,
   isPluginContainedPath,
+  readClaudePluginSkills,
+  readCodexSkills,
   readInstalledPluginVersion,
+  refreshClaudeBundleSkills,
+  refreshCodexBundleSkills,
   removeClaudePlugin,
   removeCodexEntry,
+  removeCodexSkills,
   resolveSelfInvocation,
   splitCommandLine,
+  type PluginEmitterBundleSkillInput,
 } from '../plugin-emitter';
 
 describe('plugin-emitter (issue #411)', () => {
@@ -816,6 +823,289 @@ describe('plugin-emitter (issue #411)', () => {
         command: execPath,
         args: [scriptPath, ...args],
       });
+    });
+  });
+});
+
+describe('bundle skills (Skilled OpenAPI)', () => {
+  let tmp: string;
+  let destRoot: string;
+
+  const bundleSkill = (id: string, name: string, version = '1.0.0'): PluginEmitterBundleSkillInput => ({
+    id,
+    name,
+    skillMd: `---\nname: ${name}\ndescription: ${name} skill\n---\n\nbundle ${version} content for ${id}\n`,
+  });
+
+  const shippedSkill = (name: string) => ({ name, description: `${name} skill`, instructionContent: `# ${name}\n` });
+
+  const baseOptions = () => ({
+    destRoot,
+    name: 'mymcp',
+    version: '1.0.0',
+    description: 'My server',
+    mcpCommand: 'mymcp',
+    mcpArgs: ['serve', '--stdio'],
+    envHints: [],
+    commands: [{ name: 'triage', description: 'Triage' }],
+    cliVersion: '1.11.1',
+  });
+
+  const pluginDir = () => path.join(destRoot, 'mymcp');
+  const skillMdOf = (folder: string) => path.join(pluginDir(), 'skills', folder, 'SKILL.md');
+
+  beforeEach(async () => {
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-bundle-skills-'));
+    destRoot = path.join(tmp, 'plugins');
+  });
+  afterEach(async () => {
+    await rm(tmp, { recursive: true, force: true });
+  });
+
+  describe('emitClaudePlugin', () => {
+    it('writes the shipped and the bundle skills, a bundle skill in a kebab-case folder with its own SKILL.md', async () => {
+      const result = await emitClaudePlugin({
+        ...baseOptions(),
+        skills: [shippedSkill('math-helper')],
+        bundleSkills: { bundleVersion: '1.0.0', skills: [bundleSkill('guarded', 'Guarded action'), bundleSkill('invoices', 'Invoices')] },
+      });
+
+      expect(result.shippedSkills).toEqual(['math-helper']);
+      expect(result.bundleSkills).toEqual([
+        { name: 'Guarded action', folder: 'guarded-action' },
+        { name: 'Invoices', folder: 'invoices' },
+      ]);
+      expect(await readFile(skillMdOf('guarded-action'))).toBe(bundleSkill('guarded', 'Guarded action').skillMd);
+      expect(await readFile(skillMdOf('math-helper'))).toContain('name: math-helper');
+      const manifest = JSON.parse(await readFile(path.join(pluginDir(), '.claude-plugin', 'plugin.json')));
+      expect(manifest.skills).toEqual(['guarded-action', 'invoices', 'math-helper']);
+      expect(manifest._meta.frontmcp.bundleSkills).toEqual({ bundleVersion: '1.0.0', skills: ['guarded-action', 'invoices'] });
+      expect(manifest._meta.frontmcp.managedFiles).toEqual([
+        'commands/triage.md',
+        'skills/guarded-action/SKILL.md',
+        'skills/invoices/SKILL.md',
+        'skills/math-helper/SKILL.md',
+      ]);
+    });
+
+    it('gives a bundle skill whose folder a shipped skill or another bundle skill has a suffixed folder', async () => {
+      const result = await emitClaudePlugin({
+        ...baseOptions(),
+        skills: [shippedSkill('invoices')],
+        bundleSkills: { skills: [bundleSkill('a-invoices', 'Invoices'), bundleSkill('b-invoices', 'invoices!')] },
+      });
+
+      expect(result.bundleSkills.map((skill) => skill.folder)).toEqual(['invoices-2', 'invoices-3']);
+      expect(await readFile(skillMdOf('invoices'))).toBe('---\nname: invoices\ndescription: invoices skill\n---\n# invoices\n');
+      expect(await readFile(skillMdOf('invoices-2'))).toContain('content for a-invoices');
+      expect(await readFile(skillMdOf('invoices-3'))).toContain('content for b-invoices');
+    });
+
+    it('writes no bundleSkills record for a server without the plugin', async () => {
+      const result = await emitClaudePlugin({ ...baseOptions(), skills: [shippedSkill('math-helper')] });
+
+      expect(result.manifest._meta.frontmcp.bundleSkills).toBeUndefined();
+      expect(result.bundleSkills).toEqual([]);
+    });
+
+    it('removes the folder of a bundle skill a reinstall no longer writes', async () => {
+      await emitClaudePlugin({
+        ...baseOptions(),
+        skills: [],
+        bundleSkills: { skills: [bundleSkill('invoices', 'Invoices'), bundleSkill('admin', 'Admin')] },
+      });
+
+      const result = await emitClaudePlugin({ ...baseOptions(), skills: [], bundleSkills: { skills: [bundleSkill('invoices', 'Invoices')] } });
+
+      expect(await fileExists(path.join(pluginDir(), 'skills', 'admin'))).toBe(false);
+      expect(result.filesRemoved).toEqual([skillMdOf('admin')]);
+    });
+  });
+
+  describe('refreshClaudeBundleSkills', () => {
+    async function installWith(bundle: PluginEmitterBundleSkillInput[]): Promise<void> {
+      await emitClaudePlugin({
+        ...baseOptions(),
+        skills: [shippedSkill('math-helper')],
+        bundleSkills: { bundleVersion: '1.0.0', skills: bundle },
+      });
+    }
+
+    it('adds, rewrites and removes only the bundle skills', async () => {
+      await installWith([bundleSkill('invoices', 'Invoices'), bundleSkill('admin', 'Admin')]);
+      const shippedBefore = await readFile(skillMdOf('math-helper'));
+      const commandBefore = await readFile(path.join(pluginDir(), 'commands', 'triage.md'));
+
+      const result = await refreshClaudeBundleSkills({
+        destRoot,
+        name: 'mymcp',
+        bundleSkills: {
+          bundleVersion: '1.1.0',
+          skills: [bundleSkill('invoices', 'Invoices', '1.1.0'), bundleSkill('refunds', 'Refunds', '1.1.0')],
+        },
+      });
+
+      expect(result).toMatchObject({
+        installDir: pluginDir(),
+        bundleVersion: '1.1.0',
+        added: ['refunds'],
+        updated: ['invoices'],
+        removed: ['admin'],
+        filesRemoved: [skillMdOf('admin')],
+      });
+      expect(await readFile(skillMdOf('invoices'))).toContain('bundle 1.1.0 content for invoices');
+      expect(await readFile(skillMdOf('refunds'))).toContain('bundle 1.1.0 content for refunds');
+      expect(await fileExists(path.join(pluginDir(), 'skills', 'admin'))).toBe(false);
+      expect(await readFile(skillMdOf('math-helper'))).toBe(shippedBefore);
+      expect(await readFile(path.join(pluginDir(), 'commands', 'triage.md'))).toBe(commandBefore);
+
+      const record = await readClaudePluginSkills(pluginDir());
+      expect(record).toEqual({
+        skills: ['invoices', 'math-helper', 'refunds'],
+        bundleSkills: { bundleVersion: '1.1.0', skills: ['invoices', 'refunds'] },
+        managedFiles: ['commands/triage.md', 'skills/invoices/SKILL.md', 'skills/math-helper/SKILL.md', 'skills/refunds/SKILL.md'],
+      });
+    });
+
+    it('leaves a shipped skill untouched, even one edited by hand, and keeps its folder from a new bundle skill', async () => {
+      await installWith([]);
+      await writeFile(skillMdOf('math-helper'), 'edited by hand');
+
+      const result = await refreshClaudeBundleSkills({
+        destRoot,
+        name: 'mymcp',
+        bundleSkills: { skills: [bundleSkill('math', 'Math helper')] },
+      });
+
+      expect(result.added).toEqual(['math-helper-2']);
+      expect(await readFile(skillMdOf('math-helper'))).toBe('edited by hand');
+    });
+
+    it('keeps the manifest fields the install wrote and the user added', async () => {
+      await installWith([bundleSkill('invoices', 'Invoices')]);
+      const manifestPath = path.join(pluginDir(), '.claude-plugin', 'plugin.json');
+      const installed = JSON.parse(await readFile(manifestPath));
+      await writeFile(manifestPath, JSON.stringify({ ...installed, homepage: 'https://example.com' }));
+
+      await refreshClaudeBundleSkills({ destRoot, name: 'mymcp', bundleSkills: { skills: [] } });
+
+      const refreshed = JSON.parse(await readFile(manifestPath));
+      expect(refreshed.homepage).toBe('https://example.com');
+      expect(refreshed.mcpServers).toEqual(installed.mcpServers);
+      expect(refreshed.commands).toEqual(['triage']);
+      expect(refreshed._meta.frontmcp.installedAt).toBe(installed._meta.frontmcp.installedAt);
+      expect(refreshed.skills).toEqual(['math-helper']);
+    });
+
+    it("keeps a removed bundle skill's folder when someone added a file to it", async () => {
+      await installWith([bundleSkill('admin', 'Admin')]);
+      await writeFile(path.join(pluginDir(), 'skills', 'admin', 'notes.md'), 'mine');
+
+      await refreshClaudeBundleSkills({ destRoot, name: 'mymcp', bundleSkills: { skills: [] } });
+
+      expect(await fileExists(skillMdOf('admin'))).toBe(false);
+      expect(await readFile(path.join(pluginDir(), 'skills', 'admin', 'notes.md'))).toBe('mine');
+    });
+
+    it('plans without writing with dryRun', async () => {
+      await installWith([bundleSkill('admin', 'Admin')]);
+
+      const result = await refreshClaudeBundleSkills({
+        destRoot,
+        name: 'mymcp',
+        bundleSkills: { skills: [bundleSkill('refunds', 'Refunds')] },
+        dryRun: true,
+      });
+
+      expect(result).toMatchObject({ added: ['refunds'], removed: ['admin'], filesWritten: [skillMdOf('refunds')], filesRemoved: [] });
+      expect(await fileExists(skillMdOf('admin'))).toBe(true);
+      expect(await fileExists(skillMdOf('refunds'))).toBe(false);
+    });
+
+    it('refuses when no plugin is installed', async () => {
+      await expect(refreshClaudeBundleSkills({ destRoot, name: 'mymcp', bundleSkills: { skills: [] } })).rejects.toThrow(
+        'No Claude plugin is installed at',
+      );
+    });
+
+    it("removes only managed paths inside the plugin, whatever a tampered manifest's bundleSkills names", async () => {
+      await installWith([bundleSkill('invoices', 'Invoices')]);
+      const outside = path.join(tmp, 'outside.txt');
+      await writeFile(outside, 'keep');
+      const manifestPath = path.join(pluginDir(), '.claude-plugin', 'plugin.json');
+      const manifest = JSON.parse(await readFile(manifestPath));
+      manifest._meta.frontmcp.bundleSkills.skills.push('../../../outside.txt');
+      manifest._meta.frontmcp.managedFiles.push('../../outside.txt');
+      await writeFile(manifestPath, JSON.stringify(manifest));
+
+      await refreshClaudeBundleSkills({ destRoot, name: 'mymcp', bundleSkills: { skills: [] } });
+
+      expect(await readFile(outside)).toBe('keep');
+    });
+  });
+
+  describe('Codex skills', () => {
+    const codexRoot = () => path.join(tmp, '.codex', 'skills');
+    const codexSkillMd = (folder: string) => path.join(codexRoot(), 'mymcp', folder, 'SKILL.md');
+    const codexOptions = () => ({ destRoot: codexRoot(), name: 'mymcp', version: '1.0.0', cliVersion: '1.11.1' });
+
+    it('writes both kinds under <root>/<bin>/, recorded in a dot-file Codex skips', async () => {
+      const result = await emitCodexSkills({
+        ...codexOptions(),
+        skills: [shippedSkill('math-helper')],
+        bundleSkills: { bundleVersion: '1.0.0', skills: [bundleSkill('guarded', 'Guarded action')] },
+      });
+
+      expect(result.skillsDir).toBe(path.join(codexRoot(), 'mymcp'));
+      expect(await readFile(codexSkillMd('math-helper'))).toContain('name: math-helper');
+      expect(await readFile(codexSkillMd('guarded-action'))).toBe(bundleSkill('guarded', 'Guarded action').skillMd);
+      expect(await readCodexSkills(codexRoot(), 'mymcp')).toEqual({
+        installedBy: 'frontmcp@1.11.1',
+        bin: 'mymcp',
+        binVersion: '1.0.0',
+        skills: ['guarded-action', 'math-helper'],
+        bundleSkills: { bundleVersion: '1.0.0', skills: ['guarded-action'] },
+        managedFiles: ['guarded-action/SKILL.md', 'math-helper/SKILL.md'],
+      });
+    });
+
+    it('writes nothing for a server with no skills', async () => {
+      const result = await emitCodexSkills({ ...codexOptions(), skills: [] });
+
+      expect(result.filesWritten).toEqual([]);
+      expect(await fileExists(codexRoot())).toBe(false);
+    });
+
+    it('refreshes only the bundle skills, then uninstall removes what install wrote', async () => {
+      await emitCodexSkills({
+        ...codexOptions(),
+        skills: [shippedSkill('math-helper')],
+        bundleSkills: { bundleVersion: '1.0.0', skills: [bundleSkill('admin', 'Admin')] },
+      });
+      await writeFile(path.join(codexRoot(), 'mymcp', 'mine.md'), 'mine');
+
+      const refreshed = await refreshCodexBundleSkills({
+        destRoot: codexRoot(),
+        name: 'mymcp',
+        bundleSkills: { bundleVersion: '1.1.0', skills: [bundleSkill('refunds', 'Refunds', '1.1.0')] },
+      });
+
+      expect(refreshed).toMatchObject({ added: ['refunds'], updated: [], removed: ['admin'] });
+      expect(await fileExists(path.join(codexRoot(), 'mymcp', 'admin'))).toBe(false);
+      expect(await readFile(codexSkillMd('math-helper'))).toContain('name: math-helper');
+      expect((await readCodexSkills(codexRoot(), 'mymcp'))?.bundleSkills).toEqual({ bundleVersion: '1.1.0', skills: ['refunds'] });
+
+      const removed = await removeCodexSkills({ destRoot: codexRoot(), name: 'mymcp' });
+
+      expect(removed.removed).toHaveLength(3);
+      expect(await readCodexSkills(codexRoot(), 'mymcp')).toBeUndefined();
+      expect(await readFile(path.join(codexRoot(), 'mymcp', 'mine.md'))).toBe('mine');
+    });
+
+    it('refuses to refresh when no Codex skills are installed', async () => {
+      await expect(
+        refreshCodexBundleSkills({ destRoot: codexRoot(), name: 'mymcp', bundleSkills: { skills: [] } }),
+      ).rejects.toThrow('No Codex skills are installed at');
     });
   });
 });

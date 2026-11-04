@@ -14,7 +14,8 @@ export const SKILLED_OPENAPI_TOOLS = {
   run: 'run_workflow',
 } as const;
 
-type Verb = keyof typeof SKILLED_OPENAPI_TOOLS;
+export type SkilledVerb = keyof typeof SKILLED_OPENAPI_TOOLS;
+type Verb = SkilledVerb;
 
 /** The top-level name of each command, on a CLI whose only tools are the plugin's, with the names it also answers to. */
 export const TOP_LEVEL_SKILL_COMMANDS: Record<Verb, { name: string; aliases: string[] }> = {
@@ -51,7 +52,7 @@ export interface SkilledCommandsOptions {
   stdin?: NodeJS.ReadableStream;
 }
 
-interface JsonSchema {
+export interface JsonSchema {
   type?: string | string[];
   properties?: Record<string, JsonSchema>;
   required?: string[];
@@ -67,7 +68,7 @@ interface SkillMatch {
   score: number;
 }
 
-interface SkillAction {
+export interface SkillAction {
   actionId: string;
   summary: string;
   inputJsonSchema: JsonSchema;
@@ -117,10 +118,7 @@ export function registerSkilledCommands(program: Command, options: SkilledComman
   const context: CommandContext = {
     program,
     options,
-    commandLine: (verb) =>
-      options.topLevel
-        ? `${program.name()} ${TOP_LEVEL_SKILL_COMMANDS[verb].name}`
-        : `${program.name()} skills ${verb}`,
+    commandLine: (verb) => skilledCommandLine(program.name(), verb, options.topLevel),
   };
 
   if (options.topLevel) {
@@ -138,6 +136,11 @@ export function registerSkilledCommands(program: Command, options: SkilledComman
   }
   addReadCommand(group, context);
   addListCommand(group, context);
+}
+
+/** The command line that runs a verb: `<bin> execute` on a server whose only tools are the plugin's, else `<bin> skills execute`. */
+export function skilledCommandLine(binCommand: string, verb: Verb, topLevel: boolean): string {
+  return topLevel ? `${binCommand} ${TOP_LEVEL_SKILL_COMMANDS[verb].name}` : `${binCommand} skills ${verb}`;
 }
 
 const ADD_COMMAND: Record<Verb, (parent: Command, placement: Placement, context: CommandContext) => void> = {
@@ -301,12 +304,12 @@ function textOf(result: ToolCallResult): string {
     .join('\n');
 }
 
-function toolErrorText(result: ToolCallResult): string {
+export function toolErrorText(result: ToolCallResult): string {
   const error = result.structuredContent?.['error'];
   return typeof error === 'string' ? error : textOf(result) || 'the call failed';
 }
 
-function resourceText(result: ResourceReadResult): string {
+export function resourceText(result: ResourceReadResult): string {
   return (result.contents ?? []).map((content) => content.text ?? '').join('\n');
 }
 
@@ -407,18 +410,27 @@ function renderLoadedSkill({ skill, warning }: LoadSkillResult, executeCommand: 
 }
 
 function renderAction(action: SkillAction, executeCommand: string): string[] {
-  const schema = action.inputJsonSchema;
-  const example = exampleObject(schema);
-  const inputFlag = Object.keys(example).length > 0 ? ` --input ${shellQuoted(JSON.stringify(example))}` : '';
-  const lines = [`  ${action.actionId}: ${action.summary}`, `    ${executeCommand} ${action.actionId}${inputFlag}`];
-  const required = schema.required ?? [];
-  const optional = Object.keys(schema.properties ?? {}).filter((name) => !required.includes(name));
+  const lines = [`  ${action.actionId}: ${action.summary}`, `    ${actionCommandLine(executeCommand, action)}`];
+  const optional = optionalInputNames(action.inputJsonSchema);
   if (optional.length > 0) lines.push(`    optional input: ${optional.join(', ')}`);
   return lines;
 }
 
+/** The command that runs an action with its required fields: `<execute command> <actionId> --input '<json>'`. */
+export function actionCommandLine(executeCommand: string, action: SkillAction): string {
+  const example = exampleInput(action.inputJsonSchema);
+  const inputFlag = Object.keys(example).length > 0 ? ` --input ${shellQuoted(JSON.stringify(example))}` : '';
+  return `${executeCommand} ${action.actionId}${inputFlag}`;
+}
+
+/** The input fields an action takes but doesn't require. */
+export function optionalInputNames(schema: JsonSchema): string[] {
+  const required = schema.required ?? [];
+  return Object.keys(schema.properties ?? {}).filter((name) => !required.includes(name));
+}
+
 /** An input with each required field, set to its example, default or first allowed value, else a placeholder. */
-function exampleObject(schema: JsonSchema): Record<string, unknown> {
+export function exampleInput(schema: JsonSchema): Record<string, unknown> {
   const properties = schema.properties ?? {};
   const required = (schema.required ?? []).filter((name) => properties[name] !== undefined);
   return Object.fromEntries(required.map((name) => [name, exampleValue(name, properties[name])]));
@@ -431,7 +443,7 @@ function exampleValue(name: string, schema: JsonSchema): unknown {
   const type = Array.isArray(schema.type) ? schema.type.find((candidate) => candidate !== 'null') : schema.type;
   switch (type) {
     case 'object':
-      return exampleObject(schema);
+      return exampleInput(schema);
     case 'array':
       return [];
     case 'integer':
@@ -444,7 +456,7 @@ function exampleValue(name: string, schema: JsonSchema): unknown {
   }
 }
 
-function shellQuoted(text: string): string {
+export function shellQuoted(text: string): string {
   return `'${text.replace(/'/g, `'\\''`)}'`;
 }
 

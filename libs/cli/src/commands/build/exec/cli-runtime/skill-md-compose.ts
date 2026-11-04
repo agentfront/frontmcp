@@ -19,6 +19,8 @@ export interface SkillFrontmatter {
   description?: string;
   tags?: string[];
   license?: string;
+  /** The Agent Skills `metadata` map: string keys and values. */
+  metadata?: Record<string, string>;
 }
 
 const FRONTMATTER_DELIMITER = '---';
@@ -58,6 +60,16 @@ export function composeSkillMd(meta: SkillFrontmatter, body: string): string {
   if (hasFrontmatter(body)) {
     return body;
   }
+  // Drop AT MOST a single optional leading newline — that's the separator
+  // between the (now-prepended) frontmatter and the body itself. Stripping
+  // all leading whitespace would eat intentional blank lines or indentation
+  // the author put at the top of the body, which is content, not noise.
+  const normalizedBody = body.replace(/^\r?\n/, '');
+  return renderFrontmatter(meta) + (normalizedBody.length > 0 ? normalizedBody : `# ${meta.name}\n`);
+}
+
+/** The `---` frontmatter block for a skill, ending with a newline. */
+export function renderFrontmatter(meta: SkillFrontmatter): string {
   const lines: string[] = [FRONTMATTER_DELIMITER];
   lines.push(`name: ${yamlScalar(meta.name)}`);
   lines.push(`description: ${yamlScalar(meta.description ?? `${meta.name} skill`)}`);
@@ -67,14 +79,12 @@ export function composeSkillMd(meta: SkillFrontmatter, body: string): string {
   if (meta.license) {
     lines.push(`license: ${yamlScalar(meta.license)}`);
   }
-  lines.push(FRONTMATTER_DELIMITER);
-  lines.push('');
-  // Drop AT MOST a single optional leading newline — that's the separator
-  // between the (now-prepended) frontmatter and the body itself. Stripping
-  // all leading whitespace would eat intentional blank lines or indentation
-  // the author put at the top of the body, which is content, not noise.
-  const normalizedBody = body.replace(/^\r?\n/, '');
-  return lines.join('\n') + (normalizedBody.length > 0 ? normalizedBody : `# ${meta.name}\n`);
+  if (meta.metadata) {
+    lines.push('metadata:');
+    for (const [key, value] of Object.entries(meta.metadata)) lines.push(`  ${key}: ${JSON.stringify(value)}`);
+  }
+  lines.push(FRONTMATTER_DELIMITER, '');
+  return lines.join('\n');
 }
 
 export function hasFrontmatter(body: string): boolean {

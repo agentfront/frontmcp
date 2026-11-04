@@ -152,6 +152,11 @@ export function runCliBundleAsync(
   return runNodeAsync([bundle, ...args], path.dirname(bundle), 30000, extraEnv, stdin);
 }
 
+/** Run a command line with `sh -c`, as a coding agent runs one it read, without blocking the test process. */
+export function runShellAsync(commandLine: string, cwd: string, extraEnv?: Record<string, string>): Promise<CliResult> {
+  return runProgramAsync('sh', ['-c', commandLine], cwd, 30000, extraEnv);
+}
+
 function runNodeAsync(
   nodeArgs: string[],
   cwd: string,
@@ -159,8 +164,19 @@ function runNodeAsync(
   extraEnv?: Record<string, string>,
   stdin?: string,
 ): Promise<CliResult> {
+  return runProgramAsync('node', nodeArgs, cwd, timeoutMs, extraEnv, stdin);
+}
+
+function runProgramAsync(
+  program: string,
+  args: string[],
+  cwd: string,
+  timeoutMs: number,
+  extraEnv?: Record<string, string>,
+  stdin?: string,
+): Promise<CliResult> {
   return new Promise((resolve) => {
-    const child = spawn('node', nodeArgs, {
+    const child = spawn(program, args, {
       cwd,
       env: { ...process.env, NODE_ENV: 'test', ...extraEnv },
     });

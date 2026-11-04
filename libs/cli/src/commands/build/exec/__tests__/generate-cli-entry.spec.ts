@@ -876,6 +876,21 @@ describe('generateCliEntry', () => {
       expect(source).toContain(`["search_skill","load_skill","execute","skills"].indexOf(name)`);
     });
 
+    it("has install read the bundle skills with the commands the CLI has, and add --refresh-skills", () => {
+      const topLevel = sourceFor(metaTools, { excludeTools: ['run_workflow'] });
+      const grouped = sourceFor([ownTool, ...metaTools]);
+
+      expect(topLevel).toContain('var SKILLED = {"toolNames":["search_skill","load_skill","execute_action"],"topLevel":true};');
+      expect(grouped).toContain('"topLevel":false};');
+      expect(topLevel).toContain("bundleSkillsRead = await bundleSkillsModule.readBundleSkills(await getClient());");
+      expect(topLevel).toContain(".option('--refresh-skills', ");
+      expect(() => new Function(topLevel.replace(/^#!.*\n/, ''))).not.toThrow();
+    });
+
+    it('has install write no bundle skills for a server without the plugin', () => {
+      expect(sourceFor([ownTool])).toContain('var SKILLED = null;');
+    });
+
     it('finds the plugin when its four meta-tools are listed', () => {
       expect(skilledOpenApiToolNames(metaTools, [])).toEqual(['search_skill', 'load_skill', 'execute_action', 'run_workflow']);
       expect(skilledOpenApiToolNames(metaTools.slice(0, 3), [])).toBeUndefined();

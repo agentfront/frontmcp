@@ -1185,8 +1185,9 @@ describe('DirectClientImpl', () => {
       ),
     });
 
-    const collect = async (skills: ReturnType<typeof skillStub>[]) => {
-      const scope = { ...createMockScope(), skills: { getSkills: () => skills } } as unknown as Scope;
+    const collect = async (skills: ReturnType<typeof skillStub>[], bundleVersions: Record<string, string> = {}) => {
+      const loadSkill = async (id: string) => ({ skill: { bundleVersion: bundleVersions[id] } });
+      const scope = { ...createMockScope(), skills: { getSkills: () => skills, loadSkill } } as unknown as Scope;
       const client = await DirectClientImpl.create(scope);
       return (await client.collectSkillAssets()).entries;
     };
@@ -1207,6 +1208,21 @@ describe('DirectClientImpl', () => {
 
       expect(entry.instructionContent).toBe(inline);
       expect(entry.instructionFile).toBeUndefined();
+    });
+
+    it('marks a skill a plugin registered at runtime from a bundle with its bundle version', async () => {
+      const entries = await collect(
+        [
+          skillStub({ name: 'Invoices', instructions: '# Invoices', loaded: '# Invoices' }),
+          skillStub({ name: 'math-helper', instructions: '# Math', loaded: '# Math' }),
+        ],
+        { Invoices: '1.4.0' },
+      );
+
+      expect(entries.map((entry) => [entry.skillName, entry.bundleVersion])).toEqual([
+        ['Invoices', '1.4.0'],
+        ['math-helper', undefined],
+      ]);
     });
 
     it('captures url instructions from the already-loaded skill', async () => {

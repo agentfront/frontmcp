@@ -18,17 +18,23 @@
 
 import * as path from 'path';
 
-import {
-  cp,
-  ensureDir,
-  fileExists,
-  readdir,
-  readFile,
-  rm,
-  writeFile,
-} from '@frontmcp/utils';
+import { ensureDir, fileExists, readdir, readFile, rm, writeFile } from '@frontmcp/utils';
 
-import { composeSkillMd, readSkillInstructions } from './skill-md-compose';
+import {
+  applyPlan,
+  isPluginContainedPath,
+  planSkills,
+  refreshBundleSkills,
+  removeIfEmpty,
+  type BundleRefreshResult,
+  type InstalledBundleSkills,
+  type PlannedFile,
+  type SkillPlan,
+  type SkillTreeLayout,
+  type SkillTreeRecord,
+} from './skill-tree';
+
+export { isPluginContainedPath };
 
 // ============================================================================
 // Public types
@@ -57,6 +63,20 @@ export interface PluginEmitterSkillInput {
   };
 }
 
+/** A Skilled OpenAPI skill read from the running server, with the SKILL.md written for it. */
+export interface PluginEmitterBundleSkillInput {
+  id: string;
+  /** The skill's name in the bundle, which its folder is named after. */
+  name: string;
+  skillMd: string;
+}
+
+/** The bundle skills an install writes, and the bundle version they were read from. */
+export interface PluginEmitterBundleSkills {
+  bundleVersion?: string;
+  skills: PluginEmitterBundleSkillInput[];
+}
+
 export interface PluginEmitterCommandInput {
   /** Slash-command name without leading `/`. */
   name: string;
@@ -76,7 +96,10 @@ export interface EmitClaudePluginOptions {
   mcpArgs: string[];
   /** Env-var names (placeholder values) to surface in `mcpServers.<bin>.env`. */
   envHints: string[];
+  /** The server's own skills, from the metadata the build recorded. */
   skills: PluginEmitterSkillInput[];
+  /** The Skilled OpenAPI bundle's skills, read from the running server; left out for a server without the plugin. */
+  bundleSkills?: PluginEmitterBundleSkills;
   commands: PluginEmitterCommandInput[];
   /** Used for `_meta.frontmcp.installedBy`. */
   cliVersion: string;
@@ -95,6 +118,22 @@ export interface EmitClaudePluginResult {
   filesRemoved: string[];
   /** Skills left out because they had no instructions to install. */
   skillsSkipped: Array<{ name: string; reason: string }>;
+  shippedSkills: string[];
+  /** Each bundle skill's name and the folder it was written to. */
+  bundleSkills: Array<{ name: string; folder: string }>;
+}
+
+export interface RefreshBundleSkillsOptions {
+  /** The root the plugin (Claude) or the skills folder (Codex) was installed under. */
+  destRoot: string;
+  name: string;
+  bundleSkills: PluginEmitterBundleSkills;
+  dryRun?: boolean;
+}
+
+export interface RefreshBundleSkillsResult extends BundleRefreshResult {
+  /** The folder holding the skills: the plugin folder, or the Codex skills folder. */
+  installDir: string;
 }
 
 export interface ClaudePluginManifest {
@@ -112,6 +151,7 @@ export interface ClaudePluginManifest {
       binVersion: string;
       managedFields: string[];
       managedFiles: string[];
+      bundleSkills?: InstalledBundleSkills;
     };
   };
 }
@@ -202,21 +242,6 @@ export function assertValidPluginName(name: string, where: string): void {
   }
 }
 
-/**
- * Returns true when `rel` resolves to a path strictly inside `pluginDir`.
- * Defends `emitClaudePlugin` and `removeClaudePlugin` against a tampered
- * prior `plugin.json` whose `_meta.frontmcp.managedFiles` entries try to
- * escape the plugin root with `../` traversals or absolute paths.
- */
-export function isPluginContainedPath(pluginDir: string, rel: string): boolean {
-  if (typeof rel !== 'string' || rel.length === 0) return false;
-  if (path.isAbsolute(rel)) return false;
-  const resolved = path.resolve(pluginDir, rel);
-  const relative = path.relative(pluginDir, resolved);
-  if (relative === '') return false; // never delete the plugin dir itself via a managedFile entry
-  return !relative.startsWith('..') && !path.isAbsolute(relative);
-}
-
 const FRAMEWORK_MANAGED_FIELDS = [
   'name',
   'version',
@@ -237,60 +262,14 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
   const previousManifest = await readPluginManifest(manifestPath);
   const previouslyManaged = previousManifest?._meta?.frontmcp?.managedFiles ?? [];
 
-  // Build the new file plan in deterministic order.
-  const plannedFiles: Array<{ absPath: string; relPath: string; action: () => Promise<void> }> = [];
-
-  // Skills subtree. Validate the name before it lands in a filesystem
-  // path or in synthesized SKILL.md frontmatter — same rules as command
-  // names (issue #411 security pass), so a malicious `@Skill({ name: '../x' })`
-  // can't escape the plugin tree.
-  const skillsSkipped: EmitClaudePluginResult['skillsSkipped'] = [];
-  const installedSkillNames: string[] = [];
-  for (const skill of [...opts.skills].sort((a, b) => a.name.localeCompare(b.name))) {
-    assertValidPluginName(skill.name, 'emitClaudePlugin.skill');
-    const instructions = await readSkillInstructions(skill);
-    if ('skipReason' in instructions) {
-      skillsSkipped.push({ name: skill.name, reason: instructions.skipReason });
-      continue;
-    }
-    installedSkillNames.push(skill.name);
-    const skillDir = path.join(pluginDir, 'skills', skill.name);
-    const skillMd = path.join(skillDir, 'SKILL.md');
-    plannedFiles.push({
-      absPath: skillMd,
-      relPath: path.relative(pluginDir, skillMd),
-      action: async () => {
-        await ensureDir(skillDir);
-        // The instruction file is typically a raw markdown body authored by
-        // the user; Claude Code's filesystem loader needs YAML frontmatter
-        // with at least `name` + `description`. composeSkillMd preserves a
-        // pre-existing frontmatter block verbatim and otherwise synthesizes
-        // one from the decorator metadata we plumbed through bin-meta.json.
-        await writeFile(
-          skillMd,
-          composeSkillMd(
-            { name: skill.name, description: skill.description, tags: skill.tags, license: skill.license },
-            instructions.body,
-          ),
-        );
-      },
-    });
-    for (const kind of ['references', 'examples', 'scripts', 'assets'] as const) {
-      const src = skill.resourceDirs?.[kind];
-      if (!src) continue;
-      const dest = path.join(skillDir, kind);
-      plannedFiles.push({
-        absPath: dest,
-        relPath: path.relative(pluginDir, dest),
-        action: async () => {
-          await ensureDir(skillDir);
-          if (await fileExists(src)) {
-            await cp(src, dest, { recursive: true });
-          }
-        },
-      });
-    }
-  }
+  // Skills subtree. A shipped skill's name is validated before it lands in a filesystem path or in synthesized
+  // SKILL.md frontmatter (issue #411 security pass), so a malicious `@Skill({ name: '../x' })` can't escape the
+  // plugin tree; a bundle skill's folder is named from its name in kebab-case.
+  const layout: SkillTreeLayout = { root: pluginDir, skillsDir: path.join(pluginDir, 'skills') };
+  const skillPlan = await planSkills(layout, opts.skills, opts.bundleSkills?.skills, (name) =>
+    assertValidPluginName(name, 'emitClaudePlugin.skill'),
+  );
+  const plannedFiles: PlannedFile[] = [...skillPlan.files];
 
   // Commands subtree. Validate each command name before it lands in the
   // markdown body or the filesystem path — same rules as the plugin name.
@@ -300,7 +279,7 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
     plannedFiles.push({
       absPath: cmdPath,
       relPath: path.relative(pluginDir, cmdPath),
-      action: async () => {
+      write: async () => {
         await ensureDir(path.dirname(cmdPath));
         await writeFile(cmdPath, renderCommandFile(cmd, opts.name));
       },
@@ -309,7 +288,7 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
 
   // Build the manifest. Manifest is itself a managed file and appears last in
   // managedFiles so removal-on-uninstall happens after subtree cleanup.
-  const newManagedFiles = plannedFiles.map((f) => f.relPath).sort();
+  const record = skillRecordOf(skillPlan, plannedFiles, opts.bundleSkills);
   const manifest: ClaudePluginManifest = {
     name: opts.name,
     version: opts.version,
@@ -317,7 +296,7 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
     mcpServers: {
       [opts.name]: makeMcpServerEntry(opts),
     },
-    skills: installedSkillNames,
+    skills: record.skills,
     ...(opts.commands.length > 0 ? { commands: opts.commands.map((c) => c.name).sort() } : {}),
     _meta: {
       frontmcp: {
@@ -326,7 +305,8 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
         bin: opts.name,
         binVersion: opts.version,
         managedFields: [...FRAMEWORK_MANAGED_FIELDS].sort(),
-        managedFiles: newManagedFiles,
+        managedFiles: record.managedFiles,
+        ...(record.bundleSkills && { bundleSkills: record.bundleSkills }),
       },
     },
   };
@@ -334,38 +314,17 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
   // Merge any user-owned top-level keys back in from the previous manifest.
   const mergedManifest = mergeUserManifestFields(manifest, previousManifest);
 
-  // Compute the file delta. We don't `rm -rf` the plugin dir; we only:
-  //   1. Remove previously-managed files that are no longer in newManagedFiles.
-  //   2. Write/overwrite the new managed files.
-  //   3. Write the manifest.
-  const previousSet = new Set(previouslyManaged);
-  const newSet = new Set(newManagedFiles);
-  const removed: string[] = [];
-  const written: string[] = [];
-
+  // We don't `rm -rf` the plugin dir; we only remove previously-managed files that are no longer planned (and the
+  // skill folders that leaves empty), write the planned files, then the manifest.
+  let written: string[];
+  let removed: string[] = [];
   if (!opts.dryRun) {
     await ensureDir(claudePluginDir);
-    // 1. Drop stale managed files. Guard against a tampered prior manifest
-    // that may have injected escape-paths into `managedFiles`.
-    for (const rel of previousSet) {
-      if (newSet.has(rel)) continue;
-      if (!isPluginContainedPath(pluginDir, rel)) continue;
-      const abs = path.join(pluginDir, rel);
-      if (await fileExists(abs)) {
-        await rm(abs, { recursive: true, force: true });
-        removed.push(abs);
-      }
-    }
-    // 2. Write new/refreshed managed files.
-    for (const f of plannedFiles) {
-      await f.action();
-      written.push(f.absPath);
-    }
-    // 3. Manifest.
+    ({ written, removed } = await applyPlan(layout, previouslyManaged, plannedFiles));
     await writeFile(manifestPath, serializeManifest(mergedManifest));
     written.push(manifestPath);
   } else {
-    written.push(...plannedFiles.map((f) => f.absPath), manifestPath);
+    written = [...plannedFiles.map((f) => f.absPath), manifestPath];
   }
 
   const preserved = previousManifest
@@ -380,8 +339,41 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
     filesWritten: written,
     filesPreserved: preserved,
     filesRemoved: removed,
-    skillsSkipped,
+    skillsSkipped: skillPlan.skillsSkipped,
+    shippedSkills: skillPlan.shippedSkills,
+    bundleSkills: skillPlan.bundleSkills,
   };
+}
+
+/**
+ * Rewrite the bundle skills of an installed Claude plugin from the bundle the server has now: write each again, add
+ * new ones, and remove the folders of skills it no longer gives. The shipped skills, the commands and the MCP server
+ * entry are left as installed.
+ */
+export async function refreshClaudeBundleSkills(opts: RefreshBundleSkillsOptions): Promise<RefreshBundleSkillsResult> {
+  assertValidPluginName(opts.name, 'refreshClaudeBundleSkills');
+  const pluginDir = path.join(opts.destRoot, opts.name);
+  const manifestPath = path.join(pluginDir, '.claude-plugin', 'plugin.json');
+  const manifest = await readPluginManifest(manifestPath);
+  if (!manifest) {
+    throw new Error(`No Claude plugin is installed at ${pluginDir}: run "${opts.name} install -p claude" first`);
+  }
+  const layout: SkillTreeLayout = { root: pluginDir, skillsDir: path.join(pluginDir, 'skills') };
+  const refreshed = await refreshBundleSkills(layout, claudeSkillRecord(manifest), opts.bundleSkills, !!opts.dryRun);
+  if (!opts.dryRun) {
+    const frontmcp = { ...manifest._meta.frontmcp, managedFiles: refreshed.record.managedFiles, bundleSkills: refreshed.record.bundleSkills };
+    await writeFile(
+      manifestPath,
+      serializeManifest({ ...manifest, skills: refreshed.record.skills, _meta: { ...manifest._meta, frontmcp } }),
+    );
+  }
+  return { installDir: pluginDir, ...refreshed.result };
+}
+
+/** The skills an installed Claude plugin holds, by kind; undefined when none is installed there. */
+export async function readClaudePluginSkills(pluginDir: string): Promise<SkillTreeRecord | undefined> {
+  const manifest = await readPluginManifest(path.join(pluginDir, '.claude-plugin', 'plugin.json'));
+  return manifest ? claudeSkillRecord(manifest) : undefined;
 }
 
 export async function removeClaudePlugin(args: {
@@ -418,7 +410,7 @@ export async function removeClaudePlugin(args: {
 
   // Bottom-up empty-dir cleanup. Stops at first non-empty dir, preserving
   // user-added files.
-  await cleanupEmptyDirs(pluginDir, preserved);
+  await cleanupEmptyDirs(pluginDir);
 
   return { removed, preserved, pluginDir };
 }
@@ -427,6 +419,127 @@ export async function readInstalledPluginVersion(pluginDir: string): Promise<str
   const manifestPath = path.join(pluginDir, '.claude-plugin', 'plugin.json');
   const manifest = await readPluginManifest(manifestPath);
   return manifest?._meta?.frontmcp?.binVersion;
+}
+
+// ============================================================================
+// Codex skills
+// ============================================================================
+
+/** The file in a server's Codex skills folder that records what an install wrote there; Codex skips dot-files. */
+const CODEX_SKILLS_RECORD = '.frontmcp.json';
+
+export interface EmitCodexSkillsOptions {
+  /** The Codex skills folder: `.codex/skills` in the project, or `~/.codex/skills`. */
+  destRoot: string;
+  name: string;
+  version: string;
+  cliVersion: string;
+  /** The server's own skills, from the metadata the build recorded. */
+  skills: PluginEmitterSkillInput[];
+  /** The Skilled OpenAPI bundle's skills, read from the running server; left out for a server without the plugin. */
+  bundleSkills?: PluginEmitterBundleSkills;
+  dryRun?: boolean;
+}
+
+export interface EmitCodexSkillsResult {
+  /** `<destRoot>/<name>`: the folder holding the server's skills. */
+  skillsDir: string;
+  filesWritten: string[];
+  filesRemoved: string[];
+  skillsSkipped: Array<{ name: string; reason: string }>;
+  shippedSkills: string[];
+  bundleSkills: Array<{ name: string; folder: string }>;
+}
+
+interface CodexSkillsRecord extends SkillTreeRecord {
+  installedBy: string;
+  bin: string;
+  binVersion: string;
+}
+
+/**
+ * Write the server's skills where Codex finds them, as `<destRoot>/<name>/<skill>/SKILL.md`: the shipped skills and
+ * the bundle skills, recorded in `<destRoot>/<name>/.frontmcp.json` so a reinstall removes only what it wrote.
+ */
+export async function emitCodexSkills(opts: EmitCodexSkillsOptions): Promise<EmitCodexSkillsResult> {
+  assertValidPluginName(opts.name, 'emitCodexSkills');
+  const layout = codexSkillsLayout(opts.destRoot, opts.name);
+  const previous = await readCodexSkillsRecord(layout.root);
+  const plan = await planSkills(layout, opts.skills, opts.bundleSkills?.skills, (name) =>
+    assertValidPluginName(name, 'emitCodexSkills.skill'),
+  );
+  const result: EmitCodexSkillsResult = {
+    skillsDir: layout.root,
+    filesWritten: plan.files.map((file) => file.absPath),
+    filesRemoved: [],
+    skillsSkipped: plan.skillsSkipped,
+    shippedSkills: plan.shippedSkills,
+    bundleSkills: plan.bundleSkills,
+  };
+  if (opts.dryRun || (plan.files.length === 0 && !previous)) return result;
+  const applied = await applyPlan(layout, previous?.managedFiles ?? [], plan.files);
+  await writeCodexSkillsRecord(layout.root, {
+    installedBy: `frontmcp@${opts.cliVersion}`,
+    bin: opts.name,
+    binVersion: opts.version,
+    ...skillRecordOf(plan, plan.files, opts.bundleSkills),
+  });
+  return { ...result, filesWritten: applied.written, filesRemoved: applied.removed };
+}
+
+/** {@link refreshClaudeBundleSkills} for the skills an install wrote for Codex. */
+export async function refreshCodexBundleSkills(opts: RefreshBundleSkillsOptions): Promise<RefreshBundleSkillsResult> {
+  assertValidPluginName(opts.name, 'refreshCodexBundleSkills');
+  const layout = codexSkillsLayout(opts.destRoot, opts.name);
+  const previous = await readCodexSkillsRecord(layout.root);
+  if (!previous) {
+    throw new Error(`No Codex skills are installed at ${layout.root}: run "${opts.name} install -p codex" first`);
+  }
+  const refreshed = await refreshBundleSkills(layout, previous, opts.bundleSkills, !!opts.dryRun);
+  if (!opts.dryRun) await writeCodexSkillsRecord(layout.root, { ...previous, ...refreshed.record });
+  return { installDir: layout.root, ...refreshed.result };
+}
+
+/** Remove the skills an install wrote for Codex, leaving files someone else added there. */
+export async function removeCodexSkills(args: {
+  destRoot: string;
+  name: string;
+}): Promise<{ removed: string[]; skillsDir: string }> {
+  assertValidPluginName(args.name, 'removeCodexSkills');
+  const layout = codexSkillsLayout(args.destRoot, args.name);
+  const previous = await readCodexSkillsRecord(layout.root);
+  if (!previous) return { removed: [], skillsDir: layout.root };
+  const { removed } = await applyPlan(layout, previous.managedFiles, []);
+  const recordPath = path.join(layout.root, CODEX_SKILLS_RECORD);
+  await rm(recordPath, { force: true });
+  removed.push(recordPath);
+  await removeIfEmpty(layout.root);
+  return { removed, skillsDir: layout.root };
+}
+
+/** The skills an install wrote for Codex under `destRoot`, by kind; undefined when it wrote none. */
+export async function readCodexSkills(destRoot: string, name: string): Promise<SkillTreeRecord | undefined> {
+  return readCodexSkillsRecord(codexSkillsLayout(destRoot, name).root);
+}
+
+function codexSkillsLayout(destRoot: string, name: string): SkillTreeLayout {
+  const skillsDir = path.join(destRoot, name);
+  return { root: skillsDir, skillsDir };
+}
+
+async function readCodexSkillsRecord(skillsDir: string): Promise<CodexSkillsRecord | undefined> {
+  const recordPath = path.join(skillsDir, CODEX_SKILLS_RECORD);
+  if (!(await fileExists(recordPath))) return undefined;
+  try {
+    return JSON.parse(await readFile(recordPath)) as CodexSkillsRecord;
+  } catch {
+    return undefined;
+  }
+}
+
+async function writeCodexSkillsRecord(skillsDir: string, record: CodexSkillsRecord): Promise<void> {
+  await ensureDir(skillsDir);
+  await writeFile(path.join(skillsDir, CODEX_SKILLS_RECORD), serializeJson(record));
 }
 
 // ============================================================================
@@ -571,6 +684,30 @@ function makeMcpServerEntry(opts: EmitClaudePluginOptions): McpServerEntry {
   return entry;
 }
 
+function skillRecordOf(
+  plan: SkillPlan,
+  files: PlannedFile[],
+  bundle: PluginEmitterBundleSkills | undefined,
+): SkillTreeRecord {
+  const bundleFolders = plan.bundleSkills.map((skill) => skill.folder);
+  return {
+    skills: [...plan.shippedSkills, ...bundleFolders].sort(),
+    ...(bundle && {
+      bundleSkills: { ...(bundle.bundleVersion !== undefined && { bundleVersion: bundle.bundleVersion }), skills: bundleFolders },
+    }),
+    managedFiles: files.map((file) => file.relPath).sort(),
+  };
+}
+
+function claudeSkillRecord(manifest: ClaudePluginManifest): SkillTreeRecord {
+  const bundleSkills = manifest._meta?.frontmcp?.bundleSkills;
+  return {
+    skills: manifest.skills ?? [],
+    ...(bundleSkills && { bundleSkills }),
+    managedFiles: manifest._meta?.frontmcp?.managedFiles ?? [],
+  };
+}
+
 async function readPluginManifest(manifestPath: string): Promise<ClaudePluginManifest | undefined> {
   if (!(await fileExists(manifestPath))) return undefined;
   try {
@@ -605,7 +742,11 @@ function mergeUserManifestFields(
 }
 
 function serializeManifest(manifest: ClaudePluginManifest): string {
-  return JSON.stringify(sortObjectKeys(manifest), null, 2) + '\n';
+  return serializeJson(manifest);
+}
+
+function serializeJson(value: unknown): string {
+  return JSON.stringify(sortObjectKeys(value), null, 2) + '\n';
 }
 
 function sortObjectKeys<T>(value: T): T {
@@ -653,53 +794,16 @@ function renderCommandFile(cmd: PluginEmitterCommandInput, binName: string): str
  * plugin tree leaves the entire tree (and the plugin dir itself) intact.
  * We never traverse INTO user-added subdirs.
  */
-async function cleanupEmptyDirs(root: string, _preserved: string[]): Promise<void> {
+async function cleanupEmptyDirs(root: string): Promise<void> {
   if (!(await fileExists(root))) return;
-  // `readdir` and `rm` are imported statically at the top of this module so
-  // the file bundles cleanly into the per-bin CLI (esbuild can't resolve
-  // `await import('@frontmcp/utils')` inside a CJS bundle, which manifests
-  // as a runtime "Dynamic require of fs is not supported" error when the
-  // bin's own `uninstall -p claude` walks the plugin tree).
-
-  // Pass 1: each per-skill folder under skills/ (one level deep).
   const skillsDir = path.join(root, 'skills');
-  if (await fileExists(skillsDir)) {
-    for (const entry of await safeReaddir(readdir, skillsDir)) {
-      const sub = path.join(skillsDir, entry);
-      await removeIfEmpty(sub, rm, readdir);
-    }
+  for (const entry of await readdir(skillsDir).catch((): string[] => [])) {
+    await removeIfEmpty(path.join(skillsDir, entry));
   }
-
-  // Pass 2: framework-managed dirs directly under the plugin root.
   for (const sub of ['commands', 'skills', '.claude-plugin']) {
-    await removeIfEmpty(path.join(root, sub), rm, readdir);
+    await removeIfEmpty(path.join(root, sub));
   }
-
-  // Pass 3: the plugin root itself (only if user added nothing).
-  await removeIfEmpty(root, rm, readdir);
-}
-
-async function removeIfEmpty(
-  dir: string,
-  rmFn: (p: string, opts?: { recursive?: boolean; force?: boolean }) => Promise<void>,
-  readdirFn: (p: string) => Promise<string[]>,
-): Promise<void> {
-  if (!(await fileExists(dir))) return;
-  const entries = await safeReaddir(readdirFn, dir);
-  if (entries.length === 0) {
-    await rmFn(dir, { recursive: true, force: true });
-  }
-}
-
-async function safeReaddir(
-  readdirFn: (p: string) => Promise<string[]>,
-  dir: string,
-): Promise<string[]> {
-  try {
-    return await readdirFn(dir);
-  } catch {
-    return [];
-  }
+  await removeIfEmpty(root);
 }
 
 // ----- Codex TOML -----
