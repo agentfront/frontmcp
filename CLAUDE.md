@@ -314,21 +314,29 @@ origin/release/1.7.x:libs/sdk/package.json` reads `1.7.2`; and `npm view @frontm
 lists `1.7.2` as published, with no later 1.7.x. Fixes merged, and the newest installable 1.7
 artifact still carries the vulnerable code.
 
-Three things worth knowing before they surprise you:
+A few things worth knowing before they surprise you:
 
 - **The cherry-pick is conditional.** Its `if` gate requires the PR to be merged, to target
   `release/*` or `next/*` (never the default branch), and — the one that catches people —
   **not to come from a fork**, since a forked PR's `GITHUB_TOKEN` is read-only. Merge a fork PR
   into a release branch and no cherry-pick PR appears at all; back-port it to `main` by hand.
-- **Stacked PRs are cherry-picked from where their commit landed.** When GitHub merges a native
-  stack, each upper PR's `closed` event still names its stacked base (the parent PR's branch),
-  while its commit lands on the stack's base. The workflow finds the `release/*` or `next/*` branch
-  that contains the merge commit and cherry-picks from there. It builds on the parent's cherry-pick
-  branch while that PR is open, so the cherry-picks stack on `main` the way the PRs did. A stacked
-  PR merged only into its parent's branch has landed nowhere yet: the parent's merge carries it.
-  An upper PR's change can also land as a commit of its own, with the PR's merge commit after it
-  and empty, as #1056's did. `scripts/cherry-pick-commits.mjs` finds the commits that hold the
-  change by the PR's `(#N)` subject suffix, and the workflow cherry-picks those.
+- **A native stack gets one cherry-pick PR.** When GitHub merges a stack, every PR's `closed`
+  event fires within seconds, and each upper PR's event still names its stacked base (the parent
+  PR's branch). The workflow asks the stacks API for the PR's stack. A PR below the stack's top
+  only gets a comment. The top PR's run waits up to three minutes for the rest to merge, then
+  picks every merged PR onto `cherry-pick/stack-<N>-main`, one commit per PR, bottom to top,
+  re-pins versions in a last commit, and opens one PR to `main`. It skips a PR `main` already
+  has: a commit says `Cherry-picked from #N`, or the pick changes nothing. A conflict stops it;
+  the pushed branch keeps what was picked, and one issue for the stack lists the commits still to
+  pick. A PR in no stack, or whose stack can't be read, still gets a cherry-pick PR of its own.
+- **Run the stack's cherry-pick by hand** for a stack merged only in part, or after fixing a
+  conflict on `main`: `gh workflow run cherry-pick-prompt.yml -f stack=<N>`, optionally with
+  `-f pull_requests=<a,b>`. A run deletes and rebuilds `cherry-pick/stack-<N>-main`, which closes
+  a PR open on it. `node scripts/cherry-pick-stack.mjs plan <N>` prints the plan and changes
+  nothing.
+- **Each PR's commits come from `scripts/cherry-pick-commits.mjs`.** An upper PR's change can
+  land as a commit of its own, with the PR's merge commit after it and empty, as #1056's did. The
+  script finds the commits that hold the change by the PR's `(#N)` subject suffix.
 - The cherry-pick PRs are authored by `github-actions[bot]`, and **CodeRabbit skips them**
   ("Bot user detected"). Review has to happen on the original PR against the release branch.
 - `publish-release.yml` only runs from a `release/X.Y.x` branch, so a fix that exists solely on
