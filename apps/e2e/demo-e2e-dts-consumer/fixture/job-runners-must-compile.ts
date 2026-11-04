@@ -5,14 +5,21 @@ import {
   FrontMcp,
   Job,
   JOB_WORKER_MARKER,
+  JobAdmission,
   JobContext,
+  JobExecutionManager,
   JobRunnerBootError,
   JobRunnerUnavailableError,
+  jobRunUri,
+  mayAccessRun,
   z,
+  type FrontMcpLogger,
+  type JobAdmissionSlot,
   type JobRunner,
   type JobRunnerInfo,
   type JobRunRecord,
   type JobStateStore,
+  type ScopeEntry,
 } from '@frontmcp/sdk';
 import { reapOrphans } from '@frontmcp/utils';
 
@@ -82,3 +89,19 @@ export class BadRunnerJob extends JobContext {
   jobs: { enabled: true, runner: 'process' },
 })
 export class BadRunnerServer {}
+
+/** A custom host builds its own manager, bounds it with `JobAdmission`, and checks access as the job tools do (#1051). */
+export function customManager(store: JobStateStore, logger: FrontMcpLogger, scope: ScopeEntry): JobExecutionManager {
+  const admission = new JobAdmission({ concurrency: 2, memoryMb: 512 });
+  const slot: JobAdmissionSlot = admission.slot();
+  slot.release();
+  return new JobExecutionManager(store, logger, undefined, scope, { admission });
+}
+
+export async function readableRunUri(
+  scope: ScopeEntry,
+  run: JobRunRecord,
+  sessionId: string,
+): Promise<string | undefined> {
+  return (await mayAccessRun(scope, run, 'read', { sessionId })) ? jobRunUri(run.runId) : undefined;
+}

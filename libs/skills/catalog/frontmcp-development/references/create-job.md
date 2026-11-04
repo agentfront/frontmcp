@@ -321,6 +321,18 @@ class BuildProjectJob extends JobContext {
 class CiServer {}
 ```
 
+A custom host that builds its own `JobExecutionManager` passes the same limits as a `JobAdmission`, and uses `jobRunUri()` and `mayAccessRun()` to build a run's resource URI and check who may read or cancel it, the way the built-in job tools do. All three are exported from `@frontmcp/sdk`:
+
+```typescript
+import { JobAdmission, JobExecutionManager, jobRunUri, mayAccessRun } from '@frontmcp/sdk';
+
+const manager = new JobExecutionManager(store, logger, notify, scope, {
+  admission: new JobAdmission({ concurrency: 2, memoryMb: 2_048 }),
+});
+
+if (await mayAccessRun(scope, run, 'read', authInfo)) return jobRunUri(run.runId); // 'job://runs/<runId>'
+```
+
 ## Run Handle and `job://runs/{runId}`
 
 `execute_job` answers with `{ runId, state, uri }`; a background run answers at once with `state: 'pending'` and `uri: 'job://runs/<runId>'`. Reading that resource returns the run as JSON (`runId`, `jobName`, `state`, `attempt`, `maxAttempts`, `startedAt`, `completedAt`, `updatedAt`, `revision`, `progress`, `result`, `error`, `logs`); `resources/subscribe` to it, and every write this process makes to the run (state changes and `this.progress()` reports) sends `notifications/resources/updated`. The same owner and `read` rule as `get_job_status` decide who may read it; a run the caller may not read reads as not found. Run states: `pending`, `running`, `retrying`, then `completed`, `failed`, `cancelled`, `timed_out` or `interrupted`. Each write bumps the record's `revision` and stamps `updatedAt`.

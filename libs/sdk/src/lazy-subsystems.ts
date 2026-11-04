@@ -75,7 +75,17 @@
   );
   defineLazyExports(
     () => require('./job'),
-    ['JobRegistry', 'JobInstance', 'JobPermissionGuard', 'JobExecutionManager', 'JobEmitter', 'JobRunResource'],
+    [
+      'JobRegistry',
+      'JobInstance',
+      'JobPermissionGuard',
+      'JobExecutionManager',
+      'JobAdmission',
+      'JobEmitter',
+      'JobRunResource',
+      'jobRunUri',
+      'mayAccessRun',
+    ],
   );
   defineLazyExports(
     () => require('./job/tools'),
