@@ -13,6 +13,8 @@ import {
   FlowHooksOf,
   LogLevel,
   Plugin,
+  Resource,
+  ResourceContext,
   Skill,
   SkillContext,
   type FlowCtxOf,
@@ -51,11 +53,24 @@ class PublicGuideSkill extends SkillContext {}
 })
 class RestrictedGuideSkill extends SkillContext {}
 
+@Resource({
+  name: 'vendor-guide',
+  uri: 'skill://vendor-guide/SKILL.md',
+  mimeType: 'text/markdown',
+  _meta: { 'io.modelcontextprotocol.skills/path': 'vendor-guide' },
+})
+class VendorGuideResource extends ResourceContext {
+  async execute(uri: string) {
+    return { contents: [{ uri, mimeType: 'text/markdown', text: '# Vendor guide' }] };
+  }
+}
+
 @App({
   id: 'guides',
   name: 'Guides',
   plugins: [RestrictedSkillsPlugin],
   skills: [PublicGuideSkill, RestrictedGuideSkill],
+  resources: [VendorGuideResource],
 })
 class GuidesApp {}
 
@@ -234,6 +249,20 @@ describe('skills:filter flow', () => {
 
       expect(index.skills.map((entry) => entry.name)).toContain('public-guide');
       expect(index.skills.map((entry) => entry.name)).not.toContain('restricted-guide');
+    });
+
+    it('leaves the SKILL.md of a skill the flow drops out of resources/list', async () => {
+      const { resources } = await client.listResources();
+      const uris = resources.map((resource) => resource.uri);
+
+      expect(uris).toContain('skill://public-guide/SKILL.md');
+      expect(uris).not.toContain('skill://restricted-guide/SKILL.md');
+    });
+
+    it('keeps a resource with a skill path that no registered skill has', async () => {
+      const { resources } = await client.listResources();
+
+      expect(resources.map((resource) => resource.uri)).toContain('skill://vendor-guide/SKILL.md');
     });
 
     it('does not serve the SKILL.md of a skill the flow drops', async () => {
