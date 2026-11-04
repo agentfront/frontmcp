@@ -34,8 +34,9 @@ leaves out actions the caller can never run. When the server configures
 `authorities`, bundle rules are evaluated with the server's engine (its
 `claimsMapping`, resolvers and custom evaluators). An operation that several
 skills list runs when the caller satisfies the operation's rule and the rule of
-any one of those skills, so an action `load_skill` shows can be run whatever
-the order of the skills in the bundle.
+any one of those skills, whatever the order of the skills in the bundle. A rule
+that depends on the action's input is judged only at the call, so `load_skill`
+can list an action that the call then refuses.
 
 A bundle skill's `SKILL.md` is listed in `skill://index.json` at its name
 (`skill://Invoices/SKILL.md`, as SEP-2640 requires) and is also served at the
