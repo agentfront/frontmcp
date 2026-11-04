@@ -52,6 +52,7 @@ function auditedDeps() {
       },
       unprotectedOps: 'allow',
     },
+    confirmAction: jest.fn(async () => undefined),
     resolver: { resolve: jest.fn(async () => undefined) },
     guard: { check: jest.fn(async () => ({ granted: true })) } as never,
     logger: { warn: jest.fn() } as never,

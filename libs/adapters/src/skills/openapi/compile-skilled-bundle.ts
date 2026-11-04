@@ -85,6 +85,7 @@ export interface CompiledSkilledBundle {
       httpMethod: string;
       pathTemplate: string;
       summary?: string;
+      tags?: string[];
       inputSchema: unknown;
       outputSchema: unknown;
       mapper: unknown[];
@@ -133,12 +134,14 @@ export async function compileSkilledBundleFromOpenApi(
         `compileSkilledBundleFromOpenApi: operationId "${opId}" is referenced by a skill but not defined in the OpenAPI document.`,
       );
     }
+    const tags = operationTags(tool);
     operations[opId] = {
       operationId: opId,
       serviceId,
       httpMethod: tool.metadata.method.toUpperCase(),
       pathTemplate: tool.metadata.path,
       summary: tool.metadata.operationSummary ?? tool.description,
+      ...(tags.length > 0 ? { tags } : {}),
       inputSchema: tool.inputSchema,
       outputSchema: outputSchemaOf(tool) ?? {},
       mapper: tool.mapper as unknown[],
@@ -164,4 +167,9 @@ export async function compileSkilledBundleFromOpenApi(
     })),
     operations,
   };
+}
+
+/** An operation's OpenAPI `tags` and its `x-frontmcp` tags, each once. */
+function operationTags(tool: McpOpenAPITool): string[] {
+  return [...new Set([...(tool.metadata.tags ?? []), ...(tool.metadata.frontmcp?.tags ?? [])])];
 }

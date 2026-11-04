@@ -23,6 +23,8 @@ export interface HiddenOpEntry {
    * a skill-wide gate actually protects every op of the skill (C2).
    */
   skillRequiredAuthorities?: AuthoritiesPolicy;
+  /** The skill's tags, pinned with the entry, which the plugin's `confirm.tags` option matches. */
+  skillTags?: string[];
   /** Operation descriptor (immutable for the lifetime of this entry). */
   op: OperationDescriptor;
   /** Resolved service this op lives in. */

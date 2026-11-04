@@ -1,10 +1,11 @@
 // file: plugins/plugin-skilled-openapi/src/executor/execute-skill-action.ts
 //
 // Shared "run one skilled-OpenAPI operation" path: resolve → authorize →
-// validate input → outbound HTTPS (vault creds injected) → validate output →
-// structured envelope. The enclave codecall (`run_workflow`) calls this once per
-// `callTool(actionId, input)` so a sandboxed AgentScript orchestrates the SAME
-// authorized/validated operations a single direct call would run. Failures are
+// validate input → confirm (when `confirm` names it) → outbound HTTPS (vault
+// creds injected) → validate output → structured envelope. The enclave
+// codecall (`run_workflow`) calls this once per `callTool(actionId, input)` so
+// a sandboxed AgentScript orchestrates the SAME authorized/validated
+// operations a single direct call would run. Failures are
 // returned as `{ ok:false, error }` envelopes, except a caller credential that
 // isn't connected, which throws `ToolCredentialsRequiredError`.
 
@@ -14,6 +15,8 @@ import type { FrontMcpLogger } from '@frontmcp/sdk';
 
 import { type HiddenOpEntry, type OperationListings } from '../registry/hidden-op.registry';
 import { type AuthorityGuard, type UnprotectedOpsPolicy } from '../security/authority-guard';
+import { type ConfirmOptions } from '../skilled-openapi.types';
+import { needsConfirmation, type ConfirmAction } from './action-confirmation';
 import type { CallerAuthInfo } from './credential-resolver';
 import { executeOperation, type OpenApiRuntimeDeps } from './openapi-runtime';
 import { getCompiledOpSchemas } from './schema-cache';
@@ -33,7 +36,11 @@ export interface SkillActionDeps {
     outbound: OpenApiRuntimeDeps['outbound'];
     /** Default-deny policy for ops with no required-authorities (C1/C3). */
     unprotectedOps: UnprotectedOpsPolicy;
+    /** The actions that ask the user before their request. */
+    confirm?: ConfirmOptions;
   };
+  /** Decides, for an action `confirm` names, whether its request may be sent: the calling tool asks the user. */
+  confirmAction: ConfirmAction;
   resolver: { resolve: OpenApiRuntimeDeps['resolver']['resolve'] };
   guard: AuthorityGuard;
   logger: FrontMcpLogger;
@@ -153,8 +160,18 @@ export async function executeSkillAction(args: {
     detach(audit?.writer.writeHttpCallFailure(auditCtx, { status: 0, error }), 'http-call-failure');
     return { ok: false, status: 0, error };
   }
+  const validInput = inputParse.data as Record<string, unknown>;
 
-  // 3) Allowed hosts: ONLY the single service this op is bound to (B3).
+  // 3) An action the `confirm` option names asks the user before its request; a refusal sends nothing.
+  if (needsConfirmation(config.confirm, listings)) {
+    const refusal = await deps.confirmAction({ entry, input: validInput });
+    if (refusal) {
+      detach(audit?.writer.writeHttpCallFailure(auditCtx, { status: 0, error: refusal }), 'http-call-failure');
+      return { ok: false, status: 0, error: refusal };
+    }
+  }
+
+  // 4) Allowed hosts: ONLY the single service this op is bound to (B3).
   //    The credential injected below is the op's per-service vault credential;
   //    unioning every bundle service's host (the prior behavior) meant a
   //    credential for service A could egress to service B if a crafted input
@@ -174,13 +191,13 @@ export async function executeSkillAction(args: {
     logger,
   };
 
-  // 4) Execute the outbound call.
+  // 5) Execute the outbound call.
   let result: Awaited<ReturnType<typeof executeOperation>>;
   try {
     result = await executeOperation({
       entry,
       bundleId: entry.bundleId,
-      input: inputParse.data as Record<string, unknown>,
+      input: validInput,
       authInfo,
       signal,
       deps: runtimeDeps,
@@ -199,7 +216,7 @@ export async function executeSkillAction(args: {
     );
   }
 
-  // 5) Validate JSON response against the op's output schema; the audit records the outcome the caller gets.
+  // 6) Validate JSON response against the op's output schema; the audit records the outcome the caller gets.
   const isJsonResponse = (result.contentType ?? '').toLowerCase().includes('application/json');
   if (result.ok && isJsonResponse && result.data !== undefined && result.data !== null) {
     const outputParse = schemas.output.safeParse(result.data);

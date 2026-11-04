@@ -73,6 +73,26 @@ export type OutboundOptions = z.infer<typeof outboundOptionsSchema>;
 /** Whether a failed action reports the API's error body with its status, or the status alone. */
 export type ErrorBodiesPolicy = OutboundOptions['errorBodies'];
 
+// ─── Confirming actions ────────────────────────────────────────────────────
+
+export const confirmOptionsSchema = z
+  .object({
+    /** HTTP methods whose actions ask the user first, such as `['DELETE']`. */
+    methods: z.array(z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'])).optional(),
+    /** Tags whose actions ask the user first: a tag of the action's operation, or of a skill that lists it. */
+    tags: z.array(z.string().min(1).max(256)).optional(),
+    /** The ids (operationIds) of actions that ask the user first. */
+    operations: z.array(z.string().min(1).max(256)).optional(),
+    /** For a client that can't show the question: `'refuse'` the action, or `'allow'` it without asking. */
+    whenUnsupported: z.enum(['refuse', 'allow']).default('refuse'),
+  })
+  .strict();
+
+export type ConfirmOptions = z.infer<typeof confirmOptionsSchema>;
+
+/** What happens to an action that needs confirmation when the client can't ask the user. */
+export type WhenConfirmationUnsupported = ConfirmOptions['whenUnsupported'];
+
 // ─── Plugin-level options ──────────────────────────────────────────────────
 
 const skilledOpenApiPluginOptionsObjectSchema = z.object({
@@ -163,6 +183,14 @@ const skilledOpenApiPluginOptionsObjectSchema = z.object({
    * meta-tools are sufficient.
    */
   exposeOperationsAsInternalTools: z.boolean().default(true),
+
+  /**
+   * Actions that ask the user before their request is sent, through an MCP elicitation the client shows as a yes/no
+   * question: an action matches by its HTTP method, a tag of its operation or of a skill listing it, or its id. A
+   * workflow asks once, before its script starts. Needs `elicitation: { enabled: true }` on the server. Without this
+   * option nothing asks.
+   */
+  confirm: confirmOptionsSchema.optional(),
 });
 
 const DEFAULT_OUTBOUND_OPTIONS: OutboundOptions = {

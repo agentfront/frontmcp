@@ -79,6 +79,8 @@ export interface OperationDescriptor {
   /** Human-readable summary surfaced in `load_skill` content. */
   summary?: string;
   description?: string;
+  /** The OpenAPI operation's tags, which the plugin's `confirm.tags` option matches. */
+  tags?: string[];
 }
 
 /** A skill bundles a curated set of operations. */
