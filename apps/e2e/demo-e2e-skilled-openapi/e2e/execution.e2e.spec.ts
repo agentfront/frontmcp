@@ -1,4 +1,4 @@
-// Scenarios A2 E1 E2 E3 F1 G1 G3: run_workflow against the mock billing API over HTTPS, with the production settings.
+// Scenarios A2 E1 E2 E3 E6 F1 G1 G3: run_workflow and execute_action against the mock billing API over HTTPS, with the production settings.
 import { expect, test } from '@frontmcp/testing';
 
 import { SLOW_REPORT_DELAY_MS } from './helpers/mock-billing-api';
@@ -7,6 +7,7 @@ import {
   asAdmin,
   asViewer,
   callToolOver,
+  executeAction,
   runWorkflow,
   sharedOperationAccess,
   SKILLED_SERVER,
@@ -323,12 +324,69 @@ test.describe('an operation a public and an admin-only skill both list (G3)', ()
   }) => {
     const access = await sharedOperationAccess(callToolOver(await asViewer({ server, auth })));
 
-    expect(access).toEqual({ shown: ['getInvoice'], runnable: ['getInvoice'] });
+    expect(access).toEqual({ shown: ['getInvoice'], runnable: ['getInvoice'], executable: ['getInvoice'] });
   });
 
   test('runs for an admin, with the actions only the admin-only skill lists', async ({ server, auth }) => {
     const access = await sharedOperationAccess(callToolOver(await asAdmin({ server, auth })));
 
-    expect(access).toEqual({ shown: ['getInvoice', 'voidInvoice'], runnable: ['getInvoice', 'voidInvoice'] });
+    expect(access).toEqual({
+      shown: ['getInvoice', 'voidInvoice'],
+      runnable: ['getInvoice', 'voidInvoice'],
+      executable: ['getInvoice', 'voidInvoice'],
+    });
+  });
+});
+
+test.describe('one action with execute_action (E6)', () => {
+  test("runs an action and answers with its data, sent with the API's credential", async ({ mcp }) => {
+    const created = await executeAction(mcp, 'createInvoice', { customerId: 'cus_e2e', amount: 1234 });
+    const fetched = await executeAction(mcp, 'getInvoice', { id: 'inv_1' });
+
+    expect(created.isError).toBe(false);
+    expect(created.raw.structuredContent).toEqual({ id: 'inv_1', status: 'open' });
+    expect(fetched.raw.structuredContent).toEqual({ id: 'inv_1', status: 'open', amount: 1234 });
+    expect(environment.billingApi.requests.map((request) => request.authorization)).toEqual([
+      `Bearer ${environment.billingToken}`,
+      `Bearer ${environment.billingToken}`,
+    ]);
+  });
+
+  test("fails a 4xx answer as an error result with the API's error body", async ({ mcp }) => {
+    const result = await executeAction(mcp, 'getInvoice', { id: 'inv_missing' });
+
+    expect(result.isError).toBe(true);
+    expect(result.text()).toBe('action "getInvoice" failed with status 404: {"error":"invoice not found"}');
+    expect(result.raw.structuredContent).toEqual({ ok: false, status: 404, data: { error: 'invoice not found' } });
+  });
+
+  test('fails an action the caller may not run, sending nothing', async ({ mcp, server, auth }) => {
+    const gated = await executeAction(mcp, 'adminPing');
+    const unprotected = await executeAction(await asAdmin({ server, auth }), 'getUsageStats');
+
+    expect(gated.text()).toBe("authority denied: roles.any: user has none of 'admin'");
+    expect(unprotected.text()).toBe('authority denied: unprotected_operation_denied');
+    expect([gated.isError, unprotected.isError]).toEqual([true, true]);
+    expect(environment.billingApi.requests).toEqual([]);
+  });
+
+  test("fails an answer that doesn't match the output schema, and a request past its timeoutMs", async ({ mcp }) => {
+    const mismatched = await executeAction(mcp, 'getAccountBalance');
+    const timedOut = await executeAction(mcp, 'getRevenueReport');
+
+    expect(mismatched.text()).toBe(
+      'upstream response failed output schema: balance: Invalid input: expected number, received string',
+    );
+    expect(timedOut.text()).toBe('timeout after 250ms');
+    expect([mismatched.isError, timedOut.isError]).toEqual([true, true]);
+  });
+
+  test('fails an unknown action as run_workflow does', async ({ mcp }) => {
+    const result = await executeAction(mcp, 'doesNotExist');
+
+    expect(result.isError).toBe(true);
+    expect(result.text()).toBe(
+      'unknown action "doesNotExist" — run search_skill then load_skill to discover available actions',
+    );
   });
 });

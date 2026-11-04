@@ -133,6 +133,11 @@ async function loads(server: DirectMcpServer, skillId: string): Promise<boolean>
   );
 }
 
+async function executeOperation(server: DirectMcpServer, skillId: string) {
+  const result = await server.callTool('execute_action', { actionId: `list_${skillId}` });
+  return { isError: result.isError === true, structuredContent: result.structuredContent };
+}
+
 async function runOperation(server: DirectMcpServer, skillId: string) {
   const result = await server.callTool('run_workflow', { script: `return await callTool('list_${skillId}', {})` });
   return result.structuredContent as { success: boolean; error?: string };
@@ -193,7 +198,7 @@ describe('a second Skilled OpenAPI plugin in one server', () => {
 });
 
 describe('the credential resolver', () => {
-  it('is the one @FrontMcp({ providers }) declares, for workflows and for in-process operation calls', async () => {
+  it('is the one @FrontMcp({ providers }) declares, for workflows, execute_action and in-process operation calls', async () => {
     const vault = new RotatingVault();
     @App({ name: 'host', tools: [CallOperationTool] })
     class HostApp {}
@@ -204,10 +209,12 @@ describe('the credential resolver', () => {
     });
 
     expect(await runOperation(server, 'invoices')).toMatchObject({ success: true });
+    expect(await executeOperation(server, 'invoices')).toEqual({ isError: false, structuredContent: { items: [] } });
     await server.callTool('call_operation', {});
 
-    expect(authorizationHeaders).toEqual(['Bearer from-vault', 'Bearer from-vault']);
+    expect(authorizationHeaders).toEqual(['Bearer from-vault', 'Bearer from-vault', 'Bearer from-vault']);
     expect(vault.lookups).toEqual([
+      { ref: VAULT_REF, bundleId: 'acme:invoices' },
       { ref: VAULT_REF, bundleId: 'acme:invoices' },
       { ref: VAULT_REF, bundleId: 'acme:invoices' },
     ]);
@@ -225,13 +232,14 @@ describe('the credential resolver', () => {
     expect(vault.lookups).toEqual([{ ref: VAULT_REF, bundleId: 'acme:invoices' }]);
   });
 
-  it('is the one init({ providers }) declares', async () => {
+  it('is the one init({ providers }) declares, for workflows and execute_action', async () => {
     const vault = new RotatingVault();
     const server = await startServer({ plugins: [skilledPlugin('invoices', [vaultProvider(vault)])] });
 
     expect(await runOperation(server, 'invoices')).toMatchObject({ success: true });
+    expect(await executeOperation(server, 'invoices')).toMatchObject({ isError: false });
 
-    expect(authorizationHeaders).toEqual(['Bearer from-vault']);
+    expect(authorizationHeaders).toEqual(['Bearer from-vault', 'Bearer from-vault']);
   });
 
   it('is asked on every call, so a rotated secret is sent without a restart', async () => {

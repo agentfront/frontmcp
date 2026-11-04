@@ -66,22 +66,22 @@ test.describe('a signed bundle written as YAML, with generatedAt unquoted', () =
 test.describe('a bundle changed after it was signed', () => {
   test.use({ env: environment.tamperedBundleEnv });
 
-  test('is not applied: search_skill, load_skill and run_workflow say why, and /readyz is not ready', async ({
-    mcp,
-    server,
-  }) => {
+  test('is not applied: the meta-tools say why, and /readyz is not ready', async ({ mcp, server }) => {
     const reason = /^No skill bundle is loaded: bundle e2e:billing@1\.0\.0 was not applied: digest mismatch \(/;
 
     const searched = await mcp.tools.call('search_skill', { query: 'billing' });
     const loaded = await mcp.tools.call('load_skill', { skillId: 'invoices' });
+    const executed = await mcp.tools.call('execute_action', { actionId: 'getInvoice', input: { id: 'inv_1' } });
     const ran = await mcp.tools.call('run_workflow', { script: 'return 1' });
     const ready = await readiness(server.info.baseUrl);
 
-    expect([searched.isError, loaded.isError, ran.isError]).toEqual([true, true, true]);
+    expect([searched.isError, loaded.isError, executed.isError, ran.isError]).toEqual([true, true, true, true]);
     expect(searched.text()).toMatch(reason);
     expect(loaded.text()).toBe(searched.text());
+    expect(executed.text()).toBe(searched.text());
     expect(ran.text()).toBe(searched.text());
     expect((await mcp.tools.list()).map((tool) => tool.name).sort()).toEqual([
+      'execute_action',
       'load_skill',
       'run_workflow',
       'search_skill',

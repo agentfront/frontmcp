@@ -16,14 +16,15 @@ yarn tsx apps/demo/src/skilled-openapi-fixtures/skilled-openapi-demo.app.ts
 
 ## Manual checks
 
-1. `tools/list` returns exactly: `search_skill`, `load_skill`, `run_workflow`. The three OpenAPI operations (`createInvoice`, `getInvoice`, `refundInvoice`) MUST NOT appear.
+1. `tools/list` returns exactly: `search_skill`, `load_skill`, `execute_action`, `run_workflow`. The three OpenAPI operations (`createInvoice`, `getInvoice`, `refundInvoice`) MUST NOT appear.
 2. `skill://index.json` lists the `invoices` skill (type `skill-md`) at `skill://invoices/SKILL.md` with `bundleVersion: "1.0.0"` exposed via the load tool.
 3. `search_skill({ query: "create invoice" })` returns `[{ skillId: "invoices", ... }]`.
 4. `load_skill({ skillId: "invoices" })` returns instructions plus 3 actions with their JSON Schemas.
 5. `run_workflow({ script: 'return await callTool("createInvoice", { customerId: "cus_1", amount: 4200 })' })` →
    - Mock REST server logs a `POST /v1/invoices` hit (with `Authorization: Bearer demo-billing-token`).
    - Tool returns `{ success: true, value: { id: "inv_1", status: "open" } }` — `value` is the action's response (replacing the old `{ ok, status, data }` envelope).
-6. Edit `billing-bundle.json` (e.g. tweak the instructions text), bump `version`, and the hot-swap path replays through `BundleSyncService` (when `watch: true` is set on the static source).
+6. `execute_action({ actionId: "getInvoice", input: { id: "inv_1" } })` runs one action with no script and returns its data as `structuredContent`; a failure is an error result (`isError: true`).
+7. Edit `billing-bundle.json` (e.g. tweak the instructions text), bump `version`, and the hot-swap path replays through `BundleSyncService` (when `watch: true` is set on the static source).
 
 ## Caveats
 

@@ -255,6 +255,56 @@ describe('a binding the authProviders option maps', () => {
   });
 });
 
+describe('execute_action on a binding the authProviders option maps', () => {
+  async function executeAs(caller: DirectAuthContext, target: DirectMcpServer = server) {
+    return target.callTool('execute_action', { actionId: 'getBalance' }, { authContext: caller });
+  }
+
+  it("sends the caller's own connected credential", async () => {
+    const result = await executeAs(BOB);
+
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toEqual({ account: 'bob' });
+    expect(requests.map((request) => request.authorization)).toEqual(['Bearer bob-billing-token']);
+  });
+
+  it("raises the operation tool's ToolCredentialsRequiredError for a caller who has not connected it, sending nothing", async () => {
+    const call = executeAs(CAROL);
+
+    await expect(call).rejects.toBeInstanceOf(ToolCredentialsRequiredError);
+    await expect(call).rejects.toMatchObject({ toolId: 'acme:billing.getBalance', providers: ['billing'] });
+    expect(requests).toEqual([]);
+  });
+
+  it('raises it as execute_action without operation tools', async () => {
+    const withoutOperationTools = await FrontMcpInstance.createDirect({
+      info: { name: 'billing', version: '1.0.0' },
+      apps: [],
+      plugins: [
+        SkilledOpenApiPlugin.init({
+          source: { type: 'inline', content: bundle },
+          dev: true,
+          authProviders: { 'billing-token': 'billing' },
+          exposeOperationsAsInternalTools: false,
+        }),
+      ],
+      providers: [authProvidersVault()],
+      logging: { level: LogLevel.Off },
+    } as never);
+    try {
+      expect((await executeAs(BOB, withoutOperationTools)).structuredContent).toEqual({ account: 'bob' });
+
+      const call = executeAs(CAROL, withoutOperationTools);
+
+      await expect(call).rejects.toBeInstanceOf(ToolCredentialsRequiredError);
+      await expect(call).rejects.toMatchObject({ toolId: 'execute_action', providers: ['billing'] });
+      expect(requests.map((request) => request.authorization)).toEqual(['Bearer bob-billing-token']);
+    } finally {
+      await withoutOperationTools.dispose();
+    }
+  });
+});
+
 describe('a custom resolver', () => {
   const asked: CredentialResolveOptions[] = [];
 

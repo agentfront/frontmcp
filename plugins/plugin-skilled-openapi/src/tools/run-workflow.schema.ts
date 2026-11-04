@@ -1,9 +1,9 @@
 import { z } from '@frontmcp/lazy-zod';
 
-export const runWorkflowDescription = `Run an AgentScript program in a sandbox, the step after \`search_skill\` and \`load_skill\`. Chain actions in one call; each is authorized, schema-checked and sent with credentials the server adds and never shows.
+export const runWorkflowDescription = `Run an AgentScript program in a sandbox to chain several actions from \`load_skill\` in one call; for one action, use \`execute_action\`. Each action is authorized, schema-checked and sent with credentials the server adds and never shows.
 
 In the script:
-  - \`await callTool(actionId, input)\` runs an action from \`load_skill\` and returns its data. A failure throws and ends the run; an HTTP failure includes the API's message: \`action "getTodo" failed with status 404: {"error":"not found"}\`.
+  - \`await callTool(actionId, input)\` runs an action and returns its data. A failure throws and ends the run; an HTTP failure includes the API's message: \`action "getTodo" failed with status 404: {"error":"not found"}\`.
   - \`await callTool(actionId, input, { throwOnError: false })\` returns \`{ ok, status, data, error? }\` instead: \`data\` is the API's error body, \`status\` 0 means no answer. There is no try/catch.
   - Only \`Math\` and \`JSON\` are available. End with \`return <value>\`.
 

@@ -63,6 +63,10 @@ export async function loadSkill(client: McpTestClient, skillId: string): Promise
   return result.isError ? undefined : result.json<LoadSkillResponse>().skill;
 }
 
+export function executeAction(client: McpTestClient, actionId: string, input: Record<string, unknown> = {}) {
+  return client.tools.call('execute_action', { actionId, input });
+}
+
 export async function runWorkflow(client: McpTestClient, script: string): Promise<RunWorkflowResponse> {
   const result = await client.tools.call('run_workflow', { script });
   return result.json<RunWorkflowResponse>();
@@ -87,11 +91,15 @@ export function callToolOver(client: McpTestClient): CallTool {
   return async (name, args) => (await client.tools.call(name, args)).raw;
 }
 
+const CREATE_INVOICE_INPUT = { customerId: 'cus_e2e', amount: 10 };
+
 /** `getInvoice` is listed by the public invoices skill and the admin-only skill; `voidInvoice` by the admin-only skill alone. */
 const SHARED_AND_ADMIN_ONLY_ACTIONS = ['getInvoice', 'voidInvoice'];
 
-/** Of the actions in SHARED_AND_ADMIN_ONLY_ACTIONS, the ones load_skill shows the caller and the ones its run_workflow calls run. */
-export async function sharedOperationAccess(callTool: CallTool): Promise<{ shown: string[]; runnable: string[] }> {
+/** Of the actions in SHARED_AND_ADMIN_ONLY_ACTIONS, the ones load_skill shows the caller, and the ones its run_workflow and execute_action calls run. */
+export async function sharedOperationAccess(
+  callTool: CallTool,
+): Promise<{ shown: string[]; runnable: string[]; executable: string[] }> {
   const shown = new Set<string>();
   for (const skillId of ['invoices', 'billing-admin']) {
     const loaded = await callTool('load_skill', { skillId });
@@ -100,10 +108,15 @@ export async function sharedOperationAccess(callTool: CallTool): Promise<{ shown
   }
 
   const runnable: string[] = [];
+  const executable: string[] = [];
   for (const actionId of SHARED_AND_ADMIN_ONLY_ACTIONS) {
     const script = `const created = await callTool('createInvoice', { customerId: 'cus_e2e', amount: 10 }); return await callTool('${actionId}', { id: created.id });`;
     const result = await callTool('run_workflow', { script });
     if (result.structuredContent?.['success'] === true) runnable.push(actionId);
+
+    const created = await callTool('execute_action', { actionId: 'createInvoice', input: CREATE_INVOICE_INPUT });
+    const executed = await callTool('execute_action', { actionId, input: { id: created.structuredContent?.['id'] } });
+    if (executed.isError !== true) executable.push(actionId);
   }
-  return { shown: SHARED_AND_ADMIN_ONLY_ACTIONS.filter((actionId) => shown.has(actionId)), runnable };
+  return { shown: SHARED_AND_ADMIN_ONLY_ACTIONS.filter((actionId) => shown.has(actionId)), runnable, executable };
 }

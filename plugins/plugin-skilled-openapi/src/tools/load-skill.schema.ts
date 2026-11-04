@@ -14,9 +14,10 @@ only when its \`bundleVersion\` changed (\`search_skill\` results report the
 current one), or when its content is no longer in your context.
 
 The returned object contains:
-  - \`instructions\`: markdown the LLM should read carefully before invoking
-  - \`actions\`: each action's input/output JSON Schema and required authorities
-  - \`bundleVersion\`: changes when the bundle is hot-swapped (use it to detect drift)
+  - \`instructions\`: markdown to read before running an action
+  - \`actions\`: each action's input/output JSON Schema and required authorities;
+    run one with \`execute_action\`, or chain several with \`run_workflow\`
+  - \`bundleVersion\`: changes when the bundle is hot-swapped
 
 INPUT: { skillId } or { skillIds }
 OUTPUT: { skill: { id, name, description, instructions, actions[] }, isComplete } for skillId,
