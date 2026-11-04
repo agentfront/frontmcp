@@ -1,4 +1,5 @@
 import { z } from '@frontmcp/lazy-zod';
+import type { SkillCatalogPointers } from '@frontmcp/sdk';
 
 export const searchSkillDescription = `Search the available skills by free-form query.
 
@@ -59,4 +60,15 @@ export type SearchSkillOutput = {
     score: number;
     bundleVersion?: string;
   }>;
+};
+
+/**
+ * How the skill catalog points to these tools, in `search_skill`'s description and in the server's `initialize`
+ * instructions: a skill's `SKILL.md` resource has its instructions but not its actions, so a model loads a skill with
+ * `load_skill` (#1067). `load_skill` takes the name the catalog shows.
+ */
+export const SKILL_TOOL_CATALOG_POINTERS: SkillCatalogPointers = {
+  header: 'Available skills (load one by name with `load_skill`; `search_skill` finds others):',
+  truncationHint: 'use `search_skill` to find the rest',
+  compact: 'load one by name with `load_skill`, or find one with `search_skill`.',
 };

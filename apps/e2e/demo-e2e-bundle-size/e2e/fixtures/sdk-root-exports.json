@@ -485,6 +485,7 @@
   "SignInLockedError": "class",
   "SignInRefusedError": "class",
   "Skill": "function",
+  "SkillCatalogSourceToken": "symbol",
   "SkillContext": "class",
   "SkillContextNotImplementedError": "class",
   "SkillEmitter": "class",
