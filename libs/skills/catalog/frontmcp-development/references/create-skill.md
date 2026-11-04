@@ -193,7 +193,7 @@ interface SkillContent {
   description: string;
   instructions: string; // resolved instruction text
   tools: Array<{ name: string; purpose?: string; required?: boolean }>;
-  tags?: string[]; // search_skill's and skills/search's tags filter, and search ranking
+  tags?: string[]; // for registerSkillContent(): the tags filter and ranking; an @Skill's tags are the decorator's, not build()'s
   parameters?: SkillParameter[];
   examples?: Array<{ scenario: string; parameters?: Record<string, unknown>; expectedOutcome?: string }>;
   license?: string;
