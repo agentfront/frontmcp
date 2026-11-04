@@ -78,11 +78,12 @@ async function connectFirst(
 }
 
 describe('Skilled OpenAPI: where the skill catalog points (#1067)', () => {
-  it("counts the bundle's skills in the first initialize, and names load_skill and search_skill", async () => {
+  it("counts the bundle's skills in the first initialize, and names the tools that load and run them", async () => {
     const { client, close } = await connectFirst();
     try {
       expect(client.getInstructions()).toBe(
-        'This server has 1 skill: load one by name with `load_skill`, or find one with `search_skill`.',
+        'This server has 1 skill: load one by name with `load_skill`, or find one with `search_skill`; ' +
+          'then run an action with `execute_action`, or chain several with `run_workflow`.',
       );
     } finally {
       await close();

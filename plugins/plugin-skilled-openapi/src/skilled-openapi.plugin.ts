@@ -41,6 +41,7 @@ import {
 } from './skilled-openapi.types';
 import { bundleHealth } from './sync/bundle-load-state';
 import { BundleSyncService } from './sync/bundle-sync.service';
+import ExecuteActionTool from './tools/execute-action.tool';
 import LoadSkillTool from './tools/load-skill.tool';
 import { OperationToolFactory } from './tools/operation-tool.factory';
 import RunWorkflowTool from './tools/run-workflow.tool';
@@ -167,8 +168,8 @@ function resolveBundleTelemetry(scope: ScopeEntry): BundleStoreTelemetry | undef
  *
  * Consumes signed skill bundles (OpenAPI spec + Overlay) from a configured
  * source (static, npm, or SaaS-pull) and serves them as FrontMCP skills with
- * three meta-tools (`search_skill`, `load_skill`, `run_workflow`). Per-op
- * REST tools stay hidden from `tools/list`.
+ * four meta-tools (`search_skill`, `load_skill`, `execute_action`, `run_workflow`).
+ * Per-op REST tools stay hidden from `tools/list`.
  *
  * Lifecycle: `BundleSyncService` is a useFactory provider that starts the
  * configured bundle source on first injection (lazy-boot). The meta-tools
@@ -178,9 +179,9 @@ function resolveBundleTelemetry(scope: ScopeEntry): BundleStoreTelemetry | undef
 @Plugin({
   name: 'skilled-openapi',
   description:
-    "Serve a customer's OpenAPI spec as signed skill bundles with hidden per-operation tools mediated by 3 meta-tools.",
+    "Serve a customer's OpenAPI spec as signed skill bundles with hidden per-operation tools mediated by 4 meta-tools.",
   providers: [],
-  tools: [SearchSkillTool, LoadSkillTool, RunWorkflowTool],
+  tools: [SearchSkillTool, LoadSkillTool, ExecuteActionTool, RunWorkflowTool],
   // The bundle's skills are registered after startup: serve the skills capability and methods from
   // startup, answering with the skills loaded so far.
   dynamicSkills: true,

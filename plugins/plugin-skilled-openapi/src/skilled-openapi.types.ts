@@ -154,10 +154,13 @@ const skilledOpenApiPluginOptionsObjectSchema = z.object({
    *
    * Internal tools are excluded from `tools/list` and rejected for external
    * `tools/call` requests — only callable in-process via the SDK helper.
+   * `execute_action` runs an action through its operation tool, so the
+   * `tools:call-tool` hooks run for it; without these tools it runs the same
+   * checks itself.
    *
    * Default: true. Disable for very large bundles where the additional tool
    * registry pressure outweighs the composition convenience, or when the
-   * three meta-tools are sufficient.
+   * meta-tools are sufficient.
    */
   exposeOperationsAsInternalTools: z.boolean().default(true),
 });

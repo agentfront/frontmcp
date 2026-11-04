@@ -1,7 +1,7 @@
 {
   "name": "@frontmcp/plugin-skilled-openapi",
   "version": "1.11.0",
-  "description": "FrontMCP plugin that serves a REST API to the model as skills from an OpenAPI-based bundle, behind three tools: search_skill, load_skill and run_workflow",
+  "description": "FrontMCP plugin that serves a REST API to the model as skills from an OpenAPI-based bundle, behind four tools: search_skill, load_skill, execute_action and run_workflow",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
   "engines": {

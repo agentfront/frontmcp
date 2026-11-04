@@ -22,9 +22,11 @@ description: Deploy an auto-updating FrontMCP server to Cloudflare Workers with 
 > bundle to `POST /__skilled_openapi/push` (`managed.enableWebhook`) is implemented.
 
 The managed model hosts FrontMCP where the MCP surface is a small set of
-meta-tools (`search_skill`, `load_skill`, `run_workflow`) and every capability
-is reached through a skill compiled from an OpenAPI spec. `run_workflow` runs a
-short AgentScript program in the Worker isolate, where each `callTool(actionId,
+meta-tools (`search_skill`, `load_skill`, `execute_action`, `run_workflow`) and
+every capability is reached through a skill compiled from an OpenAPI spec.
+`execute_action` runs one action of a loaded skill, `{ actionId, input }`, with
+no script and no sandbox. `run_workflow` chains several: it runs a short
+AgentScript program in the Worker isolate, where each `callTool(actionId,
 input)` invokes a loaded skill's operation. The bundle is pulled from a SaaS
 endpoint, cached in KV, and refreshed on a Cron Trigger; with
 `managed.enableWebhook`, the SaaS can also push a new bundle to the Worker.
@@ -37,7 +39,10 @@ input, { throwOnError: false })` returns `{ ok, status, data }` instead, `data`
 being the error body on a failure and `status` 0 (with an `error`) when no
 answer came. A workflow that fails is an `isError: true` result with the same
 `structuredContent`. Up to 1.11.0 the error named the status alone, and the
-result had no `isError`.
+result had no `isError`. A failed `execute_action` is an `isError: true` result
+whose text is that same error and whose `structuredContent` is the `{ ok:
+false, status, data?, error? }` outcome; on success its `structuredContent` is
+the action's data.
 
 The meta-tools only show what the caller may use: a skill whose
 `requiredAuthorities` the caller doesn't satisfy is left out of `search_skill`
@@ -62,8 +67,8 @@ fills in).
 
 A bundle skill's `SKILL.md` ends with an `## Actions` section listing the
 actions the caller may run, as `load_skill` does: each action's id, summary,
-description, and input and output JSON Schemas, after a line on running them
-with `run_workflow`. Up to 1.11.0 it had the instructions only, so a client
+description, and input and output JSON Schemas, after a line on running one
+with `execute_action` or chaining several with `run_workflow`. Up to 1.11.0 it had the instructions only, so a client
 that read the resource had to call `load_skill` to learn the actions.
 
 For the conceptual picture, see [Skills-Only Deployment](https://frontmcp.dev/reference/sdk/skill#connecting-for-skills-only).

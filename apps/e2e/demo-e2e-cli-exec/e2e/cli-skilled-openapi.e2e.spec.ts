@@ -1,37 +1,63 @@
 /**
  * E2E: a CLI built for a server whose skills a plugin registers at runtime (a Skilled OpenAPI bundle). A one-shot
- * command sees those skills, `skills read` / `skills load` exit 1 for a skill they do not find, `run-workflow` exits 1
- * for a workflow that fails, and a running daemon serves the commands from the bundle it loaded once.
+ * command sees those skills, `skills read` / `skills load` exit 1 for a skill they do not find, `run-workflow` and
+ * `execute-action` exit 1 for a call that fails, and a running daemon serves the commands from the bundle it loaded once.
  */
+import { createServer } from 'node:http';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { mkdtemp, rename, rm } from '@frontmcp/utils';
 
 import { removeScratchProject } from './helpers/dev-cli';
-import { runCliBundle, type CliResult } from './helpers/exec-cli';
+import { runCliBundle, runCliBundleAsync, type CliResult } from './helpers/exec-cli';
 import { buildSkilledCliProject, type SkilledCliProject } from './helpers/skilled-cli-project';
 
 const APP_NAME = 'skilled-cli-demo';
+const INVOICE = { id: 'inv_1', status: 'paid' };
 
 describe('a CLI whose skills a plugin registers at runtime', () => {
   let project: SkilledCliProject;
   let homeDir: string;
+  const apiRequests: string[] = [];
+  const invoiceApi = createServer((req, res) => {
+    apiRequests.push(req.url ?? '');
+    const found = req.url === '/v1/invoices/inv_1';
+    res.writeHead(found ? 200 : 404, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(found ? INVOICE : { error: 'invoice not found' }));
+  });
 
   function run(args: string[]): CliResult {
     return runCliBundle(project.cliBundle, args, { FRONTMCP_HOME: homeDir });
   }
 
+  // The command calls the API this process serves, so it must not block this process
+  function runReachingTheApi(args: string[]): Promise<CliResult> {
+    return runCliBundleAsync(project.cliBundle, args, { FRONTMCP_HOME: homeDir });
+  }
+
   beforeAll(async () => {
-    project = await buildSkilledCliProject({ prefix: 'skilled-cli', appName: APP_NAME });
+    await new Promise<void>((resolve) => invoiceApi.listen(0, '127.0.0.1', resolve));
+    const address = invoiceApi.address();
+    if (!address || typeof address === 'string') throw new Error('the invoice API has no port');
+    project = await buildSkilledCliProject({
+      prefix: 'skilled-cli',
+      appName: APP_NAME,
+      serviceBaseUrl: `http://127.0.0.1:${address.port}/v1`,
+    });
     // Short: the daemon's socket path must fit the platform's limit
     homeDir = await mkdtemp(path.join(os.tmpdir(), 'fmcp-sk-'));
   }, 180_000);
 
   afterAll(async () => {
     run(['daemon', 'stop']);
+    await new Promise((resolve) => invoiceApi.close(resolve));
     await rm(homeDir, { recursive: true, force: true });
     await removeScratchProject(project.dir);
+  });
+
+  beforeEach(() => {
+    apiRequests.length = 0;
   });
 
   it('lists the bundle skills', () => {
@@ -107,6 +133,57 @@ describe('a CLI whose skills a plugin registers at runtime', () => {
       isError: true,
       structuredContent: { success: false, error: expect.stringContaining('unknown action "refundInvoice"') },
     });
+  });
+
+  it('runs one action with execute-action and exits 0, with its data', async () => {
+    const { stdout, exitCode } = await runReachingTheApi([
+      '--output',
+      'json',
+      'execute-action',
+      '--action-id',
+      'getInvoice',
+      '--input',
+      '{"id":"inv_1"}',
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({ structuredContent: INVOICE });
+    expect(apiRequests).toEqual(['/v1/invoices/inv_1']);
+  });
+
+  it("exits 1 from execute-action for an action that fails, with the API's error body", async () => {
+    const { stdout, exitCode } = await runReachingTheApi([
+      '--output',
+      'json',
+      'execute-action',
+      '--action-id',
+      'getInvoice',
+      '--input',
+      '{"id":"inv_missing"}',
+    ]);
+
+    expect(exitCode).toBe(1);
+    expect(JSON.parse(stdout)).toMatchObject({
+      isError: true,
+      structuredContent: { ok: false, status: 404, data: { error: 'invoice not found' } },
+    });
+  });
+
+  it('exits 1 from execute-action for an unknown action, sending nothing', async () => {
+    const { stdout, exitCode } = await runReachingTheApi([
+      '--output',
+      'json',
+      'execute-action',
+      '--action-id',
+      'refundInvoice',
+    ]);
+
+    expect(exitCode).toBe(1);
+    expect(JSON.parse(stdout)).toMatchObject({
+      isError: true,
+      structuredContent: { ok: false, status: 0, error: expect.stringContaining('unknown action "refundInvoice"') },
+    });
+    expect(apiRequests).toEqual([]);
   });
 
   describe('with its daemon running', () => {

@@ -2,9 +2,9 @@
 
 Serves a REST API to the model as a few named **skills** instead of one tool per endpoint. You describe the API in a
 **bundle**: its services, credentials, operations, and skills that each group some operations with instructions. The
-model sees three tools: `search_skill` finds a skill, `load_skill` reads its instructions and the operations it offers,
-and `run_workflow` runs a short script that calls those operations, each one checked, authorized and sent with
-credentials the model never sees. Use it for an API with too many operations to list as tools. For a small API, where
+model sees four tools: `search_skill` finds a skill, `load_skill` reads its instructions and the operations it offers,
+`execute_action` runs one of those operations, and `run_workflow` runs a short script that chains several. Each call is
+checked, authorized and sent with credentials the model never sees. Use it for an API with too many operations to list as tools. For a small API, where
 the model should see every operation, use the OpenAPI adapter in
 [`@frontmcp/adapters`](https://www.npmjs.com/package/@frontmcp/adapters); the two work side by side.
 
@@ -19,10 +19,10 @@ npm install @frontmcp/plugin-skilled-openapi @enclave-vm/core @enclave-vm/ast
 The plugin runs inside a FrontMCP server, so your app needs `@frontmcp/sdk`, at the same version as this package, and
 Node.js 24 or later. Its peer dependency `@frontmcp/lazy-zod` comes with the SDK. The other peers are optional:
 
-| Package                               | Enables                                                                                                                                                                          |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@enclave-vm/core`, `@enclave-vm/ast` | `run_workflow`. Without them, `search_skill` and `load_skill` still work, and `run_workflow` answers `workflow execution unavailable: the @enclave-vm sandbox is not installed`. |
-| `undici`                              | `outbound.egressProxy` on Node.js. The plugin loads it only when that option is set.                                                                                             |
+| Package                               | Enables                                                                                                                                                                                            |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@enclave-vm/core`, `@enclave-vm/ast` | `run_workflow`. Without them, `search_skill`, `load_skill` and `execute_action` still work, and `run_workflow` answers `workflow execution unavailable: the @enclave-vm sandbox is not installed`. |
+| `undici`                              | `outbound.egressProxy` on Node.js. The plugin loads it only when that option is set.                                                                                                               |
 
 ## Usage
 
@@ -57,28 +57,36 @@ app's, or two apps'), makes the server fail at startup with a `DuplicatePluginEr
 bundles, give each its own app with `splitByApp: true`: each app is then a server of its own. Up to 1.11.0 a second
 instance started without an error, and only one of the bundles was served.
 
-`tools/list` then returns `search_skill`, `load_skill` and `run_workflow`, and none of the bundle's operations. After
-loading a skill, the model runs its operations with a script:
+`tools/list` then returns `search_skill`, `load_skill`, `execute_action` and `run_workflow`, and none of the bundle's
+operations. After loading a skill, the model runs one of its operations with `execute_action`, or several with a
+script:
 
 ```jsonc
+// execute_action arguments
+{ "actionId": "getInvoice", "input": { "id": "INV-1" } }
+// result: the operation's data, as structuredContent
+{ "id": "INV-1", "status": "paid" }
+
 // run_workflow arguments
 { "script": "const invoice = await callTool('getInvoice', { id: 'INV-1' }); return invoice.status;" }
 // result
 { "success": true, "value": "paid", "stats": { "durationMs": 12, "toolCalls": 1, "steps": 3 } }
 ```
 
-## The three tools
+## The four tools
 
-| Tool           | Input                                                | What it does                                                                                                                                                                                                                                                                                                                                                      |
-| -------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_skill` | `query`, `limit?` (default 20), `tags?`, `notQuery?` | Searches the skills and returns `{ skills: [{ skillId, name, description, score, bundleVersion }] }`, where `bundleVersion` is the version of the bundle the skill comes from. Its description lists the skills the caller may use, so the model sees what the server can do, and loads a skill it names with `load_skill` directly, without searching.           |
-| `load_skill`   | `skillId`, or `skillIds` (up to 10)                  | Returns the skill's markdown instructions and its `actions`, with their input and output JSON Schemas: the `actionId`s a script calls. `skillId` takes the name the catalog shows, or an id; `skillIds` loads several, under `skills`. Its description tells the model to load each skill once per conversation, and again only when its `bundleVersion` changes. |
-| `run_workflow` | `script`                                             | Runs an AgentScript program (a subset of JavaScript) in the `@enclave-vm` sandbox. Each `await callTool(actionId, input)` calls an operation, and `callTool(actionId, input, { throwOnError: false })` returns `{ ok, status, data }` instead of throwing; the script's `return` value is the result.                                                             |
+| Tool             | Input                                                | What it does                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_skill`   | `query`, `limit?` (default 20), `tags?`, `notQuery?` | Searches the skills and returns `{ skills: [{ skillId, name, description, score, bundleVersion }] }`, where `bundleVersion` is the version of the bundle the skill comes from. Its description lists the skills the caller may use, so the model sees what the server can do, and loads a skill it names with `load_skill` directly, without searching.           |
+| `load_skill`     | `skillId`, or `skillIds` (up to 10)                  | Returns the skill's markdown instructions and its `actions`, with their input and output JSON Schemas: the `actionId`s a script calls. `skillId` takes the name the catalog shows, or an id; `skillIds` loads several, under `skills`. Its description tells the model to load each skill once per conversation, and again only when its `bundleVersion` changes. |
+| `execute_action` | `actionId`, `input?`                                 | Runs one action, with no script and no sandbox, and answers with its data. A failure is an error result (`isError: true`) whose text says why, and whose structured content is `{ ok: false, status, data?, error? }`.                                                                                                                                            |
+| `run_workflow`   | `script`                                             | Runs an AgentScript program (a subset of JavaScript) in the `@enclave-vm` sandbox. Each `await callTool(actionId, input)` calls an operation, and `callTool(actionId, input, { throwOnError: false })` returns `{ ok, status, data }` instead of throwing; the script's `return` value is the result.                                                             |
 
-For each `callTool`, the plugin checks the caller against the operation's and skill's `requiredAuthorities`, validates
-the input against the operation's `inputSchema`, sends the request with the credential from the bundle's auth binding,
-and checks a JSON answer against `outputSchema`. A failed call throws, which ends the script with `success: false`. A
-script may make up to 25 calls and run for up to 8 seconds.
+For each `callTool`, and for each `execute_action` call, the plugin checks the caller against the operation's and
+skill's `requiredAuthorities`, validates the input against the operation's `inputSchema`, sends the request with the
+credential from the bundle's auth binding, checks a JSON answer against `outputSchema`, and writes the audit records.
+A failed call throws, which ends the script with `success: false`. A script may make up to 25 calls and run for up to
+8 seconds.
 
 When your API answers with an error status, the error includes its error body, so the model can correct the call. A
 JSON body is compacted, a text body is kept as it is, and a body over 2 KB is cut and ends with `…`. Credentials found
@@ -118,9 +126,46 @@ those skills, whatever the order of the skills in the bundle. `load_skill` judge
 and the listing agree. A rule that depends on the action's input can't be judged until the call, though: `load_skill`
 still lists such an action, and the call can be refused once its input is known.
 
+### One action with `execute_action`
+
+`execute_action` takes the `actionId` of an action `load_skill` listed and its `input`, and runs it without a script,
+so it works without `@enclave-vm/core`. It runs the same checks as a script's `callTool`. On success its structured
+content is the operation's data: a JSON object as it is, anything else under `value`; a bodyless answer, such as a 204,
+has no structured content and a text that names the status. A failure is an error result, so an MCP client sees a
+failed call and the generated CLI's `execute-action` exits 1:
+
+```jsonc
+// execute_action { "actionId": "refundInvoice", "input": { "id": "INV-1", "amount": 500 } }
+{
+  "isError": true,
+  "content": [
+    { "type": "text", "text": "action \"refundInvoice\" failed with status 422: {\"error\":\"refund_too_large\"}" },
+  ],
+  "structuredContent": { "ok": false, "status": 422, "data": { "error": "refund_too_large" } },
+}
+```
+
+The text is the error a script's `callTool` throws: an authority denial, a failed input or output check, a timeout, an
+unknown action, or the API's status and error body (as `outbound.errorBodies` allows). The structured content is what
+`callTool(actionId, input, { throwOnError: false })` returns. Its annotations are `run_workflow`'s
+(`destructiveHint: true`, `openWorldHint: true`), as it runs any action.
+
+`execute_action` runs the action through its operation tool (below), with the caller's auth, so the `tools:call-tool`
+hooks run for the operation's own call too. With `exposeOperationsAsInternalTools: false` there is no operation tool:
+it runs the same checks itself, and the hooks run for the `execute_action` call only.
+
+### Operation tools
+
 With `exposeOperationsAsInternalTools` (the default), each operation is also an internal tool named
-`<bundleId>.<operationId>`, which your own tools can call with `this.callTool()`. It checks the caller the same way,
-and aborts its request when the tool call is cancelled or times out. Clients can't list or call it.
+`<bundleId>.<operationId>`, which your own tools can call with `this.callTool()`. Clients can't list or call it. It
+runs the checks a `run_workflow` call runs, authorization, the input and output schemas and the audit records, and
+aborts its request when the tool call is cancelled or times out. It answers, without `isError`, with structured
+content `{ ok, status, data?, contentType?, error? }`: on an HTTP failure, `data` is the API's error body, redacted and
+cut to 2 KB, or left out with `outbound.errorBodies: 'status-only'`.
+
+Up to 1.11.0 an operation tool skipped the output schema check and the audit log, so an answer that didn't match the
+schema came back as `ok: true`, and its `data` on an HTTP failure was the API's whole error body, whatever
+`errorBodies` said.
 
 ## Credentials
 
@@ -157,8 +202,9 @@ request whose secret doesn't resolve fails, and isn't sent. `authInfo` is the ca
 `user` claims and `sessionId`), so a resolver that serves several tenants can pick each one's credential, as above. A
 resolver that caches credentials must key its cache by the caller too.
 
-An operation your own tool calls with `this.callTool()` uses the resolver the server's providers declare. When the plugin
-is installed in an `@App`, declare it in `init({ providers })` or in `@FrontMcp({ providers })` for those calls.
+An operation tool, which `execute_action` and your own tools' `this.callTool()` run, uses the resolver the server's
+providers declare. When the plugin is installed in an `@App`, declare it in `init({ providers })` or in
+`@FrontMcp({ providers })` for those calls: one in `@App({ providers })` reaches `run_workflow` only.
 
 Up to 1.11.0 a resolver declared in `@FrontMcp({ providers })` or `@App({ providers })` was ignored, and the built-in
 one kept answering: only `init({ providers })` replaced it. It was told only `bundleId`, not the caller.
@@ -188,6 +234,8 @@ names only the `vaultRef`, and the server decides where its credential comes fro
 - A mapped `vaultRef` never falls back to `credentials`, to a resolver, or to another caller's credential.
 - The error ends a `run_workflow` run even when the script passes `{ throwOnError: false }`, since the script can't
   fix it. From `this.callTool()`, the operation tool throws it, so your tool's call fails with it unless you catch it.
+  `execute_action` raises it as it comes from the operation tool, whose name is its `tool` (`execute_action` with
+  `exposeOperationsAsInternalTools: false`).
 - The credential is read on each request and kept only for that request. An auth provider with `global` scope is
   shared by every caller: map a provider with `user` or `session` scope.
 - An auth providers credential of type `oauth`, `oauth_pkce` or `bearer` sends its token, and `api_key` its key; other
@@ -209,7 +257,7 @@ for a bad one.
 | `outbound`                        | `OutboundOptions`                                        | see below                           | Limits on the requests to your API.                                                                                                                            |
 | `dev`                             | `boolean`                                                | `false`                             | For development only: turns off signature checks (unless `requireSignature` is set) and allows `http:` URLs. Logs a warning.                                   |
 | `bundleCacheDir`                  | `string`                                                 | `'.frontmcp/skilled-openapi/'`      | Where the `saas` source keeps the last bundle it pulled, used when a pull fails at startup.                                                                    |
-| `exposeOperationsAsInternalTools` | `boolean`                                                | `true`                              | Register each operation as an internal tool for `this.callTool()`.                                                                                             |
+| `exposeOperationsAsInternalTools` | `boolean`                                                | `true`                              | Register each operation as an internal tool for `this.callTool()`, which `execute_action` runs an action through.                                              |
 | `sourceConflictPolicy`            | `'static-wins' \| 'last-wins' \| 'reject'`               | `'static-wins'`                     | Accepted and currently unused: the plugin has one source.                                                                                                      |
 
 `outbound`:
@@ -259,7 +307,7 @@ The used `jti`s are kept in memory: replicas, and the isolates of a Worker, don'
 If the bundle fails to load (a bad signature, a schema error, an unreachable source) and no bundle was loaded before,
 the server keeps running, and:
 
-- `search_skill`, `load_skill` and `run_workflow` answer an error, code `SKILL_BUNDLE_NOT_LOADED`:
+- `search_skill`, `load_skill`, `execute_action` and `run_workflow` answer an error, code `SKILL_BUNDLE_NOT_LOADED`:
   `No skill bundle is loaded: <reason>`, for example
   `No skill bundle is loaded: bundle acme:billing@1.4.0 was not applied: unknown signing keyId "ci-2026" — not in trustedKeys allowlist`.
   The reason is the first line of the error, with each URL cut to its scheme, host and path, and tokens removed. The
@@ -293,7 +341,7 @@ response compiled to `{ "type": "null" }`, which every JSON answer failed, and e
 - **Signing.** With `requireSignature` (the default), a bundle is applied only if its `integrity` signature, RS256 or
   EdDSA (Ed25519) over the bundle's canonical JSON, verifies with a key in `trustedKeys`. A signed bundle is still
   checked for shape: unknown fields are errors, and path templates and header names are restricted.
-- **Authorization.** `requiredAuthorities` on skills and operations are checked on every `callTool`. Skills organize
+- **Authorization.** `requiredAuthorities` on skills and operations are checked on every `callTool` and `execute_action` call. Skills organize
   what the model reads; they don't limit what a script can call, so protect operations with rules and use
   `unprotectedOps: 'deny'` in production. Each caller is shown only the skills and actions their rules allow. A skill's
   rule doesn't protect an operation that another skill, without that rule, also lists: put the rule on the operation.
