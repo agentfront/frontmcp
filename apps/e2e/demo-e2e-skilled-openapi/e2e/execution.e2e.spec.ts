@@ -1,9 +1,16 @@
-// Scenarios E1 E2 E3 F1 G1: run_workflow against the mock billing API over HTTPS, with the production settings.
+// Scenarios E1 E2 E3 F1 G1 G3: run_workflow against the mock billing API over HTTPS, with the production settings.
 import { expect, test } from '@frontmcp/testing';
 
 import { SLOW_REPORT_DELAY_MS } from './helpers/mock-billing-api';
 import { ProductionEnvironment } from './helpers/production-environment';
-import { asAdmin, asViewer, runWorkflow, SKILLED_SERVER } from './helpers/skilled-client';
+import {
+  asAdmin,
+  asViewer,
+  callToolOver,
+  runWorkflow,
+  sharedOperationAccess,
+  SKILLED_SERVER,
+} from './helpers/skilled-client';
 
 const environment = new ProductionEnvironment();
 
@@ -207,5 +214,22 @@ test.describe('caller authorization (G1)', () => {
     });
     expect(await runWorkflow(await asAdmin({ server, auth }), refund(500))).toMatchObject({ success: true });
     expect(requestsTo('/v1/invoices/inv_2/refunds')).toBe(0);
+  });
+});
+
+test.describe('an operation a public and an admin-only skill both list (G3)', () => {
+  test('runs for a viewer, who sees it through the public skill, though the admin-only skill lists it first', async ({
+    server,
+    auth,
+  }) => {
+    const access = await sharedOperationAccess(callToolOver(await asViewer({ server, auth })));
+
+    expect(access).toEqual({ shown: ['getInvoice'], runnable: ['getInvoice'] });
+  });
+
+  test('runs for an admin, with the actions only the admin-only skill lists', async ({ server, auth }) => {
+    const access = await sharedOperationAccess(callToolOver(await asAdmin({ server, auth })));
+
+    expect(access).toEqual({ shown: ['getInvoice', 'voidInvoice'], runnable: ['getInvoice', 'voidInvoice'] });
   });
 });

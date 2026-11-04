@@ -1,10 +1,10 @@
-// Scenario J1: streamable HTTP and stdio, on the same config and signed bundle, give the same answers.
+// Scenarios J1 G3: streamable HTTP and stdio, on the same config and signed bundle, give the same answers.
 import { join } from 'node:path';
 
 import { expect, McpClient, McpStdioClientTransport, test, type CallToolResult } from '@frontmcp/testing';
 
 import { ProductionEnvironment } from './helpers/production-environment';
-import { SKILLED_SERVER } from './helpers/skilled-client';
+import { callToolOver, sharedOperationAccess, SKILLED_SERVER, type CallTool } from './helpers/skilled-client';
 
 interface NormalizedTool {
   readonly name: string;
@@ -158,5 +158,18 @@ test.describe('Skilled-OpenAPI cross-runtime parity', () => {
         result: comparableResult(overHttp),
       });
     }
+  });
+
+  test('an operation a public and an admin-only skill both list runs over stdio, as load_skill shows (G3)', async ({
+    mcp,
+  }) => {
+    const stdio = await connectStdio();
+    const callToolOverStdio: CallTool = async (name, args) =>
+      (await stdio.callTool({ name, arguments: args })) as CallToolResult;
+
+    const overStdio = await sharedOperationAccess(callToolOverStdio);
+
+    expect(overStdio).toEqual({ shown: ['getInvoice'], runnable: ['getInvoice'] });
+    expect(overStdio).toEqual(await sharedOperationAccess(callToolOver(mcp)));
   });
 });

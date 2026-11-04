@@ -58,7 +58,7 @@ test.describe('tools/list (C1)', () => {
     expect(anonymousCatalog).toContain('- **Reports**: Revenue and usage reports');
     expect(anonymousCatalog).not.toContain(ADMIN_SKILL_NAME);
     expect(viewerCatalog).not.toContain(ADMIN_SKILL_NAME);
-    expect(adminCatalog).toContain(`- **${ADMIN_SKILL_NAME}**: Void invoices`);
+    expect(adminCatalog).toContain(`- **${ADMIN_SKILL_NAME}**: Look up and void invoices`);
   });
 });
 
@@ -156,7 +156,7 @@ test.describe('load_skill (D1)', () => {
     const skill = await loadSkill(await asAdmin({ server, auth }), 'billing-admin');
 
     expect(skill).toMatchObject({ id: 'billing-admin', name: ADMIN_SKILL_NAME, bundleVersion: '1.0.0' });
-    expect(actionIdsOf(skill)).toEqual(['adminPing', 'voidInvoice']);
+    expect(actionIdsOf(skill)).toEqual(['adminPing', 'getInvoice', 'voidInvoice']);
   });
 });
 
@@ -205,7 +205,7 @@ test.describe('skill:// resources (C5)', () => {
       expect(refused.error?.message).toMatch(/Resource not found/);
 
       const skillMd = (await admin.resources.read(uri)).text() ?? '';
-      expect(skillMdActionIds(skillMd)).toEqual(['voidInvoice', 'adminPing']);
+      expect(skillMdActionIds(skillMd)).toEqual(['getInvoice', 'voidInvoice', 'adminPing']);
     }
   });
 });

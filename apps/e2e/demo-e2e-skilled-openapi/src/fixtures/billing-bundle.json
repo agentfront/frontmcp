@@ -16,6 +16,15 @@
   },
   "skills": [
     {
+      "id": "billing-admin",
+      "name": "Billing administration",
+      "description": "Look up and void invoices, and check the billing service. For administrators only.",
+      "instructions": "# Billing administration\n\nLook up an invoice with getInvoice, void it with voidInvoice, and check the service with adminPing.",
+      "tags": ["admin"],
+      "operationIds": ["getInvoice", "voidInvoice", "adminPing"],
+      "requiredAuthorities": { "roles": { "any": ["admin"] } }
+    },
+    {
       "id": "invoices",
       "name": "Invoices",
       "description": "Issue, query, and refund invoices on the demo billing service.",
@@ -30,15 +39,6 @@
       "instructions": "# Reports skill\n\nRead the revenue report with getRevenueReport and the account balance with getAccountBalance.",
       "tags": ["reports"],
       "operationIds": ["getRevenueReport", "getAccountBalance", "getUsageStats"]
-    },
-    {
-      "id": "billing-admin",
-      "name": "Billing administration",
-      "description": "Void invoices and check the billing service. For administrators only.",
-      "instructions": "# Billing administration\n\nVoid an invoice with voidInvoice; check the service with adminPing.",
-      "tags": ["admin"],
-      "operationIds": ["voidInvoice", "adminPing"],
-      "requiredAuthorities": { "roles": { "any": ["admin"] } }
     }
   ],
   "operations": {
