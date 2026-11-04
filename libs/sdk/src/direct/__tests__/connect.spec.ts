@@ -42,6 +42,8 @@ const mockScopes = [
     metadata: {
       info: { name: 'test-server', version: '1.0.0' },
     },
+    // What a public server's session:verify answers for an opaque token: an anonymous caller
+    runFlow: jest.fn().mockResolvedValue({ kind: 'authorized', authorization: { token: '', user: { sub: 'anon:1' } } }),
   },
 ];
 

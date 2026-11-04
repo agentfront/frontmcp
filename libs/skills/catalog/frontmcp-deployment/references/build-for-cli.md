@@ -80,12 +80,40 @@ deployments: [
   resources, prompts, skills, jobs) refuse to run until the active session has a
   stored credential: they exit 1 with
   `Not logged in. Run "<bin> login" or "<bin> connect --token <token>" first.`
-  The stored token is sent on every call: in process it arrives as
-  `this.context.authInfo.token`, and a running daemon receives it as an
-  `Authorization: Bearer` header that the server's auth checks like any HTTP call.
+  The stored token is checked like an HTTP `Authorization: Bearer` token, per the
+  server's `auth` mode: in process, `connect()` runs it through the same
+  `session:verify` flow, and a running daemon receives it as that header. Its
+  verified claims are the caller (`this.auth`, and the roles and permissions
+  `authorities` rules read through `claimsMapping`), and a token the server rejects
+  fails the command (exit 1, `The server's auth did not accept the auth token`).
+  The token is verified as one sent to `http://localhost<entryPath>`, so set
+  `auth.expectedAudience` (or `FRONTMCP_PUBLIC_URL`) when your IdP puts the
+  server's public URL in `aud`. A public server verifies no opaque token, so the
+  tools just receive it as `this.context.authInfo.token`. Up to 1.11.0 the token
+  only reached `authInfo.token`, and authorization saw an anonymous caller.
 - The top-level `build` block applies to the cli bundles too: `build.esbuild` (`external`, `define`, `target`,
   `minify`) and `build.dependencies.nativeAddons` (kept external). A `--target cli` SEA binary is self-contained, so
   `external` doesn't apply to it (see `configure-deployment-targets`, "Build Options").
+
+### The CLI's daemon
+
+`<bin> daemon start` runs the server in the background on
+`~/.frontmcp/sockets/<bin>.sock` (`FRONTMCP_HOME` moves `~/.frontmcp`). While it
+runs, every command goes to it over the socket instead of starting the server
+in its own process, so a plugin's state, such as a loaded Skilled OpenAPI
+bundle, stays loaded across commands. The commands send to the server's
+`http.entryPath` (`/` by default) and open an MCP session per command, with the
+results an in-process command prints. A socket whose daemon does not answer is
+reported on stderr (`The daemon at <socket> did not answer (...); running the
+command in-process.`), and the command runs in-process. `subscribe` always runs
+in-process: the socket cannot push. In production (`NODE_ENV=production`), the
+daemon needs `MCP_SESSION_SECRET` like any server. Up to 1.11.0, the commands
+posted to `/mcp` without a session, so they never reached the daemon and always
+ran in-process.
+
+`<bin> skills read <name>` and `<bin> skills load <ids...>` exit 1 when a skill
+is not found, and name it on stderr; `skills load` prints how many of the
+requested skills it loaded. Up to 1.11.0 both exited 0.
 
 ## Requirements
 

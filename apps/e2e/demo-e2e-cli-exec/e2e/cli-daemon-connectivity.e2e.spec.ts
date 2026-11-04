@@ -6,12 +6,17 @@
  * are reachable over the Unix socket via FrontMcpInstance.runUnixSocket().
  */
 
+import { spawn, type ChildProcess } from 'child_process';
 import * as os from 'os';
 import * as path from 'path';
-import { ChildProcess, spawn } from 'child_process';
-import { mkdtemp, rm } from '@frontmcp/utils';
+
+import { mkdir, mkdtemp, rm } from '@frontmcp/utils';
+
 import { ensureBuild, getServerBundlePath, runCli } from './helpers/exec-cli';
-import { McpJsonRpcClient, httpOverSocket, waitForSocket } from './helpers/mcp-client';
+import { httpOverSocket, McpJsonRpcClient, waitForSocket } from './helpers/mcp-client';
+
+// Fails a CLI process that loads the SDK, so a command that succeeds under it was served by the daemon
+const FORBID_IN_PROCESS_SERVER = path.join(__dirname, 'helpers', 'forbid-in-process-server.cjs');
 
 function killQuiet(proc: ChildProcess | null): void {
   try {
@@ -28,7 +33,8 @@ describe('CLI Daemon Connectivity E2E', () => {
 
   beforeAll(async () => {
     await ensureBuild();
-    homeDir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-daemon-conn-'));
+    // Short: the daemon's socket path must fit the platform's limit
+    homeDir = await mkdtemp(path.join(os.tmpdir(), 'fmcp-conn-'));
   });
 
   afterAll(async () => {
@@ -69,7 +75,9 @@ describe('CLI Daemon Connectivity E2E', () => {
   }
 
   it('should start daemon and have socket ready for MCP', async () => {
-    socketPath = path.join(homeDir, 'test-daemon.sock');
+    // Where the generated CLI looks for its daemon: $FRONTMCP_HOME/sockets/<app>.sock
+    await mkdir(path.join(homeDir, 'sockets'), { recursive: true, mode: 0o700 });
+    socketPath = path.join(homeDir, 'sockets', 'cli-exec-demo.sock');
     startDaemon(socketPath);
     await waitForSocket(socketPath, 20_000);
   });
@@ -143,13 +151,26 @@ describe('CLI Daemon Connectivity E2E', () => {
   });
 
   it('should route CLI tool commands through running daemon', () => {
-    // Use the CLI's built-in tool routing which checks for daemon socket
-    // We need a daemon on the expected socket path for CLI auto-routing
     const { stdout, exitCode } = runCli(['add', '--a', '1', '--b', '2'], {
-      FRONTMCP_DAEMON_SOCKET: socketPath,
+      FRONTMCP_HOME: homeDir,
+      NODE_OPTIONS: `--require ${FORBID_IN_PROCESS_SERVER}`,
     });
     expect(exitCode).toBe(0);
     expect(stdout).toContain('3');
+  });
+
+  it('should run the server in-process for a command when no daemon listens', async () => {
+    const emptyHome = await mkdtemp(path.join(os.tmpdir(), 'fmcp-none-'));
+    try {
+      const { stderr, exitCode } = runCli(['add', '--a', '1', '--b', '2'], {
+        FRONTMCP_HOME: emptyHome,
+        NODE_OPTIONS: `--require ${FORBID_IN_PROCESS_SERVER}`,
+      });
+      expect(exitCode).toBe(1);
+      expect(stderr).toContain('it ran the server in-process');
+    } finally {
+      await rm(emptyHome, { recursive: true, force: true });
+    }
   });
 
   it('should stop daemon cleanly', async () => {
