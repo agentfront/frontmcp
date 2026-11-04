@@ -34,7 +34,7 @@ export default class LoadSkillTool extends ToolContext {
     }
     // Await the first bundle apply so the skill registry is populated (stateless
     // workers have no background loop to finish a deferred sync).
-    await this.get(BundleSyncService).ensureReady();
+    await this.get(BundleSyncService).ensureLoaded();
     const scope = this.get(ScopeEntry);
     const skillRegistry = scope.skills;
     if (!skillRegistry) {

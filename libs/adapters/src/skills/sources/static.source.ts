@@ -15,7 +15,9 @@ import type { BundleSourceListener, SkillBundleSource } from './skill-bundle-sou
 
 /**
  * Loads a bundle from a local file (YAML or JSON). Optionally watches the
- * file for changes via `fs.watch` and re-fetches on edit.
+ * file for changes via `fs.watch` and re-fetches on edit. The watch starts
+ * before the first read, so fixing a file that failed to load reloads it. A
+ * refresh that reads the same content as the last read applies nothing.
  *
  * Bundle file extensions:
  *   - `.yaml` / `.yml` — parsed as YAML
@@ -29,6 +31,7 @@ export class StaticSource implements SkillBundleSource {
   private watcher: FileWatcherHandle | undefined;
   private debounceTimer: NodeJS.Timeout | undefined;
   private stopped = false;
+  private lastContent: string | undefined;
 
   constructor(
     private readonly options: StaticSourceOptions,
@@ -38,11 +41,12 @@ export class StaticSource implements SkillBundleSource {
   }
 
   async start(): Promise<void> {
-    const bundle = await this.fetchOnce();
-    this.notify(bundle);
     if (this.options.watch) {
       this.beginWatch();
     }
+    const content = await this.readBundleFile();
+    this.lastContent = content;
+    this.notify(this.parse(content));
   }
 
   onChange(listener: BundleSourceListener): () => void {
@@ -65,10 +69,12 @@ export class StaticSource implements SkillBundleSource {
     this.listeners.clear();
   }
 
-  private async fetchOnce(): Promise<ResolvedBundle> {
-    const absPath = pathResolve(this.options.path);
-    const raw = await readFile(absPath, 'utf8');
-    const ext = extname(absPath).toLowerCase();
+  private readBundleFile(): Promise<string> {
+    return readFile(pathResolve(this.options.path), 'utf8');
+  }
+
+  private parse(raw: string): ResolvedBundle {
+    const ext = extname(this.options.path).toLowerCase();
 
     let input: OverlayInput;
     if (ext === '.json') {
@@ -119,8 +125,10 @@ export class StaticSource implements SkillBundleSource {
     this.debounceTimer = setTimeout(async () => {
       if (this.stopped) return;
       try {
-        const bundle = await this.fetchOnce();
-        this.notify(bundle);
+        const content = await this.readBundleFile();
+        if (content === this.lastContent) return;
+        this.lastContent = content;
+        this.notify(this.parse(content));
       } catch (e) {
         this.logger.warn(`[static-source] refresh failed: ${(e as Error).message}`);
       }

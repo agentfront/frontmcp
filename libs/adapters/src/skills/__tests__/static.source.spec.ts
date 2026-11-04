@@ -95,6 +95,38 @@ operations: {}
     expect(events[0].bundleId).toBe('static:yaml');
   });
 
+  it('loads a YAML bundle whose generatedAt is an unquoted timestamp, keeping it a string', async () => {
+    const yamlContent = `schemaVersion: 1
+bundleId: static:yaml-date
+version: 1.0.0
+generatedAt: 2026-05-04T12:00:00.000Z
+sourceDigest: ${'b'.repeat(64)}
+services:
+  - id: svc
+    baseUrl: https://example.com
+authBindings:
+  def:
+    kind: none
+skills:
+  - id: s
+    name: S
+    description: d
+    instructions: "# X"
+    operationIds: []
+operations: {}
+`;
+    const file = path.join(tmpDir, 'bundle.yml');
+    await fs.writeFile(file, yamlContent, 'utf8');
+
+    const source = new StaticSource({ type: 'static', path: file, watch: false }, fakeLogger);
+    const events: ResolvedBundle[] = [];
+    source.onChange((b) => events.push(b));
+    await source.start();
+    await source.stop();
+
+    expect(events.map((b) => [b.bundleId, b.generatedAt])).toEqual([['static:yaml-date', '2026-05-04T12:00:00.000Z']]);
+  });
+
   it('sniffs format when extension is unknown', async () => {
     const file = path.join(tmpDir, 'bundle.txt');
     await fs.writeFile(file, JSON.stringify(baseBundle), 'utf8');
@@ -143,6 +175,44 @@ operations: {}
     }
     await source.stop();
     expect(events.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('watch=true applies nothing when the file is rewritten with the same content', async () => {
+    const file = path.join(tmpDir, 'bundle.json');
+    const content = JSON.stringify(baseBundle);
+    await fs.writeFile(file, content, 'utf8');
+
+    const source = new StaticSource({ type: 'static', path: file, watch: true }, fakeLogger);
+    const events: ResolvedBundle[] = [];
+    source.onChange((b) => events.push(b));
+    await source.start();
+
+    await new Promise((r) => setTimeout(r, 50));
+    await fs.writeFile(file, content, 'utf8');
+    await new Promise((r) => setTimeout(r, 600));
+    await source.stop();
+
+    expect(events).toHaveLength(1);
+  });
+
+  it('watch=true reloads a file that failed to load at start once it is fixed', async () => {
+    const file = path.join(tmpDir, 'bundle.json');
+    await fs.writeFile(file, '{ broken json', 'utf8');
+
+    const source = new StaticSource({ type: 'static', path: file, watch: true }, fakeLogger);
+    const events: ResolvedBundle[] = [];
+    source.onChange((b) => events.push(b));
+    await expect(source.start()).rejects.toThrow('Overlay JSON parse failed');
+
+    await new Promise((r) => setTimeout(r, 50));
+    await fs.writeFile(file, JSON.stringify(baseBundle), 'utf8');
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline && events.length === 0) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    await source.stop();
+
+    expect(events.map((b) => b.bundleId)).toEqual(['static:test']);
   });
 
   it('refresh failure (file becomes invalid) is logged but does not throw', async () => {

@@ -903,7 +903,7 @@ export default class SkillRegistry
         availableTools = v.available;
         missingTools = v.missing;
       }
-      return { ...r, metadata: meta, availableTools, missingTools };
+      return { ...r, metadata: meta, availableTools, missingTools, bundleVersion: dyn.bundleVersion };
     });
     const overlayOnly = this.searchDynamicOverlay(query, options, baseSeen);
     if (overlayOnly.length === 0 && rewrites === 0) return baseResults;
@@ -1242,7 +1242,14 @@ export default class SkillRegistry
       }
       if (score < minScore) continue;
 
-      out.push({ metadata: meta, score, availableTools, missingTools, source: 'local' });
+      out.push({
+        metadata: meta,
+        score,
+        availableTools,
+        missingTools,
+        source: 'local',
+        ...(content.bundleVersion !== undefined && { bundleVersion: content.bundleVersion }),
+      });
     }
     return out;
   }

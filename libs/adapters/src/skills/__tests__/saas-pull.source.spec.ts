@@ -137,6 +137,25 @@ describe('SaasPullSource', () => {
     await expect(source.start()).rejects.toThrow();
   });
 
+  it('keeps polling after a start that failed, and notifies the first pull that succeeds', async () => {
+    let calls = 0;
+    const source = new FakeSaasSource(baseOptions({ pollIntervalMs: 50 }), tmpDir, async () => {
+      calls++;
+      return calls === 1 ? { status: 503, body: '' } : { status: 200, body: JSON.stringify(baseBundle) };
+    });
+    const events: ResolvedBundle[] = [];
+    source.onChange((b) => events.push(b));
+    await expect(source.start()).rejects.toThrow('initial pull failed and no cached bundle is available');
+
+    const deadline = Date.now() + 1500;
+    while (Date.now() < deadline && events.length === 0) {
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    await source.stop();
+
+    expect(events.map((b) => b.bundleId)).toEqual(['saas:test']);
+  });
+
   it('rejects non-2xx HTTP responses', async () => {
     const source = new FakeSaasSource(baseOptions(), tmpDir, async () => ({ status: 500, body: '' }));
     await expect(source.start()).rejects.toThrow();

@@ -124,6 +124,12 @@ export interface SkillSearchResult {
    * Source of the skill ('local' or 'external').
    */
   source: 'local' | 'external';
+
+  /**
+   * The version of the bundle the skill was registered from (`SkillContent.bundleVersion`), for a skill a
+   * bundle registers at runtime.
+   */
+  bundleVersion?: string;
 }
 
 /**

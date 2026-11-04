@@ -40,6 +40,7 @@ import type {
 } from '../interfaces';
 import type { FlowName, ScopeMetadata } from '../metadata';
 import type { ScopeRecord } from '../records';
+import type { HealthProbeDefinition } from '../types/options/health';
 import { normalizeEntryPrefix, normalizeScopeBase } from '../utils';
 import { BaseEntry } from './base.entry';
 
@@ -183,6 +184,25 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
     for (const cb of this.lifecycleCallbacks) {
       await cb();
     }
+  }
+
+  private readonly addedHealthProbes: HealthProbeDefinition[] = [];
+
+  /**
+   * Add a check to the server's `/readyz` readiness probe, run with the built-in ones and the
+   * `health.probes` the server configures. Plugins call it while the server starts, from a provider
+   * factory: the health service takes the checks registered by the time the scope is ready.
+   */
+  registerHealthProbe(probe: HealthProbeDefinition): void {
+    this.addedHealthProbes.push(probe);
+  }
+
+  /**
+   * The checks added with registerHealthProbe().
+   * @internal
+   */
+  get healthProbes(): readonly HealthProbeDefinition[] {
+    return this.addedHealthProbes;
   }
 
   /** Teardown callbacks registered via onDispose(), run once when the scope is disposed. */

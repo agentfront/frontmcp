@@ -30,7 +30,7 @@ export default class SearchSkillTool extends ToolContext {
     // Drive the bundle source to apply its first bundle (and await it) so the
     // skill registry is populated before we search. On a stateless worker this
     // is the only thing that loads the catalog within the request lifecycle.
-    await this.get(BundleSyncService).ensureReady();
+    await this.get(BundleSyncService).ensureLoaded();
     const scope = this.get(ScopeEntry);
     const skillRegistry = scope.skills;
     if (!skillRegistry || !skillRegistry.hasAny()) {
@@ -66,9 +66,7 @@ export default class SearchSkillTool extends ToolContext {
         name: r.metadata.name,
         description: r.metadata.description ?? '',
         score: r.score,
-        ...((r.metadata as { bundleVersion?: string }).bundleVersion
-          ? { bundleVersion: (r.metadata as { bundleVersion?: string }).bundleVersion }
-          : {}),
+        ...(r.bundleVersion !== undefined && { bundleVersion: r.bundleVersion }),
       })),
     };
   }
