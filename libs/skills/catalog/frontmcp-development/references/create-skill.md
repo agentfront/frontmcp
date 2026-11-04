@@ -164,7 +164,7 @@ class ApiStandardsSkill extends SkillContext {}
 >
 > A skill is matched by its description (weighted 3x), its tags (2x), its name, tools, parameters and examples, and, for a skill registered at runtime such as a Skilled OpenAPI bundle skill, its actions: each action's id split into words (`getInventory` is "get inventory"), summary and description. Its instructions count at a lower weight: their distinct words, up to 48, once each.
 >
-> Words in any script are terms: Hebrew, Arabic and Cyrillic words whole, Chinese and Japanese as characters and neighbor pairs, and accents on Latin and Greek letters folded, so `Vogel` matches `Vögel`. Stop words (`the`, `of`, `me`, …) count neither in a skill's text nor in the query. Up to 1.11.0 only `[A-Za-z0-9_]` made terms, and stop words counted.
+> Words in any script are terms: Hebrew, Arabic and Cyrillic words whole, Chinese as characters and neighbor pairs, Japanese kana and Thai as neighbor pairs, and accents on Latin and Greek letters folded, so `Vogel` matches `Vögel`. Stop words (`the`, `of`, `me`, …) count neither in a skill's text nor in the query. Up to 1.11.0 only `[A-Za-z0-9_]` made terms, and stop words counted.
 
 ## SkillContext: loadInstructions() and build()
 
