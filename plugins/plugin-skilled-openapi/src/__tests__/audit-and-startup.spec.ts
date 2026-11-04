@@ -1,7 +1,6 @@
 import { hasSkillAuditFactory, setSkillAuditFactory } from '@frontmcp/sdk';
 
 import { executeSkillAction, type SkillActionDeps } from '../executor/execute-skill-action';
-import { clearCompiledSchemaCache } from '../executor/schema-cache';
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
 import SkilledOpenApiPlugin from '../skilled-openapi.plugin';
 
@@ -64,7 +63,6 @@ function auditedDeps() {
 describe('skill action audit records', () => {
   beforeEach(() => {
     mockExecuteOperation.mockReset();
-    clearCompiledSchemaCache();
   });
 
   it('records an action whose input fails its schema as a failure', async () => {
