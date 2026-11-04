@@ -31,11 +31,10 @@
 import { resolveClientProfile } from '../answer/client-profile';
 import type { ScopeEntry, SkillEntry } from '../common';
 import { callSurfaceOf } from '../common/availability';
-import { DependencyNotFoundError, ProviderNotAvailableError, ProviderNotRegisteredError } from '../errors';
 import { mcpRequestSurface } from '../transport/mcp-handlers/mcp-surface';
 import { SKILL_INDEX_URI } from './sep-2640/sep-2640.constants';
 import { filterSkillsByAuthorities } from './skill-authorities.helper';
-import { SkillCatalogSourceToken, type SkillCatalogPointers, type SkillCatalogSource } from './skill-catalog-source';
+import { findSkillCatalogSource, type SkillCatalogPointers } from './skill-catalog-source';
 import { filterServableSkills } from './skill-filter.helper';
 import type { SkillRegistryInterface } from './skill.registry';
 
@@ -373,7 +372,7 @@ export async function composeCallerInstructions(
   const skillsConfig = scope.metadata.skillsConfig;
   // A plugin's runtime skills (a Skilled OpenAPI bundle) are registered once it is ready; wait, so the
   // instructions count and list them, and point to the plugin's tools if it serves skills through them (#1067).
-  const source = skillCatalogSourceOf(scope);
+  const source = findSkillCatalogSource(scope);
   if (source) {
     try {
       await source.ready();
@@ -408,29 +407,6 @@ export async function composeCallerInstructions(
   const composed = composeInitializeInstructions({ ...composeOptions, skills });
   const uriHints = withUriHints ? buildSkillUriHints(skills, scope.skills?.getSep2640InstructionUris?.() ?? []) : '';
   return [composed, uriHints].filter((section) => section.length > 0).join('\n\n---\n\n');
-}
-
-/**
- * The plugin skill source provided in the scope, if any. Not registered is the usual case and means none; a provider
- * that fails to build is logged and treated as none, so `initialize` still answers.
- */
-function skillCatalogSourceOf(scope: InstructionsScope): SkillCatalogSource | undefined {
-  if (!scope.providers) return undefined;
-  try {
-    return scope.providers.get(SkillCatalogSourceToken);
-  } catch (error) {
-    if (
-      error instanceof ProviderNotRegisteredError ||
-      error instanceof ProviderNotAvailableError ||
-      error instanceof DependencyNotFoundError
-    ) {
-      return undefined;
-    }
-    scope.logger.warn('initialize instructions: the skill source provider failed; composed without it', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return undefined;
-  }
 }
 
 /**

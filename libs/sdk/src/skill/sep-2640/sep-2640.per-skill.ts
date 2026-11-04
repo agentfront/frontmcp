@@ -32,12 +32,12 @@ import {
   type SkillEntry,
   type SkillResourceAnnotations,
 } from '../../common';
+import type { ResourceContext } from '../../common/interfaces';
 import { ResourceKind } from '../../common/records/resource.record';
 import type ResourceRegistry from '../../resource/resource.registry';
 import type { SkillRegistryInterface } from '../skill.registry';
-import { serializeSkillMd } from './sep-2640.builders';
 import { SEP_2640_META_NAMESPACE, SKILL_MD_MIME_TYPE, SKILL_MD_PRIORITY } from './sep-2640.constants';
-import { findAndLoadSkillByPath } from './sep-2640.resource-helpers';
+import { findAndLoadSkillByPath, renderSkillMd } from './sep-2640.resource-helpers';
 import { buildSkillUri } from './sep-2640.uri';
 
 /**
@@ -103,14 +103,14 @@ export function buildPerSkillResourceRecord(
   // function that returns a `ReadResourceResult`. We close over `scope` so
   // resolution always uses the live SkillRegistry — supporting hot-swap
   // without re-registering the resource.
-  const handler = async (): Promise<ReadResourceResult> => {
+  const handler = async (_uri: string, _params: unknown, ctx: ResourceContext): Promise<ReadResourceResult> => {
     const { loadResult } = await findAndLoadSkillByPath(scope, skillPath);
     return {
       contents: [
         {
           uri,
           mimeType: SKILL_MD_MIME_TYPE,
-          text: serializeSkillMd(loadResult.skill),
+          text: await renderSkillMd(scope, loadResult.skill, ctx.getAuthInfo()),
         },
       ],
     };
