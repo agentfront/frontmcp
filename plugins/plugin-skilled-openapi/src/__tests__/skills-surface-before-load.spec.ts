@@ -8,8 +8,8 @@
  * connected, the SEP-2640 capability wasn't declared, and `skill://index.json` was never served.
  *
  * The host here turns off background loading (`disablePolling`, as `@frontmcp/edge` does), so the
- * bundle loads only when a meta-tool or `tools/list` asks for it: the client below connects, and
- * asks for skills, strictly before the bundle has loaded.
+ * bundle loads only when a request asks for it: the client below connects strictly before the bundle
+ * has loaded. Since #1067 its `initialize` is that request: the instructions wait for the bundle.
  */
 import 'reflect-metadata';
 
@@ -94,10 +94,8 @@ describe('Skilled OpenAPI: skills surfaces before the bundle has loaded', () => 
   const listSkillIds = async () =>
     (await client.request({ method: 'skills/list', params: {} }, skillsListSchema)).skills.map((skill) => skill.id);
 
-  it('answers skills/list, empty until the bundle loads, then with its skills', async () => {
-    expect(await listSkillIds()).toEqual([]);
-
-    await client.listTools(); // loads the bundle, as a meta-tool call would
+  it("answers skills/list with the bundle's skills from the first request: initialize waited for the bundle", async () => {
+    // Up to 1.11.0 the list was empty until a meta-tool or tools/list loaded the bundle (#1067)
     expect(await listSkillIds()).toEqual(['invoices']);
   });
 
