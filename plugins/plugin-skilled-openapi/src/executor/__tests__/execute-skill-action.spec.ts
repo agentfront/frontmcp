@@ -289,7 +289,6 @@ describe('executeSkillAction: an action the confirm option names', () => {
   beforeEach(() => {
     mockExecuteOperation.mockReset();
     mockExecuteOperation.mockResolvedValue({ ok: true, status: 204 });
-    clearCompiledSchemaCache();
   });
 
   it('asks with the listing and the validated input after authorization, and sends the request once confirmed', async () => {
