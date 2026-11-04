@@ -5,7 +5,8 @@
 // structured envelope. The enclave codecall (`run_workflow`) calls this once per
 // `callTool(actionId, input)` so a sandboxed AgentScript orchestrates the SAME
 // authorized/validated operations a single direct call would run. Failures are
-// returned as `{ ok:false, error }` envelopes — they never throw.
+// returned as `{ ok:false, error }` envelopes, except a caller credential that
+// isn't connected, which throws `ToolCredentialsRequiredError`.
 
 import { type SkillAuditWriter } from '@frontmcp/adapters/skills';
 import type { AuthoritiesResult } from '@frontmcp/auth';
@@ -13,7 +14,7 @@ import type { FrontMcpLogger } from '@frontmcp/sdk';
 
 import { type HiddenOpEntry, type OperationListings } from '../registry/hidden-op.registry';
 import { type AuthorityGuard, type UnprotectedOpsPolicy } from '../security/authority-guard';
-import { callerTokenOf } from './caller-token';
+import type { CallerAuthInfo } from './credential-resolver';
 import { executeOperation, type OpenApiRuntimeDeps } from './openapi-runtime';
 import { getCompiledOpSchemas } from './schema-cache';
 
@@ -98,7 +99,7 @@ export async function authorizeAction(args: {
 export async function executeSkillAction(args: {
   listings: OperationListings;
   input: Record<string, unknown>;
-  authInfo: unknown;
+  authInfo: CallerAuthInfo;
   /** Aborts the request in flight, and keeps one from starting, once the call it belongs to has ended. */
   signal?: AbortSignal;
   deps: SkillActionDeps;
@@ -180,8 +181,7 @@ export async function executeSkillAction(args: {
       entry,
       bundleId: entry.bundleId,
       input: inputParse.data as Record<string, unknown>,
-      // For a bearer binding with `passthroughCallerToken: true`.
-      callerToken: callerTokenOf(authInfo),
+      authInfo,
       signal,
       deps: runtimeDeps,
     });

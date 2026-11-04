@@ -8,7 +8,7 @@
 // outbound-HTTPS → validate path as a direct action call. This replaces the
 // prior single-shot execute tool with a composable, sandboxed executor.
 import { SkillAuditWriterToken, type SkillAuditWriter } from '@frontmcp/adapters/skills';
-import { Tool, ToolContext, type CallToolResult } from '@frontmcp/sdk';
+import { Tool, ToolContext, ToolCredentialsRequiredError, type CallToolResult } from '@frontmcp/sdk';
 
 import { actionFailureMessage, actionOutcome, type ActionOutcome } from '../executor/action-outcome';
 import { credentialResolverOf } from '../executor/credential-resolver';
@@ -107,6 +107,9 @@ export default class RunWorkflowTool extends ToolContext {
     const workflowEnded = new AbortController();
     const requestSignal = this.signal ? AbortSignal.any([workflowEnded.signal, this.signal]) : workflowEnded.signal;
 
+    // An action that needs a credential the caller hasn't connected; the sandbox keeps only its message.
+    let missingCredential: ToolCredentialsRequiredError | undefined;
+
     // The bridge the sandboxed script reaches as `await callTool(actionId, input, options)`.
     // It is the ONLY way the script touches the outside world.
     const callAction = async (actionId: string, actionInput: Record<string, unknown>): Promise<ActionOutcome> => {
@@ -124,6 +127,9 @@ export default class RunWorkflowTool extends ToolContext {
         authInfo: this.authInfo,
         signal: requestSignal,
         deps,
+      }).catch((error: unknown) => {
+        if (error instanceof ToolCredentialsRequiredError) missingCredential ??= error;
+        throw error;
       });
       return actionOutcome(result, config.outbound.errorBodies, listings[0].authBinding);
     };
@@ -170,6 +176,7 @@ export default class RunWorkflowTool extends ToolContext {
       toolCalls: result.stats.toolCallCount,
       steps: result.stats.iterationCount,
     };
+    if (!result.success && missingCredential) throw missingCredential;
     if (!result.success) return failedWorkflow(result.error?.message ?? 'workflow failed', stats);
     return { success: true, value: result.value, stats };
   }

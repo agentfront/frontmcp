@@ -140,6 +140,14 @@ const skilledOpenApiPluginOptionsObjectSchema = z.object({
   credentials: z.record(z.string().min(1).max(256), z.string().min(1)).optional(),
 
   /**
+   * Auth bindings that send each caller's own credential, keyed by `vaultRef`: the value names the auth provider the
+   * caller connected the service as. The credential is read from the caller's vault (`this.authProviders`, else
+   * `this.credentials`), never from `credentials` or a resolver, and a caller who hasn't connected it gets a
+   * `ToolCredentialsRequiredError`.
+   */
+  authProviders: z.record(z.string().min(1).max(256), z.string().min(1)).optional(),
+
+  /**
    * Register each bundle operation as an internal SDK tool (visibility:
    * 'internal') so other tools, agents, CodeCall scripts, and jobs can
    * compose with it via `this.callTool('<bundleId>.<operationId>', args)`.

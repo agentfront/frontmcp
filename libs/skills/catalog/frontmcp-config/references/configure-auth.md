@@ -272,6 +272,8 @@ class CallAcmeTool extends ToolContext {
 
 Security: per-record AES key derived (HKDF) from a fresh per-session `vaultId` + a pepper from `VAULT_SECRET ?? JWT_SECRET` (random per-process fallback, logged with a warning — credentials then do not survive a restart, never plaintext). A disconnect + reconnect rotates the `vaultId`, so the reconnected session sees an **empty vault** and old ciphertext is undecryptable. The vault is backed by the same `auth.tokenStorage` backend (memory / Redis / SQLite). No login PII is stored.
 
+The `@Tool({ authProviders })` credential gate reads this vault too, and so does `@frontmcp/plugin-skilled-openapi`: with `authProviders: { '<vaultRef>': '<key>' }`, a bundle auth binding sends each caller the credential they connected under `<key>`, and a caller without it gets `-32001` with the `requireConnect` resume URL as `authUrl`.
+
 ### Session secure-secret store (`this.secureStore`)
 
 `this.credentials` is OAuth-credential-centric (resume URLs, per-authorize vault rotation). For **arbitrary user-typed secrets** (an API key a tool prompts for, a webhook signing secret, a per-session draft token) use `this.secureStore` — a general, typed, session-scoped key→secret store whose backing is **pluggable per deployment**. It is enabled automatically in `local` (and `remote`) modes. Stop re-implementing AES-GCM + HKDF + scope + persistence by hand.

@@ -1,28 +1,28 @@
 // file: plugins/plugin-skilled-openapi/src/executor/credential-resolver.ts
 
 import { type Token } from '@frontmcp/di';
+import type { ExecutionContextBase } from '@frontmcp/sdk';
 
-import { SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
+import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
+import { connectedCredentialOf } from './connected-credential';
+
+/** The verified auth info of the caller a request is made for: its token, user claims and session. */
+export type CallerAuthInfo = ExecutionContextBase['authInfo'];
+
+/** What a resolver is told about the credential it is asked for. */
+export interface CredentialResolveOptions {
+  /** The bundle whose auth binding names the `vaultRef`. */
+  bundleId: string;
+  /** The caller the request is made for. A resolver that serves several callers or tenants picks the credential by it. */
+  authInfo: CallerAuthInfo;
+}
 
 /**
- * Resolves a `vaultRef` string from an `AuthBinding` to a credential value.
- *
- * In production, this would be backed by `libs/auth`'s vault. v1.2.0 OSS
- * ships an in-memory implementation suitable for static-source / npm-source
- * deployments and demo scenarios; SaaS-managed deployments wire their own
- * resolver against the customer's secret manager via plugin DI overrides.
- *
- * Resolved credentials are scoped: the caller MUST supply a `bundleId` so
- * the resolver can enforce per-bundle credential allowlists (planned v1.2.x
- * feature; the interface is shaped for it now).
+ * Resolves a `vaultRef` string from an `AuthBinding` to a credential value, such as an API key or bearer token.
+ * Returns undefined if the ref is unknown: callers MUST fail closed (do NOT call without credentials).
  */
 export interface CredentialResolver {
-  /**
-   * Resolve a vault reference. Returns the credential value (e.g. an API key
-   * or bearer token). Returns undefined if the ref is unknown — callers MUST
-   * fail closed (do NOT call without credentials).
-   */
-  resolve(ref: string, opts: { bundleId: string }): Promise<string | undefined>;
+  resolve(ref: string, opts: CredentialResolveOptions): Promise<string | undefined>;
 }
 
 /**
@@ -59,7 +59,7 @@ export class MemoryCredentialResolver implements CredentialResolver {
     bundle.set(ref, normalizeSecret(value));
   }
 
-  async resolve(ref: string, opts: { bundleId: string }): Promise<string | undefined> {
+  async resolve(ref: string, opts: Pick<CredentialResolveOptions, 'bundleId'>): Promise<string | undefined> {
     const scoped = this.perBundle.get(opts.bundleId)?.get(ref);
     if (typeof scoped === 'string') return scoped;
     const fallback = this.defaults.get(ref);
@@ -67,18 +67,28 @@ export class MemoryCredentialResolver implements CredentialResolver {
   }
 }
 
-/** The providers a tool's context resolves. */
-interface ProviderLookup {
+/** The providers and identity of the tool call a credential is resolved for. */
+interface ToolCallLookup {
   get<T>(token: Token<T>): T;
   tryGet<T>(token: Token<T>): T | undefined;
+  metadata: { name: string };
 }
 
 /**
- * The nearest resolver declared as `SkilledOpenApiCredentialResolver`, in `init({ providers })`, the `@App` that
- * installs the plugin or `@FrontMcp({ providers })`; without one, the built-in resolver, which reads `credentials`.
+ * The credentials one tool call sends. A `vaultRef` the `authProviders` option names is the caller's own credential,
+ * from the vault the caller connected it in; any other comes from the nearest resolver declared as
+ * `SkilledOpenApiCredentialResolver`, in `init({ providers })`, the `@App` that installs the plugin or
+ * `@FrontMcp({ providers })`, and without one from the built-in resolver, which reads `credentials`.
  */
-export function credentialResolverOf(providers: ProviderLookup): CredentialResolver {
-  return providers.tryGet(SkilledOpenApiCredentialResolver) ?? providers.get(MemoryCredentialResolver);
+export function credentialResolverOf(toolCall: ToolCallLookup): CredentialResolver {
+  const resolver = toolCall.tryGet(SkilledOpenApiCredentialResolver) ?? toolCall.get(MemoryCredentialResolver);
+  const { authProviders } = toolCall.get(SkilledOpenApiConfig);
+  return {
+    resolve: (ref, opts) => {
+      const provider = authProviders.get(ref);
+      return provider ? connectedCredentialOf(provider, toolCall) : resolver.resolve(ref, opts);
+    },
+  };
 }
 
 // Strip a single trailing CR/LF that a file-sourced secret commonly picks up,
