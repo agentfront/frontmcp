@@ -11,6 +11,7 @@ import {
   PluginKind,
   type EntryOwnerRef,
   type PluginInstance,
+  type PluginMetadata,
   type PluginRecord,
   type PluginRegistryInterface,
   type PluginType,
@@ -22,7 +23,12 @@ import {
 import { initOptionsOf } from '../common/dynamic/dynamic.plugin';
 import { collectDynamicProviders, collectDynamicTools, dedupePluginProviders } from '../common/dynamic/dynamic.utils';
 import { installContextExtensions } from '../context/context-extension';
-import { InvalidPluginScopeError, InvalidRegistryKindError, RegistryDependencyNotRegisteredError } from '../errors';
+import {
+  DuplicatePluginError,
+  InvalidPluginScopeError,
+  InvalidRegistryKindError,
+  RegistryDependencyNotRegisteredError,
+} from '../errors';
 import { normalizeHooksFromCls, normalizeHooksFromProviders } from '../hooks/hooks.utils';
 import PromptRegistry from '../prompt/prompt.registry';
 import ProviderRegistry from '../provider/provider.registry';
@@ -50,6 +56,9 @@ export interface PluginScopeInfo {
 
 /** Plugin value instances some registry has installed; a later registry builds its own (#647). */
 const installedPluginValues = new WeakSet<object>();
+
+/** By scope, the names of the plugins it installs that can be installed once per server (`@Plugin({ oncePerServer })`). */
+const oncePerServerPlugins = new WeakMap<ScopeEntry, Set<string>>();
 
 /**
  * Builds a plugin listed as its class (`plugins: [SomePlugin]`, or `{ provide, useClass }`). A plugin
@@ -167,6 +176,7 @@ export default class PluginRegistry
 
     for (const raw of list) {
       const rec = normalizePlugin(raw);
+      this.claimOncePerServer(rec.metadata);
       const provide = rec.provide;
       tokens.add(provide);
       defs.set(provide, rec);
@@ -174,6 +184,16 @@ export default class PluginRegistry
     }
 
     return { tokens, defs, graph };
+  }
+
+  /** Refuses a second install in this server of a plugin that can be installed once per server. */
+  private claimOncePerServer({ name, oncePerServer }: PluginMetadata): void {
+    if (oncePerServer === undefined) return;
+    const scope = this.providers.getActiveScope();
+    const installed = oncePerServerPlugins.get(scope) ?? new Set<string>();
+    if (installed.has(name)) throw new DuplicatePluginError(name, oncePerServer);
+    installed.add(name);
+    oncePerServerPlugins.set(scope, installed);
   }
 
   protected buildGraph() {

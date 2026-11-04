@@ -33,6 +33,9 @@ export const MISCONFIGURATION_REMEDIES: Record<string, string> = {
   TOOL_ALIAS_CONFLICT:
     'A tool alias (`@Tool({ aliases })`) is also the name of a tool or the alias of another tool, so the server ' +
     'refuses to start. Give each alias to one tool; the server log names the conflicts.',
+  DUPLICATE_PLUGIN:
+    'A plugin that can be installed once per server is installed twice (in one plugins list, or by the server and ' +
+    'an app, or by two apps), so the server refuses to start. Install it once; the server log names the plugin.',
 };
 
 /**

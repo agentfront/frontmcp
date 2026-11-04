@@ -82,9 +82,9 @@ function buildFakeCtx(
     get: jest.fn((token: unknown) => {
       if (token === SkilledOpenApiConfig) return config;
       if (token === AuthorityGuard) return guard;
-      if (token === SkilledOpenApiCredentialResolver) return resolver;
       return undefined;
     }),
+    tryGet: jest.fn((token: unknown) => (token === SkilledOpenApiCredentialResolver ? resolver : undefined)),
   } as never;
 }
 
