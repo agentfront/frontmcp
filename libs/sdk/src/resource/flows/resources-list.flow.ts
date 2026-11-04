@@ -8,6 +8,7 @@ import {
   ResourceEntry,
   type FlowPlan,
   type FlowRunOptions,
+  type SkillEntry,
 } from '../../common';
 
 import 'reflect-metadata';
@@ -18,6 +19,8 @@ import { ListResourcesRequestSchema, ListResourcesResultSchema, type Resource } 
 import { annotationsForClient, callerClientProfile, type ClientNameSources } from '../../answer';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
+import { SEP_2640_META_NAMESPACE } from '../../skill/sep-2640/sep-2640.constants';
+import { filterServableSkills } from '../../skill/skill-filter.helper';
 import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
 
 const inputSchema = z.object({
@@ -48,7 +51,7 @@ type ResponseResourceItem = Resource;
 
 const plan = {
   pre: ['parseInput', 'ensureRemoteCapabilities'],
-  execute: ['findResources', 'filterByEnabled', 'filterByAuthorities', 'resolveConflicts'],
+  execute: ['findResources', 'filterByEnabled', 'filterByAuthorities', 'filterSkillResources', 'resolveConflicts'],
   post: ['parseResources'],
 } as const satisfies FlowPlan<string>;
 
@@ -240,6 +243,37 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
       filtered.filter((item): item is (typeof resources)[number] => item !== null),
     );
     this.logger.verbose('filterByAuthorities:done');
+  }
+
+  /** Leave out a skill's SKILL.md the `skills:filter` flow keeps from this caller, as reading it and `skill://index.json` do. */
+  @Stage('filterSkillResources')
+  async filterSkillResources() {
+    const { resources } = this.state.required;
+    const skillRegistry = this.scope.skills;
+    if (!skillRegistry?.hasAny()) return;
+
+    const skillsByPath = new Map<string, SkillEntry>();
+    for (const skill of skillRegistry.getSkills({ visibility: 'mcp' })) {
+      if (!skillsByPath.has(skill.getSkillPath())) skillsByPath.set(skill.getSkillPath(), skill);
+    }
+    const skillOfResource = new Map<(typeof resources)[number], SkillEntry | undefined>();
+    for (const item of resources) {
+      const skillPath = item.resource.metadata._meta?.[`${SEP_2640_META_NAMESPACE}path`];
+      if (typeof skillPath === 'string') skillOfResource.set(item, skillsByPath.get(skillPath));
+    }
+    if (skillOfResource.size === 0) return;
+
+    const listedSkills = [...skillOfResource.values()].filter((skill): skill is SkillEntry => skill !== undefined);
+    const ctx = (this.rawInput as { ctx?: unknown } | undefined)?.ctx;
+    const servableSkills = new Set<SkillEntry>(await filterServableSkills(this.scope, listedSkills, ctx));
+    this.state.set(
+      'resources',
+      resources.filter((item) => {
+        if (!skillOfResource.has(item)) return true;
+        const skill = skillOfResource.get(item);
+        return skill !== undefined && servableSkills.has(skill);
+      }),
+    );
   }
 
   @Stage('resolveConflicts')
