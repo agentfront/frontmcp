@@ -3,7 +3,7 @@
  *
  * Talks MCP streamable HTTP to the daemon over its Unix socket with Node's built-in http module, so a command skips
  * loading and starting the server in-process. It serves the methods the generated CLI calls, with the results the
- * in-process `connect()` client returns.
+ * in-process `connect()` client returns, and answers the questions (`elicitation/create`) the server asks during a call.
  *
  * NOTE: This file is used as a CJS runtime module — it gets bundled into the CLI
  * output by esbuild alongside the generated CLI entry. It must remain free of
@@ -23,7 +23,17 @@ var PROTOCOL_VERSION = '2025-11-25';
 var CLIENT_INFO = { name: 'mcp-client', version: '1.0.0' };
 var REQUEST_TIMEOUT_MS = 60000;
 
-function sendHttp(target, method, headers, body) {
+function eventMessage(event) {
+  var data = event.split(/\\r?\\n/)
+    .filter(function(line) { return line.indexOf('data:') === 0; })
+    .map(function(line) { return line.slice(5).trim(); })
+    .join('\\n');
+  if (!data) return undefined;
+  try { return JSON.parse(data); } catch (_) { return undefined; }
+}
+
+// Read as it streams: a request the server sends during a call is answered before the call can end
+function sendHttp(target, method, headers, body, onServerRequest) {
   return new Promise(function(resolve, reject) {
     var req = http.request({
       socketPath: target.socketPath,
@@ -32,15 +42,31 @@ function sendHttp(target, method, headers, body) {
       headers: headers,
       timeout: REQUEST_TIMEOUT_MS
     }, function(res) {
-      var chunks = [];
-      res.on('data', function(chunk) { chunks.push(chunk); });
-      res.on('end', function() {
-        resolve({
-          status: res.statusCode,
-          sessionId: res.headers['mcp-session-id'],
-          contentType: res.headers['content-type'] || '',
-          text: Buffer.concat(chunks).toString()
+      res.setEncoding('utf8');
+      var isEventStream = (res.headers['content-type'] || '').indexOf('text/event-stream') !== -1;
+      var unread = '';
+      var messages = [];
+      function takeEvents(events) {
+        events.map(eventMessage).filter(Boolean).forEach(function(message) {
+          messages.push(message);
+          if (message.method && message.id !== undefined && onServerRequest) {
+            // The server waits for the user's answer: no timeout while it is asked
+            req.setTimeout(0);
+            onServerRequest(message).then(function() { req.setTimeout(REQUEST_TIMEOUT_MS); }, function(err) { req.destroy(err); });
+          }
         });
+      }
+      res.on('data', function(chunk) {
+        unread += chunk;
+        if (!isEventStream) return;
+        var events = unread.split(/\\r?\\n\\r?\\n/);
+        unread = events.pop();
+        takeEvents(events);
+      });
+      res.on('end', function() {
+        if (isEventStream) takeEvents([unread]);
+        else { try { messages.push(JSON.parse(unread)); } catch (_) { /* not JSON-RPC: reported by status */ } }
+        resolve({ status: res.statusCode, sessionId: res.headers['mcp-session-id'], messages: messages });
       });
     });
     req.on('error', reject);
@@ -51,23 +77,8 @@ function sendHttp(target, method, headers, body) {
   });
 }
 
-function eventStreamMessages(text) {
-  return text.split(/\\r?\\n\\r?\\n/).map(function(event) {
-    return event.split(/\\r?\\n/)
-      .filter(function(line) { return line.indexOf('data:') === 0; })
-      .map(function(line) { return line.slice(5).trim(); })
-      .join('\\n');
-  }).filter(Boolean).map(function(data) { return JSON.parse(data); });
-}
-
 function responseMessage(response, id) {
-  var messages = [];
-  try {
-    messages = response.contentType.indexOf('text/event-stream') !== -1
-      ? eventStreamMessages(response.text)
-      : [JSON.parse(response.text)];
-  } catch (_) { /* not JSON-RPC: reported by status below */ }
-  var message = messages.find(function(m) { return m && m.id === id; });
+  var message = response.messages.find(function(m) { return m && m.id === id && !m.method; });
   if (!message) throw new Error('the daemon answered HTTP ' + response.status);
   if (message.error) {
     var err = new Error(message.error.message || 'RPC error');
@@ -81,13 +92,15 @@ function responseMessage(response, id) {
 /**
  * Create a daemon client that serves the methods the generated CLI calls, as the in-process client does.
  * @param {string} socketPath - Path to the Unix socket file.
- * @param {{ authToken?: string, entryPath?: string }} [options] - authToken is sent as a Bearer token with every
- *   request; entryPath is the MCP endpoint path the daemon serves (the server's http.entryPath, '/' by default).
+ * @param {{ authToken?: string, entryPath?: string, onElicitation?: Function }} [options] - authToken is sent as a
+ *   Bearer token with every request; entryPath is the MCP endpoint path the daemon serves (the server's
+ *   http.entryPath, '/' by default); onElicitation answers the server's questions, as connect()'s does.
  * @returns {object} Client object with MCP methods; call connect() before the others.
  */
 function createDaemonClient(socketPath, options) {
   var target = { socketPath: socketPath, path: (options && options.entryPath) || '/' };
   var authToken = options && options.authToken;
+  var onElicitation = options && options.onElicitation;
   var sessionId;
   var lastId = 0;
 
@@ -109,9 +122,21 @@ function createDaemonClient(socketPath, options) {
     lastId += 1;
     var id = lastId;
     var body = JSON.stringify({ jsonrpc: '2.0', id: id, method: method, params: params || {} });
-    return sendHttp(target, 'POST', headersFor(body), body).then(function(response) {
+    return sendHttp(target, 'POST', headersFor(body), body, answerServerRequest).then(function(response) {
       if (response.sessionId) sessionId = response.sessionId;
       return responseMessage(response, id);
+    });
+  }
+
+  function answerServerRequest(message) {
+    var reply = message.method === 'elicitation/create' && onElicitation
+      ? Promise.resolve(onElicitation(Object.assign({ mode: 'form' }, message.params)))
+          .catch(function() { return { action: 'decline' }; })
+          .then(function(result) { return { jsonrpc: '2.0', id: message.id, result: result }; })
+      : Promise.resolve({ jsonrpc: '2.0', id: message.id, error: { code: -32601, message: 'Method not found: ' + message.method } });
+    return reply.then(function(answer) {
+      var body = JSON.stringify(answer);
+      return sendHttp(target, 'POST', headersFor(body), body);
     });
   }
 
@@ -147,7 +172,8 @@ function createDaemonClient(socketPath, options) {
   return {
     _isDaemon: true,
     connect: function() {
-      return call('initialize', { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: CLIENT_INFO })
+      var capabilities = onElicitation ? { elicitation: { form: {} } } : {};
+      return call('initialize', { protocolVersion: PROTOCOL_VERSION, capabilities: capabilities, clientInfo: CLIENT_INFO })
         .then(function() { return notify('notifications/initialized'); });
     },
     callTool: function(name, args) {

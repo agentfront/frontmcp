@@ -410,10 +410,23 @@ An object field takes a JSON string; an array field takes the flag once per valu
 
 A server with skills also gets `skills list`, `skills search`, `skills read` and `skills load`; `skills read` and `skills load` exit 1 when a skill is not found.
 
+**Skilled OpenAPI:** on a server that uses the Skilled OpenAPI plugin, the bundle's skills are tools, and the `skills` commands run the plugin's tools instead: `skills search`, `skills load`, `skills execute`, `skills run`, `skills read` and `skills list`. On a server whose only tools are the plugin's, the same commands are also top-level, and the plugin's tools are never plain tool commands:
+
+```bash
+./myapp search_skill "refund an invoice" --limit 5     # Skills, with their scores
+./myapp load_skill invoices                            # Instructions, and a ready execute line per action
+./myapp execute getInvoice --input '{"id":"INV-1001"}' # One action (--input -, or --input-file f.json)
+./myapp run_workflow --file refund.js                  # A script (as an argument, --file, or - for stdin)
+```
+
+They answer to `search-skill`, `load-skill`, `execute_action` and `run-workflow` too. `--output json` prints the tool's structured content. They exit 1 when the tool fails or a skill is not found, and 2 for a usage error, with the error on stderr.
+
+**Questions from the server:** a tool's `this.elicit()` question, such as the confirmation of a destructive action, is asked in the terminal (`y/N`), in-process and through the daemon. `--yes` answers yes without asking; with no terminal and no `--yes`, the CLI declines.
+
 **Daemon:** while `daemon start`'s server runs, every command goes to it over its Unix socket (at the server's `http.entryPath`) instead of starting the server in-process. A daemon that does not answer is reported on stderr, and the command runs in-process.
 
 **Global options:** `--output <text|json>` sets the output format (the default comes from `cli.outputDefault`);
-`--verbose` and `--log-dir <path>` control logging.
+`--yes` answers the server's yes/no questions with yes; `--verbose` and `--log-dir <path>` control logging.
 
 **Tool name conflict resolution:** if a tool name collides with a built-in command (e.g., `login`, `serve`), the tool subcommand is automatically suffixed with `-tool` (e.g., `login-tool`).
 
