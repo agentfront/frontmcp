@@ -138,13 +138,18 @@ export function runFrontmcpCliAsync(
   return runNodeAsync([FRONTMCP_BIN, ...args], cwd, timeoutMs, extraEnv);
 }
 
-/** `runCliBundle()` without blocking, for a command that reaches a server the test process runs. */
+/**
+ * `runCliBundle()` without blocking, for a command that reaches a server the test process runs.
+ *
+ * @param stdin - What the command reads from standard input, which is then closed; a pipe, so never a terminal
+ */
 export function runCliBundleAsync(
   bundle: string,
   args: string[],
   extraEnv?: Record<string, string>,
+  stdin?: string,
 ): Promise<CliResult> {
-  return runNodeAsync([bundle, ...args], path.dirname(bundle), 30000, extraEnv);
+  return runNodeAsync([bundle, ...args], path.dirname(bundle), 30000, extraEnv, stdin);
 }
 
 function runNodeAsync(
@@ -152,12 +157,14 @@ function runNodeAsync(
   cwd: string,
   timeoutMs: number,
   extraEnv?: Record<string, string>,
+  stdin?: string,
 ): Promise<CliResult> {
   return new Promise((resolve) => {
     const child = spawn('node', nodeArgs, {
       cwd,
       env: { ...process.env, NODE_ENV: 'test', ...extraEnv },
     });
+    if (stdin !== undefined) child.stdin.end(stdin);
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (data: Buffer) => {

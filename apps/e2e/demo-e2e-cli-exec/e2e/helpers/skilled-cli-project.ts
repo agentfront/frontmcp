@@ -75,6 +75,7 @@ export interface SkilledCliProject {
  * @param options.serverConfig - Extra `@FrontMcp()` fields, as TypeScript source (such as an `auth` block)
  * @param options.cli - The cli deployment's `cli` block
  * @param options.serviceBaseUrl - The base URL of a plain-HTTP API on loopback the bundle's service points to
+ * @param options.ownTool - Give the server a tool of its own, `ping`, beside the plugin's
  */
 export async function buildSkilledCliProject(options: {
   prefix: string;
@@ -82,6 +83,7 @@ export async function buildSkilledCliProject(options: {
   serverConfig?: string;
   cli?: Record<string, unknown>;
   serviceBaseUrl?: string;
+  ownTool?: boolean;
 }): Promise<SkilledCliProject> {
   const bundle = options.serviceBaseUrl
     ? { ...SKILLED_BUNDLE, services: [{ id: 'billing', baseUrl: options.serviceBaseUrl }] }
@@ -113,7 +115,11 @@ export async function buildSkilledCliProject(options: {
   const bundlePath = path.join(dir, 'bundle.json');
   await writeFile(
     path.join(dir, 'src', 'main.ts'),
-    serverSource(bundlePath, options.serverConfig ?? "auth: { mode: 'public' },", options.serviceBaseUrl !== undefined),
+    serverSource(bundlePath, {
+      serverConfig: options.serverConfig ?? "auth: { mode: 'public' },",
+      loopbackService: options.serviceBaseUrl !== undefined,
+      ownTool: options.ownTool ?? false,
+    }),
   );
 
   const build = await runFrontmcpCliAsync(['build', '--target', 'cli', '--js'], dir, BUILD_TIMEOUT_MS);
@@ -123,15 +129,31 @@ export async function buildSkilledCliProject(options: {
   return { dir, bundlePath, cliBundle: path.join(dir, 'dist', 'cli', `${options.appName}-cli.bundle.js`) };
 }
 
-function serverSource(bundlePath: string, serverConfig: string, loopbackService: boolean): string {
-  const outbound = loopbackService ? '\n      outbound: { allowHttp: true, allowPrivateNetworks: true },' : '';
+const OWN_TOOL_APP = `
+@Tool({ name: 'ping', description: 'Answer pong', inputSchema: {} })
+class PingTool extends ToolContext {
+  async execute() {
+    return 'pong';
+  }
+}
+
+@App({ name: 'ops', tools: [PingTool] })
+class OpsApp {}
+`;
+
+function serverSource(
+  bundlePath: string,
+  options: { serverConfig: string; loopbackService: boolean; ownTool: boolean },
+): string {
+  const outbound = options.loopbackService ? '\n      outbound: { allowHttp: true, allowPrivateNetworks: true },' : '';
+  const sdkImports = options.ownTool ? 'App, FrontMcp, LogLevel, Tool, ToolContext' : 'FrontMcp, LogLevel';
   return `import 'reflect-metadata';
 import SkilledOpenApiPlugin from '@frontmcp/plugin-skilled-openapi';
-import { FrontMcp, LogLevel } from '@frontmcp/sdk';
-
+import { ${sdkImports} } from '@frontmcp/sdk';
+${options.ownTool ? OWN_TOOL_APP : ''}
 @FrontMcp({
   info: { name: 'Billing CLI', version: '1.0.0' },
-  apps: [],
+  apps: [${options.ownTool ? 'OpsApp' : ''}],
   logging: { level: LogLevel.Warn, enableConsole: false },
   authorities: { claimsMapping: { roles: 'roles' } },
   plugins: [
@@ -141,7 +163,7 @@ import { FrontMcp, LogLevel } from '@frontmcp/sdk';
       confirm: { methods: ['DELETE'] },${outbound}
     }),
   ],
-  ${serverConfig}
+  ${options.serverConfig}
 })
 export default class Server {}
 `;
