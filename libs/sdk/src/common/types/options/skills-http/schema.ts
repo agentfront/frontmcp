@@ -3,6 +3,7 @@
 
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
+import type { SkillDecider, SkillDecisionOptions } from '../../../../skill/decision/skill-decision.types';
 import type { ExternalSkillProviderBase } from '../../../../skill/providers/external-skill.provider';
 import type { RawZodShape } from '../../common.types';
 import type { SkillsConfigAuthMode, SkillsConfigOptions as SkillsConfigOptionsInterface } from './interfaces';
@@ -102,6 +103,22 @@ function isExternalSkillProvider(value: unknown): value is ExternalSkillProvider
   return EXTERNAL_SKILL_PROVIDER_METHODS.every((method) => typeof provider[method] === 'function');
 }
 
+/** `skillsConfig.decision`: rank skill search results with a decision model (#1062). */
+const skillsConfigDecisionOptionsSchema = z.object({
+  decider: z.custom<SkillDecider>((value) => typeof value === 'function', {
+    message: 'decision.decider must be a function, such as decisionsApiDecider({ apiKey })',
+  }),
+  maxCandidates: z.number().int().min(1).max(254).optional(),
+  minProbability: z.number().min(0).max(1).optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  cache: z
+    .union([
+      z.literal(false),
+      z.object({ ttlMs: z.number().int().positive().optional(), maxEntries: z.number().int().positive().optional() }),
+    ])
+    .optional(),
+}) satisfies z.ZodType<SkillDecisionOptions>;
+
 /**
  * Skills HTTP options Zod schema.
  * Auth is configured at the top level and applies to all HTTP endpoints.
@@ -122,6 +139,7 @@ export const skillsConfigOptionsSchema = z.object({
   audit: skillsConfigAuditOptionsSchema.optional(),
   injectInstructions: z.enum(['off', 'compact', 'append', 'prepend', 'replace']).optional().default('compact'),
   scoring: z.enum(['cosine', 'bm25']).optional(),
+  decision: skillsConfigDecisionOptionsSchema.optional(),
   failOnInvalidSkills: z.boolean().optional(),
   externalProvider: z
     .custom<ExternalSkillProviderBase>(isExternalSkillProvider, {

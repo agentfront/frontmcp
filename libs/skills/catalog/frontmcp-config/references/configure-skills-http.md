@@ -36,6 +36,7 @@ tags: [config, skills, skills-http, llm-txt, instructions, audit, injection, ann
     injectInstructions: 'compact', // 'compact' (default) | 'off' | 'append' | 'prepend' | 'replace'
     failOnInvalidSkills: true, // false: a 'strict' skill with a missing tool is logged, not fatal
     externalProvider: new RestSkillProvider({ mode: 'read-only' }), // external skill storage, see below
+    decision: { decider: decisionsApiDecider({ apiKey: process.env.OPENAI_API_KEY! }) }, // rank search with a decision model, see below
     audit: {
       enabled: true,
       signer: customSigner, // SkillAuditSigner — see audit section below
@@ -143,6 +144,36 @@ The provider is initialized (`initialize()`) before the server uses it. The valu
 
 A read-only provider's skills are also served over `skill://`: `skill://index.json` lists each one as `skill://<name>/SKILL.md`, and the `skill://{+skillPath}/SKILL.md` template reads it (a registered skill of the same name wins). `resources/list` names a concrete `SKILL.md` resource for registered skills only: an external store sends no change events and may hold many skills, so its skills are discovered through the index and read through the template. `setExternalProvider()` is declared on `this.scope.skills` (`SkillRegistryInterface`); up to 1.9.4 it was only on the `SkillRegistry` class and nothing installed a provider at startup.
 
+## Ranking Search with a Decision Model
+
+By default skill search (`skills/search`, Skilled OpenAPI's `search_skill`) ranks with the TF-IDF index, which matches words, not meaning: `kittens` doesn't find a skill about cats. `skillsConfig.decision` ranks with a **decision model** instead: a model that answers a bounded choice with a probability for each option, without embeddings, such as OpenAI's Decisions API (`gpt-6-luna`) or TypeSafe's Jev.
+
+```typescript
+import { decisionsApiDecider } from '@frontmcp/sdk';
+
+skillsConfig: {
+  decision: {
+    decider: decisionsApiDecider({ apiKey: process.env.OPENAI_API_KEY! }),
+    // Jev, through a gateway that serves the same API:
+    // decider: decisionsApiDecider({ apiKey, baseUrl: 'https://api.llmgateway.io/v1', model: 'jev-1.13.0' }),
+    maxCandidates: 50, // default 50, at most 254
+    minProbability: 0.1, // default 0.1
+    timeoutMs: 5000, // default 5000
+    cache: { ttlMs: 600_000, maxEntries: 500 }, // the default; false turns it off
+  },
+}
+```
+
+How a search runs:
+
+1. The index supplies the candidates: up to `maxCandidates` skills that the search's `tags` and `tools` filters keep, hidden skills left out, ranked by the index. A caller's authorities and the `skills:filter` flow are applied to the ranked results afterwards, as without a decision model. In a catalog of no more than `maxCandidates` skills, every skill is a candidate, so a query that shares no word with a skill can still find it.
+2. The decider gets the query, the anti-query (`notQuery`) and the candidates, and returns a probability for each. `decisionsApiDecider()` sends one `choice` question to `POST <baseUrl>/decisions`, with the candidates and a "none of these" option. The catalog goes in `input`, which stays the same for a skill set, so the API's prompt cache can reuse it (`prompt_cache_key`), and the query goes in the question.
+3. Results are ranked by probability, the probability is their `score`, and those under `minProbability` are left out.
+
+A decision is cached in memory, keyed by the query, the anti-query and the candidates (their ids, names, descriptions and tags), so a repeated search makes no call. A decision that fails, is refused or takes longer than `timeoutMs` leaves that search ranked by the index, and is logged as a warning. An empty query never asks the model.
+
+Any model can decide: `decider` is a function, `({ query, notQuery, candidates, signal }) => Promise<Array<{ id, probability }>>`. Abort the call on `signal`, which fires at `timeoutMs`. The API key is passed to `decisionsApiDecider()` and sent only as `Authorization: Bearer`; it is never logged.
+
 ## Skills HTTP Authentication
 
 ```typescript
@@ -236,6 +267,7 @@ See [`skill-audit-log`](../../frontmcp-extensibility/references/skill-audit-log.
 | Client that relies on resource `priority` | `resourceAnnotations: 'full'`                                                                         |
 | Multi-pod production                      | `cache: { enabled: true, redis: {...} }`, `audit: { signer: Rs256, store: StorageAdapterAuditStore }` |
 | Compliance / forensic requirements        | RS256 signer + persistent store + scheduled `verifyChain(...)` in CI                                  |
+| Search must match meaning, not words      | `decision: { decider: decisionsApiDecider({ apiKey }) }`                                              |
 
 ## Examples
 

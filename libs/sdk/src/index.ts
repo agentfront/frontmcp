@@ -419,6 +419,8 @@ export {
   buildChannelInstructions,
   // A plugin's runtime skills, which the initialize instructions wait for and point to
   SkillCatalogSourceToken,
+  // A decision model for skill search (skillsConfig.decision), such as OpenAI's Decisions API or Jev
+  decisionsApiDecider,
   // Skill audit log helper (Edge-runtime-safe factory injection)
   setSkillAuditFactory,
   hasSkillAuditFactory,
@@ -470,6 +472,12 @@ export type {
   InstructionsScope,
   SkillCatalogSource,
   SkillCatalogPointers,
+  DecisionsApiDeciderOptions,
+  SkillDecider,
+  SkillDecision,
+  SkillDecisionCandidate,
+  SkillDecisionOptions,
+  SkillDecisionRequest,
   SkillIndexCache,
   SkillIndexScoring,
   SkillValidationReport,

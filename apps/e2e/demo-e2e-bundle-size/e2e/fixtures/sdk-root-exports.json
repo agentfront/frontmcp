@@ -715,6 +715,7 @@
   "createWebFetchHandler": "function",
   "decideIntent": "function",
   "decisionSchema": "object",
+  "decisionsApiDecider": "function",
   "decryptElicitationData": "function",
   "deepMerge": "function",
   "default": "object",

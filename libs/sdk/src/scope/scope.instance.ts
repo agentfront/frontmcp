@@ -733,6 +733,7 @@ export class Scope extends ScopeEntry {
     const skillsConfig = this.metadata.skillsConfig;
     this.scopeSkills = new SkillRegistry(this.scopeProviders, this.metadata.skills ?? [], scopeRef, {
       ...(skillsConfig?.scoring ? { scoring: skillsConfig.scoring } : {}),
+      ...(skillsConfig?.decision ? { decision: skillsConfig.decision } : {}),
       ...(skillsConfig?.failOnInvalidSkills !== undefined && { failOnInvalidSkills: skillsConfig.failOnInvalidSkills }),
     });
 
