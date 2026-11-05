@@ -20,6 +20,7 @@ import { BundleStore, type BundleStoreTelemetry } from '@frontmcp/adapters/skill
 import { MemoryCredentialResolver } from '../executor/credential-resolver';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
+import { VaultRefListedTwiceError } from '../skilled-openapi.errors';
 import SkilledOpenApiPlugin from '../skilled-openapi.plugin';
 import {
   asCredentialResolverToken,
@@ -52,6 +53,32 @@ describe('SkilledOpenApiPlugin', () => {
 
     it('throws on invalid options (zod)', () => {
       expect(() => new SkilledOpenApiPlugin({ source: { type: 'static' } as never })).toThrow();
+    });
+
+    describe('a vaultRef listed under both credentials and authProviders', () => {
+      const listedTwice = {
+        source: { type: 'static' as const, path: '/x' },
+        credentials: { 'billing-token': 'server-token', 'reports-token': 'reports' },
+        authProviders: { 'billing-token': 'billing', 'crm-token': 'crm' },
+      };
+
+      it('is refused when the plugin is installed', () => {
+        expect(() => SkilledOpenApiPlugin.dynamicProviders(listedTwice)).toThrow(
+          new VaultRefListedTwiceError(['billing-token']),
+        );
+      });
+
+      it('is refused when the plugin is built', () => {
+        expect(() => new SkilledOpenApiPlugin(listedTwice)).toThrow(VaultRefListedTwiceError);
+      });
+
+      it('names the vaultRef in the error', () => {
+        expect(new VaultRefListedTwiceError(['billing-token']).message).toBe(
+          'SkilledOpenApiPlugin: vaultRef "billing-token" is listed under both credentials and authProviders, so ' +
+            "its binding would send the caller's own credential and never the server's. Keep each vaultRef in one of " +
+            'the two.',
+        );
+      });
     });
 
     it('warns on dev=true', () => {

@@ -2,19 +2,19 @@
 name: 15-tool-with-credential-vault
 level: advanced
 description: "Tool that reads a user-supplied static credential (a Slack webhook URL) from the per-session encrypted credential vault — the pattern for credentials that aren't OAuth."
-tags: [auth-providers, credential-vault, slack-webhook, encryption-at-rest]
+tags: [auth-providers, credential-vault, slack-webhook, encryption-at-rest, this.credentials]
 features:
-  - "Declaring a vault-backed auth provider with `authProviders: ['slack-webhook']`"
-  - "Reading the user's pasted-in credential via `await this.authProviders.headers('slack-webhook')` — same API as OAuth"
-  - Letting the framework handle per-session AES-256-GCM encryption at rest (Redis or memory store)
-  - Knowing when to pick the vault (static secrets the user knows) vs OAuth (delegated identity)
+  - "Declaring the credential the tool needs with `authProviders: ['slack-webhook']`, so a caller who hasn't connected it gets `-32001` with the connect URL before `execute()` runs"
+  - "Storing the user's pasted-in webhook URL in the session credential vault from local mode's `authenticate()`, and reading it with `await this.credentials.get('slack-webhook')`"
+  - Letting the framework handle per-session AES-256-GCM encryption at rest (memory, Redis or SQLite `tokenStorage`)
+  - Knowing when to pick the session credential vault (secrets the user types in) vs `authProvidersVault` (credentials the server acquires)
 ---
 
 # Tool With Credential Vault
 
 Tool that reads a user-supplied static credential (a Slack webhook URL) from the per-session encrypted credential vault — the pattern for credentials that aren't OAuth.
 
-For credentials that aren't OAuth — webhook URLs, API keys the user pastes in, custom tokens — use a vault-backed auth provider. Same API as OAuth from the tool's perspective; the framework handles per-session encryption and key derivation.
+For credentials the user types in — webhook URLs, API keys, custom tokens — use the session credential vault, `this.credentials`. Local mode's `authenticate()` stores them, encrypted for the session, and `@Tool({ authProviders })` checks them before `execute()` runs.
 
 ## Code
 
@@ -35,26 +35,16 @@ const outputSchema = { sent: z.boolean(), channel: z.string() };
   description: 'Send a message to a Slack channel via the user-supplied incoming-webhook URL',
   inputSchema,
   outputSchema,
-  authProviders: ['slack-webhook'], // vault-backed provider — see auth skill
+  authProviders: ['slack-webhook'], // required: a caller without it gets -32001 and the connect URL
   annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: true },
 })
 export class SendToSlackTool extends ToolContext {
   async execute(input: { channel: string; text: string; username?: string; iconEmoji?: string }) {
-    const headers = await this.authProviders.headers('slack-webhook');
-    // `headers` is a plain `Record<string, string>` (NOT a `Headers` object), e.g.:
-    //   { 'x-slack-webhook-url': 'https://hooks.slack.com/services/T.../B.../...' }
-    // Read values with string-index access (`headers['x-...']`), not `headers.get(...)`.
-    // The framework reads the value from the vault, decrypts with the per-session AES-256-GCM
-    // key, and never returns the raw value — it's only available indirectly via these headers.
+    // `{ secret, metadata }`, decrypted for this session's subject; undefined when not connected.
+    const webhook = await this.credentials.get('slack-webhook');
+    if (!webhook) this.fail(new PublicMcpError('Connect your Slack webhook and retry'));
 
-    // Reading the key directly is safe here because we declared `authProviders: ['slack-webhook']`
-    // (required: true by default), so the framework already rejected the call before `execute()`
-    // if the vault entry was missing — by the time we read the header, the provider is guaranteed
-    // to have produced it. If you ever switch the provider to `required: false`, `headers` will be
-    // an empty object `{}` when no credential is set, so guard with
-    // `if (!webhookUrl) this.fail(new PublicMcpError('No Slack webhook configured'))` instead.
-    const webhookUrl = headers['x-slack-webhook-url'];
-    const response = await this.fetch(webhookUrl, {
+    const response = await this.fetch(webhook.secret, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -74,42 +64,51 @@ export class SendToSlackTool extends ToolContext {
 }
 ```
 
-## What This Demonstrates
-
-- Declaring a vault-backed auth provider with `authProviders: ['slack-webhook']`
-- Reading the user's pasted-in credential via `await this.authProviders.headers('slack-webhook')` — same API as OAuth
-- Letting the framework handle per-session AES-256-GCM encryption at rest (Redis or memory store)
-- Knowing when to pick the vault (static secrets the user knows) vs OAuth (delegated identity)
-
-## Vault vs OAuth — when to pick which
-
-| Vault-backed                                                                 | OAuth                                                                    |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| User pastes in a webhook URL, API key, or token they own                     | User clicks "Connect to GitHub" — provider issues a token to your server |
-| Static — doesn't refresh, doesn't expire                                     | Refresh token + access token + expiration                                |
-| Per-session — gone when the session ends (vs. Redis store, then it survives) | Long-lived — usually persists across sessions                            |
-| For "bring your own" integrations (Slack webhooks, custom API keys)          | For "log in with" integrations (GitHub, Google, Microsoft)               |
-
-## How vault-backed providers are configured
-
-Server side, in the `auth` skill:
-
 ```typescript
+// src/server.ts
+import { FrontMcp } from '@frontmcp/sdk';
+
+import { MainApp } from './apps/main';
+
 @FrontMcp({
+  info: { name: 'slack-tools', version: '1.0.0' },
+  apps: [MainApp],
   auth: {
-    providers: [
-      {
-        name: 'slack-webhook',
-        kind: 'vault',
-        fields: [
-          { name: 'webhook-url', type: 'url', label: 'Slack incoming-webhook URL', required: true },
-        ],
-      },
-    ],
+    mode: 'local',
+    login: {
+      title: 'Connect Slack',
+      fields: { webhookUrl: { type: 'password', label: 'Slack incoming-webhook URL', required: true } },
+      subject: { fromField: 'webhookUrl', strategy: 'per-account' },
+    },
+    authenticate: async ({ fields, resume }) => {
+      const webhookUrl = fields['webhookUrl'];
+      if (!webhookUrl?.startsWith('https://hooks.slack.com/')) {
+        return { ok: false, message: 'Paste a Slack incoming-webhook URL', retryField: 'webhookUrl' };
+      }
+      // At sign-in, and again when the caller opens the connect URL of a -32001 (`resume` is set then).
+      return { ok: true, credentials: [{ key: resume?.key ?? 'slack-webhook', secret: webhookUrl }] };
+    },
   },
 })
+export default class Server {}
 ```
 
-The framework renders the credential UI based on `fields`, encrypts the user's input, stores it per-session, and exposes it back to tools via `this.authProviders.headers('slack-webhook')`.
+## What This Demonstrates
 
-See the `auth` skill for full vault configuration, encryption-key management, Redis-backed storage, and the credential UI.
+- Declaring the credential the tool needs with `authProviders: ['slack-webhook']`, so a caller who hasn't connected it gets `-32001` with the connect URL before `execute()` runs
+- Storing the user's pasted-in webhook URL in the session credential vault from local mode's `authenticate()`, and reading it with `await this.credentials.get('slack-webhook')`
+- Letting the framework handle per-session AES-256-GCM encryption at rest (memory, Redis or SQLite `tokenStorage`)
+- Knowing when to pick the session credential vault (secrets the user types in) vs `authProvidersVault` (credentials the server acquires)
+
+## Session credential vault vs `authProvidersVault`
+
+| Session credential vault (`this.credentials`)                     | `authProvidersVault` (`this.authProviders`)                                    |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| The user types the secret in: at sign-in, or from the connect URL | The server acquires it: a `factory` you register per provider                  |
+| Filled by local mode's `authenticate()` returning `credentials`   | `@FrontMcp({ authProvidersVault: { providers: [{ name, scope, factory }] } })` |
+| Encrypted per session, in the `auth.tokenStorage` backend         | Cached for the request (and a verified session), not stored                    |
+| A missing one gets `-32001` with a connect URL                    | A factory returning `null` gets `-32001`                                       |
+
+`@Tool({ authProviders })` checks both: the `authProvidersVault` provider of that name first, then the session
+credential vault's key. See `13-tool-with-single-auth-provider` for `authProvidersVault`, and the `configure-auth`
+reference for the session credential vault, its encryption key and `requireConnect()`.

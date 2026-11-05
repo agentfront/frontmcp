@@ -8,11 +8,5 @@ export {
   createAuthProvidersProviders,
   isAuthProvidersEnabled,
   LAZY_CREDENTIAL_LOADER,
+  registerAuthProvidersVault,
 } from './auth-providers.providers';
-
-// Context Extension
-export {
-  authProvidersContextExtension,
-  getAuthProviders,
-  tryGetAuthProviders,
-} from './auth-providers.context-extension';

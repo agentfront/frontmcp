@@ -25,4 +25,5 @@ export type {
   ConfirmOptions,
 } from './skilled-openapi.types';
 export { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from './skilled-openapi.symbols';
+export { VaultRefListedTwiceError } from './skilled-openapi.errors';
 export type { CallerAuthInfo, CredentialResolveOptions } from './executor/credential-resolver';

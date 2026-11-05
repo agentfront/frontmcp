@@ -272,7 +272,7 @@ class CallAcmeTool extends ToolContext {
 
 Security: per-record AES key derived (HKDF) from a fresh per-session `vaultId` + a pepper from `VAULT_SECRET ?? JWT_SECRET` (random per-process fallback, logged with a warning — credentials then do not survive a restart, never plaintext). A disconnect + reconnect rotates the `vaultId`, so the reconnected session sees an **empty vault** and old ciphertext is undecryptable. The vault is backed by the same `auth.tokenStorage` backend (memory / Redis / SQLite). No login PII is stored.
 
-The `@Tool({ authProviders })` credential gate reads this vault too, and so does `@frontmcp/plugin-skilled-openapi`: with `authProviders: { '<vaultRef>': '<key>' }`, a bundle auth binding sends each caller the credential they connected under `<key>`, and a caller without it gets `-32001` with the `requireConnect` resume URL as `authUrl`.
+The `@Tool({ authProviders })` credential gate reads this vault too, and so does `@frontmcp/plugin-skilled-openapi`: with `authProviders: { '<vaultRef>': '<key>' }`, a bundle auth binding sends each caller the credential they connected under `<key>`, and a caller without it gets `-32001` with the `requireConnect` resume URL as `authUrl`. A `<vaultRef>` it also lists under `credentials` is refused at startup (`VaultRefListedTwiceError`).
 
 ### Session secure-secret store (`this.secureStore`)
 
@@ -436,17 +436,35 @@ class AdminApi {}
 
 ## Credential Vault (`this.authProviders`)
 
-The credential vault and its `this.authProviders` accessor are intended to surface downstream API tokens to tools. The accessor and the underlying vault primitives exist in `@frontmcp/auth`, but they are **scaffolding** — the vault must be explicitly configured/registered with providers before `this.authProviders` resolves. It is **not** turnkey-wired for `local` mode (or auto-populated by simply setting `auth.mode`), so do not assume credentials appear automatically from configuring an auth mode.
-
-When the vault is configured with registered providers, tools read credentials via the `this.authProviders` context extension:
+`this.authProviders` reads downstream API credentials the server acquires itself, from the providers registered in
+`@FrontMcp({ authProvidersVault })`. It works in every auth mode, `public` included, and isn't filled by setting
+`auth.mode`:
 
 ```typescript
-@Tool({ name: 'create_github_issue' })
+@FrontMcp({
+  info: { name: 'github-server', version: '1.0.0' },
+  apps: [GithubApp],
+  authProvidersVault: {
+    providers: [
+      {
+        name: 'github',
+        scope: 'user', // 'global' | 'user' | 'session'
+        loading: 'lazy',
+        factory: async ({ userSub }) => {
+          const token = userSub ? await githubTokenOf(userSub) : undefined;
+          return token ? { type: 'bearer', token } : null;
+        },
+      },
+    ],
+  },
+})
+class Server {}
+
+@Tool({ name: 'create_github_issue', authProviders: ['github'] })
 class CreateGithubIssueTool extends ToolContext {
   async execute(input: { title: string; body: string }) {
-    // Resolves only when the AuthProviders vault is configured with providers.
-    const github = await this.authProviders.get('github');
-    const headers = await this.authProviders.headers('github');
+    const github = await this.authProviders.get('github'); // ResolvedCredential | null
+    const headers = await this.authProviders.headers('github'); // { Authorization: 'Bearer …' }
     // Use headers to call GitHub API
   }
 }
@@ -454,12 +472,18 @@ class CreateGithubIssueTool extends ToolContext {
 
 The `authProviders` accessor (from `@frontmcp/auth`) exposes:
 
-- `get(provider)` -- get the credential/token for a provider.
-- `headers(provider)` -- get pre-formatted auth headers for HTTP requests.
-- `has(provider)` -- check if a provider is configured.
-- `refresh(provider)` -- force refresh the credential.
+- `get(provider)` -- get the credential/token for a provider (`null` when the factory returns none).
+- `headers(provider)` -- get pre-formatted auth headers for HTTP requests (`{}` when there is none).
+- `has(provider)` -- check if a provider's credential is available.
+- `refresh(provider)` -- force refresh the credential (the provider's `refresh`, else its `factory`).
 
-If the vault is not configured, accessing `this.authProviders` throws (`AuthProvidersNotConfiguredError`).
+The factory gets the caller's `userSub`, `userEmail`, `userName` and `sessionId`. A credential is cached for the
+request, and for the requests of a verified session on a single-instance server; nothing is stored between them.
+
+On a server without `authProvidersVault`, `get()` and `headers()` throw `AuthProvidersNotConfiguredError`, naming
+the provider. A provider name listed twice is refused at startup. A name the vault doesn't register answers `null`,
+so `@Tool({ authProviders })` and `@frontmcp/plugin-skilled-openapi` read the session credential vault's key of
+that name instead.
 
 ## Common Patterns
 
