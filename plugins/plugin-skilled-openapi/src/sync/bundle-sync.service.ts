@@ -11,7 +11,9 @@ import {
   verifyBundleSignature,
   type AuthBinding,
   type BundleDiff,
+  type BundlePullFailureListener,
   type BundlePushReceiver,
+  type BundleSourceListener,
   type BundleStore,
   type OperationDescriptor,
   type ResolvedBundle,
@@ -23,7 +25,12 @@ import { PublicMcpError, type FrontMcpLogger, type SkillContent, type SkillRegis
 import { type HiddenOpEntry, type HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { type SignatureKey } from '../skilled-openapi.types';
 import { type OperationToolFactory } from '../tools/operation-tool.factory';
-import { describeLoadError, publicLoadFailureReason, type BundleLoadState } from './bundle-load-state';
+import {
+  describeLoadError,
+  publicLoadFailureReason,
+  type BundleLoadState,
+  type BundleSyncOutcome,
+} from './bundle-load-state';
 
 export interface BundleSyncOptions {
   requireSignature: boolean;
@@ -75,7 +82,8 @@ export interface BundleApplyResult {
 /** Minimal slice of a bundle source that {@link BundleSyncService} drives. */
 interface StartableBundleSource {
   start(): Promise<void>;
-  onChange(listener: (bundle: ResolvedBundle) => Promise<void>): () => void;
+  onChange(listener: BundleSourceListener): () => void;
+  onPullFailure?(listener: BundlePullFailureListener): () => void;
   refresh?(): Promise<unknown>;
   keepBundle?(bundle: ResolvedBundle): Promise<void>;
   readonly push?: BundlePushReceiver;
@@ -90,6 +98,8 @@ export class BundleSyncService {
   private readyPromise?: Promise<void>;
   /** Why the last load failed, in a form clients may read; cleared when a bundle is applied. */
   private loadFailure?: string;
+  /** What the last bundle sync came to: a bundle pulled or pushed, or a pull that failed. */
+  private lastSync?: BundleSyncOutcome;
   /** The last queued apply: the source's bundles and pushed ones apply one at a time, in the order they arrive. */
   private applyQueue?: Promise<BundleApplyResult>;
 
@@ -143,15 +153,44 @@ export class BundleSyncService {
     throw new PublicMcpError(`No skill bundle is loaded: ${reason}`, 'SKILL_BUNDLE_NOT_LOADED', 503);
   }
 
+  /** {@link ensureReady}, then what the last sync came to: on a first start, its pull. */
+  async start(): Promise<BundleSyncOutcome> {
+    await this.ensureReady();
+    return this.syncOutcome();
+  }
+
   /**
    * Refresh the bundle as a host's scheduler does, such as a Worker's Cron run: the source pulls a fresh bundle, and
-   * this resolves once it is applied and kept. When nothing has started the source yet, this starts it instead, as
-   * {@link ensureLoaded} does: its start pulls, applies and keeps the bundle, so no second pull follows.
+   * this resolves once it is applied and kept, or refused, with what the pull came to. A pull that fails resolves as
+   * `failed`. When nothing has started the source yet, this starts it instead ({@link start}): its start pulls,
+   * applies and keeps the bundle, so no second pull follows.
    */
-  async refresh(): Promise<void> {
-    if (this.readyPromise === undefined) return this.ensureLoaded();
+  async refresh(): Promise<BundleSyncOutcome> {
+    if (this.readyPromise === undefined) return this.start();
     await this.ensureReady();
-    await this.source?.refresh?.();
+    try {
+      await this.source?.refresh?.();
+    } catch (e) {
+      this.recordPullFailure(describeLoadError(e), false);
+    }
+    return this.syncOutcome();
+  }
+
+  /** What the last sync came to: a bundle pulled or pushed, or a pull that failed. Undefined before the first. */
+  lastSyncOutcome(): BundleSyncOutcome | undefined {
+    return this.lastSync;
+  }
+
+  /** {@link lastSyncOutcome}; before the first sync, that the first bundle hasn't loaded, and why when loading failed. */
+  private syncOutcome(): BundleSyncOutcome {
+    return (
+      this.lastSync ?? {
+        status: 'failed',
+        reason: this.loadFailure ?? 'the first bundle has not loaded yet',
+        cacheFallback: false,
+        at: new Date().toISOString(),
+      }
+    );
   }
 
   /** The source's checks for pushed bundles, when it takes them (`saas` with `enableWebhook`). */
@@ -199,14 +238,15 @@ export class BundleSyncService {
     // Wire onChange HERE (request context). The first emit drives `firstApply`;
     // later emits re-apply in order. The source waits for each apply, so a Cron
     // refresh ends once its bundle is applied and kept.
-    source.onChange(async (bundle) => {
-      const applied = this.enqueueApply(bundle);
+    source.onChange(async (bundle, origin) => {
+      const applied = this.enqueueApply(bundle, origin?.pullFailure);
       if (!firstSettled) {
         firstSettled = true;
         void applied.then(() => resolveFirst());
       }
       await applied;
     });
+    source.onPullFailure?.((reason) => this.recordPullFailure(reason, false));
     try {
       await source.start();
       // Only await the first apply when the source actually emitted during
@@ -221,6 +261,7 @@ export class BundleSyncService {
       const reason = describeLoadError(e);
       this.logger.error(`[skilled-openapi] initial bundle sync failed: ${reason}`);
       this.recordLoadFailure(reason);
+      this.recordPullFailure(reason, false);
     }
   }
 
@@ -233,17 +274,42 @@ export class BundleSyncService {
    * Apply after every apply queued before: apply() mutates the registry, the bundle store and the unregister
    * handles, so two at once would leave them inconsistent. An applied bundle, pulled or pushed, is kept by the source
    * before the next apply starts, so the last good bundle is always the last one applied. Never rejects, so the queue
-   * never breaks.
+   * never breaks. `pullFailure` is set when the bundle is the cached one, served because the pull failed.
    */
-  private enqueueApply(bundle: ResolvedBundle): Promise<BundleApplyResult> {
+  private enqueueApply(bundle: ResolvedBundle, pullFailure?: string): Promise<BundleApplyResult> {
     const previous = this.applyQueue ?? Promise.resolve(undefined);
     const applied = previous.then(async () => {
       const result = await this.applyAndRecord(bundle);
+      this.recordSync(result, pullFailure);
       if (result.applied) await this.keepAppliedBundle(bundle);
       return result;
     });
     this.applyQueue = applied;
     return applied;
+  }
+
+  /** Record what became of a bundle a pull or a push brought; with `pullFailure`, of the cached one served instead. */
+  private recordSync(result: BundleApplyResult, pullFailure: string | undefined): void {
+    if (pullFailure !== undefined) {
+      this.recordPullFailure(pullFailure, result.applied);
+      return;
+    }
+    const synced = { bundleId: result.bundleId, bundleVersion: result.bundleVersion, at: new Date().toISOString() };
+    if (result.applied) {
+      this.lastSync = { status: result.diff?.isNoOp ? 'unchanged' : 'applied', ...synced };
+    } else {
+      this.lastSync = { status: 'refused', reason: publicLoadFailureReason(result.reason ?? 'not applied'), ...synced };
+    }
+  }
+
+  /** Record a pull that failed; `cacheFallback` when the source served its cached bundle instead. */
+  private recordPullFailure(reason: string, cacheFallback: boolean): void {
+    this.lastSync = {
+      status: 'failed',
+      reason: publicLoadFailureReason(reason),
+      cacheFallback,
+      at: new Date().toISOString(),
+    };
   }
 
   /** Keep an applied bundle as the last good one; a failure to keep it leaves the bundle applied. */

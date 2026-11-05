@@ -87,13 +87,33 @@ export {
  */
 const RUNTIME_DEPS_TOKEN = Symbol.for('frontmcp:skilled-openapi:runtime-deps');
 
+/** What the plugin's last bundle sync came to, as its `BundleSyncOutcome` says (only the fields a Cron run reads). */
+interface BundleSyncOutcome {
+  status: 'applied' | 'unchanged' | 'refused' | 'failed';
+  bundleId?: string;
+  bundleVersion?: string;
+  reason?: string;
+  cacheFallback?: boolean;
+}
+
 /**
- * What the plugin hands back for Cron runs. `start()` makes sure its bundle sync has started and loaded a bundle;
- * `refresh()` pulls a fresh one, or starts the sync when nothing has. Both resolve once the bundle is applied and kept.
+ * What the plugin hands back for Cron runs. `start()` makes sure its bundle sync has started; `refresh()` pulls a fresh
+ * bundle, or starts the sync when nothing has. Both resolve once the bundle is applied and kept, or refused, with what
+ * the last sync came to.
  */
 interface BundleScheduler {
-  start(): Promise<unknown>;
-  refresh(): Promise<unknown>;
+  start(): Promise<BundleSyncOutcome>;
+  refresh(): Promise<BundleSyncOutcome>;
+}
+
+/** Throw for a Cron run whose bundle was refused or whose pull failed, so the platform records the run as failed. */
+function assertBundleSynced(outcome: BundleSyncOutcome): void {
+  if (outcome.status === 'applied' || outcome.status === 'unchanged') return;
+  const problem =
+    outcome.status === 'refused'
+      ? `bundle ${outcome.bundleId}@${outcome.bundleVersion} was not applied: ${outcome.reason}`
+      : `the bundle pull failed${outcome.cacheFallback ? ', so the cached bundle serves' : ''}: ${outcome.reason}`;
+  throw new Error(`[frontmcp/edge] Cron refresh: ${problem}`);
 }
 
 /**
@@ -115,11 +135,11 @@ class EdgeRefreshController {
     this.scheduler = scheduler;
   }
 
-  start(): Promise<unknown> {
+  start(): Promise<BundleSyncOutcome> {
     return this.attached().start();
   }
 
-  refresh(): Promise<unknown> {
+  refresh(): Promise<BundleSyncOutcome> {
     return this.attached().refresh();
   }
 
@@ -258,6 +278,8 @@ export interface EdgeMcp {
    * Wire a `[triggers] crons = ["*&#47;5 * * * *"]` in `wrangler.toml` and
    * the runtime calls this on schedule; it pulls a fresh bundle and hot-swaps
    * it (Workers have no background timers, so this replaces internal polling).
+   * It throws, so the run counts as failed, when the bundle it pulled is
+   * refused or the pull fails, also when the cached bundle serves instead.
    */
   scheduled?: (event?: unknown, env?: unknown, ctx?: unknown) => Promise<void>;
   /**
@@ -436,7 +458,8 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
       // A run that builds it only starts the bundle sync: its first pull is this run's pull.
       const buildsServer = !serverBuilt;
       await ensureHandler(env);
-      await (buildsServer ? controller?.start() : controller?.refresh());
+      const outcome = await (buildsServer ? controller?.start() : controller?.refresh());
+      if (outcome) assertBundleSynced(outcome);
     };
   }
 

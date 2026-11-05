@@ -13,6 +13,8 @@ import { createStorageReplayNonceStore, type ReplayNonceStore } from '../securit
 import { WebhookReplayGuard, type ReplayRejectCode } from '../security/webhook-replay-guard';
 import type { SaasSourceOptions } from '../source-options';
 import type {
+  BundleOrigin,
+  BundlePullFailureListener,
   BundlePushReceiver,
   BundleSourceDeps,
   BundleSourceListener,
@@ -102,18 +104,20 @@ function isUsableSigningKey(key: unknown): boolean {
  *
  * Boot semantics:
  *   - Always attempts a fresh pull on `start()`.
- *   - If the pull fails AND a cached bundle exists on disk, falls back to it
- *     and emits a warning. This prevents a SaaS outage at boot from killing
- *     the customer's MCP server. The cache holds the last bundle the plugin
- *     applied ({@link SaasPullSource.keepBundle}): a pulled bundle that fails
- *     its signature or apply never replaces it.
+ *   - If the pull fails AND a cached bundle exists on disk, falls back to it,
+ *     emits a warning, and hands it to its listeners with why the pull failed.
+ *     This prevents a SaaS outage at boot from killing the customer's MCP
+ *     server. The cache holds the last bundle the plugin applied
+ *     ({@link SaasPullSource.keepBundle}): a pulled bundle that fails its
+ *     signature or apply never replaces it.
  *   - If both pull and cache fail, `start()` throws. Polling still starts, so a
  *     later pull that succeeds loads the bundle.
  *
  * Refresh: poll on `pollIntervalMs`. Single-flight per source — overlapping
- * polls are skipped, never queued. With `enableWebhook` the source also takes
- * pushed bundles ({@link SaasPullSource.verifyPushToken}): the plugin serves
- * them at `POST /__skilled_openapi/push`.
+ * polls are skipped, never queued. A poll that fails is logged and reported to
+ * the {@link SaasPullSource.onPullFailure} listeners. With `enableWebhook` the
+ * source also takes pushed bundles ({@link SaasPullSource.verifyPushToken}):
+ * the plugin serves them at `POST /__skilled_openapi/push`.
  *
  * Before every pull the pinned `authToken` is verified: it must be a JWT signed
  * by a key in the issuer's JWKS (`jwksUrl`), with `iss` equal to
@@ -131,6 +135,7 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
   readonly id: string;
 
   private listeners = new Set<BundleSourceListener>();
+  private pullFailureListeners = new Set<BundlePullFailureListener>();
   private pollHandle: NodeJS.Timeout | undefined;
   /** The pull running now, from start, a poll or a refresh; only one runs at a time. */
   private inFlightPull: Promise<unknown> | undefined;
@@ -230,6 +235,8 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
         );
       }
       this.logger.warn(`[saas-source] using cached bundle "${bundle.bundleId}@${bundle.version}"`);
+      await this.notify(bundle, { pullFailure: failure });
+      return;
     }
     await this.notify(bundle);
   }
@@ -250,6 +257,14 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
     };
   }
 
+  /** Subscribe to the polls that fail, with why; a failed start or refresh throws to its caller instead. */
+  onPullFailure(listener: BundlePullFailureListener): () => void {
+    this.pullFailureListeners.add(listener);
+    return () => {
+      this.pullFailureListeners.delete(listener);
+    };
+  }
+
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.pollHandle) {
@@ -257,6 +272,7 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
       this.pollHandle = undefined;
     }
     this.listeners.clear();
+    this.pullFailureListeners.clear();
   }
 
   private schedulePoll(): void {
@@ -308,11 +324,13 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
         await this.notify(bundle);
       });
     } catch (e) {
+      const failure = describePullFailure(e);
       if (e instanceof SaasPullTokenRejectedError) {
-        this.logger.error(`[saas-source] poll refused: ${e.message}; keeping the current bundle`);
+        this.logger.error(`[saas-source] poll refused: ${failure}; keeping the current bundle`);
       } else {
-        this.logger.warn(`[saas-source] poll failed: ${describePullFailure(e)}`);
+        this.logger.warn(`[saas-source] poll failed: ${failure}`);
       }
+      this.notifyPullFailure(failure);
     } finally {
       this.schedulePoll();
     }
@@ -478,12 +496,22 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
     }
   }
 
-  private async notify(bundle: ResolvedBundle): Promise<void> {
+  private async notify(bundle: ResolvedBundle, origin?: BundleOrigin): Promise<void> {
     for (const fn of this.listeners) {
       try {
-        await fn(bundle);
+        await fn(bundle, origin);
       } catch (e) {
         this.logger.warn(`[saas-source] listener threw: ${(e as Error).message}`);
+      }
+    }
+  }
+
+  private notifyPullFailure(reason: string): void {
+    for (const listener of this.pullFailureListeners) {
+      try {
+        listener(reason);
+      } catch (e) {
+        this.logger.warn(`[saas-source] pull failure listener threw: ${(e as Error).message}`);
       }
     }
   }

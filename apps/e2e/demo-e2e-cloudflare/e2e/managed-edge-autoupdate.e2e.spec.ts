@@ -1,5 +1,6 @@
 // A managed @frontmcp/edge Worker in workerd: pull over https, Cron refresh (also as an isolate's first event), token
-// rejection, workflows and pushes, older ones refused, and a push token replayed to another replica refused.
+// rejection, workflows and pushes, older ones refused, and a push token replayed to another replica refused. A Cron run
+// whose bundle is refused, or that serves the cached bundle, fails, and /readyz says the bundle served is stale.
 import { base64urlEncode, randomBytes } from '@frontmcp/utils';
 
 import {
@@ -103,15 +104,54 @@ describe('a managed edge Worker on workerd', () => {
     expect(await worker.cachedBundleVersion()).toBe('2.0.0');
   });
 
-  it('neither applies nor keeps a bundle changed after it was signed on a Cron run: KV keeps the version before', async () => {
+  it('fails a Cron run that pulls a bundle changed after it was signed: not applied or kept, and /readyz says so', async () => {
     const signed = signer.sign(billingBundle('2.1.0', ['reports']));
     internet.bundle = { ...signed, skills: [...signed.skills, ...billingBundle('2.1.0', ['invoices']).skills] };
 
     const run = await worker.scheduled();
+    const ready = await worker.readiness();
 
-    expect(run.outcome).toBe('ok');
+    expect(run.outcome).toBe('exception');
     expect(await servedSkills()).toEqual(['invoices', 'refunds']);
     expect(await worker.cachedBundleVersion()).toBe('2.0.0');
+    expect(ready).toMatchObject({ httpStatus: 200, status: 'ready' });
+    expect(ready.probes?.['skilled-openapi']).toEqual({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleId: 'e2e:managed-billing',
+        bundleVersion: '2.0.0',
+        lastSync: {
+          status: 'refused',
+          bundleId: 'e2e:managed-billing',
+          bundleVersion: '2.1.0',
+          reason: expect.stringContaining('digest mismatch'),
+          at: expect.any(String),
+        },
+      },
+    });
+  });
+
+  it('fails a Cron run that pulls a signed bundle older than the one served: /readyz names the refusal', async () => {
+    publish('1.0.0', ['invoices', 'reports']);
+
+    const run = await worker.scheduled();
+
+    expect(run.outcome).toBe('exception');
+    expect(await servedSkills()).toEqual(['invoices', 'refunds']);
+    expect(await worker.cachedBundleVersion()).toBe('2.0.0');
+    expect((await worker.readiness()).probes?.['skilled-openapi']).toMatchObject({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleVersion: '2.0.0',
+        lastSync: {
+          status: 'refused',
+          bundleVersion: '1.0.0',
+          reason: expect.stringContaining('older than the served bundle e2e:managed-billing@2.0.0'),
+        },
+      },
+    });
   });
 
   it('does not pull or apply a bundle when the issuer no longer accepts the pull token', async () => {
@@ -144,6 +184,10 @@ describe('a managed edge Worker on workerd', () => {
       expect(await response.json()).toEqual({ applied: true, bundleId: 'e2e:managed-billing', bundleVersion: '4.0.0' });
       expect(await servedSkills()).toEqual(['invoices', 'refunds', 'reports']);
       expect(await worker.cachedBundleVersion()).toBe('4.0.0');
+      expect((await worker.readiness()).probes?.['skilled-openapi']).toEqual({
+        status: 'healthy',
+        details: { state: 'loaded', bundleId: 'e2e:managed-billing', bundleVersion: '4.0.0' },
+      });
     });
 
     it('is refused when it replays the token of an earlier push', async () => {
@@ -295,5 +339,25 @@ describe('a managed edge Worker whose first event is a Cron run', () => {
     expect(run.outcome).toBe('ok');
     expect(internet.requestsTo(BUNDLE_URL)).toHaveLength(2);
     expect(await worker.cachedBundleVersion()).toBe('2.0.0');
+  });
+
+  it('fails the Cron run of an isolate that starts while the bundle server is down, though it serves the cached bundle', async () => {
+    internet.bundle = undefined;
+    const replica = worker.secondReplica();
+
+    const run = await replica.scheduled();
+    const ready = await replica.readiness();
+
+    expect(run.outcome).toBe('exception');
+    expect(ready).toMatchObject({ httpStatus: 200, status: 'ready' });
+    expect(ready.probes?.['skilled-openapi']).toEqual({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleId: 'e2e:managed-billing',
+        bundleVersion: '2.0.0',
+        lastSync: { status: 'failed', reason: 'pull responded 404', cacheFallback: true, at: expect.any(String) },
+      },
+    });
   });
 });

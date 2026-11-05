@@ -40,6 +40,12 @@ export interface SkillBundleSource {
   onChange(listener: BundleSourceListener): () => void;
 
   /**
+   * Subscribe to the pulls that fail in the background (a poll), which no caller sees: `start()` and `refresh()` throw
+   * theirs. Returns an unsubscribe function. Present on a polling source: the `saas` source.
+   */
+  onPullFailure?(listener: BundlePullFailureListener): () => void;
+
+  /**
    * Pull a fresh bundle on demand and notify listeners — the manual,
    * externally-driven counterpart to background polling. Optional: only
    * remote/pulling sources implement it. On runtimes with no background
@@ -77,7 +83,16 @@ export interface BundlePushReceiver {
 }
 
 /** Takes each new bundle; a pulling source waits for a promise it returns before its pull counts as done. */
-export type BundleSourceListener = (bundle: ResolvedBundle) => unknown;
+export type BundleSourceListener = (bundle: ResolvedBundle, origin?: BundleOrigin) => unknown;
+
+/** How a source came by a bundle it hands its listeners. */
+export interface BundleOrigin {
+  /** Set when the pull failed and the bundle is the last good one the source kept, served in its place: why it failed. */
+  pullFailure?: string;
+}
+
+/** Takes the reason a background pull failed. */
+export type BundlePullFailureListener = (reason: string) => void;
 
 /**
  * Pluggable last-good bundle cache. The default (Node) implementation writes to

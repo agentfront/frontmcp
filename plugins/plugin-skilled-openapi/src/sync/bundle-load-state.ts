@@ -9,6 +9,21 @@ export type BundleLoadState =
   | { status: 'loaded'; bundleId: string; bundleVersion: string }
   | { status: 'failed'; reason: string };
 
+/**
+ * What the last bundle sync came to, and when: the bundle a pull or a push brought was applied, was the one already
+ * served, or was refused; or a pull failed, and `cacheFallback` says the source served its cached bundle instead. The
+ * reasons are as clients may read them ({@link publicLoadFailureReason}).
+ */
+export type BundleSyncOutcome =
+  | { status: 'applied' | 'unchanged'; bundleId: string; bundleVersion: string; at: string }
+  | { status: 'refused'; bundleId: string; bundleVersion: string; reason: string; at: string }
+  | { status: 'failed'; reason: string; cacheFallback: boolean; at: string };
+
+/** Whether a sync left the server serving the bundle its source or a push brought. */
+function isUpToDate(outcome: BundleSyncOutcome): boolean {
+  return outcome.status === 'applied' || outcome.status === 'unchanged';
+}
+
 const MAX_LISTED_ISSUES = 3;
 const MAX_PUBLIC_REASON_LENGTH = 500;
 const URL_PATTERN = /\b[a-z][a-z\d+.-]*:\/\/[^\s'"<>()]+/gi;
@@ -42,14 +57,17 @@ function urlWithoutSecrets(text: string): string {
   }
 }
 
-/** The plugin's `/readyz` check: ready once a bundle is loaded, not ready while loading has failed. */
-export function bundleHealth(state: BundleLoadState): HealthProbeResult {
+/**
+ * The plugin's `/readyz` check: ready once a bundle is loaded, not ready while loading has failed. While the last sync
+ * was refused or failed, the bundle served is stale: the check is `degraded`, which keeps the server ready, and names it.
+ */
+export function bundleHealth(state: BundleLoadState, lastSync?: BundleSyncOutcome): HealthProbeResult {
   switch (state.status) {
-    case 'loaded':
-      return {
-        status: 'healthy',
-        details: { state: 'loaded', bundleId: state.bundleId, bundleVersion: state.bundleVersion },
-      };
+    case 'loaded': {
+      const served = { bundleId: state.bundleId, bundleVersion: state.bundleVersion };
+      if (!lastSync || isUpToDate(lastSync)) return { status: 'healthy', details: { state: 'loaded', ...served } };
+      return { status: 'degraded', details: { state: 'stale', ...served, lastSync } };
+    }
     case 'failed':
       return { status: 'unhealthy', details: { state: 'failed' }, error: `no skill bundle is loaded: ${state.reason}` };
     case 'loading':

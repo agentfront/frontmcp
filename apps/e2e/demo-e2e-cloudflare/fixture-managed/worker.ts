@@ -17,6 +17,7 @@ const mcp = createEdgeMcp({
   info: { name: 'cf-managed-fixture', version: '1.0.0' },
   apps: [],
   http: { entryPath: '/mcp' },
+  health: { readyz: { enabled: true }, includeDetails: true },
   tasks: { enabled: false },
   managed: {
     endpoint: 'https://bundles.example/v1/bundles/e2e-managed',

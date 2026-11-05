@@ -429,6 +429,39 @@ the server keeps running, and:
 Once a bundle loads (a watched file is fixed, a poll succeeds), the tools work again and the check is `healthy`, with
 `details: { state: 'loaded', bundleId, bundleVersion }`.
 
+### When a newer bundle is refused
+
+A bundle that was loaded keeps serving when a later sync doesn't replace it: a pulled or pushed bundle is refused (its
+signature, its other checks, or it is older than the one served), or a pull fails. The `skilled-openapi` check is then
+`degraded`, which keeps `/readyz` at 200, and says the bundle served is stale:
+
+```json
+{
+  "status": "degraded",
+  "details": {
+    "state": "stale",
+    "bundleId": "acme:billing",
+    "bundleVersion": "1.4.0",
+    "lastSync": {
+      "status": "refused",
+      "bundleId": "acme:billing",
+      "bundleVersion": "1.5.0",
+      "reason": "digest mismatch (envelope=e9ec8b853572.. computed=d9f4ec7292dd..)",
+      "at": "2026-11-05T08:00:00.000Z"
+    }
+  }
+}
+```
+
+- `lastSync.status` is `refused`, with the refused bundle's id and version, or `failed`, for a pull that failed, with
+  `cacheFallback: true` when the server started on its cached bundle because of it.
+- The reason is cut as the tools' reasons are: its first line, URLs cut to scheme, host and path, no tokens.
+- The next sync that applies a bundle, or pulls the one served again, makes the check `healthy`.
+- `/readyz` shows the checks' details outside production, or with `health: { includeDetails: true }`.
+- On a Worker (`@frontmcp/edge`), a Cron run whose sync is refused or fails throws, so Cloudflare records it as failed.
+
+Up to 1.11.0, the check stayed `healthy`, and a Cron run that pulled a refused bundle reported success.
+
 ### The bundle
 
 A bundle is a JSON or YAML object with `schemaVersion`, `bundleId`, `version`, `services`, `authBindings`, `skills`,

@@ -222,7 +222,8 @@ describe('a managed edge Cron run in an isolate that has served no request', () 
   const JWKS_URL = `${ISSUER}/.well-known/jwks.json`;
   const AUDIENCE = 'acme:prod';
   const KEY_ID = 'edge-cron';
-  let publishedVersion = '1.0.0';
+  /** The version the bundle server publishes; undefined while it is down. */
+  let publishedVersion: string | undefined = '1.0.0';
   let pulls = 0;
   let fetchMock: jest.SpyInstance;
   let pullToken: string;
@@ -260,7 +261,7 @@ describe('a managed edge Cron run in an isolate that has served no request', () 
       if (url === JWKS_URL) return Response.json(jwks);
       if (url !== ENDPOINT) return new Response('not found', { status: 404 });
       pulls++;
-      return Response.json(billingBundle(publishedVersion));
+      return publishedVersion ? Response.json(billingBundle(publishedVersion)) : new Response('down', { status: 503 });
     });
   });
 
@@ -331,6 +332,83 @@ describe('a managed edge Cron run in an isolate that has served no request', () 
       expect(keptVersions).toEqual(['1.0.0', '2.0.0']);
     },
   );
+
+  it('fails a run whose pulled bundle is refused, and one that serves the cached bundle: /readyz says it is stale', async () => {
+    let keptBundle: unknown;
+    const managedWorker = () =>
+      createEdgeMcp({
+        info: { name: 'managed-cron', version: '1.0.0' },
+        apps: [],
+        tasks: { enabled: false },
+        http: { entryPath: '/mcp' },
+        health: { readyz: { enabled: true }, includeDetails: true },
+        managed: {
+          endpoint: ENDPOINT,
+          authToken: pullToken,
+          expectedAudience: AUDIENCE,
+          jwksUrl: JWKS_URL,
+          expectedIssuer: ISSUER,
+          requireSignature: false,
+          cache: {
+            read: async () => keptBundle,
+            write: async (bundle) => {
+              keptBundle = bundle;
+            },
+          },
+        },
+      });
+    const run = (worker: ReturnType<typeof managedWorker>) => {
+      if (!worker.scheduled) throw new Error('expected a scheduled handler in managed mode');
+      return worker.scheduled({}, {});
+    };
+    const readiness = async (worker: ReturnType<typeof managedWorker>) =>
+      (await worker.fetch(new Request('https://worker.example.com/readyz'))).json();
+    const worker = managedWorker();
+    publishedVersion = '2.0.0';
+    await run(worker);
+
+    publishedVersion = '1.0.0';
+    const refusedRun = run(worker);
+    await expect(refusedRun).rejects.toThrow(
+      '[frontmcp/edge] Cron refresh: bundle edge:billing@1.0.0 was not applied: older than the served bundle edge:billing@2.0.0',
+    );
+    const afterRefusal = await readiness(worker);
+    publishedVersion = undefined;
+    const isolateStartedDuringOutage = managedWorker();
+    const fallbackRun = run(isolateStartedDuringOutage);
+    await expect(fallbackRun).rejects.toThrow(
+      '[frontmcp/edge] Cron refresh: the bundle pull failed, so the cached bundle serves: pull responded 503',
+    );
+    const afterFallback = await readiness(isolateStartedDuringOutage);
+
+    expect(afterRefusal).toMatchObject({
+      status: 'ready',
+      probes: {
+        'skilled-openapi': {
+          status: 'degraded',
+          details: {
+            state: 'stale',
+            bundleId: 'edge:billing',
+            bundleVersion: '2.0.0',
+            lastSync: { status: 'refused', bundleVersion: '1.0.0', reason: expect.stringContaining('older than') },
+          },
+        },
+      },
+    });
+    expect(afterFallback).toMatchObject({
+      status: 'ready',
+      probes: {
+        'skilled-openapi': {
+          status: 'degraded',
+          details: {
+            state: 'stale',
+            bundleVersion: '2.0.0',
+            lastSync: { status: 'failed', reason: 'pull responded 503', cacheFallback: true },
+          },
+        },
+      },
+    });
+  });
 });
 
 /**

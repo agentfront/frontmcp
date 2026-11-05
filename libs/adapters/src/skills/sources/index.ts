@@ -12,6 +12,8 @@ import { StaticSource } from './static.source';
 export { StaticSource, NpmSource, SaasPullSource, SaasPushRefusedError, InlineSource };
 export type {
   BundleCacheStore,
+  BundleOrigin,
+  BundlePullFailureListener,
   BundlePushReceiver,
   BundleSourceDeps,
   BundleSourceListener,

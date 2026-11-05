@@ -138,6 +138,18 @@ compare by `generatedAt`. To roll back, publish the earlier content under a
 newer version, or set `managed.allowRollback: true`. An isolate that starts
 has no bundle to compare with: it serves what it pulls, or the KV cache when
 the pull fails.
+A Cron run whose sync leaves an older bundle serving **fails**: `scheduled`
+throws, so Cloudflare logs the run as an exception and counts it as a failed
+invocation. That is a pulled bundle that is not applied (`[frontmcp/edge] Cron
+refresh: bundle <id>@<version> was not applied: <reason>`), or a pull that
+fails (`... the bundle pull failed: <reason>`), also when the run started the
+isolate and it serves the KV cache (`... failed, so the cached bundle serves:
+<reason>`). Up to 1.11.0 such a run reported success. With
+`health: { readyz: { enabled: true } }` (off on a Worker by default), `/readyz`
+stays ready while the last good bundle serves, and its `skilled-openapi` check
+is `degraded` with `details: { state: 'stale', bundleId, bundleVersion,
+lastSync: { status: 'refused' | 'failed', reason, at, ... } }`. Each isolate
+answers for its own bundle.
 A `run_workflow` already running when the new bundle is applied finishes on the operations of the bundle it started on.
 Managed mode runs on `@frontmcp/plugin-skilled-openapi`, which `@frontmcp/edge` depends on. When the boot pull fails and the KV cache is empty, the error says no bundle is available in the injected bundle cache (no file path), and `search_skill`, `load_skill` and `run_workflow` answer `No skill bundle is loaded: <that reason>` (code `SKILL_BUNDLE_NOT_LOADED`) until a Cron refresh loads a bundle.
 Its `outbound.egressProxy` option needs Node.js (undici's `ProxyAgent`); on a
