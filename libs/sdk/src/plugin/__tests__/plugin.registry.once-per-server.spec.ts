@@ -62,6 +62,20 @@ describe('PluginRegistry — a plugin installed once per server (oncePerServer)'
     await expect(started).rejects.toThrow(DUPLICATE_MESSAGE);
   });
 
+  it('refuses two entries of it that share its class but give different inline names', async () => {
+    const started = startServer({
+      plugins: [
+        { ...CatalogPlugin.init({ source: 'a' }), name: 'catalog-a' },
+        { ...CatalogPlugin.init({ source: 'b' }), name: 'catalog-b' },
+      ],
+    });
+
+    await expect(started).rejects.toThrow(DuplicatePluginEntryError);
+    await expect(started).rejects.toThrow(
+      'Plugin "catalog-b" is listed twice in @FrontMcp({ plugins }) (entries 1 and 2)',
+    );
+  });
+
   it('refuses to start a server that installs it and whose app installs it too', async () => {
     @App({ name: 'billing', plugins: [CatalogPlugin.init({ source: 'b' })] })
     class BillingApp {}
