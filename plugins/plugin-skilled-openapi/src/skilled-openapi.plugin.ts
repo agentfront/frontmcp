@@ -180,13 +180,13 @@ function resolveBundleTelemetry(scope: ScopeEntry): BundleStoreTelemetry | undef
  */
 /** The plugin's options, parsed; a `vaultRef` that both `credentials` and `authProviders` list is refused. */
 function parsePluginOptions(options: SkilledOpenApiPluginOptionsInput): SkilledOpenApiPluginOptions {
-  const parsed = skilledOpenApiPluginOptionsSchema.parse(options);
-  const serverVaultRefs = new Set(Object.keys(parsed.credentials ?? {}));
-  const listedTwice = Object.keys(parsed.authProviders ?? {}).filter((vaultRef) => serverVaultRefs.has(vaultRef));
-  if (listedTwice.length > 0) {
-    throw new VaultRefListedTwiceError(listedTwice);
+  const result = skilledOpenApiPluginOptionsSchema.safeParse(options);
+  if (result.success) return result.data;
+  for (const issue of result.error.issues) {
+    const listedTwice: unknown = issue.code === 'custom' ? issue.params?.['vaultRefsListedTwice'] : undefined;
+    if (Array.isArray(listedTwice)) throw new VaultRefListedTwiceError(listedTwice);
   }
-  return parsed;
+  throw result.error;
 }
 
 @Plugin({
