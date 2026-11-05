@@ -1289,6 +1289,16 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
       expect(sync.loadState()).toEqual({ status: 'failed', reason });
     });
 
+    it('on a start with no cached bundle, whose JWKS could not be read', async () => {
+      const sync = makeSync();
+      const jwksDown = new Error('[saas-source] initial pull failed and no cached bundle is available', {
+        cause: new SaasJwksUnavailableError('JWKS https://saas.example/jwks responded 503'),
+      });
+      sync.attachSource(pullingSource([jwksDown]).source);
+
+      expect(await sync.refresh()).toMatchObject({ status: 'failed', tokenFailure: 'jwks_unavailable' });
+    });
+
     it('on a refresh, while the bundle before it serves', async () => {
       const sync = makeSync();
       sync.attachSource(pullingSource(['1', rejected('unknown_key')]).source);
