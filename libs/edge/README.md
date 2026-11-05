@@ -138,10 +138,13 @@ crons = ["*/5 * * * *"]
 | `expectedAudience`, `jwksUrl`, `expectedIssuer`                     | How the bundle server's tokens are verified                                                    |
 | `cache`                                                             | Keeps the last bundle applied: `kvBundleCacheFromEnv('BINDING')`, or a store of your own       |
 | `enableWebhook`                                                     | Also take bundles pushed to `POST /__skilled_openapi/push`, as below                           |
+| `allowRollback`                                                     | Apply a pulled or pushed bundle older than the one being served, as below. Default `false`     |
 | `requireSignature`, `trustedKeys`, `dev`, `credentials`, `outbound` | Passed to the Skilled OpenAPI plugin. `dev` skips signature checks: never use it in production |
 | `pollIntervalMs`, `bundleCacheDir`                                  | Ignored on a Worker, which has no timers or file system                                        |
 
 A Cron run ends once the bundle it pulled is applied and kept in `cache`, also when it is the first event an isolate gets: it then starts the bundle sync, whose first pull is the run's pull. A bundle that fails its signature or its other checks is not applied and not kept, so a cold start that can't reach the bundle server serves the last bundle the Worker applied.
+
+Bundles only move forward: a pulled or pushed bundle older than the one the isolate serves is not applied and not kept, so a validly signed old bundle can't roll the Worker back. Two semver versions compare by semver; the same version (re-signed), or versions that aren't both semver, compare by `generatedAt`. To roll back, publish the earlier content under a newer version, or set `allowRollback: true`. An isolate that starts has no bundle to compare with: it serves the bundle it pulls, or the cached one when the pull fails.
 
 Each operation call checks the API's host first: on a Worker, `node:dns` resolves it over DNS over HTTPS, so the host must resolve publicly.
 
@@ -159,7 +162,7 @@ Content-Type: application/json
 
 - **The token** is checked as `authToken` is (signed by a key at `jwksUrl`, `iss` equal to `expectedIssuer`, `aud` including `expectedAudience`, not expired). It must also carry a `jti` of 8 or more characters that no push used, and an `iat` within five minutes, so the pull token, issued long before, can't push.
 - **The body** is the bundle as JSON, checked as a pulled bundle is: its schema, then its signature against `trustedKeys` (unless `requireSignature: false`).
-- **It is applied** after the first pull and after any bundle already queued, so a push and a Cron run never apply at once, and then kept in `cache`.
+- **It is applied**, unless it is older than the bundle being served, after the first pull and after any bundle already queued, so a push and a Cron run never apply at once, and then kept in `cache`.
 
 | Status | Body                                                                                                      |
 | ------ | --------------------------------------------------------------------------------------------------------- |
@@ -167,6 +170,7 @@ Content-Type: application/json
 | `400`  | `{ "error": "invalid_bundle" }`: the body is not a bundle                                                 |
 | `401`  | `{ "error": "invalid_token" }`, with `WWW-Authenticate: Bearer error="invalid_token"`                     |
 | `409`  | `{ "error": "push_replayed" }`: a push already used this token                                            |
+| `409`  | `{ "error": "bundle_outdated" }`: the bundle is older than the one being served, which stays              |
 | `422`  | `{ "error": "bundle_not_applied" }`: the signature or the bundle's checks failed; the served bundle stays |
 | `503`  | `{ "error": "temporarily_unavailable" }`: the JWKS could not be read                                      |
 
