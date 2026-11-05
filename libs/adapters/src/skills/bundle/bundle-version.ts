@@ -9,7 +9,8 @@ type BundleVersionFields = Pick<ResolvedBundle, 'version' | 'generatedAt'>;
 /**
  * Order two bundles: negative when `bundle` is older than `other`, positive when it is newer, zero when neither is.
  * Two semver versions order by semver precedence. Versions equal by it (a bundle re-signed under its version), or
- * not both semver, order by `generatedAt`, which the bundle's signature covers.
+ * not both semver, order by `generatedAt`, which the bundle's signature covers. NaN when that order is needed and
+ * either `generatedAt` isn't a date, so a caller must treat only `>= 0` as "not older".
  */
 export function compareBundleVersions(bundle: BundleVersionFields, other: BundleVersionFields): number {
   if (isValidVersion(bundle.version) && isValidVersion(other.version)) {

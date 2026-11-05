@@ -1307,6 +1307,16 @@ describe('BundleSyncService version order', () => {
     expect(sync.loadState()).toMatchObject({ bundleVersion: '10' });
   });
 
+  it('refuses a bundle whose generatedAt is not a date when the order depends on it', async () => {
+    const sync = makeSync();
+    sync.attachSource(orderedSource(buildBundle({ version: '2.0.0', generatedAt: EARLIER }), true).source);
+
+    const result = await sync.applyPushed(buildBundle({ version: '2.0.0', generatedAt: 'not-a-date' }));
+
+    expect(result).toMatchObject({ applied: false, refusal: 'outdated' });
+    expect(sync.loadState()).toMatchObject({ bundleVersion: '2.0.0' });
+  });
+
   it.each([
     ['allows a rollback', false],
     ['does not order its bundles, as the static and inline sources', undefined],
