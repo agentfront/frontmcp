@@ -363,6 +363,36 @@ export class CacheWarmerPlugin {}
 
 Listing the provider in `exports` too lets the app's tools resolve the cache with `this.get(ReportCache)`; `exports` takes provider definitions, not bare tokens. Inside a tool, resource or prompt, the scope itself is `this.scope`. Inside a flow hook, resolve it with `ctx.get(ScopeEntry)` (for example `ctx.get(ScopeEntry).apps.getApps()` in a server-scoped plugin): the flow's own `scope` is protected. To tell clients a list changed, a hook calls `ctx.notify.listChanged('tools')` (see [What a Hook Receives](#what-a-hook-receives)). See [Scope lifecycle hooks](https://frontmcp.dev/reference/sdk/scope).
 
+### Announcing Many Registry Changes Once
+
+Each registry change (a skill registered, a tool removed) sends connected clients a `notifications/<kind>/list_changed`. A plugin that changes many entries at once, such as a bundle of skills and the tools they use, runs the change in `scope.batchListChanges()`:
+
+```typescript
+await scope.batchListChanges(async () => {
+  for (const content of bundleSkills) await scope.skills.registerSkillContent(content);
+  for (const id of droppedSkillIds) await scope.skills.unregisterSkill(id);
+});
+```
+
+- Clients get one `list_changed` for each list the batch changed (`tools`, `resources`, `prompts`, `skills`), once it ends, and none for a list it left alone. A batch that throws still sends one for each list it changed before the throw, then rejects with the error.
+- A change that undoes itself, such as a rollback that put back every entry it replaced, calls `batch.listsRestored()` on the batch its callback receives. Then nothing it changed up to that point is sent:
+
+  ```typescript
+  await scope.batchListChanges(async (batch) => {
+    try {
+      await registerAll(bundleSkills);
+    } catch {
+      await restorePreviousSkills();
+      batch.listsRestored();
+    }
+  });
+  ```
+
+- A batch run inside another hands what it changed to the outer one, which sends it when it ends. `listsRestored()` in the inner batch drops only what the inner batch changed.
+- Registering or removing a `visibility: 'internal'` tool (`scope.tools.registerToolInstance()` / `unregisterToolInstance()`) sends no `tools/list_changed`, inside a batch or not: `tools/list` never shows internal tools.
+- Changes made outside the batch, such as by another request while it runs, are sent as they happen, as every change outside a batch is.
+- `@frontmcp/plugin-skilled-openapi` runs each bundle it applies in one batch.
+
 ## Pre-Built Hook Type Exports
 
 For convenience, FrontMCP exports typed aliases so you do not need to call `FlowHooksOf` directly:

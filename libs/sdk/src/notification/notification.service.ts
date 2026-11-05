@@ -12,7 +12,7 @@ import { awaitOutsideRequest } from '@frontmcp/utils';
 
 import type { AIPlatformType, FrontMcpLogger, PlatformDetectionConfig, PlatformMappingEntry } from '../common';
 import type { Scope } from '../scope';
-import { listsUnchanged } from '../surface/unchanged-lists';
+import { announcesListChangeNow } from '../surface/list-change-batch';
 
 /**
  * Re-export Root from MCP SDK for convenience.
@@ -437,7 +437,7 @@ export class NotificationService {
         if (event.kind === 'updated' && event.updatedUri) {
           // Content-level change: notify only subscribers of this specific URI
           this.notifyResourceUpdated(event.updatedUri);
-        } else if (!listsUnchanged()) {
+        } else if (announcesListChangeNow(this.scope, 'resources')) {
           // Structural change (added/removed/reset): broadcast list_changed to all sessions
           this.broadcastNotification('notifications/resources/list_changed');
         }
@@ -447,7 +447,7 @@ export class NotificationService {
 
     // Subscribe to tool changes
     const unsubTools = this.scope.tools.subscribe({ immediate: false }, (event) => {
-      if (event.changeScope === 'global' && !listsUnchanged()) {
+      if (event.changeScope === 'global' && announcesListChangeNow(this.scope, 'tools')) {
         this.broadcastNotification('notifications/tools/list_changed');
       }
     });
@@ -455,7 +455,7 @@ export class NotificationService {
 
     // Subscribe to prompt changes
     const unsubPrompts = this.scope.prompts.subscribe({ immediate: false }, (event) => {
-      if (event.changeScope === 'global' && !listsUnchanged()) {
+      if (event.changeScope === 'global' && announcesListChangeNow(this.scope, 'prompts')) {
         this.broadcastNotification('notifications/prompts/list_changed');
       }
     });
@@ -466,7 +466,7 @@ export class NotificationService {
     const skillRegistry = this.scope.skills;
     if (skillRegistry?.subscribe) {
       const unsubSkills = skillRegistry.subscribe({ immediate: false }, (event) => {
-        if (event.changeScope === 'global') {
+        if (event.changeScope === 'global' && announcesListChangeNow(this.scope, 'skills')) {
           this.broadcastNotification('notifications/skills/list_changed');
         }
       });

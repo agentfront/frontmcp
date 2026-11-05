@@ -41,7 +41,14 @@ export {
   type BudgetNote,
   type BudgetOmission,
 } from './answer';
-export { fileSignal, SURFACE_META_KEY, surfaceHash, type FileSignalOptions, type LiveSurface } from './surface';
+export {
+  fileSignal,
+  SURFACE_META_KEY,
+  surfaceHash,
+  type FileSignalOptions,
+  type ListChangeBatch,
+  type LiveSurface,
+} from './surface';
 export {
   MATERIALIZED_META_KEY,
   MaterializedResourceContext,

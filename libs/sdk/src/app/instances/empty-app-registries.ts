@@ -62,6 +62,7 @@ export class EmptySkillRegistry implements SkillRegistryInterface {
   subscribe(): () => void {
     return () => {};
   }
+  notifyListChanged(): void {}
   getCapabilities() {
     return {};
   }
