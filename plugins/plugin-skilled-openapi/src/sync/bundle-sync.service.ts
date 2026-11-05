@@ -321,7 +321,7 @@ export class BundleSyncService {
 
     // Gate 2: version order: a forward-only source never replaces the served bundle with an older one.
     const previous = this.bundleStore.current();
-    if (this.source?.forwardOnly && previous && compareBundleVersions(bundle, previous) < 0) {
+    if (this.source?.forwardOnly && previous && !(compareBundleVersions(bundle, previous) >= 0)) {
       return {
         applied: false,
         refusal: 'outdated',
