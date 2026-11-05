@@ -35,4 +35,10 @@ describe('compareBundleVersions', () => {
     expect(order('2026.05.01-1', EARLIER, '1.0.0', LATER)).toBe(-1);
     expect(order('build-2', LATER, 'build-1', LATER)).toBe(0);
   });
+
+  it('returns NaN when the order falls to a generatedAt that is not a date', () => {
+    expect(order('2.0.0', 'not-a-date', '2.0.0', LATER)).toBeNaN();
+    expect(order('9', LATER, '10', 'not-a-date')).toBeNaN();
+    expect(order('2.0.0', 'not-a-date', '1.0.0', LATER)).toBe(1);
+  });
 });
