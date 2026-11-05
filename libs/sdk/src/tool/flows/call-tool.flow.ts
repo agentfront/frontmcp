@@ -77,7 +77,6 @@ import {
   TaskAugmentationRequiredError,
   TaskConcurrencyLimitError,
   TaskStoreNotInitializedError,
-  ToolCredentialsRequiredError,
   ToolExecutionError,
   ToolNotConsentedError,
   ToolNotFoundError,
@@ -97,7 +96,7 @@ import { hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
 import { toolOutputPolicies } from '../tool-output-policy';
 import { toolServingMode } from '../ui/serving-mode-default';
 import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
-import { evaluateToolCredentialGate } from './tool-credentials.gate';
+import { askToOpenConnectPages, credentialsRequiredErrorOf, evaluateToolCredentialGate } from './tool-credentials.gate';
 
 /**
  * Type for transport extension on AuthInfo.
@@ -1035,9 +1034,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
    * Reads the tool's `authProviders` and, for every provider declared
    * `required: true` (the default per the metadata), verifies a credential is
    * available for the current session BEFORE `execute()` runs. A missing
-   * required credential aborts the call with {@link ToolCredentialsRequiredError}
+   * required credential aborts the call with `ToolCredentialsRequiredError`
    * (JSON-RPC -32001 / MCP UNAUTHORIZED) carrying the provider id(s) and a
-   * connect/authorize `authUrl`.
+   * connect/authorize `authUrl` in its data (never its message), or
+   * `signInRequired` for a caller that isn't signed in. A client that declared
+   * URL-mode elicitation is first asked to open the connect page(s); when the
+   * user accepts, the credentials are checked again.
    *
    * Runs after `createToolCallContext` so the CONTEXT-scoped credential
    * accessors (`this.authProviders` / `this.credentials`) are resolvable via the
@@ -1102,14 +1104,27 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
     const toolId = tool.fullName || tool.metadata.name;
     const missingNames = result.missing.map((m) => m.name);
-    // Surface the first resolvable connect/authorize URL (callers re-auth one
-    // provider at a time; the data also lists every missing provider id).
-    const authUrl = result.missing.find((m) => m.authUrl)?.authUrl;
-
     this.logger.info(
       `checkToolCredentials: tool "${toolId}" missing required credential(s): ${missingNames.join(', ')}`,
     );
-    throw new ToolCredentialsRequiredError({ toolId, providers: missingNames, authUrl });
+
+    const connectPageAsk = {
+      context: this.tryGetContext(),
+      getClientCapabilities: (sessionId: string) => this.scope.notifications.getClientCapabilities(sessionId),
+      elicitationEnabled: this.scope.metadata.elicitation?.enabled === true,
+      toolId,
+      toolInput: this.state.input?.arguments,
+      signal: this.state.executionAbort?.signal,
+    };
+    let missing = result.missing;
+    if (await askToOpenConnectPages(connectPageAsk, missing)) {
+      missing = (await evaluateToolCredentialGate(providers, (token) => toolContext.tryGet(token))).missing;
+      if (missing.length === 0) {
+        this.logger.verbose('checkToolCredentials:done (connected through the connect page)');
+        return;
+      }
+    }
+    throw credentialsRequiredErrorOf(toolId, missing);
   }
 
   @Stage('acquireQuota')

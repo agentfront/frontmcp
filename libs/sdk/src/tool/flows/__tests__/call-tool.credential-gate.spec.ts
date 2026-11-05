@@ -10,7 +10,11 @@
  *  - a tool with NO authProviders is unaffected (default preserved);
  *  - when NO credential accessor is wired the gate is a no-op (default
  *    preserved) — this is the common public/no-auth case;
- *  - trusted internal dispatch (`internalCall: true`) bypasses the gate.
+ *  - trusted internal dispatch (`internalCall: true`) bypasses the gate;
+ *  - the connect URL is in the error's data, never its message, and an
+ *    anonymous caller gets signInRequired instead of a URL;
+ *  - a client that declared URL-mode elicitation is asked to open the connect
+ *    page, and the call runs when the credential is connected after it.
  *
  * The stage is invoked directly with a seeded tool context whose `tryGet`
  * resolves fake accessors, so the test never spawns a server and asserts no
@@ -49,6 +53,7 @@ function makeFlow(opts: {
   tool: ToolStub;
   accessors?: Map<Token, unknown>;
   ctx?: Record<string, unknown>;
+  elicitation?: { clientCapabilities: Record<string, unknown>; elicit: jest.Mock };
 }): CallToolFlow {
   const scope = createMockScopeEntry({ auth: { mode: 'local' } as never });
   const metadata = {
@@ -64,7 +69,41 @@ function makeFlow(opts: {
   // The gate reads the built tool context; seed one whose tryGet resolves the
   // provided accessors (empty registry ⇒ "no accessor wired").
   flow.state.set('toolContext', makeToolContext(opts.accessors ?? new Map()) as never);
+  if (opts.elicitation) {
+    const { clientCapabilities, elicit } = opts.elicitation;
+    Object.assign(scope.metadata, { elicitation: { enabled: true } });
+    Object.assign(scope, { notifications: { getClientCapabilities: () => clientCapabilities } });
+    const context = { sessionId: 'session-1', transport: { elicit }, getPreResolvedElicitResult: () => undefined };
+    jest.spyOn(flow as unknown as { tryGetContext: () => unknown }, 'tryGetContext').mockReturnValue(context);
+  }
   return flow;
+}
+
+async function gateErrorOf(flow: CallToolFlow): Promise<ToolCredentialsRequiredError> {
+  const error = await flow.checkToolCredentials().then(
+    () => undefined,
+    (thrown: unknown) => thrown,
+  );
+  expect(error).toBeInstanceOf(ToolCredentialsRequiredError);
+  return error as ToolCredentialsRequiredError;
+}
+
+const CONNECT_URL = 'https://server/oauth/connect?token=tok';
+const URL_ELICITATION = { elicitation: { url: {} } };
+
+/** A `this.credentials` accessor whose credentials connect when the client accepts the connect page. */
+function credentialsConnectedOnAccept() {
+  const connected: Record<string, boolean> = {};
+  const accessor = {
+    requireConnect: jest.fn(async ({ key }: { key: string }) =>
+      connected[key] ? { connected: true } : { connected: false, resumeUrl: CONNECT_URL },
+    ),
+  };
+  const elicit = jest.fn(async () => {
+    connected['github'] = true;
+    return { status: 'accept' };
+  });
+  return { accessors: new Map<Token, unknown>([[CREDENTIALS_ACCESSOR, accessor]]), elicit };
 }
 
 /** Fake `this.authProviders` accessor: `get(name)` resolves to a truthy cred or null. */
@@ -75,7 +114,7 @@ function authProvidersWith(available: Record<string, boolean>) {
 }
 
 /** Fake `this.credentials` accessor backed by requireConnect. */
-function credentialsWith(connected: Record<string, boolean>, resumeUrl = 'https://server/oauth/connect?token=tok') {
+function credentialsWith(connected: Record<string, boolean>, resumeUrl = CONNECT_URL) {
   return {
     requireConnect: jest.fn(async ({ key }: { key: string }) =>
       connected[key] ? { connected: true } : { connected: false, resumeUrl },
@@ -218,5 +257,116 @@ describe('call-tool credential gate (checkToolCredentials)', () => {
     });
 
     await expect(flow.checkToolCredentials()).resolves.toBeUndefined();
+  });
+
+  it('keeps the connect URL out of the message, which names the provider to connect', async () => {
+    const error = await gateErrorOf(
+      makeFlow({
+        tool: { ...TOOL_BASE, metadata: { name: 'deploy', authProviders: ['github'] } },
+        accessors: withCredentials({}),
+      }),
+    );
+
+    expect(error.message).not.toContain('http');
+    expect(error.message).toContain("Connect github to continue: open the link in this error's data (authUrl).");
+    expect(error.toJsonRpcError().data.authUrl).toBe(CONNECT_URL);
+  });
+
+  it('answers an anonymous caller with signInRequired and no connect URL', async () => {
+    const anonymousCredentials = {
+      requireConnect: jest.fn(async () => ({ connected: false, resumeUrl: '', signInRequired: true })),
+    };
+    const error = await gateErrorOf(
+      makeFlow({
+        tool: { ...TOOL_BASE, metadata: { name: 'deploy', authProviders: ['github'] } },
+        accessors: new Map<Token, unknown>([[CREDENTIALS_ACCESSOR, anonymousCredentials]]),
+      }),
+    );
+
+    expect(error.toJsonRpcError()).toEqual({
+      code: -32001,
+      message:
+        'Tool "cloud:deploy" requires credentials for github, and this caller isn\'t signed in. ' +
+        'Sign in to this server, then connect github.',
+      data: { tool: 'cloud:deploy', providers: ['github'], signInRequired: true },
+    });
+  });
+
+  describe('a client that declared URL-mode elicitation', () => {
+    const tool = { ...TOOL_BASE, metadata: { name: 'deploy', authProviders: ['github'] } };
+
+    it('is asked to open the connect page, and the call runs once the credential is connected', async () => {
+      const { accessors, elicit } = credentialsConnectedOnAccept();
+      const flow = makeFlow({ tool, accessors, elicitation: { clientCapabilities: URL_ELICITATION, elicit } });
+
+      await expect(flow.checkToolCredentials()).resolves.toBeUndefined();
+      expect(elicit).toHaveBeenCalledWith(
+        'Connect github to continue: tool "cloud:deploy" needs it.',
+        expect.anything(),
+        expect.objectContaining({ mode: 'url', url: CONNECT_URL, elicitationId: expect.any(String) }),
+      );
+    });
+
+    it('answers -32001 when the credential is still missing after the user accepted', async () => {
+      const elicit = jest.fn(async () => ({ status: 'accept' }));
+      const flow = makeFlow({
+        tool,
+        accessors: withCredentials({}),
+        elicitation: { clientCapabilities: URL_ELICITATION, elicit },
+      });
+
+      const error = await gateErrorOf(flow);
+      expect(elicit).toHaveBeenCalledTimes(1);
+      expect(error.toJsonRpcError().data.authUrl).toBe(CONNECT_URL);
+    });
+
+    it.each([['decline'], ['cancel']])('answers -32001 when the user answers %s', async (status) => {
+      const { accessors } = credentialsConnectedOnAccept();
+      const elicit = jest.fn(async () => ({ status }));
+      const flow = makeFlow({ tool, accessors, elicitation: { clientCapabilities: URL_ELICITATION, elicit } });
+
+      await gateErrorOf(flow);
+      expect(elicit).toHaveBeenCalledTimes(1);
+    });
+
+    it('answers -32001 when asking fails', async () => {
+      const elicit = jest.fn(async () => {
+        throw new Error('the session closed');
+      });
+      const flow = makeFlow({
+        tool,
+        accessors: withCredentials({}),
+        elicitation: { clientCapabilities: URL_ELICITATION, elicit },
+      });
+
+      await gateErrorOf(flow);
+    });
+
+    it('is not asked when the caller has to sign in first', async () => {
+      const elicit = jest.fn();
+      const anonymousCredentials = {
+        requireConnect: jest.fn(async () => ({ connected: false, resumeUrl: '', signInRequired: true })),
+      };
+      const flow = makeFlow({
+        tool,
+        accessors: new Map<Token, unknown>([[CREDENTIALS_ACCESSOR, anonymousCredentials]]),
+        elicitation: { clientCapabilities: URL_ELICITATION, elicit },
+      });
+
+      expect((await gateErrorOf(flow)).signInRequired).toBe(true);
+      expect(elicit).not.toHaveBeenCalled();
+    });
+  });
+
+  it('does not ask a client that declared only form elicitation', async () => {
+    const { accessors, elicit } = credentialsConnectedOnAccept();
+    const flow = makeFlow({
+      tool: { ...TOOL_BASE, metadata: { name: 'deploy', authProviders: ['github'] } },
+      accessors,
+      elicitation: { clientCapabilities: { elicitation: { form: {} } }, elicit },
+    });
+
+    await gateErrorOf(flow);
+    expect(elicit).not.toHaveBeenCalled();
   });
 });

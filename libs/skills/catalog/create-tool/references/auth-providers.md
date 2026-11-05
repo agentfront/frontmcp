@@ -132,10 +132,30 @@ flow runs a credential gate **before** `execute()`:
      camelCase key (primary) and the snake_case key (matching the app-level
      `authorization_required` error), so either convention resolves. Present
      when the framework can mint a connect URL for the session.
+   - `signInRequired: true` — set instead of `authUrl` when the caller isn't
+     signed in: no connect URL works before sign-in, so none is given.
+
+   The message names the provider and points at the data, never holding the
+   URL: clients echo messages into transcripts and logs, and the signed link
+   lets whoever holds it connect a credential for the caller for 10 minutes.
+
+   ```text
+   Tool "deploy_app" requires credentials for github which are not connected for this session. Connect github to continue: open the link in this error's data (authUrl).
+   Tool "deploy_app" requires credentials for github, and this caller isn't signed in. Sign in to this server, then connect github.
+   ```
 
 3. The user opens the URL and connects the credential. A signed-in caller who has no credential vault yet gets one
-   created there. An anonymous caller's URL opens a page asking them to sign in first (`403`, `login_required`).
+   created there.
 4. The client retries the tool call — the gate now passes and `execute()` runs.
+
+A client that declared URL-mode elicitation (`capabilities.elicitation.url`) is
+asked to open the connect page instead (`elicitation/create` with `mode: 'url'`
+and the URL), on a server with `elicitation: { enabled: true }`. When the user
+accepts, the gate checks again and the call runs if the credential is now
+connected; otherwise it answers the same `-32001`. On protocol 2026-07-28 the
+question travels as an `input_required` result under the key
+`connect-<provider>`, and the client's retry carries the answer. A caller who
+has to sign in first isn't asked.
 
 This is handled by the framework — you don't write any of this in `execute()`.
 

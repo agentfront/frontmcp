@@ -177,9 +177,10 @@ export class MrtrExchange {
     map: (raw: Record<string, unknown>) => T,
     /** Overrides the default capability gate (elicitation narrows it by mode). */
     gate?: { supported: boolean; required: Record<string, unknown> },
+    /** Names the request instead of its place among the call's requests of this kind. */
+    inputKey?: string,
   ): T {
-    this.counters[kind] += 1;
-    const key = `${kind}-${this.counters[kind]}`;
+    const key = inputKey ?? this.nextKeyOf(kind);
 
     const recorded = this.responses[key];
     if (recorded) return map(recorded);
@@ -196,8 +197,11 @@ export class MrtrExchange {
     throw new InputRequiredSignal(this.pending, encodeRequestState(this.responses, this.binding));
   }
 
-  /** Resolve the next `elicit()` call. */
-  resolveElicitation(pending: PendingElicitation): { status: ElicitStatus; content?: unknown } {
+  /**
+   * Resolve the next `elicit()` call. An `inputKey` names a question that is asked only on some runs (the call-tool
+   * credential gate's connect page), so the call's other questions keep their keys across the replay.
+   */
+  resolveElicitation(pending: PendingElicitation, inputKey?: string): { status: ElicitStatus; content?: unknown } {
     // Gate on the MODE actually being asked for. A client that declared only
     // `form` cannot service a `url` elicitation, and the spec forbids emitting
     // an input request the client never said it supports.
@@ -214,7 +218,13 @@ export class MrtrExchange {
       },
       toElicitResult,
       { supported: this.supportsElicitation(mode), required: { elicitation: { [mode]: {} } } },
+      inputKey,
     );
+  }
+
+  private nextKeyOf(kind: MrtrRequestKind): string {
+    this.counters[kind] += 1;
+    return `${kind}-${this.counters[kind]}`;
   }
 
   /** Resolve the next `sample()` call. */
