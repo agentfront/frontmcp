@@ -1,6 +1,6 @@
 // Scenarios B2 B3 B4 J3: the bundle pulled over https from a SaaS bundle server, with a pull token checked against the
 // issuer's JWKS: the startup pull, new versions applied by polling, refused tokens, bundles and older versions, the
-// cache, redirects.
+// cache, redirects. /readyz stays ready but says the bundle served is stale while the last pull was refused or failed.
 import type { ResolvedBundle } from '@frontmcp/adapters/skills';
 import { expect, test, type McpTestClient, type ServerFixture } from '@frontmcp/testing';
 import { chmod, fileExists, pathJoin, readFile } from '@frontmcp/utils';
@@ -138,6 +138,13 @@ async function servedSkills(client: McpTestClient): Promise<{ ids: string[]; ver
   };
 }
 
+/** The skilled-openapi check of /readyz, which must still answer ready. */
+async function readyCheck(server: ServerFixture) {
+  const ready = await readiness(server.info.baseUrl);
+  expect(ready).toMatchObject({ httpStatus: 200, status: 'ready' });
+  return ready.probes?.['skilled-openapi'];
+}
+
 function waitForLog(server: ServerFixture, text: string): Promise<void> {
   return until(() => server.getLogs().join('\n').includes(text), `the log line "${text}"`);
 }
@@ -249,8 +256,20 @@ test.describe('a bundle pulled from the bundle server', () => {
 
     expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
     expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
-    expect((await readiness(server.info.baseUrl)).probes?.['skilled-openapi']?.details).toMatchObject({
-      bundleVersion: '2.0.0',
+    expect(await readyCheck(server)).toEqual({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleId: 'e2e:billing',
+        bundleVersion: '2.0.0',
+        lastSync: {
+          status: 'refused',
+          bundleId: 'e2e:billing',
+          bundleVersion: '3.0.0',
+          reason: expect.stringContaining('digest mismatch'),
+          at: expect.any(String),
+        },
+      },
     });
   });
 
@@ -268,6 +287,18 @@ test.describe('a bundle pulled from the bundle server', () => {
     expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
     expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
     expect(await cachedBundleVersion(env)).not.toBe('4.0.0');
+    expect(await readyCheck(server)).toMatchObject({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleVersion: '2.0.0',
+        lastSync: {
+          status: 'failed',
+          reason: expect.stringContaining('Bundle schema validation failed (4 issue(s)): skills.0.name: '),
+          cacheFallback: false,
+        },
+      },
+    });
   });
 
   test('does not apply an older signed version on a poll: the version served stays, and stays cached', async ({
@@ -284,6 +315,29 @@ test.describe('a bundle pulled from the bundle server', () => {
     expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
     expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
     expect(await cachedBundleVersion(env)).toBe('2.0.0');
+    expect(await readyCheck(server)).toMatchObject({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleVersion: '2.0.0',
+        lastSync: {
+          status: 'refused',
+          bundleVersion: '1.0.0',
+          reason: expect.stringContaining('older than the served bundle e2e:billing@2.0.0'),
+        },
+      },
+    });
+  });
+
+  test('is healthy again once a poll applies a newer version', async ({ mcp, server }) => {
+    bundleServer.published = environment.sign(billingBundle('5.0.0', V2_SKILLS));
+
+    await until(async () => (await servedSkills(mcp)).versions.includes('5.0.0'), 'version 5.0.0');
+
+    expect(await readyCheck(server)).toEqual({
+      status: 'healthy',
+      details: { state: 'loaded', bundleId: 'e2e:billing', bundleVersion: '5.0.0' },
+    });
   });
 });
 
@@ -374,7 +428,10 @@ test.describe('a bundle server that is down at startup', () => {
 
       expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'reports'], versions: ['1.0.0'] });
       expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
-      expect((await readiness(server.info.baseUrl)).httpStatus).toBe(200);
+      expect(await readyCheck(server)).toMatchObject({
+        status: 'degraded',
+        details: { state: 'stale', bundleVersion: '1.0.0', lastSync: { status: 'failed', reason: 'fetch failed' } },
+      });
       expect(server.getLogs().join('\n')).toContain('[saas-source] using cached bundle "e2e:billing@1.0.0"');
     });
   });

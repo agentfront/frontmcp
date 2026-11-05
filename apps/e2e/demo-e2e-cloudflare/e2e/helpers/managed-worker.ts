@@ -11,6 +11,7 @@ const FIXTURE_DIR = resolve(__dirname, '../../fixture-managed');
 const WRANGLER_BIN = join(ROOT_DIR, 'node_modules', '.bin', 'wrangler');
 const MCP_URL = 'http://localhost/mcp';
 const PUSH_URL = 'http://localhost/__skilled_openapi/push';
+const READYZ_URL = 'http://localhost/readyz';
 const BUNDLE_CACHE_KEY = 'frontmcp:bundle:last-good';
 const BUNDLE_CACHE_NAMESPACE_ID = 'e2e-bundle-cache';
 const PUSH_REPLAY_CLASS = 'FrontMcpPushReplay';
@@ -26,6 +27,12 @@ export interface ToolCallResult<T> {
   isError: boolean;
   text: string;
   json: () => T;
+}
+
+export interface Readiness {
+  httpStatus: number;
+  status: string;
+  probes?: Record<string, { status: string; details?: Record<string, unknown>; error?: string }>;
 }
 
 export interface ManagedWorkerOptions {
@@ -121,6 +128,12 @@ export class ManagedWorker {
   async scheduled(): Promise<{ outcome: string }> {
     const worker = await this.miniflare.getWorker(this.replicaName);
     return worker.scheduled({ cron: '*/5 * * * *' });
+  }
+
+  /** What `/readyz` answers. */
+  async readiness(): Promise<Readiness> {
+    const response = await this.fetch(READYZ_URL);
+    return { httpStatus: response.status, ...((await response.json()) as Omit<Readiness, 'httpStatus'>) };
   }
 
   push(authorization: string | undefined, body: unknown): Promise<Response> {

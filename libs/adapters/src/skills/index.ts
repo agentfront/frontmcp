@@ -73,6 +73,8 @@ export {
 } from './openapi/compile-skilled-bundle';
 export type {
   BundleCacheStore,
+  BundleOrigin,
+  BundlePullFailureListener,
   BundlePushReceiver,
   BundleSourceDeps,
   BundleSourceListener,
