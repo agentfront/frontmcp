@@ -110,17 +110,27 @@ function pluginListName(owner: EntryOwnerRef | undefined, hostPluginName: string
   return `the plugins of ${owner.kind} "${owner.id}"`;
 }
 
-/** Refuses a list naming a plugin twice; a oncePerServer plugin's second entry gets DuplicatePluginError instead. */
+/**
+ * Refuses a list naming a plugin twice. A oncePerServer plugin's second entry under the same name gets
+ * DuplicatePluginError instead, when the server claims that name.
+ */
 function refuseDuplicateEntries(list: readonly PluginType[], listName: string): void {
-  const entryNumbers = new Map<Token, number>();
+  const firstEntries = new Map<Token, { entryNumber: number; name: string | undefined }>();
   for (const [index, raw] of list.entries()) {
     const { provide, metadata } = normalizePlugin(raw);
-    if (metadata.oncePerServer !== undefined) continue;
-    const firstEntryNumber = entryNumbers.get(provide);
-    if (firstEntryNumber !== undefined) {
-      throw new DuplicatePluginEntryError(metadata.name ?? tokenName(provide), listName, firstEntryNumber, index + 1);
+    const firstEntry = firstEntries.get(provide);
+    if (firstEntry === undefined) {
+      firstEntries.set(provide, { entryNumber: index + 1, name: metadata.name });
+      continue;
     }
-    entryNumbers.set(provide, index + 1);
+    const sameOncePerServerPlugin = metadata.oncePerServer !== undefined && firstEntry.name === metadata.name;
+    if (sameOncePerServerPlugin) continue;
+    throw new DuplicatePluginEntryError(
+      metadata.name ?? tokenName(provide),
+      listName,
+      firstEntry.entryNumber,
+      index + 1,
+    );
   }
 }
 
