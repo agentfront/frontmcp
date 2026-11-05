@@ -64,6 +64,12 @@ export interface ElicitHelperDeps {
 
   /** Aborts when the call stops; a persistent question then stops waiting. */
   signal?: AbortSignal;
+
+  /**
+   * The key a 2026-07-28 client answers this question under, for a question asked on some runs of the call only.
+   * Default: its place among the call's questions.
+   */
+  inputKey?: string;
 }
 
 /**
@@ -134,13 +140,16 @@ export async function performElicit<S extends ZodType>(
   if (mrtr) {
     const zodSchema =
       requestedSchema instanceof z.ZodType ? requestedSchema : z.object(requestedSchema as z.ZodRawShape);
-    const answer = mrtr.resolveElicitation({
-      message,
-      requestedSchema: toJSONSchema(zodSchema) as Record<string, unknown>,
-      ...(elicitOptions?.mode ? { mode: elicitOptions.mode } : {}),
-      ...(elicitOptions?.url ? { url: elicitOptions.url } : {}),
-      ...(elicitOptions?.elicitationId ? { elicitationId: elicitOptions.elicitationId } : {}),
-    });
+    const answer = mrtr.resolveElicitation(
+      {
+        message,
+        requestedSchema: toJSONSchema(zodSchema) as Record<string, unknown>,
+        ...(elicitOptions?.mode ? { mode: elicitOptions.mode } : {}),
+        ...(elicitOptions?.url ? { url: elicitOptions.url } : {}),
+        ...(elicitOptions?.elicitationId ? { elicitationId: elicitOptions.elicitationId } : {}),
+      },
+      deps.inputKey,
+    );
     if (answer.status !== 'accept') {
       return answer as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
     }

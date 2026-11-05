@@ -87,9 +87,24 @@ describe('connectedCredentialOf', () => {
     const call = connectedCredentialOf('billing', toolCall({ authProviders: null, sessionCredential: null }).lookup);
 
     await expect(call).rejects.toThrow(
-      `Tool "run_workflow" sends the caller's own "billing" credential, which this caller hasn't connected. Connect "billing" and retry.`,
+      'Tool "run_workflow" requires credentials for billing which are not connected for this session. ' +
+        "Connect billing to continue: open the link in this error's data (authUrl).",
     );
     await expect(call).rejects.not.toThrow(CONNECT_URL);
+  });
+
+  it('asks a caller who is not signed in to sign in, with no connect URL', async () => {
+    const signInRequired = { connected: false, key: 'billing', resumeUrl: '', signInRequired: true, message: '' };
+    const lookup = {
+      metadata: { name: 'run_workflow' },
+      tryGet: <T>(token: Token<T>) =>
+        (token === CREDENTIALS_ACCESSOR ? { requireConnect: async () => signInRequired } : undefined) as T | undefined,
+    };
+
+    const call = connectedCredentialOf('billing', lookup);
+
+    await expect(call).rejects.toMatchObject({ providers: ['billing'], authUrl: undefined, signInRequired: true });
+    await expect(call).rejects.toThrow('Sign in to this server, then connect billing.');
   });
 
   it('asks the caller to connect it, without a URL, when the server has no vault', async () => {

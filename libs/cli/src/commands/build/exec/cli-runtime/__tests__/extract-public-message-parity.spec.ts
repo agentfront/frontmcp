@@ -110,3 +110,26 @@ describe('extract-public-message snippet', () => {
     expect(extract({ foo: 'bar' })).toBe('[object Object]');
   });
 });
+
+describe('connect hint snippet', () => {
+  const connectHint = new Function(`${EXTRACT_PUBLIC_MESSAGE_SNIPPET}\nreturn _connectHint;`)() as (
+    err: unknown,
+  ) => string;
+  const connectUrl = 'https://server.example/oauth/connect?token=signed';
+
+  it("prints the connect link from a credentials-required error's data for the terminal user", () => {
+    const err = { code: -32001, data: { tool: 'deploy', providers: ['github'], authUrl: connectUrl } };
+    expect(connectHint(err)).toBe(`Connect github at: ${connectUrl}`);
+  });
+
+  it('asks a caller who is not signed in to sign in first', () => {
+    const err = { code: -32001, data: { tool: 'deploy', providers: ['github', 'aws'], signInRequired: true } };
+    expect(connectHint(err)).toBe('Sign in to the server first, then connect github, aws.');
+  });
+
+  it('prints nothing for other errors', () => {
+    expect(connectHint(new Error('boom'))).toBe('');
+    expect(connectHint({ data: { providers: ['github'] } })).toBe('');
+    expect(connectHint(null)).toBe('');
+  });
+});
