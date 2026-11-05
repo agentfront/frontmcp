@@ -91,9 +91,24 @@ On a server with the Skilled OpenAPI plugin, the line and the catalog summary po
 This server has 3 skills: load one by name with `load_skill`, or find one with `search_skill`; then run an action with `execute_action`, or chain several with `run_workflow`.
 ```
 
-The summary is headed ``Available skills (load one by name with `load_skill`; `search_skill` finds others):``. `initialize` waits for the plugin's bundle to load first, so a client's first connection counts its skills (up to 1.11.0, a client that initialized before the bundle loaded got no line, and the line pointed to `skill://index.json`).
+The summary is headed ``Available skills (load one by name with `load_skill`; `search_skill` finds others):``. `initialize` waits for the plugin's bundle to load first, so a client's first connection counts its skills (up to 1.11.0, a client that initialized before the bundle loaded got no line, and the line pointed to `skill://index.json`). While no bundle is loaded (its first pull failed, or hasn't finished), the line says so instead:
+
+```text
+This server's skills have not loaded yet (<reason>). Ask for them again shortly; the server sends notifications/skills/list_changed once they load.
+```
+
+and the skill methods and resources answer the retryable `SKILL_BUNDLE_NOT_LOADED` error, as the plugin's tools do (below). Up to 1.11.0 they all answered as if the server had no skills, and a client kept that answer.
 
 A plugin that registers skills at runtime does the same by providing a `SkillCatalogSource` under `SkillCatalogSourceToken` (both from `@frontmcp/sdk`): `ready()` resolves once its skills are registered, and is awaited before the instructions are composed (a rejection is logged, and the instructions are composed anyway). Its optional `pointers` (`header`, `truncationHint`, `compact`) replace the default wording. Its optional `actions` (`hint`, and `visibleTo(skill, authInfo)`, which returns the actions of `skill` the caller may run) add an `## Actions` section to each of its skills' `SKILL.md`: the hint, then each action's id, summary, description, and input and output JSON Schemas. Without `actions`, `SKILL.md` lists no actions, since only the plugin can judge which ones a caller may run.
+
+Its optional `notLoadedReason()` says why its skills aren't loaded once `ready()` has settled, and returns undefined once they are. While it gives a reason:
+
+- the instructions say the skills have not loaded yet, in place of the count or summary (not under `'off'`, or `'replace'` with server instructions);
+- `skills/list`, `skills/search` and `skill://index.json` answer `SkillBundleNotLoadedError` (exported from `@frontmcp/sdk`): JSON-RPC `-32603`, message `No skill bundle is loaded: <reason>`, `data: { code: 'SKILL_BUNDLE_NOT_LOADED', retryable: true }`. A partial list would be kept as the whole one, so they refuse even when the server has skills of its own;
+- `skills/load` and a `skill://<skillPath>/SKILL.md` or file read answer it only for a skill not found; the server's own skills still load;
+- a tool that throws it answers `_meta: { code: 'SKILL_BUNDLE_NOT_LOADED', retryable: true }`.
+
+Each surface waits for `ready()` first, so a client that skips `initialize` (a stateless 2026-07-28 request, or a Worker's first request) also gets the plugin's skills, or the error. When the skills are registered, connected clients get `notifications/skills/list_changed`. A server without a source answers as before.
 
 **Default change (1.10.16):** up to 1.10.15 the default was `'append'`, which lists every skill's name and description (up to 16 KB). Some clients copy the server's instructions into every tool's description, so a large catalog was repeated once per tool. Set `injectInstructions: 'append'` to get the full catalog back.
 
@@ -101,7 +116,7 @@ The composed instructions count against `@FrontMcp({ instructionsBudget })`, 102
 
 The catalog summary is built by `composeInitializeInstructions(...)` and `buildSkillsCatalogSummary(...)` (exported from `@frontmcp/sdk`). It is bounded at **16 KB** with a truncation footer. Its header and footer point clients at `skill://index.json` (SEP-2640 — singular scheme), which lists each skill's `skill://<skillPath>/SKILL.md` URI, unless a plugin's `SkillCatalogSource` gives its own `pointers` (above). `buildSkillsCatalogSummary(registry, { pointers })` takes them too. With `mcpResources: false` no `skill://` resource is served, so they point at the `skills/load` and `skills/search` methods instead, and `sep2640InInstructions` is ignored.
 
-> **Dynamic skills:** because the composer recomputes the summary on every `initialize` request, skills registered after server boot **are** picked up automatically. Their `skill://<skillPath>/SKILL.md` resources follow too: a skill registered or removed after boot (`this.scope.skills.registerSkillContent()` / `unregisterSkill()`, a skill-bundle plugin) is added to or dropped from `resources/list`, and clients get `notifications/resources/list_changed`. Up to 1.9.4 `resources/list` named only the skills present at startup.
+> **Dynamic skills:** because the composer recomputes the summary on every `initialize` request, skills registered after server boot **are** picked up automatically. A skill registered with a `bundleVersion` (`registerSkillContent({ ..., bundleVersion })`, a Skilled OpenAPI bundle skill) carries it in `skills/list` and `skills/search` results; other skills' results have no such field (up to 1.11.0 neither method sent it). Their `skill://<skillPath>/SKILL.md` resources follow too: a skill registered or removed after boot (`this.scope.skills.registerSkillContent()` / `unregisterSkill()`, a skill-bundle plugin) is added to or dropped from `resources/list`, and clients get `notifications/resources/list_changed`. Up to 1.9.4 `resources/list` named only the skills present at startup.
 
 > **Per caller:** the compact line or the summary (and the SEP-2640 `skill://` hints under `sep2640InInstructions`) is composed for the client that initializes, like `skills/list`: it only counts or names skills whose `authorities` that caller satisfies and that the hookable `skills:filter` flow keeps, so a flag-disabled skill's name and description are left out. With nothing gating a skill the instructions are unchanged. Transports use `composeCallerInstructions(scope, { ctx })`, exported from `@frontmcp/sdk` for custom transports.
 

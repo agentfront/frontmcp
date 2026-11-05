@@ -258,6 +258,12 @@ export interface SkillRegistryInterface {
   servesSkills?(): boolean;
 
   /**
+   * The version of the bundle a skill registered at runtime came from (`SkillContent.bundleVersion`), or undefined
+   * for any other skill.
+   */
+  bundleVersionOf?(skillId: string): string | undefined;
+
+  /**
    * Owner lineage (root → leaf) of a skill, including the app a plugin-contributed skill belongs to,
    * or undefined when the registry doesn't hold it.
    */
@@ -1104,6 +1110,10 @@ export default class SkillRegistry
    */
   servesSkills(): boolean {
     return this.dynamicSkillsExpected || this.hasAny() || this.externalProvider?.isReadOnly() === true;
+  }
+
+  bundleVersionOf(skillId: string): string | undefined {
+    return this.dynamicContents.get(skillId)?.bundleVersion;
   }
 
   /**

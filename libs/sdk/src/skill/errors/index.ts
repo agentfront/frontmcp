@@ -2,3 +2,4 @@
 
 export * from './tool-not-allowed.error';
 export * from './skill-validation.error';
+export * from './skill-bundle-not-loaded.error';

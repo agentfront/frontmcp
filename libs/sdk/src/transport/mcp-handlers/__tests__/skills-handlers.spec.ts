@@ -4,11 +4,14 @@
  * Tests for the skills/search, skills/load, and skills/list MCP handlers. skills/search and skills/load
  * run the real `skills:search` / `skills:load` flows on the mock scope.
  */
+import { McpError } from '@frontmcp/protocol';
+
 import { runFlowStages } from '../../../__test-utils__';
 import { FrontMcpFlowTokens, type FlowMetadata, type FlowName, type FlowType } from '../../../common';
-import { ProviderNotAvailableError } from '../../../errors';
+import { MCP_ERROR_CODES, ProviderNotAvailableError } from '../../../errors';
 import LoadSkillFlow from '../../../skill/flows/load-skill.flow';
 import SearchSkillsFlow from '../../../skill/flows/search-skills.flow';
+import { SkillCatalogSourceToken, type SkillCatalogSource } from '../../../skill/skill-catalog-source';
 import { type McpHandlerOptions } from '../mcp-handlers.types';
 import skillsListRequestHandler from '../skills-list-request.handler';
 import skillsLoadRequestHandler from '../skills-load-request.handler';
@@ -34,6 +37,7 @@ describe('Skills MCP Handlers', () => {
     findByName: jest.fn(),
     findByQualifiedName: jest.fn(),
     getSkills: jest.fn().mockReturnValue([]),
+    bundleVersionOf: jest.fn(),
   };
 
   // The `skills:filter` flow, which every handler runs registered skills through
@@ -48,7 +52,7 @@ describe('Skills MCP Handlers', () => {
 
   // The flows the handlers run, with their stages in order
   const handlerFlows: Partial<Record<string, { flow: FlowType; stages: string[] }>> = {
-    'skills:search': { flow: SearchSkillsFlow, stages: ['parseInput', 'search', 'finalize'] },
+    'skills:search': { flow: SearchSkillsFlow, stages: ['parseInput', 'ensureSkillsLoaded', 'search', 'finalize'] },
     'skills:load': { flow: LoadSkillFlow, stages: ['parseInput', 'loadSkills', 'activateSessions', 'finalize'] },
   };
 
@@ -693,6 +697,154 @@ describe('Skills MCP Handlers', () => {
 
       expect(result.skills.map((skill) => skill.id)).toEqual(['a', 'b', 'c']);
       expect(mockSkillRegistry.getSkills).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("a plugin's runtime skills that haven't loaded (SkillCatalogSource.notLoadedReason)", () => {
+    const NOT_LOADED_MESSAGE = 'No skill bundle is loaded: pull responded 503';
+    let notLoadedReason: string | undefined;
+    const ready = jest.fn(async () => undefined);
+    const source: SkillCatalogSource = { ready, notLoadedReason: () => notLoadedReason };
+
+    const createSourceHandlerOptions = (): McpHandlerOptions => ({
+      serverOptions: {} as any,
+      scope: {
+        ...createMockScope(),
+        providers: {
+          get: (token: unknown) => {
+            if (token === SkillCatalogSourceToken) return source;
+            throw new ProviderNotAvailableError('telemetry');
+          },
+        },
+      } as any,
+    });
+
+    async function rejectionOf(answer: unknown): Promise<McpError> {
+      const error = await Promise.resolve(answer).then(
+        () => undefined,
+        (rejected: unknown) => rejected,
+      );
+      if (!(error instanceof McpError)) throw new Error(`expected an McpError, got ${String(error)}`);
+      return error;
+    }
+
+    const bundleSkill = { id: 'invoices', name: 'Invoices', description: 'Look up invoices.' };
+
+    beforeEach(() => {
+      notLoadedReason = 'pull responded 503';
+      mockRunFlowForOutput.mockImplementation(async (_flow: string, input: { skills: unknown[] }) => ({
+        skills: input.skills,
+      }));
+    });
+
+    afterEach(() => {
+      mockRunFlowForOutput.mockReset();
+      mockSkillRegistry.loadSkill.mockReset();
+      mockSkillRegistry.bundleVersionOf.mockReset();
+    });
+
+    it('answers skills/list with the retryable SKILL_BUNDLE_NOT_LOADED error, without reading the registry', async () => {
+      const error = await rejectionOf(
+        skillsListRequestHandler(createSourceHandlerOptions()).handler(
+          { method: 'skills/list' as const, params: {} },
+          createContext() as any,
+        ),
+      );
+
+      expect(error.code).toBe(MCP_ERROR_CODES.INTERNAL_ERROR);
+      expect(error.message).toContain(NOT_LOADED_MESSAGE);
+      expect(error.data).toMatchObject({ code: 'SKILL_BUNDLE_NOT_LOADED', retryable: true });
+      expect(ready).toHaveBeenCalled();
+      expect(mockSkillRegistry.listSkills).not.toHaveBeenCalled();
+    });
+
+    it('answers skills/search with the same error, without searching', async () => {
+      const error = await rejectionOf(
+        skillsSearchRequestHandler(createSourceHandlerOptions()).handler(
+          { method: 'skills/search' as const, params: { query: 'invoices' } },
+          createContext() as any,
+        ),
+      );
+
+      expect(error.message).toContain(NOT_LOADED_MESSAGE);
+      expect(error.data).toMatchObject({ code: 'SKILL_BUNDLE_NOT_LOADED', retryable: true });
+      expect(mockSkillRegistry.search).not.toHaveBeenCalled();
+    });
+
+    it('answers skills/load with the same error for a skill not found, rather than a "not found" warning', async () => {
+      mockSkillRegistry.loadSkill.mockResolvedValue(undefined);
+
+      const error = await rejectionOf(
+        skillsLoadRequestHandler(createSourceHandlerOptions()).handler(
+          { method: 'skills/load' as const, params: { skillIds: ['invoices'] } },
+          createContext() as any,
+        ),
+      );
+
+      expect(error.data).toMatchObject({ code: 'SKILL_BUNDLE_NOT_LOADED', retryable: true });
+    });
+
+    it('loads a skill that is registered: only a skill not found waits for the bundle', async () => {
+      mockSkillRegistry.loadSkill.mockResolvedValue({
+        skill: { ...bundleSkill, instructions: '# Invoices', tools: [] },
+        availableTools: [],
+        missingTools: [],
+        isComplete: true,
+      });
+
+      const result = await skillsLoadRequestHandler(createSourceHandlerOptions()).handler(
+        { method: 'skills/load' as const, params: { skillIds: ['invoices'] } },
+        createContext() as any,
+      );
+
+      expect(result.skills.map((skill) => skill.id)).toEqual(['invoices']);
+    });
+
+    it("lists the skills once they have loaded, with each bundle skill's bundleVersion", async () => {
+      notLoadedReason = undefined;
+      mockSkillRegistry.listSkills.mockResolvedValueOnce({
+        skills: [bundleSkill, { id: 'local', name: 'local', description: 'A local skill.' }],
+        total: 2,
+        hasMore: false,
+      });
+      mockSkillRegistry.bundleVersionOf.mockImplementation((id: string) => (id === 'invoices' ? '2.1.0' : undefined));
+
+      const result = await skillsListRequestHandler(createSourceHandlerOptions()).handler(
+        { method: 'skills/list' as const, params: {} },
+        createContext() as any,
+      );
+
+      expect(result.skills).toEqual([
+        { id: 'invoices', name: 'Invoices', description: 'Look up invoices.', bundleVersion: '2.1.0' },
+        { id: 'local', name: 'local', description: 'A local skill.' },
+      ]);
+    });
+
+    it("searches once they have loaded, with each bundle skill's bundleVersion", async () => {
+      notLoadedReason = undefined;
+      const result = (metadata: typeof bundleSkill, bundleVersion?: string) => ({
+        metadata,
+        score: 0.9,
+        availableTools: [],
+        missingTools: [],
+        source: 'local',
+        ...(bundleVersion !== undefined && { bundleVersion }),
+      });
+      mockSkillRegistry.search.mockResolvedValueOnce([
+        result(bundleSkill, '2.1.0'),
+        result({ id: 'local', name: 'local', description: 'A local skill.' }),
+      ]);
+
+      const found = await skillsSearchRequestHandler(createSourceHandlerOptions()).handler(
+        { method: 'skills/search' as const, params: { query: 'invoices' } },
+        createContext() as any,
+      );
+
+      expect(found.skills.map(({ id, bundleVersion }) => ({ id, bundleVersion }))).toEqual([
+        { id: 'invoices', bundleVersion: '2.1.0' },
+        { id: 'local', bundleVersion: undefined },
+      ]);
+      expect(found.skills[1]).not.toHaveProperty('bundleVersion');
     });
   });
 });

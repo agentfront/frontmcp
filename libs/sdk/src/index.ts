@@ -432,6 +432,8 @@ export {
   SkillHttpAuthValidator,
   // Thrown by validateAllTools() when a 'strict' skill references a missing tool
   SkillValidationError,
+  // A plugin's runtime skills aren't loaded yet: the skill surfaces answer with it, retryable
+  SkillBundleNotLoadedError,
 } from './skill';
 export type {
   SkillAuditFactory,

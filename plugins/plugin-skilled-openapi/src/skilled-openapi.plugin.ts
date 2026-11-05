@@ -501,8 +501,9 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
       },
       {
         // The server's initialize instructions wait for the bundle, so they count and list its skills, and point
-        // to load_skill and search_skill rather than to skill://index.json (#1067). A skill's SKILL.md resource
-        // lists the actions the caller may run, as load_skill does.
+        // to load_skill and search_skill rather than to skill://index.json (#1067). Until a bundle loads, they and
+        // the SDK's skill surfaces say so, retryable. A skill's SKILL.md resource lists the actions the caller may
+        // run, as load_skill does.
         name: 'skilled-openapi:skill-catalog-source',
         provide: SkillCatalogSourceToken,
         inject: () => [ScopeEntry, AuthorityGuard, BundleStore, HiddenOpRegistry] as const,
@@ -511,6 +512,8 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
             ready: async () => {
               await Promise.all([...builtSyncs].map((sync) => sync.ensureReady()));
             },
+            notLoadedReason: () =>
+              [...builtSyncs].map((sync) => sync.notLoadedReason()).find((reason) => reason !== undefined),
             pointers: SKILL_TOOL_CATALOG_POINTERS,
             actions: {
               hint: SKILL_MD_ACTIONS_HINT,
