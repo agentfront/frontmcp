@@ -87,7 +87,7 @@ export interface ReadySkillCatalog {
 
 /**
  * Wait for the plugin skill source provided in the scope, if any, and read whether its skills loaded. A `ready()`
- * that rejects is logged: the skills registered so far are served.
+ * that rejects, or a `notLoadedReason()` that throws, is logged: the skills registered so far are served.
  */
 export async function readySkillCatalog(scope: SkillCatalogSourceScope): Promise<ReadySkillCatalog> {
   const source = findSkillCatalogSource(scope);
@@ -99,7 +99,21 @@ export async function readySkillCatalog(scope: SkillCatalogSourceScope): Promise
       error: error instanceof Error ? error.message : String(error),
     });
   }
-  return { source, notLoadedReason: source.notLoadedReason?.() };
+  return { source, notLoadedReason: notLoadedReasonOf(source, scope) };
+}
+
+function notLoadedReasonOf(source: SkillCatalogSource, scope: SkillCatalogSourceScope): string | undefined {
+  try {
+    return source.notLoadedReason?.();
+  } catch (error) {
+    scope.logger.warn(
+      'a skill source failed to report whether its skills loaded; serving the skills registered so far',
+      {
+        error: error instanceof Error ? error.message : String(error),
+      },
+    );
+    return undefined;
+  }
 }
 
 /**
