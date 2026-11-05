@@ -426,7 +426,8 @@ the server keeps running, and:
   `No skill bundle is loaded: bundle acme:billing@1.4.0 was not applied: unknown signing keyId "ci-2026" — not in trustedKeys allowlist`.
   The reason is the first line of the error, with each URL cut to its scheme, host and path, and tokens removed. The
   log has the full reason.
-- `/readyz` answers 503: its `skilled-openapi` check is `unhealthy`, with the same reason in `error`.
+- `/readyz` answers 503: its `skilled-openapi` check is `unhealthy`, with the same reason in `error`, and the sync that
+  failed in `details.lastSync`.
 
 Once a bundle loads (a watched file is fixed, a poll succeeds), the tools work again and the check is `healthy`, with
 `details: { state: 'loaded', bundleId, bundleVersion }`.
@@ -463,6 +464,36 @@ signature, its other checks, or it is older than the one served), or a pull fail
 - On a Worker (`@frontmcp/edge`), a Cron run whose sync is refused or fails throws, so Cloudflare records it as failed.
 
 Up to 1.11.0, the check stayed `healthy`, and a Cron run that pulled a refused bundle reported success.
+
+### When a pull or push token is refused
+
+The `saas` source checks `authToken` against `jwksUrl` before every pull, and the token of each push the same way. When
+a check fails, the log and `/readyz` name it as `tokenFailure`:
+
+| `tokenFailure`          | The token                                                                          |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| `expired`               | Its `exp` has passed: issue a new one.                                             |
+| `not_yet_valid`         | Its `nbf` is in the future: check the issuer's clock and the server's.             |
+| `wrong_issuer`          | Its `iss` is not `expectedIssuer`, or it has none.                                 |
+| `wrong_audience`        | Its `aud`, or its `resource`, does not name `expectedAudience`.                    |
+| `unknown_key`           | Its `kid` is not in the JWKS: the issuer may have retired the key.                 |
+| `bad_signature`         | The key in the JWKS under its `kid` does not verify it.                            |
+| `unsupported_algorithm` | It is not signed with an asymmetric algorithm (`HS256`, for example).              |
+| `missing_claim`         | It has no `exp`; a push token also needs `iat` and `jti`.                          |
+| `malformed`             | It is not a JWT, or a claim has the wrong type.                                    |
+| `jwks_unavailable`      | Not checked: `jwksUrl` could not be read, or has no usable signing key. An outage. |
+
+- A pull logs, at warn level, `[saas-source] saas:<endpoint>: pull token check failed (expired)`. The log never has
+  the token.
+- `/readyz` has it in the check's `details.lastSync.tokenFailure`: the check is `degraded` while an earlier bundle
+  serves, and `unhealthy` when none loaded. A refused pull token never falls back to the cached bundle;
+  `jwks_unavailable` does, at a start.
+- A push logs `[saas-source] push refused (wrong_issuer): ...`, or `bundle push not checked (jwks_unavailable): ...`.
+- On a Worker, a failed Cron run's error says it too: `the bundle pull failed (token check: expired): ...`.
+
+Callers learn nothing more than before: the tools' `SKILL_BUNDLE_NOT_LOADED` reason is unchanged, a refused push token
+answers `401 invalid_token` with `the push token was refused` whatever check failed, and a push while the JWKS can't be
+read answers `503 temporarily_unavailable`, as a server-side problem the SaaS should retry.
 
 ### The bundle
 

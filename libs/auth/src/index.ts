@@ -35,7 +35,7 @@
 // JWKS Module
 // ============================================
 export { JwksService, trimSlash, normalizeIssuer, decodeJwtPayloadSafe } from './jwks';
-export type { JwksServiceOptions, ProviderVerifyRef, VerifyResult } from './jwks';
+export type { JwksServiceOptions, ProviderVerifyRef, TokenVerifyFailure, VerifyResult } from './jwks';
 
 // ============================================
 // UI Module

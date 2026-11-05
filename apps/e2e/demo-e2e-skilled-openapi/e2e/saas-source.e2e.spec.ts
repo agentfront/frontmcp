@@ -1,7 +1,8 @@
 // Scenarios B2 B3 B4 J3: the bundle pulled over https from a SaaS bundle server, with a pull token checked against the
 // issuer's JWKS: the startup pull, new versions applied by polling, refused tokens, bundles and older versions, the
 // cache, redirects. /readyz stays ready but says the bundle served is stale while the last pull was refused or failed.
-import type { ResolvedBundle } from '@frontmcp/adapters/skills';
+// The log and /readyz name the check a pull or push token failed; the tools and the push answer don't.
+import type { BundleTokenFailure, ResolvedBundle } from '@frontmcp/adapters/skills';
 import { expect, test, type McpTestClient, type ServerFixture } from '@frontmcp/testing';
 import { chmod, fileExists, pathJoin, readFile } from '@frontmcp/utils';
 
@@ -89,6 +90,8 @@ interface SaasServerSetup {
   /** The pull token the server is set up with; by default, the one the bundle server issued it. */
   pullToken?: () => Promise<string>;
   readOnlyCache?: boolean;
+  /** Take bundles pushed to `POST /__skilled_openapi/push`. */
+  enableWebhook?: boolean;
 }
 
 /**
@@ -110,6 +113,7 @@ function useSaasServer(setup: SaasServerSetup = {}): Record<string, string> {
       SKILLED_SAAS_AUDIENCE: BUNDLE_AUDIENCE,
       SKILLED_SAAS_POLL_INTERVAL_MS: String(POLL_INTERVAL_MS),
       SKILLED_BUNDLE_CACHE_DIR: cacheDir,
+      SKILLED_SAAS_ENABLE_WEBHOOK: String(setup.enableWebhook === true),
     });
   });
   return env;
@@ -372,26 +376,45 @@ test.describe('a workflow that runs while a new version is applied', () => {
   });
 });
 
-const REFUSED_PULL_TOKENS: ReadonlyArray<{ label: string; token: () => Promise<string>; reason: string }> = [
+interface RefusedPullToken {
+  label: string;
+  token: () => Promise<string>;
+  /** What the tools answer: the same for every token the issuer's checks refuse. */
+  reason: string;
+  /** The check that refused it, which only the log and /readyz name. */
+  tokenFailure: BundleTokenFailure;
+}
+
+const REFUSED_PULL_TOKENS: readonly RefusedPullToken[] = [
   {
     label: 'issued for another audience',
     token: () => issuer.pullToken({ aud: 'e2e:another-server' }),
     reason: 'its "aud" claim does not include "e2e:billing"',
+    tokenFailure: 'wrong_audience',
   },
   {
     label: 'from another issuer',
     token: () => issuer.pullToken({ iss: 'https://impostor.e2e.example' }),
     reason: 'not a valid token from issuer',
+    tokenFailure: 'wrong_issuer',
   },
   {
     label: 'that has expired',
     token: () => issuer.pullToken({}, { issuedAt: '2 hours ago', expiresAt: '1 hour ago' }),
     reason: 'not a valid token from issuer',
+    tokenFailure: 'expired',
   },
   {
     label: 'signed by a key outside the JWKS',
     token: async () => (await PullTokenIssuer.create(ISSUER_KEY_ID)).pullToken(),
     reason: 'not a valid token from issuer',
+    tokenFailure: 'bad_signature',
+  },
+  {
+    label: 'signed under a key id the JWKS does not publish',
+    token: async () => (await PullTokenIssuer.create('e2e-retired-issuer')).pullToken(),
+    reason: 'not a valid token from issuer',
+    tokenFailure: 'unknown_key',
   },
 ];
 
@@ -407,13 +430,71 @@ for (const refused of REFUSED_PULL_TOKENS) {
       const [reason = ''] = answers.reasons;
 
       expect(reason).toContain(`[saas-source] pull token rejected: ${refused.reason}`);
+      expect(reason).not.toContain(refused.tokenFailure);
       expectNoBundleLoaded(answers, reason.replace('No skill bundle is loaded: ', ''));
+      expect(answers.ready.probes?.['skilled-openapi']?.details).toMatchObject({
+        state: 'failed',
+        lastSync: { status: 'failed', tokenFailure: refused.tokenFailure, cacheFallback: false },
+      });
+      await waitForLog(server, `: pull token check failed (${refused.tokenFailure})`);
+      expect(server.getLogs().join('\n')).not.toContain(env['SKILLED_SAAS_PULL_TOKEN']);
       expect(bundleServer.requestsTo(JWKS_PATH).length).toBeGreaterThan(0);
       expect(bundleServer.requestsTo(BUNDLE_PATH)).toEqual([]);
       expect(await cachedBundleVersion(env)).toBeUndefined();
     });
   });
 }
+
+/** Push `body` to the server's push endpoint with `token`. */
+function pushBundle(server: ServerFixture, token: string, body: unknown): Promise<Response> {
+  return fetch(`${server.info.baseUrl}/__skilled_openapi/push`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+test.describe('a server that takes pushed bundles', () => {
+  useSaasServer({ enableWebhook: true });
+
+  test("answers a push 503 while the issuer's JWKS can't be read, and the log names jwks_unavailable", async ({
+    mcp,
+    server,
+  }) => {
+    expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
+    const token = await issuer.pullToken({ jti: 'e2e-push-during-outage' });
+    bundleServer.mode = 'outage';
+
+    try {
+      const response = await pushBundle(server, token, environment.sign(billingBundle('2.0.0', V2_SKILLS)));
+
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: 'temporarily_unavailable',
+        error_description: "the issuer's JWKS could not be read",
+      });
+      await waitForLog(server, 'bundle push not checked (jwks_unavailable): fetch failed');
+    } finally {
+      bundleServer.mode = 'serving';
+    }
+  });
+
+  test('answers a push token from another issuer with the generic 401, while the log names the check', async ({
+    mcp,
+    server,
+  }) => {
+    const token = await issuer.pullToken({ iss: 'https://impostor.e2e.example', jti: 'e2e-push-impostor' });
+
+    const response = await pushBundle(server, token, environment.sign(billingBundle('2.0.0', V2_SKILLS)));
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+    expect(await response.json()).toEqual({ error: 'invalid_token', error_description: 'the push token was refused' });
+    await waitForLog(server, '[saas-source] push refused (wrong_issuer): not a valid token from issuer');
+    expect(server.getLogs().join('\n')).not.toContain(token);
+    expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
+  });
+});
 
 test.describe('a bundle server that is down at startup', () => {
   test.describe('with the bundle kept in the cache by an earlier run', () => {
@@ -430,7 +511,11 @@ test.describe('a bundle server that is down at startup', () => {
       expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
       expect(await readyCheck(server)).toMatchObject({
         status: 'degraded',
-        details: { state: 'stale', bundleVersion: '1.0.0', lastSync: { status: 'failed', reason: 'fetch failed' } },
+        details: {
+          state: 'stale',
+          bundleVersion: '1.0.0',
+          lastSync: { status: 'failed', reason: 'fetch failed', tokenFailure: 'jwks_unavailable', cacheFallback: true },
+        },
       });
       expect(server.getLogs().join('\n')).toContain('[saas-source] using cached bundle "e2e:billing@1.0.0"');
     });

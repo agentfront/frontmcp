@@ -505,7 +505,16 @@ describe('SkilledOpenApiPlugin', () => {
 
         expect(await probe.check()).toEqual({
           status: 'unhealthy',
-          details: { state: 'failed' },
+          details: {
+            state: 'failed',
+            lastSync: {
+              status: 'refused',
+              bundleId: 'plugin:test',
+              bundleVersion: '1',
+              reason: 'bundle missing integrity envelope',
+              at: expect.any(String),
+            },
+          },
           error: 'no skill bundle is loaded: bundle plugin:test@1 was not applied: bundle missing integrity envelope',
         });
       });
