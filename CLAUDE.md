@@ -333,7 +333,9 @@ A few things worth knowing before they surprise you:
   conflict on `main`: `gh workflow run cherry-pick-prompt.yml -f stack=<N>`, optionally with
   `-f pull_requests=<a,b>`. A run deletes and rebuilds `cherry-pick/stack-<N>-main`, which closes
   a PR open on it. `node scripts/cherry-pick-stack.mjs plan <N>` prints the plan and changes
-  nothing.
+  nothing. GitHub offers a manual run only for a workflow that is on the default branch, so until
+  this workflow's own cherry-pick reaches `main`, pick a stack by hand from the conflict issue's
+  commands instead.
 - **Each PR's commits come from `scripts/cherry-pick-commits.mjs`.** An upper PR's change can
   land as a commit of its own, with the PR's merge commit after it and empty, as #1056's did. The
   script finds the commits that hold the change by the PR's `(#N)` subject suffix.

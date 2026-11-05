@@ -282,6 +282,7 @@ describe('render', () => {
     assert.match(body, /stopped at a merge conflict on #1073/);
     assert.match(body, /\*\*Picked so far:\*\* #1072, on the branch `cherry-pick\/stack-1084-main`/);
     assert.match(body, /git cherry-pick sha1073 {2}# #1073\ngit cherry-pick sha1074 {2}# #1074\n/);
+    assert.match(body, /yarn install --mode=update-lockfile\ngit add -A && \(git diff --cached --quiet \|\| git commit -m /);
     assert.match(body, /`stack: 1084`/);
   });
 });

@@ -473,6 +473,10 @@ jobs:
   cherry-pick-stack:
     needs: detect
     if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.detect.outputs.mode == 'stack-top') }}
+    # One run per stack at a time, whether a top PR's merge or a manual run started it.
+    concurrency:
+      group: cherry-pick-stack-${{ needs.detect.outputs.stack || inputs.stack }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     env:
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}

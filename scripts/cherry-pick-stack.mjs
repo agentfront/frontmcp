@@ -265,6 +265,7 @@ export function renderIssue(result, defaultBranch, branch) {
     `# Re-pin internal versions to the ${defaultBranch} line, and commit what it changes`,
     'node scripts/normalize-internal-versions.mjs',
     'yarn install --mode=update-lockfile',
+    `git add -A && (git diff --cached --quiet || git commit -m "chore: re-pin internal versions to the ${defaultBranch} line")`,
     '',
     '# Push and create PR',
     `git push origin ${branch}`,
