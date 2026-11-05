@@ -75,7 +75,10 @@ export default class RunWorkflowTool extends ToolContext {
     try {
       visibleListings = await visibleListingsAtStart(this.get(ScopeEntry), hiddenOps);
     } catch (error) {
-      return failedWorkflow(`skills:filter rejected: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.warn(
+        `[run_workflow] skills:filter failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return failedWorkflow('the skills:filter flow failed, so the workflow did not run');
     }
 
     // Asked before the script starts: time spent waiting for the user would count against the script's time limit.
