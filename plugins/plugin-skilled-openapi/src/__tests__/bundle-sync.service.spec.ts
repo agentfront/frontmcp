@@ -1234,14 +1234,16 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
     expect(warmSync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '1' });
   });
 
-  it('resolves as failed, serving the cached bundle, when the start it runs could not pull', async () => {
+  it('resolves as failed, serving the cached bundle without keeping it again, when the start it runs could not pull', async () => {
     const sync = makeSync();
-    sync.attachSource(pullingSource([{ cached: '1', pullFailure: 'fetch failed' }]).source);
+    const { source, kept } = pullingSource([{ cached: '1', pullFailure: 'fetch failed' }]);
+    sync.attachSource(source);
 
     const outcome = await sync.start();
 
     expect(outcome).toEqual({ status: 'failed', reason: 'fetch failed', cacheFallback: true, at });
     expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '1' });
+    expect(kept).toEqual([]);
   });
 
   it('says the cached bundle does not serve when it is refused too', async () => {
@@ -1664,5 +1666,229 @@ describe('BundleSyncService version order', () => {
 
     expect(result).toMatchObject({ applied: false, reason: 'bundle missing integrity envelope' });
     expect(result.refusal).toBeUndefined();
+  });
+});
+
+describe('BundleSyncService cold start, with the cached bundle of the source', () => {
+  const EARLIER = '2026-11-04T10:00:00.000Z';
+  const LATER = '2026-11-04T12:00:00.000Z';
+  const refunds = { id: 'refunds', name: 'Refunds', description: 'd', instructions: '# R', operationIds: [] };
+  const withRefunds = (version: string) => buildBundle({ version, skills: [...buildBundle().skills, refunds] });
+  const at = expect.any(String);
+
+  const makeSync = (registry = new FakeRegistry()) =>
+    new BundleSyncService(
+      registry as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      new BundleStore(),
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+
+  /**
+   * A source whose cache holds `cached`, and that hands each of `pulls` to its listeners in turn, the first when it
+   * starts (none when `pulls` is empty). It records the versions it keeps.
+   */
+  const sourceWithCache = (cached: ResolvedBundle | undefined, pulls: ResolvedBundle[], forwardOnly = true) => {
+    const listeners = new Set<BundleSourceListener>();
+    const kept: string[] = [];
+    const pull = async () => {
+      const bundle = pulls.shift();
+      if (bundle) for (const fn of listeners) await fn(bundle);
+    };
+    return {
+      kept,
+      pull,
+      source: {
+        forwardOnly,
+        start: pull,
+        onChange(fn: BundleSourceListener) {
+          listeners.add(fn);
+          return () => listeners.delete(fn);
+        },
+        async keepBundle(bundle: ResolvedBundle) {
+          kept.push(bundle.version);
+        },
+        keptBundle: jest.fn(async (): Promise<ResolvedBundle | undefined> => cached),
+      },
+    };
+  };
+
+  beforeEach(() => {
+    loggerMocks.warn.mockClear();
+  });
+
+  it('serves the cached bundle in place of an older pulled one, keeps neither, and says the pull was older', async () => {
+    const registry = new FakeRegistry();
+    const sync = makeSync(registry);
+    const { source, kept } = sourceWithCache(buildBundle({ version: '2.0.0', generatedAt: EARLIER }), [
+      buildBundle({ version: '1.9.0', generatedAt: LATER }),
+    ]);
+    sync.attachSource(source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toEqual({
+      status: 'refused',
+      bundleId: 'acme:prod',
+      bundleVersion: '1.9.0',
+      reason: `older than the cached bundle acme:prod@2.0.0 (generatedAt ${EARLIER})`,
+      cacheFallback: true,
+      at,
+    });
+    expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '2.0.0' });
+    expect(registry.registered.map((skill) => skill.bundleVersion)).toEqual(['2.0.0']);
+    expect(kept).toEqual([]);
+    expect(loggerMocks.warn).toHaveBeenCalledWith(
+      `[bundle-sync] bundle acme:prod@1.9.0 not applied: older than the cached bundle acme:prod@2.0.0 (generatedAt ${EARLIER}); serving the cached bundle acme:prod@2.0.0`,
+    );
+  });
+
+  it.each([
+    ['newer than the cached one', buildBundle({ version: '2.1.0' })],
+    ['the same as the cached one', buildBundle({ version: '2.0.0' })],
+  ])('serves and keeps a pulled bundle %s, applied once', async (_label, pulled) => {
+    const registry = new FakeRegistry();
+    const sync = makeSync(registry);
+    const { source, kept } = sourceWithCache(buildBundle({ version: '2.0.0' }), [pulled]);
+    sync.attachSource(source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toEqual({ status: 'applied', bundleId: 'acme:prod', bundleVersion: pulled.version, at });
+    expect(sync.loadState()).toMatchObject({ status: 'loaded', bundleVersion: pulled.version });
+    expect(registry.registered.map((skill) => skill.bundleVersion)).toEqual([pulled.version]);
+    expect(kept).toEqual([pulled.version]);
+  });
+
+  it('serves and keeps an older pulled bundle when the source allows a rollback', async () => {
+    const sync = makeSync();
+    const { source, kept } = sourceWithCache(
+      buildBundle({ version: '2.0.0' }),
+      [buildBundle({ version: '1.0.0' })],
+      false,
+    );
+    sync.attachSource(source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toMatchObject({ status: 'applied', bundleVersion: '1.0.0' });
+    expect(kept).toEqual(['1.0.0']);
+  });
+
+  it.each([
+    ['a forward-only source', true],
+    ['a source that allows a rollback', false],
+  ])(
+    'serves the cached bundle in place of a pulled one that is refused, from %s, and says why',
+    async (_label, forwardOnly) => {
+      const registry = new FakeRegistry();
+      registry.failOn.add('refunds');
+      const sync = makeSync(registry);
+      const { source, kept } = sourceWithCache(buildBundle({ version: '2.0.0' }), [withRefunds('3.0.0')], forwardOnly);
+      sync.attachSource(source);
+
+      const outcome = await sync.start();
+      await expect(sync.ensureLoaded()).resolves.toBeUndefined();
+
+      expect(outcome).toEqual({
+        status: 'refused',
+        bundleId: 'acme:prod',
+        bundleVersion: '3.0.0',
+        reason: 'rollback: synthetic registration failure',
+        cacheFallback: true,
+        at,
+      });
+      expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '2.0.0' });
+      expect(kept).toEqual([]);
+      expect(loggerMocks.warn).toHaveBeenCalledWith(
+        '[bundle-sync] bundle acme:prod@3.0.0 not applied: rollback: synthetic registration failure; serving the cached bundle acme:prod@2.0.0',
+      );
+    },
+  );
+
+  it('serves and keeps an older pulled bundle when the newer cached one is refused', async () => {
+    const registry = new FakeRegistry();
+    registry.failOn.add('refunds');
+    const sync = makeSync(registry);
+    const { source, kept } = sourceWithCache(withRefunds('2.0.0'), [buildBundle({ version: '1.0.0' })]);
+    sync.attachSource(source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toMatchObject({ status: 'applied', bundleVersion: '1.0.0' });
+    expect(kept).toEqual(['1.0.0']);
+  });
+
+  it('serves nothing, and says the pulled bundle was refused, when the cached one is refused too', async () => {
+    const registry = new FakeRegistry();
+    registry.failOn.add('refunds');
+    const sync = makeSync(registry);
+    const { source, kept } = sourceWithCache(withRefunds('2.0.0'), [withRefunds('3.0.0')]);
+    sync.attachSource(source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toEqual({
+      status: 'refused',
+      bundleId: 'acme:prod',
+      bundleVersion: '3.0.0',
+      reason: 'rollback: synthetic registration failure',
+      at,
+    });
+    expect(sync.loadState()).toMatchObject({ status: 'failed' });
+    expect(kept).toEqual([]);
+  });
+
+  it('answers a push older than the cached bundle as outdated while none serves, and serves the cached one', async () => {
+    const sync = makeSync();
+    const { source, kept } = sourceWithCache(buildBundle({ version: '2.0.0' }), []);
+    sync.attachSource(source);
+    await sync.ensureReady();
+
+    const pushed = await sync.applyPushed(buildBundle({ version: '1.0.0' }));
+
+    expect(pushed).toMatchObject({
+      applied: false,
+      refusal: 'outdated',
+      bundleVersion: '1.0.0',
+      reason: expect.stringContaining('older than the cached bundle acme:prod@2.0.0'),
+    });
+    expect(sync.loadState()).toMatchObject({ status: 'loaded', bundleVersion: '2.0.0' });
+    expect(kept).toEqual([]);
+  });
+
+  it('reads the cache only while no bundle serves: a later pull compares with the bundle served', async () => {
+    const sync = makeSync();
+    const { source, pull } = sourceWithCache(buildBundle({ version: '2.0.0' }), [
+      buildBundle({ version: '2.0.0' }),
+      buildBundle({ version: '1.0.0' }),
+    ]);
+    sync.attachSource(source);
+    await sync.start();
+
+    await pull();
+
+    expect(source.keptBundle).toHaveBeenCalledTimes(1);
+    expect(sync.lastSyncOutcome()).toEqual({
+      status: 'refused',
+      bundleId: 'acme:prod',
+      bundleVersion: '1.0.0',
+      reason: expect.stringContaining('older than the served bundle acme:prod@2.0.0'),
+      at,
+    });
+  });
+
+  it('applies the pulled bundle when the cache cannot be read, and logs why', async () => {
+    const sync = makeSync();
+    const { source, kept } = sourceWithCache(undefined, [buildBundle({ version: '1.0.0' })]);
+    source.keptBundle.mockRejectedValue(new Error('KV unavailable'));
+    sync.attachSource(source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toMatchObject({ status: 'applied', bundleVersion: '1.0.0' });
+    expect(kept).toEqual(['1.0.0']);
+    expect(loggerMocks.warn).toHaveBeenCalledWith('[bundle-sync] the cached bundle could not be read: KV unavailable');
   });
 });

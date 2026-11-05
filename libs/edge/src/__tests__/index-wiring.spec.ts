@@ -458,6 +458,17 @@ describe('createEdgeMcp — managed mode', () => {
       '[frontmcp/edge] Cron refresh: bundle acme:billing@3.0.0 was not applied: digest mismatch',
     ],
     [
+      'the isolate started on a pulled bundle older than the cached one, which serves',
+      {
+        status: 'refused',
+        bundleId: 'acme:billing',
+        bundleVersion: '1.0.0',
+        reason: 'older than the cached bundle acme:billing@2.0.0',
+        cacheFallback: true,
+      },
+      '[frontmcp/edge] Cron refresh: bundle acme:billing@1.0.0 was not applied, so the cached bundle serves: older than the cached bundle acme:billing@2.0.0',
+    ],
+    [
       'its pull failed',
       { status: 'failed', reason: 'pull responded 503', cacheFallback: false },
       '[frontmcp/edge] Cron refresh: the bundle pull failed: pull responded 503',

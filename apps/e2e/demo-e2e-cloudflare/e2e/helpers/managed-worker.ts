@@ -17,6 +17,7 @@ const BUNDLE_CACHE_NAMESPACE_ID = 'e2e-bundle-cache';
 const PUSH_REPLAY_CLASS = 'FrontMcpPushReplay';
 const FIRST_REPLICA = 'replica-1';
 const SECOND_REPLICA = 'replica-2';
+const THIRD_REPLICA = 'replica-3';
 
 interface JsonRpcResponse {
   result?: { isError?: boolean; content?: Array<{ type: string; text?: string }> };
@@ -41,10 +42,10 @@ export interface ManagedWorkerOptions {
 }
 
 /**
- * The fixture Worker, bundled by `wrangler deploy --dry-run` as it would be deployed, and run in workerd as two
- * replicas: two Workers of one bundle, each in its own isolate with its own memory, sharing the KV namespace and the
+ * The fixture Worker, bundled by `wrangler deploy --dry-run` as it would be deployed, and run in workerd as three
+ * replicas: three Workers of one bundle, each in its own isolate with its own memory, sharing the KV namespace and the
  * push replay Durable Object, as the isolates of a deployed Worker do. The tests use the first unless they ask for the
- * {@link ManagedWorker.secondReplica}.
+ * {@link ManagedWorker.secondReplica} or the {@link ManagedWorker.thirdReplica}.
  */
 export class ManagedWorker {
   private requestId = 0;
@@ -82,6 +83,7 @@ export class ManagedWorker {
       workers: [
         replica(FIRST_REPLICA, { className: PUSH_REPLAY_CLASS, useSQLite: true }),
         replica(SECOND_REPLICA, { className: PUSH_REPLAY_CLASS, scriptName: FIRST_REPLICA, useSQLite: true }),
+        replica(THIRD_REPLICA, { className: PUSH_REPLAY_CLASS, scriptName: FIRST_REPLICA, useSQLite: true }),
       ],
       handleRuntimeStdio: (stdout, stderr) => {
         collect(stdout);
@@ -92,9 +94,12 @@ export class ManagedWorker {
     return new ManagedWorker(miniflare, bundleDir, runtimeLog);
   }
 
-  /** The other replica of the Worker. */
   secondReplica(): ManagedWorker {
     return new ManagedWorker(this.miniflare, this.bundleDir, this.runtimeLog, SECOND_REPLICA);
+  }
+
+  thirdReplica(): ManagedWorker {
+    return new ManagedWorker(this.miniflare, this.bundleDir, this.runtimeLog, THIRD_REPLICA);
   }
 
   /** What the Worker printed, for a failing test's message. */
@@ -149,9 +154,20 @@ export class ManagedWorker {
 
   /** The version of the last good bundle the Worker kept in KV. */
   async cachedBundleVersion(): Promise<string | undefined> {
-    const namespace = await this.miniflare.getKVNamespace('BUNDLE_CACHE', this.replicaName);
-    const cached = await namespace.get(BUNDLE_CACHE_KEY);
+    const cached = await this.cachedBundleEntry();
     return cached ? (JSON.parse(cached) as { version: string }).version : undefined;
+  }
+
+  /** The KV entry of the last good bundle, as it is stored. */
+  async cachedBundleEntry(): Promise<string | null> {
+    const namespace = await this.miniflare.getKVNamespace('BUNDLE_CACHE', this.replicaName);
+    return namespace.get(BUNDLE_CACHE_KEY);
+  }
+
+  /** Store `entry` as the KV entry of the last good bundle, as an earlier deploy of the Worker would have. */
+  async storeCachedBundleEntry(entry: string): Promise<void> {
+    const namespace = await this.miniflare.getKVNamespace('BUNDLE_CACHE', this.replicaName);
+    await namespace.put(BUNDLE_CACHE_KEY, entry);
   }
 
   async dispose(): Promise<void> {

@@ -5,6 +5,7 @@
 // bound to its body (body_sha256) is refused with another body.
 // A pulled or pushed version is announced with one list_changed per list it changed (skills and their skill://
 // resources; the operation tools are internal, never listed), and a poll of the version served with none.
+// A restart serves the cached version, without writing it back, in place of a pull that fails, is refused or is older.
 import {
   PUSH_BODY_DIGEST_CLAIM,
   pushBodyDigest,
@@ -12,7 +13,7 @@ import {
   type ResolvedBundle,
 } from '@frontmcp/adapters/skills';
 import { expect, test, type McpTestClient, type ServerFixture } from '@frontmcp/testing';
-import { chmod, fileExists, pathJoin, readFile } from '@frontmcp/utils';
+import { chmod, fileExists, pathJoin, readFile, stat } from '@frontmcp/utils';
 
 import {
   BUNDLE_AUDIENCE,
@@ -36,6 +37,8 @@ import {
 
 const ISSUER_KEY_ID = 'e2e-bundle-issuer';
 const POLL_INTERVAL_MS = 500;
+/** For a server whose /readyz must show what its start pulled: no poll replaces that before the test reads it. */
+const SLOW_POLL_INTERVAL_MS = 60_000;
 /** The source keeps the last bundle at `<bundleCacheDir>/<expectedAudience>.json`, the audience made file-safe. */
 const CACHE_FILE_NAME = 'e2e_billing.json';
 const CREATE_INVOICE = "return await callTool('createInvoice', { customerId: 'cus_e2e', amount: 10 });";
@@ -97,6 +100,7 @@ interface SaasServerSetup {
   readOnlyCache?: boolean;
   /** Take bundles pushed to `POST /__skilled_openapi/push`. */
   enableWebhook?: boolean;
+  pollIntervalMs?: number;
 }
 
 /**
@@ -116,7 +120,7 @@ function useSaasServer(setup: SaasServerSetup = {}): Record<string, string> {
       SKILLED_SAAS_PULL_TOKEN: setup.pullToken ? await setup.pullToken() : pullToken,
       SKILLED_SAAS_ISSUER: BUNDLE_ISSUER,
       SKILLED_SAAS_AUDIENCE: BUNDLE_AUDIENCE,
-      SKILLED_SAAS_POLL_INTERVAL_MS: String(POLL_INTERVAL_MS),
+      SKILLED_SAAS_POLL_INTERVAL_MS: String(setup.pollIntervalMs ?? POLL_INTERVAL_MS),
       SKILLED_BUNDLE_CACHE_DIR: cacheDir,
       SKILLED_SAAS_ENABLE_WEBHOOK: String(setup.enableWebhook === true),
     });
@@ -124,10 +128,18 @@ function useSaasServer(setup: SaasServerSetup = {}): Record<string, string> {
   return env;
 }
 
+function cacheFileOf(env: Record<string, string>): string {
+  return pathJoin(env['SKILLED_BUNDLE_CACHE_DIR'], CACHE_FILE_NAME);
+}
+
 async function cachedBundleVersion(env: Record<string, string>): Promise<string | undefined> {
-  const cacheFile = pathJoin(env['SKILLED_BUNDLE_CACHE_DIR'], CACHE_FILE_NAME);
+  const cacheFile = cacheFileOf(env);
   if (!(await fileExists(cacheFile))) return undefined;
   return (JSON.parse(await readFile(cacheFile)) as ResolvedBundle).version;
+}
+
+async function cacheWrittenAt(env: Record<string, string>): Promise<number> {
+  return (await stat(cacheFileOf(env))).mtimeMs;
 }
 
 async function until(condition: () => boolean | Promise<boolean>, what: string, timeoutMs = 15_000): Promise<void> {
@@ -557,17 +569,21 @@ test.describe('a server that takes pushed bundles', () => {
 
 test.describe('a bundle server that is down at startup', () => {
   test.describe('with the bundle kept in the cache by an earlier run', () => {
-    useSaasServer();
+    const env = useSaasServer();
 
-    test('starts, and serves the cached bundle', async ({ mcp, server }) => {
+    test('starts, and serves the cached bundle without writing it back to the cache', async ({ mcp, server }) => {
       expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
+      server.clearLogs();
       bundleServer.mode = 'outage';
+      await waitForLog(server, '[saas-source] poll failed');
+      const keptAt = await cacheWrittenAt(env);
       server.clearLogs();
 
       await server.restart();
 
       expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'reports'], versions: ['1.0.0'] });
       expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
+      expect(await cacheWrittenAt(env)).toBe(keptAt);
       expect(await readyCheck(server)).toMatchObject({
         status: 'degraded',
         details: {
@@ -625,6 +641,75 @@ test.describe('a bundle server that is down at startup', () => {
       expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
       expect((await readiness(server.info.baseUrl)).httpStatus).toBe(200);
     });
+  });
+});
+
+test.describe('a server restarted while the bundle server serves an older version than the one it cached', () => {
+  const env = useSaasServer({ pollIntervalMs: SLOW_POLL_INTERVAL_MS });
+
+  test('keeps serving the cached version, and /readyz says the version pulled is older', async ({ mcp, server }) => {
+    expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
+    bundleServer.published = environment.sign(billingBundle('2.0.0', V2_SKILLS));
+    await server.restart();
+    expect((await servedSkills(mcp)).versions).toEqual(['2.0.0']);
+    bundleServer.published = environment.sign(billingBundle('1.0.0', V1_SKILLS));
+    server.clearLogs();
+
+    await server.restart();
+
+    expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
+    expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
+    expect(await cachedBundleVersion(env)).toBe('2.0.0');
+    expect(await readyCheck(server)).toEqual({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleId: 'e2e:billing',
+        bundleVersion: '2.0.0',
+        lastSync: {
+          status: 'refused',
+          bundleId: 'e2e:billing',
+          bundleVersion: '1.0.0',
+          reason: expect.stringContaining('older than the cached bundle e2e:billing@2.0.0'),
+          cacheFallback: true,
+          at: expect.any(String),
+        },
+      },
+    });
+    expect(server.getLogs().join('\n')).toContain(
+      '[bundle-sync] bundle e2e:billing@1.0.0 not applied: older than the cached bundle e2e:billing@2.0.0',
+    );
+  });
+});
+
+test.describe('a server restarted while the bundle server serves a version changed after it was signed', () => {
+  const env = useSaasServer({ pollIntervalMs: SLOW_POLL_INTERVAL_MS });
+
+  test('serves the cached version, and /readyz says the version pulled was refused', async ({ mcp, server }) => {
+    expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
+    const signed = environment.sign(billingBundle('2.0.0', V1_SKILLS));
+    bundleServer.published = { ...signed, skills: [...signed.skills, REFUNDS_SKILL] };
+    server.clearLogs();
+
+    await server.restart();
+
+    expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'reports'], versions: ['1.0.0'] });
+    expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
+    expect(await cachedBundleVersion(env)).toBe('1.0.0');
+    expect(await readyCheck(server)).toMatchObject({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleVersion: '1.0.0',
+        lastSync: {
+          status: 'refused',
+          bundleVersion: '2.0.0',
+          reason: expect.stringContaining('digest mismatch'),
+          cacheFallback: true,
+        },
+      },
+    });
+    expect(server.getLogs().join('\n')).toContain('serving the cached bundle e2e:billing@1.0.0');
   });
 });
 

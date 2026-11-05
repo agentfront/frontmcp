@@ -151,7 +151,10 @@ function isUsableSigningKey(key: unknown): boolean {
  *     This prevents a SaaS outage at boot from killing the customer's MCP
  *     server. The cache holds the last bundle the plugin applied
  *     ({@link SaasPullSource.keepBundle}): a pulled bundle that fails its
- *     signature or apply never replaces it.
+ *     signature or apply never replaces it, and the plugin doesn't write back
+ *     the cached bundle it serves. While no bundle serves, the plugin reads the
+ *     cache ({@link SaasPullSource.keptBundle}), and serves it in place of a
+ *     pulled bundle that is older or refused.
  *   - If both pull and cache fail, `start()` throws. Polling still starts, so a
  *     later pull that succeeds loads the bundle.
  *
@@ -274,6 +277,11 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
   /** Keep a bundle the plugin applied, pulled or pushed, as the last good one a start falls back to. */
   keepBundle(bundle: ResolvedBundle): Promise<void> {
     return this.persistCache(bundle);
+  }
+
+  /** The last good bundle {@link keepBundle} kept, schema-checked as a pull is; undefined when there is none. */
+  keptBundle(): Promise<ResolvedBundle | undefined> {
+    return this.loadCache();
   }
 
   async start(): Promise<void> {
