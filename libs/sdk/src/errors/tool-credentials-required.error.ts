@@ -17,7 +17,10 @@
  * an `authUrl` (a framework-signed connect/authorize URL) the client/agent can
  * open to (re)authorize. Both `authUrl` (camelCase, primary) and `auth_url`
  * (snake_case, matching {@link AuthorizationRequiredError}'s convention) are
- * emitted so either naming convention resolves.
+ * emitted so either naming convention resolves. The URL stays out of the message:
+ * clients echo messages into transcripts and logs, and the link lets its holder
+ * connect a credential for the caller. A caller that isn't signed in gets
+ * `signInRequired` instead of a URL.
  */
 import { MCP_ERROR_CODES, PublicMcpError } from './mcp.error';
 
@@ -31,6 +34,8 @@ export interface ToolCredentialsRequiredData {
   authUrl?: string;
   /** Same URL under the snake_case key used by AuthorizationRequiredError. */
   auth_url?: string;
+  /** Set when the caller isn't signed in: it signs in to this server first, so no connect URL is given. */
+  signInRequired?: true;
 }
 
 export class ToolCredentialsRequiredError extends PublicMcpError {
@@ -46,16 +51,21 @@ export class ToolCredentialsRequiredError extends PublicMcpError {
   /** Connect/authorize URL to (re)authorize the provider(s), if resolvable. */
   readonly authUrl?: string;
 
-  constructor(params: { toolId: string; providers: string[]; authUrl?: string; message?: string }) {
-    const providerList = params.providers.join(', ');
-    const defaultMessage =
-      `Tool "${params.toolId}" requires credentials for ${providerList} which are not connected for this session. ` +
-      (params.authUrl ? `Connect via: ${params.authUrl}` : `Please authorize the required provider(s) and retry.`);
+  /** Whether the caller has to sign in to this server before it can connect the provider(s). */
+  readonly signInRequired: boolean;
 
-    super(params.message || defaultMessage, 'TOOL_CREDENTIALS_REQUIRED', 401);
+  constructor(params: {
+    toolId: string;
+    providers: string[];
+    authUrl?: string;
+    signInRequired?: boolean;
+    message?: string;
+  }) {
+    super(params.message || defaultMessageOf(params), 'TOOL_CREDENTIALS_REQUIRED', 401);
     this.toolId = params.toolId;
     this.providers = params.providers;
     this.authUrl = params.authUrl;
+    this.signInRequired = params.signInRequired === true;
   }
 
   /**
@@ -64,7 +74,7 @@ export class ToolCredentialsRequiredError extends PublicMcpError {
    * @example
    * {
    *   "code": -32001,
-   *   "message": "Tool \"deploy_app\" requires credentials for github ...",
+   *   "message": "Tool \"deploy_app\" requires credentials for github ... Connect github to continue: open the link in this error's data (authUrl).",
    *   "data": {
    *     "tool": "deploy_app",
    *     "providers": ["github"],
@@ -85,7 +95,23 @@ export class ToolCredentialsRequiredError extends PublicMcpError {
         tool: this.toolId,
         providers: this.providers,
         ...(this.authUrl ? { authUrl: this.authUrl, auth_url: this.authUrl } : {}),
+        ...(this.signInRequired ? { signInRequired: true } : {}),
       },
     };
   }
+}
+
+function defaultMessageOf(params: { toolId: string; providers: string[]; authUrl?: string; signInRequired?: boolean }) {
+  const providerList = params.providers.join(', ');
+  if (params.signInRequired) {
+    return (
+      `Tool "${params.toolId}" requires credentials for ${providerList}, and this caller isn't signed in. ` +
+      `Sign in to this server, then connect ${providerList}.`
+    );
+  }
+  const notConnected = `Tool "${params.toolId}" requires credentials for ${providerList} which are not connected for this session.`;
+  if (params.authUrl) {
+    return `${notConnected} Connect ${providerList} to continue: open the link in this error's data (authUrl).`;
+  }
+  return `${notConnected} Please authorize the required provider(s) and retry.`;
 }

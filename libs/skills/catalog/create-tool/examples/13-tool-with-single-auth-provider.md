@@ -100,8 +100,8 @@ Add a `refresh` function to the provider for `this.authProviders.refresh('github
 throws `AuthProvidersNotConfiguredError` naming `github`.
 
 The `authUrl` in the `-32001` data comes from the session credential vault (`this.credentials`, local mode): when a
-`github` credential the caller connected at sign-in is missing, the error carries the connect URL. See
-`15-tool-with-credential-vault`.
+`github` credential the caller connected at sign-in is missing, the error carries the connect URL in its data, never
+its message. A caller who isn't signed in gets `signInRequired: true` instead. See `15-tool-with-credential-vault`.
 
 ## What you don't have to write
 

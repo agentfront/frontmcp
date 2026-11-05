@@ -297,8 +297,10 @@ names only the `vaultRef`, and the server decides where its credential comes fro
 
 - A caller who hasn't connected the provider gets `ToolCredentialsRequiredError` (JSON-RPC `-32001`), with
   `data: { tool, providers, authUrl }`, as a tool whose `authProviders` the caller hasn't connected does. `authUrl`, the
-  session vault's `/oauth/connect` link, is there when the server can make one. The message names the provider but not
-  the link, which lets its holder connect a credential for the caller. Nothing is sent to the API.
+  session vault's `/oauth/connect` link, is there when the server can make one. The message names the provider and
+  points at the link in the data, but never holds it: the link lets its holder connect a credential for the caller. A
+  caller who isn't signed in gets `data.signInRequired: true` and no `authUrl`, since no link works before sign-in.
+  Nothing is sent to the API.
 - A mapped `vaultRef` never falls back to `credentials`, to a resolver, or to another caller's credential. A
   `vaultRef` listed in both `credentials` and `authProviders` is refused at startup with `VaultRefListedTwiceError`:
   keep each one in one of the two.
