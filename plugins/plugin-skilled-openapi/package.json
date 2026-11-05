@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/plugin-skilled-openapi",
-  "version": "1.11.0",
+  "version": "1.11.1-rc.1",
   "description": "FrontMCP plugin that serves a REST API to the model as skills from an OpenAPI-based bundle, behind four tools: search_skill, load_skill, execute_action and run_workflow",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -50,16 +50,16 @@
     }
   },
   "dependencies": {
-    "@frontmcp/adapters": "1.11.0",
-    "@frontmcp/auth": "1.11.0",
-    "@frontmcp/utils": "1.11.0"
+    "@frontmcp/adapters": "1.11.1-rc.1",
+    "@frontmcp/auth": "1.11.1-rc.1",
+    "@frontmcp/utils": "1.11.1-rc.1"
   },
   "peerDependencies": {
     "@enclave-vm/ast": "*",
     "@enclave-vm/browser": "*",
     "@enclave-vm/core": "*",
-    "@frontmcp/lazy-zod": "1.11.0",
-    "@frontmcp/sdk": "1.11.0",
+    "@frontmcp/lazy-zod": "1.11.1-rc.1",
+    "@frontmcp/sdk": "1.11.1-rc.1",
     "undici": ">=6"
   },
   "peerDependenciesMeta": {
@@ -77,7 +77,7 @@
     }
   },
   "devDependencies": {
-    "@frontmcp/sdk": "1.11.0",
+    "@frontmcp/sdk": "1.11.1-rc.1",
     "reflect-metadata": "^0.2.2"
   }
 }
