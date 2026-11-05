@@ -2,6 +2,7 @@
 
 import {
   bundleSkillToActions,
+  compareBundleVersions,
   diffBundles,
   formatDiffSummary,
   resolveSkillLoadOrder,
@@ -51,6 +52,8 @@ export interface BundleSyncOptions {
 export interface BundleApplyResult {
   applied: boolean;
   reason?: string;
+  /** Set when the bundle is older than the one being served, from a source whose bundles only move forward. */
+  refusal?: 'outdated';
   bundleId: string;
   bundleVersion: string;
   diff?: BundleDiff;
@@ -76,6 +79,7 @@ interface StartableBundleSource {
   refresh?(): Promise<unknown>;
   keepBundle?(bundle: ResolvedBundle): Promise<void>;
   readonly push?: BundlePushReceiver;
+  readonly forwardOnly?: boolean;
 }
 
 export class BundleSyncService {
@@ -315,7 +319,18 @@ export class BundleSyncService {
       }
     }
 
+    // Gate 2: version order: a forward-only source never replaces the served bundle with an older one.
     const previous = this.bundleStore.current();
+    if (this.source?.forwardOnly && previous && !(compareBundleVersions(bundle, previous) >= 0)) {
+      return {
+        applied: false,
+        refusal: 'outdated',
+        reason: `older than the served bundle ${previous.bundleId}@${previous.version} (generatedAt ${previous.generatedAt})`,
+        bundleId: bundle.bundleId,
+        bundleVersion: bundle.version,
+      };
+    }
+
     const diff = diffBundles(previous, bundle);
 
     // Snapshot every piece of state we mutate so a failure mid-apply can be

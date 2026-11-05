@@ -1193,3 +1193,161 @@ describe('BundleSyncService pushed bundles', () => {
     );
   });
 });
+
+describe('BundleSyncService version order', () => {
+  const EARLIER = '2026-11-04T10:00:00.000Z';
+  const LATER = '2026-11-04T12:00:00.000Z';
+
+  const makeSync = (registry = new FakeRegistry()) =>
+    new BundleSyncService(
+      registry as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      new BundleStore(),
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+
+  /** A source that pulls `first` when it starts, hands later pulls to `pull()`, takes pushes, and records what it keeps. */
+  const orderedSource = (first: ResolvedBundle, forwardOnly: boolean | undefined) => {
+    const listeners = new Set<(b: ResolvedBundle) => Promise<void>>();
+    const kept: ResolvedBundle[] = [];
+    return {
+      kept,
+      pull: async (bundle: ResolvedBundle) => {
+        for (const fn of listeners) await fn(bundle);
+      },
+      source: {
+        forwardOnly,
+        push: { verifyPushToken: jest.fn() },
+        async start() {
+          for (const fn of listeners) await fn(first);
+        },
+        onChange(fn: (b: ResolvedBundle) => Promise<void>) {
+          listeners.add(fn);
+          return () => listeners.delete(fn);
+        },
+        async keepBundle(bundle: ResolvedBundle) {
+          kept.push(bundle);
+        },
+      },
+    };
+  };
+
+  it('applies a newer pulled or pushed bundle from a forward-only source', async () => {
+    const sync = makeSync();
+    const { source, pull } = orderedSource(buildBundle({ version: '1.0.0' }), true);
+    sync.attachSource(source);
+    await sync.ensureLoaded();
+
+    await pull(buildBundle({ version: '1.1.0' }));
+    const pushed = await sync.applyPushed(buildBundle({ version: '2.0.0' }));
+
+    expect(pushed).toMatchObject({ applied: true, bundleVersion: '2.0.0' });
+    expect(sync.loadState()).toMatchObject({ bundleVersion: '2.0.0' });
+  });
+
+  it('refuses an older pulled bundle: the served one stays and stays kept, and the refusal is logged', async () => {
+    const registry = new FakeRegistry();
+    const sync = makeSync(registry);
+    const { source, pull, kept } = orderedSource(buildBundle({ version: '2.0.0', generatedAt: EARLIER }), true);
+    sync.attachSource(source);
+    await sync.ensureLoaded();
+    loggerMocks.warn.mockClear();
+
+    await pull(buildBundle({ version: '1.9.0', generatedAt: LATER }));
+
+    expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '2.0.0' });
+    expect(kept.map((bundle) => bundle.version)).toEqual(['2.0.0']);
+    expect(registry.registered.map((skill) => skill.bundleVersion)).toEqual(['2.0.0']);
+    expect(loggerMocks.warn).toHaveBeenCalledWith(
+      `[bundle-sync] bundle acme:prod@1.9.0 not applied: older than the served bundle acme:prod@2.0.0 (generatedAt ${EARLIER})`,
+    );
+  });
+
+  it('refuses an older pushed bundle as outdated', async () => {
+    const sync = makeSync();
+    sync.attachSource(orderedSource(buildBundle({ version: '3.0.0' }), true).source);
+
+    const result = await sync.applyPushed(buildBundle({ version: '2.5.0' }));
+
+    expect(result).toMatchObject({
+      applied: false,
+      refusal: 'outdated',
+      bundleVersion: '2.5.0',
+      reason: expect.stringContaining('older than the served bundle acme:prod@3.0.0'),
+    });
+    expect(sync.loadState()).toMatchObject({ bundleVersion: '3.0.0' });
+  });
+
+  it('applies the same version re-signed later, refuses it signed earlier, and applies the same bundle pulled again', async () => {
+    const sync = makeSync();
+    const { source, pull, kept } = orderedSource(buildBundle({ version: '2.0.0', generatedAt: EARLIER }), true);
+    sync.attachSource(source);
+    await sync.ensureLoaded();
+
+    await pull(buildBundle({ version: '2.0.0', generatedAt: LATER }));
+    const earlier = await sync.applyPushed(buildBundle({ version: '2.0.0', generatedAt: EARLIER }));
+    const same = await sync.applyPushed(buildBundle({ version: '2.0.0', generatedAt: LATER }));
+
+    expect(earlier).toMatchObject({ applied: false, refusal: 'outdated' });
+    expect(same).toMatchObject({ applied: true });
+    expect(kept.map((bundle) => bundle.generatedAt)).toEqual([EARLIER, LATER, LATER]);
+  });
+
+  it('orders versions that are not semver by generatedAt', async () => {
+    const sync = makeSync();
+    const { source, pull } = orderedSource(buildBundle({ version: '9', generatedAt: EARLIER }), true);
+    sync.attachSource(source);
+    await sync.ensureLoaded();
+
+    await pull(buildBundle({ version: '10', generatedAt: LATER }));
+    const generatedBefore = await sync.applyPushed(buildBundle({ version: '11', generatedAt: EARLIER }));
+
+    expect(generatedBefore).toMatchObject({ applied: false, refusal: 'outdated' });
+    expect(sync.loadState()).toMatchObject({ bundleVersion: '10' });
+  });
+
+  it('refuses a bundle whose generatedAt is not a date when the order depends on it', async () => {
+    const sync = makeSync();
+    sync.attachSource(orderedSource(buildBundle({ version: '2.0.0', generatedAt: EARLIER }), true).source);
+
+    const result = await sync.applyPushed(buildBundle({ version: '2.0.0', generatedAt: 'not-a-date' }));
+
+    expect(result).toMatchObject({ applied: false, refusal: 'outdated' });
+    expect(sync.loadState()).toMatchObject({ bundleVersion: '2.0.0' });
+  });
+
+  it.each([
+    ['allows a rollback', false],
+    ['does not order its bundles, as the static and inline sources', undefined],
+  ])('applies an older bundle from a source that %s', async (_label, forwardOnly) => {
+    const sync = makeSync();
+    const { source, pull, kept } = orderedSource(buildBundle({ version: '2.0.0' }), forwardOnly);
+    sync.attachSource(source);
+    await sync.ensureLoaded();
+
+    await pull(buildBundle({ version: '1.0.0' }));
+    const pushed = await sync.applyPushed(buildBundle({ version: '0.9.0' }));
+
+    expect(pushed).toMatchObject({ applied: true, bundleVersion: '0.9.0' });
+    expect(kept.map((bundle) => bundle.version)).toEqual(['2.0.0', '1.0.0', '0.9.0']);
+  });
+
+  it('checks the signature before the version, so a tampered older bundle is refused for its signature', async () => {
+    const store = new BundleStore();
+    store.swap(buildBundle({ version: '2.0.0' }));
+    const sync = new BundleSyncService(
+      new FakeRegistry() as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      store,
+      { requireSignature: true, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+    sync.attachSource(orderedSource(buildBundle({ version: '2.0.0' }), true).source);
+
+    const result = await sync.apply(buildBundle({ version: '1.0.0' }));
+
+    expect(result).toMatchObject({ applied: false, reason: 'bundle missing integrity envelope' });
+    expect(result.refusal).toBeUndefined();
+  });
+});

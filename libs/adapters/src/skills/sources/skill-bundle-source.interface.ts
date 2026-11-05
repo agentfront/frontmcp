@@ -59,6 +59,12 @@ export interface SkillBundleSource {
   /** Present on a source that takes pushed bundles: the `saas` source with `enableWebhook`. */
   readonly push?: BundlePushReceiver;
 
+  /**
+   * True on a source whose bundles only move forward: the `saas` source, unless `allowRollback`. The plugin then
+   * refuses a bundle older than the one being served, as `compareBundleVersions` orders them.
+   */
+  readonly forwardOnly?: boolean;
+
   /** Halt background work; idempotent. */
   stop(): Promise<void>;
 }
