@@ -569,9 +569,11 @@ A server that installs it twice then fails at startup with `DuplicatePluginError
 
 ### A plugin listed twice in one `plugins` list
 
-Any plugin, with or without `oncePerServer`, is listed once per `plugins` list. Two entries of one plugin in the same list (the class twice, two `init()` calls, or the class and an `init()`) fail at startup with `DuplicatePluginEntryError` (code `DUPLICATE_PLUGIN_ENTRY`), which names the plugin and the two entries by their place in the list: `Plugin "cache" is listed twice in one plugins list (entries 1 and 3), and only one entry could be installed.` Up to 1.11.0 the list kept only the last entry and dropped the other's options without a word.
+Any plugin, with or without `oncePerServer`, is listed once per `plugins` list. Two entries of one plugin in the same list (the class twice, two `init()` calls, or the class and an `init()`) fail at startup with `DuplicatePluginEntryError` (code `DUPLICATE_PLUGIN_ENTRY`), which names the plugin, the list (`@FrontMcp({ plugins })`, `the plugins of app "<id>"`, `the plugins of agent "<id>"` or `the plugins of plugin "<name>"`) and the two entries by their place in it: `Plugin "cache" is listed twice in the plugins of app "billing" (entries 1 and 3), and only one entry could be installed.` Up to 1.11.0 the list kept only the last entry and dropped the other's options without a word.
 
 Put all the options in one entry. To run a plugin with two configurations, install each on its own `@App`: each app's list is installed on its own, so the same plugin in two apps' lists, or in the server's list and an app's, is two instances, each with its own options. A `oncePerServer` plugin still allows one install per server, and listing it twice in one list fails with its `DuplicatePluginError`.
+
+A server option that installs a plugin for you counts as an entry the user didn't write. `@FrontMcp({ observability })` adds `ObservabilityPlugin`; a server that sets it and also lists `ObservabilityPlugin` in `@FrontMcp({ plugins })` fails with `PluginConfiguredTwiceError` (code `PLUGIN_CONFIGURED_TWICE`), which names the option and the entry. Configure the plugin in one place.
 
 ```typescript
 @App({ name: 'Billing', plugins: [CachePlugin.init({ type: 'memory', defaultTTL: 60 })] })

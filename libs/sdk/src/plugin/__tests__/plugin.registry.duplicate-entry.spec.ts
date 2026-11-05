@@ -63,8 +63,11 @@ function startServer(config: Record<string, unknown>) {
   } as never);
 }
 
-function duplicateMessage(firstEntry: number, secondEntry: number): string {
-  return `Plugin "ledger" is listed twice in one plugins list (entries ${firstEntry} and ${secondEntry}), and only one entry could be installed.`;
+@Plugin({ name: 'host', plugins: [LedgerPlugin.init({ owner: 'a' }), LedgerPlugin.init({ owner: 'b' })] })
+class HostPlugin {}
+
+function duplicateMessage(listName: string, firstEntry: number, secondEntry: number): string {
+  return `Plugin "ledger" is listed twice in ${listName} (entries ${firstEntry} and ${secondEntry}), and only one entry could be installed.`;
 }
 
 describe('PluginRegistry — a plugin listed twice in one plugins list', () => {
@@ -72,12 +75,13 @@ describe('PluginRegistry — a plugin listed twice in one plugins list', () => {
     const started = startServer({ plugins: [LedgerPlugin, LedgerPlugin] });
 
     await expect(started).rejects.toThrow(DuplicatePluginEntryError);
-    await expect(started).rejects.toThrow(duplicateMessage(1, 2));
+    await expect(started).rejects.toThrow(duplicateMessage('@FrontMcp({ plugins })', 1, 2));
   });
 
   it('refuses to start a server whose app lists two init() entries of the plugin, naming both entries', async () => {
     @App({
-      name: 'billing',
+      id: 'billing',
+      name: 'Billing',
       plugins: [LedgerPlugin.init({ owner: 'a' }), AuditPlugin, LedgerPlugin.init({ owner: 'b' })],
     })
     class BillingApp {}
@@ -85,12 +89,18 @@ describe('PluginRegistry — a plugin listed twice in one plugins list', () => {
     const started = startServer({ apps: [BillingApp] });
 
     await expect(started).rejects.toThrow(DuplicatePluginEntryError);
-    await expect(started).rejects.toThrow(duplicateMessage(1, 3));
+    await expect(started).rejects.toThrow(duplicateMessage('the plugins of app "billing"', 1, 3));
   });
 
   it('refuses a list that names the plugin by its class and by init()', async () => {
     await expect(startServer({ plugins: [LedgerPlugin.init({ owner: 'a' }), LedgerPlugin] })).rejects.toThrow(
-      duplicateMessage(1, 2),
+      duplicateMessage('@FrontMcp({ plugins })', 1, 2),
+    );
+  });
+
+  it("names a plugin's nested plugins list", async () => {
+    await expect(startServer({ plugins: [HostPlugin] })).rejects.toThrow(
+      duplicateMessage('the plugins of plugin "host"', 1, 2),
     );
   });
 

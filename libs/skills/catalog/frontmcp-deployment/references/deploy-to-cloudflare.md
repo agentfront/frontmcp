@@ -196,7 +196,7 @@ npx wrangler secret put JWT_SECRET           # openssl rand -hex 32
 
 **When the server fails to start.** The Worker builds the server on its first request. A failed build is answered, never thrown to the platform, and the error's message is not echoed:
 
-- A configuration fault (missing or weak secret, a startup check, a config the schema refuses): `500 {"error":"server_misconfigured","code":"…"}` — codes `SESSION_SECRET_REQUIRED`, `JWT_SECRET_REQUIRED`, `JWT_SECRET_INVALID`, `UNENFORCED_METADATA`, `AUTH_CONFIGURATION_ERROR`, `TOOL_ALIAS_CONFLICT`, `DUPLICATE_PLUGIN`, `DUPLICATE_PLUGIN_ENTRY`, `CONFIG_INVALID`.
+- A configuration fault (missing or weak secret, a startup check, a config the schema refuses): `500 {"error":"server_misconfigured","code":"…"}` — codes `SESSION_SECRET_REQUIRED`, `JWT_SECRET_REQUIRED`, `JWT_SECRET_INVALID`, `UNENFORCED_METADATA`, `AUTH_CONFIGURATION_ERROR`, `TOOL_ALIAS_CONFLICT`, `DUPLICATE_PLUGIN`, `DUPLICATE_PLUGIN_ENTRY`, `PLUGIN_CONFIGURED_TWICE`, `CONFIG_INVALID`.
 - Anything else (a remote that refused the connection, a package that failed to load): `503 {"error":"server_unavailable","code":"SERVER_START_FAILED"}` with `Retry-After`.
 
 The failure is kept until a retry delay passes (1 s, doubling up to 60 s); the first request after it builds again. The cause is logged once per attempt (`wrangler tail`). Same for `createEdgeMcp()`, `createFetchHandler()` on an edge isolate, and each session Durable Object.

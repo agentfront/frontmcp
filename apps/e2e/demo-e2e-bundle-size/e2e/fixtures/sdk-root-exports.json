@@ -373,6 +373,7 @@
   "PayloadTooLargeError": "class",
   "PersonNotSignedInError": "class",
   "Plugin": "function",
+  "PluginConfiguredTwiceError": "class",
   "PluginDependencyError": "class",
   "PluginEntry": "class",
   "PluginKind": "object",
