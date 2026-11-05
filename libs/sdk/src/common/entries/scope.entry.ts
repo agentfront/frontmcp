@@ -191,7 +191,8 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
    * Run `change`, such as a plugin swapping the entries it registered, and send connected clients one `list_changed`
    * for each list it changed (tools, resources, prompts, skills) once it ends, also when it throws, instead of one per
    * registry change. A change that undoes itself, such as a rollback, calls `batch.listsRestored()` so nothing is sent.
-   * A batch run inside another joins it. Changes made outside it, such as another request's, are sent as they happen.
+   * A batch run inside another hands what it changed to the outer one. Changes made outside it, such as another
+   * request's, are sent as they happen.
    */
   batchListChanges<T>(change: (batch: ListChangeBatch) => T | Promise<T>): Promise<T> {
     return runListChangeBatch(this, change);
