@@ -60,7 +60,8 @@ can list an action that the call then refuses.
 A bundle skill's `SKILL.md` is listed in `skill://index.json` at its name
 (`skill://Invoices/SKILL.md`, as SEP-2640 requires) and is also served at the
 same URI with its id (`skill://invoices/SKILL.md`), the id the meta-tools and
-`skills/list` report, with the same gating. A skill whose id is another
+`skills/list` report, with the same gating. `skills/list` and `skills/search`
+report each bundle skill's `bundleVersion` too, as `search_skill` does. A skill whose id is another
 skill's name is refused, so an id names one skill: a bundle with one is not
 applied and the previous bundle stays active. The previous bundle's skills do
 not count, so a new skill can take the name of a skill the bundle drops or
@@ -151,7 +152,7 @@ is `degraded` with `details: { state: 'stale', bundleId, bundleVersion,
 lastSync: { status: 'refused' | 'failed', reason, at, ... } }`. Each isolate
 answers for its own bundle.
 A `run_workflow` already running when the new bundle is applied finishes on the operations of the bundle it started on.
-Managed mode runs on `@frontmcp/plugin-skilled-openapi`, which `@frontmcp/edge` depends on. When the boot pull fails and the KV cache is empty, the error says no bundle is available in the injected bundle cache (no file path), and `search_skill`, `load_skill` and `run_workflow` answer `No skill bundle is loaded: <that reason>` (code `SKILL_BUNDLE_NOT_LOADED`) until a Cron refresh loads a bundle.
+Managed mode runs on `@frontmcp/plugin-skilled-openapi`, which `@frontmcp/edge` depends on. When the boot pull fails and the KV cache is empty, the error says no bundle is available in the injected bundle cache (no file path), and `search_skill`, `load_skill` and `run_workflow` answer `No skill bundle is loaded: <that reason>` (code `SKILL_BUNDLE_NOT_LOADED`, `_meta.retryable: true`) until a Cron refresh loads a bundle. The SDK's skill surfaces answer the same, as a JSON-RPC error with `data: { code: 'SKILL_BUNDLE_NOT_LOADED', retryable: true }`: `skills/list`, `skills/search` and `skill://index.json`, and `skills/load` or a `SKILL.md` read of a skill not found. `initialize` says the skills have not loaded yet. A stateless request, which skips `initialize`, starts the pull and gets the same answer. Up to 1.11.0 they answered as if the server had no skills.
 Its `outbound.egressProxy` option needs Node.js (undici's `ProxyAgent`); on a
 Worker a configured proxy makes every operation call fail with
 `egress proxy unavailable`, so leave it unset there.

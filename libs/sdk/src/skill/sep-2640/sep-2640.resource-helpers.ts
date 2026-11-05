@@ -15,7 +15,8 @@ import type { SkillLoadResult } from '../../common/entries/skill.entry';
 import type { SkillContent } from '../../common/interfaces';
 import type { SkillMetadata } from '../../common/metadata/skill.metadata';
 import { PublicMcpError, ResourceNotFoundError } from '../../errors';
-import { findSkillCatalogSource } from '../skill-catalog-source';
+import { SkillBundleNotLoadedError } from '../errors/skill-bundle-not-loaded.error';
+import { findSkillCatalogSource, readySkillCatalog } from '../skill-catalog-source';
 import { isSkillServable } from '../skill-filter.helper';
 import { parseSkillMdFrontmatter } from '../skill-md-parser';
 import type { SkillInstance } from '../skill.instance';
@@ -90,18 +91,22 @@ export function findSkillByPath(scope: ScopeEntry, skillPath: string): SkillEntr
 
 /**
  * Load a skill addressed by its `<skill-path>`, asserting MCP visibility and that the
- * `skills:filter` flow lets the caller see it.
+ * `skills:filter` flow lets the caller see it. It waits for a plugin's runtime skills first, and a
+ * path that names no skill while they haven't loaded answers the retryable {@link SkillBundleNotLoadedError}.
  */
 export async function findAndLoadSkillByPath(
   scope: ScopeEntry,
   skillPath: string,
 ): Promise<{ loadResult: SkillLoadResult; instance: SkillInstance }> {
+  const { notLoadedReason } = await readySkillCatalog(scope);
+  const entry = findSkillByPath(scope, skillPath);
+  if (!entry && notLoadedReason !== undefined) throw new SkillBundleNotLoadedError(notLoadedReason);
+
   const registry = scope.skills;
   if (!registry || !registry.hasAny()) {
     throw new PublicMcpError('Skills are not available in this scope.', 'CAPABILITY_NOT_AVAILABLE', 501);
   }
 
-  const entry = findSkillByPath(scope, skillPath);
   if (!entry || !(await isSkillServable(scope, entry))) {
     throw new ResourceNotFoundError(`skill://${skillPath}/SKILL.md`);
   }

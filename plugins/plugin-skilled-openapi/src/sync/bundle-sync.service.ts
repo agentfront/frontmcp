@@ -23,7 +23,12 @@ import {
   type ServiceDescriptor,
   type SignatureVerifyTelemetry,
 } from '@frontmcp/adapters/skills';
-import { PublicMcpError, type FrontMcpLogger, type SkillContent, type SkillRegistryInterface } from '@frontmcp/sdk';
+import {
+  SkillBundleNotLoadedError,
+  type FrontMcpLogger,
+  type SkillContent,
+  type SkillRegistryInterface,
+} from '@frontmcp/sdk';
 
 import { type HiddenOpEntry, type HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { type SignatureKey } from '../skilled-openapi.types';
@@ -145,15 +150,20 @@ export class BundleSyncService {
   }
 
   /**
-   * {@link ensureReady}, then refuse with a public error while no bundle is loaded, so a meta-tool says why the
-   * server has no skills instead of answering as if it had none.
+   * {@link ensureReady}, then refuse with a retryable error while no bundle is loaded, so a meta-tool says why the
+   * server has no skills instead of answering as if it had none. The SDK's skill surfaces answer the same error.
    */
   async ensureLoaded(): Promise<void> {
     await this.ensureReady();
+    const reason = this.notLoadedReason();
+    if (reason !== undefined) throw new SkillBundleNotLoadedError(reason);
+  }
+
+  /** Why no bundle is loaded, as clients may read it; undefined while one is. */
+  notLoadedReason(): string | undefined {
     const state = this.loadState();
-    if (state.status === 'loaded') return;
-    const reason = state.status === 'failed' ? state.reason : 'the first bundle has not loaded yet';
-    throw new PublicMcpError(`No skill bundle is loaded: ${reason}`, 'SKILL_BUNDLE_NOT_LOADED', 503);
+    if (state.status === 'loaded') return undefined;
+    return state.status === 'failed' ? state.reason : 'the first bundle has not loaded yet';
   }
 
   /** {@link ensureReady}, then what the last sync came to: on a first start, its pull. */

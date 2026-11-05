@@ -99,6 +99,8 @@ export interface SkillSearchResultItem {
   tools: Array<{ name: string; available: boolean }>;
   /** Source of the skill */
   source: 'local' | 'external';
+  /** Version of the bundle a skill registered at runtime came from, such as a Skilled OpenAPI bundle skill */
+  bundleVersion?: string;
 }
 
 /**
@@ -221,6 +223,8 @@ export interface ListSkillsResult {
     description: string;
     tags?: string[];
     priority?: number;
+    /** Version of the bundle a skill registered at runtime came from, such as a Skilled OpenAPI bundle skill */
+    bundleVersion?: string;
   }>;
   /** Total number of skills matching the filter */
   total: number;

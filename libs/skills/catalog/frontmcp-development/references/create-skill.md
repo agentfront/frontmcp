@@ -203,6 +203,7 @@ interface SkillContent {
   specMetadata?: Record<string, string>;
   allowedTools?: string; // client agent tools to pre-approve (SKILL.md `allowed-tools`); the server does not enforce it
   resources?: SkillResources; // bundled scripts/, references/, assets/
+  bundleVersion?: string; // for registerSkillContent(): the bundle it came from, sent in skills/list and skills/search
 }
 ```
 

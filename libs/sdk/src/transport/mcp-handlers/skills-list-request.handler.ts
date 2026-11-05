@@ -1,8 +1,10 @@
 import { type SkillMetadata } from '../../common/metadata';
 import { PublicMcpError } from '../../errors';
+import { assertSkillCatalogLoaded } from '../../skill/skill-catalog-source';
 import { filterDiscoverableSkillResults } from '../../skill/skill-filter.helper';
 import { type SkillListOptions } from '../../skill/skill-storage.interface';
 import { type SkillRegistryInterface } from '../../skill/skill.registry';
+import { toSdkMcpError } from './mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 import { withMcpSurface } from './mcp-surface';
 import {
@@ -62,6 +64,12 @@ export default function skillsListRequestHandler({
       if (!skillRegistry) {
         throw new PublicMcpError('Skills capability not available', 'CAPABILITY_NOT_AVAILABLE', 501);
       }
+      // A plugin's runtime skills that haven't loaded answer a retryable error, not an empty list.
+      try {
+        await assertSkillCatalogLoaded(scope);
+      } catch (error) {
+        throw toSdkMcpError(error);
+      }
 
       // Remove the skills the caller can't discover (entry-level authorities, surface, then the
       // `skills:filter` flow) from the whole matching catalog before cutting the page. Filtering a
@@ -80,13 +88,18 @@ export default function skillsListRequestHandler({
       const page = visible.slice(start, start + (limit ?? DEFAULT_PAGE_SIZE));
 
       // Transform to response format
-      const skills = page.map(({ metadata: s }) => ({
-        id: s.id ?? s.name,
-        name: s.name,
-        description: s.description ?? '',
-        tags: s.tags,
-        priority: s.priority,
-      }));
+      const skills = page.map(({ metadata: s }) => {
+        const id = s.id ?? s.name;
+        const bundleVersion = skillRegistry.bundleVersionOf?.(id);
+        return {
+          id,
+          name: s.name,
+          description: s.description ?? '',
+          tags: s.tags,
+          priority: s.priority,
+          ...(bundleVersion !== undefined && { bundleVersion }),
+        };
+      });
 
       const result = {
         skills,
