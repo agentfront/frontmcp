@@ -101,14 +101,18 @@ export default class BundlePushFlow extends FlowBase<typeof name> {
       }
       refused = error;
     }
-    if (refused) {
-      this.logger.warn(refused.message);
-      return this.respond(
-        refused.refusal === 'replayed'
-          ? refusal(409, 'push_replayed', 'a push already used this token')
-          : invalidToken('the push token was refused'),
-      );
+    if (refused) return this.respond(this.answerRefusal(refused));
+  }
+
+  private answerRefusal(refused: SaasPushRefusedError) {
+    if (refused.refusal === 'replay-unchecked') {
+      this.logger.error(`bundle push not checked: ${refused.message}`);
+      return refusal(503, 'temporarily_unavailable', "the replay guard's store could not record the push token");
     }
+    this.logger.warn(refused.message);
+    return refused.refusal === 'replayed'
+      ? refusal(409, 'push_replayed', 'a push already used this token')
+      : invalidToken('the push token was refused');
   }
 
   @Stage('parseBundle')

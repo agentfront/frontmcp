@@ -11,6 +11,7 @@
  * cache fallback).
  */
 import type { EdgeBundleCacheFactory, EdgeBundleCacheStore } from './kv-cache';
+import type { EdgePushReplayStoreFactory } from './push-replay';
 
 export interface ManagedEdgeOptions {
   /** SaaS pull endpoint serving the signed bundle (HTTPS). */
@@ -35,6 +36,12 @@ export interface ManagedEdgeOptions {
   pollIntervalMs?: number;
   /** Also take bundles the bundle server pushes, at `POST /__skilled_openapi/push`; see the README for the request. */
   enableWebhook?: boolean;
+  /**
+   * Where the push replay guard records the push tokens' `jti`s, for every isolate and replica of the Worker. Default
+   * `{ binding: 'FRONTMCP_PUSH_REPLAY' }`: the Durable Object class `mcp.PushReplayDurableObject`, bound under that
+   * name. A function of `env` can return another store (on Deno or Bun). With no store, pushes are refused.
+   */
+  pushReplay?: { binding?: string } | EdgePushReplayStoreFactory;
   /** Apply a pulled or pushed bundle older than the one being served. Default false: bundles only move forward. */
   allowRollback?: boolean;
   /** Require a signed bundle. Default true. */

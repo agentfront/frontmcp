@@ -12,6 +12,10 @@ const WRANGLER_BIN = join(ROOT_DIR, 'node_modules', '.bin', 'wrangler');
 const MCP_URL = 'http://localhost/mcp';
 const PUSH_URL = 'http://localhost/__skilled_openapi/push';
 const BUNDLE_CACHE_KEY = 'frontmcp:bundle:last-good';
+const BUNDLE_CACHE_NAMESPACE_ID = 'e2e-bundle-cache';
+const PUSH_REPLAY_CLASS = 'FrontMcpPushReplay';
+const FIRST_REPLICA = 'replica-1';
+const SECOND_REPLICA = 'replica-2';
 
 interface JsonRpcResponse {
   result?: { isError?: boolean; content?: Array<{ type: string; text?: string }> };
@@ -29,7 +33,12 @@ export interface ManagedWorkerOptions {
   outbound: (request: Request) => Promise<Response>;
 }
 
-/** The fixture Worker, bundled by `wrangler deploy --dry-run` as it would be deployed, and run in workerd. */
+/**
+ * The fixture Worker, bundled by `wrangler deploy --dry-run` as it would be deployed, and run in workerd as two
+ * replicas: two Workers of one bundle, each in its own isolate with its own memory, sharing the KV namespace and the
+ * push replay Durable Object, as the isolates of a deployed Worker do. The tests use the first unless they ask for the
+ * {@link ManagedWorker.secondReplica}.
+ */
 export class ManagedWorker {
   private requestId = 0;
 
@@ -37,6 +46,7 @@ export class ManagedWorker {
     private readonly miniflare: Miniflare,
     private readonly bundleDir: string,
     private readonly runtimeLog: string[],
+    private readonly replicaName = FIRST_REPLICA,
   ) {}
 
   static async start({ bindings, outbound }: ManagedWorkerOptions): Promise<ManagedWorker> {
@@ -47,14 +57,25 @@ export class ManagedWorker {
     });
     const runtimeLog: string[] = [];
     const collect = (stream: Readable) => stream.on('data', (chunk: Buffer) => runtimeLog.push(chunk.toString()));
-    const miniflare = new Miniflare({
+    const replica = (
+      name: string,
+      pushReplayObject: { className: string; scriptName?: string; useSQLite: boolean },
+    ) => ({
+      name,
       modulesRoot: bundleDir,
-      modules: [{ type: 'ESModule', path: join(bundleDir, 'worker.js') }],
+      modules: [{ type: 'ESModule' as const, path: join(bundleDir, 'worker.js') }],
       compatibilityDate: '2024-09-23',
       compatibilityFlags: ['nodejs_compat'],
-      kvNamespaces: ['BUNDLE_CACHE'],
+      kvNamespaces: { BUNDLE_CACHE: BUNDLE_CACHE_NAMESPACE_ID },
+      durableObjects: { FRONTMCP_PUSH_REPLAY: pushReplayObject },
       bindings,
       outboundService: outbound,
+    });
+    const miniflare = new Miniflare({
+      workers: [
+        replica(FIRST_REPLICA, { className: PUSH_REPLAY_CLASS, useSQLite: true }),
+        replica(SECOND_REPLICA, { className: PUSH_REPLAY_CLASS, scriptName: FIRST_REPLICA, useSQLite: true }),
+      ],
       handleRuntimeStdio: (stdout, stderr) => {
         collect(stdout);
         collect(stderr);
@@ -64,13 +85,18 @@ export class ManagedWorker {
     return new ManagedWorker(miniflare, bundleDir, runtimeLog);
   }
 
+  /** The other replica of the Worker. */
+  secondReplica(): ManagedWorker {
+    return new ManagedWorker(this.miniflare, this.bundleDir, this.runtimeLog, SECOND_REPLICA);
+  }
+
   /** What the Worker printed, for a failing test's message. */
   get log(): string {
     return this.runtimeLog.join('');
   }
 
   async fetch(url: string, init?: RequestInit): Promise<Response> {
-    const worker = await this.miniflare.getWorker();
+    const worker = await this.miniflare.getWorker(this.replicaName);
     return worker.fetch(url, init) as unknown as Promise<Response>;
   }
 
@@ -93,7 +119,7 @@ export class ManagedWorker {
 
   /** Run the Cron Trigger handler, as the platform does on schedule. */
   async scheduled(): Promise<{ outcome: string }> {
-    const worker = await this.miniflare.getWorker();
+    const worker = await this.miniflare.getWorker(this.replicaName);
     return worker.scheduled({ cron: '*/5 * * * *' });
   }
 
@@ -105,7 +131,7 @@ export class ManagedWorker {
 
   /** The version of the last good bundle the Worker kept in KV. */
   async cachedBundleVersion(): Promise<string | undefined> {
-    const namespace = await this.miniflare.getKVNamespace('BUNDLE_CACHE');
+    const namespace = await this.miniflare.getKVNamespace('BUNDLE_CACHE', this.replicaName);
     const cached = await namespace.get(BUNDLE_CACHE_KEY);
     return cached ? (JSON.parse(cached) as { version: string }).version : undefined;
   }

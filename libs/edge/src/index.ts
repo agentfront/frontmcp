@@ -50,6 +50,7 @@ import {
 
 import type { EdgeBundleCacheFactory, EdgeBundleCacheStore } from './kv-cache';
 import { buildManagedOpenApiPluginOptions, type ManagedEdgeOptions } from './managed';
+import { PushReplayDurableObject, resolvePushReplayStore, type EdgePushReplayStore } from './push-replay';
 import { createEdgeSessionDurableObject, createEdgeSessionRouter } from './session-host';
 import { kvSkillIndexCacheFromEnv, type EdgeSkillIndexCacheFactory } from './skill-index-cache';
 import { logStartFailure } from './start-failure';
@@ -69,6 +70,7 @@ export {
   type EdgeKvNamespace,
   type KvBundleCacheOptions,
 } from './kv-cache';
+export type { EdgePushReplayStore, EdgePushReplayStoreFactory } from './push-replay';
 export {
   createKvSkillIndexCache,
   kvSkillIndexCacheFromEnv,
@@ -95,17 +97,18 @@ interface BundleScheduler {
 }
 
 /**
- * Carries the KV cache + `disablePolling` flag into the skilled-openapi plugin
- * and captures the plugin's scheduler so {@link EdgeMcp.scheduled} can run it. A
- * Worker has no background timers, so polling is disabled and a Cron Trigger /
- * Durable Object alarm drives refresh instead.
+ * Carries the KV cache, the push replay store and the `disablePolling` flag into
+ * the skilled-openapi plugin and captures the plugin's scheduler so {@link
+ * EdgeMcp.scheduled} can run it. A Worker has no background timers, so polling
+ * is disabled and a Cron Trigger / Durable Object alarm drives refresh instead.
  */
 class EdgeRefreshController {
   private scheduler?: BundleScheduler;
+  readonly disablePolling = true;
 
   constructor(
     readonly cache?: EdgeBundleCacheStore,
-    readonly disablePolling = true,
+    readonly pushReplayStore?: EdgePushReplayStore,
   ) {}
 
   attach(scheduler: BundleScheduler): void {
@@ -269,6 +272,12 @@ export interface EdgeMcp {
    * ```
    */
   SessionDurableObject: new (state: unknown, env: unknown) => { fetch(request: Request): Promise<Response> };
+  /**
+   * The **Durable Object class** that keeps the push tokens' `jti`s, with
+   * `managed.enableWebhook`. Re-export it from the worker entry and bind it under
+   * `managed.pushReplay.binding` (default `FRONTMCP_PUSH_REPLAY`).
+   */
+  PushReplayDurableObject: typeof PushReplayDurableObject;
 }
 
 /**
@@ -315,7 +324,12 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
     let frontmcpConfig = base;
 
     if (managed) {
-      controller = new EdgeRefreshController(resolveCache(managed.cache, env));
+      controller = new EdgeRefreshController(
+        resolveCache(managed.cache, env),
+        managed.enableWebhook
+          ? resolvePushReplayStore(managed.pushReplay, env, `push-jti:${managed.expectedAudience}`)
+          : undefined,
+      );
       // Wire the skilled-openapi plugin (SaaS source) so the bundle is pulled
       // on boot and auto-refreshed. Lazy-imported so non-managed edges never
       // evaluate it; it is a dependency, so wrangler always resolves the literal specifier (#769).
@@ -411,6 +425,7 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
     // The DO builds its own session-local scope (in its isolate) via buildScope,
     // and bridges `env`→`process.env` the same way the worker does.
     SessionDurableObject: createEdgeSessionDurableObject(buildScope, bridgeEnvToProcessEnv),
+    PushReplayDurableObject,
   };
 
   if (config.managed) {

@@ -103,6 +103,13 @@ export {
 } from './security/bundle-signature';
 export { BundlePushJwtVerifier, type BundlePushJwtVerifierOptions } from './security/jwt-verifier';
 export {
+  createStorageReplayNonceStore,
+  MemoryReplayNonceStore,
+  StorageReplayNonceStore,
+  type MemoryReplayNonceStoreOptions,
+  type ReplayNonceStore,
+} from './security/replay-nonce-store';
+export {
   WebhookReplayGuard,
   type ReplayCheckResult,
   type ReplayGuardCounter,

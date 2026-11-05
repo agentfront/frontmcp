@@ -184,17 +184,41 @@ HTTP flow). The request:
 | `409`  | `push_replayed`: a push already used this token's `jti`                                    |
 | `409`  | `bundle_outdated`: older than the bundle being served, which stays                         |
 | `422`  | `bundle_not_applied`: the signature or the bundle's checks failed; the served bundle stays |
-| `503`  | `temporarily_unavailable`: the JWKS could not be read                                      |
+| `503`  | `temporarily_unavailable`: the JWKS could not be read, or the `jti` could not be recorded  |
 
 A pushed bundle is applied after the first pull and after bundles already
-queued, so a push and a Cron refresh never apply at once. The replay guard keeps
-the `jti`s it has seen in memory, per isolate: two isolates of the same Worker
-don't share them, so keep push tokens short-lived.
+queued, so a push and a Cron refresh never apply at once.
+
+The replay guard keeps the `jti`s in a Durable Object that every isolate and
+replica of the Worker reaches, so a push replayed to another isolate is refused
+with `409 push_replayed` too. KV can't guard replays: it is eventually
+consistent, so two isolates could both read a `jti` as unused. Export the class
+and bind it (default binding `FRONTMCP_PUSH_REPLAY`; `managed.pushReplay:
+{ binding }` changes it):
+
+```ts
+const mcp = createEdgeMcp({ /* ..., */ managed: { /* ..., */ enableWebhook: true } });
+export default mcp;
+export const FrontMcpPushReplay = mcp.PushReplayDurableObject;
+```
+
+Each `jti` is kept, in one object per `expectedAudience`, until its token's
+`iat` is five minutes old. Without the binding, every push answers `503
+temporarily_unavailable` and the log names the missing binding; pulls and Cron
+runs are not affected. Up to 1.11.0 the `jti`s were kept in each isolate's
+memory. On Deno or Bun, `managed.pushReplay` can be a function of `env` that
+returns a store `{ claim(key, ttlMs) }` (`true` when it recorded `key`, `false`
+when it is already recorded, throws when it can't tell).
+
+On Node, the plugin keeps the `jti`s in the process's memory by default; with
+several replicas, set the `saas` source's `pushReplayStorage` to a shared store
+(`{ type: 'redis', redis: { url } }`, or `upstash`, `vercel-kv`, `sqlite`).
 
 This path is bundled by **wrangler** (not `frontmcp build`), so you maintain
 `wrangler.toml` yourself — it needs a `[[kv_namespaces]] binding = "BUNDLE_CACHE"`
 and a `[triggers] crons = [...]` (the `managed.pollIntervalMs` option is
-ignored on edge — Workers have no background timers; the Cron drives refresh):
+ignored on edge — Workers have no background timers; the Cron drives refresh),
+and with `enableWebhook` the push replay Durable Object and its migration:
 
 ```toml
 name = "my-worker"
@@ -205,6 +229,15 @@ compatibility_flags = ["nodejs_compat"]
 [[kv_namespaces]]
 binding = "BUNDLE_CACHE"
 id = "<your-kv-namespace-id>"
+
+# with managed.enableWebhook
+[[durable_objects.bindings]]
+name = "FRONTMCP_PUSH_REPLAY"
+class_name = "FrontMcpPushReplay"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FrontMcpPushReplay"]
 
 [triggers]
 crons = ["*/5 * * * *"]

@@ -1,5 +1,5 @@
 // A managed @frontmcp/edge Worker in workerd: pull over https, Cron refresh (also as an isolate's first event), token
-// rejection, workflows and pushes, older ones refused.
+// rejection, workflows and pushes, older ones refused, and a push token replayed to another replica refused.
 import { base64urlEncode, randomBytes } from '@frontmcp/utils';
 
 import {
@@ -202,6 +202,39 @@ describe('a managed edge Worker on workerd', () => {
       });
       expect(await servedSkills()).toEqual(['invoices']);
       expect(await worker.cachedBundleVersion()).toBe('5.0.0');
+    });
+
+    it('is refused, with 409, when its token is replayed to another replica of the Worker', async () => {
+      const replica = worker.secondReplica();
+      const replicaSkills = async () => {
+        const result = await replica.callTool<SearchSkillResponse>('search_skill', { query: 'billing' });
+        return result
+          .json()
+          .skills.map((skill) => `${skill.skillId}@${skill.bundleVersion}`)
+          .sort();
+      };
+      publish('9.0.0', ['invoices', 'reports']);
+      const servedBeforeReplay = await replicaSkills();
+      const token = await issuer.pushToken();
+
+      const first = await worker.push(`Bearer ${token}`, signer.sign(billingBundle('10.0.0', ['refunds'])));
+      const replayed = await replica.push(`Bearer ${token}`, signer.sign(billingBundle('10.0.0', ['refunds'])));
+      const servedAfterReplay = await replicaSkills();
+      const fresh = await replica.push(
+        `Bearer ${await issuer.pushToken()}`,
+        signer.sign(billingBundle('11.0.0', ['refunds'])),
+      );
+
+      expect(servedBeforeReplay).toEqual(['invoices@9.0.0', 'reports@9.0.0']);
+      expect(first.status).toBe(200);
+      expect(replayed.status).toBe(409);
+      expect(await replayed.json()).toEqual({
+        error: 'push_replayed',
+        error_description: 'a push already used this token',
+      });
+      expect(servedAfterReplay).toEqual(servedBeforeReplay);
+      expect(fresh.status).toBe(200);
+      expect(await replicaSkills()).toEqual(['refunds@11.0.0']);
     });
   });
 });

@@ -20,6 +20,7 @@ import {
   kvSkillIndexCacheFromEnv,
   type EdgeMcpConfig,
 } from '../index';
+import { PushReplayDurableObject } from '../push-replay';
 
 // ---- mocks -----------------------------------------------------------------
 
@@ -464,6 +465,51 @@ describe('createEdgeMcp — managed mode', () => {
 
     expect(cacheFactory).toHaveBeenCalledWith({ ENV: 1 });
     expect(controllerCache).toBe(store);
+  });
+
+  /** The push replay store the controller hands the plugin, after the first request built the scope with `env`. */
+  async function controllerPushReplayStore(managed: Record<string, unknown>, env: unknown) {
+    let store: { claim(key: string, ttlMs: number): Promise<boolean> } | undefined;
+    createForGraph.mockImplementation(async (cfg: { providers?: Array<{ provide: symbol; useValue: unknown }> }) => {
+      const provider = (cfg.providers ?? []).find((p) => typeof p.provide === 'symbol');
+      store = (provider?.useValue as { pushReplayStore?: typeof store }).pushReplayStore;
+      return builtInstance(makeScope());
+    });
+    const edge = createEdgeMcp({ ...BASE, managed: { ...MANAGED, ...managed } } as unknown as EdgeMcpConfig);
+    await edge.fetch(new Request('https://w/'), env);
+    return store;
+  }
+
+  it('hands the plugin a push replay store on the Durable Object bound in env, named after the audience', async () => {
+    const fetchClaim = jest.fn(async () => Response.json({ claimed: true }));
+    const namespace = {
+      idFromName: jest.fn((name: string) => `id:${name}`),
+      get: jest.fn(() => ({ fetch: fetchClaim })),
+    };
+
+    const store = await controllerPushReplayStore({ enableWebhook: true }, { FRONTMCP_PUSH_REPLAY: namespace });
+
+    await expect(store?.claim('jti-hash', 1_000)).resolves.toBe(true);
+    expect(namespace.idFromName).toHaveBeenCalledWith('push-jti:acme:prod');
+    expect(namespace.get).toHaveBeenCalledWith('id:push-jti:acme:prod');
+  });
+
+  it('hands the plugin a store that refuses every push when the Durable Object is not bound', async () => {
+    const store = await controllerPushReplayStore({ enableWebhook: true, pushReplay: { binding: 'MY_REPLAY' } }, {});
+
+    await expect(store?.claim('jti-hash', 1_000)).rejects.toThrow(
+      'the Durable Object binding "MY_REPLAY" is not bound',
+    );
+  });
+
+  it('hands the plugin no push replay store without enableWebhook', async () => {
+    const store = await controllerPushReplayStore({}, { FRONTMCP_PUSH_REPLAY: {} });
+
+    expect(store).toBeUndefined();
+  });
+
+  it('exposes the push replay Durable Object class on the module', () => {
+    expect(createEdgeMcp(BASE).PushReplayDurableObject).toBe(PushReplayDurableObject);
   });
 
   it('passes a plain managed.cache store through unchanged', async () => {

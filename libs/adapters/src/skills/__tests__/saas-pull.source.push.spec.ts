@@ -1,5 +1,8 @@
 // With enableWebhook, the saas source checks a pushed bundle's token as it checks the pull token, plus its iat and jti.
+import { createMemoryStorage, createStorage } from '@frontmcp/utils';
+
 import type { ResolvedBundle } from '../bundle/bundle.types';
+import { StorageReplayNonceStore, type ReplayNonceStore } from '../security/replay-nonce-store';
 import type { SaasSourceOptions } from '../source-options';
 import type { BundleCacheStore } from '../sources';
 import { SaasPullSource, SaasPushRefusedError } from '../sources/saas-pull.source';
@@ -10,6 +13,8 @@ import {
   SAAS_JWKS_URL,
   type SaasTokenIssuer,
 } from './saas-token.fixture';
+
+jest.mock('@frontmcp/utils', () => ({ ...jest.requireActual('@frontmcp/utils'), createStorage: jest.fn() }));
 
 const logger = {
   warn: jest.fn(),
@@ -27,8 +32,9 @@ class StubbedSaasSource extends SaasPullSource {
     options: SaasSourceOptions,
     private readonly stub: Stub,
     cache?: BundleCacheStore,
+    pushReplayStore?: ReplayNonceStore,
   ) {
-    super(options, undefined, logger, { cache, disablePolling: true });
+    super(options, undefined, logger, { cache, disablePolling: true, pushReplayStore });
   }
   protected override async httpGet(url: string) {
     return this.stub(url);
@@ -116,6 +122,75 @@ describe('SaasPullSource push checks', () => {
 
     expect(refused.refusal).toBe('invalid-token');
     expect(refused.message).toContain(reason);
+  });
+
+  describe('with a replay store shared by several sources', () => {
+    const servingJwks: Stub = async (url) =>
+      url === SAAS_JWKS_URL ? { status: 200, body: JSON.stringify(issuer.jwks) } : { status: 404, body: '' };
+
+    const replicaSharing = (store: ReplayNonceStore) =>
+      new StubbedSaasSource(sourceOptions(true), servingJwks, undefined, store);
+
+    it('refuses, on a second replica, a jti a push to the first replica used', async () => {
+      const storage = createMemoryStorage({ enableSweeper: false });
+      await storage.connect();
+      const shared = new StorageReplayNonceStore(storage);
+      const token = await issuer.token({ jti: 'push-shared-1' });
+      await replicaSharing(shared).verifyPushToken(token);
+
+      const replayed = await replicaSharing(shared)
+        .verifyPushToken(token)
+        .catch((e: unknown) => e);
+
+      expect(replayed).toMatchObject({ refusal: 'replayed', message: expect.stringContaining('nonce replay') });
+    });
+
+    it('refuses the push, as unchecked, when the replay store fails', async () => {
+      const failing = { claim: jest.fn(async () => Promise.reject(new Error('ECONNREFUSED 10.0.0.7:6379'))) };
+
+      const error = await replicaSharing(failing)
+        .verifyPushToken(await issuer.token({ jti: 'push-shared-2' }))
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(SaasPushRefusedError);
+      expect(error).toMatchObject({
+        refusal: 'replay-unchecked',
+        message: expect.stringContaining('the replay store failed: ECONNREFUSED'),
+      });
+    });
+
+    it('keeps the jtis in the storage pushReplayStorage names, under its audience, never falling back to memory', async () => {
+      const storage = createMemoryStorage({ enableSweeper: false });
+      await storage.connect();
+      jest.mocked(createStorage).mockResolvedValue(storage);
+      const pushReplayStorage = { type: 'redis' as const, redis: { url: 'redis://replay.internal:6379' } };
+      const replica = () => new StubbedSaasSource({ ...sourceOptions(true), pushReplayStorage }, servingJwks);
+      const token = await issuer.token({ jti: 'push-shared-3' });
+
+      await replica().verifyPushToken(token);
+      const replayed = await replica()
+        .verifyPushToken(token)
+        .catch((e: unknown) => e);
+
+      expect(replayed).toMatchObject({ refusal: 'replayed' });
+      expect(createStorage).toHaveBeenCalledWith({ ...pushReplayStorage, fallback: 'error' });
+      expect(await storage.keys('*')).toEqual([
+        expect.stringMatching(new RegExp(`^frontmcp:skilled-openapi:push-jti:${SAAS_AUDIENCE}:[0-9a-f]{64}$`)),
+      ]);
+    });
+
+    it('uses an injected pushReplayStore rather than the storage pushReplayStorage names', async () => {
+      const injected = { claim: jest.fn(async () => true) };
+      const options = { ...sourceOptions(true), pushReplayStorage: { type: 'redis' as const } };
+      jest.mocked(createStorage).mockClear();
+
+      await new StubbedSaasSource(options, servingJwks, undefined, injected).verifyPushToken(
+        await issuer.token({ jti: 'push-shared-4' }),
+      );
+
+      expect(injected.claim).toHaveBeenCalledTimes(1);
+      expect(createStorage).not.toHaveBeenCalled();
+    });
   });
 
   it('refuses a token signed by a key the JWKS does not hold', async () => {

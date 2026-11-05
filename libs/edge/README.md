@@ -138,6 +138,7 @@ crons = ["*/5 * * * *"]
 | `expectedAudience`, `jwksUrl`, `expectedIssuer`                     | How the bundle server's tokens are verified                                                    |
 | `cache`                                                             | Keeps the last bundle applied: `kvBundleCacheFromEnv('BINDING')`, or a store of your own       |
 | `enableWebhook`                                                     | Also take bundles pushed to `POST /__skilled_openapi/push`, as below                           |
+| `pushReplay`                                                        | Where pushed tokens' `jti`s are kept: `{ binding }` (default `FRONTMCP_PUSH_REPLAY`), as below |
 | `allowRollback`                                                     | Apply a pulled or pushed bundle older than the one being served, as below. Default `false`     |
 | `requireSignature`, `trustedKeys`, `dev`, `credentials`, `outbound` | Passed to the Skilled OpenAPI plugin. `dev` skips signature checks: never use it in production |
 | `pollIntervalMs`, `bundleCacheDir`                                  | Ignored on a Worker, which has no timers or file system                                        |
@@ -172,9 +173,37 @@ Content-Type: application/json
 | `409`  | `{ "error": "push_replayed" }`: a push already used this token                                            |
 | `409`  | `{ "error": "bundle_outdated" }`: the bundle is older than the one being served, which stays              |
 | `422`  | `{ "error": "bundle_not_applied" }`: the signature or the bundle's checks failed; the served bundle stays |
-| `503`  | `{ "error": "temporarily_unavailable" }`: the JWKS could not be read                                      |
+| `503`  | `{ "error": "temporarily_unavailable" }`: the JWKS could not be read, or the `jti` could not be recorded  |
 
-The endpoint is a hookable flow, `skilled-openapi:bundle-push`, behind the same IP filter and rate limit as the server's other HTTP flows. The `jti`s it has seen are kept in memory, per isolate, so two isolates of a Worker don't share them: keep push tokens short-lived.
+The endpoint is a hookable flow, `skilled-openapi:bundle-push`, behind the same IP filter and rate limit as the server's other HTTP flows.
+
+The `jti`s are kept in a Durable Object that every isolate and replica of the Worker reaches, so a push replayed to another isolate is refused too. (KV can't do this: it is eventually consistent, so two isolates could both read a `jti` as unused.) Export the class and bind it:
+
+```ts
+// src/worker.ts
+const mcp = createEdgeMcp({
+  // ...
+  managed: { /* ... */ enableWebhook: true }, // the binding defaults to FRONTMCP_PUSH_REPLAY; set pushReplay: { binding } to change it
+});
+
+export default mcp;
+export const FrontMcpPushReplay = mcp.PushReplayDurableObject;
+```
+
+```toml
+# wrangler.toml
+[[durable_objects.bindings]]
+name = "FRONTMCP_PUSH_REPLAY"
+class_name = "FrontMcpPushReplay"
+
+[[migrations]]
+tag = "v1" # or the next tag, when wrangler.toml already has migrations
+new_sqlite_classes = ["FrontMcpPushReplay"]
+```
+
+- **One object per audience** keeps the `jti`s, named after `expectedAudience`. Each `jti` is kept until its token's `iat` is five minutes old, and dropped after that.
+- **Without the binding**, every push answers `503 temporarily_unavailable`, and the log names the missing binding. Pulls and Cron runs are not affected. Up to 1.11.0, the `jti`s were kept in each isolate's memory, which isolates don't share.
+- **On Deno or Bun**, set `pushReplay` to a function of `env` that returns a store, `{ claim(key, ttlMs) }`: it resolves `true` when it recorded `key`, `false` when `key` is already recorded, and throws when it can't tell. A push is refused when it throws.
 
 ## API
 
@@ -196,9 +225,10 @@ It returns:
 | ------------------------------- | ----------------------------------------------------------------------- |
 | `fetch(request, env?, ctx?)`    | The Worker's request handler                                            |
 | `SessionDurableObject`          | The Durable Object class for `sessions`. Export it only when you use it |
+| `PushReplayDurableObject`       | The Durable Object class for `managed.enableWebhook`, as above          |
 | `scheduled(event?, env?, ctx?)` | With `managed` only: the Cron Trigger handler, which pulls the bundle   |
 
-Other exports: `kvBundleCacheFromEnv`, `createKvBundleCache`, `kvSkillIndexCacheFromEnv`, `createKvSkillIndexCache`, `buildManagedOpenApiPluginOptions`, and the `EdgeMcp`, `EdgeMcpConfig` and `ManagedEdgeOptions` types.
+Other exports: `kvBundleCacheFromEnv`, `createKvBundleCache`, `kvSkillIndexCacheFromEnv`, `createKvSkillIndexCache`, `buildManagedOpenApiPluginOptions`, and the `EdgeMcp`, `EdgeMcpConfig`, `ManagedEdgeOptions`, `EdgePushReplayStore` and `EdgePushReplayStoreFactory` types.
 
 ## Docs
 
