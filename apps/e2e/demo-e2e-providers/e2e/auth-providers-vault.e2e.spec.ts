@@ -1,6 +1,7 @@
 /**
  * A tool that declares `authProviders: ['github']` reads the credential `@FrontMcp({ authProvidersVault })` registers,
- * through `this.authProviders`; on a server that registers none, it gets an error naming the provider.
+ * through `this.authProviders`, acquired once and kept for later requests; on a server that registers none, it gets an
+ * error naming the provider.
  */
 import { expect, test } from '@frontmcp/testing';
 
@@ -15,7 +16,20 @@ test.describe('a server with authProvidersVault', () => {
     const result = await mcp.tools.call('read-github-credential', {});
 
     expect(result).toBeSuccessful();
-    expect(result.json()).toEqual({ token: 'github-e2e-token', authorization: 'Bearer github-e2e-token' });
+    expect(result.json()).toEqual({ token: 'github-e2e-token-1', authorization: 'Bearer github-e2e-token-1' });
+  });
+
+  test("keeps the credential for another client's requests, without running the factory again", async ({ server }) => {
+    const first = await server.createClient();
+    const second = await server.createClient();
+
+    const firstResult = await first.tools.call('read-github-credential', {});
+    const secondResult = await second.tools.call('read-github-credential', {});
+
+    expect([firstResult.json(), secondResult.json()]).toEqual([
+      { token: 'github-e2e-token-1', authorization: 'Bearer github-e2e-token-1' },
+      { token: 'github-e2e-token-1', authorization: 'Bearer github-e2e-token-1' },
+    ]);
   });
 });
 

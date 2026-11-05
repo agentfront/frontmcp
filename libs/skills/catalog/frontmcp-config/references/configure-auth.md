@@ -480,8 +480,11 @@ The `authProviders` accessor (from `@frontmcp/auth`) exposes:
 - `has(provider)` -- check if a provider's credential is available.
 - `refresh(provider)` -- force refresh the credential (the provider's `refresh`, else its `factory`).
 
-The factory gets the caller's `userSub`, `userEmail`, `userName` and `sessionId`. A credential is cached for the
-request, and for the requests of a verified session on a single-instance server; nothing is stored between them.
+The factory gets the caller's `userSub`, `userEmail`, `userName` and `sessionId`. The server keeps the credential it
+returns in memory, per scope: a `global` one for every caller, a `user` one for that user in any session, a `session`
+one for that verified session. Later requests of the scope get it without running the factory again, until it expires,
+or, for a credential without an expiry, until the provider's `cacheTtl` passes (default `defaultCacheTtl`, one hour).
+Each server instance keeps its own. A `session` credential of an anonymous caller without a verified session isn't kept.
 
 On a server without `authProvidersVault`, `get()` and `headers()` throw `AuthProvidersNotConfiguredError`, naming
 the provider. A provider name listed twice is refused at startup. A name the vault doesn't register answers `null`,
