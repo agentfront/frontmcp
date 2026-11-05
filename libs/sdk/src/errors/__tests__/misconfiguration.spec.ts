@@ -1,6 +1,8 @@
 import {
+  DuplicatePluginEntryError,
   DuplicatePluginError,
   JwtSecretRequiredError,
+  PluginConfiguredTwiceError,
   SessionSecretRequiredError,
   ToolAliasConflictError,
 } from '../index';
@@ -43,6 +45,18 @@ describe('misconfiguration classification (#646)', () => {
     const found = findMisconfiguration(new DuplicatePluginError('catalog', 'One catalog holds every source.'));
     expect(found?.code).toBe('DUPLICATE_PLUGIN');
     expect(found?.remedy).toContain('Install it once');
+  });
+
+  it('recognizes a plugin listed twice in one plugins list', () => {
+    const found = findMisconfiguration(new DuplicatePluginEntryError('ledger', '@FrontMcp({ plugins })', 1, 2));
+    expect(found?.code).toBe('DUPLICATE_PLUGIN_ENTRY');
+    expect(found?.remedy).toContain('List it once with all its options');
+  });
+
+  it('recognizes a plugin a server option installs and the plugins list names too', () => {
+    const found = findMisconfiguration(new PluginConfiguredTwiceError('ObservabilityPlugin', 'observability'));
+    expect(found?.code).toBe('PLUGIN_CONFIGURED_TWICE');
+    expect(found?.remedy).toContain('Configure the plugin in one place');
   });
 
   it('maps a ZodError to CONFIG_INVALID', () => {

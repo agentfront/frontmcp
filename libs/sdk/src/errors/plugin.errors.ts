@@ -41,3 +41,29 @@ export class DuplicatePluginError extends PublicMcpError {
     );
   }
 }
+
+/** Thrown at startup when one plugins list names a plugin twice, which would install only its last entry. */
+export class DuplicatePluginEntryError extends PublicMcpError {
+  constructor(pluginName: string, listName: string, firstEntry: number, secondEntry: number) {
+    super(
+      `Plugin "${pluginName}" is listed twice in ${listName} (entries ${firstEntry} and ${secondEntry}), and only ` +
+        'one entry could be installed. List it once, with all its options in that entry, or install the other ' +
+        'configuration on an @App of its own.',
+      'DUPLICATE_PLUGIN_ENTRY',
+      500,
+    );
+  }
+}
+
+/** Thrown at startup when a server option installs a plugin that the server's plugins list names too. */
+export class PluginConfiguredTwiceError extends PublicMcpError {
+  constructor(pluginClassName: string, serverOption: string) {
+    super(
+      `${pluginClassName} is configured twice: by @FrontMcp({ ${serverOption} }) and by an ${pluginClassName} entry ` +
+        `in @FrontMcp({ plugins }). Configure it in one place: move the entry's options to ${serverOption} and ` +
+        `remove the entry, or remove ${serverOption}.`,
+      'PLUGIN_CONFIGURED_TWICE',
+      500,
+    );
+  }
+}

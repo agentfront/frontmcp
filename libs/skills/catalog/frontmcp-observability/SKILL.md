@@ -79,6 +79,8 @@ This enables auto-tracing for all SDK flows. Add structured logging:
 })
 ```
 
+`observability` installs `ObservabilityPlugin` for you, so don't also list `ObservabilityPlugin.init()` in `@FrontMcp({ plugins })`. A server that does both fails at startup with `PluginConfiguredTwiceError` (code `PLUGIN_CONFIGURED_TWICE`): `ObservabilityPlugin is configured twice: by @FrontMcp({ observability }) and by an ObservabilityPlugin entry in @FrontMcp({ plugins }).` Move the entry's options to `observability` and remove the entry; only `observability` also connects the logging sinks to the server's logger. Up to 1.11.0 the server started anyway, and the entry's options could be dropped for the ones `observability` gives.
+
 ## Step 3: Read the Relevant Reference
 
 Follow the scenario routing table above to find the right reference for your use case.
@@ -143,15 +145,16 @@ Follow the scenario routing table above to find the right reference for your use
 
 ## Troubleshooting
 
-| Problem                                          | Cause                                                         | Solution                                                                                                                  |
-| ------------------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `this.telemetry` is undefined in a tool          | `observability` not enabled on the parent `@FrontMcp` config  | Set `observability: true` (or a config object) in the `@FrontMcp` decorator; see `tracing-setup`                          |
-| `Property 'telemetry' does not exist` (TS2339)   | `@frontmcp/observability` is not part of the compilation      | Add `import type {} from '@frontmcp/observability'` where you use it (or once in the server entry); see `telemetry-api`   |
-| Spans appear without `trace_id` in logs          | Logger not connected to `StructuredLogTransport`              | Use `this.logger`, not `console`; see `structured-logging`                                                                |
-| OTLP exporter silently drops spans               | Endpoint URL points at the UI, not the OTLP collector         | Use the OTLP HTTP/gRPC ingest endpoint exposed by your vendor (Datadog, Coralogix, Logz, etc.); see `vendor-integrations` |
-| Real session ID appears in span attributes       | A custom span attribute writes `session.id` directly          | Use the SDK-provided `mcp.session.id` (already hashed); never log the raw session token                                   |
-| Tests randomly fail with leftover spans          | Exporter retained between tests                               | Reset the in-memory exporter in `afterEach`; see `testing-observability`                                                  |
-| OTel auto-instrumentation double-traces requests | Both `setupOTel()` AND a vendor agent attached to the process | Pick one: either FrontMCP-managed OTel OR the vendor agent — not both                                                     |
+| Problem                                          | Cause                                                                   | Solution                                                                                                                  |
+| ------------------------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `this.telemetry` is undefined in a tool          | `observability` not enabled on the parent `@FrontMcp` config            | Set `observability: true` (or a config object) in the `@FrontMcp` decorator; see `tracing-setup`                          |
+| `Property 'telemetry' does not exist` (TS2339)   | `@frontmcp/observability` is not part of the compilation                | Add `import type {} from '@frontmcp/observability'` where you use it (or once in the server entry); see `telemetry-api`   |
+| Spans appear without `trace_id` in logs          | Logger not connected to `StructuredLogTransport`                        | Use `this.logger`, not `console`; see `structured-logging`                                                                |
+| OTLP exporter silently drops spans               | Endpoint URL points at the UI, not the OTLP collector                   | Use the OTLP HTTP/gRPC ingest endpoint exposed by your vendor (Datadog, Coralogix, Logz, etc.); see `vendor-integrations` |
+| Real session ID appears in span attributes       | A custom span attribute writes `session.id` directly                    | Use the SDK-provided `mcp.session.id` (already hashed); never log the raw session token                                   |
+| Tests randomly fail with leftover spans          | Exporter retained between tests                                         | Reset the in-memory exporter in `afterEach`; see `testing-observability`                                                  |
+| OTel auto-instrumentation double-traces requests | Both `setupOTel()` AND a vendor agent attached to the process           | Pick one: either FrontMCP-managed OTel OR the vendor agent — not both                                                     |
+| Startup fails with `PLUGIN_CONFIGURED_TWICE`     | `observability` is set and `ObservabilityPlugin` is listed in `plugins` | Configure it in one place: move the entry's options to `observability` and remove the entry                               |
 
 ## Examples
 
