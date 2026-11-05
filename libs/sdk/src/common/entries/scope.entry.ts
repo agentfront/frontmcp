@@ -201,15 +201,23 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
 
   /**
    * Add a check to the server's `/readyz` readiness probe, run with the built-in ones and the
-   * `health.probes` the server configures. Plugins call it while the server starts, from a provider
-   * factory: the health service takes the checks registered by the time the scope is ready.
+   * `health.probes` the server configures. A check added at any time, while the server starts or after it,
+   * runs from the next `/readyz` on; a check already running finishes with the checks it started with.
+   * Two checks with one name both run, and `/readyz` shows the later one's result.
+   *
+   * @returns A function that removes the check.
    */
-  registerHealthProbe(probe: HealthProbeDefinition): void {
-    this.addedHealthProbes.push(probe);
+  registerHealthProbe(probe: HealthProbeDefinition): () => void {
+    const registration: HealthProbeDefinition = { name: probe.name, check: () => probe.check() };
+    this.addedHealthProbes.push(registration);
+    return () => {
+      const index = this.addedHealthProbes.indexOf(registration);
+      if (index !== -1) this.addedHealthProbes.splice(index, 1);
+    };
   }
 
   /**
-   * The checks added with registerHealthProbe().
+   * The checks added with registerHealthProbe() and not removed. The health service reads it at every check.
    * @internal
    */
   get healthProbes(): readonly HealthProbeDefinition[] {

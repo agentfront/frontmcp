@@ -334,9 +334,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       const { HealthService } = await import('../health/index.js');
       const composite = new HealthService(healthConfig, this.config.info);
       for (const scopeService of scopeServices) {
-        for (const probe of scopeService.getProbes()) {
-          composite.registerProbe(probe);
-        }
+        composite.registerProbeSource(() => scopeService.getProbes());
       }
       // Use the primary scope's catalog view (catalog is scope-level; probes are aggregated)
       const primaryScope = this.getPrimaryScope() as Scope | undefined;
