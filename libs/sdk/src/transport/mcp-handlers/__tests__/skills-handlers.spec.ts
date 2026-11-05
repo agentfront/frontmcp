@@ -332,7 +332,9 @@ describe('Skills MCP Handlers', () => {
       // When format is 'instructions-only', inputSchema should not be included
       expect(result.skills[0].tools[0].inputSchema).toBeUndefined();
       expect(result.skills[0].instructions).toBe('Do the thing');
-      expect(result.skills[0].formattedContent).toBeUndefined();
+      expect(result.skills[0].formattedContent).not.toContain('Input Schema');
+      expect(result.skills[0].formattedContent).not.toContain('"foo"');
+      expect(result.skills[0].formattedContent).toContain('Do the thing');
     });
   });
 

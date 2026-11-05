@@ -214,10 +214,11 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
     const { loadResults = [], warnings = [], format, activateSession } = this.state.required;
 
     const toolRegistry = this.scope.tools;
-    const asMarkdown = format === 'markdown';
-    const withSchemas = format === 'full';
+    const markdownOnly = format === 'markdown';
+    const markdownWithSchemas = format !== 'instructions-only';
+    const toolsWithSchemas = format === 'full';
     const toolsByName = new Map(
-      withSchemas && toolRegistry ? toolRegistry.getTools(false).map((t) => [t.name, t]) : [],
+      toolsWithSchemas && toolRegistry ? toolRegistry.getTools(false).map((t) => [t.name, t]) : [],
     );
     const allToolNames = new Set<string>();
     let allToolsAvailable = true;
@@ -229,7 +230,7 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
 
       const tools = skill.tools.map(({ name, purpose }) => {
         const available = availableTools.includes(name);
-        const toolEntry = withSchemas && available ? toolsByName.get(name) : undefined;
+        const toolEntry = toolsWithSchemas && available ? toolsByName.get(name) : undefined;
         return { name, purpose, available, ...(toolEntry && { inputSchema: toolEntry.getInputJsonSchema() }) };
       });
       const session = activationResult
@@ -241,12 +242,8 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
           }
         : { activated: false };
 
-      const content = asMarkdown
-        ? {
-            formattedContent: toolRegistry
-              ? formatSkillForLLMWithSchemas(skill, availableTools, missingTools, toolRegistry)
-              : formatSkillForLLM(skill, availableTools, missingTools),
-          }
+      const fields = markdownOnly
+        ? {}
         : {
             instructions: skill.instructions,
             parameters: skill.parameters?.map(({ name, description, required, type }) => ({
@@ -262,10 +259,14 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
         name: skill.name,
         description: skill.description ?? '',
         tools,
-        ...content,
+        ...fields,
         availableTools,
         missingTools,
         isComplete,
+        formattedContent:
+          toolRegistry && markdownWithSchemas
+            ? formatSkillForLLMWithSchemas(skill, availableTools, missingTools, toolRegistry)
+            : formatSkillForLLM(skill, availableTools, missingTools),
         session: activateSession ? session : undefined,
       };
     });
@@ -280,7 +281,7 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
       },
       nextSteps:
         skills.length > 0
-          ? `Loaded ${skills.length} skill(s). Follow ${asMarkdown ? 'each formattedContent' : 'the instructions'} to complete the task.`
+          ? `Loaded ${skills.length} skill(s). Follow ${markdownOnly ? 'each formattedContent' : 'the instructions'} to complete the task.`
           : 'No skills were loaded. Check the skill IDs and try again.',
     });
     this.logger.verbose('finalize:done');

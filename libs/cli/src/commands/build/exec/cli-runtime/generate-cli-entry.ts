@@ -868,7 +868,7 @@ skillsCmd
   .action(async function(ids) {
     try {
       var client = await getClient();
-      var result = await client.loadSkills(ids);
+      var result = await client.loadSkills(ids, { format: 'markdown' });
       var loaded = result.skills || [];
       var mode = program.opts().output || 'text';
       if (mode === 'json') {

@@ -127,7 +127,11 @@ ran in-process.
 On a server without the Skilled OpenAPI plugin, `<bin> skills read <name>` and
 `<bin> skills load <ids...>` exit 1 when a skill is not found, and name it on
 stderr; `skills load` prints how many of the requested skills it loaded. Up to
-1.11.0 both exited 0.
+1.11.0 both exited 0. `skills load` loads with the `skills/load` format
+`'markdown'`, so it prints each skill once, in `formattedContent`, without
+`instructions`, `parameters` or tool schemas beside it (up to 1.11.0 it printed
+them twice, as fields and in `formattedContent`). `skills read` prints the
+skill's instructions and tools, as before.
 
 ### Skilled OpenAPI commands
 

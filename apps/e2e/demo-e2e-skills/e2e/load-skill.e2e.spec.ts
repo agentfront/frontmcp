@@ -37,7 +37,7 @@ interface SkillResult {
   missingTools: string[];
   isComplete: boolean;
   warning?: string;
-  formattedContent?: string;
+  formattedContent: string;
 }
 
 interface LoadSkillsResult {
@@ -90,10 +90,9 @@ test.describe('loadSkills E2E', () => {
       expect(skill.instructions).toContain('github_add_comment');
     });
 
-    test('should include formatted content for LLM with the markdown format', async ({ mcp }) => {
+    test('should include formatted content for LLM', async ({ mcp }) => {
       const result = await loadSkills(mcp, {
         skillIds: ['review-pr'],
-        format: 'markdown',
       });
 
       expect(result).toBeDefined();
@@ -101,7 +100,7 @@ test.describe('loadSkills E2E', () => {
       const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       expect(typeof skill.formattedContent).toBe('string');
-      expect(skill.formattedContent?.length).toBeGreaterThan(0);
+      expect(skill.formattedContent).toContain('PR Review Process');
     });
   });
 
@@ -258,7 +257,7 @@ test.describe('loadSkills E2E', () => {
       const skill = content.skills[0];
       expect(skill.id).toBeDefined();
       expect(skill.instructions).toContain('PR Review Process');
-      expect(skill.formattedContent).toBeUndefined();
+      expect(skill.formattedContent).toContain('PR Review Process');
     });
 
     test('should return instructions-only format when requested', async ({ mcp }) => {
@@ -273,7 +272,20 @@ test.describe('loadSkills E2E', () => {
       const skill = content.skills[0];
       expect(skill.instructions).toContain('PR Review Process');
       expect(skill.tools.every((tool) => tool.inputSchema === undefined)).toBe(true);
-      expect(skill.formattedContent).toBeUndefined();
+      expect(skill.formattedContent).toContain('PR Review Process');
+      expect(skill.formattedContent).not.toContain('Input Schema');
+    });
+
+    test('should return the markdown format, without the instructions field, when requested', async ({ mcp }) => {
+      const result = await loadSkills(mcp, {
+        skillIds: ['review-pr'],
+        format: 'markdown',
+      });
+
+      const skill = (result as LoadSkillsResult).skills[0];
+      expect(skill.formattedContent).toContain('PR Review Process');
+      expect(skill.instructions).toBeUndefined();
+      expect(skill.parameters).toBeUndefined();
     });
   });
 

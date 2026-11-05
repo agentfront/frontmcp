@@ -176,15 +176,15 @@ In `'strict'` mode the server refuses to start, with `SkillValidationError: Skil
 
 When a caller loads the skill (`skills/load`, the `skills:load` flow, `GET /skills/{id}`, `/llm_full.txt`), a referenced tool that `availableWhen.surface` doesn't offer that caller (an agent-only tool, for an MCP client) is reported as missing, without its input schema, just as `tools/list` leaves it out. The same skill loaded by an agent lists it as available.
 
-`skills/load` sends each part of a skill once, as its `format` asks:
+`skills/load` sends what its `format` asks:
 
-| `format`              | Sent                                                                                         |
-| --------------------- | -------------------------------------------------------------------------------------------- |
-| `'full'` (default)    | `instructions`, `parameters`, and each available tool's `inputSchema` in `tools[]`           |
-| `'markdown'`          | `formattedContent`, a markdown rendering of the skill that holds all of them, in their place |
-| `'instructions-only'` | `instructions` and `parameters`, with no tool schemas                                        |
+| `format`              | Sent                                                                                                                                               |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'full'` (default)    | `instructions`, `parameters`, each available tool's `inputSchema` in `tools[]`, and `formattedContent`, a markdown rendering that holds them again |
+| `'markdown'`          | `formattedContent` alone: no `instructions`, `parameters` or tool schemas beside it, so each part of the skill is sent once                        |
+| `'instructions-only'` | `instructions`, `parameters` and `formattedContent`, with no tool schemas in either                                                                |
 
-Up to 1.11.0 every format sent `formattedContent` too, so the instructions and the tool schemas went twice.
+A client that hands the result to a model asks for `format: 'markdown'` to pay for each part once (new in 1.11.1; a 1.11.0 server refuses it). `DirectClient.loadSkills()` types `instructions` and `formattedContent` as `string` for the default and `'instructions-only'`, and leaves `instructions` out for `'markdown'`. 1.11.1-rc.1 left `formattedContent` out of the default and of `'instructions-only'`; 1.11.1 sends it, as 1.11.0 did. Up to 1.11.0, `'instructions-only'` still carried the tool schemas in `formattedContent`.
 
 ## Instruction Sources
 
