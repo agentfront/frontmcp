@@ -37,6 +37,21 @@ export type ProviderVerifyRef = {
   jwks?: JSONWebKeySet; // optional inline keys (prioritized)
 };
 
+/**
+ * Which check refused a token, for the server's own logs and health checks. Never answer a caller with it: a caller
+ * learns only that its token was refused.
+ */
+export type TokenVerifyFailure =
+  | 'jwks_unavailable'
+  | 'malformed'
+  | 'unsupported_algorithm'
+  | 'unknown_key'
+  | 'bad_signature'
+  | 'missing_claim'
+  | 'wrong_issuer'
+  | 'not_yet_valid'
+  | 'expired';
+
 export type VerifyResult = {
   ok: boolean;
   issuer?: string;
@@ -45,4 +60,6 @@ export type VerifyResult = {
   header?: Record<string, unknown>;
   payload?: Record<string, unknown>;
   error?: string;
+  /** Set on a refusal: which check refused the token, or `jwks_unavailable` when no provider had keys to check it. */
+  failure?: TokenVerifyFailure;
 };

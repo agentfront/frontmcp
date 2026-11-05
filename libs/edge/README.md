@@ -150,7 +150,7 @@ Bundles only move forward: a pulled or pushed bundle older than the one the isol
 A Cron run fails (`scheduled()` throws, so Cloudflare logs the run as an exception and counts it as a failed invocation) when its sync leaves an older bundle serving:
 
 - **The bundle it pulled was not applied**: its signature or its other checks failed, or it is older than the one served. The error names it: `[frontmcp/edge] Cron refresh: bundle billing@4.2.0 was not applied: digest mismatch (...)`.
-- **The pull failed**: `[frontmcp/edge] Cron refresh: the bundle pull failed: pull responded 503`. When the run started the isolate, which then serves the cached bundle, it says `the bundle pull failed, so the cached bundle serves`.
+- **The pull failed**: `[frontmcp/edge] Cron refresh: the bundle pull failed: pull responded 503`. When the run started the isolate, which then serves the cached bundle, it says `the bundle pull failed, so the cached bundle serves`. A pull that failed on its token names the check: `the bundle pull failed (token check: expired): ...`, as `lastSync.tokenFailure` does in `/readyz`.
 
 Up to 1.11.0, such a run reported success. A run whose pull applies a bundle, or pulls the one served, succeeds.
 
@@ -183,6 +183,8 @@ Content-Type: application/json
 | `409`  | `{ "error": "bundle_outdated" }`: the bundle is older than the one being served, which stays              |
 | `422`  | `{ "error": "bundle_not_applied" }`: the signature or the bundle's checks failed; the served bundle stays |
 | `503`  | `{ "error": "temporarily_unavailable" }`: the JWKS could not be read, or the `jti` could not be recorded  |
+
+A refused token answers the same `401` whatever check refused it. Only the log names it: `[saas-source] push refused (wrong_issuer): ...`, or `bundle push not checked (jwks_unavailable): ...` for a `503`.
 
 The endpoint is a hookable flow, `skilled-openapi:bundle-push`, behind the same IP filter and rate limit as the server's other HTTP flows.
 

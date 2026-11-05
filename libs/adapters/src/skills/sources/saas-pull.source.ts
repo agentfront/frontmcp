@@ -18,6 +18,7 @@ import type {
   BundlePushReceiver,
   BundleSourceDeps,
   BundleSourceListener,
+  BundleTokenFailure,
   SkillBundleSource,
 } from './skill-bundle-source.interface';
 
@@ -34,9 +35,22 @@ const MAX_LISTED_ISSUES = 3;
  * bundle: the configured SaaS is not the one the server was set up to trust.
  */
 export class SaasPullTokenRejectedError extends Error {
-  constructor(reason: string) {
+  constructor(
+    reason: string,
+    readonly tokenFailure: BundleTokenFailure,
+  ) {
     super(`[saas-source] pull token rejected: ${reason}`);
     this.name = 'SaasPullTokenRejectedError';
+  }
+}
+
+/** The issuer's JWKS could not be read, or holds no usable signing key: no token can be checked, an outage. */
+export class SaasJwksUnavailableError extends Error {
+  readonly tokenFailure = 'jwks_unavailable';
+
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'SaasJwksUnavailableError';
   }
 }
 
@@ -49,13 +63,26 @@ export class SaasPushRefusedError extends Error {
   constructor(
     readonly refusal: 'invalid-token' | 'replayed' | 'replay-unchecked',
     reason: string,
+    /** The check that refused the token, when the issuer's checks did rather than the replay guard. */
+    readonly tokenFailure?: BundleTokenFailure,
   ) {
-    super(`[saas-source] push refused: ${reason}`);
+    super(`[saas-source] push refused${tokenFailure ? ` (${tokenFailure})` : ''}: ${reason}`);
     this.name = 'SaasPushRefusedError';
   }
 }
 
-type TokenVerdict = { ok: true; claims: Record<string, unknown> } | { ok: false; reason: string };
+/** The token check a pull or push failed on, from the error it threw; undefined for any other failure. */
+export function tokenFailureOf(error: unknown): BundleTokenFailure | undefined {
+  if (error instanceof SaasPullTokenRejectedError || error instanceof SaasJwksUnavailableError) {
+    return error.tokenFailure;
+  }
+  if (error instanceof SaasPushRefusedError) return error.tokenFailure;
+  return error instanceof Error && error.cause !== undefined ? tokenFailureOf(error.cause) : undefined;
+}
+
+type TokenVerdict =
+  | { ok: true; claims: Record<string, unknown> }
+  | { ok: false; reason: string; tokenFailure: BundleTokenFailure };
 
 /** The key prefix of the push token `jti`s a shared replay store keeps, followed by the source's audience. */
 const PUSH_JTI_NAMESPACE = 'frontmcp:skilled-openapi:push-jti';
@@ -96,6 +123,7 @@ function isUsableSigningKey(key: unknown): boolean {
   const jwk = key as Record<string, unknown>;
   const members = typeof jwk['kty'] === 'string' ? PUBLIC_KEY_MEMBERS.get(jwk['kty']) : undefined;
   if (!members || (jwk['use'] !== undefined && jwk['use'] !== 'sig')) return false;
+  if (Array.isArray(jwk['key_ops']) && !jwk['key_ops'].includes('verify')) return false;
   return members.every((m) => typeof jwk[m] === 'string' && jwk[m] !== '');
 }
 
@@ -176,8 +204,8 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
   /**
    * Check the token of a pushed bundle: by the rules the pull token passes (a key in `jwksUrl`, `iss`, `aud`,
    * `resource`, expiry), then by the replay guard, so its `iat` must be within five minutes and its `jti` unused by
-   * every instance sharing the replay store. Throws {@link SaasPushRefusedError}, or a plain Error when the JWKS can't
-   * be read.
+   * every instance sharing the replay store. Throws {@link SaasPushRefusedError}, or {@link SaasJwksUnavailableError}
+   * when the JWKS can't be read.
    */
   async verifyPushToken(token: string): Promise<void> {
     if (!this.replayGuard) {
@@ -187,10 +215,10 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
       );
     }
     const verdict = await this.verifyIssuedToken(token, await this.signingKeysForPush());
-    if (!verdict.ok) throw new SaasPushRefusedError('invalid-token', verdict.reason);
+    if (!verdict.ok) throw new SaasPushRefusedError('invalid-token', verdict.reason, verdict.tokenFailure);
     const { iat, jti } = verdict.claims;
     if (typeof iat !== 'number' || typeof jti !== 'string') {
-      throw new SaasPushRefusedError('invalid-token', 'a push token needs "iat" and "jti" claims');
+      throw new SaasPushRefusedError('invalid-token', 'a push token needs "iat" and "jti" claims', 'missing_claim');
     }
     const replay = await this.replayGuard.check({ timestampMs: iat * 1000, nonce: jti });
     if (!replay.ok) {
@@ -235,7 +263,7 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
         );
       }
       this.logger.warn(`[saas-source] using cached bundle "${bundle.bundleId}@${bundle.version}"`);
-      await this.notify(bundle, { pullFailure: failure });
+      await this.notify(bundle, { pullFailure: failure, tokenFailure: tokenFailureOf(e) });
       return;
     }
     await this.notify(bundle);
@@ -330,7 +358,7 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
       } else {
         this.logger.warn(`[saas-source] poll failed: ${failure}`);
       }
-      this.notifyPullFailure(failure);
+      this.notifyPullFailure(failure, tokenFailureOf(e));
     } finally {
       this.schedulePoll();
     }
@@ -358,13 +386,19 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
   }
 
   /**
-   * Verify the pinned pull token against the issuer's JWKS, issuer and audience.
-   * Throws {@link SaasPullTokenRejectedError} when the token is refused, and a
-   * plain Error when the JWKS can't be fetched (an outage).
+   * Verify the pinned pull token against the issuer's JWKS, issuer and audience, and log the check it fails on.
+   * Throws {@link SaasPullTokenRejectedError} when the token is refused, and {@link SaasJwksUnavailableError} when
+   * the JWKS can't be fetched (an outage).
    */
   private async verifyPullToken(): Promise<void> {
-    const verdict = await this.verifyIssuedToken(this.options.authToken, await this.fetchSigningKeys());
-    if (!verdict.ok) throw new SaasPullTokenRejectedError(verdict.reason);
+    try {
+      const verdict = await this.verifyIssuedToken(this.options.authToken, await this.fetchSigningKeys());
+      if (!verdict.ok) throw new SaasPullTokenRejectedError(verdict.reason, verdict.tokenFailure);
+    } catch (error) {
+      const tokenFailure = tokenFailureOf(error);
+      if (tokenFailure) this.logger.warn(`[saas-source] ${this.id}: pull token check failed (${tokenFailure})`);
+      throw error;
+    }
   }
 
   /**
@@ -388,25 +422,30 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
   private async fetchSigningKeys(): Promise<unknown[]> {
     const { jwksUrl } = this.options;
     // The JWKS is public: never send the pull token with it.
-    const { status, body } = await this.httpGet(jwksUrl, { Accept: 'application/json', 'User-Agent': USER_AGENT });
+    const { status, body } = await this.httpGet(jwksUrl, {
+      Accept: 'application/json',
+      'User-Agent': USER_AGENT,
+    }).catch((error: unknown) => {
+      throw new SaasJwksUnavailableError(describePullFailure(error), { cause: error });
+    });
     if (status < 200 || status >= 300) {
-      throw new Error(`JWKS ${jwksUrl} responded ${status}`);
+      throw new SaasJwksUnavailableError(`JWKS ${jwksUrl} responded ${status}`);
     }
     let jwks: JSONWebKeySet;
     try {
       jwks = JSON.parse(body) as JSONWebKeySet;
     } catch {
-      throw new Error(`JWKS ${jwksUrl} is not valid JSON`);
+      throw new SaasJwksUnavailableError(`JWKS ${jwksUrl} is not valid JSON`);
     }
     if (!jwks || !Array.isArray(jwks.keys) || jwks.keys.length === 0) {
-      throw new Error(`JWKS ${jwksUrl} has no keys`);
+      throw new SaasJwksUnavailableError(`JWKS ${jwksUrl} has no keys`);
     }
     // A JWKS with no key that could verify a token says nothing about the token: treat it like an
     // unreachable JWKS (a pull failure), and keep SaasPullTokenRejectedError for a token that a
     // usable key set refuses.
     const signingKeys = (jwks.keys as unknown[]).filter(isUsableSigningKey);
     if (signingKeys.length === 0) {
-      throw new Error(`JWKS ${jwksUrl} has no usable signing keys`);
+      throw new SaasJwksUnavailableError(`JWKS ${jwksUrl} has no usable signing keys`);
     }
     return signingKeys;
   }
@@ -421,16 +460,25 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
       return {
         ok: false,
         reason: `not a valid token from issuer "${expectedIssuer}" signed by a key in ${jwksUrl} (${verified.error ?? 'verification failed'})`,
+        tokenFailure: verified.failure ?? 'malformed',
       };
     }
     const payload = verified.payload;
     if (!claimValues(payload['aud']).includes(expectedAudience)) {
-      return { ok: false, reason: `its "aud" claim does not include "${expectedAudience}"` };
+      return {
+        ok: false,
+        reason: `its "aud" claim does not include "${expectedAudience}"`,
+        tokenFailure: 'wrong_audience',
+      };
     }
     // RFC 8707: a token that names its resource must name this audience too.
     const resource = claimValues(payload['resource']);
     if (resource.length > 0 && !resource.includes(expectedAudience)) {
-      return { ok: false, reason: `its "resource" claim does not include "${expectedAudience}"` };
+      return {
+        ok: false,
+        reason: `its "resource" claim does not include "${expectedAudience}"`,
+        tokenFailure: 'wrong_audience',
+      };
     }
     return { ok: true, claims: payload };
   }
@@ -506,10 +554,10 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
     }
   }
 
-  private notifyPullFailure(reason: string): void {
+  private notifyPullFailure(reason: string, tokenFailure: BundleTokenFailure | undefined): void {
     for (const listener of this.pullFailureListeners) {
       try {
-        listener(reason);
+        listener(reason, tokenFailure);
       } catch (e) {
         this.logger.warn(`[saas-source] pull failure listener threw: ${(e as Error).message}`);
       }

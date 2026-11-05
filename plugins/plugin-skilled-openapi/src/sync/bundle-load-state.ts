@@ -1,6 +1,6 @@
 // file: plugins/plugin-skilled-openapi/src/sync/bundle-load-state.ts
 
-import { OverlayParseError } from '@frontmcp/adapters/skills';
+import { OverlayParseError, type BundleTokenFailure } from '@frontmcp/adapters/skills';
 import type { HealthProbeResult } from '@frontmcp/sdk';
 
 /** Whether the plugin serves a bundle: one is loaded, loading failed with none loaded, or the first load hasn't finished. */
@@ -12,12 +12,13 @@ export type BundleLoadState =
 /**
  * What the last bundle sync came to, and when: the bundle a pull or a push brought was applied, was the one already
  * served, or was refused; or a pull failed, and `cacheFallback` says the source served its cached bundle instead. The
- * reasons are as clients may read them ({@link publicLoadFailureReason}).
+ * reasons are as clients may read them ({@link publicLoadFailureReason}). `tokenFailure` names the check a pull token
+ * failed, for operators.
  */
 export type BundleSyncOutcome =
   | { status: 'applied' | 'unchanged'; bundleId: string; bundleVersion: string; at: string }
   | { status: 'refused'; bundleId: string; bundleVersion: string; reason: string; at: string }
-  | { status: 'failed'; reason: string; cacheFallback: boolean; at: string };
+  | { status: 'failed'; reason: string; tokenFailure?: BundleTokenFailure; cacheFallback: boolean; at: string };
 
 /** Whether a sync left the server serving the bundle its source or a push brought. */
 function isUpToDate(outcome: BundleSyncOutcome): boolean {
@@ -60,6 +61,7 @@ function urlWithoutSecrets(text: string): string {
 /**
  * The plugin's `/readyz` check: ready once a bundle is loaded, not ready while loading has failed. While the last sync
  * was refused or failed, the bundle served is stale: the check is `degraded`, which keeps the server ready, and names it.
+ * A failed check carries the last sync too, so its `tokenFailure` shows.
  */
 export function bundleHealth(state: BundleLoadState, lastSync?: BundleSyncOutcome): HealthProbeResult {
   switch (state.status) {
@@ -69,7 +71,11 @@ export function bundleHealth(state: BundleLoadState, lastSync?: BundleSyncOutcom
       return { status: 'degraded', details: { state: 'stale', ...served, lastSync } };
     }
     case 'failed':
-      return { status: 'unhealthy', details: { state: 'failed' }, error: `no skill bundle is loaded: ${state.reason}` };
+      return {
+        status: 'unhealthy',
+        details: { state: 'failed', lastSync },
+        error: `no skill bundle is loaded: ${state.reason}`,
+      };
     case 'loading':
       return { status: 'degraded', details: { state: 'loading' } };
   }

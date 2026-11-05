@@ -169,6 +169,16 @@ pulled, and the KV cache is **not** used in its place. An unreachable JWKS, or
 one with no usable signing key (no RSA, EC or OKP public key for signatures),
 counts as an ordinary pull failure, so the cache fallback still applies.
 
+The log and `/readyz` name the check that failed, as `tokenFailure`: `expired`,
+`not_yet_valid`, `wrong_issuer`, `wrong_audience`, `unknown_key` (a `kid` the
+JWKS doesn't publish), `bad_signature`, `unsupported_algorithm`,
+`missing_claim`, `malformed`, or `jwks_unavailable` (not checked: the JWKS
+couldn't be read). A pull logs `[saas-source] saas:<endpoint>: pull token check
+failed (expired)` at warn level, never the token; the check has it in
+`details.lastSync.tokenFailure`, and a failed Cron run's error says
+`the bundle pull failed (token check: expired): …`. The tools'
+`SKILL_BUNDLE_NOT_LOADED` reason doesn't name it.
+
 On a Worker, the outbound check of each operation call resolves the API's host
 with workerd's `node:dns`, which asks DNS over HTTPS (`cloudflare-dns.com`): the
 host must resolve publicly, and a name that resolves to a private address is
@@ -198,8 +208,11 @@ HTTP flow). The request:
 | `422`  | `bundle_not_applied`: the signature or the bundle's checks failed; the served bundle stays |
 | `503`  | `temporarily_unavailable`: the JWKS could not be read, or the `jti` could not be recorded  |
 
-A pushed bundle is applied after the first pull and after bundles already
-queued, so a push and a Cron refresh never apply at once.
+A refused push token answers the same `401` whatever check refused it; only
+the log names it: `[saas-source] push refused (wrong_issuer): …`, or
+`bundle push not checked (jwks_unavailable): …` for the `503`. A pushed bundle
+is applied after the first pull and after bundles already queued, so a push and
+a Cron refresh never apply at once.
 
 The replay guard keeps the `jti`s in a Durable Object that every isolate and
 replica of the Worker reaches, so a push replayed to another isolate is refused

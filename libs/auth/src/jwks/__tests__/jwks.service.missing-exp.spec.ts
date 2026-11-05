@@ -29,7 +29,7 @@ describe('JwksService.verifyTransparentToken — missing exp', () => {
       { id: 'idp', issuerUrl: ISSUER, jwks: key.jwks },
     ]);
 
-    expect(result).toEqual({ ok: false, error: 'missing required "exp" claim' });
+    expect(result).toEqual({ ok: false, error: 'missing required "exp" claim', failure: 'missing_claim' });
   });
 
   it('names it when a second provider is configured too', async () => {
@@ -54,7 +54,7 @@ describe('JwksService.verifyTransparentToken — missing exp', () => {
       { id: 'idp', issuerUrl: ISSUER, jwks: key.jwks },
     ]);
 
-    expect(result).toEqual({ ok: false, error: 'no_provider_verified (kid=k1)' });
+    expect(result).toEqual({ ok: false, error: 'no_provider_verified (kid=k1)', failure: 'bad_signature' });
   });
 
   it('still verifies a token with exp', async () => {

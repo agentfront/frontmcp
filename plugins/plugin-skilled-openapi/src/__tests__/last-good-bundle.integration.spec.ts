@@ -21,6 +21,7 @@ interface PullingServer {
 describe('the last good bundle of a saas source', () => {
   let issuer: Awaited<ReturnType<typeof tokenIssuer>>;
   let published: ResolvedBundle | 'outage';
+  let jwksAvailable = true;
   let fetchMock: jest.SpyInstance;
   let pulls = 0;
   let storedBundle: ResolvedBundle | undefined;
@@ -33,8 +34,14 @@ describe('the last good bundle of a saas source', () => {
     },
   };
 
-  /** Build a server; unless `cold`, a first request has started its bundle sync. No instructions budget starts it. */
-  async function startServer({ cold = false } = {}): Promise<PullingServer> {
+  /**
+   * Build a server that pulls with `authToken`, by default one the issuer signed for it; unless `cold`, a first request
+   * has started its bundle sync. No instructions budget starts it.
+   */
+  async function startServer({
+    cold = false,
+    authToken,
+  }: { cold?: boolean; authToken?: string } = {}): Promise<PullingServer> {
     let refresher: { refresh(): Promise<BundleSyncOutcome> } | undefined;
     const runtimeDeps: SkilledOpenApiRuntimeDeps = {
       cache,
@@ -54,7 +61,7 @@ describe('the last good bundle of a saas source', () => {
           source: {
             type: 'saas',
             endpoint: ENDPOINT,
-            authToken: await issuer.sign({}),
+            authToken: authToken ?? (await issuer.sign({})),
             expectedAudience: AUDIENCE,
             jwksUrl: JWKS_URL,
             expectedIssuer: ISSUER,
@@ -85,7 +92,10 @@ describe('the last good bundle of a saas source', () => {
     issuer = await tokenIssuer('cloud-2026');
     fetchMock = jest.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
-      if (url === JWKS_URL) return Response.json(issuer.jwks);
+      if (url === JWKS_URL) {
+        if (!jwksAvailable) throw new TypeError('fetch failed');
+        return Response.json(issuer.jwks);
+      }
       if (url !== ENDPOINT) return new Response('not found', { status: 404 });
       if (published === 'outage') throw new TypeError('fetch failed');
       pulls++;
@@ -174,5 +184,36 @@ describe('the last good bundle of a saas source', () => {
     expect(cold.servedVersion()).toBe('5.0.0');
     expect(keptVersions.at(-1)).toBe('5.0.0');
     expect(pulls - pullsBefore).toBe(2);
+  });
+
+  it('names the check that refused the pull token in its check, and keeps the reason clients read as it was', async () => {
+    published = signed(bundle('6.0.0', ['invoices']));
+
+    const refused = await startServer({ authToken: await issuer.sign({ iss: 'https://impostor.example' }) });
+    const check = await refused.health();
+
+    expect(refused.servedVersion()).toBeUndefined();
+    expect(check).toMatchObject({
+      status: 'unhealthy',
+      details: { state: 'failed', lastSync: { status: 'failed', tokenFailure: 'wrong_issuer', cacheFallback: false } },
+    });
+    expect(check?.error).toMatch(/^no skill bundle is loaded: \[saas-source\] pull token rejected: not a valid token/);
+    expect(check?.error).not.toContain('wrong_issuer');
+  });
+
+  it('names jwks_unavailable when a refresh cannot read the JWKS, and stays ready on the bundle it serves', async () => {
+    jwksAvailable = false;
+
+    try {
+      const outcome = await server.refresh();
+
+      expect(outcome).toMatchObject({ status: 'failed', reason: 'fetch failed', tokenFailure: 'jwks_unavailable' });
+      expect(await server.health()).toMatchObject({
+        status: 'degraded',
+        details: { state: 'stale', lastSync: { tokenFailure: 'jwks_unavailable' } },
+      });
+    } finally {
+      jwksAvailable = true;
+    }
   });
 });

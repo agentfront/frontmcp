@@ -14,7 +14,12 @@ import {
 import { resolveAndCheckHostname } from '../cimd/cimd.validator';
 import { noopAuthLogger, type AuthLogger } from '../common/auth-logger.interface';
 import { loadJose } from './jose.loader';
-import { type JwksServiceOptions, type ProviderVerifyRef, type VerifyResult } from './jwks.types';
+import {
+  type JwksServiceOptions,
+  type ProviderVerifyRef,
+  type TokenVerifyFailure,
+  type VerifyResult,
+} from './jwks.types';
 import { normalizeIssuer, trimSlash } from './jwks.utils';
 
 /**
@@ -55,6 +60,50 @@ function isMissingExpError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
   const { code, claim, reason } = error as { code?: unknown; claim?: unknown; reason?: unknown };
   return code === 'ERR_JWT_CLAIM_VALIDATION_FAILED' && claim === 'exp' && reason === 'missing';
+}
+
+/** Each failure in the order `jose` reaches its check: a later one means more of the token checked out. */
+const FAILURE_DEPTH: readonly TokenVerifyFailure[] = [
+  'jwks_unavailable',
+  'malformed',
+  'unsupported_algorithm',
+  'unknown_key',
+  'bad_signature',
+  'missing_claim',
+  'wrong_issuer',
+  'not_yet_valid',
+  'expired',
+];
+
+/** Which check refused a token, from the error `jose` threw. */
+function tokenVerifyFailureOf(error: unknown): TokenVerifyFailure {
+  const { code, claim, reason } = (typeof error === 'object' && error !== null ? error : {}) as {
+    code?: unknown;
+    claim?: unknown;
+    reason?: unknown;
+  };
+  switch (code) {
+    case 'ERR_JWT_EXPIRED':
+      return 'expired';
+    case 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED':
+      return 'bad_signature';
+    case 'ERR_JWKS_NO_MATCHING_KEY':
+      return 'unknown_key';
+    case 'ERR_JOSE_ALG_NOT_ALLOWED':
+    case 'ERR_JOSE_NOT_SUPPORTED':
+      return 'unsupported_algorithm';
+    case 'ERR_JWT_CLAIM_VALIDATION_FAILED':
+      if (claim === 'iss') return 'wrong_issuer';
+      if (reason === 'missing') return 'missing_claim';
+      return claim === 'nbf' && reason === 'check_failed' ? 'not_yet_valid' : 'malformed';
+    default:
+      return 'malformed';
+  }
+}
+
+/** The failure that got further through the checks: it says more about the token. */
+function deeperFailure(current: TokenVerifyFailure | undefined, next: TokenVerifyFailure): TokenVerifyFailure {
+  return current && FAILURE_DEPTH.indexOf(current) >= FAILURE_DEPTH.indexOf(next) ? current : next;
 }
 
 // Warning message for weak RSA keys (shown only once per provider)
@@ -155,6 +204,7 @@ export class JwksService {
     // `exp` (#272): then the refusal says so. Any other failure keeps the
     // generic reason, so a forged token learns nothing from the message.
     let missingExp = false;
+    let failure: TokenVerifyFailure | undefined;
 
     for (const p of candidates) {
       let jwks: JSONWebKeySet | undefined;
@@ -163,7 +213,10 @@ export class JwksService {
         if (kid && !p.jwks?.keys?.length && !jwks?.keys?.some((key) => key.kid === kid)) {
           jwks = (await this.refetchForUnknownKid(p)) ?? jwks;
         }
-        if (!jwks?.keys?.length) continue;
+        if (!jwks?.keys?.length) {
+          failure = deeperFailure(failure, 'jwks_unavailable');
+          continue;
+        }
         const JWKS = createLocalJWKSet(jwks);
         // `undefined` when the provider opts out of issuer validation
         // (`verifyIssuer: false`); omit the `issuer` option so `jose` skips the
@@ -196,16 +249,18 @@ export class JwksService {
               return fallbackResult;
             }
             if (fallbackResult.error === 'missing_exp') missingExp = true;
+            if (fallbackResult.failure) failure = deeperFailure(failure, fallbackResult.failure);
           }
         }
         if (isMissingExpError(e)) missingExp = true;
+        failure = deeperFailure(failure, tokenVerifyFailureOf(e));
         this.logger.debug('[JwksService] Failed to verify token for provider: %s', p.id, e);
         // try next provider
       }
     }
 
-    if (missingExp) return { ok: false, error: MISSING_EXP_ERROR };
-    return { ok: false, error: `no_provider_verified${kid ? ` (kid=${kid})` : ''}` };
+    if (missingExp) return { ok: false, error: MISSING_EXP_ERROR, failure };
+    return { ok: false, error: `no_provider_verified${kid ? ` (kid=${kid})` : ''}`, failure };
   }
 
   /**
@@ -265,7 +320,7 @@ export class JwksService {
     try {
       const parts = token.split('.');
       if (parts.length !== 3) {
-        return { ok: false, error: 'invalid_token_format' };
+        return { ok: false, error: 'invalid_token_format', failure: 'malformed' };
       }
 
       const [headerB64, payloadB64, signatureB64] = parts;
@@ -275,7 +330,7 @@ export class JwksService {
       // Find matching key
       const matchingKey = this.findMatchingKey(jwks, header);
       if (!matchingKey) {
-        return { ok: false, error: 'no_matching_key' };
+        return { ok: false, error: 'no_matching_key', failure: 'unknown_key' };
       }
 
       // Verify signature using Node's crypto (via @frontmcp/utils).
@@ -287,7 +342,7 @@ export class JwksService {
 
       const jwtAlg = typeof header.alg === 'string' ? header.alg : undefined;
       if (!jwtAlg) {
-        return { ok: false, error: 'missing_alg' };
+        return { ok: false, error: 'missing_alg', failure: 'malformed' };
       }
 
       const isValid = await rsaVerify(
@@ -298,7 +353,7 @@ export class JwksService {
       );
 
       if (!isValid) {
-        return { ok: false, error: 'signature_invalid' };
+        return { ok: false, error: 'signature_invalid', failure: 'bad_signature' };
       }
 
       // Validate issuer unless the provider explicitly opts out
@@ -306,14 +361,14 @@ export class JwksService {
       if (provider.verifyIssuer !== false) {
         const payloadIssuerRaw = typeof payload.iss === 'string' ? payload.iss : undefined;
         if (!payloadIssuerRaw) {
-          return { ok: false, error: 'issuer_mismatch' };
+          return { ok: false, error: 'issuer_mismatch', failure: 'wrong_issuer' };
         }
         const trustedIssuers = new Set(
           [provider.issuerUrl, ...(provider.additionalIssuers ?? [])].map((issuer) => normalizeIssuer(issuer)),
         );
         const payloadIssuer = normalizeIssuer(payloadIssuerRaw);
         if (!trustedIssuers.has(payloadIssuer)) {
-          return { ok: false, error: 'issuer_mismatch' };
+          return { ok: false, error: 'issuer_mismatch', failure: 'wrong_issuer' };
         }
       }
 
@@ -324,10 +379,10 @@ export class JwksService {
       // second, as jose treats it.
       const nowSec = Math.floor(Date.now() / 1000);
       if (payload.exp === undefined) {
-        return { ok: false, error: 'missing_exp' };
+        return { ok: false, error: 'missing_exp', failure: 'missing_claim' };
       }
       if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp) || payload.exp <= nowSec) {
-        return { ok: false, error: 'token_expired' };
+        return { ok: false, error: 'token_expired', failure: 'expired' };
       }
 
       // Check not-before — reject not-yet-valid tokens, matching jose's primary
@@ -337,7 +392,7 @@ export class JwksService {
         payload.nbf !== undefined &&
         (typeof payload.nbf !== 'number' || !Number.isFinite(payload.nbf) || payload.nbf > nowSec)
       ) {
-        return { ok: false, error: 'token_not_yet_valid' };
+        return { ok: false, error: 'token_not_yet_valid', failure: 'not_yet_valid' };
       }
 
       // Emit warning (once per provider)
@@ -357,7 +412,7 @@ export class JwksService {
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown';
-      return { ok: false, error: `weak_key_verification_failed: ${message}` };
+      return { ok: false, error: `weak_key_verification_failed: ${message}`, failure: 'malformed' };
     }
   }
 

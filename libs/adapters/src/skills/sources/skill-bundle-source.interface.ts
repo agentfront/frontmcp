@@ -1,5 +1,7 @@
 // file: plugins/plugin-skilled-openapi/src/sources/skill-bundle-source.interface.ts
 
+import type { TokenVerifyFailure } from '@frontmcp/auth';
+
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import type { ReplayNonceStore } from '../security/replay-nonce-store';
 
@@ -89,10 +91,18 @@ export type BundleSourceListener = (bundle: ResolvedBundle, origin?: BundleOrigi
 export interface BundleOrigin {
   /** Set when the pull failed and the bundle is the last good one the source kept, served in its place: why it failed. */
   pullFailure?: string;
+  /** Set when that pull failed on its token: the check that refused it, or `jwks_unavailable`. */
+  tokenFailure?: BundleTokenFailure;
 }
 
-/** Takes the reason a background pull failed. */
-export type BundlePullFailureListener = (reason: string) => void;
+/**
+ * Which check refused a pull or push token, or `jwks_unavailable` when the issuer's keys could not be read to check
+ * it. For the server's logs and `/readyz`: a caller learns only that its token was refused.
+ */
+export type BundleTokenFailure = TokenVerifyFailure | 'wrong_audience';
+
+/** Takes the reason a background pull failed, and the token check it failed on, if any. */
+export type BundlePullFailureListener = (reason: string, tokenFailure?: BundleTokenFailure) => void;
 
 /**
  * Pluggable last-good bundle cache. The default (Node) implementation writes to

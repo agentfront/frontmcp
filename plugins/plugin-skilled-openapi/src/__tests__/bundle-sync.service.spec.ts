@@ -1,7 +1,11 @@
 import {
   BundleStore,
   OverlayParseError,
+  SaasJwksUnavailableError,
+  SaasPullTokenRejectedError,
+  type BundleOrigin,
   type BundleSourceListener,
+  type BundleTokenFailure,
   type ResolvedBundle,
 } from '@frontmcp/adapters/skills';
 import {
@@ -1006,7 +1010,7 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
       fakeLogger,
     );
 
-  type Pull = string | { cached: string; pullFailure: string } | Error;
+  type Pull = string | ({ cached: string } & Required<Pick<BundleOrigin, 'pullFailure'>> & BundleOrigin) | Error;
 
   /**
    * A forward-only source whose start and refresh each take the next of `pulls`: a version it pulls, the cached
@@ -1015,19 +1019,20 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
    */
   const pullingSource = (pulls: Pull[]) => {
     const listeners = new Set<BundleSourceListener>();
-    const pullFailureListeners = new Set<(reason: string) => void>();
+    const pullFailureListeners = new Set<(reason: string, tokenFailure?: BundleTokenFailure) => void>();
     const calls = { start: 0, refresh: 0 };
     const kept: string[] = [];
     const pullNext = async () => {
       const pull = pulls.shift() ?? new Error('pull responded 503');
       if (pull instanceof Error) throw pull;
-      const [version, origin] = typeof pull === 'string' ? [pull] : [pull.cached, { pullFailure: pull.pullFailure }];
+      const [version, origin] = typeof pull === 'string' ? [pull] : [pull.cached, pull];
       for (const fn of listeners) await fn(buildBundle({ version }), origin);
     };
     return {
       calls,
       kept,
-      failPoll: (reason: string) => pullFailureListeners.forEach((fn) => fn(reason)),
+      failPoll: (reason: string, tokenFailure?: BundleTokenFailure) =>
+        pullFailureListeners.forEach((fn) => fn(reason, tokenFailure)),
       source: {
         forwardOnly: true,
         push: { verifyPushToken: jest.fn() },
@@ -1043,7 +1048,7 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
           listeners.add(fn);
           return () => listeners.delete(fn);
         },
-        onPullFailure(fn: (reason: string) => void) {
+        onPullFailure(fn: (reason: string, tokenFailure?: BundleTokenFailure) => void) {
           pullFailureListeners.add(fn);
           return () => pullFailureListeners.delete(fn);
         },
@@ -1158,6 +1163,89 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
 
     expect(afterPoll).toEqual({ status: 'failed', reason: 'pull responded 502', cacheFallback: false, at });
     expect(sync.lastSyncOutcome()).toEqual({ status: 'applied', bundleId: 'acme:prod', bundleVersion: '1.1.0', at });
+  });
+
+  describe('names the token check a pull failed on', () => {
+    const rejected = (tokenFailure: BundleTokenFailure) =>
+      new SaasPullTokenRejectedError('not a valid token from the issuer', tokenFailure);
+
+    it('on the start a refresh runs, which loads no bundle', async () => {
+      const sync = makeSync();
+      sync.attachSource(pullingSource([rejected('expired')]).source);
+
+      const outcome = await sync.refresh();
+
+      const reason = '[saas-source] pull token rejected: not a valid token from the issuer';
+      expect(outcome).toEqual({ status: 'failed', reason, tokenFailure: 'expired', cacheFallback: false, at });
+      expect(sync.loadState()).toEqual({ status: 'failed', reason });
+    });
+
+    it('on a start with no cached bundle, whose JWKS could not be read', async () => {
+      const sync = makeSync();
+      const jwksDown = new Error('[saas-source] initial pull failed and no cached bundle is available', {
+        cause: new SaasJwksUnavailableError('JWKS https://saas.example/jwks responded 503'),
+      });
+      sync.attachSource(pullingSource([jwksDown]).source);
+
+      expect(await sync.refresh()).toMatchObject({ status: 'failed', tokenFailure: 'jwks_unavailable' });
+    });
+
+    it('on a refresh, while the bundle before it serves', async () => {
+      const sync = makeSync();
+      sync.attachSource(pullingSource(['1', rejected('unknown_key')]).source);
+      await sync.ensureReady();
+
+      expect(await sync.refresh()).toMatchObject({ status: 'failed', tokenFailure: 'unknown_key' });
+      expect(sync.loadState()).toMatchObject({ status: 'loaded', bundleVersion: '1' });
+    });
+
+    it('on a poll', async () => {
+      const sync = makeSync();
+      const { source, failPoll } = pullingSource(['1']);
+      sync.attachSource(source);
+      await sync.ensureReady();
+
+      failPoll('[saas-source] pull token rejected: its "aud" claim does not include "acme:prod"', 'wrong_audience');
+
+      expect(sync.lastSyncOutcome()).toMatchObject({ status: 'failed', tokenFailure: 'wrong_audience' });
+    });
+
+    it('on a start that serves the cached bundle because the JWKS was unavailable', async () => {
+      const sync = makeSync();
+      const pullFailure = 'JWKS https://cloud.example.dev/.well-known/jwks.json responded 503';
+      sync.attachSource(pullingSource([{ cached: '1', pullFailure, tokenFailure: 'jwks_unavailable' }]).source);
+
+      expect(await sync.start()).toEqual({
+        status: 'failed',
+        reason: pullFailure,
+        tokenFailure: 'jwks_unavailable',
+        cacheFallback: true,
+        at,
+      });
+    });
+
+    it('on a refresh whose JWKS could not be read', async () => {
+      const sync = makeSync();
+      sync.attachSource(pullingSource(['1', new SaasJwksUnavailableError('fetch failed')]).source);
+      await sync.ensureReady();
+
+      expect(await sync.refresh()).toMatchObject({
+        status: 'failed',
+        reason: 'fetch failed',
+        tokenFailure: 'jwks_unavailable',
+      });
+    });
+
+    it('and names none for a pull that failed for another reason', async () => {
+      const sync = makeSync();
+      sync.attachSource(pullingSource(['1', new Error('pull responded 502')]).source);
+      await sync.ensureReady();
+
+      const outcome = await sync.refresh();
+
+      expect(outcome).toMatchObject({ status: 'failed', reason: 'pull responded 502' });
+      expect(outcome).not.toHaveProperty('tokenFailure', expect.anything());
+    });
   });
 
   it('records a pushed bundle that is refused', async () => {

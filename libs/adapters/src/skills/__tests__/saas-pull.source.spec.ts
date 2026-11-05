@@ -162,6 +162,57 @@ describe('SaasPullSource', () => {
     expect(events).toEqual([{ bundleId: 'saas:test', origin: { pullFailure: 'pull responded 503' } }]);
   });
 
+  it('tells its listeners that the cached bundle serves because the JWKS was unavailable', async () => {
+    await fs.writeFile(path.join(tmpDir, 'acme_prod.json'), JSON.stringify(baseBundle), 'utf8');
+    const source = new (class extends SaasPullSource {
+      protected override async httpGet() {
+        return { status: 503, body: '' };
+      }
+    })(baseOptions(), tmpDir, fakeLogger);
+    const origins: unknown[] = [];
+    source.onChange((_bundle, origin) => origins.push(origin));
+
+    await source.start();
+    await source.stop();
+
+    expect(origins).toEqual([
+      {
+        pullFailure: 'JWKS https://cloud.example.dev/.well-known/jwks.json responded 503',
+        tokenFailure: 'jwks_unavailable',
+      },
+    ]);
+  });
+
+  it('tells its pull failure listeners the token check a poll failed on, and none for any other failure', async () => {
+    const rotated = await createSaasTokenIssuer('saas-2027');
+    let jwksReads = 0;
+    let bundleReads = 0;
+    const source = new (class extends SaasPullSource {
+      protected override async httpGet(url: string) {
+        if (url === baseOptions().endpoint) {
+          bundleReads++;
+          return bundleReads === 2 ? { status: 502, body: '' } : { status: 200, body: JSON.stringify(baseBundle) };
+        }
+        jwksReads++;
+        return { status: 200, body: JSON.stringify(jwksReads <= 2 ? issuer.jwks : rotated.jwks) };
+      }
+    })(baseOptions({ pollIntervalMs: 20 }), tmpDir, fakeLogger);
+    const failures: Array<[string, unknown]> = [];
+    source.onPullFailure((reason, tokenFailure) => failures.push([reason, tokenFailure]));
+
+    await source.start();
+    const deadline = Date.now() + 1500;
+    while (Date.now() < deadline && failures.length < 2) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    await source.stop();
+
+    expect(failures.slice(0, 2)).toEqual([
+      ['pull responded 502', undefined],
+      [expect.stringContaining('[saas-source] pull token rejected:'), 'unknown_key'],
+    ]);
+  });
+
   it('hands a pulled bundle to its listeners with no origin', async () => {
     const source = new FakeSaasSource(baseOptions(), tmpDir, async () => ({
       status: 200,

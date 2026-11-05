@@ -58,9 +58,12 @@ export {
   createBundleSource,
   InlineSource,
   NpmSource,
+  SaasJwksUnavailableError,
   SaasPullSource,
+  SaasPullTokenRejectedError,
   SaasPushRefusedError,
   StaticSource,
+  tokenFailureOf,
 } from './sources';
 
 // OpenAPI → skilled-bundle compiler (operationId ↔ skill linkage). First-party
@@ -78,6 +81,7 @@ export type {
   BundlePushReceiver,
   BundleSourceDeps,
   BundleSourceListener,
+  BundleTokenFailure,
   SkillBundleSource,
 } from './sources/skill-bundle-source.interface';
 

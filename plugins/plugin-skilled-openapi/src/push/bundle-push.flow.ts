@@ -2,7 +2,13 @@
 
 import 'reflect-metadata';
 
-import { OverlayParseError, parseOverlay, SaasPushRefusedError, type ResolvedBundle } from '@frontmcp/adapters/skills';
+import {
+  OverlayParseError,
+  parseOverlay,
+  SaasPushRefusedError,
+  tokenFailureOf,
+  type ResolvedBundle,
+} from '@frontmcp/adapters/skills';
 import { extractBearerToken } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import {
@@ -96,7 +102,10 @@ export default class BundlePushFlow extends FlowBase<typeof name> {
       await receiver.verifyPushToken(token);
     } catch (error) {
       if (!(error instanceof SaasPushRefusedError)) {
-        this.logger.error(`bundle push not checked: ${(error as Error).message}`);
+        const tokenFailure = tokenFailureOf(error);
+        this.logger.error(
+          `bundle push not checked${tokenFailure ? ` (${tokenFailure})` : ''}: ${(error as Error).message}`,
+        );
         return this.respond(refusal(503, 'temporarily_unavailable', "the issuer's JWKS could not be read"));
       }
       refused = error;

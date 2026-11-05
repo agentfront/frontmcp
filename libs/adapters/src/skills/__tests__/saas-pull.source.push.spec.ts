@@ -5,7 +5,12 @@ import type { ResolvedBundle } from '../bundle/bundle.types';
 import { StorageReplayNonceStore, type ReplayNonceStore } from '../security/replay-nonce-store';
 import type { SaasSourceOptions } from '../source-options';
 import type { BundleCacheStore } from '../sources';
-import { SaasPullSource, SaasPushRefusedError } from '../sources/saas-pull.source';
+import {
+  SaasJwksUnavailableError,
+  SaasPullSource,
+  SaasPushRefusedError,
+  tokenFailureOf,
+} from '../sources/saas-pull.source';
 import {
   createSaasTokenIssuer,
   SAAS_AUDIENCE,
@@ -111,17 +116,49 @@ describe('SaasPullSource push checks', () => {
   });
 
   it.each([
-    ['another audience', { jti: 'push-0004', aud: 'someone-else' }, '"aud" claim does not include'],
-    ['another resource', { jti: 'push-0005', resource: 'https://other.example' }, '"resource" claim does not include'],
-    ['another issuer', { jti: 'push-0006', iss: 'https://evil.example' }, 'not a valid token from issuer'],
-    ['no jti', {}, 'needs "iat" and "jti" claims'],
-    ['an iat ten minutes old', { jti: 'push-0007', iat: nowSeconds() - 600 }, 'outside'],
-    ['a short jti', { jti: 'short' }, 'nonce too short'],
-  ])('refuses a token with %s as an invalid token', async (_label, claims, reason) => {
+    ['another audience', { jti: 'push-0004', aud: 'someone-else' }, '"aud" claim does not include', 'wrong_audience'],
+    [
+      'another resource',
+      { jti: 'push-0005', resource: 'https://other.example' },
+      '"resource" claim does not include',
+      'wrong_audience',
+    ],
+    [
+      'another issuer',
+      { jti: 'push-0006', iss: 'https://evil.example' },
+      'not a valid token from issuer',
+      'wrong_issuer',
+    ],
+    ['an expired token', { jti: 'push-0011', exp: nowSeconds() - 60 }, 'not a valid token from issuer', 'expired'],
+    ['no jti', {}, 'needs "iat" and "jti" claims', 'missing_claim'],
+    ['an iat ten minutes old', { jti: 'push-0007', iat: nowSeconds() - 600 }, 'outside', undefined],
+    ['a short jti', { jti: 'short' }, 'nonce too short', undefined],
+  ])('refuses a token with %s as an invalid token', async (_label, claims, reason, tokenFailure) => {
     const refused = await refusalOf(await issuer.token(claims));
 
     expect(refused.refusal).toBe('invalid-token');
     expect(refused.message).toContain(reason);
+    expect(refused.tokenFailure).toBe(tokenFailure);
+    expect(tokenFailureOf(refused)).toBe(tokenFailure);
+  });
+
+  it('names the check that refused the token in its message, for the log', async () => {
+    const refused = await refusalOf(await issuer.token({ jti: 'push-0012', iss: 'https://evil.example' }));
+
+    expect(refused.message).toMatch(/^\[saas-source\] push refused \(wrong_issuer\): not a valid token from issuer/);
+  });
+
+  it('names the token check of an error that wraps one', () => {
+    const wrapped = new Error('initial pull failed and no cached bundle is available', {
+      cause: new SaasJwksUnavailableError('JWKS https://saas.example/jwks responded 503'),
+    });
+
+    expect(tokenFailureOf(wrapped)).toBe('jwks_unavailable');
+  });
+
+  it('names no token check for an error that is not one', () => {
+    expect(tokenFailureOf(new Error('pull responded 502'))).toBeUndefined();
+    expect(tokenFailureOf('not an error')).toBeUndefined();
   });
 
   describe('with a replay store shared by several sources', () => {
@@ -193,22 +230,29 @@ describe('SaasPullSource push checks', () => {
     });
   });
 
-  it('refuses a token signed by a key the JWKS does not hold', async () => {
-    const stranger = await createSaasTokenIssuer();
+  it.each([
+    ['a key the JWKS does not hold, under a kid it publishes', 'saas-2026', 'bad_signature'],
+    ['a kid the JWKS does not publish', 'saas-2027', 'unknown_key'],
+  ])('refuses a token signed by %s', async (_label, kid, tokenFailure) => {
+    const stranger = await createSaasTokenIssuer(kid);
 
-    const refused = await refusalOf(await stranger.token({ jti: 'push-0008' }));
+    const refused = await refusalOf(await stranger.token({ jti: `push-0008-${kid}` }));
 
-    expect(refused.refusal).toBe('invalid-token');
+    expect(refused).toMatchObject({ refusal: 'invalid-token', tokenFailure });
   });
 
-  it('throws a plain error, not a refusal, when the JWKS cannot be read', async () => {
+  it('throws SaasJwksUnavailableError, not a refusal, when the JWKS cannot be read', async () => {
     const offline = new StubbedSaasSource(sourceOptions(true), async () => ({ status: 503, body: '' }));
 
     const error = await offline.verifyPushToken(await issuer.token({ jti: 'push-0009' })).catch((e: unknown) => e);
 
-    expect(error).toBeInstanceOf(Error);
+    expect(error).toBeInstanceOf(SaasJwksUnavailableError);
     expect(error).not.toBeInstanceOf(SaasPushRefusedError);
-    expect((error as Error).message).toContain('responded 503');
+    expect(error).toMatchObject({
+      tokenFailure: 'jwks_unavailable',
+      message: expect.stringContaining('responded 503'),
+    });
+    expect(tokenFailureOf(error)).toBe('jwks_unavailable');
   });
 
   it('reads the JWKS once for concurrent pushes, reuses it for a minute, and never caches a failed read', async () => {

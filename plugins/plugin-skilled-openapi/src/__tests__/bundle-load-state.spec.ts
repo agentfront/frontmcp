@@ -87,6 +87,16 @@ describe('bundleHealth', () => {
       'the cached bundle served for a pull that failed',
       { status: 'failed' as const, reason: 'fetch failed', cacheFallback: true, at },
     ],
+    [
+      'a pull whose token expired',
+      {
+        status: 'failed' as const,
+        reason: '[saas-source] pull token rejected: not a valid token from issuer',
+        tokenFailure: 'expired' as const,
+        cacheFallback: false,
+        at,
+      },
+    ],
   ])('is degraded, still ready, and names the stale bundle served and %s', (_label, lastSync) => {
     expect(bundleHealth(loaded, lastSync)).toEqual({
       status: 'degraded',
@@ -102,12 +112,20 @@ describe('bundleHealth', () => {
     });
   });
 
-  it('is unhealthy while loading failed, whatever the last sync was', () => {
-    const lastSync = { status: 'failed' as const, reason: 'pull responded 401', cacheFallback: false, at };
+  it('is unhealthy while loading failed, whatever the last sync was, and names that sync and its token check', () => {
+    const reason = '[saas-source] pull token rejected: its "aud" claim does not include "acme:prod"';
+    const lastSync = {
+      status: 'failed' as const,
+      reason,
+      tokenFailure: 'wrong_audience' as const,
+      cacheFallback: false,
+      at,
+    };
 
-    expect(bundleHealth({ status: 'failed', reason: 'pull responded 401' }, lastSync)).toMatchObject({
+    expect(bundleHealth({ status: 'failed', reason }, lastSync)).toEqual({
       status: 'unhealthy',
-      details: { state: 'failed' },
+      details: { state: 'failed', lastSync },
+      error: `no skill bundle is loaded: ${reason}`,
     });
   });
 
