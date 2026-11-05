@@ -9,8 +9,9 @@
  *     mid-session connect flow re-invokes it.
  *
  * The persisted credential is read back by the `read-credential` tool via
- * `this.credentials.get('acme')` over a real authenticated session. No PII —
- * synthetic secrets only.
+ * `this.credentials.get('acme')` over a real authenticated session. A sign-in
+ * with a `sk-test-no-credential-…` key stores no credential, so that caller has
+ * no vault until a mid-session connect creates one. No PII — synthetic secrets only.
  */
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 
@@ -23,6 +24,8 @@ const port = Number.isNaN(parsedPort) ? 3157 : parsedPort;
 const EXPECTED_API_KEY = 'sk-test-credentials-secret';
 /** The credential the verifier persists for the session on login. */
 const ACME_SECRET = 'acme-token-abcdef123456';
+/** A sign-in with a key of this prefix stores no credential. */
+const NO_CREDENTIAL_KEY_PREFIX = 'sk-test-no-credential-';
 
 @FrontMcp({
   info: { name: 'Demo E2E Local Auth (credentials)', version: '0.1.0' },
@@ -59,6 +62,9 @@ const ACME_SECRET = 'acme-token-abcdef123456';
 
       // Initial login branch.
       const apiKey = input.fields['apiKey'];
+      if (apiKey?.startsWith(NO_CREDENTIAL_KEY_PREFIX)) {
+        return { ok: true };
+      }
       if (apiKey !== EXPECTED_API_KEY) {
         return { ok: false, message: 'Invalid API key', retryField: 'apiKey' };
       }

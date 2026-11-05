@@ -121,6 +121,37 @@ describe('SessionCredentialVault', () => {
     });
   });
 
+  describe('ensureVault (create when absent, keep when present)', () => {
+    it('creates a vault for a subject that has none', async () => {
+      const vaultId = await vault.ensureVault('user-alpha');
+
+      expect(await vault.getVaultId('user-alpha')).toBe(vaultId);
+      await vault.store('user-alpha', vaultId, 'acme', { secret: 'sk-123' });
+      expect(await vault.get('user-alpha', 'acme')).toEqual({ secret: 'sk-123' });
+    });
+
+    it('returns the existing vault unchanged, with its credentials still readable', async () => {
+      const existingVaultId = await vault.rotateVault('user-alpha');
+      await vault.store('user-alpha', existingVaultId, 'acme', { secret: 'sk-123' });
+
+      expect(await vault.ensureVault('user-alpha')).toBe(existingVaultId);
+      expect(await vault.get('user-alpha', 'acme')).toEqual({ secret: 'sk-123' });
+    });
+
+    it('gives concurrent callers for one subject the same vault', async () => {
+      const vaultIds = await Promise.all([vault.ensureVault('user-alpha'), vault.ensureVault('user-alpha')]);
+
+      expect(vaultIds[0]).toBe(vaultIds[1]);
+      expect(await vault.getVaultId('user-alpha')).toBe(vaultIds[0]);
+    });
+
+    it('creates a vault for the named subject only', async () => {
+      await vault.ensureVault('user-alpha');
+
+      expect(await vault.getVaultId('user-beta')).toBeUndefined();
+    });
+  });
+
   describe('subject isolation', () => {
     it('a different subject cannot read another subject credential', async () => {
       const subA = 'user-A';
