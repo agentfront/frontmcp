@@ -6,7 +6,8 @@
  *   - missing / invalid / tampered tokens are rejected (400)
  *   - POST with a live vault re-invokes authenticate({ resume }) and ADDS the
  *     credential to the existing vault
- *   - POST with NO live vault for the subject is refused (409)
+ *   - POST for a signed subject with no vault yet creates that subject's vault
+ *   - a link signed for an anonymous caller is refused (403), and no vault is made
  *
  * Crypto + the resume-link round-trip are exercised against a real
  * SessionCredentialVault + MemoryStorageAdapter.
@@ -63,6 +64,22 @@ async function makeScope(opts: {
 
 function token(sub: string, key: string, context?: string): string {
   return signCredentialResumeToken({ sub, key, context }, SECRET);
+}
+
+function withSignedSubjectReplaced(signedToken: string, sub: string): string {
+  const envelope = JSON.parse(Buffer.from(signedToken, 'base64url').toString('utf8'));
+  envelope.data.sub = sub;
+  return Buffer.from(JSON.stringify(envelope), 'utf8').toString('base64url');
+}
+
+function connectFlow(scope: any, request: Parameters<typeof createMockHttpRequest>[0]): OauthConnectFlow {
+  const input = createMockHttpRequest({ path: '/oauth/connect', ...request });
+  return new OauthConnectFlow(createConnectMetadata(), input as any, scope, jest.fn(), new Map());
+}
+
+async function connect(scope: any, request: Parameters<typeof createMockHttpRequest>[0]) {
+  const { output } = await runFlowStages(connectFlow(scope, request), ['parseInput', 'handleConnect']);
+  return output;
 }
 
 describe('OAuth Connect Flow (Checkpoint 3b)', () => {
@@ -135,6 +152,20 @@ describe('OAuth Connect Flow (Checkpoint 3b)', () => {
     await adapter.disconnect();
   });
 
+  it('POST with a live vault keeps that vault and the credentials already in it', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ ok: true, credentials: [{ key: 'acme', secret: 'sk-new' }] });
+    const { scope, vault, adapter } = await makeScope({ authenticate });
+    const vaultIdBefore = await vault.rotateVault('user-1');
+    await vault.store('user-1', vaultIdBefore, 'globex', { secret: 'sk-globex' });
+
+    await connect(scope, { method: 'POST', body: { token: token('user-1', 'acme'), apiKey: 'sk-new' } });
+
+    expect(await vault.getVaultId('user-1')).toBe(vaultIdBefore);
+    expect(await vault.get('user-1', 'globex')).toEqual({ secret: 'sk-globex' });
+    expect((await vault.list('user-1')).sort()).toEqual(['acme', 'globex']);
+    await adapter.disconnect();
+  });
+
   it('POST reports the added credential to callers subscribed to its credential:// resource', async () => {
     const authenticate = jest.fn().mockResolvedValue({ ok: true, credentials: [{ key: 'acme', secret: 'sk-new' }] });
     const { scope, adapter } = await makeScope({ seedSub: 'user-1', authenticate });
@@ -153,21 +184,147 @@ describe('OAuth Connect Flow (Checkpoint 3b)', () => {
     await adapter.disconnect();
   });
 
-  it('POST is refused (409) when the subject has NO live vault', async () => {
-    const authenticate = jest.fn().mockResolvedValue({ ok: true, credentials: [{ key: 'acme', secret: 'sk-new' }] });
-    // No seedSub → the subject has no live vault.
-    const { scope, adapter } = await makeScope({ authenticate });
+  describe('a signed subject with no vault yet', () => {
+    it('POST creates the vault for that subject and stores the credential', async () => {
+      const authenticate = jest.fn().mockResolvedValue({ ok: true, credentials: [{ key: 'acme', secret: 'sk-new' }] });
+      const { scope, vault, adapter } = await makeScope({ authenticate });
+      expect(await vault.getVaultId('user-without-vault')).toBeUndefined();
 
-    const input = createMockHttpRequest({
-      method: 'POST',
-      path: '/oauth/connect',
-      body: { token: token('ghost-sub', 'acme'), apiKey: 'sk-new' },
+      const output = await connect(scope, {
+        method: 'POST',
+        body: { token: token('user-without-vault', 'acme'), apiKey: 'sk-new' },
+      });
+
+      expect(output?.status).toBe(200);
+      expect(String(output?.body).toLowerCase()).toContain('connected');
+      expect(await vault.getVaultId('user-without-vault')).toEqual(expect.any(String));
+      expect(await vault.get('user-without-vault', 'acme')).toEqual({ secret: 'sk-new' });
+      expect(await vault.list('user-without-vault')).toEqual(['acme']);
+      await adapter.disconnect();
     });
-    const flow = new OauthConnectFlow(createConnectMetadata(), input as any, scope, jest.fn(), new Map());
-    const { output } = await runFlowStages(flow, ['parseInput', 'handleConnect']);
-    expect(output?.kind).toBe('html');
-    expect(output?.status).toBe(409);
-    await adapter.disconnect();
+
+    it('GET still renders the connect page', async () => {
+      const { scope, adapter } = await makeScope({});
+      const output = await connect(scope, { method: 'GET', query: { token: token('user-without-vault', 'acme') } });
+      expect(output?.status).toBe(200);
+      expect(String(output?.body)).toContain('name="token"');
+      await adapter.disconnect();
+    });
+
+    it('creates a vault for the signed subject only, leaving another subject vault as it was', async () => {
+      const authenticate = jest.fn().mockResolvedValue({ ok: true, credentials: [{ key: 'acme', secret: 'sk-new' }] });
+      const { scope, vault, adapter } = await makeScope({ authenticate });
+      const otherVaultId = await vault.rotateVault('other-user');
+      await vault.store('other-user', otherVaultId, 'globex', { secret: 'sk-other' });
+
+      await connect(scope, { method: 'POST', body: { token: token('user-without-vault', 'acme'), apiKey: 'sk-new' } });
+
+      expect(await vault.getVaultId('other-user')).toBe(otherVaultId);
+      expect(await vault.list('other-user')).toEqual(['globex']);
+      expect(await vault.get('other-user', 'acme')).toBeUndefined();
+      expect(await vault.list('user-without-vault')).toEqual(['acme']);
+      await adapter.disconnect();
+    });
+
+    it('two connects at once write into one vault, so each credential stays readable', async () => {
+      const authenticate = jest.fn().mockImplementation(async (input: { resume: { key: string } }) => ({
+        ok: true,
+        credentials: [{ key: input.resume.key, secret: `${input.resume.key}-secret` }],
+      }));
+      const { scope, vault, adapter } = await makeScope({ authenticate });
+
+      await Promise.all([
+        connect(scope, { method: 'POST', body: { token: token('user-without-vault', 'acme'), apiKey: 'a' } }),
+        connect(scope, { method: 'POST', body: { token: token('user-without-vault', 'globex'), apiKey: 'b' } }),
+      ]);
+
+      expect(await vault.get('user-without-vault', 'acme')).toEqual({ secret: 'acme-secret' });
+      expect(await vault.get('user-without-vault', 'globex')).toEqual({ secret: 'globex-secret' });
+      await adapter.disconnect();
+    });
+
+    it('creates no vault when every returned credential is malformed', async () => {
+      const authenticate = jest.fn().mockResolvedValue({ ok: true, credentials: [{ key: 'acme' }, { secret: 'x' }] });
+      const { scope, vault, adapter } = await makeScope({ authenticate });
+
+      const output = await connect(scope, {
+        method: 'POST',
+        body: { token: token('user-without-vault', 'acme'), apiKey: 'sk-new' },
+      });
+
+      expect(output?.status).toBe(400);
+      expect(String(output?.body)).toContain('No valid credential was returned');
+      expect(await vault.getVaultId('user-without-vault')).toBeUndefined();
+      await adapter.disconnect();
+    });
+
+    it('creates no vault when authenticate() rejects the submitted value', async () => {
+      const authenticate = jest.fn().mockResolvedValue({ ok: false, message: 'Invalid value' });
+      const { scope, vault, adapter } = await makeScope({ authenticate });
+
+      const output = await connect(scope, {
+        method: 'POST',
+        body: { token: token('user-without-vault', 'acme'), apiKey: 'wrong' },
+      });
+
+      expect(String(output?.body)).toContain('Invalid value');
+      expect(await vault.getVaultId('user-without-vault')).toBeUndefined();
+      await adapter.disconnect();
+    });
+  });
+
+  describe('a link signed for an anonymous caller', () => {
+    it.each([
+      ['an empty subject', ''],
+      ['an anon: placeholder', 'anon:4f1c2b'],
+    ])('with %s is refused on GET and POST, asking the caller to sign in', async (_label, anonymousSub) => {
+      const authenticate = jest.fn().mockResolvedValue({ ok: true, credentials: [{ key: 'acme', secret: 'sk-new' }] });
+      const { scope, vault, adapter } = await makeScope({ authenticate });
+      const anonymousToken = token(anonymousSub, 'acme');
+
+      const page = await connect(scope, { method: 'GET', query: { token: anonymousToken } });
+      const submit = await connect(scope, { method: 'POST', body: { token: anonymousToken, apiKey: 'sk-new' } });
+
+      for (const output of [page, submit]) {
+        expect(output?.kind).toBe('html');
+        expect(output?.status).toBe(403);
+        expect(String(output?.body)).toContain('login_required');
+        expect(String(output?.body)).toContain('Sign in to this server');
+        expect(String(output?.body)).not.toContain('name="token"');
+      }
+      expect(authenticate).not.toHaveBeenCalled();
+      expect(await vault.getVaultId(anonymousSub)).toBeUndefined();
+      await adapter.disconnect();
+    });
+  });
+
+  describe('a link whose signed subject was changed', () => {
+    it('is refused, and neither subject gets a vault or a credential', async () => {
+      const authenticate = jest.fn().mockResolvedValue({ ok: true, credentials: [{ key: 'acme', secret: 'sk-new' }] });
+      const { scope, vault, adapter } = await makeScope({ authenticate, seedSub: 'victim-user' });
+      const forgedToken = withSignedSubjectReplaced(token('attacker-user', 'acme'), 'victim-user');
+
+      const output = await connect(scope, { method: 'POST', body: { token: forgedToken, apiKey: 'sk-new' } });
+
+      expect(output?.status).toBe(400);
+      expect(String(output?.body)).toContain('invalid_token');
+      expect(authenticate).not.toHaveBeenCalled();
+      expect(await vault.list('victim-user')).toEqual([]);
+      expect(await vault.getVaultId('attacker-user')).toBeUndefined();
+      await adapter.disconnect();
+    });
+
+    it('is refused when an anonymous link is rewritten to name a signed-in subject', async () => {
+      const authenticate = jest.fn().mockResolvedValue({ ok: true, credentials: [{ key: 'acme', secret: 'sk-new' }] });
+      const { scope, vault, adapter } = await makeScope({ authenticate });
+      const forgedToken = withSignedSubjectReplaced(token('', 'acme'), 'user-without-vault');
+
+      const output = await connect(scope, { method: 'POST', body: { token: forgedToken, apiKey: 'sk-new' } });
+
+      expect(output?.status).toBe(400);
+      expect(await vault.getVaultId('user-without-vault')).toBeUndefined();
+      await adapter.disconnect();
+    });
   });
 
   it('POST re-renders with the error when authenticate() rejects', async () => {

@@ -972,6 +972,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       customClaims,
       // Checkpoint 3b — credentials from authenticate()
       credentials,
+      isIncremental,
     } = this.state;
 
     // Validate required fields before creating authorization code
@@ -1048,6 +1049,21 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       } else {
         this.logger.warn('authenticate() returned credentials but no credential vault is configured; ignoring');
       }
+    } else if (!isIncremental) {
+      await this.rotateExistingVault(localAuth, userSub);
+    }
+  }
+
+  /** A sign-in that stores no credential still starts empty: it rotates the vault the subject has, if any. */
+  private async rotateExistingVault(localAuth: LocalPrimaryAuth, userSub: string): Promise<void> {
+    const vault = localAuth.credentialVault;
+    if (!vault) return;
+    try {
+      if (await vault.getVaultId(userSub)) {
+        await vault.rotateVault(userSub);
+      }
+    } catch (err) {
+      this.logger.error(`Failed to rotate the session vault: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
