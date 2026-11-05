@@ -21,7 +21,7 @@ import { skillActionDepsOf } from '../executor/run-skill-action';
 import { loadWorkflowSandbox, splitCallOptions, type WorkflowToolHandler } from '../executor/workflow-sandbox';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
-import { visibleListingsAtStart } from '../security/skill-visibility';
+import { visibleListingsAtStart, type VisibleListings } from '../security/skill-visibility';
 import { SkilledOpenApiConfig } from '../skilled-openapi.symbols';
 import { BundleSyncService } from '../sync/bundle-sync.service';
 import {
@@ -71,7 +71,12 @@ export default class RunWorkflowTool extends ToolContext {
     }
 
     // The listings the caller may see, judged on that same bundle by one run of the `skills:filter` flow.
-    const visibleListings = await visibleListingsAtStart(this.get(ScopeEntry), hiddenOps);
+    let visibleListings: VisibleListings;
+    try {
+      visibleListings = await visibleListingsAtStart(this.get(ScopeEntry), hiddenOps);
+    } catch (error) {
+      return failedWorkflow(`skills:filter rejected: ${error instanceof Error ? error.message : String(error)}`);
+    }
 
     // Asked before the script starts: time spent waiting for the user would count against the script's time limit.
     const confirmation = await confirmWorkflow({
