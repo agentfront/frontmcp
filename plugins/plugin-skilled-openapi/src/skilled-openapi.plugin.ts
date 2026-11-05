@@ -429,6 +429,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
               // installed this is `undefined` and verifyBundleSignature skips
               // the counter lookup entirely.
               telemetry: resolveBundleTelemetry(scope),
+              batchListChanges: (change) => scope.batchListChanges(change),
             },
             logger,
             opToolFactory,

@@ -42,6 +42,7 @@ class FakeRegistry implements Partial<SkillRegistryInterface> {
   public failOn = new Set<string>();
   /** Superseded ids a registration reports as removed, by the registered skill's id. */
   public removedBy = new Map<string, string[]>();
+  public notifyListChanged = jest.fn();
 
   async registerSkillContent(
     content: SkillContent,
@@ -122,6 +123,31 @@ describe('BundleSyncService', () => {
     expect(hiddenOps.size).toBe(1);
     expect(hiddenOps.get('invoices', 'createInvoice')?.op.pathTemplate).toBe('/v1/invoices');
     expect(store.current()).toBe(bundle);
+  });
+
+  it('leaves the registries as they are for the bundle being served applied again, and re-registers one generated later', async () => {
+    const fakeReg = new FakeRegistry();
+    const store = new BundleStore();
+    const sync = new BundleSyncService(
+      fakeReg as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      store,
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+    await sync.apply(buildBundle());
+
+    const pulledAgain = buildBundle();
+    const again = await sync.apply(pulledAgain);
+    const registeredAfterAgain = fakeReg.registered.length;
+    const regenerated = await sync.apply(buildBundle({ generatedAt: '2026-05-05T00:00:00Z' }));
+
+    expect(again).toMatchObject({ applied: true, diff: { isNoOp: true } });
+    expect(registeredAfterAgain).toBe(1);
+    expect(fakeReg.unregistered).toEqual([]);
+    expect(regenerated).toMatchObject({ applied: true });
+    expect(fakeReg.registered).toHaveLength(2);
+    expect(store.current()?.generatedAt).toBe('2026-05-05T00:00:00Z');
   });
 
   describe('ensureReady (worker-safe lazy boot)', () => {

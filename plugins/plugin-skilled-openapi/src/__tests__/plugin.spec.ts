@@ -29,6 +29,9 @@ import {
 } from '../skilled-openapi.symbols';
 import { BundleSyncService } from '../sync/bundle-sync.service';
 
+/** A scope's `batchListChanges`, for the fake scopes: runs the change. */
+const batchListChanges = async <T>(change: () => T | Promise<T>): Promise<T> => change();
+
 const validBundle = {
   schemaVersion: 1,
   bundleId: 'plugin:test',
@@ -205,7 +208,9 @@ describe('SkilledOpenApiPlugin', () => {
       const fakeScope = {
         logger: fakeLogger,
         registerHealthProbe: jest.fn(),
+        batchListChanges,
         skills: {
+          notifyListChanged: jest.fn(),
           registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })),
           unregisterSkill: jest.fn(async () => false),
         },
@@ -339,7 +344,9 @@ describe('SkilledOpenApiPlugin', () => {
       const fakeScope = {
         logger: fakeLogger,
         registerHealthProbe: jest.fn(),
+        batchListChanges,
         skills: {
+          notifyListChanged: jest.fn(),
           registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })),
           unregisterSkill: jest.fn(async () => false),
         },
@@ -416,7 +423,11 @@ describe('SkilledOpenApiPlugin', () => {
         const scope: { logger: typeof logger } & Record<string, unknown> = {
           logger,
           registerHealthProbe: jest.fn(),
-          skills: { registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })) },
+          batchListChanges,
+          skills: {
+            notifyListChanged: jest.fn(),
+            registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })),
+          },
           tools: undefined,
         };
         const sync = await buildSync(scope);
@@ -434,7 +445,11 @@ describe('SkilledOpenApiPlugin', () => {
         const scope = {
           logger,
           registerHealthProbe: jest.fn(),
-          skills: { registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })) },
+          batchListChanges,
+          skills: {
+            notifyListChanged: jest.fn(),
+            registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })),
+          },
         };
         const bundleStore = new BundleStore();
         const providers = SkilledOpenApiPlugin.dynamicProviders({
@@ -477,7 +492,11 @@ describe('SkilledOpenApiPlugin', () => {
         const scope = {
           logger: quietLogger(),
           registerHealthProbe,
-          skills: { registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })) },
+          batchListChanges,
+          skills: {
+            notifyListChanged: jest.fn(),
+            registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })),
+          },
         };
         const syncProvider = SkilledOpenApiPlugin.dynamicProviders(options).find(
           (p) => (p as { provide: unknown }).provide === BundleSyncService,

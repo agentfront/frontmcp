@@ -357,12 +357,26 @@ at once. A bundle that fails its checks isn't applied, and the reason is logged,
 found; the bundle already loaded stays. A `run_workflow` already running when a new bundle is applied finishes on the
 operations of the bundle it started on.
 
+Connected clients are told once the new bundle is in place, with one notification per list it changed, however many
+skills and operations it has:
+
+- `notifications/skills/list_changed` for the skills, `notifications/tools/list_changed` for the operation tools, and
+  `notifications/resources/list_changed` for the skills' `skill://` resources.
+- A poll that pulls the bundle being served again leaves it registered and sends nothing. So does a refused bundle.
+- A bundle that fails part-way is rolled back, and sends one notification for each list it changed before it failed.
+- The first bundle that loads sends `notifications/skills/list_changed` even when it has no skills, since the skill
+  surfaces stop answering that no bundle is loaded.
+
+Up to 1.11.0 a new bundle sent one notification per skill, operation tool and resource it registered or removed (about
+25 for a modest bundle), and every poll registered the bundle being served again, which sent them again.
+
 A bundle from the `saas` source, pulled or pushed, is applied only when it isn't older than the bundle being served, so
 a validly signed old bundle, replayed or served by mistake, can't roll the server back:
 
 - Two semver versions compare by semver precedence, whatever their `generatedAt`.
 - The same version (a bundle re-signed under it), or versions that aren't both semver, compare by `generatedAt`, which
-  the signature covers. The same version and `generatedAt` is the same bundle, and a poll that pulls it again applies it.
+  the signature covers. The same version and `generatedAt` is the same bundle, and a poll that pulls it again keeps
+  serving it.
 - An older bundle is not applied and not kept, and the log says why:
   `[bundle-sync] bundle acme:billing@1.4.0 not applied: older than the served bundle acme:billing@1.5.0 (generatedAt ...)`.
 - To roll back, publish the earlier content under a newer version, or set `allowRollback: true` on the source, which

@@ -8,3 +8,9 @@ export {
   type LiveSurfaceScope,
 } from './live-surface';
 export { keepingListsUnchanged, listsUnchanged } from './unchanged-lists';
+export {
+  announcesListChangeNow,
+  runListChangeBatch,
+  type BatchedListKind,
+  type BatchedLists,
+} from './list-change-batch';

@@ -298,7 +298,7 @@ Worker:
    - Replay-guard via REPLAY_NONCE KV
    - Diff: structural change (DO classes, bindings) → require redeploy
    - Otherwise: atomic swap of skill + classification registries
-   - Emit notifications/{skills,tools,resources,prompts}/list_changed
+   - Emit one notifications/{skills,tools,resources,prompts}/list_changed per list that changed
    - Persist envelope into BUNDLE_CACHE KV
 ```
 

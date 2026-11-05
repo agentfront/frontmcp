@@ -2,6 +2,8 @@
 // issuer's JWKS: the startup pull, new versions applied by polling, refused tokens, bundles and older versions, the
 // cache, redirects. /readyz stays ready but says the bundle served is stale while the last pull was refused or failed.
 // The log and /readyz name the check a pull or push token failed; the tools and the push answer don't.
+// A pulled or pushed version is announced with one list_changed per list it changed, and a poll of the version served
+// with none.
 import type { BundleTokenFailure, ResolvedBundle } from '@frontmcp/adapters/skills';
 import { expect, test, type McpTestClient, type ServerFixture } from '@frontmcp/testing';
 import { chmod, fileExists, pathJoin, readFile } from '@frontmcp/utils';
@@ -37,6 +39,7 @@ const LIST_CHANGED = [
   'notifications/skills/list_changed',
   'notifications/tools/list_changed',
 ];
+const ONE_LIST_CHANGED_EACH = Object.fromEntries(LIST_CHANGED.map((method) => [method, 1]));
 
 type BundledSkill = ResolvedBundle['skills'][number];
 
@@ -149,6 +152,27 @@ async function readyCheck(server: ServerFixture) {
   return ready.probes?.['skilled-openapi'];
 }
 
+type NotificationLog = ReturnType<McpTestClient['notifications']['collect']>;
+
+/** The `list_changed` notifications the client got after the first `seen`, counted by method. */
+function listChangedCounts(notifications: NotificationLog, seen: number): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const { method } of notifications.received.slice(seen)) {
+    if (method.endsWith('/list_changed')) counts[method] = (counts[method] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** Wait for the client to be told of each list a swap changed, then for the polls after it, which bring no change. */
+async function listChangedBySwap(notifications: NotificationLog, seen: number): Promise<Record<string, number>> {
+  await until(
+    () => LIST_CHANGED.every((method) => listChangedCounts(notifications, seen)[method] !== undefined),
+    'the list_changed notifications',
+  );
+  await new Promise((resolve) => setTimeout(resolve, 3 * POLL_INTERVAL_MS));
+  return listChangedCounts(notifications, seen);
+}
+
 function waitForLog(server: ServerFixture, text: string): Promise<void> {
   return until(() => server.getLogs().join('\n').includes(text), `the log line "${text}"`);
 }
@@ -217,26 +241,23 @@ test.describe('a bundle pulled from the bundle server', () => {
     expect(await cachedBundleVersion(env)).toBe('1.0.0');
   });
 
-  test('applies a new version on a poll: skills and actions change together, and connected clients are told', async ({
+  test('applies a new version on a poll: skills and actions change together, and connected clients are told once per list', async ({
     mcp,
     server,
   }) => {
     const notifications = mcp.notifications.collect();
     const seen = notifications.received.length;
-    const notifiedSinceSwap = () => new Set(notifications.received.slice(seen).map(({ method }) => method));
 
     bundleServer.published = environment.sign(billingBundle('2.0.0', V2_SKILLS));
     await until(async () => (await servedSkills(mcp)).versions.includes('2.0.0'), 'version 2.0.0');
-    await until(
-      () => LIST_CHANGED.every((method) => notifiedSinceSwap().has(method)),
-      'the list_changed notifications',
-    );
+    const notified = await listChangedBySwap(notifications, seen);
 
     const removed = await mcp.tools.call('load_skill', { skillId: 'reports' });
     const added = await loadSkill(mcp, 'refunds');
     const removedAction = await runWorkflow(mcp, GET_PLAN);
     const keptAction = await runWorkflow(mcp, CREATE_INVOICE);
 
+    expect(notified).toEqual(ONE_LIST_CHANGED_EACH);
     expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
     expect(removed.isError).toBe(true);
     expect(added).toMatchObject({ id: 'refunds', bundleVersion: '2.0.0' });
@@ -493,6 +514,19 @@ test.describe('a server that takes pushed bundles', () => {
     await waitForLog(server, '[saas-source] push refused (wrong_issuer): not a valid token from issuer');
     expect(server.getLogs().join('\n')).not.toContain(token);
     expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
+  });
+
+  test('applies a pushed version and tells connected clients once per list it changed', async ({ mcp, server }) => {
+    const notifications = mcp.notifications.collect();
+    const seen = notifications.received.length;
+    const token = await issuer.pullToken({ jti: 'e2e-push-applied' });
+
+    const response = await pushBundle(server, token, environment.sign(billingBundle('2.0.0', V2_SKILLS)));
+    const notified = await listChangedBySwap(notifications, seen);
+
+    expect(response.status).toBe(200);
+    expect(notified).toEqual(ONE_LIST_CHANGED_EACH);
+    expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
   });
 });
 

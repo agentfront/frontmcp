@@ -22,6 +22,7 @@ import type PromptRegistry from '../../prompt/prompt.registry';
 import type ResourceRegistry from '../../resource/resource.registry';
 import type { SkillSessionManager } from '../../skill/session/skill-session.manager';
 import type { SkillRegistryInterface } from '../../skill/skill.registry';
+import { runListChangeBatch } from '../../surface/list-change-batch';
 import type { LiveSurface } from '../../surface/live-surface';
 import type { TaskStore } from '../../task/store/task.store';
 import type { TaskRegistry } from '../../task/task.registry';
@@ -184,6 +185,16 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
     for (const cb of this.lifecycleCallbacks) {
       await cb();
     }
+  }
+
+  /**
+   * Run `change`, such as a plugin swapping the entries it registered, and send connected clients one `list_changed`
+   * for each list it changed (tools, resources, prompts, skills) once it ends, also when it throws, instead of one per
+   * registry change. A batch run inside another joins it. Changes made outside it, such as another request's, are
+   * sent as they happen.
+   */
+  batchListChanges<T>(change: () => T | Promise<T>): Promise<T> {
+    return runListChangeBatch(this, change);
   }
 
   private readonly addedHealthProbes: HealthProbeDefinition[] = [];

@@ -285,6 +285,9 @@ export interface SkillRegistryInterface {
     cb: (event: SkillChangeEvent) => void,
   ): () => void;
 
+  /** Tell subscribers the listed skills changed though none was added or removed, as when a skill source first loads. */
+  notifyListChanged(): void;
+
   /**
    * Get MCP capabilities for skills.
    */
@@ -1285,6 +1288,10 @@ export default class SkillRegistry
     }
 
     return this.emitter.on((e) => cb({ ...e, snapshot: this.listAllInstances().filter(filter) }));
+  }
+
+  notifyListChanged(): void {
+    this.bump('reset');
   }
 
   /* -------------------- Capabilities -------------------- */
