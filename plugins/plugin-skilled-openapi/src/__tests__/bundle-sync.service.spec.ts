@@ -1148,7 +1148,7 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
     const warm = await warmSync.refresh();
 
     expect(cold).toEqual({ status: 'failed', reason: 'pull responded 503', cacheFallback: false, at });
-    expect(warm).toEqual(cold);
+    expect(warm).toEqual({ ...cold, at });
     expect(coldSync.loadState()).toEqual({ status: 'failed', reason: 'pull responded 503' });
     expect(warmSync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '1' });
   });
