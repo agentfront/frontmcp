@@ -58,6 +58,39 @@ describe('source-options schemas', () => {
       expect(() => saasSourceSchema.parse({ ...baseSaas, allowRollback: 'yes' })).toThrow();
     });
 
+    describe('pushReplayStorage', () => {
+      const issuesOf = (pushReplayStorage: unknown) => {
+        const result = saasSourceSchema.safeParse({ ...baseSaas, enableWebhook: true, pushReplayStorage });
+        return result.success ? [] : result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
+      };
+
+      it('is unset by default, and takes a store every replica shares', () => {
+        const redis = { type: 'redis', redis: { url: 'redis://replay.internal:6379' }, prefix: 'acme:' };
+
+        expect(saasSourceSchema.parse(baseSaas).pushReplayStorage).toBeUndefined();
+        expect(saasSourceSchema.parse({ ...baseSaas, pushReplayStorage: redis }).pushReplayStorage).toEqual(redis);
+        expect(issuesOf({ type: 'upstash' })).toEqual([]);
+        expect(issuesOf({ type: 'vercel-kv' })).toEqual([]);
+        expect(issuesOf({ type: 'sqlite', sqlite: { path: '/var/lib/acme/replay.sqlite' } })).toEqual([]);
+      });
+
+      it.each([['memory'], ['auto'], ['cloudflare-kv'], [undefined]])(
+        'refuses type %s, which replicas do not share or cannot write once atomically',
+        (type) => {
+          expect(issuesOf({ type })).toEqual([expect.stringMatching(/^pushReplayStorage\.type: must be "redis", /)]);
+        },
+      );
+
+      it('refuses a fallback to memory, and a value that is not a storage config', () => {
+        expect(issuesOf({ type: 'redis', fallback: 'memory' })).toEqual([
+          'pushReplayStorage.fallback: cannot be "memory": each replica would then accept the same push',
+        ]);
+        expect(issuesOf('redis://replay.internal:6379')).toEqual([
+          expect.stringMatching(/^pushReplayStorage: must be a storage config/),
+        ]);
+      });
+    });
+
     it('rejects http:// endpoint (must be HTTPS)', () => {
       expect(() => saasSourceSchema.parse({ ...baseSaas, endpoint: 'http://insecure.example/x' })).toThrow();
     });

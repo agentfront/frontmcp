@@ -7,5 +7,13 @@ compatibility_flags = ["nodejs_compat"]
 binding = "BUNDLE_CACHE"
 id = "e2e-bundle-cache"
 
+[[durable_objects.bindings]]
+name = "FRONTMCP_PUSH_REPLAY"
+class_name = "FrontMcpPushReplay"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FrontMcpPushReplay"]
+
 [triggers]
 crons = ["*/5 * * * *"]
