@@ -369,6 +369,20 @@ describe('OAuth Callback Flow — the session credential vault at sign-in', () =
     await adapter.disconnect();
   });
 
+  it('refuses a sign-in that stores no credential when the old vault cannot be rotated, and mints no code', async () => {
+    const { vault, adapter, run } = await signIn({ ok: true, sub: SUBJECT });
+    const connectedVaultId = await vault.ensureVault(SUBJECT);
+    await vault.store(SUBJECT, connectedVaultId, 'github', { secret: 'gh-token' });
+    jest.spyOn(vault, 'rotateVault').mockRejectedValue(new Error('storage down'));
+
+    const { state, output } = await run();
+
+    expect(state.authorizationCode).toBeUndefined();
+    expect(output?.status).toBe(500);
+    expect(String(output?.body)).toContain('Could not start a new session');
+    await adapter.disconnect();
+  });
+
   it('a sign-in that stores no credential creates no vault for a subject without one', async () => {
     const { vault, adapter, run } = await signIn({ ok: true, sub: SUBJECT });
 
