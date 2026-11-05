@@ -149,7 +149,9 @@ The operations of `@frontmcp/plugin-skilled-openapi` name their credential by th
 not by security scheme. For a binding that sends each caller's own credential, its `authProviders` option maps the
 `vaultRef` to the auth provider the caller connected (`authProviders: { 'billing-token': 'billing' }`), read from
 `this.authProviders`, else `this.credentials`; a caller who hasn't connected it gets `-32001` with the connect URL.
-A `SkilledOpenApiCredentialResolver` is told the caller as `opts.authInfo`, to pick a per-tenant credential.
+A `SkilledOpenApiCredentialResolver` is told the caller as `opts.authInfo`, to pick a per-tenant credential. The
+nearest one, in `init({ providers })`, the `@App` that installs the plugin or `@FrontMcp({ providers })`, answers
+`run_workflow`, `execute_action` and `this.callTool('<bundleId>.<operationId>')` alike.
 
 ## Spec Polling
 

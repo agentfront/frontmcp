@@ -253,7 +253,7 @@ describe('SkilledOpenApiPlugin', () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
-    it('builds an OperationToolFactory and registers per-op internal tools when scope.tools is available', async () => {
+    it("registers per-op internal tools, built on the plugin's providers, when scope.tools is available", async () => {
       // Use a bundle with an operation so the sync flow drives the factory's
       // registerToolInstance call — verifying not just construction but the
       // full wiring: factory → toolRegistry → registerToolInstance.
@@ -304,7 +304,7 @@ describe('SkilledOpenApiPlugin', () => {
         child: jest.fn().mockReturnThis(),
       };
       const fakeTools = {
-        registerToolInstance: jest.fn(),
+        registerToolInstance: jest.fn((tool: { providers: unknown }) => tool),
         unregisterToolInstance: jest.fn(() => true),
         getToolsForListing: jest.fn(() => []),
         getTools: jest.fn(() => []),
@@ -317,9 +317,9 @@ describe('SkilledOpenApiPlugin', () => {
           unregisterSkill: jest.fn(async () => false),
         },
         tools: fakeTools,
-        providers: { getActiveScope: () => ({ logger: fakeLogger, hooks: { registerHooks: jest.fn() } }) },
       };
-      const sync = await syncProvider.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore());
+      const pluginProviders = { getActiveScope: () => ({ logger: fakeLogger, hooks: { registerHooks: jest.fn() } }) };
+      const sync = await syncProvider.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore(), pluginProviders);
       expect(sync).toBeInstanceOf(BundleSyncService);
 
       // Wait up to 1s for the deferred source.start() → bundle apply → tool
@@ -329,6 +329,7 @@ describe('SkilledOpenApiPlugin', () => {
         await new Promise((r) => setTimeout(r, 25));
       }
       expect(fakeTools.registerToolInstance).toHaveBeenCalled();
+      expect(fakeTools.registerToolInstance.mock.calls[0][0].providers).toBe(pluginProviders);
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
@@ -363,7 +364,10 @@ describe('SkilledOpenApiPlugin', () => {
         };
         return logger;
       };
-      const buildSync = async (scope: Record<string, unknown>) => {
+      const pluginProvidersOf = (logger: ReturnType<typeof silentLogger>) => ({
+        getActiveScope: () => ({ logger, hooks: { registerHooks: jest.fn() } }),
+      });
+      const buildSync = async (scope: { logger: ReturnType<typeof silentLogger> } & Record<string, unknown>) => {
         const providers = SkilledOpenApiPlugin.dynamicProviders({
           source: { type: 'inline', content: bundleWithOp },
           dev: true,
@@ -372,17 +376,21 @@ describe('SkilledOpenApiPlugin', () => {
         const syncProvider = providers.find((p) => (p as { provide: unknown }).provide === BundleSyncService) as {
           useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
         };
-        return syncProvider.useFactory(scope, new HiddenOpRegistry(), new BundleStore());
+        return syncProvider.useFactory(
+          scope,
+          new HiddenOpRegistry(),
+          new BundleStore(),
+          pluginProvidersOf(scope.logger),
+        );
       };
 
       it('registers the operation tools in the registry the scope has by the time the bundle applies', async () => {
         const logger = silentLogger();
-        const scope: Record<string, unknown> = {
+        const scope: { logger: typeof logger } & Record<string, unknown> = {
           logger,
           registerHealthProbe: jest.fn(),
           skills: { registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })) },
           tools: undefined,
-          providers: { getActiveScope: () => ({ logger, hooks: { registerHooks: jest.fn() } }) },
         };
         const sync = await buildSync(scope);
         const tools = { registerToolInstance: jest.fn(), unregisterToolInstance: jest.fn(() => true) };
@@ -400,7 +408,6 @@ describe('SkilledOpenApiPlugin', () => {
           logger,
           registerHealthProbe: jest.fn(),
           skills: { registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })) },
-          providers: { getActiveScope: () => ({ logger, hooks: { registerHooks: jest.fn() } }) },
         };
         const bundleStore = new BundleStore();
         const providers = SkilledOpenApiPlugin.dynamicProviders({
@@ -410,7 +417,12 @@ describe('SkilledOpenApiPlugin', () => {
         const syncProvider = providers.find((p) => (p as { provide: unknown }).provide === BundleSyncService) as {
           useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
         };
-        const sync = await syncProvider.useFactory(scope, new HiddenOpRegistry(), bundleStore);
+        const sync = await syncProvider.useFactory(
+          scope,
+          new HiddenOpRegistry(),
+          bundleStore,
+          pluginProvidersOf(logger),
+        );
 
         await sync.ensureReady();
 
