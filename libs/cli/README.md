@@ -408,6 +408,8 @@ An object field takes a JSON string; an array field takes the flag once per valu
 ./myapp uninstall                 # Remove what install added
 ```
 
+An unknown command exits 2 with `error: unknown command '<name>'`, and `(Did you mean <command>?)` when one is close. A failed call prints `Error: <message>` on stderr, without the `MCP error <code>:` prefix, and exits 1.
+
 A server with skills also gets `skills list`, `skills search`, `skills read` and `skills load`; `skills read` and `skills load` exit 1 when a skill is not found.
 
 **Skilled OpenAPI:** on a server that uses the Skilled OpenAPI plugin, the bundle's skills are tools, and the `skills` commands run the plugin's tools instead: `skills search`, `skills load`, `skills execute`, `skills run`, `skills read` and `skills list`. On a server whose only tools are the plugin's, the same commands are also top-level, and the plugin's tools are never plain tool commands:
@@ -419,7 +421,7 @@ A server with skills also gets `skills list`, `skills search`, `skills read` and
 ./myapp run_workflow --file refund.js                  # A script (as an argument, --file, or - for stdin)
 ```
 
-They answer to `search-skill`, `load-skill`, `execute_action` and `run-workflow` too. `--output json` prints the tool's structured content. They exit 1 when the tool fails or a skill is not found, and 2 for a usage error, with the error on stderr.
+They answer to `search-skill`, `load-skill`, `execute_action` and `run-workflow` too. `--output json` prints the tool's structured content. They exit 1 when the tool fails or a skill is not found, and 2 for a usage error, with the error on stderr. With `execute_action` in `cli.excludeTools`, `load_skill` prints each action as a one-call `run_workflow` script instead of an `execute` line.
 
 **Teaching a coding agent the skills:** `install -p claude` writes a Claude Code plugin and `install -p codex` writes the skills to `.codex/skills/<bin>/` (`~/.codex/skills/<bin>/` with `--scope user`), beside the Codex MCP entry. Each gets the two kinds of skill, kept apart:
 

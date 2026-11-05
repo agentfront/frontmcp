@@ -6,14 +6,17 @@ describe('CLI Exec Error Handling', () => {
   });
 
   // #378 — an unknown command is a Commander usage error: it exits 2 (per the
-  // program.exitOverride convention), not 0. (This was a pre-#378 expectation.)
-  // The program declares subcommands but no positionals, so an unrecognized
-  // token currently surfaces as an excess-argument error; the contract under
-  // test is the exit code, so accept either phrasing.
-  it('exits 2 (usage error) for an unknown command', () => {
+  // program.exitOverride convention), not 0.
+  it('exits 2 (usage error) for an unknown command, and names it', () => {
     const { stderr, exitCode } = runCli(['nonexistent-command']);
     expect(exitCode).toBe(2);
-    expect(stderr).toMatch(/unknown command|too many arguments/i);
+    expect(stderr).toBe("error: unknown command 'nonexistent-command'\n");
+  });
+
+  it('suggests the command a mistyped one is close to', () => {
+    const { stderr, exitCode } = runCli(['greeet', '--name', 'World']);
+    expect(exitCode).toBe(2);
+    expect(stderr).toBe("error: unknown command 'greeet'\n(Did you mean greet?)\n");
   });
 
   it('should exit with non-zero code when missing required tool arg', () => {

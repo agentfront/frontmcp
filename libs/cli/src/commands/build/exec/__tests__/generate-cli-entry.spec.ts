@@ -704,9 +704,11 @@ describe('generateCliEntry', () => {
       expect(source).toContain("'workflow'");
     });
 
-    it('should default to outputHelp when no args', () => {
+    it('prints the help with no command, and leaves an unknown command to commander', () => {
       const source = generateCliEntry(makeOptions());
-      expect(source).toContain('program.action(function() { program.outputHelp(); })');
+      expect(source).toContain("process.argv.concat('--help')");
+      expect(source).not.toContain('program.action(');
+      expect(source).not.toContain("program.on('command:*'");
     });
   });
 
