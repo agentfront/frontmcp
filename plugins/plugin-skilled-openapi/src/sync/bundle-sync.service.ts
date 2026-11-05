@@ -8,13 +8,16 @@ import {
   resolveSkillLoadOrder,
   SkillDependencyCycleError,
   SkillDependencyMissingError,
+  tokenFailureOf,
   verifyBundleSignature,
   type AuthBinding,
   type BundleDiff,
+  type BundleOrigin,
   type BundlePullFailureListener,
   type BundlePushReceiver,
   type BundleSourceListener,
   type BundleStore,
+  type BundleTokenFailure,
   type OperationDescriptor,
   type ResolvedBundle,
   type ServiceDescriptor,
@@ -171,7 +174,7 @@ export class BundleSyncService {
     try {
       await this.source?.refresh?.();
     } catch (e) {
-      this.recordPullFailure(describeLoadError(e), false);
+      this.recordPullFailure(describeLoadError(e), false, tokenFailureOf(e));
     }
     return this.syncOutcome();
   }
@@ -239,14 +242,14 @@ export class BundleSyncService {
     // later emits re-apply in order. The source waits for each apply, so a Cron
     // refresh ends once its bundle is applied and kept.
     source.onChange(async (bundle, origin) => {
-      const applied = this.enqueueApply(bundle, origin?.pullFailure);
+      const applied = this.enqueueApply(bundle, origin);
       if (!firstSettled) {
         firstSettled = true;
         void applied.then(() => resolveFirst());
       }
       await applied;
     });
-    source.onPullFailure?.((reason) => this.recordPullFailure(reason, false));
+    source.onPullFailure?.((reason, tokenFailure) => this.recordPullFailure(reason, false, tokenFailure));
     try {
       await source.start();
       // Only await the first apply when the source actually emitted during
@@ -261,7 +264,7 @@ export class BundleSyncService {
       const reason = describeLoadError(e);
       this.logger.error(`[skilled-openapi] initial bundle sync failed: ${reason}`);
       this.recordLoadFailure(reason);
-      this.recordPullFailure(reason, false);
+      this.recordPullFailure(reason, false, tokenFailureOf(e));
     }
   }
 
@@ -274,13 +277,13 @@ export class BundleSyncService {
    * Apply after every apply queued before: apply() mutates the registry, the bundle store and the unregister
    * handles, so two at once would leave them inconsistent. An applied bundle, pulled or pushed, is kept by the source
    * before the next apply starts, so the last good bundle is always the last one applied. Never rejects, so the queue
-   * never breaks. `pullFailure` is set when the bundle is the cached one, served because the pull failed.
+   * never breaks. `origin.pullFailure` is set when the bundle is the cached one, served because the pull failed.
    */
-  private enqueueApply(bundle: ResolvedBundle, pullFailure?: string): Promise<BundleApplyResult> {
+  private enqueueApply(bundle: ResolvedBundle, origin?: BundleOrigin): Promise<BundleApplyResult> {
     const previous = this.applyQueue ?? Promise.resolve(undefined);
     const applied = previous.then(async () => {
       const result = await this.applyAndRecord(bundle);
-      this.recordSync(result, pullFailure);
+      this.recordSync(result, origin);
       if (result.applied) await this.keepAppliedBundle(bundle);
       return result;
     });
@@ -288,10 +291,10 @@ export class BundleSyncService {
     return applied;
   }
 
-  /** Record what became of a bundle a pull or a push brought; with `pullFailure`, of the cached one served instead. */
-  private recordSync(result: BundleApplyResult, pullFailure: string | undefined): void {
-    if (pullFailure !== undefined) {
-      this.recordPullFailure(pullFailure, result.applied);
+  /** Record what became of a bundle a pull or a push brought; with `origin.pullFailure`, of the cached one served instead. */
+  private recordSync(result: BundleApplyResult, origin: BundleOrigin | undefined): void {
+    if (origin?.pullFailure !== undefined) {
+      this.recordPullFailure(origin.pullFailure, result.applied, origin.tokenFailure);
       return;
     }
     const synced = { bundleId: result.bundleId, bundleVersion: result.bundleVersion, at: new Date().toISOString() };
@@ -302,11 +305,12 @@ export class BundleSyncService {
     }
   }
 
-  /** Record a pull that failed; `cacheFallback` when the source served its cached bundle instead. */
-  private recordPullFailure(reason: string, cacheFallback: boolean): void {
+  /** Record a pull that failed, and the token check it failed on; `cacheFallback` when the cached bundle serves instead. */
+  private recordPullFailure(reason: string, cacheFallback: boolean, tokenFailure?: BundleTokenFailure): void {
     this.lastSync = {
       status: 'failed',
       reason: publicLoadFailureReason(reason),
+      tokenFailure,
       cacheFallback,
       at: new Date().toISOString(),
     };

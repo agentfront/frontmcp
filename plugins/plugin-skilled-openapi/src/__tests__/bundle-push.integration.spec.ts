@@ -131,6 +131,26 @@ describe('pushed bundles on a server with enableWebhook', () => {
     expect(server.servedVersion()).toBe('3.0.0');
   });
 
+  it('answers every refused token with the same 401, whatever check refused it', async () => {
+    const tokens = [
+      await issuer.sign({ jti: 'push-other-issuer', iss: 'https://impostor.example' }),
+      await (await tokenIssuer('cloud-2026')).pushToken(),
+      await (await tokenIssuer('cloud-2027')).pushToken(),
+      await issuer.sign({}),
+    ];
+
+    const answers = await Promise.all(
+      tokens.map(async (token) => {
+        const response = await push(server, `Bearer ${token}`, signed(bundle('5.0.0', ['refunds'])));
+        return { status: response.status, body: await response.json() };
+      }),
+    );
+
+    expect(answers).toEqual(
+      Array(4).fill({ status: 401, body: { error: 'invalid_token', error_description: 'the push token was refused' } }),
+    );
+  });
+
   it("answers 503 when the issuer's JWKS cannot be read once its cached keys are a minute old", async () => {
     const token = await issuer.pushToken();
     jwksAvailable = false;

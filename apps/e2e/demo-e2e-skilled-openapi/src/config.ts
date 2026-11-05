@@ -51,6 +51,7 @@ export function saasBundleSetup(): PluginSetup {
       expectedIssuer: requiredEnv('SKILLED_SAAS_ISSUER'),
       expectedAudience: requiredEnv('SKILLED_SAAS_AUDIENCE'),
       pollIntervalMs: Number(requiredEnv('SKILLED_SAAS_POLL_INTERVAL_MS')),
+      enableWebhook: process.env['SKILLED_SAAS_ENABLE_WEBHOOK'] === 'true',
     },
     bundleCacheDir: requiredEnv('SKILLED_BUNDLE_CACHE_DIR'),
   };
