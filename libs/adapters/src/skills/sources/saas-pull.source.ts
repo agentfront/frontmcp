@@ -9,7 +9,8 @@ import { dirname, ensureDir, isRedirectResponse, pathResolve, readFile, writeFil
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import { OverlayParseError, parseOverlay } from '../bundle/overlay-parser';
-import { WebhookReplayGuard } from '../security/webhook-replay-guard';
+import { createStorageReplayNonceStore, type ReplayNonceStore } from '../security/replay-nonce-store';
+import { WebhookReplayGuard, type ReplayRejectCode } from '../security/webhook-replay-guard';
 import type { SaasSourceOptions } from '../source-options';
 import type {
   BundlePushReceiver,
@@ -38,12 +39,13 @@ export class SaasPullTokenRejectedError extends Error {
 }
 
 /**
- * The token of a pushed bundle was refused: it fails the checks the pull token passes (`invalid-token`), or a push
- * already used it (`replayed`). The pushed bundle is not applied.
+ * The token of a pushed bundle was refused: it fails the checks the pull token passes (`invalid-token`), a push
+ * already used it (`replayed`), or the replay store could not record its `jti` (`replay-unchecked`). The pushed
+ * bundle is not applied.
  */
 export class SaasPushRefusedError extends Error {
   constructor(
-    readonly refusal: 'invalid-token' | 'replayed',
+    readonly refusal: 'invalid-token' | 'replayed' | 'replay-unchecked',
     reason: string,
   ) {
     super(`[saas-source] push refused: ${reason}`);
@@ -52,6 +54,15 @@ export class SaasPushRefusedError extends Error {
 }
 
 type TokenVerdict = { ok: true; claims: Record<string, unknown> } | { ok: false; reason: string };
+
+/** The key prefix of the push token `jti`s a shared replay store keeps, followed by the source's audience. */
+const PUSH_JTI_NAMESPACE = 'frontmcp:skilled-openapi:push-jti';
+
+function pushRefusalFor(code: ReplayRejectCode | undefined): SaasPushRefusedError['refusal'] {
+  if (code === 'nonce_replay') return 'replayed';
+  if (code === 'store_unavailable') return 'replay-unchecked';
+  return 'invalid-token';
+}
 
 /** Why a pull failed, with the first issues the bundle checks found when the bundle was the problem. */
 function describePullFailure(error: unknown): string {
@@ -136,7 +147,15 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
     private readonly deps: BundleSourceDeps = {},
   ) {
     this.id = `saas:${this.options.endpoint}`;
-    if (options.enableWebhook) this.replayGuard = new WebhookReplayGuard();
+    if (options.enableWebhook) this.replayGuard = new WebhookReplayGuard({ store: this.pushReplayStore() });
+  }
+
+  /** The store an injected `pushReplayStore` or the `pushReplayStorage` option names; none keeps the jtis in memory. */
+  private pushReplayStore(): ReplayNonceStore | undefined {
+    if (this.deps.pushReplayStore) return this.deps.pushReplayStore;
+    const { pushReplayStorage, expectedAudience } = this.options;
+    if (!pushReplayStorage) return undefined;
+    return createStorageReplayNonceStore(pushReplayStorage, `${PUSH_JTI_NAMESPACE}:${expectedAudience}`);
   }
 
   /** This source, when `enableWebhook` is on: it then takes bundles pushed to the server. */
@@ -151,8 +170,9 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
 
   /**
    * Check the token of a pushed bundle: by the rules the pull token passes (a key in `jwksUrl`, `iss`, `aud`,
-   * `resource`, expiry), then by the replay guard, so its `iat` must be within five minutes and its `jti` unused.
-   * Throws {@link SaasPushRefusedError}, or a plain Error when the JWKS can't be read.
+   * `resource`, expiry), then by the replay guard, so its `iat` must be within five minutes and its `jti` unused by
+   * every instance sharing the replay store. Throws {@link SaasPushRefusedError}, or a plain Error when the JWKS can't
+   * be read.
    */
   async verifyPushToken(token: string): Promise<void> {
     if (!this.replayGuard) {
@@ -167,10 +187,9 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
     if (typeof iat !== 'number' || typeof jti !== 'string') {
       throw new SaasPushRefusedError('invalid-token', 'a push token needs "iat" and "jti" claims');
     }
-    const replay = this.replayGuard.check({ timestampMs: iat * 1000, nonce: jti });
+    const replay = await this.replayGuard.check({ timestampMs: iat * 1000, nonce: jti });
     if (!replay.ok) {
-      const refusal = replay.code === 'nonce_replay' ? 'replayed' : 'invalid-token';
-      throw new SaasPushRefusedError(refusal, `its "jti" or "iat" claim: ${replay.reason}`);
+      throw new SaasPushRefusedError(pushRefusalFor(replay.code), `its "jti" or "iat" claim: ${replay.reason}`);
     }
   }
 

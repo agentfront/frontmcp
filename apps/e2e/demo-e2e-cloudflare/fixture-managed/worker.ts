@@ -13,7 +13,7 @@ interface ManagedFixtureBindings {
 
 const bindings = env as unknown as ManagedFixtureBindings;
 
-export default createEdgeMcp({
+const mcp = createEdgeMcp({
   info: { name: 'cf-managed-fixture', version: '1.0.0' },
   apps: [],
   http: { entryPath: '/mcp' },
@@ -30,3 +30,6 @@ export default createEdgeMcp({
     cache: kvBundleCacheFromEnv('BUNDLE_CACHE'),
   },
 });
+
+export default mcp;
+export const FrontMcpPushReplay = mcp.PushReplayDurableObject;
