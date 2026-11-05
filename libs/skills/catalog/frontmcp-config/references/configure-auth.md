@@ -482,7 +482,8 @@ The `authProviders` accessor (from `@frontmcp/auth`) exposes:
 
 The factory gets the caller's `userSub`, `userEmail`, `userName` and `sessionId`. The server keeps the credential it
 returns in memory, per scope: a `global` one for every caller, a `user` one for that user in any session, a `session`
-one for that verified session. Later requests of the scope get it without running the factory again, until it expires,
+one for that verified session; a signed-in caller without a verified session gets one `session` credential for all
+its requests. Later requests of the scope get it without running the factory again, until it expires,
 or, for a credential without an expiry, until the provider's `cacheTtl` passes (default `defaultCacheTtl`, one hour).
 Each server instance keeps its own. A `session` credential of an anonymous caller without a verified session isn't kept.
 

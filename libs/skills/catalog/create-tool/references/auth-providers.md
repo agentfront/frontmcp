@@ -38,7 +38,8 @@ export default class Server {}
   (`bearer`, `oauth`, `api_key`, `basic`, `custom`, …) or `null`.
 - The server keeps each credential the factory returns, in memory, and serves it to the later requests of its
   scope: a `global` one to every caller, a `user` one to that signed-in user in any session, a `session` one to that
-  verified session. So the factory runs once per scope, not once per call.
+  verified session. A signed-in caller without a verified session gets one `session` credential for all its requests.
+  So the factory runs once per scope, not once per call.
 - A kept credential lasts until it expires (its `expiresAt`). One without an expiry lasts for the provider's
   `cacheTtl`, which defaults to `authProvidersVault.defaultCacheTtl` (one hour). Then the factory runs again.
 - Each server instance keeps its own credentials. A `session` credential of an anonymous caller without a verified
