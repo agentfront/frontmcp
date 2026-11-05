@@ -3,7 +3,7 @@ import { sha256Hex } from '@frontmcp/utils';
 import type { ListChangedKind } from '../common/interfaces/flow.interface';
 import { isEnabledSource, type EnabledOption, type EnabledSource } from '../common/metadata/enabled.metadata';
 import { STATELESS_SESSION_ID } from '../transport/transport.types';
-import { listsUnchanged } from './unchanged-lists';
+import { announcesListChangeNow } from './list-change-batch';
 
 /** The `_meta` key of a list result that carries the hash of what the list shows. */
 export const SURFACE_META_KEY = 'frontmcp/surface';
@@ -79,7 +79,7 @@ export class LiveSurface {
     }
     this.stops.push(
       this.scope.tools.subscribe({ immediate: false }, () => {
-        if (!listsUnchanged()) this.toolsVersion++;
+        if (announcesListChangeNow(this.scope, 'tools')) this.toolsVersion++;
       }),
     );
   }

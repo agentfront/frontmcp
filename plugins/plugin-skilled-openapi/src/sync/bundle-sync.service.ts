@@ -1,6 +1,7 @@
 // file: plugins/plugin-skilled-openapi/src/sync/bundle-sync.service.ts
 
 import {
+  bundleDigest,
   bundleSkillToActions,
   compareBundleVersions,
   diffBundles,
@@ -26,6 +27,8 @@ import {
 import {
   SkillBundleNotLoadedError,
   type FrontMcpLogger,
+  type ListChangeBatch,
+  type ScopeEntry,
   type SkillContent,
   type SkillRegistryInterface,
 } from '@frontmcp/sdk';
@@ -62,6 +65,11 @@ export interface BundleSyncOptions {
    * through its internal tool when there is one.
    */
   exposeOperationsAsInternalTools: boolean;
+  /**
+   * Runs each apply as one batch of registry changes, so connected clients get one `list_changed` per list it
+   * changed instead of one per skill, tool and resource. Wired to the scope's `batchListChanges` by the plugin.
+   */
+  batchListChanges?: ScopeEntry['batchListChanges'];
 }
 
 export interface BundleApplyResult {
@@ -342,7 +350,7 @@ export class BundleSyncService {
   private async applyAndRecord(bundle: ResolvedBundle): Promise<BundleApplyResult> {
     const label = `bundle ${bundle.bundleId}@${bundle.version}`;
     try {
-      const result = await this.apply(bundle);
+      const result = await this.applyAnnounced(bundle);
       if (result.applied) {
         this.loadFailure = undefined;
       } else {
@@ -358,11 +366,26 @@ export class BundleSyncService {
   }
 
   /**
+   * {@link apply} in one batch of registry changes. The first bundle applied also tells clients the skills changed:
+   * the skill surfaces answered that none was loaded, and a bundle with no skills changes no registry.
+   */
+  private applyAnnounced(bundle: ResolvedBundle): Promise<BundleApplyResult> {
+    const firstBundle = this.bundleStore.current() === undefined;
+    const applyAndAnnounce = async (batch?: ListChangeBatch) => {
+      const result = await this.apply(bundle, batch);
+      if (result.applied && firstBundle) this.skillRegistry.notifyListChanged();
+      return result;
+    };
+    return this.options.batchListChanges ? this.options.batchListChanges(applyAndAnnounce) : applyAndAnnounce();
+  }
+
+  /**
    * Validate signature and apply the bundle. Returns a structured result;
    * never throws on validation/registration failure (caller logs + ignores).
    * Throws ONLY on programmer error (e.g. invalid argument).
+   * A rollback that restores every skill tells `batch` the lists are as they were: the operation tools are never listed.
    */
-  async apply(bundle: ResolvedBundle): Promise<BundleApplyResult> {
+  async apply(bundle: ResolvedBundle, batch?: ListChangeBatch): Promise<BundleApplyResult> {
     if (!bundle) throw new Error('apply: bundle is required');
 
     // Gate 0: pin guard. When operators have pinned the active version,
@@ -413,6 +436,12 @@ export class BundleSyncService {
 
     const diff = diffBundles(previous, bundle);
 
+    // The bundle served pulled again: its skills and tools stay registered, so clients get no list_changed for it.
+    if (previous && bundleDigest(previous) === bundleDigest(bundle)) {
+      this.bundleStore.swap(bundle);
+      return { applied: true, bundleId: bundle.bundleId, bundleVersion: bundle.version, diff };
+    }
+
     // Snapshot every piece of state we mutate so a failure mid-apply can be
     // fully reversed:
     //   - hiddenOps entries (the registry is rebuilt from scratch below).
@@ -433,6 +462,7 @@ export class BundleSyncService {
     // succeeds. These let rollback know exactly what to undo.
     const newHandles: { id: string; unregister: () => Promise<void> }[] = [];
     const successfullyRemovedIds: string[] = [];
+    let operationToolsReplaced = false;
 
     try {
       // 1) Sync hidden-op registry. This throws if the bundle references an
@@ -514,6 +544,7 @@ export class BundleSyncService {
       //    that op is just unavailable until the next swap.
       if (this.options.exposeOperationsAsInternalTools && this.operationToolFactory) {
         try {
+          operationToolsReplaced = true;
           this.operationToolFactory.unregisterAll();
           // Precompute the set of path templates with a GET op in this
           // bundle so the per-op classification can decide
@@ -545,6 +576,7 @@ export class BundleSyncService {
       this.logger.error(
         `[bundle-sync] apply failed for ${bundle.bundleId}@${bundle.version}: ${(e as Error).message}; rolling back`,
       );
+      let listsRestored = true;
 
       // Rollback step A: restore the hidden-op registry to its pre-apply state.
       this.hiddenOps.clear();
@@ -555,7 +587,8 @@ export class BundleSyncService {
       // Rollback step A.1: undo any internal tool registrations from this
       // failed apply, then re-register the prior bundle's operations so
       // composition callers continue to see the previous bundle's surface.
-      if (this.options.exposeOperationsAsInternalTools && this.operationToolFactory) {
+      // Left alone when the apply failed before replacing them.
+      if (operationToolsReplaced && this.operationToolFactory) {
         try {
           this.operationToolFactory.unregisterAll();
           const pathsWithGet = collectPathsWithGet(snapshotEntries);
@@ -578,7 +611,7 @@ export class BundleSyncService {
         try {
           await h.unregister();
         } catch {
-          // best effort
+          listsRestored = false;
         }
       }
 
@@ -611,8 +644,10 @@ export class BundleSyncService {
             `[bundle-sync] failed to restore prior skill ${id} during rollback: ${(restoreErr as Error).message}`,
           );
           this.skillUnregisterByBundleId.delete(id);
+          listsRestored = false;
         }
       }
+      if (listsRestored) batch?.listsRestored();
 
       return {
         applied: false,
