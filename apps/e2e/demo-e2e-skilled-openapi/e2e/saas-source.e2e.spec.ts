@@ -1,8 +1,19 @@
 // Scenarios B2 B3 B4 J3: the bundle pulled over https from a SaaS bundle server, with a pull token checked against the
-// issuer's JWKS: the startup pull, new versions applied by polling, refused tokens and bundles, the cache, redirects.
-import type { ResolvedBundle } from '@frontmcp/adapters/skills';
+// issuer's JWKS: the startup pull, new versions applied by polling, refused tokens, bundles and older versions, the
+// cache, redirects. /readyz stays ready but says the bundle served is stale while the last pull was refused or failed.
+// The log and /readyz name the check a pull or push token failed; the tools and the push answer don't. A push token
+// bound to its body (body_sha256) is refused with another body.
+// A pulled or pushed version is announced with one list_changed per list it changed (skills and their skill://
+// resources; the operation tools are internal, never listed), and a poll of the version served with none.
+// A restart serves the cached version, without writing it back, in place of a pull that fails, is refused or is older.
+import {
+  PUSH_BODY_DIGEST_CLAIM,
+  pushBodyDigest,
+  type BundleTokenFailure,
+  type ResolvedBundle,
+} from '@frontmcp/adapters/skills';
 import { expect, test, type McpTestClient, type ServerFixture } from '@frontmcp/testing';
-import { chmod, fileExists, pathJoin, readFile } from '@frontmcp/utils';
+import { chmod, fileExists, pathJoin, readFile, stat } from '@frontmcp/utils';
 
 import {
   BUNDLE_AUDIENCE,
@@ -26,15 +37,14 @@ import {
 
 const ISSUER_KEY_ID = 'e2e-bundle-issuer';
 const POLL_INTERVAL_MS = 500;
+/** For a server whose /readyz must show what its start pulled: no poll replaces that before the test reads it. */
+const SLOW_POLL_INTERVAL_MS = 60_000;
 /** The source keeps the last bundle at `<bundleCacheDir>/<expectedAudience>.json`, the audience made file-safe. */
 const CACHE_FILE_NAME = 'e2e_billing.json';
 const CREATE_INVOICE = "return await callTool('createInvoice', { customerId: 'cus_e2e', amount: 10 });";
 const GET_PLAN = "return await callTool('getAccountPlan', {});";
-const LIST_CHANGED = [
-  'notifications/resources/list_changed',
-  'notifications/skills/list_changed',
-  'notifications/tools/list_changed',
-];
+const LIST_CHANGED = ['notifications/resources/list_changed', 'notifications/skills/list_changed'];
+const ONE_LIST_CHANGED_EACH = Object.fromEntries(LIST_CHANGED.map((method) => [method, 1]));
 
 type BundledSkill = ResolvedBundle['skills'][number];
 
@@ -88,6 +98,9 @@ interface SaasServerSetup {
   /** The pull token the server is set up with; by default, the one the bundle server issued it. */
   pullToken?: () => Promise<string>;
   readOnlyCache?: boolean;
+  /** Take bundles pushed to `POST /__skilled_openapi/push`. */
+  enableWebhook?: boolean;
+  pollIntervalMs?: number;
 }
 
 /**
@@ -107,17 +120,26 @@ function useSaasServer(setup: SaasServerSetup = {}): Record<string, string> {
       SKILLED_SAAS_PULL_TOKEN: setup.pullToken ? await setup.pullToken() : pullToken,
       SKILLED_SAAS_ISSUER: BUNDLE_ISSUER,
       SKILLED_SAAS_AUDIENCE: BUNDLE_AUDIENCE,
-      SKILLED_SAAS_POLL_INTERVAL_MS: String(POLL_INTERVAL_MS),
+      SKILLED_SAAS_POLL_INTERVAL_MS: String(setup.pollIntervalMs ?? POLL_INTERVAL_MS),
       SKILLED_BUNDLE_CACHE_DIR: cacheDir,
+      SKILLED_SAAS_ENABLE_WEBHOOK: String(setup.enableWebhook === true),
     });
   });
   return env;
 }
 
+function cacheFileOf(env: Record<string, string>): string {
+  return pathJoin(env['SKILLED_BUNDLE_CACHE_DIR'], CACHE_FILE_NAME);
+}
+
 async function cachedBundleVersion(env: Record<string, string>): Promise<string | undefined> {
-  const cacheFile = pathJoin(env['SKILLED_BUNDLE_CACHE_DIR'], CACHE_FILE_NAME);
+  const cacheFile = cacheFileOf(env);
   if (!(await fileExists(cacheFile))) return undefined;
   return (JSON.parse(await readFile(cacheFile)) as ResolvedBundle).version;
+}
+
+async function cacheWrittenAt(env: Record<string, string>): Promise<number> {
+  return (await stat(cacheFileOf(env))).mtimeMs;
 }
 
 async function until(condition: () => boolean | Promise<boolean>, what: string, timeoutMs = 15_000): Promise<void> {
@@ -135,6 +157,34 @@ async function servedSkills(client: McpTestClient): Promise<{ ids: string[]; ver
     ids: skills.map((skill) => skill.skillId).sort(),
     versions: [...new Set(skills.map((skill) => skill.bundleVersion ?? 'none'))],
   };
+}
+
+/** The skilled-openapi check of /readyz, which must still answer ready. */
+async function readyCheck(server: ServerFixture) {
+  const ready = await readiness(server.info.baseUrl);
+  expect(ready).toMatchObject({ httpStatus: 200, status: 'ready' });
+  return ready.probes?.['skilled-openapi'];
+}
+
+type NotificationLog = ReturnType<McpTestClient['notifications']['collect']>;
+
+/** The `list_changed` notifications the client got after the first `seen`, counted by method. */
+function listChangedCounts(notifications: NotificationLog, seen: number): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const { method } of notifications.received.slice(seen)) {
+    if (method.endsWith('/list_changed')) counts[method] = (counts[method] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** Wait for the client to be told of each list a swap changed, then for the polls after it, which bring no change. */
+async function listChangedBySwap(notifications: NotificationLog, seen: number): Promise<Record<string, number>> {
+  await until(
+    () => LIST_CHANGED.every((method) => listChangedCounts(notifications, seen)[method] !== undefined),
+    'the list_changed notifications',
+  );
+  await new Promise((resolve) => setTimeout(resolve, 3 * POLL_INTERVAL_MS));
+  return listChangedCounts(notifications, seen);
 }
 
 function waitForLog(server: ServerFixture, text: string): Promise<void> {
@@ -205,26 +255,23 @@ test.describe('a bundle pulled from the bundle server', () => {
     expect(await cachedBundleVersion(env)).toBe('1.0.0');
   });
 
-  test('applies a new version on a poll: skills and actions change together, and connected clients are told', async ({
+  test('applies a new version on a poll: skills and actions change together, and connected clients are told once per list', async ({
     mcp,
     server,
   }) => {
     const notifications = mcp.notifications.collect();
     const seen = notifications.received.length;
-    const notifiedSinceSwap = () => new Set(notifications.received.slice(seen).map(({ method }) => method));
 
     bundleServer.published = environment.sign(billingBundle('2.0.0', V2_SKILLS));
     await until(async () => (await servedSkills(mcp)).versions.includes('2.0.0'), 'version 2.0.0');
-    await until(
-      () => LIST_CHANGED.every((method) => notifiedSinceSwap().has(method)),
-      'the list_changed notifications',
-    );
+    const notified = await listChangedBySwap(notifications, seen);
 
     const removed = await mcp.tools.call('load_skill', { skillId: 'reports' });
     const added = await loadSkill(mcp, 'refunds');
     const removedAction = await runWorkflow(mcp, GET_PLAN);
     const keptAction = await runWorkflow(mcp, CREATE_INVOICE);
 
+    expect(notified).toEqual(ONE_LIST_CHANGED_EACH);
     expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
     expect(removed.isError).toBe(true);
     expect(added).toMatchObject({ id: 'refunds', bundleVersion: '2.0.0' });
@@ -248,8 +295,20 @@ test.describe('a bundle pulled from the bundle server', () => {
 
     expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
     expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
-    expect((await readiness(server.info.baseUrl)).probes?.['skilled-openapi']?.details).toMatchObject({
-      bundleVersion: '2.0.0',
+    expect(await readyCheck(server)).toEqual({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleId: 'e2e:billing',
+        bundleVersion: '2.0.0',
+        lastSync: {
+          status: 'refused',
+          bundleId: 'e2e:billing',
+          bundleVersion: '3.0.0',
+          reason: expect.stringContaining('digest mismatch'),
+          at: expect.any(String),
+        },
+      },
     });
   });
 
@@ -267,6 +326,57 @@ test.describe('a bundle pulled from the bundle server', () => {
     expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
     expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
     expect(await cachedBundleVersion(env)).not.toBe('4.0.0');
+    expect(await readyCheck(server)).toMatchObject({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleVersion: '2.0.0',
+        lastSync: {
+          status: 'failed',
+          reason: expect.stringContaining('Bundle schema validation failed (4 issue(s)): skills.0.name: '),
+          cacheFallback: false,
+        },
+      },
+    });
+  });
+
+  test('does not apply an older signed version on a poll: the version served stays, and stays cached', async ({
+    mcp,
+    server,
+  }) => {
+    bundleServer.published = environment.sign(billingBundle('1.0.0', V1_SKILLS));
+
+    await waitForLog(
+      server,
+      '[bundle-sync] bundle e2e:billing@1.0.0 not applied: older than the served bundle e2e:billing@2.0.0',
+    );
+
+    expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
+    expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
+    expect(await cachedBundleVersion(env)).toBe('2.0.0');
+    expect(await readyCheck(server)).toMatchObject({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleVersion: '2.0.0',
+        lastSync: {
+          status: 'refused',
+          bundleVersion: '1.0.0',
+          reason: expect.stringContaining('older than the served bundle e2e:billing@2.0.0'),
+        },
+      },
+    });
+  });
+
+  test('is healthy again once a poll applies a newer version', async ({ mcp, server }) => {
+    bundleServer.published = environment.sign(billingBundle('5.0.0', V2_SKILLS));
+
+    await until(async () => (await servedSkills(mcp)).versions.includes('5.0.0'), 'version 5.0.0');
+
+    expect(await readyCheck(server)).toEqual({
+      status: 'healthy',
+      details: { state: 'loaded', bundleId: 'e2e:billing', bundleVersion: '5.0.0' },
+    });
   });
 });
 
@@ -301,26 +411,45 @@ test.describe('a workflow that runs while a new version is applied', () => {
   });
 });
 
-const REFUSED_PULL_TOKENS: ReadonlyArray<{ label: string; token: () => Promise<string>; reason: string }> = [
+interface RefusedPullToken {
+  label: string;
+  token: () => Promise<string>;
+  /** What the tools answer: the same for every token the issuer's checks refuse. */
+  reason: string;
+  /** The check that refused it, which only the log and /readyz name. */
+  tokenFailure: BundleTokenFailure;
+}
+
+const REFUSED_PULL_TOKENS: readonly RefusedPullToken[] = [
   {
     label: 'issued for another audience',
     token: () => issuer.pullToken({ aud: 'e2e:another-server' }),
     reason: 'its "aud" claim does not include "e2e:billing"',
+    tokenFailure: 'wrong_audience',
   },
   {
     label: 'from another issuer',
     token: () => issuer.pullToken({ iss: 'https://impostor.e2e.example' }),
     reason: 'not a valid token from issuer',
+    tokenFailure: 'wrong_issuer',
   },
   {
     label: 'that has expired',
     token: () => issuer.pullToken({}, { issuedAt: '2 hours ago', expiresAt: '1 hour ago' }),
     reason: 'not a valid token from issuer',
+    tokenFailure: 'expired',
   },
   {
     label: 'signed by a key outside the JWKS',
     token: async () => (await PullTokenIssuer.create(ISSUER_KEY_ID)).pullToken(),
     reason: 'not a valid token from issuer',
+    tokenFailure: 'bad_signature',
+  },
+  {
+    label: 'signed under a key id the JWKS does not publish',
+    token: async () => (await PullTokenIssuer.create('e2e-retired-issuer')).pullToken(),
+    reason: 'not a valid token from issuer',
+    tokenFailure: 'unknown_key',
   },
 ];
 
@@ -336,7 +465,14 @@ for (const refused of REFUSED_PULL_TOKENS) {
       const [reason = ''] = answers.reasons;
 
       expect(reason).toContain(`[saas-source] pull token rejected: ${refused.reason}`);
+      expect(reason).not.toContain(refused.tokenFailure);
       expectNoBundleLoaded(answers, reason.replace('No skill bundle is loaded: ', ''));
+      expect(answers.ready.probes?.['skilled-openapi']?.details).toMatchObject({
+        state: 'failed',
+        lastSync: { status: 'failed', tokenFailure: refused.tokenFailure, cacheFallback: false },
+      });
+      await waitForLog(server, `: pull token check failed (${refused.tokenFailure})`);
+      expect(server.getLogs().join('\n')).not.toContain(env['SKILLED_SAAS_PULL_TOKEN']);
       expect(bundleServer.requestsTo(JWKS_PATH).length).toBeGreaterThan(0);
       expect(bundleServer.requestsTo(BUNDLE_PATH)).toEqual([]);
       expect(await cachedBundleVersion(env)).toBeUndefined();
@@ -344,20 +480,118 @@ for (const refused of REFUSED_PULL_TOKENS) {
   });
 }
 
+/** Push `body` to the server's push endpoint with `token`: a string is sent as is, anything else as its JSON. */
+function pushBundle(server: ServerFixture, token: string, body: unknown): Promise<Response> {
+  return fetch(`${server.info.baseUrl}/__skilled_openapi/push`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  });
+}
+
+/** A push token bound by its `body_sha256` claim to `body`, the exact JSON it is pushed with. */
+function pushTokenFor(body: string, jti: string): Promise<string> {
+  return issuer.pullToken({ jti, [PUSH_BODY_DIGEST_CLAIM]: pushBodyDigest(body) });
+}
+
+test.describe('a server that takes pushed bundles', () => {
+  useSaasServer({ enableWebhook: true });
+
+  test("answers a push 503 while the issuer's JWKS can't be read, and the log names jwks_unavailable", async ({
+    mcp,
+    server,
+  }) => {
+    expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
+    const token = await issuer.pullToken({ jti: 'e2e-push-during-outage' });
+    bundleServer.mode = 'outage';
+
+    try {
+      const response = await pushBundle(server, token, environment.sign(billingBundle('2.0.0', V2_SKILLS)));
+
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: 'temporarily_unavailable',
+        error_description: "the issuer's JWKS could not be read",
+      });
+      await waitForLog(server, 'bundle push not checked (jwks_unavailable): fetch failed');
+    } finally {
+      bundleServer.mode = 'serving';
+    }
+  });
+
+  test('answers a push token from another issuer with the generic 401, while the log names the check', async ({
+    mcp,
+    server,
+  }) => {
+    const token = await issuer.pullToken({ iss: 'https://impostor.e2e.example', jti: 'e2e-push-impostor' });
+
+    const response = await pushBundle(server, token, environment.sign(billingBundle('2.0.0', V2_SKILLS)));
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+    expect(await response.json()).toEqual({ error: 'invalid_token', error_description: 'the push token was refused' });
+    await waitForLog(server, '[saas-source] push refused (wrong_issuer): not a valid token from issuer');
+    expect(server.getLogs().join('\n')).not.toContain(token);
+    expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
+  });
+
+  test('answers a token issued for another body with the generic 401, while the log names body_mismatch', async ({
+    mcp,
+    server,
+  }) => {
+    const issuedFor = JSON.stringify(environment.sign(billingBundle('2.0.0', V2_SKILLS)));
+    const token = await pushTokenFor(issuedFor, 'e2e-push-other-body');
+
+    const response = await pushBundle(server, token, environment.sign(billingBundle('2.0.0', V1_SKILLS)));
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+    expect(await response.json()).toEqual({ error: 'invalid_token', error_description: 'the push token was refused' });
+    await waitForLog(server, '[saas-source] push refused (body_mismatch): its "body_sha256" claim is not the SHA-256');
+    expect(server.getLogs().join('\n')).not.toContain(token);
+    expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
+  });
+
+  test('applies a pushed version and tells connected clients once per list it changed', async ({ mcp, server }) => {
+    const notifications = mcp.notifications.collect();
+    const seen = notifications.received.length;
+    const pushed = JSON.stringify(environment.sign(billingBundle('2.0.0', V2_SKILLS)));
+    const token = await pushTokenFor(pushed, 'e2e-push-applied');
+
+    const response = await pushBundle(server, token, pushed);
+    const notified = await listChangedBySwap(notifications, seen);
+
+    expect(response.status).toBe(200);
+    expect(notified).toEqual(ONE_LIST_CHANGED_EACH);
+    expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
+  });
+});
+
 test.describe('a bundle server that is down at startup', () => {
   test.describe('with the bundle kept in the cache by an earlier run', () => {
-    useSaasServer();
+    const env = useSaasServer();
 
-    test('starts, and serves the cached bundle', async ({ mcp, server }) => {
+    test('starts, and serves the cached bundle without writing it back to the cache', async ({ mcp, server }) => {
       expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
+      server.clearLogs();
       bundleServer.mode = 'outage';
+      await waitForLog(server, '[saas-source] poll failed');
+      const keptAt = await cacheWrittenAt(env);
       server.clearLogs();
 
       await server.restart();
 
       expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'reports'], versions: ['1.0.0'] });
       expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
-      expect((await readiness(server.info.baseUrl)).httpStatus).toBe(200);
+      expect(await cacheWrittenAt(env)).toBe(keptAt);
+      expect(await readyCheck(server)).toMatchObject({
+        status: 'degraded',
+        details: {
+          state: 'stale',
+          bundleVersion: '1.0.0',
+          lastSync: { status: 'failed', reason: 'fetch failed', tokenFailure: 'jwks_unavailable', cacheFallback: true },
+        },
+      });
       expect(server.getLogs().join('\n')).toContain('[saas-source] using cached bundle "e2e:billing@1.0.0"');
     });
   });
@@ -407,6 +641,75 @@ test.describe('a bundle server that is down at startup', () => {
       expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
       expect((await readiness(server.info.baseUrl)).httpStatus).toBe(200);
     });
+  });
+});
+
+test.describe('a server restarted while the bundle server serves an older version than the one it cached', () => {
+  const env = useSaasServer({ pollIntervalMs: SLOW_POLL_INTERVAL_MS });
+
+  test('keeps serving the cached version, and /readyz says the version pulled is older', async ({ mcp, server }) => {
+    expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
+    bundleServer.published = environment.sign(billingBundle('2.0.0', V2_SKILLS));
+    await server.restart();
+    expect((await servedSkills(mcp)).versions).toEqual(['2.0.0']);
+    bundleServer.published = environment.sign(billingBundle('1.0.0', V1_SKILLS));
+    server.clearLogs();
+
+    await server.restart();
+
+    expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
+    expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
+    expect(await cachedBundleVersion(env)).toBe('2.0.0');
+    expect(await readyCheck(server)).toEqual({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleId: 'e2e:billing',
+        bundleVersion: '2.0.0',
+        lastSync: {
+          status: 'refused',
+          bundleId: 'e2e:billing',
+          bundleVersion: '1.0.0',
+          reason: expect.stringContaining('older than the cached bundle e2e:billing@2.0.0'),
+          cacheFallback: true,
+          at: expect.any(String),
+        },
+      },
+    });
+    expect(server.getLogs().join('\n')).toContain(
+      '[bundle-sync] bundle e2e:billing@1.0.0 not applied: older than the cached bundle e2e:billing@2.0.0',
+    );
+  });
+});
+
+test.describe('a server restarted while the bundle server serves a version changed after it was signed', () => {
+  const env = useSaasServer({ pollIntervalMs: SLOW_POLL_INTERVAL_MS });
+
+  test('serves the cached version, and /readyz says the version pulled was refused', async ({ mcp, server }) => {
+    expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
+    const signed = environment.sign(billingBundle('2.0.0', V1_SKILLS));
+    bundleServer.published = { ...signed, skills: [...signed.skills, REFUNDS_SKILL] };
+    server.clearLogs();
+
+    await server.restart();
+
+    expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'reports'], versions: ['1.0.0'] });
+    expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
+    expect(await cachedBundleVersion(env)).toBe('1.0.0');
+    expect(await readyCheck(server)).toMatchObject({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleVersion: '1.0.0',
+        lastSync: {
+          status: 'refused',
+          bundleVersion: '2.0.0',
+          reason: expect.stringContaining('digest mismatch'),
+          cacheFallback: true,
+        },
+      },
+    });
+    expect(server.getLogs().join('\n')).toContain('serving the cached bundle e2e:billing@1.0.0');
   });
 });
 

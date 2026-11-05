@@ -72,21 +72,21 @@ export class CredentialsAccessorImpl implements CredentialsAccessor {
   async requireConnect(options: RequireConnectOptions): Promise<RequireConnectResult> {
     const { key, context } = options;
     const sub = this.resolveSub();
-    if (sub) {
-      const existing = await this.vault.get(sub, key);
-      if (existing) {
-        return { connected: true, key, credential: existing };
-      }
+    if (!sub) {
+      return {
+        connected: false,
+        key,
+        resumeUrl: '',
+        signInRequired: true,
+        message: `Sign in to this server to connect credential "${key}".`,
+      };
+    }
+    const existing = await this.vault.get(sub, key);
+    if (existing) {
+      return { connected: true, key, credential: existing };
     }
 
-    // Not connected (or anonymous): mint a signed, short-lived resume URL bound
-    // to this subject + key. When anonymous, sub is '' — the resume page will
-    // re-derive the subject on submit, but the link still cannot target another
-    // identity because the token is HMAC-signed and verified on the server.
-    const token = signCredentialResumeToken(
-      { sub: sub ?? '', key, context, ttlMs: this.resumeTtlMs },
-      this.signingSecret,
-    );
+    const token = signCredentialResumeToken({ sub, key, context, ttlMs: this.resumeTtlMs }, this.signingSecret);
     const resumeUrl = buildCredentialResumeUrl(this.basePath, token);
     this.logger.debug(`CredentialsAccessor: credential "${key}" not connected; issued resume link`);
     return {

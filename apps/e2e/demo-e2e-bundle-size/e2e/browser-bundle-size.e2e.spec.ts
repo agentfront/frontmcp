@@ -21,11 +21,11 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_288_965 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_296_155 },
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_296_730 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_303_961 },
 ];
 
-const VITE_INITIAL_CHUNK_MAX_BYTES = 763_249;
+const VITE_INITIAL_CHUNK_MAX_BYTES = 768_782;
 
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {
@@ -52,6 +52,8 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   auth: sdkModule(
     'auth/(flows|instances|auth-ui|cimd|credentials|secure-store)/|auth/primary-auth\\.factory|front-mcp/authorities-engine',
   ),
+  'auth providers vault':
+    /^libs\/sdk\/dist\/browser\/auth\/vault\/auth-providers\.providers|^libs\/auth\/dist\/browser\/vault\/(auth-providers\.(registry|vault|accessor\.impl)|credential-cache|credential-loaders\/)/,
   channels: sdkModule('channel/(?!channel\\.utils)'),
   'distributed transport': sdkModule('ha/|transport/(bus|relay|event-stores)/'),
   duties: sdkModule('duty/'),

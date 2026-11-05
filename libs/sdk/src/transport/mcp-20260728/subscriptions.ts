@@ -18,8 +18,9 @@
 import { MCP_20260728_META, SUBSCRIPTIONS_ACKNOWLEDGED_METHOD, type SubscriptionFilter } from '@frontmcp/protocol';
 
 import { CHANNEL_NOTIFICATION_METHOD } from '../../channel/channel.utils';
+import type { ListChangedKind } from '../../common/interfaces/flow.interface';
 import { type Scope } from '../../scope';
-import { listsUnchanged } from '../../surface/unchanged-lists';
+import { announcesListChangeNow } from '../../surface/list-change-batch';
 
 /** How often a bare SSE comment is emitted to hold the connection open. */
 const KEEPALIVE_INTERVAL_MS = 15_000;
@@ -112,17 +113,17 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
     queue.push({ method, params });
     notify?.();
   };
-  const pushListChanged = (method: string): void => {
-    if (!listsUnchanged()) push(method);
+  const pushListChanged = (kind: ListChangedKind): void => {
+    if (announcesListChangeNow(scope, kind)) push(`notifications/${kind}/list_changed`);
   };
 
   const unsubscribes: Array<() => void> = [];
 
   if (acknowledged.toolsListChanged) {
-    unsubscribes.push(scope.tools.subscribe({}, () => pushListChanged('notifications/tools/list_changed')));
+    unsubscribes.push(scope.tools.subscribe({}, () => pushListChanged('tools')));
   }
   if (acknowledged.promptsListChanged) {
-    unsubscribes.push(scope.prompts.subscribe({}, () => pushListChanged('notifications/prompts/list_changed')));
+    unsubscribes.push(scope.prompts.subscribe({}, () => pushListChanged('prompts')));
   }
 
   const watchedUris = new Set(acknowledged.resourceSubscriptions ?? []);
@@ -146,7 +147,7 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
           return;
         }
         if (acknowledged.resourcesListChanged) {
-          pushListChanged('notifications/resources/list_changed');
+          pushListChanged('resources');
         }
       }),
     );

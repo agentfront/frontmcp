@@ -16,8 +16,8 @@ interface CallerVaultLookup {
  * The secret of the credential the caller connected as `provider`: from the auth providers vault
  * (`this.authProviders`), else the session credential vault (`this.credentials`). A caller who has none gets a
  * `ToolCredentialsRequiredError` (JSON-RPC -32001), with the session vault's connect URL as `authUrl` when it has
- * one. The URL is kept out of the message: it lets its holder connect a credential for the caller, and the message
- * reaches workflow errors and the audit log.
+ * one, or `signInRequired` when the caller isn't signed in. The error's message never holds the URL: it lets its
+ * holder connect a credential for the caller, and the message reaches workflow errors and the audit log.
  */
 export async function connectedCredentialOf(provider: string, toolCall: CallerVaultLookup): Promise<string> {
   const resolved = await toolCall.tryGet(AUTH_PROVIDERS_ACCESSOR)?.get(provider);
@@ -26,12 +26,11 @@ export async function connectedCredentialOf(provider: string, toolCall: CallerVa
   const connection = await toolCall.tryGet(CREDENTIALS_ACCESSOR)?.requireConnect({ key: provider });
   if (connection?.connected) return connection.credential.secret;
 
-  const toolId = toolCall.metadata.name;
   throw new ToolCredentialsRequiredError({
-    toolId,
+    toolId: toolCall.metadata.name,
     providers: [provider],
-    authUrl: connection?.resumeUrl,
-    message: `Tool "${toolId}" sends the caller's own "${provider}" credential, which this caller hasn't connected. Connect "${provider}" and retry.`,
+    authUrl: connection?.resumeUrl || undefined,
+    signInRequired: connection?.signInRequired,
   });
 }
 

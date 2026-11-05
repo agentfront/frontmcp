@@ -972,6 +972,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       customClaims,
       // Checkpoint 3b — credentials from authenticate()
       credentials,
+      isIncremental,
     } = this.state;
 
     // Validate required fields before creating authorization code
@@ -993,6 +994,14 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     }
 
     const localAuth = this.scope.auth as LocalPrimaryAuth;
+
+    const startsWithEmptyVault = (!credentials || credentials.length === 0) && !isIncremental;
+    if (startsWithEmptyVault && !(await this.rotateExistingVault(localAuth, userSub))) {
+      this.respond(
+        this.htmlPage(this.renderErrorPage('server_error', 'Could not start a new session. Please try again.'), 500),
+      );
+      return;
+    }
 
     // Create the authorization code with consent/federated data
     const code = await localAuth.createAuthorizationCode({
@@ -1048,6 +1057,24 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       } else {
         this.logger.warn('authenticate() returned credentials but no credential vault is configured; ignoring');
       }
+    }
+  }
+
+  /**
+   * A sign-in that stores no credential still starts empty: it rotates the vault the subject has, if any.
+   * False when the rotation failed, so the old vault could still serve the new session.
+   */
+  private async rotateExistingVault(localAuth: LocalPrimaryAuth, userSub: string): Promise<boolean> {
+    const vault = localAuth.credentialVault;
+    if (!vault) return true;
+    try {
+      if (await vault.getVaultId(userSub)) {
+        await vault.rotateVault(userSub);
+      }
+      return true;
+    } catch (err) {
+      this.logger.error(`Failed to rotate the session vault: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
     }
   }
 

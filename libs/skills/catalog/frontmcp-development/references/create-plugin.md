@@ -539,6 +539,20 @@ An app that does not install the plugin does not get its providers: there, `this
 
 Because the nearest definition wins, a provider the plugin registers under a public token hides the one the app or the server declares under that token. For a default the user may replace, register the default under a token of the plugin's own and resolve the public one first: `this.tryGet(PublicToken) ?? this.get(DefaultToken)`. `@frontmcp/plugin-skilled-openapi` does this for `SkilledOpenApiCredentialResolver`.
 
+A provider factory that injects `ProviderRegistry` gets the registry that builds it, which for a GLOBAL provider is the one that declares it: for a plugin's provider, the plugin's own. A tool the plugin builds at runtime on that registry, `new ToolInstance(record, providers, owner)`, resolves `this.get()` and `this.tryGet()` as the plugin's tools do: the plugin's providers, then the app's that installs it, then the server's. `@frontmcp/plugin-skilled-openapi` builds its operation tools this way:
+
+```typescript
+import { ProviderRegistry } from '@frontmcp/sdk';
+
+static override dynamicProviders = (options: MyPluginOptions) => [
+  {
+    provide: RuntimeTools,
+    inject: () => [ProviderRegistry] as const,
+    useFactory: (pluginProviders: ProviderRegistry) => new RuntimeTools(pluginProviders, options),
+  },
+];
+```
+
 ### A plugin that runs once per server
 
 A plugin whose tools, skills or providers are the server's, such as `@frontmcp/plugin-skilled-openapi` with its four meta-tools, can't run twice in one server. Declare it with `oncePerServer`, giving the reason:
@@ -551,7 +565,23 @@ A plugin whose tools, skills or providers are the server's, such as `@frontmcp/p
 export default class CatalogPlugin extends DynamicPlugin<CatalogOptions> {}
 ```
 
-A server that installs it twice then fails at startup with `DuplicatePluginError` (code `DUPLICATE_PLUGIN`): `Plugin "catalog" can be installed once per server, and this server installs it twice.` followed by the reason. That covers the same `plugins` list naming it twice, the server and an app each installing it, and two apps of the server each installing it. An app with an endpoint of its own (`splitByApp`, or `standalone`) is a server of its own, so each such app may install one. Without `oncePerServer`, a plugin listed twice in one `plugins` list is installed once, from its last entry.
+A server that installs it twice then fails at startup with `DuplicatePluginError` (code `DUPLICATE_PLUGIN`): `Plugin "catalog" can be installed once per server, and this server installs it twice.` followed by the reason. That covers the same `plugins` list naming it twice, the server and an app each installing it, and two apps of the server each installing it. An app with an endpoint of its own (`splitByApp`, or `standalone`) is a server of its own, so each such app may install one.
+
+### A plugin listed twice in one `plugins` list
+
+Any plugin, with or without `oncePerServer`, is listed once per `plugins` list. Two entries of one plugin in the same list (the class twice, two `init()` calls, or the class and an `init()`) fail at startup with `DuplicatePluginEntryError` (code `DUPLICATE_PLUGIN_ENTRY`), which names the plugin, the list (`@FrontMcp({ plugins })`, `the plugins of app "<id>"`, `the plugins of agent "<id>"` or `the plugins of plugin "<name>"`) and the two entries by their place in it: `Plugin "cache" is listed twice in the plugins of app "billing" (entries 1 and 3), and only one entry could be installed.` Up to 1.11.0 the list kept only the last entry and dropped the other's options without a word.
+
+Put all the options in one entry. To run a plugin with two configurations, install each on its own `@App`: each app's list is installed on its own, so the same plugin in two apps' lists, or in the server's list and an app's, is two instances, each with its own options. A `oncePerServer` plugin still allows one install per server, and listing it twice in one list fails with its `DuplicatePluginError`.
+
+A server option that installs a plugin for you counts as an entry the user didn't write. `@FrontMcp({ observability })` adds `ObservabilityPlugin`; a server that sets it and also lists `ObservabilityPlugin` in `@FrontMcp({ plugins })` fails with `PluginConfiguredTwiceError` (code `PLUGIN_CONFIGURED_TWICE`), which names the option and the entry. Configure the plugin in one place.
+
+```typescript
+@App({ name: 'Billing', plugins: [CachePlugin.init({ type: 'memory', defaultTTL: 60 })] })
+class BillingApp {}
+
+@App({ name: 'Reports', plugins: [CachePlugin.init({ type: 'memory', defaultTTL: 3600 })] })
+class ReportsApp {}
+```
 
 ## Step 5: Extend Metadata and Execution Context
 

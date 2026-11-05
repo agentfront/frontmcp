@@ -17,6 +17,13 @@ describe('CLI Exec Resource Commands', () => {
     expect(stdout).toContain('CLI Exec E2E');
   });
 
+  it('exits 1 for a resource that is not found, with its error once', () => {
+    const { stdout, stderr, exitCode } = runCli(['resource', 'read', 'app://missing']);
+    expect(exitCode).toBe(1);
+    expect(stdout).toBe('');
+    expect(stderr).toBe('Error: Resource not found: app://missing\n');
+  });
+
   it('should list resource templates', () => {
     const { stdout, exitCode } = runCli(['template', 'list']);
     expect(exitCode).toBe(0);

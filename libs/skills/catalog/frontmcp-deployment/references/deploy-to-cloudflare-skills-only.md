@@ -42,9 +42,23 @@ answer came. A workflow that fails is an `isError: true` result with the same
 result had no `isError`. A failed `execute_action` is an `isError: true` result
 whose text is that same error and whose `structuredContent` is the `{ ok:
 false, status, data?, error? }` outcome; on success its `structuredContent` is
-the action's data. Managed mode doesn't set the plugin's `confirm` option, so
-no action asks the user first; a server built with `SkilledOpenApiPlugin.init({
-confirm })` and `elicitation: { enabled: true }` can make actions ask.
+the action's data.
+
+`managed.confirm` is the plugin's `confirm` option, checked by the plugin's
+schema (an invalid value answers `500 CONFIG_INVALID`, and the log names the
+field): `confirm: { methods: ['DELETE'], tags: ['destructive'], operations:
+['refundInvoice'], whenUnsupported: 'refuse' }` names the actions that ask the
+user before their request. The question is an MCP elicitation, and on a
+Cloudflare Worker `elicitation: { enabled: true }` refuses to start
+(`Elicitation requires distributed storage when running on Edge runtime`). So a
+Worker can't ask: an action `confirm` names is refused, `the user's
+confirmation is needed for voidInvoice, and this server can't ask for it:
+elicitation is disabled; nothing was sent` (`isError: true`, for a client that
+declares elicitation too), and `run_workflow` fails with the same error before
+its script starts. With `whenUnsupported: 'allow'` it runs without asking.
+`load_skill` marks such an action with `asksForConfirmation: true`, and the
+audit log's `confirmation` field records `unanswered` or `skipped` for it. Up
+to 1.11.0 managed mode had no `confirm`, so every action ran without asking.
 
 The meta-tools only show what the caller may use: a skill whose
 `requiredAuthorities` the caller doesn't satisfy is left out of `search_skill`
@@ -60,7 +74,8 @@ can list an action that the call then refuses.
 A bundle skill's `SKILL.md` is listed in `skill://index.json` at its name
 (`skill://Invoices/SKILL.md`, as SEP-2640 requires) and is also served at the
 same URI with its id (`skill://invoices/SKILL.md`), the id the meta-tools and
-`skills/list` report, with the same gating. A skill whose id is another
+`skills/list` report, with the same gating. `skills/list` and `skills/search`
+report each bundle skill's `bundleVersion` too, as `search_skill` does. A skill whose id is another
 skill's name is refused, so an id names one skill: a bundle with one is not
 applied and the previous bundle stays active. The previous bundle's skills do
 not count, so a new skill can take the name of a skill the bundle drops or
@@ -129,8 +144,36 @@ when it is the first event an isolate gets (it starts the bundle sync, whose
 first pull is the run's pull). The cache only ever holds a bundle the Worker
 applied: one that fails its signature or schema check is not applied and not
 kept, so a cold start that can't pull serves the last bundle applied.
+Bundles only move forward: a pulled or pushed bundle older than the one the
+isolate serves is not applied and not kept (logged as `[bundle-sync] bundle
+<id>@<version> not applied: older than the served bundle ...`), so a validly
+signed old bundle can't roll the Worker back. Two semver versions compare by
+semver; the same version (re-signed), or versions that aren't both semver,
+compare by `generatedAt`. To roll back, publish the earlier content under a
+newer version, or set `managed.allowRollback: true`. An isolate that starts
+has no bundle served yet, so the KV cache stands in for it: the isolate serves
+the cached bundle when its pull fails, when the pulled bundle is refused, or
+when it is older than the cached one (`... not applied: older than the cached
+bundle <id>@<version> ...`; with `allowRollback` it serves the pulled one), so
+a stale CDN or a rolled-back origin can't take a new isolate back. Serving the
+cached bundle never writes it back to KV. Up to 1.11.0 a new isolate served
+whatever it pulled, served nothing when that bundle was refused, and rewrote
+the KV entry on an offline start.
+A Cron run whose sync leaves an older bundle serving **fails**: `scheduled`
+throws, so Cloudflare logs the run as an exception and counts it as a failed
+invocation. That is a pulled bundle that is not applied (`[frontmcp/edge] Cron
+refresh: bundle <id>@<version> was not applied: <reason>`, or `... was not
+applied, so the cached bundle serves: <reason>` when the run started the
+isolate), or a pull that fails (`... the bundle pull failed: <reason>`), also
+when the run started the isolate and it serves the KV cache (`... failed, so
+the cached bundle serves: <reason>`). Up to 1.11.0 such a run reported success. With
+`health: { readyz: { enabled: true } }` (off on a Worker by default), `/readyz`
+stays ready while the last good bundle serves, and its `skilled-openapi` check
+is `degraded` with `details: { state: 'stale', bundleId, bundleVersion,
+lastSync: { status: 'refused' | 'failed', reason, at, ... } }`. Each isolate
+answers for its own bundle.
 A `run_workflow` already running when the new bundle is applied finishes on the operations of the bundle it started on.
-Managed mode runs on `@frontmcp/plugin-skilled-openapi`, which `@frontmcp/edge` depends on. When the boot pull fails and the KV cache is empty, the error says no bundle is available in the injected bundle cache (no file path), and `search_skill`, `load_skill` and `run_workflow` answer `No skill bundle is loaded: <that reason>` (code `SKILL_BUNDLE_NOT_LOADED`) until a Cron refresh loads a bundle.
+Managed mode runs on `@frontmcp/plugin-skilled-openapi`, which `@frontmcp/edge` depends on. When the boot pull fails and the KV cache is empty, the error says no bundle is available in the injected bundle cache (no file path), and `search_skill`, `load_skill` and `run_workflow` answer `No skill bundle is loaded: <that reason>` (code `SKILL_BUNDLE_NOT_LOADED`, `_meta.retryable: true`) until a Cron refresh loads a bundle. The SDK's skill surfaces answer the same, as a JSON-RPC error with `data: { code: 'SKILL_BUNDLE_NOT_LOADED', retryable: true }`: `skills/list`, `skills/search` and `skill://index.json`, and `skills/load` or a `SKILL.md` read of a skill not found. `initialize` says the skills have not loaded yet. A stateless request, which skips `initialize`, starts the pull and gets the same answer. Up to 1.11.0 they answered as if the server had no skills.
 Its `outbound.egressProxy` option needs Node.js (undici's `ProxyAgent`); on a
 Worker a configured proxy makes every operation call fail with
 `egress proxy unavailable`, so leave it unset there.
@@ -148,6 +191,16 @@ pulled, and the KV cache is **not** used in its place. An unreachable JWKS, or
 one with no usable signing key (no RSA, EC or OKP public key for signatures),
 counts as an ordinary pull failure, so the cache fallback still applies.
 
+The log and `/readyz` name the check that failed, as `tokenFailure`: `expired`,
+`not_yet_valid`, `wrong_issuer`, `wrong_audience`, `unknown_key` (a `kid` the
+JWKS doesn't publish), `bad_signature`, `unsupported_algorithm`,
+`missing_claim`, `malformed`, `body_mismatch` (a push token issued for another
+body), or `jwks_unavailable` (not checked: the JWKS couldn't be read). A pull logs `[saas-source] saas:<endpoint>: pull token check
+failed (expired)` at warn level, never the token; the check has it in
+`details.lastSync.tokenFailure`, and a failed Cron run's error says
+`the bundle pull failed (token check: expired): …`. The tools'
+`SKILL_BUNDLE_NOT_LOADED` reason doesn't name it.
+
 On a Worker, the outbound check of each operation call resolves the API's host
 with workerd's `node:dns`, which asks DNS over HTTPS (`cloudflare-dns.com`): the
 host must resolve publicly, and a name that resolves to a private address is
@@ -164,8 +217,30 @@ HTTP flow). The request:
   `jwksUrl`, `iss`, `aud`, `resource`, `exp`), and it must also carry a `jti`
   of 8 or more characters that no push used and an `iat` within five minutes,
   so the pull token, issued long before, can't push;
+- a `body_sha256` claim in that token: the base64url SHA-256, without
+  padding, of the exact bytes of the request body (not the bundle's
+  `integrity.digest`), so a captured token can't carry another bundle;
 - the body: the bundle as JSON, checked as a pulled bundle is (schema, then
   signature against `trustedKeys` unless `requireSignature: false`).
+
+The Worker hashes the bytes it received, not a re-serialization of the JSON:
+any other body, even the same bundle with other whitespace, answers `401`, and
+the log says `[saas-source] push refused (body_mismatch): …`. The refused
+token's `jti` stays unused, so the push it was issued for still applies. A
+token without `body_sha256` is accepted, with one warning per isolate, so a
+SaaS that doesn't set it yet keeps working; `managed.requirePushBodyDigest:
+true` refuses it (logged as `missing_claim`). On Node, the `saas` source takes
+the same `requirePushBodyDigest` option. A sender computes the claim with
+`pushBodyDigest(body)` from `@frontmcp/adapters/skills`, over the string it
+sends:
+
+```ts
+import { PUSH_BODY_DIGEST_CLAIM, pushBodyDigest } from '@frontmcp/adapters/skills';
+
+const body = JSON.stringify(signedBundle);
+const claims = { jti: randomUUID(), [PUSH_BODY_DIGEST_CLAIM]: pushBodyDigest(body) };
+// sign `claims` as a push token (iss, aud, iat, a short exp), then POST `body` with it
+```
 
 | Answer | When                                                                                       |
 | ------ | ------------------------------------------------------------------------------------------ |
@@ -173,18 +248,46 @@ HTTP flow). The request:
 | `400`  | `invalid_bundle`: the body is not a bundle                                                 |
 | `401`  | `invalid_token`, with `WWW-Authenticate: Bearer error="invalid_token"`                     |
 | `409`  | `push_replayed`: a push already used this token's `jti`                                    |
+| `409`  | `bundle_outdated`: older than the bundle being served, which stays                         |
 | `422`  | `bundle_not_applied`: the signature or the bundle's checks failed; the served bundle stays |
-| `503`  | `temporarily_unavailable`: the JWKS could not be read                                      |
+| `503`  | `temporarily_unavailable`: the JWKS could not be read, or the `jti` could not be recorded  |
 
-A pushed bundle is applied after the first pull and after bundles already
-queued, so a push and a Cron refresh never apply at once. The replay guard keeps
-the `jti`s it has seen in memory, per isolate: two isolates of the same Worker
-don't share them, so keep push tokens short-lived.
+A refused push token answers the same `401` whatever check refused it; only
+the log names it: `[saas-source] push refused (wrong_issuer): …`, or
+`bundle push not checked (jwks_unavailable): …` for the `503`. A pushed bundle
+is applied after the first pull and after bundles already queued, so a push and
+a Cron refresh never apply at once.
+
+The replay guard keeps the `jti`s in a Durable Object that every isolate and
+replica of the Worker reaches, so a push replayed to another isolate is refused
+with `409 push_replayed` too. KV can't guard replays: it is eventually
+consistent, so two isolates could both read a `jti` as unused. Export the class
+and bind it (default binding `FRONTMCP_PUSH_REPLAY`; `managed.pushReplay:
+{ binding }` changes it):
+
+```ts
+const mcp = createEdgeMcp({ /* ..., */ managed: { /* ..., */ enableWebhook: true } });
+export default mcp;
+export const FrontMcpPushReplay = mcp.PushReplayDurableObject;
+```
+
+Each `jti` is kept, in one object per `expectedAudience`, until its token's
+`iat` is five minutes old. Without the binding, every push answers `503
+temporarily_unavailable` and the log names the missing binding; pulls and Cron
+runs are not affected. Up to 1.11.0 the `jti`s were kept in each isolate's
+memory. On Deno or Bun, `managed.pushReplay` can be a function of `env` that
+returns a store `{ claim(key, ttlMs) }` (`true` when it recorded `key`, `false`
+when it is already recorded, throws when it can't tell).
+
+On Node, the plugin keeps the `jti`s in the process's memory by default; with
+several replicas, set the `saas` source's `pushReplayStorage` to a shared store
+(`{ type: 'redis', redis: { url } }`, or `upstash`, `vercel-kv`, `sqlite`).
 
 This path is bundled by **wrangler** (not `frontmcp build`), so you maintain
 `wrangler.toml` yourself — it needs a `[[kv_namespaces]] binding = "BUNDLE_CACHE"`
 and a `[triggers] crons = [...]` (the `managed.pollIntervalMs` option is
-ignored on edge — Workers have no background timers; the Cron drives refresh):
+ignored on edge — Workers have no background timers; the Cron drives refresh),
+and with `enableWebhook` the push replay Durable Object and its migration:
 
 ```toml
 name = "my-worker"
@@ -195,6 +298,15 @@ compatibility_flags = ["nodejs_compat"]
 [[kv_namespaces]]
 binding = "BUNDLE_CACHE"
 id = "<your-kv-namespace-id>"
+
+# with managed.enableWebhook
+[[durable_objects.bindings]]
+name = "FRONTMCP_PUSH_REPLAY"
+class_name = "FrontMcpPushReplay"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FrontMcpPushReplay"]
 
 [triggers]
 crons = ["*/5 * * * *"]
@@ -229,7 +341,7 @@ Worker:
    - Replay-guard via REPLAY_NONCE KV
    - Diff: structural change (DO classes, bindings) → require redeploy
    - Otherwise: atomic swap of skill + classification registries
-   - Emit notifications/{skills,tools,resources,prompts}/list_changed
+   - Emit one notifications/{skills,tools,resources,prompts}/list_changed per list that changed
    - Persist envelope into BUNDLE_CACHE KV
 ```
 

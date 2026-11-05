@@ -704,9 +704,11 @@ describe('generateCliEntry', () => {
       expect(source).toContain("'workflow'");
     });
 
-    it('should default to outputHelp when no args', () => {
+    it('prints the help with no command, and leaves an unknown command to commander', () => {
       const source = generateCliEntry(makeOptions());
-      expect(source).toContain('program.action(function() { program.outputHelp(); })');
+      expect(source).toContain("process.argv.concat('--help')");
+      expect(source).not.toContain('program.action(');
+      expect(source).not.toContain("program.on('command:*'");
     });
   });
 
@@ -802,6 +804,14 @@ describe('generateCliEntry', () => {
       expect(load).toContain('if (loaded.length < ids.length) {');
       expect(load).toContain('warnings.forEach(function(warning) { console.error(warning); });');
       expect(load).toContain('process.exitCode = 1;');
+    });
+
+    it("loads skills with the 'markdown' format, so each part of a skill is printed once", () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({ capabilities: { skills: true, jobs: false, workflows: false } }),
+      }));
+      const load = source.slice(source.indexOf("'load <ids...>'"), source.indexOf("'read <name>'"));
+      expect(load).toContain("client.loadSkills(ids, { format: 'markdown' })");
     });
 
     it('exits 1 when skills read finds no skill, in text and json output', () => {

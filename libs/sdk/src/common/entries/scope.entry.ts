@@ -22,6 +22,7 @@ import type PromptRegistry from '../../prompt/prompt.registry';
 import type ResourceRegistry from '../../resource/resource.registry';
 import type { SkillSessionManager } from '../../skill/session/skill-session.manager';
 import type { SkillRegistryInterface } from '../../skill/skill.registry';
+import { runListChangeBatch, type ListChangeBatch } from '../../surface/list-change-batch';
 import type { LiveSurface } from '../../surface/live-surface';
 import type { TaskStore } from '../../task/store/task.store';
 import type { TaskRegistry } from '../../task/task.registry';
@@ -186,19 +187,38 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
     }
   }
 
+  /**
+   * Run `change`, such as a plugin swapping the entries it registered, and send connected clients one `list_changed`
+   * for each list it changed (tools, resources, prompts, skills) once it ends, also when it throws, instead of one per
+   * registry change. A change that undoes itself, such as a rollback, calls `batch.listsRestored()` so nothing is sent.
+   * A batch run inside another hands what it changed to the outer one. Changes made outside it, such as another
+   * request's, are sent as they happen.
+   */
+  batchListChanges<T>(change: (batch: ListChangeBatch) => T | Promise<T>): Promise<T> {
+    return runListChangeBatch(this, change);
+  }
+
   private readonly addedHealthProbes: HealthProbeDefinition[] = [];
 
   /**
    * Add a check to the server's `/readyz` readiness probe, run with the built-in ones and the
-   * `health.probes` the server configures. Plugins call it while the server starts, from a provider
-   * factory: the health service takes the checks registered by the time the scope is ready.
+   * `health.probes` the server configures. A check added at any time, while the server starts or after it,
+   * runs from the next `/readyz` on; a check already running finishes with the checks it started with.
+   * Two checks with one name both run, and `/readyz` shows the later one's result.
+   *
+   * @returns A function that removes the check.
    */
-  registerHealthProbe(probe: HealthProbeDefinition): void {
-    this.addedHealthProbes.push(probe);
+  registerHealthProbe(probe: HealthProbeDefinition): () => void {
+    const registration: HealthProbeDefinition = { name: probe.name, check: () => probe.check() };
+    this.addedHealthProbes.push(registration);
+    return () => {
+      const index = this.addedHealthProbes.indexOf(registration);
+      if (index !== -1) this.addedHealthProbes.splice(index, 1);
+    };
   }
 
   /**
-   * The checks added with registerHealthProbe().
+   * The checks added with registerHealthProbe() and not removed. The health service reads it at every check.
    * @internal
    */
   get healthProbes(): readonly HealthProbeDefinition[] {

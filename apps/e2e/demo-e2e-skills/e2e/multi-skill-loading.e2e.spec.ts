@@ -23,7 +23,7 @@ interface SkillResult {
   missingTools: string[];
   isComplete: boolean;
   warning?: string;
-  formattedContent?: string;
+  formattedContent: string;
   session?: {
     activated: boolean;
     sessionId?: string;
@@ -333,7 +333,7 @@ test.describe('Multi-Skill Loading E2E', () => {
       const skill = content.skills[0];
       expect(skill.id).toBeDefined();
       expect(skill.instructions).toContain('PR Review Process');
-      expect(skill.formattedContent).toBeUndefined();
+      expect(skill.formattedContent).toContain('PR Review Process');
     });
 
     test('should return instructions-only format when requested', async ({ mcp }) => {
@@ -347,7 +347,7 @@ test.describe('Multi-Skill Loading E2E', () => {
       const content = result as LoadSkillsResult;
       const skill = content.skills[0];
       expect(skill.instructions).toContain('PR Review Process');
-      expect(skill.formattedContent).toBeUndefined();
+      expect(skill.formattedContent).toContain('PR Review Process');
     });
 
     test('should return the skill as markdown, and the instructions only there, when requested', async ({ mcp }) => {

@@ -315,7 +315,7 @@ Besides flow hooks, the scope (`ScopeEntry`) takes two lifecycle callbacks, and 
 - **`scope.onServerStarted(callback: () => void | Promise<void>): void`** runs `callback` after the HTTP server starts listening, in `FrontMcpInstance.start()`. Callbacks run in registration order, each awaited. It never fires in direct mode (`create()`, `createDirect()`, `connect()`), where no HTTP server starts.
 - **`scope.onDispose(callback: () => void | Promise<void>): () => void`** runs `callback` when the scope is disposed: on `SIGTERM`/`SIGINT` for an HTTP, Unix socket or stdio server, and in direct mode too. Callbacks run once, in reverse order of registration, each awaited; the shutdown deadline (5s under stdio, 10s otherwise) still exits a process whose callback hangs. The returned function removes the callback.
 
-- **`scope.registerHealthProbe(probe: { name: string; check(): Promise<HealthProbeResult> }): void`** adds a check to the server's `/readyz`, run with the built-in ones and `health.probes`. `check()` answers `{ status: 'healthy' | 'degraded' | 'unhealthy', details?, error? }`; an `unhealthy` one makes `/readyz` answer 503. Register it while the server starts, from a provider factory: the health service takes the checks registered by the time the scope is ready. A plugin uses it to report what it loads, as `@frontmcp/plugin-skilled-openapi` reports its bundle (see `health-readiness-endpoints`).
+- **`scope.registerHealthProbe(probe: { name: string; check(): Promise<HealthProbeResult> }): () => void`** adds a check to the server's `/readyz`, run with the built-in ones and `health.probes`. `check()` answers `{ status: 'healthy' | 'degraded' | 'unhealthy', details?, error? }`; an `unhealthy` one makes `/readyz` answer 503. Register it at any time: while the server starts, from a provider factory, or after it, from a feature started later or an app loaded on its first call. The next `/readyz` runs it; a `/readyz` already running finishes with the checks it started with. The returned function removes the check (up to 1.11.0 it returned nothing, and a check registered after startup never ran). Give each check its own name: two checks with one name both run and both count toward the status, but `probes` shows only the later one's result. A plugin uses it to report what it loads, as `@frontmcp/plugin-skilled-openapi` reports its bundle (see `health-readiness-endpoints`).
 
 Use them for warming caches, starting background indexing, or releasing timers and connections. A plugin reaches the scope from a factory provider: `ScopeEntry` is a DI token, so `inject: () => [ScopeEntry]` hands the factory the scope it is built in. The plugin's providers are built while the server starts up, before it listens, so the callback is registered in time.
 
@@ -363,6 +363,36 @@ export class CacheWarmerPlugin {}
 
 Listing the provider in `exports` too lets the app's tools resolve the cache with `this.get(ReportCache)`; `exports` takes provider definitions, not bare tokens. Inside a tool, resource or prompt, the scope itself is `this.scope`. Inside a flow hook, resolve it with `ctx.get(ScopeEntry)` (for example `ctx.get(ScopeEntry).apps.getApps()` in a server-scoped plugin): the flow's own `scope` is protected. To tell clients a list changed, a hook calls `ctx.notify.listChanged('tools')` (see [What a Hook Receives](#what-a-hook-receives)). See [Scope lifecycle hooks](https://frontmcp.dev/reference/sdk/scope).
 
+### Announcing Many Registry Changes Once
+
+Each registry change (a skill registered, a tool removed) sends connected clients a `notifications/<kind>/list_changed`. A plugin that changes many entries at once, such as a bundle of skills and the tools they use, runs the change in `scope.batchListChanges()`:
+
+```typescript
+await scope.batchListChanges(async () => {
+  for (const content of bundleSkills) await scope.skills.registerSkillContent(content);
+  for (const id of droppedSkillIds) await scope.skills.unregisterSkill(id);
+});
+```
+
+- Clients get one `list_changed` for each list the batch changed (`tools`, `resources`, `prompts`, `skills`), once it ends, and none for a list it left alone. A batch that throws still sends one for each list it changed before the throw, then rejects with the error.
+- A change that undoes itself, such as a rollback that put back every entry it replaced, calls `batch.listsRestored()` on the batch its callback receives. Then nothing it changed up to that point is sent:
+
+  ```typescript
+  await scope.batchListChanges(async (batch) => {
+    try {
+      await registerAll(bundleSkills);
+    } catch {
+      await restorePreviousSkills();
+      batch.listsRestored();
+    }
+  });
+  ```
+
+- A batch run inside another hands what it changed to the outer one, which sends it when it ends. `listsRestored()` in the inner batch drops only what the inner batch changed.
+- Registering or removing a `visibility: 'internal'` tool (`scope.tools.registerToolInstance()` / `unregisterToolInstance()`) sends no `tools/list_changed`, inside a batch or not: `tools/list` never shows internal tools.
+- Changes made outside the batch, such as by another request while it runs, are sent as they happen, as every change outside a batch is.
+- `@frontmcp/plugin-skilled-openapi` runs each bundle it applies in one batch.
+
 ## Pre-Built Hook Type Exports
 
 For convenience, FrontMCP exports typed aliases so you do not need to call `FlowHooksOf` directly:
@@ -391,7 +421,7 @@ Usage:
 const { Will, Did, Around, Finally, Stage } = ToolHook;
 ```
 
-> **Note:** Other flows (e.g., `skills:filter`, transport flows) can be hooked by passing the flow name to `FlowHooksOf('flow:name')`. Prefer the pre-built exports above when one is available: exporting them is also what puts a flow's types in the published package, which is why `FlowHooksOf('prompts:get-prompt')`, `'prompts:list-prompts'` and `'completion:complete'` did not typecheck in consumer projects up to 1.8.7.
+> **Note:** Other flows (e.g., `skills:filter`, transport flows) can be hooked by passing the flow name to `FlowHooksOf('flow:name')`. A `skills:filter` hook decides which skills a caller sees on every skill surface, and `@frontmcp/plugin-skilled-openapi` asks it before each action call too, so a bundle skill the hook drops can't be run by naming its actions. Prefer the pre-built exports above when one is available: exporting them is also what puts a flow's types in the published package, which is why `FlowHooksOf('prompts:get-prompt')`, `'prompts:list-prompts'` and `'completion:complete'` did not typecheck in consumer projects up to 1.8.7.
 
 ## call-tool Flow Stages
 

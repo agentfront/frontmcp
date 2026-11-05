@@ -7,6 +7,7 @@
  *   - requireConnect returns the credential when connected
  *   - requireConnect returns a signed resume URL when not connected, and the URL
  *     verifies back to { sub, key, context }
+ *   - requireConnect for an anonymous request asks to sign in, with no URL
  */
 
 import { MemoryStorageAdapter } from '@frontmcp/utils';
@@ -96,15 +97,21 @@ describe('CredentialsAccessorImpl', () => {
     }
   });
 
-  it('requireConnect for an anonymous request still issues a (sub-empty) signed link', async () => {
+  it('requireConnect for an anonymous request asks to sign in and issues no connect link', async () => {
     const anon = makeAccessor(undefined);
     const res = await anon.requireConnect({ key: 'acme' });
+    expect(res).toEqual({
+      connected: false,
+      key: 'acme',
+      resumeUrl: '',
+      signInRequired: true,
+      message: 'Sign in to this server to connect credential "acme".',
+    });
+  });
+
+  it('requireConnect for a signed-in caller sets no signInRequired', async () => {
+    const res = await makeAccessor('user-1').requireConnect({ key: 'acme' });
     expect(res.connected).toBe(false);
-    if (!res.connected) {
-      const token = new URL(res.resumeUrl).searchParams.get('token')!;
-      const payload = verifyCredentialResumeToken(token, SIGNING_SECRET);
-      expect(payload?.sub).toBe('');
-      expect(payload?.key).toBe('acme');
-    }
+    expect(res).not.toHaveProperty('signInRequired');
   });
 });

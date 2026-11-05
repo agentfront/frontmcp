@@ -1,6 +1,9 @@
 // file: plugins/plugin-skilled-openapi/src/sources/skill-bundle-source.interface.ts
 
+import type { TokenVerifyFailure } from '@frontmcp/auth';
+
 import type { ResolvedBundle } from '../bundle/bundle.types';
+import type { ReplayNonceStore } from '../security/replay-nonce-store';
 
 /**
  * Pluggable source of skill bundles. Static, npm-installed, and SaaS-pull
@@ -39,6 +42,12 @@ export interface SkillBundleSource {
   onChange(listener: BundleSourceListener): () => void;
 
   /**
+   * Subscribe to the pulls that fail in the background (a poll), which no caller sees: `start()` and `refresh()` throw
+   * theirs. Returns an unsubscribe function. Present on a polling source: the `saas` source.
+   */
+  onPullFailure?(listener: BundlePullFailureListener): () => void;
+
+  /**
    * Pull a fresh bundle on demand and notify listeners — the manual,
    * externally-driven counterpart to background polling. Optional: only
    * remote/pulling sources implement it. On runtimes with no background
@@ -56,8 +65,20 @@ export interface SkillBundleSource {
    */
   keepBundle?(bundle: ResolvedBundle): Promise<void>;
 
+  /**
+   * The last good bundle {@link keepBundle} kept, read back from the cache; undefined when none is kept or it can't be
+   * read. While no bundle serves, the plugin compares a new bundle with it, and serves it in place of one it refuses.
+   */
+  keptBundle?(): Promise<ResolvedBundle | undefined>;
+
   /** Present on a source that takes pushed bundles: the `saas` source with `enableWebhook`. */
   readonly push?: BundlePushReceiver;
+
+  /**
+   * True on a source whose bundles only move forward: the `saas` source, unless `allowRollback`. The plugin then
+   * refuses a bundle older than the one being served, as `compareBundleVersions` orders them.
+   */
+  readonly forwardOnly?: boolean;
 
   /** Halt background work; idempotent. */
   stop(): Promise<void>;
@@ -65,12 +86,36 @@ export interface SkillBundleSource {
 
 /** The check a pushed bundle's token passes before the bundle is applied. */
 export interface BundlePushReceiver {
-  /** Resolves when the push token is accepted; throws when it is refused or can't be checked. */
-  verifyPushToken(token: string): Promise<void>;
+  /**
+   * Resolves when the push token is accepted for `body`, the exact bytes of the request body; throws when it is
+   * refused or can't be checked.
+   */
+  verifyPushToken(token: string, body: Uint8Array): Promise<void>;
 }
 
 /** Takes each new bundle; a pulling source waits for a promise it returns before its pull counts as done. */
-export type BundleSourceListener = (bundle: ResolvedBundle) => unknown;
+export type BundleSourceListener = (bundle: ResolvedBundle, origin?: BundleOrigin) => unknown;
+
+/** How a source came by a bundle it hands its listeners. */
+export interface BundleOrigin {
+  /**
+   * Set when the pull failed and the bundle is the last good one the source kept, served in its place: why it failed.
+   * The plugin doesn't keep such a bundle again, since the cache holds it.
+   */
+  pullFailure?: string;
+  /** Set when that pull failed on its token: the check that refused it, or `jwks_unavailable`. */
+  tokenFailure?: BundleTokenFailure;
+}
+
+/**
+ * Which check refused a pull or push token, or `jwks_unavailable` when the issuer's keys could not be read to check
+ * it; `body_mismatch` is a push token issued for another body. For the server's logs and `/readyz`: a caller learns
+ * only that its token was refused.
+ */
+export type BundleTokenFailure = TokenVerifyFailure | 'wrong_audience' | 'body_mismatch';
+
+/** Takes the reason a background pull failed, and the token check it failed on, if any. */
+export type BundlePullFailureListener = (reason: string, tokenFailure?: BundleTokenFailure) => void;
 
 /**
  * Pluggable last-good bundle cache. The default (Node) implementation writes to
@@ -89,7 +134,9 @@ export interface BundleCacheStore {
  *   - `cache` replaces the on-disk last-good cache (no filesystem on a Worker),
  *   - `disablePolling` turns off the internal `setInterval` loop (no background
  *     execution on a Worker; a Cron Trigger / DO alarm drives {@link
- *     SkillBundleSource.refresh} instead).
+ *     SkillBundleSource.refresh} instead),
+ *   - `pushReplayStore` records the pushed tokens' `jti`s where every instance
+ *     reaches them (a Durable Object on a Worker).
  */
 export interface BundleSourceDeps {
   /**
@@ -103,4 +150,9 @@ export interface BundleSourceDeps {
    * {@link SkillBundleSource.refresh} instead.
    */
   disablePolling?: boolean;
+  /**
+   * Where the push replay guard records the `jti`s it accepted, shared by every instance that serves the server.
+   * Replaces the `saas` source's `pushReplayStorage` option and its in-memory default.
+   */
+  pushReplayStore?: ReplayNonceStore;
 }

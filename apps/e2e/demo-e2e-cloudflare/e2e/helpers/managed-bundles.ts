@@ -3,6 +3,8 @@ import { exportJWK, generateKeyPair, SignJWT, type JWK, type JWTPayload } from '
 import {
   bundleDigest,
   canonicalize,
+  PUSH_BODY_DIGEST_CLAIM,
+  pushBodyDigest,
   type OperationDescriptor,
   type ResolvedBundle,
   type SignatureKey,
@@ -37,6 +39,11 @@ export class BundleTokenIssuer {
 
   pushToken(claims: JWTPayload = {}): Promise<string> {
     return this.sign({ jti: randomUUID(), ...claims }, '5m');
+  }
+
+  /** A push token bound to `body`, the exact JSON it is pushed with, by its `body_sha256` claim. */
+  pushTokenFor(body: string): Promise<string> {
+    return this.pushToken({ [PUSH_BODY_DIGEST_CLAIM]: pushBodyDigest(body) });
   }
 
   private sign(claims: JWTPayload, expiresIn: string): Promise<string> {
@@ -92,16 +99,33 @@ const createInvoiceOperation: OperationDescriptor = {
   authBindingRef: 'default',
 };
 
+const voidInvoiceOperation: OperationDescriptor = {
+  operationId: 'voidInvoice',
+  serviceId: 'billing',
+  httpMethod: 'DELETE',
+  pathTemplate: '/v1/invoices/{id}',
+  summary: 'Void an invoice',
+  public: true,
+  inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  outputSchema: {
+    type: 'object',
+    properties: { id: { type: 'string' }, status: { type: 'string' } },
+    required: ['id', 'status'],
+  },
+  mapper: [{ inputKey: 'id', type: 'path', key: 'id', required: true }],
+  authBindingRef: 'default',
+};
+
 export type BillingSkillId = 'invoices' | 'reports' | 'refunds';
 
 const billingSkills: Record<BillingSkillId, ResolvedBundle['skills'][number]> = {
   invoices: {
     id: 'invoices',
     name: 'Invoices',
-    description: 'Create billing invoices for customers.',
-    instructions: '# Invoices\n\nCreate an invoice with createInvoice.',
+    description: 'Create and void billing invoices for customers.',
+    instructions: '# Invoices\n\nCreate an invoice with createInvoice, and void one with voidInvoice.',
     tags: ['billing'],
-    operationIds: ['createInvoice'],
+    operationIds: ['createInvoice', 'voidInvoice'],
   },
   reports: {
     id: 'reports',
@@ -132,6 +156,6 @@ export function billingBundle(version: string, skillIds: readonly BillingSkillId
     services: [{ id: 'billing', baseUrl: BILLING_API_URL }],
     authBindings: { default: { kind: 'bearer', vaultRef: 'billing-token' } },
     skills: skillIds.map((skillId) => billingSkills[skillId]),
-    operations: { createInvoice: createInvoiceOperation },
+    operations: { createInvoice: createInvoiceOperation, voidInvoice: voidInvoiceOperation },
   };
 }

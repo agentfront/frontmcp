@@ -1,11 +1,14 @@
-// A real server whose saas source has enableWebhook takes pushed bundles at POST /__skilled_openapi/push.
+// A real server whose saas source has enableWebhook takes pushed bundles at POST /__skilled_openapi/push. A push token
+// bound to its body (body_sha256) carries no other body.
 import 'reflect-metadata';
 
-import { BundleStore } from '@frontmcp/adapters/skills';
+import { BundleStore, StorageReplayNonceStore, type ReplayNonceStore } from '@frontmcp/adapters/skills';
 import { createWebFetchHandler, FrontMcpInstance, LogLevel, type WebFetchHandler } from '@frontmcp/sdk';
+import { createMemoryStorage } from '@frontmcp/utils';
 
 import { SkilledOpenApiPlugin } from '../index';
 import { SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN } from '../skilled-openapi.plugin';
+import { BundleSyncService } from '../sync/bundle-sync.service';
 import { AUDIENCE, bundle, ENDPOINT, ISSUER, JWKS_URL, signed, tokenIssuer, trustedKey } from './saas-bundles.fixture';
 
 const PUSH_URL = 'http://localhost/__skilled_openapi/push';
@@ -13,6 +16,7 @@ const PUSH_URL = 'http://localhost/__skilled_openapi/push';
 interface PushServer {
   handler: WebFetchHandler;
   servedVersion: () => string | undefined;
+  loadBundle: () => Promise<void>;
 }
 
 describe('pushed bundles on a server with enableWebhook', () => {
@@ -20,7 +24,11 @@ describe('pushed bundles on a server with enableWebhook', () => {
   let jwksAvailable = true;
   const cache = { read: jest.fn(async () => undefined), write: jest.fn(async () => undefined) };
 
-  async function startServer(enableWebhook: boolean): Promise<PushServer> {
+  async function startServer(
+    enableWebhook: boolean,
+    pushReplayStore?: ReplayNonceStore,
+    { requirePushBodyDigest }: { requirePushBodyDigest?: boolean } = {},
+  ): Promise<PushServer> {
     const instance = await FrontMcpInstance.createForGraph({
       info: { name: 'billing', version: '1.0.0' },
       apps: [],
@@ -35,6 +43,7 @@ describe('pushed bundles on a server with enableWebhook', () => {
             jwksUrl: JWKS_URL,
             expectedIssuer: ISSUER,
             enableWebhook,
+            requirePushBodyDigest,
           },
           trustedKeys: [trustedKey],
         }),
@@ -43,7 +52,7 @@ describe('pushed bundles on a server with enableWebhook', () => {
         {
           name: 'test:runtime-deps',
           provide: SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN,
-          useValue: { cache, disablePolling: true },
+          useValue: { cache, disablePolling: true, pushReplayStore },
         },
       ],
       logging: { level: LogLevel.Off },
@@ -54,6 +63,7 @@ describe('pushed bundles on a server with enableWebhook', () => {
     return {
       handler: createWebFetchHandler(scope as Parameters<typeof createWebFetchHandler>[0]),
       servedVersion: () => scope.providers.get(BundleStore).current()?.version,
+      loadBundle: () => scope.providers.get(BundleSyncService).ensureReady(),
     };
   }
 
@@ -127,6 +137,26 @@ describe('pushed bundles on a server with enableWebhook', () => {
     expect(server.servedVersion()).toBe('3.0.0');
   });
 
+  it('answers every refused token with the same 401, whatever check refused it', async () => {
+    const tokens = [
+      await issuer.sign({ jti: 'push-other-issuer', iss: 'https://impostor.example' }),
+      await (await tokenIssuer('cloud-2026')).pushToken(),
+      await (await tokenIssuer('cloud-2027')).pushToken(),
+      await issuer.sign({}),
+    ];
+
+    const answers = await Promise.all(
+      tokens.map(async (token) => {
+        const response = await push(server, `Bearer ${token}`, signed(bundle('5.0.0', ['refunds'])));
+        return { status: response.status, body: await response.json() };
+      }),
+    );
+
+    expect(answers).toEqual(
+      Array(4).fill({ status: 401, body: { error: 'invalid_token', error_description: 'the push token was refused' } }),
+    );
+  });
+
   it("answers 503 when the issuer's JWKS cannot be read once its cached keys are a minute old", async () => {
     const token = await issuer.pushToken();
     jwksAvailable = false;
@@ -171,6 +201,106 @@ describe('pushed bundles on a server with enableWebhook', () => {
     });
     expect(server.servedVersion()).toBe('3.0.0');
     expect(cache.write).not.toHaveBeenCalled();
+  });
+
+  describe('a push token bound to its body by a body_sha256 claim', () => {
+    it('is refused with the generic 401 for another body, and still applies the body it was issued for', async () => {
+      const issuedFor = JSON.stringify(signed(bundle('6.0.0', ['invoices', 'refunds'])));
+      const otherBody = JSON.stringify(signed(bundle('6.0.0', ['refunds'])));
+      const token = await issuer.pushToken(issuedFor);
+
+      const swapped = await push(server, `Bearer ${token}`, otherBody);
+      const servedAfterSwap = server.servedVersion();
+      const genuine = await push(server, `Bearer ${token}`, issuedFor);
+
+      expect(swapped.status).toBe(401);
+      expect(swapped.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+      expect(await swapped.json()).toEqual({ error: 'invalid_token', error_description: 'the push token was refused' });
+      expect(servedAfterSwap).toBe('3.0.0');
+      expect(genuine.status).toBe(200);
+      expect(server.servedVersion()).toBe('6.0.0');
+    });
+
+    it('is refused for the same bundle sent with other whitespace: the claim covers the exact bytes', async () => {
+      const pushed = signed(bundle('7.0.0', ['invoices']));
+      const token = await issuer.pushToken(JSON.stringify(pushed));
+
+      const reformatted = await push(server, `Bearer ${token}`, JSON.stringify(pushed, null, 2));
+
+      expect(reformatted.status).toBe(401);
+      expect(server.servedVersion()).toBe('6.0.0');
+    });
+
+    it('is required on a server with requirePushBodyDigest: a token without the claim is refused with 401', async () => {
+      const strict = await startServer(true, undefined, { requirePushBodyDigest: true });
+      await strict.loadBundle();
+      const pushed = JSON.stringify(signed(bundle('2.0.0', ['invoices', 'refunds'])));
+
+      const unbound = await push(strict, `Bearer ${await issuer.pushToken()}`, pushed);
+      const bound = await push(strict, `Bearer ${await issuer.pushToken(pushed)}`, pushed);
+
+      expect(unbound.status).toBe(401);
+      expect(await unbound.json()).toEqual({ error: 'invalid_token', error_description: 'the push token was refused' });
+      expect(bound.status).toBe(200);
+      expect(strict.servedVersion()).toBe('2.0.0');
+    });
+  });
+
+  describe('replicas that share a replay store', () => {
+    let sharedStore: ReplayNonceStore;
+    let firstReplica: PushServer;
+    let secondReplica: PushServer;
+
+    beforeAll(async () => {
+      const storage = createMemoryStorage({ enableSweeper: false });
+      await storage.connect();
+      sharedStore = new StorageReplayNonceStore(storage);
+      firstReplica = await startServer(true, sharedStore);
+      secondReplica = await startServer(true, sharedStore);
+      await Promise.all([firstReplica.loadBundle(), secondReplica.loadBundle()]);
+    });
+
+    it('refuse, with 409, a push replayed to another replica, which keeps serving the bundle it had', async () => {
+      const token = await issuer.pushToken();
+      const first = await push(firstReplica, `Bearer ${token}`, signed(bundle('2.0.0', ['invoices', 'refunds'])));
+
+      const replayed = await push(secondReplica, `Bearer ${token}`, signed(bundle('2.0.0', ['invoices', 'refunds'])));
+
+      expect(first.status).toBe(200);
+      expect(replayed.status).toBe(409);
+      expect(await replayed.json()).toEqual({
+        error: 'push_replayed',
+        error_description: 'a push already used this token',
+      });
+      expect(firstReplica.servedVersion()).toBe('2.0.0');
+      expect(secondReplica.servedVersion()).toBe('1.0.0');
+    });
+
+    it('take a push with a fresh token on either replica', async () => {
+      const response = await push(
+        secondReplica,
+        `Bearer ${await issuer.pushToken()}`,
+        signed(bundle('2.0.0', ['invoices', 'refunds'])),
+      );
+
+      expect(response.status).toBe(200);
+      expect(secondReplica.servedVersion()).toBe('2.0.0');
+    });
+  });
+
+  it('refuses a push with 503 when the replay store fails, and applies nothing', async () => {
+    const failingStore = { claim: jest.fn(async () => Promise.reject(new Error('ECONNREFUSED 10.0.0.7:6379'))) };
+    const storeDown = await startServer(true, failingStore);
+    await storeDown.loadBundle();
+
+    const response = await push(storeDown, `Bearer ${await issuer.pushToken()}`, signed(bundle('9.0.0', ['invoices'])));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: 'temporarily_unavailable',
+      error_description: "the replay guard's store could not record the push token",
+    });
+    expect(storeDown.servedVersion()).toBe('1.0.0');
   });
 
   it('serves no push endpoint when enableWebhook is off', async () => {

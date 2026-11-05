@@ -13,7 +13,7 @@ import {
   type DirectMcpServer,
 } from '@frontmcp/sdk';
 
-import { MAX_ERROR_BODY_LENGTH } from '../executor/action-outcome';
+import { MAX_ERROR_BODY_LENGTH, unknownActionError } from '../executor/action-outcome';
 import { SkilledOpenApiPlugin } from '../index';
 import type { SkilledOpenApiPluginOptionsInput } from '../skilled-openapi.types';
 
@@ -256,7 +256,7 @@ describe('callTool(actionId, input, { throwOnError: false })', () => {
 
     expect(output.value).toEqual({
       invalid: { ok: false, status: 0, error: expect.stringMatching(/^input validation failed: id/) },
-      denied: { ok: false, status: 0, error: "authority denied: roles.any: user has none of 'admin'" },
+      denied: { ok: false, status: 0, error: unknownActionError('purgeInvoices') },
     });
   });
 

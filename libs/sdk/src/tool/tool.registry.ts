@@ -26,6 +26,7 @@ import {
 } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { keepingListsUnchanged } from '../surface/unchanged-lists';
 import { EntryLineageIndex, ownerKeyOf, qualifiedNameOf } from '../utils/lineage.utils';
 import { normalizeOwnerPath, normalizeProviderId, normalizeSegment } from '../utils/naming.utils';
 import CallToolFlow from './flows/call-tool.flow';
@@ -544,6 +545,12 @@ export default class ToolRegistry extends RegistryAbstract<
     this.emitter.emit({ kind, changeScope: 'global', version, snapshot: this.listAllInstances() });
   }
 
+  /** Report a change of `tool`; an internal tool is never listed, so its change leaves the tool list as it was. */
+  private bumpFor(tool: ToolEntry | undefined) {
+    if (tool && resolveToolVisibility(tool.metadata) === 'internal') keepingListsUnchanged(() => this.bump('reset'));
+    else this.bump('reset');
+  }
+
   /* -------------------- Helpers -------------------- */
 
   /** Build an IndexedTool row */
@@ -751,7 +758,7 @@ export default class ToolRegistry extends RegistryAbstract<
 
     // Rebuild indexes
     this.reindex();
-    this.bump('reset');
+    this.bumpFor(tool);
   }
 
   /**
@@ -764,13 +771,14 @@ export default class ToolRegistry extends RegistryAbstract<
    */
   unregisterToolInstance(token: Token): boolean {
     const typedToken = token as Token<ToolInstance>;
+    const tool = this.instances.get(typedToken) ?? this.localRows.find((row) => row.token === token)?.instance;
     const existed = this.instances.delete(typedToken);
     const before = this.localRows.length;
     this.localRows = this.localRows.filter((row) => row.token !== token);
     const removed = existed || this.localRows.length !== before;
     if (removed) {
       this.reindex();
-      this.bump('reset');
+      this.bumpFor(tool);
     }
     return removed;
   }

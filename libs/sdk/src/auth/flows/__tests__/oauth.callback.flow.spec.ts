@@ -8,8 +8,9 @@
  */
 import 'reflect-metadata';
 
-import { generatePkceChallenge } from '@frontmcp/auth';
+import { generatePkceChallenge, SessionCredentialVault } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
+import { MemoryStorageAdapter } from '@frontmcp/utils';
 
 import { createMockHttpRequest, createMockScopeEntry, runFlowStages } from '../../../__test-utils__';
 import { bindSignin, signinCookie } from '../../../__test-utils__/helpers/oauth-flow.helpers';
@@ -318,5 +319,93 @@ describe('OAuth Callback Flow — custom authenticate() (Checkpoint 3a)', () => 
     // Falls back to a generic failure page, never a 500/throw.
     expect(output?.kind).toBe('html');
     expect(String(output?.body)).toContain('Authentication failed');
+  });
+});
+
+describe('OAuth Callback Flow — the session credential vault at sign-in', () => {
+  const SUBJECT = 'signed-in-user';
+
+  async function signIn(authenticateResult: Record<string, unknown>) {
+    const adapter = new MemoryStorageAdapter();
+    await adapter.connect();
+    const vault = new SessionCredentialVault({ storage: adapter, pepper: 'callback-vault-pepper-32-bytes-min' });
+    const authenticate = jest.fn().mockResolvedValue(authenticateResult);
+    const scope = createMockScopeEntry({ auth: { mode: 'local', authenticate } as any });
+    Object.assign(scope.auth, {
+      credentialVault: vault,
+      createAuthorizationCode: jest.fn(async () => 'minted-code'),
+    });
+    const run = async () => {
+      const pendingAuthId = await seedPendingAuth(scope);
+      const input = createMockHttpRequest({
+        headers: { cookie: signinCookie(pendingAuthId) },
+        method: 'GET',
+        path: '/oauth/callback',
+        query: { pending_auth_id: pendingAuthId, apiKey: 'k' },
+      });
+      const flow = new OauthCallbackFlow(createCallbackMetadata(), input as any, scope, jest.fn(), new Map());
+      return runFlowStages(flow, [
+        'parseInput',
+        'validatePendingAuth',
+        'handleIncrementalAuth',
+        'handleFederatedAuth',
+        'createAuthorizationCode',
+      ]);
+    };
+    return { vault, adapter, run };
+  }
+
+  it('a sign-in that stores no credential empties a vault a mid-session connect created', async () => {
+    const { vault, adapter, run } = await signIn({ ok: true, sub: SUBJECT });
+    const connectedVaultId = await vault.ensureVault(SUBJECT);
+    await vault.store(SUBJECT, connectedVaultId, 'github', { secret: 'gh-token' });
+
+    const { state } = await run();
+
+    expect(state.authorizationCode).toBe('minted-code');
+    expect(await vault.getVaultId(SUBJECT)).not.toBe(connectedVaultId);
+    expect(await vault.list(SUBJECT)).toEqual([]);
+    expect(await vault.get(SUBJECT, 'github')).toBeUndefined();
+    await adapter.disconnect();
+  });
+
+  it('refuses a sign-in that stores no credential when the old vault cannot be rotated, and mints no code', async () => {
+    const { vault, adapter, run } = await signIn({ ok: true, sub: SUBJECT });
+    const connectedVaultId = await vault.ensureVault(SUBJECT);
+    await vault.store(SUBJECT, connectedVaultId, 'github', { secret: 'gh-token' });
+    jest.spyOn(vault, 'rotateVault').mockRejectedValue(new Error('storage down'));
+
+    const { state, output } = await run();
+
+    expect(state.authorizationCode).toBeUndefined();
+    expect(output?.status).toBe(500);
+    expect(String(output?.body)).toContain('Could not start a new session');
+    await adapter.disconnect();
+  });
+
+  it('a sign-in that stores no credential creates no vault for a subject without one', async () => {
+    const { vault, adapter, run } = await signIn({ ok: true, sub: SUBJECT });
+
+    await run();
+
+    expect(await vault.getVaultId(SUBJECT)).toBeUndefined();
+    await adapter.disconnect();
+  });
+
+  it('a sign-in that returns credentials still starts a fresh vault holding only them', async () => {
+    const { vault, adapter, run } = await signIn({
+      ok: true,
+      sub: SUBJECT,
+      credentials: [{ key: 'acme', secret: 'sk-acme' }],
+    });
+    const connectedVaultId = await vault.ensureVault(SUBJECT);
+    await vault.store(SUBJECT, connectedVaultId, 'github', { secret: 'gh-token' });
+
+    await run();
+
+    expect(await vault.getVaultId(SUBJECT)).not.toBe(connectedVaultId);
+    expect(await vault.list(SUBJECT)).toEqual(['acme']);
+    expect(await vault.get(SUBJECT, 'acme')).toEqual({ secret: 'sk-acme' });
+    await adapter.disconnect();
   });
 });

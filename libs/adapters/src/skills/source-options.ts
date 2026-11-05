@@ -5,6 +5,7 @@
 // options (outbound/SSRF, credentials) re-import what they need from here.
 
 import { z } from '@frontmcp/lazy-zod';
+import type { StorageConfig, StorageType } from '@frontmcp/utils';
 
 // SaaS endpoints carry pinned bearer tokens and JWKS material; both must be
 // HTTPS so the JWT and verification keys are not exposed in plaintext.
@@ -21,6 +22,30 @@ const httpsUrl = z
     },
     { message: 'must use https://' },
   );
+
+/** The storage types every replica reaches and can write a key to once, atomically: a replay store needs both. */
+const SHARED_REPLAY_STORAGE_TYPES: readonly StorageType[] = ['redis', 'upstash', 'vercel-kv', 'sqlite'];
+
+const pushReplayStorageSchema = z
+  .custom<StorageConfig>((value) => typeof value === 'object' && value !== null && !Array.isArray(value), {
+    message: 'must be a storage config, such as { type: "redis", redis: { url } }',
+  })
+  .superRefine((storage, ctx) => {
+    if (!storage.type || !SHARED_REPLAY_STORAGE_TYPES.includes(storage.type)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['type'],
+        message: `must be ${SHARED_REPLAY_STORAGE_TYPES.map((type) => `"${type}"`).join(', ')}: a store every replica shares, with an atomic write-once`,
+      });
+    }
+    if (storage.fallback === 'memory') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['fallback'],
+        message: 'cannot be "memory": each replica would then accept the same push',
+      });
+    }
+  });
 
 export const staticSourceSchema = z.object({
   type: z.literal('static'),
@@ -68,10 +93,27 @@ export const saasSourceSchema = z.object({
   pollIntervalMs: z.number().int().positive().default(300_000),
   /**
    * Also take bundles the SaaS pushes, at `POST /__skilled_openapi/push`. The push token is checked as `authToken`
-   * is, and must carry a `jti` no push used and an `iat` within five minutes; the body is the bundle as JSON, checked
-   * and applied as a pulled one. Default false.
+   * is, and must carry a `jti` no push used and an `iat` within five minutes; when it carries a `body_sha256` claim,
+   * that must be the SHA-256 of the exact body. The body is the bundle as JSON, checked and applied as a pulled one.
+   * Default false.
    */
   enableWebhook: z.boolean().default(false),
+  /**
+   * Refuse a push token without a `body_sha256` claim, the base64url SHA-256 of the exact request body, which binds
+   * the token to the bundle it came with. Default false: such a token is accepted, and a warning is logged once.
+   */
+  requirePushBodyDigest: z.boolean().optional(),
+  /**
+   * Apply a pulled or pushed bundle older than the one being served (see `compareBundleVersions`). Default false: such
+   * a bundle is refused, so a validly signed old bundle can't roll the server back.
+   */
+  allowRollback: z.boolean().optional(),
+  /**
+   * Where the replay guard records the push tokens' `jti`s, through `createStorage()` from `@frontmcp/utils`: a store
+   * every replica shares (`redis`, `upstash`, `vercel-kv`, or `sqlite` for processes on one machine). Default: this
+   * process's memory, enough for a single process. When the store can't be reached, pushes are refused.
+   */
+  pushReplayStorage: pushReplayStorageSchema.optional(),
   /** JWKS URL for verifying SaaS-issued tokens (fetched without credentials, redirects refused). */
   jwksUrl: httpsUrl,
   /** Expected issuer (`iss`) claim of `authToken`. */

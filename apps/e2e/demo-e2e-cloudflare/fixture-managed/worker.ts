@@ -13,10 +13,11 @@ interface ManagedFixtureBindings {
 
 const bindings = env as unknown as ManagedFixtureBindings;
 
-export default createEdgeMcp({
+const mcp = createEdgeMcp({
   info: { name: 'cf-managed-fixture', version: '1.0.0' },
   apps: [],
   http: { entryPath: '/mcp' },
+  health: { readyz: { enabled: true }, includeDetails: true },
   tasks: { enabled: false },
   managed: {
     endpoint: 'https://bundles.example/v1/bundles/e2e-managed',
@@ -27,6 +28,10 @@ export default createEdgeMcp({
     trustedKeys: [JSON.parse(bindings.BUNDLE_TRUSTED_KEY)],
     credentials: { 'billing-token': bindings.BILLING_API_TOKEN },
     enableWebhook: true,
+    confirm: { methods: ['DELETE'] },
     cache: kvBundleCacheFromEnv('BUNDLE_CACHE'),
   },
 });
+
+export default mcp;
+export const FrontMcpPushReplay = mcp.PushReplayDurableObject;

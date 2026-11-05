@@ -3,6 +3,8 @@
 import { bundleSourceSchema, signatureKeySchema } from '@frontmcp/adapters/skills';
 import { z } from '@frontmcp/lazy-zod';
 
+import { vaultRefListedTwiceMessage } from './skilled-openapi.errors';
+
 // Re-export source-layer schemas/types from the Skills Adapter so existing
 // consumers of @frontmcp/plugin-skilled-openapi keep working without a code
 // change. New code should import these directly from @frontmcp/adapters/skills.
@@ -197,27 +199,40 @@ const DEFAULT_OUTBOUND_OPTIONS: OutboundOptions = {
   errorBodies: 'include',
 };
 
-export const skilledOpenApiPluginOptionsSchema = skilledOpenApiPluginOptionsObjectSchema.transform((opts) => {
-  // Merge user-provided outbound overrides on top of the SSRF/timeouts default.
-  // `dev: true` widens this further by allowing http:// upstreams (the docstring
-  // for `dev` advertises this behavior; without applying it here, callers
-  // reading the parsed config still see allowHttp=false and lose the relaxation).
-  const outbound: OutboundOptions = {
-    ...DEFAULT_OUTBOUND_OPTIONS,
-    ...(opts.outbound ?? {}),
-  };
-  if (opts.dev) {
-    outbound.allowHttp = true;
-  }
-  return {
-    ...opts,
-    // `dev: true` turns the signature requirement off, as it advertises; an explicit
-    // `requireSignature` (either way) is kept.
-    requireSignature: opts.requireSignature ?? !opts.dev,
-    outbound,
-    bundleCacheDir: opts.bundleCacheDir ?? '.frontmcp/skilled-openapi/',
-  };
-});
+export const skilledOpenApiPluginOptionsSchema = skilledOpenApiPluginOptionsObjectSchema
+  .superRefine((opts, ctx) => {
+    const serverVaultRefs = new Set(Object.keys(opts.credentials ?? {}));
+    const listedTwice = Object.keys(opts.authProviders ?? {}).filter((vaultRef) => serverVaultRefs.has(vaultRef));
+    if (listedTwice.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['authProviders'],
+        message: vaultRefListedTwiceMessage(listedTwice),
+        params: { vaultRefsListedTwice: listedTwice },
+      });
+    }
+  })
+  .transform((opts) => {
+    // Merge user-provided outbound overrides on top of the SSRF/timeouts default.
+    // `dev: true` widens this further by allowing http:// upstreams (the docstring
+    // for `dev` advertises this behavior; without applying it here, callers
+    // reading the parsed config still see allowHttp=false and lose the relaxation).
+    const outbound: OutboundOptions = {
+      ...DEFAULT_OUTBOUND_OPTIONS,
+      ...(opts.outbound ?? {}),
+    };
+    if (opts.dev) {
+      outbound.allowHttp = true;
+    }
+    return {
+      ...opts,
+      // `dev: true` turns the signature requirement off, as it advertises; an explicit
+      // `requireSignature` (either way) is kept.
+      requireSignature: opts.requireSignature ?? !opts.dev,
+      outbound,
+      bundleCacheDir: opts.bundleCacheDir ?? '.frontmcp/skilled-openapi/',
+    };
+  });
 
 /** Parsed options with defaults applied — internal plugin use. */
 export type SkilledOpenApiPluginOptions = z.infer<typeof skilledOpenApiPluginOptionsSchema>;

@@ -23,25 +23,28 @@ INPUT: { skillId } or { skillIds }
 OUTPUT: { skill: { id, name, description, instructions, actions[] }, isComplete } for skillId,
         { skills: Array<{ skill, isComplete }> } for skillIds`;
 
-const loadedSkillSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string(),
-  instructions: z.string(),
-  bundleVersion: z.string().optional(),
-  actions: z
-    .array(
-      z.object({
-        actionId: z.string(),
-        summary: z.string(),
-        description: z.string().optional(),
-        inputJsonSchema: z.record(z.string(), z.unknown()),
-        outputJsonSchema: z.record(z.string(), z.unknown()),
-        requiredAuthorities: z.record(z.string(), z.unknown()).optional(),
-      }),
-    )
-    .optional(),
-});
+const loadedSkillSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    instructions: z.string(),
+    bundleVersion: z.string().optional(),
+    actions: z
+      .array(
+        z.object({
+          actionId: z.string(),
+          summary: z.string(),
+          description: z.string().optional(),
+          inputJsonSchema: z.record(z.string(), z.unknown()),
+          outputJsonSchema: z.record(z.string(), z.unknown()),
+          requiredAuthorities: z.record(z.string(), z.unknown()).optional(),
+          asksForConfirmation: z.literal(true).optional(),
+        }),
+      )
+      .optional(),
+  })
+  .meta({ id: 'LoadedSkill' });
 
 export const loadSkillInputSchema = {
   skillId: z
@@ -82,6 +85,8 @@ export type LoadedSkill = {
     inputJsonSchema: Record<string, unknown>;
     outputJsonSchema: Record<string, unknown>;
     requiredAuthorities?: Record<string, unknown>;
+    /** Set when the plugin's `confirm` option makes the action ask the user before its request. */
+    asksForConfirmation?: true;
   }>;
 };
 

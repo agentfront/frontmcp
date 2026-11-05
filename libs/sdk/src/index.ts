@@ -41,7 +41,14 @@ export {
   type BudgetNote,
   type BudgetOmission,
 } from './answer';
-export { fileSignal, SURFACE_META_KEY, surfaceHash, type FileSignalOptions, type LiveSurface } from './surface';
+export {
+  fileSignal,
+  SURFACE_META_KEY,
+  surfaceHash,
+  type FileSignalOptions,
+  type ListChangeBatch,
+  type LiveSurface,
+} from './surface';
 export {
   MATERIALIZED_META_KEY,
   MaterializedResourceContext,
@@ -432,6 +439,8 @@ export {
   SkillHttpAuthValidator,
   // Thrown by validateAllTools() when a 'strict' skill references a missing tool
   SkillValidationError,
+  // A plugin's runtime skills aren't loaded yet: the skill surfaces answer with it, retryable
+  SkillBundleNotLoadedError,
 } from './skill';
 export type {
   SkillAuditFactory,

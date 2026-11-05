@@ -243,6 +243,7 @@ export { createSkillToolGuardHook, type SkillToolGuardHookOptions, type SkillToo
 // Errors
 export { ToolNotAllowedError, ToolApprovalRequiredError } from './errors/tool-not-allowed.error';
 export { SkillValidationError } from './errors/skill-validation.error';
+export { SkillBundleNotLoadedError } from './errors/skill-bundle-not-loaded.error';
 export type { SkillValidationResult, SkillValidationReport } from './errors/skill-validation.error';
 
 // Scope Helper

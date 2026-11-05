@@ -77,12 +77,12 @@ script:
 
 ## The four tools
 
-| Tool             | Input                                                | What it does                                                                                                                                                                                                                                                                                                                                                      |
-| ---------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_skill`   | `query`, `limit?` (default 20), `tags?`, `notQuery?` | Searches the skills and returns `{ skills: [{ skillId, name, description, score, bundleVersion }] }`, where `bundleVersion` is the version of the bundle the skill comes from. Its description lists the skills the caller may use, so the model sees what the server can do, and loads a skill it names with `load_skill` directly, without searching.           |
-| `load_skill`     | `skillId`, or `skillIds` (up to 10)                  | Returns the skill's markdown instructions and its `actions`, with their input and output JSON Schemas: the `actionId`s a script calls. `skillId` takes the name the catalog shows, or an id; `skillIds` loads several, under `skills`. Its description tells the model to load each skill once per conversation, and again only when its `bundleVersion` changes. |
-| `execute_action` | `actionId`, `input?`                                 | Runs one action, with no script and no sandbox, and answers with its data. A failure is an error result (`isError: true`) whose text says why, and whose structured content is `{ ok: false, status, data?, error? }`.                                                                                                                                            |
-| `run_workflow`   | `script`                                             | Runs an AgentScript program (a subset of JavaScript) in the `@enclave-vm` sandbox. Each `await callTool(actionId, input)` calls an operation, and `callTool(actionId, input, { throwOnError: false })` returns `{ ok, status, data }` instead of throwing; the script's `return` value is the result.                                                             |
+| Tool             | Input                                                | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_skill`   | `query`, `limit?` (default 20), `tags?`, `notQuery?` | Searches the skills and returns `{ skills: [{ skillId, name, description, score, bundleVersion }] }`, where `bundleVersion` is the version of the bundle the skill comes from. Its description lists the skills the caller may use, so the model sees what the server can do, and loads a skill it names with `load_skill` directly, without searching.                                                                                                                          |
+| `load_skill`     | `skillId`, or `skillIds` (up to 10)                  | Returns the skill's markdown instructions and its `actions`, with their input and output JSON Schemas: the `actionId`s a script calls. `skillId` takes the name the catalog shows, or an id; `skillIds` loads several, under `skills`. Its description tells the model to load each skill once per conversation, and again only when its `bundleVersion` changes. Its `outputSchema` describes a loaded skill once, under `$defs`, and refers to it with `$ref` from both forms. |
+| `execute_action` | `actionId`, `input?`                                 | Runs one action, with no script and no sandbox, and answers with its data. A failure is an error result (`isError: true`) whose text says why, and whose structured content is `{ ok: false, status, data?, error? }`.                                                                                                                                                                                                                                                           |
+| `run_workflow`   | `script`                                             | Runs an AgentScript program (a subset of JavaScript) in the `@enclave-vm` sandbox. Each `await callTool(actionId, input)` calls an operation, and `callTool(actionId, input, { throwOnError: false })` returns `{ ok, status, data }` instead of throwing; the script's `return` value is the result.                                                                                                                                                                            |
 
 For each `callTool`, and for each `execute_action` call, the plugin checks the caller against the operation's and
 skill's `requiredAuthorities`, validates the input against the operation's `inputSchema`, asks the user when
@@ -128,6 +128,14 @@ An operation that several skills list runs when the caller satisfies the operati
 those skills, whatever the order of the skills in the bundle. `load_skill` judges each skill the same way, so the call
 and the listing agree. A rule that depends on the action's input can't be judged until the call, though: `load_skill`
 still lists such an action, and the call can be refused once its input is known.
+
+Only the skills the caller may see count. The `skills:filter` flow decides which those are, as it does for
+`search_skill` and `load_skill`: it hides a skill whose own `requiredAuthorities` refuse the caller, and any skill a
+hook of the server's drops (a feature flag, a tenant's plan). An action that no skill the caller may see lists is
+answered as an unknown action, the answer for an action that doesn't exist, as `load_skill` answers its skill as not
+found; the audit log records it as a failed authority check. A workflow asks the flow once, when it starts, about the
+bundle it runs on. Up to 1.11.0 such an action still ran when named, and one whose skill's rule refused the caller
+answered `authority denied`.
 
 ### One action with `execute_action`
 
@@ -204,11 +212,29 @@ yes/no form:
   with an error that tells the model to write the id as a string.
 - **A decline** sends nothing. The call fails with `the user declined: voidInvoice` (`isError: true`), and a declined
   workflow runs none of its script, reads included. The audit log records a declined call as `http-call-failure` with
-  status 0 and that error; a confirmed call's records are those of any call.
+  status 0 and that error.
 - **A client that can't show the question**, because it declared no elicitation capability or the server has
   elicitation disabled, is refused: `the user's confirmation is needed for voidInvoice, and this client can't ask for
 it: it doesn't support elicitation; nothing was sent`. With `whenUnsupported: 'allow'` the action runs unasked
   there instead. The plugin doesn't use the SDK's elicitation fallback, in which the model would answer for the user.
+- **`load_skill`** marks each action that asks with `asksForConfirmation: true`, so the model knows the user will be
+  asked before it calls it.
+
+The audit records of a call say what the confirmation came to, in a `confirmation` field. It is set on the call's
+`http-call-success` or `http-call-failure` once its input passed the schema check. The `authority-check-*` records,
+and the failure of an input that fails the schema, come before the confirmation and have none:
+
+| `confirmation` | When                                                                                                                                      |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `not_required` | No `confirm` rule names the action, so nobody was asked                                                                                   |
+| `confirmed`    | The user said yes. The CLI's `--yes` says yes for the user, so the server records it the same                                             |
+| `skipped`      | The client can't ask, and `whenUnsupported: 'allow'` sent the request without asking                                                      |
+| `declined`     | The user said no, or cancelled. Nothing was sent                                                                                          |
+| `unanswered`   | No answer came, so nothing was sent: the client can't ask, the question timed out, or a script reached the action by an id it didn't name |
+
+A workflow's action calls carry the workflow's answer: `confirmed` (or `skipped`) for the actions it asked about, and
+`not_required` for the others. A workflow the user declines runs no action, so it writes no records. Up to 1.11.0 the
+records had no `confirmation`, so a confirmed call's records were those of a call no rule names.
 
 The generated CLI (`frontmcp build --target cli`) asks the question in the terminal, in-process and through its daemon:
 it reads `y/N` when standard input is a terminal, and `--yes` answers yes without asking. With no terminal and no
@@ -263,9 +289,8 @@ request whose secret doesn't resolve fails, and isn't sent. `authInfo` is the ca
 `user` claims and `sessionId`), so a resolver that serves several tenants can pick each one's credential, as above. A
 resolver that caches credentials must key its cache by the caller too.
 
-An operation tool, which `execute_action` and your own tools' `this.callTool()` run, uses the resolver the server's
-providers declare. When the plugin is installed in an `@App`, declare it in `init({ providers })` or in
-`@FrontMcp({ providers })` for those calls: one in `@App({ providers })` reaches `run_workflow` only.
+`run_workflow`, `execute_action` and the operation tools your own tools call with `this.callTool()` all use the same
+resolver, wherever it is declared.
 
 Up to 1.11.0 a resolver declared in `@FrontMcp({ providers })` or `@App({ providers })` was ignored, and the built-in
 one kept answering: only `init({ providers })` replaced it. It was told only `bundleId`, not the caller.
@@ -290,9 +315,13 @@ names only the `vaultRef`, and the server decides where its credential comes fro
 
 - A caller who hasn't connected the provider gets `ToolCredentialsRequiredError` (JSON-RPC `-32001`), with
   `data: { tool, providers, authUrl }`, as a tool whose `authProviders` the caller hasn't connected does. `authUrl`, the
-  session vault's `/oauth/connect` link, is there when the server can make one. The message names the provider but not
-  the link, which lets its holder connect a credential for the caller. Nothing is sent to the API.
-- A mapped `vaultRef` never falls back to `credentials`, to a resolver, or to another caller's credential.
+  session vault's `/oauth/connect` link, is there when the server can make one. The message names the provider and
+  points at the link in the data, but never holds it: the link lets its holder connect a credential for the caller. A
+  caller who isn't signed in gets `data.signInRequired: true` and no `authUrl`, since no link works before sign-in.
+  Nothing is sent to the API.
+- A mapped `vaultRef` never falls back to `credentials`, to a resolver, or to another caller's credential. A
+  `vaultRef` listed in both `credentials` and `authProviders` is refused at startup with `VaultRefListedTwiceError`,
+  and `skilledOpenApiPluginOptionsSchema` refuses it too: keep each one in one of the two.
 - The error ends a `run_workflow` run even when the script passes `{ throwOnError: false }`, since the script can't
   fix it. From `this.callTool()`, the operation tool throws it, so your tool's call fails with it unless you catch it.
   `execute_action` raises it as it comes from the operation tool, whose name is its `tool` (`execute_action` with
@@ -317,7 +346,7 @@ for a bad one.
 | `unprotectedOps`                  | `'allow' \| 'deny'`                                      | `'allow'`                           | Whether an operation with no `requiredAuthorities`, on itself or its skill, may be called. `'deny'` blocks it unless it's marked `public: true`.               |
 | `outbound`                        | `OutboundOptions`                                        | see below                           | Limits on the requests to your API.                                                                                                                            |
 | `dev`                             | `boolean`                                                | `false`                             | For development only: turns off signature checks (unless `requireSignature` is set) and allows `http:` URLs. Logs a warning.                                   |
-| `bundleCacheDir`                  | `string`                                                 | `'.frontmcp/skilled-openapi/'`      | Where the `saas` source keeps the last bundle the plugin applied, served when a pull fails at startup.                                                         |
+| `bundleCacheDir`                  | `string`                                                 | `'.frontmcp/skilled-openapi/'`      | Where the `saas` source keeps the last bundle the plugin applied, served at startup when the pull fails, or brings an older or refused bundle.                 |
 | `exposeOperationsAsInternalTools` | `boolean`                                                | `true`                              | Register each operation as an internal tool for `this.callTool()`, which `execute_action` runs an action through.                                              |
 | `confirm`                         | `{ methods?, tags?, operations?, whenUnsupported? }`     |                                     | Actions that ask the user before their request; `whenUnsupported` is `'refuse'` or `'allow'`. See [Asking the user](#asking-the-user-before-an-action).        |
 | `sourceConflictPolicy`            | `'static-wins' \| 'last-wins' \| 'reject'`               | `'static-wins'`                     | Accepted and currently unused: the plugin has one source.                                                                                                      |
@@ -336,21 +365,63 @@ for a bad one.
 
 ### Sources
 
-| `type`   | Fields                                                                                                        | What it does                                                                                                                                                                                                                                 |
-| -------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `inline` | `content`                                                                                                     | The bundle object itself. For tests, bundles built in code, and runtimes without a file system.                                                                                                                                              |
-| `static` | `path`, `watch?`                                                                                              | A JSON or YAML bundle file, resolved from the working directory. With `watch: true`, the plugin reloads it when it changes.                                                                                                                  |
-| `npm`    | `packageName`, `exportName?`, `verifyProvenance?`                                                             | Imports a package and uses one of its exports. Provenance checks aren't implemented yet, so the default `verifyProvenance: true` refuses to load it; set `false` only for a package you pin and trust.                                       |
-| `saas`   | `endpoint`, `authToken`, `expectedAudience`, `jwksUrl`, `expectedIssuer`, `pollIntervalMs?`, `enableWebhook?` | Pulls the bundle over HTTPS at startup and every `pollIntervalMs` (default 5 minutes), after checking `authToken` against `jwksUrl`, `expectedIssuer` and `expectedAudience`. With `enableWebhook: true`, also takes pushed bundles (below). |
+| `type`   | Fields                                                                                                                                                                          | What it does                                                                                                                                                                                                                                                                                                                       |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inline` | `content`                                                                                                                                                                       | The bundle object itself. For tests, bundles built in code, and runtimes without a file system.                                                                                                                                                                                                                                    |
+| `static` | `path`, `watch?`                                                                                                                                                                | A JSON or YAML bundle file, resolved from the working directory. With `watch: true`, the plugin reloads it when it changes.                                                                                                                                                                                                        |
+| `npm`    | `packageName`, `exportName?`, `verifyProvenance?`                                                                                                                               | Imports a package and uses one of its exports. Provenance checks aren't implemented yet, so the default `verifyProvenance: true` refuses to load it; set `false` only for a package you pin and trust.                                                                                                                             |
+| `saas`   | `endpoint`, `authToken`, `expectedAudience`, `jwksUrl`, `expectedIssuer`, `pollIntervalMs?`, `enableWebhook?`, `requirePushBodyDigest?`, `pushReplayStorage?`, `allowRollback?` | Pulls the bundle over HTTPS at startup and every `pollIntervalMs` (default 5 minutes), after checking `authToken` against `jwksUrl`, `expectedIssuer` and `expectedAudience`. With `enableWebhook: true`, also takes pushed bundles (below). Applies no bundle older than the one it serves, unless `allowRollback: true` (below). |
 
 A new bundle from `static` (with `watch`) or `saas` is checked like the first, then replaces the skills and operations
 at once. A bundle that fails its checks isn't applied, and the reason is logged, with the first issues a schema check
 found; the bundle already loaded stays. A `run_workflow` already running when a new bundle is applied finishes on the
 operations of the bundle it started on.
 
+Connected clients are told once the new bundle is in place, with one notification per list it changed, however many
+skills and operations it has:
+
+- `notifications/skills/list_changed` for the skills, and `notifications/resources/list_changed` for the skills'
+  `skill://` resources when skills are added or removed.
+- No `notifications/tools/list_changed`: the operation tools are internal, and `tools/list` never shows them.
+- A poll that pulls the bundle being served again leaves it registered and sends nothing. So does a refused bundle.
+- A bundle that fails part-way is rolled back to the bundle served, and sends nothing. If the rollback can't put a
+  skill back, it sends one notification for each list it left changed.
+- The first bundle that loads sends `notifications/skills/list_changed` even when it has no skills, since the skill
+  surfaces stop answering that no bundle is loaded.
+
+Up to 1.11.0 a new bundle sent one notification per skill, operation tool and resource it registered or removed (about
+25 for a modest bundle), a rolled-back bundle sent them too, and every poll registered the bundle being served again,
+which sent them again.
+
+A bundle from the `saas` source, pulled or pushed, is applied only when it isn't older than the bundle being served, so
+a validly signed old bundle, replayed or served by mistake, can't roll the server back:
+
+- Two semver versions compare by semver precedence, whatever their `generatedAt`.
+- The same version (a bundle re-signed under it), or versions that aren't both semver, compare by `generatedAt`, which
+  the signature covers. The same version and `generatedAt` is the same bundle, and a poll that pulls it again keeps
+  serving it.
+- An older bundle is not applied and not kept, and the log says why:
+  `[bundle-sync] bundle acme:billing@1.4.0 not applied: older than the served bundle acme:billing@1.5.0 (generatedAt ...)`.
+- To roll back, publish the earlier content under a newer version, or set `allowRollback: true` on the source, which
+  then applies any bundle that passes its other checks, as the `inline`, `static` and `npm` sources do.
+
 The `saas` source keeps the last bundle the plugin applied, pulled or pushed, in `bundleCacheDir` (on a Worker, in the
-injected cache). A bundle that fails its signature or its other checks is never kept, so a server that restarts while
-the bundle server is down serves the last bundle it applied.
+injected cache). A bundle that fails its signature or its other checks is never kept. A server that starts has no
+bundle served yet, so the cached bundle stands in for it:
+
+- The pull fails (an outage, a schema error): the server serves the cached bundle.
+- The pulled bundle is older than the cached one: the server serves the cached bundle, and logs
+  `[bundle-sync] bundle acme:billing@1.4.0 not applied: older than the cached bundle acme:billing@1.5.0 (generatedAt ...); serving the cached bundle acme:billing@1.5.0`.
+  With `allowRollback: true` it serves the pulled bundle. A stale CDN or a rolled-back origin can't take a restarted
+  server back.
+- The pulled bundle is refused (its signature, a bundle that fails part-way): the server serves the cached bundle.
+- The cached bundle is refused too (its signature no longer checks out): the server serves the pulled bundle when it
+  passes, or none.
+- Serving the cached bundle never writes it back to the cache. Only a bundle the server applies from a pull or a push is
+  written.
+
+`/readyz` says which (below). Up to 1.11.0 a start served whatever it pulled, an older bundle too, served nothing when
+the pulled bundle was refused, and wrote the cached bundle back when it served it.
 
 A `static` file that fails to load at startup is still watched (with `watch: true`), and a `saas` source keeps polling
 after a failed first pull, so the next good bundle loads without a restart.
@@ -361,14 +432,75 @@ With `enableWebhook: true` on a `saas` source, the server takes bundles the SaaS
 `POST /__skilled_openapi/push`, through the hookable `skilled-openapi:bundle-push` flow, on Node and on a Worker:
 
 - The `Authorization: Bearer` token is checked as `authToken` is, and must also carry a `jti` of 8 or more characters
-  that no push used and an `iat` within five minutes. A missing or refused token answers `401 invalid_token`, a used
-  `jti` answers `409 push_replayed`, and a JWKS that can't be read answers `503 temporarily_unavailable`.
+  that no push used and an `iat` within five minutes. With a `body_sha256` claim, it is good only for the body it was
+  issued for (below). A missing or refused token answers `401 invalid_token`, a used `jti` answers
+  `409 push_replayed`, and a JWKS that can't be read, or a `jti` that can't be recorded, answers
+  `503 temporarily_unavailable`.
 - The body is the bundle as JSON, checked as a pulled bundle is: `400 invalid_bundle` when it is not a bundle,
-  `422 bundle_not_applied` when its signature or its other checks fail.
+  `409 bundle_outdated` when it is older than the bundle being served, `422 bundle_not_applied` when its signature or
+  its other checks fail. The served bundle stays.
 - An applied bundle answers `200 { applied: true, bundleId, bundleVersion }` and is kept as the last good bundle. Pushes
   and pulls apply one at a time, in the order they arrive.
 
-The used `jti`s are kept in memory: replicas, and the isolates of a Worker, don't share them.
+By default the used `jti`s are kept in the process's memory, which is enough for a single process. With several
+replicas, a push replayed to another replica would be accepted again, so give them a store they share with
+`pushReplayStorage`, a config for `createStorage()` from `@frontmcp/utils`:
+
+```ts
+SkilledOpenApiPlugin.init({
+  source: {
+    type: 'saas',
+    // endpoint, authToken, expectedAudience, jwksUrl, expectedIssuer ...
+    enableWebhook: true,
+    pushReplayStorage: { type: 'redis', redis: { url: process.env.REDIS_URL } },
+  },
+});
+```
+
+- Its `type` is `redis`, `upstash`, `vercel-kv`, or `sqlite` for processes on one machine. `memory`, `auto` and
+  `cloudflare-kv` are refused, and so is `fallback: 'memory'`: each replica would keep its own `jti`s. Cloudflare KV is
+  eventually consistent, so two isolates could both read a `jti` as unused.
+- Each `jti` is kept under `frontmcp:skilled-openapi:push-jti:<expectedAudience>:` until its token's `iat` is five
+  minutes old.
+- The store is connected on the first push. While it can't be reached, every push answers
+  `503 temporarily_unavailable` and the log says why: a push is never accepted unchecked.
+- On a Cloudflare Worker, `@frontmcp/edge` keeps the `jti`s in a Durable Object instead (`managed.pushReplay`).
+
+#### A push token bound to its body
+
+A push token's `body_sha256` claim binds it to the body it is sent with: the base64url SHA-256, without padding, of the
+exact bytes of the request body. Without it, a token captured within its five minutes, before its `jti` is used (from a
+proxy log, or a middlebox that ends TLS), could carry any other bundle the SaaS signed for this server, such as one for
+another channel.
+
+- The server hashes the bytes it received, not a re-serialization of the JSON. Any other body, even the same bundle
+  with other whitespace, answers `401 invalid_token`, and the log says
+  `[saas-source] push refused (body_mismatch): ...`. The refused token's `jti` isn't used, so the push it was issued
+  for still applies.
+- This is not the bundle's own `integrity.digest`, a hex SHA-256 of the bundle's canonical form: hash the body as sent.
+- A token without the claim is accepted, so a SaaS that doesn't set it yet keeps working, and the source logs one
+  warning. Set `requirePushBodyDigest: true` on the `saas` source to refuse such a token (`401`, logged as
+  `missing_claim`).
+
+The sender hashes the string it sends, with the helpers `@frontmcp/adapters/skills` exports:
+
+```ts
+import { PUSH_BODY_DIGEST_CLAIM, pushBodyDigest } from '@frontmcp/adapters/skills';
+
+const body = JSON.stringify(signedBundle);
+const pushToken = await new SignJWT({ jti: randomUUID(), [PUSH_BODY_DIGEST_CLAIM]: pushBodyDigest(body) })
+  .setProtectedHeader({ alg: 'ES256', kid })
+  .setIssuer(issuer)
+  .setAudience(audience)
+  .setIssuedAt()
+  .setExpirationTime('5m')
+  .sign(privateKey);
+await fetch(`${serverUrl}/__skilled_openapi/push`, {
+  method: 'POST',
+  headers: { authorization: `Bearer ${pushToken}`, 'content-type': 'application/json' },
+  body,
+});
+```
 
 ### When no bundle loads
 
@@ -379,11 +511,86 @@ the server keeps running, and:
   `No skill bundle is loaded: <reason>`, for example
   `No skill bundle is loaded: bundle acme:billing@1.4.0 was not applied: unknown signing keyId "ci-2026" — not in trustedKeys allowlist`.
   The reason is the first line of the error, with each URL cut to its scheme, host and path, and tokens removed. The
-  log has the full reason.
-- `/readyz` answers 503: its `skilled-openapi` check is `unhealthy`, with the same reason in `error`.
+  log has the full reason. The error's `_meta` has `retryable: true`.
+- The SDK's skill surfaces answer the same reason and code, as a JSON-RPC error with
+  `data: { code: 'SKILL_BUNDLE_NOT_LOADED', retryable: true }`: `skills/list`, `skills/search` and `skill://index.json`,
+  and `skills/load` or a `skill://<path>/SKILL.md` read of a skill not found. A stateless request, which skips
+  `initialize`, gets it too. Up to 1.11.0 they answered as if the server had no skills.
+- `initialize` says in its instructions, in place of the skills count, that the skills have not loaded yet and why.
+- `/readyz` answers 503: its `skilled-openapi` check is `unhealthy`, with the same reason in `error`, and the sync that
+  failed in `details.lastSync`.
 
-Once a bundle loads (a watched file is fixed, a poll succeeds), the tools work again and the check is `healthy`, with
-`details: { state: 'loaded', bundleId, bundleVersion }`.
+The same holds while the first load is still running, with the reason `the first bundle has not loaded yet`.
+
+Once a bundle loads (a watched file is fixed, a poll succeeds), the tools work again, the skill surfaces list the
+bundle's skills with its `bundleVersion`, connected clients get `notifications/skills/list_changed`, and the check is
+`healthy`, with `details: { state: 'loaded', bundleId, bundleVersion }`.
+
+### When a newer bundle is refused
+
+A bundle that was loaded keeps serving when a later sync doesn't replace it: a pulled or pushed bundle is refused (its
+signature, its other checks, or it is older than the one served), or a pull fails. The `skilled-openapi` check is then
+`degraded`, which keeps `/readyz` at 200, and says the bundle served is stale:
+
+```json
+{
+  "status": "degraded",
+  "details": {
+    "state": "stale",
+    "bundleId": "acme:billing",
+    "bundleVersion": "1.4.0",
+    "lastSync": {
+      "status": "refused",
+      "bundleId": "acme:billing",
+      "bundleVersion": "1.5.0",
+      "reason": "digest mismatch (envelope=e9ec8b853572.. computed=d9f4ec7292dd..)",
+      "at": "2026-11-05T08:00:00.000Z"
+    }
+  }
+}
+```
+
+- `lastSync.status` is `refused`, with the refused bundle's id and version, or `failed`, for a pull that failed.
+  `cacheFallback: true` says the server started on its cached bundle because of it: the pull failed, or the pulled
+  bundle was refused or older than the cached one (`reason: "older than the cached bundle acme:billing@1.5.0 ..."`).
+- The reason is cut as the tools' reasons are: its first line, URLs cut to scheme, host and path, no tokens.
+- The next sync that applies a bundle, or pulls the one served again, makes the check `healthy`.
+- `/readyz` shows the checks' details outside production, or with `health: { includeDetails: true }`.
+- On a Worker (`@frontmcp/edge`), a Cron run whose sync is refused or fails throws, so Cloudflare records it as failed.
+
+Up to 1.11.0, the check stayed `healthy`, and a Cron run that pulled a refused bundle reported success.
+
+### When a pull or push token is refused
+
+The `saas` source checks `authToken` against `jwksUrl` before every pull, and the token of each push the same way. When
+a check fails, the log and `/readyz` name it as `tokenFailure`:
+
+| `tokenFailure`          | The token                                                                                                 |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| `expired`               | Its `exp` has passed: issue a new one.                                                                    |
+| `not_yet_valid`         | Its `nbf` is in the future: check the issuer's clock and the server's.                                    |
+| `wrong_issuer`          | Its `iss` is not `expectedIssuer`, or it has none.                                                        |
+| `wrong_audience`        | Its `aud`, or its `resource`, does not name `expectedAudience`.                                           |
+| `unknown_key`           | Its `kid` is not in the JWKS: the issuer may have retired the key.                                        |
+| `bad_signature`         | The key in the JWKS under its `kid` does not verify it.                                                   |
+| `unsupported_algorithm` | It is not signed with an asymmetric algorithm (`HS256`, for example).                                     |
+| `missing_claim`         | It has no `exp`; a push token also needs `iat` and `jti`, and `body_sha256` with `requirePushBodyDigest`. |
+| `body_mismatch`         | A push token's `body_sha256` is not the SHA-256 of the body it came with.                                 |
+| `malformed`             | It is not a JWT, or a claim has the wrong type.                                                           |
+| `jwks_unavailable`      | Not checked: `jwksUrl` could not be read, or has no usable signing key. An outage.                        |
+
+- A pull logs, at warn level, `[saas-source] saas:<endpoint>: pull token check failed (expired)`. The log never has
+  the token.
+- `/readyz` has it in the check's `details.lastSync.tokenFailure`: the check is `degraded` while an earlier bundle
+  serves, and `unhealthy` when none loaded. A refused pull token never falls back to the cached bundle;
+  `jwks_unavailable` does, at a start.
+- A push logs `[saas-source] push refused (wrong_issuer): ...`, or `bundle push not checked (jwks_unavailable): ...`.
+  `body_mismatch` comes only from a push.
+- On a Worker, a failed Cron run's error says it too: `the bundle pull failed (token check: expired): ...`.
+
+Callers learn nothing more than before: the tools' `SKILL_BUNDLE_NOT_LOADED` reason is unchanged, a refused push token
+answers `401 invalid_token` with `the push token was refused` whatever check failed, and a push while the JWKS can't be
+read answers `503 temporarily_unavailable`, as a server-side problem the SaaS should retry.
 
 ### The bundle
 
@@ -462,9 +669,14 @@ host, and `run_workflow` needed `@enclave-vm/core`.
   EdDSA (Ed25519) over the bundle's canonical JSON, verifies with a key in `trustedKeys`. A signed bundle is still
   checked for shape: unknown fields are errors, and path templates and header names are restricted.
 - **Authorization.** `requiredAuthorities` on skills and operations are checked on every `callTool` and `execute_action` call. Skills organize
-  what the model reads; they don't limit what a script can call, so protect operations with rules and use
-  `unprotectedOps: 'deny'` in production. Each caller is shown only the skills and actions their rules allow. A skill's
-  rule doesn't protect an operation that another skill, without that rule, also lists: put the rule on the operation.
+  what the model reads; a script can call any action of a skill the caller may see, not only the ones it loaded, so
+  protect operations with rules and use `unprotectedOps: 'deny'` in production. Each caller is shown only the skills
+  and actions their rules allow. A skill's rule doesn't protect an operation that another skill, without that rule,
+  also lists: put the rule on the operation.
+- **Hidden skills.** A skill the `skills:filter` flow hides from a caller, by its own rule or a hook such as a feature
+  flag, can't be run by naming its actions: `run_workflow`, `execute_action` and the operation tools count only the
+  skills the caller may see, and answer an action none of them lists as an unknown action, so the call doesn't reveal
+  the hidden skill.
 - **Credentials.** Credentials stay on the server: the plugin adds them to each request, and the script gets only the
   API's answer. With `authProviders`, a caller's request carries only that caller's credential, and one who hasn't
   connected it is asked to. Redirects aren't followed, so a credential isn't sent elsewhere. An error body your API

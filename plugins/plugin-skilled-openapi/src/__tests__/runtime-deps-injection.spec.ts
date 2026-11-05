@@ -53,7 +53,9 @@ function scopeWith(controller: SkilledOpenApiRuntimeDeps) {
   return {
     logger: fakeLogger,
     registerHealthProbe: jest.fn(),
+    batchListChanges: async <T>(change: () => T | Promise<T>): Promise<T> => change(),
     skills: {
+      notifyListChanged: jest.fn(),
       registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })),
       unregisterSkill: jest.fn(async () => false),
     },
@@ -163,7 +165,7 @@ describe('skilled-openapi runtime-deps injection', () => {
     fetchMock.mockRejectedValue(new Error('network down'));
     const cached = bundle({ bundleId: 'plugin:cached', version: '1' });
     const write = jest.fn(async () => {});
-    let captured: { refresh(): Promise<void> } | undefined;
+    let captured: { refresh(): Promise<unknown> } | undefined;
     const controller: SkilledOpenApiRuntimeDeps = {
       cache: { read: jest.fn(async () => cached as never), write },
       disablePolling: true,
@@ -197,7 +199,8 @@ describe('skilled-openapi runtime-deps injection', () => {
     const scope = {
       logger: fakeLogger,
       registerHealthProbe: jest.fn(),
-      skills: { registerSkillContent: jest.fn(), unregisterSkill: jest.fn() },
+      batchListChanges: async <T>(change: () => T | Promise<T>): Promise<T> => change(),
+      skills: { notifyListChanged: jest.fn(), registerSkillContent: jest.fn(), unregisterSkill: jest.fn() },
     };
     const store = new BundleStore();
     const sync = await getSyncFactory()(scope, new HiddenOpRegistry(), store);

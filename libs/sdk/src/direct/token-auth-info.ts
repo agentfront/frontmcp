@@ -1,5 +1,6 @@
 import { isAnonymousSubject } from '@frontmcp/auth';
 
+import { DirectPublicAuth } from '../auth/direct-public-auth';
 import {
   authInfoFromAuthorization,
   normalizeEntryPrefix,
@@ -9,8 +10,13 @@ import {
 import { PublicMcpError, SessionVerificationFailedError, UnauthorizedError } from '../errors';
 import type { Scope } from '../scope/scope.instance';
 
-/** The caller `token` names, verified by `session:verify` as a Bearer token sent to `localhost`; empty when it names none. */
+/**
+ * The caller `token` names, verified by `session:verify` as a Bearer token sent to `localhost`; empty when it names
+ * none. A server without `auth` verifies no token (it has no session flows and no key), so the token names no caller: the
+ * caller is anonymous unless `session.user` names one.
+ */
 export async function authInfoForToken(scope: Scope, token: string): Promise<Partial<AuthorizationAuthInfo>> {
+  if (scope.auth instanceof DirectPublicAuth) return {};
   const mcpPath = `${normalizeEntryPrefix(scope.entryPath)}${normalizeScopeBase(scope.routeBase)}` || '/';
   const request = {
     method: 'POST',

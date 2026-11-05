@@ -10,7 +10,7 @@
  *
  * Asserts, over a real authenticated MCP session:
  *   - `gated-globex` is REJECTED before execute() with MCP -32001, and the error
- *     data names the missing provider + carries an authUrl;
+ *     data names the missing provider + carries an authUrl (the message doesn't);
  *   - `gated-acme` EXECUTES (credential present);
  *   - `gated-optional` EXECUTES (optional provider never gates);
  *   - after the mid-session connect flow ADDS `globex`, `gated-globex` executes.
@@ -127,6 +127,8 @@ describe('LOCAL-mode tool-level authProviders credential gate E2E', () => {
       // A connect/authorize URL is surfaced so the agent can (re)authorize.
       expect(typeof data?.authUrl).toBe('string');
       expect(data?.authUrl).toContain('/oauth/connect?token=');
+      // The link is in the data only: messages reach transcripts and logs.
+      expect(result.error?.message).not.toContain('/oauth/connect');
     } finally {
       await client.disconnect();
     }

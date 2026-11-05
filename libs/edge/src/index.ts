@@ -50,6 +50,7 @@ import {
 
 import type { EdgeBundleCacheFactory, EdgeBundleCacheStore } from './kv-cache';
 import { buildManagedOpenApiPluginOptions, type ManagedEdgeOptions } from './managed';
+import { PushReplayDurableObject, resolvePushReplayStore, type EdgePushReplayStore } from './push-replay';
 import { createEdgeSessionDurableObject, createEdgeSessionRouter } from './session-host';
 import { kvSkillIndexCacheFromEnv, type EdgeSkillIndexCacheFactory } from './skill-index-cache';
 import { logStartFailure } from './start-failure';
@@ -69,6 +70,7 @@ export {
   type EdgeKvNamespace,
   type KvBundleCacheOptions,
 } from './kv-cache';
+export type { EdgePushReplayStore, EdgePushReplayStoreFactory } from './push-replay';
 export {
   createKvSkillIndexCache,
   kvSkillIndexCacheFromEnv,
@@ -85,38 +87,63 @@ export {
  */
 const RUNTIME_DEPS_TOKEN = Symbol.for('frontmcp:skilled-openapi:runtime-deps');
 
-/**
- * What the plugin hands back for Cron runs. `start()` makes sure its bundle sync has started and loaded a bundle;
- * `refresh()` pulls a fresh one, or starts the sync when nothing has. Both resolve once the bundle is applied and kept.
- */
-interface BundleScheduler {
-  start(): Promise<unknown>;
-  refresh(): Promise<unknown>;
+/** What the plugin's last bundle sync came to, as its `BundleSyncOutcome` says (only the fields a Cron run reads). */
+interface BundleSyncOutcome {
+  status: 'applied' | 'unchanged' | 'refused' | 'failed';
+  bundleId?: string;
+  bundleVersion?: string;
+  reason?: string;
+  tokenFailure?: string;
+  cacheFallback?: boolean;
 }
 
 /**
- * Carries the KV cache + `disablePolling` flag into the skilled-openapi plugin
- * and captures the plugin's scheduler so {@link EdgeMcp.scheduled} can run it. A
- * Worker has no background timers, so polling is disabled and a Cron Trigger /
- * Durable Object alarm drives refresh instead.
+ * What the plugin hands back for Cron runs. `start()` makes sure its bundle sync has started; `refresh()` pulls a fresh
+ * bundle, or starts the sync when nothing has. Both resolve once the bundle is applied and kept, or refused, with what
+ * the last sync came to.
+ */
+interface BundleScheduler {
+  start(): Promise<BundleSyncOutcome>;
+  refresh(): Promise<BundleSyncOutcome>;
+}
+
+/** Throw for a Cron run whose bundle was refused or whose pull failed, so the platform records the run as failed. */
+function assertBundleSynced(outcome: BundleSyncOutcome): void {
+  if (outcome.status === 'applied' || outcome.status === 'unchanged') return;
+  const fallback = outcome.cacheFallback ? ', so the cached bundle serves' : '';
+  if (outcome.status === 'refused') {
+    throw new Error(
+      `[frontmcp/edge] Cron refresh: bundle ${outcome.bundleId}@${outcome.bundleVersion} was not applied${fallback}: ${outcome.reason}`,
+    );
+  }
+  const tokenCheck = outcome.tokenFailure ? ` (token check: ${outcome.tokenFailure})` : '';
+  throw new Error(`[frontmcp/edge] Cron refresh: the bundle pull failed${tokenCheck}${fallback}: ${outcome.reason}`);
+}
+
+/**
+ * Carries the KV cache, the push replay store and the `disablePolling` flag into
+ * the skilled-openapi plugin and captures the plugin's scheduler so {@link
+ * EdgeMcp.scheduled} can run it. A Worker has no background timers, so polling
+ * is disabled and a Cron Trigger / Durable Object alarm drives refresh instead.
  */
 class EdgeRefreshController {
   private scheduler?: BundleScheduler;
+  readonly disablePolling = true;
 
   constructor(
     readonly cache?: EdgeBundleCacheStore,
-    readonly disablePolling = true,
+    readonly pushReplayStore?: EdgePushReplayStore,
   ) {}
 
   attach(scheduler: BundleScheduler): void {
     this.scheduler = scheduler;
   }
 
-  start(): Promise<unknown> {
+  start(): Promise<BundleSyncOutcome> {
     return this.attached().start();
   }
 
-  refresh(): Promise<unknown> {
+  refresh(): Promise<BundleSyncOutcome> {
     return this.attached().refresh();
   }
 
@@ -255,6 +282,8 @@ export interface EdgeMcp {
    * Wire a `[triggers] crons = ["*&#47;5 * * * *"]` in `wrangler.toml` and
    * the runtime calls this on schedule; it pulls a fresh bundle and hot-swaps
    * it (Workers have no background timers, so this replaces internal polling).
+   * It throws, so the run counts as failed, when the bundle it pulled is
+   * refused or the pull fails, also when the cached bundle serves instead.
    */
   scheduled?: (event?: unknown, env?: unknown, ctx?: unknown) => Promise<void>;
   /**
@@ -269,6 +298,12 @@ export interface EdgeMcp {
    * ```
    */
   SessionDurableObject: new (state: unknown, env: unknown) => { fetch(request: Request): Promise<Response> };
+  /**
+   * The **Durable Object class** that keeps the push tokens' `jti`s, with
+   * `managed.enableWebhook`. Re-export it from the worker entry and bind it under
+   * `managed.pushReplay.binding` (default `FRONTMCP_PUSH_REPLAY`).
+   */
+  PushReplayDurableObject: typeof PushReplayDurableObject;
 }
 
 /**
@@ -315,7 +350,12 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
     let frontmcpConfig = base;
 
     if (managed) {
-      controller = new EdgeRefreshController(resolveCache(managed.cache, env));
+      controller = new EdgeRefreshController(
+        resolveCache(managed.cache, env),
+        managed.enableWebhook
+          ? resolvePushReplayStore(managed.pushReplay, env, `push-jti:${managed.expectedAudience}`)
+          : undefined,
+      );
       // Wire the skilled-openapi plugin (SaaS source) so the bundle is pulled
       // on boot and auto-refreshed. Lazy-imported so non-managed edges never
       // evaluate it; it is a dependency, so wrangler always resolves the literal specifier (#769).
@@ -411,6 +451,7 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
     // The DO builds its own session-local scope (in its isolate) via buildScope,
     // and bridges `env`→`process.env` the same way the worker does.
     SessionDurableObject: createEdgeSessionDurableObject(buildScope, bridgeEnvToProcessEnv),
+    PushReplayDurableObject,
   };
 
   if (config.managed) {
@@ -421,7 +462,8 @@ export function createEdgeMcp(config: EdgeMcpConfig): EdgeMcp {
       // A run that builds it only starts the bundle sync: its first pull is this run's pull.
       const buildsServer = !serverBuilt;
       await ensureHandler(env);
-      await (buildsServer ? controller?.start() : controller?.refresh());
+      const outcome = await (buildsServer ? controller?.start() : controller?.refresh());
+      if (outcome) assertBundleSynced(outcome);
     };
   }
 

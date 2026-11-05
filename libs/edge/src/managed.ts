@@ -10,7 +10,10 @@
  * (which handles signature verification, replay/SSRF guards, and last-good
  * cache fallback).
  */
+import type { SkilledOpenApiPluginOptionsInput } from '@frontmcp/plugin-skilled-openapi';
+
 import type { EdgeBundleCacheFactory, EdgeBundleCacheStore } from './kv-cache';
+import type { EdgePushReplayStoreFactory } from './push-replay';
 
 export interface ManagedEdgeOptions {
   /** SaaS pull endpoint serving the signed bundle (HTTPS). */
@@ -35,6 +38,19 @@ export interface ManagedEdgeOptions {
   pollIntervalMs?: number;
   /** Also take bundles the bundle server pushes, at `POST /__skilled_openapi/push`; see the README for the request. */
   enableWebhook?: boolean;
+  /**
+   * Refuse a push token without a `body_sha256` claim (the base64url SHA-256 of the exact body), which binds it to
+   * the bundle it came with. Default false: such a token is accepted, and a warning is logged once per isolate.
+   */
+  requirePushBodyDigest?: boolean;
+  /**
+   * Where the push replay guard records the push tokens' `jti`s, for every isolate and replica of the Worker. Default
+   * `{ binding: 'FRONTMCP_PUSH_REPLAY' }`: the Durable Object class `mcp.PushReplayDurableObject`, bound under that
+   * name. A function of `env` can return another store (on Deno or Bun). With no store, pushes are refused.
+   */
+  pushReplay?: { binding?: string } | EdgePushReplayStoreFactory;
+  /** Apply a pulled or pushed bundle older than the one being served. Default false: bundles only move forward. */
+  allowRollback?: boolean;
   /** Require a signed bundle. Default true. */
   requireSignature?: boolean;
   /** Trusted public keys for bundle signature verification. */
@@ -45,6 +61,12 @@ export interface ManagedEdgeOptions {
   credentials?: Record<string, string>;
   /** Outbound HTTP / SSRF options for the executor. */
   outbound?: Record<string, unknown>;
+  /**
+   * Actions that ask the user before their request, as the plugin's `confirm` option: `{ methods?, tags?, operations?,
+   * whenUnsupported? }`. The question is an MCP elicitation: without `elicitation: { enabled: true }`, which a
+   * Cloudflare Worker can't start with, such an action is refused, or runs unasked with `whenUnsupported: 'allow'`.
+   */
+  confirm?: SkilledOpenApiPluginOptionsInput['confirm'];
   /**
    * Cache dir for the last-good bundle (boot fallback when a fresh pull fails).
    * Filesystem-only — a no-op on a Worker (there is no filesystem); use {@link
@@ -80,6 +102,8 @@ export function buildManagedOpenApiPluginOptions(managed: ManagedEdgeOptions): R
   };
   if (managed.pollIntervalMs !== undefined) source['pollIntervalMs'] = managed.pollIntervalMs;
   if (managed.enableWebhook !== undefined) source['enableWebhook'] = managed.enableWebhook;
+  if (managed.requirePushBodyDigest !== undefined) source['requirePushBodyDigest'] = managed.requirePushBodyDigest;
+  if (managed.allowRollback !== undefined) source['allowRollback'] = managed.allowRollback;
 
   const options: Record<string, unknown> = { source };
   if (managed.requireSignature !== undefined) options['requireSignature'] = managed.requireSignature;
@@ -87,6 +111,7 @@ export function buildManagedOpenApiPluginOptions(managed: ManagedEdgeOptions): R
   if (managed.dev !== undefined) options['dev'] = managed.dev;
   if (managed.credentials !== undefined) options['credentials'] = managed.credentials;
   if (managed.outbound !== undefined) options['outbound'] = managed.outbound;
+  if (managed.confirm !== undefined) options['confirm'] = managed.confirm;
   if (managed.bundleCacheDir !== undefined) options['bundleCacheDir'] = managed.bundleCacheDir;
   return options;
 }

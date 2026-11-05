@@ -6,6 +6,7 @@ import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from 
 import { extractToolNames } from '../../common/metadata/skill.metadata';
 import { DependencyNotFoundError, InvalidInputError, ProviderNotAvailableError, PublicMcpError } from '../../errors';
 import { SkillsSearchRequestSchema, SkillsSearchResultSchema } from '../../transport/mcp-handlers/skills-mcp.types';
+import { assertSkillCatalogLoaded } from '../skill-catalog-source';
 import { filterDiscoverableSkillResults } from '../skill-filter.helper';
 import { type SkillSearchOptions, type SkillSearchResult } from '../skill-storage.interface';
 
@@ -66,7 +67,7 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['parseInput'],
+  pre: ['parseInput', 'ensureSkillsLoaded'],
   execute: ['search'],
   finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
@@ -131,6 +132,12 @@ export default class SearchSkillsFlow extends FlowBase<typeof name> {
 
     this.state.set({ query, options });
     this.logger.verbose('parseInput:done');
+  }
+
+  /** A plugin's runtime skills that haven't loaded answer a retryable error, not an empty search. */
+  @Stage('ensureSkillsLoaded')
+  async ensureSkillsLoaded() {
+    await assertSkillCatalogLoaded(this.scope);
   }
 
   @Stage('search')
@@ -203,6 +210,7 @@ export default class SearchSkillsFlow extends FlowBase<typeof name> {
         available: result.availableTools.includes(name),
       })),
       source: result.source,
+      ...(result.bundleVersion !== undefined && { bundleVersion: result.bundleVersion }),
     }));
 
     // hasMore: the search filled its limit before visibility filtering, so more may exist

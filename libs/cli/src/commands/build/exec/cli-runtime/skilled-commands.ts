@@ -6,6 +6,8 @@ import type { Command } from 'commander';
 
 import { readFile } from '@frontmcp/utils';
 
+import { MCP_ERROR_PREFIX } from './extract-public-message.snippet';
+
 /** The Skilled OpenAPI plugin's meta-tools, by the command each one serves. */
 export const SKILLED_OPENAPI_TOOLS = {
   search: 'search_skill',
@@ -100,12 +102,17 @@ interface Placement {
   acceptsLegacyFlags: boolean;
 }
 
+/** The command line that runs an action, as `load` prints it. */
+type ActionRunner = (action: SkillAction) => string;
+
 /** A mistake on the command line, which exits 2. */
 class UsageError extends Error {}
 
 interface CommandContext {
   program: Command;
   options: SkilledCommandsOptions;
+  /** The verbs the CLI has a command for. */
+  offered: readonly Verb[];
   /** The command line that runs a verb, for the hints a command prints. */
   commandLine: (verb: Verb) => string;
 }
@@ -118,6 +125,7 @@ export function registerSkilledCommands(program: Command, options: SkilledComman
   const context: CommandContext = {
     program,
     options,
+    offered,
     commandLine: (verb) => skilledCommandLine(program.name(), verb, options.topLevel),
   };
 
@@ -177,10 +185,15 @@ function addSearchCommand(parent: Command, placement: Placement, context: Comman
 
 function addLoadCommand(parent: Command, placement: Placement, context: CommandContext): void {
   const skillsArgument = placement.acceptsLegacyFlags ? '[skills...]' : '<skills...>';
+  const runAction = actionRunner(context);
   const command = parent
     .command(`${placement.name} ${skillsArgument}`)
     .aliases(placement.aliases)
-    .description("Show skills' instructions, and their actions with a ready command for each");
+    .description(
+      runAction
+        ? "Show skills' instructions, and their actions with a ready command for each"
+        : "Show skills' instructions and their actions",
+    );
   if (placement.acceptsLegacyFlags) command.addOption(command.createOption('--skill-id <id>').hideHelp());
 
   command.action((names: string[], flags: { skillId?: string }) =>
@@ -189,7 +202,7 @@ function addLoadCommand(parent: Command, placement: Placement, context: CommandC
       if (skillIds.length === 0) throw new UsageError(`name a skill, as in: ${context.commandLine('load')} invoices`);
       const args = skillIds.length === 1 ? { skillId: skillIds[0] } : { skillIds };
       await callAndReport(context, SKILLED_OPENAPI_TOOLS.load, args, (output) =>
-        renderLoadedSkills(output as LoadSkillOutput, context.commandLine('execute')),
+        renderLoadedSkills(output as LoadSkillOutput, runAction),
       );
     }),
   );
@@ -269,7 +282,8 @@ async function runCommand(work: () => Promise<void>): Promise<void> {
   try {
     await work();
   } catch (error) {
-    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Error: ${message.replace(MCP_ERROR_PREFIX, '')}`);
     process.exitCode = error instanceof UsageError ? 2 : 1;
   }
 }
@@ -392,25 +406,39 @@ function renderSkillMatches(output: { skills?: SkillMatch[] }, loadCommand: stri
   return `${matches.join('\n\n')}\n\nLoad one: ${loadCommand} <skillId>`;
 }
 
-function renderLoadedSkills(output: LoadSkillOutput, executeCommand: string): string {
-  const results = output.skills ?? (output.skill ? [{ skill: output.skill, warning: output.warning }] : []);
-  return results.map((result) => renderLoadedSkill(result, executeCommand)).join('\n\n');
+/** The command line that runs an action: `execute` when the CLI has it, else a one-call workflow, else none. */
+function actionRunner(context: CommandContext): ActionRunner | undefined {
+  if (context.offered.includes('execute')) {
+    const executeCommand = context.commandLine('execute');
+    return (action) => actionCommandLine(executeCommand, action);
+  }
+  if (context.offered.includes('run')) {
+    const runCommand = context.commandLine('run');
+    return (action) => workflowCommandLine(runCommand, action);
+  }
+  return undefined;
 }
 
-function renderLoadedSkill({ skill, warning }: LoadSkillResult, executeCommand: string): string {
+function renderLoadedSkills(output: LoadSkillOutput, runAction: ActionRunner | undefined): string {
+  const results = output.skills ?? (output.skill ? [{ skill: output.skill, warning: output.warning }] : []);
+  return results.map((result) => renderLoadedSkill(result, runAction)).join('\n\n');
+}
+
+function renderLoadedSkill({ skill, warning }: LoadSkillResult, runAction: ActionRunner | undefined): string {
   const lines = [`${skill.name} (${skill.id})`, skill.description];
   if (warning) lines.push(`Warning: ${warning}`);
   lines.push('', skill.instructions);
   const actions = skill.actions ?? [];
   if (actions.length > 0) {
     lines.push('', `Actions (${actions.length}):`);
-    for (const action of actions) lines.push('', ...renderAction(action, executeCommand));
+    for (const action of actions) lines.push('', ...renderAction(action, runAction));
   }
   return lines.join('\n');
 }
 
-function renderAction(action: SkillAction, executeCommand: string): string[] {
-  const lines = [`  ${action.actionId}: ${action.summary}`, `    ${actionCommandLine(executeCommand, action)}`];
+function renderAction(action: SkillAction, runAction: ActionRunner | undefined): string[] {
+  const lines = [`  ${action.actionId}: ${action.summary}`];
+  if (runAction) lines.push(`    ${runAction(action)}`);
   const optional = optionalInputNames(action.inputJsonSchema);
   if (optional.length > 0) lines.push(`    optional input: ${optional.join(', ')}`);
   return lines;
@@ -421,6 +449,12 @@ export function actionCommandLine(executeCommand: string, action: SkillAction): 
   const example = exampleInput(action.inputJsonSchema);
   const inputFlag = Object.keys(example).length > 0 ? ` --input ${shellQuoted(JSON.stringify(example))}` : '';
   return `${executeCommand} ${action.actionId}${inputFlag}`;
+}
+
+/** The command that runs an action as a workflow of one call: `<run command> 'return await callTool(...);'`. */
+export function workflowCommandLine(runCommand: string, action: SkillAction): string {
+  const callArguments = [action.actionId, exampleInput(action.inputJsonSchema)].map((value) => JSON.stringify(value));
+  return `${runCommand} ${shellQuoted(`return await callTool(${callArguments.join(', ')});`)}`;
 }
 
 /** The input fields an action takes but doesn't require. */

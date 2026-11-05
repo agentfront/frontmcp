@@ -1,28 +1,47 @@
 // file: plugins/plugin-skilled-openapi/src/sync/bundle-sync.service.ts
 
 import {
+  bundleDigest,
   bundleSkillToActions,
+  compareBundleVersions,
   diffBundles,
   formatDiffSummary,
   resolveSkillLoadOrder,
   SkillDependencyCycleError,
   SkillDependencyMissingError,
+  tokenFailureOf,
   verifyBundleSignature,
   type AuthBinding,
   type BundleDiff,
+  type BundleOrigin,
+  type BundlePullFailureListener,
   type BundlePushReceiver,
+  type BundleSourceListener,
   type BundleStore,
+  type BundleTokenFailure,
   type OperationDescriptor,
   type ResolvedBundle,
   type ServiceDescriptor,
   type SignatureVerifyTelemetry,
 } from '@frontmcp/adapters/skills';
-import { PublicMcpError, type FrontMcpLogger, type SkillContent, type SkillRegistryInterface } from '@frontmcp/sdk';
+import {
+  SkillBundleNotLoadedError,
+  type FrontMcpLogger,
+  type ListChangeBatch,
+  type ScopeEntry,
+  type SkillContent,
+  type SkillRegistryInterface,
+} from '@frontmcp/sdk';
 
 import { type HiddenOpEntry, type HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { type SignatureKey } from '../skilled-openapi.types';
 import { type OperationToolFactory } from '../tools/operation-tool.factory';
-import { describeLoadError, publicLoadFailureReason, type BundleLoadState } from './bundle-load-state';
+import {
+  describeLoadError,
+  publicLoadFailureReason,
+  type BundleLoadState,
+  type BundleSyncOutcome,
+} from './bundle-load-state';
 
 export interface BundleSyncOptions {
   requireSignature: boolean;
@@ -46,11 +65,18 @@ export interface BundleSyncOptions {
    * through its internal tool when there is one.
    */
   exposeOperationsAsInternalTools: boolean;
+  /**
+   * Runs each apply as one batch of registry changes, so connected clients get one `list_changed` per list it
+   * changed instead of one per skill, tool and resource. Wired to the scope's `batchListChanges` by the plugin.
+   */
+  batchListChanges?: ScopeEntry['batchListChanges'];
 }
 
 export interface BundleApplyResult {
   applied: boolean;
   reason?: string;
+  /** Set when the bundle is older than the one being served, from a source whose bundles only move forward. */
+  refusal?: 'outdated';
   bundleId: string;
   bundleVersion: string;
   diff?: BundleDiff;
@@ -72,10 +98,13 @@ export interface BundleApplyResult {
 /** Minimal slice of a bundle source that {@link BundleSyncService} drives. */
 interface StartableBundleSource {
   start(): Promise<void>;
-  onChange(listener: (bundle: ResolvedBundle) => Promise<void>): () => void;
+  onChange(listener: BundleSourceListener): () => void;
+  onPullFailure?(listener: BundlePullFailureListener): () => void;
   refresh?(): Promise<unknown>;
   keepBundle?(bundle: ResolvedBundle): Promise<void>;
+  keptBundle?(): Promise<ResolvedBundle | undefined>;
   readonly push?: BundlePushReceiver;
+  readonly forwardOnly?: boolean;
 }
 
 export class BundleSyncService {
@@ -86,6 +115,8 @@ export class BundleSyncService {
   private readyPromise?: Promise<void>;
   /** Why the last load failed, in a form clients may read; cleared when a bundle is applied. */
   private loadFailure?: string;
+  /** What the last bundle sync came to: a bundle pulled or pushed, or a pull that failed. */
+  private lastSync?: BundleSyncOutcome;
   /** The last queued apply: the source's bundles and pushed ones apply one at a time, in the order they arrive. */
   private applyQueue?: Promise<BundleApplyResult>;
 
@@ -128,26 +159,60 @@ export class BundleSyncService {
   }
 
   /**
-   * {@link ensureReady}, then refuse with a public error while no bundle is loaded, so a meta-tool says why the
-   * server has no skills instead of answering as if it had none.
+   * {@link ensureReady}, then refuse with a retryable error while no bundle is loaded, so a meta-tool says why the
+   * server has no skills instead of answering as if it had none. The SDK's skill surfaces answer the same error.
    */
   async ensureLoaded(): Promise<void> {
     await this.ensureReady();
+    const reason = this.notLoadedReason();
+    if (reason !== undefined) throw new SkillBundleNotLoadedError(reason);
+  }
+
+  /** Why no bundle is loaded, as clients may read it; undefined while one is. */
+  notLoadedReason(): string | undefined {
     const state = this.loadState();
-    if (state.status === 'loaded') return;
-    const reason = state.status === 'failed' ? state.reason : 'the first bundle has not loaded yet';
-    throw new PublicMcpError(`No skill bundle is loaded: ${reason}`, 'SKILL_BUNDLE_NOT_LOADED', 503);
+    if (state.status === 'loaded') return undefined;
+    return state.status === 'failed' ? state.reason : 'the first bundle has not loaded yet';
+  }
+
+  /** {@link ensureReady}, then what the last sync came to: on a first start, its pull. */
+  async start(): Promise<BundleSyncOutcome> {
+    await this.ensureReady();
+    return this.syncOutcome();
   }
 
   /**
    * Refresh the bundle as a host's scheduler does, such as a Worker's Cron run: the source pulls a fresh bundle, and
-   * this resolves once it is applied and kept. When nothing has started the source yet, this starts it instead, as
-   * {@link ensureLoaded} does: its start pulls, applies and keeps the bundle, so no second pull follows.
+   * this resolves once it is applied and kept, or refused, with what the pull came to. A pull that fails resolves as
+   * `failed`. When nothing has started the source yet, this starts it instead ({@link start}): its start pulls,
+   * applies and keeps the bundle, so no second pull follows.
    */
-  async refresh(): Promise<void> {
-    if (this.readyPromise === undefined) return this.ensureLoaded();
+  async refresh(): Promise<BundleSyncOutcome> {
+    if (this.readyPromise === undefined) return this.start();
     await this.ensureReady();
-    await this.source?.refresh?.();
+    try {
+      await this.source?.refresh?.();
+    } catch (e) {
+      this.recordPullFailure(describeLoadError(e), false, tokenFailureOf(e));
+    }
+    return this.syncOutcome();
+  }
+
+  /** What the last sync came to: a bundle pulled or pushed, or a pull that failed. Undefined before the first. */
+  lastSyncOutcome(): BundleSyncOutcome | undefined {
+    return this.lastSync;
+  }
+
+  /** {@link lastSyncOutcome}; before the first sync, that the first bundle hasn't loaded, and why when loading failed. */
+  private syncOutcome(): BundleSyncOutcome {
+    return (
+      this.lastSync ?? {
+        status: 'failed',
+        reason: this.loadFailure ?? 'the first bundle has not loaded yet',
+        cacheFallback: false,
+        at: new Date().toISOString(),
+      }
+    );
   }
 
   /** The source's checks for pushed bundles, when it takes them (`saas` with `enableWebhook`). */
@@ -195,14 +260,15 @@ export class BundleSyncService {
     // Wire onChange HERE (request context). The first emit drives `firstApply`;
     // later emits re-apply in order. The source waits for each apply, so a Cron
     // refresh ends once its bundle is applied and kept.
-    source.onChange(async (bundle) => {
-      const applied = this.enqueueApply(bundle);
+    source.onChange(async (bundle, origin) => {
+      const applied = this.enqueueApply(bundle, origin);
       if (!firstSettled) {
         firstSettled = true;
         void applied.then(() => resolveFirst());
       }
       await applied;
     });
+    source.onPullFailure?.((reason, tokenFailure) => this.recordPullFailure(reason, false, tokenFailure));
     try {
       await source.start();
       // Only await the first apply when the source actually emitted during
@@ -217,6 +283,7 @@ export class BundleSyncService {
       const reason = describeLoadError(e);
       this.logger.error(`[skilled-openapi] initial bundle sync failed: ${reason}`);
       this.recordLoadFailure(reason);
+      this.recordPullFailure(reason, false, tokenFailureOf(e));
     }
   }
 
@@ -229,17 +296,106 @@ export class BundleSyncService {
    * Apply after every apply queued before: apply() mutates the registry, the bundle store and the unregister
    * handles, so two at once would leave them inconsistent. An applied bundle, pulled or pushed, is kept by the source
    * before the next apply starts, so the last good bundle is always the last one applied. Never rejects, so the queue
-   * never breaks.
+   * never breaks. `origin.pullFailure` is set when the bundle is the cached one, served because the pull failed.
    */
-  private enqueueApply(bundle: ResolvedBundle): Promise<BundleApplyResult> {
+  private enqueueApply(bundle: ResolvedBundle, origin?: BundleOrigin): Promise<BundleApplyResult> {
     const previous = this.applyQueue ?? Promise.resolve(undefined);
-    const applied = previous.then(async () => {
-      const result = await this.applyAndRecord(bundle);
-      if (result.applied) await this.keepAppliedBundle(bundle);
-      return result;
-    });
+    const applied = previous.then(() => this.applyInTurn(bundle, origin));
     this.applyQueue = applied;
     return applied;
+  }
+
+  /** Apply a bundle in its turn; while none serves, as on a cold start, through {@link applyAtColdStart}. */
+  private async applyInTurn(bundle: ResolvedBundle, origin?: BundleOrigin): Promise<BundleApplyResult> {
+    const isCachedBundle = origin?.pullFailure !== undefined;
+    if (isCachedBundle || this.bundleStore.current()) return this.applyAndKeep(bundle, origin);
+    const cached = await this.readCachedBundle();
+    return cached ? this.applyAtColdStart(bundle, cached) : this.applyAndKeep(bundle, origin);
+  }
+
+  /**
+   * Apply the first bundle when the source has a cached one, which stands in for the served bundle the forward-only
+   * gate has yet to compare with. A forward-only source's bundle older than the cached one is not applied: the cached
+   * one serves, unless it is refused too. A bundle that is not applied leaves the cached one serving, as a failed
+   * pull does.
+   */
+  private async applyAtColdStart(offered: ResolvedBundle, cached: ResolvedBundle): Promise<BundleApplyResult> {
+    if (this.source?.forwardOnly && !(compareBundleVersions(offered, cached) >= 0)) {
+      const outdated: BundleApplyResult = {
+        applied: false,
+        refusal: 'outdated',
+        reason: `older than the cached bundle ${cached.bundleId}@${cached.version} (generatedAt ${cached.generatedAt})`,
+        bundleId: offered.bundleId,
+        bundleVersion: offered.version,
+      };
+      if (await this.serveCachedInstead(cached, outdated)) return outdated;
+      return this.applyAndKeep(offered);
+    }
+    const result = await this.applyAndKeep(offered);
+    if (!result.applied) await this.serveCachedInstead(cached, result);
+    return result;
+  }
+
+  /** Serve the cached bundle in place of a bundle that was not applied, and record why; false when it is refused too. */
+  private async serveCachedInstead(cached: ResolvedBundle, notApplied: BundleApplyResult): Promise<boolean> {
+    const result = await this.applyAndRecord(cached);
+    if (!result.applied) return false;
+    const reason = notApplied.reason ?? 'not applied';
+    this.logger.warn(
+      `[bundle-sync] bundle ${notApplied.bundleId}@${notApplied.bundleVersion} not applied: ${reason}; serving the cached bundle ${cached.bundleId}@${cached.version}`,
+    );
+    this.lastSync = {
+      status: 'refused',
+      bundleId: notApplied.bundleId,
+      bundleVersion: notApplied.bundleVersion,
+      reason: publicLoadFailureReason(reason),
+      cacheFallback: true,
+      at: new Date().toISOString(),
+    };
+    return true;
+  }
+
+  /** Apply a bundle, record what came of it, and keep it once applied, unless it is the cached bundle itself. */
+  private async applyAndKeep(bundle: ResolvedBundle, origin?: BundleOrigin): Promise<BundleApplyResult> {
+    const result = await this.applyAndRecord(bundle);
+    this.recordSync(result, origin);
+    if (result.applied && origin?.pullFailure === undefined) await this.keepAppliedBundle(bundle);
+    return result;
+  }
+
+  /** The last good bundle the source keeps, when it keeps one; undefined when it can't be read. */
+  private async readCachedBundle(): Promise<ResolvedBundle | undefined> {
+    try {
+      return await this.source?.keptBundle?.();
+    } catch (e) {
+      this.logger.warn(`[bundle-sync] the cached bundle could not be read: ${(e as Error).message}`);
+      return undefined;
+    }
+  }
+
+  /** Record what became of a bundle a pull or a push brought; with `origin.pullFailure`, of the cached one served instead. */
+  private recordSync(result: BundleApplyResult, origin: BundleOrigin | undefined): void {
+    if (origin?.pullFailure !== undefined) {
+      this.recordPullFailure(origin.pullFailure, result.applied, origin.tokenFailure);
+      return;
+    }
+    const synced = { bundleId: result.bundleId, bundleVersion: result.bundleVersion, at: new Date().toISOString() };
+    if (result.applied) {
+      this.lastSync = { status: result.diff?.isNoOp ? 'unchanged' : 'applied', ...synced };
+    } else {
+      this.lastSync = { status: 'refused', reason: publicLoadFailureReason(result.reason ?? 'not applied'), ...synced };
+    }
+  }
+
+  /** Record a pull that failed, and the token check it failed on; `cacheFallback` when the cached bundle serves instead. */
+  private recordPullFailure(reason: string, cacheFallback: boolean, tokenFailure?: BundleTokenFailure): void {
+    this.lastSync = {
+      status: 'failed',
+      reason: publicLoadFailureReason(reason),
+      tokenFailure,
+      cacheFallback,
+      at: new Date().toISOString(),
+    };
   }
 
   /** Keep an applied bundle as the last good one; a failure to keep it leaves the bundle applied. */
@@ -258,7 +414,7 @@ export class BundleSyncService {
   private async applyAndRecord(bundle: ResolvedBundle): Promise<BundleApplyResult> {
     const label = `bundle ${bundle.bundleId}@${bundle.version}`;
     try {
-      const result = await this.apply(bundle);
+      const result = await this.applyAnnounced(bundle);
       if (result.applied) {
         this.loadFailure = undefined;
       } else {
@@ -274,11 +430,26 @@ export class BundleSyncService {
   }
 
   /**
+   * {@link apply} in one batch of registry changes. The first bundle applied also tells clients the skills changed:
+   * the skill surfaces answered that none was loaded, and a bundle with no skills changes no registry.
+   */
+  private applyAnnounced(bundle: ResolvedBundle): Promise<BundleApplyResult> {
+    const firstBundle = this.bundleStore.current() === undefined;
+    const applyAndAnnounce = async (batch?: ListChangeBatch) => {
+      const result = await this.apply(bundle, batch);
+      if (result.applied && firstBundle) this.skillRegistry.notifyListChanged();
+      return result;
+    };
+    return this.options.batchListChanges ? this.options.batchListChanges(applyAndAnnounce) : applyAndAnnounce();
+  }
+
+  /**
    * Validate signature and apply the bundle. Returns a structured result;
    * never throws on validation/registration failure (caller logs + ignores).
    * Throws ONLY on programmer error (e.g. invalid argument).
+   * A rollback that restores every skill tells `batch` the lists are as they were: the operation tools are never listed.
    */
-  async apply(bundle: ResolvedBundle): Promise<BundleApplyResult> {
+  async apply(bundle: ResolvedBundle, batch?: ListChangeBatch): Promise<BundleApplyResult> {
     if (!bundle) throw new Error('apply: bundle is required');
 
     // Gate 0: pin guard. When operators have pinned the active version,
@@ -315,8 +486,25 @@ export class BundleSyncService {
       }
     }
 
+    // Gate 2: version order: a forward-only source never replaces the served bundle with an older one.
     const previous = this.bundleStore.current();
+    if (this.source?.forwardOnly && previous && !(compareBundleVersions(bundle, previous) >= 0)) {
+      return {
+        applied: false,
+        refusal: 'outdated',
+        reason: `older than the served bundle ${previous.bundleId}@${previous.version} (generatedAt ${previous.generatedAt})`,
+        bundleId: bundle.bundleId,
+        bundleVersion: bundle.version,
+      };
+    }
+
     const diff = diffBundles(previous, bundle);
+
+    // The bundle served pulled again: its skills and tools stay registered, so clients get no list_changed for it.
+    if (previous && bundleDigest(previous) === bundleDigest(bundle)) {
+      this.bundleStore.swap(bundle);
+      return { applied: true, bundleId: bundle.bundleId, bundleVersion: bundle.version, diff };
+    }
 
     // Snapshot every piece of state we mutate so a failure mid-apply can be
     // fully reversed:
@@ -338,6 +526,7 @@ export class BundleSyncService {
     // succeeds. These let rollback know exactly what to undo.
     const newHandles: { id: string; unregister: () => Promise<void> }[] = [];
     const successfullyRemovedIds: string[] = [];
+    let operationToolsReplaced = false;
 
     try {
       // 1) Sync hidden-op registry. This throws if the bundle references an
@@ -419,6 +608,7 @@ export class BundleSyncService {
       //    that op is just unavailable until the next swap.
       if (this.options.exposeOperationsAsInternalTools && this.operationToolFactory) {
         try {
+          operationToolsReplaced = true;
           this.operationToolFactory.unregisterAll();
           // Precompute the set of path templates with a GET op in this
           // bundle so the per-op classification can decide
@@ -450,6 +640,7 @@ export class BundleSyncService {
       this.logger.error(
         `[bundle-sync] apply failed for ${bundle.bundleId}@${bundle.version}: ${(e as Error).message}; rolling back`,
       );
+      let listsRestored = true;
 
       // Rollback step A: restore the hidden-op registry to its pre-apply state.
       this.hiddenOps.clear();
@@ -460,7 +651,8 @@ export class BundleSyncService {
       // Rollback step A.1: undo any internal tool registrations from this
       // failed apply, then re-register the prior bundle's operations so
       // composition callers continue to see the previous bundle's surface.
-      if (this.options.exposeOperationsAsInternalTools && this.operationToolFactory) {
+      // Left alone when the apply failed before replacing them.
+      if (operationToolsReplaced && this.operationToolFactory) {
         try {
           this.operationToolFactory.unregisterAll();
           const pathsWithGet = collectPathsWithGet(snapshotEntries);
@@ -483,7 +675,7 @@ export class BundleSyncService {
         try {
           await h.unregister();
         } catch {
-          // best effort
+          listsRestored = false;
         }
       }
 
@@ -516,8 +708,10 @@ export class BundleSyncService {
             `[bundle-sync] failed to restore prior skill ${id} during rollback: ${(restoreErr as Error).message}`,
           );
           this.skillUnregisterByBundleId.delete(id);
+          listsRestored = false;
         }
       }
+      if (listsRestored) batch?.listsRestored();
 
       return {
         applied: false,

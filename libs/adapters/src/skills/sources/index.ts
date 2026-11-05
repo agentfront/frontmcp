@@ -5,16 +5,38 @@ import type { FrontMcpLogger } from '@frontmcp/sdk';
 import type { BundleSourceOptions } from '../source-options';
 import { InlineSource } from './inline.source';
 import { NpmSource } from './npm.source';
-import { SaasPullSource, SaasPushRefusedError } from './saas-pull.source';
+import {
+  PUSH_BODY_DIGEST_CLAIM,
+  pushBodyDigest,
+  SaasJwksUnavailableError,
+  SaasPullSource,
+  SaasPullTokenRejectedError,
+  SaasPushRefusedError,
+  tokenFailureOf,
+} from './saas-pull.source';
 import type { BundleSourceDeps, SkillBundleSource } from './skill-bundle-source.interface';
 import { StaticSource } from './static.source';
 
-export { StaticSource, NpmSource, SaasPullSource, SaasPushRefusedError, InlineSource };
+export {
+  StaticSource,
+  NpmSource,
+  SaasPullSource,
+  SaasPullTokenRejectedError,
+  SaasJwksUnavailableError,
+  SaasPushRefusedError,
+  tokenFailureOf,
+  PUSH_BODY_DIGEST_CLAIM,
+  pushBodyDigest,
+  InlineSource,
+};
 export type {
   BundleCacheStore,
+  BundleOrigin,
+  BundlePullFailureListener,
   BundlePushReceiver,
   BundleSourceDeps,
   BundleSourceListener,
+  BundleTokenFailure,
   SkillBundleSource,
 } from './skill-bundle-source.interface';
 

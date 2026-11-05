@@ -258,6 +258,12 @@ export interface SkillRegistryInterface {
   servesSkills?(): boolean;
 
   /**
+   * The version of the bundle a skill registered at runtime came from (`SkillContent.bundleVersion`), or undefined
+   * for any other skill.
+   */
+  bundleVersionOf?(skillId: string): string | undefined;
+
+  /**
    * Owner lineage (root → leaf) of a skill, including the app a plugin-contributed skill belongs to,
    * or undefined when the registry doesn't hold it.
    */
@@ -278,6 +284,9 @@ export interface SkillRegistryInterface {
     opts: { immediate?: boolean; filter?: (skill: SkillEntry) => boolean },
     cb: (event: SkillChangeEvent) => void,
   ): () => void;
+
+  /** Tell subscribers the listed skills changed though none was added or removed, as when a skill source first loads. */
+  notifyListChanged(): void;
 
   /**
    * Get MCP capabilities for skills.
@@ -1106,6 +1115,10 @@ export default class SkillRegistry
     return this.dynamicSkillsExpected || this.hasAny() || this.externalProvider?.isReadOnly() === true;
   }
 
+  bundleVersionOf(skillId: string): string | undefined {
+    return this.dynamicContents.get(skillId)?.bundleVersion;
+  }
+
   /**
    * Get total skill count.
    *
@@ -1275,6 +1288,10 @@ export default class SkillRegistry
     }
 
     return this.emitter.on((e) => cb({ ...e, snapshot: this.listAllInstances().filter(filter) }));
+  }
+
+  notifyListChanged(): void {
+    this.bump('reset');
   }
 
   /* -------------------- Capabilities -------------------- */

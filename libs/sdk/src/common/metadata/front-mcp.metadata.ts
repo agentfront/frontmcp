@@ -1,3 +1,4 @@
+import { authProvidersVaultOptionsSchema, type AuthProvidersVaultOptions } from '@frontmcp/auth';
 import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
@@ -160,6 +161,12 @@ export interface FrontMcpBaseMetadata {
    * Additional providers that are available to all apps.
    */
   providers?: ProviderType[];
+
+  /**
+   * The credential providers `this.authProviders` reads and `@Tool({ authProviders })` names: each one's `name`,
+   * `scope` (`'global'`, `'user'` or `'session'`), `loading` and the `factory` that acquires its credential.
+   */
+  authProvidersVault?: AuthProvidersVaultOptions;
 
   /**
    * Provider lifecycle settings: how long each provider's `onShutdown()` may run.
@@ -724,6 +731,7 @@ export const frontMcpBaseSchema = z.object({
   instructionsBudget: instructionsBudgetOptionsSchema.optional(),
   manifest: serverManifestOptionSchema.optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
+  authProvidersVault: authProvidersVaultOptionsSchema.optional(),
   lifecycle: lifecycleOptionsSchema.optional(),
   offload: offloadOptionsSchema.optional(),
   devtools: devtoolsOptionsSchema.optional(),
@@ -1003,6 +1011,7 @@ const frontMcpLiteSchema = z.object({
   instructionsBudget: instructionsBudgetOptionsSchema.optional(),
   manifest: serverManifestOptionSchema.optional(),
   providers: z.array(annotatedFrontMcpProvidersSchema).optional().default([]),
+  authProvidersVault: authProvidersVaultOptionsSchema.optional(),
   lifecycle: lifecycleOptionsSchema.optional(),
   offload: offloadOptionsSchema.optional(),
   devtools: devtoolsOptionsSchema.optional(),

@@ -198,6 +198,16 @@ describe('a second Skilled OpenAPI plugin in one server', () => {
 });
 
 describe('the credential resolver', () => {
+  const FROM_VAULT_ON_EVERY_PATH = ['Bearer from-vault', 'Bearer from-vault', 'Bearer from-vault'];
+
+  /** Runs the operation through run_workflow, execute_action and a server tool's `this.callTool()`. */
+  async function callOnEveryPath(server: DirectMcpServer): Promise<string[]> {
+    expect(await runOperation(server, 'invoices')).toMatchObject({ success: true });
+    expect(await executeOperation(server, 'invoices')).toEqual({ isError: false, structuredContent: { items: [] } });
+    await server.callTool('call_operation', {});
+    return authorizationHeaders;
+  }
+
   it('is the one @FrontMcp({ providers }) declares, for workflows, execute_action and in-process operation calls', async () => {
     const vault = new RotatingVault();
     @App({ name: 'host', tools: [CallOperationTool] })
@@ -208,11 +218,7 @@ describe('the credential resolver', () => {
       providers: [vaultProvider(vault)],
     });
 
-    expect(await runOperation(server, 'invoices')).toMatchObject({ success: true });
-    expect(await executeOperation(server, 'invoices')).toEqual({ isError: false, structuredContent: { items: [] } });
-    await server.callTool('call_operation', {});
-
-    expect(authorizationHeaders).toEqual(['Bearer from-vault', 'Bearer from-vault', 'Bearer from-vault']);
+    expect(await callOnEveryPath(server)).toEqual(FROM_VAULT_ON_EVERY_PATH);
     expect(vault.lookups).toEqual([
       { ref: VAULT_REF, bundleId: 'acme:invoices' },
       { ref: VAULT_REF, bundleId: 'acme:invoices' },
@@ -220,26 +226,73 @@ describe('the credential resolver', () => {
     ]);
   });
 
-  it('is the one declared by the @App that installs the plugin', async () => {
+  it('is the one declared by the @App that installs the plugin, for workflows, execute_action and in-process operation calls', async () => {
     const vault = new RotatingVault();
-    @App({ name: 'invoices', plugins: [skilledPlugin('invoices')], providers: [vaultProvider(vault)] })
+    @App({
+      name: 'invoices',
+      plugins: [skilledPlugin('invoices')],
+      providers: [vaultProvider(vault)],
+      tools: [CallOperationTool],
+    })
     class InvoicesApp {}
     const server = await startServer({ apps: [InvoicesApp] });
 
-    expect(await runOperation(server, 'invoices')).toMatchObject({ success: true });
-
-    expect(authorizationHeaders).toEqual(['Bearer from-vault']);
-    expect(vault.lookups).toEqual([{ ref: VAULT_REF, bundleId: 'acme:invoices' }]);
+    expect(await callOnEveryPath(server)).toEqual(FROM_VAULT_ON_EVERY_PATH);
+    expect(vault.lookups).toHaveLength(3);
   });
 
-  it('is the one init({ providers }) declares, for workflows and execute_action', async () => {
+  it('is the one declared by the @App that installs the plugin, on a splitByApp server', async () => {
     const vault = new RotatingVault();
-    const server = await startServer({ plugins: [skilledPlugin('invoices', [vaultProvider(vault)])] });
+    @App({
+      name: 'invoices',
+      plugins: [skilledPlugin('invoices')],
+      providers: [vaultProvider(vault)],
+      tools: [CallOperationTool],
+    })
+    class InvoicesApp {}
+    const server = await startServer({ apps: [InvoicesApp], splitByApp: true }, { app: 'invoices' });
 
-    expect(await runOperation(server, 'invoices')).toMatchObject({ success: true });
-    expect(await executeOperation(server, 'invoices')).toMatchObject({ isError: false });
+    expect(await callOnEveryPath(server)).toEqual(FROM_VAULT_ON_EVERY_PATH);
+  });
 
-    expect(authorizationHeaders).toEqual(['Bearer from-vault', 'Bearer from-vault']);
+  it("is the app's over the server's, also when another app's tool calls the operation", async () => {
+    const appVault = new RotatingVault();
+    const serverVault = new RotatingVault();
+    serverVault.secret = 'from-server-vault';
+    @App({ name: 'invoices', plugins: [skilledPlugin('invoices')], providers: [vaultProvider(appVault)] })
+    class InvoicesApp {}
+    @App({ name: 'host', tools: [CallOperationTool] })
+    class HostApp {}
+    const server = await startServer({ apps: [InvoicesApp, HostApp], providers: [vaultProvider(serverVault)] });
+
+    expect(await callOnEveryPath(server)).toEqual(FROM_VAULT_ON_EVERY_PATH);
+    expect(serverVault.lookups).toEqual([]);
+  });
+
+  it("is the one init({ providers }) declares, over the app's, when the plugin is installed in an @App", async () => {
+    const pluginVault = new RotatingVault();
+    const appVault = new RotatingVault();
+    appVault.secret = 'from-app-vault';
+    @App({
+      name: 'invoices',
+      plugins: [skilledPlugin('invoices', [vaultProvider(pluginVault)])],
+      providers: [vaultProvider(appVault)],
+      tools: [CallOperationTool],
+    })
+    class InvoicesApp {}
+    const server = await startServer({ apps: [InvoicesApp] });
+
+    expect(await callOnEveryPath(server)).toEqual(FROM_VAULT_ON_EVERY_PATH);
+    expect(appVault.lookups).toEqual([]);
+  });
+
+  it('is the one init({ providers }) declares, for workflows, execute_action and in-process operation calls', async () => {
+    const vault = new RotatingVault();
+    @App({ name: 'host', tools: [CallOperationTool] })
+    class HostApp {}
+    const server = await startServer({ apps: [HostApp], plugins: [skilledPlugin('invoices', [vaultProvider(vault)])] });
+
+    expect(await callOnEveryPath(server)).toEqual(FROM_VAULT_ON_EVERY_PATH);
   });
 
   it('is asked on every call, so a rotated secret is sent without a restart', async () => {
@@ -254,13 +307,14 @@ describe('the credential resolver', () => {
   });
 
   it('is the built-in one, which reads credentials, when none is declared', async () => {
-    @App({ name: 'host', tools: [CallOperationTool] })
-    class HostApp {}
-    const server = await startServer({ apps: [HostApp], plugins: [skilledPlugin('invoices')] });
+    @App({ name: 'invoices', plugins: [skilledPlugin('invoices')], tools: [CallOperationTool] })
+    class InvoicesApp {}
+    const server = await startServer({ apps: [InvoicesApp] });
 
-    expect(await runOperation(server, 'invoices')).toMatchObject({ success: true });
-    await server.callTool('call_operation', {});
-
-    expect(authorizationHeaders).toEqual(['Bearer from-credentials', 'Bearer from-credentials']);
+    expect(await callOnEveryPath(server)).toEqual([
+      'Bearer from-credentials',
+      'Bearer from-credentials',
+      'Bearer from-credentials',
+    ]);
   });
 });

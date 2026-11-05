@@ -16,17 +16,23 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { BundleStore, type BundleStoreTelemetry } from '@frontmcp/adapters/skills';
+import { ZodError } from '@frontmcp/lazy-zod';
 
 import { MemoryCredentialResolver } from '../executor/credential-resolver';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
+import { VaultRefListedTwiceError } from '../skilled-openapi.errors';
 import SkilledOpenApiPlugin from '../skilled-openapi.plugin';
 import {
   asCredentialResolverToken,
   SkilledOpenApiConfig,
   SkilledOpenApiCredentialResolver,
 } from '../skilled-openapi.symbols';
+import { skilledOpenApiPluginOptionsSchema } from '../skilled-openapi.types';
 import { BundleSyncService } from '../sync/bundle-sync.service';
+
+/** A scope's `batchListChanges`, for the fake scopes: runs the change. */
+const batchListChanges = async <T>(change: () => T | Promise<T>): Promise<T> => change();
 
 const validBundle = {
   schemaVersion: 1,
@@ -52,6 +58,48 @@ describe('SkilledOpenApiPlugin', () => {
 
     it('throws on invalid options (zod)', () => {
       expect(() => new SkilledOpenApiPlugin({ source: { type: 'static' } as never })).toThrow();
+    });
+
+    describe('a vaultRef listed under both credentials and authProviders', () => {
+      const listedTwice = {
+        source: { type: 'static' as const, path: '/x' },
+        credentials: { 'billing-token': 'server-token', 'reports-token': 'reports' },
+        authProviders: { 'billing-token': 'billing', 'crm-token': 'crm' },
+      };
+
+      it('is refused when the plugin is installed', () => {
+        expect(() => SkilledOpenApiPlugin.dynamicProviders(listedTwice)).toThrow(
+          new VaultRefListedTwiceError(['billing-token']),
+        );
+      });
+
+      it('is refused when the plugin is built', () => {
+        expect(() => new SkilledOpenApiPlugin(listedTwice)).toThrow(VaultRefListedTwiceError);
+      });
+
+      it('is refused by the exported options schema', () => {
+        const result = skilledOpenApiPluginOptionsSchema.safeParse(listedTwice);
+        expect(result.success).toBe(false);
+        expect(result.error?.issues).toEqual([
+          expect.objectContaining({
+            path: ['authProviders'],
+            message: new VaultRefListedTwiceError(['billing-token']).message,
+          }),
+        ]);
+      });
+
+      it('still reports another bad option as a ZodError', () => {
+        const badKeysListedTwice = { ...listedTwice, trustedKeys: 'not-a-list' as never };
+        expect(() => new SkilledOpenApiPlugin(badKeysListedTwice)).toThrow(ZodError);
+      });
+
+      it('names the vaultRef in the error', () => {
+        expect(new VaultRefListedTwiceError(['billing-token']).message).toBe(
+          'SkilledOpenApiPlugin: vaultRef "billing-token" is listed under both credentials and authProviders, so ' +
+            "its binding would send the caller's own credential and never the server's. Keep each vaultRef in one of " +
+            'the two.',
+        );
+      });
     });
 
     it('warns on dev=true', () => {
@@ -178,7 +226,9 @@ describe('SkilledOpenApiPlugin', () => {
       const fakeScope = {
         logger: fakeLogger,
         registerHealthProbe: jest.fn(),
+        batchListChanges,
         skills: {
+          notifyListChanged: jest.fn(),
           registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })),
           unregisterSkill: jest.fn(async () => false),
         },
@@ -253,7 +303,7 @@ describe('SkilledOpenApiPlugin', () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
-    it('builds an OperationToolFactory and registers per-op internal tools when scope.tools is available', async () => {
+    it("registers per-op internal tools, built on the plugin's providers, when scope.tools is available", async () => {
       // Use a bundle with an operation so the sync flow drives the factory's
       // registerToolInstance call — verifying not just construction but the
       // full wiring: factory → toolRegistry → registerToolInstance.
@@ -304,7 +354,7 @@ describe('SkilledOpenApiPlugin', () => {
         child: jest.fn().mockReturnThis(),
       };
       const fakeTools = {
-        registerToolInstance: jest.fn(),
+        registerToolInstance: jest.fn((tool: { providers: unknown }) => tool),
         unregisterToolInstance: jest.fn(() => true),
         getToolsForListing: jest.fn(() => []),
         getTools: jest.fn(() => []),
@@ -312,14 +362,16 @@ describe('SkilledOpenApiPlugin', () => {
       const fakeScope = {
         logger: fakeLogger,
         registerHealthProbe: jest.fn(),
+        batchListChanges,
         skills: {
+          notifyListChanged: jest.fn(),
           registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })),
           unregisterSkill: jest.fn(async () => false),
         },
         tools: fakeTools,
-        providers: { getActiveScope: () => ({ logger: fakeLogger, hooks: { registerHooks: jest.fn() } }) },
       };
-      const sync = await syncProvider.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore());
+      const pluginProviders = { getActiveScope: () => ({ logger: fakeLogger, hooks: { registerHooks: jest.fn() } }) };
+      const sync = await syncProvider.useFactory(fakeScope, new HiddenOpRegistry(), new BundleStore(), pluginProviders);
       expect(sync).toBeInstanceOf(BundleSyncService);
 
       // Wait up to 1s for the deferred source.start() → bundle apply → tool
@@ -329,6 +381,7 @@ describe('SkilledOpenApiPlugin', () => {
         await new Promise((r) => setTimeout(r, 25));
       }
       expect(fakeTools.registerToolInstance).toHaveBeenCalled();
+      expect(fakeTools.registerToolInstance.mock.calls[0][0].providers).toBe(pluginProviders);
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
@@ -363,7 +416,10 @@ describe('SkilledOpenApiPlugin', () => {
         };
         return logger;
       };
-      const buildSync = async (scope: Record<string, unknown>) => {
+      const pluginProvidersOf = (logger: ReturnType<typeof silentLogger>) => ({
+        getActiveScope: () => ({ logger, hooks: { registerHooks: jest.fn() } }),
+      });
+      const buildSync = async (scope: { logger: ReturnType<typeof silentLogger> } & Record<string, unknown>) => {
         const providers = SkilledOpenApiPlugin.dynamicProviders({
           source: { type: 'inline', content: bundleWithOp },
           dev: true,
@@ -372,17 +428,25 @@ describe('SkilledOpenApiPlugin', () => {
         const syncProvider = providers.find((p) => (p as { provide: unknown }).provide === BundleSyncService) as {
           useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
         };
-        return syncProvider.useFactory(scope, new HiddenOpRegistry(), new BundleStore());
+        return syncProvider.useFactory(
+          scope,
+          new HiddenOpRegistry(),
+          new BundleStore(),
+          pluginProvidersOf(scope.logger),
+        );
       };
 
       it('registers the operation tools in the registry the scope has by the time the bundle applies', async () => {
         const logger = silentLogger();
-        const scope: Record<string, unknown> = {
+        const scope: { logger: typeof logger } & Record<string, unknown> = {
           logger,
           registerHealthProbe: jest.fn(),
-          skills: { registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })) },
+          batchListChanges,
+          skills: {
+            notifyListChanged: jest.fn(),
+            registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })),
+          },
           tools: undefined,
-          providers: { getActiveScope: () => ({ logger, hooks: { registerHooks: jest.fn() } }) },
         };
         const sync = await buildSync(scope);
         const tools = { registerToolInstance: jest.fn(), unregisterToolInstance: jest.fn(() => true) };
@@ -399,8 +463,11 @@ describe('SkilledOpenApiPlugin', () => {
         const scope = {
           logger,
           registerHealthProbe: jest.fn(),
-          skills: { registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })) },
-          providers: { getActiveScope: () => ({ logger, hooks: { registerHooks: jest.fn() } }) },
+          batchListChanges,
+          skills: {
+            notifyListChanged: jest.fn(),
+            registerSkillContent: jest.fn(async () => ({ id: 'invoices', unregister: async () => {} })),
+          },
         };
         const bundleStore = new BundleStore();
         const providers = SkilledOpenApiPlugin.dynamicProviders({
@@ -410,7 +477,12 @@ describe('SkilledOpenApiPlugin', () => {
         const syncProvider = providers.find((p) => (p as { provide: unknown }).provide === BundleSyncService) as {
           useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
         };
-        const sync = await syncProvider.useFactory(scope, new HiddenOpRegistry(), bundleStore);
+        const sync = await syncProvider.useFactory(
+          scope,
+          new HiddenOpRegistry(),
+          bundleStore,
+          pluginProvidersOf(logger),
+        );
 
         await sync.ensureReady();
 
@@ -438,7 +510,11 @@ describe('SkilledOpenApiPlugin', () => {
         const scope = {
           logger: quietLogger(),
           registerHealthProbe,
-          skills: { registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })) },
+          batchListChanges,
+          skills: {
+            notifyListChanged: jest.fn(),
+            registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })),
+          },
         };
         const syncProvider = SkilledOpenApiPlugin.dynamicProviders(options).find(
           (p) => (p as { provide: unknown }).provide === BundleSyncService,
@@ -466,7 +542,16 @@ describe('SkilledOpenApiPlugin', () => {
 
         expect(await probe.check()).toEqual({
           status: 'unhealthy',
-          details: { state: 'failed' },
+          details: {
+            state: 'failed',
+            lastSync: {
+              status: 'refused',
+              bundleId: 'plugin:test',
+              bundleVersion: '1',
+              reason: 'bundle missing integrity envelope',
+              at: expect.any(String),
+            },
+          },
           error: 'no skill bundle is loaded: bundle plugin:test@1 was not applied: bundle missing integrity envelope',
         });
       });

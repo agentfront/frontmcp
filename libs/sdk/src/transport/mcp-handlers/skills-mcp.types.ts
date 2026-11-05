@@ -33,6 +33,7 @@ export const SkillsSearchResultSchema = z.object({
       tags: z.array(z.string()).optional(),
       tools: z.array(z.object({ name: z.string(), available: z.boolean() })),
       source: z.enum(['local', 'external']),
+      bundleVersion: z.string().optional().describe('Version of the bundle a runtime-registered skill came from'),
     }),
   ),
   total: z.number(),
@@ -63,7 +64,7 @@ export const SkillsLoadRequestSchema = z.object({
       .enum(['full', 'markdown', 'instructions-only'])
       .optional()
       .describe(
-        "'full' (default): structured fields with tool schemas; 'markdown': formattedContent instead; 'instructions-only': no tool schemas",
+        "'full' (default): the fields with tool schemas, and formattedContent; 'markdown': formattedContent alone, without instructions and parameters; 'instructions-only': no tool schemas",
       ),
     activateSession: z.boolean().optional().describe('Whether to activate a skill session'),
     policyMode: z.enum(['strict', 'approval', 'permissive']).optional().describe('Policy mode for session'),
@@ -104,7 +105,7 @@ export const SkillsLoadResultSchema = z.object({
       availableTools: z.array(z.string()),
       missingTools: z.array(z.string()),
       isComplete: z.boolean(),
-      formattedContent: z.string().optional(),
+      formattedContent: z.string(),
       session: z
         .object({
           activated: z.boolean(),
@@ -166,6 +167,7 @@ export const SkillsListResultSchema = z.object({
       description: z.string(),
       tags: z.array(z.string()).optional(),
       priority: z.number().optional(),
+      bundleVersion: z.string().optional().describe('Version of the bundle a runtime-registered skill came from'),
     }),
   ),
   total: z.number(),

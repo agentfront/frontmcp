@@ -52,7 +52,7 @@ What the handler does:
 
 - **It builds the server on the first request**, not when the module loads, since a Worker can't do I/O then, and reuses it afterwards. A failed build answers `500` (a configuration fault) or `503` with `Retry-After`, and is tried again after a delay that doubles from 1 second up to 60.
 - **It copies string bindings to `process.env`** on the first request (your `[vars]` and secrets), without replacing values already there. Other bindings, such as a KV namespace, reach tools as `this.workerEnv`.
-- **It serves** MCP at `http.entryPath` (`/` by default) and `/healthz`.
+- **It serves** MCP at `http.entryPath` (`/` by default) and `/healthz`, and `/readyz` with `health: { readyz: { enabled: true } }`.
 - **Background tasks are off** on the edge; the server logs that and starts without them.
 - **On Deno and Bun**, which pass `fetch` a second argument of their own, the handler reads the client IP from it.
 
@@ -138,12 +138,29 @@ crons = ["*/5 * * * *"]
 | `expectedAudience`, `jwksUrl`, `expectedIssuer`                     | How the bundle server's tokens are verified                                                    |
 | `cache`                                                             | Keeps the last bundle applied: `kvBundleCacheFromEnv('BINDING')`, or a store of your own       |
 | `enableWebhook`                                                     | Also take bundles pushed to `POST /__skilled_openapi/push`, as below                           |
+| `requirePushBodyDigest`                                             | Refuse a push token without a `body_sha256` claim, as below. Default `false`                   |
+| `pushReplay`                                                        | Where pushed tokens' `jti`s are kept: `{ binding }` (default `FRONTMCP_PUSH_REPLAY`), as below |
+| `allowRollback`                                                     | Apply a pulled or pushed bundle older than the one being served, as below. Default `false`     |
 | `requireSignature`, `trustedKeys`, `dev`, `credentials`, `outbound` | Passed to the Skilled OpenAPI plugin. `dev` skips signature checks: never use it in production |
+| `confirm`                                                           | Actions that ask the user before their request, as the plugin's `confirm`; see below           |
 | `pollIntervalMs`, `bundleCacheDir`                                  | Ignored on a Worker, which has no timers or file system                                        |
 
 A Cron run ends once the bundle it pulled is applied and kept in `cache`, also when it is the first event an isolate gets: it then starts the bundle sync, whose first pull is the run's pull. A bundle that fails its signature or its other checks is not applied and not kept, so a cold start that can't reach the bundle server serves the last bundle the Worker applied.
 
+Bundles only move forward: a pulled or pushed bundle older than the one the isolate serves is not applied and not kept, so a validly signed old bundle can't roll the Worker back. Two semver versions compare by semver; the same version (re-signed), or versions that aren't both semver, compare by `generatedAt`. To roll back, publish the earlier content under a newer version, or set `allowRollback: true`. An isolate that starts has no bundle served yet, so the cached bundle stands in for it: the isolate serves the cached bundle when its pull fails, when the pulled bundle is refused, or when it is older than the cached one (without `allowRollback`), so a stale CDN or a rolled-back origin can't take a new isolate back. Serving the cached bundle never writes it back to `cache`. Up to 1.11.0 a new isolate served whatever it pulled, served nothing when that bundle was refused, and rewrote the cache entry on an offline start.
+
+A Cron run fails (`scheduled()` throws, so Cloudflare logs the run as an exception and counts it as a failed invocation) when its sync leaves an older bundle serving:
+
+- **The bundle it pulled was not applied**: its signature or its other checks failed, or it is older than the one served. The error names it: `[frontmcp/edge] Cron refresh: bundle billing@4.2.0 was not applied: digest mismatch (...)`. When the run started the isolate, which then serves the cached bundle, it says `was not applied, so the cached bundle serves: older than the cached bundle billing@4.3.0 (...)`.
+- **The pull failed**: `[frontmcp/edge] Cron refresh: the bundle pull failed: pull responded 503`. When the run started the isolate, which then serves the cached bundle, it says `the bundle pull failed, so the cached bundle serves`. A pull that failed on its token names the check: `the bundle pull failed (token check: expired): ...`, as `lastSync.tokenFailure` does in `/readyz`.
+
+Up to 1.11.0, such a run reported success. A run whose pull applies a bundle, or pulls the one served, succeeds.
+
+`/readyz` says the same, once `health: { readyz: { enabled: true } }` turns it on (it is off on a Worker by default). While the last sync was refused or failed, its `skilled-openapi` check is `degraded`, with `details: { state: 'stale', bundleId, bundleVersion, lastSync }`: the bundle served, and the refusal or failure with its reason and time. The Worker stays ready, since it serves the last good bundle. Each isolate answers for its own bundle and syncs. The details appear outside production, or with `health.includeDetails: true`.
+
 Each operation call checks the API's host first: on a Worker, `node:dns` resolves it over DNS over HTTPS, so the host must resolve publicly.
+
+`confirm` names the actions that ask the user before their request, by HTTP method, tag or operationId, as the Skilled OpenAPI plugin's [`confirm` option](https://frontmcp.dev/reference/plugins/skilled-openapi) does: `confirm: { methods: ['DELETE'] }`. The plugin checks it, so an invalid value refuses to start (`500 CONFIG_INVALID`, and the log names the field). The question is an MCP elicitation, which the server asks only with `elicitation: { enabled: true }`. On a Cloudflare Worker that setting refuses to start (`Elicitation requires distributed storage when running on Edge runtime`), so there an action `confirm` names is refused, `the user's confirmation is needed for voidInvoice, and this server can't ask for it: elicitation is disabled; nothing was sent`, or with `whenUnsupported: 'allow'` runs without asking. `load_skill` marks it with `asksForConfirmation: true`, and the audit log records what the confirmation came to. Up to 1.11.0 managed mode had no `confirm`, so every action ran without asking.
 
 ### Pushed bundles
 
@@ -158,8 +175,9 @@ Content-Type: application/json
 ```
 
 - **The token** is checked as `authToken` is (signed by a key at `jwksUrl`, `iss` equal to `expectedIssuer`, `aud` including `expectedAudience`, not expired). It must also carry a `jti` of 8 or more characters that no push used, and an `iat` within five minutes, so the pull token, issued long before, can't push.
+- **The token's `body_sha256` claim** binds it to the body: the base64url SHA-256, without padding, of the exact bytes of the request body (not the bundle's `integrity.digest`). The Worker hashes the bytes it received; any other body answers `401`, and the log says `push refused (body_mismatch)`. The refused token's `jti` stays unused, so the push it was issued for still applies. Without the claim, a token captured within its five minutes could carry any other bundle the bundle server signed for this Worker. A token without it is accepted, with one warning per isolate, so a bundle server that doesn't set it yet keeps working; `requirePushBodyDigest: true` refuses it. `pushBodyDigest(body)` and `PUSH_BODY_DIGEST_CLAIM` from `@frontmcp/adapters/skills` compute the claim for a sender.
 - **The body** is the bundle as JSON, checked as a pulled bundle is: its schema, then its signature against `trustedKeys` (unless `requireSignature: false`).
-- **It is applied** after the first pull and after any bundle already queued, so a push and a Cron run never apply at once, and then kept in `cache`.
+- **It is applied**, unless it is older than the bundle being served, after the first pull and after any bundle already queued, so a push and a Cron run never apply at once, and then kept in `cache`.
 
 | Status | Body                                                                                                      |
 | ------ | --------------------------------------------------------------------------------------------------------- |
@@ -167,10 +185,41 @@ Content-Type: application/json
 | `400`  | `{ "error": "invalid_bundle" }`: the body is not a bundle                                                 |
 | `401`  | `{ "error": "invalid_token" }`, with `WWW-Authenticate: Bearer error="invalid_token"`                     |
 | `409`  | `{ "error": "push_replayed" }`: a push already used this token                                            |
+| `409`  | `{ "error": "bundle_outdated" }`: the bundle is older than the one being served, which stays              |
 | `422`  | `{ "error": "bundle_not_applied" }`: the signature or the bundle's checks failed; the served bundle stays |
-| `503`  | `{ "error": "temporarily_unavailable" }`: the JWKS could not be read                                      |
+| `503`  | `{ "error": "temporarily_unavailable" }`: the JWKS could not be read, or the `jti` could not be recorded  |
 
-The endpoint is a hookable flow, `skilled-openapi:bundle-push`, behind the same IP filter and rate limit as the server's other HTTP flows. The `jti`s it has seen are kept in memory, per isolate, so two isolates of a Worker don't share them: keep push tokens short-lived.
+A refused token answers the same `401` whatever check refused it. Only the log names it: `[saas-source] push refused (wrong_issuer): ...`, or `bundle push not checked (jwks_unavailable): ...` for a `503`.
+
+The endpoint is a hookable flow, `skilled-openapi:bundle-push`, behind the same IP filter and rate limit as the server's other HTTP flows.
+
+The `jti`s are kept in a Durable Object that every isolate and replica of the Worker reaches, so a push replayed to another isolate is refused too. (KV can't do this: it is eventually consistent, so two isolates could both read a `jti` as unused.) Export the class and bind it:
+
+```ts
+// src/worker.ts
+const mcp = createEdgeMcp({
+  // ...
+  managed: { /* ... */ enableWebhook: true }, // the binding defaults to FRONTMCP_PUSH_REPLAY; set pushReplay: { binding } to change it
+});
+
+export default mcp;
+export const FrontMcpPushReplay = mcp.PushReplayDurableObject;
+```
+
+```toml
+# wrangler.toml
+[[durable_objects.bindings]]
+name = "FRONTMCP_PUSH_REPLAY"
+class_name = "FrontMcpPushReplay"
+
+[[migrations]]
+tag = "v1" # or the next tag, when wrangler.toml already has migrations
+new_sqlite_classes = ["FrontMcpPushReplay"]
+```
+
+- **One object per audience** keeps the `jti`s, named after `expectedAudience`. Each `jti` is kept until its token's `iat` is five minutes old, and dropped after that.
+- **Without the binding**, every push answers `503 temporarily_unavailable`, and the log names the missing binding. Pulls and Cron runs are not affected. Up to 1.11.0, the `jti`s were kept in each isolate's memory, which isolates don't share.
+- **On Deno or Bun**, set `pushReplay` to a function of `env` that returns a store, `{ claim(key, ttlMs) }`: it resolves `true` when it recorded `key`, `false` when `key` is already recorded, and throws when it can't tell. A push is refused when it throws.
 
 ## API
 
@@ -188,13 +237,14 @@ The server never listens: `createEdgeMcp()` sets `serve: false`. Configuration f
 
 It returns:
 
-| Member                          | Description                                                             |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| `fetch(request, env?, ctx?)`    | The Worker's request handler                                            |
-| `SessionDurableObject`          | The Durable Object class for `sessions`. Export it only when you use it |
-| `scheduled(event?, env?, ctx?)` | With `managed` only: the Cron Trigger handler, which pulls the bundle   |
+| Member                          | Description                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `fetch(request, env?, ctx?)`    | The Worker's request handler                                                                           |
+| `SessionDurableObject`          | The Durable Object class for `sessions`. Export it only when you use it                                |
+| `PushReplayDurableObject`       | The Durable Object class for `managed.enableWebhook`, as above                                         |
+| `scheduled(event?, env?, ctx?)` | With `managed` only: the Cron Trigger handler, which pulls the bundle and throws when it isn't applied |
 
-Other exports: `kvBundleCacheFromEnv`, `createKvBundleCache`, `kvSkillIndexCacheFromEnv`, `createKvSkillIndexCache`, `buildManagedOpenApiPluginOptions`, and the `EdgeMcp`, `EdgeMcpConfig` and `ManagedEdgeOptions` types.
+Other exports: `kvBundleCacheFromEnv`, `createKvBundleCache`, `kvSkillIndexCacheFromEnv`, `createKvSkillIndexCache`, `buildManagedOpenApiPluginOptions`, and the `EdgeMcp`, `EdgeMcpConfig`, `ManagedEdgeOptions`, `EdgePushReplayStore` and `EdgePushReplayStoreFactory` types.
 
 ## Docs
 

@@ -15,8 +15,10 @@ import type { FrontMcpLogger } from '@frontmcp/sdk';
 
 import { type HiddenOpEntry, type OperationListings } from '../registry/hidden-op.registry';
 import { type AuthorityGuard, type UnprotectedOpsPolicy } from '../security/authority-guard';
+import { type VisibleListings } from '../security/skill-visibility';
 import { type ConfirmOptions } from '../skilled-openapi.types';
 import { needsConfirmation, type ConfirmAction } from './action-confirmation';
+import { unknownActionError } from './action-outcome';
 import type { CallerAuthInfo } from './credential-resolver';
 import { executeOperation, type OpenApiRuntimeDeps } from './openapi-runtime';
 import { getCompiledOpSchemas } from './schema-cache';
@@ -43,6 +45,8 @@ export interface SkillActionDeps {
   confirmAction: ConfirmAction;
   resolver: { resolve: OpenApiRuntimeDeps['resolver']['resolve'] };
   guard: AuthorityGuard;
+  /** Which listings of an operation count for the caller: those whose skill the `skills:filter` flow shows them. */
+  visibleListings: VisibleListings;
   logger: FrontMcpLogger;
   /** Opt-in tamper-evident audit (when `skillsConfig.audit.enabled`). */
   audit?: { writer: SkillAuditWriter; subject: string };
@@ -61,23 +65,33 @@ function formatZodIssues(issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey
 export interface ActionAuthorization {
   entry: HiddenOpEntry;
   result: AuthoritiesResult;
+  /** Set when `skills:filter` hides every skill listing the operation: the call is answered as an unknown action. */
+  hidden?: true;
 }
 
+/** The decision of a call no `confirm` rule names: it runs without asking. */
+const NO_CONFIRMATION_REQUIRED = { confirmation: 'not_required' } as const;
+
+/** Why the audit log records a call denied because `skills:filter` hides every skill listing its operation. */
+const HIDDEN_SKILLS_REASON = 'skills:filter hides every skill that lists the action';
+
 /**
- * Authorize a call to an operation that one or more skills list. The caller
- * must satisfy the operation's rule and the skill-level rule of at least one
- * listing skill, the answer discovery gives. The call runs, and is audited,
+ * Authorize a call to an operation that one or more skills list. Only the
+ * listings whose skill the `skills:filter` flow shows the caller count, as in
+ * discovery, and the caller must satisfy the operation's rule and the
+ * skill-level rule of at least one of them. The call runs, and is audited,
  * under the first listing that admits the caller; when none does, the first
- * listing's denial is returned.
+ * visible listing's denial is returned, and when none is visible, a `hidden` one.
  */
 export async function authorizeAction(args: {
   listings: OperationListings;
+  visibleListings: VisibleListings;
   guard: AuthorityGuard;
   unprotectedOps: UnprotectedOpsPolicy;
   authInfo: unknown;
   input: Record<string, unknown>;
 }): Promise<ActionAuthorization> {
-  const { listings, guard, unprotectedOps, authInfo, input } = args;
+  const { listings, visibleListings, guard, unprotectedOps, authInfo, input } = args;
   const checkListing = (entry: HiddenOpEntry): Promise<AuthoritiesResult> =>
     guard.check({
       policy: entry.op.requiredAuthorities,
@@ -88,7 +102,14 @@ export async function authorizeAction(args: {
       input,
     });
 
-  const [firstListing, ...otherListings] = listings;
+  const [firstListing, ...otherListings] = await visibleListings(listings);
+  if (!firstListing) {
+    return {
+      entry: listings[0],
+      result: { granted: false, deniedBy: HIDDEN_SKILLS_REASON, evaluatedPolicies: [] },
+      hidden: true,
+    };
+  }
   const firstResult = await checkListing(firstListing);
   if (firstResult.granted) return { entry: firstListing, result: firstResult };
   for (const entry of otherListings) {
@@ -112,17 +133,20 @@ export async function executeSkillAction(args: {
   deps: SkillActionDeps;
 }): Promise<SkillActionResult> {
   const { listings, input, authInfo, signal, deps } = args;
-  const { config, resolver, guard, logger, audit } = deps;
+  const { config, resolver, guard, visibleListings, logger, audit } = deps;
 
-  // 1) Authority check: the operation's rule and one listing skill's rule must
-  //    both grant; a policy-less op is allowed/denied per `unprotectedOps` (C1/C2/C3).
-  const { entry, result: authResult } = await authorizeAction({
+  // 1) Authority check: the operation's rule and the rule of one listing skill
+  //    the caller may see must both grant; a policy-less op is allowed/denied
+  //    per `unprotectedOps` (C1/C2/C3).
+  const authorization = await authorizeAction({
     listings,
+    visibleListings,
     guard,
     unprotectedOps: config.unprotectedOps,
     authInfo,
     input: input ?? {},
   });
+  const { entry, result: authResult } = authorization;
 
   // Audit context shared by every write; writes are detached (a slow/failing
   // audit backend must never block or fail the caller).
@@ -139,11 +163,10 @@ export async function executeSkillAction(args: {
   };
 
   if (!authResult.granted) {
-    detach(
-      audit?.writer.writeAuthorityFail(auditCtx, { reason: authResult.deniedBy ?? 'policy not satisfied' }),
-      'authority-fail',
-    );
-    return { ok: false, status: 0, error: `authority denied: ${authResult.deniedBy ?? 'policy not satisfied'}` };
+    const reason = authResult.deniedBy ?? 'policy not satisfied';
+    detach(audit?.writer.writeAuthorityFail(auditCtx, { reason }), 'authority-fail');
+    const error = authorization.hidden ? unknownActionError(entry.op.operationId) : `authority denied: ${reason}`;
+    return { ok: false, status: 0, error };
   }
   detach(audit?.writer.writeAuthorityPass(auditCtx), 'authority-pass');
 
@@ -158,12 +181,14 @@ export async function executeSkillAction(args: {
   const validInput = inputParse.data as Record<string, unknown>;
 
   // 3) An action the `confirm` option names asks the user before its request; a refusal sends nothing.
-  if (needsConfirmation(config.confirm, listings)) {
-    const refusal = await deps.confirmAction({ entry, input: validInput });
-    if (refusal) {
-      detach(audit?.writer.writeHttpCallFailure(auditCtx, { status: 0, error: refusal }), 'http-call-failure');
-      return { ok: false, status: 0, error: refusal };
-    }
+  const decision = needsConfirmation(config.confirm, listings)
+    ? await deps.confirmAction({ entry, input: validInput })
+    : NO_CONFIRMATION_REQUIRED;
+  const decidedAuditCtx = { ...auditCtx, confirmation: decision.confirmation };
+  if ('refusal' in decision) {
+    const error = decision.refusal;
+    detach(audit?.writer.writeHttpCallFailure(decidedAuditCtx, { status: 0, error }), 'http-call-failure');
+    return { ok: false, status: 0, error };
   }
 
   // 4) Allowed hosts: ONLY the single service this op is bound to (B3).
@@ -198,12 +223,12 @@ export async function executeSkillAction(args: {
       deps: runtimeDeps,
     });
   } catch (e) {
-    detach(audit?.writer.writeHttpCallFailure(auditCtx, { status: 0, error: e }), 'http-call-failure');
+    detach(audit?.writer.writeHttpCallFailure(decidedAuditCtx, { status: 0, error: e }), 'http-call-failure');
     throw e;
   }
   if (!result.ok) {
     detach(
-      audit?.writer.writeHttpCallFailure(auditCtx, {
+      audit?.writer.writeHttpCallFailure(decidedAuditCtx, {
         status: result.status,
         error: result.error ?? `http call failed with status ${result.status}`,
       }),
@@ -217,7 +242,10 @@ export async function executeSkillAction(args: {
     const outputParse = schemas.output.safeParse(result.data);
     if (!outputParse.success) {
       const error = `upstream response failed output schema: ${formatZodIssues(outputParse.error.issues)}`;
-      detach(audit?.writer.writeHttpCallFailure(auditCtx, { status: result.status, error }), 'http-call-failure');
+      detach(
+        audit?.writer.writeHttpCallFailure(decidedAuditCtx, { status: result.status, error }),
+        'http-call-failure',
+      );
       return {
         ok: false,
         status: result.status,
@@ -228,7 +256,7 @@ export async function executeSkillAction(args: {
   }
   if (result.ok) {
     detach(
-      audit?.writer.writeHttpCallSuccess(auditCtx, { status: result.status, output: result.data ?? null }),
+      audit?.writer.writeHttpCallSuccess(decidedAuditCtx, { status: result.status, output: result.data ?? null }),
       'http-call-success',
     );
   }

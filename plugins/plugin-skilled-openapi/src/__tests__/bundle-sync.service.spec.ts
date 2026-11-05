@@ -1,6 +1,16 @@
-import { BundleStore, OverlayParseError, type ResolvedBundle } from '@frontmcp/adapters/skills';
+import {
+  BundleStore,
+  OverlayParseError,
+  SaasJwksUnavailableError,
+  SaasPullTokenRejectedError,
+  type BundleOrigin,
+  type BundleSourceListener,
+  type BundleTokenFailure,
+  type ResolvedBundle,
+} from '@frontmcp/adapters/skills';
 import {
   PublicMcpError,
+  SkillBundleNotLoadedError,
   type RegisteredSkillContent,
   type RegisterSkillContentOptions,
   type SkillContent,
@@ -32,12 +42,16 @@ class FakeRegistry implements Partial<SkillRegistryInterface> {
   public failOn = new Set<string>();
   /** Superseded ids a registration reports as removed, by the registered skill's id. */
   public removedBy = new Map<string, string[]>();
+  /** Whether a rollback's registration of a prior skill fails. */
+  public failRollbackRestores = false;
+  public notifyListChanged = jest.fn();
 
   async registerSkillContent(
     content: SkillContent,
     opts?: RegisterSkillContentOptions,
   ): Promise<RegisteredSkillContent> {
-    if (this.failNext || this.failOn.has(content.id)) {
+    const rollbackRestore = opts?.source?.endsWith(':rollback') ?? false;
+    if (this.failNext || this.failOn.has(content.id) || (this.failRollbackRestores && rollbackRestore)) {
       this.failNext = false;
       throw new Error('synthetic registration failure');
     }
@@ -112,6 +126,31 @@ describe('BundleSyncService', () => {
     expect(hiddenOps.size).toBe(1);
     expect(hiddenOps.get('invoices', 'createInvoice')?.op.pathTemplate).toBe('/v1/invoices');
     expect(store.current()).toBe(bundle);
+  });
+
+  it('leaves the registries as they are for the bundle being served applied again, and re-registers one generated later', async () => {
+    const fakeReg = new FakeRegistry();
+    const store = new BundleStore();
+    const sync = new BundleSyncService(
+      fakeReg as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      store,
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+    await sync.apply(buildBundle());
+
+    const pulledAgain = buildBundle();
+    const again = await sync.apply(pulledAgain);
+    const registeredAfterAgain = fakeReg.registered.length;
+    const regenerated = await sync.apply(buildBundle({ generatedAt: '2026-05-05T00:00:00Z' }));
+
+    expect(again).toMatchObject({ applied: true, diff: { isNoOp: true } });
+    expect(registeredAfterAgain).toBe(1);
+    expect(fakeReg.unregistered).toEqual([]);
+    expect(regenerated).toMatchObject({ applied: true });
+    expect(fakeReg.registered).toHaveLength(2);
+    expect(store.current()?.generatedAt).toBe('2026-05-05T00:00:00Z');
   });
 
   describe('ensureReady (worker-safe lazy boot)', () => {
@@ -281,6 +320,33 @@ describe('BundleSyncService', () => {
         message: 'No skill bundle is loaded: the first bundle has not loaded yet',
         code: 'SKILL_BUNDLE_NOT_LOADED',
       });
+    });
+
+    it("refuses with the SDK's retryable error, the one its skill surfaces answer", async () => {
+      const sync = makeSync();
+      sync.recordLoadFailure('pull responded 503');
+
+      const refusal = sync.ensureLoaded();
+
+      await expect(refusal).rejects.toBeInstanceOf(SkillBundleNotLoadedError);
+      await expect(
+        refusal.catch((error: SkillBundleNotLoadedError) => error.toMcpError()._meta),
+      ).resolves.toMatchObject({ code: 'SKILL_BUNDLE_NOT_LOADED', retryable: true });
+    });
+
+    it('gives the reason no bundle is loaded, the one ensureLoaded refuses with, and none once one is', async () => {
+      const sync = makeSync();
+      const { source } = makeDrivenSource(async (emit) => emit(buildBundle({ version: '2.0.0' })));
+      sync.attachSource(source);
+      const beforeStart = sync.notLoadedReason();
+      sync.recordLoadFailure('pull responded 503');
+      const afterFailure = sync.notLoadedReason();
+
+      await sync.ensureLoaded();
+
+      expect(beforeStart).toBe('the first bundle has not loaded yet');
+      expect(afterFailure).toBe('pull responded 503');
+      expect(sync.notLoadedReason()).toBeUndefined();
     });
 
     it('refuses with the recorded reason when the bundle source could not be created', async () => {
@@ -479,6 +545,58 @@ describe('BundleSyncService', () => {
     expect(again.unregistered).toEqual(['target']);
     expect(again.registered.map((content) => content.id)).toEqual(['target', 'invoices']);
     expect(again.registered[1].name).toBe('target');
+  });
+
+  describe('the lists a rollback leaves changed', () => {
+    const skill = (id: string) => ({
+      id,
+      name: id,
+      description: `${id} skill`,
+      instructions: `# ${id}`,
+      operationIds: [],
+    });
+
+    async function failedApply(fakeReg: FakeRegistry) {
+      const sync = new BundleSyncService(
+        fakeReg as unknown as SkillRegistryInterface,
+        new HiddenOpRegistry(),
+        new BundleStore(),
+        { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+        fakeLogger,
+      );
+      const batch = { listsRestored: jest.fn() };
+      const applied = await sync.apply(buildBundle({ skills: [skill('invoices')], operations: {} }), batch);
+      const restoredByApplied = batch.listsRestored.mock.calls.length;
+      fakeReg.failOn.add('zeta');
+      const rolledBack = await sync.apply(
+        buildBundle({ skills: [skill('invoices'), skill('zeta')], operations: {}, version: '2' }),
+        batch,
+      );
+      return { applied, restoredByApplied, rolledBack, batch };
+    }
+
+    it('tells the batch the lists are as they were when the rollback restored every skill', async () => {
+      const fakeReg = new FakeRegistry();
+
+      const { applied, restoredByApplied, rolledBack, batch } = await failedApply(fakeReg);
+
+      expect(applied.applied).toBe(true);
+      expect(restoredByApplied).toBe(0);
+      expect(rolledBack).toMatchObject({ applied: false, reason: expect.stringContaining('rollback') });
+      expect(fakeReg.registered.map((content) => content.id)).toEqual(['invoices', 'invoices', 'invoices']);
+      expect(batch.listsRestored).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves the batch to announce the lists when a skill could not be restored', async () => {
+      const fakeReg = new FakeRegistry();
+      fakeReg.failRollbackRestores = true;
+
+      const { rolledBack, batch } = await failedApply(fakeReg);
+
+      expect(rolledBack.applied).toBe(false);
+      expect(fakeReg.unregistered).toEqual(['invoices']);
+      expect(batch.listsRestored).not.toHaveBeenCalled();
+    });
   });
 
   it('rolls back hidden-op state if registration fails mid-apply', async () => {
@@ -1001,20 +1119,32 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
       fakeLogger,
     );
 
-  /** A source whose start and refresh each pull the next bundle of `versions`, and that records what it kept. */
-  const pullingSource = (versions: string[]) => {
-    const listeners = new Set<(b: ResolvedBundle) => Promise<void>>();
+  type Pull = string | ({ cached: string } & Required<Pick<BundleOrigin, 'pullFailure'>> & BundleOrigin) | Error;
+
+  /**
+   * A forward-only source whose start and refresh each take the next of `pulls`: a version it pulls, the cached
+   * version it serves because the pull failed, or the error the pull fails with. It records what it kept, and hands
+   * `failPoll()` to its pull failure listeners, as a poll that fails does.
+   */
+  const pullingSource = (pulls: Pull[]) => {
+    const listeners = new Set<BundleSourceListener>();
+    const pullFailureListeners = new Set<(reason: string, tokenFailure?: BundleTokenFailure) => void>();
     const calls = { start: 0, refresh: 0 };
     const kept: string[] = [];
     const pullNext = async () => {
-      const version = versions.shift();
-      if (!version) throw new Error('pull responded 503');
-      for (const fn of listeners) await fn(buildBundle({ version }));
+      const pull = pulls.shift() ?? new Error('pull responded 503');
+      if (pull instanceof Error) throw pull;
+      const [version, origin] = typeof pull === 'string' ? [pull] : [pull.cached, pull];
+      for (const fn of listeners) await fn(buildBundle({ version }), origin);
     };
     return {
       calls,
       kept,
+      failPoll: (reason: string, tokenFailure?: BundleTokenFailure) =>
+        pullFailureListeners.forEach((fn) => fn(reason, tokenFailure)),
       source: {
+        forwardOnly: true,
+        push: { verifyPushToken: jest.fn() },
         async start() {
           calls.start++;
           await pullNext();
@@ -1023,9 +1153,13 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
           calls.refresh++;
           await pullNext();
         },
-        onChange(fn: (b: ResolvedBundle) => Promise<void>) {
+        onChange(fn: BundleSourceListener) {
           listeners.add(fn);
           return () => listeners.delete(fn);
+        },
+        onPullFailure(fn: (reason: string, tokenFailure?: BundleTokenFailure) => void) {
+          pullFailureListeners.add(fn);
+          return () => pullFailureListeners.delete(fn);
         },
         async keepBundle(bundle: ResolvedBundle) {
           kept.push(bundle.version);
@@ -1034,13 +1168,16 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
     };
   };
 
+  const at = expect.any(String);
+
   it('starts the source when nothing started it, and applies and keeps that pull without pulling again', async () => {
     const sync = makeSync();
     const { source, calls, kept } = pullingSource(['1']);
     sync.attachSource(source);
 
-    await sync.refresh();
+    const outcome = await sync.refresh();
 
+    expect(outcome).toEqual({ status: 'applied', bundleId: 'acme:prod', bundleVersion: '1', at });
     expect(calls).toEqual({ start: 1, refresh: 0 });
     expect(kept).toEqual(['1']);
     expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '1' });
@@ -1052,22 +1189,212 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
     sync.attachSource(source);
     await sync.ensureReady();
 
-    await sync.refresh();
+    const outcome = await sync.refresh();
 
+    expect(outcome).toEqual({ status: 'applied', bundleId: 'acme:prod', bundleVersion: '2', at });
     expect(calls).toEqual({ start: 1, refresh: 1 });
     expect(kept).toEqual(['1', '2']);
     expect(sync.loadState()).toMatchObject({ status: 'loaded', bundleVersion: '2' });
   });
 
-  it('throws when the start it runs leaves no bundle loaded, or when a later pull fails', async () => {
+  it('says a pull of the bundle being served is unchanged, and one older than it refused, with why', async () => {
+    const sync = makeSync();
+    const { source, kept } = pullingSource(['2.0.0', '2.0.0', '1.0.0']);
+    sync.attachSource(source);
+    await sync.ensureReady();
+
+    const unchanged = await sync.refresh();
+    const refused = await sync.refresh();
+
+    expect(unchanged).toEqual({ status: 'unchanged', bundleId: 'acme:prod', bundleVersion: '2.0.0', at });
+    expect(refused).toEqual({
+      status: 'refused',
+      bundleId: 'acme:prod',
+      bundleVersion: '1.0.0',
+      reason: 'older than the served bundle acme:prod@2.0.0 (generatedAt 2026-05-04T00:00:00Z)',
+      at,
+    });
+    expect(kept).toEqual(['2.0.0', '2.0.0']);
+    expect(sync.loadState()).toMatchObject({ status: 'loaded', bundleVersion: '2.0.0' });
+  });
+
+  it('resolves as failed when the start it runs loads no bundle, or when a later pull fails: the served one stays', async () => {
     const coldSync = makeSync();
     coldSync.attachSource(pullingSource([]).source);
     const warmSync = makeSync();
     warmSync.attachSource(pullingSource(['1']).source);
     await warmSync.ensureReady();
 
-    await expect(coldSync.refresh()).rejects.toThrow('No skill bundle is loaded: pull responded 503');
-    await expect(warmSync.refresh()).rejects.toThrow('pull responded 503');
+    const cold = await coldSync.refresh();
+    const warm = await warmSync.refresh();
+
+    expect(cold).toEqual({ status: 'failed', reason: 'pull responded 503', cacheFallback: false, at });
+    expect(warm).toEqual({ ...cold, at });
+    expect(coldSync.loadState()).toEqual({ status: 'failed', reason: 'pull responded 503' });
+    expect(warmSync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '1' });
+  });
+
+  it('resolves as failed, serving the cached bundle without keeping it again, when the start it runs could not pull', async () => {
+    const sync = makeSync();
+    const { source, kept } = pullingSource([{ cached: '1', pullFailure: 'fetch failed' }]);
+    sync.attachSource(source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toEqual({ status: 'failed', reason: 'fetch failed', cacheFallback: true, at });
+    expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '1' });
+    expect(kept).toEqual([]);
+  });
+
+  it('says the cached bundle does not serve when it is refused too', async () => {
+    const sync = new BundleSyncService(
+      new FakeRegistry() as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      new BundleStore(),
+      { requireSignature: true, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+    sync.attachSource(pullingSource([{ cached: '1', pullFailure: 'fetch failed' }]).source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toEqual({ status: 'failed', reason: 'fetch failed', cacheFallback: false, at });
+    expect(sync.loadState()).toMatchObject({ status: 'failed' });
+  });
+
+  it('records a poll that fails, and the push applied after it', async () => {
+    const sync = makeSync();
+    const { source, failPoll } = pullingSource(['1.0.0']);
+    sync.attachSource(source);
+    await sync.ensureReady();
+
+    failPoll('pull responded 502');
+    const afterPoll = sync.lastSyncOutcome();
+    await sync.applyPushed(buildBundle({ version: '1.1.0' }));
+
+    expect(afterPoll).toEqual({ status: 'failed', reason: 'pull responded 502', cacheFallback: false, at });
+    expect(sync.lastSyncOutcome()).toEqual({ status: 'applied', bundleId: 'acme:prod', bundleVersion: '1.1.0', at });
+  });
+
+  describe('names the token check a pull failed on', () => {
+    const rejected = (tokenFailure: BundleTokenFailure) =>
+      new SaasPullTokenRejectedError('not a valid token from the issuer', tokenFailure);
+
+    it('on the start a refresh runs, which loads no bundle', async () => {
+      const sync = makeSync();
+      sync.attachSource(pullingSource([rejected('expired')]).source);
+
+      const outcome = await sync.refresh();
+
+      const reason = '[saas-source] pull token rejected: not a valid token from the issuer';
+      expect(outcome).toEqual({ status: 'failed', reason, tokenFailure: 'expired', cacheFallback: false, at });
+      expect(sync.loadState()).toEqual({ status: 'failed', reason });
+    });
+
+    it('on a start with no cached bundle, whose JWKS could not be read', async () => {
+      const sync = makeSync();
+      const jwksDown = new Error('[saas-source] initial pull failed and no cached bundle is available', {
+        cause: new SaasJwksUnavailableError('JWKS https://saas.example/jwks responded 503'),
+      });
+      sync.attachSource(pullingSource([jwksDown]).source);
+
+      expect(await sync.refresh()).toMatchObject({ status: 'failed', tokenFailure: 'jwks_unavailable' });
+    });
+
+    it('on a refresh, while the bundle before it serves', async () => {
+      const sync = makeSync();
+      sync.attachSource(pullingSource(['1', rejected('unknown_key')]).source);
+      await sync.ensureReady();
+
+      expect(await sync.refresh()).toMatchObject({ status: 'failed', tokenFailure: 'unknown_key' });
+      expect(sync.loadState()).toMatchObject({ status: 'loaded', bundleVersion: '1' });
+    });
+
+    it('on a poll', async () => {
+      const sync = makeSync();
+      const { source, failPoll } = pullingSource(['1']);
+      sync.attachSource(source);
+      await sync.ensureReady();
+
+      failPoll('[saas-source] pull token rejected: its "aud" claim does not include "acme:prod"', 'wrong_audience');
+
+      expect(sync.lastSyncOutcome()).toMatchObject({ status: 'failed', tokenFailure: 'wrong_audience' });
+    });
+
+    it('on a start that serves the cached bundle because the JWKS was unavailable', async () => {
+      const sync = makeSync();
+      const pullFailure = 'JWKS https://cloud.example.dev/.well-known/jwks.json responded 503';
+      sync.attachSource(pullingSource([{ cached: '1', pullFailure, tokenFailure: 'jwks_unavailable' }]).source);
+
+      expect(await sync.start()).toEqual({
+        status: 'failed',
+        reason: pullFailure,
+        tokenFailure: 'jwks_unavailable',
+        cacheFallback: true,
+        at,
+      });
+    });
+
+    it('on a refresh whose JWKS could not be read', async () => {
+      const sync = makeSync();
+      sync.attachSource(pullingSource(['1', new SaasJwksUnavailableError('fetch failed')]).source);
+      await sync.ensureReady();
+
+      expect(await sync.refresh()).toMatchObject({
+        status: 'failed',
+        reason: 'fetch failed',
+        tokenFailure: 'jwks_unavailable',
+      });
+    });
+
+    it('and names none for a pull that failed for another reason', async () => {
+      const sync = makeSync();
+      sync.attachSource(pullingSource(['1', new Error('pull responded 502')]).source);
+      await sync.ensureReady();
+
+      const outcome = await sync.refresh();
+
+      expect(outcome).toMatchObject({ status: 'failed', reason: 'pull responded 502' });
+      expect(outcome).not.toHaveProperty('tokenFailure', expect.anything());
+    });
+  });
+
+  it('records a pushed bundle that is refused', async () => {
+    const sync = makeSync();
+    sync.attachSource(pullingSource(['2.0.0']).source);
+
+    await sync.applyPushed(buildBundle({ version: '1.0.0' }));
+
+    expect(sync.lastSyncOutcome()).toMatchObject({ status: 'refused', bundleVersion: '1.0.0' });
+  });
+
+  it('gives each reason as clients may read it: no URL credentials or query, no token', async () => {
+    const sync = makeSync();
+    const token = 'eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJ4In0.c2ln';
+    sync.attachSource(
+      pullingSource(['1', new Error(`pull https://ci:secret@cloud.example.dev/v1/b?sig=abc rejected ${token}`)]).source,
+    );
+    await sync.ensureReady();
+
+    const outcome = await sync.refresh();
+
+    expect(outcome).toMatchObject({
+      status: 'failed',
+      reason: 'pull https://cloud.example.dev/v1/b rejected [token]',
+    });
+  });
+
+  it('says the first bundle has not loaded when the source started without one', async () => {
+    const sync = makeSync();
+    sync.attachSource({ start: async () => undefined, onChange: () => () => undefined });
+
+    expect(sync.lastSyncOutcome()).toBeUndefined();
+    await expect(sync.start()).resolves.toEqual({
+      status: 'failed',
+      reason: 'the first bundle has not loaded yet',
+      cacheFallback: false,
+      at,
+    });
   });
 });
 
@@ -1191,5 +1518,387 @@ describe('BundleSyncService pushed bundles', () => {
     expect(loggerMocks.error).toHaveBeenCalledWith(
       expect.stringContaining('acme:prod@3 apply threw: registry offline'),
     );
+  });
+});
+
+describe('BundleSyncService version order', () => {
+  const EARLIER = '2026-11-04T10:00:00.000Z';
+  const LATER = '2026-11-04T12:00:00.000Z';
+
+  const makeSync = (registry = new FakeRegistry()) =>
+    new BundleSyncService(
+      registry as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      new BundleStore(),
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+
+  /** A source that pulls `first` when it starts, hands later pulls to `pull()`, takes pushes, and records what it keeps. */
+  const orderedSource = (first: ResolvedBundle, forwardOnly: boolean | undefined) => {
+    const listeners = new Set<(b: ResolvedBundle) => Promise<void>>();
+    const kept: ResolvedBundle[] = [];
+    return {
+      kept,
+      pull: async (bundle: ResolvedBundle) => {
+        for (const fn of listeners) await fn(bundle);
+      },
+      source: {
+        forwardOnly,
+        push: { verifyPushToken: jest.fn() },
+        async start() {
+          for (const fn of listeners) await fn(first);
+        },
+        onChange(fn: (b: ResolvedBundle) => Promise<void>) {
+          listeners.add(fn);
+          return () => listeners.delete(fn);
+        },
+        async keepBundle(bundle: ResolvedBundle) {
+          kept.push(bundle);
+        },
+      },
+    };
+  };
+
+  it('applies a newer pulled or pushed bundle from a forward-only source', async () => {
+    const sync = makeSync();
+    const { source, pull } = orderedSource(buildBundle({ version: '1.0.0' }), true);
+    sync.attachSource(source);
+    await sync.ensureLoaded();
+
+    await pull(buildBundle({ version: '1.1.0' }));
+    const pushed = await sync.applyPushed(buildBundle({ version: '2.0.0' }));
+
+    expect(pushed).toMatchObject({ applied: true, bundleVersion: '2.0.0' });
+    expect(sync.loadState()).toMatchObject({ bundleVersion: '2.0.0' });
+  });
+
+  it('refuses an older pulled bundle: the served one stays and stays kept, and the refusal is logged', async () => {
+    const registry = new FakeRegistry();
+    const sync = makeSync(registry);
+    const { source, pull, kept } = orderedSource(buildBundle({ version: '2.0.0', generatedAt: EARLIER }), true);
+    sync.attachSource(source);
+    await sync.ensureLoaded();
+    loggerMocks.warn.mockClear();
+
+    await pull(buildBundle({ version: '1.9.0', generatedAt: LATER }));
+
+    expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '2.0.0' });
+    expect(kept.map((bundle) => bundle.version)).toEqual(['2.0.0']);
+    expect(registry.registered.map((skill) => skill.bundleVersion)).toEqual(['2.0.0']);
+    expect(loggerMocks.warn).toHaveBeenCalledWith(
+      `[bundle-sync] bundle acme:prod@1.9.0 not applied: older than the served bundle acme:prod@2.0.0 (generatedAt ${EARLIER})`,
+    );
+  });
+
+  it('refuses an older pushed bundle as outdated', async () => {
+    const sync = makeSync();
+    sync.attachSource(orderedSource(buildBundle({ version: '3.0.0' }), true).source);
+
+    const result = await sync.applyPushed(buildBundle({ version: '2.5.0' }));
+
+    expect(result).toMatchObject({
+      applied: false,
+      refusal: 'outdated',
+      bundleVersion: '2.5.0',
+      reason: expect.stringContaining('older than the served bundle acme:prod@3.0.0'),
+    });
+    expect(sync.loadState()).toMatchObject({ bundleVersion: '3.0.0' });
+  });
+
+  it('applies the same version re-signed later, refuses it signed earlier, and applies the same bundle pulled again', async () => {
+    const sync = makeSync();
+    const { source, pull, kept } = orderedSource(buildBundle({ version: '2.0.0', generatedAt: EARLIER }), true);
+    sync.attachSource(source);
+    await sync.ensureLoaded();
+
+    await pull(buildBundle({ version: '2.0.0', generatedAt: LATER }));
+    const earlier = await sync.applyPushed(buildBundle({ version: '2.0.0', generatedAt: EARLIER }));
+    const same = await sync.applyPushed(buildBundle({ version: '2.0.0', generatedAt: LATER }));
+
+    expect(earlier).toMatchObject({ applied: false, refusal: 'outdated' });
+    expect(same).toMatchObject({ applied: true });
+    expect(kept.map((bundle) => bundle.generatedAt)).toEqual([EARLIER, LATER, LATER]);
+  });
+
+  it('orders versions that are not semver by generatedAt', async () => {
+    const sync = makeSync();
+    const { source, pull } = orderedSource(buildBundle({ version: '9', generatedAt: EARLIER }), true);
+    sync.attachSource(source);
+    await sync.ensureLoaded();
+
+    await pull(buildBundle({ version: '10', generatedAt: LATER }));
+    const generatedBefore = await sync.applyPushed(buildBundle({ version: '11', generatedAt: EARLIER }));
+
+    expect(generatedBefore).toMatchObject({ applied: false, refusal: 'outdated' });
+    expect(sync.loadState()).toMatchObject({ bundleVersion: '10' });
+  });
+
+  it('refuses a bundle whose generatedAt is not a date when the order depends on it', async () => {
+    const sync = makeSync();
+    sync.attachSource(orderedSource(buildBundle({ version: '2.0.0', generatedAt: EARLIER }), true).source);
+
+    const result = await sync.applyPushed(buildBundle({ version: '2.0.0', generatedAt: 'not-a-date' }));
+
+    expect(result).toMatchObject({ applied: false, refusal: 'outdated' });
+    expect(sync.loadState()).toMatchObject({ bundleVersion: '2.0.0' });
+  });
+
+  it.each([
+    ['allows a rollback', false],
+    ['does not order its bundles, as the static and inline sources', undefined],
+  ])('applies an older bundle from a source that %s', async (_label, forwardOnly) => {
+    const sync = makeSync();
+    const { source, pull, kept } = orderedSource(buildBundle({ version: '2.0.0' }), forwardOnly);
+    sync.attachSource(source);
+    await sync.ensureLoaded();
+
+    await pull(buildBundle({ version: '1.0.0' }));
+    const pushed = await sync.applyPushed(buildBundle({ version: '0.9.0' }));
+
+    expect(pushed).toMatchObject({ applied: true, bundleVersion: '0.9.0' });
+    expect(kept.map((bundle) => bundle.version)).toEqual(['2.0.0', '1.0.0', '0.9.0']);
+  });
+
+  it('checks the signature before the version, so a tampered older bundle is refused for its signature', async () => {
+    const store = new BundleStore();
+    store.swap(buildBundle({ version: '2.0.0' }));
+    const sync = new BundleSyncService(
+      new FakeRegistry() as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      store,
+      { requireSignature: true, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+    sync.attachSource(orderedSource(buildBundle({ version: '2.0.0' }), true).source);
+
+    const result = await sync.apply(buildBundle({ version: '1.0.0' }));
+
+    expect(result).toMatchObject({ applied: false, reason: 'bundle missing integrity envelope' });
+    expect(result.refusal).toBeUndefined();
+  });
+});
+
+describe('BundleSyncService cold start, with the cached bundle of the source', () => {
+  const EARLIER = '2026-11-04T10:00:00.000Z';
+  const LATER = '2026-11-04T12:00:00.000Z';
+  const refunds = { id: 'refunds', name: 'Refunds', description: 'd', instructions: '# R', operationIds: [] };
+  const withRefunds = (version: string) => buildBundle({ version, skills: [...buildBundle().skills, refunds] });
+  const at = expect.any(String);
+
+  const makeSync = (registry = new FakeRegistry()) =>
+    new BundleSyncService(
+      registry as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      new BundleStore(),
+      { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+
+  /**
+   * A source whose cache holds `cached`, and that hands each of `pulls` to its listeners in turn, the first when it
+   * starts (none when `pulls` is empty). It records the versions it keeps.
+   */
+  const sourceWithCache = (cached: ResolvedBundle | undefined, pulls: ResolvedBundle[], forwardOnly = true) => {
+    const listeners = new Set<BundleSourceListener>();
+    const kept: string[] = [];
+    const pull = async () => {
+      const bundle = pulls.shift();
+      if (bundle) for (const fn of listeners) await fn(bundle);
+    };
+    return {
+      kept,
+      pull,
+      source: {
+        forwardOnly,
+        start: pull,
+        onChange(fn: BundleSourceListener) {
+          listeners.add(fn);
+          return () => listeners.delete(fn);
+        },
+        async keepBundle(bundle: ResolvedBundle) {
+          kept.push(bundle.version);
+        },
+        keptBundle: jest.fn(async (): Promise<ResolvedBundle | undefined> => cached),
+      },
+    };
+  };
+
+  beforeEach(() => {
+    loggerMocks.warn.mockClear();
+  });
+
+  it('serves the cached bundle in place of an older pulled one, keeps neither, and says the pull was older', async () => {
+    const registry = new FakeRegistry();
+    const sync = makeSync(registry);
+    const { source, kept } = sourceWithCache(buildBundle({ version: '2.0.0', generatedAt: EARLIER }), [
+      buildBundle({ version: '1.9.0', generatedAt: LATER }),
+    ]);
+    sync.attachSource(source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toEqual({
+      status: 'refused',
+      bundleId: 'acme:prod',
+      bundleVersion: '1.9.0',
+      reason: `older than the cached bundle acme:prod@2.0.0 (generatedAt ${EARLIER})`,
+      cacheFallback: true,
+      at,
+    });
+    expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '2.0.0' });
+    expect(registry.registered.map((skill) => skill.bundleVersion)).toEqual(['2.0.0']);
+    expect(kept).toEqual([]);
+    expect(loggerMocks.warn).toHaveBeenCalledWith(
+      `[bundle-sync] bundle acme:prod@1.9.0 not applied: older than the cached bundle acme:prod@2.0.0 (generatedAt ${EARLIER}); serving the cached bundle acme:prod@2.0.0`,
+    );
+  });
+
+  it.each([
+    ['newer than the cached one', buildBundle({ version: '2.1.0' })],
+    ['the same as the cached one', buildBundle({ version: '2.0.0' })],
+  ])('serves and keeps a pulled bundle %s, applied once', async (_label, pulled) => {
+    const registry = new FakeRegistry();
+    const sync = makeSync(registry);
+    const { source, kept } = sourceWithCache(buildBundle({ version: '2.0.0' }), [pulled]);
+    sync.attachSource(source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toEqual({ status: 'applied', bundleId: 'acme:prod', bundleVersion: pulled.version, at });
+    expect(sync.loadState()).toMatchObject({ status: 'loaded', bundleVersion: pulled.version });
+    expect(registry.registered.map((skill) => skill.bundleVersion)).toEqual([pulled.version]);
+    expect(kept).toEqual([pulled.version]);
+  });
+
+  it('serves and keeps an older pulled bundle when the source allows a rollback', async () => {
+    const sync = makeSync();
+    const { source, kept } = sourceWithCache(
+      buildBundle({ version: '2.0.0' }),
+      [buildBundle({ version: '1.0.0' })],
+      false,
+    );
+    sync.attachSource(source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toMatchObject({ status: 'applied', bundleVersion: '1.0.0' });
+    expect(kept).toEqual(['1.0.0']);
+  });
+
+  it.each([
+    ['a forward-only source', true],
+    ['a source that allows a rollback', false],
+  ])(
+    'serves the cached bundle in place of a pulled one that is refused, from %s, and says why',
+    async (_label, forwardOnly) => {
+      const registry = new FakeRegistry();
+      registry.failOn.add('refunds');
+      const sync = makeSync(registry);
+      const { source, kept } = sourceWithCache(buildBundle({ version: '2.0.0' }), [withRefunds('3.0.0')], forwardOnly);
+      sync.attachSource(source);
+
+      const outcome = await sync.start();
+      await expect(sync.ensureLoaded()).resolves.toBeUndefined();
+
+      expect(outcome).toEqual({
+        status: 'refused',
+        bundleId: 'acme:prod',
+        bundleVersion: '3.0.0',
+        reason: 'rollback: synthetic registration failure',
+        cacheFallback: true,
+        at,
+      });
+      expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '2.0.0' });
+      expect(kept).toEqual([]);
+      expect(loggerMocks.warn).toHaveBeenCalledWith(
+        '[bundle-sync] bundle acme:prod@3.0.0 not applied: rollback: synthetic registration failure; serving the cached bundle acme:prod@2.0.0',
+      );
+    },
+  );
+
+  it('serves and keeps an older pulled bundle when the newer cached one is refused', async () => {
+    const registry = new FakeRegistry();
+    registry.failOn.add('refunds');
+    const sync = makeSync(registry);
+    const { source, kept } = sourceWithCache(withRefunds('2.0.0'), [buildBundle({ version: '1.0.0' })]);
+    sync.attachSource(source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toMatchObject({ status: 'applied', bundleVersion: '1.0.0' });
+    expect(kept).toEqual(['1.0.0']);
+  });
+
+  it('serves nothing, and says the pulled bundle was refused, when the cached one is refused too', async () => {
+    const registry = new FakeRegistry();
+    registry.failOn.add('refunds');
+    const sync = makeSync(registry);
+    const { source, kept } = sourceWithCache(withRefunds('2.0.0'), [withRefunds('3.0.0')]);
+    sync.attachSource(source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toEqual({
+      status: 'refused',
+      bundleId: 'acme:prod',
+      bundleVersion: '3.0.0',
+      reason: 'rollback: synthetic registration failure',
+      at,
+    });
+    expect(sync.loadState()).toMatchObject({ status: 'failed' });
+    expect(kept).toEqual([]);
+  });
+
+  it('answers a push older than the cached bundle as outdated while none serves, and serves the cached one', async () => {
+    const sync = makeSync();
+    const { source, kept } = sourceWithCache(buildBundle({ version: '2.0.0' }), []);
+    sync.attachSource(source);
+    await sync.ensureReady();
+
+    const pushed = await sync.applyPushed(buildBundle({ version: '1.0.0' }));
+
+    expect(pushed).toMatchObject({
+      applied: false,
+      refusal: 'outdated',
+      bundleVersion: '1.0.0',
+      reason: expect.stringContaining('older than the cached bundle acme:prod@2.0.0'),
+    });
+    expect(sync.loadState()).toMatchObject({ status: 'loaded', bundleVersion: '2.0.0' });
+    expect(kept).toEqual([]);
+  });
+
+  it('reads the cache only while no bundle serves: a later pull compares with the bundle served', async () => {
+    const sync = makeSync();
+    const { source, pull } = sourceWithCache(buildBundle({ version: '2.0.0' }), [
+      buildBundle({ version: '2.0.0' }),
+      buildBundle({ version: '1.0.0' }),
+    ]);
+    sync.attachSource(source);
+    await sync.start();
+
+    await pull();
+
+    expect(source.keptBundle).toHaveBeenCalledTimes(1);
+    expect(sync.lastSyncOutcome()).toEqual({
+      status: 'refused',
+      bundleId: 'acme:prod',
+      bundleVersion: '1.0.0',
+      reason: expect.stringContaining('older than the served bundle acme:prod@2.0.0'),
+      at,
+    });
+  });
+
+  it('applies the pulled bundle when the cache cannot be read, and logs why', async () => {
+    const sync = makeSync();
+    const { source, kept } = sourceWithCache(undefined, [buildBundle({ version: '1.0.0' })]);
+    source.keptBundle.mockRejectedValue(new Error('KV unavailable'));
+    sync.attachSource(source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toMatchObject({ status: 'applied', bundleVersion: '1.0.0' });
+    expect(kept).toEqual(['1.0.0']);
+    expect(loggerMocks.warn).toHaveBeenCalledWith('[bundle-sync] the cached bundle could not be read: KV unavailable');
   });
 });

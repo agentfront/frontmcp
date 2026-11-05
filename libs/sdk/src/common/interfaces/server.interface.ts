@@ -13,6 +13,8 @@ export class ServerRequest extends IncomingMessage {
   /** Path parameters of the matched route (`:providerId` in `/oauth/provider/:providerId/callback`). */
   params?: Record<string, string>;
   body?: any;
+  /** The bytes `body` was parsed from, as received: for a check over the exact body, such as a digest. */
+  bodyBytes?: Uint8Array;
   authSession?: Authorization;
 }
 

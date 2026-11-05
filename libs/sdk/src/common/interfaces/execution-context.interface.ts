@@ -13,6 +13,7 @@ import { type Token } from '@frontmcp/di';
 import { type AuthInfo, type CallToolResult } from '@frontmcp/protocol';
 import { getRuntimeContext, randomUUID, type RuntimeContext } from '@frontmcp/utils';
 
+import { unconfiguredAuthProviders } from '../../auth/vault/unconfigured-auth-providers';
 import { ConfigService } from '../../builtin/config/providers/config.service';
 import { FRONTMCP_CONTEXT, type FrontMcpContext } from '../../context';
 import { workerEnvOf } from '../../context/frontmcp-context-storage';
@@ -238,6 +239,11 @@ export abstract class ExecutionContextBase<Out = unknown> {
       this.logger.warn(`Failed to get provider ${String(token)}: ${msg}`);
       return undefined;
     }
+  }
+
+  /** The credentials of the providers `@FrontMcp({ authProvidersVault })` registers, read for the current caller. */
+  get authProviders(): AuthProvidersAccessor {
+    return this.tryGet(AUTH_PROVIDERS_ACCESSOR) ?? unconfiguredAuthProviders;
   }
 
   /**

@@ -153,7 +153,7 @@ describe('requiredAuthorities use the server authorities settings (claimsMapping
     const result = await runWorkflow(MALLORY, 'return await callTool("voidInvoice", { id: "INV-7" })');
 
     expect(result.success).toBe(false);
-    expect(result.error).toMatch(/authority denied/);
+    expect(result.error).toMatch(/^unknown action "voidInvoice"/);
     expect(outbound).toEqual([]);
   });
 

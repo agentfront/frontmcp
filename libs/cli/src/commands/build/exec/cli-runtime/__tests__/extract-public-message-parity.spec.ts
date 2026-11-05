@@ -110,3 +110,58 @@ describe('extract-public-message snippet', () => {
     expect(extract({ foo: 'bar' })).toBe('[object Object]');
   });
 });
+
+describe('connect hint snippet', () => {
+  const connectHint = new Function(`${EXTRACT_PUBLIC_MESSAGE_SNIPPET}\nreturn _connectHint;`)() as (
+    err: unknown,
+  ) => string;
+  const connectUrl = 'https://server.example/oauth/connect?token=signed';
+
+  it("prints the connect link from a credentials-required error's data for the terminal user", () => {
+    const err = { code: -32001, data: { tool: 'deploy', providers: ['github'], authUrl: connectUrl } };
+    expect(connectHint(err)).toBe(`Connect github at: ${connectUrl}`);
+  });
+
+  it('asks a caller who is not signed in to sign in first', () => {
+    const err = { code: -32001, data: { tool: 'deploy', providers: ['github', 'aws'], signInRequired: true } };
+    expect(connectHint(err)).toBe('Sign in to the server first, then connect github, aws.');
+  });
+
+  it('prints nothing for other errors', () => {
+    expect(connectHint(new Error('boom'))).toBe('');
+    expect(connectHint({ data: { providers: ['github'] } })).toBe('');
+    expect(connectHint(null)).toBe('');
+  });
+});
+
+describe('exit with error snippet', () => {
+  const exitWithError = new Function(`${EXTRACT_PUBLIC_MESSAGE_SNIPPET}\nreturn _exitWithError;`)() as (
+    err: unknown,
+    code?: number,
+  ) => void;
+
+  function printed(err: unknown): string {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      exitWithError(err, 1);
+      return error.mock.calls.map((call) => call.join(' ')).join('\n');
+    } finally {
+      error.mockRestore();
+      process.exitCode = undefined;
+    }
+  }
+
+  it("prints a failed read without the MCP error prefix the client doubles, as a tool's error reads", () => {
+    const notFound = Object.assign(new Error('MCP error -32002: MCP error -32002: Resource not found: app://missing'), {
+      code: -32002,
+    });
+    expect(printed(notFound)).toBe('Error: Resource not found: app://missing');
+  });
+
+  it("drops the daemon's single prefix too, and keeps a message without one", () => {
+    expect(printed(new Error('MCP error -32602: Invalid arguments'))).toBe('Error: Invalid arguments');
+    expect(printed(new Error('Not logged in. Run "mymcp login" first.'))).toBe(
+      'Error: Not logged in. Run "mymcp login" first.',
+    );
+  });
+});

@@ -20,6 +20,7 @@ import {
   kvSkillIndexCacheFromEnv,
   type EdgeMcpConfig,
 } from '../index';
+import { PushReplayDurableObject } from '../push-replay';
 
 // ---- mocks -----------------------------------------------------------------
 
@@ -397,9 +398,11 @@ describe('createEdgeMcp — managed mode', () => {
     expect(provider).toBeDefined();
   });
 
+  const APPLIED = { status: 'applied', bundleId: 'acme:billing', bundleVersion: '2.0.0', at: '2026-11-05T08:00:00Z' };
+
   /** Capture the controller passed to the plugin provider, and attach the scheduler the plugin would hand it. */
-  function attachScheduler(): { start: jest.Mock; refresh: jest.Mock } {
-    const scheduler = { start: jest.fn(async () => undefined), refresh: jest.fn(async () => undefined) };
+  function attachScheduler(outcome: Record<string, unknown> = APPLIED): { start: jest.Mock; refresh: jest.Mock } {
+    const scheduler = { start: jest.fn(async () => outcome), refresh: jest.fn(async () => outcome) };
     createForGraph.mockImplementation(async (cfg: { providers?: Array<{ provide: symbol; useValue: unknown }> }) => {
       const provider = (cfg.providers ?? []).find((p) => typeof p.provide === 'symbol');
       const controller = provider?.useValue as { attach: (attached: typeof scheduler) => void };
@@ -436,6 +439,69 @@ describe('createEdgeMcp — managed mode', () => {
     expect(scheduler.refresh).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ['applied', APPLIED],
+    ['was the bundle served', { ...APPLIED, status: 'unchanged' }],
+  ])('scheduled() resolves when the bundle it pulled %s', async (_label, outcome) => {
+    attachScheduler(outcome);
+    const edge = createEdgeMcp({ ...BASE, managed: MANAGED } as EdgeMcpConfig);
+    if (!edge.scheduled) throw new Error('expected scheduled handler in managed mode');
+
+    await expect(edge.scheduled({}, {})).resolves.toBeUndefined();
+    await expect(edge.scheduled({}, {})).resolves.toBeUndefined();
+  });
+
+  it.each([
+    [
+      'the bundle it pulled was refused',
+      { status: 'refused', bundleId: 'acme:billing', bundleVersion: '3.0.0', reason: 'digest mismatch' },
+      '[frontmcp/edge] Cron refresh: bundle acme:billing@3.0.0 was not applied: digest mismatch',
+    ],
+    [
+      'the isolate started on a pulled bundle older than the cached one, which serves',
+      {
+        status: 'refused',
+        bundleId: 'acme:billing',
+        bundleVersion: '1.0.0',
+        reason: 'older than the cached bundle acme:billing@2.0.0',
+        cacheFallback: true,
+      },
+      '[frontmcp/edge] Cron refresh: bundle acme:billing@1.0.0 was not applied, so the cached bundle serves: older than the cached bundle acme:billing@2.0.0',
+    ],
+    [
+      'its pull failed',
+      { status: 'failed', reason: 'pull responded 503', cacheFallback: false },
+      '[frontmcp/edge] Cron refresh: the bundle pull failed: pull responded 503',
+    ],
+    [
+      'its pull failed and the cached bundle serves',
+      { status: 'failed', reason: 'fetch failed', cacheFallback: true },
+      '[frontmcp/edge] Cron refresh: the bundle pull failed, so the cached bundle serves: fetch failed',
+    ],
+    [
+      'its pull token expired',
+      {
+        status: 'failed',
+        reason: '[saas-source] pull token rejected: not a valid token',
+        tokenFailure: 'expired',
+        cacheFallback: false,
+      },
+      '[frontmcp/edge] Cron refresh: the bundle pull failed (token check: expired): [saas-source] pull token rejected: not a valid token',
+    ],
+    [
+      'its JWKS could not be read and the cached bundle serves',
+      { status: 'failed', reason: 'fetch failed', tokenFailure: 'jwks_unavailable', cacheFallback: true },
+      '[frontmcp/edge] Cron refresh: the bundle pull failed (token check: jwks_unavailable), so the cached bundle serves: fetch failed',
+    ],
+  ])('scheduled() throws, so the run counts as failed, when %s', async (_label, outcome, message) => {
+    attachScheduler(outcome);
+    const edge = createEdgeMcp({ ...BASE, managed: MANAGED } as EdgeMcpConfig);
+    if (!edge.scheduled) throw new Error('expected scheduled handler in managed mode');
+
+    await expect(edge.scheduled({}, {})).rejects.toThrow(message);
+    await expect(edge.scheduled({}, {})).rejects.toThrow(message);
+  });
+
   it('scheduled() throws when no bundle source was attached (controller has no source)', async () => {
     // createForGraph builds a scope but the provider/controller never gets a source attached.
     mockScopeBuild(makeScope());
@@ -464,6 +530,51 @@ describe('createEdgeMcp — managed mode', () => {
 
     expect(cacheFactory).toHaveBeenCalledWith({ ENV: 1 });
     expect(controllerCache).toBe(store);
+  });
+
+  /** The push replay store the controller hands the plugin, after the first request built the scope with `env`. */
+  async function controllerPushReplayStore(managed: Record<string, unknown>, env: unknown) {
+    let store: { claim(key: string, ttlMs: number): Promise<boolean> } | undefined;
+    createForGraph.mockImplementation(async (cfg: { providers?: Array<{ provide: symbol; useValue: unknown }> }) => {
+      const provider = (cfg.providers ?? []).find((p) => typeof p.provide === 'symbol');
+      store = (provider?.useValue as { pushReplayStore?: typeof store }).pushReplayStore;
+      return builtInstance(makeScope());
+    });
+    const edge = createEdgeMcp({ ...BASE, managed: { ...MANAGED, ...managed } } as unknown as EdgeMcpConfig);
+    await edge.fetch(new Request('https://w/'), env);
+    return store;
+  }
+
+  it('hands the plugin a push replay store on the Durable Object bound in env, named after the audience', async () => {
+    const fetchClaim = jest.fn(async () => Response.json({ claimed: true }));
+    const namespace = {
+      idFromName: jest.fn((name: string) => `id:${name}`),
+      get: jest.fn(() => ({ fetch: fetchClaim })),
+    };
+
+    const store = await controllerPushReplayStore({ enableWebhook: true }, { FRONTMCP_PUSH_REPLAY: namespace });
+
+    await expect(store?.claim('jti-hash', 1_000)).resolves.toBe(true);
+    expect(namespace.idFromName).toHaveBeenCalledWith('push-jti:acme:prod');
+    expect(namespace.get).toHaveBeenCalledWith('id:push-jti:acme:prod');
+  });
+
+  it('hands the plugin a store that refuses every push when the Durable Object is not bound', async () => {
+    const store = await controllerPushReplayStore({ enableWebhook: true, pushReplay: { binding: 'MY_REPLAY' } }, {});
+
+    await expect(store?.claim('jti-hash', 1_000)).rejects.toThrow(
+      'the Durable Object binding "MY_REPLAY" is not bound',
+    );
+  });
+
+  it('hands the plugin no push replay store without enableWebhook', async () => {
+    const store = await controllerPushReplayStore({}, { FRONTMCP_PUSH_REPLAY: {} });
+
+    expect(store).toBeUndefined();
+  });
+
+  it('exposes the push replay Durable Object class on the module', () => {
+    expect(createEdgeMcp(BASE).PushReplayDurableObject).toBe(PushReplayDurableObject);
   });
 
   it('passes a plain managed.cache store through unchanged', async () => {

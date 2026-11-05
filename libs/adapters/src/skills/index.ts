@@ -29,6 +29,7 @@ export {
   type BundleSwapListener,
 } from './bundle/bundle.store';
 export { diffBundles, formatDiffSummary, type BundleDiff } from './bundle/bundle-diff';
+export { compareBundleVersions } from './bundle/bundle-version';
 
 // Dependency resolution
 export {
@@ -57,9 +58,14 @@ export {
   createBundleSource,
   InlineSource,
   NpmSource,
+  PUSH_BODY_DIGEST_CLAIM,
+  pushBodyDigest,
+  SaasJwksUnavailableError,
   SaasPullSource,
+  SaasPullTokenRejectedError,
   SaasPushRefusedError,
   StaticSource,
+  tokenFailureOf,
 } from './sources';
 
 // OpenAPI → skilled-bundle compiler (operationId ↔ skill linkage). First-party
@@ -72,9 +78,12 @@ export {
 } from './openapi/compile-skilled-bundle';
 export type {
   BundleCacheStore,
+  BundleOrigin,
+  BundlePullFailureListener,
   BundlePushReceiver,
   BundleSourceDeps,
   BundleSourceListener,
+  BundleTokenFailure,
   SkillBundleSource,
 } from './sources/skill-bundle-source.interface';
 
@@ -101,6 +110,13 @@ export {
   type SignatureVerifyTelemetry,
 } from './security/bundle-signature';
 export { BundlePushJwtVerifier, type BundlePushJwtVerifierOptions } from './security/jwt-verifier';
+export {
+  createStorageReplayNonceStore,
+  MemoryReplayNonceStore,
+  StorageReplayNonceStore,
+  type MemoryReplayNonceStoreOptions,
+  type ReplayNonceStore,
+} from './security/replay-nonce-store';
 export {
   WebhookReplayGuard,
   type ReplayCheckResult,
@@ -134,6 +150,7 @@ export {
   type AuditTrustedKey,
   type SkillAuditAuthorityFailExtras,
   type SkillAuditConfig,
+  type SkillAuditConfirmation,
   type SkillAuditFailureExtras,
   type SkillAuditLogger,
   type SkillAuditMetrics,

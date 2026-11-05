@@ -16,10 +16,10 @@ import {
   FrontMcpLogger,
   ListToolsHook,
   Plugin,
+  ProviderRegistry,
   ScopeEntry,
   SkillCatalogSourceToken,
   type FlowCtxOf,
-  type ProviderRegistry,
   type ProviderType,
   type SkillCatalogSource,
   type SkillRegistryInterface,
@@ -32,13 +32,14 @@ import BundlePushFlow from './push/bundle-push.flow';
 import { HiddenOpRegistry } from './registry/hidden-op.registry';
 import { AuthorityGuard } from './security/authority-guard';
 import { bundleSkillPolicies, SkillVisibility } from './security/skill-visibility';
+import { VaultRefListedTwiceError } from './skilled-openapi.errors';
 import { SkilledOpenApiConfig } from './skilled-openapi.symbols';
 import {
   skilledOpenApiPluginOptionsSchema,
   type SkilledOpenApiPluginOptions,
   type SkilledOpenApiPluginOptionsInput,
 } from './skilled-openapi.types';
-import { bundleHealth } from './sync/bundle-load-state';
+import { bundleHealth, type BundleSyncOutcome } from './sync/bundle-load-state';
 import { BundleSyncService } from './sync/bundle-sync.service';
 import ExecuteActionTool from './tools/execute-action.tool';
 import LoadSkillTool from './tools/load-skill.tool';
@@ -87,11 +88,12 @@ export const SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN = Symbol.for('frontmcp:skilled-o
 export interface SkilledOpenApiRuntimeDeps extends BundleSourceDeps {
   /**
    * Invoked once, right after the bundle source is constructed, with what an external scheduler (Cloudflare Cron
-   * Trigger / DO alarm) calls on a runtime with no background timers. `start()` makes sure the bundle sync has started
-   * and loaded a bundle, for a run that also built the server; `refresh()` pulls a fresh bundle, or starts the sync
-   * when nothing has ({@link BundleSyncService.refresh}). Both resolve once the bundle is applied and kept.
+   * Trigger / DO alarm) calls on a runtime with no background timers. `start()` makes sure the bundle sync has started,
+   * for a run that also built the server; `refresh()` pulls a fresh bundle, or starts the sync when nothing has
+   * ({@link BundleSyncService.refresh}). Both resolve once the bundle is applied and kept, or refused, with what the
+   * last sync came to: a scheduler reports a `refused` or `failed` outcome as a failed run.
    */
-  attach?(scheduler: { start(): Promise<void>; refresh(): Promise<void> }): void;
+  attach?(scheduler: { start(): Promise<BundleSyncOutcome>; refresh(): Promise<BundleSyncOutcome> }): void;
 }
 
 /**
@@ -176,6 +178,17 @@ function resolveBundleTelemetry(scope: ScopeEntry): BundleStoreTelemetry | undef
  * inject it implicitly via `BundleStore` / `HiddenOpRegistry`, so the first
  * call to any meta-tool kicks off ingestion.
  */
+/** The plugin's options, parsed; a `vaultRef` that both `credentials` and `authProviders` list is refused. */
+function parsePluginOptions(options: SkilledOpenApiPluginOptionsInput): SkilledOpenApiPluginOptions {
+  const result = skilledOpenApiPluginOptionsSchema.safeParse(options);
+  if (result.success) return result.data;
+  for (const issue of result.error.issues) {
+    const listedTwice: unknown = issue.code === 'custom' ? issue.params?.['vaultRefsListedTwice'] : undefined;
+    if (Array.isArray(listedTwice)) throw new VaultRefListedTwiceError(listedTwice);
+  }
+  throw result.error;
+}
+
 @Plugin({
   name: 'skilled-openapi',
   description:
@@ -198,7 +211,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
 
   constructor(options: SkilledOpenApiPluginOptionsInput) {
     super();
-    this.options = skilledOpenApiPluginOptionsSchema.parse(options);
+    this.options = parsePluginOptions(options);
     this.warnIfInsecureConfig();
     registerSkillAuditModule();
   }
@@ -328,7 +341,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
   }
 
   static override dynamicProviders(options: SkilledOpenApiPluginOptionsInput): ProviderType[] {
-    const parsed = skilledOpenApiPluginOptionsSchema.parse(options);
+    const parsed = parsePluginOptions(options);
     // The sync services the bundle-sync factory builds. The skill catalog source waits for them through this set:
     // that factory is async, so the source can't inject the service it builds.
     const builtSyncs = new Set<BundleSyncService>();
@@ -375,8 +388,13 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
       {
         name: 'skilled-openapi:bundle-sync',
         provide: BundleSyncService,
-        inject: () => [ScopeEntry, HiddenOpRegistry, BundleStore],
-        useFactory: async (scope: ScopeEntry, hiddenOps: HiddenOpRegistry, bundleStore: BundleStore) => {
+        inject: () => [ScopeEntry, HiddenOpRegistry, BundleStore, ProviderRegistry],
+        useFactory: async (
+          scope: ScopeEntry,
+          hiddenOps: HiddenOpRegistry,
+          bundleStore: BundleStore,
+          pluginProviders: ProviderRegistry,
+        ) => {
           const logger = scope.logger.child('skilled-openapi:sync');
           // Resolve scope.skills and scope.tools lazily: this factory runs while the
           // server's plugins initialize, BEFORE the scope creates its skill and tool
@@ -391,10 +409,8 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
           if (parsed.exposeOperationsAsInternalTools) {
             opToolFactory = new OperationToolFactory({
               toolRegistry: lazyScopeRegistry<ToolRegistry>(scope, 'tools'),
-              // ScopeEntry exposes a ProviderRegistryInterface; the factory
-              // needs the concrete ProviderRegistry to construct ToolInstance.
-              // The runtime is the same class — the cast is safe by construction.
-              providers: scope.providers as unknown as ProviderRegistry,
+              // The plugin's own providers, so an operation tool resolves them as run_workflow does.
+              providers: pluginProviders,
               logger: logger.child('op-tool'),
             });
           }
@@ -413,6 +429,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
               // installed this is `undefined` and verifyBundleSignature skips
               // the counter lookup entirely.
               telemetry: resolveBundleTelemetry(scope),
+              batchListChanges: (change) => scope.batchListChanges(change),
             },
             logger,
             opToolFactory,
@@ -421,7 +438,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
             name: 'skilled-openapi',
             check: async () => {
               await sync.ensureReady();
-              return bundleHealth(sync.loadState());
+              return bundleHealth(sync.loadState(), sync.lastSyncOutcome());
             },
           });
           // Host-injected runtime deps (e.g. `@frontmcp/edge` supplies a
@@ -443,7 +460,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
           // throwing attach must not abort sync wiring.
           if (runtimeDeps?.attach) {
             try {
-              runtimeDeps.attach({ start: () => sync.ensureLoaded(), refresh: () => sync.refresh() });
+              runtimeDeps.attach({ start: () => sync.start(), refresh: () => sync.refresh() });
             } catch (e) {
               logger.warn(`runtime-deps attach threw: ${(e as Error).message}`);
             }
@@ -485,8 +502,9 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
       },
       {
         // The server's initialize instructions wait for the bundle, so they count and list its skills, and point
-        // to load_skill and search_skill rather than to skill://index.json (#1067). A skill's SKILL.md resource
-        // lists the actions the caller may run, as load_skill does.
+        // to load_skill and search_skill rather than to skill://index.json (#1067). Until a bundle loads, they and
+        // the SDK's skill surfaces say so, retryable. A skill's SKILL.md resource lists the actions the caller may
+        // run, as load_skill does.
         name: 'skilled-openapi:skill-catalog-source',
         provide: SkillCatalogSourceToken,
         inject: () => [ScopeEntry, AuthorityGuard, BundleStore, HiddenOpRegistry] as const,
@@ -495,6 +513,8 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
             ready: async () => {
               await Promise.all([...builtSyncs].map((sync) => sync.ensureReady()));
             },
+            notLoadedReason: () =>
+              [...builtSyncs].map((sync) => sync.notLoadedReason()).find((reason) => reason !== undefined),
             pointers: SKILL_TOOL_CATALOG_POINTERS,
             actions: {
               hint: SKILL_MD_ACTIONS_HINT,

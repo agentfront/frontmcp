@@ -3,6 +3,7 @@ import { hasSkillAuditFactory, setSkillAuditFactory } from '@frontmcp/sdk';
 import { executeSkillAction, type SkillActionDeps } from '../executor/execute-skill-action';
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
 import SkilledOpenApiPlugin from '../skilled-openapi.plugin';
+import { scopeHidingSkills } from './skill-filter-scope.fixture';
 
 const mockExecuteOperation = jest.fn();
 jest.mock('../executor/openapi-runtime', () => ({
@@ -51,9 +52,10 @@ function auditedDeps() {
       },
       unprotectedOps: 'allow',
     },
-    confirmAction: jest.fn(async () => undefined),
+    confirmAction: jest.fn(async () => ({ confirmation: 'confirmed' as const })),
     resolver: { resolve: jest.fn(async () => undefined) },
     guard: { check: jest.fn(async () => ({ granted: true })) } as never,
+    visibleListings: scopeHidingSkills().visibleListings,
     logger: { warn: jest.fn() } as never,
     audit: { writer: writer as never, subject: 'user-1' },
   };

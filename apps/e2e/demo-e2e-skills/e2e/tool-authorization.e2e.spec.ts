@@ -25,7 +25,7 @@ interface SkillResult {
   missingTools: string[];
   isComplete: boolean;
   warning?: string;
-  formattedContent?: string;
+  formattedContent: string;
   session?: {
     activated: boolean;
     sessionId?: string;

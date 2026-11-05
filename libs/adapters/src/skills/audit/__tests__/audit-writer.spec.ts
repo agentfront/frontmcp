@@ -242,6 +242,21 @@ describe('SkillAuditWriter', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('records the confirmation a call passes, signed and chained with the rest of the record', async () => {
+    const { writer, store } = makeWriter();
+
+    await writer.writeAuthorityPass(ctx);
+    await writer.writeHttpCallSuccess({ ...ctx, confirmation: 'confirmed' }, { status: 200, output: { id: 'inv-1' } });
+    await writer.writeHttpCallFailure({ ...ctx, confirmation: 'declined' }, { status: 0, error: 'the user declined' });
+    const all = await store.read();
+
+    expect(all.map((record) => record.confirmation)).toEqual([undefined, 'confirmed', 'declined']);
+    expect('confirmation' in all[0]).toBe(false);
+    expect(verifyChain(all, TRUSTED, defaultAuditSignatureVerifier)).toEqual({ ok: true, verified: 3 });
+    const edited = all.map((record, index) => (index === 1 ? { ...record, confirmation: 'skipped' as const } : record));
+    expect(verifyChain(edited, TRUSTED, defaultAuditSignatureVerifier)).toMatchObject({ ok: false, breakAt: 2 });
+  });
+
   it('does not produce a sequence gap when signing fails (M4 regression)', async () => {
     // Backing adapter that exposes a real `decr` for sequence rollback.
     const seqMap = new Map<string, number>();

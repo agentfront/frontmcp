@@ -16,16 +16,26 @@
  *  2. {@link CREDENTIALS_ACCESSOR} — the per-session `this.credentials` vault
  *     (local/remote auth modes). `accessor.requireConnect({ key })` reports
  *     `connected` and, when absent, returns a framework-signed `resumeUrl` we
- *     surface as the `authUrl`.
+ *     surface as the `authUrl`, or `signInRequired` for a caller that isn't
+ *     signed in.
  *
  * When NEITHER accessor is configured (public mode, no auth, or the vault
  * subsystem simply isn't enabled), the gate reports "no checker" and the stage
  * skips entirely — preserving the pre-existing call-tool behavior exactly.
+ *
+ * A client that declared URL-mode elicitation is asked to open each missing
+ * provider's connect page ({@link askToOpenConnectPages}), so the link reaches
+ * the user rather than the model.
  */
 import { AUTH_PROVIDERS_ACCESSOR, CREDENTIALS_ACCESSOR } from '@frontmcp/auth';
 import type { Token } from '@frontmcp/di';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { NormalizedToolAuthProvider } from '../../common/metadata/tool.metadata';
+import type { FrontMcpContext } from '../../context';
+import { performElicit } from '../../elicitation/helpers/elicit.helper';
+import { InputRequiredSignal, ToolCredentialsRequiredError } from '../../errors';
+import { supportsElicitation, type ClientCapabilities } from '../../notification';
 
 /** Outcome for a single required provider whose credential is unavailable. */
 export interface MissingProvider {
@@ -33,6 +43,8 @@ export interface MissingProvider {
   name: string;
   /** Best-effort connect/authorize URL to (re)authorize, if resolvable. */
   authUrl?: string;
+  /** Set when the caller has to sign in to this server before it can connect the provider. */
+  signInRequired?: true;
 }
 
 /** Result of evaluating the credential gate for a tool. */
@@ -53,7 +65,7 @@ interface AuthProvidersLike {
 
 /** Minimal shape of the wired `this.credentials` accessor we depend on. */
 interface CredentialsLike {
-  requireConnect(options: { key: string }): Promise<{ connected: boolean; resumeUrl?: string }>;
+  requireConnect(options: { key: string }): Promise<{ connected: boolean; resumeUrl?: string; signInRequired?: true }>;
 }
 
 function isAuthProvidersLike(v: unknown): v is AuthProvidersLike {
@@ -95,10 +107,8 @@ export async function evaluateToolCredentialGate(
 
   const missing: MissingProvider[] = [];
   for (const provider of required) {
-    const { available, authUrl } = await checkProvider(provider.name, authProviders, credentials);
-    if (!available) {
-      missing.push({ name: provider.name, ...(authUrl ? { authUrl } : {}) });
-    }
+    const missingProvider = await missingProviderOf(provider.name, authProviders, credentials);
+    if (missingProvider) missing.push(missingProvider);
   }
 
   return { evaluated: true, missing };
@@ -119,21 +129,21 @@ function resolveAccessor<T>(
 }
 
 /**
- * Determine availability for a single provider, preferring the documented
- * `this.authProviders` vault and falling back to the `this.credentials` vault
- * (which also yields a connect URL when absent).
+ * The provider when its credential is unavailable (undefined when available), preferring the documented
+ * `this.authProviders` vault and falling back to the `this.credentials` vault (which also yields a connect URL, or
+ * says the caller has to sign in, when absent).
  */
-async function checkProvider(
+async function missingProviderOf(
   name: string,
   authProviders: AuthProvidersLike | undefined,
   credentials: CredentialsLike | undefined,
-): Promise<{ available: boolean; authUrl?: string }> {
+): Promise<MissingProvider | undefined> {
   // 1. authProviders vault — get() triggers load; non-null ⇒ available.
   if (authProviders) {
     try {
       const resolved = await authProviders.get(name);
       if (resolved) {
-        return { available: true };
+        return undefined;
       }
     } catch {
       // Fall through to the credentials vault on resolver failure.
@@ -145,15 +155,86 @@ async function checkProvider(
     try {
       const res = await credentials.requireConnect({ key: name });
       if (res.connected) {
-        return { available: true };
+        return undefined;
       }
-      return { available: false, authUrl: res.resumeUrl };
+      return {
+        name,
+        ...(res.resumeUrl ? { authUrl: res.resumeUrl } : {}),
+        ...(res.signInRequired ? { signInRequired: true } : {}),
+      };
     } catch {
       // Resolver failure ⇒ treat as unavailable with no URL.
-      return { available: false };
+      return { name };
     }
   }
 
   // authProviders existed but returned null and no credentials fallback.
-  return { available: false };
+  return { name };
+}
+
+/**
+ * The error a call missing these credentials answers with: every missing provider id, the first connect URL (callers
+ * connect one provider at a time), and whether the caller has to sign in first.
+ */
+export function credentialsRequiredErrorOf(toolId: string, missing: MissingProvider[]): ToolCredentialsRequiredError {
+  return new ToolCredentialsRequiredError({
+    toolId,
+    providers: missing.map((provider) => provider.name),
+    authUrl: missing.find((provider) => provider.authUrl)?.authUrl,
+    signInRequired: missing.some((provider) => provider.signInRequired),
+  });
+}
+
+/** What asking the client to open a connect page needs: the call's context, and the server's elicitation setting. */
+export interface ConnectPageAsk {
+  context: FrontMcpContext | undefined;
+  getClientCapabilities: (sessionId: string) => ClientCapabilities | undefined;
+  elicitationEnabled: boolean;
+  toolId: string;
+  toolInput: unknown;
+  signal?: AbortSignal;
+}
+
+/**
+ * Ask the client to open the connect page of each missing provider (URL-mode elicitation), when the server enables
+ * elicitation, the client declared URL mode, and every missing provider has a page. True when the user accepted every
+ * page, so the gate checks the credentials again. On protocol 2026-07-28 the first ask answers the call with an
+ * `input_required` result, and the client's retry carries the answer.
+ */
+export async function askToOpenConnectPages(ask: ConnectPageAsk, missing: MissingProvider[]): Promise<boolean> {
+  const everyProviderHasPage = missing.every((provider) => provider.authUrl);
+  if (!ask.elicitationEnabled || !everyProviderHasPage || !clientTakesUrlElicitation(ask)) return false;
+
+  for (const provider of missing) {
+    try {
+      const answer = await performElicit(
+        {
+          sessionId: ask.context?.sessionId,
+          getClientCapabilities: ask.getClientCapabilities,
+          tryGetContext: () => ask.context,
+          entryName: ask.toolId,
+          entryInput: ask.toolInput,
+          elicitationEnabled: ask.elicitationEnabled,
+          signal: ask.signal,
+          inputKey: `connect-${provider.name}`,
+        },
+        `Connect ${provider.name} to continue: tool "${ask.toolId}" needs it.`,
+        z.object({}),
+        { mode: 'url', url: provider.authUrl },
+      );
+      if (answer.status !== 'accept') return false;
+    } catch (error) {
+      if (error instanceof InputRequiredSignal) throw error;
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Whether the client declared URL-mode elicitation: in this request on protocol 2026-07-28, else for its session. */
+function clientTakesUrlElicitation(ask: ConnectPageAsk): boolean {
+  const exchange = ask.context?.getMrtrExchange?.();
+  if (exchange) return exchange.supportsElicitation?.('url') === true;
+  const sessionId = ask.context?.sessionId;
+  return sessionId !== undefined && supportsElicitation(ask.getClientCapabilities(sessionId), 'url');
 }

@@ -467,6 +467,8 @@ export default class ProviderRegistry
   }
 
   private async resolveFactoryArg(t: Token, store: Map<Token, any>, scopeKey?: string): Promise<any> {
+    // A factory that injects ProviderRegistry gets the registry that builds it.
+    if (t === ProviderRegistry) return this;
     if (store.has(t)) return store.get(t);
     if (this.instances.has(t)) return this.instances.get(t);
 
@@ -1313,6 +1315,7 @@ export default class ProviderRegistry
     globalStore: ReadonlyMap<Token, unknown>,
     scopeKey: string,
   ): Promise<unknown> {
+    if (token === ProviderRegistry) return this;
     // Check stores in order: context -> global -> instances
     if (contextStore.has(token)) return contextStore.get(token);
     if (globalStore.has(token)) return globalStore.get(token);
