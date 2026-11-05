@@ -3,26 +3,26 @@
  */
 import { AuthInternalError } from '../auth-internal.error';
 import {
+  AuthFlowError,
+  AuthInvalidInputError,
+  AuthProvidersNotConfiguredError,
+  CredentialProviderAlreadyRegisteredError,
+  CredentialStorageError,
+  ElicitationSecretRequiredError,
   EncryptionContextNotSetError,
-  VaultLoadError,
-  VaultNotFoundError,
+  EncryptionKeyNotConfiguredError,
+  InMemoryStoreRequiredError,
+  NoProviderIdError,
+  OrchestratedAuthNotAvailableError,
+  OrchestratorJwksNotAvailableError,
+  ScopeDeniedError,
+  SessionIdEmptyError,
+  SessionSecretRequiredError,
+  TokenLeakDetectedError,
   TokenNotAvailableError,
   TokenStoreRequiredError,
-  NoProviderIdError,
-  TokenLeakDetectedError,
-  SessionSecretRequiredError,
-  CredentialProviderAlreadyRegisteredError,
-  AuthProvidersNotConfiguredError,
-  OrchestratedAuthNotAvailableError,
-  EncryptionKeyNotConfiguredError,
-  SessionIdEmptyError,
-  ElicitationSecretRequiredError,
-  ScopeDeniedError,
-  InMemoryStoreRequiredError,
-  OrchestratorJwksNotAvailableError,
-  AuthInvalidInputError,
-  CredentialStorageError,
-  AuthFlowError,
+  VaultLoadError,
+  VaultNotFoundError,
 } from '../auth-internal.errors';
 
 // ============================================
@@ -298,6 +298,13 @@ describe('AuthProvidersNotConfiguredError', () => {
 
   it('should have name AuthProvidersNotConfiguredError', () => {
     expect(new AuthProvidersNotConfiguredError().name).toBe('AuthProvidersNotConfiguredError');
+  });
+
+  it('names the provider a tool asked for, and where to register it', () => {
+    expect(new AuthProvidersNotConfiguredError('github').message).toBe(
+      'Auth provider "github" is not configured: this server registers no auth providers. ' +
+        'Register it in @FrontMcp({ authProvidersVault: { providers: [...] } }).',
+    );
   });
 });
 

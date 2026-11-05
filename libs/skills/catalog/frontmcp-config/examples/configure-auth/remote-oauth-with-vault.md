@@ -17,8 +17,9 @@ Configure a FrontMCP server with local OAuth orchestration of an upstream provid
 > **Two distinct subsystems — do not conflate them.** `this.orchestration` reads
 > tokens for providers declared in top-level `auth.providers` (the local-mode
 > multi-provider OAuth orchestrator). `this.authProviders` is a _separate_
-> downstream-OAuth-provider accessor whose providers are registered via
-> `@App`/`@Tool({ authProviders: [...] })`. Neither is the per-session credential
+> downstream-credential accessor whose providers are registered in
+> `@FrontMcp({ authProvidersVault: { providers } })` and named by
+> `@Tool({ authProviders: [...] })`. Neither is the per-session credential
 > vault — that is `this.credentials` (see `local-credential-vault`). This example
 > uses the orchestrator, so the provider MUST be declared in `auth.providers` or
 > `getToken('github')` has nothing to return.

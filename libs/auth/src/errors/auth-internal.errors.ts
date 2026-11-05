@@ -113,11 +113,17 @@ export class CredentialProviderAlreadyRegisteredError extends AuthInternalError 
 }
 
 /**
- * Thrown when auth providers are not configured.
+ * Thrown when a tool reads an auth provider's credential on a server that registers no auth providers.
  */
 export class AuthProvidersNotConfiguredError extends AuthInternalError {
-  constructor() {
-    super('Auth providers are not configured', 'AUTH_PROVIDERS_NOT_CONFIGURED');
+  constructor(providerName?: string) {
+    const register = 'Register it in @FrontMcp({ authProvidersVault: { providers: [...] } }).';
+    super(
+      providerName === undefined
+        ? 'Auth providers are not configured: this server registers no auth providers.'
+        : `Auth provider "${providerName}" is not configured: this server registers no auth providers. ${register}`,
+      'AUTH_PROVIDERS_NOT_CONFIGURED',
+    );
   }
 }
 

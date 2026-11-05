@@ -263,6 +263,11 @@ export class Scope extends ScopeEntry {
     // A browser has no TCP socket for Redis and no file for SQLite: refused here, before any store opens
     await refuseStoresInBrowser(this.metadata);
 
+    if (this.metadata.authProvidersVault) {
+      const { registerAuthProvidersVault } = await import('../auth/vault/auth-providers.providers.js');
+      await registerAuthProvidersVault(scopeProviders, this.metadata.authProvidersVault);
+    }
+
     const httpServing = this.directOnly ? undefined : await import('./http-scope.helper.js');
     const createPrimaryAuth = await this.primaryAuthFactory();
 

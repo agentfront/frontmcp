@@ -32,6 +32,7 @@ import BundlePushFlow from './push/bundle-push.flow';
 import { HiddenOpRegistry } from './registry/hidden-op.registry';
 import { AuthorityGuard } from './security/authority-guard';
 import { bundleSkillPolicies, SkillVisibility } from './security/skill-visibility';
+import { VaultRefListedTwiceError } from './skilled-openapi.errors';
 import { SkilledOpenApiConfig } from './skilled-openapi.symbols';
 import {
   skilledOpenApiPluginOptionsSchema,
@@ -177,6 +178,17 @@ function resolveBundleTelemetry(scope: ScopeEntry): BundleStoreTelemetry | undef
  * inject it implicitly via `BundleStore` / `HiddenOpRegistry`, so the first
  * call to any meta-tool kicks off ingestion.
  */
+/** The plugin's options, parsed; a `vaultRef` that both `credentials` and `authProviders` list is refused. */
+function parsePluginOptions(options: SkilledOpenApiPluginOptionsInput): SkilledOpenApiPluginOptions {
+  const result = skilledOpenApiPluginOptionsSchema.safeParse(options);
+  if (result.success) return result.data;
+  for (const issue of result.error.issues) {
+    const listedTwice: unknown = issue.code === 'custom' ? issue.params?.['vaultRefsListedTwice'] : undefined;
+    if (Array.isArray(listedTwice)) throw new VaultRefListedTwiceError(listedTwice);
+  }
+  throw result.error;
+}
+
 @Plugin({
   name: 'skilled-openapi',
   description:
@@ -199,7 +211,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
 
   constructor(options: SkilledOpenApiPluginOptionsInput) {
     super();
-    this.options = skilledOpenApiPluginOptionsSchema.parse(options);
+    this.options = parsePluginOptions(options);
     this.warnIfInsecureConfig();
     registerSkillAuditModule();
   }
@@ -329,7 +341,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
   }
 
   static override dynamicProviders(options: SkilledOpenApiPluginOptionsInput): ProviderType[] {
-    const parsed = skilledOpenApiPluginOptionsSchema.parse(options);
+    const parsed = parsePluginOptions(options);
     // The sync services the bundle-sync factory builds. The skill catalog source waits for them through this set:
     // that factory is async, so the source can't inject the service it builds.
     const builtSyncs = new Set<BundleSyncService>();
