@@ -315,6 +315,23 @@ describe('run_workflow', () => {
     expect(filterRuns).toHaveBeenCalledTimes(1);
   });
 
+  it('fails the workflow, without running it, when the skills:filter flow rejects', async () => {
+    const hiddenOps = new HiddenOpRegistry();
+    hiddenOps.set(buildEntry('reports', 'getAccountPlan'));
+    const { scope, filterRuns } = scopeHidingSkills();
+    filterRuns.mockRejectedValueOnce(new Error('flag service down'));
+    mockExecuteImpl = jest.fn();
+
+    const res = await runOutput(
+      makeRunWorkflowThis({ hiddenOps, scope }),
+      'return await callTool("getAccountPlan", {})',
+    );
+
+    expect(res).toMatchObject({ success: false, error: 'skills:filter rejected: flag service down' });
+    expect(mockExecuteImpl).not.toHaveBeenCalled();
+    expect(mockExecuteSkillAction).not.toHaveBeenCalled();
+  });
+
   it('callTool bridge throws for an unknown action', async () => {
     mockExecuteImpl = async (_code, ctx) => {
       await ctx.toolHandler('ghost', {});
