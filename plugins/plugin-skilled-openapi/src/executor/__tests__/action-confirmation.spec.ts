@@ -91,7 +91,9 @@ describe('askingBeforeEachCall', () => {
   it('asks about the action, its summary, method, path and input, and lets it run when the user confirms', async () => {
     const askUser = jest.fn(accepted);
 
-    await expect(asking(askUser, { entry: voidInvoice, input: { id: 'inv_1' } })).resolves.toBeUndefined();
+    await expect(asking(askUser, { entry: voidInvoice, input: { id: 'inv_1' } })).resolves.toEqual({
+      confirmation: 'confirmed',
+    });
     expect(askUser).toHaveBeenCalledWith(
       'Run voidInvoice: Void an invoice (DELETE /invoices/{id}) with {"id":"inv_1"}?',
     );
@@ -111,48 +113,53 @@ describe('askingBeforeEachCall', () => {
     ['declines', { status: 'decline' as const }],
     ['cancels', { status: 'cancel' as const }],
     ['accepts without confirming', { status: 'accept' as const, content: { confirmed: false } }],
-  ])('refuses the call when the user %s', async (_answer, answer) => {
-    const refusal = await asking(async () => answer, { entry: voidInvoice, input: { id: 'inv_1' } });
+  ])('refuses the call, as declined, when the user %s', async (_answer, answer) => {
+    const decision = await asking(async () => answer, { entry: voidInvoice, input: { id: 'inv_1' } });
 
-    expect(refusal).toBe('the user declined: voidInvoice');
+    expect(decision).toEqual({ confirmation: 'declined', refusal: 'the user declined: voidInvoice' });
   });
 
-  it('refuses the call when the user does not answer in time', async () => {
-    const refusal = await asking(
+  it('refuses the call, as unanswered, when the user does not answer in time', async () => {
+    const decision = await asking(
       async () => {
         throw new ElicitationTimeoutError('elicit-1', 300_000);
       },
       { entry: voidInvoice, input: {} },
     );
 
-    expect(refusal).toBe('the user did not answer in time: voidInvoice');
+    expect(decision).toEqual({ confirmation: 'unanswered', refusal: 'the user did not answer in time: voidInvoice' });
   });
 
   it.each([
     ['takes the elicitation fallback', new ElicitationFallbackRequired('elicit-1', 'Run?', {}, 'tool', {}, 1000)],
     ['has no elicitation support', new ElicitationNotSupportedError()],
     ['declares no elicitation capability', new MissingClientCapabilityError({ elicitation: {} }, 'no elicitation')],
-  ])('refuses, or with allow runs, a call from a client that %s', async (_client, error) => {
+  ])('refuses as unanswered, or with allow runs as skipped, a call from a client that %s', async (_client, error) => {
     const askUser: AskUser = async () => {
       throw error;
     };
     const call = { entry: voidInvoice, input: { id: 'inv_1' } };
 
-    await expect(asking(askUser, call)).resolves.toBe(
-      "the user's confirmation is needed for voidInvoice, and this client can't ask for it: it doesn't support elicitation; nothing was sent",
-    );
-    await expect(asking(askUser, call, 'allow')).resolves.toBeUndefined();
+    await expect(asking(askUser, call)).resolves.toEqual({
+      confirmation: 'unanswered',
+      refusal:
+        "the user's confirmation is needed for voidInvoice, and this client can't ask for it: it doesn't support elicitation; nothing was sent",
+    });
+    await expect(asking(askUser, call, 'allow')).resolves.toEqual({ confirmation: 'skipped' });
   });
 
   it('refuses a call on a server with elicitation disabled', async () => {
-    const refusal = await asking(
+    const decision = await asking(
       async () => {
         throw new ElicitationDisabledError();
       },
       { entry: voidInvoice, input: {} },
     );
 
-    expect(refusal).toContain("this server can't ask for it: elicitation is disabled");
+    expect(decision).toEqual({
+      confirmation: 'unanswered',
+      refusal: expect.stringContaining("this server can't ask for it: elicitation is disabled"),
+    });
   });
 
   it('rethrows what is not an answer, such as a request for input the client sends on its retry', async () => {
@@ -233,12 +240,45 @@ describe('confirmWorkflow', () => {
     const confirmation = await confirming(CLEANUP, accepted, { methods: ['DELETE'] });
     if (!('confirmAction' in confirmation)) throw new Error('the workflow was refused');
 
-    await expect(confirmation.confirmAction({ entry: voidInvoice, input: { id: 'inv_2' } })).resolves.toBeUndefined();
+    await expect(confirmation.confirmAction({ entry: voidInvoice, input: { id: 'inv_2' } })).resolves.toEqual({
+      confirmation: 'confirmed',
+    });
     await expect(
       confirmation.confirmAction({ entry: entry('dropTable', { httpMethod: 'DELETE' }), input: {} }),
-    ).resolves.toContain(
-      `write the actionId as a string, as in callTool('dropTable', …), or run it with execute_action`,
-    );
+    ).resolves.toEqual({
+      confirmation: 'unanswered',
+      refusal: expect.stringContaining(
+        `write the actionId as a string, as in callTool('dropTable', …), or run it with execute_action`,
+      ),
+    });
+  });
+
+  it("carries the workflow's answer, skipped, to the calls of the actions it would have asked about", async () => {
+    const clientWithoutElicitation: AskUser = async () => {
+      throw new ElicitationNotSupportedError();
+    };
+
+    const confirmation = await confirming(CLEANUP, clientWithoutElicitation, {
+      methods: ['DELETE'],
+      whenUnsupported: 'allow',
+    });
+    if (!('confirmAction' in confirmation)) throw new Error('the workflow was refused');
+
+    await expect(confirmation.confirmAction({ entry: voidInvoice, input: { id: 'inv_2' } })).resolves.toEqual({
+      confirmation: 'skipped',
+    });
+  });
+
+  it('refuses, as unanswered, an action that needs confirmation in a workflow that asked about none', async () => {
+    const askUser = jest.fn(accepted);
+
+    const confirmation = await confirming("return await callTool('getInvoice', {});", askUser, { methods: ['DELETE'] });
+    if (!('confirmAction' in confirmation)) throw new Error('the workflow was refused');
+
+    await expect(confirmation.confirmAction({ entry: voidInvoice, input: { id: 'inv_2' } })).resolves.toMatchObject({
+      confirmation: 'unanswered',
+    });
+    expect(askUser).not.toHaveBeenCalled();
   });
 
   it('does not ask about an action whose every listing skill the skills:filter flow hides from the caller', async () => {

@@ -28,6 +28,7 @@ const mcp = createEdgeMcp({
     trustedKeys: [JSON.parse(bindings.BUNDLE_TRUSTED_KEY)],
     credentials: { 'billing-token': bindings.BILLING_API_TOKEN },
     enableWebhook: true,
+    confirm: { methods: ['DELETE'] },
     cache: kvBundleCacheFromEnv('BUNDLE_CACHE'),
   },
 });

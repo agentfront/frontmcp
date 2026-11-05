@@ -62,7 +62,7 @@ function makeDeps(
       },
       ...(over.confirm ? { confirm: over.confirm } : {}),
     } as SkillActionDeps['config'],
-    confirmAction: over.confirmAction ?? jest.fn(async () => undefined),
+    confirmAction: over.confirmAction ?? jest.fn(async () => ({ confirmation: 'confirmed' as const })),
     resolver: { resolve: jest.fn(async () => undefined) as never },
     guard: { check: jest.fn(async () => ({ granted: over.granted ?? true, deniedBy: over.deniedBy })) } as never,
     visibleListings: over.visibleListings ?? scopeHidingSkills().visibleListings,
@@ -297,7 +297,7 @@ describe('executeSkillAction: an action the confirm option names', () => {
   });
 
   it('asks with the listing and the validated input after authorization, and sends the request once confirmed', async () => {
-    const confirmAction = jest.fn(async () => undefined);
+    const confirmAction = jest.fn(async () => ({ confirmation: 'confirmed' as const }));
     const entry = deleteThing();
 
     const res = await executeSkillAction({
@@ -321,7 +321,10 @@ describe('executeSkillAction: an action the confirm option names', () => {
     };
     const deps = makeDeps({
       confirm: DELETES,
-      confirmAction: jest.fn(async () => 'the user declined: deleteThing'),
+      confirmAction: jest.fn(async () => ({
+        confirmation: 'declined' as const,
+        refusal: 'the user declined: deleteThing',
+      })),
       audit: { writer: writer as never, subject: 'u' },
     });
 
@@ -330,10 +333,10 @@ describe('executeSkillAction: an action the confirm option names', () => {
     expect(res).toEqual({ ok: false, status: 0, error: 'the user declined: deleteThing' });
     expect(mockExecuteOperation).not.toHaveBeenCalled();
     expect(writer.writeAuthorityPass).toHaveBeenCalledTimes(1);
-    expect(writer.writeHttpCallFailure).toHaveBeenCalledWith(expect.objectContaining({ actionId: 'deleteThing' }), {
-      status: 0,
-      error: 'the user declined: deleteThing',
-    });
+    expect(writer.writeHttpCallFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ actionId: 'deleteThing', confirmation: 'declined' }),
+      { status: 0, error: 'the user declined: deleteThing' },
+    );
     expect(writer.writeHttpCallSuccess).not.toHaveBeenCalled();
   });
 
@@ -341,7 +344,7 @@ describe('executeSkillAction: an action the confirm option names', () => {
     ['the caller is denied', { granted: false, deniedBy: 'role:admin' }, { id: 7 }],
     ['the input is invalid', {}, { id: 'seven' }],
   ])('does not ask when %s', async (_case, guard, input) => {
-    const confirmAction = jest.fn(async () => undefined);
+    const confirmAction = jest.fn(async () => ({ confirmation: 'confirmed' as const }));
 
     const res = await executeSkillAction({
       listings: [deleteThing()],
@@ -356,7 +359,7 @@ describe('executeSkillAction: an action the confirm option names', () => {
   });
 
   it('does not ask for an action no rule names, nor when there is no confirm option', async () => {
-    const confirmAction = jest.fn(async () => undefined);
+    const confirmAction = jest.fn(async () => ({ confirmation: 'confirmed' as const }));
 
     await executeSkillAction({
       listings: [makeEntry()],
@@ -373,6 +376,122 @@ describe('executeSkillAction: an action the confirm option names', () => {
 
     expect(confirmAction).not.toHaveBeenCalled();
     expect(mockExecuteOperation).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('executeSkillAction: whether the audit records say the call was confirmed', () => {
+  const DELETES = { methods: ['DELETE' as const], whenUnsupported: 'refuse' as const };
+  const deleteThing = () => makeEntry({ operationId: 'deleteThing', httpMethod: 'DELETE' });
+
+  function recordingWriter() {
+    const records: Array<{ phase: string; confirmation?: string }> = [];
+    const record =
+      (phase: string) =>
+      async (ctx: { confirmation?: string }): Promise<void> => {
+        records.push({ phase, ...(ctx.confirmation ? { confirmation: ctx.confirmation } : {}) });
+      };
+    const writer = {
+      writeAuthorityPass: jest.fn(record('authority-check-pass')),
+      writeAuthorityFail: jest.fn(record('authority-check-fail')),
+      writeHttpCallSuccess: jest.fn(record('http-call-success')),
+      writeHttpCallFailure: jest.fn(record('http-call-failure')),
+    };
+    return { audit: { writer: writer as never, subject: 'u' }, records };
+  }
+
+  beforeEach(() => {
+    mockExecuteOperation.mockReset();
+    mockExecuteOperation.mockResolvedValue({ ok: true, status: 204 });
+  });
+
+  it('records not_required for an action no rule names, from the records written after the input check', async () => {
+    const { audit, records } = recordingWriter();
+
+    await executeSkillAction({
+      listings: [makeEntry()],
+      input: { id: 1 },
+      authInfo: {},
+      deps: makeDeps({ confirm: DELETES, audit }),
+    });
+
+    expect(records).toEqual([
+      { phase: 'authority-check-pass' },
+      { phase: 'http-call-success', confirmation: 'not_required' },
+    ]);
+  });
+
+  it.each([['confirmed' as const], ['skipped' as const]])(
+    "records the decision, %s, of a call that ran, on its outcome's record",
+    async (confirmation) => {
+      const { audit, records } = recordingWriter();
+
+      await executeSkillAction({
+        listings: [deleteThing()],
+        input: { id: 7 },
+        authInfo: {},
+        deps: makeDeps({ confirm: DELETES, confirmAction: async () => ({ confirmation }), audit }),
+      });
+
+      expect(records).toEqual([{ phase: 'authority-check-pass' }, { phase: 'http-call-success', confirmation }]);
+    },
+  );
+
+  it('records the decision of a call that ran and then failed', async () => {
+    mockExecuteOperation.mockResolvedValue({ ok: false, status: 500, error: 'boom' });
+    const { audit, records } = recordingWriter();
+
+    await executeSkillAction({
+      listings: [deleteThing()],
+      input: { id: 7 },
+      authInfo: {},
+      deps: makeDeps({ confirm: DELETES, audit }),
+    });
+
+    expect(records).toEqual([
+      { phase: 'authority-check-pass' },
+      { phase: 'http-call-failure', confirmation: 'confirmed' },
+    ]);
+  });
+
+  it('records unanswered for a call refused because no answer came', async () => {
+    const { audit, records } = recordingWriter();
+    const refusal = 'the user did not answer in time: deleteThing';
+
+    const res = await executeSkillAction({
+      listings: [deleteThing()],
+      input: { id: 7 },
+      authInfo: {},
+      deps: makeDeps({ confirm: DELETES, confirmAction: async () => ({ confirmation: 'unanswered', refusal }), audit }),
+    });
+
+    expect(res).toEqual({ ok: false, status: 0, error: refusal });
+    expect(records).toEqual([
+      { phase: 'authority-check-pass' },
+      { phase: 'http-call-failure', confirmation: 'unanswered' },
+    ]);
+  });
+
+  it('records no confirmation on a call that ends before it is decided', async () => {
+    const { audit, records } = recordingWriter();
+
+    await executeSkillAction({
+      listings: [deleteThing()],
+      input: { id: 'seven' },
+      authInfo: {},
+      deps: makeDeps({ confirm: DELETES, audit }),
+    });
+    await executeSkillAction({
+      listings: [deleteThing()],
+      input: { id: 7 },
+      authInfo: {},
+      deps: makeDeps({ granted: false, deniedBy: 'role:admin', confirm: DELETES, audit }),
+    });
+
+    expect(records).toEqual([
+      { phase: 'authority-check-pass' },
+      { phase: 'http-call-failure' },
+      { phase: 'authority-check-fail' },
+    ]);
   });
 });
 

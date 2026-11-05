@@ -150,6 +150,7 @@ export {
   type AuditTrustedKey,
   type SkillAuditAuthorityFailExtras,
   type SkillAuditConfig,
+  type SkillAuditConfirmation,
   type SkillAuditFailureExtras,
   type SkillAuditLogger,
   type SkillAuditMetrics,

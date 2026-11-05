@@ -251,6 +251,12 @@ class Server {}
   elicitation fallback, where the model would answer for the user.
 - The generated CLI (`frontmcp build --target cli`) asks in the terminal (`y/N`), in-process and through its daemon;
   `--yes` answers yes, and with no terminal and no `--yes` it declines. See `build-for-cli`.
+- `load_skill` marks each action that asks with `asksForConfirmation: true`.
+- The skill audit log records what the confirmation came to on each call's `http-call-*` record, as `confirmation`:
+  `not_required`, `confirmed`, `skipped`, `declined` or `unanswered`. See `skill-audit-log`.
+- On a Cloudflare Worker, `elicitation: { enabled: true }` refuses to start without a distributed store, so a managed
+  Worker's `confirm` (`createEdgeMcp({ managed: { confirm } })`) refuses the actions it names, or runs them unasked
+  with `'allow'`. See `deploy-to-cloudflare-skills-only`.
 
 ## Notes
 
