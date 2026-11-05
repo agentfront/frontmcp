@@ -76,7 +76,8 @@ export function tokenFailureOf(error: unknown): BundleTokenFailure | undefined {
   if (error instanceof SaasPullTokenRejectedError || error instanceof SaasJwksUnavailableError) {
     return error.tokenFailure;
   }
-  return error instanceof SaasPushRefusedError ? error.tokenFailure : undefined;
+  if (error instanceof SaasPushRefusedError) return error.tokenFailure;
+  return error instanceof Error && error.cause !== undefined ? tokenFailureOf(error.cause) : undefined;
 }
 
 type TokenVerdict =
@@ -122,6 +123,7 @@ function isUsableSigningKey(key: unknown): boolean {
   const jwk = key as Record<string, unknown>;
   const members = typeof jwk['kty'] === 'string' ? PUBLIC_KEY_MEMBERS.get(jwk['kty']) : undefined;
   if (!members || (jwk['use'] !== undefined && jwk['use'] !== 'sig')) return false;
+  if (Array.isArray(jwk['key_ops']) && !jwk['key_ops'].includes('verify')) return false;
   return members.every((m) => typeof jwk[m] === 'string' && jwk[m] !== '');
 }
 
