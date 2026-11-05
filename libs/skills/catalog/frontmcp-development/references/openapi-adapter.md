@@ -148,7 +148,8 @@ Resolution order: `securityResolver` → `authProviderMapper` → `staticAuth` (
 The operations of `@frontmcp/plugin-skilled-openapi` name their credential by their bundle auth binding's `vaultRef`,
 not by security scheme. For a binding that sends each caller's own credential, its `authProviders` option maps the
 `vaultRef` to the auth provider the caller connected (`authProviders: { 'billing-token': 'billing' }`), read from
-`this.authProviders`, else `this.credentials`; a caller who hasn't connected it gets `-32001` with the connect URL.
+`this.authProviders`, else `this.credentials`; a caller who hasn't connected it gets `-32001` with the connect URL in
+the error's data (its message names the provider, not the URL).
 A `vaultRef` listed in both `credentials` and `authProviders` is refused at startup (`VaultRefListedTwiceError`).
 A `SkilledOpenApiCredentialResolver` is told the caller as `opts.authInfo`, to pick a per-tenant credential. The
 nearest one, in `init({ providers })`, the `@App` that installs the plugin or `@FrontMcp({ providers })`, answers

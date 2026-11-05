@@ -53,7 +53,7 @@ test.describe("a binding that sends the caller's own credential", () => {
     expect(result.isError).toBe(true);
     expect(result.error?.code).toBe(-32001);
     expect(result.error?.message).toContain(
-      `sends the caller's own "billing" credential, which this caller hasn't connected`,
+      "requires credentials for billing which are not connected for this session. Connect billing to continue: open the link in this error's data (authUrl).",
     );
     expect(result.error?.message).not.toContain('/oauth/connect');
     expect(result.error?.data).toMatchObject({ tool: 'run_workflow', providers: ['billing'] });

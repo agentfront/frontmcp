@@ -37,6 +37,7 @@ class CallAcmeTool extends ToolContext {
     if (!cred) {
       // Not connected — hand the agent a framework-signed resume URL so the
       // user can connect it mid-session (verified server-side, short-lived).
+      // Empty for an anonymous caller (res.signInRequired): it signs in first.
       const res = await this.credentials.requireConnect({ key: 'acme' });
       if (!res.connected) return { connected: false, connectUrl: res.resumeUrl };
     }

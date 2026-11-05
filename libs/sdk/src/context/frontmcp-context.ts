@@ -58,12 +58,15 @@ export interface MrtrExchangeRef {
   /** Whether the client declared support for elicitation in this request. */
   supportsElicitation?(mode?: 'form' | 'url'): boolean;
 
-  resolveElicitation(pending: {
-    message: string;
-    requestedSchema: Record<string, unknown>;
-    mode?: 'form' | 'url';
-    url?: string;
-  }): ElicitResult<unknown>;
+  resolveElicitation(
+    pending: {
+      message: string;
+      requestedSchema: Record<string, unknown>;
+      mode?: 'form' | 'url';
+      url?: string;
+    },
+    inputKey?: string,
+  ): ElicitResult<unknown>;
 
   resolveSampling(pending: {
     messages: unknown[];

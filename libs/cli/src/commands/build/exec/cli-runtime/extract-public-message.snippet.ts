@@ -1,5 +1,5 @@
 /**
- * CLI-bundle source for `_extractPublicMessage` / `_exitWithError`.
+ * CLI-bundle source for `_extractPublicMessage` / `_exitWithError` / `_connectHint`.
  *
  * The SEA CLI bundle has to be self-contained — it can't reach into
  * `@frontmcp/sdk` at runtime — so we duplicate the SDK's
@@ -49,6 +49,17 @@ function _extractPublicMessageImpl(err, visited) {
 function _exitWithError(err, code) {
   var msg = _extractPublicMessage(err);
   console.error('Error: ' + msg);
+  var connectHint = _connectHint(err);
+  if (connectHint) console.error(connectHint);
   process.exitCode = code || 1;
+}
+// A tool needing a credential the caller hasn't connected keeps its connect link in the error's data, not its message.
+function _connectHint(err) {
+  var data = err && err.data;
+  if (!data || !Array.isArray(data.providers)) return '';
+  var providers = data.providers.join(', ');
+  if (data.authUrl) return 'Connect ' + providers + ' at: ' + data.authUrl;
+  if (data.signInRequired) return 'Sign in to the server first, then connect ' + providers + '.';
+  return '';
 }
 `.trim();

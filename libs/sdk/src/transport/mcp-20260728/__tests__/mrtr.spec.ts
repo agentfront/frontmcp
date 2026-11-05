@@ -165,6 +165,29 @@ describe('MrtrExchange — elicitation', () => {
   });
 });
 
+describe('MrtrExchange — a named elicitation', () => {
+  it('asks under the name it is given', () => {
+    const signal = capture(() =>
+      exchange({ clientCapabilities: ELICITATION_CAPABLE }).resolveElicitation(PENDING, 'connect-github'),
+    );
+
+    expect(Object.keys(signal.inputRequests)).toEqual(['connect-github']);
+  });
+
+  it('leaves the numbered keys of the other questions as they are, asked or not', () => {
+    const answers = {
+      'connect-github': { action: 'accept' },
+      'elicitation-1': { action: 'accept', content: { confirmed: true } },
+    };
+    const askedFirst = exchange({ clientCapabilities: ELICITATION_CAPABLE, inputResponses: answers });
+    const notAsked = exchange({ clientCapabilities: ELICITATION_CAPABLE, inputResponses: answers });
+
+    expect(askedFirst.resolveElicitation(PENDING, 'connect-github')).toEqual({ status: 'accept' });
+    expect(askedFirst.resolveElicitation(PENDING)).toEqual({ status: 'accept', content: { confirmed: true } });
+    expect(notAsked.resolveElicitation(PENDING)).toEqual({ status: 'accept', content: { confirmed: true } });
+  });
+});
+
 describe('MrtrExchange — sampling', () => {
   it('raises a sampling/createMessage input request', () => {
     const signal = capture(() => exchange({ clientCapabilities: SAMPLING_CAPABLE }).resolveSampling(SAMPLE));

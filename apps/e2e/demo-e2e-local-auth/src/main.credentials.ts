@@ -11,7 +11,8 @@
  * The persisted credential is read back by the `read-credential` tool via
  * `this.credentials.get('acme')` over a real authenticated session. A sign-in
  * with a `sk-test-no-credential-…` key stores no credential, so that caller has
- * no vault until a mid-session connect creates one. No PII — synthetic secrets only.
+ * no vault until a mid-session connect creates one. `ALLOW_ANONYMOUS=true` lets a
+ * caller without a sign-in take an anonymous token. No PII — synthetic secrets only.
  */
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 
@@ -32,11 +33,12 @@ const NO_CREDENTIAL_KEY_PREFIX = 'sk-test-no-credential-';
   apps: [CredentialsApp],
   logging: { level: LogLevel.Warn },
   http: { port },
+  elicitation: { enabled: true },
   auth: {
     mode: 'local',
     // The e2e specs sign in with ad-hoc client ids that aren't registered.
     requireRegisteredClients: false,
-    allowDefaultPublic: false,
+    allowDefaultPublic: process.env['ALLOW_ANONYMOUS'] === 'true',
     anonymousScopes: ['anonymous'],
     login: {
       title: 'Sign in with your API key',

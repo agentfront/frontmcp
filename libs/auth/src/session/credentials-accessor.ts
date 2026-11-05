@@ -31,8 +31,13 @@ export interface CredentialNotConnected {
   connected: false;
   /** The credential key that is missing. */
   key: string;
-  /** Framework-signed, short-lived URL that opens the add-credential page. */
+  /**
+   * Framework-signed, short-lived URL that opens the add-credential page. Empty when `signInRequired` is set: no
+   * connect link works before the caller signs in.
+   */
   resumeUrl: string;
+  /** Set when the caller isn't signed in: it signs in to this server first, then connects the credential. */
+  signInRequired?: true;
   /** Human-readable hint for the agent/user. */
   message: string;
 }
@@ -100,7 +105,8 @@ export interface CredentialsAccessor {
 
   /**
    * Resolve a credential, returning a framework-signed resume URL when it is not
-   * connected so the caller can prompt the user to connect it mid-session.
+   * connected so the caller can prompt the user to connect it mid-session. An
+   * anonymous caller gets `signInRequired` and no URL instead.
    */
   requireConnect(options: RequireConnectOptions): Promise<RequireConnectResult>;
 }
