@@ -327,7 +327,8 @@ describe('run_workflow', () => {
       'return await callTool("getAccountPlan", {})',
     );
 
-    expect(res).toMatchObject({ success: false, error: 'skills:filter rejected: flag service down' });
+    expect(res).toMatchObject({ success: false, error: 'the skills:filter flow failed, so the workflow did not run' });
+    expect(JSON.stringify(res)).not.toContain('flag service down');
     expect(mockExecuteImpl).not.toHaveBeenCalled();
     expect(mockExecuteSkillAction).not.toHaveBeenCalled();
   });
