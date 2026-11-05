@@ -1,14 +1,14 @@
 /**
  * A plugin declaring `oncePerServer` refuses a second install in the same server.
  *
- * A plugins list keeps one entry per plugin class, so listing a plugin twice dropped the first entry
- * without a word; and two lists of one server (the server's and an app's, or two apps') installed two
- * instances that registered the same providers, tools and skills over each other.
+ * Two lists of one server (the server's and an app's, or two apps') installed two instances that
+ * registered the same providers, tools and skills over each other. One list that names any plugin
+ * twice fails with DuplicatePluginEntryError instead; a oncePerServer plugin keeps its own error.
  */
 import 'reflect-metadata';
 
 import { App, DynamicPlugin, LogLevel, Plugin, Tool, ToolContext } from '../../common';
-import { DuplicatePluginError } from '../../errors';
+import { DuplicatePluginEntryError, DuplicatePluginError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 
 const REASON = 'One catalog can hold several sources.';
@@ -110,12 +110,12 @@ describe('PluginRegistry — a plugin installed once per server (oncePerServer)'
     await Promise.all([first.dispose(), second.dispose()]);
   });
 
-  it('still starts a server that lists twice a plugin without oncePerServer', async () => {
-    const server = await startServer({
+  it('reports a plugin without oncePerServer listed twice as a duplicate entry, not as a second install', async () => {
+    const started = startServer({
       plugins: [CounterPlugin.init({ source: 'a' }), CounterPlugin.init({ source: 'b' })],
     });
 
-    expect((await server.listTools()).tools).toEqual([]);
-    await server.dispose();
+    await expect(started).rejects.toThrow(DuplicatePluginEntryError);
+    await expect(started).rejects.not.toThrow(DuplicatePluginError);
   });
 });

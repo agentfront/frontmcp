@@ -93,6 +93,7 @@
   "DidHookOf": "function",
   "DistributedSemaphore": "class",
   "DuplicateAppIdError": "class",
+  "DuplicatePluginEntryError": "class",
   "DuplicatePluginError": "class",
   "Duty": "function",
   "DutyNameConflictError": "class",

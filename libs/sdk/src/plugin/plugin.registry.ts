@@ -24,6 +24,7 @@ import { initOptionsOf } from '../common/dynamic/dynamic.plugin';
 import { collectDynamicProviders, collectDynamicTools, dedupePluginProviders } from '../common/dynamic/dynamic.utils';
 import { installContextExtensions } from '../context/context-extension';
 import {
+  DuplicatePluginEntryError,
   DuplicatePluginError,
   InvalidPluginScopeError,
   InvalidRegistryKindError,
@@ -173,11 +174,17 @@ export default class PluginRegistry
     const tokens = new Set<Token>();
     const defs = new Map<Token, PluginRecord>();
     const graph = new Map<Token, Set<Token>>();
+    const entryNumbers = new Map<Token, number>();
 
-    for (const raw of list) {
+    for (const [index, raw] of list.entries()) {
       const rec = normalizePlugin(raw);
       this.claimOncePerServer(rec.metadata);
       const provide = rec.provide;
+      const firstEntryNumber = entryNumbers.get(provide);
+      if (firstEntryNumber !== undefined) {
+        throw new DuplicatePluginEntryError(rec.metadata.name ?? tokenName(provide), firstEntryNumber, index + 1);
+      }
+      entryNumbers.set(provide, index + 1);
       tokens.add(provide);
       defs.set(provide, rec);
       graph.set(provide, new Set());

@@ -41,3 +41,16 @@ export class DuplicatePluginError extends PublicMcpError {
     );
   }
 }
+
+/** Thrown at startup when one plugins list names a plugin twice, which would install only its last entry. */
+export class DuplicatePluginEntryError extends PublicMcpError {
+  constructor(pluginName: string, firstEntry: number, secondEntry: number) {
+    super(
+      `Plugin "${pluginName}" is listed twice in one plugins list (entries ${firstEntry} and ${secondEntry}), and ` +
+        'only one entry could be installed. List it once, with all its options in that entry, or install the other ' +
+        'configuration on an @App of its own.',
+      'DUPLICATE_PLUGIN_ENTRY',
+      500,
+    );
+  }
+}

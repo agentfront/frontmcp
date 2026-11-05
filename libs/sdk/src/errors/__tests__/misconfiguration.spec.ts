@@ -1,4 +1,5 @@
 import {
+  DuplicatePluginEntryError,
   DuplicatePluginError,
   JwtSecretRequiredError,
   SessionSecretRequiredError,
@@ -43,6 +44,12 @@ describe('misconfiguration classification (#646)', () => {
     const found = findMisconfiguration(new DuplicatePluginError('catalog', 'One catalog holds every source.'));
     expect(found?.code).toBe('DUPLICATE_PLUGIN');
     expect(found?.remedy).toContain('Install it once');
+  });
+
+  it('recognizes a plugin listed twice in one plugins list', () => {
+    const found = findMisconfiguration(new DuplicatePluginEntryError('ledger', 1, 2));
+    expect(found?.code).toBe('DUPLICATE_PLUGIN_ENTRY');
+    expect(found?.remedy).toContain('List it once with all its options');
   });
 
   it('maps a ZodError to CONFIG_INVALID', () => {

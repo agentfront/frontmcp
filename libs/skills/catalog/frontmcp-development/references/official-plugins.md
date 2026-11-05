@@ -66,6 +66,8 @@ class MyApp {}
 class MyServer {}
 ```
 
+List each plugin once per `plugins` list. Two entries of one plugin in the same list (the class twice, or two `init()` calls) fail at startup with `DuplicatePluginEntryError` (code `DUPLICATE_PLUGIN_ENTRY`), naming the plugin and both entries; up to 1.11.0 only the last entry was installed. Put all its options in one `init()`, or install each configuration on its own `@App` (see `create-plugin`).
+
 ---
 
 ## 1. CodeCall Plugin (`@frontmcp/plugin-codecall`)
