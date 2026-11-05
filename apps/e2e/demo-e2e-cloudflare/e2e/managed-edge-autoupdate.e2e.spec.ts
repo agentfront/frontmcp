@@ -1,5 +1,5 @@
 // A managed @frontmcp/edge Worker in workerd: pull over https, Cron refresh (also as an isolate's first event), token
-// rejection, workflows and pushes.
+// rejection, workflows and pushes, older ones refused.
 import { base64urlEncode, randomBytes } from '@frontmcp/utils';
 
 import {
@@ -187,6 +187,21 @@ describe('a managed edge Worker on workerd', () => {
       expect(notBundle.status).toBe(400);
       expect(await notBundle.json()).toMatchObject({ error: 'invalid_bundle' });
       expect(await servedSkills()).toEqual(['invoices']);
+    });
+
+    it('is refused when it is older than the bundle being served, though signed: KV keeps the served one', async () => {
+      const response = await worker.push(
+        `Bearer ${await issuer.pushToken()}`,
+        signer.sign(billingBundle('4.0.0', ['invoices', 'refunds', 'reports'])),
+      );
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        error: 'bundle_outdated',
+        error_description: expect.stringContaining('older than the served bundle e2e:managed-billing@5.0.0'),
+      });
+      expect(await servedSkills()).toEqual(['invoices']);
+      expect(await worker.cachedBundleVersion()).toBe('5.0.0');
     });
   });
 });

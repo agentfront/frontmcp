@@ -35,6 +35,8 @@ export interface ManagedEdgeOptions {
   pollIntervalMs?: number;
   /** Also take bundles the bundle server pushes, at `POST /__skilled_openapi/push`; see the README for the request. */
   enableWebhook?: boolean;
+  /** Apply a pulled or pushed bundle older than the one being served. Default false: bundles only move forward. */
+  allowRollback?: boolean;
   /** Require a signed bundle. Default true. */
   requireSignature?: boolean;
   /** Trusted public keys for bundle signature verification. */
@@ -80,6 +82,7 @@ export function buildManagedOpenApiPluginOptions(managed: ManagedEdgeOptions): R
   };
   if (managed.pollIntervalMs !== undefined) source['pollIntervalMs'] = managed.pollIntervalMs;
   if (managed.enableWebhook !== undefined) source['enableWebhook'] = managed.enableWebhook;
+  if (managed.allowRollback !== undefined) source['allowRollback'] = managed.allowRollback;
 
   const options: Record<string, unknown> = { source };
   if (managed.requireSignature !== undefined) options['requireSignature'] = managed.requireSignature;

@@ -29,6 +29,7 @@ export {
   type BundleSwapListener,
 } from './bundle/bundle.store';
 export { diffBundles, formatDiffSummary, type BundleDiff } from './bundle/bundle-diff';
+export { compareBundleVersions } from './bundle/bundle-version';
 
 // Dependency resolution
 export {

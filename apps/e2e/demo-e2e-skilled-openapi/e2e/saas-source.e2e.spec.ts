@@ -1,5 +1,6 @@
 // Scenarios B2 B3 B4 J3: the bundle pulled over https from a SaaS bundle server, with a pull token checked against the
-// issuer's JWKS: the startup pull, new versions applied by polling, refused tokens and bundles, the cache, redirects.
+// issuer's JWKS: the startup pull, new versions applied by polling, refused tokens, bundles and older versions, the
+// cache, redirects.
 import type { ResolvedBundle } from '@frontmcp/adapters/skills';
 import { expect, test, type McpTestClient, type ServerFixture } from '@frontmcp/testing';
 import { chmod, fileExists, pathJoin, readFile } from '@frontmcp/utils';
@@ -267,6 +268,22 @@ test.describe('a bundle pulled from the bundle server', () => {
     expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
     expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
     expect(await cachedBundleVersion(env)).not.toBe('4.0.0');
+  });
+
+  test('does not apply an older signed version on a poll: the version served stays, and stays cached', async ({
+    mcp,
+    server,
+  }) => {
+    bundleServer.published = environment.sign(billingBundle('1.0.0', V1_SKILLS));
+
+    await waitForLog(
+      server,
+      '[bundle-sync] bundle e2e:billing@1.0.0 not applied: older than the served bundle e2e:billing@2.0.0',
+    );
+
+    expect(await servedSkills(mcp)).toEqual({ ids: ['invoices', 'refunds'], versions: ['2.0.0'] });
+    expect(await runWorkflow(mcp, CREATE_INVOICE)).toMatchObject({ success: true });
+    expect(await cachedBundleVersion(env)).toBe('2.0.0');
   });
 });
 

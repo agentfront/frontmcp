@@ -129,6 +129,15 @@ when it is the first event an isolate gets (it starts the bundle sync, whose
 first pull is the run's pull). The cache only ever holds a bundle the Worker
 applied: one that fails its signature or schema check is not applied and not
 kept, so a cold start that can't pull serves the last bundle applied.
+Bundles only move forward: a pulled or pushed bundle older than the one the
+isolate serves is not applied and not kept (logged as `[bundle-sync] bundle
+<id>@<version> not applied: older than the served bundle ...`), so a validly
+signed old bundle can't roll the Worker back. Two semver versions compare by
+semver; the same version (re-signed), or versions that aren't both semver,
+compare by `generatedAt`. To roll back, publish the earlier content under a
+newer version, or set `managed.allowRollback: true`. An isolate that starts
+has no bundle to compare with: it serves what it pulls, or the KV cache when
+the pull fails.
 A `run_workflow` already running when the new bundle is applied finishes on the operations of the bundle it started on.
 Managed mode runs on `@frontmcp/plugin-skilled-openapi`, which `@frontmcp/edge` depends on. When the boot pull fails and the KV cache is empty, the error says no bundle is available in the injected bundle cache (no file path), and `search_skill`, `load_skill` and `run_workflow` answer `No skill bundle is loaded: <that reason>` (code `SKILL_BUNDLE_NOT_LOADED`) until a Cron refresh loads a bundle.
 Its `outbound.egressProxy` option needs Node.js (undici's `ProxyAgent`); on a
@@ -173,6 +182,7 @@ HTTP flow). The request:
 | `400`  | `invalid_bundle`: the body is not a bundle                                                 |
 | `401`  | `invalid_token`, with `WWW-Authenticate: Bearer error="invalid_token"`                     |
 | `409`  | `push_replayed`: a push already used this token's `jti`                                    |
+| `409`  | `bundle_outdated`: older than the bundle being served, which stays                         |
 | `422`  | `bundle_not_applied`: the signature or the bundle's checks failed; the served bundle stays |
 | `503`  | `temporarily_unavailable`: the JWKS could not be read                                      |
 
