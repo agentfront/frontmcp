@@ -320,8 +320,8 @@ names only the `vaultRef`, and the server decides where its credential comes fro
   caller who isn't signed in gets `data.signInRequired: true` and no `authUrl`, since no link works before sign-in.
   Nothing is sent to the API.
 - A mapped `vaultRef` never falls back to `credentials`, to a resolver, or to another caller's credential. A
-  `vaultRef` listed in both `credentials` and `authProviders` is refused at startup with `VaultRefListedTwiceError`:
-  keep each one in one of the two.
+  `vaultRef` listed in both `credentials` and `authProviders` is refused at startup with `VaultRefListedTwiceError`,
+  and `skilledOpenApiPluginOptionsSchema` refuses it too: keep each one in one of the two.
 - The error ends a `run_workflow` run even when the script passes `{ throwOnError: false }`, since the script can't
   fix it. From `this.callTool()`, the operation tool throws it, so your tool's call fails with it unless you catch it.
   `execute_action` raises it as it comes from the operation tool, whose name is its `tool` (`execute_action` with
