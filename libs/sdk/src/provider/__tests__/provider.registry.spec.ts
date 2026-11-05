@@ -249,6 +249,43 @@ describe('ProviderRegistry', () => {
       expect(dependentInstance.testService).toBeInstanceOf(TestService);
     });
 
+    describe('a factory that injects ProviderRegistry', () => {
+      const ownRegistryProvider = (scope: ProviderScope) => ({
+        name: 'OwnRegistry',
+        provide: FACTORY_TOKEN,
+        scope,
+        inject: () => [ProviderRegistry] as const,
+        useFactory: (own: ProviderRegistry) => ({ own }),
+      });
+
+      async function childOf(parent: ProviderRegistry, scope: ProviderScope): Promise<ProviderRegistry> {
+        const child = new ProviderRegistry([ownRegistryProvider(scope)], parent);
+        await child.ready;
+        return child;
+      }
+
+      it('gets the registry that declares it, which resolves through its parents', async () => {
+        const parent = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'from parent' })]);
+        await parent.ready;
+        const child = await childOf(parent, ProviderScope.GLOBAL);
+
+        const { own } = child.get<{ own: ProviderRegistry }>(FACTORY_TOKEN);
+
+        expect(own).toBe(child);
+        expect(own.get(TEST_TOKEN)).toEqual({ name: 'from parent' });
+      });
+
+      it('gets the registry that builds it when it is CONTEXT-scoped', async () => {
+        const parent = new ProviderRegistry([]);
+        await parent.ready;
+        const child = await childOf(parent, ProviderScope.CONTEXT);
+
+        const views = await child.buildViews('own-registry-session');
+
+        expect((views.context.get(FACTORY_TOKEN) as { own: ProviderRegistry }).own).toBe(child);
+      });
+    });
+
     it('disposes the registries built below it, each once (#821)', async () => {
       const parent = new ProviderRegistry([createValueProvider(TEST_TOKEN, { name: 'from parent' })]);
       const child = new ProviderRegistry([], parent);

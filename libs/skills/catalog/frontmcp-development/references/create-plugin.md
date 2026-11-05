@@ -539,6 +539,20 @@ An app that does not install the plugin does not get its providers: there, `this
 
 Because the nearest definition wins, a provider the plugin registers under a public token hides the one the app or the server declares under that token. For a default the user may replace, register the default under a token of the plugin's own and resolve the public one first: `this.tryGet(PublicToken) ?? this.get(DefaultToken)`. `@frontmcp/plugin-skilled-openapi` does this for `SkilledOpenApiCredentialResolver`.
 
+A provider factory that injects `ProviderRegistry` gets the registry that builds it, which for a GLOBAL provider is the one that declares it: for a plugin's provider, the plugin's own. A tool the plugin builds at runtime on that registry, `new ToolInstance(record, providers, owner)`, resolves `this.get()` and `this.tryGet()` as the plugin's tools do: the plugin's providers, then the app's that installs it, then the server's. `@frontmcp/plugin-skilled-openapi` builds its operation tools this way:
+
+```typescript
+import { ProviderRegistry } from '@frontmcp/sdk';
+
+static override dynamicProviders = (options: MyPluginOptions) => [
+  {
+    provide: RuntimeTools,
+    inject: () => [ProviderRegistry] as const,
+    useFactory: (pluginProviders: ProviderRegistry) => new RuntimeTools(pluginProviders, options),
+  },
+];
+```
+
 ### A plugin that runs once per server
 
 A plugin whose tools, skills or providers are the server's, such as `@frontmcp/plugin-skilled-openapi` with its four meta-tools, can't run twice in one server. Declare it with `oncePerServer`, giving the reason:

@@ -263,9 +263,8 @@ request whose secret doesn't resolve fails, and isn't sent. `authInfo` is the ca
 `user` claims and `sessionId`), so a resolver that serves several tenants can pick each one's credential, as above. A
 resolver that caches credentials must key its cache by the caller too.
 
-An operation tool, which `execute_action` and your own tools' `this.callTool()` run, uses the resolver the server's
-providers declare. When the plugin is installed in an `@App`, declare it in `init({ providers })` or in
-`@FrontMcp({ providers })` for those calls: one in `@App({ providers })` reaches `run_workflow` only.
+`run_workflow`, `execute_action` and the operation tools your own tools call with `this.callTool()` all use the same
+resolver, wherever it is declared.
 
 Up to 1.11.0 a resolver declared in `@FrontMcp({ providers })` or `@App({ providers })` was ignored, and the built-in
 one kept answering: only `init({ providers })` replaced it. It was told only `bundleId`, not the caller.
