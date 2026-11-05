@@ -47,6 +47,14 @@ const routes: HttpRouteConfig[] = [
     },
   },
   {
+    method: 'POST',
+    path: '/body-bytes',
+    handler: (req: ServerRequest, res: ServerResponse) => {
+      const keepingByteOrderMark = new TextDecoder('utf-8', { ignoreBOM: true });
+      res.status(200).json({ received: keepingByteOrderMark.decode(req.bodyBytes), parsed: req.body });
+    },
+  },
+  {
     method: 'GET',
     path: '/page',
     handler: (_req: ServerRequest, res: ServerResponse) => {
@@ -127,6 +135,21 @@ describe('createFetchHandler() with http.routes (#819)', () => {
     expect(accepted.status).toBe(200);
     await expect(accepted.json()).resolves.toEqual({ connected: true });
     expect(refused.status).toBe(400);
+  });
+
+  it('hands a POST route the bytes of its body as received, not a re-serialization of the parsed JSON', async () => {
+    const handler = await fetchHandler();
+    const sent = '\ufeff{ "secret":  "caf\u00e9" }\n';
+
+    const response = await handler(
+      new Request('http://localhost/body-bytes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: new TextEncoder().encode(sent),
+      }),
+    );
+
+    await expect(response.json()).resolves.toEqual({ received: sent, parsed: { secret: 'caf\u00e9' } });
   });
 
   it('keeps the headers and body the handler wrote', async () => {

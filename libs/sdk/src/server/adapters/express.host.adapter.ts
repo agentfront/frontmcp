@@ -32,7 +32,7 @@ import {
   listenOwnerOnly,
 } from '../security/unix-socket-guard';
 import { HostServerAdapter } from './base.host.adapter';
-import { utf8JsonParser } from './utf8-json.parser';
+import { keepBodyBytes, utf8JsonParser } from './utf8-json.parser';
 
 const SERVER_DRAIN_MS = 5_000;
 
@@ -169,9 +169,9 @@ export class ExpressHostAdapter extends HostServerAdapter {
       headerContains(req, 'application/x-www-form-urlencoded');
     const isJson = (req: http.IncomingMessage): boolean =>
       headerContains(req, 'application/json') && !isUrlencoded(req);
-    this.app.use(express.urlencoded({ extended: true, limit: formLimit, type: isUrlencoded }));
+    this.app.use(express.urlencoded({ extended: true, limit: formLimit, type: isUrlencoded, verify: keepBodyBytes }));
     this.app.use(utf8JsonParser(jsonLimit));
-    this.app.use(express.json({ limit: jsonLimit, type: isJson }));
+    this.app.use(express.json({ limit: jsonLimit, type: isJson, verify: keepBodyBytes }));
 
     // Translate body-parser's `entity.too.large` (raised when a request body
     // exceeds the configured `limit`) into a structured JSON-RPC 413 response

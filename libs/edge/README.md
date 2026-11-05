@@ -138,6 +138,7 @@ crons = ["*/5 * * * *"]
 | `expectedAudience`, `jwksUrl`, `expectedIssuer`                     | How the bundle server's tokens are verified                                                    |
 | `cache`                                                             | Keeps the last bundle applied: `kvBundleCacheFromEnv('BINDING')`, or a store of your own       |
 | `enableWebhook`                                                     | Also take bundles pushed to `POST /__skilled_openapi/push`, as below                           |
+| `requirePushBodyDigest`                                             | Refuse a push token without a `body_sha256` claim, as below. Default `false`                   |
 | `pushReplay`                                                        | Where pushed tokens' `jti`s are kept: `{ binding }` (default `FRONTMCP_PUSH_REPLAY`), as below |
 | `allowRollback`                                                     | Apply a pulled or pushed bundle older than the one being served, as below. Default `false`     |
 | `requireSignature`, `trustedKeys`, `dev`, `credentials`, `outbound` | Passed to the Skilled OpenAPI plugin. `dev` skips signature checks: never use it in production |
@@ -171,6 +172,7 @@ Content-Type: application/json
 ```
 
 - **The token** is checked as `authToken` is (signed by a key at `jwksUrl`, `iss` equal to `expectedIssuer`, `aud` including `expectedAudience`, not expired). It must also carry a `jti` of 8 or more characters that no push used, and an `iat` within five minutes, so the pull token, issued long before, can't push.
+- **The token's `body_sha256` claim** binds it to the body: the base64url SHA-256, without padding, of the exact bytes of the request body (not the bundle's `integrity.digest`). The Worker hashes the bytes it received; any other body answers `401`, and the log says `push refused (body_mismatch)`. The refused token's `jti` stays unused, so the push it was issued for still applies. Without the claim, a token captured within its five minutes could carry any other bundle the bundle server signed for this Worker. A token without it is accepted, with one warning per isolate, so a bundle server that doesn't set it yet keeps working; `requirePushBodyDigest: true` refuses it. `pushBodyDigest(body)` and `PUSH_BODY_DIGEST_CLAIM` from `@frontmcp/adapters/skills` compute the claim for a sender.
 - **The body** is the bundle as JSON, checked as a pulled bundle is: its schema, then its signature against `trustedKeys` (unless `requireSignature: false`).
 - **It is applied**, unless it is older than the bundle being served, after the first pull and after any bundle already queued, so a push and a Cron run never apply at once, and then kept in `cache`.
 

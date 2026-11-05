@@ -22,6 +22,7 @@ import {
   httpRespond,
   type FlowPlan,
   type FlowRunOptions,
+  type ServerRequest,
 } from '@frontmcp/sdk';
 
 import { BundleSyncService } from '../sync/bundle-sync.service';
@@ -50,6 +51,8 @@ declare global {
   }
 }
 
+const EMPTY_BODY = new Uint8Array();
+
 const name = 'skilled-openapi:bundle-push' as const;
 const { Stage } = FlowHooksOf(name);
 
@@ -65,9 +68,10 @@ function invalidToken(description: string) {
 }
 
 /**
- * `POST /__skilled_openapi/push`: a bundle the SaaS pushes. Its token passes the pull token's checks and the replay
- * guard, the body passes the checks a pulled bundle passes (schema, signature when required, not older than the served
- * bundle), and it is applied after the bundles already queued, then kept as the last good bundle.
+ * `POST /__skilled_openapi/push`: a bundle the SaaS pushes. Its token passes the pull token's checks, is checked
+ * against the exact bytes of the body (its `body_sha256` claim) and passes the replay guard; the body passes the checks
+ * a pulled bundle passes (schema, signature when required, not older than the served bundle), and it is applied after
+ * the bundles already queued, then kept as the last good bundle.
  */
 @Flow({
   name,
@@ -94,12 +98,13 @@ export default class BundlePushFlow extends FlowBase<typeof name> {
   async verifyPushToken() {
     const receiver = this.get(BundleSyncService).pushReceiver;
     if (!receiver) return this.next();
-    const token = extractBearerToken(this.rawInput.request.headers['authorization'] as string | undefined);
+    const { headers, bodyBytes } = this.rawInput.request as ServerRequest;
+    const token = extractBearerToken(headers['authorization']);
     if (!token) return this.respond(invalidToken('the push carries no bearer token'));
 
     let refused: SaasPushRefusedError | undefined;
     try {
-      await receiver.verifyPushToken(token);
+      await receiver.verifyPushToken(token, bodyBytes ?? EMPTY_BODY);
     } catch (error) {
       if (!(error instanceof SaasPushRefusedError)) {
         const tokenFailure = tokenFailureOf(error);

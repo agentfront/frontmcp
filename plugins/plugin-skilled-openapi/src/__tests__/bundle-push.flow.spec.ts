@@ -48,6 +48,28 @@ describe('BundlePushFlow', () => {
     expect((outcome as FlowControl).type).toBe('next');
   });
 
+  it.each([
+    ['the exact bytes of the body', new TextEncoder().encode('{ "version": "2.0.0" }\n'), '{ "version": "2.0.0" }\n'],
+    ['an empty body when the request carried none', undefined, ''],
+  ])('hands the token check %s', async (_label, bodyBytes, expectedText) => {
+    const verifyPushToken = jest.fn(async () => undefined);
+    const request = {
+      method: 'POST',
+      path: BUNDLE_PUSH_PATH,
+      headers: { authorization: 'Bearer push-token' },
+      body: { version: '2.0.0' },
+      bodyBytes,
+    };
+    const deps = new Map<unknown, unknown>([[BundleSyncService, { pushReceiver: { verifyPushToken } }]]);
+    const flow = new BundlePushFlow(metadata, { request, response: {} }, scope, jest.fn(), deps as never);
+
+    await flow.verifyPushToken();
+
+    const [[token, body]] = verifyPushToken.mock.calls as unknown as Array<[string, Uint8Array]>;
+    expect(token).toBe('push-token');
+    expect(new TextDecoder().decode(body)).toBe(expectedText);
+  });
+
   it.each<BundleTokenFailure>([
     'expired',
     'wrong_issuer',
@@ -55,6 +77,7 @@ describe('BundlePushFlow', () => {
     'unknown_key',
     'bad_signature',
     'malformed',
+    'body_mismatch',
   ])('answers a token refused as %s with the same generic 401, and logs the check', async (tokenFailure) => {
     const { response, logged } = await pushAnswer(
       new SaasPushRefusedError('invalid-token', 'not a valid token from issuer', tokenFailure),
