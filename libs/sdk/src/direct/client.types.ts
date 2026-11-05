@@ -444,8 +444,8 @@ export interface ConnectOptions {
   /**
    * The caller's token, verified as the HTTP transport verifies a Bearer token, per the server's `auth` mode: its
    * claims become the caller (`authInfo.user`, read by authorities through `claimsMapping`), and a token the server
-   * rejects fails the connection. A token that names no caller, such as an opaque one on a public server, is only
-   * passed to the tools.
+   * rejects fails the connection. A token that names no caller, such as an opaque one on a public server, or any
+   * token on a server without `auth` (which verifies none), is only passed to the tools.
    */
   authToken?: string;
   /** Optional client capabilities override */
@@ -486,8 +486,8 @@ export interface LLMConnectOptions {
   /**
    * The caller's token, verified as the HTTP transport verifies a Bearer token, per the server's `auth` mode: its
    * claims become the caller (`authInfo.user`, read by authorities through `claimsMapping`), and a token the server
-   * rejects fails the connection. A token that names no caller, such as an opaque one on a public server, is only
-   * passed to the tools.
+   * rejects fails the connection. A token that names no caller, such as an opaque one on a public server, or any
+   * token on a server without `auth` (which verifies none), is only passed to the tools.
    */
   authToken?: string;
   /** Optional client capabilities override */

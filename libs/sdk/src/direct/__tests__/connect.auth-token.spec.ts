@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import { createTestJwtIssuer, type TestJwtIssuer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { App, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 import { PublicMcpError, UnauthorizedError } from '../../errors';
+import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { connect } from '../connect';
 
 @Tool({ name: 'who_is_calling', inputSchema: {} })
@@ -133,6 +134,48 @@ describe('connect() with an authToken', () => {
       });
     } finally {
       await client.close();
+    }
+  });
+
+  it('passes an opaque token to the tools of a server without auth, as a public server does', async () => {
+    const client = await connect(config(undefined), { authToken: 'opaque-token' });
+    try {
+      expect(structured(await client.callTool('who_is_calling', {}))).toEqual({
+        sub: null,
+        token: 'opaque-token',
+        roles: [],
+      });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('passes a JWT to the tools of a server without auth, which has no key to verify it against', async () => {
+    const token = await issuer.sign({ aud: AUDIENCE, realm: { roles: ['admin'] } }, 'alice');
+    const client = await connect(config(undefined), { authToken: token });
+    try {
+      expect(structured(await client.callTool('who_is_calling', {}))).toEqual({ sub: null, token, roles: [] });
+      expect((await client.callTool('refund_order', {})) as { isError?: boolean }).toMatchObject({ isError: true });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('passes the token to the tools of a createDirect() server without auth', async () => {
+    const server = await FrontMcpInstance.createDirect(config(undefined));
+    try {
+      const client = await server.connect({ authToken: 'opaque-token' });
+      try {
+        expect(structured(await client.callTool('who_is_calling', {}))).toEqual({
+          sub: null,
+          token: 'opaque-token',
+          roles: [],
+        });
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await server.dispose();
     }
   });
 });

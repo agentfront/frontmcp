@@ -406,7 +406,8 @@ interface ConnectOptions {
     };
   };
 
-  // Verified like an HTTP Bearer token, per the server's auth mode: its claims become the caller
+  // Verified like an HTTP Bearer token, per the server's auth mode: its claims become the caller.
+  // A server without auth verifies none: the tools only receive it.
   authToken?: string;
 
   // Client capabilities
