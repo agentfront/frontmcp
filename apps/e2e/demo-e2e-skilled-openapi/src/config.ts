@@ -26,6 +26,12 @@ class EnvironmentCredentialResolver extends SkilledOpenApiCredentialResolver {
   }
 }
 
+/** The resolver the plugin uses in place of its built-in one, declared on the server or on the app that installs it. */
+export const environmentCredentialResolver = {
+  provide: SkilledOpenApiCredentialResolver,
+  useValue: new EnvironmentCredentialResolver(),
+};
+
 type PluginSetup = Partial<
   Pick<SkilledOpenApiPluginOptionsInput, 'authProviders' | 'source' | 'bundleCacheDir' | 'confirm'>
 >;
@@ -73,7 +79,7 @@ export const serverConfig = {
   apps: [] as unknown[],
   plugins: [skilledOpenApiPlugin()],
   // Declared on the server, not in init({ providers }): the plugin uses it in place of its built-in resolver.
-  providers: [{ provide: SkilledOpenApiCredentialResolver, useValue: new EnvironmentCredentialResolver() }],
+  providers: [environmentCredentialResolver],
   authorities: { claimsMapping: { roles: 'realm_access.roles' } },
   logging: { level: LogLevel.Warn },
   auth: {

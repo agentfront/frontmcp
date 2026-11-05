@@ -81,7 +81,7 @@ function buildOperationMetadata(entry: HiddenOpEntry): ToolMetadata {
 export interface OperationToolFactoryDeps {
   /** Tool registry to register/unregister synthetic operation tools. */
   toolRegistry: ToolRegistry;
-  /** Provider registry to bind synthesized ToolInstances to. */
+  /** The plugin's own providers, which the tools resolve through: init({ providers }), the app's, then the server's. */
   providers: ProviderRegistry;
   /** Logger for diagnostics. */
   logger: FrontMcpLogger;

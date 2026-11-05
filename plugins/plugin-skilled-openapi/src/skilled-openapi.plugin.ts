@@ -16,10 +16,10 @@ import {
   FrontMcpLogger,
   ListToolsHook,
   Plugin,
+  ProviderRegistry,
   ScopeEntry,
   SkillCatalogSourceToken,
   type FlowCtxOf,
-  type ProviderRegistry,
   type ProviderType,
   type SkillCatalogSource,
   type SkillRegistryInterface,
@@ -375,8 +375,13 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
       {
         name: 'skilled-openapi:bundle-sync',
         provide: BundleSyncService,
-        inject: () => [ScopeEntry, HiddenOpRegistry, BundleStore],
-        useFactory: async (scope: ScopeEntry, hiddenOps: HiddenOpRegistry, bundleStore: BundleStore) => {
+        inject: () => [ScopeEntry, HiddenOpRegistry, BundleStore, ProviderRegistry],
+        useFactory: async (
+          scope: ScopeEntry,
+          hiddenOps: HiddenOpRegistry,
+          bundleStore: BundleStore,
+          pluginProviders: ProviderRegistry,
+        ) => {
           const logger = scope.logger.child('skilled-openapi:sync');
           // Resolve scope.skills and scope.tools lazily: this factory runs while the
           // server's plugins initialize, BEFORE the scope creates its skill and tool
@@ -391,10 +396,8 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
           if (parsed.exposeOperationsAsInternalTools) {
             opToolFactory = new OperationToolFactory({
               toolRegistry: lazyScopeRegistry<ToolRegistry>(scope, 'tools'),
-              // ScopeEntry exposes a ProviderRegistryInterface; the factory
-              // needs the concrete ProviderRegistry to construct ToolInstance.
-              // The runtime is the same class — the cast is safe by construction.
-              providers: scope.providers as unknown as ProviderRegistry,
+              // The plugin's own providers, so an operation tool resolves them as run_workflow does.
+              providers: pluginProviders,
               logger: logger.child('op-tool'),
             });
           }
