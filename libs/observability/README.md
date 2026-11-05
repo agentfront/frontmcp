@@ -92,7 +92,7 @@ const shutdown = setupOTel({ serviceName: 'help-desk', exporter: 'otlp', endpoin
 
 The log sinks are `{ type: 'stdout', pretty? }` (one JSON object per line), `{ type: 'console' }` (a readable line), `{ type: 'callback', fn }`, `{ type: 'otlp', endpoint?, headers?, batchSize?, flushIntervalMs?, serviceName? }`, `{ type: 'pino', logger }` and `{ type: 'winston', logger }`.
 
-`@FrontMcp({ observability })` registers `ObservabilityPlugin` for you. You can register `ObservabilityPlugin.init(options)` in `plugins` yourself, but `observability` also connects the `logging` sinks to the server's logger, which the plugin alone doesn't.
+`@FrontMcp({ observability })` registers `ObservabilityPlugin` for you. You can register `ObservabilityPlugin.init(options)` in `plugins` yourself instead, but `observability` also connects the `logging` sinks to the server's logger, which the plugin alone doesn't. Use one or the other: a server that sets `observability` and also lists `ObservabilityPlugin` in `@FrontMcp({ plugins })` fails at startup with `PluginConfiguredTwiceError` (code `PLUGIN_CONFIGURED_TWICE`).
 
 ## Key exports
 

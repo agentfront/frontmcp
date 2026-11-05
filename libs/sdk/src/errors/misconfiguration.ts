@@ -36,6 +36,12 @@ export const MISCONFIGURATION_REMEDIES: Record<string, string> = {
   DUPLICATE_PLUGIN:
     'A plugin that can be installed once per server is installed twice (in one plugins list, or by the server and ' +
     'an app, or by two apps), so the server refuses to start. Install it once; the server log names the plugin.',
+  DUPLICATE_PLUGIN_ENTRY:
+    'One plugins list names a plugin twice, so the server refuses to start. List it once with all its options, ' +
+    'or install the other configuration on another app; the server log names the plugin, the list and both entries.',
+  PLUGIN_CONFIGURED_TWICE:
+    'A server option (such as `observability`) installs a plugin that the server plugins list names too, so the ' +
+    'server refuses to start. Configure the plugin in one place; the server log names the option and the plugin.',
 };
 
 /**

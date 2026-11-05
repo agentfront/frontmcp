@@ -47,7 +47,7 @@ import { proxyTrustOf } from '../context/metadata.utils';
 import type { ElicitationStore } from '../elicitation';
 import type { PersistentQuestions } from '../elicitation/questions/question-scope.helper';
 import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors';
-import { UnenforcedMetadataError } from '../errors/plugin.errors';
+import { PluginConfiguredTwiceError, UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
 import { assertAuthoritiesRules } from '../front-mcp/authorities-rules.check';
 import { isEntryServer, isJobWorker } from '../front-mcp/detached-job.flag';
@@ -94,7 +94,7 @@ import { warnIfSessionModeIgnored } from '../transport/session-mode.check';
 import type { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
 import { guardStorageInBrowser, refuseServerStoresInBrowser, refuseStoresInBrowser } from './browser-stores';
-import { devEventsObservabilityConfig } from './dev-events-observability';
+import { devEventsObservabilityConfig, listsObservabilityPlugin } from './dev-events-observability';
 import { registerServerEntries } from './server-entries.helper';
 import { reportStartup } from './startup-report.helper';
 
@@ -681,6 +681,9 @@ export class Scope extends ScopeEntry {
         : undefined;
     const observabilityConfig = this.metadata.observability ?? impliedObservability;
     if (observabilityConfig) {
+      if (listsObservabilityPlugin(serverPlugins)) {
+        throw new PluginConfiguredTwiceError('ObservabilityPlugin', 'observability');
+      }
       const { observabilityPlugins } = await import('./observability-scope.helper.js');
       serverPlugins.push(
         ...observabilityPlugins({

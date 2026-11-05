@@ -24,6 +24,7 @@ import { initOptionsOf } from '../common/dynamic/dynamic.plugin';
 import { collectDynamicProviders, collectDynamicTools, dedupePluginProviders } from '../common/dynamic/dynamic.utils';
 import { installContextExtensions } from '../context/context-extension';
 import {
+  DuplicatePluginEntryError,
   DuplicatePluginError,
   InvalidPluginScopeError,
   InvalidRegistryKindError,
@@ -101,6 +102,28 @@ function isConfiguredByOptions(klass: Ctor<PluginInstance>): boolean {
   return typeof hooks.dynamicProviders === 'function' || typeof hooks.dynamicTools === 'function';
 }
 
+/** The plugins list a registry installs, as a duplicate-entry error names it. */
+function pluginListName(owner: EntryOwnerRef | undefined, hostPluginName: string | undefined): string {
+  if (hostPluginName !== undefined) return `the plugins of plugin "${hostPluginName}"`;
+  if (owner === undefined) return 'one plugins list';
+  if (owner.kind === 'scope') return '@FrontMcp({ plugins })';
+  return `the plugins of ${owner.kind} "${owner.id}"`;
+}
+
+/** Refuses a list naming a plugin twice; a oncePerServer plugin's second entry gets DuplicatePluginError instead. */
+function refuseDuplicateEntries(list: readonly PluginType[], listName: string): void {
+  const entryNumbers = new Map<Token, number>();
+  for (const [index, raw] of list.entries()) {
+    const { provide, metadata } = normalizePlugin(raw);
+    if (metadata.oncePerServer !== undefined) continue;
+    const firstEntryNumber = entryNumbers.get(provide);
+    if (firstEntryNumber !== undefined) {
+      throw new DuplicatePluginEntryError(metadata.name ?? tokenName(provide), listName, firstEntryNumber, index + 1);
+    }
+    entryNumbers.set(provide, index + 1);
+  }
+}
+
 export default class PluginRegistry
   extends RegistryAbstract<PluginInstance, PluginRecord, PluginType[]>
   implements PluginRegistryInterface
@@ -136,7 +159,10 @@ export default class PluginRegistry
      * - scope='server': hooks register to parentScope (if available)
      */
     scopeInfo?: PluginScopeInfo,
+    /** The plugin whose nested `plugins` this registry installs, named in a duplicate-entry error. */
+    hostPluginName?: string,
   ) {
+    refuseDuplicateEntries(list, pluginListName(owner, hostPluginName));
     super('PluginRegistry', providers, list);
     this.scope = providers.getActiveScope();
     this.scopeInfo = scopeInfo;
@@ -243,7 +269,13 @@ export default class PluginRegistry
         this.owner?.kind === 'app' || this.owner?.kind === 'agent' || this.owner?.kind === 'scope'
           ? this.owner
           : pluginOwner;
-      const plugins = new PluginRegistry(providers, rec.metadata.plugins ?? [], nestedHookOwner, this.scopeInfo);
+      const plugins = new PluginRegistry(
+        providers,
+        rec.metadata.plugins ?? [],
+        nestedHookOwner,
+        this.scopeInfo,
+        rec.metadata.name,
+      );
       await plugins.ready;
 
       const adapters = new AdapterRegistry(providers, rec.metadata.adapters ?? []);
