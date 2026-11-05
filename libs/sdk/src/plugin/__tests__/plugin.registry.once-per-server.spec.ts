@@ -76,6 +76,17 @@ describe('PluginRegistry — a plugin installed once per server (oncePerServer)'
     );
   });
 
+  it('refuses a second entry that adds oncePerServer to a plugin whose first entry has none', async () => {
+    const started = startServer({
+      plugins: [CounterPlugin.init({ source: 'a' }), { ...CounterPlugin.init({ source: 'b' }), oncePerServer: REASON }],
+    });
+
+    await expect(started).rejects.toThrow(DuplicatePluginEntryError);
+    await expect(started).rejects.toThrow(
+      'Plugin "counter" is listed twice in @FrontMcp({ plugins }) (entries 1 and 2)',
+    );
+  });
+
   it('refuses to start a server that installs it and whose app installs it too', async () => {
     @App({ name: 'billing', plugins: [CatalogPlugin.init({ source: 'b' })] })
     class BillingApp {}

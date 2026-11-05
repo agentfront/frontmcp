@@ -115,15 +115,20 @@ function pluginListName(owner: EntryOwnerRef | undefined, hostPluginName: string
  * DuplicatePluginError instead, when the server claims that name.
  */
 function refuseDuplicateEntries(list: readonly PluginType[], listName: string): void {
-  const firstEntries = new Map<Token, { entryNumber: number; name: string | undefined }>();
+  const firstEntries = new Map<Token, { entryNumber: number; name: string | undefined; oncePerServer: boolean }>();
   for (const [index, raw] of list.entries()) {
     const { provide, metadata } = normalizePlugin(raw);
     const firstEntry = firstEntries.get(provide);
     if (firstEntry === undefined) {
-      firstEntries.set(provide, { entryNumber: index + 1, name: metadata.name });
+      firstEntries.set(provide, {
+        entryNumber: index + 1,
+        name: metadata.name,
+        oncePerServer: metadata.oncePerServer !== undefined,
+      });
       continue;
     }
-    const sameOncePerServerPlugin = metadata.oncePerServer !== undefined && firstEntry.name === metadata.name;
+    const sameOncePerServerPlugin =
+      firstEntry.oncePerServer && metadata.oncePerServer !== undefined && firstEntry.name === metadata.name;
     if (sameOncePerServerPlugin) continue;
     throw new DuplicatePluginEntryError(
       metadata.name ?? tokenName(provide),
