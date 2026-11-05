@@ -16,6 +16,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { BundleStore, type BundleStoreTelemetry } from '@frontmcp/adapters/skills';
+import { ZodError } from '@frontmcp/lazy-zod';
 
 import { MemoryCredentialResolver } from '../executor/credential-resolver';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
@@ -27,6 +28,7 @@ import {
   SkilledOpenApiConfig,
   SkilledOpenApiCredentialResolver,
 } from '../skilled-openapi.symbols';
+import { skilledOpenApiPluginOptionsSchema } from '../skilled-openapi.types';
 import { BundleSyncService } from '../sync/bundle-sync.service';
 
 const validBundle = {
@@ -70,6 +72,22 @@ describe('SkilledOpenApiPlugin', () => {
 
       it('is refused when the plugin is built', () => {
         expect(() => new SkilledOpenApiPlugin(listedTwice)).toThrow(VaultRefListedTwiceError);
+      });
+
+      it('is refused by the exported options schema', () => {
+        const result = skilledOpenApiPluginOptionsSchema.safeParse(listedTwice);
+        expect(result.success).toBe(false);
+        expect(result.error?.issues).toEqual([
+          expect.objectContaining({
+            path: ['authProviders'],
+            message: new VaultRefListedTwiceError(['billing-token']).message,
+          }),
+        ]);
+      });
+
+      it('still reports another bad option as a ZodError', () => {
+        const badKeysListedTwice = { ...listedTwice, trustedKeys: 'not-a-list' as never };
+        expect(() => new SkilledOpenApiPlugin(badKeysListedTwice)).toThrow(ZodError);
       });
 
       it('names the vaultRef in the error', () => {
