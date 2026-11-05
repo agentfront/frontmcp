@@ -52,6 +52,7 @@ import type {
   ListWorkflowsOptions,
   ListWorkflowsResult,
   LLMPlatform,
+  LoadSkillsFormat,
   LoadSkillsOptions,
   LoadSkillsResult,
   McpLogLevel,
@@ -454,8 +455,11 @@ export class DirectClientImpl implements DirectClient {
    * @remarks
    * Response is validated using `SkillsLoadResultSchema`.
    */
-  async loadSkills(skillIds: string[], options?: LoadSkillsOptions): Promise<LoadSkillsResult> {
-    return this.mcpClient.request(
+  async loadSkills<Format extends LoadSkillsFormat = 'full'>(
+    skillIds: string[],
+    options?: LoadSkillsOptions<Format>,
+  ): Promise<LoadSkillsResult<Format>> {
+    const result = await this.mcpClient.request(
       {
         method: 'skills/load',
         params: {
@@ -465,6 +469,7 @@ export class DirectClientImpl implements DirectClient {
       },
       SkillsLoadResultSchema,
     );
+    return result as LoadSkillsResult<Format>;
   }
 
   /**

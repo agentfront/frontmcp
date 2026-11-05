@@ -22,9 +22,11 @@ export type {
   SearchSkillsOptions,
   SearchSkillsResult,
   SkillSearchResultItem,
+  LoadSkillsFormat,
   LoadSkillsOptions,
   LoadSkillsResult,
   LoadedSkillItem,
+  LoadedSkillMarkdownItem,
   ListSkillsOptions,
   ListSkillsResult,
   // Elicitation types

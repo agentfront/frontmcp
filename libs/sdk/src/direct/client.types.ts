@@ -118,15 +118,19 @@ export interface SearchSkillsResult {
 }
 
 /**
+ * What `skills/load` sends each skill as. `'full'` (default): `instructions`, `parameters`, each tool's `inputSchema`,
+ * and `formattedContent`, a markdown rendering that holds them all again. `'markdown'`: `formattedContent` alone,
+ * without `instructions` and `parameters`, so each part is sent once. `'instructions-only'`: as `'full'` without the
+ * tool schemas, in `tools` or `formattedContent`.
+ */
+export type LoadSkillsFormat = 'full' | 'markdown' | 'instructions-only';
+
+/**
  * Options for loading skills.
  */
-export interface LoadSkillsOptions {
-  /**
-   * What each skill is sent as, each part once. `'full'` (default): `instructions`, `parameters` and each tool's
-   * `inputSchema`. `'markdown'`: `formattedContent`, a markdown rendering that holds them all, in their place.
-   * `'instructions-only'`: as `'full'` without the tool schemas.
-   */
-  format?: 'full' | 'markdown' | 'instructions-only';
+export interface LoadSkillsOptions<Format extends LoadSkillsFormat = 'full' | 'instructions-only'> {
+  /** What each skill is sent as; see {@link LoadSkillsFormat} */
+  format?: Format;
   /** Whether to activate a skill session */
   activateSession?: boolean;
   /** Policy mode for the skill session */
@@ -134,17 +138,15 @@ export interface LoadSkillsOptions {
 }
 
 /**
- * A single loaded skill item.
+ * What every loaded skill carries, whatever its format.
  */
-export interface LoadedSkillItem {
+interface LoadedSkillFields {
   /** Unique skill identifier */
   id: string;
   /** Display name */
   name: string;
   /** Description of what the skill does */
   description: string;
-  /** Instructions for using the skill; absent with `format: 'markdown'`, where `formattedContent` holds them */
-  instructions?: string;
   /** Tools used by this skill with their schemas */
   tools: Array<{
     name: string;
@@ -153,21 +155,14 @@ export interface LoadedSkillItem {
     inputSchema?: unknown;
     outputSchema?: unknown;
   }>;
-  /** Parameters that can be passed to the skill */
-  parameters?: Array<{
-    name: string;
-    description?: string;
-    required?: boolean;
-    type?: string;
-  }>;
   /** Names of tools that are available */
   availableTools: string[];
   /** Names of tools that are missing */
   missingTools: string[];
   /** Whether all required tools are available */
   isComplete: boolean;
-  /** The skill rendered as markdown for a model, with `format: 'markdown'` only */
-  formattedContent?: string;
+  /** The skill rendered as markdown for a model */
+  formattedContent: string;
   /** Session info if activateSession was true */
   session?: {
     activated: boolean;
@@ -178,11 +173,34 @@ export interface LoadedSkillItem {
 }
 
 /**
+ * A skill loaded with `format: 'full'` (the default) or `'instructions-only'`.
+ */
+export interface LoadedSkillItem extends LoadedSkillFields {
+  /** Instructions for using the skill */
+  instructions: string;
+  /** Parameters that can be passed to the skill */
+  parameters?: Array<{
+    name: string;
+    description?: string;
+    required?: boolean;
+    type?: string;
+  }>;
+}
+
+/**
+ * A skill loaded with `format: 'markdown'`: `formattedContent` holds its instructions and parameters.
+ */
+export interface LoadedSkillMarkdownItem extends LoadedSkillFields {
+  instructions?: undefined;
+  parameters?: undefined;
+}
+
+/**
  * Result of loading skills.
  */
-export interface LoadSkillsResult {
+export interface LoadSkillsResult<Format extends LoadSkillsFormat = 'full'> {
   /** Loaded skills */
-  skills: LoadedSkillItem[];
+  skills: Array<Format extends 'markdown' ? LoadedSkillMarkdownItem : LoadedSkillItem>;
   /** Summary of the load operation */
   summary: {
     totalSkills: number;
@@ -638,7 +656,10 @@ export interface DirectClient {
    * @param options - Load options
    * @returns Loaded skills with their content and tool info
    */
-  loadSkills(skillIds: string[], options?: LoadSkillsOptions): Promise<LoadSkillsResult>;
+  loadSkills<Format extends LoadSkillsFormat = 'full'>(
+    skillIds: string[],
+    options?: LoadSkillsOptions<Format>,
+  ): Promise<LoadSkillsResult<Format>>;
 
   /**
    * List all available skills.

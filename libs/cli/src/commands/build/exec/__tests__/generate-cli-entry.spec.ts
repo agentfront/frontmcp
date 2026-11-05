@@ -806,6 +806,14 @@ describe('generateCliEntry', () => {
       expect(load).toContain('process.exitCode = 1;');
     });
 
+    it("loads skills with the 'markdown' format, so each part of a skill is printed once", () => {
+      const source = generateCliEntry(makeOptions({
+        schema: makeSchema({ capabilities: { skills: true, jobs: false, workflows: false } }),
+      }));
+      const load = source.slice(source.indexOf("'load <ids...>'"), source.indexOf("'read <name>'"));
+      expect(load).toContain("client.loadSkills(ids, { format: 'markdown' })");
+    });
+
     it('exits 1 when skills read finds no skill, in text and json output', () => {
       const source = generateCliEntry(makeOptions({
         schema: makeSchema({ capabilities: { skills: true, jobs: false, workflows: false } }),

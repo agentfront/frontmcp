@@ -25,7 +25,7 @@ interface SkillResult {
   missingTools: string[];
   isComplete: boolean;
   warning?: string;
-  formattedContent?: string;
+  formattedContent: string;
   session?: {
     activated: boolean;
     sessionId?: string;
@@ -211,7 +211,7 @@ test.describe('Skill Session E2E', () => {
       const loadContent = loadResult as LoadSkillsResult;
       const skill = loadContent.skills[0];
       expect(skill.instructions).toBeDefined();
-      expect(skill.formattedContent).toBeUndefined();
+      expect(skill.formattedContent).toBeDefined();
 
       // Step 3: Use a tool mentioned in the skill
       if (skill.availableTools.includes('github_get_pr')) {
