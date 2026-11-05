@@ -644,7 +644,8 @@ export interface AuthenticateInput {
    * the credential key being connected, and the optional opaque context from the
    * original `requireConnect({ key, context })` call. When set, the verifier
    * should return `{ ok: true, credentials: [{ key, secret, … }] }` to ADD the
-   * credential to the existing session vault (a new token is NOT minted).
+   * credential to the subject's session vault, created when the subject has none
+   * yet (a new token is NOT minted).
    */
   resume?: {
     /** Framework-verified subject the credential is being connected for. */

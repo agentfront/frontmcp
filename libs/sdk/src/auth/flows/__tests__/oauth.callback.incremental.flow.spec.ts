@@ -14,8 +14,9 @@
  */
 import 'reflect-metadata';
 
-import { generatePkceChallenge } from '@frontmcp/auth';
+import { generatePkceChallenge, SessionCredentialVault } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
+import { MemoryStorageAdapter } from '@frontmcp/utils';
 
 import { createMockHttpRequest, createMockScopeEntry, runFlowStages } from '../../../__test-utils__';
 import { bindSignin, signinCookie } from '../../../__test-utils__/helpers/oauth-flow.helpers';
@@ -122,6 +123,37 @@ describe('OAuth Callback Flow — incremental authorization expansion', () => {
 
     expect(captured).toBeDefined();
     expect(new Set(captured.authorizedAppIds)).toEqual(new Set(['notes', 'tasks']));
+  });
+
+  it('keeps the subject session vault: an incremental authorize is the same session', async () => {
+    const adapter = new MemoryStorageAdapter();
+    await adapter.connect();
+    const vault = new SessionCredentialVault({ storage: adapter, pepper: 'incremental-vault-pepper-32-bytes' });
+    const sessionVaultId = await vault.ensureVault('user-1');
+    await vault.store('user-1', sessionVaultId, 'github', { secret: 'gh-token' });
+    const scope = createMockScopeEntry({
+      auth: { mode: 'local', incrementalAuth: { enabled: true } } as any,
+      apps: APPS,
+    });
+    Object.assign(scope.auth, { credentialVault: vault, createAuthorizationCode: jest.fn(async () => 'minted-code') });
+    const pendingAuthId = await seedIncrementalPending(scope, {
+      targetAppId: 'tasks',
+      priorAuthorizedAppIds: ['notes'],
+    });
+
+    const flow = makeCallback(scope, pendingAuthId, { incremental: 'true', app_id: 'tasks' });
+    const { state } = await runFlowStages(flow, [
+      'parseInput',
+      'validatePendingAuth',
+      'handleIncrementalAuth',
+      'handleFederatedAuth',
+      'createAuthorizationCode',
+    ]);
+
+    expect(state.authorizationCode).toBe('minted-code');
+    expect(await vault.getVaultId('user-1')).toBe(sessionVaultId);
+    expect(await vault.get('user-1', 'github')).toEqual({ secret: 'gh-token' });
+    await adapter.disconnect();
   });
 
   it('drops unknown prior app ids (cannot forge a grant to a non-existent app)', async () => {

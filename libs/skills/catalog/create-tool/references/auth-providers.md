@@ -133,7 +133,8 @@ flow runs a credential gate **before** `execute()`:
      `authorization_required` error), so either convention resolves. Present
      when the framework can mint a connect URL for the session.
 
-3. The user opens the URL and connects the credential.
+3. The user opens the URL and connects the credential. A signed-in caller who has no credential vault yet gets one
+   created there. An anonymous caller's URL opens a page asking them to sign in first (`403`, `login_required`).
 4. The client retries the tool call — the gate now passes and `execute()` runs.
 
 This is handled by the framework — you don't write any of this in `execute()`.

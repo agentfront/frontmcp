@@ -184,6 +184,15 @@ export class SessionCredentialVault {
     return vaultId;
   }
 
+  /** The subject's vaultId, or a new vault when it has none; unlike {@link rotateVault}, it never replaces one. */
+  async ensureVault(sub: string): Promise<string> {
+    const currentVaultId = await this.getVaultId(sub);
+    if (currentVaultId) return currentVaultId;
+    const createdVaultId = randomUUID();
+    await this.storage.set(this.indexKey(sub), createdVaultId, { ...this.credentialSetOpts, ifNotExists: true });
+    return (await this.getVaultId(sub)) ?? createdVaultId;
+  }
+
   // ============================================
   // Credential CRUD (committed vault)
   // ============================================

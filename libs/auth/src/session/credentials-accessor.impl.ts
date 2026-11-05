@@ -80,9 +80,8 @@ export class CredentialsAccessorImpl implements CredentialsAccessor {
     }
 
     // Not connected (or anonymous): mint a signed, short-lived resume URL bound
-    // to this subject + key. When anonymous, sub is '' — the resume page will
-    // re-derive the subject on submit, but the link still cannot target another
-    // identity because the token is HMAC-signed and verified on the server.
+    // to this subject + key. When anonymous, sub is '' and the connect page asks
+    // the caller to sign in; the HMAC keeps the link from naming another identity.
     const token = signCredentialResumeToken(
       { sub: sub ?? '', key, context, ttlMs: this.resumeTtlMs },
       this.signingSecret,

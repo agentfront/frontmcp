@@ -10,8 +10,10 @@
  *   - POST /oauth/connect          → re-verify the token, re-invoke the
  *     configured `authenticate({ fields, resume: { sub, key, context } })`
  *     verifier, and ADDITIVELY store the returned credential into the user's
- *     EXISTING vault. Refuses when there is no live vault (never mints a new one)
- *     so a stale link cannot resurrect a rotated-away session.
+ *     vault, creating it when the signed subject has none yet (a sign-in that
+ *     stored no credential, or a restart of an in-memory vault).
+ *   - A link signed for an anonymous caller is refused on both: there is no
+ *     signed-in subject to store a credential for.
  *
  * This is auth-internal: it lives on the existing OAuth flow surface (registered
  * by LocalPrimaryAuth), not via the public custom-route feature.
@@ -22,9 +24,11 @@ import {
   buildConnectSuccessPage,
   builtInAuthPageHeaders,
   escapeHtml,
+  isAnonymousSubject,
   toLoginExtraFields,
   verifyCredentialResumeToken,
   type AuthenticateContext,
+  type AuthenticateCredential,
   type AuthenticateResult,
   type CredentialResumePayload,
   type LoginConfig,
@@ -143,6 +147,19 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
       return;
     }
 
+    if (isAnonymousSubject(payload.sub)) {
+      this.respond(
+        this.htmlPage(
+          this.renderError(
+            'login_required',
+            'Connecting a credential needs a signed-in account. Sign in to this server, then run the tool again to get a new connect link.',
+          ),
+          403,
+        ),
+      );
+      return;
+    }
+
     const localOptions = localAuth.options as {
       login?: LoginConfig;
       authenticate?: (
@@ -164,7 +181,7 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
     }
 
     // POST → re-invoke authenticate() with the resume context, then additively
-    // store the returned credential into the EXISTING vault.
+    // store the returned credential into the subject's vault.
     const authenticateFn = typeof localOptions.authenticate === 'function' ? localOptions.authenticate : undefined;
     if (!authenticateFn) {
       this.respond(
@@ -188,38 +205,8 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
       return;
     }
 
-    const vault = localAuth.credentialVault;
-    if (!vault) {
-      this.respond(this.htmlPage(this.renderError('server_error', 'Credential storage is not configured.'), 500));
-      return;
-    }
-
-    // Refuse when there is NO live vault for the subject — a mid-session connect
-    // must ADD to an existing session, never resurrect a rotated-away one.
-    const vaultId = await vault.getVaultId(payload.sub);
-    if (!vaultId) {
-      this.logger.warn('Connect attempted with no live vault for subject; refusing');
-      this.respond(
-        this.htmlPage(
-          this.renderError('invalid_request', 'Your session is no longer active. Please sign in again.'),
-          409,
-        ),
-      );
-      return;
-    }
-
-    // Additively store the returned credential(s) into the existing vault.
-    let stored = 0;
-    for (const cred of credentials) {
-      if (!cred || typeof cred.key !== 'string' || typeof cred.secret !== 'string') continue;
-      await vault.store(payload.sub, vaultId, cred.key, { secret: cred.secret, metadata: cred.metadata });
-      stored++;
-    }
-
-    // `credentials.length > 0` above doesn't guarantee anything was persisted —
-    // every entry may have been malformed and skipped. Don't claim success (or
-    // emit resources/updated) when nothing was actually stored.
-    if (stored === 0) {
+    const storableCredentials = credentials.filter(isStorableCredential);
+    if (storableCredentials.length === 0) {
       this.logger.warn('Connect produced no storable credentials (all returned entries were malformed)');
       this.respond(
         this.htmlPage(this.renderError('invalid_request', 'No valid credential was returned. Please try again.'), 400),
@@ -227,7 +214,21 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
       return;
     }
 
-    this.logger.info(`Connected ${stored} credential(s) mid-session for key "${payload.key}"`);
+    const vault = localAuth.credentialVault;
+    if (!vault) {
+      this.respond(this.htmlPage(this.renderError('server_error', 'Credential storage is not configured.'), 500));
+      return;
+    }
+
+    const vaultId = await vault.ensureVault(payload.sub);
+    for (const credential of storableCredentials) {
+      await vault.store(payload.sub, vaultId, credential.key, {
+        secret: credential.secret,
+        metadata: credential.metadata,
+      });
+    }
+
+    this.logger.info(`Connected ${storableCredentials.length} credential(s) mid-session for key "${payload.key}"`);
 
     // Fire a resources/updated notification when applicable (best-effort). This
     // lets connected clients know session-scoped resources may have changed.
@@ -385,6 +386,10 @@ export default class OauthConnectFlow extends FlowBase<typeof name> {
 <p>${escapeHtml(description)}</p>
 </body></html>`;
   }
+}
+
+function isStorableCredential(credential: AuthenticateCredential | undefined): credential is AuthenticateCredential {
+  return !!credential && typeof credential.key === 'string' && typeof credential.secret === 'string';
 }
 
 export { OauthConnectFlow };
