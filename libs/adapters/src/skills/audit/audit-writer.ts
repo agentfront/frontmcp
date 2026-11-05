@@ -37,7 +37,12 @@ import { bytesToHex, hmacSha256, randomUUID, sha256Hex } from '@frontmcp/utils';
 import { canonicalize } from '../security/bundle-signature';
 import { linkRecord } from './audit-chain';
 import type { SkillAuditSubjectMode } from './audit-config';
-import { SKILL_AUDIT_GENESIS_PREV_HASH, type SkillAuditPhase, type SkillAuditRecord } from './audit-record.types';
+import {
+  SKILL_AUDIT_GENESIS_PREV_HASH,
+  type SkillAuditConfirmation,
+  type SkillAuditPhase,
+  type SkillAuditRecord,
+} from './audit-record.types';
 import type { SkillAuditSigner } from './audit-signer';
 import type { SkillAuditStore } from './audit-store';
 
@@ -97,6 +102,8 @@ export interface SkillAuditWriteContext {
   bundleVersion: string;
   /** Raw input — hashed via JCS before storage. Never persisted verbatim. */
   input: unknown;
+  /** Whether the user confirmed the call, once that is decided; recorded as it is. */
+  confirmation?: SkillAuditConfirmation;
 }
 
 /** Extra fields for the http-call-success path. */
@@ -365,6 +372,7 @@ export class SkillAuditWriter {
       ...(phase === 'http-call-failure' || phase === 'authority-check-fail'
         ? { errorMessage: this.formatError(error) }
         : {}),
+      ...(ctx.confirmation ? { confirmation: ctx.confirmation } : {}),
     };
 
     // Stamp prevHash from `prev` (or the genesis sentinel for the first write).

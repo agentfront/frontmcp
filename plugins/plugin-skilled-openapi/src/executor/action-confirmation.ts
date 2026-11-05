@@ -1,3 +1,4 @@
+import { type SkillAuditConfirmation } from '@frontmcp/adapters/skills';
 import { z } from '@frontmcp/lazy-zod';
 import {
   ElicitationDisabledError,
@@ -26,8 +27,22 @@ export interface ConfirmationSubject {
   input?: Record<string, unknown>;
 }
 
-/** Whether an action call that needs the user's confirmation may send its request: undefined when it may, else why not. */
-export type ConfirmAction = (call: Required<ConfirmationSubject>) => Promise<string | undefined>;
+/** A call that may send its request: the user said yes, or no one could be asked and `whenUnsupported` allows it. */
+export interface AllowedCall {
+  confirmation: Extract<SkillAuditConfirmation, 'confirmed' | 'skipped'>;
+}
+
+/** A call that may not send its request, and why. */
+export interface RefusedCall {
+  confirmation: Extract<SkillAuditConfirmation, 'declined' | 'unanswered'>;
+  refusal: string;
+}
+
+/** What the confirmation of a call decided, as the audit log records it. */
+export type ConfirmationDecision = AllowedCall | RefusedCall;
+
+/** Whether an action call that needs the user's confirmation may send its request. */
+export type ConfirmAction = (call: Required<ConfirmationSubject>) => Promise<ConfirmationDecision>;
 
 const MAX_INPUT_TEXT_LENGTH = 1000;
 
@@ -59,10 +74,8 @@ export async function confirmWorkflow(args: {
   askUser: AskUser;
 }): Promise<{ refusal: string } | { confirmAction: ConfirmAction }> {
   const { script, config, guard, visibleListings, hiddenOps, authInfo, askUser } = args;
-  const confirmedActionIds = new Set<string>();
-  const confirmAction: ConfirmAction = async ({ entry }) =>
-    confirmedActionIds.has(entry.op.operationId) ? undefined : notAskedByWorkflow(entry.op.operationId);
-  if (!config.confirm) return { confirmAction };
+  const askedActionIds = new Set<string>();
+  if (!config.confirm) return { confirmAction: confirmingAskedActions(askedActionIds) };
 
   const mayRun = async (listings: OperationListings): Promise<boolean> => {
     for (const entry of await visibleListings(listings)) {
@@ -82,33 +95,47 @@ export async function confirmWorkflow(args: {
     const listings = hiddenOps.listingsOf(actionId);
     if (!listings || !needsConfirmation(config.confirm, listings) || !(await mayRun(listings))) continue;
     subjects.push({ entry: listings[0] });
-    confirmedActionIds.add(actionId);
+    askedActionIds.add(actionId);
   }
-  if (subjects.length === 0) return { confirmAction };
+  if (subjects.length === 0) return { confirmAction: confirmingAskedActions(askedActionIds) };
 
-  const refusal = await confirmWithUser(askUser, subjects, config.confirm.whenUnsupported);
-  return refusal ? { refusal } : { confirmAction };
+  const decision = await confirmWithUser(askUser, subjects, config.confirm.whenUnsupported);
+  if ('refusal' in decision) return { refusal: decision.refusal };
+  return { confirmAction: confirmingAskedActions(askedActionIds, decision) };
 }
 
-/** Ask the user to confirm the actions: undefined when they may run, else why they may not. */
+/** A workflow's calls of the actions it asked about carry its answer; other actions that need confirmation are refused. */
+function confirmingAskedActions(askedActionIds: ReadonlySet<string>, answer?: AllowedCall): ConfirmAction {
+  return async ({ entry }) => {
+    const actionId = entry.op.operationId;
+    return answer && askedActionIds.has(actionId) ? answer : notAskedByWorkflow(actionId);
+  };
+}
+
+/** Ask the user to confirm the actions: whether they may run, and why not when they may not. */
 async function confirmWithUser(
   askUser: AskUser,
   subjects: readonly ConfirmationSubject[],
   whenUnsupported: WhenConfirmationUnsupported,
-): Promise<string | undefined> {
+): Promise<ConfirmationDecision> {
   const actionIds = subjects.map(({ entry }) => entry.op.operationId).join(', ');
   let answer: ElicitResult<{ confirmed: boolean }>;
   try {
     answer = await askUser(confirmationMessage(subjects));
   } catch (error) {
-    if (error instanceof ElicitationTimeoutError) return `the user did not answer in time: ${actionIds}`;
+    if (error instanceof ElicitationTimeoutError) {
+      return { confirmation: 'unanswered', refusal: `the user did not answer in time: ${actionIds}` };
+    }
     const unavailable = whyUserCannotBeAsked(error);
     if (!unavailable) throw error;
-    if (whenUnsupported === 'allow') return undefined;
-    return `the user's confirmation is needed for ${actionIds}, and ${unavailable}; nothing was sent`;
+    if (whenUnsupported === 'allow') return { confirmation: 'skipped' };
+    const refusal = `the user's confirmation is needed for ${actionIds}, and ${unavailable}; nothing was sent`;
+    return { confirmation: 'unanswered', refusal };
   }
   const confirmed = answer.status === 'accept' && answer.content?.confirmed === true;
-  return confirmed ? undefined : `the user declined: ${actionIds}`;
+  return confirmed
+    ? { confirmation: 'confirmed' }
+    : { confirmation: 'declined', refusal: `the user declined: ${actionIds}` };
 }
 
 function whyUserCannotBeAsked(error: unknown): string | undefined {
@@ -135,9 +162,9 @@ function actionText({ entry: { op }, input }: ConfirmationSubject): string {
   return `${action} with ${shownInput}`;
 }
 
-function notAskedByWorkflow(actionId: string): string {
-  return (
+function notAskedByWorkflow(actionId: string): RefusedCall {
+  const refusal =
     `action "${actionId}" needs the user's confirmation, which run_workflow asks for before the script starts, ` +
-    `for the actions it names: write the actionId as a string, as in callTool('${actionId}', …), or run it with execute_action`
-  );
+    `for the actions it names: write the actionId as a string, as in callTool('${actionId}', …), or run it with execute_action`;
+  return { confirmation: 'unanswered', refusal };
 }

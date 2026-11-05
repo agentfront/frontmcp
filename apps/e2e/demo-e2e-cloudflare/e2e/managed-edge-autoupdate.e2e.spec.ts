@@ -21,7 +21,7 @@ interface SearchSkillResponse {
 }
 
 interface LoadSkillResponse {
-  skill: { id: string; bundleVersion?: string; actions?: Array<{ actionId: string }> };
+  skill: { id: string; bundleVersion?: string; actions?: Array<{ actionId: string; asksForConfirmation?: true }> };
 }
 
 interface RunWorkflowResponse {
@@ -75,7 +75,7 @@ describe('a managed edge Worker on workerd', () => {
     expect(skills.map((skill) => skill.skillId).sort()).toEqual(['invoices', 'reports']);
     expect(skills.every((skill) => skill.bundleVersion === '1.0.0')).toBe(true);
     expect(loaded.json().skill).toMatchObject({ id: 'invoices', bundleVersion: '1.0.0' });
-    expect(loaded.json().skill.actions?.map((action) => action.actionId)).toEqual(['createInvoice']);
+    expect(loaded.json().skill.actions?.map((action) => action.actionId)).toEqual(['createInvoice', 'voidInvoice']);
     expect(internet.requestsTo(BUNDLE_URL)).toHaveLength(1);
     expect(await worker.cachedBundleVersion()).toBe('1.0.0');
   });
@@ -93,6 +93,53 @@ describe('a managed edge Worker on workerd', () => {
       }),
     ]);
     expect(result.text).not.toContain(billingToken);
+  });
+
+  describe("managed.confirm: { methods: ['DELETE'] }, on a Worker that can't enable elicitation", () => {
+    const VOID_INVOICE = { actionId: 'voidInvoice', input: { id: 'inv_edge' } };
+    const CANNOT_ASK =
+      "the user's confirmation is needed for voidInvoice, and this server can't ask for it: elicitation is disabled; nothing was sent";
+    const voidRequests = () => internet.requests.filter((request) => request.method === 'DELETE');
+
+    it('refuses the DELETE action in execute_action and run_workflow, sending nothing', async () => {
+      const action = await worker.callTool('execute_action', VOID_INVOICE);
+      const workflow = await worker.callTool<RunWorkflowResponse>('run_workflow', {
+        script: "return await callTool('voidInvoice', { id: 'inv_edge' });",
+      });
+
+      expect(action.isError).toBe(true);
+      expect(action.text).toBe(CANNOT_ASK);
+      expect(workflow.json()).toEqual({ success: false, error: CANNOT_ASK });
+      expect(voidRequests()).toEqual([]);
+    });
+
+    it('refuses it to a client that declares elicitation too, without asking', async () => {
+      const answer = await worker.callToolAsking('execute_action', VOID_INVOICE);
+
+      expect(answer.resultType).not.toBe('input_required');
+      expect(answer.isError).toBe(true);
+      expect(answer.content?.[0]?.text).toBe(CANNOT_ASK);
+      expect(voidRequests()).toEqual([]);
+    });
+
+    it('still runs an action the rule does not name', async () => {
+      const result = await worker.callTool<{ id: string }>('execute_action', {
+        actionId: 'createInvoice',
+        input: { customerId: 'cus_confirm', amount: 3 },
+      });
+
+      expect(result.isError).toBe(false);
+      expect(result.json()).toMatchObject({ id: 'inv_cus_confirm' });
+    });
+
+    it('marks the DELETE action in load_skill as one that asks for confirmation', async () => {
+      const loaded = await worker.callTool<LoadSkillResponse>('load_skill', { skillId: 'invoices' });
+
+      expect(loaded.json().skill.actions).toEqual([
+        expect.not.objectContaining({ asksForConfirmation: true }),
+        expect.objectContaining({ actionId: 'voidInvoice', asksForConfirmation: true }),
+      ]);
+    });
   });
 
   it('picks up a new bundle version on a Cron run, applied and kept in KV by the time the run ends', async () => {

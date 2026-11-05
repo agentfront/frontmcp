@@ -52,7 +52,7 @@ function auditedDeps() {
       },
       unprotectedOps: 'allow',
     },
-    confirmAction: jest.fn(async () => undefined),
+    confirmAction: jest.fn(async () => ({ confirmation: 'confirmed' as const })),
     resolver: { resolve: jest.fn(async () => undefined) },
     guard: { check: jest.fn(async () => ({ granted: true })) } as never,
     visibleListings: scopeHidingSkills().visibleListings,

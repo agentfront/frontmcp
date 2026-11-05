@@ -10,6 +10,8 @@
  * (which handles signature verification, replay/SSRF guards, and last-good
  * cache fallback).
  */
+import type { SkilledOpenApiPluginOptionsInput } from '@frontmcp/plugin-skilled-openapi';
+
 import type { EdgeBundleCacheFactory, EdgeBundleCacheStore } from './kv-cache';
 import type { EdgePushReplayStoreFactory } from './push-replay';
 
@@ -60,6 +62,12 @@ export interface ManagedEdgeOptions {
   /** Outbound HTTP / SSRF options for the executor. */
   outbound?: Record<string, unknown>;
   /**
+   * Actions that ask the user before their request, as the plugin's `confirm` option: `{ methods?, tags?, operations?,
+   * whenUnsupported? }`. The question is an MCP elicitation: without `elicitation: { enabled: true }`, which a
+   * Cloudflare Worker can't start with, such an action is refused, or runs unasked with `whenUnsupported: 'allow'`.
+   */
+  confirm?: SkilledOpenApiPluginOptionsInput['confirm'];
+  /**
    * Cache dir for the last-good bundle (boot fallback when a fresh pull fails).
    * Filesystem-only — a no-op on a Worker (there is no filesystem); use {@link
    * ManagedEdgeOptions.cache} there instead.
@@ -103,6 +111,7 @@ export function buildManagedOpenApiPluginOptions(managed: ManagedEdgeOptions): R
   if (managed.dev !== undefined) options['dev'] = managed.dev;
   if (managed.credentials !== undefined) options['credentials'] = managed.credentials;
   if (managed.outbound !== undefined) options['outbound'] = managed.outbound;
+  if (managed.confirm !== undefined) options['confirm'] = managed.confirm;
   if (managed.bundleCacheDir !== undefined) options['bundleCacheDir'] = managed.bundleCacheDir;
   return options;
 }

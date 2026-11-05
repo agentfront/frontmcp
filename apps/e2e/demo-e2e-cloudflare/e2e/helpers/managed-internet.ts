@@ -58,6 +58,10 @@ export class ManagedInternet {
       const invoice = JSON.parse(body) as { customerId: string; amount: number };
       return Response.json({ id: `inv_${invoice.customerId}`, status: 'open' }, { status: 201 });
     }
+    if (method === 'DELETE' && url.startsWith(`${BILLING_API_URL}/v1/invoices/`)) {
+      if (authorization !== `Bearer ${this.options.billingToken}`) return new Response('unauthorized', { status: 401 });
+      return Response.json({ id: url.slice(`${BILLING_API_URL}/v1/invoices/`.length), status: 'void' });
+    }
     return new Response(`no route for ${method} ${url}`, { status: 404 });
   }
 }

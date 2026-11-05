@@ -142,6 +142,7 @@ crons = ["*/5 * * * *"]
 | `pushReplay`                                                        | Where pushed tokens' `jti`s are kept: `{ binding }` (default `FRONTMCP_PUSH_REPLAY`), as below |
 | `allowRollback`                                                     | Apply a pulled or pushed bundle older than the one being served, as below. Default `false`     |
 | `requireSignature`, `trustedKeys`, `dev`, `credentials`, `outbound` | Passed to the Skilled OpenAPI plugin. `dev` skips signature checks: never use it in production |
+| `confirm`                                                           | Actions that ask the user before their request, as the plugin's `confirm`; see below           |
 | `pollIntervalMs`, `bundleCacheDir`                                  | Ignored on a Worker, which has no timers or file system                                        |
 
 A Cron run ends once the bundle it pulled is applied and kept in `cache`, also when it is the first event an isolate gets: it then starts the bundle sync, whose first pull is the run's pull. A bundle that fails its signature or its other checks is not applied and not kept, so a cold start that can't reach the bundle server serves the last bundle the Worker applied.
@@ -158,6 +159,8 @@ Up to 1.11.0, such a run reported success. A run whose pull applies a bundle, or
 `/readyz` says the same, once `health: { readyz: { enabled: true } }` turns it on (it is off on a Worker by default). While the last sync was refused or failed, its `skilled-openapi` check is `degraded`, with `details: { state: 'stale', bundleId, bundleVersion, lastSync }`: the bundle served, and the refusal or failure with its reason and time. The Worker stays ready, since it serves the last good bundle. Each isolate answers for its own bundle and syncs. The details appear outside production, or with `health.includeDetails: true`.
 
 Each operation call checks the API's host first: on a Worker, `node:dns` resolves it over DNS over HTTPS, so the host must resolve publicly.
+
+`confirm` names the actions that ask the user before their request, by HTTP method, tag or operationId, as the Skilled OpenAPI plugin's [`confirm` option](https://frontmcp.dev/reference/plugins/skilled-openapi) does: `confirm: { methods: ['DELETE'] }`. The plugin checks it, so an invalid value refuses to start (`500 CONFIG_INVALID`, and the log names the field). The question is an MCP elicitation, which the server asks only with `elicitation: { enabled: true }`. On a Cloudflare Worker that setting refuses to start (`Elicitation requires distributed storage when running on Edge runtime`), so there an action `confirm` names is refused, `the user's confirmation is needed for voidInvoice, and this server can't ask for it: elicitation is disabled; nothing was sent`, or with `whenUnsupported: 'allow'` runs without asking. `load_skill` marks it with `asksForConfirmation: true`, and the audit log records what the confirmation came to. Up to 1.11.0 managed mode had no `confirm`, so every action ran without asking.
 
 ### Pushed bundles
 

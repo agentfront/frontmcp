@@ -69,6 +69,9 @@ export interface ActionAuthorization {
   hidden?: true;
 }
 
+/** The decision of a call no `confirm` rule names: it runs without asking. */
+const NO_CONFIRMATION_REQUIRED = { confirmation: 'not_required' } as const;
+
 /** Why the audit log records a call denied because `skills:filter` hides every skill listing its operation. */
 const HIDDEN_SKILLS_REASON = 'skills:filter hides every skill that lists the action';
 
@@ -178,12 +181,14 @@ export async function executeSkillAction(args: {
   const validInput = inputParse.data as Record<string, unknown>;
 
   // 3) An action the `confirm` option names asks the user before its request; a refusal sends nothing.
-  if (needsConfirmation(config.confirm, listings)) {
-    const refusal = await deps.confirmAction({ entry, input: validInput });
-    if (refusal) {
-      detach(audit?.writer.writeHttpCallFailure(auditCtx, { status: 0, error: refusal }), 'http-call-failure');
-      return { ok: false, status: 0, error: refusal };
-    }
+  const decision = needsConfirmation(config.confirm, listings)
+    ? await deps.confirmAction({ entry, input: validInput })
+    : NO_CONFIRMATION_REQUIRED;
+  const decidedAuditCtx = { ...auditCtx, confirmation: decision.confirmation };
+  if ('refusal' in decision) {
+    const error = decision.refusal;
+    detach(audit?.writer.writeHttpCallFailure(decidedAuditCtx, { status: 0, error }), 'http-call-failure');
+    return { ok: false, status: 0, error };
   }
 
   // 4) Allowed hosts: ONLY the single service this op is bound to (B3).
@@ -218,12 +223,12 @@ export async function executeSkillAction(args: {
       deps: runtimeDeps,
     });
   } catch (e) {
-    detach(audit?.writer.writeHttpCallFailure(auditCtx, { status: 0, error: e }), 'http-call-failure');
+    detach(audit?.writer.writeHttpCallFailure(decidedAuditCtx, { status: 0, error: e }), 'http-call-failure');
     throw e;
   }
   if (!result.ok) {
     detach(
-      audit?.writer.writeHttpCallFailure(auditCtx, {
+      audit?.writer.writeHttpCallFailure(decidedAuditCtx, {
         status: result.status,
         error: result.error ?? `http call failed with status ${result.status}`,
       }),
@@ -237,7 +242,10 @@ export async function executeSkillAction(args: {
     const outputParse = schemas.output.safeParse(result.data);
     if (!outputParse.success) {
       const error = `upstream response failed output schema: ${formatZodIssues(outputParse.error.issues)}`;
-      detach(audit?.writer.writeHttpCallFailure(auditCtx, { status: result.status, error }), 'http-call-failure');
+      detach(
+        audit?.writer.writeHttpCallFailure(decidedAuditCtx, { status: result.status, error }),
+        'http-call-failure',
+      );
       return {
         ok: false,
         status: result.status,
@@ -248,7 +256,7 @@ export async function executeSkillAction(args: {
   }
   if (result.ok) {
     detach(
-      audit?.writer.writeHttpCallSuccess(auditCtx, { status: result.status, output: result.data ?? null }),
+      audit?.writer.writeHttpCallSuccess(decidedAuditCtx, { status: result.status, output: result.data ?? null }),
       'http-call-success',
     );
   }

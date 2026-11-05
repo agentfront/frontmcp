@@ -2,7 +2,7 @@
 import { expect, test, type McpTestClient, type TestFixtures } from '@frontmcp/testing';
 
 import { ProductionEnvironment } from './helpers/production-environment';
-import { asAdmin, executeAction, runWorkflow } from './helpers/skilled-client';
+import { asAdmin, executeAction, loadSkill, runWorkflow } from './helpers/skilled-client';
 
 const environment = new ProductionEnvironment();
 
@@ -113,6 +113,19 @@ test.describe('a DELETE action on a server that confirms them', () => {
     expect(result.isError).toBe(true);
     expect(result.text()).toContain("this client can't ask for it: it doesn't support elicitation");
     expect(requestsSent()).toEqual(['POST /v1/invoices']);
+  });
+
+  test('is marked in load_skill as an action that asks for confirmation; the others are not', async ({
+    server,
+    auth,
+  }) => {
+    const client = await asAdmin({ server, auth });
+
+    const skill = await loadSkill(client, 'billing-admin');
+
+    const asking = (skill?.actions ?? []).filter((action) => action.asksForConfirmation === true);
+    expect(asking.map((action) => action.actionId)).toEqual(['voidInvoice']);
+    expect(skill?.actions?.length).toBeGreaterThan(1);
   });
 
   test('does not ask for an action the option does not name', async ({ server, auth }) => {
