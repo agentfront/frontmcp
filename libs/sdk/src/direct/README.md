@@ -205,6 +205,10 @@ const options: LoadSkillsOptions = {
 
 const result: LoadSkillsResult = await client.loadSkills(['skill-1', 'skill-2'], options);
 
+// A markdown load, annotated: its skills carry formattedContent without instructions
+const markdownOptions: LoadSkillsOptions<'markdown'> = { format: 'markdown' };
+const asMarkdown: LoadSkillsResult<'markdown'> = await client.loadSkills(['skill-1'], markdownOptions);
+
 // Result structure:
 // {
 //   skills: [{

@@ -115,6 +115,18 @@ describe('skills/load format', () => {
     expect(instructions).toBeUndefined();
   });
 
+  it("types a load whose options are annotated as LoadSkillsOptions<'markdown'> without instructions", async () => {
+    const options: LoadSkillsOptions<'markdown'> = { format: 'markdown' };
+    const result: LoadSkillsResult<'markdown'> = await client.loadSkills(['stock-check'], options);
+
+    const formattedContent: string = result.skills[0].formattedContent;
+    // @ts-expect-error a markdown load sends no instructions
+    const instructions: string = result.skills[0].instructions;
+
+    expect(formattedContent).toContain('Call count_pets with the status');
+    expect(instructions).toBeUndefined();
+  });
+
   it('types a load whose format is only known at runtime with optional instructions', async () => {
     const format: LoadSkillsFormat = 'markdown';
     const {

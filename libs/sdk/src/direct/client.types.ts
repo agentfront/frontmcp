@@ -126,7 +126,8 @@ export interface SearchSkillsResult {
 export type LoadSkillsFormat = 'full' | 'markdown' | 'instructions-only';
 
 /**
- * Options for loading skills.
+ * Options for loading skills. Without a type argument, `format` takes the values 1.11.0 took, so the result keeps
+ * `instructions` a string; annotate a markdown load as `LoadSkillsOptions<'markdown'>`.
  */
 export interface LoadSkillsOptions<Format extends LoadSkillsFormat = 'full' | 'instructions-only'> {
   /** What each skill is sent as; see {@link LoadSkillsFormat} */
