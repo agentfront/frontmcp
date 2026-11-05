@@ -307,10 +307,10 @@ describe('execute_action', () => {
     expect(sent).toEqual([]);
   });
 
-  it('fails an action of a skill whose rule the caller does not satisfy, sending nothing', async () => {
+  it('fails an action of a skill whose rule hides it from the caller as an unknown action, sending nothing', async () => {
     const denied = await executeAction('voidInvoice', { id: 'inv_1' }, { caller: VIEWER });
 
-    const error = "authority denied: roles.any: user has none of 'admin'";
+    const error = 'unknown action "voidInvoice" — run search_skill then load_skill to discover available actions';
     expect(denied.isError).toBe(true);
     expect(textOf(denied)).toBe(error);
     expect(denied.structuredContent).toEqual({ ok: false, status: 0, error });

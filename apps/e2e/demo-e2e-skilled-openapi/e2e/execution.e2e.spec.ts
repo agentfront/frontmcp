@@ -264,22 +264,23 @@ test.describe('the upstream credential (F1)', () => {
   });
 });
 
+const UNKNOWN_ADMIN_PING =
+  'unknown action "adminPing" — run search_skill then load_skill to discover available actions';
+
 test.describe('caller authorization (G1)', () => {
-  test('an action of a skill gated by a role runs only for a caller with the role', async ({ mcp, server, auth }) => {
+  test('an action of a skill gated by a role runs only for a caller with the role, and is unknown to the others', async ({
+    mcp,
+    server,
+    auth,
+  }) => {
     const script = "return await callTool('adminPing', {});";
 
     const asAnonymous = await runWorkflow(mcp, script);
     const asViewerResult = await runWorkflow(await asViewer({ server, auth }), script);
     const asAdminResult = await runWorkflow(await asAdmin({ server, auth }), script);
 
-    expect(asAnonymous).toMatchObject({
-      success: false,
-      error: "authority denied: roles.any: user has none of 'admin'",
-    });
-    expect(asViewerResult).toMatchObject({
-      success: false,
-      error: "authority denied: roles.any: user has none of 'admin'",
-    });
+    expect(asAnonymous).toMatchObject({ success: false, error: UNKNOWN_ADMIN_PING });
+    expect(asViewerResult).toMatchObject({ success: false, error: UNKNOWN_ADMIN_PING });
     expect(asAdminResult).toMatchObject({ success: true, value: { ok: true } });
     expect(requestsTo('/v1/admin/ping')).toBe(1);
   });
@@ -364,7 +365,7 @@ test.describe('one action with execute_action (E6)', () => {
     const gated = await executeAction(mcp, 'adminPing');
     const unprotected = await executeAction(await asAdmin({ server, auth }), 'getUsageStats');
 
-    expect(gated.text()).toBe("authority denied: roles.any: user has none of 'admin'");
+    expect(gated.text()).toBe(UNKNOWN_ADMIN_PING);
     expect(unprotected.text()).toBe('authority denied: unprotected_operation_denied');
     expect([gated.isError, unprotected.isError]).toEqual([true, true]);
     expect(environment.billingApi.requests).toEqual([]);

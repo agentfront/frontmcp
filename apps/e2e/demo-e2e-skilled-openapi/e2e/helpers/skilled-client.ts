@@ -53,6 +53,16 @@ export const asAdmin = (fixtures: Pick<TestFixtures, 'auth' | 'server'>) =>
 export const asViewer = (fixtures: Pick<TestFixtures, 'auth' | 'server'>) =>
   connectWithRoles(fixtures, 'vera', ['viewer']);
 
+/** A client whose verified token carries the `plan` claim the skill-filter server's hook reads (src/skill-filter.main.ts). */
+export async function onPlan(
+  { auth, server }: Pick<TestFixtures, 'auth' | 'server'>,
+  sub: string,
+  plan: string,
+): Promise<McpTestClient> {
+  const token = await auth.createToken({ sub, claims: { plan } });
+  return server.createClient({ token });
+}
+
 export interface Readiness {
   httpStatus: number;
   status: string;
