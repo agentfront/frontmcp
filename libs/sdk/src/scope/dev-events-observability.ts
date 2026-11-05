@@ -12,9 +12,14 @@ export function devEventsObservabilityConfig(
   installedPlugins: Iterable<PluginType>,
 ): { tracing: false; logging: false } | undefined {
   const underFrontmcpDev = !!getEnv('FRONTMCP_DEV_EVENTS_FILE') || getEnv('FRONTMCP_DEV_EVENTS_IPC') === '1';
-  if (!underFrontmcpDev) return undefined;
-  for (const plugin of installedPlugins) {
-    if (normalizePlugin(plugin).metadata.name === 'observability') return undefined;
-  }
+  if (!underFrontmcpDev || listsObservabilityPlugin(installedPlugins)) return undefined;
   return { tracing: false, logging: false };
+}
+
+/** Whether a plugins list installs ObservabilityPlugin, from any copy of `@frontmcp/observability`. */
+export function listsObservabilityPlugin(plugins: Iterable<PluginType>): boolean {
+  for (const plugin of plugins) {
+    if (normalizePlugin(plugin).metadata.name === 'observability') return true;
+  }
+  return false;
 }
