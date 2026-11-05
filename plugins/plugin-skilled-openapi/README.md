@@ -343,12 +343,12 @@ for a bad one.
 
 ### Sources
 
-| `type`   | Fields                                                                                                                          | What it does                                                                                                                                                                                                                                                                                                                       |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `inline` | `content`                                                                                                                       | The bundle object itself. For tests, bundles built in code, and runtimes without a file system.                                                                                                                                                                                                                                    |
-| `static` | `path`, `watch?`                                                                                                                | A JSON or YAML bundle file, resolved from the working directory. With `watch: true`, the plugin reloads it when it changes.                                                                                                                                                                                                        |
-| `npm`    | `packageName`, `exportName?`, `verifyProvenance?`                                                                               | Imports a package and uses one of its exports. Provenance checks aren't implemented yet, so the default `verifyProvenance: true` refuses to load it; set `false` only for a package you pin and trust.                                                                                                                             |
-| `saas`   | `endpoint`, `authToken`, `expectedAudience`, `jwksUrl`, `expectedIssuer`, `pollIntervalMs?`, `enableWebhook?`, `allowRollback?` | Pulls the bundle over HTTPS at startup and every `pollIntervalMs` (default 5 minutes), after checking `authToken` against `jwksUrl`, `expectedIssuer` and `expectedAudience`. With `enableWebhook: true`, also takes pushed bundles (below). Applies no bundle older than the one it serves, unless `allowRollback: true` (below). |
+| `type`   | Fields                                                                                                                                                | What it does                                                                                                                                                                                                                                                                                                                       |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inline` | `content`                                                                                                                                             | The bundle object itself. For tests, bundles built in code, and runtimes without a file system.                                                                                                                                                                                                                                    |
+| `static` | `path`, `watch?`                                                                                                                                      | A JSON or YAML bundle file, resolved from the working directory. With `watch: true`, the plugin reloads it when it changes.                                                                                                                                                                                                        |
+| `npm`    | `packageName`, `exportName?`, `verifyProvenance?`                                                                                                     | Imports a package and uses one of its exports. Provenance checks aren't implemented yet, so the default `verifyProvenance: true` refuses to load it; set `false` only for a package you pin and trust.                                                                                                                             |
+| `saas`   | `endpoint`, `authToken`, `expectedAudience`, `jwksUrl`, `expectedIssuer`, `pollIntervalMs?`, `enableWebhook?`, `pushReplayStorage?`, `allowRollback?` | Pulls the bundle over HTTPS at startup and every `pollIntervalMs` (default 5 minutes), after checking `authToken` against `jwksUrl`, `expectedIssuer` and `expectedAudience`. With `enableWebhook: true`, also takes pushed bundles (below). Applies no bundle older than the one it serves, unless `allowRollback: true` (below). |
 
 A new bundle from `static` (with `watch`) or `saas` is checked like the first, then replaces the skills and operations
 at once. A bundle that fails its checks isn't applied, and the reason is logged, with the first issues a schema check
@@ -382,14 +382,37 @@ With `enableWebhook: true` on a `saas` source, the server takes bundles the SaaS
 
 - The `Authorization: Bearer` token is checked as `authToken` is, and must also carry a `jti` of 8 or more characters
   that no push used and an `iat` within five minutes. A missing or refused token answers `401 invalid_token`, a used
-  `jti` answers `409 push_replayed`, and a JWKS that can't be read answers `503 temporarily_unavailable`.
+  `jti` answers `409 push_replayed`, and a JWKS that can't be read, or a `jti` that can't be recorded, answers
+  `503 temporarily_unavailable`.
 - The body is the bundle as JSON, checked as a pulled bundle is: `400 invalid_bundle` when it is not a bundle,
   `409 bundle_outdated` when it is older than the bundle being served, `422 bundle_not_applied` when its signature or
   its other checks fail. The served bundle stays.
 - An applied bundle answers `200 { applied: true, bundleId, bundleVersion }` and is kept as the last good bundle. Pushes
   and pulls apply one at a time, in the order they arrive.
 
-The used `jti`s are kept in memory: replicas, and the isolates of a Worker, don't share them.
+By default the used `jti`s are kept in the process's memory, which is enough for a single process. With several
+replicas, a push replayed to another replica would be accepted again, so give them a store they share with
+`pushReplayStorage`, a config for `createStorage()` from `@frontmcp/utils`:
+
+```ts
+SkilledOpenApiPlugin.init({
+  source: {
+    type: 'saas',
+    // endpoint, authToken, expectedAudience, jwksUrl, expectedIssuer ...
+    enableWebhook: true,
+    pushReplayStorage: { type: 'redis', redis: { url: process.env.REDIS_URL } },
+  },
+});
+```
+
+- Its `type` is `redis`, `upstash`, `vercel-kv`, or `sqlite` for processes on one machine. `memory`, `auto` and
+  `cloudflare-kv` are refused, and so is `fallback: 'memory'`: each replica would keep its own `jti`s. Cloudflare KV is
+  eventually consistent, so two isolates could both read a `jti` as unused.
+- Each `jti` is kept under `frontmcp:skilled-openapi:push-jti:<expectedAudience>:` until its token's `iat` is five
+  minutes old.
+- The store is connected on the first push. While it can't be reached, every push answers
+  `503 temporarily_unavailable` and the log says why: a push is never accepted unchecked.
+- On a Cloudflare Worker, `@frontmcp/edge` keeps the `jti`s in a Durable Object instead (`managed.pushReplay`).
 
 ### When no bundle loads
 

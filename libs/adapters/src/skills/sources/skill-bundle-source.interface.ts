@@ -1,6 +1,7 @@
 // file: plugins/plugin-skilled-openapi/src/sources/skill-bundle-source.interface.ts
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
+import type { ReplayNonceStore } from '../security/replay-nonce-store';
 
 /**
  * Pluggable source of skill bundles. Static, npm-installed, and SaaS-pull
@@ -95,7 +96,9 @@ export interface BundleCacheStore {
  *   - `cache` replaces the on-disk last-good cache (no filesystem on a Worker),
  *   - `disablePolling` turns off the internal `setInterval` loop (no background
  *     execution on a Worker; a Cron Trigger / DO alarm drives {@link
- *     SkillBundleSource.refresh} instead).
+ *     SkillBundleSource.refresh} instead),
+ *   - `pushReplayStore` records the pushed tokens' `jti`s where every instance
+ *     reaches them (a Durable Object on a Worker).
  */
 export interface BundleSourceDeps {
   /**
@@ -109,4 +112,9 @@ export interface BundleSourceDeps {
    * {@link SkillBundleSource.refresh} instead.
    */
   disablePolling?: boolean;
+  /**
+   * Where the push replay guard records the `jti`s it accepted, shared by every instance that serves the server.
+   * Replaces the `saas` source's `pushReplayStorage` option and its in-memory default.
+   */
+  pushReplayStore?: ReplayNonceStore;
 }
