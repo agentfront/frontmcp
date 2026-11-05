@@ -362,15 +362,18 @@ operations of the bundle it started on.
 Connected clients are told once the new bundle is in place, with one notification per list it changed, however many
 skills and operations it has:
 
-- `notifications/skills/list_changed` for the skills, `notifications/tools/list_changed` for the operation tools, and
-  `notifications/resources/list_changed` for the skills' `skill://` resources.
+- `notifications/skills/list_changed` for the skills, and `notifications/resources/list_changed` for the skills'
+  `skill://` resources when skills are added or removed.
+- No `notifications/tools/list_changed`: the operation tools are internal, and `tools/list` never shows them.
 - A poll that pulls the bundle being served again leaves it registered and sends nothing. So does a refused bundle.
-- A bundle that fails part-way is rolled back, and sends one notification for each list it changed before it failed.
+- A bundle that fails part-way is rolled back to the bundle served, and sends nothing. If the rollback can't put a
+  skill back, it sends one notification for each list it left changed.
 - The first bundle that loads sends `notifications/skills/list_changed` even when it has no skills, since the skill
   surfaces stop answering that no bundle is loaded.
 
 Up to 1.11.0 a new bundle sent one notification per skill, operation tool and resource it registered or removed (about
-25 for a modest bundle), and every poll registered the bundle being served again, which sent them again.
+25 for a modest bundle), a rolled-back bundle sent them too, and every poll registered the bundle being served again,
+which sent them again.
 
 A bundle from the `saas` source, pulled or pushed, is applied only when it isn't older than the bundle being served, so
 a validly signed old bundle, replayed or served by mistake, can't roll the server back:

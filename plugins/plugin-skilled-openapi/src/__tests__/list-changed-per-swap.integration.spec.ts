@@ -1,11 +1,18 @@
 // A connected client of a real server is told once per list that a bundle swap changed (pulled, pushed, or one with no
-// skills), not once per skill, operation tool and skill resource the swap registers or removes. A refused bundle, and
-// the bundle being served pulled again, change nothing and send nothing.
+// skills), not once per skill, operation tool and skill resource the swap registers or removes. The operation tools are
+// internal, never in tools/list, so a swap sends no tools/list_changed. A refused bundle, the bundle being served pulled
+// again, and a bundle rolled back to the one served change nothing and send nothing.
 import 'reflect-metadata';
 
 import type { BundleCacheStore, ResolvedBundle } from '@frontmcp/adapters/skills';
 import { Client } from '@frontmcp/protocol/client';
-import { createInMemoryServer, createWebFetchHandler, FrontMcpInstance, LogLevel } from '@frontmcp/sdk';
+import {
+  createInMemoryServer,
+  createWebFetchHandler,
+  FrontMcpInstance,
+  LogLevel,
+  type SkillRegistryInterface,
+} from '@frontmcp/sdk';
 
 import { type BundleSyncOutcome } from '../index';
 import SkilledOpenApiPlugin, { SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN } from '../skilled-openapi.plugin';
@@ -38,12 +45,31 @@ function billingBundle(version: string, skills: Record<string, string[]>): Resol
   };
 }
 
+/**
+ * A bundle that replaces `invoices` and adds `legacy`, then fails on `ledger`, whose id is the skill:// path of
+ * `legacy`: it is rolled back after it changed the skills.
+ */
+function collidingBundle(version: string): ResolvedBundle {
+  const colliding = billingBundle(version, { invoices: ['listInvoices'], legacy: ['listPayouts'], ledger: [] });
+  colliding.skills[1].name = 'archive';
+  colliding.skills[2].id = 'archive';
+  return colliding;
+}
+
+const ONE_RESOURCES_AND_SKILLS_LIST_CHANGED = {
+  'notifications/resources/list_changed': 1,
+  'notifications/skills/list_changed': 1,
+};
+
 interface SkilledServer {
   refresh(): Promise<BundleSyncOutcome>;
   push(body: unknown): Promise<Response>;
   /** The `list_changed` notifications the connected client got since `seen`, counted by method. */
   listChangedSince(seen: number): Record<string, number>;
   notificationCount(): number;
+  /** The ids of the skills the server lists. */
+  skillIds(): string[];
+  skills: SkillRegistryInterface;
   close(): Promise<void>;
 }
 
@@ -129,6 +155,8 @@ describe('list_changed notifications of a bundle swap', () => {
         return counts;
       },
       notificationCount: () => methods.length,
+      skillIds: () => scope.skills.getSkills().map((skill) => skill.metadata.id ?? skill.name),
+      skills: scope.skills,
       close: async () => {
         await client.close();
         await inMemory.close();
@@ -169,7 +197,7 @@ describe('list_changed notifications of a bundle swap', () => {
       await server?.close();
     });
 
-    it('sends one tools, resources and skills list_changed for a pulled bundle that changes all three', async () => {
+    it('sends one resources and skills list_changed for a pulled bundle that changes its skills and operations', async () => {
       published = signed(
         billingBundle('2.0.0', { invoices: ['listInvoices'], refunds: ['refundInvoice', 'getRefund'] }),
       );
@@ -178,11 +206,7 @@ describe('list_changed notifications of a bundle swap', () => {
       const outcome = await server.refresh();
 
       expect(outcome.status).toBe('applied');
-      expect(server.listChangedSince(seen)).toEqual({
-        'notifications/tools/list_changed': 1,
-        'notifications/resources/list_changed': 1,
-        'notifications/skills/list_changed': 1,
-      });
+      expect(server.listChangedSince(seen)).toEqual(ONE_RESOURCES_AND_SKILLS_LIST_CHANGED);
     });
 
     it('sends nothing when a pull brings the bundle being served again', async () => {
@@ -194,7 +218,7 @@ describe('list_changed notifications of a bundle swap', () => {
       expect(server.listChangedSince(seen)).toEqual({});
     });
 
-    it('sends one of each for a pushed bundle', async () => {
+    it('sends one resources and skills list_changed for a pushed bundle', async () => {
       const seen = server.notificationCount();
 
       const response = await server.push(
@@ -202,11 +226,7 @@ describe('list_changed notifications of a bundle swap', () => {
       );
 
       expect(response.status).toBe(200);
-      expect(server.listChangedSince(seen)).toEqual({
-        'notifications/tools/list_changed': 1,
-        'notifications/resources/list_changed': 1,
-        'notifications/skills/list_changed': 1,
-      });
+      expect(server.listChangedSince(seen)).toEqual(ONE_RESOURCES_AND_SKILLS_LIST_CHANGED);
     });
 
     it('sends nothing for a bundle it refuses', async () => {
@@ -232,36 +252,49 @@ describe('list_changed notifications of a bundle swap', () => {
       expect(server.listChangedSince(seen)).toEqual({});
     });
 
-    it('sends one skills and resources list_changed for a bundle rolled back after registering skills', async () => {
-      const collision = billingBundle('4.2.0', { payouts: ['listPayouts'], legacy: ['listPayouts'], ledger: [] });
-      collision.skills[1].name = 'archive';
-      collision.skills[2].id = 'archive';
+    it('sends nothing for a bundle that fails after it registered skills and replaced one, and is rolled back', async () => {
       const seen = server.notificationCount();
 
-      const response = await server.push(signed(collision));
+      const response = await server.push(signed(collidingBundle('4.2.0')));
 
       expect(response.status).toBe(422);
       expect(await response.json()).toMatchObject({
         error_description: expect.stringContaining('id "archive" of skill "ledger" is the skill:// path of skill'),
       });
-      expect(server.listChangedSince(seen)).toEqual({
-        'notifications/resources/list_changed': 1,
-        'notifications/skills/list_changed': 1,
-      });
+      expect(server.skillIds().sort()).toEqual(['disputes', 'invoices']);
+      expect(server.listChangedSince(seen)).toEqual({});
     });
 
-    it('sends one of each for a bundle with no skills that replaces one with skills', async () => {
+    it('sends one resources and skills list_changed for a rollback that could not restore a skill it replaced', async () => {
+      const registerSkillContent = server.skills.registerSkillContent.bind(server.skills);
+      const restoreFails = jest
+        .spyOn(server.skills, 'registerSkillContent')
+        .mockImplementation(async (content, options) => {
+          if (options?.source?.endsWith(':rollback')) throw new Error('the registry refused the restore');
+          return registerSkillContent(content, options);
+        });
+      const seen = server.notificationCount();
+
+      try {
+        const response = await server.push(signed(collidingBundle('4.3.0')));
+
+        expect(response.status).toBe(422);
+        expect(server.skillIds()).toEqual(['disputes']);
+        expect(server.listChangedSince(seen)).toEqual(ONE_RESOURCES_AND_SKILLS_LIST_CHANGED);
+      } finally {
+        restoreFails.mockRestore();
+      }
+    });
+
+    it('sends one resources and skills list_changed for a bundle with no skills that replaces one with skills', async () => {
       published = signed(billingBundle('5.0.0', {}));
       const seen = server.notificationCount();
 
       const outcome = await server.refresh();
 
       expect(outcome.status).toBe('applied');
-      expect(server.listChangedSince(seen)).toEqual({
-        'notifications/tools/list_changed': 1,
-        'notifications/resources/list_changed': 1,
-        'notifications/skills/list_changed': 1,
-      });
+      expect(server.skillIds()).toEqual([]);
+      expect(server.listChangedSince(seen)).toEqual(ONE_RESOURCES_AND_SKILLS_LIST_CHANGED);
     });
   });
 
@@ -275,6 +308,17 @@ describe('list_changed notifications of a bundle swap', () => {
 
     afterAll(async () => {
       await server?.close();
+    });
+
+    it('sends nothing for a first bundle that is rolled back, since the skills are still not loaded', async () => {
+      published = signed(collidingBundle('0.9.0'));
+      const seen = server.notificationCount();
+
+      const outcome = await server.refresh();
+
+      expect(outcome.status).toBe('refused');
+      expect(server.skillIds()).toEqual([]);
+      expect(server.listChangedSince(seen)).toEqual({});
     });
 
     it('sends one skills/list_changed when the first bundle loads with no skills, since the skills loaded', async () => {

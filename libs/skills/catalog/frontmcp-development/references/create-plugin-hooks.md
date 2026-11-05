@@ -375,7 +375,21 @@ await scope.batchListChanges(async () => {
 ```
 
 - Clients get one `list_changed` for each list the batch changed (`tools`, `resources`, `prompts`, `skills`), once it ends, and none for a list it left alone. A batch that throws still sends one for each list it changed before the throw, then rejects with the error.
-- A batch run inside another joins it, so the outer one sends them.
+- A change that undoes itself, such as a rollback that put back every entry it replaced, calls `batch.listsRestored()` on the batch its callback receives. Then nothing it changed up to that point is sent:
+
+  ```typescript
+  await scope.batchListChanges(async (batch) => {
+    try {
+      await registerAll(bundleSkills);
+    } catch {
+      await restorePreviousSkills();
+      batch.listsRestored();
+    }
+  });
+  ```
+
+- A batch run inside another hands what it changed to the outer one, which sends it when it ends. `listsRestored()` in the inner batch drops only what the inner batch changed.
+- Registering or removing a `visibility: 'internal'` tool (`scope.tools.registerToolInstance()` / `unregisterToolInstance()`) sends no `tools/list_changed`, inside a batch or not: `tools/list` never shows internal tools.
 - Changes made outside the batch, such as by another request while it runs, are sent as they happen, as every change outside a batch is.
 - `@frontmcp/plugin-skilled-openapi` runs each bundle it applies in one batch.
 

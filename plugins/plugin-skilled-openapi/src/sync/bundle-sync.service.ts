@@ -27,6 +27,7 @@ import {
 import {
   SkillBundleNotLoadedError,
   type FrontMcpLogger,
+  type ListChangeBatch,
   type ScopeEntry,
   type SkillContent,
   type SkillRegistryInterface,
@@ -370,8 +371,8 @@ export class BundleSyncService {
    */
   private applyAnnounced(bundle: ResolvedBundle): Promise<BundleApplyResult> {
     const firstBundle = this.bundleStore.current() === undefined;
-    const applyAndAnnounce = async () => {
-      const result = await this.apply(bundle);
+    const applyAndAnnounce = async (batch?: ListChangeBatch) => {
+      const result = await this.apply(bundle, batch);
       if (result.applied && firstBundle) this.skillRegistry.notifyListChanged();
       return result;
     };
@@ -382,8 +383,9 @@ export class BundleSyncService {
    * Validate signature and apply the bundle. Returns a structured result;
    * never throws on validation/registration failure (caller logs + ignores).
    * Throws ONLY on programmer error (e.g. invalid argument).
+   * A rollback that restores every skill tells `batch` the lists are as they were: the operation tools are never listed.
    */
-  async apply(bundle: ResolvedBundle): Promise<BundleApplyResult> {
+  async apply(bundle: ResolvedBundle, batch?: ListChangeBatch): Promise<BundleApplyResult> {
     if (!bundle) throw new Error('apply: bundle is required');
 
     // Gate 0: pin guard. When operators have pinned the active version,
@@ -574,6 +576,7 @@ export class BundleSyncService {
       this.logger.error(
         `[bundle-sync] apply failed for ${bundle.bundleId}@${bundle.version}: ${(e as Error).message}; rolling back`,
       );
+      let listsRestored = true;
 
       // Rollback step A: restore the hidden-op registry to its pre-apply state.
       this.hiddenOps.clear();
@@ -608,7 +611,7 @@ export class BundleSyncService {
         try {
           await h.unregister();
         } catch {
-          // best effort
+          listsRestored = false;
         }
       }
 
@@ -641,8 +644,10 @@ export class BundleSyncService {
             `[bundle-sync] failed to restore prior skill ${id} during rollback: ${(restoreErr as Error).message}`,
           );
           this.skillUnregisterByBundleId.delete(id);
+          listsRestored = false;
         }
       }
+      if (listsRestored) batch?.listsRestored();
 
       return {
         applied: false,

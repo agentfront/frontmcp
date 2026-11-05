@@ -1,12 +1,14 @@
 import 'reflect-metadata';
 
+import { type Token } from '@frontmcp/di';
 import { Client } from '@frontmcp/protocol/client';
 
-import { App, LogLevel, Tool, ToolContext } from '../../common';
+import { App, LogLevel, Tool, ToolContext, ToolKind } from '../../common';
 import type { RuntimeToolDefinition } from '../../direct/direct.types';
 import { registerRuntimeTool } from '../../direct/runtime-tools';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
+import { ToolInstance } from '../../tool/tool.instance';
 import { createInMemoryServer } from '../../transport/in-memory-server';
 import { announcesListChangeNow, runListChangeBatch, type BatchedListKind } from '../list-change-batch';
 import { keepingListsUnchanged } from '../unchanged-lists';
@@ -142,6 +144,75 @@ describe('runListChangeBatch', () => {
     expect(sent).toEqual([]);
   });
 
+  it('announces nothing for a batch whose change restored every list, also when it then throws', async () => {
+    const { lists, sent, change } = testLists();
+
+    await runListChangeBatch(lists, (batch) => {
+      change('skills');
+      change('resources');
+      batch.listsRestored();
+    });
+    const rolledBack = runListChangeBatch(lists, async (batch) => {
+      change('tools');
+      batch.listsRestored();
+      throw new Error('rolled back');
+    });
+
+    await expect(rolledBack).rejects.toThrow('rolled back');
+    expect(sent).toEqual([]);
+  });
+
+  it('announces a list changed after the change restored the lists', async () => {
+    const { lists, sent, change } = testLists();
+
+    await runListChangeBatch(lists, (batch) => {
+      change('skills');
+      batch.listsRestored();
+      change('tools');
+    });
+
+    expect(sent).toEqual(['lists:tools']);
+  });
+
+  it('restores only what a batch run inside another changed, and the outer one announces the rest', async () => {
+    const { lists, sent, change } = testLists();
+    let sentAfterInner: string[] = [];
+
+    await runListChangeBatch(lists, async () => {
+      change('tools');
+      await runListChangeBatch(lists, (inner) => {
+        change('skills');
+        inner.listsRestored();
+        change('prompts');
+      });
+      sentAfterInner = [...sent];
+    });
+
+    expect(sentAfterInner).toEqual([]);
+    expect(sent).toEqual(['lists:tools', 'lists:prompts']);
+  });
+
+  it('announces what a batch run inside another changed when it outlives the outer one', async () => {
+    const { lists, sent, change } = testLists();
+    let finishInner = (): void => undefined;
+    let inner: Promise<void> = Promise.resolve();
+
+    await runListChangeBatch(lists, () => {
+      inner = runListChangeBatch(lists, async () => {
+        await new Promise<void>((resolve) => {
+          finishInner = resolve;
+        });
+        change('resources');
+      });
+    });
+    const sentAfterOuter = [...sent];
+    finishInner();
+    await inner;
+
+    expect(sentAfterOuter).toEqual([]);
+    expect(sent).toEqual(['lists:resources']);
+  });
+
   it("holds only its own scope's lists, also inside a batch of another scope", async () => {
     const billing = testLists('billing');
     const shipping = testLists('shipping');
@@ -240,6 +311,45 @@ describe('scope.batchListChanges() on a server with a connected client', () => {
     expect(listed).toEqual(expect.arrayContaining(['open_ticket', 'close_ticket']));
     expect(listed).not.toContain('assign_ticket');
     expect(sentSince(seen)).toEqual(['notifications/tools/list_changed', 'notifications/tools/list_changed']);
+  });
+
+  it('sends nothing for a batch rolled back to the tools it started with', async () => {
+    const seen = notifications.length;
+
+    await scope.batchListChanges(async (batch) => {
+      const unregister = await registerRuntimeTool(scope, runtimeTool('merge_tickets'));
+      unregister();
+      batch.listsRestored();
+    });
+    await settle();
+
+    expect(sentSince(seen)).toEqual([]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).not.toContain('merge_tickets');
+  });
+
+  it('sends nothing for an internal tool registered or removed, since tools/list never shows it', async () => {
+    const seen = notifications.length;
+    const provide = () => 'reindexed';
+    const internalTool = new ToolInstance(
+      {
+        kind: ToolKind.FUNCTION,
+        provide,
+        metadata: { name: 'reindex_tickets', inputSchema: {}, visibility: 'internal' },
+      },
+      scope.providers,
+      { kind: 'plugin', id: 'ticket-index', ref: Symbol('ticket-index') },
+    );
+    await internalTool.ready;
+
+    scope.tools.registerToolInstance(internalTool);
+    await settle();
+    const registered = scope.tools.listAllInstances().some((tool) => tool.name === 'reindex_tickets');
+    const removed = scope.tools.unregisterToolInstance(provide as unknown as Token);
+    await settle();
+
+    expect(registered).toBe(true);
+    expect(removed).toBe(true);
+    expect(sentSince(seen)).toEqual([]);
   });
 
   it('sends a change made outside a batch as it happens', async () => {

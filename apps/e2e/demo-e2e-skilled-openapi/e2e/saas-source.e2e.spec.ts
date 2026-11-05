@@ -2,8 +2,8 @@
 // issuer's JWKS: the startup pull, new versions applied by polling, refused tokens, bundles and older versions, the
 // cache, redirects. /readyz stays ready but says the bundle served is stale while the last pull was refused or failed.
 // The log and /readyz name the check a pull or push token failed; the tools and the push answer don't.
-// A pulled or pushed version is announced with one list_changed per list it changed, and a poll of the version served
-// with none.
+// A pulled or pushed version is announced with one list_changed per list it changed (skills and their skill://
+// resources; the operation tools are internal, never listed), and a poll of the version served with none.
 import type { BundleTokenFailure, ResolvedBundle } from '@frontmcp/adapters/skills';
 import { expect, test, type McpTestClient, type ServerFixture } from '@frontmcp/testing';
 import { chmod, fileExists, pathJoin, readFile } from '@frontmcp/utils';
@@ -34,11 +34,7 @@ const POLL_INTERVAL_MS = 500;
 const CACHE_FILE_NAME = 'e2e_billing.json';
 const CREATE_INVOICE = "return await callTool('createInvoice', { customerId: 'cus_e2e', amount: 10 });";
 const GET_PLAN = "return await callTool('getAccountPlan', {});";
-const LIST_CHANGED = [
-  'notifications/resources/list_changed',
-  'notifications/skills/list_changed',
-  'notifications/tools/list_changed',
-];
+const LIST_CHANGED = ['notifications/resources/list_changed', 'notifications/skills/list_changed'];
 const ONE_LIST_CHANGED_EACH = Object.fromEntries(LIST_CHANGED.map((method) => [method, 1]));
 
 type BundledSkill = ResolvedBundle['skills'][number];

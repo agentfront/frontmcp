@@ -42,13 +42,16 @@ class FakeRegistry implements Partial<SkillRegistryInterface> {
   public failOn = new Set<string>();
   /** Superseded ids a registration reports as removed, by the registered skill's id. */
   public removedBy = new Map<string, string[]>();
+  /** Whether a rollback's registration of a prior skill fails. */
+  public failRollbackRestores = false;
   public notifyListChanged = jest.fn();
 
   async registerSkillContent(
     content: SkillContent,
     opts?: RegisterSkillContentOptions,
   ): Promise<RegisteredSkillContent> {
-    if (this.failNext || this.failOn.has(content.id)) {
+    const rollbackRestore = opts?.source?.endsWith(':rollback') ?? false;
+    if (this.failNext || this.failOn.has(content.id) || (this.failRollbackRestores && rollbackRestore)) {
       this.failNext = false;
       throw new Error('synthetic registration failure');
     }
@@ -542,6 +545,58 @@ describe('BundleSyncService', () => {
     expect(again.unregistered).toEqual(['target']);
     expect(again.registered.map((content) => content.id)).toEqual(['target', 'invoices']);
     expect(again.registered[1].name).toBe('target');
+  });
+
+  describe('the lists a rollback leaves changed', () => {
+    const skill = (id: string) => ({
+      id,
+      name: id,
+      description: `${id} skill`,
+      instructions: `# ${id}`,
+      operationIds: [],
+    });
+
+    async function failedApply(fakeReg: FakeRegistry) {
+      const sync = new BundleSyncService(
+        fakeReg as unknown as SkillRegistryInterface,
+        new HiddenOpRegistry(),
+        new BundleStore(),
+        { requireSignature: false, trustedKeys: [], exposeOperationsAsInternalTools: false },
+        fakeLogger,
+      );
+      const batch = { listsRestored: jest.fn() };
+      const applied = await sync.apply(buildBundle({ skills: [skill('invoices')], operations: {} }), batch);
+      const restoredByApplied = batch.listsRestored.mock.calls.length;
+      fakeReg.failOn.add('zeta');
+      const rolledBack = await sync.apply(
+        buildBundle({ skills: [skill('invoices'), skill('zeta')], operations: {}, version: '2' }),
+        batch,
+      );
+      return { applied, restoredByApplied, rolledBack, batch };
+    }
+
+    it('tells the batch the lists are as they were when the rollback restored every skill', async () => {
+      const fakeReg = new FakeRegistry();
+
+      const { applied, restoredByApplied, rolledBack, batch } = await failedApply(fakeReg);
+
+      expect(applied.applied).toBe(true);
+      expect(restoredByApplied).toBe(0);
+      expect(rolledBack).toMatchObject({ applied: false, reason: expect.stringContaining('rollback') });
+      expect(fakeReg.registered.map((content) => content.id)).toEqual(['invoices', 'invoices', 'invoices']);
+      expect(batch.listsRestored).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves the batch to announce the lists when a skill could not be restored', async () => {
+      const fakeReg = new FakeRegistry();
+      fakeReg.failRollbackRestores = true;
+
+      const { rolledBack, batch } = await failedApply(fakeReg);
+
+      expect(rolledBack.applied).toBe(false);
+      expect(fakeReg.unregistered).toEqual(['invoices']);
+      expect(batch.listsRestored).not.toHaveBeenCalled();
+    });
   });
 
   it('rolls back hidden-op state if registration fails mid-apply', async () => {

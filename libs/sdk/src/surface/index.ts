@@ -13,4 +13,5 @@ export {
   runListChangeBatch,
   type BatchedListKind,
   type BatchedLists,
+  type ListChangeBatch,
 } from './list-change-batch';
