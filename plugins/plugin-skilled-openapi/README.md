@@ -328,7 +328,7 @@ for a bad one.
 | `unprotectedOps`                  | `'allow' \| 'deny'`                                      | `'allow'`                           | Whether an operation with no `requiredAuthorities`, on itself or its skill, may be called. `'deny'` blocks it unless it's marked `public: true`.               |
 | `outbound`                        | `OutboundOptions`                                        | see below                           | Limits on the requests to your API.                                                                                                                            |
 | `dev`                             | `boolean`                                                | `false`                             | For development only: turns off signature checks (unless `requireSignature` is set) and allows `http:` URLs. Logs a warning.                                   |
-| `bundleCacheDir`                  | `string`                                                 | `'.frontmcp/skilled-openapi/'`      | Where the `saas` source keeps the last bundle the plugin applied, served when a pull fails at startup.                                                         |
+| `bundleCacheDir`                  | `string`                                                 | `'.frontmcp/skilled-openapi/'`      | Where the `saas` source keeps the last bundle the plugin applied, served at startup when the pull fails, or brings an older or refused bundle.                 |
 | `exposeOperationsAsInternalTools` | `boolean`                                                | `true`                              | Register each operation as an internal tool for `this.callTool()`, which `execute_action` runs an action through.                                              |
 | `confirm`                         | `{ methods?, tags?, operations?, whenUnsupported? }`     |                                     | Actions that ask the user before their request; `whenUnsupported` is `'refuse'` or `'allow'`. See [Asking the user](#asking-the-user-before-an-action).        |
 | `sourceConflictPolicy`            | `'static-wins' \| 'last-wins' \| 'reject'`               | `'static-wins'`                     | Accepted and currently unused: the plugin has one source.                                                                                                      |
@@ -387,11 +387,23 @@ a validly signed old bundle, replayed or served by mistake, can't roll the serve
 - To roll back, publish the earlier content under a newer version, or set `allowRollback: true` on the source, which
   then applies any bundle that passes its other checks, as the `inline`, `static` and `npm` sources do.
 
-A server that starts has no bundle to compare with: it serves the bundle it pulls, or the cached one when the pull fails.
-
 The `saas` source keeps the last bundle the plugin applied, pulled or pushed, in `bundleCacheDir` (on a Worker, in the
-injected cache). A bundle that fails its signature or its other checks is never kept, so a server that restarts while
-the bundle server is down serves the last bundle it applied.
+injected cache). A bundle that fails its signature or its other checks is never kept. A server that starts has no
+bundle served yet, so the cached bundle stands in for it:
+
+- The pull fails (an outage, a schema error): the server serves the cached bundle.
+- The pulled bundle is older than the cached one: the server serves the cached bundle, and logs
+  `[bundle-sync] bundle acme:billing@1.4.0 not applied: older than the cached bundle acme:billing@1.5.0 (generatedAt ...); serving the cached bundle acme:billing@1.5.0`.
+  With `allowRollback: true` it serves the pulled bundle. A stale CDN or a rolled-back origin can't take a restarted
+  server back.
+- The pulled bundle is refused (its signature, a bundle that fails part-way): the server serves the cached bundle.
+- The cached bundle is refused too (its signature no longer checks out): the server serves the pulled bundle when it
+  passes, or none.
+- Serving the cached bundle never writes it back to the cache. Only a bundle the server applies from a pull or a push is
+  written.
+
+`/readyz` says which (below). Up to 1.11.0 a start served whatever it pulled, an older bundle too, served nothing when
+the pulled bundle was refused, and wrote the cached bundle back when it served it.
 
 A `static` file that fails to load at startup is still watched (with `watch: true`), and a `saas` source keeps polling
 after a failed first pull, so the next good bundle loads without a restart.
@@ -483,8 +495,9 @@ signature, its other checks, or it is older than the one served), or a pull fail
 }
 ```
 
-- `lastSync.status` is `refused`, with the refused bundle's id and version, or `failed`, for a pull that failed, with
-  `cacheFallback: true` when the server started on its cached bundle because of it.
+- `lastSync.status` is `refused`, with the refused bundle's id and version, or `failed`, for a pull that failed.
+  `cacheFallback: true` says the server started on its cached bundle because of it: the pull failed, or the pulled
+  bundle was refused or older than the cached one (`reason: "older than the cached bundle acme:billing@1.5.0 ..."`).
 - The reason is cut as the tools' reasons are: its first line, URLs cut to scheme, host and path, no tokens.
 - The next sync that applies a bundle, or pulls the one served again, makes the check `healthy`.
 - `/readyz` shows the checks' details outside production, or with `health: { includeDetails: true }`.

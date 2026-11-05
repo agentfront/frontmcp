@@ -113,9 +113,24 @@ describe('SaasPullSource — edge (worker-safe + Cron-refreshable)', () => {
 
     await src.start(); // pull fails → read cache
     expect(cache.reads).toBeGreaterThanOrEqual(1);
+    expect(cache.writes).toBe(0);
     expect(seen).toHaveLength(1);
     expect(seen[0].bundleId).toBe('saas:test');
     await src.stop();
+  });
+
+  it('reads back the bundle the injected cache holds, through the schema check, and writes nothing', async () => {
+    const cache = memoryCache(baseBundle);
+    const tamperedCache = memoryCache({ ...baseBundle, skills: [{ id: 'x' }] } as unknown as ResolvedBundle);
+    const src = new EdgeFakeSource(options(), fail, { cache, disablePolling: true });
+    const tamperedSrc = new EdgeFakeSource(options(), fail, { cache: tamperedCache, disablePolling: true });
+
+    const kept = await src.keptBundle();
+    const tampered = await tamperedSrc.keptBundle();
+
+    expect(kept).toMatchObject({ bundleId: 'saas:test', version: '1' });
+    expect(tampered).toBeUndefined();
+    expect([cache.writes, tamperedCache.writes]).toEqual([0, 0]);
   });
 
   it('names the injected cache, not a file path, when the boot pull fails and the cache is empty (#769)', async () => {
