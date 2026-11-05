@@ -30,6 +30,18 @@ export type SkillAuditPhase =
   | 'http-call-failure';
 
 /**
+ * Whether the user confirmed the call, as `@frontmcp/plugin-skilled-openapi`'s `confirm` option decided it.
+ *
+ * - `not_required`: no `confirm` rule names the action, so nobody was asked.
+ * - `confirmed`: the user said yes. A generated CLI's `--yes` says yes for them, so it is recorded the same.
+ * - `skipped`: the client can't ask, and `whenUnsupported: 'allow'` sent the request without asking.
+ * - `declined`: the user said no, or cancelled. Nothing was sent.
+ * - `unanswered`: no answer came, so nothing was sent: the client can't ask (`whenUnsupported: 'refuse'`), the
+ *   question timed out, or a `run_workflow` script reached the action by an id it didn't name.
+ */
+export type SkillAuditConfirmation = 'not_required' | 'confirmed' | 'skipped' | 'declined' | 'unanswered';
+
+/**
  * Signature algorithm used to sign the audit record.
  *
  * - `HS256`: HMAC-SHA256 with a shared secret. Default for dev / single-pod
@@ -90,6 +102,11 @@ export interface SkillAuditRecord {
   outputHash?: string;
   /** Redacted, truncated error description for http-call-failure. */
   errorMessage?: string;
+  /**
+   * Whether the user confirmed the call — see {@link SkillAuditConfirmation}. Set on the records written once that is
+   * decided, after the input check; left out of the records before it, and of records written up to 1.11.0.
+   */
+  confirmation?: SkillAuditConfirmation;
   /**
    * sha256Hex of the canonicalized previous record (without its own signature).
    * The genesis record uses `'0'.repeat(64)`. Tamper detection works because

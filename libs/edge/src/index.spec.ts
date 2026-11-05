@@ -11,7 +11,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 
 import { App, Tool, ToolContext, z } from '@frontmcp/sdk';
 
-import { createEdgeMcp } from './index';
+import { createEdgeMcp, type ManagedEdgeOptions } from './index';
 
 const echoInput = { message: z.string() };
 
@@ -431,6 +431,247 @@ describe('a managed edge Cron run in an isolate that has served no request', () 
       },
     });
     expect(cacheWrites).toBe(writesBeforeRestarts);
+  });
+});
+
+describe('a managed edge whose confirm option names an action', () => {
+  const ISSUER = 'https://cloud.example.dev';
+  const ENDPOINT = `${ISSUER}/v1/bundles/billing`;
+  const JWKS_URL = `${ISSUER}/.well-known/jwks.json`;
+  const AUDIENCE = 'billing:prod';
+  const KEY_ID = 'edge-confirm';
+  const BILLING_API = 'https://billing.example.dev';
+  const PROTOCOL_20260728 = '2026-07-28';
+  const sent: string[] = [];
+  let fetchMock: jest.SpyInstance;
+  let pullToken: string;
+
+  const invoiceOperation = (operationId: string, httpMethod: string, summary: string) => ({
+    operationId,
+    serviceId: 'billing',
+    httpMethod,
+    pathTemplate: '/invoices/{id}',
+    summary,
+    public: true,
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+    outputSchema: {},
+    mapper: [{ inputKey: 'id', type: 'path', key: 'id', required: true }],
+    authBindingRef: 'none',
+  });
+
+  const bundle = {
+    schemaVersion: 1,
+    bundleId: 'edge:billing',
+    version: '1.0.0',
+    generatedAt: '2026-11-05T12:00:00.000Z',
+    sourceDigest: '0'.repeat(64),
+    services: [{ id: 'billing', baseUrl: BILLING_API }],
+    authBindings: { none: { kind: 'none' } },
+    skills: [
+      {
+        id: 'invoices',
+        name: 'Invoices',
+        description: 'Look up and void invoices.',
+        instructions: '# Invoices',
+        operationIds: ['getInvoice', 'voidInvoice'],
+      },
+    ],
+    operations: {
+      getInvoice: invoiceOperation('getInvoice', 'GET', 'Fetch an invoice'),
+      voidInvoice: invoiceOperation('voidInvoice', 'DELETE', 'Void an invoice'),
+    },
+  };
+
+  beforeAll(async () => {
+    const { publicKey, privateKey } = await generateKeyPair('ES256');
+    const jwks = { keys: [{ ...(await exportJWK(publicKey)), kid: KEY_ID, alg: 'ES256', use: 'sig' }] };
+    pullToken = await new SignJWT({ iss: ISSUER, aud: AUDIENCE })
+      .setProtectedHeader({ alg: 'ES256', kid: KEY_ID })
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey);
+    fetchMock = jest.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === JWKS_URL) return Response.json(jwks);
+      if (url === ENDPOINT) return Response.json(bundle);
+      if (!url.startsWith(BILLING_API)) return new Response('not found', { status: 404 });
+      sent.push(`${init?.method ?? 'GET'} ${new URL(url).pathname}`);
+      return Response.json({ id: 'inv_1', status: init?.method === 'DELETE' ? 'void' : 'open' });
+    });
+  });
+
+  afterAll(() => {
+    fetchMock.mockRestore();
+  });
+
+  beforeEach(() => {
+    sent.length = 0;
+  });
+
+  const managedEdge = (confirm: ManagedEdgeOptions['confirm'], elicitation = true) =>
+    createEdgeMcp({
+      info: { name: 'managed-confirm', version: '1.0.0' },
+      apps: [],
+      tasks: { enabled: false },
+      http: { entryPath: '/mcp' },
+      ...(elicitation ? { elicitation: { enabled: true } } : {}),
+      managed: {
+        endpoint: ENDPOINT,
+        authToken: pullToken,
+        expectedAudience: AUDIENCE,
+        jwksUrl: JWKS_URL,
+        expectedIssuer: ISSUER,
+        requireSignature: false,
+        outbound: { allowPrivateNetworks: true },
+        confirm,
+      },
+    });
+
+  type ToolAnswer = {
+    result?: {
+      isError?: boolean;
+      resultType?: string;
+      content?: Array<{ text?: string }>;
+      structuredContent?: { skill?: { actions?: Array<{ actionId: string; asksForConfirmation?: true }> } };
+      inputRequests?: Record<string, { method: string; params: { message: string } }>;
+      requestState?: string;
+    };
+    error?: { code: number; message: string };
+  };
+
+  /** A `tools/call` from a client that sends no protocol version, as one without elicitation does. */
+  const callTool = async (edge: ReturnType<typeof managedEdge>, name: string, args: Record<string, unknown>) =>
+    readMcp<ToolAnswer>(
+      await edge.fetch(
+        new Request('https://worker.example.com/mcp', {
+          method: 'POST',
+          headers: MCP_HEADERS,
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
+        }),
+      ),
+    );
+
+  /** A 2026-07-28 `tools/call` from a client that declares elicitation, with the answers of an earlier round. */
+  const callToolAsking = async (
+    edge: ReturnType<typeof managedEdge>,
+    name: string,
+    args: Record<string, unknown>,
+    retry: Record<string, unknown> = {},
+  ) =>
+    readMcp<ToolAnswer>(
+      await edge.fetch(
+        new Request('https://worker.example.com/mcp', {
+          method: 'POST',
+          headers: {
+            ...MCP_HEADERS,
+            'mcp-protocol-version': PROTOCOL_20260728,
+            'mcp-method': 'tools/call',
+            'mcp-name': name,
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 2,
+            method: 'tools/call',
+            params: {
+              name,
+              arguments: args,
+              ...retry,
+              _meta: {
+                'io.modelcontextprotocol/protocolVersion': PROTOCOL_20260728,
+                'io.modelcontextprotocol/clientCapabilities': { elicitation: { form: {} } },
+              },
+            },
+          }),
+        }),
+      ),
+    );
+
+  const textOf = (answer: ToolAnswer) => answer.result?.content?.[0]?.text ?? '';
+  const VOID_INVOICE = { actionId: 'voidInvoice', input: { id: 'inv_1' } };
+
+  it("refuses the action for a client that can't ask, sending nothing, and runs one it doesn't name", async () => {
+    const edge = managedEdge({ methods: ['DELETE'] });
+
+    const refused = await callTool(edge, 'execute_action', VOID_INVOICE);
+    const read = await callTool(edge, 'execute_action', { actionId: 'getInvoice', input: { id: 'inv_1' } });
+
+    expect(refused.result?.isError).toBe(true);
+    expect(textOf(refused)).toBe(
+      "the user's confirmation is needed for voidInvoice, and this client can't ask for it: it doesn't support elicitation; nothing was sent",
+    );
+    expect(read.result?.isError).not.toBe(true);
+    expect(sent).toEqual(['GET /invoices/inv_1']);
+  });
+
+  it("runs the action unasked with whenUnsupported: 'allow'", async () => {
+    const edge = managedEdge({ methods: ['DELETE'], whenUnsupported: 'allow' });
+
+    const answer = await callTool(edge, 'execute_action', VOID_INVOICE);
+
+    expect(answer.result?.isError).not.toBe(true);
+    expect(sent).toEqual(['DELETE /invoices/inv_1']);
+  });
+
+  it('refuses the action on a server with elicitation disabled, which says so', async () => {
+    const edge = managedEdge({ methods: ['DELETE'] }, false);
+
+    const answer = await callTool(edge, 'execute_action', VOID_INVOICE);
+
+    expect(textOf(answer)).toContain("this server can't ask for it: elicitation is disabled");
+    expect(sent).toEqual([]);
+  });
+
+  it('asks a client that declares elicitation, and sends the request once the user confirms', async () => {
+    const edge = managedEdge({ methods: ['DELETE'] });
+
+    const question = await callToolAsking(edge, 'execute_action', VOID_INVOICE);
+    const [[key, request]] = Object.entries(question.result?.inputRequests ?? {});
+    const sentBeforeAnswer = [...sent];
+    const answer = await callToolAsking(edge, 'execute_action', VOID_INVOICE, {
+      inputResponses: { [key]: { action: 'accept', content: { confirmed: true } } },
+      requestState: question.result?.requestState,
+    });
+
+    expect(question.result?.resultType).toBe('input_required');
+    expect(request.method).toBe('elicitation/create');
+    expect(request.params.message).toBe(
+      'Run voidInvoice: Void an invoice (DELETE /invoices/{id}) with {"id":"inv_1"}?',
+    );
+    expect(sentBeforeAnswer).toEqual([]);
+    expect(answer.result?.isError).not.toBe(true);
+    expect(sent).toEqual(['DELETE /invoices/inv_1']);
+  });
+
+  it('marks the action in load_skill', async () => {
+    const edge = managedEdge({ operations: ['voidInvoice'] });
+
+    const loaded = await callTool(edge, 'load_skill', { skillId: 'invoices' });
+
+    expect(loaded.result?.structuredContent?.skill?.actions).toEqual([
+      expect.not.objectContaining({ asksForConfirmation: true }),
+      expect.objectContaining({ actionId: 'voidInvoice', asksForConfirmation: true }),
+    ]);
+  });
+
+  it("refuses to start with a confirm option the plugin's schema rejects, and the log names the field", async () => {
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const edge = managedEdge({ methods: ['FETCH'] } as unknown as ManagedEdgeOptions['confirm']);
+
+    try {
+      const response = await edge.fetch(
+        new Request('https://worker.example.com/mcp', {
+          method: 'POST',
+          headers: MCP_HEADERS,
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+        }),
+      );
+
+      expect(response.status).toBe(500);
+      expect(await response.json()).toMatchObject({ code: 'CONFIG_INVALID' });
+      expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('confirm.methods.0'), expect.anything());
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });
 

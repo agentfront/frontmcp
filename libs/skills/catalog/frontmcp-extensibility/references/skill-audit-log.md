@@ -31,7 +31,7 @@ run_workflow → callTool(action) | execute_action | this.callTool('<bundleId>.<
 
 The `write*` methods queue the record and never reject: a failed sign or append is logged as a `[skill-audit]` warning and the tool call carries on.
 
-Each record matches the outcome the caller got. An action whose input fails its schema is recorded as `http-call-failure` with `status: 0` (no request is sent), and an answer that fails the operation's `outputSchema` as `http-call-failure` with the upstream status, both with the reason in `errorMessage`. A request aborted because its workflow ended first (the script hit its time limit, or the `run_workflow` call was cancelled) is recorded as `http-call-failure` with `status: 0` and an `errorMessage` such as `request aborted: the workflow ended before the request finished`. An action the plugin's `confirm` option names and the user declines, or that a client without elicitation is refused, is recorded as `http-call-failure` with `status: 0` and the refusal, such as `the user declined: voidInvoice`, after its `authority-check-pass`; a confirmed call writes the records of any call. A workflow the user declines before its script starts runs no action, so it writes none. `http-call-success` is written only for an answer the caller receives.
+Each record matches the outcome the caller got. An action whose input fails its schema is recorded as `http-call-failure` with `status: 0` (no request is sent), and an answer that fails the operation's `outputSchema` as `http-call-failure` with the upstream status, both with the reason in `errorMessage`. A request aborted because its workflow ended first (the script hit its time limit, or the `run_workflow` call was cancelled) is recorded as `http-call-failure` with `status: 0` and an `errorMessage` such as `request aborted: the workflow ended before the request finished`. An action the plugin's `confirm` option names and the user declines, or that a client without elicitation is refused, is recorded as `http-call-failure` with `status: 0` and the refusal, such as `the user declined: voidInvoice`, after its `authority-check-pass`. A workflow the user declines before its script starts runs no action, so it writes none. `http-call-success` is written only for an answer the caller receives.
 
 Up to 1.11.0 a call of an operation tool, `this.callTool('<bundleId>.<operationId>')`, wrote no records.
 
@@ -58,6 +58,21 @@ Each `SkillAuditRecord` carries:
 | `inputHash`      | SHA-256 hex of the canonical input — the input itself is never stored                                   |
 | `outputHash`     | SHA-256 hex of the canonical response body, on `http-call-success`                                      |
 | `errorMessage`   | Truncated error (or denial reason), on `http-call-failure` and `authority-check-fail`                   |
+| `confirmation`   | Whether the user confirmed the call, on `http-call-*` once its input passed; see below                  |
+
+### Whether the user confirmed the call
+
+A record written once a call's input passed its schema check, its `http-call-success` or `http-call-failure`, says what the plugin's `confirm` option came to, in `confirmation`. The `authority-check-*` records, and the `http-call-failure` of an input that fails its schema, come before it and leave it out, as do records written up to 1.11.0.
+
+| `confirmation` | When                                                                                                                                                                    |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `not_required` | No `confirm` rule names the action, so nobody was asked                                                                                                                 |
+| `confirmed`    | The user said yes. A generated CLI's `--yes` answers yes for the user, so the server can't tell it apart and records it the same                                        |
+| `skipped`      | The client can't ask (or the server has elicitation disabled), and `whenUnsupported: 'allow'` sent the request without asking                                           |
+| `declined`     | The user said no, or cancelled (a generated CLI with no terminal declines). Nothing was sent                                                                            |
+| `unanswered`   | No answer came, so nothing was sent: the client can't ask (`whenUnsupported: 'refuse'`), the question timed out, or a script reached the action by an id it didn't name |
+
+In a `run_workflow`, each action call carries the workflow's answer: the calls of the actions its question named get `confirmed` (or `skipped`), and the calls of actions no rule names get `not_required`. The field is signed with the rest of the record, so a verifier from 1.11.0 or before still verifies a record that has it. `SkillAuditConfirmation` is the field's type, and a plugin that writes its own records may set `confirmation` on the `SkillAuditWriteContext` it passes.
 
 ## Configuration
 

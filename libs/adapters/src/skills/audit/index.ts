@@ -7,6 +7,7 @@
 export {
   SKILL_AUDIT_GENESIS_PREV_HASH,
   SKILL_AUDIT_KEYS,
+  type SkillAuditConfirmation,
   type SkillAuditPhase,
   type SkillAuditRecord,
   type SkillAuditSignatureAlg,

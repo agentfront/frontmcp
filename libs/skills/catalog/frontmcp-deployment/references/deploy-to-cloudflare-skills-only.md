@@ -42,9 +42,23 @@ answer came. A workflow that fails is an `isError: true` result with the same
 result had no `isError`. A failed `execute_action` is an `isError: true` result
 whose text is that same error and whose `structuredContent` is the `{ ok:
 false, status, data?, error? }` outcome; on success its `structuredContent` is
-the action's data. Managed mode doesn't set the plugin's `confirm` option, so
-no action asks the user first; a server built with `SkilledOpenApiPlugin.init({
-confirm })` and `elicitation: { enabled: true }` can make actions ask.
+the action's data.
+
+`managed.confirm` is the plugin's `confirm` option, checked by the plugin's
+schema (an invalid value answers `500 CONFIG_INVALID`, and the log names the
+field): `confirm: { methods: ['DELETE'], tags: ['destructive'], operations:
+['refundInvoice'], whenUnsupported: 'refuse' }` names the actions that ask the
+user before their request. The question is an MCP elicitation, and on a
+Cloudflare Worker `elicitation: { enabled: true }` refuses to start
+(`Elicitation requires distributed storage when running on Edge runtime`). So a
+Worker can't ask: an action `confirm` names is refused, `the user's
+confirmation is needed for voidInvoice, and this server can't ask for it:
+elicitation is disabled; nothing was sent` (`isError: true`, for a client that
+declares elicitation too), and `run_workflow` fails with the same error before
+its script starts. With `whenUnsupported: 'allow'` it runs without asking.
+`load_skill` marks such an action with `asksForConfirmation: true`, and the
+audit log's `confirmation` field records `unanswered` or `skipped` for it. Up
+to 1.11.0 managed mode had no `confirm`, so every action ran without asking.
 
 The meta-tools only show what the caller may use: a skill whose
 `requiredAuthorities` the caller doesn't satisfy is left out of `search_skill`

@@ -38,6 +38,7 @@ const loadedSkillSchema = z.object({
         inputJsonSchema: z.record(z.string(), z.unknown()),
         outputJsonSchema: z.record(z.string(), z.unknown()),
         requiredAuthorities: z.record(z.string(), z.unknown()).optional(),
+        asksForConfirmation: z.literal(true).optional(),
       }),
     )
     .optional(),
@@ -82,6 +83,8 @@ export type LoadedSkill = {
     inputJsonSchema: Record<string, unknown>;
     outputJsonSchema: Record<string, unknown>;
     requiredAuthorities?: Record<string, unknown>;
+    /** Set when the plugin's `confirm` option makes the action ask the user before its request. */
+    asksForConfirmation?: true;
   }>;
 };
 
