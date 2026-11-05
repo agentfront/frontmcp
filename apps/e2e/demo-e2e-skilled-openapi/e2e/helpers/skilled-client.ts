@@ -22,6 +22,7 @@ export interface LoadedSkill {
     inputJsonSchema: Record<string, unknown>;
     outputJsonSchema: Record<string, unknown>;
     requiredAuthorities?: Record<string, unknown>;
+    asksForConfirmation?: true;
   }>;
 }
 

@@ -20,9 +20,26 @@ const SECOND_REPLICA = 'replica-2';
 const THIRD_REPLICA = 'replica-3';
 
 interface JsonRpcResponse {
-  result?: { isError?: boolean; content?: Array<{ type: string; text?: string }> };
+  result?: AskingToolResult;
   error?: { code: number; message: string };
 }
+
+/** A protocol 2026-07-28 `tools/call` result: complete, or asking for input the client sends back on its retry. */
+export interface AskingToolResult {
+  resultType?: 'complete' | 'input_required';
+  isError?: boolean;
+  content?: Array<{ type: string; text?: string }>;
+  inputRequests?: Record<string, { method: string; params: { message: string } }>;
+  requestState?: string;
+}
+
+/** What a retry of a 2026-07-28 call carries: the answers to the input requests, and the state to echo. */
+export interface AskingToolRetry {
+  inputResponses: Record<string, unknown>;
+  requestState?: string;
+}
+
+const PROTOCOL_20260728 = '2026-07-28';
 
 export interface ToolCallResult<T> {
   isError: boolean;
@@ -127,6 +144,41 @@ export class ManagedWorker {
     if (!message.result) throw new Error(`tools/call ${name} failed: ${JSON.stringify(message.error)}\n${this.log}`);
     const text = message.result.content?.find((part) => part.type === 'text')?.text ?? '';
     return { isError: message.result.isError === true, text, json: () => JSON.parse(text) as T };
+  }
+
+  /** A protocol 2026-07-28 `tools/call` from a client that declares elicitation, so the server may ask it. */
+  async callToolAsking(
+    name: string,
+    args: Record<string, unknown>,
+    retry?: AskingToolRetry,
+  ): Promise<AskingToolResult> {
+    const response = await this.fetch(MCP_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'mcp-protocol-version': PROTOCOL_20260728,
+        'mcp-method': 'tools/call',
+        'mcp-name': name,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: ++this.requestId,
+        method: 'tools/call',
+        params: {
+          name,
+          arguments: args,
+          ...retry,
+          _meta: {
+            'io.modelcontextprotocol/protocolVersion': PROTOCOL_20260728,
+            'io.modelcontextprotocol/clientCapabilities': { elicitation: { form: {} } },
+          },
+        },
+      }),
+    });
+    const message = await readJsonRpc(response);
+    if (!message.result) throw new Error(`tools/call ${name} failed: ${JSON.stringify(message.error)}\n${this.log}`);
+    return message.result;
   }
 
   /** Run the Cron Trigger handler, as the platform does on schedule. */

@@ -7,6 +7,8 @@
  */
 import 'reflect-metadata';
 
+import { skilledOpenApiPluginOptionsSchema } from '@frontmcp/plugin-skilled-openapi';
+
 import { buildManagedOpenApiPluginOptions, createEdgeMcp, type ManagedEdgeOptions } from '../index';
 
 const MANAGED: ManagedEdgeOptions = {
@@ -51,9 +53,29 @@ describe('buildManagedOpenApiPluginOptions', () => {
     expect(opts['credentials']).toEqual({ 'acme-token': 'xyz' });
   });
 
+  it("passes confirm to the plugin as it is, for the plugin's schema to check", () => {
+    const confirm = { methods: ['DELETE' as const], tags: ['destructive'], whenUnsupported: 'allow' as const };
+
+    const opts = buildManagedOpenApiPluginOptions({ ...MANAGED, confirm });
+
+    expect(opts['confirm']).toEqual(confirm);
+    expect(skilledOpenApiPluginOptionsSchema.parse(opts).confirm).toEqual(confirm);
+  });
+
+  it("leaves whenUnsupported to the plugin's default, refuse", () => {
+    const opts = buildManagedOpenApiPluginOptions({ ...MANAGED, confirm: { operations: ['voidInvoice'] } });
+
+    expect(opts['confirm']).toEqual({ operations: ['voidInvoice'] });
+    expect(skilledOpenApiPluginOptionsSchema.parse(opts).confirm).toEqual({
+      operations: ['voidInvoice'],
+      whenUnsupported: 'refuse',
+    });
+  });
+
   it('omits unset optional fields (no undefined leakage)', () => {
     const opts = buildManagedOpenApiPluginOptions(MANAGED);
     expect('requireSignature' in opts).toBe(false);
+    expect('confirm' in opts).toBe(false);
     expect('dev' in opts).toBe(false);
     expect('pollIntervalMs' in (opts['source'] as object)).toBe(false);
     expect('allowRollback' in (opts['source'] as object)).toBe(false);

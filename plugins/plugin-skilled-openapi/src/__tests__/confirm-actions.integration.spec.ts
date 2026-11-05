@@ -160,17 +160,26 @@ function textOf(result: CallToolResult): string {
   return result.content.map((block) => (block.type === 'text' ? block.text : '')).join('');
 }
 
-async function auditedPhases(auditStore: MemoryAuditStore, count: number): Promise<string[]> {
+async function auditRecords(auditStore: MemoryAuditStore, count: number): Promise<SkillAuditRecord[]> {
   const deadline = Date.now() + 5_000;
   let records: SkillAuditRecord[] = [];
   while (Date.now() < deadline) {
     records = await auditStore.read();
-    if (records.length >= count) {
-      return records.map((record) => [record.phase, record.actionId, record.errorMessage].filter(Boolean).join(':'));
-    }
+    if (records.length >= count) return records;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(`expected ${count} audit records, got ${records.length}`);
+}
+
+async function auditedPhases(auditStore: MemoryAuditStore, count: number): Promise<string[]> {
+  const records = await auditRecords(auditStore, count);
+  return records.map((record) => [record.phase, record.actionId, record.errorMessage].filter(Boolean).join(':'));
+}
+
+/** Each record as `phase:actionId:confirmation`, the confirmation left out where the record has none. */
+async function auditedConfirmations(auditStore: MemoryAuditStore, count: number): Promise<string[]> {
+  const records = await auditRecords(auditStore, count);
+  return records.map((record) => [record.phase, record.actionId, record.confirmation].filter(Boolean).join(':'));
 }
 
 const originalFetch = global.fetch;
@@ -364,5 +373,146 @@ describe('a server with no confirm option', () => {
 
     expect(asked).toEqual([]);
     expect(sent).toEqual(['DELETE /v1/invoices/inv_1', 'DELETE /v1/invoices/inv_2']);
+  });
+});
+
+describe('the audit records of a call say whether the user confirmed it', () => {
+  it('records confirmed for a call the user confirmed, and declined for one the user declined', async () => {
+    const confirmedStore = new MemoryAuditStore();
+    const declinedStore = new MemoryAuditStore();
+    const { client: confirmingClient } = await connectClient({ answer: 'accept', auditStore: confirmedStore });
+    const { client: decliningClient } = await connectClient({ answer: 'decline', auditStore: declinedStore });
+
+    await call(confirmingClient, 'execute_action', { actionId: 'voidInvoice', input: { id: 'inv_1' } });
+    await call(decliningClient, 'execute_action', { actionId: 'voidInvoice', input: { id: 'inv_1' } });
+
+    expect(await auditedConfirmations(confirmedStore, 2)).toEqual([
+      'authority-check-pass:voidInvoice',
+      'http-call-success:voidInvoice:confirmed',
+    ]);
+    expect(await auditedConfirmations(declinedStore, 2)).toEqual([
+      'authority-check-pass:voidInvoice',
+      'http-call-failure:voidInvoice:declined',
+    ]);
+  });
+
+  it('records not_required for an action no rule names', async () => {
+    const auditStore = new MemoryAuditStore();
+    const { client, asked } = await connectClient({ answer: 'decline', auditStore });
+
+    await call(client, 'execute_action', { actionId: 'getInvoice', input: { id: 'inv_1' } });
+
+    expect(asked).toEqual([]);
+    expect(await auditedConfirmations(auditStore, 2)).toEqual([
+      'authority-check-pass:getInvoice',
+      'http-call-success:getInvoice:not_required',
+    ]);
+  });
+
+  it("records unanswered for a client that can't ask, and skipped when whenUnsupported is 'allow'", async () => {
+    const refusedStore = new MemoryAuditStore();
+    const allowedStore = new MemoryAuditStore();
+    const { client: refusedClient } = await connectClient({ auditStore: refusedStore });
+    const { client: allowedClient } = await connectClient({
+      auditStore: allowedStore,
+      plugin: { confirm: { ...CONFIRM_DELETES_AND_TAGGED, whenUnsupported: 'allow' } },
+    });
+
+    await call(refusedClient, 'execute_action', { actionId: 'voidInvoice', input: { id: 'inv_1' } });
+    await call(allowedClient, 'execute_action', { actionId: 'voidInvoice', input: { id: 'inv_1' } });
+
+    expect(await auditedConfirmations(refusedStore, 2)).toEqual([
+      'authority-check-pass:voidInvoice',
+      'http-call-failure:voidInvoice:unanswered',
+    ]);
+    expect(await auditedConfirmations(allowedStore, 2)).toEqual([
+      'authority-check-pass:voidInvoice',
+      'http-call-success:voidInvoice:skipped',
+    ]);
+  });
+
+  it("gives each action call of a workflow the workflow's confirmation, and not_required to those no rule names", async () => {
+    const auditStore = new MemoryAuditStore();
+    const { client, asked } = await connectClient({ answer: 'accept', auditStore });
+    const script = [
+      "const invoice = await callTool('getInvoice', { id: 'inv_1' });",
+      "await callTool('voidInvoice', { id: invoice.id });",
+      "await callTool('voidInvoice', { id: 'inv_2' });",
+      'return invoice.id;',
+    ].join('\n');
+
+    await call(client, 'run_workflow', { script });
+
+    expect(asked).toHaveLength(1);
+    expect(await auditedConfirmations(auditStore, 6)).toEqual([
+      'authority-check-pass:getInvoice',
+      'http-call-success:getInvoice:not_required',
+      'authority-check-pass:voidInvoice',
+      'http-call-success:voidInvoice:confirmed',
+      'authority-check-pass:voidInvoice',
+      'http-call-success:voidInvoice:confirmed',
+    ]);
+  });
+
+  it('records skipped on the action calls of a workflow a client without elicitation runs under allow', async () => {
+    const auditStore = new MemoryAuditStore();
+    const { client } = await connectClient({
+      auditStore,
+      plugin: { confirm: { ...CONFIRM_DELETES_AND_TAGGED, whenUnsupported: 'allow' } },
+    });
+
+    await call(client, 'run_workflow', { script: "return await callTool('voidInvoice', { id: 'inv_1' });" });
+
+    expect(await auditedConfirmations(auditStore, 2)).toEqual([
+      'authority-check-pass:voidInvoice',
+      'http-call-success:voidInvoice:skipped',
+    ]);
+  });
+
+  it('records unanswered for a workflow call of an action it reached by a computed id', async () => {
+    const auditStore = new MemoryAuditStore();
+    const { client } = await connectClient({ answer: 'accept', auditStore });
+
+    await call(client, 'run_workflow', {
+      script: "const verb = 'void'; return await callTool(verb + 'Invoice', { id: 'inv_1' });",
+    });
+
+    expect(await auditedConfirmations(auditStore, 2)).toEqual([
+      'authority-check-pass:voidInvoice',
+      'http-call-failure:voidInvoice:unanswered',
+    ]);
+  });
+});
+
+describe('load_skill', () => {
+  interface LoadedActions {
+    skill: { actions: Array<{ actionId: string; asksForConfirmation?: true }> };
+  }
+
+  it('marks the actions that ask for confirmation', async () => {
+    const { client } = await connectClient({ answer: 'accept' });
+
+    const invoices = await call(client, 'load_skill', { skillId: 'invoices' });
+    const cleanup = await call(client, 'load_skill', { skillId: 'cleanup' });
+
+    expect((invoices.structuredContent as unknown as LoadedActions).skill.actions).toEqual([
+      expect.not.objectContaining({ asksForConfirmation: expect.anything() }),
+      expect.objectContaining({ actionId: 'voidInvoice', asksForConfirmation: true }),
+      expect.objectContaining({ actionId: 'refundInvoice', asksForConfirmation: true }),
+    ]);
+    expect((invoices.structuredContent as unknown as LoadedActions).skill.actions[0].actionId).toBe('getInvoice');
+    expect((cleanup.structuredContent as unknown as LoadedActions).skill.actions).toEqual([
+      expect.objectContaining({ actionId: 'purgeDraft', asksForConfirmation: true }),
+    ]);
+  });
+
+  it('marks no action on a server with no confirm option', async () => {
+    const { client } = await connectClient({ plugin: { confirm: undefined } });
+
+    const invoices = await call(client, 'load_skill', { skillId: 'invoices' });
+
+    const { actions } = (invoices.structuredContent as unknown as LoadedActions).skill;
+    expect(actions.map((action) => action.actionId)).toEqual(['getInvoice', 'voidInvoice', 'refundInvoice']);
+    expect(actions.some((action) => 'asksForConfirmation' in action)).toBe(false);
   });
 });

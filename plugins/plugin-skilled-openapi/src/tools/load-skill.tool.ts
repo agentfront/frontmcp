@@ -3,6 +3,7 @@
 import { BundleStore } from '@frontmcp/adapters/skills';
 import { InternalMcpError, PublicMcpError, ScopeEntry, Tool, ToolContext } from '@frontmcp/sdk';
 
+import { needsConfirmation } from '../executor/action-confirmation';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
 import { SkillVisibility } from '../security/skill-visibility';
@@ -16,6 +17,16 @@ import {
   type LoadSkillOutput,
   type LoadSkillResult,
 } from './load-skill.schema';
+
+/** The action as `load_skill` shows it: marked when the `confirm` option makes it ask the user before its request. */
+function withConfirmationMarker<Action extends { actionId: string }>(
+  action: Action,
+  config: SkilledOpenApiConfig,
+  hiddenOps: HiddenOpRegistry,
+): Action & { asksForConfirmation?: true } {
+  const listings = hiddenOps.listingsOf(action.actionId);
+  return listings && needsConfirmation(config.confirm, listings) ? { ...action, asksForConfirmation: true } : action;
+}
 
 @Tool({
   name: 'load_skill',
@@ -74,7 +85,7 @@ export default class LoadSkillTool extends ToolContext {
           description: skill.description,
           instructions: skill.instructions,
           ...(skill.bundleVersion !== undefined && { bundleVersion: skill.bundleVersion }),
-          ...(actions ? { actions } : {}),
+          ...(actions ? { actions: actions.map((action) => withConfirmationMarker(action, config, hiddenOps)) } : {}),
         },
         isComplete: result.isComplete,
         ...(result.warning !== undefined && { warning: result.warning }),

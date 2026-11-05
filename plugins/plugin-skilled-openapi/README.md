@@ -212,11 +212,29 @@ yes/no form:
   with an error that tells the model to write the id as a string.
 - **A decline** sends nothing. The call fails with `the user declined: voidInvoice` (`isError: true`), and a declined
   workflow runs none of its script, reads included. The audit log records a declined call as `http-call-failure` with
-  status 0 and that error; a confirmed call's records are those of any call.
+  status 0 and that error.
 - **A client that can't show the question**, because it declared no elicitation capability or the server has
   elicitation disabled, is refused: `the user's confirmation is needed for voidInvoice, and this client can't ask for
 it: it doesn't support elicitation; nothing was sent`. With `whenUnsupported: 'allow'` the action runs unasked
   there instead. The plugin doesn't use the SDK's elicitation fallback, in which the model would answer for the user.
+- **`load_skill`** marks each action that asks with `asksForConfirmation: true`, so the model knows the user will be
+  asked before it calls it.
+
+The audit records of a call say what the confirmation came to, in a `confirmation` field. It is set on the call's
+`http-call-success` or `http-call-failure` once its input passed the schema check. The `authority-check-*` records,
+and the failure of an input that fails the schema, come before the confirmation and have none:
+
+| `confirmation` | When                                                                                                                                      |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `not_required` | No `confirm` rule names the action, so nobody was asked                                                                                   |
+| `confirmed`    | The user said yes. The CLI's `--yes` says yes for the user, so the server records it the same                                             |
+| `skipped`      | The client can't ask, and `whenUnsupported: 'allow'` sent the request without asking                                                      |
+| `declined`     | The user said no, or cancelled. Nothing was sent                                                                                          |
+| `unanswered`   | No answer came, so nothing was sent: the client can't ask, the question timed out, or a script reached the action by an id it didn't name |
+
+A workflow's action calls carry the workflow's answer: `confirmed` (or `skipped`) for the actions it asked about, and
+`not_required` for the others. A workflow the user declines runs no action, so it writes no records. Up to 1.11.0 the
+records had no `confirmation`, so a confirmed call's records were those of a call no rule names.
 
 The generated CLI (`frontmcp build --target cli`) asks the question in the terminal, in-process and through its daemon:
 it reads `y/N` when standard input is a terminal, and `--yes` answers yes without asking. With no terminal and no
