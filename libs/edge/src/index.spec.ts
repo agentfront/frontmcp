@@ -335,6 +335,7 @@ describe('a managed edge Cron run in an isolate that has served no request', () 
 
   it('fails a run whose pulled bundle is refused, and one that serves the cached bundle: /readyz says it is stale', async () => {
     let keptBundle: unknown;
+    let cacheWrites = 0;
     const managedWorker = () =>
       createEdgeMcp({
         info: { name: 'managed-cron', version: '1.0.0' },
@@ -353,6 +354,7 @@ describe('a managed edge Cron run in an isolate that has served no request', () 
             read: async () => keptBundle,
             write: async (bundle) => {
               keptBundle = bundle;
+              cacheWrites++;
             },
           },
         },
@@ -373,6 +375,7 @@ describe('a managed edge Cron run in an isolate that has served no request', () 
       '[frontmcp/edge] Cron refresh: bundle edge:billing@1.0.0 was not applied: older than the served bundle edge:billing@2.0.0',
     );
     const afterRefusal = await readiness(worker);
+    const writesBeforeRestarts = cacheWrites;
     publishedVersion = undefined;
     const isolateStartedDuringOutage = managedWorker();
     const fallbackRun = run(isolateStartedDuringOutage);
@@ -380,6 +383,12 @@ describe('a managed edge Cron run in an isolate that has served no request', () 
       '[frontmcp/edge] Cron refresh: the bundle pull failed, so the cached bundle serves: pull responded 503',
     );
     const afterFallback = await readiness(isolateStartedDuringOutage);
+    publishedVersion = '1.0.0';
+    const isolateStartedOnOlderBundle = managedWorker();
+    await expect(run(isolateStartedOnOlderBundle)).rejects.toThrow(
+      '[frontmcp/edge] Cron refresh: bundle edge:billing@1.0.0 was not applied, so the cached bundle serves: older than the cached bundle edge:billing@2.0.0',
+    );
+    const afterOlderPull = await readiness(isolateStartedOnOlderBundle);
 
     expect(afterRefusal).toMatchObject({
       status: 'ready',
@@ -408,6 +417,20 @@ describe('a managed edge Cron run in an isolate that has served no request', () 
         },
       },
     });
+    expect(afterOlderPull).toMatchObject({
+      status: 'ready',
+      probes: {
+        'skilled-openapi': {
+          status: 'degraded',
+          details: {
+            state: 'stale',
+            bundleVersion: '2.0.0',
+            lastSync: { status: 'refused', bundleVersion: '1.0.0', cacheFallback: true },
+          },
+        },
+      },
+    });
+    expect(cacheWrites).toBe(writesBeforeRestarts);
   });
 });
 

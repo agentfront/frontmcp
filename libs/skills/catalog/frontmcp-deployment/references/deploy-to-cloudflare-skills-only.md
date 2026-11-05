@@ -137,15 +137,22 @@ signed old bundle can't roll the Worker back. Two semver versions compare by
 semver; the same version (re-signed), or versions that aren't both semver,
 compare by `generatedAt`. To roll back, publish the earlier content under a
 newer version, or set `managed.allowRollback: true`. An isolate that starts
-has no bundle to compare with: it serves what it pulls, or the KV cache when
-the pull fails.
+has no bundle served yet, so the KV cache stands in for it: the isolate serves
+the cached bundle when its pull fails, when the pulled bundle is refused, or
+when it is older than the cached one (`... not applied: older than the cached
+bundle <id>@<version> ...`; with `allowRollback` it serves the pulled one), so
+a stale CDN or a rolled-back origin can't take a new isolate back. Serving the
+cached bundle never writes it back to KV. Up to 1.11.0 a new isolate served
+whatever it pulled, served nothing when that bundle was refused, and rewrote
+the KV entry on an offline start.
 A Cron run whose sync leaves an older bundle serving **fails**: `scheduled`
 throws, so Cloudflare logs the run as an exception and counts it as a failed
 invocation. That is a pulled bundle that is not applied (`[frontmcp/edge] Cron
-refresh: bundle <id>@<version> was not applied: <reason>`), or a pull that
-fails (`... the bundle pull failed: <reason>`), also when the run started the
-isolate and it serves the KV cache (`... failed, so the cached bundle serves:
-<reason>`). Up to 1.11.0 such a run reported success. With
+refresh: bundle <id>@<version> was not applied: <reason>`, or `... was not
+applied, so the cached bundle serves: <reason>` when the run started the
+isolate), or a pull that fails (`... the bundle pull failed: <reason>`), also
+when the run started the isolate and it serves the KV cache (`... failed, so
+the cached bundle serves: <reason>`). Up to 1.11.0 such a run reported success. With
 `health: { readyz: { enabled: true } }` (off on a Worker by default), `/readyz`
 stays ready while the last good bundle serves, and its `skilled-openapi` check
 is `degraded` with `details: { state: 'stale', bundleId, bundleVersion,

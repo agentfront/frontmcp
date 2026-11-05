@@ -129,6 +129,25 @@ describe('SaasPullSource', () => {
     expect(cached.bundleId).toBe('saas:test');
   });
 
+  it('reads back the bundle it kept without pulling, and none when nothing valid is kept', async () => {
+    const requests: string[] = [];
+    const source = new FakeSaasSource(baseOptions(), tmpDir, async (url) => {
+      requests.push(url);
+      return { status: 200, body: JSON.stringify(baseBundle) };
+    });
+    const nothingKept = await source.keptBundle();
+
+    await source.keepBundle({ ...baseBundle, version: '2' } as ResolvedBundle);
+    const kept = await source.keptBundle();
+    await fs.writeFile(path.join(tmpDir, 'acme_prod.json'), JSON.stringify({ ...baseBundle, skills: [{ id: 'x' }] }));
+    const failsTheSchema = await source.keptBundle();
+
+    expect(nothingKept).toBeUndefined();
+    expect(kept).toMatchObject({ bundleId: 'saas:test', version: '2' });
+    expect(failsTheSchema).toBeUndefined();
+    expect(requests).toEqual([]);
+  });
+
   it('finishes a pull only once its listeners are done with the bundle', async () => {
     const source = new FakeSaasSource(baseOptions(), tmpDir, async () => ({
       status: 200,
