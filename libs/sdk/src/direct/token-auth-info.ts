@@ -12,7 +12,8 @@ import type { Scope } from '../scope/scope.instance';
 
 /**
  * The caller `token` names, verified by `session:verify` as a Bearer token sent to `localhost`; empty when it names
- * none. A server without `auth` verifies no token (it has no session flows and no key), so its callers are anonymous.
+ * none. A server without `auth` verifies no token (it has no session flows and no key), so the token names no caller: the
+ * caller is anonymous unless `session.user` names one.
  */
 export async function authInfoForToken(scope: Scope, token: string): Promise<Partial<AuthorizationAuthInfo>> {
   if (scope.auth instanceof DirectPublicAuth) return {};
