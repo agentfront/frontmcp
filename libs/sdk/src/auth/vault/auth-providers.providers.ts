@@ -13,6 +13,8 @@ import {
   AuthProvidersRegistry,
   AuthProvidersVault,
   CredentialCache,
+  InMemoryAuthorizationVault,
+  isAnonymousSubject,
   LazyCredentialLoader,
   type AuthorizationVault,
   type AuthProvidersVaultOptions,
@@ -21,9 +23,10 @@ import {
 import { ProviderScope, type Token } from '@frontmcp/di';
 import { randomUUID } from '@frontmcp/utils';
 
-import { FrontMcpLogger } from '../../common';
+import { FrontMcpLogger, type ProviderType } from '../../common';
 import type { FrontMcpContext } from '../../context/frontmcp-context';
 import { FRONTMCP_CONTEXT } from '../../context/frontmcp-context.provider';
+import type ProviderRegistry from '../../provider/provider.registry';
 import { sessionScopeIdentity } from '../session-scope-identity';
 import { CREDENTIAL_CACHE } from './credential-cache';
 
@@ -31,20 +34,6 @@ import { CREDENTIAL_CACHE } from './credential-cache';
  * Token for lazy loader (internal use)
  */
 export const LAZY_CREDENTIAL_LOADER = Symbol.for('frontmcp:LAZY_CREDENTIAL_LOADER') as Token<LazyCredentialLoader>;
-
-/**
- * Provider definition type for AuthProviders system.
- * Extended to include scope at top level for SDK compatibility.
- */
-interface AuthProvidersProviderDef {
-  provide: Token;
-  scope: ProviderScope;
-  name?: string;
-
-  useFactory?: (...args: any[]) => any;
-  useValue?: unknown;
-  inject?: () => readonly Token[];
-}
 
 /**
  * Create providers for AuthProviders vault system
@@ -56,8 +45,8 @@ interface AuthProvidersProviderDef {
 export function createAuthProvidersProviders(
   options: AuthProvidersVaultOptions,
   baseVault: AuthorizationVault,
-): AuthProvidersProviderDef[] {
-  const providers: AuthProvidersProviderDef[] = [];
+): ProviderType[] {
+  const providers: ProviderType[] = [];
 
   // 1. AuthProvidersRegistry - GLOBAL scope (singleton)
   providers.push({
@@ -111,11 +100,13 @@ export function createAuthProvidersProviders(
       // the verified session, else the signed-in caller; an anonymous caller without a verified
       // session gets an id of its own that no other request has, so nothing is shared or kept.
       // Never `ctx.sessionId`, which under MCP 2026-07-28 is the `mcp-session-id` the client sent.
+      const user = ctx.authInfo?.user;
+      const signedIn = user && !isAnonymousSubject(user.sub) ? user : undefined;
       const factoryContext: CredentialFactoryContext = {
         sessionId: sessionScopeIdentity(ctx) ?? `unidentified:${randomUUID()}`,
-        userSub: ctx.authInfo?.extra?.['sub'] as string | undefined,
-        userEmail: ctx.authInfo?.extra?.['email'] as string | undefined,
-        userName: ctx.authInfo?.extra?.['name'] as string | undefined,
+        userSub: signedIn?.sub,
+        userEmail: signedIn?.email,
+        userName: signedIn?.name,
         // appId and toolId are not available in FrontMcpContext,
         // they can be set by the tool flow when calling the accessor
         vault: baseVault,
@@ -140,7 +131,7 @@ export function createAuthProvidersProviders(
 /**
  * Check if AuthProviders should be enabled based on options
  */
-export function isAuthProvidersEnabled(options?: AuthProvidersVaultOptions): boolean {
+export function isAuthProvidersEnabled(options?: AuthProvidersVaultOptions): options is AuthProvidersVaultOptions {
   if (options?.enabled === false) {
     return false;
   }
@@ -151,4 +142,13 @@ export function isAuthProvidersEnabled(options?: AuthProvidersVaultOptions): boo
 
   // Auto-enable if providers are registered
   return (options?.providers?.length ?? 0) > 0;
+}
+
+/** Register the providers behind `this.authProviders` in a scope, when `@FrontMcp({ authProvidersVault })` enables them. */
+export async function registerAuthProvidersVault(
+  providers: ProviderRegistry,
+  options: AuthProvidersVaultOptions | undefined,
+): Promise<void> {
+  if (!isAuthProvidersEnabled(options)) return;
+  await providers.addDynamicProviders(createAuthProvidersProviders(options, new InMemoryAuthorizationVault()));
 }

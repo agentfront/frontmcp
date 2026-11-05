@@ -2,27 +2,32 @@
  * LazyCredentialLoader - Loads credentials on first access
  *
  * Used for providers configured with `loading: 'lazy'` (default).
- * Prevents concurrent loads for the same provider (deduplication).
+ * Prevents concurrent loads of one provider for one caller (deduplication).
  */
 
+import type { AuthLogger } from '../../common/auth-logger.interface';
 import type { Credential } from '../../session';
+import type { NormalizedProviderConfig } from '../auth-providers.registry';
 import type { CredentialFactoryContext, ResolvedCredential } from '../auth-providers.types';
 import { extractCredentialExpiry } from '../credential-helpers';
-import type { NormalizedProviderConfig } from '../auth-providers.registry';
-import type { AuthLogger } from '../../common/auth-logger.interface';
+
+/** What tells one load apart: the provider, and the session and user the factory loads it for. */
+function inFlightKey(providerName: string, context: CredentialFactoryContext): string {
+  return JSON.stringify([providerName, context.sessionId, context.userSub ?? null]);
+}
 
 /**
  * LazyCredentialLoader - Loads credentials on first access
  */
 export class LazyCredentialLoader {
-  /** In-flight loading promises for deduplication */
+  /** In-flight loading promises for deduplication, by provider and caller */
   private readonly loading = new Map<string, Promise<ResolvedCredential | null>>();
 
   constructor(private readonly logger?: AuthLogger) {}
 
   /**
    * Load a credential lazily.
-   * If already loading, returns the in-flight promise (deduplication).
+   * If already loading for the same caller, returns the in-flight promise (deduplication).
    *
    * @param config - Provider configuration
    * @param context - Factory context
@@ -32,21 +37,20 @@ export class LazyCredentialLoader {
     config: NormalizedProviderConfig<T>,
     context: CredentialFactoryContext,
   ): Promise<ResolvedCredential<T> | null> {
-    // Check for in-flight request
-    const existing = this.loading.get(config.name);
+    const key = inFlightKey(config.name, context);
+    const existing = this.loading.get(key);
     if (existing) {
       this.logger?.debug(`Waiting for in-flight load: ${config.name}`);
       return existing as Promise<ResolvedCredential<T> | null>;
     }
 
-    // Start new load
     const promise = this.doLoad(config, context);
-    this.loading.set(config.name, promise as Promise<ResolvedCredential | null>);
+    this.loading.set(key, promise as Promise<ResolvedCredential | null>);
 
     try {
       return await promise;
     } finally {
-      this.loading.delete(config.name);
+      this.loading.delete(key);
     }
   }
 
@@ -142,13 +146,14 @@ export class LazyCredentialLoader {
   }
 
   /**
-   * Check if a credential is currently being loaded
+   * Check if a credential is currently being loaded for a caller
    *
    * @param name - Provider name
+   * @param context - Factory context of the caller
    * @returns true if loading is in progress
    */
-  isLoading(name: string): boolean {
-    return this.loading.has(name);
+  isLoading(name: string, context: CredentialFactoryContext): boolean {
+    return this.loading.has(inFlightKey(name, context));
   }
 
   /**

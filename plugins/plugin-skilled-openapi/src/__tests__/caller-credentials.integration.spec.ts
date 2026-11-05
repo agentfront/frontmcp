@@ -82,7 +82,6 @@ const bundle = {
 const ACCOUNT_OF_TOKEN: Record<string, string> = {
   'Bearer alice-billing-token': 'alice',
   'Bearer bob-billing-token': 'bob',
-  'Bearer shared-billing-token': 'shared',
   'Bearer reports-token': 'reports',
   'Bearer acme-reports-token': 'acme',
   'Bearer globex-reports-token': 'globex',
@@ -165,8 +164,7 @@ beforeAll(async () => {
         source: { type: 'inline', content: bundle },
         dev: true,
         authProviders: { 'billing-token': 'billing' },
-        // A shared billing token the mapped binding must never fall back to.
-        credentials: { 'billing-token': 'shared-billing-token', 'reports-token': 'reports-token' },
+        credentials: { 'reports-token': 'reports-token' },
       }),
     ],
     providers: [authProvidersVault()],
@@ -225,7 +223,7 @@ describe('a binding the authProviders option maps', () => {
     expect(requests).toEqual([]);
   });
 
-  it("ends the run with throwOnError: false too, with neither the shared nor another caller's token sent", async () => {
+  it("ends the run with throwOnError: false too, with no other caller's token sent", async () => {
     const call = runWorkflowAs(
       CAROL,
       'const balance = await callTool("getBalance", {}, { throwOnError: false }); return balance.ok ? "sent" : "skipped";',

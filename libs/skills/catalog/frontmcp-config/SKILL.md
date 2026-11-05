@@ -99,6 +99,7 @@ Server (@FrontMcp)     ← Global defaults
 | Throttle (rate limit) | Yes (`throttle` global defaults) | No                    | Yes (`rateLimit`, `concurrency`, `timeout`) |
 | Auth mode             | Yes                              | Yes (override)        | No                                          |
 | Auth providers        | No                               | Yes (`authProviders`) | Yes (`authProviders`)                       |
+| Credential providers  | Yes (`authProvidersVault`)       | No                    | Yes (`authProviders` names them)            |
 | Session store         | Yes                              | No                    | No                                          |
 | Elicitation           | Yes (enable: `elicitation`)      | No                    | Yes (usage: `this.elicit()`)                |
 | ExtApps               | Yes                              | No                    | No                                          |

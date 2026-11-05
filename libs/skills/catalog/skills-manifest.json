@@ -219,12 +219,12 @@
           "name": "13-tool-with-single-auth-provider",
           "description": "Tool requiring a single OAuth provider via the `authProviders: ['github']` string shorthand — credentials loaded before `execute()` runs.",
           "level": "intermediate",
-          "tags": ["auth-providers", "oauth", "github", "this.authProviders"],
+          "tags": ["auth-providers", "oauth", "github", "this.authProviders", "authProvidersVault"],
           "features": [
+            "Registering the `github` credential provider in `@FrontMcp({ authProvidersVault: { providers } })`, with the `factory` that acquires each caller's token",
             "Declaring a single required OAuth provider with the `authProviders: ['github']` shorthand",
             "Reading pre-formatted credentials via `await this.authProviders.headers('github')`",
-            "Letting the framework reject calls whose required credential is missing **before** `execute()` runs — a JSON-RPC `-32001` (MCP `UNAUTHORIZED`) error whose `data` carries `{ tool, providers: ['github'], authUrl }` (no auth-check boilerplate)",
-            "Trusting the framework to handle token refresh, expiration, and the connect/authorize URL"
+            "Letting the framework reject calls whose required credential is missing **before** `execute()` runs — a JSON-RPC `-32001` (MCP `UNAUTHORIZED`) error whose `data` carries `{ tool, providers: ['github'] }` (no auth-check boilerplate)"
           ]
         },
         {
@@ -244,12 +244,12 @@
           "name": "15-tool-with-credential-vault",
           "description": "Tool that reads a user-supplied static credential (a Slack webhook URL) from the per-session encrypted credential vault — the pattern for credentials that aren't OAuth.",
           "level": "advanced",
-          "tags": ["auth-providers", "credential-vault", "slack-webhook", "encryption-at-rest"],
+          "tags": ["auth-providers", "credential-vault", "slack-webhook", "encryption-at-rest", "this.credentials"],
           "features": [
-            "Declaring a vault-backed auth provider with `authProviders: ['slack-webhook']`",
-            "Reading the user's pasted-in credential via `await this.authProviders.headers('slack-webhook')` — same API as OAuth",
-            "Letting the framework handle per-session AES-256-GCM encryption at rest (Redis or memory store)",
-            "Knowing when to pick the vault (static secrets the user knows) vs OAuth (delegated identity)"
+            "Declaring the credential the tool needs with `authProviders: ['slack-webhook']`, so a caller who hasn't connected it gets `-32001` with the connect URL before `execute()` runs",
+            "Storing the user's pasted-in webhook URL in the session credential vault from local mode's `authenticate()`, and reading it with `await this.credentials.get('slack-webhook')`",
+            "Letting the framework handle per-session AES-256-GCM encryption at rest (memory, Redis or SQLite `tokenStorage`)",
+            "Knowing when to pick the session credential vault (secrets the user types in) vs `authProvidersVault` (credentials the server acquires)"
           ]
         },
         {
