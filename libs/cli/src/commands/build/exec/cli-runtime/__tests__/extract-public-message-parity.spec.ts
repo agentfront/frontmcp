@@ -133,3 +133,35 @@ describe('connect hint snippet', () => {
     expect(connectHint(null)).toBe('');
   });
 });
+
+describe('exit with error snippet', () => {
+  const exitWithError = new Function(`${EXTRACT_PUBLIC_MESSAGE_SNIPPET}\nreturn _exitWithError;`)() as (
+    err: unknown,
+    code?: number,
+  ) => void;
+
+  function printed(err: unknown): string {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      exitWithError(err, 1);
+      return error.mock.calls.map((call) => call.join(' ')).join('\n');
+    } finally {
+      error.mockRestore();
+      process.exitCode = undefined;
+    }
+  }
+
+  it("prints a failed read without the MCP error prefix the client doubles, as a tool's error reads", () => {
+    const notFound = Object.assign(new Error('MCP error -32002: MCP error -32002: Resource not found: app://missing'), {
+      code: -32002,
+    });
+    expect(printed(notFound)).toBe('Error: Resource not found: app://missing');
+  });
+
+  it("drops the daemon's single prefix too, and keeps a message without one", () => {
+    expect(printed(new Error('MCP error -32602: Invalid arguments'))).toBe('Error: Invalid arguments');
+    expect(printed(new Error('Not logged in. Run "mymcp login" first.'))).toBe(
+      'Error: Not logged in. Run "mymcp login" first.',
+    );
+  });
+});

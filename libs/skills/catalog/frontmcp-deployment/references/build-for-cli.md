@@ -95,6 +95,19 @@ deployments: [
   `minify`) and `build.dependencies.nativeAddons` (kept external). A `--target cli` SEA binary is self-contained, so
   `external` doesn't apply to it (see `configure-deployment-targets`, "Build Options").
 
+### Usage errors and failed calls
+
+- An unknown command exits 2 with `error: unknown command '<name>'`, followed
+  by `(Did you mean <command>?)` when a command is close to it. With no command,
+  the CLI prints its help and exits 0. Up to 1.11.0, an unknown command said
+  `error: too many arguments. Expected 0 arguments but got 1.`
+- A failed call prints `Error: <message>` on stderr, without the JSON-RPC
+  `MCP error <code>:` prefix, as a tool's error reads:
+  `<bin> resource read app://missing` prints
+  `Error: Resource not found: app://missing` and exits 1. Up to 1.11.0, a
+  failed read printed the prefix twice
+  (`Error: MCP error -32002: MCP error -32002: Resource not found: ...`).
+
 ### The CLI's daemon
 
 `<bin> daemon start` runs the server in the background on
@@ -147,7 +160,11 @@ mymcp run_workflow --file refund.js
 - A server with tools of its own has them only under `skills`. Scripts that
   use `skills ...` keep working if the server later gains tools.
 - The plugin's tools are never generated as tool commands. `cli.excludeTools`
-  naming one of them leaves its command out.
+  naming one of them leaves its command out. Without `execute_action`,
+  `load_skill` prints each action as a workflow of one call
+  (`mymcp run_workflow 'return await callTool("getInvoice", {"id":"<id>"});'`),
+  and without `run_workflow` too, it prints no command line. Up to 1.11.0, it
+  printed `execute` lines for a command the CLI didn't have.
 - `--output json` prints the tool's structured content (the whole result when
   it has none).
 - Exit codes: 0 on success; 1 when the tool fails (a failed action or
@@ -401,6 +418,7 @@ frontmcp service uninstall my-server
 | `run_workflow` exits 1       | The workflow failed (`success: false`)      | Read the error on stderr; it names the API's status and error body       |
 | `execute` exits 1            | The action failed, or the user declined it  | Read the error on stderr; `--output json` prints `{ ok, status, data? }` |
 | `execute` exits 1, declined  | No terminal to confirm a destructive action | Run it again with `--yes`                                                |
+| `error: unknown command`     | A mistyped or missing command               | Run `<bin> --help`; on a server with tools, use `<bin> skills ...`       |
 
 ## Examples
 

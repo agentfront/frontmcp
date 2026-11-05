@@ -166,7 +166,10 @@ describe("a CLI for a server whose only tools are the Skilled OpenAPI plugin's",
         exitCode: 0,
         stdout: expect.stringContaining('name: Invoices'),
       });
-      expect(run(['skills', 'read', 'refunds'])).toMatchObject({ exitCode: 1 });
+      const missing = run(['skills', 'read', 'refunds']);
+      expect(missing.exitCode).toBe(1);
+      expect(missing.stderr).toContain('Error: Resource not found: skill://refunds/SKILL.md\n');
+      expect(missing.stderr).not.toContain('MCP error');
     });
 
     it('lists the skills the caller can use', () => {
@@ -382,7 +385,10 @@ describe('a CLI for a server with tools of its own beside the Skilled OpenAPI pl
     expect(stdout).toMatch(/Skills:\n\s+skills\s+Find, load and run skills/);
     expect(stdout).not.toContain('search_skill');
     expect(stdout).not.toContain('run-workflow');
-    expect(run(['search_skill', 'invoices'])).toMatchObject({ exitCode: 2 });
+    expect(run(['search_skill', 'invoices'])).toMatchObject({
+      exitCode: 2,
+      stderr: expect.stringContaining("error: unknown command 'search_skill'"),
+    });
   });
 
   it('serves the skills group and its own tools', () => {
@@ -392,5 +398,46 @@ describe('a CLI for a server with tools of its own beside the Skilled OpenAPI pl
     });
     expect(run(['skills', 'load', 'invoices']).stdout).toContain('skilled-mixed-demo skills execute getInvoice');
     expect(run(['ping'])).toMatchObject({ exitCode: 0, stdout: expect.stringContaining('pong') });
+  });
+});
+
+describe('a CLI that leaves out execute_action', () => {
+  const appName = 'skilled-no-execute-demo';
+  let project: SkilledCliProject;
+  let homeDir: string;
+
+  function run(args: string[]): CliResult {
+    return runCliBundle(project.cliBundle, args, { FRONTMCP_HOME: homeDir });
+  }
+
+  beforeAll(async () => {
+    project = await buildSkilledCliProject({
+      prefix: 'skilled-no-execute',
+      appName,
+      cli: { excludeTools: ['execute_action'] },
+    });
+    homeDir = await mkdtemp(path.join(os.tmpdir(), 'fmcp-skx-'));
+  }, 180_000);
+
+  afterAll(async () => {
+    await rm(homeDir, { recursive: true, force: true });
+    await removeScratchProject(project.dir);
+  });
+
+  it('prints each action of a loaded skill as a run_workflow command, with no execute line', () => {
+    const { stdout, exitCode } = run(['load_skill', 'invoices']);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(
+      `  getInvoice: Get an invoice by id.\n    ${appName} run_workflow 'return await callTool("getInvoice", {"id":"<id>"});'`,
+    );
+    expect(stdout).not.toContain(`${appName} execute`);
+  });
+
+  it('has no execute command', () => {
+    expect(run(['execute', 'getInvoice'])).toMatchObject({
+      exitCode: 2,
+      stderr: expect.stringContaining("error: unknown command 'execute'"),
+    });
   });
 });

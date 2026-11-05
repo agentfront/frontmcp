@@ -317,8 +317,15 @@ export async function buildExec(
     // step that produces the bin's CLI bundle fails with a missing-module
     // error. The Skilled OpenAPI commands (`./skilled-commands`) and the
     // bundle skills `install` writes (`./bundle-skills`) are compiled modules
-    // as well. Tolerate absence in test/source-only contexts.
-    const compiledModules = ['plugin-emitter.js', 'skill-tree.js', 'skill-md-compose.js', 'skilled-commands.js', 'bundle-skills.js'];
+    // as well, with the error snippet the commands share. Tolerate absence in test/source-only contexts.
+    const compiledModules = [
+      'plugin-emitter.js',
+      'skill-tree.js',
+      'skill-md-compose.js',
+      'skilled-commands.js',
+      'bundle-skills.js',
+      'extract-public-message.snippet.js',
+    ];
     for (const compiledModule of compiledModules) {
       const compiledModulePath = path.join(__dirname, 'cli-runtime', compiledModule);
       if (fs.existsSync(compiledModulePath)) {

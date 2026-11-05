@@ -400,9 +400,7 @@ ${groupEntries.join(',\n')}
     });
     return lines.join('\\n');
   }
-});
-
-program.action(function() { program.outputHelp(); });`;
+});`;
 }
 
 function generateToolCommands(tools: ExtractedTool[], appName: string): string {
@@ -2205,11 +2203,9 @@ daemonCmd
 }
 
 function generateFooter(): string {
-  return `program.on('command:*', function(args) {
-  console.error('Unknown command: ' + args[0]);
-  process.exitCode = 1;
-});
-program.parseAsync(process.argv).then(async function() {
+  return `// No command prints the help, as --help does; commander answers an unknown one with a suggestion.
+var cliArgs = process.argv.length > 2 ? process.argv : process.argv.concat('--help');
+program.parseAsync(cliArgs).then(async function() {
   // Long-running commands (serve) set _isLongRunning to keep the event loop alive.
   // Short-lived commands close the client and exit explicitly to avoid hanging
   // on unclosed handles (file loggers, in-memory transport, etc.).

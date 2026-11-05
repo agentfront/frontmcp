@@ -91,7 +91,8 @@ async function run(
     readResource: async (uri) => {
       reads.push(uri);
       const text = setup.resources?.[uri];
-      if (text === undefined) throw new Error(`Resource not found: ${uri}`);
+      // As the in-process client throws it: the server's McpError message, prefixed again by the client
+      if (text === undefined) throw new Error(`MCP error -32002: MCP error -32002: Resource not found: ${uri}`);
       return { contents: [{ text }] };
     },
   };
@@ -265,6 +266,55 @@ describe('registerSkilledCommands', () => {
 
       expect(exitCode).toBe(1);
       expect(JSON.parse(stdout)).toEqual(notFound);
+    });
+
+    it("prints each action as a one-call workflow when the CLI has run_workflow but not execute_action", async () => {
+      const { stdout, program } = await run(['load_skill', 'invoices'], {
+        toolNames: ['search_skill', 'load_skill', 'run_workflow'],
+        answers: { load_skill: { structuredContent: { skill: INVOICES_SKILL } } },
+      });
+
+      expect(stdout).toContain(
+        [
+          '  getInvoice: Get an invoice by id.',
+          `    mymcp run_workflow 'return await callTool("getInvoice", {"id":"<id>"});'`,
+          '    optional input: expand',
+          '',
+          '  listInvoices: List invoices.',
+          `    mymcp run_workflow 'return await callTool("listInvoices", {});'`,
+        ].join('\n'),
+      );
+      expect(stdout).not.toContain('execute');
+      expect(program.commands.find((command) => command.name() === 'load_skill')?.description()).toContain(
+        'a ready command for each',
+      );
+    });
+
+    it('prints the actions with no command line when the CLI has neither execute_action nor run_workflow', async () => {
+      const { stdout, program } = await run(['skills', 'load', 'invoices'], {
+        topLevel: false,
+        toolNames: ['search_skill', 'load_skill'],
+        answers: { load_skill: { structuredContent: { skill: INVOICES_SKILL } } },
+      });
+
+      expect(stdout).toContain(
+        [
+          'Actions (3):',
+          '',
+          '  getInvoice: Get an invoice by id.',
+          '    optional input: expand',
+          '',
+          '  listInvoices: List invoices.',
+          '    optional input: status',
+          '',
+          '  createInvoice: Create an invoice.',
+        ].join('\n'),
+      );
+      expect(stdout).not.toContain('mymcp');
+      const group = program.commands.find((command) => command.name() === 'skills');
+      expect(group?.commands.find((command) => command.name() === 'load')?.description()).toBe(
+        "Show skills' instructions and their actions",
+      );
     });
 
     it('exits 2 without a skill to load', async () => {
@@ -476,7 +526,7 @@ describe('registerSkilledCommands', () => {
       expect(stdout).toBe('---\nname: Billing administration\n---\n# Admin');
     });
 
-    it('exits 1 when the skill to read is not found', async () => {
+    it('exits 1 when the skill to read is not found, without the MCP error prefix', async () => {
       const { stderr, exitCode } = await run(['skills', 'read', 'refunds']);
 
       expect(exitCode).toBe(1);

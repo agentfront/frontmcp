@@ -1,3 +1,6 @@
+/** The `MCP error <code>: ` prefix an MCP client puts before an error's message: twice when the server's has it too. */
+export const MCP_ERROR_PREFIX = /^(?:MCP error -?\d+: )+/;
+
 /**
  * CLI-bundle source for `_extractPublicMessage` / `_exitWithError` / `_connectHint`.
  *
@@ -47,7 +50,7 @@ function _extractPublicMessageImpl(err, visited) {
 // exit code (1 = runtime error, 2 = usage error). Centralized so every action
 // handler reports the same shape.
 function _exitWithError(err, code) {
-  var msg = _extractPublicMessage(err);
+  var msg = String(_extractPublicMessage(err)).replace(${MCP_ERROR_PREFIX}, '');
   console.error('Error: ' + msg);
   var connectHint = _connectHint(err);
   if (connectHint) console.error(connectHint);

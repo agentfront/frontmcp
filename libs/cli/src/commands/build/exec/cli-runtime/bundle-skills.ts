@@ -6,13 +6,13 @@
 import { renderFrontmatter } from './skill-md-compose';
 import {
   actionCommandLine,
-  exampleInput,
   optionalInputNames,
   resourceText,
   SKILLED_OPENAPI_TOOLS,
   skilledCommandLine,
   shellQuoted,
   toolErrorText,
+  workflowCommandLine,
   type SkillAction,
   type SkilledClient,
 } from './skilled-commands';
@@ -159,14 +159,11 @@ function actionsSection(actions: BundleSkillAction[], commands: BundleSkillComma
 function workflowSection(actions: BundleSkillAction[], commands: BundleSkillCommands): string | undefined {
   if (!offers(commands, 'run') || actions.length === 0) return undefined;
   const runCommand = skilledCommandLine(commands.cli, 'run', commands.topLevel);
-  const [firstAction] = actions;
-  const exampleArguments = [firstAction.actionId, exampleInput(firstAction.inputJsonSchema)].map((value) => JSON.stringify(value));
-  const script = `return await callTool(${exampleArguments.join(', ')});`;
   return [
     '## Several actions at once',
     `\`${runCommand} '<script>'\` runs a script that chains actions: each \`await callTool(actionId, input)\` runs ` +
       'one and returns its data, and the value the script returns is printed. Pass a longer script with ' +
       '`--file <path>`, or `-` to read it from standard input.',
-    ['```bash', `${runCommand} ${shellQuoted(script)}`, '```'].join('\n'),
+    ['```bash', workflowCommandLine(runCommand, actions[0]), '```'].join('\n'),
   ].join('\n\n');
 }

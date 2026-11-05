@@ -41,6 +41,41 @@ function makeOptions(overrides?: Partial<CliEntryOptions>): CliEntryOptions {
   };
 }
 
+interface GeneratedCliRun {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
+/** Run the generated CLI in this process, with stubs for its server and runtime modules, until it exits. */
+async function runGeneratedCli(source: string, args: string[]): Promise<GeneratedCliRun> {
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  const argv = process.argv;
+  jest.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+    stdout.push(String(chunk));
+    return true;
+  });
+  jest.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+    stderr.push(String(chunk));
+    return true;
+  });
+  try {
+    const exitCode = await new Promise<number>((resolve) => {
+      jest.spyOn(process, 'exit').mockImplementation(((code?: number) => resolve(code ?? 0)) as never);
+      process.argv = ['node', 'test-app', ...args];
+      const runtimeModule = { createElicitationHandler: () => undefined };
+      const requireModule = (id: string) => (id.startsWith('./') ? runtimeModule : jest.requireActual(id));
+      new Function('require', '__dirname', stripShebang(source))(requireModule, __dirname);
+    });
+    return { stdout: stdout.join(''), stderr: stderr.join(''), exitCode };
+  } finally {
+    process.argv = argv;
+    process.exitCode = undefined;
+    jest.restoreAllMocks();
+  }
+}
+
 describe('generated CLI smoke tests', () => {
   describe('JavaScript validity', () => {
     it('should produce valid JavaScript with no tools', () => {
@@ -285,9 +320,34 @@ describe('generated CLI smoke tests', () => {
       expect(source).toContain('.action(async function');
     });
 
-    it('should end with program.parseAsync(process.argv)', () => {
+    it('should end with program.parseAsync of the command line', () => {
       const source = generateCliEntry(makeOptions());
-      expect(source).toContain('program.parseAsync(process.argv)');
+      expect(source).toContain('program.parseAsync(cliArgs)');
+    });
+  });
+
+  describe('the command line', () => {
+    const source = generateCliEntry(makeOptions({
+      schema: makeSchema({
+        tools: [{ name: 'greet', description: 'Greet someone', inputSchema: { type: 'object', properties: {} } }],
+      }),
+    }));
+
+    it("answers an unknown command as one, with commander's suggestion, and exits 2", async () => {
+      const { stdout, stderr, exitCode } = await runGeneratedCli(source, ['gret', 'world']);
+
+      expect(stderr).toBe("error: unknown command 'gret'\n(Did you mean greet?)\n");
+      expect(stdout).toBe('');
+      expect(exitCode).toBe(2);
+    });
+
+    it('prints the help on standard output with no command, and exits 0', async () => {
+      const { stdout, stderr, exitCode } = await runGeneratedCli(source, []);
+
+      expect(stdout).toContain('Usage: test-app [options] [command]');
+      expect(stdout).toMatch(/Tools:\n\s+greet\s+Greet someone/);
+      expect(stderr).toBe('');
+      expect(exitCode).toBe(0);
     });
   });
 
