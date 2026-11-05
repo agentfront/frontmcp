@@ -8,16 +8,29 @@
 // `requiredAuthorities`, an `@Skill({ authorities })` rule and the hookable
 // `skills:filter` flow (feature flags, this plugin's own bundle-skill hook) were
 // only applied on the SDK's own skill surfaces. Every discovery path of the
-// plugin goes through here instead.
+// plugin goes through here instead, and so does every action call, so a skill
+// discovery hides can't be run by naming its actions.
 
 import type { AuthoritiesPolicy, ResolvedBundle } from '@frontmcp/adapters/skills';
 import type { AuthoritiesMetadata } from '@frontmcp/auth';
-import { filterServableSkills, type ScopeEntry, type SkillAction, type SkillEntry } from '@frontmcp/sdk';
+import {
+  filterServableSkills,
+  type ScopeEntry,
+  type SkillAction,
+  type SkillEntry,
+  type SkillRegistryInterface,
+} from '@frontmcp/sdk';
 
-import type { HiddenOpRegistry } from '../registry/hidden-op.registry';
+import type { HiddenOpEntry, HiddenOpRegistry } from '../registry/hidden-op.registry';
 import type { AuthorityGuard, UnprotectedOpsPolicy } from './authority-guard';
 
 type CallerAuthInfo = Parameters<AuthorityGuard['check']>[0]['authInfo'];
+
+/** The part of a scope that decides which skills the current caller may see. */
+export type SkillFilterScope = Pick<ScopeEntry, 'skills' | 'runFlowForOutput'>;
+
+/** The listings of an operation that count for the caller: those whose skill the `skills:filter` flow shows them. */
+export type VisibleListings = (listings: readonly HiddenOpEntry[]) => Promise<HiddenOpEntry[]>;
 
 export interface SkillVisibilityDeps {
   scope: ScopeEntry;
@@ -38,6 +51,55 @@ export function bundleSkillPolicies(bundle: ResolvedBundle | undefined): Map<str
     }
   }
   return policies;
+}
+
+/** The registered skill an id names, looked up the way the SDK's skill surfaces do. */
+function registeredSkill(registry: SkillRegistryInterface, id: string): SkillEntry | undefined {
+  return (
+    registry.findByName(id) ??
+    (id.includes(':') ? registry.findByQualifiedName(id) : undefined) ??
+    registry.getSkills(true).find((skill) => (skill.metadata.id ?? skill.name) === id || skill.metadata.name === id)
+  );
+}
+
+/**
+ * The listings of an operation whose skill the current caller may see, in their order: the
+ * `skills:filter` flow, which decides what discovery shows, keeps the listing's registered skill.
+ * A listing whose skill is not registered is left out, as discovery can't show that skill either.
+ */
+async function listingsVisibleToCaller(
+  scope: SkillFilterScope,
+  listings: readonly HiddenOpEntry[],
+): Promise<HiddenOpEntry[]> {
+  const registry = scope.skills;
+  if (!registry) return [];
+  const skillById = new Map<string, SkillEntry | undefined>();
+  for (const { skillId } of listings) {
+    if (!skillById.has(skillId)) skillById.set(skillId, registeredSkill(registry, skillId));
+  }
+  const registered = [...skillById.values()].filter((skill): skill is SkillEntry => skill !== undefined);
+  const servable = new Set<SkillEntry>(await filterServableSkills(scope, registered));
+  return listings.filter((listing) => {
+    const skill = skillById.get(listing.skillId);
+    return skill !== undefined && servable.has(skill);
+  });
+}
+
+/** Judges the listings of each call against the skills registered when the call is made. */
+export function visibleListingsWhenCalled(scope: SkillFilterScope): VisibleListings {
+  return (listings) => listingsVisibleToCaller(scope, listings);
+}
+
+/**
+ * Judges every listing of `hiddenOps` now, in one run of the `skills:filter` flow, for a workflow that runs on that
+ * snapshot: a bundle swap that lands while it runs changes neither the operations it calls nor which of them count.
+ */
+export async function visibleListingsAtStart(
+  scope: SkillFilterScope,
+  hiddenOps: HiddenOpRegistry,
+): Promise<VisibleListings> {
+  const visible = new Set(await listingsVisibleToCaller(scope, [...hiddenOps.values()]));
+  return async (listings) => listings.filter((listing) => visible.has(listing));
 }
 
 export class SkillVisibility {
@@ -134,14 +196,8 @@ export class SkillVisibility {
     }
   }
 
-  /** The registered skill an id names, looked up the way the SDK's skill surfaces do. */
   private resolveEntry(id: string): SkillEntry | undefined {
     const registry = this.deps.scope.skills;
-    if (!registry) return undefined;
-    return (
-      registry.findByName(id) ??
-      (id.includes(':') ? registry.findByQualifiedName(id) : undefined) ??
-      registry.getSkills(true).find((skill) => (skill.metadata.id ?? skill.name) === id || skill.metadata.name === id)
-    );
+    return registry ? registeredSkill(registry, id) : undefined;
   }
 }

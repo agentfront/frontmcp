@@ -391,7 +391,7 @@ Usage:
 const { Will, Did, Around, Finally, Stage } = ToolHook;
 ```
 
-> **Note:** Other flows (e.g., `skills:filter`, transport flows) can be hooked by passing the flow name to `FlowHooksOf('flow:name')`. Prefer the pre-built exports above when one is available: exporting them is also what puts a flow's types in the published package, which is why `FlowHooksOf('prompts:get-prompt')`, `'prompts:list-prompts'` and `'completion:complete'` did not typecheck in consumer projects up to 1.8.7.
+> **Note:** Other flows (e.g., `skills:filter`, transport flows) can be hooked by passing the flow name to `FlowHooksOf('flow:name')`. A `skills:filter` hook decides which skills a caller sees on every skill surface, and `@frontmcp/plugin-skilled-openapi` asks it before each action call too, so a bundle skill the hook drops can't be run by naming its actions. Prefer the pre-built exports above when one is available: exporting them is also what puts a flow's types in the published package, which is why `FlowHooksOf('prompts:get-prompt')`, `'prompts:list-prompts'` and `'completion:complete'` did not typecheck in consumer projects up to 1.8.7.
 
 ## call-tool Flow Stages
 

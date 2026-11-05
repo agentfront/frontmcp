@@ -7,7 +7,7 @@
 // elsewhere. Each `callTool(actionId, input)` resolves the operation across
 // loaded skills and runs it through the SAME authorize → validate →
 // outbound-HTTPS → validate path as a direct action call.
-import { Tool, ToolContext, ToolCredentialsRequiredError, type CallToolResult } from '@frontmcp/sdk';
+import { ScopeEntry, Tool, ToolContext, ToolCredentialsRequiredError, type CallToolResult } from '@frontmcp/sdk';
 
 import { confirmationSchema, confirmWorkflow } from '../executor/action-confirmation';
 import {
@@ -21,6 +21,7 @@ import { skillActionDepsOf } from '../executor/run-skill-action';
 import { loadWorkflowSandbox, splitCallOptions, type WorkflowToolHandler } from '../executor/workflow-sandbox';
 import { HiddenOpRegistry } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
+import { visibleListingsAtStart } from '../security/skill-visibility';
 import { SkilledOpenApiConfig } from '../skilled-openapi.symbols';
 import { BundleSyncService } from '../sync/bundle-sync.service';
 import {
@@ -69,17 +70,21 @@ export default class RunWorkflowTool extends ToolContext {
       return failedWorkflow(`AgentScript rejected: ${error instanceof Error ? error.message : String(error)}`);
     }
 
+    // The listings the caller may see, judged on that same bundle by one run of the `skills:filter` flow.
+    const visibleListings = await visibleListingsAtStart(this.get(ScopeEntry), hiddenOps);
+
     // Asked before the script starts: time spent waiting for the user would count against the script's time limit.
     const confirmation = await confirmWorkflow({
       script: input.script,
       config: this.get(SkilledOpenApiConfig),
       guard: this.get(AuthorityGuard),
+      visibleListings,
       hiddenOps,
       authInfo: this.authInfo,
       askUser: (message) => this.elicit(message, confirmationSchema),
     });
     if ('refusal' in confirmation) return failedWorkflow(confirmation.refusal);
-    const deps = skillActionDepsOf(this, this.logger, confirmation.confirmAction);
+    const deps = skillActionDepsOf(this, this.logger, confirmation.confirmAction, visibleListings);
 
     // Aborted once the workflow ends, whatever ends it, so no request it started outlives it.
     const workflowEnded = new AbortController();

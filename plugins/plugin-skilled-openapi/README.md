@@ -129,6 +129,14 @@ those skills, whatever the order of the skills in the bundle. `load_skill` judge
 and the listing agree. A rule that depends on the action's input can't be judged until the call, though: `load_skill`
 still lists such an action, and the call can be refused once its input is known.
 
+Only the skills the caller may see count. The `skills:filter` flow decides which those are, as it does for
+`search_skill` and `load_skill`: it hides a skill whose own `requiredAuthorities` refuse the caller, and any skill a
+hook of the server's drops (a feature flag, a tenant's plan). An action that no skill the caller may see lists is
+answered as an unknown action, the answer for an action that doesn't exist, as `load_skill` answers its skill as not
+found; the audit log records it as a failed authority check. A workflow asks the flow once, when it starts, about the
+bundle it runs on. Up to 1.11.0 such an action still ran when named, and one whose skill's rule refused the caller
+answered `authority denied`.
+
 ### One action with `execute_action`
 
 `execute_action` takes the `actionId` of an action `load_skill` listed and its `input`, and runs it without a script,
@@ -475,9 +483,14 @@ host, and `run_workflow` needed `@enclave-vm/core`.
   EdDSA (Ed25519) over the bundle's canonical JSON, verifies with a key in `trustedKeys`. A signed bundle is still
   checked for shape: unknown fields are errors, and path templates and header names are restricted.
 - **Authorization.** `requiredAuthorities` on skills and operations are checked on every `callTool` and `execute_action` call. Skills organize
-  what the model reads; they don't limit what a script can call, so protect operations with rules and use
-  `unprotectedOps: 'deny'` in production. Each caller is shown only the skills and actions their rules allow. A skill's
-  rule doesn't protect an operation that another skill, without that rule, also lists: put the rule on the operation.
+  what the model reads; a script can call any action of a skill the caller may see, not only the ones it loaded, so
+  protect operations with rules and use `unprotectedOps: 'deny'` in production. Each caller is shown only the skills
+  and actions their rules allow. A skill's rule doesn't protect an operation that another skill, without that rule,
+  also lists: put the rule on the operation.
+- **Hidden skills.** A skill the `skills:filter` flow hides from a caller, by its own rule or a hook such as a feature
+  flag, can't be run by naming its actions: `run_workflow`, `execute_action` and the operation tools count only the
+  skills the caller may see, and answer an action none of them lists as an unknown action, so the call doesn't reveal
+  the hidden skill.
 - **Credentials.** Credentials stay on the server: the plugin adds them to each request, and the script gets only the
   API's answer. With `authProviders`, a caller's request carries only that caller's credential, and one who hasn't
   connected it is asked to. Redirects aren't followed, so a credential isn't sent elsewhere. An error body your API

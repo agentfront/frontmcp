@@ -9,14 +9,16 @@
 import 'reflect-metadata';
 
 import { SkillAuditWriterToken } from '@frontmcp/adapters/skills';
-import type { CallToolResult } from '@frontmcp/sdk';
+import { ScopeEntry, type CallToolResult } from '@frontmcp/sdk';
 
 import { HiddenOpRegistry, type HiddenOpEntry } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
+import type { SkillFilterScope, VisibleListings } from '../security/skill-visibility';
 import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
 import { BundleSyncService } from '../sync/bundle-sync.service';
 import { runWorkflowDescription, type RunWorkflowOutput } from '../tools/run-workflow.schema';
 import RunWorkflowTool from '../tools/run-workflow.tool';
+import { scopeHidingSkills } from './skill-filter-scope.fixture';
 
 // ── Controllable mocks (factories may only reference `mock`-prefixed vars) ──
 
@@ -106,6 +108,7 @@ function makeRunWorkflowThis(
     config?: SkilledOpenApiConfig;
     omitAuthInfo?: boolean;
     signal?: AbortSignal;
+    scope?: SkillFilterScope;
   } = {},
 ) {
   const resolver = { resolve: jest.fn(async () => ({ token: 'sk_x' })) };
@@ -116,6 +119,7 @@ function makeRunWorkflowThis(
   map.set(SkilledOpenApiConfig, args.config ?? baseConfig());
   map.set(HiddenOpRegistry, args.hiddenOps ?? new HiddenOpRegistry());
   map.set(AuthorityGuard, new AuthorityGuard());
+  map.set(ScopeEntry, args.scope ?? scopeHidingSkills().scope);
   map.set(SkilledOpenApiCredentialResolver, resolver as unknown as SkilledOpenApiCredentialResolver);
   if (args.auditWriter) map.set(SkillAuditWriterToken, args.auditWriter);
 
@@ -288,6 +292,27 @@ describe('run_workflow', () => {
     expect(mockExecuteSkillAction).toHaveBeenCalledWith(
       expect.objectContaining({ listings: [expect.objectContaining({ skillId: 'reports' })] }),
     );
+  });
+
+  it("judges the actions' listings once, as the workflow starts, by the skills:filter flow", async () => {
+    const hiddenOps = new HiddenOpRegistry();
+    hiddenOps.set(buildEntry('flagged', 'getAccountPlan'));
+    hiddenOps.set(buildEntry('reports', 'getAccountPlan'));
+    const { scope, filterRuns } = scopeHidingSkills('flagged');
+    mockExecuteSkillAction.mockResolvedValue({ ok: true, status: 200, data: { plan: 'growth' } });
+    mockExecuteImpl = async (_code, ctx) => {
+      await ctx.toolHandler('getAccountPlan', {});
+      await ctx.toolHandler('getAccountPlan', {});
+      return { success: true, stats: { duration: 1, toolCallCount: 2, iterationCount: 1 } };
+    };
+
+    await run(makeRunWorkflowThis({ hiddenOps, scope }), 'return await callTool("getAccountPlan", {})');
+
+    const [{ listings, deps }] = mockExecuteSkillAction.mock.calls[0] as [
+      { listings: HiddenOpEntry[]; deps: { visibleListings: VisibleListings } },
+    ];
+    expect(await deps.visibleListings(listings)).toEqual([expect.objectContaining({ skillId: 'reports' })]);
+    expect(filterRuns).toHaveBeenCalledTimes(1);
   });
 
   it('callTool bridge throws for an unknown action', async () => {

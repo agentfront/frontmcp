@@ -1,11 +1,19 @@
 import type { Token } from '@frontmcp/di';
-import type { ProviderRegistry, ToolClassTokenRecord, ToolContext, ToolRegistry } from '@frontmcp/sdk';
+import {
+  ScopeEntry,
+  type ProviderRegistry,
+  type ToolClassTokenRecord,
+  type ToolContext,
+  type ToolRegistry,
+} from '@frontmcp/sdk';
 
+import { unknownActionError } from '../executor/action-outcome';
 import { executeOperation, type ExecutionResult } from '../executor/openapi-runtime';
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
 import { SkilledOpenApiConfig, SkilledOpenApiCredentialResolver } from '../skilled-openapi.symbols';
 import { OperationToolFactory, operationToolName } from '../tools/operation-tool.factory';
+import { scopeHidingSkills } from './skill-filter-scope.fixture';
 
 jest.mock('../executor/openapi-runtime', () => ({
   executeOperation: jest.fn(async () => ({
@@ -65,7 +73,13 @@ interface FakeToolCall {
 }
 
 function buildFakeCtx(
-  overrides: { granted?: boolean; deniedBy?: string; guard?: AuthorityGuard; signal?: AbortSignal } = {},
+  overrides: {
+    granted?: boolean;
+    deniedBy?: string;
+    guard?: AuthorityGuard;
+    signal?: AbortSignal;
+    hiddenSkills?: string[];
+  } = {},
 ): FakeToolCall {
   const guard = overrides.guard ?? {
     check: jest.fn(async () => ({ granted: overrides.granted ?? true, deniedBy: overrides.deniedBy })),
@@ -86,6 +100,7 @@ function buildFakeCtx(
     [SkilledOpenApiConfig, config],
     [AuthorityGuard, guard],
     [SkilledOpenApiCredentialResolver, resolver],
+    [ScopeEntry, scopeHidingSkills(...(overrides.hiddenSkills ?? [])).scope],
   ]);
   return {
     authInfo: {},
@@ -439,6 +454,34 @@ describe('OperationToolFactory', () => {
       await expect(
         lastExecutor(toolRegistry)({ id: 'x' }, buildFakeCtx({ guard: new AuthorityGuard() })),
       ).resolves.toMatchObject({ ok: true });
+    });
+
+    it('admits a caller through a listing skill the skills:filter flow keeps when it hides another', async () => {
+      const { factory, toolRegistry } = makeFactory();
+      factory.register(buildEntry({ skillId: 'flagged' }));
+      factory.register(buildEntry({ skillId: 'invoices' }));
+
+      const result = await lastExecutor(toolRegistry)(
+        { id: 'x' },
+        buildFakeCtx({ guard: new AuthorityGuard(), hiddenSkills: ['flagged'] }),
+      );
+
+      expect(result).toMatchObject({ ok: true });
+      expect(mockExecuteOperation).toHaveBeenCalledTimes(1);
+    });
+
+    it('answers as for an unknown action, sending nothing, when the skills:filter flow hides every listing skill', async () => {
+      const { factory, toolRegistry } = makeFactory();
+      factory.register(buildEntry({ skillId: 'flagged' }));
+      factory.register(buildEntry({ skillId: 'invoices' }));
+
+      const result = await lastExecutor(toolRegistry)(
+        { id: 'x' },
+        buildFakeCtx({ guard: new AuthorityGuard(), hiddenSkills: ['flagged', 'invoices'] }),
+      );
+
+      expect(result).toEqual({ ok: false, status: 0, error: unknownActionError('createInvoice') });
+      expect(mockExecuteOperation).not.toHaveBeenCalled();
     });
 
     it('passes through executeOperation envelope on success', async () => {

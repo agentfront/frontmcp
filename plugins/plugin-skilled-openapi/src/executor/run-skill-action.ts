@@ -1,9 +1,10 @@
 import { SkillAuditWriterToken, type SkillAuditWriter } from '@frontmcp/adapters/skills';
 import { type Token } from '@frontmcp/di';
-import type { FrontMcpLogger } from '@frontmcp/sdk';
+import { ScopeEntry, type FrontMcpLogger } from '@frontmcp/sdk';
 
 import { type OperationListings } from '../registry/hidden-op.registry';
 import { AuthorityGuard } from '../security/authority-guard';
+import { visibleListingsWhenCalled, type VisibleListings } from '../security/skill-visibility';
 import { SkilledOpenApiConfig } from '../skilled-openapi.symbols';
 import { askingBeforeEachCall, type AskUser, type ConfirmAction } from './action-confirmation';
 import { actionOutcome, type ActionOutcome } from './action-outcome';
@@ -22,11 +23,12 @@ export interface SkillActionContext {
 /** What an operation tool answers: the outcome a script's `callTool(..., { throwOnError: false })` gets, and the answer's content type. */
 export type OperationToolResult = ActionOutcome & { contentType?: string };
 
-/** The shared executor's dependencies, resolved from a tool's context, with how the tool confirms an action. */
+/** The shared executor's dependencies from a tool's context, with how it confirms an action and judges its listings. */
 export function skillActionDepsOf(
   ctx: SkillActionContext,
   logger: FrontMcpLogger,
   confirmAction: ConfirmAction,
+  visibleListings: VisibleListings,
 ): SkillActionDeps {
   const config = ctx.get(SkilledOpenApiConfig);
   const resolver = credentialResolverOf(ctx);
@@ -36,6 +38,7 @@ export function skillActionDepsOf(
     confirmAction,
     resolver: { resolve: (ref, opts) => resolver.resolve(ref, opts) },
     guard: ctx.get(AuthorityGuard),
+    visibleListings,
     logger,
     ...(auditWriter ? { audit: { writer: auditWriter, subject: ctx.authInfo?.user?.sub ?? 'anonymous' } } : {}),
   };
@@ -51,7 +54,12 @@ export async function runSkillAction(args: {
 }): Promise<OperationToolResult> {
   const { ctx, logger, listings, input, askUser } = args;
   const whenUnsupported = ctx.get(SkilledOpenApiConfig).confirm?.whenUnsupported ?? 'refuse';
-  const deps = skillActionDepsOf(ctx, logger, askingBeforeEachCall(askUser, whenUnsupported));
+  const deps = skillActionDepsOf(
+    ctx,
+    logger,
+    askingBeforeEachCall(askUser, whenUnsupported),
+    visibleListingsWhenCalled(ctx.get(ScopeEntry)),
+  );
   const result = await executeSkillAction({ listings, input, authInfo: ctx.authInfo, signal: ctx.signal, deps });
   const outcome = actionOutcome(result, deps.config.outbound.errorBodies, listings[0].authBinding);
   return result.contentType ? { ...outcome, contentType: result.contentType } : outcome;
