@@ -46,12 +46,12 @@ export interface HealthScopeView {
     isNodeAlive(nodeId: string): Promise<boolean>;
     getNodeId(): string;
   };
-  /** Checks plugins added with `scope.registerHealthProbe()`. */
+  /** Checks plugins add with `scope.registerHealthProbe()`, read again at every check. */
   readonly healthProbes?: readonly HealthProbeDefinition[];
 }
 
 export class HealthService {
-  private readonly probes: HealthProbe[] = [];
+  private readonly probeSources: Array<() => readonly HealthProbe[]> = [];
   private readonly config: HealthOptionsInterface;
   private readonly serverInfo: ServerInfoOptions;
   private scopeView?: HealthScopeView;
@@ -69,7 +69,14 @@ export class HealthService {
    * Register a health probe.
    */
   registerProbe(probe: HealthProbe): void {
-    this.probes.push(probe);
+    this.probeSources.push(() => [probe]);
+  }
+
+  /**
+   * Register a list of probes that every check reads again, so a probe added to it or removed from it later counts.
+   */
+  registerProbeSource(source: () => readonly HealthProbe[]): void {
+    this.probeSources.push(source);
   }
 
   /**
@@ -78,7 +85,7 @@ export class HealthService {
    * Walks the scope's stores and registries to create built-in probes:
    * - Session store (if transport persistence is configured)
    * - Remote MCP apps (via existing HealthCheckManager)
-   * - Probes plugins registered on the scope
+   * - Probes plugins register on the scope, at any time
    * - User-defined probes from config
    */
   autoDiscoverProbes(scope: HealthScopeView): void {
@@ -114,9 +121,7 @@ export class HealthService {
       });
     }
 
-    for (const probe of scope.healthProbes ?? []) {
-      this.registerProbe(probe);
-    }
+    this.registerProbeSource(() => scope.healthProbes ?? []);
 
     // User-defined probes
     const userProbes = (this.config.probes ?? []) as HealthProbeDefinition[];
@@ -166,7 +171,7 @@ export class HealthService {
 
     // Run all probes in parallel with timeout
     const results = await Promise.all(
-      this.probes.map(async (probe) => {
+      this.getProbes().map(async (probe) => {
         const result = await this.runProbeWithTimeout(probe, timeoutMs);
         return { name: probe.name, result };
       }),
@@ -197,14 +202,14 @@ export class HealthService {
    * Get the number of registered probes.
    */
   getProbeCount(): number {
-    return this.probes.length;
+    return this.getProbes().length;
   }
 
   /**
-   * Get all registered probes (used for aggregation across scopes).
+   * Get the probes the next check runs (used for aggregation across scopes).
    */
   getProbes(): readonly HealthProbe[] {
-    return this.probes;
+    return this.probeSources.flatMap((source) => source());
   }
 
   /**
