@@ -6,6 +6,8 @@ import type { BundleSourceOptions } from '../source-options';
 import { InlineSource } from './inline.source';
 import { NpmSource } from './npm.source';
 import {
+  PUSH_BODY_DIGEST_CLAIM,
+  pushBodyDigest,
   SaasJwksUnavailableError,
   SaasPullSource,
   SaasPullTokenRejectedError,
@@ -23,6 +25,8 @@ export {
   SaasJwksUnavailableError,
   SaasPushRefusedError,
   tokenFailureOf,
+  PUSH_BODY_DIGEST_CLAIM,
+  pushBodyDigest,
   InlineSource,
 };
 export type {

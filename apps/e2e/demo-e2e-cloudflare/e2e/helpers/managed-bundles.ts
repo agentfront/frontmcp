@@ -3,6 +3,8 @@ import { exportJWK, generateKeyPair, SignJWT, type JWK, type JWTPayload } from '
 import {
   bundleDigest,
   canonicalize,
+  PUSH_BODY_DIGEST_CLAIM,
+  pushBodyDigest,
   type OperationDescriptor,
   type ResolvedBundle,
   type SignatureKey,
@@ -37,6 +39,11 @@ export class BundleTokenIssuer {
 
   pushToken(claims: JWTPayload = {}): Promise<string> {
     return this.sign({ jti: randomUUID(), ...claims }, '5m');
+  }
+
+  /** A push token bound to `body`, the exact JSON it is pushed with, by its `body_sha256` claim. */
+  pushTokenFor(body: string): Promise<string> {
+    return this.pushToken({ [PUSH_BODY_DIGEST_CLAIM]: pushBodyDigest(body) });
   }
 
   private sign(claims: JWTPayload, expiresIn: string): Promise<string> {
