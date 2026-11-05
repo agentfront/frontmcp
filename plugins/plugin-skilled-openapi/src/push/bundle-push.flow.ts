@@ -60,8 +60,8 @@ function invalidToken(description: string) {
 
 /**
  * `POST /__skilled_openapi/push`: a bundle the SaaS pushes. Its token passes the pull token's checks and the replay
- * guard, the body passes the checks a pulled bundle passes (schema, then signature when required), and it is applied
- * after the bundles already queued, then kept as the last good bundle.
+ * guard, the body passes the checks a pulled bundle passes (schema, signature when required, not older than the served
+ * bundle), and it is applied after the bundles already queued, then kept as the last good bundle.
  */
 @Flow({
   name,
@@ -133,12 +133,11 @@ export default class BundlePushFlow extends FlowBase<typeof name> {
     const { bundle } = this.state.required;
     const result = await this.get(BundleSyncService).applyPushed(bundle);
     if (!result.applied) {
+      const description = `bundle ${bundle.bundleId}@${bundle.version} was not applied: ${result.reason}`;
       return this.respond(
-        refusal(
-          422,
-          'bundle_not_applied',
-          `bundle ${bundle.bundleId}@${bundle.version} was not applied: ${result.reason}`,
-        ),
+        result.refusal === 'outdated'
+          ? refusal(409, 'bundle_outdated', description)
+          : refusal(422, 'bundle_not_applied', description),
       );
     }
     this.logger.info(`applied pushed bundle ${bundle.bundleId}@${bundle.version}`);

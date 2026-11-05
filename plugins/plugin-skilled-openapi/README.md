@@ -335,17 +335,30 @@ for a bad one.
 
 ### Sources
 
-| `type`   | Fields                                                                                                        | What it does                                                                                                                                                                                                                                 |
-| -------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `inline` | `content`                                                                                                     | The bundle object itself. For tests, bundles built in code, and runtimes without a file system.                                                                                                                                              |
-| `static` | `path`, `watch?`                                                                                              | A JSON or YAML bundle file, resolved from the working directory. With `watch: true`, the plugin reloads it when it changes.                                                                                                                  |
-| `npm`    | `packageName`, `exportName?`, `verifyProvenance?`                                                             | Imports a package and uses one of its exports. Provenance checks aren't implemented yet, so the default `verifyProvenance: true` refuses to load it; set `false` only for a package you pin and trust.                                       |
-| `saas`   | `endpoint`, `authToken`, `expectedAudience`, `jwksUrl`, `expectedIssuer`, `pollIntervalMs?`, `enableWebhook?` | Pulls the bundle over HTTPS at startup and every `pollIntervalMs` (default 5 minutes), after checking `authToken` against `jwksUrl`, `expectedIssuer` and `expectedAudience`. With `enableWebhook: true`, also takes pushed bundles (below). |
+| `type`   | Fields                                                                                                                          | What it does                                                                                                                                                                                                                                                                                                                       |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inline` | `content`                                                                                                                       | The bundle object itself. For tests, bundles built in code, and runtimes without a file system.                                                                                                                                                                                                                                    |
+| `static` | `path`, `watch?`                                                                                                                | A JSON or YAML bundle file, resolved from the working directory. With `watch: true`, the plugin reloads it when it changes.                                                                                                                                                                                                        |
+| `npm`    | `packageName`, `exportName?`, `verifyProvenance?`                                                                               | Imports a package and uses one of its exports. Provenance checks aren't implemented yet, so the default `verifyProvenance: true` refuses to load it; set `false` only for a package you pin and trust.                                                                                                                             |
+| `saas`   | `endpoint`, `authToken`, `expectedAudience`, `jwksUrl`, `expectedIssuer`, `pollIntervalMs?`, `enableWebhook?`, `allowRollback?` | Pulls the bundle over HTTPS at startup and every `pollIntervalMs` (default 5 minutes), after checking `authToken` against `jwksUrl`, `expectedIssuer` and `expectedAudience`. With `enableWebhook: true`, also takes pushed bundles (below). Applies no bundle older than the one it serves, unless `allowRollback: true` (below). |
 
 A new bundle from `static` (with `watch`) or `saas` is checked like the first, then replaces the skills and operations
 at once. A bundle that fails its checks isn't applied, and the reason is logged, with the first issues a schema check
 found; the bundle already loaded stays. A `run_workflow` already running when a new bundle is applied finishes on the
 operations of the bundle it started on.
+
+A bundle from the `saas` source, pulled or pushed, is applied only when it isn't older than the bundle being served, so
+a validly signed old bundle, replayed or served by mistake, can't roll the server back:
+
+- Two semver versions compare by semver precedence, whatever their `generatedAt`.
+- The same version (a bundle re-signed under it), or versions that aren't both semver, compare by `generatedAt`, which
+  the signature covers. The same version and `generatedAt` is the same bundle, and a poll that pulls it again applies it.
+- An older bundle is not applied and not kept, and the log says why:
+  `[bundle-sync] bundle acme:billing@1.4.0 not applied: older than the served bundle acme:billing@1.5.0 (generatedAt ...)`.
+- To roll back, publish the earlier content under a newer version, or set `allowRollback: true` on the source, which
+  then applies any bundle that passes its other checks, as the `inline`, `static` and `npm` sources do.
+
+A server that starts has no bundle to compare with: it serves the bundle it pulls, or the cached one when the pull fails.
 
 The `saas` source keeps the last bundle the plugin applied, pulled or pushed, in `bundleCacheDir` (on a Worker, in the
 injected cache). A bundle that fails its signature or its other checks is never kept, so a server that restarts while
@@ -363,7 +376,8 @@ With `enableWebhook: true` on a `saas` source, the server takes bundles the SaaS
   that no push used and an `iat` within five minutes. A missing or refused token answers `401 invalid_token`, a used
   `jti` answers `409 push_replayed`, and a JWKS that can't be read answers `503 temporarily_unavailable`.
 - The body is the bundle as JSON, checked as a pulled bundle is: `400 invalid_bundle` when it is not a bundle,
-  `422 bundle_not_applied` when its signature or its other checks fail.
+  `409 bundle_outdated` when it is older than the bundle being served, `422 bundle_not_applied` when its signature or
+  its other checks fail. The served bundle stays.
 - An applied bundle answers `200 { applied: true, bundleId, bundleVersion }` and is kept as the last good bundle. Pushes
   and pulls apply one at a time, in the order they arrive.
 

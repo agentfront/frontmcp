@@ -72,6 +72,11 @@ export const saasSourceSchema = z.object({
    * and applied as a pulled one. Default false.
    */
   enableWebhook: z.boolean().default(false),
+  /**
+   * Apply a pulled or pushed bundle older than the one being served (see `compareBundleVersions`). Default false: such
+   * a bundle is refused, so a validly signed old bundle can't roll the server back.
+   */
+  allowRollback: z.boolean().optional(),
   /** JWKS URL for verifying SaaS-issued tokens (fetched without credentials, redirects refused). */
   jwksUrl: httpsUrl,
   /** Expected issuer (`iss`) claim of `authToken`. */

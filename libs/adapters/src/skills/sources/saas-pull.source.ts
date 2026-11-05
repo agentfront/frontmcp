@@ -113,7 +113,8 @@ function isUsableSigningKey(key: unknown): boolean {
  * other pull failure (the cache fallback still applies).
  *
  * NOTE: Bundle signature verification is applied by the bundle-sync service
- * before the bundle becomes active.
+ * before the bundle becomes active, and so is the version order: the source is
+ * {@link SaasPullSource.forwardOnly}, so a bundle older than the served one is refused.
  */
 export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
   readonly id: string;
@@ -141,6 +142,11 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
   /** This source, when `enableWebhook` is on: it then takes bundles pushed to the server. */
   get push(): BundlePushReceiver | undefined {
     return this.replayGuard ? this : undefined;
+  }
+
+  /** A pulled or pushed bundle older than the one being served is not applied, unless `allowRollback` is on. */
+  get forwardOnly(): boolean {
+    return !this.options.allowRollback;
   }
 
   /**

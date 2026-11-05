@@ -50,6 +50,12 @@ describe('source-options schemas', () => {
       const out = saasSourceSchema.parse(baseSaas);
       expect(out.pollIntervalMs).toBe(300_000);
       expect(out.enableWebhook).toBe(false);
+      expect(out.allowRollback).toBeUndefined();
+    });
+
+    it('takes allowRollback as a boolean only', () => {
+      expect(saasSourceSchema.parse({ ...baseSaas, allowRollback: true }).allowRollback).toBe(true);
+      expect(() => saasSourceSchema.parse({ ...baseSaas, allowRollback: 'yes' })).toThrow();
     });
 
     it('rejects http:// endpoint (must be HTTPS)', () => {
