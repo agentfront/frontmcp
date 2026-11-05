@@ -23,26 +23,28 @@ INPUT: { skillId } or { skillIds }
 OUTPUT: { skill: { id, name, description, instructions, actions[] }, isComplete } for skillId,
         { skills: Array<{ skill, isComplete }> } for skillIds`;
 
-const loadedSkillSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string(),
-  instructions: z.string(),
-  bundleVersion: z.string().optional(),
-  actions: z
-    .array(
-      z.object({
-        actionId: z.string(),
-        summary: z.string(),
-        description: z.string().optional(),
-        inputJsonSchema: z.record(z.string(), z.unknown()),
-        outputJsonSchema: z.record(z.string(), z.unknown()),
-        requiredAuthorities: z.record(z.string(), z.unknown()).optional(),
-        asksForConfirmation: z.literal(true).optional(),
-      }),
-    )
-    .optional(),
-});
+const loadedSkillSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    instructions: z.string(),
+    bundleVersion: z.string().optional(),
+    actions: z
+      .array(
+        z.object({
+          actionId: z.string(),
+          summary: z.string(),
+          description: z.string().optional(),
+          inputJsonSchema: z.record(z.string(), z.unknown()),
+          outputJsonSchema: z.record(z.string(), z.unknown()),
+          requiredAuthorities: z.record(z.string(), z.unknown()).optional(),
+          asksForConfirmation: z.literal(true).optional(),
+        }),
+      )
+      .optional(),
+  })
+  .meta({ id: 'LoadedSkill' });
 
 export const loadSkillInputSchema = {
   skillId: z
