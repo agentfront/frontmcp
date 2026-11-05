@@ -58,7 +58,10 @@ describe('Persistent questions E2E', () => {
   });
 
   async function connect(sub: string): Promise<McpTestClient> {
-    const token = await tokenFactory.createTestToken({ sub });
+    return connectWithToken(await tokenFactory.createTestToken({ sub }));
+  }
+
+  async function connectWithToken(token: string): Promise<McpTestClient> {
     const client = await McpTestClient.create({
       baseUrl: server.info.baseUrl,
       transport: 'streamable-http',
@@ -164,7 +167,8 @@ describe('Persistent questions E2E', () => {
   });
 
   it('keeps an answer for the next session when the waiting session ends', async () => {
-    const first = await connect('alice');
+    const aliceToken = await tokenFactory.createTestToken({ sub: 'alice' });
+    const first = await connectWithToken(aliceToken);
     const cookie = await signIn(first);
 
     void first.tools.call('approve-deploy', { version: '3.0.0' }).catch(() => undefined);
@@ -173,7 +177,8 @@ describe('Persistent questions E2E', () => {
       method: 'DELETE',
       headers: {
         'mcp-session-id': first.sessionId,
-        Authorization: `Bearer ${await tokenFactory.createTestToken({ sub: 'alice' })}`,
+        // The session id is bound to the token that opened the session, not to any token for alice.
+        Authorization: `Bearer ${aliceToken}`,
       },
     });
     expect(ended.status).toBeLessThan(300);
