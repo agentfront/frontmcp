@@ -149,18 +149,32 @@ describe('SaasPullSource', () => {
     expect(events).toEqual(['applied', 'start resolved', 'applied', 'refresh resolved']);
   });
 
-  it('falls back to cached bundle when pull fails on boot', async () => {
+  it('falls back to cached bundle when pull fails on boot, and tells its listeners why the pull failed', async () => {
     // Pre-seed cache
     const cachedPath = path.join(tmpDir, 'acme_prod.json');
     await fs.writeFile(cachedPath, JSON.stringify(baseBundle), 'utf8');
 
     const source = new FakeSaasSource(baseOptions(), tmpDir, async () => ({ status: 503, body: '' }));
-    const events: ResolvedBundle[] = [];
-    source.onChange((b) => events.push(b));
+    const events: Array<{ bundleId: string; origin: unknown }> = [];
+    source.onChange((b, origin) => events.push({ bundleId: b.bundleId, origin }));
     await source.start();
     await source.stop();
-    expect(events).toHaveLength(1);
-    expect(events[0].bundleId).toBe('saas:test');
+    expect(events).toEqual([{ bundleId: 'saas:test', origin: { pullFailure: 'pull responded 503' } }]);
+  });
+
+  it('hands a pulled bundle to its listeners with no origin', async () => {
+    const source = new FakeSaasSource(baseOptions(), tmpDir, async () => ({
+      status: 200,
+      body: JSON.stringify(baseBundle),
+    }));
+    const origins: unknown[] = [];
+    source.onChange((_bundle, origin) => origins.push(origin));
+
+    await source.start();
+    await source.refresh();
+    await source.stop();
+
+    expect(origins).toEqual([undefined, undefined]);
   });
 
   it('throws when both pull AND cache are unavailable', async () => {
@@ -279,6 +293,62 @@ describe('SaasPullSource', () => {
     }
     await sourceLoggerInjected.stop();
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/poll failed/));
+  });
+
+  it('reports each poll that fails to its pull failure listeners, but not a start or a refresh, which throw', async () => {
+    const source = new FakeSaasSource(baseOptions({ pollIntervalMs: 20 }), tmpDir, async () => ({
+      status: 502,
+      body: '',
+    }));
+    const failures: string[] = [];
+    const unsubscribe = source.onPullFailure((reason) => failures.push(reason));
+
+    const startFailure = await source.start().catch((e: Error) => e.message);
+    const refreshFailure = await source.refresh().catch((e: Error) => e.message);
+    const reportedByStartAndRefresh = failures.length;
+    const deadline = Date.now() + 1500;
+    while (Date.now() < deadline && failures.length === 0) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    unsubscribe();
+    const reportedBeforeUnsubscribe = failures.length;
+    await new Promise((r) => setTimeout(r, 60));
+    await source.stop();
+
+    expect(startFailure).toContain('initial pull failed and no cached bundle is available');
+    expect(refreshFailure).toBe('pull responded 502');
+    expect(reportedByStartAndRefresh).toBe(0);
+    expect(failures[0]).toBe('pull responded 502');
+    expect(failures).toHaveLength(reportedBeforeUnsubscribe);
+  });
+
+  it('logs a pull failure listener that throws, and keeps polling', async () => {
+    const warn = jest.fn();
+    let calls = 0;
+    const source = new (class extends SaasPullSource {
+      constructor() {
+        super(baseOptions({ pollIntervalMs: 20 }), tmpDir, { ...fakeLogger, warn } as unknown as never);
+      }
+      protected override async httpGet(url: string, headers: Record<string, string>) {
+        return withSaasJwks(issuer, async () => {
+          calls++;
+          return calls === 1 ? { status: 200, body: JSON.stringify(baseBundle) } : { status: 502, body: '' };
+        })(url, headers);
+      }
+    })();
+    source.onPullFailure(() => {
+      throw new Error('listener broke');
+    });
+    await source.start();
+
+    const deadline = Date.now() + 1500;
+    while (Date.now() < deadline && calls < 3) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    await source.stop();
+
+    expect(calls).toBeGreaterThanOrEqual(3);
+    expect(warn).toHaveBeenCalledWith('[saas-source] pull failure listener threw: listener broke');
   });
 
   it('skips overlapping polls (single-flight)', async () => {

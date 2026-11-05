@@ -398,9 +398,11 @@ describe('createEdgeMcp — managed mode', () => {
     expect(provider).toBeDefined();
   });
 
+  const APPLIED = { status: 'applied', bundleId: 'acme:billing', bundleVersion: '2.0.0', at: '2026-11-05T08:00:00Z' };
+
   /** Capture the controller passed to the plugin provider, and attach the scheduler the plugin would hand it. */
-  function attachScheduler(): { start: jest.Mock; refresh: jest.Mock } {
-    const scheduler = { start: jest.fn(async () => undefined), refresh: jest.fn(async () => undefined) };
+  function attachScheduler(outcome: Record<string, unknown> = APPLIED): { start: jest.Mock; refresh: jest.Mock } {
+    const scheduler = { start: jest.fn(async () => outcome), refresh: jest.fn(async () => outcome) };
     createForGraph.mockImplementation(async (cfg: { providers?: Array<{ provide: symbol; useValue: unknown }> }) => {
       const provider = (cfg.providers ?? []).find((p) => typeof p.provide === 'symbol');
       const controller = provider?.useValue as { attach: (attached: typeof scheduler) => void };
@@ -435,6 +437,43 @@ describe('createEdgeMcp — managed mode', () => {
 
     expect(scheduler.start).not.toHaveBeenCalled();
     expect(scheduler.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['applied', APPLIED],
+    ['was the bundle served', { ...APPLIED, status: 'unchanged' }],
+  ])('scheduled() resolves when the bundle it pulled %s', async (_label, outcome) => {
+    attachScheduler(outcome);
+    const edge = createEdgeMcp({ ...BASE, managed: MANAGED } as EdgeMcpConfig);
+    if (!edge.scheduled) throw new Error('expected scheduled handler in managed mode');
+
+    await expect(edge.scheduled({}, {})).resolves.toBeUndefined();
+    await expect(edge.scheduled({}, {})).resolves.toBeUndefined();
+  });
+
+  it.each([
+    [
+      'the bundle it pulled was refused',
+      { status: 'refused', bundleId: 'acme:billing', bundleVersion: '3.0.0', reason: 'digest mismatch' },
+      '[frontmcp/edge] Cron refresh: bundle acme:billing@3.0.0 was not applied: digest mismatch',
+    ],
+    [
+      'its pull failed',
+      { status: 'failed', reason: 'pull responded 503', cacheFallback: false },
+      '[frontmcp/edge] Cron refresh: the bundle pull failed: pull responded 503',
+    ],
+    [
+      'its pull failed and the cached bundle serves',
+      { status: 'failed', reason: 'fetch failed', cacheFallback: true },
+      '[frontmcp/edge] Cron refresh: the bundle pull failed, so the cached bundle serves: fetch failed',
+    ],
+  ])('scheduled() throws, so the run counts as failed, when %s', async (_label, outcome, message) => {
+    attachScheduler(outcome);
+    const edge = createEdgeMcp({ ...BASE, managed: MANAGED } as EdgeMcpConfig);
+    if (!edge.scheduled) throw new Error('expected scheduled handler in managed mode');
+
+    await expect(edge.scheduled({}, {})).rejects.toThrow(message);
+    await expect(edge.scheduled({}, {})).rejects.toThrow(message);
   });
 
   it('scheduled() throws when no bundle source was attached (controller has no source)', async () => {

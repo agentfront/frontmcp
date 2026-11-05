@@ -34,7 +34,7 @@ describe('the version order of a saas source', () => {
   };
 
   async function startServer({ allowRollback }: { allowRollback?: boolean } = {}): Promise<VersionedServer> {
-    let refresher: { refresh(): Promise<void> } | undefined;
+    let refresher: { refresh(): Promise<unknown> } | undefined;
     const runtimeDeps: SkilledOpenApiRuntimeDeps = {
       cache,
       disablePolling: true,

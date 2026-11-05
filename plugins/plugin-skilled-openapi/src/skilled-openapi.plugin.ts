@@ -38,7 +38,7 @@ import {
   type SkilledOpenApiPluginOptions,
   type SkilledOpenApiPluginOptionsInput,
 } from './skilled-openapi.types';
-import { bundleHealth } from './sync/bundle-load-state';
+import { bundleHealth, type BundleSyncOutcome } from './sync/bundle-load-state';
 import { BundleSyncService } from './sync/bundle-sync.service';
 import ExecuteActionTool from './tools/execute-action.tool';
 import LoadSkillTool from './tools/load-skill.tool';
@@ -87,11 +87,12 @@ export const SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN = Symbol.for('frontmcp:skilled-o
 export interface SkilledOpenApiRuntimeDeps extends BundleSourceDeps {
   /**
    * Invoked once, right after the bundle source is constructed, with what an external scheduler (Cloudflare Cron
-   * Trigger / DO alarm) calls on a runtime with no background timers. `start()` makes sure the bundle sync has started
-   * and loaded a bundle, for a run that also built the server; `refresh()` pulls a fresh bundle, or starts the sync
-   * when nothing has ({@link BundleSyncService.refresh}). Both resolve once the bundle is applied and kept.
+   * Trigger / DO alarm) calls on a runtime with no background timers. `start()` makes sure the bundle sync has started,
+   * for a run that also built the server; `refresh()` pulls a fresh bundle, or starts the sync when nothing has
+   * ({@link BundleSyncService.refresh}). Both resolve once the bundle is applied and kept, or refused, with what the
+   * last sync came to: a scheduler reports a `refused` or `failed` outcome as a failed run.
    */
-  attach?(scheduler: { start(): Promise<void>; refresh(): Promise<void> }): void;
+  attach?(scheduler: { start(): Promise<BundleSyncOutcome>; refresh(): Promise<BundleSyncOutcome> }): void;
 }
 
 /**
@@ -424,7 +425,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
             name: 'skilled-openapi',
             check: async () => {
               await sync.ensureReady();
-              return bundleHealth(sync.loadState());
+              return bundleHealth(sync.loadState(), sync.lastSyncOutcome());
             },
           });
           // Host-injected runtime deps (e.g. `@frontmcp/edge` supplies a
@@ -446,7 +447,7 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
           // throwing attach must not abort sync wiring.
           if (runtimeDeps?.attach) {
             try {
-              runtimeDeps.attach({ start: () => sync.ensureLoaded(), refresh: () => sync.refresh() });
+              runtimeDeps.attach({ start: () => sync.start(), refresh: () => sync.refresh() });
             } catch (e) {
               logger.warn(`runtime-deps attach threw: ${(e as Error).message}`);
             }

@@ -52,7 +52,7 @@ What the handler does:
 
 - **It builds the server on the first request**, not when the module loads, since a Worker can't do I/O then, and reuses it afterwards. A failed build answers `500` (a configuration fault) or `503` with `Retry-After`, and is tried again after a delay that doubles from 1 second up to 60.
 - **It copies string bindings to `process.env`** on the first request (your `[vars]` and secrets), without replacing values already there. Other bindings, such as a KV namespace, reach tools as `this.workerEnv`.
-- **It serves** MCP at `http.entryPath` (`/` by default) and `/healthz`.
+- **It serves** MCP at `http.entryPath` (`/` by default) and `/healthz`, and `/readyz` with `health: { readyz: { enabled: true } }`.
 - **Background tasks are off** on the edge; the server logs that and starts without them.
 - **On Deno and Bun**, which pass `fetch` a second argument of their own, the handler reads the client IP from it.
 
@@ -147,6 +147,15 @@ A Cron run ends once the bundle it pulled is applied and kept in `cache`, also w
 
 Bundles only move forward: a pulled or pushed bundle older than the one the isolate serves is not applied and not kept, so a validly signed old bundle can't roll the Worker back. Two semver versions compare by semver; the same version (re-signed), or versions that aren't both semver, compare by `generatedAt`. To roll back, publish the earlier content under a newer version, or set `allowRollback: true`. An isolate that starts has no bundle to compare with: it serves the bundle it pulls, or the cached one when the pull fails.
 
+A Cron run fails (`scheduled()` throws, so Cloudflare logs the run as an exception and counts it as a failed invocation) when its sync leaves an older bundle serving:
+
+- **The bundle it pulled was not applied**: its signature or its other checks failed, or it is older than the one served. The error names it: `[frontmcp/edge] Cron refresh: bundle billing@4.2.0 was not applied: digest mismatch (...)`.
+- **The pull failed**: `[frontmcp/edge] Cron refresh: the bundle pull failed: pull responded 503`. When the run started the isolate, which then serves the cached bundle, it says `the bundle pull failed, so the cached bundle serves`.
+
+Up to 1.11.0, such a run reported success. A run whose pull applies a bundle, or pulls the one served, succeeds.
+
+`/readyz` says the same, once `health: { readyz: { enabled: true } }` turns it on (it is off on a Worker by default). While the last sync was refused or failed, its `skilled-openapi` check is `degraded`, with `details: { state: 'stale', bundleId, bundleVersion, lastSync }`: the bundle served, and the refusal or failure with its reason and time. The Worker stays ready, since it serves the last good bundle. Each isolate answers for its own bundle and syncs. The details appear outside production, or with `health.includeDetails: true`.
+
 Each operation call checks the API's host first: on a Worker, `node:dns` resolves it over DNS over HTTPS, so the host must resolve publicly.
 
 ### Pushed bundles
@@ -221,12 +230,12 @@ The server never listens: `createEdgeMcp()` sets `serve: false`. Configuration f
 
 It returns:
 
-| Member                          | Description                                                             |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| `fetch(request, env?, ctx?)`    | The Worker's request handler                                            |
-| `SessionDurableObject`          | The Durable Object class for `sessions`. Export it only when you use it |
-| `PushReplayDurableObject`       | The Durable Object class for `managed.enableWebhook`, as above          |
-| `scheduled(event?, env?, ctx?)` | With `managed` only: the Cron Trigger handler, which pulls the bundle   |
+| Member                          | Description                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `fetch(request, env?, ctx?)`    | The Worker's request handler                                                                           |
+| `SessionDurableObject`          | The Durable Object class for `sessions`. Export it only when you use it                                |
+| `PushReplayDurableObject`       | The Durable Object class for `managed.enableWebhook`, as above                                         |
+| `scheduled(event?, env?, ctx?)` | With `managed` only: the Cron Trigger handler, which pulls the bundle and throws when it isn't applied |
 
 Other exports: `kvBundleCacheFromEnv`, `createKvBundleCache`, `kvSkillIndexCacheFromEnv`, `createKvSkillIndexCache`, `buildManagedOpenApiPluginOptions`, and the `EdgeMcp`, `EdgeMcpConfig`, `ManagedEdgeOptions`, `EdgePushReplayStore` and `EdgePushReplayStoreFactory` types.
 

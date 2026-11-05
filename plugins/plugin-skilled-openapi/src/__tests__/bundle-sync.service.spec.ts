@@ -1,4 +1,9 @@
-import { BundleStore, OverlayParseError, type ResolvedBundle } from '@frontmcp/adapters/skills';
+import {
+  BundleStore,
+  OverlayParseError,
+  type BundleSourceListener,
+  type ResolvedBundle,
+} from '@frontmcp/adapters/skills';
 import {
   PublicMcpError,
   type RegisteredSkillContent,
@@ -1001,20 +1006,31 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
       fakeLogger,
     );
 
-  /** A source whose start and refresh each pull the next bundle of `versions`, and that records what it kept. */
-  const pullingSource = (versions: string[]) => {
-    const listeners = new Set<(b: ResolvedBundle) => Promise<void>>();
+  type Pull = string | { cached: string; pullFailure: string } | Error;
+
+  /**
+   * A forward-only source whose start and refresh each take the next of `pulls`: a version it pulls, the cached
+   * version it serves because the pull failed, or the error the pull fails with. It records what it kept, and hands
+   * `failPoll()` to its pull failure listeners, as a poll that fails does.
+   */
+  const pullingSource = (pulls: Pull[]) => {
+    const listeners = new Set<BundleSourceListener>();
+    const pullFailureListeners = new Set<(reason: string) => void>();
     const calls = { start: 0, refresh: 0 };
     const kept: string[] = [];
     const pullNext = async () => {
-      const version = versions.shift();
-      if (!version) throw new Error('pull responded 503');
-      for (const fn of listeners) await fn(buildBundle({ version }));
+      const pull = pulls.shift() ?? new Error('pull responded 503');
+      if (pull instanceof Error) throw pull;
+      const [version, origin] = typeof pull === 'string' ? [pull] : [pull.cached, { pullFailure: pull.pullFailure }];
+      for (const fn of listeners) await fn(buildBundle({ version }), origin);
     };
     return {
       calls,
       kept,
+      failPoll: (reason: string) => pullFailureListeners.forEach((fn) => fn(reason)),
       source: {
+        forwardOnly: true,
+        push: { verifyPushToken: jest.fn() },
         async start() {
           calls.start++;
           await pullNext();
@@ -1023,9 +1039,13 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
           calls.refresh++;
           await pullNext();
         },
-        onChange(fn: (b: ResolvedBundle) => Promise<void>) {
+        onChange(fn: BundleSourceListener) {
           listeners.add(fn);
           return () => listeners.delete(fn);
+        },
+        onPullFailure(fn: (reason: string) => void) {
+          pullFailureListeners.add(fn);
+          return () => pullFailureListeners.delete(fn);
         },
         async keepBundle(bundle: ResolvedBundle) {
           kept.push(bundle.version);
@@ -1034,13 +1054,16 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
     };
   };
 
+  const at = expect.any(String);
+
   it('starts the source when nothing started it, and applies and keeps that pull without pulling again', async () => {
     const sync = makeSync();
     const { source, calls, kept } = pullingSource(['1']);
     sync.attachSource(source);
 
-    await sync.refresh();
+    const outcome = await sync.refresh();
 
+    expect(outcome).toEqual({ status: 'applied', bundleId: 'acme:prod', bundleVersion: '1', at });
     expect(calls).toEqual({ start: 1, refresh: 0 });
     expect(kept).toEqual(['1']);
     expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '1' });
@@ -1052,22 +1075,127 @@ describe('BundleSyncService refresh, as a scheduler runs it', () => {
     sync.attachSource(source);
     await sync.ensureReady();
 
-    await sync.refresh();
+    const outcome = await sync.refresh();
 
+    expect(outcome).toEqual({ status: 'applied', bundleId: 'acme:prod', bundleVersion: '2', at });
     expect(calls).toEqual({ start: 1, refresh: 1 });
     expect(kept).toEqual(['1', '2']);
     expect(sync.loadState()).toMatchObject({ status: 'loaded', bundleVersion: '2' });
   });
 
-  it('throws when the start it runs leaves no bundle loaded, or when a later pull fails', async () => {
+  it('says a pull of the bundle being served is unchanged, and one older than it refused, with why', async () => {
+    const sync = makeSync();
+    const { source, kept } = pullingSource(['2.0.0', '2.0.0', '1.0.0']);
+    sync.attachSource(source);
+    await sync.ensureReady();
+
+    const unchanged = await sync.refresh();
+    const refused = await sync.refresh();
+
+    expect(unchanged).toEqual({ status: 'unchanged', bundleId: 'acme:prod', bundleVersion: '2.0.0', at });
+    expect(refused).toEqual({
+      status: 'refused',
+      bundleId: 'acme:prod',
+      bundleVersion: '1.0.0',
+      reason: 'older than the served bundle acme:prod@2.0.0 (generatedAt 2026-05-04T00:00:00Z)',
+      at,
+    });
+    expect(kept).toEqual(['2.0.0', '2.0.0']);
+    expect(sync.loadState()).toMatchObject({ status: 'loaded', bundleVersion: '2.0.0' });
+  });
+
+  it('resolves as failed when the start it runs loads no bundle, or when a later pull fails: the served one stays', async () => {
     const coldSync = makeSync();
     coldSync.attachSource(pullingSource([]).source);
     const warmSync = makeSync();
     warmSync.attachSource(pullingSource(['1']).source);
     await warmSync.ensureReady();
 
-    await expect(coldSync.refresh()).rejects.toThrow('No skill bundle is loaded: pull responded 503');
-    await expect(warmSync.refresh()).rejects.toThrow('pull responded 503');
+    const cold = await coldSync.refresh();
+    const warm = await warmSync.refresh();
+
+    expect(cold).toEqual({ status: 'failed', reason: 'pull responded 503', cacheFallback: false, at });
+    expect(warm).toEqual({ ...cold, at });
+    expect(coldSync.loadState()).toEqual({ status: 'failed', reason: 'pull responded 503' });
+    expect(warmSync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '1' });
+  });
+
+  it('resolves as failed, serving the cached bundle, when the start it runs could not pull', async () => {
+    const sync = makeSync();
+    sync.attachSource(pullingSource([{ cached: '1', pullFailure: 'fetch failed' }]).source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toEqual({ status: 'failed', reason: 'fetch failed', cacheFallback: true, at });
+    expect(sync.loadState()).toEqual({ status: 'loaded', bundleId: 'acme:prod', bundleVersion: '1' });
+  });
+
+  it('says the cached bundle does not serve when it is refused too', async () => {
+    const sync = new BundleSyncService(
+      new FakeRegistry() as unknown as SkillRegistryInterface,
+      new HiddenOpRegistry(),
+      new BundleStore(),
+      { requireSignature: true, trustedKeys: [], exposeOperationsAsInternalTools: false },
+      fakeLogger,
+    );
+    sync.attachSource(pullingSource([{ cached: '1', pullFailure: 'fetch failed' }]).source);
+
+    const outcome = await sync.start();
+
+    expect(outcome).toEqual({ status: 'failed', reason: 'fetch failed', cacheFallback: false, at });
+    expect(sync.loadState()).toMatchObject({ status: 'failed' });
+  });
+
+  it('records a poll that fails, and the push applied after it', async () => {
+    const sync = makeSync();
+    const { source, failPoll } = pullingSource(['1.0.0']);
+    sync.attachSource(source);
+    await sync.ensureReady();
+
+    failPoll('pull responded 502');
+    const afterPoll = sync.lastSyncOutcome();
+    await sync.applyPushed(buildBundle({ version: '1.1.0' }));
+
+    expect(afterPoll).toEqual({ status: 'failed', reason: 'pull responded 502', cacheFallback: false, at });
+    expect(sync.lastSyncOutcome()).toEqual({ status: 'applied', bundleId: 'acme:prod', bundleVersion: '1.1.0', at });
+  });
+
+  it('records a pushed bundle that is refused', async () => {
+    const sync = makeSync();
+    sync.attachSource(pullingSource(['2.0.0']).source);
+
+    await sync.applyPushed(buildBundle({ version: '1.0.0' }));
+
+    expect(sync.lastSyncOutcome()).toMatchObject({ status: 'refused', bundleVersion: '1.0.0' });
+  });
+
+  it('gives each reason as clients may read it: no URL credentials or query, no token', async () => {
+    const sync = makeSync();
+    const token = 'eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJ4In0.c2ln';
+    sync.attachSource(
+      pullingSource(['1', new Error(`pull https://ci:secret@cloud.example.dev/v1/b?sig=abc rejected ${token}`)]).source,
+    );
+    await sync.ensureReady();
+
+    const outcome = await sync.refresh();
+
+    expect(outcome).toMatchObject({
+      status: 'failed',
+      reason: 'pull https://cloud.example.dev/v1/b rejected [token]',
+    });
+  });
+
+  it('says the first bundle has not loaded when the source started without one', async () => {
+    const sync = makeSync();
+    sync.attachSource({ start: async () => undefined, onChange: () => () => undefined });
+
+    expect(sync.lastSyncOutcome()).toBeUndefined();
+    await expect(sync.start()).resolves.toEqual({
+      status: 'failed',
+      reason: 'the first bundle has not loaded yet',
+      cacheFallback: false,
+      at,
+    });
   });
 });
 

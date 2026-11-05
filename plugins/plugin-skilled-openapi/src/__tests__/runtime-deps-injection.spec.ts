@@ -163,7 +163,7 @@ describe('skilled-openapi runtime-deps injection', () => {
     fetchMock.mockRejectedValue(new Error('network down'));
     const cached = bundle({ bundleId: 'plugin:cached', version: '1' });
     const write = jest.fn(async () => {});
-    let captured: { refresh(): Promise<void> } | undefined;
+    let captured: { refresh(): Promise<unknown> } | undefined;
     const controller: SkilledOpenApiRuntimeDeps = {
       cache: { read: jest.fn(async () => cached as never), write },
       disablePolling: true,

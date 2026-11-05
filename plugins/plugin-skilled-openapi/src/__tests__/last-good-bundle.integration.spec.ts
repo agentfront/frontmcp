@@ -3,9 +3,9 @@
 import 'reflect-metadata';
 
 import { BundleStore, type BundleCacheStore, type ResolvedBundle } from '@frontmcp/adapters/skills';
-import { FrontMcpInstance, LogLevel } from '@frontmcp/sdk';
+import { FrontMcpInstance, LogLevel, type HealthProbeResult, type Scope } from '@frontmcp/sdk';
 
-import { SkilledOpenApiPlugin } from '../index';
+import { SkilledOpenApiPlugin, type BundleSyncOutcome } from '../index';
 import { SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN, type SkilledOpenApiRuntimeDeps } from '../skilled-openapi.plugin';
 import { BundleSyncService } from '../sync/bundle-sync.service';
 import { AUDIENCE, bundle, ENDPOINT, ISSUER, JWKS_URL, signed, tokenIssuer, trustedKey } from './saas-bundles.fixture';
@@ -13,7 +13,9 @@ import { AUDIENCE, bundle, ENDPOINT, ISSUER, JWKS_URL, signed, tokenIssuer, trus
 interface PullingServer {
   servedVersion: () => string | undefined;
   /** Pull the published bundle, as a Worker's Cron run does. */
-  refresh: () => Promise<void>;
+  refresh: () => Promise<BundleSyncOutcome>;
+  /** The plugin's check, as `/readyz` answers it. */
+  health: () => Promise<HealthProbeResult | undefined>;
 }
 
 describe('the last good bundle of a saas source', () => {
@@ -33,7 +35,7 @@ describe('the last good bundle of a saas source', () => {
 
   /** Build a server; unless `cold`, a first request has started its bundle sync. No instructions budget starts it. */
   async function startServer({ cold = false } = {}): Promise<PullingServer> {
-    let refresher: { refresh(): Promise<void> } | undefined;
+    let refresher: { refresh(): Promise<BundleSyncOutcome> } | undefined;
     const runtimeDeps: SkilledOpenApiRuntimeDeps = {
       cache,
       disablePolling: true,
@@ -46,6 +48,7 @@ describe('the last good bundle of a saas source', () => {
       apps: [],
       serve: false,
       instructionsBudget: false,
+      health: { includeDetails: true },
       plugins: [
         SkilledOpenApiPlugin.init({
           source: {
@@ -62,7 +65,7 @@ describe('the last good bundle of a saas source', () => {
       providers: [{ name: 'test:runtime-deps', provide: SKILLED_OPENAPI_RUNTIME_DEPS_TOKEN, useValue: runtimeDeps }],
       logging: { level: LogLevel.Off },
     } as never);
-    const scope = instance.getPrimaryScope();
+    const scope = instance.getPrimaryScope() as Scope | undefined;
     if (!scope) throw new Error('the server config produced no scope');
     await instance.emitProvidersReady();
     if (!cold) await scope.providers.get(BundleSyncService).ensureReady();
@@ -70,8 +73,9 @@ describe('the last good bundle of a saas source', () => {
       servedVersion: () => scope.providers.get(BundleStore).current()?.version,
       refresh: async () => {
         if (!refresher) throw new Error('the plugin attached no refresh');
-        await refresher.refresh();
+        return refresher.refresh();
       },
+      health: async () => (await scope.healthService?.getReadyz())?.probes?.['skilled-openapi'],
     };
   }
 
@@ -95,38 +99,63 @@ describe('the last good bundle of a saas source', () => {
     fetchMock.mockRestore();
   });
 
-  it('keeps the bundle pulled at startup once it is applied', () => {
+  it('keeps the bundle pulled at startup once it is applied, and its check is healthy', async () => {
     expect(server.servedVersion()).toBe('1.0.0');
     expect(keptVersions).toEqual(['1.0.0']);
+    expect(await server.health()).toEqual({
+      status: 'healthy',
+      details: { state: 'loaded', bundleId: 'acme:billing', bundleVersion: '1.0.0' },
+    });
   });
 
-  it('does not keep a pulled bundle whose signature check fails, and the bundle before keeps serving', async () => {
+  it('does not keep a pulled bundle whose signature check fails: the refresh says it was refused, the check that the served one is stale', async () => {
     const signedBundle = signed(bundle('2.0.0', ['invoices']));
     published = { ...signedBundle, skills: [...signedBundle.skills, ...bundle('2.0.0', ['refunds']).skills] };
 
-    await server.refresh();
+    const outcome = await server.refresh();
 
+    expect(outcome).toEqual({
+      status: 'refused',
+      bundleId: 'acme:billing',
+      bundleVersion: '2.0.0',
+      reason: expect.stringContaining('digest mismatch'),
+      at: expect.any(String),
+    });
     expect(server.servedVersion()).toBe('1.0.0');
     expect(keptVersions).toEqual(['1.0.0']);
+    expect(await server.health()).toEqual({
+      status: 'degraded',
+      details: { state: 'stale', bundleId: 'acme:billing', bundleVersion: '1.0.0', lastSync: outcome },
+    });
   });
 
-  it('serves the last bundle applied when it restarts while the bundle server is down', async () => {
+  it('serves the last bundle applied when it restarts while the bundle server is down, and says it is stale', async () => {
     published = 'outage';
 
     const restarted = await startServer();
 
     expect(restarted.servedVersion()).toBe('1.0.0');
+    expect(await restarted.health()).toMatchObject({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleVersion: '1.0.0',
+        lastSync: { status: 'failed', reason: 'fetch failed', cacheFallback: true },
+      },
+    });
   });
 
   it('keeps a newer pulled bundle once it is applied, by the time the refresh that pulled it resolves', async () => {
     published = signed(bundle('3.0.0', ['invoices', 'refunds']));
 
-    await server.refresh();
+    const outcome = await server.refresh();
     const keptAfterRefresh = keptVersions.at(-1);
     published = 'outage';
     const restarted = await startServer();
 
+    expect(outcome).toMatchObject({ status: 'applied', bundleVersion: '3.0.0' });
     expect(server.servedVersion()).toBe('3.0.0');
+    expect(await server.health()).toMatchObject({ status: 'healthy' });
     expect(keptAfterRefresh).toBe('3.0.0');
     expect(restarted.servedVersion()).toBe('3.0.0');
   });

@@ -64,11 +64,50 @@ describe('bundleHealth', () => {
     });
   });
 
+  const loaded = { status: 'loaded' as const, bundleId: 'acme:billing', bundleVersion: '1.2.0' };
+  const at = '2026-11-05T08:00:00.000Z';
+
+  it.each([
+    ['applied', { status: 'applied' as const, bundleId: 'acme:billing', bundleVersion: '1.2.0', at }],
+    ['was the bundle served', { status: 'unchanged' as const, bundleId: 'acme:billing', bundleVersion: '1.2.0', at }],
+  ])('stays healthy when the last sync %s', (_label, lastSync) => {
+    expect(bundleHealth(loaded, lastSync)).toEqual({
+      status: 'healthy',
+      details: { state: 'loaded', bundleId: 'acme:billing', bundleVersion: '1.2.0' },
+    });
+  });
+
+  it.each([
+    [
+      'a refused newer bundle',
+      { status: 'refused' as const, bundleId: 'acme:billing', bundleVersion: '1.3.0', reason: 'digest mismatch', at },
+    ],
+    ['a pull that failed', { status: 'failed' as const, reason: 'pull responded 503', cacheFallback: false, at }],
+    [
+      'the cached bundle served for a pull that failed',
+      { status: 'failed' as const, reason: 'fetch failed', cacheFallback: true, at },
+    ],
+  ])('is degraded, still ready, and names the stale bundle served and %s', (_label, lastSync) => {
+    expect(bundleHealth(loaded, lastSync)).toEqual({
+      status: 'degraded',
+      details: { state: 'stale', bundleId: 'acme:billing', bundleVersion: '1.2.0', lastSync },
+    });
+  });
+
   it('is unhealthy with the reason while loading failed', () => {
     expect(bundleHealth({ status: 'failed', reason: 'pull responded 401' })).toEqual({
       status: 'unhealthy',
       details: { state: 'failed' },
       error: 'no skill bundle is loaded: pull responded 401',
+    });
+  });
+
+  it('is unhealthy while loading failed, whatever the last sync was', () => {
+    const lastSync = { status: 'failed' as const, reason: 'pull responded 401', cacheFallback: false, at };
+
+    expect(bundleHealth({ status: 'failed', reason: 'pull responded 401' }, lastSync)).toMatchObject({
+      status: 'unhealthy',
+      details: { state: 'failed' },
     });
   });
 
