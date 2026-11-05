@@ -155,6 +155,14 @@ describe('SaasPullSource push checks', () => {
     expect(refused.message).toMatch(/^\[saas-source\] push refused \(wrong_issuer\): not a valid token from issuer/);
   });
 
+  it('names the token check of an error that wraps one', () => {
+    const wrapped = new Error('initial pull failed and no cached bundle is available', {
+      cause: new SaasJwksUnavailableError('JWKS https://saas.example/jwks responded 503'),
+    });
+
+    expect(tokenFailureOf(wrapped)).toBe('jwks_unavailable');
+  });
+
   it('names no token check for an error that is not one', () => {
     expect(tokenFailureOf(new Error('pull responded 502'))).toBeUndefined();
     expect(tokenFailureOf('not an error')).toBeUndefined();
