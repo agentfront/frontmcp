@@ -5,7 +5,7 @@
  */
 
 // Types
-export type { JwksServiceOptions, ProviderVerifyRef, VerifyResult } from './jwks.types';
+export type { JwksServiceOptions, ProviderVerifyRef, TokenVerifyFailure, VerifyResult } from './jwks.types';
 
 // Service
 export { JwksService } from './jwks.service';

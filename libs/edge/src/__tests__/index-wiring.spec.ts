@@ -467,6 +467,21 @@ describe('createEdgeMcp — managed mode', () => {
       { status: 'failed', reason: 'fetch failed', cacheFallback: true },
       '[frontmcp/edge] Cron refresh: the bundle pull failed, so the cached bundle serves: fetch failed',
     ],
+    [
+      'its pull token expired',
+      {
+        status: 'failed',
+        reason: '[saas-source] pull token rejected: not a valid token',
+        tokenFailure: 'expired',
+        cacheFallback: false,
+      },
+      '[frontmcp/edge] Cron refresh: the bundle pull failed (token check: expired): [saas-source] pull token rejected: not a valid token',
+    ],
+    [
+      'its JWKS could not be read and the cached bundle serves',
+      { status: 'failed', reason: 'fetch failed', tokenFailure: 'jwks_unavailable', cacheFallback: true },
+      '[frontmcp/edge] Cron refresh: the bundle pull failed (token check: jwks_unavailable), so the cached bundle serves: fetch failed',
+    ],
   ])('scheduled() throws, so the run counts as failed, when %s', async (_label, outcome, message) => {
     attachScheduler(outcome);
     const edge = createEdgeMcp({ ...BASE, managed: MANAGED } as EdgeMcpConfig);

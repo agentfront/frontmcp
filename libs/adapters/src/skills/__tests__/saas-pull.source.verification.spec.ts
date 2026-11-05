@@ -11,7 +11,7 @@ import * as path from 'node:path';
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import type { SaasSourceOptions } from '../source-options';
-import { SaasPullSource } from '../sources/saas-pull.source';
+import { SaasJwksUnavailableError, SaasPullSource, SaasPullTokenRejectedError } from '../sources/saas-pull.source';
 import {
   createSaasTokenIssuer,
   SAAS_AUDIENCE,
@@ -133,22 +133,92 @@ describe('SaasPullSource verifies the SaaS with jwksUrl, expectedIssuer and expe
     expect(seen[SAAS_JWKS_URL]?.['Authorization']).toBeUndefined();
   });
 
+  const nowSeconds = () => Math.floor(Date.now() / 1000);
+
   it.each([
-    ['another issuer', async () => issuer.token({ iss: 'https://evil.example' })],
-    ['another audience', async () => issuer.token({ aud: 'other-customer:prod' })],
-    ['no audience', async () => issuer.token({ aud: undefined })],
-    ['an expired token', async () => issuer.token({ exp: Math.floor(Date.now() / 1000) - 60 })],
-    ['a key the JWKS does not publish', async () => (await createSaasTokenIssuer('saas-2026')).token()],
-    ['a token that is not a JWT', async () => 'opaque-pull-token'],
-  ])('refuses a pull token with %s: no request to the endpoint, no bundle', async (_label, makeToken) => {
+    ['another issuer', 'wrong_issuer', async () => issuer.token({ iss: 'https://evil.example' })],
+    ['no issuer', 'wrong_issuer', async () => issuer.token({ iss: undefined })],
+    ['another audience', 'wrong_audience', async () => issuer.token({ aud: 'other-customer:prod' })],
+    ['no audience', 'wrong_audience', async () => issuer.token({ aud: undefined })],
+    ['another resource', 'wrong_audience', async () => issuer.token({ resource: 'https://other.example' })],
+    ['an expired token', 'expired', async () => issuer.token({ exp: nowSeconds() - 60 })],
+    ['a token not valid yet', 'not_yet_valid', async () => issuer.token({ nbf: nowSeconds() + 600 })],
+    ['a kid the JWKS does not publish', 'unknown_key', async () => (await createSaasTokenIssuer('saas-2027')).token()],
+    [
+      'a key the JWKS does not publish',
+      'bad_signature',
+      async () => (await createSaasTokenIssuer('saas-2026')).token(),
+    ],
+    ['a token that is not a JWT', 'malformed', async () => 'opaque-pull-token'],
+  ])('refuses a pull token with %s (%s): no request to the endpoint, no bundle', async (_label, failure, makeToken) => {
     const requests: string[] = [];
     const source = new StubbedSaasSource(options(await makeToken()), cacheDir, saas(issuer.jwks, requests));
 
     const { bundles, error } = await startAndCollect(source);
 
     expect(bundles).toEqual([]);
-    expect(error?.message).toMatch(/pull token rejected/);
+    expect(error).toBeInstanceOf(SaasPullTokenRejectedError);
+    expect(error).toMatchObject({ tokenFailure: failure, message: expect.stringMatching(/pull token rejected/) });
     expect(requests).not.toContain(ENDPOINT);
+  });
+
+  it('keeps the message clients may read as it was: it does not name the check that failed', async () => {
+    const source = new StubbedSaasSource(
+      options(await issuer.token({ exp: nowSeconds() - 60 })),
+      cacheDir,
+      saas(issuer.jwks),
+    );
+
+    const { error } = await startAndCollect(source);
+
+    expect(error?.message).toMatch(/^\[saas-source\] pull token rejected: not a valid token from issuer /);
+    expect(error?.message).not.toContain('expired');
+  });
+
+  it('logs the check the pull token failed, with the source id, at warn level and without the token', async () => {
+    const token = await issuer.token({ iss: 'https://evil.example' });
+    const warn = jest.mocked((logger as unknown as { warn: jest.Mock }).warn);
+    warn.mockClear();
+    const source = new StubbedSaasSource(options(token), cacheDir, saas(issuer.jwks));
+
+    await startAndCollect(source);
+
+    expect(warn).toHaveBeenCalledWith(`[saas-source] saas:${ENDPOINT}: pull token check failed (wrong_issuer)`);
+    expect(warn.mock.calls.flat().join('\n')).not.toContain(token);
+  });
+
+  it('names an unreachable JWKS jwks_unavailable, in the log and on the error, and does not take it for a bad token', async () => {
+    const warn = jest.mocked((logger as unknown as { warn: jest.Mock }).warn);
+    warn.mockClear();
+    const source = new StubbedSaasSource(options(await issuer.token()), cacheDir, async () => {
+      throw new TypeError('fetch failed');
+    });
+
+    const { error } = await startAndCollect(source);
+
+    expect(error?.message).toContain('fetch failed');
+    expect(error).not.toBeInstanceOf(SaasPullTokenRejectedError);
+    expect(warn).toHaveBeenCalledWith(`[saas-source] saas:${ENDPOINT}: pull token check failed (jwks_unavailable)`);
+  });
+
+  it.each([
+    ['answers 503', async () => ({ status: 503, body: '' })],
+    ['is not JSON', async () => ({ status: 200, body: '<html>' })],
+    ['has no keys', async () => ({ status: 200, body: '{"keys":[]}' })],
+    ['has no usable signing key', async () => ({ status: 200, body: '{"keys":[{}]}' })],
+    [
+      'has only an encryption key',
+      async () => ({
+        status: 200,
+        body: JSON.stringify({ keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB', key_ops: ['encrypt'] }] }),
+      }),
+    ],
+  ])('throws SaasJwksUnavailableError when the JWKS %s', async (_label, stub) => {
+    const source = new StubbedSaasSource(options(await issuer.token()), cacheDir, stub);
+
+    await expect(source.refresh()).rejects.toBeInstanceOf(SaasJwksUnavailableError);
+    await expect(source.refresh()).rejects.toMatchObject({ tokenFailure: 'jwks_unavailable' });
+    await source.stop();
   });
 
   it('does not fall back to the cached bundle when the pull token is rejected', async () => {

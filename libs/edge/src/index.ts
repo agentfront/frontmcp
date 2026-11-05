@@ -93,6 +93,7 @@ interface BundleSyncOutcome {
   bundleId?: string;
   bundleVersion?: string;
   reason?: string;
+  tokenFailure?: string;
   cacheFallback?: boolean;
 }
 
@@ -109,11 +110,14 @@ interface BundleScheduler {
 /** Throw for a Cron run whose bundle was refused or whose pull failed, so the platform records the run as failed. */
 function assertBundleSynced(outcome: BundleSyncOutcome): void {
   if (outcome.status === 'applied' || outcome.status === 'unchanged') return;
-  const problem =
-    outcome.status === 'refused'
-      ? `bundle ${outcome.bundleId}@${outcome.bundleVersion} was not applied: ${outcome.reason}`
-      : `the bundle pull failed${outcome.cacheFallback ? ', so the cached bundle serves' : ''}: ${outcome.reason}`;
-  throw new Error(`[frontmcp/edge] Cron refresh: ${problem}`);
+  if (outcome.status === 'refused') {
+    throw new Error(
+      `[frontmcp/edge] Cron refresh: bundle ${outcome.bundleId}@${outcome.bundleVersion} was not applied: ${outcome.reason}`,
+    );
+  }
+  const tokenCheck = outcome.tokenFailure ? ` (token check: ${outcome.tokenFailure})` : '';
+  const fallback = outcome.cacheFallback ? ', so the cached bundle serves' : '';
+  throw new Error(`[frontmcp/edge] Cron refresh: the bundle pull failed${tokenCheck}${fallback}: ${outcome.reason}`);
 }
 
 /**
