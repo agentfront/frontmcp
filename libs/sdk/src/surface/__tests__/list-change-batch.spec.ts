@@ -99,6 +99,43 @@ describe('runListChangeBatch', () => {
     expect(sent).toEqual(['lists:skills']);
   });
 
+  it('announces every changed list when one announcement throws, and rejects with its error', async () => {
+    const { lists, sent, change } = testLists();
+    lists.tools = {
+      notifyListChanged: () => {
+        throw new Error('tools listener failed');
+      },
+    };
+
+    const batch = runListChangeBatch(lists, async () => {
+      change('tools');
+      change('prompts');
+      change('skills');
+      return 'done';
+    });
+
+    await expect(batch).rejects.toThrow('tools listener failed');
+    expect(sent).toEqual(['lists:prompts', 'lists:skills']);
+  });
+
+  it("rejects with the change's error, not an announcement's, when both throw", async () => {
+    const { lists, sent, change } = testLists();
+    lists.tools = {
+      notifyListChanged: () => {
+        throw new Error('tools listener failed');
+      },
+    };
+
+    const batch = runListChangeBatch(lists, async () => {
+      change('tools');
+      change('prompts');
+      throw new Error('rolled back');
+    });
+
+    await expect(batch).rejects.toThrow('rolled back');
+    expect(sent).toEqual(['lists:prompts']);
+  });
+
   it('announces a change made by other code while a batch runs at once', async () => {
     const { lists, sent, change } = testLists();
     let finish = (): void => undefined;
