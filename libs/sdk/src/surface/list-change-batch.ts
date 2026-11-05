@@ -38,7 +38,8 @@ function openBatchOf(lists: object): BatchRun | undefined {
 /**
  * Run `change` holding the `list_changed` its registry changes send, then announce each list that changed once, also
  * when `change` throws. A batch run inside another of the same lists hands what it changed to the outer one. Changes
- * made by other code meanwhile, such as another request's, are announced as they happen.
+ * made by other code meanwhile, such as another request's, are announced as they happen. An announcement that throws
+ * doesn't stop the others: the batch rejects with the error `change` threw, else with the first announcement's.
  */
 export async function runListChangeBatch<T>(
   lists: BatchedLists,
@@ -46,16 +47,35 @@ export async function runListChangeBatch<T>(
 ): Promise<T> {
   const run: BatchRun = { lists, changed: new Set(), outer: runningBatches.getStore(), open: true };
   const batch: ListChangeBatch = { listsRestored: () => run.changed.clear() };
+  let outcome: { completed: true; result: T } | { completed: false; error: unknown };
   try {
-    return await runningBatches.run(run, () => change(batch));
-  } finally {
-    run.open = false;
-    const enclosing = openBatchOf(lists);
-    for (const kind of run.changed) {
-      if (enclosing) enclosing.changed.add(kind);
-      else lists[kind].notifyListChanged();
+    outcome = { completed: true, result: await runningBatches.run(run, () => change(batch)) };
+  } catch (error) {
+    outcome = { completed: false, error };
+  }
+  run.open = false;
+  const announcementFailure = announceChangedLists(run, lists);
+  if (!outcome.completed) throw outcome.error;
+  if (announcementFailure) throw announcementFailure.error;
+  return outcome.result;
+}
+
+/** Announce each list a batch changed, or hand it to the enclosing batch; the first announcement that throws. */
+function announceChangedLists(run: BatchRun, lists: BatchedLists): { error: unknown } | undefined {
+  const enclosing = openBatchOf(lists);
+  let firstFailure: { error: unknown } | undefined;
+  for (const kind of run.changed) {
+    if (enclosing) {
+      enclosing.changed.add(kind);
+      continue;
+    }
+    try {
+      lists[kind].notifyListChanged();
+    } catch (error) {
+      firstFailure ??= { error };
     }
   }
+  return firstFailure;
 }
 
 /**
