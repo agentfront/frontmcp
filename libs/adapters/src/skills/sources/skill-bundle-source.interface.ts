@@ -65,6 +65,12 @@ export interface SkillBundleSource {
    */
   keepBundle?(bundle: ResolvedBundle): Promise<void>;
 
+  /**
+   * The last good bundle {@link keepBundle} kept, read back from the cache; undefined when none is kept or it can't be
+   * read. While no bundle serves, the plugin compares a new bundle with it, and serves it in place of one it refuses.
+   */
+  keptBundle?(): Promise<ResolvedBundle | undefined>;
+
   /** Present on a source that takes pushed bundles: the `saas` source with `enableWebhook`. */
   readonly push?: BundlePushReceiver;
 
@@ -89,7 +95,10 @@ export type BundleSourceListener = (bundle: ResolvedBundle, origin?: BundleOrigi
 
 /** How a source came by a bundle it hands its listeners. */
 export interface BundleOrigin {
-  /** Set when the pull failed and the bundle is the last good one the source kept, served in its place: why it failed. */
+  /**
+   * Set when the pull failed and the bundle is the last good one the source kept, served in its place: why it failed.
+   * The plugin doesn't keep such a bundle again, since the cache holds it.
+   */
   pullFailure?: string;
   /** Set when that pull failed on its token: the check that refused it, or `jwks_unavailable`. */
   tokenFailure?: BundleTokenFailure;

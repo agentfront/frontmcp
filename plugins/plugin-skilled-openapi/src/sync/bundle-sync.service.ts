@@ -102,6 +102,7 @@ interface StartableBundleSource {
   onPullFailure?(listener: BundlePullFailureListener): () => void;
   refresh?(): Promise<unknown>;
   keepBundle?(bundle: ResolvedBundle): Promise<void>;
+  keptBundle?(): Promise<ResolvedBundle | undefined>;
   readonly push?: BundlePushReceiver;
   readonly forwardOnly?: boolean;
 }
@@ -299,14 +300,77 @@ export class BundleSyncService {
    */
   private enqueueApply(bundle: ResolvedBundle, origin?: BundleOrigin): Promise<BundleApplyResult> {
     const previous = this.applyQueue ?? Promise.resolve(undefined);
-    const applied = previous.then(async () => {
-      const result = await this.applyAndRecord(bundle);
-      this.recordSync(result, origin);
-      if (result.applied) await this.keepAppliedBundle(bundle);
-      return result;
-    });
+    const applied = previous.then(() => this.applyInTurn(bundle, origin));
     this.applyQueue = applied;
     return applied;
+  }
+
+  /** Apply a bundle in its turn; while none serves, as on a cold start, through {@link applyAtColdStart}. */
+  private async applyInTurn(bundle: ResolvedBundle, origin?: BundleOrigin): Promise<BundleApplyResult> {
+    const isCachedBundle = origin?.pullFailure !== undefined;
+    if (isCachedBundle || this.bundleStore.current()) return this.applyAndKeep(bundle, origin);
+    const cached = await this.readCachedBundle();
+    return cached ? this.applyAtColdStart(bundle, cached) : this.applyAndKeep(bundle, origin);
+  }
+
+  /**
+   * Apply the first bundle when the source has a cached one, which stands in for the served bundle the forward-only
+   * gate has yet to compare with. A forward-only source's bundle older than the cached one is not applied: the cached
+   * one serves, unless it is refused too. A bundle that is not applied leaves the cached one serving, as a failed
+   * pull does.
+   */
+  private async applyAtColdStart(offered: ResolvedBundle, cached: ResolvedBundle): Promise<BundleApplyResult> {
+    if (this.source?.forwardOnly && !(compareBundleVersions(offered, cached) >= 0)) {
+      const outdated: BundleApplyResult = {
+        applied: false,
+        refusal: 'outdated',
+        reason: `older than the cached bundle ${cached.bundleId}@${cached.version} (generatedAt ${cached.generatedAt})`,
+        bundleId: offered.bundleId,
+        bundleVersion: offered.version,
+      };
+      if (await this.serveCachedInstead(cached, outdated)) return outdated;
+      return this.applyAndKeep(offered);
+    }
+    const result = await this.applyAndKeep(offered);
+    if (!result.applied) await this.serveCachedInstead(cached, result);
+    return result;
+  }
+
+  /** Serve the cached bundle in place of a bundle that was not applied, and record why; false when it is refused too. */
+  private async serveCachedInstead(cached: ResolvedBundle, notApplied: BundleApplyResult): Promise<boolean> {
+    const result = await this.applyAndRecord(cached);
+    if (!result.applied) return false;
+    const reason = notApplied.reason ?? 'not applied';
+    this.logger.warn(
+      `[bundle-sync] bundle ${notApplied.bundleId}@${notApplied.bundleVersion} not applied: ${reason}; serving the cached bundle ${cached.bundleId}@${cached.version}`,
+    );
+    this.lastSync = {
+      status: 'refused',
+      bundleId: notApplied.bundleId,
+      bundleVersion: notApplied.bundleVersion,
+      reason: publicLoadFailureReason(reason),
+      cacheFallback: true,
+      at: new Date().toISOString(),
+    };
+    return true;
+  }
+
+  /** Apply a bundle, record what came of it, and keep it once applied, unless it is the cached bundle itself. */
+  private async applyAndKeep(bundle: ResolvedBundle, origin?: BundleOrigin): Promise<BundleApplyResult> {
+    const result = await this.applyAndRecord(bundle);
+    this.recordSync(result, origin);
+    if (result.applied && origin?.pullFailure === undefined) await this.keepAppliedBundle(bundle);
+    return result;
+  }
+
+  /** The last good bundle the source keeps, when it keeps one; undefined when it can't be read. */
+  private async readCachedBundle(): Promise<ResolvedBundle | undefined> {
+    try {
+      return await this.source?.keptBundle?.();
+    } catch (e) {
+      this.logger.warn(`[bundle-sync] the cached bundle could not be read: ${(e as Error).message}`);
+      return undefined;
+    }
   }
 
   /** Record what became of a bundle a pull or a push brought; with `origin.pullFailure`, of the cached one served instead. */

@@ -1,6 +1,7 @@
 // A managed @frontmcp/edge Worker in workerd: pull over https, Cron refresh (also as an isolate's first event), token
 // rejection, workflows and pushes, older ones refused, and a push token replayed to another replica refused. A Cron run
-// whose bundle is refused, or that serves the cached bundle, fails, and /readyz says the bundle served is stale.
+// whose bundle is refused, or that serves the cached bundle, fails, and /readyz says the bundle served is stale. A new
+// isolate serves the KV bundle in place of an older pull, and an outage start leaves the KV entry as it was.
 import { base64urlEncode, randomBytes } from '@frontmcp/utils';
 
 import {
@@ -341,14 +342,52 @@ describe('a managed edge Worker whose first event is a Cron run', () => {
     expect(await worker.cachedBundleVersion()).toBe('2.0.0');
   });
 
-  it('fails the Cron run of an isolate that starts while the bundle server is down, though it serves the cached bundle', async () => {
+  it('fails the Cron run of an isolate that starts while the bundle server serves an older bundle: KV keeps its newer one, which serves', async () => {
+    internet.bundle = signer.sign(billingBundle('1.0.0', ['invoices', 'reports']));
+    const replica = worker.thirdReplica();
+
+    const run = await replica.scheduled();
+    const ready = await replica.readiness();
+    const search = await replica.callTool<SearchSkillResponse>('search_skill', { query: 'billing' });
+
+    expect(run.outcome).toBe('exception');
+    expect(
+      search
+        .json()
+        .skills.map((skill) => `${skill.skillId}@${skill.bundleVersion}`)
+        .sort(),
+    ).toEqual(['invoices@2.0.0', 'refunds@2.0.0']);
+    expect(await replica.cachedBundleVersion()).toBe('2.0.0');
+    expect(ready).toMatchObject({ httpStatus: 200, status: 'ready' });
+    expect(ready.probes?.['skilled-openapi']).toEqual({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleId: 'e2e:managed-billing',
+        bundleVersion: '2.0.0',
+        lastSync: {
+          status: 'refused',
+          bundleId: 'e2e:managed-billing',
+          bundleVersion: '1.0.0',
+          reason: 'older than the cached bundle e2e:managed-billing@2.0.0 (generatedAt 2026-11-04T12:00:00.000Z)',
+          cacheFallback: true,
+          at: expect.any(String),
+        },
+      },
+    });
+  });
+
+  it('fails the Cron run of an isolate that starts while the bundle server is down, though it serves the cached bundle, and leaves KV as it was', async () => {
     internet.bundle = undefined;
     const replica = worker.secondReplica();
+    const keptByEarlierDeploy = JSON.stringify(signer.sign(billingBundle('2.0.0', ['invoices', 'refunds'])), null, 2);
+    await replica.storeCachedBundleEntry(keptByEarlierDeploy);
 
     const run = await replica.scheduled();
     const ready = await replica.readiness();
 
     expect(run.outcome).toBe('exception');
+    expect(await replica.cachedBundleEntry()).toBe(keptByEarlierDeploy);
     expect(ready).toMatchObject({ httpStatus: 200, status: 'ready' });
     expect(ready.probes?.['skilled-openapi']).toEqual({
       status: 'degraded',

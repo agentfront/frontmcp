@@ -11,13 +11,13 @@ export type BundleLoadState =
 
 /**
  * What the last bundle sync came to, and when: the bundle a pull or a push brought was applied, was the one already
- * served, or was refused; or a pull failed, and `cacheFallback` says the source served its cached bundle instead. The
- * reasons are as clients may read them ({@link publicLoadFailureReason}). `tokenFailure` names the check a pull token
- * failed, for operators.
+ * served, or was refused; or a pull failed. `cacheFallback` says the cached bundle serves instead, on a start: its
+ * pull failed, or the bundle it pulled was refused or older than the cached one. The reasons are as clients may read
+ * them ({@link publicLoadFailureReason}). `tokenFailure` names the check a pull token failed, for operators.
  */
 export type BundleSyncOutcome =
   | { status: 'applied' | 'unchanged'; bundleId: string; bundleVersion: string; at: string }
-  | { status: 'refused'; bundleId: string; bundleVersion: string; reason: string; at: string }
+  | { status: 'refused'; bundleId: string; bundleVersion: string; reason: string; cacheFallback?: true; at: string }
   | { status: 'failed'; reason: string; tokenFailure?: BundleTokenFailure; cacheFallback: boolean; at: string };
 
 /** Whether a sync left the server serving the bundle its source or a push brought. */

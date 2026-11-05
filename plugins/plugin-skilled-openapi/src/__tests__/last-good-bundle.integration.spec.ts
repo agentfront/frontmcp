@@ -1,5 +1,6 @@
 // A real server whose saas source pulls signed bundles keeps only the bundles it applied, and serves the last of them
-// when it restarts while the bundle server is down. Its refresh is the one a Worker's Cron run calls.
+// when it restarts while the bundle server is down, serves an older bundle, or serves one it refuses; serving it writes
+// nothing to the cache. Its refresh is the one a Worker's Cron run calls.
 import 'reflect-metadata';
 
 import { BundleStore, type BundleCacheStore, type ResolvedBundle } from '@frontmcp/adapters/skills';
@@ -139,12 +140,14 @@ describe('the last good bundle of a saas source', () => {
     });
   });
 
-  it('serves the last bundle applied when it restarts while the bundle server is down, and says it is stale', async () => {
+  it('serves the last bundle applied when it restarts while the bundle server is down, says it is stale, and does not write it back', async () => {
     published = 'outage';
+    const keptBeforeRestart = [...keptVersions];
 
     const restarted = await startServer();
 
     expect(restarted.servedVersion()).toBe('1.0.0');
+    expect(keptVersions).toEqual(keptBeforeRestart);
     expect(await restarted.health()).toMatchObject({
       status: 'degraded',
       details: {
@@ -199,6 +202,53 @@ describe('the last good bundle of a saas source', () => {
     });
     expect(check?.error).toMatch(/^no skill bundle is loaded: \[saas-source\] pull token rejected: not a valid token/);
     expect(check?.error).not.toContain('wrong_issuer');
+  });
+
+  it('serves the cached bundle on a Cron run that restarts it against a bundle server serving an older one', async () => {
+    published = signed(bundle('4.5.0', ['invoices']));
+    const keptBeforeRestart = [...keptVersions];
+    const restarted = await startServer({ cold: true });
+
+    const outcome = await restarted.refresh();
+
+    expect(outcome).toEqual({
+      status: 'refused',
+      bundleId: 'acme:billing',
+      bundleVersion: '4.5.0',
+      reason: 'older than the cached bundle acme:billing@5.0.0 (generatedAt 2026-11-04T12:00:00.000Z)',
+      cacheFallback: true,
+      at: expect.any(String),
+    });
+    expect(restarted.servedVersion()).toBe('5.0.0');
+    expect(keptVersions).toEqual(keptBeforeRestart);
+    expect(await restarted.health()).toEqual({
+      status: 'degraded',
+      details: { state: 'stale', bundleId: 'acme:billing', bundleVersion: '5.0.0', lastSync: outcome },
+    });
+  });
+
+  it('serves the cached bundle when it restarts and the bundle it pulls is refused for its signature', async () => {
+    const signedBundle = signed(bundle('7.0.0', ['invoices']));
+    published = { ...signedBundle, skills: [...signedBundle.skills, ...bundle('7.0.0', ['refunds']).skills] };
+    const keptBeforeRestart = [...keptVersions];
+
+    const restarted = await startServer();
+
+    expect(restarted.servedVersion()).toBe('5.0.0');
+    expect(keptVersions).toEqual(keptBeforeRestart);
+    expect(await restarted.health()).toMatchObject({
+      status: 'degraded',
+      details: {
+        state: 'stale',
+        bundleVersion: '5.0.0',
+        lastSync: {
+          status: 'refused',
+          bundleVersion: '7.0.0',
+          reason: expect.stringContaining('digest mismatch'),
+          cacheFallback: true,
+        },
+      },
+    });
   });
 
   it('names jwks_unavailable when a refresh cannot read the JWKS, and stays ready on the bundle it serves', async () => {
