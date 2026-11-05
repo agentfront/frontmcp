@@ -197,8 +197,8 @@ function createDaemonClient(socketPath, options) {
     searchSkills: function(query) {
       return call('skills/search', { query: query });
     },
-    loadSkills: function(ids) {
-      return call('skills/load', { skillIds: ids });
+    loadSkills: function(ids, options) {
+      return call('skills/load', Object.assign({ skillIds: ids }, options));
     },
     listSkills: function() {
       return call('skills/list');

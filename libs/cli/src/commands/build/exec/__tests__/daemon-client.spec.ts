@@ -10,7 +10,7 @@ interface DaemonClient {
   connect(): Promise<void>;
   callTool(name: string, args?: Record<string, unknown>): Promise<unknown>;
   listResources(): Promise<unknown>;
-  loadSkills(ids: string[]): Promise<unknown>;
+  loadSkills(ids: string[], options?: { format?: string }): Promise<unknown>;
   listJobs(): Promise<unknown>;
   close(): Promise<void>;
 }
@@ -199,6 +199,14 @@ describe('generateDaemonClientSource', () => {
     await client.loadSkills(['invoices']);
 
     expect(received[2].body?.params).toEqual({ skillIds: ['invoices'] });
+  });
+
+  it('sends the load options with the skillIds', async () => {
+    const client = createDaemonClient(socketPath, { entryPath: '/mcp' });
+    await client.connect();
+    await client.loadSkills(['invoices'], { format: 'markdown' });
+
+    expect(received[2].body?.params).toEqual({ skillIds: ['invoices'], format: 'markdown' });
   });
 
   it('lists jobs through the list_jobs tool, as the in-process client does', async () => {

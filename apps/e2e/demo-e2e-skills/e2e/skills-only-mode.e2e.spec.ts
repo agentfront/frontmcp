@@ -24,7 +24,7 @@ interface SkillResult {
   availableTools: string[];
   missingTools: string[];
   isComplete: boolean;
-  formattedContent?: string;
+  formattedContent: string;
 }
 
 interface LoadSkillsResult {

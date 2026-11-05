@@ -198,12 +198,16 @@ const result: SearchSkillsResult = await client.searchSkills('code review', opti
 import type { LoadSkillsOptions, LoadSkillsResult } from '@frontmcp/sdk/direct';
 
 const options: LoadSkillsOptions = {
-  format: 'full', // 'full' (default) | 'markdown' (formattedContent in place of the fields) | 'instructions-only' (no tool schemas)
+  format: 'full', // 'full' (default) | 'markdown' (formattedContent alone, each part once) | 'instructions-only' (no tool schemas)
   activateSession: true, // Activate skill session
   policyMode: 'approval', // 'strict' | 'approval' | 'permissive'
 };
 
 const result: LoadSkillsResult = await client.loadSkills(['skill-1', 'skill-2'], options);
+
+// A markdown load, annotated: its skills carry formattedContent without instructions
+const markdownOptions: LoadSkillsOptions<'markdown'> = { format: 'markdown' };
+const asMarkdown: LoadSkillsResult<'markdown'> = await client.loadSkills(['skill-1'], markdownOptions);
 
 // Result structure:
 // {
@@ -215,7 +219,7 @@ const result: LoadSkillsResult = await client.loadSkills(['skill-1', 'skill-2'],
 //     availableTools: string[],
 //     missingTools: string[],
 //     isComplete: boolean,
-//     formattedContent: string,                                    // with 'markdown' only
+//     formattedContent: string,                                    // the skill as markdown, in every format
 //     session?: { activated, sessionId, policyMode, allowedTools }
 //   }],
 //   summary: { totalSkills, totalTools, allToolsAvailable, combinedWarnings },
@@ -441,6 +445,8 @@ import type {
   LLMConnectOptions,
   LLMPlatform,
   LoadedSkillItem,
+  LoadedSkillMarkdownItem,
+  LoadSkillsFormat,
   LoadSkillsOptions,
   LoadSkillsResult,
   // Logging
