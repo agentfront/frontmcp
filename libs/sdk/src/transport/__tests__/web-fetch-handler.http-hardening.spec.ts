@@ -208,4 +208,23 @@ describe('web-fetch handler: health config', () => {
       await instance.shutdown();
     }
   });
+
+  it('runs on /readyz a check the scope registered after the handler was built', async () => {
+    const { instance, handler } = await build({
+      http: { entryPath: '/mcp' },
+      health: { readyz: { enabled: true }, includeDetails: true },
+    });
+    try {
+      const scope = instance.getScopes()[0] as Scope;
+      scope.registerHealthProbe({ name: 'late-feature', check: async () => ({ status: 'unhealthy', error: 'down' }) });
+
+      const res = await handler(new Request('https://worker.example.com/readyz'));
+      const body = (await res.json()) as { probes?: Record<string, unknown> };
+
+      expect(res.status).toBe(503);
+      expect(body.probes?.['late-feature']).toEqual({ status: 'unhealthy', error: 'down' });
+    } finally {
+      await instance.shutdown();
+    }
+  });
 });

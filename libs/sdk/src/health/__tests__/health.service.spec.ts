@@ -176,6 +176,37 @@ describe('HealthService', () => {
       expect(result.status).toBe('not_ready');
       expect(result.probes?.['skill-bundle']).toEqual({ status: 'unhealthy', error: 'no skill bundle is loaded' });
     });
+
+    it('reads the probes on the scope at every check, so one added or removed after discovery counts', async () => {
+      const service = new HealthService(defaultConfig, defaultServerInfo);
+      const scopeProbes: HealthProbe[] = [];
+      const lateProbe: HealthProbe = { name: 'late', check: jest.fn().mockResolvedValue({ status: 'unhealthy' }) };
+      service.autoDiscoverProbes(createMockScope({ transportService: undefined, healthProbes: scopeProbes }));
+
+      scopeProbes.push(lateProbe);
+      const withLate = await service.getReadyz();
+      scopeProbes.splice(0, 1);
+      const withoutLate = await service.getReadyz();
+
+      expect(withLate).toMatchObject({ status: 'not_ready', probes: { late: { status: 'unhealthy' } } });
+      expect(withoutLate).toMatchObject({ status: 'ready', probes: {} });
+    });
+  });
+
+  describe('registerProbeSource', () => {
+    it("runs the probes another service holds at each check, as a splitByApp server's composite does", async () => {
+      const scopeService = new HealthService(defaultConfig, defaultServerInfo);
+      const composite = new HealthService(defaultConfig, defaultServerInfo);
+      composite.registerProbeSource(() => scopeService.getProbes());
+
+      const before = composite.getProbeCount();
+      scopeService.registerProbe({ name: 'late', check: jest.fn().mockResolvedValue({ status: 'healthy' }) });
+      const result = await composite.getReadyz();
+
+      expect(before).toBe(0);
+      expect(composite.getProbeCount()).toBe(1);
+      expect(result.probes?.['late']).toEqual({ status: 'healthy' });
+    });
   });
 
   describe('getReadyz', () => {
@@ -290,14 +321,11 @@ describe('HealthService', () => {
 
     it('should return ready with no probes registered', async () => {
       const service = new HealthService(defaultConfig, defaultServerInfo);
-      const scope = createMockScope();
-      service.autoDiscoverProbes(scope);
-
-      // Remove the auto-discovered session-store probe for this test
-      (service as any).probes.length = 0;
+      service.autoDiscoverProbes(createMockScope({ transportService: undefined }));
 
       const result = await service.getReadyz();
 
+      expect(service.getProbeCount()).toBe(0);
       expect(result.status).toBe('ready');
     });
   });
