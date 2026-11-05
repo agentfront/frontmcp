@@ -206,6 +206,13 @@ describe('SaasPullSource verifies the SaaS with jwksUrl, expectedIssuer and expe
     ['is not JSON', async () => ({ status: 200, body: '<html>' })],
     ['has no keys', async () => ({ status: 200, body: '{"keys":[]}' })],
     ['has no usable signing key', async () => ({ status: 200, body: '{"keys":[{}]}' })],
+    [
+      'has only an encryption key',
+      async () => ({
+        status: 200,
+        body: JSON.stringify({ keys: [{ kty: 'RSA', n: 'AQAB', e: 'AQAB', key_ops: ['encrypt'] }] }),
+      }),
+    ],
   ])('throws SaasJwksUnavailableError when the JWKS %s', async (_label, stub) => {
     const source = new StubbedSaasSource(options(await issuer.token()), cacheDir, stub);
 
