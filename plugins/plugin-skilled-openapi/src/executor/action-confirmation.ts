@@ -10,6 +10,7 @@ import {
 
 import { type HiddenOpEntry, type HiddenOpRegistry, type OperationListings } from '../registry/hidden-op.registry';
 import { type AuthorityGuard } from '../security/authority-guard';
+import { type VisibleListings } from '../security/skill-visibility';
 import { type SkilledOpenApiConfig } from '../skilled-openapi.symbols';
 import { type ConfirmOptions, type WhenConfirmationUnsupported } from '../skilled-openapi.types';
 
@@ -52,18 +53,19 @@ export async function confirmWorkflow(args: {
   script: string;
   config: SkilledOpenApiConfig;
   guard: AuthorityGuard;
+  visibleListings: VisibleListings;
   hiddenOps: HiddenOpRegistry;
   authInfo: unknown;
   askUser: AskUser;
 }): Promise<{ refusal: string } | { confirmAction: ConfirmAction }> {
-  const { script, config, guard, hiddenOps, authInfo, askUser } = args;
+  const { script, config, guard, visibleListings, hiddenOps, authInfo, askUser } = args;
   const confirmedActionIds = new Set<string>();
   const confirmAction: ConfirmAction = async ({ entry }) =>
     confirmedActionIds.has(entry.op.operationId) ? undefined : notAskedByWorkflow(entry.op.operationId);
   if (!config.confirm) return { confirmAction };
 
   const mayRun = async (listings: OperationListings): Promise<boolean> => {
-    for (const entry of listings) {
+    for (const entry of await visibleListings(listings)) {
       const allowed = await guard.canDiscover({
         policy: entry.op.requiredAuthorities,
         skillPolicy: entry.skillRequiredAuthorities,

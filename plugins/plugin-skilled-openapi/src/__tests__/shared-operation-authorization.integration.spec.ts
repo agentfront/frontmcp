@@ -192,13 +192,13 @@ describe.each(ORDERS)('an operation a public and an admin-only skill both list, 
     expect(outbound).toEqual([`${SERVICE_URL}/invoices/INV-1`]);
   });
 
-  it('stays denied to a viewer when only the admin skill lists it', async () => {
+  it('stays unknown to a viewer when only the admin skill, which the viewer cannot see, lists it', async () => {
     expect(await actionsShownTo(server, VIEWER)).not.toContain('voidInvoice');
 
     const result = await runAction(server, VIEWER, 'voidInvoice');
 
     expect(result.success).toBe(false);
-    expect(result.error).toMatch(/^authority denied: /);
+    expect(result.error).toMatch(/^unknown action "voidInvoice"/);
     expect(outbound).toEqual([]);
   });
 
@@ -213,7 +213,7 @@ describe.each(ORDERS)('an operation a public and an admin-only skill both list, 
 
     const denied = await callOperationTool(server, VIEWER, 'voidInvoice');
     expect(denied.ok).toBe(false);
-    expect(denied.error).toMatch(/^authority denied: /);
+    expect(denied.error).toMatch(/^unknown action "voidInvoice"/);
   });
 });
 

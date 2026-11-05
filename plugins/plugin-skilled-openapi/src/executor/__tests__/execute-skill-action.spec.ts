@@ -2,8 +2,11 @@
 // `callTool(actionId, input)` bridge: authorize → validate input → execute →
 // validate output → envelope, plus opt-in audit. The outbound call
 // (`executeOperation`) is mocked so these tests stay hermetic.
+import { scopeHidingSkills } from '../../__tests__/skill-filter-scope.fixture';
 import type { HiddenOpEntry, OperationListings } from '../../registry/hidden-op.registry';
 import { AuthorityGuard, type UnprotectedOpsPolicy } from '../../security/authority-guard';
+import { visibleListingsWhenCalled, type SkillFilterScope } from '../../security/skill-visibility';
+import { unknownActionError } from '../action-outcome';
 import { authorizeAction, executeSkillAction, type SkillActionDeps } from '../execute-skill-action';
 
 const mockExecuteOperation = jest.fn();
@@ -45,6 +48,7 @@ function makeDeps(
     audit?: SkillActionDeps['audit'];
     confirm?: SkillActionDeps['config']['confirm'];
     confirmAction?: SkillActionDeps['confirmAction'];
+    visibleListings?: SkillActionDeps['visibleListings'];
   } = {},
 ): SkillActionDeps & { bundleStore: unknown } {
   return {
@@ -61,6 +65,7 @@ function makeDeps(
     confirmAction: over.confirmAction ?? jest.fn(async () => undefined),
     resolver: { resolve: jest.fn(async () => undefined) as never },
     guard: { check: jest.fn(async () => ({ granted: over.granted ?? true, deniedBy: over.deniedBy })) } as never,
+    visibleListings: over.visibleListings ?? scopeHidingSkills().visibleListings,
     bundleStore: { current: () => undefined } as never,
     logger: { warn: jest.fn(), info: jest.fn(), error: jest.fn(), child: () => ({ warn: jest.fn() }) } as never,
     ...(over.audit ? { audit: over.audit } : {}),
@@ -385,8 +390,19 @@ describe('authorizeAction: an operation several skills list', () => {
     ...(skillRequiredAuthorities ? { skillRequiredAuthorities } : {}),
   });
 
-  const authorize = (listings: OperationListings, unprotectedOps: UnprotectedOpsPolicy = 'allow') =>
-    authorizeAction({ listings, guard: new AuthorityGuard(), unprotectedOps, authInfo: VIEWER, input: { id: 1 } });
+  const authorize = (
+    listings: OperationListings,
+    unprotectedOps: UnprotectedOpsPolicy = 'allow',
+    visibleListings = scopeHidingSkills().visibleListings,
+  ) =>
+    authorizeAction({
+      listings,
+      visibleListings,
+      guard: new AuthorityGuard(),
+      unprotectedOps,
+      authInfo: VIEWER,
+      input: { id: 1 },
+    });
 
   it.each([
     ['the admin skill first', [listing('billing-admin', ADMIN), listing('invoices')]],
@@ -451,5 +467,100 @@ describe('authorizeAction: an operation several skills list', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(writer.writeAuthorityPass.mock.calls[0][0]).toMatchObject({ skillId: 'invoices', actionId: 'getThing' });
     expect(writer.writeHttpCallSuccess.mock.calls[0][0]).toMatchObject({ skillId: 'invoices' });
+  });
+
+  describe('with a skills:filter flow that hides a listing skill from the caller', () => {
+    beforeEach(() => {
+      mockExecuteOperation.mockReset();
+    });
+
+    const auditWriter = () => ({
+      writeAuthorityPass: jest.fn(async () => undefined),
+      writeAuthorityFail: jest.fn(async (_record: unknown, _extras: unknown) => undefined),
+      writeHttpCallSuccess: jest.fn(async () => undefined),
+      writeHttpCallFailure: jest.fn(async () => undefined),
+    });
+
+    it('runs under the other listing skill when it admits the caller', async () => {
+      const { entry, result } = await authorize(
+        [listing('flagged'), listing('invoices')],
+        'allow',
+        scopeHidingSkills('flagged').visibleListings,
+      );
+
+      expect(result.granted).toBe(true);
+      expect(entry.skillId).toBe('invoices');
+    });
+
+    it("returns the visible listing's denial when the hidden one is the only listing that admits the caller", async () => {
+      const authorization = await authorize(
+        [listing('invoices'), listing('billing-admin', ADMIN)],
+        'allow',
+        scopeHidingSkills('invoices').visibleListings,
+      );
+
+      expect(authorization.result.granted).toBe(false);
+      expect(authorization.entry.skillId).toBe('billing-admin');
+      expect(authorization.hidden).toBeUndefined();
+    });
+
+    it('runs the flow once per call, over every skill that lists the operation', async () => {
+      const { visibleListings, filterRuns } = scopeHidingSkills('flagged');
+
+      await authorize([listing('flagged'), listing('invoices')], 'allow', visibleListings);
+
+      expect(filterRuns).toHaveBeenCalledTimes(1);
+      expect(filterRuns.mock.calls[0][0]).toBe('skills:filter');
+      expect(filterRuns.mock.calls[0][1].skills.map((skill) => skill.name)).toEqual(['flagged', 'invoices']);
+    });
+
+    it('denies a call, without checking a rule, when the flow hides every listing skill', async () => {
+      const guard = { check: jest.fn() };
+
+      const authorization = await authorizeAction({
+        listings: [listing('flagged'), listing('also-flagged')],
+        visibleListings: scopeHidingSkills('flagged', 'also-flagged').visibleListings,
+        guard: guard as never,
+        unprotectedOps: 'allow',
+        authInfo: VIEWER,
+        input: { id: 1 },
+      });
+
+      expect(authorization).toMatchObject({ hidden: true, result: { granted: false } });
+      expect(authorization.entry.skillId).toBe('flagged');
+      expect(guard.check).not.toHaveBeenCalled();
+    });
+
+    it('denies a listing whose skill is not registered', async () => {
+      const noSkills = { skills: undefined, runFlowForOutput: jest.fn() } as unknown as SkillFilterScope;
+
+      const authorization = await authorize([listing('invoices')], 'allow', visibleListingsWhenCalled(noSkills));
+
+      expect(authorization.hidden).toBe(true);
+      expect(noSkills.runFlowForOutput).not.toHaveBeenCalled();
+    });
+
+    it('answers as for an unknown action, sending nothing, and audits the denial', async () => {
+      const writer = auditWriter();
+
+      const res = await executeSkillAction({
+        listings: [listing('flagged')],
+        input: { id: 1 },
+        authInfo: VIEWER,
+        deps: makeDeps({
+          visibleListings: scopeHidingSkills('flagged').visibleListings,
+          audit: { writer: writer as never, subject: 'u' },
+        }),
+      });
+
+      expect(res).toEqual({ ok: false, status: 0, error: unknownActionError('getThing') });
+      expect(mockExecuteOperation).not.toHaveBeenCalled();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(writer.writeAuthorityPass).not.toHaveBeenCalled();
+      expect(writer.writeAuthorityFail).toHaveBeenCalledWith(
+        expect.objectContaining({ skillId: 'flagged', actionId: 'getThing', subject: 'u' }),
+        { reason: 'skills:filter hides every skill that lists the action' },
+      );
+    });
   });
 });

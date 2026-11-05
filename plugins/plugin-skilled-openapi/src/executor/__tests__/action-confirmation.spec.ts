@@ -7,6 +7,7 @@ import {
   MissingClientCapabilityError,
 } from '@frontmcp/sdk';
 
+import { scopeHidingSkills } from '../../__tests__/skill-filter-scope.fixture';
 import { HiddenOpRegistry, type HiddenOpEntry, type OperationListings } from '../../registry/hidden-op.registry';
 import { AuthorityGuard } from '../../security/authority-guard';
 import { SkilledOpenApiConfig } from '../../skilled-openapi.symbols';
@@ -175,12 +176,19 @@ describe('confirmWorkflow', () => {
     const hiddenOps = new HiddenOpRegistry();
     hiddenOps.set(voidInvoice);
     hiddenOps.set(getInvoice);
-    hiddenOps.set(entry('deleteCustomer', { httpMethod: 'DELETE', summary: 'Delete a customer' }));
+    hiddenOps.set(
+      entry('deleteCustomer', { httpMethod: 'DELETE', summary: 'Delete a customer' }, { skillId: 'customers' }),
+    );
     hiddenOps.set(entry('purgeLedger', { httpMethod: 'DELETE' }, { skillRequiredAuthorities: ADMIN_ONLY }));
     return hiddenOps;
   }
 
-  function confirming(script: string, askUser: AskUser, confirm?: Partial<ConfirmOptions>) {
+  function confirming(
+    script: string,
+    askUser: AskUser,
+    confirm?: Partial<ConfirmOptions>,
+    visibleListings = scopeHidingSkills().visibleListings,
+  ) {
     const options = skilledOpenApiPluginOptionsSchema.parse({
       source: { type: 'inline', content: {} },
       ...(confirm ? { confirm } : {}),
@@ -189,6 +197,7 @@ describe('confirmWorkflow', () => {
       script,
       config: new SkilledOpenApiConfig(options),
       guard: new AuthorityGuard(),
+      visibleListings,
       hiddenOps: registry(),
       authInfo: {},
       askUser,
@@ -229,6 +238,20 @@ describe('confirmWorkflow', () => {
       confirmation.confirmAction({ entry: entry('dropTable', { httpMethod: 'DELETE' }), input: {} }),
     ).resolves.toContain(
       `write the actionId as a string, as in callTool('dropTable', …), or run it with execute_action`,
+    );
+  });
+
+  it('does not ask about an action whose every listing skill the skills:filter flow hides from the caller', async () => {
+    const askUser = jest.fn(accepted);
+
+    await confirming(CLEANUP, askUser, { methods: ['DELETE'] }, scopeHidingSkills('customers').visibleListings);
+
+    expect(askUser).toHaveBeenCalledWith(
+      [
+        'This workflow can run these actions, as many times as its script calls them:',
+        '- voidInvoice: Void an invoice (DELETE /invoices/{id})',
+        'Run it?',
+      ].join('\n'),
     );
   });
 
