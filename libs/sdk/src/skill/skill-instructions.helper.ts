@@ -34,7 +34,7 @@ import { callSurfaceOf } from '../common/availability';
 import { mcpRequestSurface } from '../transport/mcp-handlers/mcp-surface';
 import { SKILL_INDEX_URI } from './sep-2640/sep-2640.constants';
 import { filterSkillsByAuthorities } from './skill-authorities.helper';
-import { findSkillCatalogSource, type SkillCatalogPointers } from './skill-catalog-source';
+import { readySkillCatalog, type SkillCatalogPointers } from './skill-catalog-source';
 import { filterServableSkills } from './skill-filter.helper';
 import type { SkillRegistryInterface } from './skill.registry';
 
@@ -72,6 +72,8 @@ interface ComposeOptions {
   skills?: readonly SkillEntry[];
   /** How the catalog tells a model to load skills; defaults by `mcpResources`. */
   pointers?: SkillCatalogPointers;
+  /** Why a plugin's runtime skills aren't loaded yet: the skills section says so in place of the count or catalog. */
+  skillsNotLoaded?: string;
 }
 
 export interface SkillsCatalogSummaryOptions {
@@ -241,6 +243,15 @@ function buildCompactSkillsLine(
   return `This server has ${skills}: ${pointersFor(options).compact}`;
 }
 
+/** The skills section while a plugin's runtime skills haven't loaded: temporary, so a client asks again. */
+function buildSkillsNotLoadedLine(reason: string): string {
+  const singleLineReason = reason.replace(/\s+/g, ' ').trim();
+  return (
+    `This server's skills have not loaded yet (${singleLineReason}). Ask for them again shortly; ` +
+    'the server sends notifications/skills/list_changed once they load.'
+  );
+}
+
 /**
  * Compose the final `instructions` string for the MCP `initialize` response
  * by merging server instructions, channel hints, and the skill catalog
@@ -258,6 +269,9 @@ function buildCompactSkillsLine(
  *   back to `'append'` semantics when `userInstructions` is empty/undefined**
  *   so a misconfigured server doesn't silently drop the catalog and channel
  *   hints. Document this in the schema if you change it.
+ *
+ * While a plugin's runtime skills haven't loaded (`skillsNotLoaded`), a line saying so takes the place of the count
+ * or catalog.
  */
 export function composeInitializeInstructions(options: ComposeOptions): string {
   const policy = options.policy ?? DEFAULT_POLICY;
@@ -277,6 +291,11 @@ export function composeInitializeInstructions(options: ComposeOptions): string {
     // Skip skill catalog; keep server + channel hints since they're also
     // bounded and framework-level.
     return joinSections([user, channel]);
+  }
+
+  if (options.skillsNotLoaded !== undefined) {
+    const notLoaded = buildSkillsNotLoadedLine(options.skillsNotLoaded);
+    return joinSections(policy === 'prepend' ? [notLoaded, channel, user] : [user, channel, notLoaded]);
   }
 
   const summaryOptions: SkillsCatalogSummaryOptions = {
@@ -372,16 +391,8 @@ export async function composeCallerInstructions(
   const skillsConfig = scope.metadata.skillsConfig;
   // A plugin's runtime skills (a Skilled OpenAPI bundle) are registered once it is ready; wait, so the
   // instructions count and list them, and point to the plugin's tools if it serves skills through them (#1067).
-  const source = findSkillCatalogSource(scope);
-  if (source) {
-    try {
-      await source.ready();
-    } catch (error) {
-      scope.logger.warn('initialize instructions: a skill source failed to load; composed without its skills', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
+  // Skills that haven't loaded are said to be loading, so a client doesn't take the server for one without skills.
+  const { source, notLoadedReason } = await readySkillCatalog(scope);
   const composeOptions: ComposeOptions = {
     userInstructions: scope.metadata.instructions,
     channelInstructions: buildChannelInstructions(scope.channels),
@@ -389,8 +400,9 @@ export async function composeCallerInstructions(
     policy: instructionsPolicyFor(scope, options.clientName),
     mcpResources: skillsConfig?.mcpResources,
     pointers: source?.pointers,
+    skillsNotLoaded: notLoadedReason,
   };
-  const withUriHints = options.skillUriHints === true && skillUriHintsEnabled(scope);
+  const withUriHints = options.skillUriHints === true && notLoadedReason === undefined && skillUriHintsEnabled(scope);
   const listsSkills = withUriHints || includesSkillCatalog(composeOptions);
 
   let skills: SkillEntry[] = [];
@@ -441,7 +453,7 @@ function skillUriHintsEnabled(scope: InstructionsScope): boolean {
 /** Whether {@link composeInitializeInstructions} counts or lists skills under these options. */
 function includesSkillCatalog(options: ComposeOptions): boolean {
   const policy = options.policy ?? DEFAULT_POLICY;
-  if (policy === 'off') return false;
+  if (policy === 'off' || options.skillsNotLoaded !== undefined) return false;
   return !(policy === 'replace' && (options.userInstructions ?? '').trim().length > 0);
 }
 

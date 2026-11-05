@@ -10,6 +10,7 @@ import {
 } from '@frontmcp/adapters/skills';
 import {
   PublicMcpError,
+  SkillBundleNotLoadedError,
   type RegisteredSkillContent,
   type RegisterSkillContentOptions,
   type SkillContent,
@@ -290,6 +291,33 @@ describe('BundleSyncService', () => {
         message: 'No skill bundle is loaded: the first bundle has not loaded yet',
         code: 'SKILL_BUNDLE_NOT_LOADED',
       });
+    });
+
+    it("refuses with the SDK's retryable error, the one its skill surfaces answer", async () => {
+      const sync = makeSync();
+      sync.recordLoadFailure('pull responded 503');
+
+      const refusal = sync.ensureLoaded();
+
+      await expect(refusal).rejects.toBeInstanceOf(SkillBundleNotLoadedError);
+      await expect(
+        refusal.catch((error: SkillBundleNotLoadedError) => error.toMcpError()._meta),
+      ).resolves.toMatchObject({ code: 'SKILL_BUNDLE_NOT_LOADED', retryable: true });
+    });
+
+    it('gives the reason no bundle is loaded, the one ensureLoaded refuses with, and none once one is', async () => {
+      const sync = makeSync();
+      const { source } = makeDrivenSource(async (emit) => emit(buildBundle({ version: '2.0.0' })));
+      sync.attachSource(source);
+      const beforeStart = sync.notLoadedReason();
+      sync.recordLoadFailure('pull responded 503');
+      const afterFailure = sync.notLoadedReason();
+
+      await sync.ensureLoaded();
+
+      expect(beforeStart).toBe('the first bundle has not loaded yet');
+      expect(afterFailure).toBe('pull responded 503');
+      expect(sync.notLoadedReason()).toBeUndefined();
     });
 
     it('refuses with the recorded reason when the bundle source could not be created', async () => {

@@ -425,12 +425,20 @@ the server keeps running, and:
   `No skill bundle is loaded: <reason>`, for example
   `No skill bundle is loaded: bundle acme:billing@1.4.0 was not applied: unknown signing keyId "ci-2026" — not in trustedKeys allowlist`.
   The reason is the first line of the error, with each URL cut to its scheme, host and path, and tokens removed. The
-  log has the full reason.
+  log has the full reason. The error's `_meta` has `retryable: true`.
+- The SDK's skill surfaces answer the same reason and code, as a JSON-RPC error with
+  `data: { code: 'SKILL_BUNDLE_NOT_LOADED', retryable: true }`: `skills/list`, `skills/search` and `skill://index.json`,
+  and `skills/load` or a `skill://<path>/SKILL.md` read of a skill not found. A stateless request, which skips
+  `initialize`, gets it too. Up to 1.11.0 they answered as if the server had no skills.
+- `initialize` says in its instructions, in place of the skills count, that the skills have not loaded yet and why.
 - `/readyz` answers 503: its `skilled-openapi` check is `unhealthy`, with the same reason in `error`, and the sync that
   failed in `details.lastSync`.
 
-Once a bundle loads (a watched file is fixed, a poll succeeds), the tools work again and the check is `healthy`, with
-`details: { state: 'loaded', bundleId, bundleVersion }`.
+The same holds while the first load is still running, with the reason `the first bundle has not loaded yet`.
+
+Once a bundle loads (a watched file is fixed, a poll succeeds), the tools work again, the skill surfaces list the
+bundle's skills with its `bundleVersion`, connected clients get `notifications/skills/list_changed`, and the check is
+`healthy`, with `details: { state: 'loaded', bundleId, bundleVersion }`.
 
 ### When a newer bundle is refused
 

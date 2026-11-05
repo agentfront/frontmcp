@@ -4,6 +4,7 @@ import type { Token } from '@frontmcp/di';
 
 import type { ScopeEntry, SkillAction, SkillContent } from '../common';
 import { DependencyNotFoundError, ProviderNotAvailableError, ProviderNotRegisteredError } from '../errors';
+import { SkillBundleNotLoadedError } from './errors/skill-bundle-not-loaded.error';
 
 /**
  * How the skill catalog tells a model to load and find skills: the catalog's heading, the hint that ends a truncated
@@ -29,12 +30,19 @@ export interface SkillCatalogActions {
 
 /**
  * Skills a plugin registers at runtime, such as Skilled OpenAPI's bundle skills, provided under
- * {@link SkillCatalogSourceToken}. The `initialize` instructions wait for `ready()`, so they count and list those
- * skills, and use `pointers` in place of the default ones.
+ * {@link SkillCatalogSourceToken}. The `initialize` instructions and the SDK's skill surfaces wait for `ready()`, so
+ * they count and list those skills, and the instructions use `pointers` in place of the default ones.
  */
 export interface SkillCatalogSource {
   /** Resolves once the plugin has registered its skills. A rejection is logged, and the instructions don't wait. */
   ready(): Promise<void>;
+  /**
+   * Why the plugin's skills aren't loaded once `ready()` has settled, such as a first bundle pull that failed;
+   * undefined once they are. While it gives a reason, `initialize` says the skills haven't loaded, and `skills/list`,
+   * `skills/search` and `skill://index.json` answer the retryable {@link SkillBundleNotLoadedError} rather than as if
+   * the server had no skills; `skills/load` and `skill://<path>/SKILL.md` answer it for a skill not found.
+   */
+  notLoadedReason?(): string | undefined;
   /** How the catalog tells a model to load and find skills, when the plugin serves them through tools of its own. */
   pointers?: SkillCatalogPointers;
   /** Lists a skill's actions in its `SKILL.md` resource. Without it, `SKILL.md` lists none. */
@@ -69,4 +77,36 @@ export function findSkillCatalogSource(scope: SkillCatalogSourceScope): SkillCat
     });
     return undefined;
   }
+}
+
+/** The plugin skill source once it is ready, and why its skills aren't loaded when they aren't. */
+export interface ReadySkillCatalog {
+  source?: SkillCatalogSource;
+  notLoadedReason?: string;
+}
+
+/**
+ * Wait for the plugin skill source provided in the scope, if any, and read whether its skills loaded. A `ready()`
+ * that rejects is logged: the skills registered so far are served.
+ */
+export async function readySkillCatalog(scope: SkillCatalogSourceScope): Promise<ReadySkillCatalog> {
+  const source = findSkillCatalogSource(scope);
+  if (!source) return {};
+  try {
+    await source.ready();
+  } catch (error) {
+    scope.logger.warn('a skill source failed to load; serving the skills registered so far', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return { source, notLoadedReason: source.notLoadedReason?.() };
+}
+
+/**
+ * Wait for the plugin skill source, and refuse with a retryable {@link SkillBundleNotLoadedError} while its skills
+ * aren't loaded. A scope without a skill source passes.
+ */
+export async function assertSkillCatalogLoaded(scope: SkillCatalogSourceScope): Promise<void> {
+  const { notLoadedReason } = await readySkillCatalog(scope);
+  if (notLoadedReason !== undefined) throw new SkillBundleNotLoadedError(notLoadedReason);
 }

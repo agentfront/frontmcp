@@ -5,8 +5,10 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
 import { InvalidInputError, PublicMcpError } from '../../errors';
 import { SkillsLoadRequestSchema, SkillsLoadResultSchema } from '../../transport/mcp-handlers/skills-mcp.types';
+import { SkillBundleNotLoadedError } from '../errors/skill-bundle-not-loaded.error';
 import type { SkillActivationResult, SkillPolicyMode } from '../session/skill-session.types';
 import { assertSkillAuthorized } from '../skill-authorities.helper';
+import { readySkillCatalog } from '../skill-catalog-source';
 import { createSkillEntryResolver } from '../skill-entry.resolver';
 import { isSkillServable, skillToolsForCaller } from '../skill-filter.helper';
 import { formatSkillForLLMWithSchemas } from '../skill-http.utils';
@@ -119,6 +121,8 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
     const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
     const authInfo = (ctx?.['authInfo'] ?? {}) as Record<string, unknown>;
 
+    // A plugin's runtime skills are registered once it is ready; a skill not found while they aren't answers retryable.
+    const { notLoadedReason } = await readySkillCatalog(this.scope);
     const loadResults: LoadResultWithActivation[] = [];
     const resolveEntry = createSkillEntryResolver(skillRegistry);
 
@@ -126,6 +130,7 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
       const result = await skillRegistry.loadSkill(skillId);
 
       if (!result) {
+        if (notLoadedReason !== undefined) throw new SkillBundleNotLoadedError(notLoadedReason);
         warnings.push(`Skill "${skillId}" not found`);
         continue;
       }

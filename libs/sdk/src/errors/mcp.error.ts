@@ -116,6 +116,7 @@ export abstract class McpError extends Error {
       timestamp: string;
       stack?: string;
       remedy?: ErrorRemedy;
+      retryable?: boolean;
     };
   } {
     const message = isDevelopment ? this.getInternalMessage() : this.getPublicMessage();
