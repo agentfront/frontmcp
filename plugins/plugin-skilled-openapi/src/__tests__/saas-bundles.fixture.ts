@@ -1,7 +1,14 @@
-// Bundles, their signatures, and the pull and push tokens of a SaaS bundle server, made for each test run.
+// Bundles, their signatures, and the pull and push tokens of a SaaS bundle server, made for each test run; a push
+// token can be bound to the body it is issued for.
 import { exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
 
-import { bundleDigest, canonicalize, type ResolvedBundle } from '@frontmcp/adapters/skills';
+import {
+  bundleDigest,
+  canonicalize,
+  PUSH_BODY_DIGEST_CLAIM,
+  pushBodyDigest,
+  type ResolvedBundle,
+} from '@frontmcp/adapters/skills';
 import { generateRsaKeyPair, randomUUID, rsaSignBase64Url } from '@frontmcp/utils';
 
 export const ISSUER = 'https://cloud.example.dev';
@@ -55,5 +62,11 @@ export async function tokenIssuer(kid: string) {
       .setIssuedAt()
       .setExpirationTime('5m')
       .sign(privateKey);
-  return { jwks: { keys: [jwk] }, sign, pushToken: () => sign({ jti: randomUUID() }) };
+  /** A push token; issued `forBody`, it carries the `body_sha256` claim that binds it to that exact body. */
+  const pushToken = (forBody?: string) =>
+    sign({
+      jti: randomUUID(),
+      ...(forBody === undefined ? {} : { [PUSH_BODY_DIGEST_CLAIM]: pushBodyDigest(forBody) }),
+    });
+  return { jwks: { keys: [jwk] }, sign, pushToken };
 }

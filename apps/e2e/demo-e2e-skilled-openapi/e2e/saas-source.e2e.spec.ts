@@ -1,10 +1,16 @@
 // Scenarios B2 B3 B4 J3: the bundle pulled over https from a SaaS bundle server, with a pull token checked against the
 // issuer's JWKS: the startup pull, new versions applied by polling, refused tokens, bundles and older versions, the
 // cache, redirects. /readyz stays ready but says the bundle served is stale while the last pull was refused or failed.
-// The log and /readyz name the check a pull or push token failed; the tools and the push answer don't.
+// The log and /readyz name the check a pull or push token failed; the tools and the push answer don't. A push token
+// bound to its body (body_sha256) is refused with another body.
 // A pulled or pushed version is announced with one list_changed per list it changed (skills and their skill://
 // resources; the operation tools are internal, never listed), and a poll of the version served with none.
-import type { BundleTokenFailure, ResolvedBundle } from '@frontmcp/adapters/skills';
+import {
+  PUSH_BODY_DIGEST_CLAIM,
+  pushBodyDigest,
+  type BundleTokenFailure,
+  type ResolvedBundle,
+} from '@frontmcp/adapters/skills';
 import { expect, test, type McpTestClient, type ServerFixture } from '@frontmcp/testing';
 import { chmod, fileExists, pathJoin, readFile } from '@frontmcp/utils';
 
@@ -462,13 +468,18 @@ for (const refused of REFUSED_PULL_TOKENS) {
   });
 }
 
-/** Push `body` to the server's push endpoint with `token`. */
+/** Push `body` to the server's push endpoint with `token`: a string is sent as is, anything else as its JSON. */
 function pushBundle(server: ServerFixture, token: string, body: unknown): Promise<Response> {
   return fetch(`${server.info.baseUrl}/__skilled_openapi/push`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    body: typeof body === 'string' ? body : JSON.stringify(body),
   });
+}
+
+/** A push token bound by its `body_sha256` claim to `body`, the exact JSON it is pushed with. */
+function pushTokenFor(body: string, jti: string): Promise<string> {
+  return issuer.pullToken({ jti, [PUSH_BODY_DIGEST_CLAIM]: pushBodyDigest(body) });
 }
 
 test.describe('a server that takes pushed bundles', () => {
@@ -512,12 +523,30 @@ test.describe('a server that takes pushed bundles', () => {
     expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
   });
 
+  test('answers a token issued for another body with the generic 401, while the log names body_mismatch', async ({
+    mcp,
+    server,
+  }) => {
+    const issuedFor = JSON.stringify(environment.sign(billingBundle('2.0.0', V2_SKILLS)));
+    const token = await pushTokenFor(issuedFor, 'e2e-push-other-body');
+
+    const response = await pushBundle(server, token, environment.sign(billingBundle('2.0.0', V1_SKILLS)));
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+    expect(await response.json()).toEqual({ error: 'invalid_token', error_description: 'the push token was refused' });
+    await waitForLog(server, '[saas-source] push refused (body_mismatch): its "body_sha256" claim is not the SHA-256');
+    expect(server.getLogs().join('\n')).not.toContain(token);
+    expect((await servedSkills(mcp)).versions).toEqual(['1.0.0']);
+  });
+
   test('applies a pushed version and tells connected clients once per list it changed', async ({ mcp, server }) => {
     const notifications = mcp.notifications.collect();
     const seen = notifications.received.length;
-    const token = await issuer.pullToken({ jti: 'e2e-push-applied' });
+    const pushed = JSON.stringify(environment.sign(billingBundle('2.0.0', V2_SKILLS)));
+    const token = await pushTokenFor(pushed, 'e2e-push-applied');
 
-    const response = await pushBundle(server, token, environment.sign(billingBundle('2.0.0', V2_SKILLS)));
+    const response = await pushBundle(server, token, pushed);
     const notified = await listChangedBySwap(notifications, seen);
 
     expect(response.status).toBe(200);

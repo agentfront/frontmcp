@@ -93,10 +93,16 @@ export const saasSourceSchema = z.object({
   pollIntervalMs: z.number().int().positive().default(300_000),
   /**
    * Also take bundles the SaaS pushes, at `POST /__skilled_openapi/push`. The push token is checked as `authToken`
-   * is, and must carry a `jti` no push used and an `iat` within five minutes; the body is the bundle as JSON, checked
-   * and applied as a pulled one. Default false.
+   * is, and must carry a `jti` no push used and an `iat` within five minutes; when it carries a `body_sha256` claim,
+   * that must be the SHA-256 of the exact body. The body is the bundle as JSON, checked and applied as a pulled one.
+   * Default false.
    */
   enableWebhook: z.boolean().default(false),
+  /**
+   * Refuse a push token without a `body_sha256` claim, the base64url SHA-256 of the exact request body, which binds
+   * the token to the bundle it came with. Default false: such a token is accepted, and a warning is logged once.
+   */
+  requirePushBodyDigest: z.boolean().optional(),
   /**
    * Apply a pulled or pushed bundle older than the one being served (see `compareBundleVersions`). Default false: such
    * a bundle is refused, so a validly signed old bundle can't roll the server back.

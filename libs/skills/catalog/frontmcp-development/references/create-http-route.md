@@ -64,7 +64,8 @@ export class HomePage extends HttpRouteContext {
 }
 ```
 
-`this.request` holds the method, path, headers, query and parsed body; `this.params` the path parameters;
+`this.request` holds the method, path, headers, query and parsed body (with `bodyBytes`, its bytes as received, for a
+digest or a signature over the exact body); `this.params` the path parameters;
 `this.person` the signed-in person on a `'people'` or `'subject'` route. `this.get()`, `this.tryGet()`, `this.scope`,
 `this.fetch()` and `this.context` work as in a tool.
 

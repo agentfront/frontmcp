@@ -1,4 +1,5 @@
-// A real server whose saas source has enableWebhook takes pushed bundles at POST /__skilled_openapi/push.
+// A real server whose saas source has enableWebhook takes pushed bundles at POST /__skilled_openapi/push. A push token
+// bound to its body (body_sha256) carries no other body.
 import 'reflect-metadata';
 
 import { BundleStore, StorageReplayNonceStore, type ReplayNonceStore } from '@frontmcp/adapters/skills';
@@ -23,7 +24,11 @@ describe('pushed bundles on a server with enableWebhook', () => {
   let jwksAvailable = true;
   const cache = { read: jest.fn(async () => undefined), write: jest.fn(async () => undefined) };
 
-  async function startServer(enableWebhook: boolean, pushReplayStore?: ReplayNonceStore): Promise<PushServer> {
+  async function startServer(
+    enableWebhook: boolean,
+    pushReplayStore?: ReplayNonceStore,
+    { requirePushBodyDigest }: { requirePushBodyDigest?: boolean } = {},
+  ): Promise<PushServer> {
     const instance = await FrontMcpInstance.createForGraph({
       info: { name: 'billing', version: '1.0.0' },
       apps: [],
@@ -38,6 +43,7 @@ describe('pushed bundles on a server with enableWebhook', () => {
             jwksUrl: JWKS_URL,
             expectedIssuer: ISSUER,
             enableWebhook,
+            requirePushBodyDigest,
           },
           trustedKeys: [trustedKey],
         }),
@@ -195,6 +201,49 @@ describe('pushed bundles on a server with enableWebhook', () => {
     });
     expect(server.servedVersion()).toBe('3.0.0');
     expect(cache.write).not.toHaveBeenCalled();
+  });
+
+  describe('a push token bound to its body by a body_sha256 claim', () => {
+    it('is refused with the generic 401 for another body, and still applies the body it was issued for', async () => {
+      const issuedFor = JSON.stringify(signed(bundle('6.0.0', ['invoices', 'refunds'])));
+      const otherBody = JSON.stringify(signed(bundle('6.0.0', ['refunds'])));
+      const token = await issuer.pushToken(issuedFor);
+
+      const swapped = await push(server, `Bearer ${token}`, otherBody);
+      const servedAfterSwap = server.servedVersion();
+      const genuine = await push(server, `Bearer ${token}`, issuedFor);
+
+      expect(swapped.status).toBe(401);
+      expect(swapped.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+      expect(await swapped.json()).toEqual({ error: 'invalid_token', error_description: 'the push token was refused' });
+      expect(servedAfterSwap).toBe('3.0.0');
+      expect(genuine.status).toBe(200);
+      expect(server.servedVersion()).toBe('6.0.0');
+    });
+
+    it('is refused for the same bundle sent with other whitespace: the claim covers the exact bytes', async () => {
+      const pushed = signed(bundle('7.0.0', ['invoices']));
+      const token = await issuer.pushToken(JSON.stringify(pushed));
+
+      const reformatted = await push(server, `Bearer ${token}`, JSON.stringify(pushed, null, 2));
+
+      expect(reformatted.status).toBe(401);
+      expect(server.servedVersion()).toBe('6.0.0');
+    });
+
+    it('is required on a server with requirePushBodyDigest: a token without the claim is refused with 401', async () => {
+      const strict = await startServer(true, undefined, { requirePushBodyDigest: true });
+      await strict.loadBundle();
+      const pushed = JSON.stringify(signed(bundle('2.0.0', ['invoices', 'refunds'])));
+
+      const unbound = await push(strict, `Bearer ${await issuer.pushToken()}`, pushed);
+      const bound = await push(strict, `Bearer ${await issuer.pushToken(pushed)}`, pushed);
+
+      expect(unbound.status).toBe(401);
+      expect(await unbound.json()).toEqual({ error: 'invalid_token', error_description: 'the push token was refused' });
+      expect(bound.status).toBe(200);
+      expect(strict.servedVersion()).toBe('2.0.0');
+    });
   });
 
   describe('replicas that share a replay store', () => {

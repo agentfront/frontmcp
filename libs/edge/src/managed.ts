@@ -37,6 +37,11 @@ export interface ManagedEdgeOptions {
   /** Also take bundles the bundle server pushes, at `POST /__skilled_openapi/push`; see the README for the request. */
   enableWebhook?: boolean;
   /**
+   * Refuse a push token without a `body_sha256` claim (the base64url SHA-256 of the exact body), which binds it to
+   * the bundle it came with. Default false: such a token is accepted, and a warning is logged once per isolate.
+   */
+  requirePushBodyDigest?: boolean;
+  /**
    * Where the push replay guard records the push tokens' `jti`s, for every isolate and replica of the Worker. Default
    * `{ binding: 'FRONTMCP_PUSH_REPLAY' }`: the Durable Object class `mcp.PushReplayDurableObject`, bound under that
    * name. A function of `env` can return another store (on Deno or Bun). With no store, pushes are refused.
@@ -89,6 +94,7 @@ export function buildManagedOpenApiPluginOptions(managed: ManagedEdgeOptions): R
   };
   if (managed.pollIntervalMs !== undefined) source['pollIntervalMs'] = managed.pollIntervalMs;
   if (managed.enableWebhook !== undefined) source['enableWebhook'] = managed.enableWebhook;
+  if (managed.requirePushBodyDigest !== undefined) source['requirePushBodyDigest'] = managed.requirePushBodyDigest;
   if (managed.allowRollback !== undefined) source['allowRollback'] = managed.allowRollback;
 
   const options: Record<string, unknown> = { source };

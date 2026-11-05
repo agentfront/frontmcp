@@ -347,12 +347,12 @@ for a bad one.
 
 ### Sources
 
-| `type`   | Fields                                                                                                                                                | What it does                                                                                                                                                                                                                                                                                                                       |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `inline` | `content`                                                                                                                                             | The bundle object itself. For tests, bundles built in code, and runtimes without a file system.                                                                                                                                                                                                                                    |
-| `static` | `path`, `watch?`                                                                                                                                      | A JSON or YAML bundle file, resolved from the working directory. With `watch: true`, the plugin reloads it when it changes.                                                                                                                                                                                                        |
-| `npm`    | `packageName`, `exportName?`, `verifyProvenance?`                                                                                                     | Imports a package and uses one of its exports. Provenance checks aren't implemented yet, so the default `verifyProvenance: true` refuses to load it; set `false` only for a package you pin and trust.                                                                                                                             |
-| `saas`   | `endpoint`, `authToken`, `expectedAudience`, `jwksUrl`, `expectedIssuer`, `pollIntervalMs?`, `enableWebhook?`, `pushReplayStorage?`, `allowRollback?` | Pulls the bundle over HTTPS at startup and every `pollIntervalMs` (default 5 minutes), after checking `authToken` against `jwksUrl`, `expectedIssuer` and `expectedAudience`. With `enableWebhook: true`, also takes pushed bundles (below). Applies no bundle older than the one it serves, unless `allowRollback: true` (below). |
+| `type`   | Fields                                                                                                                                                                          | What it does                                                                                                                                                                                                                                                                                                                       |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inline` | `content`                                                                                                                                                                       | The bundle object itself. For tests, bundles built in code, and runtimes without a file system.                                                                                                                                                                                                                                    |
+| `static` | `path`, `watch?`                                                                                                                                                                | A JSON or YAML bundle file, resolved from the working directory. With `watch: true`, the plugin reloads it when it changes.                                                                                                                                                                                                        |
+| `npm`    | `packageName`, `exportName?`, `verifyProvenance?`                                                                                                                               | Imports a package and uses one of its exports. Provenance checks aren't implemented yet, so the default `verifyProvenance: true` refuses to load it; set `false` only for a package you pin and trust.                                                                                                                             |
+| `saas`   | `endpoint`, `authToken`, `expectedAudience`, `jwksUrl`, `expectedIssuer`, `pollIntervalMs?`, `enableWebhook?`, `requirePushBodyDigest?`, `pushReplayStorage?`, `allowRollback?` | Pulls the bundle over HTTPS at startup and every `pollIntervalMs` (default 5 minutes), after checking `authToken` against `jwksUrl`, `expectedIssuer` and `expectedAudience`. With `enableWebhook: true`, also takes pushed bundles (below). Applies no bundle older than the one it serves, unless `allowRollback: true` (below). |
 
 A new bundle from `static` (with `watch`) or `saas` is checked like the first, then replaces the skills and operations
 at once. A bundle that fails its checks isn't applied, and the reason is logged, with the first issues a schema check
@@ -402,8 +402,9 @@ With `enableWebhook: true` on a `saas` source, the server takes bundles the SaaS
 `POST /__skilled_openapi/push`, through the hookable `skilled-openapi:bundle-push` flow, on Node and on a Worker:
 
 - The `Authorization: Bearer` token is checked as `authToken` is, and must also carry a `jti` of 8 or more characters
-  that no push used and an `iat` within five minutes. A missing or refused token answers `401 invalid_token`, a used
-  `jti` answers `409 push_replayed`, and a JWKS that can't be read, or a `jti` that can't be recorded, answers
+  that no push used and an `iat` within five minutes. With a `body_sha256` claim, it is good only for the body it was
+  issued for (below). A missing or refused token answers `401 invalid_token`, a used `jti` answers
+  `409 push_replayed`, and a JWKS that can't be read, or a `jti` that can't be recorded, answers
   `503 temporarily_unavailable`.
 - The body is the bundle as JSON, checked as a pulled bundle is: `400 invalid_bundle` when it is not a bundle,
   `409 bundle_outdated` when it is older than the bundle being served, `422 bundle_not_applied` when its signature or
@@ -434,6 +435,42 @@ SkilledOpenApiPlugin.init({
 - The store is connected on the first push. While it can't be reached, every push answers
   `503 temporarily_unavailable` and the log says why: a push is never accepted unchecked.
 - On a Cloudflare Worker, `@frontmcp/edge` keeps the `jti`s in a Durable Object instead (`managed.pushReplay`).
+
+#### A push token bound to its body
+
+A push token's `body_sha256` claim binds it to the body it is sent with: the base64url SHA-256, without padding, of the
+exact bytes of the request body. Without it, a token captured within its five minutes, before its `jti` is used (from a
+proxy log, or a middlebox that ends TLS), could carry any other bundle the SaaS signed for this server, such as one for
+another channel.
+
+- The server hashes the bytes it received, not a re-serialization of the JSON. Any other body, even the same bundle
+  with other whitespace, answers `401 invalid_token`, and the log says
+  `[saas-source] push refused (body_mismatch): ...`. The refused token's `jti` isn't used, so the push it was issued
+  for still applies.
+- This is not the bundle's own `integrity.digest`, a hex SHA-256 of the bundle's canonical form: hash the body as sent.
+- A token without the claim is accepted, so a SaaS that doesn't set it yet keeps working, and the source logs one
+  warning. Set `requirePushBodyDigest: true` on the `saas` source to refuse such a token (`401`, logged as
+  `missing_claim`).
+
+The sender hashes the string it sends, with the helpers `@frontmcp/adapters/skills` exports:
+
+```ts
+import { PUSH_BODY_DIGEST_CLAIM, pushBodyDigest } from '@frontmcp/adapters/skills';
+
+const body = JSON.stringify(signedBundle);
+const pushToken = await new SignJWT({ jti: randomUUID(), [PUSH_BODY_DIGEST_CLAIM]: pushBodyDigest(body) })
+  .setProtectedHeader({ alg: 'ES256', kid })
+  .setIssuer(issuer)
+  .setAudience(audience)
+  .setIssuedAt()
+  .setExpirationTime('5m')
+  .sign(privateKey);
+await fetch(`${serverUrl}/__skilled_openapi/push`, {
+  method: 'POST',
+  headers: { authorization: `Bearer ${pushToken}`, 'content-type': 'application/json' },
+  body,
+});
+```
 
 ### When no bundle loads
 
@@ -497,18 +534,19 @@ Up to 1.11.0, the check stayed `healthy`, and a Cron run that pulled a refused b
 The `saas` source checks `authToken` against `jwksUrl` before every pull, and the token of each push the same way. When
 a check fails, the log and `/readyz` name it as `tokenFailure`:
 
-| `tokenFailure`          | The token                                                                          |
-| ----------------------- | ---------------------------------------------------------------------------------- |
-| `expired`               | Its `exp` has passed: issue a new one.                                             |
-| `not_yet_valid`         | Its `nbf` is in the future: check the issuer's clock and the server's.             |
-| `wrong_issuer`          | Its `iss` is not `expectedIssuer`, or it has none.                                 |
-| `wrong_audience`        | Its `aud`, or its `resource`, does not name `expectedAudience`.                    |
-| `unknown_key`           | Its `kid` is not in the JWKS: the issuer may have retired the key.                 |
-| `bad_signature`         | The key in the JWKS under its `kid` does not verify it.                            |
-| `unsupported_algorithm` | It is not signed with an asymmetric algorithm (`HS256`, for example).              |
-| `missing_claim`         | It has no `exp`; a push token also needs `iat` and `jti`.                          |
-| `malformed`             | It is not a JWT, or a claim has the wrong type.                                    |
-| `jwks_unavailable`      | Not checked: `jwksUrl` could not be read, or has no usable signing key. An outage. |
+| `tokenFailure`          | The token                                                                                                 |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| `expired`               | Its `exp` has passed: issue a new one.                                                                    |
+| `not_yet_valid`         | Its `nbf` is in the future: check the issuer's clock and the server's.                                    |
+| `wrong_issuer`          | Its `iss` is not `expectedIssuer`, or it has none.                                                        |
+| `wrong_audience`        | Its `aud`, or its `resource`, does not name `expectedAudience`.                                           |
+| `unknown_key`           | Its `kid` is not in the JWKS: the issuer may have retired the key.                                        |
+| `bad_signature`         | The key in the JWKS under its `kid` does not verify it.                                                   |
+| `unsupported_algorithm` | It is not signed with an asymmetric algorithm (`HS256`, for example).                                     |
+| `missing_claim`         | It has no `exp`; a push token also needs `iat` and `jti`, and `body_sha256` with `requirePushBodyDigest`. |
+| `body_mismatch`         | A push token's `body_sha256` is not the SHA-256 of the body it came with.                                 |
+| `malformed`             | It is not a JWT, or a claim has the wrong type.                                                           |
+| `jwks_unavailable`      | Not checked: `jwksUrl` could not be read, or has no usable signing key. An outage.                        |
 
 - A pull logs, at warn level, `[saas-source] saas:<endpoint>: pull token check failed (expired)`. The log never has
   the token.
@@ -516,6 +554,7 @@ a check fails, the log and `/readyz` name it as `tokenFailure`:
   serves, and `unhealthy` when none loaded. A refused pull token never falls back to the cached bundle;
   `jwks_unavailable` does, at a start.
 - A push logs `[saas-source] push refused (wrong_issuer): ...`, or `bundle push not checked (jwks_unavailable): ...`.
+  `body_mismatch` comes only from a push.
 - On a Worker, a failed Cron run's error says it too: `the bundle pull failed (token check: expired): ...`.
 
 Callers learn nothing more than before: the tools' `SKILL_BUNDLE_NOT_LOADED` reason is unchanged, a refused push token

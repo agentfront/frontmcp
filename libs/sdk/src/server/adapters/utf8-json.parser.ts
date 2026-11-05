@@ -2,6 +2,8 @@ import type * as http from 'node:http';
 
 import express from 'express';
 
+import type { ServerRequest } from '../../common';
+
 // The `application/json` bodies body-parser's `json()` reads as UTF-8: no charset, or `charset=utf-8`.
 const UTF8_JSON_TYPE = /^application\/json(?:; ?charset=utf-8)?$/i;
 const FIRST_NON_WHITESPACE = /^[ \t\n\r]*([^ \t\n\r])/;
@@ -19,6 +21,7 @@ export function utf8JsonParser(limit: number | string): express.RequestHandler {
         return;
       }
       const text = decodeUtf8(req.body);
+      keepBodyBytes(req, res, req.body);
       try {
         req.body = parseStrictJson(text);
       } catch (error) {
@@ -29,6 +32,11 @@ export function utf8JsonParser(limit: number | string): express.RequestHandler {
       next();
     });
   };
+}
+
+// body-parser's `verify` hook: keeps the bytes it read as `ServerRequest.bodyBytes`.
+export function keepBodyBytes(req: http.IncomingMessage, _res: http.ServerResponse, bytes: Buffer): void {
+  (req as ServerRequest).bodyBytes = bytes;
 }
 
 // What http-errors' `createError(400, error, { body, type })` adds, in its order.

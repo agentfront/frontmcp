@@ -644,14 +644,13 @@ async function toServerRequest(
 
   const method = request.method.toUpperCase() as HttpMethod;
   const hasBody = method !== 'GET' && method !== 'HEAD';
-  let rawBody = '';
-  if (hasBody) {
-    try {
-      rawBody = await request.text();
-    } catch {
-      rawBody = '';
-    }
-  }
+  const bodyBytes = hasBody
+    ? await request.arrayBuffer().then(
+        (buffer) => new Uint8Array(buffer),
+        () => undefined,
+      )
+    : undefined;
+  const rawBody = bodyBytes ? new TextDecoder().decode(bodyBytes) : '';
   let body: unknown;
   if (rawBody) {
     try {
@@ -676,6 +675,7 @@ async function toServerRequest(
     headers,
     query,
     body,
+    bodyBytes,
     socket: { remoteAddress: resolvePeerAddress(request, ctx) },
   } as unknown as ServerRequest;
 

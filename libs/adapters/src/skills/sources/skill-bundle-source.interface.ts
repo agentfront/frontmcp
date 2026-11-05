@@ -80,8 +80,11 @@ export interface SkillBundleSource {
 
 /** The check a pushed bundle's token passes before the bundle is applied. */
 export interface BundlePushReceiver {
-  /** Resolves when the push token is accepted; throws when it is refused or can't be checked. */
-  verifyPushToken(token: string): Promise<void>;
+  /**
+   * Resolves when the push token is accepted for `body`, the exact bytes of the request body; throws when it is
+   * refused or can't be checked.
+   */
+  verifyPushToken(token: string, body: Uint8Array): Promise<void>;
 }
 
 /** Takes each new bundle; a pulling source waits for a promise it returns before its pull counts as done. */
@@ -97,9 +100,10 @@ export interface BundleOrigin {
 
 /**
  * Which check refused a pull or push token, or `jwks_unavailable` when the issuer's keys could not be read to check
- * it. For the server's logs and `/readyz`: a caller learns only that its token was refused.
+ * it; `body_mismatch` is a push token issued for another body. For the server's logs and `/readyz`: a caller learns
+ * only that its token was refused.
  */
-export type BundleTokenFailure = TokenVerifyFailure | 'wrong_audience';
+export type BundleTokenFailure = TokenVerifyFailure | 'wrong_audience' | 'body_mismatch';
 
 /** Takes the reason a background pull failed, and the token check it failed on, if any. */
 export type BundlePullFailureListener = (reason: string, tokenFailure?: BundleTokenFailure) => void;

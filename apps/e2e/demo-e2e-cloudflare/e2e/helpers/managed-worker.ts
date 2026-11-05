@@ -136,10 +136,15 @@ export class ManagedWorker {
     return { httpStatus: response.status, ...((await response.json()) as Omit<Readiness, 'httpStatus'>) };
   }
 
+  /** Push `body`: a string is sent as is, anything else as its JSON. */
   push(authorization: string | undefined, body: unknown): Promise<Response> {
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (authorization) headers['authorization'] = authorization;
-    return this.fetch(PUSH_URL, { method: 'POST', headers, body: JSON.stringify(body) });
+    return this.fetch(PUSH_URL, {
+      method: 'POST',
+      headers,
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    });
   }
 
   /** The version of the last good bundle the Worker kept in KV. */

@@ -58,6 +58,8 @@ export {
   createBundleSource,
   InlineSource,
   NpmSource,
+  PUSH_BODY_DIGEST_CLAIM,
+  pushBodyDigest,
   SaasJwksUnavailableError,
   SaasPullSource,
   SaasPullTokenRejectedError,

@@ -381,11 +381,16 @@ from `@frontmcp/sdk`, and `ServerRequestHandler` types the handler directly.
 Routes share the configured **CORS policy, body limits, and security
 middleware** with the MCP endpoint — they ride the same Express app.
 
+Besides the parsed `req.body`, a handler gets `req.bodyBytes`: the bytes of a
+JSON or form body as received (a `Uint8Array`), for a digest or a signature
+over the exact body. A re-serialized `JSON.stringify(req.body)` can differ
+from what the client sent.
+
 `createFetchHandler()` (Cloudflare Workers, Deno, Bun) serves the same routes
 with the same handler, behind the same `throttle.ipFilter` check and, for
 `auth: true`, the same `session:verify` flow. There the handler gets the
 normalized request (`method`, `path`, `params`, `query`, `headers`, the parsed
-JSON `body`) and a response with `status`, `json`, `send`, `setHeader`, `write`,
+JSON `body`, and `bodyBytes`, every body's bytes as received) and a response with `status`, `json`, `send`, `setHeader`, `write`,
 `end` and `redirect`, returned once its head is written and streamed as it is
 written (a handler that fails after that errors the body, and the error is
 logged); route paths take literal and `:param` segments (compared

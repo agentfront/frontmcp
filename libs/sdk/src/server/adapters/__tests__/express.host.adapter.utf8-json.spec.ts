@@ -3,6 +3,7 @@ import * as path from 'node:path';
 
 import type express from 'express';
 
+import type { ServerRequest } from '../../../common';
 import { ExpressHostAdapter } from '../express.host.adapter';
 
 // Mock base.host.adapter to break the import chain into ../../common (which pulls @frontmcp/auth)
@@ -13,11 +14,14 @@ jest.mock('../base.host.adapter', () => {
 
 const resolveFrom = (name: string, from: string): string => require.resolve(name, { paths: [path.dirname(from)] });
 
-// The iconv-lite that body-parser's raw-body decodes with.
-const iconvLite = (): { encodings: object | null } => {
+// The iconv-lites body-parser decodes with: its own, which decodes a body it hands to `verify`, and raw-body's.
+const iconvLites = (): Array<{ encodings: object | null }> => {
   const bodyParser = resolveFrom('body-parser', require.resolve('express'));
-  return require(resolveFrom('iconv-lite', resolveFrom('raw-body', bodyParser)));
+  return [resolveFrom('iconv-lite', bodyParser), resolveFrom('iconv-lite', resolveFrom('raw-body', bodyParser))].map(
+    (iconvLite) => require(iconvLite),
+  );
 };
+const loadedEncodings = () => iconvLites().some((iconvLite) => iconvLite.encodings !== null);
 
 const post = (url: string, contentType: string, body: Buffer): Promise<{ status: number; body: string }> =>
   new Promise((resolve, reject) => {
@@ -43,6 +47,9 @@ describe('ExpressHostAdapter JSON bodies and iconv-lite', () => {
     adapter.registerRoute('POST', '/echo', (req: unknown, res: unknown) => {
       (res as express.Response).json((req as { body: unknown }).body);
     });
+    adapter.registerRoute('POST', '/body-bytes', (req: ServerRequest, res: unknown) => {
+      (res as express.Response).json({ hex: Buffer.from(req.bodyBytes ?? []).toString('hex') });
+    });
     server = http.createServer(adapter.getHandler() as http.RequestListener);
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
     url = `http://127.0.0.1:${(server.address() as { port: number }).port}/echo`;
@@ -55,12 +62,24 @@ describe('ExpressHostAdapter JSON bodies and iconv-lite', () => {
       status: 200,
       body: '{"a":"caf\u00e9"}',
     });
-    expect(iconvLite().encodings).toBeNull();
+    expect(loadedEncodings()).toBe(false);
   });
 
   it('decodes a UTF-16 JSON body with iconv-lite', async () => {
     const body = Buffer.from('{"a":1}', 'utf16le');
     expect(await post(url, 'application/json; charset=utf-16le', body)).toEqual({ status: 200, body: '{"a":1}' });
-    expect(iconvLite().encodings).not.toBeNull();
+    expect(loadedEncodings()).toBe(true);
+  });
+
+  it.each([
+    ['a UTF-8 JSON', 'application/json', Buffer.from('\ufeff{ "a": "caf\u00e9" }\n')],
+    ['a UTF-16 JSON', 'application/json; charset=utf-16le', Buffer.from('{"a":1}', 'utf16le')],
+    ['a form', 'application/x-www-form-urlencoded', Buffer.from('a=1&b=caf%C3%A9')],
+  ])('keeps the bytes of %s body as received, as bodyBytes', async (_label, contentType, body) => {
+    const bodyBytesUrl = url.replace(/\/echo$/, '/body-bytes');
+
+    const answer = await post(bodyBytesUrl, contentType, body);
+
+    expect(answer).toEqual({ status: 200, body: JSON.stringify({ hex: body.toString('hex') }) });
   });
 });

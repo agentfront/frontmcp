@@ -35,6 +35,7 @@ describe('buildManagedOpenApiPluginOptions', () => {
       ...MANAGED,
       pollIntervalMs: 60_000,
       enableWebhook: true,
+      requirePushBodyDigest: true,
       allowRollback: true,
       requireSignature: false,
       dev: true,
@@ -43,6 +44,7 @@ describe('buildManagedOpenApiPluginOptions', () => {
     const source = opts['source'] as Record<string, unknown>;
     expect(source['pollIntervalMs']).toBe(60_000);
     expect(source['enableWebhook']).toBe(true);
+    expect(source['requirePushBodyDigest']).toBe(true);
     expect(source['allowRollback']).toBe(true);
     expect(opts['requireSignature']).toBe(false);
     expect(opts['dev']).toBe(true);
@@ -55,6 +57,7 @@ describe('buildManagedOpenApiPluginOptions', () => {
     expect('dev' in opts).toBe(false);
     expect('pollIntervalMs' in (opts['source'] as object)).toBe(false);
     expect('allowRollback' in (opts['source'] as object)).toBe(false);
+    expect('requirePushBodyDigest' in (opts['source'] as object)).toBe(false);
   });
 });
 

@@ -5,7 +5,15 @@
 // (`frontmcp build --target <env>`) picks the right resolution per target.
 import { JwksService, type JSONWebKeySet } from '@frontmcp/auth';
 import type { FrontMcpLogger } from '@frontmcp/sdk';
-import { dirname, ensureDir, isRedirectResponse, pathResolve, readFile, writeFile } from '@frontmcp/utils';
+import {
+  dirname,
+  ensureDir,
+  isRedirectResponse,
+  pathResolve,
+  readFile,
+  sha256Base64url,
+  writeFile,
+} from '@frontmcp/utils';
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import { OverlayParseError, parseOverlay } from '../bundle/overlay-parser';
@@ -83,6 +91,14 @@ type TokenVerdict =
   | { ok: true; claims: Record<string, unknown> }
   | { ok: false; reason: string; tokenFailure: BundleTokenFailure };
 
+/** The push token claim that binds it to the body it came with: {@link pushBodyDigest} of that body. */
+export const PUSH_BODY_DIGEST_CLAIM = 'body_sha256';
+
+/** The `body_sha256` claim a push token carries for `body`: the base64url SHA-256 of its exact bytes, unpadded. */
+export function pushBodyDigest(body: string | Uint8Array): string {
+  return sha256Base64url(body);
+}
+
 /** The key prefix of the push token `jti`s a shared replay store keeps, followed by the source's audience. */
 const PUSH_JTI_NAMESPACE = 'frontmcp:skilled-openapi:push-jti';
 
@@ -143,7 +159,8 @@ function isUsableSigningKey(key: unknown): boolean {
  * polls are skipped, never queued. A poll that fails is logged and reported to
  * the {@link SaasPullSource.onPullFailure} listeners. With `enableWebhook` the
  * source also takes pushed bundles ({@link SaasPullSource.verifyPushToken}):
- * the plugin serves them at `POST /__skilled_openapi/push`.
+ * the plugin serves them at `POST /__skilled_openapi/push`, and a push token
+ * with a `body_sha256` claim is good only for the body it was issued for.
  *
  * Before every pull the pinned `authToken` is verified: it must be a JWT signed
  * by a key in the issuer's JWKS (`jwksUrl`), with `iss` equal to
@@ -170,6 +187,7 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
   private readonly replayGuard?: WebhookReplayGuard;
   private pushSigningKeys?: { keys: unknown[]; fetchedAt: number };
   private pushSigningKeysLoading?: Promise<unknown[]>;
+  private warnedOfUnboundPushToken = false;
 
   constructor(
     private readonly options: SaasSourceOptions,
@@ -201,11 +219,12 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
 
   /**
    * Check the token of a pushed bundle: by the rules the pull token passes (a key in `jwksUrl`, `iss`, `aud`,
-   * `resource`, expiry), then by the replay guard, so its `iat` must be within five minutes and its `jti` unused by
-   * every instance sharing the replay store. Throws {@link SaasPushRefusedError}, or {@link SaasJwksUnavailableError}
-   * when the JWKS can't be read.
+   * `resource`, expiry), then against `body`, the exact bytes of the request body ({@link PUSH_BODY_DIGEST_CLAIM}),
+   * then by the replay guard, so its `iat` must be within five minutes and its `jti` unused by every instance sharing
+   * the replay store. A token refused for its body leaves its `jti` unused. Throws {@link SaasPushRefusedError}, or
+   * {@link SaasJwksUnavailableError} when the JWKS can't be read.
    */
-  async verifyPushToken(token: string): Promise<void> {
+  async verifyPushToken(token: string, body: Uint8Array): Promise<void> {
     if (!this.replayGuard) {
       throw new SaasPushRefusedError(
         'invalid-token',
@@ -218,9 +237,37 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
     if (typeof iat !== 'number' || typeof jti !== 'string') {
       throw new SaasPushRefusedError('invalid-token', 'a push token needs "iat" and "jti" claims', 'missing_claim');
     }
+    this.checkPushBody(verdict.claims[PUSH_BODY_DIGEST_CLAIM], body);
     const replay = await this.replayGuard.check({ timestampMs: iat * 1000, nonce: jti });
     if (!replay.ok) {
       throw new SaasPushRefusedError(pushRefusalFor(replay.code), `its "jti" or "iat" claim: ${replay.reason}`);
+    }
+  }
+
+  /** Refuse a push whose body isn't the one its token was issued for, or, with `requirePushBodyDigest`, unbound. */
+  private checkPushBody(claimedDigest: unknown, body: Uint8Array): void {
+    if (claimedDigest === undefined) {
+      if (this.options.requirePushBodyDigest) {
+        throw new SaasPushRefusedError(
+          'invalid-token',
+          `a push token needs a "${PUSH_BODY_DIGEST_CLAIM}" claim (requirePushBodyDigest is on)`,
+          'missing_claim',
+        );
+      }
+      if (!this.warnedOfUnboundPushToken) {
+        this.warnedOfUnboundPushToken = true;
+        this.logger.warn(
+          `[saas-source] ${this.id}: a push token carries no "${PUSH_BODY_DIGEST_CLAIM}" claim, so it isn't bound to its body; set requirePushBodyDigest to refuse such tokens`,
+        );
+      }
+      return;
+    }
+    if (claimedDigest !== pushBodyDigest(body)) {
+      throw new SaasPushRefusedError(
+        'invalid-token',
+        `its "${PUSH_BODY_DIGEST_CLAIM}" claim is not the SHA-256 of the pushed body`,
+        'body_mismatch',
+      );
     }
   }
 

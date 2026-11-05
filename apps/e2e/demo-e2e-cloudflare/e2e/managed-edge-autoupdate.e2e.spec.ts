@@ -1,5 +1,6 @@
 // A managed @frontmcp/edge Worker in workerd: pull over https, Cron refresh (also as an isolate's first event), token
-// rejection, workflows and pushes, older ones refused, and a push token replayed to another replica refused. A Cron run
+// rejection, workflows and pushes, older ones refused, a push token replayed to another replica refused, and one bound
+// to another body (body_sha256) refused. A Cron run
 // whose bundle is refused, or that serves the cached bundle, fails, and /readyz says the bundle served is stale.
 import { base64urlEncode, randomBytes } from '@frontmcp/utils';
 
@@ -279,6 +280,25 @@ describe('a managed edge Worker on workerd', () => {
       expect(servedAfterReplay).toEqual(servedBeforeReplay);
       expect(fresh.status).toBe(200);
       expect(await replicaSkills()).toEqual(['refunds@11.0.0']);
+    });
+
+    it('is refused, with 401, when its token was issued for another body: the body it was issued for still applies', async () => {
+      const issuedFor = JSON.stringify(signer.sign(billingBundle('12.0.0', ['invoices', 'reports'])));
+      const otherBundle = JSON.stringify(signer.sign(billingBundle('12.0.0', ['refunds'])));
+      const token = await issuer.pushTokenFor(issuedFor);
+
+      const swapped = await worker.push(`Bearer ${token}`, otherBundle);
+      const servedAfterSwap = await servedSkills();
+      const genuine = await worker.push(`Bearer ${token}`, issuedFor);
+
+      expect(swapped.status).toBe(401);
+      expect(swapped.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+      expect(await swapped.json()).toEqual({ error: 'invalid_token', error_description: 'the push token was refused' });
+      expect(servedAfterSwap).toEqual(['refunds']);
+      expect(worker.log).toContain('push refused (body_mismatch)');
+      expect(genuine.status).toBe(200);
+      expect(await servedSkills()).toEqual(['invoices', 'reports']);
+      expect(await worker.cachedBundleVersion()).toBe('12.0.0');
     });
   });
 });

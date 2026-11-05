@@ -173,8 +173,8 @@ counts as an ordinary pull failure, so the cache fallback still applies.
 The log and `/readyz` name the check that failed, as `tokenFailure`: `expired`,
 `not_yet_valid`, `wrong_issuer`, `wrong_audience`, `unknown_key` (a `kid` the
 JWKS doesn't publish), `bad_signature`, `unsupported_algorithm`,
-`missing_claim`, `malformed`, or `jwks_unavailable` (not checked: the JWKS
-couldn't be read). A pull logs `[saas-source] saas:<endpoint>: pull token check
+`missing_claim`, `malformed`, `body_mismatch` (a push token issued for another
+body), or `jwks_unavailable` (not checked: the JWKS couldn't be read). A pull logs `[saas-source] saas:<endpoint>: pull token check
 failed (expired)` at warn level, never the token; the check has it in
 `details.lastSync.tokenFailure`, and a failed Cron run's error says
 `the bundle pull failed (token check: expired): …`. The tools'
@@ -196,8 +196,30 @@ HTTP flow). The request:
   `jwksUrl`, `iss`, `aud`, `resource`, `exp`), and it must also carry a `jti`
   of 8 or more characters that no push used and an `iat` within five minutes,
   so the pull token, issued long before, can't push;
+- a `body_sha256` claim in that token: the base64url SHA-256, without
+  padding, of the exact bytes of the request body (not the bundle's
+  `integrity.digest`), so a captured token can't carry another bundle;
 - the body: the bundle as JSON, checked as a pulled bundle is (schema, then
   signature against `trustedKeys` unless `requireSignature: false`).
+
+The Worker hashes the bytes it received, not a re-serialization of the JSON:
+any other body, even the same bundle with other whitespace, answers `401`, and
+the log says `[saas-source] push refused (body_mismatch): …`. The refused
+token's `jti` stays unused, so the push it was issued for still applies. A
+token without `body_sha256` is accepted, with one warning per isolate, so a
+SaaS that doesn't set it yet keeps working; `managed.requirePushBodyDigest:
+true` refuses it (logged as `missing_claim`). On Node, the `saas` source takes
+the same `requirePushBodyDigest` option. A sender computes the claim with
+`pushBodyDigest(body)` from `@frontmcp/adapters/skills`, over the string it
+sends:
+
+```ts
+import { PUSH_BODY_DIGEST_CLAIM, pushBodyDigest } from '@frontmcp/adapters/skills';
+
+const body = JSON.stringify(signedBundle);
+const claims = { jti: randomUUID(), [PUSH_BODY_DIGEST_CLAIM]: pushBodyDigest(body) };
+// sign `claims` as a push token (iss, aud, iat, a short exp), then POST `body` with it
+```
 
 | Answer | When                                                                                       |
 | ------ | ------------------------------------------------------------------------------------------ |
