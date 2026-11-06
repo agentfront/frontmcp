@@ -28,6 +28,7 @@ import {
   type DirectMcpServer,
   type FrontMcpContext,
 } from '@frontmcp/sdk';
+import { createStorage } from '@frontmcp/utils';
 
 import { type CredentialResolveOptions } from '../executor/credential-resolver';
 import { SkilledOpenApiCredentialResolver, SkilledOpenApiPlugin } from '../index';
@@ -106,9 +107,9 @@ function respondAsBillingApi(url: string | URL | Request, init?: RequestInit): R
 }
 
 /** The auth providers vault, built per request for the caller as the SDK builds `this.authProviders`. */
-function authProvidersVault() {
+async function authProvidersVault() {
   const baseVault = new InMemoryAuthorizationVault();
-  const vault = new AuthProvidersVault(baseVault);
+  const vault = new AuthProvidersVault(await createStorage({ type: 'memory' }));
   const registry = new AuthProvidersRegistry({
     providers: [
       {
@@ -167,7 +168,7 @@ beforeAll(async () => {
         credentials: { 'reports-token': 'reports-token' },
       }),
     ],
-    providers: [authProvidersVault()],
+    providers: [await authProvidersVault()],
     logging: { level: LogLevel.Off },
   } as never);
   await server.listTools({ authContext: ALICE });
@@ -286,7 +287,7 @@ describe('execute_action on a binding the authProviders option maps', () => {
           exposeOperationsAsInternalTools: false,
         }),
       ],
-      providers: [authProvidersVault()],
+      providers: [await authProvidersVault()],
       logging: { level: LogLevel.Off },
     } as never);
     try {

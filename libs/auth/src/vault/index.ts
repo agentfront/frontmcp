@@ -49,7 +49,12 @@ export { AuthProvidersRegistry, AUTH_PROVIDERS_REGISTRY } from './auth-providers
 export type { NormalizedProviderConfig } from './auth-providers.registry';
 
 // Vault
-export { AuthProvidersVault, AUTH_PROVIDERS_VAULT } from './auth-providers.vault';
+export {
+  AuthProvidersVault,
+  AUTH_PROVIDERS_VAULT,
+  UNIDENTIFIED_SESSION_PREFIX,
+  type AuthProvidersVaultStorageOptions,
+} from './auth-providers.vault';
 
 // Credential Loaders
 export { EagerCredentialLoader } from './credential-loaders/eager-loader';

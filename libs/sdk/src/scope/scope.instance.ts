@@ -265,7 +265,8 @@ export class Scope extends ScopeEntry {
 
     if (this.metadata.authProvidersVault) {
       const { registerAuthProvidersVault } = await import('../auth/vault/auth-providers.providers.js');
-      await registerAuthProvidersVault(scopeProviders, this.metadata.authProvidersVault);
+      const closeVaultStorage = await registerAuthProvidersVault(scopeProviders, this.metadata.authProvidersVault);
+      if (closeVaultStorage) this.onDispose(closeVaultStorage);
     }
 
     const httpServing = this.directOnly ? undefined : await import('./http-scope.helper.js');
