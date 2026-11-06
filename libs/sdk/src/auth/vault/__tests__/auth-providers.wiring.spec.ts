@@ -5,7 +5,10 @@ import {
   CredentialProviderAlreadyRegisteredError,
   type CredentialFactoryContext,
   type CredentialProviderConfig,
+  type CredentialScope,
 } from '@frontmcp/auth';
+import { z } from '@frontmcp/lazy-zod';
+import { MemoryStorageAdapter } from '@frontmcp/utils';
 
 import { App, LogLevel, Tool, ToolContext } from '../../../common';
 import { type DirectMcpServer } from '../../../direct/direct.types';
@@ -35,7 +38,15 @@ class ReadJiraTool extends ToolContext {
   }
 }
 
-@App({ id: 'desk', name: 'Desk', tools: [ReadGithubTool, ReadJiraTool] })
+@Tool({ name: 'read_token', inputSchema: { provider: z.string() } })
+class ReadTokenTool extends ToolContext {
+  async execute({ provider }: { provider: string }) {
+    const resolved = await this.authProviders.get(provider);
+    return { token: resolved?.credential.type === 'bearer' ? resolved.credential.token : null };
+  }
+}
+
+@App({ id: 'desk', name: 'Desk', tools: [ReadGithubTool, ReadJiraTool, ReadTokenTool] })
 class DeskApp {}
 
 const factoryCalls: CredentialFactoryContext[] = [];
@@ -121,5 +132,92 @@ describe('authProvidersVault at startup', () => {
     await expect(serverWith({ authProvidersVault: { providers: [{ ...github, kind: 'vault' }] } })).rejects.toThrow(
       /kind/,
     );
+  });
+});
+
+describe('credentials of authProvidersVault providers', () => {
+  const acquired: string[] = [];
+
+  function countingProvider(name: string, scope: CredentialScope): CredentialProviderConfig {
+    return {
+      name,
+      scope,
+      loading: 'lazy',
+      factory: async () => {
+        acquired.push(name);
+        return { type: 'bearer', token: `${name}-${acquired.length}` };
+      },
+    };
+  }
+
+  const caller = (sub: string, sessionId: string) => ({ authContext: { sessionId, user: { sub } } });
+
+  async function tokenOf(provider: string, options: ReturnType<typeof caller>): Promise<unknown> {
+    const result = await server.callTool('read_token', { provider }, options);
+    return (result.structuredContent as { token: unknown }).token;
+  }
+
+  let server: DirectMcpServer;
+
+  beforeAll(async () => {
+    server = await serverWith({
+      authProvidersVault: {
+        providers: [
+          countingProvider('openai', 'global'),
+          countingProvider('jira', 'user'),
+          countingProvider('notes', 'session'),
+        ],
+      },
+    });
+  });
+
+  afterAll(async () => server.dispose());
+
+  beforeEach(() => {
+    acquired.length = 0;
+  });
+
+  it("acquire a user's credential once for that user's requests, in any session", async () => {
+    const first = await tokenOf('jira', caller('alice', 'alice-session-1'));
+    const second = await tokenOf('jira', caller('alice', 'alice-session-2'));
+    const bobs = await tokenOf('jira', caller('bob', 'bob-session'));
+
+    expect({ first, second, bobs }).toEqual({ first: 'jira-1', second: 'jira-1', bobs: 'jira-2' });
+    expect(acquired).toEqual(['jira', 'jira']);
+  });
+
+  it('acquire a global credential once for every caller', async () => {
+    const alices = await tokenOf('openai', caller('alice', 'alice-session-1'));
+    const bobs = await tokenOf('openai', caller('bob', 'bob-session'));
+
+    expect({ alices, bobs }).toEqual({ alices: 'openai-1', bobs: 'openai-1' });
+    expect(acquired).toEqual(['openai']);
+  });
+
+  it("reuse a session's credential within that session, never in another", async () => {
+    const first = await tokenOf('notes', caller('alice', 'session-a'));
+    const again = await tokenOf('notes', caller('alice', 'session-a'));
+    const otherSession = await tokenOf('notes', caller('alice', 'session-b'));
+
+    expect({ first, again, otherSession }).toEqual({ first: 'notes-1', again: 'notes-1', otherSession: 'notes-2' });
+  });
+
+  it('keep no session credential of an anonymous caller without a verified session', async () => {
+    const writes = jest.spyOn(MemoryStorageAdapter.prototype, 'set');
+    const sessionWrites = () =>
+      writes.mock.calls.filter(([key]) => String(key).startsWith('authproviders:session:')).length;
+    const anonymous = caller('anon:visitor', '__stateless__');
+
+    try {
+      const first = await tokenOf('notes', anonymous);
+      const second = await tokenOf('notes', anonymous);
+      const anonymousWrites = sessionWrites();
+      await tokenOf('notes', caller('alice', 'session-c'));
+
+      expect({ first, second }).toEqual({ first: 'notes-1', second: 'notes-2' });
+      expect({ anonymousWrites, verifiedWrites: sessionWrites() }).toEqual({ anonymousWrites: 0, verifiedWrites: 1 });
+    } finally {
+      writes.mockRestore();
+    }
   });
 });

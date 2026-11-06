@@ -6,15 +6,17 @@
  * lazy loading, and header generation.
  */
 
-import { AuthProvidersVault } from '../auth-providers.vault';
+import { MAX_TTL_SECONDS, MemoryStorageAdapter } from '@frontmcp/utils';
+
+import type { AuthLogger } from '../../common/auth-logger.interface';
+import { AuthInvalidInputError, CredentialStorageError } from '../../errors/auth-internal.errors';
+import type { AppCredential, AuthorizationVault, Credential } from '../../session';
 import { AuthProvidersAccessorImpl } from '../auth-providers.accessor.impl';
 import { AuthProvidersRegistry } from '../auth-providers.registry';
+import type { CredentialFactoryContext, CredentialScope, ResolvedCredential } from '../auth-providers.types';
+import { AuthProvidersVault, UNIDENTIFIED_SESSION_PREFIX } from '../auth-providers.vault';
 import { CredentialCache } from '../credential-cache';
 import { LazyCredentialLoader } from '../credential-loaders/lazy-loader';
-import { AuthInvalidInputError, CredentialStorageError } from '../../errors/auth-internal.errors';
-import type { AuthorizationVault, Credential, AppCredential } from '../../session';
-import type { CredentialFactoryContext, ResolvedCredential, CredentialScope } from '../auth-providers.types';
-import type { AuthLogger } from '../../common/auth-logger.interface';
 
 // ============================================
 // Helpers
@@ -30,6 +32,12 @@ function mockLogger(): AuthLogger {
     error: jest.fn(),
     debug: jest.fn(),
   };
+}
+
+async function memoryStorage(): Promise<MemoryStorageAdapter> {
+  const storage = new MemoryStorageAdapter({ enableSweeper: false });
+  await storage.connect();
+  return storage;
 }
 
 /**
@@ -143,305 +151,270 @@ function mockContext(overrides: Partial<CredentialFactoryContext> = {}): Credent
 // ============================================
 
 describe('AuthProvidersVault', () => {
+  let storage: MemoryStorageAdapter;
   let vault: AuthProvidersVault;
-  let baseVault: jest.Mocked<AuthorizationVault>;
   let logger: AuthLogger;
 
-  beforeEach(() => {
-    baseVault = mockBaseVault();
+  beforeEach(async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(1_000_000);
+    storage = await memoryStorage();
     logger = mockLogger();
-    vault = new AuthProvidersVault(baseVault, 'authproviders:', logger);
+    vault = new AuthProvidersVault(storage, { logger });
   });
 
-  // --------------------------------------------------
-  // Constructor
-  // --------------------------------------------------
-
-  describe('constructor', () => {
-    it('should create a vault with default namespace', () => {
-      const v = new AuthProvidersVault(baseVault);
-      // Verify it works by calling buildVaultKey indirectly
-      expect(v).toBeDefined();
-    });
-
-    it('should create a vault with custom namespace', () => {
-      const v = new AuthProvidersVault(baseVault, 'custom:');
-      expect(v).toBeDefined();
-    });
-
-    it('should create a vault without logger', () => {
-      const v = new AuthProvidersVault(baseVault, 'ns:');
-      expect(v).toBeDefined();
-    });
+  afterEach(async () => {
+    await storage.disconnect();
+    jest.useRealTimers();
   });
-
-  // --------------------------------------------------
-  // storeCredential
-  // --------------------------------------------------
 
   describe('storeCredential', () => {
-    it('should store a credential with session scope', async () => {
+    it('keeps a credential for a later read', async () => {
       const cred = bearerCredential('tok-1');
-
       await vault.storeCredential('sess-1', 'github', cred, 'session');
 
-      expect(baseVault.addAppCredential).toHaveBeenCalledTimes(1);
-      const [vaultKey, appCred] = baseVault.addAppCredential.mock.calls[0];
-      expect(vaultKey).toBe('authproviders:session:sess-1');
-      expect(appCred.appId).toBe('authproviders:');
-      expect(appCred.providerId).toBe('github');
-      expect(appCred.credential).toBe(cred);
-      expect(appCred.isValid).toBe(true);
-      expect(appCred.acquiredAt).toBeDefined();
+      jest.advanceTimersByTime(30 * 60_000);
+
+      expect(await vault.getCredential('sess-1', 'github', 'session')).toEqual(cred);
     });
 
-    it('should store a credential with global scope', async () => {
-      const cred = bearerCredential('tok-global');
+    it('records the provider, the namespace and when it was acquired', async () => {
+      await vault.storeCredential('sess-1', 'github', bearerCredential('tok-1'), 'global');
 
-      await vault.storeCredential('sess-1', 'openai', cred, 'global');
-
-      const [vaultKey] = baseVault.addAppCredential.mock.calls[0];
-      expect(vaultKey).toBe('authproviders:global');
+      expect(await vault.getAllCredentials('sess-1', 'global')).toEqual([
+        {
+          appId: 'authproviders:',
+          providerId: 'github',
+          credential: bearerCredential('tok-1'),
+          acquiredAt: 1_000_000,
+          isValid: true,
+        },
+      ]);
     });
 
-    it('should store a credential with user scope', async () => {
-      const cred = bearerCredential('tok-user');
+    it('keeps a credential without an expiry for an hour by default', async () => {
+      await vault.storeCredential('sess-1', 'stripe', apiKeyCredential(), 'global');
 
-      await vault.storeCredential('sess-1', 'jira', cred, 'user', 'user-42');
-
-      const [vaultKey] = baseVault.addAppCredential.mock.calls[0];
-      expect(vaultKey).toBe('authproviders:user:user-42');
+      expect(await storage.ttl('authproviders:global:stripe')).toBe(3600);
+      jest.advanceTimersByTime(3600_000);
+      expect(await vault.getCredential('sess-1', 'stripe', 'global')).toBeNull();
+      expect(await storage.keys('*')).toEqual([]);
     });
 
-    it('should throw AuthInvalidInputError when user scope lacks userId', async () => {
-      const cred = bearerCredential();
+    it('keeps a credential without an expiry for defaultCacheTtl', async () => {
+      const shortVault = new AuthProvidersVault(storage, { defaultCacheTtl: 60_000 });
+      await shortVault.storeCredential('sess-1', 'stripe', apiKeyCredential(), 'global');
 
-      await expect(vault.storeCredential('sess-1', 'provider', cred, 'user')).rejects.toThrow(AuthInvalidInputError);
+      jest.advanceTimersByTime(59_000);
+      expect(await shortVault.getCredential('sess-1', 'stripe', 'global')).toEqual(apiKeyCredential());
+      jest.advanceTimersByTime(1_000);
+      expect(await shortVault.getCredential('sess-1', 'stripe', 'global')).toBeNull();
     });
 
-    it('should extract expiry from OAuth credential', async () => {
-      const cred = oauthCredential('tok', { expiresAt: 9999999 });
+    it('keeps a credential without an expiry for the cacheTtl it is given', async () => {
+      await vault.storeCredential('sess-1', 'stripe', apiKeyCredential(), 'global', undefined, 30_000);
 
-      await vault.storeCredential('sess-1', 'google', cred, 'session');
-
-      const [, appCred] = baseVault.addAppCredential.mock.calls[0];
-      expect(appCred.expiresAt).toBe(9999999);
+      expect(await storage.ttl('authproviders:global:stripe')).toBe(30);
     });
 
-    it('should set undefined expiresAt for credentials without expiry', async () => {
-      const cred = apiKeyCredential();
+    it('falls back to the default when defaultCacheTtl or cacheTtl is 0', async () => {
+      const zeroVault = new AuthProvidersVault(storage, { defaultCacheTtl: 0 });
+      await zeroVault.storeCredential('sess-1', 'stripe', apiKeyCredential(), 'global', undefined, 0);
 
-      await vault.storeCredential('sess-1', 'stripe', cred, 'session');
-
-      const [, appCred] = baseVault.addAppCredential.mock.calls[0];
-      expect(appCred.expiresAt).toBeUndefined();
+      expect(await storage.ttl('authproviders:global:stripe')).toBe(3600);
     });
 
-    it('should log debug message on success', async () => {
+    it('keeps a credential with an expiry until it expires, whatever cacheTtl says', async () => {
+      const expiresAt = Date.now() + 2 * 3600_000;
+      await vault.storeCredential(
+        'sess-1',
+        'google',
+        oauthCredential('tok', { expiresAt }),
+        'global',
+        undefined,
+        60_000,
+      );
+
+      expect(await storage.ttl('authproviders:global:google')).toBe(7200);
+      jest.advanceTimersByTime(2 * 3600_000 - 1);
+      expect(await vault.getCredential('sess-1', 'google', 'global')).not.toBeNull();
+      jest.advanceTimersByTime(1);
+      expect(await vault.getCredential('sess-1', 'google', 'global')).toBeNull();
+    });
+
+    it('keeps a credential that expires beyond the longest TTL for the longest TTL', async () => {
+      const expiresAt = Date.now() + (MAX_TTL_SECONDS + 60) * 1000;
+      await vault.storeCredential('sess-1', 'google', bearerCredential('tok', expiresAt), 'global');
+
+      expect(await storage.ttl('authproviders:global:google')).toBe(MAX_TTL_SECONDS);
+    });
+
+    it('does not keep an expired credential, and drops the one it replaces', async () => {
+      await vault.storeCredential('sess-1', 'github', bearerCredential('live'), 'global');
+      await vault.storeCredential('sess-1', 'github', bearerCredential('dead', Date.now() - 1), 'global');
+
+      expect(await vault.getCredential('sess-1', 'github', 'global')).toBeNull();
+      expect(await storage.keys('*')).toEqual([]);
+    });
+
+    it('does not keep a session credential of a caller without a verified session', async () => {
+      const unidentified = `${UNIDENTIFIED_SESSION_PREFIX}request-1`;
+
+      await vault.storeCredential(unidentified, 'github', bearerCredential(), 'session');
+
+      expect(await storage.keys('*')).toEqual([]);
+      expect(await vault.getCredential(unidentified, 'github', 'session')).toBeNull();
+    });
+
+    it('keeps a global credential acquired by a caller without a verified session', async () => {
+      await vault.storeCredential(`${UNIDENTIFIED_SESSION_PREFIX}request-1`, 'openai', bearerCredential(), 'global');
+
+      expect(await vault.getCredential(`${UNIDENTIFIED_SESSION_PREFIX}request-2`, 'openai', 'global')).toEqual(
+        bearerCredential(),
+      );
+    });
+
+    it('uses the namespace it is given', async () => {
+      await new AuthProvidersVault(storage, { namespace: 'custom:' }).storeCredential(
+        'sess-1',
+        'github',
+        bearerCredential(),
+        'global',
+      );
+
+      expect(await storage.keys('*')).toEqual(['custom:global:github']);
+    });
+
+    it('logs what it stored', async () => {
       await vault.storeCredential('sess-1', 'github', bearerCredential(), 'session');
 
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('github'));
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('session'));
     });
 
-    it('should log warning and re-throw on storage error', async () => {
-      const error = new Error('Storage failed');
-      baseVault.addAppCredential.mockRejectedValue(error);
+    it('logs and re-throws a storage error', async () => {
+      jest.spyOn(storage, 'set').mockRejectedValue(new Error('Storage failed'));
 
       await expect(vault.storeCredential('sess-1', 'github', bearerCredential(), 'session')).rejects.toThrow(
         'Storage failed',
       );
-
       expect(logger.warn).toHaveBeenCalled();
+    });
+
+    it('throws AuthInvalidInputError for a user credential without a user id', async () => {
+      await expect(vault.storeCredential('sess-1', 'jira', bearerCredential(), 'user')).rejects.toThrow(
+        AuthInvalidInputError,
+      );
+    });
+
+    it('throws AuthInvalidInputError for an unknown scope', async () => {
+      await expect(
+        vault.storeCredential('sess-1', 'prov', bearerCredential(), 'unknown' as CredentialScope),
+      ).rejects.toThrow(AuthInvalidInputError);
     });
   });
 
-  // --------------------------------------------------
-  // getCredential
-  // --------------------------------------------------
+  describe('scopes', () => {
+    it("keeps user A's credential from user B", async () => {
+      await vault.storeCredential('sess-1', 'jira', bearerCredential('alice-tok'), 'user', 'alice');
+
+      expect(await vault.getCredential('sess-1', 'jira', 'user', 'bob')).toBeNull();
+      expect(await vault.getCredential('sess-2', 'jira', 'user', 'alice')).toEqual(bearerCredential('alice-tok'));
+    });
+
+    it("keeps session X's credential from session Y", async () => {
+      await vault.storeCredential('session-x', 'github', bearerCredential('x-tok'), 'session', 'alice');
+
+      expect(await vault.getCredential('session-y', 'github', 'session', 'alice')).toBeNull();
+      expect(await vault.getCredential('session-x', 'github', 'session', 'bob')).toEqual(bearerCredential('x-tok'));
+    });
+
+    it('shares a global credential between sessions and users', async () => {
+      await vault.storeCredential('sess-1', 'openai', bearerCredential('shared'), 'global', 'alice');
+
+      expect(await vault.getCredential('sess-2', 'openai', 'global', 'bob')).toEqual(bearerCredential('shared'));
+      expect(await vault.getCredential('sess-3', 'openai', 'global')).toEqual(bearerCredential('shared'));
+    });
+
+    it("never lets one user id reach another user's keys", async () => {
+      await vault.storeCredential('sess-1', 'github', bearerCredential('a-b-tok'), 'user', 'a:b');
+
+      expect(await vault.getCredential('sess-1', 'b:github', 'user', 'a')).toBeNull();
+      expect(await vault.getAllCredentials('sess-1', 'user', 'a')).toEqual([]);
+      expect(await vault.getAllCredentials('sess-1', 'user', 'a*')).toEqual([]);
+    });
+  });
 
   describe('getCredential', () => {
-    it('should return credential when found and valid', async () => {
-      const cred = bearerCredential('found-tok');
-      baseVault.getCredential.mockResolvedValue({
-        appId: 'authproviders:',
-        providerId: 'github',
-        credential: cred,
-        acquiredAt: Date.now(),
-        isValid: true,
-      } as AppCredential);
-
-      const result = await vault.getCredential('sess-1', 'github', 'session');
-
-      expect(result).toBe(cred);
-      expect(baseVault.getCredential).toHaveBeenCalledWith('authproviders:session:sess-1', 'authproviders:', 'github');
+    it('answers null for a credential it does not have', async () => {
+      expect(await vault.getCredential('sess-1', 'nonexistent', 'session')).toBeNull();
     });
 
-    it('should return null when credential is not found', async () => {
-      baseVault.getCredential.mockResolvedValue(null);
-
-      const result = await vault.getCredential('sess-1', 'nonexistent', 'session');
-
-      expect(result).toBeNull();
-    });
-
-    it('should return null when credential is marked invalid', async () => {
-      baseVault.getCredential.mockResolvedValue({
-        appId: 'authproviders:',
-        providerId: 'github',
-        credential: bearerCredential(),
-        acquiredAt: Date.now(),
-        isValid: false,
-      } as AppCredential);
-
-      const result = await vault.getCredential('sess-1', 'github', 'session');
-
-      expect(result).toBeNull();
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('invalid'));
-    });
-
-    it('should return null when credential has expired', async () => {
-      const pastTime = Date.now() - 1000;
-      baseVault.getCredential.mockResolvedValue({
-        appId: 'authproviders:',
-        providerId: 'github',
-        credential: bearerCredential('tok', pastTime),
-        acquiredAt: Date.now() - 5000,
-        isValid: true,
-        expiresAt: pastTime,
-      } as AppCredential);
-
-      const result = await vault.getCredential('sess-1', 'github', 'session');
-
-      expect(result).toBeNull();
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('expired'));
-    });
-
-    it('should return credential when expiresAt is in the future', async () => {
-      const futureTime = Date.now() + 60000;
-      const cred = bearerCredential('tok', futureTime);
-      baseVault.getCredential.mockResolvedValue({
-        appId: 'authproviders:',
-        providerId: 'github',
-        credential: cred,
-        acquiredAt: Date.now(),
-        isValid: true,
-        expiresAt: futureTime,
-      } as AppCredential);
-
-      const result = await vault.getCredential('sess-1', 'github', 'session');
-
-      expect(result).toBe(cred);
-    });
-
-    it('should use global scope key', async () => {
-      baseVault.getCredential.mockResolvedValue(null);
-
-      await vault.getCredential('sess-1', 'prov', 'global');
-
-      expect(baseVault.getCredential).toHaveBeenCalledWith('authproviders:global', 'authproviders:', 'prov');
-    });
-
-    it('should use user scope key with userId', async () => {
-      baseVault.getCredential.mockResolvedValue(null);
-
-      await vault.getCredential('sess-1', 'prov', 'user', 'uid-1');
-
-      expect(baseVault.getCredential).toHaveBeenCalledWith('authproviders:user:uid-1', 'authproviders:', 'prov');
-    });
-
-    it('should throw AuthInvalidInputError for user scope without userId', async () => {
+    it('throws AuthInvalidInputError for a user credential without a user id', async () => {
       await expect(vault.getCredential('sess-1', 'prov', 'user')).rejects.toThrow(AuthInvalidInputError);
     });
 
-    it('should wrap non-CredentialStorageError in CredentialStorageError', async () => {
-      baseVault.getCredential.mockRejectedValue(new Error('generic error'));
+    it('wraps a storage error in CredentialStorageError', async () => {
+      jest.spyOn(storage, 'get').mockRejectedValue(new Error('generic error'));
 
       await expect(vault.getCredential('sess-1', 'prov', 'session')).rejects.toThrow(CredentialStorageError);
       expect(logger.warn).toHaveBeenCalled();
     });
 
-    it('should re-throw CredentialStorageError as-is', async () => {
+    it('re-throws a CredentialStorageError as it is', async () => {
       const storageError = new CredentialStorageError('storage problem');
-      baseVault.getCredential.mockRejectedValue(storageError);
+      jest.spyOn(storage, 'get').mockRejectedValue(storageError);
 
       await expect(vault.getCredential('sess-1', 'prov', 'session')).rejects.toThrow(storageError);
     });
 
-    it('should handle non-Error thrown values', async () => {
-      baseVault.getCredential.mockRejectedValue('string-error');
+    it('wraps a thrown value that is not an Error', async () => {
+      jest.spyOn(storage, 'get').mockRejectedValue('string-error');
 
       await expect(vault.getCredential('sess-1', 'prov', 'session')).rejects.toThrow(CredentialStorageError);
     });
   });
 
-  // --------------------------------------------------
-  // removeCredential
-  // --------------------------------------------------
-
   describe('removeCredential', () => {
-    it('should remove credential via baseVault', async () => {
-      await vault.removeCredential('sess-1', 'github', 'session');
+    it('removes a credential', async () => {
+      await vault.storeCredential('sess-1', 'github', bearerCredential(), 'user', 'alice');
 
-      expect(baseVault.removeAppCredential).toHaveBeenCalledWith(
-        'authproviders:session:sess-1',
-        'authproviders:',
-        'github',
-      );
-    });
+      await vault.removeCredential('sess-1', 'github', 'user', 'alice');
 
-    it('should log debug on success', async () => {
-      await vault.removeCredential('sess-1', 'github', 'session');
-
+      expect(await vault.getCredential('sess-1', 'github', 'user', 'alice')).toBeNull();
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Removed'));
     });
 
-    it('should swallow errors and log warning', async () => {
-      baseVault.removeAppCredential.mockRejectedValue(new Error('remove failed'));
+    it('logs a storage error instead of throwing it', async () => {
+      jest.spyOn(storage, 'delete').mockRejectedValue(new Error('remove failed'));
 
-      // Should not throw
       await vault.removeCredential('sess-1', 'github', 'session');
 
       expect(logger.warn).toHaveBeenCalled();
     });
-
-    it('should use global scope key', async () => {
-      await vault.removeCredential('sess-1', 'prov', 'global');
-
-      expect(baseVault.removeAppCredential).toHaveBeenCalledWith('authproviders:global', 'authproviders:', 'prov');
-    });
-
-    it('should use user scope key', async () => {
-      await vault.removeCredential('sess-1', 'prov', 'user', 'uid-1');
-
-      expect(baseVault.removeAppCredential).toHaveBeenCalledWith('authproviders:user:uid-1', 'authproviders:', 'prov');
-    });
   });
 
-  // --------------------------------------------------
-  // invalidateCredential
-  // --------------------------------------------------
-
   describe('invalidateCredential', () => {
-    it('should invalidate credential via baseVault', async () => {
+    it('keeps the credential, marked invalid with the reason, and stops serving it', async () => {
+      await vault.storeCredential('sess-1', 'github', bearerCredential(), 'session');
+
       await vault.invalidateCredential('sess-1', 'github', 'session', 'token revoked');
 
-      expect(baseVault.invalidateCredential).toHaveBeenCalledWith(
-        'authproviders:session:sess-1',
-        'authproviders:',
-        'github',
-        'token revoked',
-      );
+      expect(await vault.getCredential('sess-1', 'github', 'session')).toBeNull();
+      expect(await vault.getAllCredentials('sess-1', 'session')).toEqual([
+        expect.objectContaining({ providerId: 'github', isValid: false, invalidReason: 'token revoked' }),
+      ]);
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('marked as invalid'));
     });
 
-    it('should log debug on success', async () => {
+    it('does nothing for a credential it does not have', async () => {
       await vault.invalidateCredential('sess-1', 'github', 'session', 'expired');
 
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Invalidated'));
+      expect(await storage.keys('*')).toEqual([]);
     });
 
-    it('should swallow errors and log warning', async () => {
-      baseVault.invalidateCredential.mockRejectedValue(new Error('invalidate failed'));
+    it('logs a storage error instead of throwing it', async () => {
+      jest.spyOn(storage, 'get').mockRejectedValue(new Error('invalidate failed'));
 
       await vault.invalidateCredential('sess-1', 'github', 'session', 'reason');
 
@@ -449,176 +422,96 @@ describe('AuthProvidersVault', () => {
     });
   });
 
-  // --------------------------------------------------
-  // refreshOAuthCredential
-  // --------------------------------------------------
-
   describe('refreshOAuthCredential', () => {
-    it('should refresh via baseVault', async () => {
-      const tokens = { accessToken: 'new-tok', refreshToken: 'new-ref', expiresAt: 99999 };
-
-      await vault.refreshOAuthCredential('sess-1', 'google', 'session', tokens);
-
-      expect(baseVault.refreshOAuthCredential).toHaveBeenCalledWith(
-        'authproviders:session:sess-1',
-        'authproviders:',
+    it('replaces the tokens and expiry, keeps the refresh token, and serves it again', async () => {
+      const expiresAt = Date.now() + 60_000;
+      await vault.storeCredential(
+        'sess-1',
         'google',
-        tokens,
+        oauthCredential('old', { refreshToken: 'r1', expiresAt }),
+        'session',
       );
-    });
+      await vault.invalidateCredential('sess-1', 'google', 'session', 'expired');
+      const newExpiry = Date.now() + 2 * 3600_000;
 
-    it('should log debug on success', async () => {
-      await vault.refreshOAuthCredential('sess-1', 'google', 'session', { accessToken: 'tok' });
+      await vault.refreshOAuthCredential('sess-1', 'google', 'session', { accessToken: 'new', expiresAt: newExpiry });
 
+      expect(await vault.getCredential('sess-1', 'google', 'session')).toEqual(
+        oauthCredential('new', { refreshToken: 'r1', expiresAt: newExpiry }),
+      );
+      jest.advanceTimersByTime(3600_000);
+      expect(await vault.getCredential('sess-1', 'google', 'session')).not.toBeNull();
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Refreshed'));
     });
 
-    it('should log warning and re-throw on error', async () => {
-      baseVault.refreshOAuthCredential.mockRejectedValue(new Error('refresh failed'));
+    it('takes a new refresh token', async () => {
+      await vault.storeCredential('sess-1', 'google', oauthCredential('old', { refreshToken: 'r1' }), 'global');
+
+      await vault.refreshOAuthCredential('sess-1', 'google', 'global', { accessToken: 'new', refreshToken: 'r2' });
+
+      expect(await vault.getCredential('sess-1', 'google', 'global')).toEqual(
+        oauthCredential('new', { refreshToken: 'r2' }),
+      );
+    });
+
+    it('leaves a credential that is not OAuth as it is', async () => {
+      await vault.storeCredential('sess-1', 'github', bearerCredential('tok'), 'global');
+
+      await vault.refreshOAuthCredential('sess-1', 'github', 'global', { accessToken: 'new' });
+
+      expect(await vault.getCredential('sess-1', 'github', 'global')).toEqual(bearerCredential('tok'));
+    });
+
+    it('does nothing for a credential it does not have', async () => {
+      await vault.refreshOAuthCredential('sess-1', 'google', 'session', { accessToken: 'tok' });
+
+      expect(await storage.keys('*')).toEqual([]);
+    });
+
+    it('logs and re-throws a storage error', async () => {
+      jest.spyOn(storage, 'get').mockRejectedValue(new Error('refresh failed'));
 
       await expect(vault.refreshOAuthCredential('sess-1', 'google', 'session', { accessToken: 'tok' })).rejects.toThrow(
         'refresh failed',
       );
-
       expect(logger.warn).toHaveBeenCalled();
     });
   });
 
-  // --------------------------------------------------
-  // getAllCredentials
-  // --------------------------------------------------
-
   describe('getAllCredentials', () => {
-    const mockAppCred = (id: string): AppCredential =>
-      ({
-        appId: 'authproviders:',
-        providerId: id,
-        credential: bearerCredential(),
-        acquiredAt: Date.now(),
-        isValid: true,
-      }) as AppCredential;
-
-    it('should return credentials for a specific scope', async () => {
-      const creds = [mockAppCred('github')];
-      baseVault.getAppCredentials.mockResolvedValue(creds);
-
-      const result = await vault.getAllCredentials('sess-1', 'session');
-
-      expect(result).toEqual(creds);
-      expect(baseVault.getAppCredentials).toHaveBeenCalledWith('authproviders:session:sess-1', 'authproviders:');
+    beforeEach(async () => {
+      await vault.storeCredential('session-x', 'github', bearerCredential('x'), 'session');
+      await vault.storeCredential('session-y', 'github', bearerCredential('y'), 'session');
+      await vault.storeCredential('session-x', 'jira', bearerCredential('alice'), 'user', 'alice');
+      await vault.storeCredential('session-x', 'jira', bearerCredential('bob'), 'user', 'bob');
+      await vault.storeCredential('session-x', 'openai', bearerCredential('shared'), 'global');
     });
 
-    it('should return empty array when scope query fails', async () => {
-      baseVault.getAppCredentials.mockRejectedValue(new Error('fetch failed'));
+    const tokensOf = (credentials: AppCredential[]) =>
+      credentials.map((each) => `${each.providerId}=${(each.credential as { token: string }).token}`);
 
-      const result = await vault.getAllCredentials('sess-1', 'global');
-
-      expect(result).toEqual([]);
+    it("lists a session's, its user's and the global credentials, in that order", async () => {
+      expect(tokensOf(await vault.getAllCredentials('session-x', undefined, 'alice'))).toEqual([
+        'github=x',
+        'jira=alice',
+        'openai=shared',
+      ]);
     });
 
-    it('should aggregate credentials from all scopes when no scope specified', async () => {
-      const sessionCreds = [mockAppCred('sess-prov')];
-      const globalCreds = [mockAppCred('glob-prov')];
-
-      baseVault.getAppCredentials
-        .mockResolvedValueOnce(sessionCreds) // session scope
-        .mockResolvedValueOnce(globalCreds); // global scope
-
-      const result = await vault.getAllCredentials('sess-1', undefined, undefined);
-
-      // Should include session + global (no user since no userId)
-      expect(result).toHaveLength(2);
-      expect(result).toEqual(expect.arrayContaining([...sessionCreds, ...globalCreds]));
+    it('lists no user credentials without a user id', async () => {
+      expect(tokensOf(await vault.getAllCredentials('session-y'))).toEqual(['github=y', 'openai=shared']);
     });
 
-    it('should include user-scoped credentials when userId is provided', async () => {
-      const sessionCreds = [mockAppCred('sess-prov')];
-      const userCreds = [mockAppCred('user-prov')];
-      const globalCreds = [mockAppCred('glob-prov')];
-
-      baseVault.getAppCredentials
-        .mockResolvedValueOnce(sessionCreds) // session scope
-        .mockResolvedValueOnce(userCreds) // user scope
-        .mockResolvedValueOnce(globalCreds); // global scope
-
-      const result = await vault.getAllCredentials('sess-1', undefined, 'user-42');
-
-      expect(result).toHaveLength(3);
+    it('lists one scope', async () => {
+      expect(tokensOf(await vault.getAllCredentials('session-y', 'user', 'bob'))).toEqual(['jira=bob']);
     });
 
-    it('should gracefully handle errors in individual scope queries', async () => {
-      const globalCreds = [mockAppCred('glob-prov')];
+    it('answers an empty list when the storage fails', async () => {
+      jest.spyOn(storage, 'keys').mockRejectedValue(new Error('fetch failed'));
 
-      baseVault.getAppCredentials
-        .mockRejectedValueOnce(new Error('session failed')) // session scope fails
-        .mockResolvedValueOnce(globalCreds); // global scope succeeds
-
-      const result = await vault.getAllCredentials('sess-1', undefined, undefined);
-
-      // Should still have global creds despite session failure
-      expect(result).toEqual(globalCreds);
-    });
-
-    it('should return empty array when all scope queries fail', async () => {
-      baseVault.getAppCredentials.mockRejectedValue(new Error('all failed'));
-
-      const result = await vault.getAllCredentials('sess-1', undefined, undefined);
-
-      expect(result).toEqual([]);
+      expect(await vault.getAllCredentials('session-x', undefined, 'alice')).toEqual([]);
     });
   });
-
-  // --------------------------------------------------
-  // buildVaultKey (tested indirectly through public methods)
-  // --------------------------------------------------
-
-  describe('buildVaultKey (via storeCredential)', () => {
-    it('should build session key pattern', async () => {
-      await vault.storeCredential('my-session', 'prov', bearerCredential(), 'session');
-
-      const [key] = baseVault.addAppCredential.mock.calls[0];
-      expect(key).toBe('authproviders:session:my-session');
-    });
-
-    it('should build global key pattern', async () => {
-      await vault.storeCredential('any-session', 'prov', bearerCredential(), 'global');
-
-      const [key] = baseVault.addAppCredential.mock.calls[0];
-      expect(key).toBe('authproviders:global');
-    });
-
-    it('should build user key pattern', async () => {
-      await vault.storeCredential('any-session', 'prov', bearerCredential(), 'user', 'uid-99');
-
-      const [key] = baseVault.addAppCredential.mock.calls[0];
-      expect(key).toBe('authproviders:user:uid-99');
-    });
-
-    it('should use custom namespace in keys', async () => {
-      const customVault = new AuthProvidersVault(baseVault, 'custom:');
-
-      await customVault.storeCredential('sess-1', 'prov', bearerCredential(), 'session');
-
-      const [key] = baseVault.addAppCredential.mock.calls[0];
-      expect(key).toBe('custom:session:sess-1');
-    });
-
-    it('should throw AuthInvalidInputError for user scope without userId', async () => {
-      await expect(vault.storeCredential('sess-1', 'prov', bearerCredential(), 'user')).rejects.toThrow(
-        AuthInvalidInputError,
-      );
-    });
-
-    it('should throw AuthInvalidInputError for unknown scope', async () => {
-      await expect(
-        vault.storeCredential('sess-1', 'prov', bearerCredential(), 'unknown' as CredentialScope),
-      ).rejects.toThrow(AuthInvalidInputError);
-    });
-  });
-
-  // --------------------------------------------------
-  // DI Token
-  // --------------------------------------------------
 
   describe('AUTH_PROVIDERS_VAULT token', () => {
     it('should be exported as a symbol', async () => {
@@ -637,19 +530,21 @@ describe('AuthProvidersAccessorImpl', () => {
   let accessor: AuthProvidersAccessorImpl;
   let registry: AuthProvidersRegistry;
   let vaultInstance: AuthProvidersVault;
+  let storage: MemoryStorageAdapter;
   let baseVault: jest.Mocked<AuthorizationVault>;
   let cache: CredentialCache;
   let loader: LazyCredentialLoader;
   let context: CredentialFactoryContext;
   let logger: AuthLogger;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.useFakeTimers();
     jest.setSystemTime(1000000);
 
+    storage = await memoryStorage();
     baseVault = mockBaseVault();
     registry = new AuthProvidersRegistry();
-    vaultInstance = new AuthProvidersVault(baseVault, 'authproviders:');
+    vaultInstance = new AuthProvidersVault(storage);
     cache = new CredentialCache();
     logger = mockLogger();
     loader = new LazyCredentialLoader(logger);
@@ -658,7 +553,8 @@ describe('AuthProvidersAccessorImpl', () => {
     accessor = new AuthProvidersAccessorImpl(registry, vaultInstance, cache, loader, context, logger);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await storage.disconnect();
     jest.useRealTimers();
   });
 
@@ -707,9 +603,6 @@ describe('AuthProvidersAccessorImpl', () => {
         factory,
       });
 
-      // Vault also returns null so it falls through to loader
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.get('github', { forceRefresh: true });
 
       expect(result).toBeDefined();
@@ -727,13 +620,7 @@ describe('AuthProvidersAccessorImpl', () => {
         factory,
       });
 
-      baseVault.getCredential.mockResolvedValue({
-        appId: 'authproviders:',
-        providerId: 'github',
-        credential: cred,
-        acquiredAt: Date.now(),
-        isValid: true,
-      } as AppCredential);
+      await vaultInstance.storeCredential(context.sessionId, 'github', cred, 'session');
 
       const result = await accessor.get('github');
 
@@ -754,8 +641,6 @@ describe('AuthProvidersAccessorImpl', () => {
         factory,
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.get('github');
 
       expect(result).toBeDefined();
@@ -773,8 +658,6 @@ describe('AuthProvidersAccessorImpl', () => {
         factory,
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.get('github');
 
       expect(result).toBeNull();
@@ -791,13 +674,9 @@ describe('AuthProvidersAccessorImpl', () => {
         factory,
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       await accessor.get('github');
 
-      // Should have stored in vault
-      expect(baseVault.addAppCredential).toHaveBeenCalled();
-      // Should be in cache now
+      expect(await vaultInstance.getCredential(context.sessionId, 'github', 'session')).toEqual(cred);
       expect(cache.has('github')).toBe(true);
     });
 
@@ -819,8 +698,6 @@ describe('AuthProvidersAccessorImpl', () => {
         factory,
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.get('github');
 
       expect(result).toBeDefined();
@@ -841,8 +718,6 @@ describe('AuthProvidersAccessorImpl', () => {
         loading: 'lazy',
         factory,
       });
-
-      baseVault.getCredential.mockResolvedValue(null);
 
       const result = await accessor.get('github');
 
@@ -873,8 +748,6 @@ describe('AuthProvidersAccessorImpl', () => {
         factory: jest.fn().mockResolvedValue(cred2),
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const results = await accessor.getMany(['github', 'openai']);
 
       expect(results.size).toBe(2);
@@ -890,8 +763,6 @@ describe('AuthProvidersAccessorImpl', () => {
         factory: jest.fn().mockResolvedValue(bearerCredential()),
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const results = await accessor.getMany(['github', 'nonexistent']);
 
       expect(results.get('github')).toBeDefined();
@@ -905,8 +776,6 @@ describe('AuthProvidersAccessorImpl', () => {
         loading: 'lazy',
         factory: jest.fn().mockRejectedValue(new Error('fail')),
       });
-
-      baseVault.getCredential.mockResolvedValue(null);
 
       const results = await accessor.getMany(['failing']);
 
@@ -944,8 +813,6 @@ describe('AuthProvidersAccessorImpl', () => {
         toHeaders: jest.fn().mockReturnValue(customHeaders),
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.headers('custom-prov');
 
       expect(result).toEqual(customHeaders);
@@ -960,8 +827,6 @@ describe('AuthProvidersAccessorImpl', () => {
         loading: 'lazy',
         factory: jest.fn().mockResolvedValue(cred),
       });
-
-      baseVault.getCredential.mockResolvedValue(null);
 
       const result = await accessor.headers('google');
 
@@ -978,8 +843,6 @@ describe('AuthProvidersAccessorImpl', () => {
         factory: jest.fn().mockResolvedValue(cred),
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.headers('prov');
 
       expect(result).toEqual({ Authorization: 'Bearer my-bearer-tok' });
@@ -994,8 +857,6 @@ describe('AuthProvidersAccessorImpl', () => {
         loading: 'lazy',
         factory: jest.fn().mockResolvedValue(cred),
       });
-
-      baseVault.getCredential.mockResolvedValue(null);
 
       const result = await accessor.headers('stripe');
 
@@ -1012,8 +873,6 @@ describe('AuthProvidersAccessorImpl', () => {
         factory: jest.fn().mockResolvedValue(cred),
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.headers('api-prov');
 
       expect(result).toEqual({ Authorization: 'Bearer key-abc' });
@@ -1028,8 +887,6 @@ describe('AuthProvidersAccessorImpl', () => {
         loading: 'lazy',
         factory: jest.fn().mockResolvedValue(cred),
       });
-
-      baseVault.getCredential.mockResolvedValue(null);
 
       const result = await accessor.headers('basic-prov');
 
@@ -1046,8 +903,6 @@ describe('AuthProvidersAccessorImpl', () => {
         factory: jest.fn().mockResolvedValue(cred),
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.headers('basic-prov');
 
       expect(result).toEqual({ Authorization: 'Basic pre-encoded-value' });
@@ -1062,8 +917,6 @@ describe('AuthProvidersAccessorImpl', () => {
         loading: 'lazy',
         factory: jest.fn().mockResolvedValue(cred),
       });
-
-      baseVault.getCredential.mockResolvedValue(null);
 
       const result = await accessor.headers('custom');
 
@@ -1080,8 +933,6 @@ describe('AuthProvidersAccessorImpl', () => {
         factory: jest.fn().mockResolvedValue(cred),
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.headers('custom-no-headers');
 
       expect(result).toEqual({});
@@ -1096,8 +947,6 @@ describe('AuthProvidersAccessorImpl', () => {
         loading: 'lazy',
         factory: jest.fn().mockResolvedValue(cred),
       });
-
-      baseVault.getCredential.mockResolvedValue(null);
 
       const result = await accessor.headers('ssh');
 
@@ -1114,8 +963,6 @@ describe('AuthProvidersAccessorImpl', () => {
         factory: jest.fn().mockResolvedValue(cred),
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.headers('mtls-prov');
 
       expect(result).toEqual({});
@@ -1131,8 +978,6 @@ describe('AuthProvidersAccessorImpl', () => {
         factory: jest.fn().mockResolvedValue(cred),
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.headers('pk-prov');
 
       expect(result).toEqual({});
@@ -1147,8 +992,6 @@ describe('AuthProvidersAccessorImpl', () => {
         loading: 'lazy',
         factory: jest.fn().mockResolvedValue(cred),
       });
-
-      baseVault.getCredential.mockResolvedValue(null);
 
       const result = await accessor.headers('sa-prov');
 
@@ -1169,8 +1012,6 @@ describe('AuthProvidersAccessorImpl', () => {
         loading: 'lazy',
         factory: jest.fn().mockResolvedValue(cred),
       });
-
-      baseVault.getCredential.mockResolvedValue(null);
 
       const result = await accessor.headers('pkce-prov');
 
@@ -1199,8 +1040,6 @@ describe('AuthProvidersAccessorImpl', () => {
         loading: 'lazy',
         factory: jest.fn().mockResolvedValue(apiCred),
       });
-
-      baseVault.getCredential.mockResolvedValue(null);
 
       const result = await accessor.headersMany(['bearer-prov', 'api-prov']);
 
@@ -1232,8 +1071,6 @@ describe('AuthProvidersAccessorImpl', () => {
         loading: 'lazy',
         factory: jest.fn().mockResolvedValue(cred2),
       });
-
-      baseVault.getCredential.mockResolvedValue(null);
 
       const result = await accessor.headersMany(['prov1', 'prov2']);
 
@@ -1267,8 +1104,6 @@ describe('AuthProvidersAccessorImpl', () => {
       // Put old credential in cache
       cache.set('github', mockResolved('github', oldCred, 'session'));
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.refresh('github');
 
       expect(result).toBeDefined();
@@ -1288,7 +1123,7 @@ describe('AuthProvidersAccessorImpl', () => {
 
       await accessor.refresh('github');
 
-      expect(baseVault.addAppCredential).toHaveBeenCalled();
+      expect(await vaultInstance.getCredential(context.sessionId, 'github', 'session')).toEqual(newCred);
       expect(cache.has('github')).toBe(true);
     });
 
@@ -1385,8 +1220,6 @@ describe('AuthProvidersAccessorImpl', () => {
         factory: jest.fn(),
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.has('github');
 
       expect(result).toBe(false);
@@ -1402,13 +1235,7 @@ describe('AuthProvidersAccessorImpl', () => {
         factory: jest.fn(),
       });
 
-      baseVault.getCredential.mockResolvedValue({
-        appId: 'authproviders:',
-        providerId: 'github',
-        credential: cred,
-        acquiredAt: Date.now(),
-        isValid: true,
-      } as AppCredential);
+      await vaultInstance.storeCredential(context.sessionId, 'github', cred, 'session');
 
       const result = await accessor.has('github');
 
@@ -1423,13 +1250,8 @@ describe('AuthProvidersAccessorImpl', () => {
         factory: jest.fn(),
       });
 
-      baseVault.getCredential.mockResolvedValue({
-        appId: 'authproviders:',
-        providerId: 'github',
-        credential: bearerCredential(),
-        acquiredAt: Date.now(),
-        isValid: false,
-      } as AppCredential);
+      await vaultInstance.storeCredential(context.sessionId, 'github', bearerCredential(), 'session');
+      await vaultInstance.invalidateCredential(context.sessionId, 'github', 'session', 'revoked');
 
       const result = await accessor.has('github');
 
@@ -1551,8 +1373,6 @@ describe('AuthProvidersAccessorImpl', () => {
       cache.set('github', mockResolved('github', cred, 'session'));
 
       // openai not in vault either
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.listAvailable();
 
       expect(result).toEqual(['github']);
@@ -1566,11 +1386,36 @@ describe('AuthProvidersAccessorImpl', () => {
         factory: jest.fn(),
       });
 
-      baseVault.getCredential.mockResolvedValue(null);
-
       const result = await accessor.listAvailable();
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('across requests', () => {
+    const nextRequest = () =>
+      new AuthProvidersAccessorImpl(registry, vaultInstance, new CredentialCache(), loader, context, logger);
+
+    it('serves the next request the credential a factory acquired, without running the factory again', async () => {
+      const factory = jest.fn().mockResolvedValue(bearerCredential('tok'));
+      registry.register({ name: 'github', scope: 'user', loading: 'lazy', factory });
+
+      await accessor.get('github');
+      const next = await nextRequest().get('github');
+
+      expect(next?.credential).toEqual(bearerCredential('tok'));
+      expect(factory).toHaveBeenCalledTimes(1);
+    });
+
+    it("runs the factory again once the provider's cacheTtl has passed", async () => {
+      const factory = jest.fn().mockResolvedValue(apiKeyCredential());
+      registry.register({ name: 'stripe', scope: 'global', loading: 'lazy', cacheTtl: 60_000, factory });
+
+      await accessor.get('stripe');
+      jest.advanceTimersByTime(60_000);
+      await nextRequest().get('stripe');
+
+      expect(factory).toHaveBeenCalledTimes(2);
     });
   });
 

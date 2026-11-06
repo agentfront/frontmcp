@@ -5,6 +5,8 @@ import { serverConfig } from './config';
 
 const port = parseInt(process.env['PORT'] ?? '3119', 10);
 
+let acquisitions = 0;
+
 @FrontMcp({
   ...serverConfig,
   http: { port },
@@ -14,7 +16,7 @@ const port = parseInt(process.env['PORT'] ?? '3119', 10);
         name: 'github',
         scope: 'global',
         loading: 'lazy',
-        factory: async () => ({ type: 'bearer', token: 'github-e2e-token' }),
+        factory: async () => ({ type: 'bearer', token: `github-e2e-token-${++acquisitions}` }),
       },
     ],
   },

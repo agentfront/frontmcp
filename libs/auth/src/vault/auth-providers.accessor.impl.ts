@@ -5,16 +5,17 @@
  * Handles caching, vault storage, lazy loading, and credential refresh.
  */
 
-import type { Credential } from '../session';
-import type { CredentialFactoryContext, GetCredentialOptions, ResolvedCredential } from './auth-providers.types';
-import { extractCredentialExpiry } from './credential-helpers';
-import { CredentialCache } from './credential-cache';
 import { base64Encode } from '@frontmcp/utils';
+
+import type { AuthLogger } from '../common/auth-logger.interface';
+import type { Credential } from '../session';
 import type { AuthProvidersAccessor } from './auth-providers.accessor';
 import type { AuthProvidersRegistry, NormalizedProviderConfig } from './auth-providers.registry';
+import type { CredentialFactoryContext, GetCredentialOptions, ResolvedCredential } from './auth-providers.types';
 import type { AuthProvidersVault } from './auth-providers.vault';
+import type { CredentialCache } from './credential-cache';
+import { extractCredentialExpiry } from './credential-helpers';
 import type { LazyCredentialLoader } from './credential-loaders/lazy-loader';
-import type { AuthLogger } from '../common/auth-logger.interface';
 
 /**
  * AuthProvidersAccessorImpl - Runtime implementation
@@ -254,6 +255,7 @@ export class AuthProvidersAccessorImpl implements AuthProvidersAccessor {
         resolved.credential,
         config.scope,
         this.context.userSub,
+        config.cacheTtl,
       );
     } catch (error) {
       this.logger?.warn(`Failed to store in vault "${providerName}":`, error);

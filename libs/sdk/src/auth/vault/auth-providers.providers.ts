@@ -16,12 +16,13 @@ import {
   InMemoryAuthorizationVault,
   isAnonymousSubject,
   LazyCredentialLoader,
+  UNIDENTIFIED_SESSION_PREFIX,
   type AuthorizationVault,
   type AuthProvidersVaultOptions,
   type CredentialFactoryContext,
 } from '@frontmcp/auth';
 import { ProviderScope, type Token } from '@frontmcp/di';
-import { randomUUID } from '@frontmcp/utils';
+import { createStorage, randomUUID, type StorageAdapter } from '@frontmcp/utils';
 
 import { FrontMcpLogger, type ProviderType } from '../../common';
 import type { FrontMcpContext } from '../../context/frontmcp-context';
@@ -39,12 +40,14 @@ export const LAZY_CREDENTIAL_LOADER = Symbol.for('frontmcp:LAZY_CREDENTIAL_LOADE
  * Create providers for AuthProviders vault system
  *
  * @param options - Vault configuration options
- * @param baseVault - Base AuthorizationVault for storage
+ * @param storage - Where the vault keeps credentials between requests
+ * @param baseVault - AuthorizationVault handed to credential factories
  * @returns Array of provider definitions
  */
 export function createAuthProvidersProviders(
   options: AuthProvidersVaultOptions,
-  baseVault: AuthorizationVault,
+  storage: StorageAdapter,
+  baseVault: AuthorizationVault = new InMemoryAuthorizationVault(),
 ): ProviderType[] {
   const providers: ProviderType[] = [];
 
@@ -62,7 +65,11 @@ export function createAuthProvidersProviders(
     scope: ProviderScope.GLOBAL,
     name: 'AuthProvidersVault',
     useFactory: (logger: FrontMcpLogger) =>
-      new AuthProvidersVault(baseVault, options.namespace ?? 'authproviders:', logger),
+      new AuthProvidersVault(storage, {
+        namespace: options.namespace,
+        defaultCacheTtl: options.defaultCacheTtl,
+        logger,
+      }),
     inject: () => [FrontMcpLogger] as const,
   });
 
@@ -103,7 +110,7 @@ export function createAuthProvidersProviders(
       const user = ctx.authInfo?.user;
       const signedIn = user && !isAnonymousSubject(user.sub) ? user : undefined;
       const factoryContext: CredentialFactoryContext = {
-        sessionId: sessionScopeIdentity(ctx) ?? `unidentified:${randomUUID()}`,
+        sessionId: sessionScopeIdentity(ctx) ?? `${UNIDENTIFIED_SESSION_PREFIX}${randomUUID()}`,
         userSub: signedIn?.sub,
         userEmail: signedIn?.email,
         userName: signedIn?.name,
@@ -144,11 +151,17 @@ export function isAuthProvidersEnabled(options?: AuthProvidersVaultOptions): opt
   return (options?.providers?.length ?? 0) > 0;
 }
 
-/** Register the providers behind `this.authProviders` in a scope, when `@FrontMcp({ authProvidersVault })` enables them. */
+/**
+ * Register the providers behind `this.authProviders` in a scope, when `@FrontMcp({ authProvidersVault })` enables them.
+ *
+ * @returns Closes the in-memory store that keeps the scope's credentials, or undefined when nothing was registered
+ */
 export async function registerAuthProvidersVault(
   providers: ProviderRegistry,
   options: AuthProvidersVaultOptions | undefined,
-): Promise<void> {
-  if (!isAuthProvidersEnabled(options)) return;
-  await providers.addDynamicProviders(createAuthProvidersProviders(options, new InMemoryAuthorizationVault()));
+): Promise<(() => Promise<void>) | undefined> {
+  if (!isAuthProvidersEnabled(options)) return undefined;
+  const storage = await createStorage({ type: 'memory' });
+  await providers.addDynamicProviders(createAuthProvidersProviders(options, storage));
+  return () => storage.disconnect();
 }
