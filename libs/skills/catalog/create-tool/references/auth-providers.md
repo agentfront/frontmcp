@@ -36,8 +36,14 @@ export default class Server {}
 
 - The factory gets the caller's `userSub`, `userEmail`, `userName` and `sessionId`, and returns a credential
   (`bearer`, `oauth`, `api_key`, `basic`, `custom`, …) or `null`.
-- A credential is cached for the request, and for the requests of a verified session on a single-instance server.
-  Nothing is stored between them, so the factory runs again for a new request or session.
+- The server keeps each credential the factory returns, in memory, and serves it to the later requests of its
+  scope: a `global` one to every caller, a `user` one to that signed-in user in any session, a `session` one to that
+  verified session. A signed-in caller without a verified session gets one `session` credential for all its requests.
+  So the factory runs once per scope, not once per call.
+- A kept credential lasts until it expires (its `expiresAt`). One without an expiry lasts for the provider's
+  `cacheTtl`, which defaults to `authProvidersVault.defaultCacheTtl` (one hour). Then the factory runs again.
+- Each server instance keeps its own credentials. A `session` credential of an anonymous caller without a verified
+  session isn't kept, since no later request can belong to that session.
 - A provider name listed twice is refused at startup (`CredentialProviderAlreadyRegisteredError`), and so is a
   provider entry with a field it doesn't take.
 - On a server without `authProvidersVault`, `this.authProviders.get(name)` and `headers(name)` throw
