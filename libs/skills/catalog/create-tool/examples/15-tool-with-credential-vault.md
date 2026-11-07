@@ -106,7 +106,7 @@ export default class Server {}
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | The user types the secret in: at sign-in, or from the connect URL | The server acquires it: a `factory` you register per provider                  |
 | Filled by local mode's `authenticate()` returning `credentials`   | `@FrontMcp({ authProvidersVault: { providers: [{ name, scope, factory }] } })` |
-| Encrypted per session, in the `auth.tokenStorage` backend         | Cached for the request (and a verified session), not stored                    |
+| Encrypted per session, in the `auth.tokenStorage` backend         | Kept in memory per scope, until it expires or `defaultCacheTtl` (1 hour)       |
 | A missing one gets `-32001` with a connect URL                    | A factory returning `null` gets `-32001`                                       |
 
 `@Tool({ authProviders })` checks both: the `authProvidersVault` provider of that name first, then the session

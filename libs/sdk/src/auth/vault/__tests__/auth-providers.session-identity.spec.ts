@@ -10,30 +10,20 @@
 import 'reflect-metadata';
 
 import {
-  InMemoryAuthorizationVault,
-  type AppCredential,
-  type AuthorizationVault,
   type AuthProvidersAccessor,
   type CredentialFactoryContext,
   type CredentialProviderConfig,
 } from '@frontmcp/auth';
+import { createStorage, type StorageAdapter } from '@frontmcp/utils';
 
 import { authInfoFromAuthorization } from '../../../common/utils/auth-info.utils';
 import { type FrontMcpContext } from '../../../context/frontmcp-context';
 import { FrontMcpContextStorage } from '../../../context/frontmcp-context-storage';
 import { createAuthProvidersProviders } from '../auth-providers.providers';
 
-/** Just the two vault calls the accessor makes, keyed as the vault keys them. */
-function memoryVault(): AuthorizationVault {
-  const entries = new Map<string, AppCredential>();
-  const vault = {
-    addAppCredential: async (vaultKey: string, credential: AppCredential) => {
-      entries.set(`${vaultKey}|${credential.appId}|${credential.providerId}`, credential);
-    },
-    getCredential: async (vaultKey: string, appId: string, providerId: string) =>
-      entries.get(`${vaultKey}|${appId}|${providerId}`) ?? null,
-  };
-  return vault as unknown as AuthorizationVault;
+/** The store the SDK keeps a scope's credentials in. */
+function memoryStorage(): Promise<StorageAdapter> {
+  return createStorage({ type: 'memory', memory: { enableSweeper: false } });
 }
 
 /** The credential a factory hands out, and the session id each factory call was given. */
@@ -61,10 +51,10 @@ const logger = {
 type Def = { useFactory: (...args: unknown[]) => unknown };
 
 /** An accessor built for the request context `ctx`, as the SDK builds one for each request. */
-function accessorFor(ctx: FrontMcpContext, vaultBackend: AuthorizationVault): AuthProvidersAccessor {
+function accessorFor(ctx: FrontMcpContext, storage: StorageAdapter): AuthProvidersAccessor {
   const [registryDef, vaultDef, cacheDef, loaderDef, accessorDef] = createAuthProvidersProviders(
     { providers: [github] },
-    vaultBackend,
+    storage,
   ) as unknown as Def[];
   return accessorDef.useFactory(
     registryDef.useFactory(),
@@ -97,60 +87,60 @@ beforeEach(() => {
 
 describe('session-scoped auth-provider credentials of callers without a verified session', () => {
   it('are not served to a caller that sends another caller’s mcp-session-id', async () => {
-    const vault = memoryVault();
-    await tokenFor(accessorFor(await requestContext('alice', 'victim-session'), vault), 'gh-alice');
+    const storage = await memoryStorage();
+    await tokenFor(accessorFor(await requestContext('alice', 'victim-session'), storage), 'gh-alice');
 
-    const served = await tokenFor(accessorFor(await requestContext('mallory', 'victim-session'), vault), 'gh-mallory');
+    const served = await tokenFor(
+      accessorFor(await requestContext('mallory', 'victim-session'), storage),
+      'gh-mallory',
+    );
 
     expect(served).toBe('gh-mallory');
   });
 
   it('are not replaced by a caller that sends another caller’s mcp-session-id', async () => {
-    const vault = memoryVault();
-    await tokenFor(accessorFor(await requestContext('alice', 'victim-session'), vault), 'gh-alice');
+    const storage = await memoryStorage();
+    await tokenFor(accessorFor(await requestContext('alice', 'victim-session'), storage), 'gh-alice');
     issued.next = 'gh-mallory';
-    await accessorFor(await requestContext('mallory', 'victim-session'), vault).refresh('github');
+    await accessorFor(await requestContext('mallory', 'victim-session'), storage).refresh('github');
 
-    expect(await tokenFor(accessorFor(await requestContext('alice', 'victim-session'), vault), 'unused')).toBe(
+    expect(await tokenFor(accessorFor(await requestContext('alice', 'victim-session'), storage), 'unused')).toBe(
       'gh-alice',
     );
   });
 
   it('never give the credential factory the session id the client sent', async () => {
-    await tokenFor(accessorFor(await requestContext('alice', 'victim-session'), memoryVault()), 'gh-alice');
+    await tokenFor(accessorFor(await requestContext('alice', 'victim-session'), await memoryStorage()), 'gh-alice');
 
     expect(issued.sessions).toEqual(['principal:alice']);
   });
 
   it('last across a signed-in caller’s requests', async () => {
-    const vault = memoryVault();
-    await tokenFor(accessorFor(await requestContext('alice'), vault), 'gh-alice');
+    const storage = await memoryStorage();
+    await tokenFor(accessorFor(await requestContext('alice'), storage), 'gh-alice');
 
-    expect(await tokenFor(accessorFor(await requestContext('alice'), vault), 'unused')).toBe('gh-alice');
+    expect(await tokenFor(accessorFor(await requestContext('alice'), storage), 'unused')).toBe('gh-alice');
   });
 
   it('leave no vault record for an anonymous caller without a verified session', async () => {
-    // The real vault, not the stub above: it stores a credential only in an entry `create()` made,
-    // and nothing creates one for the per-request `unidentified:` id, so nothing is kept or grows.
-    const vault = new InMemoryAuthorizationVault();
-    const store = (vault as unknown as { memoryAdapter: { keys(pattern: string): Promise<string[]> } }).memoryAdapter;
-    const before = await store.keys('*');
+    // Its per-request `unidentified:` id can never be presented again, so storing would only grow the store.
+    const storage = await memoryStorage();
 
-    const first = await tokenFor(accessorFor(await requestContext('anon:1'), vault), 'gh-first');
-    const second = await tokenFor(accessorFor(await requestContext('anon:2'), vault), 'gh-second');
+    const first = await tokenFor(accessorFor(await requestContext('anon:1'), storage), 'gh-first');
+    const second = await tokenFor(accessorFor(await requestContext('anon:2'), storage), 'gh-second');
 
     expect([first, second]).toEqual(['gh-first', 'gh-second']);
     expect(issued.sessions).toHaveLength(2);
     expect(issued.sessions.every((session) => session.startsWith('unidentified:'))).toBe(true);
     expect(new Set(issued.sessions).size).toBe(2);
-    expect(await store.keys('*')).toEqual(before);
+    expect(await storage.keys('*')).toEqual([]);
   });
 
   it('are never shared between anonymous callers', async () => {
-    const vault = memoryVault();
-    await tokenFor(accessorFor(await requestContext('anon:1', 'shared-session'), vault), 'gh-first');
+    const storage = await memoryStorage();
+    await tokenFor(accessorFor(await requestContext('anon:1', 'shared-session'), storage), 'gh-first');
 
-    const second = await tokenFor(accessorFor(await requestContext('anon:2', 'shared-session'), vault), 'gh-second');
+    const second = await tokenFor(accessorFor(await requestContext('anon:2', 'shared-session'), storage), 'gh-second');
 
     expect(second).toBe('gh-second');
     expect(issued.sessions.some((session) => session.includes('shared-session'))).toBe(false);
@@ -159,16 +149,16 @@ describe('session-scoped auth-provider credentials of callers without a verified
 
 describe('session-scoped auth-provider credentials of a verified session', () => {
   it('stay with that session', async () => {
-    const vault = memoryVault();
+    const storage = await memoryStorage();
     const session = (sub: string, sessionId: string) =>
       new FrontMcpContextStorage().run({ sessionId, scopeId: 'scope', authInfo: { sessionId, clientId: sub } }, () =>
         new FrontMcpContextStorage().getStoreOrThrow(),
       ) as FrontMcpContext;
-    await tokenFor(accessorFor(session('alice', 'session-a'), vault), 'gh-a');
+    await tokenFor(accessorFor(session('alice', 'session-a'), storage), 'gh-a');
 
     expect({
-      same: await tokenFor(accessorFor(session('alice', 'session-a'), vault), 'unused'),
-      other: await tokenFor(accessorFor(session('alice', 'session-b'), vault), 'gh-b'),
+      same: await tokenFor(accessorFor(session('alice', 'session-a'), storage), 'unused'),
+      other: await tokenFor(accessorFor(session('alice', 'session-b'), storage), 'gh-b'),
     }).toEqual({ same: 'gh-a', other: 'gh-b' });
     expect(issued.sessions).toEqual(['session-a', 'session-b']);
   });

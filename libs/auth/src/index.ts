@@ -595,6 +595,8 @@ export {
   // Vault
   AuthProvidersVault,
   AUTH_PROVIDERS_VAULT,
+  UNIDENTIFIED_SESSION_PREFIX,
+  type AuthProvidersVaultStorageOptions,
   // Credential Loaders
   EagerCredentialLoader,
   type EagerLoadResult,
