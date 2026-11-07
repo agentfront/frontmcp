@@ -22,7 +22,7 @@ import {
   type CredentialFactoryContext,
 } from '@frontmcp/auth';
 import { ProviderScope, type Token } from '@frontmcp/di';
-import { createStorage, randomUUID, type StorageAdapter } from '@frontmcp/utils';
+import { createStorage, getEnv, randomUUID, type StorageAdapter } from '@frontmcp/utils';
 
 import { FrontMcpLogger, type ProviderType } from '../../common';
 import type { FrontMcpContext } from '../../context/frontmcp-context';
@@ -36,17 +36,23 @@ import { CREDENTIAL_CACHE } from './credential-cache';
  */
 export const LAZY_CREDENTIAL_LOADER = Symbol.for('frontmcp:LAZY_CREDENTIAL_LOADER') as Token<LazyCredentialLoader>;
 
+/** Where the vault keeps credentials between requests, and the secret their encryption key is derived from */
+export interface AuthProvidersVaultStore {
+  storage: StorageAdapter;
+  pepper?: string;
+}
+
 /**
  * Create providers for AuthProviders vault system
  *
  * @param options - Vault configuration options
- * @param storage - Where the vault keeps credentials between requests
+ * @param store - Where the vault keeps credentials between requests
  * @param baseVault - AuthorizationVault handed to credential factories
  * @returns Array of provider definitions
  */
 export function createAuthProvidersProviders(
   options: AuthProvidersVaultOptions,
-  storage: StorageAdapter,
+  store: AuthProvidersVaultStore,
   baseVault: AuthorizationVault = new InMemoryAuthorizationVault(),
 ): ProviderType[] {
   const providers: ProviderType[] = [];
@@ -65,9 +71,10 @@ export function createAuthProvidersProviders(
     scope: ProviderScope.GLOBAL,
     name: 'AuthProvidersVault',
     useFactory: (logger: FrontMcpLogger) =>
-      new AuthProvidersVault(storage, {
+      new AuthProvidersVault(store.storage, {
         namespace: options.namespace,
         defaultCacheTtl: options.defaultCacheTtl,
+        pepper: store.pepper,
         logger,
       }),
     inject: () => [FrontMcpLogger] as const,
@@ -154,14 +161,33 @@ export function isAuthProvidersEnabled(options?: AuthProvidersVaultOptions): opt
 /**
  * Register the providers behind `this.authProviders` in a scope, when `@FrontMcp({ authProvidersVault })` enables them.
  *
- * @returns Closes the in-memory store that keeps the scope's credentials, or undefined when nothing was registered
+ * Credentials go to the store of a Redis or SQLite `auth.tokenStorage` unless `useSharedStorage` is false, else to an
+ * in-memory store of the scope.
+ *
+ * @param tokenStorage - The connected store of the scope's `auth.tokenStorage`, when it is Redis or SQLite
+ * @returns Closes the in-memory store, or undefined when the vault uses `tokenStorage` or nothing was registered
  */
 export async function registerAuthProvidersVault(
   providers: ProviderRegistry,
   options: AuthProvidersVaultOptions | undefined,
+  tokenStorage: StorageAdapter | undefined,
+  logger: FrontMcpLogger,
 ): Promise<(() => Promise<void>) | undefined> {
   if (!isAuthProvidersEnabled(options)) return undefined;
+
+  if (tokenStorage && options.useSharedStorage !== false) {
+    const pepper = getEnv('VAULT_SECRET') || getEnv('JWT_SECRET');
+    if (!pepper) {
+      logger.warn(
+        'authProvidersVault keeps credentials in auth.tokenStorage, but neither VAULT_SECRET nor JWT_SECRET is set: ' +
+          'they are encrypted with a random key of this process, so other instances and a restart do not find them.',
+      );
+    }
+    await providers.addDynamicProviders(createAuthProvidersProviders(options, { storage: tokenStorage, pepper }));
+    return undefined;
+  }
+
   const storage = await createStorage({ type: 'memory' });
-  await providers.addDynamicProviders(createAuthProvidersProviders(options, storage));
+  await providers.addDynamicProviders(createAuthProvidersProviders(options, { storage }));
   return () => storage.disconnect();
 }
