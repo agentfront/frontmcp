@@ -1,9 +1,17 @@
 /**
- * AuthProvidersVault - Keeps auth provider credentials between requests, each under its own key with a TTL
+ * AuthProvidersVault - Keeps auth provider credentials between requests, each encrypted under its own key with a TTL
  */
 
 import type { Token } from '@frontmcp/di';
-import { MAX_TTL_SECONDS, sha256Hex, TypedStorage, type NamespacedStorage, type StorageAdapter } from '@frontmcp/utils';
+import {
+  EncryptedTypedStorage,
+  hkdfSha256,
+  MAX_TTL_SECONDS,
+  randomBytes,
+  sha256Hex,
+  type NamespacedStorage,
+  type StorageAdapter,
+} from '@frontmcp/utils';
 
 import type { AuthLogger } from '../common/auth-logger.interface';
 import { AuthInvalidInputError, CredentialStorageError } from '../errors/auth-internal.errors';
@@ -15,6 +23,7 @@ import { extractCredentialExpiry } from './credential-helpers';
 export const UNIDENTIFIED_SESSION_PREFIX = 'unidentified:';
 
 const DEFAULT_CREDENTIAL_TTL_MS = 3_600_000;
+const ENCRYPTION_KEY_INFO = new TextEncoder().encode('frontmcp-auth-providers-vault-v1');
 
 /**
  * Options of an AuthProvidersVault
@@ -24,24 +33,39 @@ export interface AuthProvidersVaultStorageOptions {
   namespace?: string;
   /** How long a credential without an expiry is kept, in ms (default: 3600000 = 1 hour) */
   defaultCacheTtl?: number;
+  /** Secret the encryption key is derived from; without one, the key is random and only this process holds it */
+  pepper?: string;
   logger?: AuthLogger;
+}
+
+/** A credential as stored, encrypted with the key it was written under, so a record copied to another key isn't read */
+interface StoredCredential {
+  storageKey: string;
+  appCredential: AppCredential;
 }
 
 function positiveOr(value: number | undefined, fallback: number): number {
   return value !== undefined && value > 0 ? value : fallback;
 }
 
+function encryptionKeyFrom(pepper: string | undefined): Uint8Array {
+  if (!pepper) return randomBytes(32);
+  return hkdfSha256(new TextEncoder().encode(pepper), new Uint8Array(0), ENCRYPTION_KEY_INFO, 32);
+}
+
 /**
  * AuthProvidersVault - Storage layer for auth provider credentials
  */
 export class AuthProvidersVault {
-  private readonly credentials: TypedStorage<AppCredential>;
+  private readonly credentials: EncryptedTypedStorage<StoredCredential>;
   private readonly namespace: string;
   private readonly defaultCacheTtl: number;
   private readonly logger?: AuthLogger;
 
   constructor(storage: StorageAdapter | NamespacedStorage, options: AuthProvidersVaultStorageOptions = {}) {
-    this.credentials = new TypedStorage<AppCredential>(storage);
+    this.credentials = new EncryptedTypedStorage<StoredCredential>(storage, {
+      keys: [{ kid: 'authproviders-v1', key: encryptionKeyFrom(options.pepper) }],
+    });
     this.namespace = options.namespace ?? 'authproviders:';
     this.defaultCacheTtl = positiveOr(options.defaultCacheTtl, DEFAULT_CREDENTIAL_TTL_MS);
     this.logger = options.logger;
@@ -107,7 +131,7 @@ export class AuthProvidersVault {
     const key = this.credentialKey(sessionId, providerId, scope, userId);
 
     try {
-      const appCredential = await this.credentials.get(key);
+      const appCredential = await this.read(key);
 
       if (!appCredential) {
         return null;
@@ -179,7 +203,7 @@ export class AuthProvidersVault {
     const key = this.credentialKey(sessionId, providerId, scope, userId);
 
     try {
-      const appCredential = await this.credentials.get(key);
+      const appCredential = await this.read(key);
       if (!appCredential) return;
       await this.write(key, { ...appCredential, isValid: false, invalidReason: reason });
       this.logger?.debug(`Invalidated credential "${providerId}": ${reason}`);
@@ -207,7 +231,7 @@ export class AuthProvidersVault {
     const key = this.credentialKey(sessionId, providerId, scope, userId);
 
     try {
-      const appCredential = await this.credentials.get(key);
+      const appCredential = await this.read(key);
       if (!appCredential) return;
       const credential = appCredential.credential;
       if (credential.type !== 'oauth' && credential.type !== 'oauth_pkce') return;
@@ -254,11 +278,16 @@ export class AuthProvidersVault {
   private async listCredentials(vaultKey: string): Promise<AppCredential[]> {
     try {
       const keys = await this.credentials.keys(`${vaultKey}:*`);
-      const found = await this.credentials.mget(keys);
-      return found.filter((appCredential): appCredential is AppCredential => appCredential !== null);
+      const records = await this.credentials.mget(keys);
+      return records.flatMap((record, index) => (record?.storageKey === keys[index] ? [record.appCredential] : []));
     } catch {
       return [];
     }
+  }
+
+  private async read(key: string): Promise<AppCredential | null> {
+    const record = await this.credentials.get(key);
+    return record?.storageKey === key ? record.appCredential : null;
   }
 
   /** Writes until the credential expires, else for `cacheTtl` or `defaultCacheTtl`; an expired one is deleted. */
@@ -274,7 +303,7 @@ export class AuthProvidersVault {
     }
 
     const ttlSeconds = Math.min(Math.ceil(ttlMs / 1000), MAX_TTL_SECONDS);
-    await this.credentials.set(key, appCredential, { ttlSeconds });
+    await this.credentials.set(key, { storageKey: key, appCredential }, { ttlSeconds });
   }
 
   private credentialKey(sessionId: string, providerId: string, scope: CredentialScope, userId?: string): string {

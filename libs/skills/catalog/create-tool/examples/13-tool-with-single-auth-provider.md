@@ -95,8 +95,9 @@ export class ListReposTool extends ToolContext {
 - Letting the framework reject calls whose required credential is missing **before** `execute()` runs — a JSON-RPC `-32001` (MCP `UNAUTHORIZED`) error whose `data` carries `{ tool, providers: ['github'] }` (no auth-check boilerplate)
 
 The factory gets the caller's `userSub`, `userEmail`, `userName` and `sessionId`. The server keeps the credential it
-returns in memory and serves it to that user's later requests, in any session, so the factory runs once per user, not
-once per call. A kept credential lasts until it expires, or, without an expiry, for `defaultCacheTtl` (one hour).
+returns and serves it to that user's later requests, in any session, so the factory runs once per user, not once per
+call. A kept credential lasts until it expires, or, without an expiry, for `defaultCacheTtl` (one hour). With a Redis
+or SQLite `auth.tokenStorage`, it is kept there, encrypted, for every instance; otherwise in memory.
 Add a `refresh` function to the provider for `this.authProviders.refresh('github')`. On a server without `authProvidersVault`, `this.authProviders.get('github')`
 throws `AuthProvidersNotConfiguredError` naming `github`.
 

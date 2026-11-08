@@ -1,5 +1,8 @@
 import 'reflect-metadata';
 
+import * as os from 'node:os';
+import * as path from 'node:path';
+
 import {
   AuthProvidersNotConfiguredError,
   CredentialProviderAlreadyRegisteredError,
@@ -8,7 +11,7 @@ import {
   type CredentialScope,
 } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
-import { MemoryStorageAdapter } from '@frontmcp/utils';
+import { MemoryStorageAdapter, mkdtemp, rm } from '@frontmcp/utils';
 
 import { App, LogLevel, Tool, ToolContext } from '../../../common';
 import { type DirectMcpServer } from '../../../direct/direct.types';
@@ -219,5 +222,69 @@ describe('credentials of authProvidersVault providers', () => {
     } finally {
       writes.mockRestore();
     }
+  });
+});
+
+describe('authProvidersVault on a server whose auth.tokenStorage is SQLite', () => {
+  const acquired: string[] = [];
+  const jira: CredentialProviderConfig = {
+    name: 'jira',
+    scope: 'user',
+    loading: 'lazy',
+    factory: async () => {
+      acquired.push('jira');
+      return { type: 'bearer', token: `jira-${acquired.length}` };
+    },
+  };
+  const savedSecrets = { VAULT_SECRET: process.env['VAULT_SECRET'], JWT_SECRET: process.env['JWT_SECRET'] };
+  let directory: string;
+
+  beforeEach(async () => {
+    acquired.length = 0;
+    directory = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-auth-providers-'));
+    process.env['VAULT_SECRET'] = 'auth-providers-wiring-vault-secret';
+  });
+
+  afterEach(async () => {
+    for (const [name, value] of Object.entries(savedSecrets)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  async function jiraTokensOfTwoServers(vaultOptions: Record<string, unknown> = {}): Promise<unknown[]> {
+    const serverOnTheSameFile = () =>
+      serverWith({
+        auth: { mode: 'local', tokenStorage: { sqlite: { path: path.join(directory, 'tokens.sqlite') } } },
+        authProvidersVault: { providers: [jira], ...vaultOptions },
+      });
+    const servers = [await serverOnTheSameFile(), await serverOnTheSameFile()];
+    try {
+      const tokens: unknown[] = [];
+      for (const server of servers) {
+        const result = await server.callTool('read_token', { provider: 'jira' }, alice);
+        tokens.push((result.structuredContent as { token: unknown }).token);
+      }
+      return tokens;
+    } finally {
+      await Promise.all(servers.map((server) => server.dispose()));
+    }
+  }
+
+  it('gives every server on that storage the credential one of them acquired', async () => {
+    expect(await jiraTokensOfTwoServers()).toEqual(['jira-1', 'jira-1']);
+    expect(acquired).toEqual(['jira']);
+  });
+
+  it('keeps the credentials of each server in its own memory with useSharedStorage: false', async () => {
+    expect(await jiraTokensOfTwoServers({ useSharedStorage: false })).toEqual(['jira-1', 'jira-2']);
+  });
+
+  it('keeps no credential another server can read when neither VAULT_SECRET nor JWT_SECRET is set', async () => {
+    delete process.env['VAULT_SECRET'];
+    delete process.env['JWT_SECRET'];
+
+    expect(await jiraTokensOfTwoServers()).toEqual(['jira-1', 'jira-2']);
   });
 });

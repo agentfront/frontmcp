@@ -54,7 +54,7 @@ type Def = { useFactory: (...args: unknown[]) => unknown };
 function accessorFor(ctx: FrontMcpContext, storage: StorageAdapter): AuthProvidersAccessor {
   const [registryDef, vaultDef, cacheDef, loaderDef, accessorDef] = createAuthProvidersProviders(
     { providers: [github] },
-    storage,
+    { storage, pepper: 'session-identity-spec' },
   ) as unknown as Def[];
   return accessorDef.useFactory(
     registryDef.useFactory(),
