@@ -263,12 +263,6 @@ export class Scope extends ScopeEntry {
     // A browser has no TCP socket for Redis and no file for SQLite: refused here, before any store opens
     await refuseStoresInBrowser(this.metadata);
 
-    if (this.metadata.authProvidersVault) {
-      const { registerAuthProvidersVault } = await import('../auth/vault/auth-providers.providers.js');
-      const closeVaultStorage = await registerAuthProvidersVault(scopeProviders, this.metadata.authProvidersVault);
-      if (closeVaultStorage) this.onDispose(closeVaultStorage);
-    }
-
     const httpServing = this.directOnly ? undefined : await import('./http-scope.helper.js');
     const createPrimaryAuth = await this.primaryAuthFactory();
 
@@ -649,6 +643,16 @@ export class Scope extends ScopeEntry {
     if (tasksPromise) batch1.push(tasksPromise);
     if (rateLimitPromise) batch1.push(rateLimitPromise);
     await Promise.all(batch1);
+    if (this.metadata.authProvidersVault) {
+      const { registerAuthProvidersVault } = await import('../auth/vault/auth-providers.providers.js');
+      const closeVaultStorage = await registerAuthProvidersVault(
+        scopeProviders,
+        this.metadata.authProvidersVault,
+        this.auth.tokenStorageAdapter,
+        this.logger,
+      );
+      if (closeVaultStorage) this.onDispose(closeVaultStorage);
+    }
     // Hooks declared on `@FrontMcp({ providers })` run for every app's entries, like an app's provider hooks do for its own.
     const serverHooks = serverProviderHooks(this.scopeProviders, this.metadata.providers, scopeRef);
     if (serverHooks.length > 0) await this.scopeHooks.registerHooks(false, ...serverHooks);

@@ -6,7 +6,7 @@
  * lazy loading, and header generation.
  */
 
-import { MAX_TTL_SECONDS, MemoryStorageAdapter } from '@frontmcp/utils';
+import { MAX_TTL_SECONDS, MemoryStorageAdapter, sha256Hex } from '@frontmcp/utils';
 
 import type { AuthLogger } from '../../common/auth-logger.interface';
 import { AuthInvalidInputError, CredentialStorageError } from '../../errors/auth-internal.errors';
@@ -342,6 +342,46 @@ describe('AuthProvidersVault', () => {
       expect(await vault.getCredential('sess-1', 'b:github', 'user', 'a')).toBeNull();
       expect(await vault.getAllCredentials('sess-1', 'user', 'a')).toEqual([]);
       expect(await vault.getAllCredentials('sess-1', 'user', 'a*')).toEqual([]);
+    });
+  });
+
+  describe('encryption', () => {
+    it('writes no credential value in the clear', async () => {
+      await vault.storeCredential('sess-1', 'github', bearerCredential('tok-in-the-clear'), 'global');
+
+      const stored = await storage.get('authproviders:global:github');
+      expect(stored).toEqual(expect.any(String));
+      expect(stored).not.toContain('tok-in-the-clear');
+    });
+
+    it('reads what another vault with the same pepper wrote to the same store', async () => {
+      const writer = new AuthProvidersVault(storage, { pepper: 'shared-pepper' });
+      const reader = new AuthProvidersVault(storage, { pepper: 'shared-pepper' });
+      await writer.storeCredential('sess-1', 'jira', bearerCredential('alice-tok'), 'user', 'alice');
+
+      expect(await reader.getCredential('sess-2', 'jira', 'user', 'alice')).toEqual(bearerCredential('alice-tok'));
+      expect(await reader.getAllCredentials('sess-2', 'user', 'alice')).toHaveLength(1);
+    });
+
+    it('answers null for what a vault with another pepper, or none, wrote', async () => {
+      const withOtherPepper = new AuthProvidersVault(storage, { pepper: 'pepper-a' });
+      const withoutPepper = new AuthProvidersVault(storage);
+      await withOtherPepper.storeCredential('sess-1', 'jira', bearerCredential('a-tok'), 'global');
+      await withoutPepper.storeCredential('sess-1', 'slack', bearerCredential('b-tok'), 'global');
+      const reader = new AuthProvidersVault(storage, { pepper: 'pepper-b' });
+
+      expect(await reader.getCredential('sess-1', 'jira', 'global')).toBeNull();
+      expect(await reader.getCredential('sess-1', 'slack', 'global')).toBeNull();
+      expect(await reader.getAllCredentials('sess-1', 'global')).toEqual([]);
+    });
+
+    it("does not read a credential copied under another user's key", async () => {
+      await vault.storeCredential('sess-1', 'github', bearerCredential('alice-tok'), 'user', 'alice');
+      const aliceRecord = await storage.get(`authproviders:user:${sha256Hex('alice')}:github`);
+      await storage.set(`authproviders:user:${sha256Hex('bob')}:github`, aliceRecord ?? '');
+
+      expect(await vault.getCredential('sess-1', 'github', 'user', 'bob')).toBeNull();
+      expect(await vault.getAllCredentials('sess-1', 'user', 'bob')).toEqual([]);
     });
   });
 

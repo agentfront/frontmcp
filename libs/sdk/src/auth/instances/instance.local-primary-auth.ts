@@ -670,6 +670,10 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     return undefined;
   }
 
+  override get tokenStorageAdapter(): StorageAdapter | undefined {
+    return this.storageAdapter;
+  }
+
   /**
    * When a persistent token-storage backend (Redis/SQLite) is configured, build
    * a shared `StorageAdapter` and swap the three in-memory stores for their
