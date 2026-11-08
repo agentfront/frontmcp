@@ -278,7 +278,7 @@ export interface AuthProvidersVaultOptions {
   /** Enable AuthProvidersVault (default: true if any providers registered) */
   enabled?: boolean;
 
-  /** Use shared storage with AuthorizationVault (default: true) */
+  /** Keep credentials, encrypted, in a Redis or SQLite `auth.tokenStorage` (default: true) */
   useSharedStorage?: boolean;
 
   /** Custom namespace for credential storage (default: 'authproviders:') */

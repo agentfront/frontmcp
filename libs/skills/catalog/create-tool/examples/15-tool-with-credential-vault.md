@@ -102,12 +102,12 @@ export default class Server {}
 
 ## Session credential vault vs `authProvidersVault`
 
-| Session credential vault (`this.credentials`)                     | `authProvidersVault` (`this.authProviders`)                                    |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| The user types the secret in: at sign-in, or from the connect URL | The server acquires it: a `factory` you register per provider                  |
-| Filled by local mode's `authenticate()` returning `credentials`   | `@FrontMcp({ authProvidersVault: { providers: [{ name, scope, factory }] } })` |
-| Encrypted per session, in the `auth.tokenStorage` backend         | Kept in memory per scope, until it expires or `defaultCacheTtl` (1 hour)       |
-| A missing one gets `-32001` with a connect URL                    | A factory returning `null` gets `-32001`                                       |
+| Session credential vault (`this.credentials`)                     | `authProvidersVault` (`this.authProviders`)                                                                                       |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| The user types the secret in: at sign-in, or from the connect URL | The server acquires it: a `factory` you register per provider                                                                     |
+| Filled by local mode's `authenticate()` returning `credentials`   | `@FrontMcp({ authProvidersVault: { providers: [{ name, scope, factory }] } })`                                                    |
+| Encrypted per session, in the `auth.tokenStorage` backend         | Kept per scope until it expires or `defaultCacheTtl` (1 hour): encrypted in a Redis or SQLite `auth.tokenStorage`, else in memory |
+| A missing one gets `-32001` with a connect URL                    | A factory returning `null` gets `-32001`                                                                                          |
 
 `@Tool({ authProviders })` checks both: the `authProvidersVault` provider of that name first, then the session
 credential vault's key. See `13-tool-with-single-auth-provider` for `authProvidersVault`, and the `configure-auth`

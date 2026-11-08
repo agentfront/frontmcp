@@ -5,6 +5,7 @@ export { CREDENTIAL_CACHE } from './credential-cache';
 
 // Providers (DI)
 export {
+  type AuthProvidersVaultStore,
   createAuthProvidersProviders,
   isAuthProvidersEnabled,
   LAZY_CREDENTIAL_LOADER,

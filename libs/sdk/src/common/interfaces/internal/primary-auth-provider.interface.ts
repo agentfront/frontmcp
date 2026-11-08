@@ -1,4 +1,5 @@
 import { type VerifyResult } from '@frontmcp/auth';
+import { type StorageAdapter } from '@frontmcp/utils';
 
 import {
   isOrchestratedMode,
@@ -75,6 +76,11 @@ export abstract class FrontMcpAuth<Options extends AuthOptions = AuthOptions> {
   abstract validate(request: ServerRequest): Promise<void>;
 
   abstract get issuer(): string;
+
+  /** The connected store of a Redis or SQLite `auth.tokenStorage`, once this auth has opened one. */
+  get tokenStorageAdapter(): StorageAdapter | undefined {
+    return undefined;
+  }
 
   /**
    * Cryptographically verify a gateway-issued access token (public/local/remote
