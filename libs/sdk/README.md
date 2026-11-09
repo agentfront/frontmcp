@@ -107,6 +107,15 @@ A tool is a class: `@Tool` describes it to the model, `inputSchema` validates it
 
 The [SDK reference](https://frontmcp.dev/reference/sdk) lists every decorator, context method and option.
 
+## Compared with other frameworks
+
+[TypeScript MCP server frameworks for production](https://frontmcp.dev/compare) compares FrontMCP with the official
+TypeScript SDK, FastMCP, mcp-framework, mcp-use, ViteMCP and xmcp, on auth, testing, protocol support and deployment.
+To move a server over, see
+[Migrate from the TypeScript SDK](https://frontmcp.dev/learn/migrating-from-the-typescript-sdk) and
+[Migrate from FastMCP](https://frontmcp.dev/learn/migrating-from-fastmcp). Longer guides and measurements are on the
+[blog](https://frontmcp.dev/blog).
+
 ## Related packages
 
 - [`frontmcp`](https://www.npmjs.com/package/frontmcp) — the CLI: `create`, `dev`, `build`, `test`
