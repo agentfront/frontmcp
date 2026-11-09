@@ -65,6 +65,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
   private poller?: VersionPoller;
   private loadResult?: EsmLoadResult;
   private updateInProgress = false;
+  private replacedVersionCount = 0;
   private registered?: EsmPackageVersion;
   /** For each version whose jobs and workflows the scope serves, the function that withdraws them. */
   private readonly jobWithdrawals = new Map<EsmPackageVersion, () => void>();
@@ -290,8 +291,11 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
       const loadResult = await this.loader.load(this.specifier);
       await this.registerFromManifest(loadResult.manifest, { replacing: true });
       this.loadResult = loadResult;
+      this.replacedVersionCount++;
 
-      logger.info(`ESM app ${this.id} updated to ${newVersion}`);
+      logger.info(
+        `ESM app ${this.id} updated to ${newVersion}; ${this.replacedVersionCount} replaced version(s) keep their providers until shutdown`,
+      );
     } catch (error) {
       logger.error(`Failed to update ESM app ${this.id} to ${newVersion}: ${(error as Error).message}`);
       throw error;
