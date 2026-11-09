@@ -83,6 +83,11 @@ export class SkillSessionManager extends EventEmitter {
     return this.storage.run(state, fn);
   }
 
+  /** Forget the skill session of an MCP session that ended. */
+  async endSession(sessionId: string): Promise<void> {
+    await this.store?.delete(sessionId);
+  }
+
   /**
    * Get the current session state.
    * Returns undefined if not running within a session context.

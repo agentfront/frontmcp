@@ -355,11 +355,19 @@ test.describe('Skill Session E2E', () => {
       const content = result as LoadSkillsResult;
       const skill = content.skills[0];
 
-      // Session object may or may not be present depending on session context availability
-      // When present, it should have an activated field
-      if (skill.session !== undefined) {
-        expect(typeof skill.session.activated).toBe('boolean');
-      }
+      expect(skill.session).toMatchObject({ activated: true });
+    });
+
+    test('limits the rest of the session to the skill tools in strict mode', async ({ mcp }) => {
+      const result = (await loadSkills(mcp, {
+        skillIds: ['review-pr'],
+        activateSession: true,
+        policyMode: 'strict',
+      })) as LoadSkillsResult;
+
+      expect(result.skills[0].session).toMatchObject({ activated: true, policyMode: 'strict' });
+      expect(await mcp.tools.call('github_get_pr', { prNumber: 7 })).toBeSuccessful();
+      expect(await mcp.tools.call('slack_notify', { channel: 'reviews', message: 'done' })).toBeError();
     });
 
     test('should not return session info when activateSession is false', async ({ mcp }) => {

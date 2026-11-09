@@ -186,6 +186,24 @@ When a caller loads the skill (`skills/load`, the `skills:load` flow, `GET /skil
 
 A client that hands the result to a model asks for `format: 'markdown'` to pay for each part once (new in 1.11.1; a 1.11.0 server refuses it). `DirectClient.loadSkills()` types `instructions` and `formattedContent` as `string` for the default and `'instructions-only'`, and leaves `instructions` out for `'markdown'`. 1.11.1-rc.1 left `formattedContent` out of the default and of `'instructions-only'`; 1.11.1 sends it, as 1.11.0 did. Up to 1.11.0, `'instructions-only'` still carried the tool schemas in `formattedContent`.
 
+## Limiting a Session to a Skill's Tools
+
+A client can limit its own MCP session to the tools a skill lists. It sends `skills/load` with `activateSession: true`, and optionally a `policyMode`:
+
+```json
+{ "method": "skills/load", "params": { "skillIds": ["review-pr"], "activateSession": true, "policyMode": "strict" } }
+```
+
+Each skill in the result then has `session: { activated: true, sessionId, policyMode, allowedTools }`. Later `tools/call` requests on the same MCP session are checked against the tools the active skills list; several active skills combine their lists.
+
+| `policyMode`           | A tool the active skills don't list                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `permissive` (default) | Runs; the server logs a warning                                                                              |
+| `strict`               | Fails: `Tool '<name>' is not permitted during the '<skill>' skill session.`, with the tools the skills allow |
+| `approval`             | Fails: `Tool '<name>' requires approval to be used with skill '<skill>'.`                                    |
+
+The activation lasts as long as the MCP session; a session the client ends with `DELETE` forgets it. A request without an MCP session activates nothing, and its result has no `session`. Up to 1.11.2, `activateSession: true` activated nothing.
+
 ## Instruction Sources
 
 Skills support three ways to provide instructions.

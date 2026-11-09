@@ -70,7 +70,13 @@ export class MemorySkillSessionStore implements SkillSessionStore {
     return cloned;
   }
 
+  constructor(private readonly maxSessions = 10_000) {}
+
   async save(session: SkillSessionState): Promise<void> {
+    if (!this.sessions.has(session.sessionId) && this.sessions.size >= this.maxSessions) {
+      const oldestSessionId = this.sessions.keys().next().value;
+      if (oldestSessionId !== undefined) this.sessions.delete(oldestSessionId);
+    }
     // Clone the session to avoid reference issues
     this.sessions.set(session.sessionId, {
       ...session,
