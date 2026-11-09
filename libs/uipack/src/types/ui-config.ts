@@ -68,90 +68,34 @@ export interface UIContentSecurityPolicy {
 }
 
 /**
- * XSS protection and content security settings.
+ * Sanitization switches for widget HTML.
  *
- * Controls sanitization of HTML content rendered in widgets.
- * By default, strict sanitization is applied to prevent XSS attacks.
+ * FrontMCP never sanitizes template markup: a `<script>`, an `onclick` or a `javascript:` link in
+ * markup a template builds (`ctx.helpers.html`, `trustedHtml`, an HTML string, a `.tsx` widget)
+ * reaches the page as written. Values interpolated into `` html`…` `` are escaped, and so are plain
+ * string results unless `escapeStringResults: false`.
  *
- * ## Platform Isolation Context
- *
- * Both OpenAI and Claude render widgets in **double-iframe isolation**:
- *
- * ```
- * ┌─────────────────────────────────────────────────┐
- * │  ChatGPT / Claude Desktop                       │
- * │  ┌─────────────────────────────────────────────┐│
- * │  │  Outer Sandbox Iframe                       ││
- * │  │  - sandbox="allow-scripts allow-same-origin"││
- * │  │  - No access to parent cookies              ││
- * │  │  ┌─────────────────────────────────────────┐││
- * │  │  │  Inner Widget Iframe                    │││
- * │  │  │  - CSP: script-src 'self' 'unsafe-inline'│││
- * │  │  │  - CSP: connect-src based on config     │││
- * │  │  │  - Your widget HTML renders here        │││
- * │  │  └─────────────────────────────────────────┘││
- * │  └─────────────────────────────────────────────┘│
- * └─────────────────────────────────────────────────┘
- * ```
- *
- * This isolation means XSS attacks are **contained** but can still:
- * - Access widget data (input/output)
- * - Make API calls within CSP-allowed domains
- * - Display fake/phishing UI to users
- *
- * **Recommendation:** Only disable protection for fully trusted content.
+ * @deprecated Has no effect: there is no sanitizer for these settings to relax.
  */
 export interface UIContentSecurity {
   /**
    * Allow `javascript:` and other potentially dangerous URL schemes in links.
    *
-   * When `false` (default), URLs are validated to only allow:
-   * - `http://`, `https://` (web URLs)
-   * - `/`, `#` (relative paths, anchors)
-   * - `mailto:` (email links)
-   *
-   * When `true`, allows any URL scheme including:
-   * - `javascript:` (inline script execution)
-   * - `data:` (data URIs)
-   * - `vbscript:` (legacy script)
-   *
-   * @default false
+   * @deprecated Has no effect: links are never rewritten.
    */
   allowUnsafeLinks?: boolean;
 
   /**
    * Allow inline `<script>` tags and event handlers (onclick, onerror, etc).
    *
-   * When `false` (default), HTML content is sanitized to remove:
-   * - `<script>...</script>` tags
-   * - Event handler attributes (`onclick`, `onerror`, `onload`, etc.)
-   *
-   * When `true`, these elements are preserved in the output.
-   *
-   * **Note:** Even with this enabled, CSP may still block script execution
-   * depending on the platform's iframe sandbox settings.
-   *
-   * @default false
+   * @deprecated Has no effect: scripts and event handlers are never removed.
    */
   allowInlineScripts?: boolean;
 
   /**
    * Completely bypass all HTML sanitization.
    *
-   * **⚠️ DANGEROUS:** Only use with fully trusted, server-generated content.
-   *
-   * When `true`, no sanitization is applied:
-   * - Script tags are preserved
-   * - Event handlers are preserved
-   * - All URL schemes are allowed
-   * - No HTML escaping is performed
-   *
-   * This is useful for:
-   * - Embedding trusted third-party widgets
-   * - Complex interactive dashboards from trusted sources
-   * - Content that was pre-sanitized server-side
-   *
-   * @default false
+   * @deprecated Has no effect: there is no sanitization to bypass.
    */
   bypassSanitization?: boolean;
 }
@@ -268,9 +212,8 @@ export type TemplateBuilderFn<In = unknown, Out = unknown> = (ctx: TemplateConte
  * - `'hybrid'`: Shell (React runtime + bridge) pre-compiled at startup.
  *   Component code transpiled per-request and delivered in `_meta['ui/component']`.
  *
- * - `'direct-url'`: HTTP endpoint on MCP server.
- *
- * - `'custom-url'`: Custom URL (CDN or external hosting).
+ * - `'direct-url'`, `'custom-url'`: Deprecated. Served as `'inline'` is: nothing serves the widget
+ *   from a URL, and startup logs a warning.
  *
  * ## Claude target caveat (issue #447)
  *
@@ -288,8 +231,8 @@ export type WidgetServingMode =
   | 'inline' // HTML embedded directly in tool response _meta
   | 'static' // Pre-compiled at startup, resolved via tools/list (ui:// resource URI)
   | 'hybrid' // Shell (React + renderer) cached, component + data in response
-  | 'direct-url' // HTTP endpoint on MCP server
-  | 'custom-url'; // Custom URL (CDN or external hosting)
+  | 'direct-url' // Deprecated: served as 'inline'
+  | 'custom-url'; // Deprecated: served as 'inline'
 
 // ============================================
 // Display Mode
@@ -356,47 +299,11 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   /**
    * Content security and XSS protection settings.
    *
-   * By default, FrontMCP sanitizes HTML content to prevent XSS attacks:
-   * - Removes `<script>` tags and event handlers (onclick, onerror, etc.)
-   * - Validates URL schemes in links (blocks `javascript:`, `data:`, `vbscript:`)
+   * FrontMCP does not sanitize template markup, with or without this option: see
+   * {@link UIContentSecurity}. Keep untrusted values out of trusted markup and interpolate them
+   * with `ctx.helpers.html`, which escapes them.
    *
-   * These protections can be disabled for trusted content that requires
-   * inline scripts, custom event handlers, or special URL schemes.
-   *
-   * ## Security Context
-   *
-   * **OpenAI/Claude run widgets in double-iframe isolation:**
-   * - Outer sandbox iframe with restricted permissions
-   * - Inner content iframe with CSP headers
-   * - No access to parent window or cookies
-   * - Network requests restricted by CSP
-   *
-   * This isolation provides defense-in-depth, making XSS less impactful.
-   * However, XSS can still:
-   * - Steal widget state/data
-   * - Make unauthorized API calls (within CSP limits)
-   * - Phish users with fake UI
-   *
-   * **Best Practice:** Keep XSS protection enabled unless you have a specific
-   * need for inline scripts/handlers AND trust your content source completely.
-   *
-   * @example
-   * ```typescript
-   * // Default: Full XSS protection
-   * ui: { template: MyWidget }
-   *
-   * // Allow inline scripts for trusted dashboard
-   * ui: {
-   *   template: TrustedDashboard,
-   *   contentSecurity: { allowInlineScripts: true }
-   * }
-   *
-   * // Bypass all sanitization for fully trusted HTML
-   * ui: {
-   *   template: FullyTrustedContent,
-   *   contentSecurity: { bypassSanitization: true }
-   * }
-   * ```
+   * @deprecated Has no effect; startup logs a warning when it is set.
    */
   contentSecurity?: UIContentSecurity;
 
@@ -527,11 +434,8 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - `'hybrid'`: Shell (React runtime + bridge) pre-compiled at startup.
    *   Component code transpiled per-request and delivered in `_meta['ui/component']`.
    *
-   * - `'direct-url'`: Served from MCP server's HTTP endpoint.
-   *   Avoids third-party cookie issues since widget loads from same domain.
-   *
-   * - `'custom-url'`: Served from a custom URL (CDN, external hosting).
-   *   Requires `customWidgetUrl` to be set.
+   * - `'direct-url'`, `'custom-url'`: Deprecated. Served as `'inline'` is, with a startup
+   *   warning: nothing serves the widget from a URL.
    *
    * When unset, the FrontMCP SDK uses the app's `@App({ ui: { servingMode } })` default, else the
    * server's `@FrontMcp({ ui: { servingMode } })`, else `'auto'`.
@@ -542,44 +446,25 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
 
   /**
    * Custom URL for widget serving when `servingMode: 'custom-url'`.
-   * The URL can include `{token}` placeholder which will be replaced with
-   * the widget access token.
    *
-   * @example
-   * ```typescript
-   * customWidgetUrl: 'https://cdn.example.com/widgets/weather.html?token={token}'
-   * ```
+   * @deprecated Has no effect: `'custom-url'` is served as `'inline'`. Startup logs a warning when it is set.
    */
   customWidgetUrl?: string;
 
   /**
    * Path for direct URL serving when `servingMode: 'direct-url'`.
-   * This path is appended to the MCP server's base URL.
    *
-   * @example
-   * ```typescript
-   * directPath: '/widgets/weather'
-   * // Results in: https://mcp-server.example.com/widgets/weather?token=...
-   * ```
+   * @deprecated Has no effect: `'direct-url'` is served as `'inline'`, and no route serves the widget.
+   * Startup logs a warning when it is set.
    */
   directPath?: string;
 
   /**
    * Custom React components available in MDX templates.
-   * These components can be used directly in MDX content without importing.
    *
-   * @example
-   * ```typescript
-   * ui: {
-   *   template: `# Weather\n<Alert type="info">Data loaded</Alert>`,
-   *   mdxComponents: {
-   *     Alert: ({ type, children }) => <div className={type}>{children}</div>,
-   *     Card: MyCardComponent,
-   *   }
-   * }
-   * ```
+   * @deprecated Has no effect: MDX is not compiled, so a string template is HTML or Markdown.
+   * Startup logs a warning when it is set.
    */
-
   mdxComponents?: Record<string, any>;
 
   // ============================================
@@ -642,49 +527,8 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   /**
    * Enable client-side React hydration after server-side rendering (SSR).
    *
-   * **Default: `false`**
-   *
-   * When `false` (default):
-   * - SSR output is static HTML
-   * - No React runtime is loaded on the client
-   * - All interactivity is handled by the FrontMCP Bridge IIFE
-   * - This prevents React Hydration Error #418 in MCP clients
-   *
-   * When `true`:
-   * - React/ReactDOM CDN scripts are included
-   * - Client attempts to hydrate React components
-   * - May cause hydration mismatch errors in some MCP clients (Claude, ChatGPT)
-   *
-   * **Why disabled by default?**
-   * MCP clients like Claude and ChatGPT render HTML in sandboxed iframes.
-   * React hydration expects the client-rendered HTML to exactly match the
-   * server-rendered HTML. Due to timing differences, random data, and
-   * different execution contexts, mismatches frequently occur causing
-   * React Error #418 ("Hydration failed...").
-   *
-   * The FrontMCP Bridge IIFE already provides all necessary interactivity
-   * (tool calls via `data-tool-call`, state updates, loading states) without
-   * requiring React hydration.
-   *
-   * **Only enable if:**
-   * - You need React state management on the client
-   * - You're sure your template produces deterministic HTML
-   * - You've tested hydration works in your target MCP client
-   *
-   * @example
-   * ```typescript
-   * // Disable hydration (default behavior - recommended)
-   * ui: {
-   *   template: MyReactComponent,
-   *   hydrate: false
-   * }
-   *
-   * // Enable hydration (use with caution)
-   * ui: {
-   *   template: MyStatefulComponent,
-   *   hydrate: true
-   * }
-   * ```
+   * @deprecated Has no effect: widgets are not rendered on the server, so there is nothing to
+   * hydrate. A `.tsx` FileSource widget is rendered in the page. Startup logs a warning when it is set.
    */
   hydrate?: boolean;
 
@@ -701,7 +545,7 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - `'markdown'`: Pure Markdown
    * - `'auto'`: Auto-detect from template (default)
    *
-   * @default 'auto'
+   * @deprecated Has no effect: the type is always detected from `template`. Startup logs a warning when it is set.
    */
   uiType?: 'html' | 'react' | 'mdx' | 'markdown' | 'auto';
 
@@ -711,7 +555,8 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - `'static'`: Pre-compile widget shell, inject data at runtime (default)
    * - `'dynamic'`: Generate fresh HTML per tool invocation
    *
-   * @default 'static'
+   * @deprecated Has no effect: `servingMode` decides it (`'static'` compiles the page at startup,
+   * `'inline'` renders it for each call). Startup logs a warning when it is set.
    */
   bundlingMode?: 'static' | 'dynamic';
 
@@ -742,6 +587,9 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
 
   /**
    * Runtime options for specific renderers.
+   *
+   * @deprecated Has no effect: there is no hydration, and Markdown is converted with fixed rules.
+   * Startup logs a warning when it is set.
    */
   runtimeOptions?: {
     /** Enable React hydration after SSR */
@@ -762,31 +610,8 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   /**
    * Prefix text shown before HTML in dual-payload responses (Claude).
    *
-   * When the output mode is `'dual-payload'` (auto-detected for Claude clients),
-   * the tool response contains two TextContent blocks:
-   * 1. Pure JSON data: `{"temperature": 72, ...}`
-   * 2. Markdown-wrapped HTML: `{prefix}:\n\n```html\n<!DOCTYPE html>...\n```
-   *
-   * This field controls the prefix text in block 2.
-   *
-   * @default 'Here is the visual result'
-   *
-   * @example
-   * ```typescript
-   * // Weather tool
-   * ui: {
-   *   template: WeatherWidget,
-   *   htmlResponsePrefix: 'Here is the weather dashboard',
-   * }
-   * // Output block 2: "Here is the weather dashboard:\n\n```html\n..."
-   *
-   * // Stock tool
-   * ui: {
-   *   template: StockWidget,
-   *   htmlResponsePrefix: 'Here is the stock information',
-   * }
-   * // Output block 2: "Here is the stock information:\n\n```html\n..."
-   * ```
+   * @deprecated Has no effect: FrontMCP sends no dual HTML payload, to Claude or any other client.
+   * Startup logs a warning when it is set.
    */
   htmlResponsePrefix?: string;
 

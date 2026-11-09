@@ -172,7 +172,7 @@ describe('startup notices for a default that does not do what it says', () => {
 
     const notices = warnings.filter((line) => line.includes('ui.servingMode'));
     expect(notices).toEqual([
-      expect.stringMatching(/^`@FrontMcp\(\{ ui \}\)`: `ui.servingMode: 'custom-url'` is not implemented/),
+      expect.stringMatching(/^`@FrontMcp\(\{ ui \}\)`: `ui.servingMode: 'custom-url'` is deprecated/),
       expect.stringMatching(/^App "hybrid-reports" `@App\(\{ ui \}\)`: `ui.servingMode: 'hybrid'`/),
     ]);
   });
@@ -218,9 +218,9 @@ describe('resolveWidgetServingMode', () => {
 });
 
 describe('describeServingModeDefault', () => {
-  it('says once that an unimplemented default serves inline', () => {
+  it('says once that a deprecated default serves inline', () => {
     expect(describeServingModeDefault('`@FrontMcp({ ui })`', 'custom-url')).toEqual([
-      expect.stringContaining("`ui.servingMode: 'custom-url'` is not implemented"),
+      expect.stringContaining("`ui.servingMode: 'custom-url'` is deprecated; tools that inherit it are served inline"),
     ]);
   });
 

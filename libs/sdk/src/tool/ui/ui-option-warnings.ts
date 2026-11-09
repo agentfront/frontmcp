@@ -1,9 +1,8 @@
 import { validateCSPDomain } from '@frontmcp/uipack/shell';
 
 /**
- * `ui` options that the schema accepts but nothing reads yet. Declaring one is
- * not an error, but a developer who sets it expects an effect, so startup says
- * that there is none.
+ * Deprecated `ui` options that the schema accepts and nothing reads. Declaring one is not an error,
+ * but a developer who sets it expects an effect, so startup says that there is none.
  */
 const IGNORED_UI_OPTIONS = [
   'contentSecurity',
@@ -13,8 +12,11 @@ const IGNORED_UI_OPTIONS = [
   'bundlingMode',
   'uiType',
   'htmlResponsePrefix',
+  'customWidgetUrl',
+  'directPath',
 ] as const;
 
+/** Deprecated serving modes, served as `'inline'` is. */
 const UNSUPPORTED_SERVING_MODES = ['direct-url', 'custom-url'] as const;
 
 /** Describe the parts of a tool's `ui` config that have no effect, one message per problem. */
@@ -26,15 +28,17 @@ export function describeIgnoredUiOptions(toolName: string, ui: Record<string, un
   if (ignored.length > 0) {
     messages.push(
       `Tool "${toolName}": \`ui.${ignored.join('`, `ui.')}\` ${
-        ignored.length === 1 ? 'is' : 'are'
-      } accepted but not used yet, so ${ignored.length === 1 ? 'it has' : 'they have'} no effect.`,
+        ignored.length === 1
+          ? 'is deprecated and has no effect; remove it.'
+          : 'are deprecated and have no effect; remove them.'
+      }`,
     );
   }
 
   const mode = ui['servingMode'];
   if ((UNSUPPORTED_SERVING_MODES as readonly unknown[]).includes(mode)) {
     messages.push(
-      `Tool "${toolName}": \`ui.servingMode: '${String(mode)}'\` is not implemented; the widget is served inline, as with \`servingMode: 'inline'\`.`,
+      `Tool "${toolName}": \`ui.servingMode: '${String(mode)}'\` is deprecated; the widget is served inline, as with \`servingMode: 'inline'\`.`,
     );
   }
 
@@ -59,7 +63,7 @@ export function describeIgnoredUiOptions(toolName: string, ui: Record<string, un
 export function describeServingModeDefault(owner: string, mode: string | undefined): string[] {
   if ((UNSUPPORTED_SERVING_MODES as readonly unknown[]).includes(mode)) {
     return [
-      `${owner}: \`ui.servingMode: '${String(mode)}'\` is not implemented; tools that inherit it are served inline, as with \`servingMode: 'inline'\`.`,
+      `${owner}: \`ui.servingMode: '${String(mode)}'\` is deprecated; tools that inherit it are served inline, as with \`servingMode: 'inline'\`.`,
     ];
   }
   if (mode === 'hybrid') {
