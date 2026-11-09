@@ -269,7 +269,11 @@ export default class Server {}
       const bundle = path.join(projectDir, 'dist', 'node', 'budget-demo.bundle.js');
       const child = spawn(process.execPath, [bundle], {
         cwd: projectDir,
-        env: { ...process.env, NODE_ENV: 'production' },
+        env: {
+          ...process.env,
+          NODE_ENV: 'production',
+          MCP_SESSION_SECRET: 'budget-demo-e2e-session-secret-0123456789',
+        },
       });
       let output = '';
       const warned = await new Promise<boolean>((resolve) => {

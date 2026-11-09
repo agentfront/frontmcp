@@ -42,6 +42,14 @@ export function getKey(): Uint8Array {
 }
 
 /**
+ * Whether `MCP_SESSION_SECRET` is set, so session ids are encrypted with it rather than the machine-id fallback
+ * that production refuses.
+ */
+export function isSessionSecretConfigured(): boolean {
+  return !!getEnv('MCP_SESSION_SECRET');
+}
+
+/**
  * Encrypt an object to a compact session ID format (iv.tag.ct).
  */
 export function encryptJson(obj: unknown): string {

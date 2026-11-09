@@ -291,6 +291,9 @@ export const transportOptionsSchema = z.object({
    * deployments are untouched.
    *
    * Over stdio (`'legacy'` by default) it applies until the connection sends `initialize`.
+   *
+   * In production, a server served over HTTP with `'legacy'` refuses to start without `MCP_SESSION_SECRET`, which
+   * encrypts session ids. With `'2026-07-28'` it starts, and `/readyz` reports the missing secret as degraded.
    */
   defaultProtocolVersion: z.enum(['2026-07-28', 'legacy']).optional(),
 
