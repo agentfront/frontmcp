@@ -156,7 +156,7 @@ async execute(input: Input) {
 }
 ```
 
-> `this.respond` doesn't bypass `outputSchema` — its argument is validated like a normal return value.
+> `this.respond` doesn't bypass `outputSchema` — its argument is validated like a normal return value and sent as `content` and `structuredContent`. A complete `CallToolResult` (a `content` array) is sent as it is, as a returned one is. Up to 1.11.2 the argument was sent as the whole result: no `content` (a string was spread into `{"0":"C",…}`) and no `outputSchema` check.
 
 ## See also
 

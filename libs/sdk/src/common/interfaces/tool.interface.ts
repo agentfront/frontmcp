@@ -56,6 +56,8 @@ export abstract class ToolContext<
   _toolInputInternal?: unknown;
   /** @internal JSON-RPC id of the tools/call request - set by CallToolFlow, for flows the call is handed on to */
   _jsonRpcRequestIdInternal?: string | number;
+  /** @internal Set by CallToolFlow: records the value `respond()` ends the call with as the tool's output */
+  _onRespondInternal?: (value: Out) => void;
 
   // ---- INPUT storages (backing fields)
   private _rawInput?: Partial<In> | any;
@@ -142,9 +144,17 @@ export abstract class ToolContext<
     return this._outputHistory;
   }
 
+  /**
+   * End the call with `value` as the tool's output, as if `execute()` returned it: it is checked
+   * against `outputSchema` and sent as `content` and `structuredContent`. A hook that calls it
+   * (`ctx.state.toolContext.respond(value)`) answers for the tool, which then does not run.
+   * To send a whole `CallToolResult` you built, pass one with a `content` array: it is sent as it is.
+   *
+   * @param value - The tool's output
+   */
   respond(value: Out): never {
-    // record validated output and surface the value via control flow
     this.output = value;
+    this._onRespondInternal?.(value);
     FlowControl.respond<Out>(value);
   }
 
