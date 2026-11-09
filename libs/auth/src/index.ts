@@ -189,6 +189,7 @@ export {
   decryptSessionJson,
   safeDecrypt,
   resetCachedKey,
+  isSessionSecretConfigured,
   // Redis Session Store
   RedisSessionStore,
   // Vercel KV Session Store

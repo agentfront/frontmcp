@@ -16,6 +16,7 @@ These checks apply to ALL deployment targets. Run them first, then proceed to yo
 - [ ] API keys/tokens are loaded from environment variables, never hardcoded
 - [ ] Session storage uses Redis or platform-native store (not in-memory) for multi-instance
 - [ ] `MCP_SESSION_SECRET` is the same on every instance — a session id minted under another secret is answered 404 (the client re-initializes), in every auth mode including `public`
+- [ ] `MCP_SESSION_SECRET` is set: a production HTTP server whose `transport.defaultProtocolVersion` is `'legacy'` (the Node default) refuses to start without it (`SESSION_SECRET_REQUIRED`); one whose fallback is `'2026-07-28'` (the default of `createFetchHandler()` and Workers) starts, logs a warning, answers older clients' `initialize` with `500 SESSION_SECRET_REQUIRED`, and reports a `degraded` `session-secret` check on `/readyz`
 - [ ] Session TTL is configured appropriately (not infinite)
 - [ ] Tool-level authorization is enforced where needed (ApprovalPlugin or custom)
 - [ ] OAuth redirect URIs are restricted to known domains
