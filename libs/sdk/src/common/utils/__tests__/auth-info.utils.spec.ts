@@ -22,7 +22,7 @@ describe('authInfoFromAuthorization', () => {
       token: 'access-token',
       clientId: 'user-123',
       scopes: ['tickets:read', 'tickets:write'],
-      expiresAt: 1_900_000_000_000,
+      expiresAt: 1_900_000_000,
       user,
       extra: { user, sessionId: 'session-1', sessionPayload: undefined },
     });

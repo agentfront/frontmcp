@@ -11,6 +11,7 @@ export interface AuthorizationAuthInfo {
   token: string;
   clientId: string | undefined;
   scopes: string[];
+  /** When the token expires, in epoch seconds (its `exp` claim), as the MCP SDK's `AuthInfo` defines it. */
   expiresAt: number | undefined;
   user: Authorization['user'];
   extra: {
@@ -71,8 +72,7 @@ export function authInfoFromAuthorization(
     token,
     clientId: user?.sub,
     scopes: scopesFromClaims(user as { scope?: unknown; scp?: unknown } | undefined),
-    // JWT exp is in seconds; the SDK uses milliseconds throughout
-    expiresAt: user?.exp ? user.exp * 1000 : undefined,
+    expiresAt: user?.exp,
     user,
     extra: {
       user,
