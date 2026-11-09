@@ -1,12 +1,14 @@
 // file: libs/plugins/src/codecall/tools/execute.tool.ts
 
-import { getCallSurface, Tool, ToolContext, type ToolEntry } from '@frontmcp/sdk';
+import { getCallSurface, toMcpError, Tool, ToolContext, type McpError, type ToolEntry } from '@frontmcp/sdk';
 
 import type { CodeCallToolDescription, CodeCallVmEnvironment } from '../codecall.symbol';
 import {
+  createPublicToolCallError,
   createToolCallError,
   TOOL_CALL_ERROR_CODES,
   type CallToolOptions,
+  type ToolCallError,
   type ToolCallErrorCode,
   type ToolCallResult,
 } from '../errors';
@@ -34,42 +36,37 @@ import {
 } from './execute.schema';
 
 /**
- * Determine the error code from an error object.
- * Used to categorize errors for sanitized reporting.
+ * The code of a failed tool call, from the error's type and code. Its message is never read: a tool's own
+ * `User u9 not found` is not a missing tool, and "timeout" or "validation" in a message are not those failures.
  */
-function getErrorCode(error: unknown): ToolCallErrorCode {
-  if (!(error instanceof Error)) {
-    return TOOL_CALL_ERROR_CODES.EXECUTION;
-  }
-
-  const { code, statusCode } = error as { code?: unknown; statusCode?: unknown };
-  if (code === 'INVALID_INPUT') {
+function getErrorCode(error: unknown, clientError: McpError): ToolCallErrorCode {
+  if (error instanceof Error && error.name === 'ZodError') {
     return TOOL_CALL_ERROR_CODES.VALIDATION;
   }
-
-  if (statusCode === 429) {
-    return TOOL_CALL_ERROR_CODES.RATE_LIMITED;
+  switch (clientError.code) {
+    case 'INVALID_INPUT':
+      return TOOL_CALL_ERROR_CODES.VALIDATION;
+    case 'TOOL_NOT_FOUND':
+      return TOOL_CALL_ERROR_CODES.NOT_FOUND;
+    case 'EXECUTION_TIMEOUT':
+      return TOOL_CALL_ERROR_CODES.TIMEOUT;
+    // A remote FrontMCP tool's limit refusal is a result with its code, without the 429 status
+    case 'RATE_LIMIT_EXCEEDED':
+    case 'QUOTA_EXCEEDED':
+    case 'CONCURRENCY_LIMIT':
+    case 'QUEUE_TIMEOUT':
+      return TOOL_CALL_ERROR_CODES.RATE_LIMITED;
   }
-
-  if (error.name === 'ZodError' || error.message?.includes('validation')) {
-    return TOOL_CALL_ERROR_CODES.VALIDATION;
-  }
-
-  if (error.message?.includes('timeout') || error.message?.includes('timed out')) {
-    return TOOL_CALL_ERROR_CODES.TIMEOUT;
-  }
-
-  if (error.name === 'ToolNotFoundError' || error.message?.includes('not found')) {
-    return TOOL_CALL_ERROR_CODES.NOT_FOUND;
-  }
-
-  return TOOL_CALL_ERROR_CODES.EXECUTION;
+  return clientError.statusCode === 429 ? TOOL_CALL_ERROR_CODES.RATE_LIMITED : TOOL_CALL_ERROR_CODES.EXECUTION;
 }
 
-/** What an MCP client would be told about the error: its public message, else its message. */
-function publicMessageOf(error: Error): string {
-  const { getPublicMessage } = error as { getPublicMessage?: () => string };
-  return typeof getPublicMessage === 'function' ? getPublicMessage.call(error) : error.message;
+/** The failed call as the script sees it: the message an MCP client would be told, or the code's generic one for an internal error. */
+function toolCallErrorOf(error: unknown, toolName: string): ToolCallError {
+  const clientError = toMcpError(error);
+  const code = getErrorCode(error, clientError);
+  return clientError.isPublic
+    ? createPublicToolCallError(code, toolName, clientError.getPublicMessage())
+    : createToolCallError(code, toolName);
 }
 
 @Tool({
@@ -233,13 +230,9 @@ export default class ExecuteTool extends ToolContext {
           // Error sanitization - NEVER expose internal details
           // ============================================================
 
-          // Determine error code from the error type
-          const errorCode = getErrorCode(error);
-          const rawMessage = error instanceof Error ? publicMessageOf(error) : undefined;
+          const sanitizedError = toolCallErrorOf(error, name);
 
-          audit?.logToolCallFailure(executionId, name, callDepth, Date.now() - toolCallStartedAt, errorCode);
-
-          const sanitizedError = createToolCallError(errorCode, name, rawMessage);
+          audit?.logToolCallFailure(executionId, name, callDepth, Date.now() - toolCallStartedAt, sanitizedError.code);
 
           if (throwOnError) {
             // Throw sanitized error (no stack trace, no internal details)
