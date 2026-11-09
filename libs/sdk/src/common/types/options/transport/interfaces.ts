@@ -399,6 +399,9 @@ export interface TransportOptionsInterface {
    *
    * Over stdio it applies until the connection sends `initialize`, which makes it a session.
    *
+   * In production, a server served over HTTP with `'legacy'` refuses to start without `MCP_SESSION_SECRET`, which
+   * encrypts session ids. With `'2026-07-28'` it starts, and `/readyz` reports the missing secret as degraded.
+   *
    * @default '2026-07-28' on V8-isolate runtimes (Cloudflare Workers), `'legacy'` elsewhere (stdio included)
    */
   defaultProtocolVersion?: '2026-07-28' | 'legacy';

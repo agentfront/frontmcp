@@ -11,4 +11,11 @@ export {
   extractBearerToken,
   type AnonymousCallerClaimsOptions,
 } from './auth-token.utils';
-export { getKey, encryptJson, decryptSessionJson, safeDecrypt, resetCachedKey } from './session-crypto.utils';
+export {
+  getKey,
+  encryptJson,
+  decryptSessionJson,
+  safeDecrypt,
+  resetCachedKey,
+  isSessionSecretConfigured,
+} from './session-crypto.utils';

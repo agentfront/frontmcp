@@ -243,6 +243,7 @@ export {
   decryptSessionJson,
   safeDecrypt,
   resetCachedKey,
+  isSessionSecretConfigured,
   TinyTtlCache,
 } from './utils';
 export type { AnonymousCallerClaimsOptions } from './utils';
