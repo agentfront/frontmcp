@@ -1,4 +1,4 @@
-import type { ToolApprovalRequirement } from '../approval';
+import type { ApprovalContext, ToolApprovalRequirement } from '../approval';
 
 /**
  * Approval types for the plugin.
@@ -41,17 +41,21 @@ declare global {
 export type ApprovalMode = 'recheck' | 'webhook';
 
 /**
- * Challenge record stored in Redis for PKCE webhook flow.
+ * A pending approval request: what `mode: 'webhook'` stores under the request's PKCE code challenge until its callback
+ * arrives, or `challengeTtl` passes.
  */
 export interface ChallengeRecord {
   /** Tool ID being approved */
   toolId: string;
 
-  /** Session ID (never exposed to webhook) */
+  /** Session ID (never sent to the webhook) */
   sessionId: string;
 
   /** User ID if available */
   userId?: string;
+
+  /** The context the refused call ran in, which a `context_specific` approval is granted for */
+  context?: ApprovalContext;
 
   /** Requested approval scope */
   requestedScope: string;
@@ -75,13 +79,20 @@ export interface ChallengeRecord {
 }
 
 /**
- * Webhook payload sent to external approval system.
+ * The body of the request `mode: 'webhook'` POSTs to `webhook.url` when a call needs an approval it doesn't have. It is
+ * signed with `webhook.secret` (Standard Webhooks: `webhook-id`, `webhook-timestamp`, `webhook-signature` headers).
  */
 export interface WebhookPayload {
-  /** PKCE code challenge (SHA256 of code_verifier) */
+  /** Always `'approval.requested'` */
+  type: 'approval.requested';
+
+  /** SHA-256 of `codeVerifier` (PKCE S256): the request's id, safe to show and log */
   codeChallenge: string;
 
-  /** Tool being approved */
+  /** The secret the callback sends back to decide this request. Keep it out of logs */
+  codeVerifier: string;
+
+  /** Tool being approved: `<app id>:<tool name>` */
   toolId: string;
 
   /** Tool name */
@@ -96,30 +107,51 @@ export interface WebhookPayload {
   /** Custom approval message */
   approvalMessage?: string;
 
-  /** URL for callback */
-  callbackUrl: string;
+  /** The scope an approval gets when the callback names none: the tool's `defaultScope` */
+  requestedScope: string;
+
+  /** The scopes the tool accepts, when it limits them */
+  allowedScopes?: string[];
+
+  /** The longest approval the tool accepts, in milliseconds */
+  maxTtlMs?: number;
+
+  /** The signed-in caller, when there is one */
+  userId?: string;
+
+  /** The path the server takes the decision on */
+  callbackPath: string;
+
+  /** `FRONTMCP_PUBLIC_URL` followed by `callbackPath`, when `FRONTMCP_PUBLIC_URL` is set */
+  callbackUrl?: string;
+
+  /** When the request stops accepting a decision (ms since the epoch) */
+  expiresAt: number;
 
   /** Request timestamp */
   timestamp: number;
+
+  /** The caller's access token, only with `webhook.includeJwt: true` */
+  jwt?: string;
 }
 
 /**
- * Callback payload received from external approval system.
+ * The body of a decision POSTed to `webhook.callbackPath`, signed with `webhook.secret` like the request.
  */
 export interface CallbackPayload {
-  /** PKCE code verifier (proves knowledge of challenge) */
+  /** The request's `codeVerifier` */
   codeVerifier: string;
 
   /** Whether approved or denied */
   approved: boolean;
 
-  /** Approval scope if approved */
+  /** Approval scope if approved: the request's `requestedScope` when absent */
   scope?: string;
 
-  /** TTL in milliseconds if time-limited */
+  /** How long the approval, or the denial, lasts in milliseconds */
   ttlMs?: number;
 
-  /** Who granted the approval */
+  /** Who decided; recorded with `origin: 'webhook'` */
   grantedBy?: {
     source: string;
     identifier?: string;
@@ -131,19 +163,22 @@ export interface CallbackPayload {
 }
 
 /**
- * Recheck response from external approval API.
+ * The answer `mode: 'recheck'` reads from `recheck.url`.
  */
 export interface RecheckResponse {
   /** Whether approved */
   approved: boolean;
 
-  /** Approval scope if approved */
+  /** With `approved: false`, `true` when nobody has decided yet: the plugin asks again after `recheck.interval` */
+  pending?: boolean;
+
+  /** Approval scope if approved: the tool's `defaultScope` when absent */
   scope?: string;
 
   /** TTL in milliseconds if time-limited */
   ttlMs?: number;
 
-  /** Who granted the approval */
+  /** Who granted the approval; recorded with `origin: 'recheck'` */
   grantedBy?: {
     source: string;
     identifier?: string;

@@ -1,7 +1,6 @@
 /**
- * Options ApprovalPlugin accepts and never reads: `webhook.url`, `webhook.includeJwt`, `webhook.callbackPath`,
- * `recheck`, `enableAudit` and `maxDelegationDepth`. They were documented as reserved; a server that sets one now
- * says so in its log when it starts.
+ * Options ApprovalPlugin accepts and never reads: `enableAudit` and `maxDelegationDepth`. They were documented as
+ * reserved; a server that sets one now says so in its log when it starts.
  */
 import 'reflect-metadata';
 
@@ -67,17 +66,11 @@ afterAll(async () => {
 
 describe('ApprovalPlugin options it never reads', () => {
   it('names each one that is set, once, when the server starts', async () => {
-    await startServer({
-      mode: 'webhook',
-      webhook: { url: 'https://approval.example.com/hook', includeJwt: true, callbackPath: '/cb', challengeTtl: 60 },
-      recheck: { url: 'https://approval.example.com/status', interval: 1000 },
-      enableAudit: true,
-      maxDelegationDepth: 2,
-    });
+    await startServer({ mode: 'webhook', webhook: { challengeTtl: 60 }, enableAudit: true, maxDelegationDepth: 2 });
 
     expect(ignoredWarnings()).toEqual([
       expect.stringContaining(
-        'ApprovalPlugin ignores `webhook.url`, `webhook.includeJwt`, `webhook.callbackPath`, `recheck`, `enableAudit`, `maxDelegationDepth`: the plugin sends no webhook, serves no callback route, polls nothing and logs no audit trail.',
+        'ApprovalPlugin ignores `enableAudit`, `maxDelegationDepth`: the plugin logs no audit trail and bounds no delegation.',
       ),
     ]);
   });

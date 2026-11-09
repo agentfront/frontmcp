@@ -4,12 +4,21 @@
  * @module @frontmcp/plugin-approval
  */
 
-import { DynamicPlugin, isEntryGatedBy, Plugin, ScopeEntry, ToolHook, type FlowCtxOf } from '@frontmcp/sdk';
+import {
+  DynamicPlugin,
+  isEntryGatedBy,
+  Plugin,
+  ProviderNotAvailableError,
+  ScopeEntry,
+  ToolHook,
+  type FlowCtxOf,
+} from '@frontmcp/sdk';
 
 import { ApprovalRequiredError } from '../approval';
-import { resolveApprovalIdentity } from '../approval.identity';
-import { ApprovalStoreToken } from '../approval.symbols';
+import { isUnidentifiedSession, resolveApprovalIdentity } from '../approval.identity';
+import { ApprovalStoreToken, ExternalApproverToken } from '../approval.symbols';
 import { isApprovalExpired, isApprovalUsable, resolveApprovalRequirement } from '../approval/policy';
+import type { ExternalApprover } from '../external/approval-decisions';
 import type { ApprovalStore } from '../stores/approval-store.interface';
 import { ApprovalState, type ApprovalContext, type ApprovalRecord, type ToolApprovalRequirement } from '../types';
 
@@ -85,7 +94,8 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
     approvalConfig: ToolApprovalRequirement,
     stores: readonly ApprovalStore[],
   ): Promise<void> {
-    const { sessionId, userId } = resolveApprovalIdentity(toolContext.tryGetContext?.());
+    const callerContext = toolContext.tryGetContext?.();
+    const { sessionId, userId } = resolveApprovalIdentity(callerContext);
     const currentContext = this.getCurrentContext(flowCtx);
     const stored: StoredApproval[] = [];
     for (const store of stores) {
@@ -125,11 +135,41 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
       return;
     }
 
+    const external = isUnidentifiedSession(sessionId) ? undefined : this.externalApprover();
+    const outcome = await external?.requestApproval({
+      toolId: tool.fullName,
+      toolName: tool.name,
+      sessionId,
+      userId,
+      context: currentContext,
+      requirement: approvalConfig,
+      accessToken: callerContext?.authInfo?.token,
+      signal: toolContext.signal,
+    });
+    if (outcome === 'approved') return;
+    if (outcome === 'denied') {
+      throw new ApprovalRequiredError({
+        toolId: tool.fullName,
+        state: 'denied',
+        message: `Tool "${tool.fullName}" execution denied.`,
+      });
+    }
+
     await this.handleApprovalRequired(
       flowCtx,
       approvalConfig,
       approved.find((record) => isApprovalExpired(record, approvalConfig, now)) ?? approved[0],
     );
+  }
+
+  /** The approval system `webhook.url` or `recheck.url` configures, or `undefined` without one. */
+  private externalApprover(): ExternalApprover | undefined {
+    try {
+      return this.get(ExternalApproverToken) as ExternalApprover | undefined;
+    } catch (error) {
+      if (error instanceof ProviderNotAvailableError) return undefined;
+      throw error;
+    }
   }
 
   /**

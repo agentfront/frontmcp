@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 
 import { ApprovalRequiredError } from '../../approval';
-import { ApprovalStoreToken } from '../../approval.symbols';
+import { ApprovalStoreToken, ExternalApproverToken } from '../../approval.symbols';
 import type { ApprovalStore } from '../../stores';
 import { ApprovalScope, ApprovalState } from '../../types';
 import ApprovalCheckPlugin from '../approval-check.hook';
@@ -16,6 +16,9 @@ jest.mock('@frontmcp/sdk', () => ({
   Plugin: () => (target: unknown) => target,
   // The approval errors are public MCP errors
   PublicMcpError: jest.requireActual<typeof import('@frontmcp/sdk')>('@frontmcp/sdk').PublicMcpError,
+  InternalMcpError: jest.requireActual<typeof import('@frontmcp/sdk')>('@frontmcp/sdk').InternalMcpError,
+  ProviderNotAvailableError:
+    jest.requireActual<typeof import('@frontmcp/sdk')>('@frontmcp/sdk').ProviderNotAvailableError,
   ToolHook: {
     Will: () => () => (target: unknown) => target,
   },
@@ -80,6 +83,66 @@ describe('ApprovalCheckPlugin', () => {
         },
       },
     };
+  });
+
+  describe('external approval system', () => {
+    let requestApproval: jest.Mock;
+
+    beforeEach(() => {
+      requestApproval = jest.fn();
+      (plugin as unknown as { _injections: Map<unknown, unknown> })._injections.set(ExternalApproverToken, {
+        requestApproval,
+      });
+      mockFlowCtx.state.tool!.metadata['approval'] = { required: true, riskLevel: 'high' };
+      (mockFlowCtx.state.tool as { name?: string }).name = 'tool';
+    });
+
+    it('runs a call the system approves', async () => {
+      requestApproval.mockResolvedValue('approved');
+
+      await expect(plugin.checkApproval(mockFlowCtx as never)).resolves.toBeUndefined();
+      expect(requestApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolId: 'test-tool',
+          toolName: 'tool',
+          sessionId: 'session-123',
+          userId: 'client-456',
+          requirement: expect.objectContaining({ riskLevel: 'high' }),
+        }),
+      );
+    });
+
+    it('refuses a call the system denies, as denied', async () => {
+      requestApproval.mockResolvedValue('denied');
+
+      await expect(plugin.checkApproval(mockFlowCtx as never)).rejects.toMatchObject({ details: { state: 'denied' } });
+    });
+
+    it('refuses a call the system has not decided, as pending', async () => {
+      requestApproval.mockResolvedValue('pending');
+
+      await expect(plugin.checkApproval(mockFlowCtx as never)).rejects.toMatchObject({ details: { state: 'pending' } });
+    });
+
+    it('asks nothing for a call a recorded denial refuses', async () => {
+      mockStore.getApproval.mockResolvedValue({
+        toolId: 'test-tool',
+        state: ApprovalState.DENIED,
+        scope: ApprovalScope.SESSION,
+        grantedAt: Date.now(),
+        grantedBy: { source: 'user' },
+      });
+
+      await expect(plugin.checkApproval(mockFlowCtx as never)).rejects.toThrow(ApprovalRequiredError);
+      expect(requestApproval).not.toHaveBeenCalled();
+    });
+
+    it('asks nothing for a call with neither a session nor a user, which no approval could match', async () => {
+      mockFlowCtx.state.toolContext!.tryGetContext = () => ({ authInfo: {} });
+
+      await expect(plugin.checkApproval(mockFlowCtx as never)).rejects.toThrow(ApprovalRequiredError);
+      expect(requestApproval).not.toHaveBeenCalled();
+    });
   });
 
   describe('checkApproval', () => {

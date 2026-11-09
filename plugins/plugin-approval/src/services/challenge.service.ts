@@ -9,16 +9,22 @@
 
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 import {
-  generatePkcePair,
+  createMemoryStorage,
+  createStorage,
   generateCodeChallenge,
+  generatePkcePair,
+  randomUUID,
+  StorageNotSupportedError,
   type NamespacedStorage,
   type RootStorage,
-  createStorage,
-  createMemoryStorage,
   type StorageConfig,
 } from '@frontmcp/utils';
+
 import { ChallengeValidationError } from '../approval';
-import type { ChallengeRecord } from '../types';
+import type { ApprovalContext, ChallengeRecord } from '../types';
+
+/** The prefix of the keys that mark a caller's request for a tool as already sent. */
+const PENDING_REQUEST_PREFIX = 'pending:';
 
 /**
  * Configuration for ChallengeService.
@@ -60,6 +66,9 @@ export interface CreateChallengeOptions {
 
   /** User ID if available */
   userId?: string;
+
+  /** The context the call ran in, for a `context_specific` approval */
+  context?: ApprovalContext;
 
   /** Requested approval scope */
   requestedScope: string;
@@ -153,6 +162,7 @@ export class ChallengeService {
       toolId: options.toolId,
       sessionId: options.sessionId,
       userId: options.userId,
+      context: options.context,
       requestedScope: options.requestedScope,
       requestInfo: options.requestInfo,
       createdAt: now,
@@ -172,29 +182,70 @@ export class ChallengeService {
    * @throws ChallengeValidationError if verification fails
    */
   async verifyAndConsume(codeVerifier: string): Promise<ChallengeRecord> {
-    this.ensureInitialized();
-
-    // Compute the code challenge from the verifier
-    const { codeChallenge } = generatePkcePairFromVerifier(codeVerifier);
-
-    // Look up the record
-    const recordJson = await this.storage.get(codeChallenge);
-    if (!recordJson) {
+    const consumed = await this.take(codeVerifier);
+    if (!consumed) {
       throw new ChallengeValidationError('not_found', 'Invalid or expired challenge');
     }
-
-    const record = JSON.parse(recordJson) as ChallengeRecord;
-
-    // Check expiration
-    if (Date.now() > record.expiresAt) {
-      await this.storage.delete(codeChallenge);
+    if (Date.now() > consumed.expiresAt) {
       throw new ChallengeValidationError('expired', 'Challenge expired');
     }
+    return consumed;
+  }
 
-    // Delete the challenge (single-use)
-    await this.storage.delete(codeChallenge);
+  /**
+   * The request a code verifier answers, deleted so no other callback gets it, or `undefined` when there is none: an
+   * unknown or expired verifier, or one another callback already used. Of two callbacks racing with one verifier,
+   * exactly one gets the record.
+   */
+  async consume(codeVerifier: string): Promise<ChallengeRecord | undefined> {
+    const consumed = await this.take(codeVerifier);
+    return consumed && Date.now() <= consumed.expiresAt ? consumed : undefined;
+  }
 
-    return record;
+  /** Deletes the record stored under the verifier's challenge and returns it, or `undefined` when this call didn't. */
+  private async take(codeVerifier: string): Promise<ChallengeRecord | undefined> {
+    this.ensureInitialized();
+
+    // Looked up by its SHA-256, so the time a lookup takes says nothing about the stored challenges.
+    const codeChallenge = generateCodeChallenge(codeVerifier);
+    const recordJson = await this.storage.get(codeChallenge);
+    if (!recordJson) return undefined;
+    if (!(await this.deleteIfUnchanged(codeChallenge, recordJson))) return undefined;
+    return JSON.parse(recordJson) as ChallengeRecord;
+  }
+
+  /** Deletes `key` only while it still holds `value`, in one step where the backend allows. */
+  private async deleteIfUnchanged(key: string, value: string): Promise<boolean> {
+    try {
+      return await this.storage.deleteIfEquals(key, value);
+    } catch (error) {
+      if (!(error instanceof StorageNotSupportedError)) throw error;
+      return this.storage.delete(key);
+    }
+  }
+
+  /**
+   * Marks the request named `key` as sent, for `ttlSeconds` (the default TTL when absent), and reports whether this
+   * call marked it: `false` when one is already pending, so it is sent once however many calls ask.
+   */
+  async claimPendingRequest(key: string, ttlSeconds = this.options.defaultTtlSeconds): Promise<boolean> {
+    this.ensureInitialized();
+    const claim = randomUUID();
+    const pendingKey = `${PENDING_REQUEST_PREFIX}${key}`;
+    try {
+      await this.storage.set(pendingKey, claim, { ttlSeconds, ifNotExists: true });
+    } catch (error) {
+      if (!(error instanceof StorageNotSupportedError)) throw error;
+      if (await this.storage.exists(pendingKey)) return false;
+      await this.storage.set(pendingKey, claim, { ttlSeconds });
+    }
+    return (await this.storage.get(pendingKey)) === claim;
+  }
+
+  /** Clears the mark {@link claimPendingRequest} set, so the next call sends the request again. */
+  async releasePendingRequest(key: string): Promise<void> {
+    this.ensureInitialized();
+    await this.storage.delete(`${PENDING_REQUEST_PREFIX}${key}`);
   }
 
   /**
@@ -261,17 +312,6 @@ export class ChallengeService {
     }
     this.initialized = false;
   }
-}
-
-/**
- * Helper to generate PKCE pair from a known verifier.
- * Used for verification.
- */
-function generatePkcePairFromVerifier(codeVerifier: string): { codeVerifier: string; codeChallenge: string } {
-  return {
-    codeVerifier,
-    codeChallenge: generateCodeChallenge(codeVerifier),
-  };
 }
 
 /**

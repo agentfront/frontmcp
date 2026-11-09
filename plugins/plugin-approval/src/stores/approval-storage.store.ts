@@ -309,6 +309,14 @@ export class ApprovalStorageStore implements ApprovalStore {
   }
 
   async grantApproval(options: GrantApprovalOptions): Promise<ApprovalRecord> {
+    return this.writeRecord(options, ApprovalState.APPROVED);
+  }
+
+  async denyApproval(options: GrantApprovalOptions): Promise<ApprovalRecord> {
+    return this.writeRecord(options, ApprovalState.DENIED);
+  }
+
+  private async writeRecord(options: GrantApprovalOptions, state: ApprovalState): Promise<ApprovalRecord> {
     this.ensureInitialized();
 
     assertValidTtl(options.ttlMs);
@@ -322,7 +330,7 @@ export class ApprovalStorageStore implements ApprovalStore {
 
     const record: ApprovalRecord = {
       toolId: options.toolId,
-      state: ApprovalState.APPROVED,
+      state,
       scope: options.scope,
       grantedAt: now,
       expiresAt,

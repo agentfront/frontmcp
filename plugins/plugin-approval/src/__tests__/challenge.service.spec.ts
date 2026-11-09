@@ -2,6 +2,11 @@
 
 import 'reflect-metadata';
 
+import { createMemoryStorage, createStorage, StorageNotSupportedError } from '@frontmcp/utils';
+
+import { ChallengeValidationError } from '../approval';
+import { ChallengeService, createMemoryChallengeService } from '../services/challenge.service';
+
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => {
   const actual = jest.requireActual('@frontmcp/utils');
@@ -33,16 +38,13 @@ jest.mock('@frontmcp/utils', () => {
   };
 });
 
-import { ChallengeService, createMemoryChallengeService } from '../services/challenge.service';
-import { ChallengeValidationError } from '../approval';
-import { createStorage, createMemoryStorage, generateCodeChallenge } from '@frontmcp/utils';
-
 describe('ChallengeService', () => {
   let service: ChallengeService;
   let mockStorage: {
     set: jest.Mock;
     get: jest.Mock;
     delete: jest.Mock;
+    deleteIfEquals: jest.Mock;
     exists: jest.Mock;
     root: { disconnect: jest.Mock };
   };
@@ -54,6 +56,7 @@ describe('ChallengeService', () => {
       set: jest.fn(),
       get: jest.fn(),
       delete: jest.fn(),
+      deleteIfEquals: jest.fn().mockResolvedValue(true),
       exists: jest.fn(),
       root: { disconnect: jest.fn() },
     };
@@ -235,7 +238,92 @@ describe('ChallengeService', () => {
       const result = await service.verifyAndConsume('test-verifier');
 
       expect(result.toolId).toBe('tool-1');
+      expect(mockStorage.deleteIfEquals).toHaveBeenCalledWith('test-challenge-456', JSON.stringify(validRecord));
+    });
+
+    it('refuses a verifier another call used between its read and its delete', async () => {
+      mockStorage.get.mockResolvedValue(JSON.stringify({ toolId: 'tool-1', expiresAt: Date.now() + 300000 }));
+      mockStorage.deleteIfEquals.mockResolvedValue(false);
+
+      await expect(service.verifyAndConsume('test-verifier')).rejects.toThrow(ChallengeValidationError);
+    });
+
+    it('deletes without comparing on a backend that cannot compare and delete', async () => {
+      mockStorage.get.mockResolvedValue(JSON.stringify({ toolId: 'tool-1', expiresAt: Date.now() + 300000 }));
+      mockStorage.deleteIfEquals.mockRejectedValue(new StorageNotSupportedError('deleteIfEquals', 'test'));
+      mockStorage.delete.mockResolvedValue(true);
+
+      await expect(service.verifyAndConsume('test-verifier')).resolves.toMatchObject({ toolId: 'tool-1' });
       expect(mockStorage.delete).toHaveBeenCalledWith('test-challenge-456');
+    });
+  });
+
+  describe('consume', () => {
+    beforeEach(async () => {
+      service = new ChallengeService();
+      await service.initialize();
+    });
+
+    it('returns the pending request once', async () => {
+      const record = { toolId: 'tool-1', expiresAt: Date.now() + 300000 };
+      mockStorage.get.mockResolvedValueOnce(JSON.stringify(record)).mockResolvedValueOnce(null);
+
+      await expect(service.consume('test-verifier')).resolves.toMatchObject({ toolId: 'tool-1' });
+      await expect(service.consume('test-verifier')).resolves.toBeUndefined();
+    });
+
+    it('returns nothing for an expired request, and deletes it', async () => {
+      mockStorage.get.mockResolvedValue(JSON.stringify({ toolId: 'tool-1', expiresAt: Date.now() - 1 }));
+
+      await expect(service.consume('test-verifier')).resolves.toBeUndefined();
+      expect(mockStorage.deleteIfEquals).toHaveBeenCalled();
+    });
+  });
+
+  describe('pending requests', () => {
+    beforeEach(async () => {
+      service = new ChallengeService({ defaultTtlSeconds: 120 });
+      await service.initialize();
+    });
+
+    it('claims a request that is not pending, for the default TTL', async () => {
+      mockStorage.get.mockImplementation(async () => mockStorage.set.mock.calls[0]?.[1] ?? null);
+
+      await expect(service.claimPendingRequest('key-1')).resolves.toBe(true);
+      expect(mockStorage.set).toHaveBeenCalledWith('pending:key-1', expect.any(String), {
+        ttlSeconds: 120,
+        ifNotExists: true,
+      });
+    });
+
+    it('does not claim a request already pending', async () => {
+      mockStorage.get.mockResolvedValue('someone-else');
+
+      await expect(service.claimPendingRequest('key-1', 30)).resolves.toBe(false);
+    });
+
+    it('checks then sets on a backend without set-if-absent', async () => {
+      mockStorage.set
+        .mockRejectedValueOnce(new StorageNotSupportedError('ifNotExists', 'test'))
+        .mockResolvedValueOnce(undefined);
+      mockStorage.exists.mockResolvedValue(false);
+      mockStorage.get.mockImplementation(async () => mockStorage.set.mock.calls[1]?.[1] ?? null);
+
+      await expect(service.claimPendingRequest('key-1', 30)).resolves.toBe(true);
+      expect(mockStorage.set).toHaveBeenLastCalledWith('pending:key-1', expect.any(String), { ttlSeconds: 30 });
+    });
+
+    it('does not claim on a backend without set-if-absent when one is pending', async () => {
+      mockStorage.set.mockRejectedValueOnce(new StorageNotSupportedError('ifNotExists', 'test'));
+      mockStorage.exists.mockResolvedValue(true);
+
+      await expect(service.claimPendingRequest('key-1', 30)).resolves.toBe(false);
+    });
+
+    it('releases a claim', async () => {
+      await service.releasePendingRequest('key-1');
+
+      expect(mockStorage.delete).toHaveBeenCalledWith('pending:key-1');
     });
   });
 

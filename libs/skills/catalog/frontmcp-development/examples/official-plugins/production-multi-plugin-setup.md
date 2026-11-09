@@ -8,7 +8,7 @@ features:
   - 'Configuring all 5 stable official plugins together in a production server'
   - 'CodeCall in `codecall_only` mode with TF-IDF search and synonym expansion for semantic tool discovery'
   - 'Remember plugin with Redis storage, encryption enabled, and LLM-accessible memory tools'
-  - 'Approval plugin in `webhook` mode, which registers the PKCE `ChallengeService` for an approval flow you build'
+  - 'Approval plugin in `webhook` mode: a signed approval request to an external system, whose signed decision comes back on `/approval/callback`'
   - 'Cache plugin with Redis storage and 24-hour default TTL'
   - 'Feature Flags with LaunchDarkly integration for external flag management'
   - 'Per-tool `approval` metadata with risk level and scope configuration'
@@ -62,8 +62,14 @@ class CoreApp {}
     }),
 
     ApprovalPlugin.init({
+      storage: { type: 'redis', redis: { config: { host: process.env.REDIS_HOST!, port: 6379 } } },
       mode: 'webhook',
-      webhook: { challengeTtl: 300 },
+      webhook: {
+        url: 'https://approval.example.com/webhook',
+        secret: process.env.APPROVAL_WEBHOOK_SECRET!,
+        challengeTtl: 300,
+        callbackPath: '/approval/callback',
+      },
     }),
 
     CachePlugin.init({
@@ -127,7 +133,7 @@ class DeleteDataTool extends ToolContext {
 - Configuring all 5 stable official plugins together in a production server
 - CodeCall in `codecall_only` mode with TF-IDF search and synonym expansion for semantic tool discovery
 - Remember plugin with Redis storage, encryption enabled, and LLM-accessible memory tools
-- Approval plugin in `webhook` mode, which registers the PKCE `ChallengeService` for an approval flow you build
+- Approval plugin in `webhook` mode: a signed approval request to an external system, whose signed decision comes back on `/approval/callback`
 - Cache plugin with Redis storage and 24-hour default TTL
 - Feature Flags with LaunchDarkly integration for external flag management
 - Per-tool `approval` metadata with risk level and scope configuration
