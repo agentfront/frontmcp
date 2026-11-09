@@ -41,7 +41,7 @@ The path is a `POST` route on FrontMCP's HTTP server (`bootstrap()` / `createHan
 
 ## App Event Source
 
-Subscribes to the in-process `ChannelEventBus`. Your application code emits events, and the channel transforms them into notifications.
+Subscribes to the in-process `ChannelEventBus`. Your application code emits events, and the channel transforms them into notifications. The bus is the scope's event bus, which `trigger: 'event'` workflows listen on too (see `create-workflow`): one `emit()` reaches both.
 
 ```typescript
 @Channel({

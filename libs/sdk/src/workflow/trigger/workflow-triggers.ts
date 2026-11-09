@@ -27,11 +27,21 @@ export function webhookWorkflows(workflows: readonly WorkflowEntry[]): WorkflowE
   return workflows.filter((workflow) => workflow.metadata.trigger === 'webhook');
 }
 
+/** The workflows an event starts. */
+export function eventWorkflows(workflows: readonly WorkflowEntry[]): WorkflowEntry[] {
+  return workflows.filter((workflow) => workflow.metadata.trigger === 'event');
+}
+
+/** The event that starts a `trigger: 'event'` workflow: its `event`, else its name. */
+export function workflowEventName(workflow: WorkflowEntry): string {
+  return workflow.metadata.event ?? workflow.name;
+}
+
 /**
  * Check the triggers of a scope's workflows when the server starts.
  *
  * @throws WorkflowTriggerConfigError for a webhook workflow without a usable secret, path or methods, for two that
- *   share a secret, and for a `webhook` on a workflow whose trigger isn't `'webhook'`
+ *   share a secret, and for a `webhook` or an `event` on a workflow whose trigger isn't theirs
  */
 export function assertWorkflowTriggers(workflows: readonly WorkflowEntry[]): void {
   const workflowsBySecret = new Map<string, string>();
@@ -51,6 +61,12 @@ export function assertWorkflowTriggers(workflows: readonly WorkflowEntry[]): voi
       throw new WorkflowTriggerConfigError(
         workflow.name,
         "webhook is set, but trigger is not 'webhook': set trigger: 'webhook' to serve it, or remove webhook",
+      );
+    }
+    if (workflow.metadata.event !== undefined && workflow.metadata.trigger !== 'event') {
+      throw new WorkflowTriggerConfigError(
+        workflow.name,
+        "event is set, but trigger is not 'event': set trigger: 'event' to listen to it, or remove event",
       );
     }
   }

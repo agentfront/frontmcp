@@ -1,13 +1,14 @@
 import { type Token } from '@frontmcp/di';
 import { type SqliteAdapterOptions } from '@frontmcp/utils';
 
+import { ChannelEventBus } from '../channel/sources/app-event.source';
 import {
   completionEventsOf,
   completionOutputText,
   type ScopeCompletionEvents,
 } from '../channel/sources/completion-events';
 import { type JobCompletionEvent } from '../channel/sources/job-completion.source';
-import { type EntryOwnerRef, type RedisOptionsInput } from '../common';
+import { type EntryOwnerRef, type RedisOptionsInput, type ScopeEntry } from '../common';
 import { type JobType } from '../common/interfaces/job.interface';
 import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
@@ -19,7 +20,8 @@ import GetWorkflowStatusTool from '../workflow/tools/get-workflow-status.tool';
 import ListWorkflowsTool from '../workflow/tools/list-workflows.tool';
 import RegisterWorkflowTool from '../workflow/tools/register-workflow.tool';
 import RemoveWorkflowTool from '../workflow/tools/remove-workflow.tool';
-import { assertWorkflowTriggers } from '../workflow/trigger/workflow-triggers';
+import { listenToWorkflowEvents } from '../workflow/trigger/workflow-events';
+import { assertWorkflowTriggers, eventWorkflows } from '../workflow/trigger/workflow-triggers';
 import WorkflowRegistry, { type WorkflowRegistryInterface } from '../workflow/workflow.registry';
 import { normalizeWorkflow } from '../workflow/workflow.utils';
 import { DETACHED_FLUSH_MS, JobExecutionManager } from './execution/job-execution.manager';
@@ -40,7 +42,7 @@ import GetJobStatusTool from './tools/get-job-status.tool';
 import ListJobsTool from './tools/list-jobs.tool';
 import RegisterJobTool from './tools/register-job.tool';
 import RemoveJobTool from './tools/remove-job.tool';
-import { describeIgnoredTrigger, describeUncheckedPermissions } from './unread-job-options';
+import { describeUncheckedPermissions } from './unread-job-options';
 
 export interface JobsConfig {
   enabled: boolean;
@@ -142,6 +144,8 @@ export interface JobCapabilitiesResult {
   stateStore: JobStateStore;
   definitionStore: JobDefinitionStore;
   managementTools: any[];
+  /** The bus `trigger: 'event'` workflows listen on; undefined when none has that trigger, or in a detached runner. */
+  eventBus?: ChannelEventBus;
 }
 
 /**
@@ -232,6 +236,11 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     await definitionStore.dispose();
   });
   scope.resources.registerDynamicResource(JobRunResource);
+  // `trigger: 'event'` workflows listen on the scope's event bus, which app-event channel sources share
+  const eventBus = jobWorker
+    ? undefined
+    : listenToEvents(scope, workflowRegistry, executionManager, jobRegistry, logger);
+  if (eventBus) scope.onDispose(eventBus.stop);
   // Runs a dead runner left in a shared store are settled in the background, once the registries exist
   if (stateStoreType !== 'memory' && !jobWorker) {
     void executionManager
@@ -273,6 +282,7 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     stateStore,
     definitionStore,
     managementTools,
+    eventBus: eventBus?.bus,
   };
 }
 
@@ -321,6 +331,27 @@ export function unregistersAppJobEntries(
     jobRegistry.unregisterJobs(jobTokens);
     workflowRegistry.unregisterWorkflows(workflowTokens);
   };
+}
+
+/** A bus that starts the `trigger: 'event'` workflows' runs, and what stops it; undefined when no workflow has one. */
+function listenToEvents(
+  scope: ScopeEntry,
+  workflows: WorkflowRegistryInterface,
+  manager: JobExecutionManager,
+  jobs: JobRegistryInterface,
+  logger: FrontMcpLogger,
+): { bus: ChannelEventBus; stop: () => void } | undefined {
+  const listening = eventWorkflows(workflows.getWorkflows(true));
+  if (listening.length === 0) return undefined;
+  const bus = new ChannelEventBus(logger);
+  const stop = listenToWorkflowEvents(listening, {
+    bus,
+    manager,
+    jobs,
+    authoritiesContextBuilder: () => scope.authoritiesContextBuilder,
+    logger,
+  });
+  return { bus, stop };
 }
 
 /** Why a server cannot start detached runs, and what to do instead; undefined when it can. */
@@ -395,9 +426,6 @@ function describeUnreadOptions(jobs: JobRegistryInterface, workflows: WorkflowRe
     ...jobs.getJobs(true).flatMap((job) => describeUncheckedPermissions('Job', job.name, job.metadata.permissions)),
     ...workflows
       .getWorkflows(true)
-      .flatMap((workflow) => [
-        ...describeIgnoredTrigger(workflow.metadata),
-        ...describeUncheckedPermissions('Workflow', workflow.name, workflow.metadata.permissions),
-      ]),
+      .flatMap((workflow) => describeUncheckedPermissions('Workflow', workflow.name, workflow.metadata.permissions)),
   ];
 }

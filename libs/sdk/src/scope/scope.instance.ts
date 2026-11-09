@@ -1086,6 +1086,7 @@ export class Scope extends ScopeEntry {
         channelsList: appChannels,
         channelProviders,
         channelsConfig,
+        eventBus: this._channelEventBus,
         notificationService: this.notificationService,
         flowRegistry: this.scopeFlows,
         toolRegistry: this.scopeTools,
@@ -1635,6 +1636,7 @@ export class Scope extends ScopeEntry {
     this._jobExecutionManager = result.executionManager;
     this._jobStateStore = result.stateStore;
     this._jobDefinitionStore = result.definitionStore;
+    this._channelEventBus = result.eventBus;
 
     // Register job/workflow management tools
     for (const toolCls of result.managementTools) {

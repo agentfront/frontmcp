@@ -45,6 +45,8 @@ export interface RegisterChannelCapabilitiesArgs {
   /** The provider registry of each channel declared on an app, by its token (see `appEntryProviders`). */
   channelProviders?: ReadonlyMap<Token, ProviderRegistry>;
   channelsConfig: ChannelsConfigOptions;
+  /** The scope's event bus when it already has one (`trigger: 'event'` workflows listen on it); else one is made. */
+  eventBus?: ChannelEventBus;
   notificationService: NotificationService;
   flowRegistry: FlowRegistry;
   toolRegistry: ToolRegistry;
@@ -122,8 +124,8 @@ export async function registerChannelCapabilities(
     (input) => flowRegistry.runFlow('channels:send-notification', input),
   );
 
-  // 3. Create event bus for app-event sources
-  const channelEventBus = new ChannelEventBus(logger);
+  // 3. The event bus app-event sources listen on: the scope's, or one of their own
+  const channelEventBus = args.eventBus ?? new ChannelEventBus(logger);
 
   // 4. Wire notification service to all channel instances
   for (const instance of channelRegistry.getChannelInstances()) {
@@ -257,7 +259,7 @@ export async function registerChannelCapabilities(
       }
     }
     for (const unsub of unsubscribers) unsub();
-    channelEventBus.clear();
+    if (!args.eventBus) channelEventBus.clear();
   };
 
   return {
