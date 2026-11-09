@@ -115,7 +115,11 @@ export interface ProviderConfig {
   verifyIssuer?: boolean;
 
   /**
-   * Enable Dynamic Client Registration (DCR)
+   * Remote mode: without a `clientId`, register this server with the provider by
+   * dynamic client registration (RFC 7591) at startup, and sign in with that client.
+   * With a persistent `tokenStorage` the client is kept there (its secret encrypted
+   * with `JWT_SECRET`) and reused across restarts and instances. Startup fails when
+   * the registration fails. Ignored when `clientId` is set, and in transparent mode.
    * @default false
    */
   dcrEnabled?: boolean;
@@ -126,7 +130,10 @@ export interface ProviderConfig {
   /** Token endpoint override */
   tokenEndpoint?: string;
 
-  /** Registration endpoint override (for DCR) */
+  /**
+   * Registration endpoint for `dcrEnabled`.
+   * @default the `registration_endpoint` of the provider's RFC 8414 or OpenID metadata
+   */
   registrationEndpoint?: string;
 
   /** User info endpoint override */
@@ -171,7 +178,11 @@ export interface RemoteProviderConfig {
   scopes?: string[];
 
   /**
-   * Enable Dynamic Client Registration (DCR)
+   * Remote mode: without a `clientId`, register this server with the provider by
+   * dynamic client registration (RFC 7591) at startup, and sign in with that client.
+   * With a persistent `tokenStorage` the client is kept there (its secret encrypted
+   * with `JWT_SECRET`) and reused across restarts and instances. Startup fails when
+   * the registration fails. Ignored when `clientId` is set, and in transparent mode.
    * @default false
    */
   dcrEnabled?: boolean;
@@ -182,7 +193,10 @@ export interface RemoteProviderConfig {
   /** Token endpoint override */
   tokenEndpoint?: string;
 
-  /** Registration endpoint override (for DCR) */
+  /**
+   * Registration endpoint for `dcrEnabled`.
+   * @default the `registration_endpoint` of the provider's RFC 8414 or OpenID metadata
+   */
   registrationEndpoint?: string;
 
   /** User info endpoint override */

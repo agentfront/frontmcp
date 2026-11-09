@@ -11,6 +11,7 @@ import {
   isRedisTokenStorage,
   isSqliteTokenStorage,
   JwksService,
+  resolveUpstreamClient,
   SessionCredentialVault,
   StorageAuthorizationStore,
   StorageConsentStore,
@@ -1557,7 +1558,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // single MANDATORY upstream provider so /oauth/authorize federates straight
     // to the upstream IdP (no in-tree login page) and the provider-callback flow
     // exchanges/stores its tokens + derives the session identity from upstream.
-    this.registerRemoteProvider();
+    await this.registerRemoteProvider();
 
     // Build the per-session credential vault and register `this.credentials`
     // (Checkpoint 3b). Runs after initializeStores so it can share the same
@@ -1755,12 +1756,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * discovery. The provider id comes from `providerConfig.id` when set, else it
    * is derived from the provider hostname (mirroring `deriveProviderId`).
    *
+   * Without a `clientId`, `providerConfig.dcrEnabled` registers this server with
+   * the provider (RFC 7591) and uses that client; a failed registration fails startup.
+   *
    * No-op outside remote mode, so local/public/transparent are unaffected.
    *
    * Security: only non-PII provider metadata is read here; the client secret is
    * kept in the provider config and never logged or exposed to the LLM.
    */
-  private registerRemoteProvider(): void {
+  private async registerRemoteProvider(): Promise<void> {
     if (!isRemoteMode(this.options)) {
       return;
     }
@@ -1772,14 +1776,10 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     const id = cfg?.id ?? this.deriveRemoteProviderId(options.provider);
     this.remoteProviderIdImpl = id;
 
-    if (!options.clientId) {
-      // The schema marks clientId optional (DCR placeholder), but without it we
-      // cannot drive the upstream authorization-code flow. Skip registration so
-      // the failure is a clear "provider not configured" rather than an upstream
-      // 400 mid-redirect. DCR (deriving clientId at runtime) is not yet wired.
-      this.logger.warn(
-        `Remote mode: no clientId configured for provider "${id}"; upstream OAuth is not available (DCR is not yet wired)`,
-      );
+    const callbackUrl = `${this.issuer}/oauth/provider/${id}/callback`;
+    const scopes = options.scopes ?? ['openid'];
+    const client = await this.resolveRemoteClient(options, id, callbackUrl, scopes);
+    if (!client) {
       return;
     }
 
@@ -1791,15 +1791,55 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       userInfoEndpoint: cfg?.userInfoEndpoint ?? `${base}/userinfo`,
       jwksUri: cfg?.jwksUri ?? `${base}/.well-known/jwks.json`,
       jwks: cfg?.jwks,
-      clientId: options.clientId,
-      clientSecret: options.clientSecret,
-      scopes: options.scopes ?? ['openid'],
-      callbackUrl: `${this.issuer}/oauth/provider/${id}/callback`,
+      clientId: client.clientId,
+      clientSecret: client.clientSecret,
+      scopes,
+      callbackUrl,
       // The provider is the issuer, as in transparent mode (#271): an RFC 9207
       // `iss` on its callback and its id_token's `iss` must name it.
       issuer: options.provider,
       additionalIssuers: cfg?.additionalIssuers,
       verifyIssuer: cfg?.verifyIssuer,
+    });
+  }
+
+  /**
+   * The client remote mode signs in to the provider with: the configured `clientId`, or one
+   * registered with the provider when `providerConfig.dcrEnabled` is set. Undefined when there is neither.
+   */
+  private async resolveRemoteClient(
+    options: RemoteAuthOptions,
+    providerId: string,
+    callbackUrl: string,
+    scopes: string[],
+  ): Promise<{ clientId: string; clientSecret?: string } | undefined> {
+    const cfg = options.providerConfig;
+    if (options.clientId) {
+      if (cfg?.dcrEnabled) {
+        this.logger.info(`Remote mode: clientId is set, so provider "${providerId}" is not registered dynamically`);
+      }
+      return { clientId: options.clientId, clientSecret: options.clientSecret };
+    }
+
+    if (!cfg?.dcrEnabled) {
+      // Without a client we cannot drive the upstream authorization-code flow. Skip registration so
+      // the failure is a clear "provider not configured" rather than an upstream 400 mid-redirect.
+      this.logger.warn(
+        `Remote mode: no clientId configured for provider "${providerId}"; upstream OAuth is not available. ` +
+          'Set clientId, or providerConfig.dcrEnabled to register with the provider.',
+      );
+      return undefined;
+    }
+
+    return resolveUpstreamClient({
+      provider: options.provider,
+      registrationEndpoint: cfg.registrationEndpoint,
+      redirectUri: callbackUrl,
+      clientName: this.scope.metadata.info?.name ?? 'FrontMCP',
+      scopes,
+      storage: this.storageAdapter,
+      encryptionKey: this.secret,
+      logger: this.logger,
     });
   }
 

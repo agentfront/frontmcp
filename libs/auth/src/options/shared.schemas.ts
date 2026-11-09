@@ -116,7 +116,11 @@ export const providerConfigSchema = z.object({
   verifyIssuer: z.boolean().optional(),
 
   /**
-   * Enable Dynamic Client Registration (DCR)
+   * Remote mode: without a `clientId`, register this server with the provider by
+   * dynamic client registration (RFC 7591) at startup, and sign in with that client.
+   * With a persistent `tokenStorage` the client is kept there (its secret encrypted
+   * with `JWT_SECRET`) and reused across restarts and instances. Startup fails when
+   * the registration fails. Ignored when `clientId` is set, and in transparent mode.
    * @default false
    */
   dcrEnabled: z.boolean().default(false),
@@ -127,7 +131,10 @@ export const providerConfigSchema = z.object({
   /** Token endpoint override */
   tokenEndpoint: z.string().url().optional(),
 
-  /** Registration endpoint override (for DCR) */
+  /**
+   * Registration endpoint for `dcrEnabled`.
+   * @default the `registration_endpoint` of the provider's RFC 8414 or OpenID metadata
+   */
   registrationEndpoint: z.string().url().optional(),
 
   /** User info endpoint override */
@@ -190,7 +197,11 @@ export const remoteProviderConfigSchema = z.object({
   scopes: z.array(z.string()).optional(),
 
   /**
-   * Enable Dynamic Client Registration (DCR)
+   * Remote mode: without a `clientId`, register this server with the provider by
+   * dynamic client registration (RFC 7591) at startup, and sign in with that client.
+   * With a persistent `tokenStorage` the client is kept there (its secret encrypted
+   * with `JWT_SECRET`) and reused across restarts and instances. Startup fails when
+   * the registration fails. Ignored when `clientId` is set, and in transparent mode.
    * @default false
    */
   dcrEnabled: z.boolean().default(false),
@@ -206,7 +217,8 @@ export const remoteProviderConfigSchema = z.object({
   tokenEndpoint: z.string().url().optional(),
 
   /**
-   * Registration endpoint override (for DCR)
+   * Registration endpoint for `dcrEnabled`.
+   * @default the `registration_endpoint` of the provider's RFC 8414 or OpenID metadata
    */
   registrationEndpoint: z.string().url().optional(),
 
