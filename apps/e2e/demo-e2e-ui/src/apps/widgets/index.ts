@@ -3,6 +3,7 @@ import { App } from '@frontmcp/sdk';
 import UiShowcasePrompt from './prompts/ui-showcase.prompt';
 import UiTemplatesResource from './resources/ui-templates.resource';
 import CustomUriTool from './tools/custom-uri.tool';
+import CustomUrlForecastTool from './tools/custom-url-forecast.tool';
 import DirectUrlForecastTool from './tools/direct-url-forecast.tool';
 import HtmlCardTool from './tools/html-card.tool';
 import HtmlTableTool from './tools/html-table.tool';
@@ -42,6 +43,7 @@ import StatusCardTool from './tools/status-card.tool';
     StatusCardTool,
     HydratedCounterTool,
     DirectUrlForecastTool,
+    CustomUrlForecastTool,
   ],
   resources: [UiTemplatesResource],
   prompts: [UiShowcasePrompt],

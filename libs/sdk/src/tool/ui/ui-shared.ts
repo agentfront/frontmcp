@@ -154,7 +154,9 @@ export class ToolUIRegistry {
 
   /** The `'direct-url'` widgets: each tool and the server route its page is served on. */
   widgetRoutes(): Array<{ toolName: string; path: string }> {
-    return [...this.widgetUrls].map(([toolName, source]) => ({ toolName, path: source.path }));
+    return [...this.widgetUrls].flatMap(([toolName, source]) =>
+      source.servingMode === 'direct-url' ? [{ toolName, path: source.path }] : [],
+    );
   }
 
   /** The tool that advertised `uri` as its custom `ui.resourceUri`. */
@@ -256,9 +258,10 @@ export class ToolUIRegistry {
    * Sync `resourceMeta[toolName]` to the current `uiConfig`. Called before
    * every render so the entry stays consistent with the latest decorator
    * state, including the case where a user removes a previously-set
-   * `ui.csp` / `ui.permissions` field on re-compile.
+   * `ui.csp` / `ui.permissions` field on re-compile, and at startup for a
+   * `'custom-url'` widget, which FrontMCP doesn't render.
    */
-  private updateResourceMetaFromConfig(toolName: string, uiConfig: Record<string, unknown> | undefined): void {
+  updateResourceMetaFromConfig(toolName: string, uiConfig: Record<string, unknown> | undefined): void {
     const resourceMeta: UIResourceMeta = {
       csp: uiConfig?.['csp'] as UIResourceMeta['csp'] | undefined,
       permissions: uiConfig?.['permissions'],

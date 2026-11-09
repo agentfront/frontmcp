@@ -166,13 +166,13 @@ describe('startup notices for a default that does not do what it says', () => {
     warnings.length = 0;
     await serve({
       apps: [TravelApp, HybridReportsApp],
-      ui: { servingMode: 'custom-url' },
+      ui: { servingMode: 'hybrid' },
       logging: { level: LogLevel.Warn, enableConsole: false, transports: [CaptureLogTransport] },
     });
 
     const notices = warnings.filter((line) => line.includes('ui.servingMode'));
     expect(notices).toEqual([
-      expect.stringMatching(/^`@FrontMcp\(\{ ui \}\)`: `ui.servingMode: 'custom-url'` is deprecated/),
+      expect.stringMatching(/^`@FrontMcp\(\{ ui \}\)`: `ui.servingMode: 'hybrid'`/),
       expect.stringMatching(/^App "hybrid-reports" `@App\(\{ ui \}\)`: `ui.servingMode: 'hybrid'`/),
     ]);
   });
@@ -218,18 +218,14 @@ describe('resolveWidgetServingMode', () => {
 });
 
 describe('describeServingModeDefault', () => {
-  it('says once that a deprecated default serves inline', () => {
-    expect(describeServingModeDefault('`@FrontMcp({ ui })`', 'custom-url')).toEqual([
-      expect.stringContaining("`ui.servingMode: 'custom-url'` is deprecated; tools that inherit it are served inline"),
-    ]);
-  });
-
   it('explains what a hybrid default sends', () => {
     expect(describeServingModeDefault('App "a" `@App({ ui })`', 'hybrid')[0]).toContain("_meta['ui/component']");
   });
 
   it('has nothing to say about the modes that do what they say, or no default', () => {
     expect(describeServingModeDefault('x', 'static')).toEqual([]);
+    expect(describeServingModeDefault('x', 'direct-url')).toEqual([]);
+    expect(describeServingModeDefault('x', 'custom-url')).toEqual([]);
     expect(describeServingModeDefault('x', undefined)).toEqual([]);
   });
 });

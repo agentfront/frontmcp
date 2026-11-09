@@ -35,10 +35,10 @@ function parseWidgetUrl(url: string): URL {
   try {
     parsed = new URL(url);
   } catch {
-    throw new Error(`Widget URL ${JSON.stringify(url)} is not an absolute URL`);
+    throw new Error('Widget URL is not an absolute URL');
   }
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    throw new Error(`Widget URL ${JSON.stringify(url)} must use https: (or http: for local development)`);
+    throw new Error('Widget URL must use https: (or http: for local development)');
   }
   return parsed;
 }
