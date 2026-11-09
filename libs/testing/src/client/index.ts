@@ -31,6 +31,7 @@ export type {
   ElicitResponse,
   ElicitationHandler,
   // Re-exports from MCP SDK
+  DiscoverResult,
   InitializeResult,
   ListToolsResult,
   CallToolResult,

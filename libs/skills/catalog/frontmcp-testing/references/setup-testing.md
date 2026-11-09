@@ -353,31 +353,27 @@ describe('Advanced E2E', () => {
 
 ### Testing with Authentication
 
+`test.use()` takes no issuer or audience: its `auth` only says what the server's auth is. A server that verifies tokens with `JWT_SECRET` gets it through `env`, and the `auth` fixture then signs its tokens with the same secret, for that server.
+
 ```typescript
 import { expect, test } from '@frontmcp/testing';
 
 test.use({
   server: './src/main.ts',
   port: 3005,
-  auth: {
-    issuer: 'https://auth.example.com/',
-    audience: 'https://api.example.com',
-  },
+  env: { JWT_SECRET: 'a-test-secret-of-at-least-32-bytes' },
 });
 
 test('authenticated tool call succeeds', async ({ mcp, auth }) => {
   const token = await auth.createToken({ sub: 'user-123', scopes: ['tools:read'] });
-  mcp.setAuthToken(token);
+  await mcp.authenticate(token);
 
   const result = await mcp.tools.call('get_user_profile', {});
   expect(result).toBeSuccessful();
 });
 
-test('unauthenticated call is rejected', async ({ mcp }) => {
-  mcp.clearAuthToken();
-
-  const result = await mcp.tools.call('get_user_profile', {});
-  expect(result).toBeError();
+test('a token with a bad signature is rejected', async ({ mcp, auth }) => {
+  await expect(mcp.authenticate(auth.createInvalidToken({ sub: 'user-123' }))).rejects.toThrow();
 });
 ```
 
@@ -412,6 +408,7 @@ test.beforeEach(async ({ mcp }) => {
 - `port: 0` (or omitting `port`) picks any free port. Ports are reserved with a cross-process lock, so parallel Jest workers do not collide.
 - `auth: { mode, type }` reaches the server process as `FRONTMCP_TEST_AUTH_MODE` / `FRONTMCP_TEST_AUTH_TYPE`; `mode: 'public'` also keeps the `mcp` client anonymous.
 - `logLevel` reaches the server process as `FRONTMCP_LOG_LEVEL`, its log level unless its `logging.level` is set; `'debug'` also prints the server's command and output. Up to 1.9.2 only `'debug'` did anything.
+- `protocolVersion` is the MCP protocol version the clients speak: `'2025-06-18'` by default, or `'2026-07-28'`, which is stateless (`server/discover` instead of `initialize`, no session). `server.createClient({ protocolVersion })` overrides it for one client. See [Protocol Versions](test-e2e-handler.md#protocol-versions).
 - `test.each` / `test.describe.each` pass the row values to the callback (fixtures first for `test.each`):
 
 ```typescript

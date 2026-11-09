@@ -3,7 +3,9 @@
  * @description Interface for MCP transport implementations
  */
 
-import type { ClientInfo, ElicitationHandler } from '../client/mcp-test-client.types';
+import type { LoggingLevel, SubscriptionFilter } from '@frontmcp/protocol';
+
+import type { ClientInfo, ElicitationHandler, TestClientCapabilities } from '../client/mcp-test-client.types';
 
 // Simplified JSON-RPC types for transport layer
 export interface JsonRpcRequest {
@@ -137,6 +139,13 @@ export interface McpTransport {
    * @param protocolVersion - The version negotiated at initialize, sent as `MCP-Protocol-Version`
    */
   openNotificationStream?(protocolVersion: string): Promise<void>;
+
+  /**
+   * Protocol 2026-07-28: open a `subscriptions/listen` stream, replacing the one open before, and
+   * hand its notifications to the notification handler.
+   * @returns The notification types the server acknowledged, or undefined when it opened no stream
+   */
+  listen?(id: string | number, notifications: SubscriptionFilter): Promise<SubscriptionFilter | undefined>;
 }
 
 /**
@@ -171,6 +180,12 @@ export interface TransportConfig {
   interceptors?: import('../interceptor').InterceptorChain;
   /** Client info for User-Agent header (enables platform detection on server) */
   clientInfo?: ClientInfo;
+  /** The protocol revision; `'2026-07-28'` sends every request statelessly, with its `_meta` and mirrored headers */
+  protocolVersion?: string;
+  /** Protocol 2026-07-28: the capabilities each request declares in its `_meta` */
+  capabilities?: TestClientCapabilities;
+  /** Protocol 2026-07-28: the log level each request asks for in its `_meta` */
+  logLevel?: LoggingLevel;
   /** Handler for server→client elicitation requests during tool execution */
   elicitationHandler?: ElicitationHandler;
   /** Handler for server notifications streamed during a request */
