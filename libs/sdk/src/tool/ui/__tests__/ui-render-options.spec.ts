@@ -73,6 +73,44 @@ describe('ToolUIRegistry rendering options', () => {
     await expect(missingTheme).rejects.toThrow('"no-such-theme", which is not a highlight.js theme');
   });
 
+  it('renders an MDX template with mdxComponents on the server, and reports it as mdx', async () => {
+    // A React element written out, so the SDK spec doesn't import react
+    const Badge = ({ children }: { children?: unknown }) => ({
+      $$typeof: Symbol.for('react.transitional.element'),
+      type: 'span',
+      key: null,
+      ref: null,
+      props: { className: 'badge', children },
+      _owner: null,
+      _store: {},
+    });
+    const registry = new ToolUIRegistry();
+    const uiConfig = { template: '## {output.name}\n\n<Badge>{output.state}</Badge>', mdxComponents: { Badge } };
+    await registry.checkRenderOptions('status', uiConfig);
+
+    const { meta } = await registry.renderAndRegisterAsync({
+      toolName: 'status',
+      output: { name: 'API', state: '<b>up</b>' },
+      uiConfig,
+    });
+    expect(body(meta).trim()).toBe('<h2>API</h2>\n<span class="badge">&lt;b&gt;up&lt;/b&gt;</span>');
+    expect(meta['ui/type']).toBe('mdx');
+    expect(registry.detectUIType(uiConfig.template, uiConfig)).toBe('mdx');
+    expect(registry.detectUIType(uiConfig.template)).toBe('html');
+  });
+
+  it('refuses mdxComponents on a template function, and an MDX template that does not compile', async () => {
+    const registry = new ToolUIRegistry();
+    await expect(
+      registry.checkRenderOptions('status', { template: () => '<Badge />', mdxComponents: {} }),
+    ).rejects.toThrow(
+      'Tool "status": `ui.mdxComponents` is for an MDX template, which is a string, and this template is a function.',
+    );
+    await expect(
+      registry.checkRenderOptions('status', { template: '<Badge', mdxComponents: {} }),
+    ).rejects.toBeInstanceOf(ToolUiConfigurationError);
+  });
+
   it('accepts a tool without rendering options', async () => {
     await expect(
       new ToolUIRegistry().checkRenderOptions('weather', { template: { file: './weather.widget.tsx' } }),

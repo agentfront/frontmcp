@@ -130,7 +130,7 @@ export class ToolUIRegistry {
     const problems = describeRenderOptionProblems(template, renderOptions(uiConfig));
     if (problems.length > 0) throw new ToolUiConfigurationError(toolName, problems);
     try {
-      prepareRenderOptions(template, renderOptions(uiConfig));
+      await prepareRenderOptions(template, renderOptions(uiConfig));
     } catch (error) {
       throw new ToolUiConfigurationError(toolName, [error instanceof Error ? error.message : String(error)]);
     }
@@ -173,7 +173,9 @@ export class ToolUIRegistry {
     return this.resourceMeta.get(toolName);
   }
 
-  detectUIType(template: unknown): string {
+  /** How the template renders: a string template is MDX with `ui.mdxComponents`, else as detected. */
+  detectUIType(template: unknown, uiConfig?: { mdxComponents?: unknown }): string {
+    if (typeof template === 'string' && uiConfig?.mdxComponents) return 'mdx';
     return detectUIType(template);
   }
 
@@ -265,7 +267,7 @@ export class ToolUIRegistry {
       const toolName = options['toolName'] as string;
       const template = options['template'];
       if (toolName && template) {
-        const uiType = detectUIType(template);
+        const uiType = this.detectUIType(template, options['uiConfig'] as Record<string, unknown> | undefined);
         this.manifests.set(toolName, { uiType, hash: '', size: 0 });
       }
     }
@@ -334,13 +336,14 @@ export class ToolUIRegistry {
 /** A tool's `ui` rendering options, as `renderToolTemplate` takes them. */
 function renderOptions(
   uiConfig: Record<string, unknown> | undefined,
-): Pick<RenderToolTemplateOptions, 'contentSecurity' | 'markdown'> {
+): Pick<RenderToolTemplateOptions, 'contentSecurity' | 'markdown' | 'mdxComponents'> {
   const runtimeOptions = uiConfig?.['runtimeOptions'] as
     | { markdown?: RenderToolTemplateOptions['markdown'] }
     | undefined;
   return {
     contentSecurity: uiConfig?.['contentSecurity'] as RenderToolTemplateOptions['contentSecurity'],
     markdown: runtimeOptions?.markdown,
+    mdxComponents: uiConfig?.['mdxComponents'] as RenderToolTemplateOptions['mdxComponents'],
   };
 }
 

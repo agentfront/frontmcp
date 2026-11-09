@@ -485,10 +485,26 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   directPath?: string;
 
   /**
-   * Custom React components available in MDX templates.
+   * React components for an MDX template. With `mdxComponents` set, a string template is MDX: it is
+   * compiled once with `@mdx-js/mdx` and rendered to HTML on the server with React for each render,
+   * with these components for the tags it names (and for HTML elements it overrides, such as `h1`).
+   * Its expressions read the call's data as `input`, `output` and `helpers`; the data is rendered as
+   * escaped text, never compiled. The page carries the rendered HTML, not React, so event handlers
+   * in the template don't run in the page.
    *
-   * @deprecated Has no effect: MDX is not compiled, so a string template is HTML or Markdown.
-   * Startup logs a warning when it is set.
+   * Needs `@mdx-js/mdx`, `react` and `react-dom` installed (and `remark-gfm` for
+   * `runtimeOptions.markdown.gfm`); `runtimeOptions.markdown.highlightTheme` highlights its fenced
+   * code. The template compiles at startup, so a syntax error or a missing package fails it. Only a
+   * string template can be MDX: a template function's result carries the call's data, and compiling
+   * it would run that data as code, so `mdxComponents` on a function fails startup.
+   *
+   * @example
+   * ```typescript
+   * ui: {
+   *   template: `# {output.title}\n\n<Alert type="info">{output.items.length} items</Alert>`,
+   *   mdxComponents: { Alert },
+   * }
+   * ```
    */
   mdxComponents?: Record<string, any>;
 
