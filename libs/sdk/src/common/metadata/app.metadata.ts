@@ -345,10 +345,25 @@ export type RemoteAuthConfig =
     }
   | {
       /**
-       * Let remote server handle its own OAuth flow.
-       * No auth headers are added by the gateway.
+       * OAuth 2.0 client credentials. The gateway gets an access token from the remote's authorization server and
+       * sends it as `Authorization: Bearer <token>` with every request to the remote, connecting included. It gets a
+       * new one before the token expires, and when the remote answers 401 (the request is then sent once more).
+       *
+       * The token endpoint is `tokenUrl`, else the one the remote's authorization server publishes: found through the
+       * remote's protected resource metadata (RFC 9728), else at the remote's origin (RFC 8414). The token request
+       * names the remote as its `resource` (RFC 8707). A token that can't be had fails with `RemoteAuthError`.
+       *
+       * Without `clientId` and `clientSecret`, no credentials are sent, and the server logs a warning.
        */
       mode: 'oauth';
+      /** OAuth client id at the remote's authorization server */
+      clientId?: string;
+      /** OAuth client secret, required with `clientId`. Read it from the environment, not from source. */
+      clientSecret?: string;
+      /** Space-separated scopes to ask for */
+      scope?: string;
+      /** Token endpoint URL; default: the one the remote's authorization server publishes */
+      tokenUrl?: string;
     };
 
 /**
@@ -540,9 +555,17 @@ const remoteAuthConfigSchema = z.discriminatedUnion('mode', [
       message: 'remoteAuth.mapper must be a function',
     }),
   }),
-  z.object({
-    mode: z.literal('oauth'),
-  }),
+  z
+    .object({
+      mode: z.literal('oauth'),
+      clientId: z.string().min(1).optional(),
+      clientSecret: z.string().min(1).optional(),
+      scope: z.string().optional(),
+      tokenUrl: z.string().url().optional(),
+    })
+    .refine((auth) => (auth.clientId === undefined) === (auth.clientSecret === undefined), {
+      message: 'remoteAuth oauth needs both clientId and clientSecret, or neither',
+    }),
 ]);
 
 export const frontMcpRemoteAppMetadataSchema = z
