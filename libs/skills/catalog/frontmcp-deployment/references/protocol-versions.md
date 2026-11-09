@@ -194,6 +194,10 @@ A client opts in per request:
 response (over stdio, as lines before the result), terminated by the final result. Omit `logLevel` and the server emits
 no `notifications/message` at all.
 
+Before 2026-07-28 they also go on the response stream of the request that ran the tool or agent, after the
+session's `logging/setLevel` for log messages. Up to 1.11.2 they went to the session's `GET` stream instead, so a
+client could get them after the call's result.
+
 ## Tasks extension
 
 ```json

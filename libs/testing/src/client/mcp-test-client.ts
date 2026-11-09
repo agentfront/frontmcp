@@ -10,6 +10,7 @@ import {
   type InputRequests,
   type InputRequiredResult,
   type InputResponses,
+  type LoggingLevel,
   type SubscriptionFilter,
 } from '@frontmcp/protocol';
 import { trimSlashes } from '@frontmcp/utils';
@@ -68,6 +69,7 @@ import type {
 
 const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_PROTOCOL_VERSION = '2025-06-18';
+const DEFAULT_MCP_LOG_LEVEL: LoggingLevel = 'debug';
 /** Most `input_required` answers one call gives before it fails, so a server that never settles can't hang a spec. */
 const MAX_INPUT_ROUNDS = 10;
 const LIST_CHANGED_SUBSCRIPTIONS: SubscriptionFilter = {
@@ -195,6 +197,7 @@ export class McpTestClient {
       timeout: config.timeout ?? DEFAULT_TIMEOUT,
       debug: config.debug ?? false,
       protocolVersion: config.protocolVersion ?? DEFAULT_PROTOCOL_VERSION,
+      mcpLogLevel: config.mcpLogLevel ?? DEFAULT_MCP_LOG_LEVEL,
       clientInfo: config.clientInfo ?? DEFAULT_CLIENT_INFO,
       platform: config.platform,
       capabilities: config.capabilities,
@@ -319,6 +322,7 @@ export class McpTestClient {
         method: 'notifications/initialized',
       });
       await this.transport.openNotificationStream?.(this.initResult.protocolVersion);
+      await this.setServerLogLevel();
     }
 
     this.log('info', `Connected to ${this.initResult.serverInfo?.name ?? 'MCP Server'}`);
@@ -1054,6 +1058,14 @@ export class McpTestClient {
     return { ...response, data };
   }
 
+  /** Ask for the server's log messages at `mcpLogLevel`, when the server has the logging capability. */
+  private async setServerLogLevel(): Promise<void> {
+    const level = this.config.mcpLogLevel;
+    if (level === false || !this.hasCapability('logging')) return;
+    const response = await this.request('logging/setLevel', { level });
+    if (!response.success) this.log('warn', `logging/setLevel ${level} failed: ${response.error?.message}`);
+  }
+
   /** Protocol 2026-07-28: open the `subscriptions/listen` stream for list changes and the subscribed resources. */
   private async listen(): Promise<SubscriptionFilter | undefined> {
     const resourceSubscriptions = [...this.resourceSubscriptions];
@@ -1141,10 +1153,11 @@ export class McpTestClient {
     const timestamp = new Date();
     this._notifications.push({ method: notification.method, params: notification.params, timestamp });
     if (notification.method !== 'notifications/progress') return;
-    const { progress, total, progressToken } = notification.params ?? {};
+    const { progress, total, progressToken, message } = notification.params ?? {};
     this._progressUpdates.push({
       progress: Number(progress),
       total: typeof total === 'number' ? total : undefined,
+      message: typeof message === 'string' ? message : undefined,
       progressToken: typeof progressToken === 'string' || typeof progressToken === 'number' ? progressToken : undefined,
       timestamp,
     });
@@ -1209,6 +1222,7 @@ export class McpTestClient {
           notificationHandler: this.recordNotification,
           protocolVersion: this.config.protocolVersion,
           capabilities: this.clientCapabilities,
+          logLevel: this.config.mcpLogLevel || undefined,
         });
       case 'sse':
         return new SseTransport({

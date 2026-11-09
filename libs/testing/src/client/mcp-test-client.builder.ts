@@ -3,6 +3,8 @@
  * @description Builder pattern for creating McpTestClient instances
  */
 
+import type { LoggingLevel } from '@frontmcp/protocol';
+
 import { getPlatformCapabilities, getPlatformClientInfo } from '../platform/platform-client-info';
 import type { TestPlatformType } from '../platform/platform-types';
 import { McpTestClient } from './mcp-test-client';
@@ -100,6 +102,14 @@ export class McpTestClientBuilder {
    */
   withProtocolVersion(version: string): this {
     this.config.protocolVersion = version;
+    return this;
+  }
+
+  /**
+   * Set the level of the log messages the client asks the server for (default 'debug'); `false` asks for none.
+   */
+  withMcpLogLevel(level: LoggingLevel | false): this {
+    this.config.mcpLogLevel = level;
     return this;
   }
 

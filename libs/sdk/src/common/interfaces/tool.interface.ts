@@ -164,7 +164,8 @@ export abstract class ToolContext<
 
   /**
    * Send a notification message to the current session.
-   * Uses 'notifications/message' per MCP 2025-11-25 spec.
+   * Uses 'notifications/message' per MCP 2025-11-25 spec, on the call's own response stream,
+   * so the client has it before the call's result.
    *
    * @param message - The notification message (string) or structured data (object)
    * @param level - One of the eight MCP log levels, 'debug' through 'emergency' (default: 'info')
@@ -197,12 +198,19 @@ export abstract class ToolContext<
       return false;
     }
 
-    return this.scope.notifications.sendLogMessageToSession(sessionId, level, this.toolName, data);
+    return this.scope.notifications.sendLogMessageToSession(
+      sessionId,
+      level,
+      this.toolName,
+      data,
+      this._jsonRpcRequestIdInternal,
+    );
   }
 
   /**
    * Send a progress notification to the current session.
-   * Uses 'notifications/progress' per MCP 2025-11-25 spec.
+   * Uses 'notifications/progress' per MCP 2025-11-25 spec, on the call's own response stream,
+   * so the client has it before the call's result.
    *
    * Only works if the client requested progress updates by including a
    * progressToken in the request's _meta field. If no progressToken was
@@ -243,7 +251,14 @@ export abstract class ToolContext<
       return false;
     }
 
-    return this.scope.notifications.sendProgressNotification(sessionId, this._progressToken, progress, total, message);
+    return this.scope.notifications.sendProgressNotification(
+      sessionId,
+      this._progressToken,
+      progress,
+      total,
+      message,
+      this._jsonRpcRequestIdInternal,
+    );
   }
 
   /**
