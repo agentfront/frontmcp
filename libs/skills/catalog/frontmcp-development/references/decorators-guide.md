@@ -536,14 +536,14 @@ export const createDatabaseProvider = AsyncProvider({
 
 **Key fields:**
 
-| Field          | Description                                                                                        |
-| -------------- | -------------------------------------------------------------------------------------------------- |
-| `name`         | Flow name, also declared in `ExtendFlows` so `runFlow()` and `FlowHooksOf()` know its types        |
-| `plan`         | Stage names by phase: `{ pre?, execute?, post?, finalize?, error? }`, each a `@Stage` of the class |
-| `inputSchema`  | Zod schema for flow input                                                                          |
-| `outputSchema` | Zod schema for flow output                                                                         |
-| `description?` | What the flow does                                                                                 |
-| `access?`      | Deprecated and never read: it controls nothing. See below                                          |
+| Field          | Description                                                                                          |
+| -------------- | ---------------------------------------------------------------------------------------------------- |
+| `name`         | Flow name, also declared in `ExtendFlows` so `runFlow()` and `FlowHooksOf()` know its types          |
+| `plan`         | Stage names by phase: `{ pre?, execute?, post?, finalize?, error? }`, each a `@Stage` of the class   |
+| `inputSchema`  | Zod schema for flow input                                                                            |
+| `outputSchema` | Zod schema for flow output                                                                           |
+| `access`       | Who the flow runs for: `'authorized'` (a caller the server's auth admitted) or `'public'`. See below |
+| `description?` | What the flow does                                                                                   |
 
 ```typescript
 import { Flow, FlowBase, FlowHooksOf, z, type FlowPlan, type FlowRunOptions } from '@frontmcp/sdk';
@@ -562,7 +562,7 @@ declare global {
 
 const { Stage } = FlowHooksOf<typeof name>(name);
 
-@Flow({ name, plan, inputSchema, outputSchema })
+@Flow({ name, plan, inputSchema, outputSchema, access: 'authorized' })
 export default class ApprovalFlow extends FlowBase<typeof name> {
   @Stage('validate')
   async validate() {
@@ -581,9 +581,20 @@ export default class ApprovalFlow extends FlowBase<typeof name> {
 }
 ```
 
-`access: 'public' | 'authorized'` is accepted for compatibility but never read: a flow runs for every caller that
-reaches it. To restrict a flow, check the caller in a stage or a hook, or put `authorities` on the tools, resources and
-prompts it serves.
+`access` is checked before the first stage. An `'authorized'` flow runs only for a caller the server's auth admitted:
+
+- Over HTTP, `session:verify` must accept the request. `http:request` verifies every MCP request first. A flow that
+  serves a request no flow verified yet (one mounted on a route with `middleware`, or a flow such a route runs)
+  verifies it itself, and refuses it with `401` (`UnauthorizedError`) or `403` (`INSUFFICIENT_SCOPE`), each with its
+  `WWW-Authenticate` challenge. No stage or hook of the flow runs.
+- The anonymous callers that public mode and `allowAnonymous` admit are authorized. To require a signed-in caller,
+  check `this.context.authInfo` in a stage, or put `authorities` on the tools, resources and prompts it serves.
+- stdio, `connect()`, direct calls, and the work the server starts itself (a scheduled job, a channel notification) are
+  the server process's own callers, and are authorized.
+- A flow run from another flow, a tool or a job is checked against the caller of the request it runs in.
+
+A `'public'` flow runs for any caller that reaches it. A flow whose metadata lacks `access` at run time (JavaScript) is
+`'public'`. Register a flow from a plugin provider that injects `ScopeEntry`: `await scope.registryFlows(ApprovalFlow)`.
 
 ---
 
