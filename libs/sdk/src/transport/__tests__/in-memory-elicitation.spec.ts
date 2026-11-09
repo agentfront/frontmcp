@@ -90,6 +90,18 @@ describe('elicitation through the in-memory transport', () => {
     expect(ranStages).toEqual(['elicitation:request', 'elicitation:result']);
   });
 
+  it('fails the call when the accepted content does not match the requested schema', async () => {
+    const client = await connect(config(), {
+      onElicitation: async () => ({ action: 'accept', content: { confirmed: 'yes' } }),
+    });
+
+    const result = (await client.callTool('confirm', {})) as { isError?: boolean; structuredContent?: unknown };
+    await client.close();
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toBeUndefined();
+  });
+
   it('takes an accepted URL-mode answer without content, and gives the question an elicitationId', async () => {
     const asked: unknown[] = [];
     const client = await connect(config(), {

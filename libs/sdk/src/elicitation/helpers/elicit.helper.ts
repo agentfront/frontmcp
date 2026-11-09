@@ -20,6 +20,7 @@ import {
 import { supportsElicitation, type ClientCapabilities } from '../../notification';
 import { DEFAULT_ELICIT_TTL, type ElicitOptions, type ElicitResult } from '../elicitation.types';
 import { type QuestionStore } from '../questions/question.store';
+import { checkedElicitAnswer } from './checked-elicit-answer';
 
 /**
  * Transport interface for elicitation.
@@ -150,21 +151,7 @@ export async function performElicit<S extends ZodType>(
       },
       deps.inputKey,
     );
-    if (answer.status !== 'accept') {
-      return answer as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
-    }
-    // A URL-mode answer carries no content: what the user did reaches the server through the page
-    if (elicitOptions?.mode === 'url') {
-      return { status: 'accept' } as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
-    }
-    const parsedContent = await zodSchema.safeParseAsync(answer.content);
-    if (!parsedContent.success) {
-      throw new InvalidInputError(
-        'The elicitation answer does not match the requested schema',
-        parsedContent.error.issues,
-      );
-    }
-    return { status: 'accept', content: parsedContent.data } as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
+    return checkedElicitAnswer(answer, requestedSchema, elicitOptions);
   }
 
   // 2. Validate session
@@ -177,7 +164,7 @@ export async function performElicit<S extends ZodType>(
   if (preResolved) {
     // Clear the pre-resolved result to prevent reuse
     ctx?.clearPreResolvedElicitResult?.();
-    return withoutUrlModeContent(preResolved, elicitOptions) as ElicitResult<S extends ZodType<infer O> ? O : unknown>;
+    return checkedElicitAnswer(preResolved, requestedSchema, elicitOptions);
   }
 
   // 4. Check client capabilities
@@ -205,15 +192,9 @@ export async function performElicit<S extends ZodType>(
     throw new ElicitationNotSupportedError('Transport not available for elicitation');
   }
 
-  // 6. Send elicit request (timeout throws ElicitationTimeoutError)
+  // 6. Send elicit request (timeout throws ElicitationTimeoutError); the transport checks the answer
   // The client may call the server before it answers; in a browser build that means stepping aside.
-  const answer = await awaitOutsideRequest(transport.elicit(message, requestedSchema, elicitOptions));
-  return withoutUrlModeContent(answer, elicitOptions);
-}
-
-/** A URL-mode answer carries no content, even when the session transports or sendElicitationResult pass some on. */
-function withoutUrlModeContent<T>(answer: ElicitResult<T>, options?: ElicitOptions): ElicitResult<T> {
-  return options?.mode === 'url' ? { status: answer.status } : answer;
+  return awaitOutsideRequest(transport.elicit(message, requestedSchema, elicitOptions));
 }
 
 /**

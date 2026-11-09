@@ -64,6 +64,8 @@ interface ElicitResult<T> {
 
 Always check `result.status === 'accept'` before reading `result.content` — `content` only exists on `accept`.
 
+An accepted answer reaches `execute()` only once it matches the schema, on every protocol version and transport and through `sendElicitationResult`: `result.content` is what the schema parsed (defaults applied, unknown keys dropped), and an answer that doesn't match fails the call with `INVALID_INPUT` ("The elicitation answer does not match the requested schema"). A `decline` or `cancel` answer carries no `content`, whatever the client sent. Up to 1.11.2, before MCP 2026-07-28, a session client's answer and a `sendElicitationResult` answer reached the tool unchecked (`{ confirm: "yes" }` for a `z.boolean()`), and a declined answer from a 2026-07-28 client kept its `content`.
+
 ## URL mode
 
 For an out-of-band step (OAuth, payment), pass `{ mode: 'url', url, elicitationId }`: `url` is the page the client opens (required: a URL-mode `elicit()` without it fails with `INVALID_INPUT`) and `elicitationId` an opaque id that correlates its completion (FrontMCP generates one when you omit it or pass an empty one, but the page needs it to report back). Both are sent on every transport, MCP 2026-07-28 included. An accepted URL-mode answer carries no `content`, as MCP specifies: the schema is not checked against it, so pass `z.object({})` and read what the user did from where the page stored it. Up to 1.9.2 such an answer failed the schema check with `INVALID_INPUT`, and `elicitationId` was required.
