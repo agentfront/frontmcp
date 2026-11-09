@@ -7,19 +7,14 @@ describe('describeIgnoredUiOptions (#645)', () => {
     expect(describeIgnoredUiOptions('t', { servingMode: 'inline' })).toEqual([]);
   });
 
-  it('names a single ignored option in the singular', () => {
-    const [message] = describeIgnoredUiOptions('weather', { htmlResponsePrefix: 'x' });
-    expect(message).toContain('Tool "weather"');
-    expect(message).toContain('`ui.htmlResponsePrefix` is deprecated and has no effect; remove it.');
-  });
-
-  it('says nothing about the rendering options and bundlingMode, which take effect', () => {
+  it('says nothing about the rendering options, bundlingMode and htmlResponsePrefix, which take effect', () => {
     expect(
       describeIgnoredUiOptions('weather', {
         uiType: 'html',
         hydrate: true,
         contentSecurity: {},
         bundlingMode: 'static',
+        htmlResponsePrefix: 'Widget',
       }),
     ).toEqual([]);
   });

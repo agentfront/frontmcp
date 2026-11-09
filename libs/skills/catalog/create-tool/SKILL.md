@@ -209,6 +209,8 @@ If a request seems to conflict with an inherited default (e.g., "wrap `inputSche
           │                            See: examples/23-tool-with-ui-filesource-tsx.md
           ├── Calls other tools     → window.FrontMcpBridge.callTool
           │                            See: examples/24-tool-with-ui-csp-and-bridge.md
+          ├── Served from a URL     → servingMode: 'direct-url' | 'custom-url'
+          │                            See: examples/28-tool-with-ui-served-from-a-url.md
           └── Claude target         → resourceMode is auto-detected; do not set
                                        See: references/ui-widgets.md
 
@@ -248,6 +250,7 @@ If a request seems to conflict with an inherited default (e.g., "wrap `inputSche
 | Tool that triggers a job + tracks it         | [`25-tool-handing-off-to-job`](./examples/25-tool-handing-off-to-job.md)                       | Thin tool + heavy job — the right split                                 |
 | Tool that returns a resource handle          | [`26-tool-with-resource-link-output`](./examples/26-tool-with-resource-link-output.md)         | `outputSchema: 'resource_link'` — the host fetches the resource         |
 | Tool with `examples` metadata for discovery  | [`27-tool-with-examples-metadata`](./examples/27-tool-with-examples-metadata.md)               | `examples: [{ description, input, output? }]`                           |
+| Tool widget served from a URL                | [`28-tool-with-ui-served-from-a-url`](./examples/28-tool-with-ui-served-from-a-url.md)         | `servingMode: 'direct-url'` / `'custom-url'`                            |
 
 ---
 

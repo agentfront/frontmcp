@@ -107,6 +107,7 @@ export function describeWidgetServingProblems(
   }
 
   problems.push(...describeBundlingModeProblems(toolName, ui));
+  problems.push(...describeHtmlResponsePrefixProblems(toolName, ui['htmlResponsePrefix']));
 
   const customWidgetUrl = ui['customWidgetUrl'];
   if (servingMode === 'custom-url' && customWidgetUrl === undefined) {
@@ -152,6 +153,22 @@ function describeBundlingModeProblems(toolName: string, ui: Record<string, unkno
     `Tool "${toolName}": ${what}. Remove one, or make them agree: 'dynamic' goes with 'inline', ` +
       "and 'static' with 'static', 'hybrid', 'direct-url' or 'custom-url'.",
   ];
+}
+
+const MAX_HTML_RESPONSE_PREFIX_LENGTH = 500;
+
+/** A `ui.htmlResponsePrefix` that isn't text the dual payload can open with. */
+function describeHtmlResponsePrefixProblems(toolName: string, prefix: unknown): string[] {
+  if (prefix === undefined) return [];
+  if (typeof prefix !== 'string' || prefix.trim() === '') {
+    return [`Tool "${toolName}": \`ui.htmlResponsePrefix\` must be a non-empty string.`];
+  }
+  if (prefix.length > MAX_HTML_RESPONSE_PREFIX_LENGTH) {
+    return [
+      `Tool "${toolName}": \`ui.htmlResponsePrefix\` is longer than ${MAX_HTML_RESPONSE_PREFIX_LENGTH} characters.`,
+    ];
+  }
+  return [];
 }
 
 /**

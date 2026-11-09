@@ -139,6 +139,15 @@ interface ElicitationFallbackResponse {
   };
 }
 
+/**
+ * The `ui.htmlResponsePrefix` of a call that gets the dual payload: from a client detected as
+ * `'claude'` (a Claude client that declares no MCP Apps support, so it renders no widget).
+ */
+function htmlResponsePrefixFor(ui: { htmlResponsePrefix?: string } | undefined, platformType: AIPlatformType) {
+  const prefix = ui?.htmlResponsePrefix;
+  return typeof prefix === 'string' && platformType === 'claude' ? prefix : undefined;
+}
+
 /** Whether a `tools/call`'s `_meta` marks it as a widget's own call (see `WIDGET_CALL_META_KEY`). */
 function isWidgetCall(requestMeta: unknown): boolean {
   return (
@@ -1465,6 +1474,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       const requestId: string = randomUUID();
 
       const platformType = this.callerPlatformType();
+      const htmlResponsePrefix = htmlResponsePrefixFor(tool.metadata.ui, platformType);
 
       // Resolve the effective serving mode based on configuration and client capabilities.
       // The tool's own `ui.servingMode` wins, then its app's and the server's `ui.servingMode`
@@ -1484,6 +1494,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           configuredMode,
           reason: resolvedMode.reason,
         });
+        if (htmlResponsePrefix !== undefined) await this.applyHtmlResponse(htmlResponsePrefix, undefined, platformType);
         return;
       }
 
@@ -1577,6 +1588,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       // Store UI result and metadata in state for finalize stage
       this.state.set('uiResult', uiResult);
       this.state.set('uiMeta', uiMeta);
+      if (htmlResponsePrefix !== undefined) await this.applyHtmlResponse(htmlResponsePrefix, htmlContent, platformType);
 
       this.logger.verbose('applyUI: UI processed', {
         tool: tool.metadata.name,
@@ -1618,6 +1630,42 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
 
     this.logger.verbose('applyUI:done');
+  }
+
+  /**
+   * Add the dual payload (`ui.htmlResponsePrefix`): a second text block holding this call's page in
+   * an `html` code fence, after the JSON text, for a Claude client that renders no widget. The page
+   * is rendered for this call when the serving mode didn't, and goes to this caller only.
+   */
+  private async applyHtmlResponse(prefix: string, renderedHtml: string | undefined, platformType: AIPlatformType) {
+    const { tool, rawOutput: executeOutput, input } = this.state;
+    if (!tool || !this.scope.toolUI) return;
+    const rawOutput = declaredOutput(tool, executeOutput);
+    const { buildHtmlResponseText, buildToolResponseContent, isUIRenderFailure } = await import('../ui/ui-render.js');
+
+    let html = renderedHtml;
+    if (html === undefined) {
+      const rendered = await this.scope.toolUI.renderAndRegisterAsync({
+        toolName: tool.metadata.name,
+        input:
+          input?.arguments && typeof input.arguments === 'object' && !Array.isArray(input.arguments)
+            ? input.arguments
+            : {},
+        output: rawOutput,
+        uiConfig: tool.metadata.ui,
+        platformType,
+      });
+      html = isUIRenderFailure(rendered) ? undefined : (rendered.meta['ui/html'] as string | undefined);
+    }
+    if (!html) return;
+
+    const uiResult =
+      this.state.uiResult ??
+      buildToolResponseContent({ rawOutput, servingMode: 'none', useStructuredContent: false, platformType });
+    this.state.set('uiResult', {
+      ...uiResult,
+      content: [...uiResult.content, { type: 'text', text: buildHtmlResponseText(prefix, html) }],
+    });
   }
 
   /**
