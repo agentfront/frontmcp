@@ -971,6 +971,7 @@
   "registerPendingTC39Hook": "function",
   "remoteAuthSchema": "object",
   "remoteProviderConfigSchema": "object",
+  "resolveAllowNonFinite": "function",
   "resolveDefaultSqlitePath": "function",
   "resolveEntryPath": "function",
   "resolveInstructionsBudget": "function",

@@ -36,6 +36,7 @@ import {
   FlowHooksOf,
   GLOBAL_RATE_LIMIT_CHECKED,
   isOrchestratedMode,
+  resolveAllowNonFinite,
   resolveOutputBudget,
   resolveOutputSchemaMode,
   resolveUndeclaredKeysPolicy,
@@ -1636,7 +1637,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
 
     // Parse and construct the MCP-compliant output using safeParseOutput
-    const undeclaredKeys = resolveUndeclaredKeysPolicy(...toolOutputPolicies(tool, this.scope));
+    const outputPolicies = toolOutputPolicies(tool, this.scope);
+    const undeclaredKeys = resolveUndeclaredKeysPolicy(...outputPolicies);
     const parseResult = tool.safeParseOutput(rawOutput, {
       // A call that renders the tool's UI sends declared keys only, whatever the policy
       undeclaredKeys: uiResult && undeclaredKeys === 'keep' ? 'strip' : undeclaredKeys,
@@ -1654,9 +1656,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // Reject non-finite numbers (Infinity / -Infinity / NaN) — JSON.stringify
     // silently coerces them to `null`, which Zod's `z.number()` accepts as
     // valid input but produces corrupted output for downstream consumers.
-    // Opt-out via `@FrontMcp({ output: { allowNonFinite: true } })`.
-    const allowNonFinite = (this.scope.metadata as { output?: { allowNonFinite?: boolean } }).output?.allowNonFinite;
-    if (allowNonFinite !== true) {
+    // Opt-out via `output: { allowNonFinite: true }` on the tool, its app or the server.
+    if (!resolveAllowNonFinite(...outputPolicies)) {
       const found = findNonFiniteNumber(parseResult.data);
       if (found) {
         this.logger.error('finalize: non-finite number in tool output', {
