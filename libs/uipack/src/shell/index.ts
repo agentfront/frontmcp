@@ -50,7 +50,7 @@ export {
 export { html, trustedHtml, isTrustedHtml, type TrustedHtml } from './trusted-html';
 
 // Markup Sanitizer (`ui.contentSecurity`)
-export { sanitizeHtml } from './sanitize-html';
+export { sanitizeHtml, describeContentSecurityProblems, DEFAULT_MAX_MARKUP_LENGTH } from './sanitize-html';
 
 // Custom Shell Types
 export type {

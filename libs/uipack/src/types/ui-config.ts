@@ -77,16 +77,32 @@ export interface UIContentSecurityPolicy {
  * `escapeStringResults: false`.
  *
  * With `contentSecurity` set, even to `{}`, the markup FrontMCP builds on the server from the
- * template is sanitized before it goes into the page: `<script>` elements, `on*` handler
- * attributes, `srcdoc`, `<object>` / `<embed>` / `<applet>`, `<base>` and `<meta>` are removed, and so
- * is every URL attribute (`href`, `src`, `action`, `formaction`, `xlink:href`, `srcset`, …) whose
- * scheme isn't `http:`, `https:` or `mailto:`. Relative URLs stay, and so do raster
- * `data:image/…` URLs in `<img src>`. Comments are dropped. The flags below relax it.
+ * template is sanitized before it goes into the page. The sanitizer reads the markup as the
+ * browser's HTML tokenizer does and writes every tag back out, each attribute value decoded once,
+ * checked, and written back escaped, so the page gets exactly what was checked. It removes:
+ *
+ * - `<script>` elements and `on*` handler attributes;
+ * - `srcdoc`, and `<object>`, `<embed>`, `<applet>`, `<base>` and `<meta>` elements;
+ * - SVG animation elements (`<animate>`, `<set>`, `<animateMotion>`, `<animateTransform>`), which
+ *   can set any attribute of their parent, an `href` included;
+ * - `data-tool-call` and `data-tool-args`, with which the bridge calls a tool when the element is
+ *   clicked;
+ * - every URL attribute (`href`, `src`, `action`, `formaction`, `xlink:href`, `srcset`, `ping`, …)
+ *   whose scheme isn't `http:`, `https:` or `mailto:`; relative URLs stay, and so do raster
+ *   `data:image/…` URLs in `<img src>`;
+ * - `@import` rules in `<style>` elements, `<link rel="stylesheet">` to another origin, and
+ *   `position: fixed` and `position: sticky` in `style` attributes, which would let the markup lay
+ *   itself over the widget;
+ * - comments, doctypes and processing instructions.
+ *
+ * Other CSS is not filtered: a `<style>` element can still position or hide elements, and
+ * `url(…)` in CSS still loads from the origins the widget's Content-Security-Policy allows.
  *
  * It applies to HTML, Markdown and MDX strings, to a template function's result, and to a
  * component rendered on the server with `uiType: 'react'`. The page FrontMCP builds around the
  * markup (the bridge, the call's data) is not touched, and a `{ file }` widget, which renders in
- * the page, can't take it: the server refuses to start such a tool.
+ * the page, can't take it: the server refuses to start such a tool. It must be a plain object whose
+ * flags are booleans; anything else fails startup.
  *
  * Both OpenAI and Claude render widgets in sandboxed iframes, so script in a widget is contained,
  * but it can still read the widget's data, call tools the widget may call and show a fake UI.
@@ -95,19 +111,35 @@ export interface UIContentSecurityPolicy {
  */
 export interface UIContentSecurity {
   /**
-   * Keep URL attributes with any scheme, including `javascript:`, `data:` and `vbscript:`.
+   * Keep any scheme but `data:` in the attributes that navigate when the user follows them: `href`
+   * of `<a>` and `<area>`, `action` of `<form>`, and `formaction` of `<button>` and `<input>`. A
+   * `javascript:` link then runs when it is clicked. Every other URL attribute, such as `src` of an
+   * `<iframe>`, `<frame>` or `<img>`, keeps the `http:` / `https:` / `mailto:` rule.
    *
    * @default false
    */
   allowUnsafeLinks?: boolean;
 
   /**
-   * Keep `<script>` elements, `on*` event handler attributes, `srcdoc` and `<object>` / `<embed>` /
-   * `<applet>`. Hosts may still block a script through the widget's Content-Security-Policy.
+   * Keep script written in the markup: `<script>` elements without a `src` (or SVG `href`), and
+   * `on*` event handler attributes. A `<script src>`, `<object>`, `<embed>`, `<applet>` and
+   * `srcdoc` are still removed. Inline script can do anything script can, loading more script
+   * included, so this turns script protection off for whoever controls the markup: set it only for
+   * markup you trust. Hosts may still block a script through the widget's Content-Security-Policy.
    *
    * @default false
    */
   allowInlineScripts?: boolean;
+
+  /**
+   * Keep `data-tool-call` and `data-tool-args`. The bridge calls the tool `data-tool-call` names,
+   * with the JSON in `data-tool-args`, when the element (or anything inside it) is clicked, so
+   * whoever controls the markup chooses which tool a click calls and with what. Set it only when
+   * the markup's tool-call attributes are your own.
+   *
+   * @default false
+   */
+  allowToolCallAttributes?: boolean;
 
   /**
    * Skip sanitization: the markup is used as written, as if `contentSecurity` were unset. Only for
@@ -116,6 +148,14 @@ export interface UIContentSecurity {
    * @default false
    */
   bypassSanitization?: boolean;
+
+  /**
+   * The longest markup, in characters, that is sanitized. Longer markup is not rendered: the render
+   * fails, and the tool call returns without its widget.
+   *
+   * @default 2097152 (2 Mi)
+   */
+  maxMarkupLength?: number;
 }
 
 // ============================================

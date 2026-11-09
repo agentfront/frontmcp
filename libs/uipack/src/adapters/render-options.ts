@@ -4,6 +4,7 @@
  * @packageDocumentation
  */
 
+import { describeContentSecurityProblems } from '../shell/sanitize-html';
 import type { UIType } from '../types/ui-runtime';
 import { loadCodeHighlighter } from './code-highlight';
 import { compileMdxTemplate, preloadMdxCompiler } from './mdx';
@@ -58,7 +59,8 @@ export function describeRenderOptionProblems(template: unknown, options: RenderO
   const uiTypeProblem = forced && describeUiTypeMismatch(forced, template);
   if (uiTypeProblem) problems.push(`\`ui.uiType: '${forced}'\` ${uiTypeProblem}`);
 
-  if (options.contentSecurity && isFileTemplate(template)) {
+  if (options.contentSecurity !== undefined) problems.push(...describeContentSecurityProblems(options.contentSecurity));
+  if (options.contentSecurity !== undefined && isFileTemplate(template)) {
     problems.push(
       '`ui.contentSecurity` sanitizes the markup FrontMCP builds on the server, and a `{ file }` widget is rendered ' +
         'in the page, so there is nothing for it to sanitize. Remove it, or use an HTML, Markdown or function template.',

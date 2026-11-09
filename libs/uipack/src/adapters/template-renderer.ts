@@ -213,7 +213,7 @@ function convertMarkdown(source: string, options: RenderToolTemplateOptions, mdx
 
 /** The template's markup, sanitized when the tool sets `ui.contentSecurity`. */
 function secureMarkup(markup: string, options: RenderToolTemplateOptions): string {
-  return options.contentSecurity ? sanitizeHtml(markup, options.contentSecurity) : markup;
+  return options.contentSecurity === undefined ? markup : sanitizeHtml(markup, options.contentSecurity);
 }
 
 /** The tools already warned about, per component, so the warning is given once. */
