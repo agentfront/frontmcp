@@ -15,9 +15,24 @@ declare module '@enclave-vm/ast' {
       additionalIdentifiers?: string[];
     },
   ): string;
+  export interface ValidationIssue {
+    code: string;
+    message: string;
+    data?: Record<string, unknown>;
+  }
+  export interface ValidationResult {
+    valid: boolean;
+    issues: ValidationIssue[];
+    ast?: unknown;
+    parseError?: Error;
+    preScanError?: Error;
+  }
   export class JSAstValidator {
     constructor(rules?: unknown[]);
-    validate(source: string): Promise<{ valid: boolean; ast?: unknown; parseError?: Error }>;
+    validate(source: string): Promise<ValidationResult>;
+  }
+  export class UnknownGlobalRule {
+    constructor(options?: { allowedGlobals?: string[]; allowStandardGlobals?: boolean });
   }
   export function generateCode(ast: unknown): string;
 }

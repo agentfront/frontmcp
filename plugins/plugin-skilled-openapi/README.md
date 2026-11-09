@@ -91,6 +91,16 @@ bundle's auth binding, checks a JSON answer against `outputSchema`, and writes t
 A failed call throws, which ends the script with `success: false`. A script may make up to 25 calls and run for up to
 8 seconds.
 
+A script can use `callTool`, `Math` and `JSON`, and no other global. One that names another, such as `fetch`,
+`process` or `console`, is refused before it runs, with a message that names it as the script wrote it:
+
+```text
+AgentScript rejected: `fetch` isn't available in run_workflow. A script reaches the API only through `callTool(actionId, input)`, and can use `Math` and `JSON`.
+```
+
+Up to 1.11.1 such a script ran, and failed on Node.js with the sandbox's internal name for the global
+(`'__safe_fetch' is not defined`).
+
 When your API answers with an error status, the error includes its error body, so the model can correct the call. A
 JSON body is compacted, a text body is kept as it is, and a body over 2 KB is cut and ends with `…`. Credentials found
 in it (a `Bearer` value, a JWT, the field the operation's credential is sent in) are replaced with `[REDACTED]`:
@@ -638,10 +648,12 @@ npm install @frontmcp/plugin-skilled-openapi @enclave-vm/browser @enclave-vm/ast
   `Function` constructor and network access. In a browser Web Worker, which has no DOM for the iframes, it uses
   `@enclave-vm/core`'s interpreter, as on Node.js.
 - **The same workflows.** The limits (25 calls, 8 seconds), `callTool` and its `{ throwOnError: false }` result, the
-  error texts, `isError`, and the question `confirm` asks before the script starts are the same as on Node.js. The
-  browser sandbox also checks the script against AgentScript's rules before it runs, so `callTool`'s action id must be
-  a string literal (`callTool('getInvoice', …)`, not a variable), and a name AgentScript doesn't have, such as
-  `fetch`, fails the run with `AgentScript validation failed: …`.
+  error texts, `isError`, the question `confirm` asks before the script starts, and the refusal of a script that uses
+  a global other than `callTool`, `Math` and `JSON` are the same as on Node.js. The browser sandbox also checks the
+  script against AgentScript's rules before it runs, so `callTool`'s action id must be a string literal
+  (`callTool('getInvoice', …)`, not a variable). Up to 1.11.1 a page refused `fetch` with
+  `AgentScript validation failed: … Unknown identifier "__safe_fetch"`, and let a script use globals Node.js doesn't
+  have, such as `Array` and `console`.
 - **The outbound check.** URLs must still be `https:` (unless `allowHttp`) and on the operation's service host, and an
   IP-literal host is still checked: private and loopback addresses are refused unless `allowPrivateNetworks`, and
   link-local and cloud metadata addresses always. A host name is not resolved, since a browser has no DNS resolver:
