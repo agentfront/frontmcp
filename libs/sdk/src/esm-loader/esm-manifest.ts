@@ -23,15 +23,18 @@ import type { AppType } from '../common/interfaces';
 import { FrontMcpLocalAppTokens } from '../common/tokens/app.tokens';
 
 /**
- * The manifest that ESM packages export to declare their MCP primitives.
+ * The manifest that ESM packages export to declare their MCP primitives. An `App.esm()` app serves every kind as a
+ * local `@App` serves it.
  *
  * Package authors export this as the default export of their package:
  * ```typescript
  * export default {
  *   name: '@acme/mcp-tools',
  *   version: '1.0.0',
+ *   providers: [IssueStore],
  *   tools: [SearchTool, CreateIssueTool],
- *   skills: [{ name: 'triage', ... }],
+ *   skills: [{ name: 'triage', description: 'Triage an issue', instructions: 'Search, then label it.' }],
+ *   jobs: [ReindexJob],
  * } satisfies FrontMcpPackageManifest;
  * ```
  */
@@ -48,15 +51,15 @@ export interface FrontMcpPackageManifest {
   prompts?: unknown[];
   /** Resource classes or function-style resources */
   resources?: unknown[];
-  /** Skill definitions (can include embedded tools via the skill's tools array) */
+  /** `@Skill` classes, `skill()` results, or `{ name, description, instructions, tools? }` objects */
   skills?: unknown[];
-  /** Agent classes or function-style agents */
+  /** `@Agent` classes or `agent()` functions */
   agents?: unknown[];
-  /** Job classes or function-style jobs */
+  /** `@Job` classes or `job()` functions; they join the server's job system */
   jobs?: unknown[];
-  /** Workflow classes or function-style workflows */
+  /** `@Workflow` classes or `workflow()` values, whose steps name the jobs they run */
   workflows?: unknown[];
-  /** Shared providers for dependency injection */
+  /** Providers the package's own entries inject, registered for each loaded version */
   providers?: unknown[];
 }
 

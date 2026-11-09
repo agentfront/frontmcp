@@ -21,9 +21,8 @@
  * ```
  */
 
+import type { EsmAppOptions, RemoteAppMetadata, RemoteUrlAppOptions } from '../common/metadata/app.metadata';
 import { parsePackageSpecifier } from './package-specifier';
-import type { RemoteAppMetadata } from '../common/metadata/app.metadata';
-import type { EsmAppOptions, RemoteUrlAppOptions } from '../common/metadata/app.metadata';
 
 export type { EsmAppOptions, RemoteUrlAppOptions } from '../common/metadata/app.metadata';
 export type { PackageLoader } from '../common/metadata/app.metadata';
@@ -47,8 +46,9 @@ export type { AppFilterConfig, PrimitiveFilterMap } from '../common/metadata/app
  */
 export const app = {
   /**
-   * Declare an npm package to load at runtime.
-   * The package should export an `@App`-decorated class as its default export.
+   * Declare an npm package to load at runtime, as `App.esm()` does: every kind of entry it exports (tools, resources,
+   * prompts, skills, agents, jobs, workflows, and the providers they use) is served as a local `@App`'s is.
+   * The package exports a default `@App` or `@FrontMcp` class, a manifest, or named exports of entries.
    *
    * @param specifier - npm package specifier (e.g., '@acme/tools@^1.0.0')
    * @param options - Optional per-app overrides

@@ -31,6 +31,8 @@ export interface WorkflowRegistryInterface {
   search(query?: string, opts?: { tags?: string[]; labels?: Record<string, string> }): WorkflowEntry[];
   registerDynamic(record: WorkflowDynamicRecord): void;
   removeDynamic(workflowId: string): boolean;
+  registerAppWorkflows(workflows: readonly WorkflowType[]): Token[];
+  unregisterWorkflows(tokens: readonly Token[]): void;
   subscribe(opts: { immediate?: boolean }, cb: (evt: WorkflowChangeEvent) => void): () => void;
   hasAny(): boolean;
 }
@@ -156,6 +158,35 @@ export default class WorkflowRegistry
     this.dynamicRows.push(row);
     this.reindex();
     this.bump('added');
+  }
+
+  /**
+   * Register workflows an app serves after the registry was built (an ESM app's new version), as the workflows an app
+   * declares are.
+   *
+   * @returns The workflows' tokens, which {@link unregisterWorkflows} takes.
+   */
+  registerAppWorkflows(workflows: readonly WorkflowType[]): Token[] {
+    const lineage: EntryLineage = this.owner ? [this.owner] : [];
+    const tokens = workflows.map((raw) => {
+      const record = normalizeWorkflow(raw);
+      const instance = new WorkflowInstance(record, this.providers, this.owner);
+      this.instances.set(record.provide as Token<WorkflowInstance>, instance);
+      this.localRows.push(this.makeRow(record.provide, instance, lineage));
+      return record.provide as Token;
+    });
+    this.reindex();
+    this.bump('added');
+    return tokens;
+  }
+
+  /** Unregister workflows {@link registerAppWorkflows} registered. */
+  unregisterWorkflows(tokens: readonly Token[]): void {
+    const leaving = new Set(tokens);
+    for (const token of leaving) this.instances.delete(token as Token<WorkflowInstance>);
+    this.localRows = this.localRows.filter((row) => !leaving.has(row.token));
+    this.reindex();
+    this.bump('removed');
   }
 
   removeDynamic(workflowId: string): boolean {
