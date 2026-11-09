@@ -153,6 +153,20 @@ describe('ToolUIRegistry rendering options', () => {
     ).resolves.toBeUndefined();
   });
 
+  it.each([
+    ['a string', 'false', '`ui.contentSecurity` must be an object of flags, and it is string "false".'],
+    [
+      'a flag that is not boolean',
+      { bypassSanitization: 1 },
+      '`ui.contentSecurity.bypassSanitization` must be true or false',
+    ],
+    ['an unknown option', { allowScripts: true }, '`ui.contentSecurity` has no `allowScripts` option'],
+  ])('refuses a contentSecurity that is %s', async (_name, contentSecurity, message) => {
+    const check = new ToolUIRegistry().checkRenderOptions('card', { template: MARKUP, contentSecurity });
+    await expect(check).rejects.toBeInstanceOf(ToolUiConfigurationError);
+    await expect(check).rejects.toThrow(message);
+  });
+
   it('accepts a tool without rendering options', async () => {
     await expect(
       new ToolUIRegistry().checkRenderOptions('weather', { template: { file: './weather.widget.tsx' } }),

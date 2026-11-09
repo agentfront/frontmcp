@@ -99,4 +99,31 @@ describe('contentSecurity', () => {
     expect(describeRenderOptionProblems({ file: './widget.tsx' }, {})).toEqual([]);
     expect(describeRenderOptionProblems('<p>x</p>', { contentSecurity: {} })).toEqual([]);
   });
+
+  it('refuses a policy that is not an object of boolean flags, which a truthy string would otherwise switch off', () => {
+    expect(describeRenderOptionProblems('<p>x</p>', { contentSecurity: 'false' as never })).toEqual([
+      '`ui.contentSecurity` must be an object of flags, and it is string "false".',
+    ]);
+    expect(() =>
+      renderToolTemplate({
+        toolName: 'w',
+        input: {},
+        output: {},
+        template: MARKUP,
+        contentSecurity: { allowInlineScripts: 'no' } as never,
+      }),
+    ).toThrow('`ui.contentSecurity.allowInlineScripts` must be true or false');
+  });
+
+  it('fails the render of markup over maxMarkupLength rather than send it unsanitized', () => {
+    expect(() =>
+      renderToolTemplate({
+        toolName: 'w',
+        input: {},
+        output: {},
+        template: MARKUP,
+        contentSecurity: { maxMarkupLength: 10 },
+      }),
+    ).toThrow(RangeError);
+  });
 });
