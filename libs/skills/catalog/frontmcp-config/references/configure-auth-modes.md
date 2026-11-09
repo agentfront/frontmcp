@@ -127,7 +127,8 @@ upstream IdP** — there is no FrontMCP login page and no provider-selection pag
 After the IdP returns to `/oauth/provider/{id}/callback`, FrontMCP exchanges the
 code, stores the upstream tokens encrypted (server-side), derives the session
 identity (`sub`/`email`/`name`) from the **upstream user**, and mints its own
-HS256 session token. Tools read the upstream token via
+session token, signed with HS256 and `JWT_SECRET`, or with `local.signKey` when
+set. Tools read the upstream token via
 `this.orchestration.getToken('<provider-id>')`.
 
 ```typescript
@@ -199,7 +200,7 @@ upstream-token access in tools, and an optional consent layer.
 | Consent (tool selection) | No                         | No                   | No              | Optional (screen + enforcement)  | Optional (screen + enforcement)  |
 | Upstream OAuth providers | No                         | No                   | No              | 0..N (declared `providers[]`)    | Exactly 1 (mandatory)            |
 
-> "Remote" still issues its own HS256 session token to the MCP client; it delegates **user authentication** to a single upstream IdP rather than delegating token signing. `GET /oauth/authorize` redirects straight to that IdP (no in-tree login page), and tools read the upstream token via `this.orchestration.getToken(id)`.
+> "Remote" still issues its own session token to the MCP client, signed with HS256 and `JWT_SECRET`, or with `local.signKey` when set; it delegates **user authentication** to a single upstream IdP rather than delegating token signing. `GET /oauth/authorize` redirects straight to that IdP (no in-tree login page), and tools read the upstream token via `this.orchestration.getToken(id)`.
 
 ## Examples
 

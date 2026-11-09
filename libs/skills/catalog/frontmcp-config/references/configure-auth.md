@@ -341,9 +341,10 @@ the upstream IdP** — there is no FrontMCP login page and no provider-selection
 page. The IdP returns to `/oauth/provider/{id}/callback`; FrontMCP exchanges the
 code, stores the upstream tokens encrypted (server-side), derives the session
 identity (`sub`/`email`/`name`) from the **upstream user**, and mints its own
-HS256 session token for the MCP client: an access token that lasts an hour and a
-refresh token that lasts 30 days (rotated on each use). The IdP controls only the
-upstream tokens' lifetime.
+session token for the MCP client: an access token that lasts an hour, signed with
+HS256 and `JWT_SECRET`, or with `local.signKey` when set, and a refresh token that
+lasts 30 days (rotated on each use). The IdP controls only the upstream tokens'
+lifetime.
 
 ```typescript
 @FrontMcp({

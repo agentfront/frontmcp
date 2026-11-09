@@ -40,7 +40,7 @@ graph TB
 ### Key Features
 
 - **OAuth 2.1 Compliant**: PKCE required (S256), authorization code flow only
-- **JWT-based**: Gateway access tokens are HS256-signed with the instance secret; RS256/ES256 apply to external JWTs verified by `JwksService` (transparent-mode upstream tokens)
+- **JWT-based**: Gateway access tokens are signed with HS256 and the instance secret (`JWT_SECRET`), or with `signKey` when set (`local.signKey` in local and remote mode); RS256/ES256 apply to external JWTs verified by `JwksService` (transparent-mode upstream tokens)
 - **Flexible Storage**: In-memory (dev) or Redis (production)
 - **Session Support**: Both stateful and stateless session modes
 - **Discovery**: Standard `.well-known` endpoints for OAuth and JWKS
