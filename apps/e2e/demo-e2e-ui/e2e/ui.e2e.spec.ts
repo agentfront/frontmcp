@@ -10,7 +10,7 @@
  * - platform-detection.e2e.spec.ts
  * - discovery-and-metadata.e2e.spec.ts
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('UI Tools E2E Integration', () => {
   test.use({
@@ -152,7 +152,7 @@ test.describe('UI Tools E2E Integration', () => {
   });
 
   test.describe('Quick Platform Tests', () => {
-    test('should return UI for OpenAI client', async ({ server }) => {
+    test('should return the data without a page for OpenAI client', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
         clientInfo: { name: 'ChatGPT', version: '1.0.0' },
@@ -164,7 +164,7 @@ test.describe('UI Tools E2E Integration', () => {
       });
 
       expect(result).toBeSuccessful();
-      expect(result.hasToolUI()).toBe(true);
+      expect(result.hasToolUI()).toBe(false);
 
       await client.disconnect();
     });
