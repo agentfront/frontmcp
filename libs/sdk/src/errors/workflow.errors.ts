@@ -23,3 +23,10 @@ export class WorkflowJobTimeoutError extends InternalMcpError {
     super(`Job "${jobName}" timed out after ${timeoutMs}ms`, 'WORKFLOW_JOB_TIMEOUT');
   }
 }
+
+/** Thrown at boot for a workflow trigger the server cannot serve, such as a webhook without a usable secret. */
+export class WorkflowTriggerConfigError extends InternalMcpError {
+  constructor(workflowName: string, reason: string) {
+    super(`Workflow "${workflowName}": ${reason}`, 'INVALID_WORKFLOW_TRIGGER');
+  }
+}

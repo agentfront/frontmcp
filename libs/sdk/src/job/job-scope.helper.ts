@@ -19,6 +19,7 @@ import GetWorkflowStatusTool from '../workflow/tools/get-workflow-status.tool';
 import ListWorkflowsTool from '../workflow/tools/list-workflows.tool';
 import RegisterWorkflowTool from '../workflow/tools/register-workflow.tool';
 import RemoveWorkflowTool from '../workflow/tools/remove-workflow.tool';
+import { assertWorkflowTriggers } from '../workflow/trigger/workflow-triggers';
 import WorkflowRegistry, { type WorkflowRegistryInterface } from '../workflow/workflow.registry';
 import { normalizeWorkflow } from '../workflow/workflow.utils';
 import { DETACHED_FLUSH_MS, JobExecutionManager } from './execution/job-execution.manager';
@@ -192,9 +193,10 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     for (const message of describeUnreadOptions(jobRegistry, workflowRegistry)) logger.warn(message);
   }
 
-  // A detached job is refused here, at boot, where its process could not outlive the server
+  // Refused at boot: a detached job this server can't outlive, or a webhook workflow without a usable secret or path
   try {
     assertRunnersAvailable(jobRegistry.getJobs(), jobsConfig.runner);
+    assertWorkflowTriggers(workflowRegistry.getWorkflows(true));
   } catch (error) {
     await stateStore.dispose();
     await definitionStore.dispose();
