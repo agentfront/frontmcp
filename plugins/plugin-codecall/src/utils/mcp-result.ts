@@ -1,6 +1,7 @@
 // file: libs/plugins/src/codecall/utils/mcp-result.ts
 
 import type { CallToolResult } from '@frontmcp/protocol';
+import { PublicMcpError } from '@frontmcp/sdk';
 
 import { toPlainJson } from './plain-json';
 
@@ -11,12 +12,11 @@ import { toPlainJson } from './plain-json';
 export function extractResultFromCallToolResult(mcpResult: CallToolResult): unknown {
   // MCP CallToolResult has { content: [...], isError?: boolean }
   if (mcpResult.isError) {
-    // If it's an error, extract the error message from content
+    // The result's text is what an MCP client was told, so it stays public, under the result's own code.
     const errorContent = mcpResult.content?.[0];
-    if (errorContent && 'text' in errorContent) {
-      throw new Error(errorContent.text);
-    }
-    throw new Error('Tool execution failed');
+    const message = errorContent && 'text' in errorContent ? errorContent.text : 'Tool execution failed';
+    const code = mcpResult._meta?.['code'];
+    throw new PublicMcpError(message, typeof code === 'string' ? code : 'TOOL_ERROR_RESULT');
   }
 
   // For successful results, try to extract the actual data
