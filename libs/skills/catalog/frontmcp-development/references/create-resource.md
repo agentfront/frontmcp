@@ -145,6 +145,8 @@ Supported return shapes:
 - **Plain string**: wrapped into a single text content block
 - **Plain object**: serialized with `JSON.stringify` into a single text content block
 
+A value that cannot become content fails the read with `INVALID_OUTPUT`: neither `JSON.stringify()` nor `String()` can turn it into text, as for an object without a prototype that holds a `BigInt`. The error's message, which the server logs and a development server sends, names the problem, such as `Resource output validation failed (Cannot convert object to primitive value)`.
+
 ## Materialized Resources
 
 A materialized resource serves a stored value with a revision and an update time. Code writes the value through a typed API, in this process or another one, and FrontMCP answers `resources/subscribe` for the resource and sends `notifications/resources/updated` to its subscribers after the revision changes. A notification is a signal to read again, not one event per revision: writes within `coalesceMs`, or that a polling store sees together, are announced once, and a subscriber reads the latest value. Use it for state that reducers, workers or tools keep up to date, instead of a resource that recomputes on every read and never tells anyone it changed.
