@@ -67,3 +67,11 @@ function captureSegments(expected: string[], actual: string[]): Record<string, s
   }
   return params;
 }
+
+/**
+ * The path a scope serves its `/oauth/*` endpoints under: an app's own scope (`splitByApp` or `standalone`) under its
+ * path, so each app's authorization server is its own; the server's scope at the root.
+ */
+export function oauthBasePath(scope: { fullPath?: string; routeBase?: string }): string {
+  return scope.routeBase ? (scope.fullPath ?? '') : '';
+}

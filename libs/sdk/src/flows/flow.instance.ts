@@ -47,7 +47,7 @@ import type ProviderRegistry from '../provider/provider.registry';
 import { writeHttpResponse } from '../server/server.validation';
 import { flowErrorToHttpOutput } from '../transport/flow-error-output';
 import { deferredFlowLoader } from './deferred-flow';
-import { matchMountedPath } from './flow.http-path';
+import { matchMountedPath, oauthBasePath } from './flow.http-path';
 import {
   cloneStageMap,
   collectFlowHookMap,
@@ -203,8 +203,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
 
     const { middleware } = this.metadata;
     if (middleware) {
-      const path = typeof middleware.path === 'string' ? middleware.path : '';
-      server.registerMiddleware(path, async (request, response, next) => {
+      server.registerMiddleware(this.mountPath(), async (request, response, next) => {
         const canActivate = await this.canActivate(request);
         if (!canActivate) return next();
 
@@ -338,7 +337,7 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
   async matchHttp(request: ServerRequest): Promise<boolean> {
     const mw = this.metadata.middleware;
     if (!mw) return false;
-    const path = typeof mw.path === 'string' ? mw.path : '';
+    const path = this.mountPath();
     const hasStaticCanActivate =
       typeof (this.FlowClass as unknown as { canActivate?: unknown }).canActivate === 'function';
     const hasMwCanActivate = (mw.canActivate?.length ?? 0) > 0;
@@ -358,6 +357,12 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       else request.params = previous;
     }
     return activated;
+  }
+
+  /** The path the flow is mounted at: its `middleware.path`, with an `/oauth/*` path under the scope's OAuth base. */
+  private mountPath(): string {
+    const path = typeof this.metadata.middleware?.path === 'string' ? this.metadata.middleware.path : '';
+    return path.startsWith('/oauth/') ? `${oauthBasePath(this.scope)}${path}` : path;
   }
 
   /**
