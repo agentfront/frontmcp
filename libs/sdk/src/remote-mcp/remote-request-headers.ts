@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from '@frontmcp/utils';
 
 import { retryAfterMsOf } from '../transport/mcp-20260728/client/mcp-stateless.client';
+import { type RemoteOAuthTokenSource } from './remote-oauth';
 import { remoteHttpFailureOf, type RemoteHttpFailure } from './resilience/retry';
 
 interface RemoteRequestScope {
@@ -42,13 +43,26 @@ function withRefusal(error: unknown, refusal: RemoteHttpFailure | undefined): un
  * or a caller's), a redirect is not followed, so they cannot reach an origin the remote sent it to.
  *
  * @param connectionCarriesHeaders - Whether the connection sends its own headers (`transportOptions.headers`, static `remoteAuth`)
+ * @param oauth - The OAuth token every request carries; a request the remote refuses with 401 is sent once more with a new token
  */
-export function createRemoteRequestFetch(connectionCarriesHeaders: boolean): typeof fetch {
+export function createRemoteRequestFetch(
+  connectionCarriesHeaders: boolean,
+  oauth?: RemoteOAuthTokenSource,
+): typeof fetch {
   return async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const scope = requestScopes.getStore();
     const extra = scope?.headers ?? {};
-    const carriesCredentials = connectionCarriesHeaders || Object.keys(extra).length > 0;
-    const response = carriesCredentials ? await fetch(input, withHeaders(init, extra)) : await fetch(input, init);
+    const carriesCredentials = connectionCarriesHeaders || oauth !== undefined || Object.keys(extra).length > 0;
+    const send = async () => {
+      const credentials: Record<string, string> = oauth ? { authorization: await oauth.authorization() } : {};
+      return carriesCredentials ? fetch(input, withHeaders(init, { ...credentials, ...extra })) : fetch(input, init);
+    };
+    let response = await send();
+    if (oauth && response.status === 401) {
+      await response.body?.cancel().catch(() => undefined);
+      oauth.invalidate();
+      response = await send();
+    }
     if (scope && response.status >= 400) {
       scope.refusal = { status: response.status, retryAfterMs: retryAfterMsOf(response.headers.get('retry-after')) };
     }

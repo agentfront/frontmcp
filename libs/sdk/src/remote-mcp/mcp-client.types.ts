@@ -168,8 +168,19 @@ export type McpRemoteAuthConfig =
       mapper: (authInfo: AuthInfo | undefined) => McpStaticCredentials | Promise<McpStaticCredentials>;
     }
   | {
-      /** Let remote server handle its own OAuth flow */
+      /**
+       * OAuth 2.0 client credentials: every request carries an access token from the remote's authorization
+       * server, renewed before it expires and when the remote answers 401. Without `clientId`, nothing is sent.
+       */
       mode: 'oauth';
+      /** OAuth client id at the remote's authorization server */
+      clientId?: string;
+      /** OAuth client secret, required with `clientId` */
+      clientSecret?: string;
+      /** Space-separated scopes to ask for */
+      scope?: string;
+      /** Token endpoint; default: the one the remote's authorization server publishes */
+      tokenUrl?: string;
     };
 
 /**

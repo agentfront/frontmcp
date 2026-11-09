@@ -56,6 +56,7 @@ import type {
   McpUnsubscribeFn,
 } from './mcp-client.types';
 import { McpStatelessClientAdapter, negotiateRemoteProtocol } from './mcp-stateless-client.adapter';
+import { RemoteOAuthTokenSource } from './remote-oauth';
 import { createRemoteRequestFetch, withRemoteRequestHeaders } from './remote-request-headers';
 import {
   CircuitBreakerManager,
@@ -130,6 +131,7 @@ export class McpClientService {
   private readonly connections: Map<string, McpClientConnection> = new Map();
   private readonly capabilities: Map<string, McpRemoteCapabilities> = new Map();
   private readonly configs: Map<string, McpConnectRequest> = new Map();
+  private readonly oauthSources: Map<string, RemoteOAuthTokenSource> = new Map();
   private readonly options: Required<McpClientServiceOptions>;
   private readonly logger: FrontMcpLogger;
 
@@ -191,6 +193,7 @@ export class McpClientService {
 
     // Store config for reconnection
     this.configs.set(appId, request);
+    this.setUpOAuth(request);
 
     // Update status
     this.updateConnectionStatus(appId, 'connecting');
@@ -320,6 +323,7 @@ export class McpClientService {
     this.connections.delete(appId);
     this.capabilities.delete(appId);
     this.configs.delete(appId);
+    this.oauthSources.delete(appId);
 
     this.updateConnectionStatus(appId, 'disconnected');
 
@@ -722,9 +726,10 @@ export class McpClientService {
           throw new RemoteAuthError(appId, `Auth mapping failed: ${(error as Error).message}`);
         }
 
-      case 'oauth':
-        // Remote server handles OAuth - no headers needed from gateway
-        return {};
+      case 'oauth': {
+        const oauth = this.oauthSources.get(appId);
+        return oauth ? { Authorization: await oauth.authorization() } : {};
+      }
 
       default:
         return {};
@@ -812,6 +817,27 @@ export class McpClientService {
     };
   }
 
+  /** Client credentials for a remote with `remoteAuth: { mode: 'oauth', clientId, clientSecret }`. */
+  private setUpOAuth(request: McpConnectRequest): void {
+    const { appId, auth } = request;
+    if (auth?.mode !== 'oauth') return;
+    if (auth.clientId === undefined || auth.clientSecret === undefined) {
+      this.logger.warn(`remoteAuth oauth for ${appId} has no clientId and clientSecret, so no credentials are sent`);
+      return;
+    }
+    if (this.oauthSources.has(appId)) return;
+    const { clientId, clientSecret, scope, tokenUrl } = auth;
+    this.oauthSources.set(
+      appId,
+      new RemoteOAuthTokenSource(appId, request.url, { clientId, clientSecret, scope, tokenUrl }),
+    );
+  }
+
+  /** The `fetch` a transport to the remote sends through, with the connection's OAuth token when it has one. */
+  private remoteFetchOf(request: McpConnectRequest, headers: Record<string, string> | undefined): typeof fetch {
+    return createRemoteRequestFetch(headers !== undefined, this.oauthSources.get(request.appId));
+  }
+
   /** Milliseconds one request to `appId` may take: its `transportOptions.timeout`, else 30 seconds. */
   private timeoutOf(appId: string): number {
     return (this.configs.get(appId)?.transportOptions as McpHttpTransportOptions | undefined)?.timeout ?? 30000;
@@ -879,7 +905,7 @@ export class McpClientService {
       }
       return undefined;
     }
-    const remoteFetch = createRemoteRequestFetch(headers !== undefined);
+    const remoteFetch = this.remoteFetchOf(request, headers);
     const requestTimeoutMs = this.timeoutOf(request.appId);
     const negotiated = await negotiateRemoteProtocol(request.url, httpOptions?.protocolVersion, headers, remoteFetch, {
       requestTimeoutMs,
@@ -916,7 +942,7 @@ export class McpClientService {
     const { transportType, url } = request;
     const options = {
       requestInit: headers ? { headers } : undefined,
-      fetch: createRemoteRequestFetch(headers !== undefined),
+      fetch: this.remoteFetchOf(request, headers),
     };
 
     switch (transportType) {
@@ -948,7 +974,7 @@ export class McpClientService {
   ): Transport {
     return new SSEClientTransport(new URL(request.url), {
       requestInit: headers ? { headers } : undefined,
-      fetch: createRemoteRequestFetch(headers !== undefined),
+      fetch: this.remoteFetchOf(request, headers),
     });
   }
 

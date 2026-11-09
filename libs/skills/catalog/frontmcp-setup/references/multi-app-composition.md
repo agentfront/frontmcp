@@ -143,17 +143,17 @@ export default class Server {}
 
 `app.remote(url, options?)` accepts a URL and optional `RemoteUrlAppOptions`:
 
-| Option             | Type                           | Description                                                                                                                                            |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `name`             | `string`                       | Override the auto-derived app name (defaults to hostname)                                                                                              |
-| `namespace`        | `string`                       | Namespace prefix for tools, resources, and prompts                                                                                                     |
-| `description`      | `string`                       | Human-readable description                                                                                                                             |
-| `standalone`       | `boolean \| 'includeInParent'` | Scope isolation mode (default: `false`)                                                                                                                |
-| `transportOptions` | `RemoteTransportOptions`       | Timeout, retries, headers, SSE fallback, MCP revision                                                                                                  |
-| `remoteAuth`       | `RemoteAuthConfig`             | Auth config: `'static'`, `'forward'` (transparent servers only), or `'oauth'`; requests carrying credentials never follow a redirect to another origin |
-| `refreshInterval`  | `number`                       | Interval (ms) to re-list the remote's capabilities, per app (default: `0`, off); a list counts as changed when any entry differs, not only its length  |
-| `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities (default: 60000)                                                                                                      |
-| `filter`           | `AppFilterConfig`              | Include/exclude filter for primitives                                                                                                                  |
+| Option             | Type                           | Description                                                                                                                                                                             |
+| ------------------ | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`             | `string`                       | Override the auto-derived app name (defaults to hostname)                                                                                                                               |
+| `namespace`        | `string`                       | Namespace prefix for tools, resources, and prompts                                                                                                                                      |
+| `description`      | `string`                       | Human-readable description                                                                                                                                                              |
+| `standalone`       | `boolean \| 'includeInParent'` | Scope isolation mode (default: `false`)                                                                                                                                                 |
+| `transportOptions` | `RemoteTransportOptions`       | Timeout, retries, headers, SSE fallback, MCP revision                                                                                                                                   |
+| `remoteAuth`       | `RemoteAuthConfig`             | Auth config: `'static'`, `'forward'` (transparent servers only), `'mapped'`, or `'oauth'` (client credentials); requests carrying credentials never follow a redirect to another origin |
+| `refreshInterval`  | `number`                       | Interval (ms) to re-list the remote's capabilities, per app (default: `0`, off); a list counts as changed when any entry differs, not only its length                                   |
+| `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities (default: 60000)                                                                                                                                       |
+| `filter`           | `AppFilterConfig`              | Include/exclude filter for primitives                                                                                                                                                   |
 
 `RemoteTransportOptions` fields:
 
@@ -179,7 +179,7 @@ Each remote tool, resource, resource template and prompt is listed once; when `c
 - `{ mode: 'static', credentials: { type: 'bearer' | 'basic' | 'apiKey', value: string } }` -- static credentials for trusted internal services, sent on every request (discovery included)
 - `{ mode: 'forward', tokenClaim?: string, headerName?: string }` -- forward the calling user's token (or one claim of it with `tokenClaim`) as `Bearer <token>` in `headerName` (default `Authorization`) on that user's calls; discovery runs outside any request and carries only `transportOptions.headers`
 - `{ mode: 'mapped', mapper: (authInfo) => credentials }` -- credentials (as in `static`) computed from each caller's auth info, on that caller's calls; a mapper that throws fails the call with `RemoteAuthError`
-- `{ mode: 'oauth' }` -- no gateway credentials; the gateway runs no OAuth flow against the remote, so this only fits a remote that serves it without credentials
+- `{ mode: 'oauth', clientId, clientSecret, scope?, tokenUrl? }` -- OAuth 2.0 client credentials: the gateway gets an access token from the remote's authorization server and sends it as `Authorization: Bearer <token>` with every request, connecting and discovery included. It gets a new one before the token expires, and when the remote answers `401` (the request is then sent once more). The token endpoint is `tokenUrl`, else the one the remote's authorization server publishes, found through the remote's protected resource metadata (RFC 9728) or at the remote's origin (RFC 8414); the token request names the remote as its `resource` (RFC 8707) and authenticates with HTTP Basic (or in the body when the server supports only `client_secret_post`). A refused token request fails with `RemoteAuthError`, so the server doesn't start. Without `clientId` and `clientSecret`, nothing is sent and the server logs a warning. Up to 1.11.2, `oauth` took no options and sent nothing.
 
 A call the remote refuses with HTTP `401` fails with `RemoteAuthError` (`REMOTE_AUTH_ERROR`, JSON-RPC `-32001`), whatever the mode.
 
