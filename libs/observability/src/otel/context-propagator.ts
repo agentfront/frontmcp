@@ -7,11 +7,11 @@
  */
 
 import {
+  trace,
   type Context,
   type TextMapGetter,
-  type TextMapSetter,
   type TextMapPropagator,
-  trace,
+  type TextMapSetter,
 } from '@opentelemetry/api';
 
 const TRACEPARENT_HEADER = 'traceparent';

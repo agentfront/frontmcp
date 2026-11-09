@@ -5,7 +5,8 @@
  * Jobs are exposed as standard MCP tools (list-jobs, execute-job, etc.).
  */
 
-import { FrontMcpInstance, DirectMcpServer } from '@frontmcp/sdk';
+import { DirectMcpServer, FrontMcpInstance } from '@frontmcp/sdk';
+
 import { serverConfig } from '../src/config';
 
 describe('Jobs Direct E2E', () => {

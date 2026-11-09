@@ -22,6 +22,7 @@ Use Vercel KV for session storage and a separate Redis instance for pub/sub reso
 ```typescript
 // src/main.ts
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({

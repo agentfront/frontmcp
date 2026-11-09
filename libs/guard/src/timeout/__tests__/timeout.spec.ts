@@ -1,5 +1,5 @@
-import { withTimeout } from '../index';
 import { ExecutionTimeoutError } from '../../errors/index';
+import { withTimeout } from '../index';
 
 describe('withTimeout', () => {
   beforeEach(() => {

@@ -15,7 +15,7 @@
  *
  * Set DEBUG_E2E=1 environment variable for verbose logging.
  */
-import { test, expect, TestServer } from '@frontmcp/testing';
+import { expect, test, TestServer } from '@frontmcp/testing';
 
 // Enable verbose logging only when DEBUG_E2E is set
 const DEBUG = process.env['DEBUG_E2E'] === '1';

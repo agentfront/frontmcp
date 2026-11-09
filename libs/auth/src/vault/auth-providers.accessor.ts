@@ -10,8 +10,9 @@
  */
 
 import { Token } from '@frontmcp/di';
+
 import type { Credential } from '../session';
-import type { ResolvedCredential, GetCredentialOptions } from './auth-providers.types';
+import type { GetCredentialOptions, ResolvedCredential } from './auth-providers.types';
 
 /**
  * AuthProvidersAccessor - Runtime accessor for auth providers in tool contexts.

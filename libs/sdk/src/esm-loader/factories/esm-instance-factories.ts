@@ -8,12 +8,18 @@
  */
 
 import type { EntryOwnerRef } from '../../common';
-import type ProviderRegistry from '../../provider/provider.registry';
-import { ToolInstance } from '../../tool/tool.instance';
-import { ResourceInstance } from '../../resource/resource.instance';
 import { PromptInstance } from '../../prompt/prompt.instance';
-import { buildEsmToolRecord, buildEsmResourceRecord, buildEsmPromptRecord } from './esm-record-builders';
-import type { EsmToolDefinition, EsmResourceDefinition, EsmPromptDefinition } from './esm-record-builders';
+import type ProviderRegistry from '../../provider/provider.registry';
+import { ResourceInstance } from '../../resource/resource.instance';
+import { ToolInstance } from '../../tool/tool.instance';
+import {
+  buildEsmPromptRecord,
+  buildEsmResourceRecord,
+  buildEsmToolRecord,
+  type EsmPromptDefinition,
+  type EsmResourceDefinition,
+  type EsmToolDefinition,
+} from './esm-record-builders';
 
 /**
  * Create a standard ToolInstance for an ESM-loaded tool.

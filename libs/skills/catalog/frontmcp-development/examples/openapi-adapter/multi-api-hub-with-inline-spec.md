@@ -20,8 +20,8 @@ Demonstrates registering multiple OpenAPI adapters from different APIs in a sing
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'integration-hub',

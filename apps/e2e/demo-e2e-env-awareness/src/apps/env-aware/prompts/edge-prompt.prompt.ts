@@ -1,5 +1,5 @@
-import { Prompt, PromptContext } from '@frontmcp/sdk';
 import { GetPromptResult } from '@frontmcp/protocol';
+import { Prompt, PromptContext } from '@frontmcp/sdk';
 
 /**
  * Prompt constrained to edge runtime. Should NOT be visible in e2e tests.

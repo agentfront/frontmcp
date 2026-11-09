@@ -4,7 +4,7 @@
  * This file tests the cancelPendingElicit and handleIfElicitResult methods
  * that are shared across transport adapter implementations.
  */
-import { ElicitResult, PendingElicit, DEFAULT_ELICIT_TTL } from '../../../elicitation';
+import { DEFAULT_ELICIT_TTL, ElicitResult, PendingElicit } from '../../../elicitation';
 import { ElicitationNotSupportedError, ElicitationTimeoutError } from '../../../errors';
 
 describe('LocalTransportAdapter Elicit Handler', () => {

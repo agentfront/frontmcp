@@ -10,7 +10,7 @@
  * 6. Unknown resources return empty completions
  * 7. The completion response matches MCP protocol shape
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 let nextRequestId = 1;
 

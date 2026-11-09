@@ -3,20 +3,20 @@
  * @description Performance testing fixtures implementation
  */
 
+import { LeakDetector } from './leak-detector';
+import { formatBytes, formatDuration, MetricsCollector } from './metrics-collector';
 import type {
-  PerfFixtures,
-  PerfSnapshot,
-  PerfThresholds,
   LeakDetectionOptions,
   LeakDetectionResult,
-  PerfMeasurement,
-  PerfIssue,
   ParallelLeakDetectionOptions,
   ParallelLeakDetectionResult,
   ParallelTestClient,
+  PerfFixtures,
+  PerfIssue,
+  PerfMeasurement,
+  PerfSnapshot,
+  PerfThresholds,
 } from './types';
-import { MetricsCollector, formatBytes, formatDuration } from './metrics-collector';
-import { LeakDetector } from './leak-detector';
 
 // ═══════════════════════════════════════════════════════════════════
 // PERF FIXTURE IMPLEMENTATION

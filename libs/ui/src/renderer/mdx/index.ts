@@ -1,14 +1,15 @@
-import React, { useMemo } from 'react';
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
 import Link from '@mui/material/Link';
+import { styled } from '@mui/material/styles';
 import MuiTable from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import { styled } from '@mui/material/styles';
-import { createLazyImport, runtimeImportWithFallback, esmShUrl } from '../common/lazy-import';
+import Typography from '@mui/material/Typography';
+import React, { useMemo } from 'react';
+
+import { createLazyImport, esmShUrl, runtimeImportWithFallback } from '../common/lazy-import';
 import { useLazyModule } from '../common/use-lazy-module';
 import type { ContentRenderer, RenderOptions } from '../types';
 
@@ -202,7 +203,9 @@ function renderFallback(content: string): React.ReactElement[] {
     } else if (line.startsWith('- ') || line.startsWith('* ')) {
       elements.push(React.createElement('li', { key: i }, line.slice(2)));
     } else if (line.startsWith('**') && line.endsWith('**')) {
-      elements.push(React.createElement(Typography, { key: i, variant: 'body1', sx: { fontWeight: 700 } }, line.slice(2, -2)));
+      elements.push(
+        React.createElement(Typography, { key: i, variant: 'body1', sx: { fontWeight: 700 } }, line.slice(2, -2)),
+      );
     } else if (line.trim()) {
       elements.push(React.createElement(Typography, { key: i, variant: 'body1', sx: { mb: 2 } }, line));
     }

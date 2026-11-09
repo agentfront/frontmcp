@@ -1,8 +1,9 @@
-import React from 'react';
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
+import Select from '@mui/material/Select';
+import Typography from '@mui/material/Typography';
+import React from 'react';
+
 import type { RendererGroup } from '../fixtures';
 
 interface SourcePanelProps {

@@ -72,7 +72,9 @@ function specStem(ref: string): string {
 }
 
 /** Normalize one `specSource` (bare string or detail object) with defaults. */
-function normalizeSpec(source: string | { id: string; spec: string; baseUrl?: string; bindingName?: string }): NormalizedSpecSource {
+function normalizeSpec(
+  source: string | { id: string; spec: string; baseUrl?: string; bindingName?: string },
+): NormalizedSpecSource {
   if (typeof source === 'string') {
     const id = specStem(source);
     return { id, spec: source, bindingName: id };

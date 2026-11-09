@@ -7,8 +7,9 @@
  * Uses real crypto from @frontmcp/utils (no mocking).
  */
 
-import { TokenVault, type VaultKey, type EncBlob } from '../token.vault';
 import { randomBytes } from '@frontmcp/utils';
+
+import { TokenVault, type EncBlob, type VaultKey } from '../token.vault';
 
 // ---------------------------------------------------------------------------
 // Helpers

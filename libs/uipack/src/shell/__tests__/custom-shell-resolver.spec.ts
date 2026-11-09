@@ -2,8 +2,8 @@
  * Custom Shell Resolver Tests
  */
 
-import { resolveShellTemplate, clearShellTemplateCache } from '../custom-shell-resolver';
 import type { ImportResolver } from '../../resolver/types';
+import { clearShellTemplateCache, resolveShellTemplate } from '../custom-shell-resolver';
 
 // Mock global fetch
 const mockFetch = jest.fn();

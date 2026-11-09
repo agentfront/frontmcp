@@ -30,8 +30,9 @@ export const KNOWLEDGE_BASE: Token<KnowledgeBase> = Symbol('knowledge-base');
 
 ```typescript
 // src/apps/main/prompts/rag-query.prompt.ts
-import { Prompt, PromptContext } from '@frontmcp/sdk';
 import { GetPromptResult } from '@frontmcp/protocol';
+import { Prompt, PromptContext } from '@frontmcp/sdk';
+
 import { KNOWLEDGE_BASE } from '../tokens';
 
 @Prompt({

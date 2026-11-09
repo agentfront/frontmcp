@@ -9,7 +9,8 @@
  * Playwright tests read results from window.__ESM_RESULTS__ after the page loads.
  */
 import 'reflect-metadata';
-import { connect, App, LogLevel } from '@frontmcp/sdk';
+
+import { App, connect, LogLevel } from '@frontmcp/sdk';
 
 // Read ESM server URL from query params (set by Playwright test)
 const params = new URLSearchParams(location.search);

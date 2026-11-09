@@ -1,5 +1,6 @@
-import { createToolCallHandler } from '../createToolHandler';
 import type { DirectMcpServer } from '@frontmcp/sdk';
+
+import { createToolCallHandler } from '../createToolHandler';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 

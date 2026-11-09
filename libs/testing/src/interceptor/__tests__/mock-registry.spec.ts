@@ -1,6 +1,6 @@
-import { DefaultMockRegistry, mockResponse } from '../mock-registry';
 import type { JsonRpcRequest } from '../../transport/transport.interface';
 import type { MockDefinition } from '../interceptor.types';
+import { DefaultMockRegistry, mockResponse } from '../mock-registry';
 
 function makeRequest(method: string, params?: Record<string, unknown>, id?: string | number): JsonRpcRequest {
   return { jsonrpc: '2.0', id: id ?? 1, method, ...(params !== undefined ? { params } : {}) };

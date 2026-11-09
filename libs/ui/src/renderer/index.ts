@@ -1,3 +1,18 @@
+// Convenience: register all renderers
+import { registerRenderer } from './auto-detect';
+import { chartsRenderer } from './charts';
+import { csvRenderer } from './csv';
+import { flowRenderer } from './flow';
+import { htmlRenderer } from './html';
+import { imageRenderer } from './image';
+import { mapsRenderer } from './maps';
+import { mathRenderer } from './math';
+import { mdxRenderer } from './mdx';
+import { audioRenderer, videoRenderer } from './media';
+import { mermaidRenderer } from './mermaid';
+import { pdfRenderer } from './pdf';
+import { reactJsxRenderer } from './react';
+
 export type { ContentRenderer, RenderOptions, ContentType } from './types';
 export {
   detectContentType,
@@ -49,21 +64,6 @@ export { isMath } from './math';
 export { isMap } from './maps';
 export { isVideo, isAudio, isMedia } from './media';
 export { isReactJsx } from './react';
-
-// Convenience: register all renderers
-import { registerRenderer } from './auto-detect';
-import { mdxRenderer } from './mdx';
-import { htmlRenderer } from './html';
-import { reactJsxRenderer } from './react';
-import { pdfRenderer } from './pdf';
-import { csvRenderer } from './csv';
-import { imageRenderer } from './image';
-import { chartsRenderer } from './charts';
-import { mermaidRenderer } from './mermaid';
-import { flowRenderer } from './flow';
-import { mathRenderer } from './math';
-import { mapsRenderer } from './maps';
-import { videoRenderer, audioRenderer } from './media';
 
 /**
  * Register all built-in renderers with the auto-detect registry.

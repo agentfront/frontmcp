@@ -1,15 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import type { DirectMcpServer, StoreAdapter } from '@frontmcp/react';
-import { create, FrontMcpProvider, createStore } from '@frontmcp/react';
-import { GreetTool } from './tools/greet.tool';
-import { AddTool } from './tools/math.tool';
-import { ProviderStatus } from './sections/ProviderStatus';
-import { ToolCalling } from './sections/ToolCalling';
-import { ToolListing } from './sections/ToolListing';
+import React, { useCallback, useEffect, useState } from 'react';
+
+import { create, createStore, FrontMcpProvider, type DirectMcpServer, type StoreAdapter } from '@frontmcp/react';
+
 import { DynamicTool } from './sections/DynamicTool';
 import { McpComponentSection } from './sections/McpComponentSection';
 import { McpComponentTable } from './sections/McpComponentTable';
+import { ProviderStatus } from './sections/ProviderStatus';
 import { StoreAdapterSection } from './sections/StoreAdapterSection';
+import { ToolCalling } from './sections/ToolCalling';
+import { ToolListing } from './sections/ToolListing';
+import { GreetTool } from './tools/greet.tool';
+import { AddTool } from './tools/math.tool';
 
 type Section = 'provider' | 'tool-calling' | 'tool-listing' | 'dynamic-tool' | 'mcp-component' | 'mcp-table' | 'store';
 

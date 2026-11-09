@@ -62,7 +62,11 @@ export function createKvSkillIndexCache(kv: EdgeKvNamespace, options: KvSkillInd
     },
     async set(key: string, snapshot: unknown): Promise<void> {
       const value = JSON.stringify(snapshot);
-      await kv.put(prefix + key, value, options.expirationTtl != null ? { expirationTtl: options.expirationTtl } : undefined);
+      await kv.put(
+        prefix + key,
+        value,
+        options.expirationTtl != null ? { expirationTtl: options.expirationTtl } : undefined,
+      );
     },
   };
 }

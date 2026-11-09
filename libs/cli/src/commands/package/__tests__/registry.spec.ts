@@ -2,6 +2,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { getRegisteredApp, listRegisteredApps, readRegistry, registerApp, unregisterApp } from '../registry';
+
 // Mock pm.paths before importing registry
 const tmpDir = path.join(os.tmpdir(), 'frontmcp-registry-test-' + Date.now());
 
@@ -13,8 +15,6 @@ jest.mock('../../pm/paths', () => ({
     }
   },
 }));
-
-import { readRegistry, registerApp, unregisterApp, getRegisteredApp, listRegisteredApps } from '../registry';
 
 describe('install registry', () => {
   beforeAll(() => {

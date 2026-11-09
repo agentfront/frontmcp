@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react';
+
 import { detectContentType as detectBaseType, type RuntimeContentType } from '../runtime/content-detector';
-import type { RenderOptions, ContentRenderer, ContentType } from './types';
+import type { ContentRenderer, ContentType, RenderOptions } from './types';
 
 export type DetectedContentType = RuntimeContentType | 'pdf' | 'csv';
 

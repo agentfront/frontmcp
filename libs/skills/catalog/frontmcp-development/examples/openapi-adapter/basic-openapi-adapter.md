@@ -19,8 +19,8 @@ Demonstrates converting an OpenAPI specification into MCP tools automatically us
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'petstore',

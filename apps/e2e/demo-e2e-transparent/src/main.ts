@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { TasksApp } from './apps/tasks';
 
 const port = parseInt(process.env['PORT'] ?? '3109', 10);

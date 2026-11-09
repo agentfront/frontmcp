@@ -1,5 +1,4 @@
-import { Channel, ChannelContext } from '@frontmcp/sdk';
-import type { ChannelNotification } from '@frontmcp/sdk';
+import { Channel, ChannelContext, type ChannelNotification } from '@frontmcp/sdk';
 
 /** Store for replies received via the channel-reply tool (for testing) */
 export const replyLog: Array<{ reply: string; meta?: Record<string, string> }> = [];

@@ -8,6 +8,7 @@
  */
 
 import type { StoredSession } from '@frontmcp/auth';
+
 import { lookupStreamableHttpTransport } from '../handle.streamable-http.flow';
 
 describe('HandleStreamableHttpFlow - onMessage transport lookup', () => {

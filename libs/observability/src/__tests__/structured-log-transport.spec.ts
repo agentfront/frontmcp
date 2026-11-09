@@ -1,6 +1,5 @@
-import { StructuredLogTransport } from '../logging/structured-log-transport';
-import type { ContextSnapshot } from '../logging/structured-log-transport';
 import type { LogSink } from '../logging/log-sink.interface';
+import { StructuredLogTransport, type ContextSnapshot } from '../logging/structured-log-transport';
 import type { StructuredLogEntry } from '../logging/structured-log.types';
 
 // Use numeric values matching SDK's LogLevel enum

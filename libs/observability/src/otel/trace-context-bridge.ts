@@ -8,11 +8,11 @@
  */
 
 import {
-  type SpanContext,
-  TraceFlags,
-  trace,
   context as otelContext,
+  trace,
+  TraceFlags,
   type Context as OTelContext,
+  type SpanContext,
 } from '@opentelemetry/api';
 
 /**

@@ -6,7 +6,8 @@
  * - Custom resource domains appear in CSP
  * - Import map script tag renders in DOM
  */
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+
 import { serveShell, stopServer } from './helpers';
 
 test.afterEach(async () => {

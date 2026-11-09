@@ -6,6 +6,7 @@
  */
 
 import 'reflect-metadata';
+
 import type { Type } from '../interfaces/base.interface.js';
 import { META_ASYNC_WITH } from '../tokens/di.constants.js';
 

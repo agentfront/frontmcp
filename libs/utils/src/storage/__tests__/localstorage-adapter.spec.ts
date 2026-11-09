@@ -1,8 +1,8 @@
 /**
  * LocalStorage Adapter Tests — encryption at rest
  */
-import { LocalStorageAdapter } from '../adapters/localstorage';
 import { randomBytes } from '../../crypto';
+import { LocalStorageAdapter } from '../adapters/localstorage';
 
 // ---------------------------------------------------------------------------
 // localStorage mock (Map-backed)

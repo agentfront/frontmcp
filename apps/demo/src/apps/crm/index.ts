@@ -1,17 +1,16 @@
-import { App } from '@frontmcp/sdk';
 import { CodeCallPlugin } from '@frontmcp/plugins';
-
-// User tools
-import UsersListTool from './tools/users-list.tool';
-import UsersGetTool from './tools/users-get.tool';
-import UsersCreateTool from './tools/users-create.tool';
-import UsersUpdateTool from './tools/users-update.tool';
-import UsersDeleteTool from './tools/users-delete.tool';
+import { App } from '@frontmcp/sdk';
 
 // Activity tools
 import ActivitiesListTool from './tools/activities-list.tool';
 import ActivitiesLogTool from './tools/activities-log.tool';
 import ActivitiesStatsTool from './tools/activities-stats.tool';
+import UsersCreateTool from './tools/users-create.tool';
+import UsersDeleteTool from './tools/users-delete.tool';
+import UsersGetTool from './tools/users-get.tool';
+// User tools
+import UsersListTool from './tools/users-list.tool';
+import UsersUpdateTool from './tools/users-update.tool';
 
 @App({
   id: 'crm',

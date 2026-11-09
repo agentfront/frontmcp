@@ -1,4 +1,5 @@
 import { Provider, ProviderScope } from '@frontmcp/sdk';
+
 import { CacheStoreInterface } from '../cache.types';
 
 type Entry = {

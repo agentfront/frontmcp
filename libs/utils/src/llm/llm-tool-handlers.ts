@@ -7,12 +7,12 @@
 
 import type {
   CallToolFn,
+  ClaudeToolResultBlock,
+  ClaudeToolUseBlock,
   OpenAIToolCallItem,
   OpenAIToolResponse,
-  ClaudeToolUseBlock,
-  ClaudeToolResultBlock,
-  VercelToolCallInfo,
   SupportedPlatform,
+  VercelToolCallInfo,
 } from './llm-tool-handler.types';
 
 // ─────────────────────────────────────────────────────────────────────────────

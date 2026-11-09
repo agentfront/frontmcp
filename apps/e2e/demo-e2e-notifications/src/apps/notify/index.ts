@@ -1,14 +1,12 @@
 import { App } from '@frontmcp/sdk';
 
-import TriggerResourceChangeTool from './tools/trigger-resource-change.tool';
-import TriggerProgressTool from './tools/trigger-progress.tool';
+import NotificationSummaryPrompt from './prompts/notification-summary.prompt';
+import NotificationLogResource from './resources/notification-log.resource';
 import LongRunningTaskTool from './tools/long-running-task.tool';
 import TestNotifyMethodTool from './tools/test-notify-method.tool';
 import TestProgressMethodTool from './tools/test-progress-method.tool';
-
-import NotificationLogResource from './resources/notification-log.resource';
-
-import NotificationSummaryPrompt from './prompts/notification-summary.prompt';
+import TriggerProgressTool from './tools/trigger-progress.tool';
+import TriggerResourceChangeTool from './tools/trigger-resource-change.tool';
 
 @App({
   name: 'notify',

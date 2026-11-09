@@ -1,7 +1,7 @@
-import React from 'react';
-import { styled } from '@mui/material/styles';
 import MuiButton, { type ButtonProps as MuiButtonProps } from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import { styled } from '@mui/material/styles';
+import React from 'react';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 

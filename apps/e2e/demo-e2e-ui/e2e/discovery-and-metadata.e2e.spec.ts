@@ -7,7 +7,7 @@
  * - Prompt access
  * - Metadata and schema validation
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Discovery and Metadata E2E', () => {
   test.use({

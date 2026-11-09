@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { UipackApp } from './apps/uipack';
 
 const parsed = parseInt(process.env['PORT'] ?? '3120', 10);

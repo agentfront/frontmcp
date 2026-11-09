@@ -5,7 +5,7 @@
  * Reduced to 100 iterations per worker (500 total) to prevent OOM from
  * notes/tasks/events accumulating across operations.
  */
-import { perfTest, expect } from '@frontmcp/testing';
+import { expect, perfTest } from '@frontmcp/testing';
 
 perfTest.describe('MultiApp Parallel Stress Testing', () => {
   perfTest.use({

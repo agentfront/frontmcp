@@ -5,9 +5,10 @@
  * Records counts of registered components and initialization duration.
  */
 
-import { type Tracer, SpanKind } from '@opentelemetry/api';
+import { SpanKind, type Tracer } from '@opentelemetry/api';
+
 import { FrontMcpAttributes } from '../otel.types';
-import { startSpan, endSpanOk } from './span.utils';
+import { endSpanOk, startSpan } from './span.utils';
 
 export interface StartupTelemetryData {
   /** Total tools registered */

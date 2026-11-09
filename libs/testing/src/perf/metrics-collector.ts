@@ -3,7 +3,7 @@
  * @description Memory and CPU metrics collection utilities
  */
 
-import type { MemoryMetrics, CpuMetrics, PerfSnapshot } from './types';
+import type { CpuMetrics, MemoryMetrics, PerfSnapshot } from './types';
 
 // ═══════════════════════════════════════════════════════════════════
 // GARBAGE COLLECTION

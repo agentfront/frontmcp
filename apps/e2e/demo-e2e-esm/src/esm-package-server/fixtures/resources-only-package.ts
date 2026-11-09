@@ -4,6 +4,7 @@
  * The ESM loader detects decorated classes automatically — no manifest needed.
  */
 import 'reflect-metadata';
+
 import { Resource, ResourceContext } from '@frontmcp/sdk';
 
 @Resource({

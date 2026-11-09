@@ -1,17 +1,18 @@
 import 'reflect-metadata';
+
 import {
-  approvalScopeSchema,
-  approvalStateSchema,
-  approvalMethodSchema,
-  approvalSourceTypeSchema,
-  revocationMethodSchema,
   approvalCategorySchema,
-  riskLevelSchema,
   approvalContextSchema,
-  delegationContextSchema,
   approvalGrantorSchema,
-  approvalRevokerSchema,
+  approvalMethodSchema,
   approvalRecordSchema,
+  approvalRevokerSchema,
+  approvalScopeSchema,
+  approvalSourceTypeSchema,
+  approvalStateSchema,
+  delegationContextSchema,
+  revocationMethodSchema,
+  riskLevelSchema,
   toolApprovalRequirementSchema,
 } from '../schemas';
 import { ApprovalScope, ApprovalState } from '../types';

@@ -2,8 +2,8 @@
  * Tests for self-reference-guard.ts
  */
 
-import { isBlockedSelfReference, assertNotSelfReference, getBlockedPatterns } from '../security/self-reference-guard';
 import { SelfReferenceError } from '../errors/tool-call.errors';
+import { assertNotSelfReference, getBlockedPatterns, isBlockedSelfReference } from '../security/self-reference-guard';
 
 describe('isBlockedSelfReference', () => {
   describe('prefix-based blocking', () => {

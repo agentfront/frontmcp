@@ -20,12 +20,13 @@ Verify that your tool creates the expected child spans with correct attributes.
 ```typescript
 // src/apps/my-app/tools/__tests__/weather.tool.spec.ts
 import { SpanStatusCode } from '@opentelemetry/api';
+
 import {
-  createTestTracer,
-  getFinishedSpans,
-  assertSpanExists,
   assertSpanAttribute,
+  assertSpanExists,
+  createTestTracer,
   findSpansByAttribute,
+  getFinishedSpans,
 } from '@frontmcp/observability';
 
 describe('GetWeatherTool', () => {

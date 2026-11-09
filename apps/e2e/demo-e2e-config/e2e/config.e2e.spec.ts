@@ -8,7 +8,7 @@
  * - getNumber and getBoolean helpers
  * - Error handling for missing required values
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 // Enable verbose logging only when DEBUG_E2E is set
 const DEBUG = process.env['DEBUG_E2E'] === '1';

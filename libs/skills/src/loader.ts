@@ -7,6 +7,7 @@
  */
 
 import * as path from 'node:path';
+
 import type { SkillCatalogEntry, SkillManifest } from './manifest';
 
 /**

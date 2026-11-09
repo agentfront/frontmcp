@@ -4,11 +4,12 @@
  * Tests for the encrypted wrapper around ElicitationStore.
  */
 
+import { createMemoryStorage, type RootStorage } from '@frontmcp/utils';
+
+import type { ElicitResult, FallbackExecutionResult, PendingElicitFallback } from '../../elicitation.types';
+import type { PendingElicitRecord } from '../elicitation.store';
 import { EncryptedElicitationStore } from '../encrypted-elicitation.store';
 import { StorageElicitationStore } from '../storage-elicitation.store';
-import { createMemoryStorage, type RootStorage } from '@frontmcp/utils';
-import type { PendingElicitRecord } from '../elicitation.store';
-import type { PendingElicitFallback, ElicitResult, FallbackExecutionResult } from '../../elicitation.types';
 
 /**
  * Creates a deferred promise that can be resolved externally.

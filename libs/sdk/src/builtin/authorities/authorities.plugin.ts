@@ -14,13 +14,14 @@
  */
 
 import {
-  AuthoritiesEngine,
   AuthoritiesContextBuilder,
-  AuthoritiesProfileRegistry,
+  AuthoritiesEngine,
   AuthoritiesEvaluatorRegistry,
+  AuthoritiesProfileRegistry,
 } from '@frontmcp/auth';
-import { DynamicPlugin } from '../../common/dynamic/dynamic.plugin';
+
 import { Plugin } from '../../common/decorators/plugin.decorator';
+import { DynamicPlugin } from '../../common/dynamic/dynamic.plugin';
 import type { AuthoritiesPluginOptions } from './authorities.plugin.options';
 
 @Plugin({

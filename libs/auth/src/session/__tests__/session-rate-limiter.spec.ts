@@ -5,7 +5,7 @@
  * cleanup, getStats, dispose, timer behaviour, and exported singleton.
  */
 
-import { SessionRateLimiter, defaultSessionRateLimiter } from '../session-rate-limiter';
+import { defaultSessionRateLimiter, SessionRateLimiter } from '../session-rate-limiter';
 
 describe('SessionRateLimiter', () => {
   beforeEach(() => {

@@ -1,8 +1,8 @@
 // file: libs/sdk/src/channel/sources/agent-completion.source.ts
 
 import type { FrontMcpLogger } from '../../common';
-import type { ChannelInstance } from '../channel.instance';
 import type { ChannelAgentCompletionSource } from '../../common/metadata/channel.metadata';
+import type { ChannelInstance } from '../channel.instance';
 
 /**
  * Event payload from agent completion.

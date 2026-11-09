@@ -1,5 +1,7 @@
-import { type Tree, formatFiles, generateFiles, readProjectConfiguration, type GeneratorCallback } from '@nx/devkit';
 import { join } from 'path';
+
+import { formatFiles, generateFiles, readProjectConfiguration, type GeneratorCallback, type Tree } from '@nx/devkit';
+
 import type { SkillDirGeneratorSchema } from './schema.js';
 
 export async function skillDirGenerator(

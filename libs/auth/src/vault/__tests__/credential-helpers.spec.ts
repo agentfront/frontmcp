@@ -5,8 +5,8 @@
  * that extracts expiry timestamps from various credential types.
  */
 
-import { extractCredentialExpiry } from '../credential-helpers';
 import type { Credential } from '../../session';
+import { extractCredentialExpiry } from '../credential-helpers';
 
 describe('extractCredentialExpiry', () => {
   // --------------------------------------------------

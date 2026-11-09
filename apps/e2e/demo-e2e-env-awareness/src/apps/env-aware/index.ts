@@ -1,27 +1,25 @@
 import { App } from '@frontmcp/sdk';
 
-// Tools
-import AlwaysAvailableTool from './tools/always-available.tool';
-import CurrentPlatformTool from './tools/current-platform.tool';
-import ImpossiblePlatformTool from './tools/impossible-platform.tool';
-import NodeRuntimeTool from './tools/node-runtime.tool';
-import BrowserOnlyTool from './tools/browser-only.tool';
-import StandaloneDeployTool from './tools/standalone-deploy.tool';
-import ServerlessOnlyTool from './tools/serverless-only.tool';
-import MultiConstraintTool from './tools/multi-constraint.tool';
-import MultiConstraintFailTool from './tools/multi-constraint-fail.tool';
-import HiddenButAvailableTool from './tools/hidden-but-available.tool';
-import TestEnvOnlyTool from './tools/test-env-only.tool';
-import ProductionOnlyTool from './tools/production-only.tool';
-import DevelopmentOnlyTool from './tools/development-only.tool';
-
-// Resources
-import NodeInfoResource from './resources/node-info.resource';
-import BrowserStorageResource from './resources/browser-storage.resource';
-
+import EdgePrompt from './prompts/edge-prompt.prompt';
 // Prompts
 import NodeDebugPrompt from './prompts/node-debug.prompt';
-import EdgePrompt from './prompts/edge-prompt.prompt';
+import BrowserStorageResource from './resources/browser-storage.resource';
+// Resources
+import NodeInfoResource from './resources/node-info.resource';
+// Tools
+import AlwaysAvailableTool from './tools/always-available.tool';
+import BrowserOnlyTool from './tools/browser-only.tool';
+import CurrentPlatformTool from './tools/current-platform.tool';
+import DevelopmentOnlyTool from './tools/development-only.tool';
+import HiddenButAvailableTool from './tools/hidden-but-available.tool';
+import ImpossiblePlatformTool from './tools/impossible-platform.tool';
+import MultiConstraintFailTool from './tools/multi-constraint-fail.tool';
+import MultiConstraintTool from './tools/multi-constraint.tool';
+import NodeRuntimeTool from './tools/node-runtime.tool';
+import ProductionOnlyTool from './tools/production-only.tool';
+import ServerlessOnlyTool from './tools/serverless-only.tool';
+import StandaloneDeployTool from './tools/standalone-deploy.tool';
+import TestEnvOnlyTool from './tools/test-env-only.tool';
 
 @App({
   name: 'env-aware',

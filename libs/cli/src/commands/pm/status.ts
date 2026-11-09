@@ -1,6 +1,6 @@
+import { formatProcessDetail, formatProcessTable, ProcessManager } from '.';
 import { ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
-import { ProcessManager, formatProcessDetail, formatProcessTable } from '.';
 
 export async function runStatus(opts: ParsedArgs): Promise<void> {
   const name = opts._[1];

@@ -1,4 +1,5 @@
 import { App } from '@frontmcp/sdk';
+
 import CreateNoteTool from './tools/create-note.tool';
 import ListNotesTool from './tools/list-notes.tool';
 

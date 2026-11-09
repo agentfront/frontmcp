@@ -5,10 +5,10 @@
  * SDK-dependent types (tool shapes, hook return types) remain here.
  */
 
-import type { OpenAITool, ClaudeTool, LangChainTool, VercelAITools, LLMPlatform, CallToolResult } from '@frontmcp/sdk';
+import type { CallToolResult, ClaudeTool, LangChainTool, LLMPlatform, OpenAITool, VercelAITools } from '@frontmcp/sdk';
 import type {
-  OpenAIToolCallItem as _OpenAIToolCallItem,
   ClaudeToolUseBlock as _ClaudeToolUseBlock,
+  OpenAIToolCallItem as _OpenAIToolCallItem,
   VercelToolCallInfo as _VercelToolCallInfo,
 } from '@frontmcp/utils';
 

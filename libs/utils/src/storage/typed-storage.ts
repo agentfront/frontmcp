@@ -21,8 +21,8 @@
  * ```
  */
 
-import type { StorageAdapter, NamespacedStorage, SetOptions } from './types';
-import type { TypedStorageOptions, TypedSetEntry } from './typed-storage.types';
+import type { TypedSetEntry, TypedStorageOptions } from './typed-storage.types';
+import type { NamespacedStorage, SetOptions, StorageAdapter } from './types';
 
 /**
  * TypedStorage provides type-safe JSON serialization on top of StorageAdapter.

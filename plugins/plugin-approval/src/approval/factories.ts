@@ -28,11 +28,11 @@
 
 import type {
   ApprovalGrantor,
+  ApprovalMethod,
   ApprovalRevoker,
   ApprovalSourceType,
-  RevocationSourceType,
   DelegationContext,
-  ApprovalMethod,
+  RevocationSourceType,
 } from './types';
 
 // ─────────────────────────────────────────────────────────────────────────────

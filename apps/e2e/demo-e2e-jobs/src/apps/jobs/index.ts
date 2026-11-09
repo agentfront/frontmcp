@@ -1,6 +1,7 @@
 import { App } from '@frontmcp/sdk';
-import GreetJob from './jobs/greet.job';
+
 import AnalyzeTextJob from './jobs/analyze-text.job';
+import GreetJob from './jobs/greet.job';
 import GreetAndAnalyzeWorkflow from './workflows/greet-and-analyze.workflow';
 
 @App({

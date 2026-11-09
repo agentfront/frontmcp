@@ -1,4 +1,5 @@
 import { createTheme, type Theme } from '@mui/material/styles';
+
 import type { FrontMcpThemeConfig } from './types';
 
 const SYSTEM_FONT_STACK = [

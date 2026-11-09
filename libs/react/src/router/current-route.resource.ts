@@ -3,6 +3,7 @@
  */
 
 import type { ReadResourceResult } from '@frontmcp/sdk';
+
 import { getLocation } from './router-bridge';
 
 export class CurrentRouteResource {

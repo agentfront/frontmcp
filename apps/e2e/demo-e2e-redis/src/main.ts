@@ -1,7 +1,8 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { SessionsApp } from './apps/sessions';
-import { VaultApp } from './apps/vault';
 import { TransportApp } from './apps/transport';
+import { VaultApp } from './apps/vault';
 
 const port = parseInt(process.env['PORT'] ?? '3111', 10);
 

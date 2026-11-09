@@ -22,8 +22,8 @@
  * @packageDocumentation
  */
 
-import type { ConfigService } from './providers/config.service';
 import { ConfigNotFoundError } from '../../errors';
+import type { ConfigService } from './providers/config.service';
 
 // ============================================================================
 // Types

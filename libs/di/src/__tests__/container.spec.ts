@@ -3,11 +3,12 @@
  */
 
 import 'reflect-metadata';
-import { DiContainer, type DiContainerOptions } from '../registry/container.js';
+
+import type { Token } from '../interfaces/index.js';
 import { ProviderScope } from '../metadata/provider.metadata.js';
+import { DiContainer, type DiContainerOptions } from '../registry/container.js';
 import { DESIGN_PARAMTYPES, META_ASYNC_WITH, META_ASYNC_WITH_TOKENS } from '../tokens/di.constants.js';
 import type { ProviderTokens } from '../utils/provider.utils.js';
-import type { Token } from '../interfaces/index.js';
 
 // Test tokens for the container
 const TEST_TOKENS: ProviderTokens = {

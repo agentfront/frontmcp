@@ -3,9 +3,10 @@
  */
 
 import 'reflect-metadata';
-import { AdapterInstance } from '../adapter.instance';
-import { AdapterInterface, AdapterKind, AdapterRecord, FrontMcpAdapterResponse, FrontMcpLogger } from '../../common';
+
 import { addProviderToMock, createMockProviderRegistry } from '../../__test-utils__';
+import { AdapterInterface, AdapterKind, AdapterRecord, FrontMcpAdapterResponse, FrontMcpLogger } from '../../common';
+import { AdapterInstance } from '../adapter.instance';
 
 // Mock registries to track constructor arguments
 const mockToolRegistryInstances: any[] = [];

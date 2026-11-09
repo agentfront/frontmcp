@@ -1,4 +1,4 @@
-import { splitWords, toCase, sepFor, shortHash, ensureMaxLen, idFromString, NameCase } from './naming';
+import { ensureMaxLen, idFromString, NameCase, sepFor, shortHash, splitWords, toCase } from './naming';
 
 describe('Naming Utils', () => {
   describe('splitWords', () => {

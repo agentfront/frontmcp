@@ -7,7 +7,7 @@
  * - Edge cases and boundaries
  * - Field types and validation
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('React Tools E2E', () => {
   test.use({

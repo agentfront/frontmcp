@@ -9,8 +9,8 @@
  * - ResourceRegistry.notifyContentChanged() emits proper events
  */
 
-import { NotificationService } from '../notification.service';
 import { ResourceEmitter } from '../../resource/resource.events';
+import { NotificationService } from '../notification.service';
 
 const createMockServer = () =>
   ({

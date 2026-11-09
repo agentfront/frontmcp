@@ -11,8 +11,10 @@
  * - ESM package server must be running on the configured port
  * - Vite preview server must be serving the browser app
  */
-import { test, expect } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
+
+import { expect, test } from '@playwright/test';
+
 import { ESM_SERVER_PORT } from './helpers';
 
 let esmServerProcess: ChildProcess | null = null;

@@ -4,7 +4,7 @@
  * Tests for JWT algorithm mapping utilities.
  */
 
-import { jwtAlgToNodeAlg, isRsaPssAlg } from '../jwt-alg';
+import { isRsaPssAlg, jwtAlgToNodeAlg } from '../jwt-alg';
 
 describe('JWT Algorithm Utilities', () => {
   describe('jwtAlgToNodeAlg()', () => {

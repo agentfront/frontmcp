@@ -1,9 +1,9 @@
 // file: libs/sdk/src/skill/guards/tool-authorization.guard.ts
 
 import type { FrontMcpLogger } from '../../common';
+import { ToolApprovalRequiredError, ToolNotAllowedError } from '../errors/tool-not-allowed.error';
 import type { SkillSessionManager } from '../session/skill-session.manager';
-import type { ToolAuthorizationResult, SkillPolicyMode } from '../session/skill-session.types';
-import { ToolNotAllowedError, ToolApprovalRequiredError } from '../errors/tool-not-allowed.error';
+import type { SkillPolicyMode, ToolAuthorizationResult } from '../session/skill-session.types';
 
 /**
  * Options for the ToolAuthorizationGuard.

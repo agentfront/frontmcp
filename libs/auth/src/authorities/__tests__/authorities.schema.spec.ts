@@ -1,15 +1,15 @@
 import {
-  rbacRolesPolicySchema,
-  rbacPermissionsPolicySchema,
-  abacOperatorSchema,
   abacConditionSchema,
+  abacOperatorSchema,
   abacPolicySchema,
-  resourceIdRefSchema,
-  rebacPolicySchema,
-  authoritiesPolicySchema,
-  authoritiesMetadataSchema,
   authoritiesClaimsMappingSchema,
   authoritiesConfigSchema,
+  authoritiesMetadataSchema,
+  authoritiesPolicySchema,
+  rbacPermissionsPolicySchema,
+  rbacRolesPolicySchema,
+  rebacPolicySchema,
+  resourceIdRefSchema,
 } from '../authorities.schema';
 
 describe('Authorities Schemas', () => {
@@ -66,7 +66,21 @@ describe('Authorities Schemas', () => {
   // =============================================
 
   describe('abacOperatorSchema', () => {
-    const validOps = ['eq', 'neq', 'in', 'notIn', 'gt', 'gte', 'lt', 'lte', 'contains', 'startsWith', 'endsWith', 'exists', 'matches'];
+    const validOps = [
+      'eq',
+      'neq',
+      'in',
+      'notIn',
+      'gt',
+      'gte',
+      'lt',
+      'lte',
+      'contains',
+      'startsWith',
+      'endsWith',
+      'exists',
+      'matches',
+    ];
 
     it.each(validOps)('should accept operator "%s"', (op) => {
       expect(abacOperatorSchema.safeParse(op).success).toBe(true);
@@ -196,10 +210,7 @@ describe('Authorities Schemas', () => {
 
     it('should accept nested allOf combinator', () => {
       const result = authoritiesPolicySchema.safeParse({
-        allOf: [
-          { roles: { any: ['admin'] } },
-          { permissions: { all: ['users:write'] } },
-        ],
+        allOf: [{ roles: { any: ['admin'] } }, { permissions: { all: ['users:write'] } }],
       });
       expect(result.success).toBe(true);
     });
@@ -208,10 +219,7 @@ describe('Authorities Schemas', () => {
       const result = authoritiesPolicySchema.safeParse({
         anyOf: [
           { roles: { any: ['superadmin'] } },
-          { allOf: [
-            { roles: { any: ['manager'] } },
-            { attributes: { match: { 'user.department': 'ops' } } },
-          ]},
+          { allOf: [{ roles: { any: ['manager'] } }, { attributes: { match: { 'user.department': 'ops' } } }] },
         ],
       });
       expect(result.success).toBe(true);

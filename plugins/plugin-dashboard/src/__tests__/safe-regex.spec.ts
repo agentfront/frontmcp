@@ -1,6 +1,7 @@
 // file: plugins/plugin-dashboard/src/__tests__/safe-regex.spec.ts
 
 import 'reflect-metadata';
+
 import { safeRegex } from '../shared/safe-regex';
 
 describe('safeRegex', () => {

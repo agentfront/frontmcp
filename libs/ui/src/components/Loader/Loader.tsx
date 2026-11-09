@@ -1,12 +1,13 @@
-import React from 'react';
+import Backdrop from '@mui/material/Backdrop';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import LinearProgress from '@mui/material/LinearProgress';
 import Skeleton from '@mui/material/Skeleton';
-import Backdrop from '@mui/material/Backdrop';
-import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
-import { useLoaderContext, type LoaderVariant, type CustomLoaderRender } from './LoaderContext';
+import Typography from '@mui/material/Typography';
+import React from 'react';
+
+import { useLoaderContext, type CustomLoaderRender, type LoaderVariant } from './LoaderContext';
 
 export interface LoaderProps {
   variant?: LoaderVariant;

@@ -15,9 +15,10 @@
  * - Sequential operations (multiple calls on same connection)
  */
 
-import { McpClient, McpStdioClientTransport } from '@frontmcp/testing';
+import { ChildProcess, spawn } from 'child_process';
 import { join } from 'path';
-import { spawn, ChildProcess } from 'child_process';
+
+import { McpClient, McpStdioClientTransport } from '@frontmcp/testing';
 
 describe('Stdio Transport E2E', () => {
   let client: McpClient | null = null;

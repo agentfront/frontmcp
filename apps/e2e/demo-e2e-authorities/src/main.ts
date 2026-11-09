@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { AuthoritiesApp } from './apps/authorities';
 
 const port = parseInt(process.env['PORT'] ?? '3140', 10);
@@ -38,9 +39,7 @@ const authConfig =
       editor: { permissions: { any: ['content:write', 'content:publish'] } },
       matchTenant: {
         attributes: {
-          conditions: [
-            { path: 'claims.tenantId', op: 'eq', value: { fromInput: 'tenantId' } },
-          ],
+          conditions: [{ path: 'claims.tenantId', op: 'eq', value: { fromInput: 'tenantId' } }],
         },
       },
     },

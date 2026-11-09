@@ -8,8 +8,8 @@
  * component tests skip gracefully while existing tests still run.
  */
 import { execSync } from 'child_process';
-import * as path from 'path';
 import * as http from 'http';
+import * as path from 'path';
 
 const VERDACCIO_URL = 'http://localhost:14873';
 const ESM_SH_URL = 'http://localhost:8088';

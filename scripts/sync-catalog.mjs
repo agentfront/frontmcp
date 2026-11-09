@@ -15,10 +15,10 @@
  * If frontmatter tags drift from manifest, frontmatter wins (per the validation
  * spec which treats the file as source of truth for description/level/tags/features).
  */
-
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
 import * as yaml from 'js-yaml';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -177,9 +177,7 @@ for (const skillEntry of manifest.skills) {
       const { frontmatter } = parseFrontmatter(fs.readFileSync(exampleFile, 'utf-8'));
       const fileDesc = typeof frontmatter.description === 'string' ? frontmatter.description : '';
       const fileLevel = typeof frontmatter.level === 'string' ? frontmatter.level : '';
-      const fileTags = Array.isArray(frontmatter.tags)
-        ? frontmatter.tags.filter((t) => typeof t === 'string')
-        : [];
+      const fileTags = Array.isArray(frontmatter.tags) ? frontmatter.tags.filter((t) => typeof t === 'string') : [];
       const fileFeatures = Array.isArray(frontmatter.features)
         ? frontmatter.features.filter((f) => typeof f === 'string')
         : [];

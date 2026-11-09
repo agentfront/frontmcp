@@ -3,7 +3,8 @@
  */
 
 import * as fs from 'fs';
-import { registryPath, ensurePmDirs } from '../pm/paths';
+
+import { ensurePmDirs, registryPath } from '../pm/paths';
 import { FrontmcpRegistry } from './types';
 
 function emptyRegistry(): FrontmcpRegistry {

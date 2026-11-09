@@ -3,7 +3,7 @@
  *
  * Tests OpenAPI-generated tools under parallel load using multiple clients
  */
-import { perfTest, expect, MockAPIServer } from '@frontmcp/testing';
+import { expect, MockAPIServer, perfTest } from '@frontmcp/testing';
 
 import { ECOMMERCE_OPENAPI_SPEC } from './helpers/ecommerce-openapi-spec';
 

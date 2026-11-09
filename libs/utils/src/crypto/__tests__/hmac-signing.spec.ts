@@ -4,7 +4,7 @@
  * Tests for the HMAC signing utilities used for tamper-evident data storage.
  */
 
-import { signData, verifyData, isSignedData, verifyOrParseData } from '../hmac-signing';
+import { isSignedData, signData, verifyData, verifyOrParseData } from '../hmac-signing';
 
 describe('HMAC Signing', () => {
   const testSecret = 'test-secret-key-for-hmac-signing';

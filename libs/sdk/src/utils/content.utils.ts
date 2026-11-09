@@ -1,7 +1,7 @@
 // file: libs/sdk/src/utils/content.utils.ts
 // MCP-specific content building utilities
 
-import { sanitizeToJson, inferMimeType } from '@frontmcp/utils';
+import { inferMimeType, sanitizeToJson } from '@frontmcp/utils';
 
 /**
  * Convert a value to MCP structuredContent format.

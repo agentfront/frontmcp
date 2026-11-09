@@ -4,7 +4,7 @@
  * It is bundled by esbuild at server startup and served as inline HTML.
  */
 
-import { Card, Badge } from '@frontmcp/ui/components';
+import { Badge, Card } from '@frontmcp/ui/components';
 
 const iconMap: Record<string, string> = {
   sunny: '\u2600\uFE0F',

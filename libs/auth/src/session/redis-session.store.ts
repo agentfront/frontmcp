@@ -1,17 +1,19 @@
 // auth/session/redis-session.store.ts
 import type { Redis } from 'ioredis';
+
 import { randomUUID, RedisStorageAdapter } from '@frontmcp/utils';
-import {
-  SessionStore,
-  StoredSession,
-  RedisConfig,
-  storedSessionSchema,
-  SessionSecurityConfig,
-} from './transport-session.types';
+
 import type { AuthLogger } from '../common/auth-logger.interface';
+import { SessionIdEmptyError } from '../errors/auth-internal.errors';
 import { signSession, verifyOrParseSession } from './session-crypto';
 import { SessionRateLimiter } from './session-rate-limiter';
-import { SessionIdEmptyError } from '../errors/auth-internal.errors';
+import {
+  RedisConfig,
+  SessionSecurityConfig,
+  SessionStore,
+  StoredSession,
+  storedSessionSchema,
+} from './transport-session.types';
 
 /**
  * Extended Redis configuration with security options.

@@ -10,9 +10,10 @@
  * - LLM-specific connect helpers (OpenAI, Claude, LangChain, Vercel AI)
  */
 
-import { connect, connectOpenAI, connectClaude, connectLangChain, connectVercelAI, DirectClient } from '@frontmcp/sdk';
-import { serverConfig } from '../src/config';
+import { connect, connectClaude, connectLangChain, connectOpenAI, connectVercelAI, DirectClient } from '@frontmcp/sdk';
+
 import { notesStore } from '../src/apps/notes/data/notes.store';
+import { serverConfig } from '../src/config';
 
 /**
  * Helper to extract JSON result from raw MCP tool result.

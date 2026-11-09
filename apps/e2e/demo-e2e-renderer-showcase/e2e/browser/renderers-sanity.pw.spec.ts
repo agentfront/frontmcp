@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
-import { renderAndWaitForContent, assertNotLoading, assertNoErrorAlert, navigateToRenderer } from './helpers';
+import { expect, test } from '@playwright/test';
+
+import { assertNoErrorAlert, assertNotLoading, navigateToRenderer, renderAndWaitForContent } from './helpers';
 
 // ─── A. Charts (recharts) ────────────────────────────────────────────────────
 

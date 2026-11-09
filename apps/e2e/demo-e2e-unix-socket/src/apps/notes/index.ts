@@ -1,9 +1,10 @@
 import { App } from '@frontmcp/sdk';
-import CreateNoteTool from './tools/create-note.tool';
-import ListNotesTool from './tools/list-notes.tool';
-import GetAuthInfoTool from './tools/get-auth-info.tool';
-import NotesListResource from './resources/notes-list.resource';
+
 import SummarizeNotesPrompt from './prompts/summarize-notes.prompt';
+import NotesListResource from './resources/notes-list.resource';
+import CreateNoteTool from './tools/create-note.tool';
+import GetAuthInfoTool from './tools/get-auth-info.tool';
+import ListNotesTool from './tools/list-notes.tool';
 
 @App({
   name: 'Notes',

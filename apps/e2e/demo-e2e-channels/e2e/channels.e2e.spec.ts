@@ -5,7 +5,8 @@
  * app-event sources, two-way reply, and manual push.
  */
 
-import { FrontMcpInstance, DirectMcpServer } from '@frontmcp/sdk';
+import { DirectMcpServer, FrontMcpInstance } from '@frontmcp/sdk';
+
 import { serverConfig } from '../src/config';
 
 describe('Channels E2E', () => {

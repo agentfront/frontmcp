@@ -3,8 +3,8 @@
  * Test fixtures for hooks
  */
 
-import { HookMetadata, HookStageType } from '../../common/metadata';
 import { Token } from '../../common/interfaces';
+import { HookMetadata, HookStageType } from '../../common/metadata';
 
 /**
  * Test token for hook target

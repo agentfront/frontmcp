@@ -1,4 +1,5 @@
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { serverConfig } from './config.js';
 
 const rawPort = parseInt(process.env['PORT'] ?? '3118', 10);

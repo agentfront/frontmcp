@@ -7,6 +7,7 @@
  */
 
 import { TokenNotAvailableError } from '../../errors/auth-internal.errors';
+import { PublicAuthorization } from '../public.authorization';
 
 // ---- Mocks ----
 
@@ -24,8 +25,6 @@ jest.mock('../../session/utils/session-crypto.utils', () => ({
 jest.mock('../../machine-id', () => ({
   getMachineId: jest.fn(() => 'machine-id-public'),
 }));
-
-import { PublicAuthorization } from '../public.authorization';
 
 // ---- Tests ----
 

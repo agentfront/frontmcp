@@ -11,6 +11,7 @@
  *   npx tsx src/stdio-entrypoint.ts
  */
 import { FrontMcpInstance } from '@frontmcp/sdk';
+
 import { serverConfig } from './config.js';
 
 FrontMcpInstance.runStdio(serverConfig).catch((err) => {

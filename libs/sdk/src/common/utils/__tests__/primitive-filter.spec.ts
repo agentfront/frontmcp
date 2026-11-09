@@ -1,5 +1,5 @@
-import { applyPrimitiveFilter } from '../primitive-filter';
 import type { AppFilterConfig } from '../../metadata/app-filter.metadata';
+import { applyPrimitiveFilter } from '../primitive-filter';
 
 describe('applyPrimitiveFilter()', () => {
   const items = [

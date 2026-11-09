@@ -7,6 +7,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+
 import { SqliteKvStore } from './sqlite-kv.store';
 import type { SqliteStorageOptions } from './sqlite.options';
 

@@ -20,6 +20,7 @@ Shows the complete lifecycle of a FrontMCP SDK package used as an embedded clien
 ```typescript
 // src/main.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { MyApp } from './my.app';
 
 @FrontMcp({

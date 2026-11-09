@@ -1,7 +1,7 @@
 // file: libs/sdk/src/channel/channel.types.ts
 
-import type { ChannelInstance } from './channel.instance';
 import type { EntryOwnerRef } from '../common';
+import type { ChannelInstance } from './channel.instance';
 
 /**
  * A row in the channel registry's index.

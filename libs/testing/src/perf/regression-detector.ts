@@ -3,15 +3,15 @@
  * @description Performance regression detection by comparing current metrics to baseline
  */
 
+import { formatBytes, formatDuration, formatMicroseconds } from './metrics-collector';
 import type {
+  MetricRegression,
+  PerfBaseline,
+  PerfMeasurement,
   RegressionConfig,
   RegressionResult,
-  MetricRegression,
-  PerfMeasurement,
   TestBaseline,
-  PerfBaseline,
 } from './types';
-import { formatBytes, formatDuration, formatMicroseconds } from './metrics-collector';
 
 // ═══════════════════════════════════════════════════════════════════
 // DEFAULT CONFIGURATION

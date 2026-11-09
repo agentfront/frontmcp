@@ -4,8 +4,9 @@
  * @see https://opentelemetry.io/docs/specs/semconv/http/http-spans/
  */
 
-import { type Tracer, type Span, type Context, SpanKind } from '@opentelemetry/api';
-import { HttpAttributes, FrontMcpAttributes } from '../otel.types';
+import { SpanKind, type Context, type Span, type Tracer } from '@opentelemetry/api';
+
+import { FrontMcpAttributes, HttpAttributes } from '../otel.types';
 import { startSpan } from './span.utils';
 
 export interface HttpServerSpanOptions {

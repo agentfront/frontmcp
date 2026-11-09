@@ -3,25 +3,25 @@
  * @description Tests for MCP Apps (ext-apps) type definitions and constants.
  */
 
-import { EXT_APPS_ERROR_CODES } from '../ext-apps.types';
-import type {
-  ExtAppsCallServerToolParams,
-  ExtAppsUpdateModelContextParams,
-  ExtAppsOpenLinkParams,
-  ExtAppsDisplayMode,
-  ExtAppsSetDisplayModeParams,
-  ExtAppsCloseParams,
-  ExtAppsLogLevel,
-  ExtAppsLogParams,
-  ExtAppsRegisterToolParams,
-  ExtAppsUnregisterToolParams,
-  ExtAppsHostCapabilities,
-  ExtAppsWidgetCapabilities,
-  ExtAppsInitializeParams,
-  ExtAppsInitializeResult,
-  ExtAppsJsonRpcRequest,
-  ExtAppsJsonRpcResponse,
-  ExtAppsJsonRpcNotification,
+import {
+  EXT_APPS_ERROR_CODES,
+  type ExtAppsCallServerToolParams,
+  type ExtAppsCloseParams,
+  type ExtAppsDisplayMode,
+  type ExtAppsHostCapabilities,
+  type ExtAppsInitializeParams,
+  type ExtAppsInitializeResult,
+  type ExtAppsJsonRpcNotification,
+  type ExtAppsJsonRpcRequest,
+  type ExtAppsJsonRpcResponse,
+  type ExtAppsLogLevel,
+  type ExtAppsLogParams,
+  type ExtAppsOpenLinkParams,
+  type ExtAppsRegisterToolParams,
+  type ExtAppsSetDisplayModeParams,
+  type ExtAppsUnregisterToolParams,
+  type ExtAppsUpdateModelContextParams,
+  type ExtAppsWidgetCapabilities,
 } from '../ext-apps.types';
 
 describe('ext-apps types', () => {

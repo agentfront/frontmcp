@@ -3,9 +3,10 @@
  */
 
 import 'reflect-metadata';
-import { SimpleRegistry } from '../registry/simple.registry.js';
-import type { RegistryBuildMapResult } from '../registry/registry.base.js';
+
 import type { Token } from '../interfaces/base.interface.js';
+import type { RegistryBuildMapResult } from '../registry/registry.base.js';
+import { SimpleRegistry } from '../registry/simple.registry.js';
 
 // Test types
 interface TestInstance {

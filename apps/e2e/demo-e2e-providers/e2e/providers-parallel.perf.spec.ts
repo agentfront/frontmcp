@@ -3,7 +3,7 @@
  *
  * Tests provider operations under parallel load using multiple clients
  */
-import { perfTest, expect } from '@frontmcp/testing';
+import { expect, perfTest } from '@frontmcp/testing';
 
 perfTest.describe('Providers Parallel Stress Testing', () => {
   perfTest.use({

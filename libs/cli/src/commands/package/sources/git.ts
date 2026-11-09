@@ -3,6 +3,7 @@
  */
 
 import * as path from 'path';
+
 import { runCmd } from '@frontmcp/utils';
 
 export async function fetchFromGit(url: string, tmpDir: string): Promise<string> {

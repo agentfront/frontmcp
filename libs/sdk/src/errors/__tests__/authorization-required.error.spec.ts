@@ -4,15 +4,15 @@
  * Tests for the progressive authorization error class.
  */
 import {
-  AuthorizationRequiredError,
-  authorizationRequiredDataSchema,
-  authorizationRequiredParamsSchema,
-  authorizationRequiredMetaSchema,
   AuthorizationRequiredData,
-  AuthorizationRequiredParams,
+  authorizationRequiredDataSchema,
+  AuthorizationRequiredError,
   AuthorizationRequiredMeta,
-  SessionMode,
+  authorizationRequiredMetaSchema,
+  AuthorizationRequiredParams,
+  authorizationRequiredParamsSchema,
   elicitResponseSchema,
+  SessionMode,
 } from '../authorization-required.error';
 import { PublicMcpError } from '../mcp.error';
 

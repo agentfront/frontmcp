@@ -1,7 +1,8 @@
+import { fireEvent, render } from '@testing-library/react';
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react';
+
+import type { FieldRenderProps, PromptInfo } from '../../types';
 import { PromptForm } from '../PromptForm';
-import type { PromptInfo, FieldRenderProps } from '../../types';
 
 describe('PromptForm', () => {
   const basePrompt: PromptInfo = {

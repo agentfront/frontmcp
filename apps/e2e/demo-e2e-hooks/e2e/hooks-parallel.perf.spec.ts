@@ -5,7 +5,7 @@
  * Reduced to 200 iterations per worker to prevent audit log OOM
  * (each audited-tool call triggers 4 hooks = 4 audit entries).
  */
-import { perfTest, expect } from '@frontmcp/testing';
+import { expect, perfTest } from '@frontmcp/testing';
 
 perfTest.describe('Hooks Parallel Stress Testing', () => {
   perfTest.use({

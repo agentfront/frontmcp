@@ -31,10 +31,13 @@ export default [
   {
     files: ['**/*.ts', '**/*.tsx'],
     rules: {
-      'no-restricted-imports': ['error', {
-        paths: [{ name: '@frontmcp/sdk', message: 'Do not self-import. Use relative paths.' }],
-        patterns: [{ group: ['@frontmcp/sdk/*'], message: 'Do not self-import. Use relative paths.' }],
-      }],
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [{ name: '@frontmcp/sdk', message: 'Do not self-import. Use relative paths.' }],
+          patterns: [{ group: ['@frontmcp/sdk/*'], message: 'Do not self-import. Use relative paths.' }],
+        },
+      ],
     },
   },
   {

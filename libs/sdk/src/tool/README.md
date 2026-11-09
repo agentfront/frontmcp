@@ -84,6 +84,7 @@ Example:
 
 ```ts
 import z from 'zod/v4';
+
 import { ToolRecord } from './tool.record';
 
 const Input = z.object({ a: z.number(), b: z.number() });
@@ -198,7 +199,7 @@ Control-flow and errors:
 ## Writing a Hook
 
 ```ts
-import { ToolHookStage, ToolHook } from './tool.hook';
+import { ToolHook, ToolHookStage } from './tool.hook';
 
 export class RateLimitHook implements ToolHook {
   priority() {
@@ -227,8 +228,8 @@ Registering hooks:
 
 ```ts
 import ProviderRegistry from '../provider/provider.registry';
-import { invokeTool } from './tool.invoke';
 import { ToolHookStage } from './tool.hook';
+import { invokeTool } from './tool.invoke';
 
 const registry = new ProviderRegistry();
 // registry.registerSingletons(...)

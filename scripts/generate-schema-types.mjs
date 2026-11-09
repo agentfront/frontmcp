@@ -12,8 +12,8 @@
  * running the build first.
  */
 
-import { writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { resolve, dirname, relative } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

@@ -19,8 +19,8 @@ A resource serving binary blob data and a resource returning multiple content it
 
 ```typescript
 // src/apps/main/resources/app-logo.resource.ts
-import { Resource, ResourceContext } from '@frontmcp/sdk';
 import { ReadResourceResult } from '@frontmcp/protocol';
+import { Resource, ResourceContext } from '@frontmcp/sdk';
 
 @Resource({
   name: 'app-logo',
@@ -48,8 +48,8 @@ class AppLogoResource extends ResourceContext {
 
 ```typescript
 // src/apps/main/resources/dashboard.resource.ts
-import { Resource, ResourceContext } from '@frontmcp/sdk';
 import { ReadResourceResult } from '@frontmcp/protocol';
+import { Resource, ResourceContext } from '@frontmcp/sdk';
 
 @Resource({
   name: 'dashboard-data',
