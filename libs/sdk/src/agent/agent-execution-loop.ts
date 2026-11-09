@@ -12,7 +12,7 @@ import {
   type FrontMcpLogger,
 } from '../common';
 import { AgentLlmError, AgentLoopExceededError, AgentTimeoutError, McpError } from '../errors';
-import { linkedAbortController } from '../utils/abort.utils';
+import { detachableAbortController } from '../utils/abort.utils';
 
 // ============================================================================
 // Types
@@ -356,10 +356,11 @@ export class AgentExecutionLoop {
 
   /**
    * The signal that stops a run: it aborts with `AgentTimeoutError` when the timeout passes, or with the
-   * reason of the config's `signal`. `stopped` rejects with that reason; `end()` clears the timer.
+   * reason of the config's `signal`. `stopped` rejects with that reason; `end()` clears the timer and stops
+   * following the config's `signal`.
    */
   private startStopSignal(): { signal: AbortSignal; stopped: Promise<never>; end: () => void } {
-    const controller = linkedAbortController(this.config.signal);
+    const { controller, unlink } = detachableAbortController(this.config.signal);
     const timer = setTimeout(
       () => controller.abort(new AgentTimeoutError(this.agentId, this.config.timeout)),
       this.config.timeout,
@@ -369,7 +370,11 @@ export class AgentExecutionLoop {
       controller.signal.addEventListener('abort', () => reject(controller.signal.reason), { once: true });
     });
     stopped.catch(() => undefined);
-    return { signal: controller.signal, stopped, end: () => clearTimeout(timer) };
+    const end = () => {
+      clearTimeout(timer);
+      unlink();
+    };
+    return { signal: controller.signal, stopped, end };
   }
 
   private get agentId(): string {
@@ -471,6 +476,7 @@ export class AgentExecutionLoop {
           const toolCall = completion.toolCalls[toolIndex];
           this.config.onToolStart?.(toolCall, toolIndex, totalTools);
           this.config.onToolCall?.(toolCall);
+          signal.throwIfAborted();
 
           let result: unknown;
           let error: Error | undefined;
@@ -564,6 +570,7 @@ export class AgentExecutionLoop {
           this.config.onToolStart?.(toolCall, toolIndex, totalTools);
           this.config.onToolCall?.(toolCall);
           yield { type: 'tool_start', toolCall };
+          signal.throwIfAborted();
 
           let result: unknown;
           let error: Error | undefined;
