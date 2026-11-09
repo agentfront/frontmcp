@@ -200,7 +200,7 @@ export class EsmCacheManager {
     // Check in-memory cache first (works in both browser and Node.js)
     const memEntry = this.memoryStore.get(memKey);
     if (memEntry) {
-      if (Date.now() - memEntry.cachedAt <= this.maxAgeMs) {
+      if (Date.now() - memEntry.cachedAt < this.maxAgeMs) {
         return memEntry;
       }
       this.memoryStore.delete(memKey);
@@ -225,7 +225,7 @@ export class EsmCacheManager {
         return undefined;
       }
 
-      if (Date.now() - meta.cachedAt > this.maxAgeMs) {
+      if (Date.now() - meta.cachedAt >= this.maxAgeMs) {
         return undefined;
       }
 

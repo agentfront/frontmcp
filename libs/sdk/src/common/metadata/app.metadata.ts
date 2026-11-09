@@ -451,7 +451,8 @@ export interface RemoteAppMetadata {
   packageConfig?: {
     /**
      * Unified loader configuration for registry API + bundle fetching.
-     * Overrides the gateway-level `loader` when set.
+     * The fields it sets replace the gateway-level `loader` fields; the rest come from the gateway's.
+     * A `token` or `tokenEnvVar` here replaces both of the gateway's.
      */
     loader?: PackageLoader;
     /** Auto-update configuration for semver-based polling */
@@ -461,7 +462,7 @@ export interface RemoteAppMetadata {
       /** Polling interval in milliseconds (default: 300000 = 5 min) */
       intervalMs?: number;
     };
-    /** Local cache TTL in milliseconds (default: 86400000 = 24 hours) */
+    /** Local cache TTL in milliseconds (default: 86400000 = 24 hours); `0` downloads the bundle on every load */
     cacheTTL?: number;
     /** Import map overrides for ESM resolution */
     importMap?: Record<string, string>;
@@ -503,7 +504,7 @@ const esmAutoUpdateOptionsSchema = z.object({
 const packageConfigSchema = z.object({
   loader: packageLoaderSchema.optional(),
   autoUpdate: esmAutoUpdateOptionsSchema.optional(),
-  cacheTTL: z.number().positive().optional(),
+  cacheTTL: z.number().nonnegative().optional(),
   importMap: z.record(z.string(), z.string()).optional(),
 });
 
