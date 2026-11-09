@@ -1,10 +1,10 @@
 import {
-  createTestTracer,
-  getFinishedSpans,
-  assertSpanExists,
   assertSpanAttribute,
+  assertSpanExists,
+  createTestTracer,
   findSpan,
   findSpansByAttribute,
+  getFinishedSpans,
 } from '../testing';
 
 describe('Testing Utilities', () => {

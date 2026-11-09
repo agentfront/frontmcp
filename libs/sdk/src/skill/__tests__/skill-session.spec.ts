@@ -1,14 +1,14 @@
 // file: libs/sdk/src/skill/__tests__/skill-session.spec.ts
 
-import {
-  SkillSessionManager,
-  MemorySkillSessionStore,
-  SkillSessionState,
-  createEmptySessionState,
-  serializeSessionState,
-  deserializeSessionState,
-} from '../session';
 import type { SkillContent } from '../../common/interfaces';
+import {
+  createEmptySessionState,
+  deserializeSessionState,
+  MemorySkillSessionStore,
+  serializeSessionState,
+  SkillSessionManager,
+  SkillSessionState,
+} from '../session';
 import type { SkillLoadResult } from '../skill-storage.interface';
 
 describe('SkillSessionManager', () => {
@@ -536,6 +536,20 @@ describe('MemorySkillSessionStore', () => {
     approvedTools: new Set(),
     deniedTools: new Set(),
     toolCallCount: 0,
+  });
+
+  it('refuses a new session once it holds its maximum, and keeps every session it holds', async () => {
+    const boundedStore = new MemorySkillSessionStore(2);
+    await boundedStore.save(createSession('session-1'));
+    await boundedStore.save(createSession('session-2'));
+    await boundedStore.save({ ...createSession('session-1'), toolCallCount: 1 });
+
+    expect(await boundedStore.hasRoomFor('session-1')).toBe(true);
+    expect(await boundedStore.hasRoomFor('session-3')).toBe(false);
+    await expect(boundedStore.save(createSession('session-3'))).rejects.toThrow('maximum of 2 sessions');
+    expect((await boundedStore.get('session-1'))?.toolCallCount).toBe(1);
+    expect(await boundedStore.get('session-2')).not.toBeNull();
+    expect(await boundedStore.get('session-3')).toBeNull();
   });
 
   it('should save and retrieve session', async () => {

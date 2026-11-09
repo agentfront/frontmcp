@@ -7,7 +7,8 @@
  * - Data injection encodes malicious output
  * - Unicode line/paragraph separators don't cause parse errors
  */
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+
 import { serveShell, stopServer } from './helpers';
 
 test.afterEach(async () => {

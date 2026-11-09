@@ -7,13 +7,14 @@
  */
 
 import { Token } from '@frontmcp/di';
+
 import { CredentialProviderAlreadyRegisteredError } from '../errors/auth-internal.errors';
 import type { Credential } from '../session';
 import type {
+  AuthProvidersVaultOptions,
   CredentialProviderConfig,
   CredentialScope,
   LoadingStrategy,
-  AuthProvidersVaultOptions,
 } from './auth-providers.types';
 
 /**

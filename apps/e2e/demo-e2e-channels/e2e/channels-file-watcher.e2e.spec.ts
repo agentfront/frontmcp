@@ -4,7 +4,8 @@
  * Tests the file watcher service connector pattern with simulated file events.
  */
 
-import { FrontMcpInstance, DirectMcpServer } from '@frontmcp/sdk';
+import { DirectMcpServer, FrontMcpInstance } from '@frontmcp/sdk';
+
 import { serverConfig } from '../src/config';
 
 function parseToolResult(result: { content: Array<{ type: string; text?: string }> }): Record<string, unknown> {

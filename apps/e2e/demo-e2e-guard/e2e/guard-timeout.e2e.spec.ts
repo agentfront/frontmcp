@@ -6,7 +6,7 @@
  * - Slow execution exceeding timeout is killed
  * - Default app timeout applies to tools without explicit config
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Guard Timeout', () => {
   test.use({

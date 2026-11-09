@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { NotesApp } from './apps/notes';
 
 const port = parseInt(process.env['PORT'] ?? '3100', 10);

@@ -10,7 +10,7 @@
  * These tests ensure existing transparent auth integrations continue to work
  * after the auth package extraction.
  */
-import { TestServer, TestTokenFactory, MockOAuthServer, McpTestClient, expect } from '@frontmcp/testing';
+import { expect, McpTestClient, MockOAuthServer, TestServer, TestTokenFactory } from '@frontmcp/testing';
 
 describe('Transparent Auth Backward Compatibility E2E', () => {
   let mockOAuth: MockOAuthServer;

@@ -1,4 +1,5 @@
 import { Tool, ToolContext } from '@frontmcp/sdk';
+
 import { replyLog } from '../channels/chat-bridge.channel';
 
 @Tool({

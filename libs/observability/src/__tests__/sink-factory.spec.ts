@@ -1,7 +1,7 @@
 import { createSink, createSinks } from '../logging/sink.factory';
-import { StdoutSink } from '../logging/sinks/stdout.sink';
-import { ConsoleSink } from '../logging/sinks/console.sink';
 import { CallbackSink } from '../logging/sinks/callback.sink';
+import { ConsoleSink } from '../logging/sinks/console.sink';
+import { StdoutSink } from '../logging/sinks/stdout.sink';
 
 describe('createSink', () => {
   it('should create StdoutSink for type stdout', () => {

@@ -3,13 +3,13 @@
  */
 
 import {
-  type Tracer,
-  type Span,
-  type Context,
+  context as otelContext,
   SpanKind,
   SpanStatusCode,
-  context as otelContext,
   trace,
+  type Context,
+  type Span,
+  type Tracer,
 } from '@opentelemetry/api';
 
 /**

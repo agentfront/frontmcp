@@ -5,7 +5,8 @@
  * client HTTP spans following OTel HTTP semantic conventions.
  */
 
-import { type Tracer, type Span, type Context, SpanKind } from '@opentelemetry/api';
+import { SpanKind, type Context, type Span, type Tracer } from '@opentelemetry/api';
+
 import { HttpAttributes } from '../otel.types';
 import { startSpan } from './span.utils';
 

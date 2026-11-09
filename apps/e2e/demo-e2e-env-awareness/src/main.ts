@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { EnvAwareApp } from './apps/env-aware';
 
 const DEFAULT_PORT = 3150;

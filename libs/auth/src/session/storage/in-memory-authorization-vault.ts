@@ -18,6 +18,7 @@
  */
 
 import { MemoryStorageAdapter } from '@frontmcp/utils';
+
 import { StorageAuthorizationVault } from './storage-authorization-vault';
 
 /**

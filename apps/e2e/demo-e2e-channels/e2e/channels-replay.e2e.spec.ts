@@ -4,7 +4,8 @@
  * Tests event buffering, ring buffer eviction, replay to sessions, and clearing.
  */
 
-import { FrontMcpInstance, DirectMcpServer } from '@frontmcp/sdk';
+import { DirectMcpServer, FrontMcpInstance } from '@frontmcp/sdk';
+
 import { serverConfig } from '../src/config';
 
 function parseToolResult(result: { content: Array<{ type: string; text?: string }> }): Record<string, unknown> {

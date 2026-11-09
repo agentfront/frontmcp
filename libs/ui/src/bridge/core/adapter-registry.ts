@@ -8,7 +8,7 @@
  * @packageDocumentation
  */
 
-import type { PlatformAdapter, AdapterFactory, AdapterRegistration, AdapterConfig } from '../types';
+import type { AdapterConfig, AdapterFactory, AdapterRegistration, PlatformAdapter } from '../types';
 
 /**
  * Registry for managing platform adapters.

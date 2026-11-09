@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { ServerlessApp } from './apps/serverless';
 
 const port = parseInt(process.env['PORT'] ?? '3110', 10);

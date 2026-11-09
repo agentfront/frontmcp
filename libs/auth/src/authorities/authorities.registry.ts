@@ -5,10 +5,7 @@
  * - AuthoritiesEvaluatorRegistry: stores custom evaluators
  */
 
-import type {
-  AuthoritiesPolicyMetadata,
-  AuthoritiesEvaluator,
-} from './authorities.types';
+import type { AuthoritiesEvaluator, AuthoritiesPolicyMetadata } from './authorities.types';
 
 // ============================================
 // Profile Registry

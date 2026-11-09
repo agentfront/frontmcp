@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { MockMintlifyApp } from './apps/mock-mintlify';
 
 const port = parseInt(process.env['PORT'] ?? '3097', 10);

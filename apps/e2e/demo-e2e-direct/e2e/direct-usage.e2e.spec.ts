@@ -12,10 +12,11 @@
  * - Agent backends with custom invocation
  */
 
-import { FrontMcpInstance, createInMemoryServer, DirectMcpServer, InternalMcpError } from '@frontmcp/sdk';
+import { createInMemoryServer, DirectMcpServer, FrontMcpInstance, InternalMcpError } from '@frontmcp/sdk';
 import { McpClient } from '@frontmcp/testing';
-import { serverConfig } from '../src/main';
+
 import { notesStore } from '../src/apps/notes/data/notes.store';
+import { serverConfig } from '../src/main';
 
 describe('Direct Usage E2E', () => {
   beforeEach(() => {

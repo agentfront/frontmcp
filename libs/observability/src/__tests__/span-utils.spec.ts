@@ -1,14 +1,15 @@
 import { SpanKind, SpanStatusCode, type Tracer } from '@opentelemetry/api';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { startSpan, endSpanOk, endSpanError, withSpan } from '../otel/spans/span.utils';
-import { startHttpServerSpan, setHttpResponseStatus } from '../otel/spans/http-server.span';
-import { startRpcSpan } from '../otel/spans/rpc.span';
-import { startToolSpan } from '../otel/spans/tool.span';
-import { startResourceSpan } from '../otel/spans/resource.span';
-import { startPromptSpan } from '../otel/spans/prompt.span';
-import { recordHookEvent, startHookSpan } from '../otel/spans/hook.span';
-import { startFetchSpan, setFetchResponseStatus } from '../otel/spans/fetch.span';
+
 import { FrontMcpAttributes, HttpAttributes, RpcAttributes } from '../otel/otel.types';
+import { setFetchResponseStatus, startFetchSpan } from '../otel/spans/fetch.span';
+import { recordHookEvent, startHookSpan } from '../otel/spans/hook.span';
+import { setHttpResponseStatus, startHttpServerSpan } from '../otel/spans/http-server.span';
+import { startPromptSpan } from '../otel/spans/prompt.span';
+import { startResourceSpan } from '../otel/spans/resource.span';
+import { startRpcSpan } from '../otel/spans/rpc.span';
+import { endSpanError, endSpanOk, startSpan, withSpan } from '../otel/spans/span.utils';
+import { startToolSpan } from '../otel/spans/tool.span';
 
 describe('Span Utilities', () => {
   let exporter: InMemorySpanExporter;

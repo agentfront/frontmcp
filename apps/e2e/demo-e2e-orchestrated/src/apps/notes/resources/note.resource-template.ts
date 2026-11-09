@@ -1,4 +1,4 @@
-import { ResourceTemplate, ResourceContext, ReadResourceResult } from '@frontmcp/sdk';
+import { ReadResourceResult, ResourceContext, ResourceTemplate } from '@frontmcp/sdk';
 
 type NoteParams = {
   noteId: string;

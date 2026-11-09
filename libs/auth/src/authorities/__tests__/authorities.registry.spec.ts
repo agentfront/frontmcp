@@ -1,4 +1,4 @@
-import { AuthoritiesProfileRegistry, AuthoritiesEvaluatorRegistry } from '../authorities.registry';
+import { AuthoritiesEvaluatorRegistry, AuthoritiesProfileRegistry } from '../authorities.registry';
 import type { AuthoritiesEvaluator } from '../authorities.types';
 
 describe('AuthoritiesProfileRegistry', () => {

@@ -19,26 +19,26 @@
  */
 
 import type { FrontMcpLogger } from '../../common';
-import type {
-  ElicitationStore,
-  PendingElicitRecord,
-  ElicitResultCallback,
-  ElicitUnsubscribe,
-} from './elicitation.store';
+import { ElicitationEncryptionError } from '../../errors';
 import type {
   ElicitResult,
-  PendingElicitFallback,
-  ResolvedElicitResult,
   FallbackExecutionResult,
   FallbackResultCallback,
+  PendingElicitFallback,
+  ResolvedElicitResult,
 } from '../elicitation.types';
 import {
-  encryptElicitationData,
   decryptElicitationData,
+  encryptElicitationData,
   isEncryptedBlob,
   type ElicitationEncryptedBlob,
 } from './elicitation-encryption';
-import { ElicitationEncryptionError } from '../../errors';
+import type {
+  ElicitationStore,
+  ElicitResultCallback,
+  ElicitUnsubscribe,
+  PendingElicitRecord,
+} from './elicitation.store';
 
 /**
  * Options for creating an encrypted elicitation store.

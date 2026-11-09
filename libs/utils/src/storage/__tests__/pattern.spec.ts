@@ -1,8 +1,8 @@
 /**
  * Pattern Matching Utilities Tests
  */
-import { globToRegex, matchesPattern, validatePattern, escapeGlob } from '../utils/pattern';
 import { StoragePatternError } from '../errors';
+import { escapeGlob, globToRegex, matchesPattern, validatePattern } from '../utils/pattern';
 
 describe('Pattern Matching Utilities', () => {
   describe('globToRegex', () => {

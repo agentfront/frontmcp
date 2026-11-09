@@ -12,9 +12,8 @@
  *   --merged      Read merged coverage (default, falls back to unit if unavailable)
  *   --json        Output JSON for CI consumption
  */
-
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

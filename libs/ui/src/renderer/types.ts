@@ -1,5 +1,5 @@
-import type { ReactElement } from 'react';
 import type { Theme } from '@mui/material/styles';
+import type { ReactElement } from 'react';
 
 /**
  * All content types supported by the renderer system.

@@ -9,34 +9,32 @@
  *
  * These tests ensure the package split maintains a proper export structure.
  */
-import { test, expect } from '@frontmcp/testing';
 
 // Import from @frontmcp/auth directly
 import {
-  JwksService,
-  InMemoryAuthorizationVault,
-  StorageAuthorizationVault,
-  TypedStorage,
-  VaultEncryption,
-  TinyTtlCache,
   authUserSchema,
   credentialTypeSchema,
+  InMemoryAuthorizationVault,
+  JwksService,
+  StorageAuthorizationVault,
+  TinyTtlCache,
+  TypedStorage,
+  VaultEncryption,
 } from '@frontmcp/auth';
-
+// Import SDK decorators and context types from @frontmcp/sdk
+import { App, FrontMcp, Prompt, PromptContext, Resource, ResourceContext, Tool, ToolContext } from '@frontmcp/sdk';
+import { expect, test } from '@frontmcp/testing';
 // Import from @frontmcp/utils directly
 import {
-  MemoryStorageAdapter,
-  hkdfSha256,
-  encryptAesGcm,
+  base64urlDecode,
+  base64urlEncode,
   decryptAesGcm,
+  encryptAesGcm,
+  hkdfSha256,
+  MemoryStorageAdapter,
   randomBytes,
   sha256,
-  base64urlEncode,
-  base64urlDecode,
 } from '@frontmcp/utils';
-
-// Import SDK decorators and context types from @frontmcp/sdk
-import { FrontMcp, Tool, ToolContext, Resource, ResourceContext, Prompt, PromptContext, App } from '@frontmcp/sdk';
 
 test.describe('Cross-Package Imports E2E', () => {
   test.use({

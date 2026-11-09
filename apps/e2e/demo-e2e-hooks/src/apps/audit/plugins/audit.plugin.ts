@@ -1,6 +1,8 @@
-import { Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
-import { auditLog } from '../data/audit-log';
 import { randomUUID } from 'crypto';
+
+import { FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
+
+import { auditLog } from '../data/audit-log';
 
 /**
  * Audit Plugin that demonstrates Will/Did hook patterns.

@@ -10,17 +10,18 @@
  */
 
 import {
-  signData,
-  verifyData,
-  isSignedData,
-  verifyOrParseData,
   getEnv,
   isProduction,
-  type SignedData,
+  isSignedData,
+  signData,
+  verifyData,
+  verifyOrParseData,
   type HmacSigningConfig,
+  type SignedData,
 } from '@frontmcp/utils';
-import type { StoredSession } from './transport-session.types';
+
 import { SessionSecretRequiredError } from '../errors/auth-internal.errors';
+import type { StoredSession } from './transport-session.types';
 
 /**
  * Signed session wrapper structure.

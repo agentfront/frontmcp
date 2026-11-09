@@ -5,6 +5,7 @@
  * GitHub token and make API calls on behalf of the user.
  */
 import { App } from '@frontmcp/sdk';
+
 import { GitHubReposTool } from './tools/github-repos.tool';
 import { GitHubUserTool } from './tools/github-user.tool';
 

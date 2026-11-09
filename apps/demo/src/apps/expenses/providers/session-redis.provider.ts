@@ -1,5 +1,6 @@
+import { FrontMcpContext, FrontMcpProvider, ProviderScope } from '@frontmcp/sdk';
+
 import RedisProvider from './redis.provider';
-import { FrontMcpProvider, ProviderScope, FrontMcpContext } from '@frontmcp/sdk';
 
 @FrontMcpProvider({
   name: 'redis-session',

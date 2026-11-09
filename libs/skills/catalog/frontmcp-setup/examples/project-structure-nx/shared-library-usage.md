@@ -51,8 +51,10 @@ export function formatCurrency(amount: number, currency: string): string {
 
 ```typescript
 // apps/billing/src/billing.app.ts
-import { App } from '@frontmcp/sdk';
 import { DatabaseProvider } from '@my-workspace/shared-utils';
+
+import { App } from '@frontmcp/sdk';
+
 import { CreateInvoiceTool } from './tools/create-invoice.tool';
 
 @App({
@@ -65,8 +67,10 @@ export class BillingApp {}
 
 ```typescript
 // apps/crm/src/crm.app.ts
-import { App } from '@frontmcp/sdk';
 import { DatabaseProvider } from '@my-workspace/shared-utils';
+
+import { App } from '@frontmcp/sdk';
+
 import { LookupUserTool } from './tools/lookup-user.tool';
 
 @App({

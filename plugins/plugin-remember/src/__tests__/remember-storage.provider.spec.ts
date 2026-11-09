@@ -2,6 +2,10 @@
 
 import 'reflect-metadata';
 
+import { createMemoryStorage, createStorage } from '@frontmcp/utils';
+
+import { createRememberMemoryProvider, RememberStorageProvider } from '../providers/remember-storage.provider';
+
 // Create mock storage before importing the module
 const mockNamespacedStorage = {
   set: jest.fn(),
@@ -43,9 +47,6 @@ jest.mock('@frontmcp/utils', () => {
     }),
   };
 });
-
-import { RememberStorageProvider, createRememberMemoryProvider } from '../providers/remember-storage.provider';
-import { createStorage, createMemoryStorage } from '@frontmcp/utils';
 
 describe('RememberStorageProvider', () => {
   let provider: RememberStorageProvider;

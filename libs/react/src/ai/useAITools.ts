@@ -8,11 +8,12 @@
  * Supports multi-server via `options.server`.
  */
 
-import { useState, useCallback, useEffect } from 'react';
-import type { LLMPlatform } from '@frontmcp/sdk';
-import { formatToolsForPlatform, formatResultForPlatform } from '@frontmcp/sdk';
+import { useCallback, useEffect, useState } from 'react';
+
+import { formatResultForPlatform, formatToolsForPlatform, type LLMPlatform } from '@frontmcp/sdk';
+
 import { useResolvedServer } from '../hooks/useResolvedServer';
-import type { UseAIToolsResult, PlatformToolsMap, McpToolInfo, FormattedToolResult } from './types';
+import type { FormattedToolResult, McpToolInfo, PlatformToolsMap, UseAIToolsResult } from './types';
 
 interface AIToolsOptions {
   server?: string;

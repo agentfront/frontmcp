@@ -1,10 +1,10 @@
 import {
-  TestClientError,
+  AssertionError,
   ConnectionError,
-  TimeoutError,
   McpProtocolError,
   ServerStartError,
-  AssertionError,
+  TestClientError,
+  TimeoutError,
 } from '../index';
 
 describe('TestClientError', () => {

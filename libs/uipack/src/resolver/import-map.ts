@@ -7,8 +7,8 @@
  * @packageDocumentation
  */
 
-import type { ImportMap, ResolvedImport, ResolvedDependency } from './types';
 import { escapeHtmlAttr } from '../utils';
+import type { ImportMap, ResolvedDependency, ResolvedImport } from './types';
 
 /**
  * Create an import map from a record of specifier → ResolvedImport.

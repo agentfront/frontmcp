@@ -1,15 +1,15 @@
-import { App } from '@frontmcp/sdk';
 import { CachePlugin } from '@frontmcp/plugins';
-import { createEmployeeRedisProvider } from './providers/redis.provider';
-import { createEmployeeDirectoryProvider } from './providers/employee-directory.provider';
-import SiteAuthorizationPlugin from './plugins/site-authorization.plugin';
+import { App } from '@frontmcp/sdk';
 
-import RegisterEntryTool from './tools/register-entry.tool';
-import RegisterExitTool from './tools/register-exit.tool';
+import SiteAuthorizationPlugin from './plugins/site-authorization.plugin';
+import { createEmployeeDirectoryProvider } from './providers/employee-directory.provider';
+import { createEmployeeRedisProvider } from './providers/redis.provider';
 import AdminAddEntryTool from './tools/admin-add-entry.tool';
 import AdminAddExitTool from './tools/admin-add-exit.tool';
 import GetEmployeeDetailsTool from './tools/get-employee-details.tool';
 import ListEmployeesTool from './tools/list-employees.tool';
+import RegisterEntryTool from './tools/register-entry.tool';
+import RegisterExitTool from './tools/register-exit.tool';
 
 @App({
   id: 'employee-time',

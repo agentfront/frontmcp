@@ -1,4 +1,5 @@
 import type { FormattedToolResult as SdkResult } from '@frontmcp/sdk';
+
 import type { FormattedToolResult as ReactResult } from '../types';
 
 // Compile-time drift guard: every SDK result must be assignable to the React type.

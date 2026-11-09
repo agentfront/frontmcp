@@ -19,7 +19,7 @@ Write E2E tests using the fixture API from `@frontmcp/testing` that manages serv
 
 ```typescript
 // my-server.e2e.spec.ts
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.use({
   server: './src/main.ts',

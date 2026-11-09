@@ -1,5 +1,6 @@
-import { Job, JobContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Job, JobContext } from '@frontmcp/sdk';
 
 @Job({
   name: 'process-data',

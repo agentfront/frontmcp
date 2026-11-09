@@ -8,10 +8,16 @@
  * @packageDocumentation
  */
 
-import type { CustomShellSource, ResolvedShellTemplate, NpmShellSource } from './custom-shell-types';
-import { isInlineShellSource, isUrlShellSource, isNpmShellSource } from './custom-shell-types';
-import { validateShellTemplate } from './custom-shell-validator';
 import type { ImportResolver } from '../resolver/types';
+import {
+  isInlineShellSource,
+  isNpmShellSource,
+  isUrlShellSource,
+  type CustomShellSource,
+  type NpmShellSource,
+  type ResolvedShellTemplate,
+} from './custom-shell-types';
+import { validateShellTemplate } from './custom-shell-validator';
 
 /** Default fetch timeout in milliseconds */
 const DEFAULT_TIMEOUT_MS = 10_000;

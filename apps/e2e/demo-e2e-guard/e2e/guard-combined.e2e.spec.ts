@@ -5,7 +5,7 @@
  * - Rate limit + concurrency + timeout on combined-guard tool
  * - Each guard enforces independently
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Guard Combined — All Pass', () => {
   test.use({

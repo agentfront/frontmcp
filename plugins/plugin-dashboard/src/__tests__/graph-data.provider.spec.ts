@@ -1,6 +1,7 @@
 // file: plugins/plugin-dashboard/src/__tests__/graph-data.provider.spec.ts
 
 import 'reflect-metadata';
+
 import { GraphDataProvider } from '../providers/graph-data.provider';
 
 // Mock types for ScopeEntry

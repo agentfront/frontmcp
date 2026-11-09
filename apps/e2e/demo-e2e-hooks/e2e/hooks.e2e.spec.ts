@@ -6,7 +6,7 @@
  * - Did hooks execute after tool
  * - Hook priority ordering
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Hooks E2E', () => {
   test.use({

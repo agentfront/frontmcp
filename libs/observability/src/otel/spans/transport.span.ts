@@ -5,7 +5,8 @@
  * protocol routing, and message dispatch.
  */
 
-import { type Tracer, type Span, type Context, SpanKind } from '@opentelemetry/api';
+import { SpanKind, type Context, type Span, type Tracer } from '@opentelemetry/api';
+
 import { FrontMcpAttributes } from '../otel.types';
 import { startSpan } from './span.utils';
 

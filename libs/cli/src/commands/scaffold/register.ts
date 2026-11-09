@@ -1,5 +1,6 @@
 import { Command } from 'commander';
-import type { DeploymentTarget, RedisSetup, PackageManager, SkillsBundle } from './create.js';
+
+import type { DeploymentTarget, PackageManager, RedisSetup, SkillsBundle } from './create.js';
 
 export function registerScaffoldCommands(program: Command): void {
   program

@@ -8,7 +8,8 @@
 
 import { ChildProcess, spawn } from 'child_process';
 import * as net from 'node:net';
-import { ensureBuild, getServerBundlePath, getDistDir } from './helpers/exec-cli';
+
+import { ensureBuild, getDistDir, getServerBundlePath } from './helpers/exec-cli';
 import { McpJsonRpcClient, waitForPort } from './helpers/mcp-client';
 
 function killQuiet(proc: ChildProcess | null): void {

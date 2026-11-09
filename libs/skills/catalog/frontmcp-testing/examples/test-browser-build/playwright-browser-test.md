@@ -20,7 +20,7 @@ Use Playwright to test a browser-based MCP client that loads and calls tools fro
 
 ```typescript
 // src/__tests__/browser-client.pw.spec.ts
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 test('browser MCP client loads tools', async ({ page }) => {
   await page.goto('http://localhost:3000');

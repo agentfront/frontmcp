@@ -7,7 +7,7 @@
  * Uses real crypto from @frontmcp/utils (no mocking).
  */
 
-import { VaultEncryption, type VaultKeyDerivationClaims, type EncryptedData } from '../vault-encryption';
+import { VaultEncryption, type EncryptedData, type VaultKeyDerivationClaims } from '../vault-encryption';
 
 describe('VaultEncryption', () => {
   // -----------------------------------------------------------------------

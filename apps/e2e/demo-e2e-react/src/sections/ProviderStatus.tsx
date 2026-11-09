@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { useFrontMcp } from '@frontmcp/react';
 
 export function ProviderStatus(): React.ReactElement {

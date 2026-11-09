@@ -35,7 +35,7 @@ const partitionBy = (ctx: PartitionKeyContext) => `tenant:${ctx.userId?.split(':
 ## Usage
 
 ```typescript
-import { resolvePartitionKey, buildStorageKey } from '@frontmcp/guard';
+import { buildStorageKey, resolvePartitionKey } from '@frontmcp/guard';
 
 const pk = resolvePartitionKey('session', { sessionId: 'sess-42' });
 // 'sess-42'

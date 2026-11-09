@@ -1,5 +1,4 @@
-import { Prompt, PromptContext } from '@frontmcp/sdk';
-import type { GetPromptResult } from '@frontmcp/sdk';
+import { Prompt, PromptContext, type GetPromptResult } from '@frontmcp/sdk';
 
 @Prompt({
   name: 'flag-report',

@@ -1,6 +1,6 @@
-import { registerHealthRoutes, isReadyzEnabled } from '../health.routes';
-import type { HealthService } from '../health.service';
 import type { HealthOptionsInterface } from '../../common/types/options/health';
+import { isReadyzEnabled, registerHealthRoutes } from '../health.routes';
+import type { HealthService } from '../health.service';
 
 // Mock @frontmcp/utils
 const mockGetRuntimeContext = jest.fn();

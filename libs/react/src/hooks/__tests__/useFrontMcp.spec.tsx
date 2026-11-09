@@ -1,12 +1,14 @@
-import React from 'react';
 import { renderHook } from '@testing-library/react';
-import { useFrontMcp } from '../useFrontMcp';
-import { FrontMcpContext } from '../../provider/FrontMcpContext';
-import { serverRegistry } from '../../registry/ServerRegistry';
+import React from 'react';
+
+import type { DirectClient, DirectMcpServer } from '@frontmcp/sdk';
+
 import { ComponentRegistry } from '../../components/ComponentRegistry';
+import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
+import { serverRegistry } from '../../registry/ServerRegistry';
 import type { FrontMcpContextValue } from '../../types';
-import type { DirectMcpServer, DirectClient } from '@frontmcp/sdk';
+import { useFrontMcp } from '../useFrontMcp';
 
 const mockServer = {} as DirectMcpServer;
 const mockClient = { callTool: jest.fn() } as unknown as DirectClient;

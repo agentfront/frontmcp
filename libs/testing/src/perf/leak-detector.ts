@@ -3,17 +3,17 @@
  * @description Memory leak detection using iterative measurement and linear regression
  */
 
+import { forceFullGc, formatBytes, isGcAvailable } from './metrics-collector';
 import type {
+  IntervalMeasurement,
   LeakDetectionOptions,
   LeakDetectionResult,
-  IntervalMeasurement,
   MemoryGraphPoint,
   ParallelLeakDetectionOptions,
   ParallelLeakDetectionResult,
-  WorkerStats,
   ParallelTestClient,
+  WorkerStats,
 } from './types';
-import { forceFullGc, isGcAvailable, formatBytes } from './metrics-collector';
 
 // ═══════════════════════════════════════════════════════════════════
 // DEFAULT OPTIONS

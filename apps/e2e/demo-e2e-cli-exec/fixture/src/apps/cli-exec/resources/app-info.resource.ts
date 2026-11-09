@@ -1,4 +1,4 @@
-import { Resource, ResourceContext, ReadResourceResult } from '@frontmcp/sdk';
+import { ReadResourceResult, Resource, ResourceContext } from '@frontmcp/sdk';
 
 @Resource({
   name: 'app-info',

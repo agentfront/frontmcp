@@ -20,8 +20,9 @@ Custom database and API probes with Kubernetes deployment configuration.
 ```typescript
 // src/server.ts
 import { FrontMcp } from '@frontmcp/sdk';
-import { pool } from './db';
+
 import { MyApp } from './apps/my-app';
+import { pool } from './db';
 
 @FrontMcp({
   info: { name: 'api-server', version: '2.1.0' },

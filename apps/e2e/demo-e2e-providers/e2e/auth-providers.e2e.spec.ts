@@ -10,7 +10,7 @@
  * Note: Full auth provider functionality with OAuth/API key credentials
  * is tested in the dedicated demo-e2e-auth-providers app.
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Auth Providers Integration E2E', () => {
   test.use({

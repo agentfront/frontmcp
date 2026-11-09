@@ -3,7 +3,7 @@
  *
  * Tests memory leak detection on repeated cache operations
  */
-import { perfTest, expect } from '@frontmcp/testing';
+import { expect, perfTest } from '@frontmcp/testing';
 
 perfTest.describe('Cache Leak Detection', () => {
   perfTest.use({

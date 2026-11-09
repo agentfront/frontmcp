@@ -7,7 +7,7 @@
  * @module @frontmcp/utils/crypto
  */
 
-import { encryptAesGcm, decryptAesGcm, randomBytes, base64urlEncode, base64urlDecode } from './index';
+import { base64urlDecode, base64urlEncode, decryptAesGcm, encryptAesGcm, randomBytes } from './index';
 import type { EncBlob } from './types';
 
 // Re-export EncBlob as EncryptedBlob for clarity

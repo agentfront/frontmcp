@@ -9,9 +9,9 @@
  *   ↳ SPAN tool get_weather [36008509] 5ms mcp.component.type=tool enduser.id=client-42
  */
 
-import type { SpanExporter, ReadableSpan } from '@opentelemetry/sdk-trace-base';
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import type { ExportResult } from '@opentelemetry/core';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 
 const RESET = '\x1b[0m';
 const DIM = '\x1b[2m';

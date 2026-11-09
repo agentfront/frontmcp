@@ -1,6 +1,6 @@
 import { AuthoritiesEngine } from '../authorities.engine';
-import { AuthoritiesProfileRegistry, AuthoritiesEvaluatorRegistry } from '../authorities.registry';
-import type { AuthoritiesEvaluationContext, RelationshipResolver, AuthorityGuardFn } from '../authorities.types';
+import { AuthoritiesEvaluatorRegistry, AuthoritiesProfileRegistry } from '../authorities.registry';
+import type { AuthoritiesEvaluationContext, AuthorityGuardFn, RelationshipResolver } from '../authorities.types';
 
 function createCtx(overrides: Partial<AuthoritiesEvaluationContext> = {}): AuthoritiesEvaluationContext {
   const noopResolver: RelationshipResolver = { check: async () => false };
@@ -22,10 +22,7 @@ describe('Authority Guards', () => {
     const engine = createEngine();
     const result = await engine.evaluate(
       {
-        guards: [
-          async () => true,
-          async () => true,
-        ],
+        guards: [async () => true, async () => true],
       },
       createCtx(),
     );
@@ -37,10 +34,7 @@ describe('Authority Guards', () => {
     const engine = createEngine();
     const result = await engine.evaluate(
       {
-        guards: [
-          async () => true,
-          async () => false,
-        ],
+        guards: [async () => true, async () => false],
       },
       createCtx(),
     );
@@ -52,9 +46,7 @@ describe('Authority Guards', () => {
     const engine = createEngine();
     const result = await engine.evaluate(
       {
-        guards: [
-          async () => 'tenant not in allowlist',
-        ],
+        guards: [async () => 'tenant not in allowlist'],
       },
       createCtx(),
     );
@@ -71,7 +63,10 @@ describe('Authority Guards', () => {
       {
         guards: [
           async () => false,
-          async () => { secondGuardCalled = true; return true; },
+          async () => {
+            secondGuardCalled = true;
+            return true;
+          },
         ],
       },
       createCtx(),
@@ -130,7 +125,10 @@ describe('Authority Guards', () => {
     await engine.evaluate(
       {
         guards: [
-          async (ctx) => { receivedCtx = ctx; return true; },
+          async (ctx) => {
+            receivedCtx = ctx;
+            return true;
+          },
         ],
       },
       createCtx({ input: { tenantId: 'test-tenant' } }),
@@ -154,17 +152,11 @@ describe('Authority Guards', () => {
     const engine = createEngine();
 
     // Allowed tenant
-    const allowed = await engine.evaluate(
-      { guards: [guard] },
-      createCtx({ input: { tenantId: 'tenant-42' } }),
-    );
+    const allowed = await engine.evaluate({ guards: [guard] }, createCtx({ input: { tenantId: 'tenant-42' } }));
     expect(allowed.granted).toBe(true);
 
     // Denied tenant
-    const denied = await engine.evaluate(
-      { guards: [guard] },
-      createCtx({ input: { tenantId: 'tenant-unknown' } }),
-    );
+    const denied = await engine.evaluate({ guards: [guard] }, createCtx({ input: { tenantId: 'tenant-unknown' } }));
     expect(denied.granted).toBe(false);
     expect(denied.deniedBy).toContain('tenant-unknown');
   });

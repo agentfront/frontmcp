@@ -2,8 +2,9 @@
  * Local path source: copy directory to temp.
  */
 
-import * as path from 'path';
 import * as fs from 'fs';
+import * as path from 'path';
+
 import { cp } from '@frontmcp/utils';
 
 export async function fetchFromLocal(localPath: string, tmpDir: string): Promise<string> {

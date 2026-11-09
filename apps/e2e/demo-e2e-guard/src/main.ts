@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { GuardApp } from './apps/guard';
 
 const port = parseInt(process.env['PORT'] ?? '50340', 10);

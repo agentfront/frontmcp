@@ -1,9 +1,10 @@
 import { App } from '@frontmcp/sdk';
+
+import SummarizeNotesPrompt from './prompts/summarize-notes.prompt';
+import NoteResourceTemplate from './resources/note.resource-template';
+import NotesListResource from './resources/notes-list.resource';
 import CreateNoteTool from './tools/create-note.tool';
 import ListNotesTool from './tools/list-notes.tool';
-import NotesListResource from './resources/notes-list.resource';
-import NoteResourceTemplate from './resources/note.resource-template';
-import SummarizeNotesPrompt from './prompts/summarize-notes.prompt';
 
 @App({
   name: 'Notes',

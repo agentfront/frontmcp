@@ -14,7 +14,7 @@
  * or use unique values per instance to enforce session affinity.
  */
 
-import { randomUUID, mkdir, writeFile, readFileSync, getEnv, getCwd, isProduction, isBrowser } from '@frontmcp/utils';
+import { getCwd, getEnv, isBrowser, isProduction, mkdir, randomUUID, readFileSync, writeFile } from '@frontmcp/utils';
 
 const DEFAULT_MACHINE_ID_PATH = '.frontmcp/machine-id';
 

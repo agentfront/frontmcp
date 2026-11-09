@@ -1,6 +1,8 @@
 import 'reflect-metadata';
-import { Resource, ResourceTemplate, ResourceContext } from '../../';
+
 import { ReadResourceResult } from '@frontmcp/protocol';
+
+import { Resource, ResourceContext, ResourceTemplate } from '../../';
 
 // ════════════════════════════════════════════════════════════════
 // Type-level tests: verified by `nx typecheck sdk`

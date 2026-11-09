@@ -4,8 +4,8 @@
  * This server is configured with staticAuth to test that Authorization headers
  * are correctly sent to backend APIs.
  */
-import { FrontMcp, App, LogLevel } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
+import { App, FrontMcp, LogLevel } from '@frontmcp/sdk';
 
 const port = parseInt(process.env['PORT'] ?? '3122', 10);
 const apiBaseUrl = process.env['OPENAPI_BASE_URL'] || 'http://localhost:3000';

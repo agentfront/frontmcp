@@ -1,4 +1,5 @@
 import { Resource, ResourceContext } from '@frontmcp/sdk';
+
 import { DataStoreService } from '../providers/data-store.provider';
 
 @Resource({

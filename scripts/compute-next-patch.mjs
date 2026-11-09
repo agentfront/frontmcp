@@ -11,7 +11,6 @@
  *   node scripts/compute-next-patch.mjs 1.4 beta      # Returns 1.4.3-beta.1 (auto-increment)
  *   node scripts/compute-next-patch.mjs 1.4 rc        # Returns 1.4.3-rc.1 (or rc.2 if rc.1 exists)
  */
-
 import { execSync } from 'node:child_process';
 
 /**

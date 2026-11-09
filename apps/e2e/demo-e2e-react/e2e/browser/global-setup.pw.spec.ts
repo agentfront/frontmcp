@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 /**
  * Warmup test — navigates to the app root to trigger Vite's initial JS compilation.

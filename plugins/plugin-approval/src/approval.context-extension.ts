@@ -4,8 +4,8 @@
  * @module @frontmcp/plugin-approval
  */
 
-import type { ApprovalService } from './services/approval.service';
 import { ApprovalServiceToken } from './approval.symbols';
+import type { ApprovalService } from './services/approval.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Module Augmentation

@@ -1,14 +1,14 @@
 import {
+  getForbiddenMetaPrefixes,
   getPlatformMetaNamespace,
   getPlatformMimeType,
-  isOpenAIPlatform,
-  isExtAppsPlatform,
-  isUiPlatform,
-  getToolsListMetaPrefixes,
   getToolCallMetaPrefixes,
-  getForbiddenMetaPrefixes,
+  getToolsListMetaPrefixes,
+  isExtAppsPlatform,
+  isOpenAIPlatform,
+  isUiPlatform,
+  type TestPlatformType,
 } from '../platform-types';
-import type { TestPlatformType } from '../platform-types';
 
 const ALL_PLATFORMS: TestPlatformType[] = [
   'openai',

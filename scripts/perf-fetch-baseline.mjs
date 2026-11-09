@@ -17,9 +17,8 @@
  *   GITHUB_TOKEN - GitHub token for API access
  *   GITHUB_REPOSITORY - Repository in owner/repo format (auto-detected in CI)
  */
-
 import { execSync } from 'child_process';
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
 
 const BASELINE_START_MARKER = '<!-- PERF_BASELINE_START -->';

@@ -1758,6 +1758,7 @@ export class Scope extends ScopeEntry {
     const GuardHookClass = createSkillToolGuardHook(this._skillSession, {
       logger: this.logger,
       trackToolCalls: true,
+      verifiedSessionId: () => this.verifiedRequestSessionId(),
     });
     const guardHookInstance = new GuardHookClass();
     const hookRecords = normalizeHooksFromCls(guardHookInstance);
@@ -1769,6 +1770,15 @@ export class Scope extends ScopeEntry {
     this.logger.verbose('Skill session manager initialized', {
       storeType: store.type,
     });
+  }
+
+  /** The MCP session the server verified for the request being served, if any. */
+  private verifiedRequestSessionId(): string | undefined {
+    try {
+      return this.scopeProviders.get(FrontMcpContextStorage).getStore()?.verifiedSessionId;
+    } catch {
+      return undefined;
+    }
   }
 
   /**

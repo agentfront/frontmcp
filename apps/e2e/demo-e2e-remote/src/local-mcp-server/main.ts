@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { LocalTestApp } from './apps/local-test';
 
 const port = parseInt(process.env['PORT'] ?? '3108', 10);

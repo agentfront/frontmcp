@@ -19,8 +19,8 @@ A static resource that exposes application configuration at a fixed URI.
 
 ```typescript
 // src/apps/main/resources/app-config.resource.ts
-import { Resource, ResourceContext } from '@frontmcp/sdk';
 import { ReadResourceResult } from '@frontmcp/protocol';
+import { Resource, ResourceContext } from '@frontmcp/sdk';
 
 @Resource({
   name: 'app-config',

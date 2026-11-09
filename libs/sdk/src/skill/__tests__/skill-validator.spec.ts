@@ -4,9 +4,9 @@
  * Tests for SkillToolValidator which validates tool availability for skills.
  */
 
-import { SkillToolValidator, ToolValidationResult } from '../skill-validator';
-import type ToolRegistry from '../../tool/tool.registry';
 import { ToolEntry } from '../../common';
+import type ToolRegistry from '../../tool/tool.registry';
+import { SkillToolValidator, ToolValidationResult } from '../skill-validator';
 
 // Mock tool entries for testing
 const createMockTool = (name: string, hidden = false): ToolEntry =>

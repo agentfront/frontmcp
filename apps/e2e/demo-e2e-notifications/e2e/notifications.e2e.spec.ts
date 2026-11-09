@@ -6,7 +6,7 @@
  * - Progress notifications
  * - Long-running task with progress updates
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Notification System E2E', () => {
   test.use({

@@ -2,10 +2,12 @@
  * Tests for OpenAPI Adapter transforms and description modes
  */
 
+import type { McpOpenAPITool } from 'mcp-from-openapi';
+
+import { FrontMcpToolTokens } from '@frontmcp/sdk';
+
 import OpenapiAdapter from '../openapi.adapter';
 import { basicOpenApiSpec, createMockLogger } from './fixtures';
-import type { McpOpenAPITool } from 'mcp-from-openapi';
-import { FrontMcpToolTokens } from '@frontmcp/sdk';
 
 // Mock the OpenAPIToolGenerator
 jest.mock('mcp-from-openapi', () => ({

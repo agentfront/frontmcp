@@ -13,13 +13,12 @@
  */
 
 import 'reflect-metadata';
-import type { Token, Type, Ctor } from '../interfaces/base.interface.js';
+
+import type { Ctor, Token, Type } from '../interfaces/base.interface.js';
 import type { ProviderType } from '../interfaces/provider.interface.js';
 import type { DiContainerInterface, DiViews } from '../interfaces/registry.interface.js';
-import { ProviderKind, type ProviderRecord, type ProviderInjectedRecord } from '../records/provider.record.js';
 import { ProviderScope } from '../metadata/provider.metadata.js';
-import { RegistryAbstract, type RegistryBuildMapResult } from './registry.base.js';
-import { tokenName, isClass, isPromise, depsOfClass } from '../utils/token.utils.js';
+import { ProviderKind, type ProviderInjectedRecord, type ProviderRecord } from '../records/provider.record.js';
 import { hasAsyncWith } from '../utils/metadata.utils.js';
 import {
   createProviderNormalizer,
@@ -27,6 +26,8 @@ import {
   providerInvocationTokens,
   type ProviderTokens,
 } from '../utils/provider.utils.js';
+import { depsOfClass, isClass, isPromise, tokenName } from '../utils/token.utils.js';
+import { RegistryAbstract, type RegistryBuildMapResult } from './registry.base.js';
 
 /**
  * Entry wrapper for provider instances.

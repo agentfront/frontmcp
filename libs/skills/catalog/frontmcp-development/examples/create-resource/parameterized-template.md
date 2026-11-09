@@ -19,10 +19,9 @@ A resource template with typed URI parameters and argument autocompletion.
 
 ```typescript
 // src/apps/main/resources/user-profile.resource.ts
-import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
-import type { ResourceCompletionResult } from '@frontmcp/sdk';
-import { ReadResourceResult } from '@frontmcp/protocol';
 import type { Token } from '@frontmcp/di';
+import { ReadResourceResult } from '@frontmcp/protocol';
+import { ResourceContext, ResourceTemplate, type ResourceCompletionResult } from '@frontmcp/sdk';
 
 interface UserService {
   findById(id: string): Promise<{ id: string; name: string; email: string }>;

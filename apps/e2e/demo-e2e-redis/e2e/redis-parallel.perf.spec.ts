@@ -7,7 +7,7 @@
  * Note: These tests require a Redis instance running locally.
  * Skip if Redis is not available by setting SKIP_REDIS_TESTS=1
  */
-import { perfTest, expect } from '@frontmcp/testing';
+import { expect, perfTest } from '@frontmcp/testing';
 
 const SKIP_REDIS = process.env['SKIP_REDIS_TESTS'] === '1';
 

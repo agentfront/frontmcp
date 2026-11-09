@@ -1,11 +1,11 @@
-import { TraceFlags } from '@opentelemetry/api';
+import { trace, TraceFlags } from '@opentelemetry/api';
+
 import {
+  createOTelContextFromTrace,
   frontmcpToOTelSpanContext,
   otelToFrontmcpContext,
-  createOTelContextFromTrace,
+  type TraceContextLike,
 } from '../otel/trace-context-bridge';
-import type { TraceContextLike } from '../otel/trace-context-bridge';
-import { trace } from '@opentelemetry/api';
 
 describe('TraceContext Bridge', () => {
   const sampleContext: TraceContextLike = {

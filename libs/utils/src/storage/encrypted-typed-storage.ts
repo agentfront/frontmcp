@@ -31,16 +31,16 @@
  * ```
  */
 
-import { encryptAesGcm, decryptAesGcm, randomBytes, base64urlEncode, base64urlDecode, hkdfSha256 } from '../crypto';
-import type { StorageAdapter, NamespacedStorage, SetOptions } from './types';
+import { base64urlDecode, base64urlEncode, decryptAesGcm, encryptAesGcm, hkdfSha256, randomBytes } from '../crypto';
 import type {
-  EncryptedTypedStorageOptions,
+  ClientKeyBinding,
   EncryptedSetEntry,
+  EncryptedTypedStorageOptions,
   EncryptionKey,
   StoredEncryptedBlob,
-  ClientKeyBinding,
 } from './encrypted-typed-storage.types';
 import { EncryptedStorageError } from './errors';
+import type { NamespacedStorage, SetOptions, StorageAdapter } from './types';
 
 /** Text encoder for string to Uint8Array conversion */
 const textEncoder = new TextEncoder();

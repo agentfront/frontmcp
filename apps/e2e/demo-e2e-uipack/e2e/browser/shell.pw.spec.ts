@@ -8,8 +8,9 @@
  * - Bridge exclusion
  * - Shell-less mode
  */
-import { test, expect } from '@playwright/test';
-import { serveShell, serveHtml, stopServer } from './helpers';
+import { expect, test } from '@playwright/test';
+
+import { serveHtml, serveShell, stopServer } from './helpers';
 
 test.afterEach(async () => {
   await stopServer();

@@ -1,6 +1,7 @@
 import { Provider, ScopeEntry } from '@frontmcp/sdk';
-import type { GraphData, GraphNode, GraphEdge, GraphMetadata } from '../shared/types';
+
 import { GraphDataProviderToken } from '../dashboard.symbol';
+import type { GraphData, GraphEdge, GraphMetadata, GraphNode } from '../shared/types';
 
 // Re-export the token for convenience
 export { GraphDataProviderToken };

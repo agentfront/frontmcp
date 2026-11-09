@@ -20,10 +20,11 @@ Shows how to compose multiple apps (Ingestion, Search, Research) into a single s
 ```typescript
 // src/main.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { IngestionApp } from './ingestion/ingestion.app';
-import { SearchApp } from './search/search.app';
-import { ResearchApp } from './research/research.app';
 import { AuditLogPlugin } from './plugins/audit-log.plugin';
+import { ResearchApp } from './research/research.app';
+import { SearchApp } from './search/search.app';
 
 @FrontMcp({
   info: { name: 'knowledge-base', version: '1.0.0' },
@@ -38,6 +39,7 @@ export default class KnowledgeBaseServer {}
 ```typescript
 // src/ingestion/ingestion.app.ts
 import { App } from '@frontmcp/sdk';
+
 import { VectorStoreProvider } from './providers/vector-store.provider';
 import { IngestDocumentTool } from './tools/ingest-document.tool';
 
@@ -53,9 +55,10 @@ export class IngestionApp {}
 ```typescript
 // src/search/search.app.ts
 import { App } from '@frontmcp/sdk';
+
 import { VectorStoreProvider } from '../ingestion/providers/vector-store.provider';
-import { SearchDocsTool } from './tools/search-docs.tool';
 import { DocResource } from './resources/doc.resource';
+import { SearchDocsTool } from './tools/search-docs.tool';
 
 @App({
   name: 'Search',
@@ -70,6 +73,7 @@ export class SearchApp {}
 ```typescript
 // src/research/research.app.ts
 import { App } from '@frontmcp/sdk';
+
 import { ResearcherAgent } from './agents/researcher.agent';
 
 @App({

@@ -1,5 +1,7 @@
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { serverConfig } from './config.js';
 
 @FrontMcp({

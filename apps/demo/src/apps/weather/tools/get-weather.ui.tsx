@@ -1,6 +1,7 @@
+import { useCallTool, useStructuredContent } from '@frontmcp/ui/react';
+
 import type { WeatherInput, WeatherOutput } from './get-weather.tool';
 import { Badge, Card } from './get-weather.ui-2';
-import { useCallTool, useStructuredContent } from '@frontmcp/ui/react';
 
 const iconMap: Record<string, string> = {
   sunny: '☀️',

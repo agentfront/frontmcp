@@ -1,5 +1,5 @@
-import { RequestLogCollector } from '../request-log/request-log.collector';
 import type { StructuredLogEntry } from '../logging/structured-log.types';
+import { RequestLogCollector } from '../request-log/request-log.collector';
 
 function makeContext() {
   return {

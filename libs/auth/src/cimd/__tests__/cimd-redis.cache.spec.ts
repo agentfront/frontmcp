@@ -1,3 +1,8 @@
+import { RedisStorageAdapter, sha256Hex } from '@frontmcp/utils';
+
+import { RedisCimdCache } from '../cimd-redis.cache';
+import type { CimdCacheConfig, ClientMetadataDocument } from '../cimd.types';
+
 /**
  * RedisCimdCache Tests
  *
@@ -27,10 +32,6 @@ jest.mock('@frontmcp/utils', () => ({
   })),
   sha256Hex: jest.fn((input: string) => `sha256_${input}`),
 }));
-
-import { RedisCimdCache } from '../cimd-redis.cache';
-import { RedisStorageAdapter, sha256Hex } from '@frontmcp/utils';
-import type { ClientMetadataDocument, CimdCacheConfig } from '../cimd.types';
 
 // Helper to create RedisCimdCache with partial config (the constructor handles defaults via ??)
 function createCache(config: unknown): RedisCimdCache {

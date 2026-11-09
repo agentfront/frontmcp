@@ -1,4 +1,4 @@
-import { isValidMcpUri, extractUriScheme, isValidMcpUriTemplate } from './uri-validation';
+import { extractUriScheme, isValidMcpUri, isValidMcpUriTemplate } from './uri-validation';
 
 describe('URI Validation Utils', () => {
   describe('isValidMcpUri', () => {

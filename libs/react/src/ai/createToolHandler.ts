@@ -2,9 +2,9 @@
  * createToolCallHandler — non-React utility for vanilla JS usage.
  */
 
-import type { LLMPlatform, DirectMcpServer } from '@frontmcp/sdk';
-import { formatResultForPlatform } from '@frontmcp/sdk';
+import { formatResultForPlatform, type DirectMcpServer, type LLMPlatform } from '@frontmcp/sdk';
 import type { CallToolFn } from '@frontmcp/utils';
+
 import type { FormattedToolResult } from './types';
 
 export interface ToolCallHandler {

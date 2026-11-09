@@ -9,7 +9,8 @@
  * - Selective channel subscriptions are enforced
  */
 
-import { FrontMcpInstance, DirectMcpServer } from '@frontmcp/sdk';
+import { DirectMcpServer, FrontMcpInstance } from '@frontmcp/sdk';
+
 import { serverConfig } from '../src/config';
 
 function parseResult(result: { content: Array<{ type: string; text?: string }> }): Record<string, unknown> {

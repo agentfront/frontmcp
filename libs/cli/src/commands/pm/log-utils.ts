@@ -4,7 +4,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { logFilePath, errorLogFilePath, ensurePmDirs, PM_DIRS } from './paths';
+
+import { ensurePmDirs, errorLogFilePath, logFilePath, PM_DIRS } from './paths';
 
 const MAX_LOG_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_ROTATED_FILES = 5;

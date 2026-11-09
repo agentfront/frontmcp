@@ -1,10 +1,11 @@
+import { act, fireEvent, render } from '@testing-library/react';
 import React from 'react';
-import { render, act, fireEvent } from '@testing-library/react';
-import { AgentSearch } from '../AgentSearch';
+
 import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
-import { ComponentRegistry } from '../ComponentRegistry';
 import type { FrontMcpContextValue } from '../../types';
+import { AgentSearch } from '../AgentSearch';
+import { ComponentRegistry } from '../ComponentRegistry';
 
 // ---------------------------------------------------------------------------
 // Helpers

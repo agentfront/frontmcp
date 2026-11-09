@@ -1,6 +1,7 @@
 import React from 'react';
-import { Card, Badge } from '@frontmcp/ui/components';
-import { useToolInput, useToolOutput, useTheme, useMcpBridgeContext } from '@frontmcp/ui/react';
+
+import { Badge, Card } from '@frontmcp/ui/components';
+import { useMcpBridgeContext, useTheme, useToolInput, useToolOutput } from '@frontmcp/ui/react';
 
 interface EmployeeRow {
   id: string;

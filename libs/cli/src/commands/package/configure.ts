@@ -1,10 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
+
 import { ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
-import { getRegisteredApp } from './registry';
-import { runQuestionnaire, writeEnvFile } from './questionnaire';
 import { ExecManifest } from '../build/exec/manifest';
+import { runQuestionnaire, writeEnvFile } from './questionnaire';
+import { getRegisteredApp } from './registry';
 
 export async function runConfigure(opts: ParsedArgs): Promise<void> {
   const name = opts._[1];

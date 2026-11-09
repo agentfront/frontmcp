@@ -20,9 +20,10 @@ A skill that guides an AI client through a deploy workflow using referenced MCP 
 ```typescript
 // src/skills/deploy-service.skill.ts
 import { Skill, SkillContext } from '@frontmcp/sdk';
+
 import { BuildProjectTool } from '../tools/build-project.tool';
-import { RunTestsTool } from '../tools/run-tests.tool';
 import { DeployToEnvTool } from '../tools/deploy-to-env.tool';
+import { RunTestsTool } from '../tools/run-tests.tool';
 
 @Skill({
   name: 'deploy-service',

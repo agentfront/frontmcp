@@ -1,6 +1,6 @@
-import React, { useState, useCallback } from 'react';
-import { useDynamicTool, useCallTool } from '@frontmcp/react';
-import type { CallToolResult } from '@frontmcp/react';
+import React, { useCallback, useState } from 'react';
+
+import { useCallTool, useDynamicTool, type CallToolResult } from '@frontmcp/react';
 
 const INPUT_SCHEMA = {
   type: 'object',

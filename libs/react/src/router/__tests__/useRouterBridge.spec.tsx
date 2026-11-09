@@ -1,5 +1,8 @@
 import { renderHook } from '@testing-library/react';
-import { getNavigate, getLocation, clearBridge } from '../router-bridge';
+
+import { clearBridge, getLocation, getNavigate } from '../router-bridge';
+// Import after mock is set up
+import { useRouterBridge } from '../useRouterBridge';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -10,9 +13,6 @@ jest.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
   useLocation: () => mockLocation,
 }));
-
-// Import after mock is set up
-import { useRouterBridge } from '../useRouterBridge';
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 

@@ -8,8 +8,7 @@
  */
 
 import type { TypeCacheEntry, TypeCacheStats } from '../types';
-import type { TypeCacheAdapter, TypeCacheOptions } from './cache-adapter';
-import { DEFAULT_CACHE_OPTIONS } from './cache-adapter';
+import { DEFAULT_CACHE_OPTIONS, type TypeCacheAdapter, type TypeCacheOptions } from './cache-adapter';
 
 /**
  * Internal cache entry with TTL tracking.

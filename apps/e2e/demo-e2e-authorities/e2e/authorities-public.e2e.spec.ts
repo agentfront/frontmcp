@@ -12,7 +12,7 @@
  * In public mode, authInfo.user is: { sub: 'anon:<uuid>', iss: 'public', name: 'Anonymous' }
  * This user has no roles, no permissions, and no custom claims.
  */
-import { TestServer, McpTestClient, expect } from '@frontmcp/testing';
+import { expect, McpTestClient, TestServer } from '@frontmcp/testing';
 
 describe('Authorities in Public Mode', () => {
   let server: TestServer;

@@ -6,11 +6,11 @@
 import type { JsonRpcRequest, JsonRpcResponse } from '../transport/transport.interface';
 import type {
   InterceptorChain,
+  InterceptorContext,
+  MockRegistry,
   RequestInterceptor,
   ResponseInterceptor,
-  InterceptorContext,
   ResponseInterceptorContext,
-  MockRegistry,
 } from './interceptor.types';
 import { DefaultMockRegistry } from './mock-registry';
 

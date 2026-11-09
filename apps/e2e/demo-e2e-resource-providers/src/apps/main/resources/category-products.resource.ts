@@ -1,5 +1,5 @@
-import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
-import type { ResourceCompletionResult } from '@frontmcp/sdk';
+import { ResourceContext, ResourceTemplate, type ResourceCompletionResult } from '@frontmcp/sdk';
+
 import { CatalogService } from '../providers/catalog.provider';
 
 /**

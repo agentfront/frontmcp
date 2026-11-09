@@ -6,7 +6,7 @@
  */
 
 import type { Credential } from '../session';
-import type { ResolvedCredential, CredentialCacheEntry, CredentialScope } from './auth-providers.types';
+import type { CredentialCacheEntry, CredentialScope, ResolvedCredential } from './auth-providers.types';
 
 /**
  * Cache statistics for monitoring

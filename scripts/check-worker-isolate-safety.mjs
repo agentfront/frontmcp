@@ -17,10 +17,10 @@
  *
  * Usage: `node scripts/check-worker-isolate-safety.mjs`  (exit 1 on findings)
  */
+import { readdirSync, readFileSync, statSync } from 'fs';
 import { createRequire } from 'module';
-import { readFileSync, readdirSync, statSync } from 'fs';
-import { fileURLToPath } from 'url';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(ROOT, 'package.json'));

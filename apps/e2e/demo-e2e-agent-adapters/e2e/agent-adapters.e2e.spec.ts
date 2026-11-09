@@ -8,7 +8,7 @@
  * All agents use the default runAgentLoop() path (no execute() override).
  * Mock clients use real OpenAI/Anthropic SDK types to prove adapter compatibility.
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Agent Adapters E2E', () => {
   test.use({

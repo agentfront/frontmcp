@@ -1,11 +1,12 @@
-import React, { useEffect } from 'react';
-import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
-import Typography from '@mui/material/Typography';
 import { styled } from '@mui/material/styles';
-import { createLazyImport, runtimeImportWithFallback, esmShUrl } from '../common/lazy-import';
+import Typography from '@mui/material/Typography';
+import React, { useEffect } from 'react';
+
 import { injectStylesheet } from '../common/inject-stylesheet';
+import { createLazyImport, esmShUrl, runtimeImportWithFallback } from '../common/lazy-import';
 import { useLazyModule } from '../common/use-lazy-module';
 import type { ContentRenderer, RenderOptions } from '../types';
 

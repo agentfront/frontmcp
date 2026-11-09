@@ -1,43 +1,43 @@
 import {
-  // Types
-  ApprovalScope,
-  ApprovalState,
-  // Factories
-  userGrantor,
-  policyGrantor,
   adminGrantor,
-  systemGrantor,
+  adminRevoker,
   agentGrantor,
   apiGrantor,
-  oauthGrantor,
-  testGrantor,
+  // Errors
+  ApprovalError,
+  ApprovalExpiredError,
+  approvalGrantorSchema,
+  ApprovalOperationError,
+  // Schemas
+  approvalRecordSchema,
+  ApprovalRequiredError,
+  // Types
+  ApprovalScope,
+  ApprovalScopeNotAllowedError,
+  ApprovalState,
+  ChallengeValidationError,
   customGrantor,
-  userRevoker,
-  adminRevoker,
   expiryRevoker,
-  sessionEndRevoker,
-  policyRevoker,
-  normalizeGrantor,
-  normalizeRevoker,
+  hasGrantorDisplayName,
+  hasGrantorIdentifier,
+  isApiGrantor,
+  isAutoGrantor,
+  isDelegatedGrantor,
   // Guards
   isGrantorSource,
   isHumanGrantor,
-  isAutoGrantor,
-  isDelegatedGrantor,
-  isApiGrantor,
-  hasGrantorIdentifier,
-  hasGrantorDisplayName,
-  // Schemas
-  approvalRecordSchema,
-  approvalGrantorSchema,
+  normalizeGrantor,
+  normalizeRevoker,
+  oauthGrantor,
+  policyGrantor,
+  policyRevoker,
+  sessionEndRevoker,
+  systemGrantor,
+  testGrantor,
   toolApprovalRequirementSchema,
-  // Errors
-  ApprovalError,
-  ApprovalRequiredError,
-  ApprovalOperationError,
-  ApprovalScopeNotAllowedError,
-  ApprovalExpiredError,
-  ChallengeValidationError,
+  // Factories
+  userGrantor,
+  userRevoker,
 } from '../index';
 
 describe('Approval module', () => {

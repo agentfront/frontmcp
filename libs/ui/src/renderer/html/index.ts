@@ -1,7 +1,8 @@
-import React, { useMemo, useState, useEffect } from 'react';
 import Box from '@mui/material/Box';
 import { styled } from '@mui/material/styles';
-import { runtimeImportWithFallback, esmShUrl } from '../common/lazy-import';
+import React, { useEffect, useMemo, useState } from 'react';
+
+import { esmShUrl, runtimeImportWithFallback } from '../common/lazy-import';
 import type { ContentRenderer, RenderOptions } from '../types';
 
 // ============================================

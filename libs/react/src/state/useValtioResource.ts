@@ -6,8 +6,9 @@
  */
 
 import { useMemo } from 'react';
-import { useStoreResource } from './useStoreResource';
+
 import type { ValtioResourceOptions } from './state.types';
+import { useStoreResource } from './useStoreResource';
 
 function getByPath(obj: unknown, path: string): unknown {
   const parts = path.split('.');

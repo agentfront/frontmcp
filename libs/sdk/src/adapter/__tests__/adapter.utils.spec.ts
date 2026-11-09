@@ -3,10 +3,11 @@
  */
 
 import 'reflect-metadata';
-import { normalizeAdapter, collectAdapterMetadata, adapterDiscoveryDeps } from '../adapter.utils';
+
 import { Adapter } from '../../common/decorators/adapter.decorator';
 import { AdapterInterface, FrontMcpAdapterResponse } from '../../common/interfaces';
 import { AdapterKind } from '../../common/records';
+import { adapterDiscoveryDeps, collectAdapterMetadata, normalizeAdapter } from '../adapter.utils';
 
 /** Minimal adapter implementation for testing */
 class StubAdapter implements AdapterInterface {

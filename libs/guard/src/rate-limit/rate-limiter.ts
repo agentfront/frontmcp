@@ -10,6 +10,7 @@
  */
 
 import type { StorageAdapter } from '@frontmcp/utils';
+
 import type { RateLimitResult } from './types';
 
 export class SlidingWindowRateLimiter {

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
-import type { ContentRenderer, RenderOptions } from '../types';
-import { runtimeImport } from '../common/lazy-import';
+import Box from '@mui/material/Box';
+import React, { useEffect, useState } from 'react';
+
 import { transpileJsx } from '../../runtime/babel-runtime';
+import { runtimeImport } from '../common/lazy-import';
+import type { ContentRenderer, RenderOptions } from '../types';
 
 // ============================================
 // Detection

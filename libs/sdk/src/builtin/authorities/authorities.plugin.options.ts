@@ -4,10 +4,10 @@
 
 import type {
   AuthoritiesClaimsMapping,
-  AuthoritiesPolicyMetadata,
-  RelationshipResolver,
   AuthoritiesEvaluator,
+  AuthoritiesPolicyMetadata,
   ClaimsResolverFn,
+  RelationshipResolver,
 } from '@frontmcp/auth';
 
 /**

@@ -8,9 +8,9 @@
  * larger storage capacity is needed.
  */
 
-import { BaseStorageAdapter } from './base';
 import type { SetOptions } from '../types';
 import { matchesPattern } from '../utils/pattern';
+import { BaseStorageAdapter } from './base';
 
 /**
  * Options for the IndexedDB adapter.

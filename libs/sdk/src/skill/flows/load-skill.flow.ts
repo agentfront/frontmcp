@@ -180,28 +180,36 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Check if we're in a session context
-    const existingSession = sessionManager.getActiveSession();
-    if (!existingSession) {
-      this.logger.warn('activateSessions: not in a session context, cannot activate skill sessions');
+    const policy = policyMode ? { policyMode: policyMode as SkillPolicyMode } : undefined;
+    const activate = async () => {
+      for (const item of loadResults) {
+        const { skill } = item.loadResult;
+        const activationResult = sessionManager.activateSkill(skill.id, skill, item.loadResult, policy);
+
+        item.activationResult = activationResult;
+        this.logger.info(`activateSessions: activated skill "${skill.id}"`, {
+          policyMode: activationResult.session.policyMode,
+          allowedTools: activationResult.availableTools,
+        });
+      }
+    };
+
+    const sessionId = this.tryGetContext()?.verifiedSessionId;
+    const targetSessionId = sessionId ?? sessionManager.getActiveSession()?.sessionId;
+    if (targetSessionId && !(await sessionManager.hasRoomFor(targetSessionId))) {
+      throw new PublicMcpError(
+        'The server keeps as many skill sessions as it can; activate again once a session has ended (DELETE)',
+        'SKILL_SESSION_LIMIT',
+        503,
+      );
+    }
+    if (sessionId && sessionManager.getActiveSession()?.sessionId !== sessionId) {
+      await sessionManager.runWithSession(sessionId, activate);
+    } else if (sessionManager.getActiveSession()) {
+      await activate();
+    } else {
+      this.logger.warn('activateSessions: the request has no MCP session, cannot activate skill sessions');
       return;
-    }
-
-    // Override policy mode if specified (session-level setting, apply before activating skills)
-    if (policyMode) {
-      sessionManager.setPolicyMode(policyMode as SkillPolicyMode);
-    }
-
-    // Activate each skill
-    for (const item of loadResults) {
-      const { skill } = item.loadResult;
-      const activationResult = sessionManager.activateSkill(skill.id, skill, item.loadResult);
-
-      item.activationResult = activationResult;
-      this.logger.info(`activateSessions: activated skill "${skill.id}"`, {
-        policyMode: activationResult.session.policyMode,
-        allowedTools: activationResult.availableTools,
-      });
     }
 
     this.state.set({ loadResults });

@@ -6,8 +6,9 @@
  * MCP clients that communicate via stdin/stdout.
  */
 
-import { McpClient, McpStdioClientTransport } from '@frontmcp/testing';
 import { join } from 'path';
+
+import { McpClient, McpStdioClientTransport } from '@frontmcp/testing';
 
 describe('Stdio Transport E2E', () => {
   let client: McpClient | null = null;

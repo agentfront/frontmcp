@@ -6,7 +6,7 @@
  *
  * Uses Playwright's `request` API fixture for HTTP testing (no DOM needed).
  */
-import { test, expect, type APIRequestContext } from '@playwright/test';
+import { expect, test, type APIRequestContext } from '@playwright/test';
 
 const MCP_ENDPOINT = '/mcp';
 

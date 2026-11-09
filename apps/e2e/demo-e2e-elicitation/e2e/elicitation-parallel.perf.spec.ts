@@ -4,7 +4,7 @@
  * Tests elicitation system under parallel load using multiple clients.
  * Note: Only tools.list is tested since this server only exposes tools (no resources/prompts).
  */
-import { perfTest, expect } from '@frontmcp/testing';
+import { expect, perfTest } from '@frontmcp/testing';
 
 perfTest.describe('Elicitation Parallel Stress Testing', () => {
   perfTest.use({

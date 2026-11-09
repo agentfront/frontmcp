@@ -1,3 +1,5 @@
+import { TransportIdGenerator } from '../session.transport';
+
 /**
  * Session Transport Tests
  *
@@ -10,8 +12,6 @@ jest.mock('@frontmcp/utils', () => ({
   ...jest.requireActual('@frontmcp/utils'),
   randomUUID: () => mockRandomUUID(),
 }));
-
-import { TransportIdGenerator } from '../session.transport';
 
 describe('TransportIdGenerator', () => {
   beforeEach(() => {

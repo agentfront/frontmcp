@@ -1,5 +1,5 @@
-import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 import { CachePlugin } from '@frontmcp/plugins';
+import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 
 const port = parseInt(process.env['PORT'] ?? '3112', 10);
 const localMcpPort = parseInt(process.env['LOCAL_MCP_PORT'] ?? '3108', 10);

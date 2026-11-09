@@ -7,7 +7,7 @@
  * - Completion tracking
  * - Edge cases and boundaries
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Markdown Tools E2E', () => {
   test.use({

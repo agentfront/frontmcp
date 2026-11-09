@@ -1,6 +1,6 @@
 // file: libs/cli/src/core/__tests__/colors.spec.ts
 
-import { COLORS, c } from '../colors';
+import { c, COLORS } from '../colors';
 
 const originalForceColor = process.env['FORCE_COLOR'];
 const originalNoColor = process.env['NO_COLOR'];
