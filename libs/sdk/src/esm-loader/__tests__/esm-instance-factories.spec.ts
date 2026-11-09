@@ -40,7 +40,7 @@ describe('esm-instance-factories', () => {
       const ctx = instance.create(parsed, { authInfo: {} } as ToolCallExtra);
       await ctx.execute(ctx.input);
 
-      expect(execute).toHaveBeenCalledWith({ message: 'hello' });
+      expect(execute).toHaveBeenCalledWith({ message: 'hello' }, ctx);
     });
 
     it('keeps strict parsing for Zod-shape ESM tools', async () => {

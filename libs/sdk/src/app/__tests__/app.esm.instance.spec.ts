@@ -67,8 +67,8 @@ describe('App.esm()', () => {
     expect((await srv.listResources()).resources.map((resource) => resource.uri)).toEqual(['status://acme']);
   });
 
-  it('warns that the skills, agents, jobs, workflows and providers of the package are not loaded', async () => {
-    load.mockResolvedValue({ ...loadResult, manifest: { ...loadResult.manifest, skills: [{}], providers: [{}] } });
+  it('warns that the skills, agents, jobs and workflows of the package are not loaded', async () => {
+    load.mockResolvedValue({ ...loadResult, manifest: { ...loadResult.manifest, skills: [{}], jobs: [{}] } });
     const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
     server = await FrontMcpInstance.createDirect({
       info: { name: 'esm-gateway', version: '1.0.0' },
@@ -77,13 +77,13 @@ describe('App.esm()', () => {
     });
 
     expect(warnings).toContain(
-      "ESM app acme: App.esm() loads only tools, resources and prompts; the package's skills, providers are not loaded",
+      "ESM app acme: App.esm() loads only tools, resources, prompts and providers; the package's skills, jobs are not loaded",
     );
   });
 
   it('warns about the kinds it skips before an entry fails to build', async () => {
     warnings.length = 0;
-    const manifest = { ...loadResult.manifest, providers: [{}] };
+    const manifest = { ...loadResult.manifest, agents: [{}] };
     Object.defineProperty(manifest, 'tools', {
       get: () => {
         throw new Error('tool needs the package provider');
@@ -100,7 +100,7 @@ describe('App.esm()', () => {
       }),
     ).rejects.toThrow('tool needs the package provider');
     expect(warnings).toContain(
-      "ESM app acme: App.esm() loads only tools, resources and prompts; the package's providers are not loaded",
+      "ESM app acme: App.esm() loads only tools, resources, prompts and providers; the package's agents are not loaded",
     );
   });
 

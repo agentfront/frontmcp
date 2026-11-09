@@ -1,7 +1,7 @@
 import {
-  createEsmToolContextClass,
-  createEsmResourceContextClass,
   createEsmPromptContextClass,
+  createEsmResourceContextClass,
+  createEsmToolContextClass,
 } from '../factories/esm-context-factories';
 
 describe('esm-context-factories', () => {
@@ -12,7 +12,7 @@ describe('esm-context-factories', () => {
       expect(CtxClass.name).toBe('EsmTool_my-tool');
     });
 
-    it('execute delegates to the provided function', async () => {
+    it('execute delegates to the provided function, with the context', async () => {
       const expectedResult = { content: [{ type: 'text', text: 'hello' }] };
       const executeFn = jest.fn().mockResolvedValue(expectedResult);
 
@@ -22,7 +22,7 @@ describe('esm-context-factories', () => {
       const proto = CtxClass.prototype;
       const result = await proto.execute({ message: 'hi' });
 
-      expect(executeFn).toHaveBeenCalledWith({ message: 'hi' });
+      expect(executeFn).toHaveBeenCalledWith({ message: 'hi' }, proto);
       expect(result).toEqual(expectedResult);
     });
 
@@ -41,14 +41,14 @@ describe('esm-context-factories', () => {
       expect(CtxClass.name).toBe('EsmResource_my-resource');
     });
 
-    it('execute delegates to the provided read function', async () => {
+    it('execute delegates to the provided read function, with the context', async () => {
       const expectedResult = { contents: [{ uri: 'file://test', text: 'data' }] };
       const readFn = jest.fn().mockResolvedValue(expectedResult);
 
       const CtxClass = createEsmResourceContextClass(readFn, 'file-reader');
       const result = await CtxClass.prototype.execute('file://test', { key: 'val' });
 
-      expect(readFn).toHaveBeenCalledWith('file://test', { key: 'val' });
+      expect(readFn).toHaveBeenCalledWith('file://test', { key: 'val' }, CtxClass.prototype);
       expect(result).toEqual(expectedResult);
     });
 
@@ -67,7 +67,7 @@ describe('esm-context-factories', () => {
       expect(CtxClass.name).toBe('EsmPrompt_my-prompt');
     });
 
-    it('execute delegates to the provided function', async () => {
+    it('execute delegates to the provided function, with the context', async () => {
       const expectedResult = {
         messages: [{ role: 'user', content: { type: 'text', text: 'hello' } }],
       };
@@ -76,7 +76,7 @@ describe('esm-context-factories', () => {
       const CtxClass = createEsmPromptContextClass(executeFn, 'greeter');
       const result = await CtxClass.prototype.execute({ name: 'world' });
 
-      expect(executeFn).toHaveBeenCalledWith({ name: 'world' });
+      expect(executeFn).toHaveBeenCalledWith({ name: 'world' }, CtxClass.prototype);
       expect(result).toEqual(expectedResult);
     });
 

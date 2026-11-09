@@ -130,10 +130,10 @@ export function buildEsmToolRecord(tool: EsmToolDefinition, namespace?: string):
  */
 function esmToolHandler(tool: EsmToolDefinition, jsonInputSchema?: Record<string, unknown>): EsmToolExecuteHandler {
   const inputParser = jsonInputSchema && jsonSchemaParserOf(jsonInputSchema);
-  return async (input) => {
+  return async (input, context) => {
     const parsed = inputParser?.safeParse(input);
     if (parsed && !parsed.success) throw new InvalidInputError('Invalid tool input', parsed.error.issues);
-    const answer: unknown = await tool.execute((parsed?.data ?? input) as Record<string, unknown>);
+    const answer: unknown = await tool.execute((parsed?.data ?? input) as Record<string, unknown>, context);
     return (tool.outputSchema === undefined ? primitiveAnswerAsText(answer) : answer) as CallToolResult;
   };
 }
