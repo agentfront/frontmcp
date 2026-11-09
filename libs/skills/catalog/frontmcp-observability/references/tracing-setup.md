@@ -104,7 +104,7 @@ observability: {
     fetchSpans: true,          // Outbound ctx.fetch() spans
     flowStageEvents: true,     // Add stage events (e.g. stage.execute.start) on the parent span
     transportSpans: true,      // SSE/HTTP transport spans
-    authSpans: true,           // Auth/session verify spans
+    authSpans: true,           // An `auth session:verify` span per HTTP request, with frontmcp.auth.result
     oauthSpans: true,          // OAuth flow spans
     elicitationSpans: true,    // Elicitation spans
     hookSpans: false,          // Emit a NEW child span per hook (verbose; default off)
@@ -117,6 +117,7 @@ observability: {
 - ES-module projects (`"type": "module"`) record the same: the SDK's ESM build loads observability's CommonJS build, which brings a second copy of the SDK classes, and `McpError`, `PublicMcpError`, `InternalMcpError`, `FlowControl`, `DynamicPlugin`, `GuardError` and `AuthorityDeniedError` recognise the other copy's instances by a process-wide brand (`instanceof` works across copies; an error keeps one error ID whichever copy converts it). In 1.9.3 an ES-module project recorded every failure as `GenericServerError` with an error ID the client never saw.
 - `this.fetch()` in a tool sends a `traceparent` naming its `GET` client span (or, with `fetchSpans: false`, the running span) as the parent, so the service called nests under it. A `traceparent` you set yourself is kept.
 - With `NODE_ENV=development` and no TracerProvider registered, FrontMCP registers one that prints each span to the console.
+- `authSpans` records how each HTTP request authenticated: an `auth session:verify` span inside its `POST /` span, with `frontmcp.auth.result` set to `authorized`, `anonymous`, `unauthorized`, `forbidden` or `error`. Up to 1.11.2 it recorded nothing.
 
 ### `flowStageEvents` vs `hookSpans` — what's the difference?
 

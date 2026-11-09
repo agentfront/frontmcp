@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
 import { InternalMcpError } from '../../errors';
+import LoggerRegistry from '../../logger/logger.registry';
 import { observabilityPlugins } from '../observability-scope.helper';
 
 class ObservabilityConfigurationError extends InternalMcpError {
@@ -10,9 +11,14 @@ class ObservabilityConfigurationError extends InternalMcpError {
 }
 
 const init = jest.fn();
+const createSinks = jest.fn((configs: unknown[]) => configs);
+
+class StructuredLogTransport {
+  onEntry?: (entry: unknown) => void;
+}
 
 jest.mock('../optional-dependency.util', () => ({
-  requireOptionalModule: () => ({ ObservabilityPlugin: { init } }),
+  requireOptionalModule: () => ({ ObservabilityPlugin: { init }, StructuredLogTransport, createSinks }),
   probeOptionalDependency: () => ({ status: 'not-installed' }),
 }));
 
@@ -55,6 +61,40 @@ describe('observabilityPlugins', () => {
     expect(plugins).toEqual([]);
     expect(logger.warn).toHaveBeenCalledWith('observability: plugin initialization failed', {
       error: 'broken install',
+    });
+  });
+
+  describe('the sinks observability.logging wires to the server logger', () => {
+    function sinksFor(logging: unknown): unknown {
+      createSinks.mockClear();
+      const loggerRegistry = { addTransport: jest.fn() };
+      const globalProviders = {
+        get: (token: unknown) => {
+          if (token === LoggerRegistry) return loggerRegistry;
+          throw new Error('not registered');
+        },
+      };
+      observabilityPlugins({
+        config: { tracing: false, ...(logging === undefined ? {} : { logging }) } as never,
+        logger: logger as never,
+        globalProviders: globalProviders as never,
+      });
+      expect(loggerRegistry.addTransport).toHaveBeenCalledTimes(1);
+      return createSinks.mock.calls[0][0];
+    }
+
+    it('adds the NDJSON stdout sink for logging: true, and for an object that names no sinks', () => {
+      expect(sinksFor(true)).toEqual([{ type: 'stdout' }]);
+      expect(sinksFor({ redactFields: ['token'] })).toEqual([{ type: 'stdout' }]);
+    });
+
+    it('uses the sinks an object names, none included', () => {
+      expect(sinksFor({ sinks: [{ type: 'console' }] })).toEqual([{ type: 'console' }]);
+      expect(sinksFor({ sinks: [] })).toEqual([]);
+    });
+
+    it('writes nothing without logging: the transport only feeds request logs', () => {
+      expect(sinksFor(undefined) ?? []).toEqual([]);
     });
   });
 });

@@ -73,6 +73,11 @@ export function recordRequestLogFailure(flowCtx: RequestLogFlowContext): void {
   currentRequestLog(flowCtx)?.setError({ type, message, code, error_id: errorId });
 }
 
+/** Summarizes an entry flow's answer (its `state.output`) on the request's log, with `includeSummaries`. */
+export function recordRequestLogOutput(flowCtx: RequestLogFlowContext): void {
+  currentRequestLog(flowCtx)?.setOutput(flowCtx.state?.['output']);
+}
+
 /**
  * Records how the HTTP flow authenticated the request (its `state.verifyResult`): `auth_type` is the scheme of
  * the `Authorization` header (`bearer`), or `anonymous` for a caller without one or with an anonymous subject.

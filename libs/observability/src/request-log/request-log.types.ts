@@ -101,6 +101,30 @@ export interface RequestLog {
 
   /** All structured log entries for this request */
   entries: RequestLogEntry[];
+
+  // ── Summaries (`includeSummaries`) ──
+  /** The arguments of a `tools/call` or `prompts/get`, without their values */
+  input_summary?: RequestLogSummary;
+
+  /** The result of a `tools/call`, `resources/read` or `prompts/get`, without its content */
+  output_summary?: RequestLogSummary;
+}
+
+/**
+ * The shape and size of a call's arguments or result, never its values.
+ */
+export interface RequestLogSummary {
+  /** Size of the value as JSON, in bytes */
+  bytes?: number;
+
+  /** The argument names of an input; the `structuredContent` keys of a tool's result */
+  keys?: string[];
+
+  /** The content types of a result: `text`, `image`, … for a tool or prompt, each content's `mimeType` for a resource */
+  content_types?: string[];
+
+  /** Whether a tool's result is an error result */
+  is_error?: boolean;
 }
 
 /**
@@ -110,7 +134,10 @@ export interface RequestLogCollectorOptions {
   /** Maximum entries to collect per request (default: 500) */
   maxEntries?: number;
 
-  /** Accepted, but not read yet: request logs carry no input or output summaries. */
+  /**
+   * Add `input_summary` and `output_summary` to the log of a `tools/call`, `resources/read` or `prompts/get`: the
+   * argument names, result keys, content types and sizes, never the values (default: false).
+   */
   includeSummaries?: boolean;
 
   /** Callback when request log is complete */

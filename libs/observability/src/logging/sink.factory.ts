@@ -1,7 +1,7 @@
 import type { LogSink, SinkConfig } from './log-sink.interface';
-import { StdoutSink } from './sinks/stdout.sink';
-import { ConsoleSink } from './sinks/console.sink';
 import { CallbackSink } from './sinks/callback.sink';
+import { ConsoleSink } from './sinks/console.sink';
+import { StdoutSink } from './sinks/stdout.sink';
 
 /**
  * Create a LogSink from a SinkConfig.
@@ -52,8 +52,8 @@ export function createSink(config: SinkConfig): LogSink {
 /**
  * Create an array of LogSink instances from an array of SinkConfig.
  *
- * If no configs are provided, defaults to StdoutSink in Node.js
- * or ConsoleSink in browser environments.
+ * Without configs it returns no sinks; `@FrontMcp({ observability: { logging } })` passes a stdout sink
+ * (a console sink in a browser) when `logging` names none.
  */
 export function createSinks(configs?: SinkConfig[]): LogSink[] {
   if (configs && configs.length > 0) {
