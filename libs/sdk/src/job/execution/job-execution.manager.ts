@@ -176,10 +176,10 @@ export class JobExecutionManager {
     // (GHSA-58v2-gpcc-jmqv) — the execute_job tool, a trigger, any in-process
     // caller. It runs BEFORE any run record is created, so an unauthorized
     // attempt leaves no state behind and background execution has no async
-    // escape hatch. Each attempt's `jobs:execute-job` flow checks the
+    // escape hatch. Each attempt's `jobs:execute-job` flow checks the execute
     // permissions again in its `checkJobAuthorization` stage, which is also
-    // where workflow STEPS are checked (#700).
-    await this.assertMayExecute(job.metadata.permissions, job.name, opts);
+    // where workflow STEPS are checked (#700); `create` is checked here only.
+    await this.assertMaySubmit(job.metadata.permissions, job.name, opts);
 
     const runId = randomUUID();
     const retryConfig = job.metadata.retry ?? {};
@@ -242,8 +242,8 @@ export class JobExecutionManager {
   }
 
   /**
-   * Execute a workflow inline or in background. The caller must pass the workflow's `execute` permissions, and the
-   * input its `inputSchema`, before the run is created.
+   * Execute a workflow inline or in background. The caller must pass the workflow's `create` and `execute`
+   * permissions, and the input its `inputSchema`, before the run is created.
    *
    * @throws JobNotAuthorizedError when the caller may not execute the workflow
    * @throws InvalidInputError when `workflowInput` doesn't match the workflow's `inputSchema`
@@ -253,7 +253,7 @@ export class JobExecutionManager {
     jobRegistry: JobRegistryInterface,
     opts: ExecuteWorkflowOptions = {},
   ): Promise<InlineJobResult | BackgroundJobResult> {
-    await this.assertMayExecute(workflow.metadata.permissions, workflow.name, opts);
+    await this.assertMaySubmit(workflow.metadata.permissions, workflow.name, opts);
     // Checked before the run exists, so bad input leaves no run behind
     const workflowInput = parseWorkflowInput(workflow, opts.workflowInput);
     const runOptions = { ...opts, workflowInput };
@@ -302,26 +302,22 @@ export class JobExecutionManager {
   }
 
   /**
-   * Throw unless the caller may execute the entry.
+   * Throw unless the caller may submit a run of the entry: its `create` rules and its `execute` rules.
    *
    * Uses the same error for "not authorized" as the tools use for "not found",
    * so a caller cannot enumerate which restricted jobs exist by comparing
    * responses.
    */
-  private async assertMayExecute(
+  private async assertMaySubmit(
     permissions: JobPermission[] | undefined,
     name: string,
     opts: ExecuteJobOptions,
   ): Promise<void> {
-    const allowed = await JobPermissionGuard.check(
-      permissions,
-      'execute',
-      opts.authInfo,
-      opts.authoritiesContextBuilder,
-    );
-    if (!allowed) {
-      this.logger.warn(`Execution of "${name}" denied: caller does not satisfy its execute permissions`);
-      throw new JobNotAuthorizedError(name);
+    for (const action of ['create', 'execute'] as const) {
+      if (!(await JobPermissionGuard.check(permissions, action, opts.authInfo, opts.authoritiesContextBuilder))) {
+        this.logger.warn(`Execution of "${name}" denied: caller does not satisfy its ${action} permissions`);
+        throw new JobNotAuthorizedError(name);
+      }
     }
   }
 

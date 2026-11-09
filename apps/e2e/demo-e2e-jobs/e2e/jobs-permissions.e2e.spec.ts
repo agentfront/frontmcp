@@ -169,6 +169,44 @@ describe('Jobs/workflows permission enforcement (GHSA-58v2-gpcc-jmqv)', () => {
     });
   });
 
+  describe('create permissions', () => {
+    it('refuses to submit a run of a job its create rules deny the caller', async () => {
+      await withClient(asUser, async (mcp) => {
+        const result = await mcp.tools.call('execute_job', { name: 'admin-submitted', input: {} });
+
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result)).not.toContain('ADMIN-SUBMITTED-RAN');
+      });
+    });
+
+    it('submits it for a caller its create rules allow', async () => {
+      await withClient(asAdmin, async (mcp) => {
+        const result = await mcp.tools.call('execute_job', { name: 'admin-submitted', input: {} });
+
+        expect(result.isError).toBe(false);
+        expect(JSON.stringify(result)).toContain('ADMIN-SUBMITTED-RAN');
+      });
+    });
+
+    it('runs it as a workflow step for the workflow caller, since a step submits no run of its job', async () => {
+      await withClient(asUser, async (mcp) => {
+        const result = await mcp.tools.call('execute_workflow', { name: 'uses-admin-submitted' });
+
+        expect(result.isError).toBe(false);
+        expect(result.json<{ state: string }>().state).toBe('completed');
+      });
+    });
+
+    it('leaves the job out of list_jobs for a caller who may not submit it', async () => {
+      await withClient(asUser, async (mcp) => {
+        const result = await mcp.tools.call('list_jobs', {});
+        const names = (result.json<{ jobs: Array<{ name: string }> }>().jobs ?? []).map((j) => j.name);
+
+        expect(names).not.toContain('admin-submitted');
+      });
+    });
+  });
+
   describe('list permissions', () => {
     it('hides a job the caller may not execute', async () => {
       await withClient(asUser, async (mcp) => {
@@ -197,6 +235,14 @@ describe('Jobs/workflows permission enforcement (GHSA-58v2-gpcc-jmqv)', () => {
           name: 'injected',
           script: 'export default async () => ({ pwned: true });',
         });
+
+        expect(result.isError).toBe(true);
+      });
+    });
+
+    it('serves no update_job either, so no job can be changed', async () => {
+      await withClient(asAdmin, async (mcp) => {
+        const result = await mcp.tools.call('update_job', { name: 'open', script: 'return { pwned: true };' });
 
         expect(result.isError).toBe(true);
       });

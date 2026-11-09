@@ -3,3 +3,4 @@ export { default as ExecuteWorkflowTool } from './execute-workflow.tool';
 export { default as GetWorkflowStatusTool } from './get-workflow-status.tool';
 export { default as RegisterWorkflowTool } from './register-workflow.tool';
 export { default as RemoveWorkflowTool } from './remove-workflow.tool';
+export { default as UpdateWorkflowTool } from './update-workflow.tool';

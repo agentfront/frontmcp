@@ -66,7 +66,7 @@ const decoder = new TextDecoder();
 
 /**
  * Start a run of the workflow for a webhook request: a JSON body within `maxBodyBytes`, signed with the workflow's
- * secret, as its input, under the workflow's `execute` rules for the role `webhook:<workflow>`.
+ * secret, as its input, under the workflow's `create` and `execute` rules for the role `webhook:<workflow>`.
  */
 async function startWebhookRun(
   request: ServerRequest,
@@ -107,8 +107,8 @@ async function startWebhookRun(
   } catch (error) {
     if (error instanceof JobNotAuthorizedError) {
       logger.warn(
-        `Webhook of workflow "${workflowName}": its execute rules don't allow the role "${principal.role}"; ` +
-          `add it to a rule's roles to let the webhook start runs`,
+        `Webhook of workflow "${workflowName}": its create or execute rules don't allow the role ` +
+          `"${principal.role}"; add it to those rules' roles to let the webhook start runs`,
       );
       return httpRespond.forbidden();
     }

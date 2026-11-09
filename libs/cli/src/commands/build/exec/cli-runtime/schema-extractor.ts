@@ -150,11 +150,13 @@ export const SYSTEM_TOOL_NAMES = new Set([
   'get_job_status',
   'cancel_job',
   'register_job',
+  'update_job',
   'remove_job',
   'list_workflows',
   'execute_workflow',
   'get_workflow_status',
   'register_workflow',
+  'update_workflow',
   'remove_workflow',
   // Legacy hyphen names — accepted for back-compat with previously built bundles.
   'list-jobs',

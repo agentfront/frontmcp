@@ -565,6 +565,8 @@
   "UnsupportedContentTypeError": "class",
   "UnsupportedHookOwnerKindError": "class",
   "UnsupportedTransportTypeError": "class",
+  "UpdateJobTool": "class",
+  "UpdateWorkflowTool": "class",
   "VaultLoadError": "class",
   "VaultNotFoundError": "class",
   "VercelKvAsyncInitRequiredError": "class",
