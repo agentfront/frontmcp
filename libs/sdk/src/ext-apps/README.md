@@ -86,7 +86,9 @@ widgets built before the bridges sent the spec names keep sending.
   takes `{ context, merge? }`.
 - `ui/request-display-mode` answers with `{ mode }`.
 - `ui/notifications/request-teardown` is a notification with no params (`ui/close` took
-  `{ reason? }`); the host decides whether to tear the widget down.
+  `{ reason? }`); the host decides whether to tear the widget down. Without a `close` callback
+  (FrontMCP's session server provides none) the notification is ignored, with a verbose log line
+  only; `ui/close`, a request, is still answered with an error.
 - `ui/registerTool` and `ui/unregisterTool` are FrontMCP extensions: the MCP Apps spec has no
   widget-defined tools, so a spec host does not answer them.
 - `notifications/message` is a JSON-RPC notification with the MCP logging params

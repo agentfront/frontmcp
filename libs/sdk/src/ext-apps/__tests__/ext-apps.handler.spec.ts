@@ -866,12 +866,13 @@ describe('ExtAppsMessageHandler', () => {
       expect(close).toHaveBeenCalledTimes(2);
     });
 
-    it('logs that a ui/notifications/request-teardown is not supported without a close callback', async () => {
+    it('ignores a ui/notifications/request-teardown without a close callback, with no warning', async () => {
       const handler = new ExtAppsMessageHandler({ context: createMockContext() });
 
       await handler.handleNotification(createNotification('ui/notifications/request-teardown', {}));
 
-      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Widget close not supported by host'));
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+      expect(mockLogger.verbose).toHaveBeenCalledWith(expect.stringContaining('ui/notifications/request-teardown'));
     });
 
     it('ignores a notification it does not handle', async () => {
