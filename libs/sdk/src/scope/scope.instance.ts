@@ -109,6 +109,14 @@ import { reportStartup } from './startup-report.helper';
  */
 const SCOPE_NON_DISPATCHABLE_FLOWS: ReadonlySet<string> = new Set(['http:request']);
 
+/** `start`, which `forget` drops when it fails, so the next caller starts it again. */
+function keptUntilFailure(start: Promise<void>, forget: () => void): Promise<void> {
+  return start.catch((error: unknown) => {
+    forget();
+    throw error;
+  });
+}
+
 export class Scope extends ScopeEntry {
   readonly id: string;
   private readonly globalProviders: ProviderRegistry;
@@ -1535,25 +1543,29 @@ export class Scope extends ScopeEntry {
 
   /** Register the `agents:call-agent` flow an agent's tool runs through, once. */
   private serveAgentCalls(): Promise<void> {
-    this.agentCallsServed ??= import('../agent/flows/index.js').then(({ CallAgentFlow }) =>
-      this.scopeFlows.registryFlows([CallAgentFlow]),
+    this.agentCallsServed ??= keptUntilFailure(
+      import('../agent/flows/index.js').then(({ CallAgentFlow }) => this.scopeFlows.registryFlows([CallAgentFlow])),
+      () => (this.agentCallsServed = undefined),
     );
     return this.agentCallsServed;
   }
 
   /** Serve skills to a scope that served none at startup: the skill session guard, the skill methods and resources. */
   private serveSkillsAddedLater(): Promise<void> {
-    this.skillsServed ??= (async () => {
-      if (!this._skillSession) await this.startSkillSession();
-      await serveSkillMethods({
-        skillRegistry: this.scopeSkills,
-        flowRegistry: this.scopeFlows,
-        resourceRegistry: this.scopeResources,
-        providers: this.scopeProviders,
-        skillsConfig: this.metadata.skillsConfig,
-        logger: this.logger,
-      });
-    })();
+    this.skillsServed ??= keptUntilFailure(
+      (async () => {
+        if (!this._skillSession) await this.startSkillSession();
+        await serveSkillMethods({
+          skillRegistry: this.scopeSkills,
+          flowRegistry: this.scopeFlows,
+          resourceRegistry: this.scopeResources,
+          providers: this.scopeProviders,
+          skillsConfig: this.metadata.skillsConfig,
+          logger: this.logger,
+        });
+      })(),
+      () => (this.skillsServed = undefined),
+    );
     return this.skillsServed;
   }
 
