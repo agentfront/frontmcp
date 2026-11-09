@@ -54,6 +54,7 @@ import {
   type FlowRunOptions,
   type ServerRequest,
 } from '../../common';
+import { oauthBasePath } from '../../flows/flow.http-path';
 import { authUiExtraPath, buildAuthUiPage, buildConsentState, type AuthTool, type AuthUiRegistry } from '../auth-ui';
 import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
@@ -1354,7 +1355,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     fields: Record<string, string>,
     failure: { message: string; retryField?: string },
   ): string {
-    const callbackPath = '/oauth/callback';
+    const callbackPath = `${oauthBasePath(this.scope)}/oauth/callback`;
     const ctx: LoginRenderContext = {
       clientId: pendingAuth.clientId,
       clientName: pendingAuth.clientId,
@@ -1436,7 +1437,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     const state = buildConsentState(
       {
         pendingAuthId: pendingAuth.id,
-        submitUrl: '/oauth/callback',
+        submitUrl: `${oauthBasePath(this.scope)}/oauth/callback`,
         extraUrl: authUiExtraPath(this.scope.fullPath),
         csrfToken,
         addedItems: authUi.getAddedItems(pendingAuth.id),
@@ -1526,7 +1527,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
      */
     preSelectedTools?: string[],
   ): string {
-    const callbackPath = '/oauth/callback';
+    const callbackPath = `${oauthBasePath(this.scope)}/oauth/callback`;
 
     // Derive the offered tool cards from the scope via the shared projection so
     // the screen, the validation set, and call-time enforcement agree (and

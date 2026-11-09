@@ -279,6 +279,8 @@ The type is: `standalone?: 'includeInParent' | boolean` (defaults to `false`).
 
 A `standalone` app (and, with `splitByApp: true`, every app) is served over HTTP at `<entryPath>/<appId>`, by the Node server and `createFetchHandler()` alike; with `splitByApp` nothing is served at the entry path itself (404, listing every endpoint's path). In process, `FrontMcpInstance.createDirect(config, { app: 'admin' })` and `connect(config, { app: 'admin' })` reach that app's own endpoint; without `app` they serve the server's main endpoint.
 
+Such an app with its own `local` or `remote` auth is its own authorization server: its discovery document (`/.well-known/oauth-authorization-server<entryPath>/<appId>`) names its OAuth endpoints under `<entryPath>/<appId>/oauth/` (`authorize`, `token`, `register`, `callback`, the remote provider's callback), and they run that app's auth. The server's main endpoint keeps its OAuth endpoints at the root `/oauth/`. Up to 1.11.2 every app's endpoints were the root ones, which the first such app served for all of them, so a sign-in for another app went to the first app's provider, and a remote-mode app's provider callback was not served.
+
 ## Tool Namespacing
 
 A local app's tool keeps its own name while no other tool in the server shares it. When two tools share a name, each is listed with its owner's id as a prefix: `appId:toolName`.
