@@ -25,6 +25,7 @@ export {
   buildConsentPage,
   buildIncrementalAuthPage,
   buildFederatedLoginPage,
+  buildFederatedStepPage,
   buildToolConsentPage,
   buildLoginPage,
   buildConnectPage,
@@ -32,7 +33,14 @@ export {
   buildErrorPage,
   renderToHtml,
 } from './templates';
-export type { AppAuthCard, ProviderCard, ToolCard, LoginExtraField, ConsentHiddenField } from './templates';
+export type {
+  AppAuthCard,
+  ProviderCard,
+  FederatedStepView,
+  ToolCard,
+  LoginExtraField,
+  ConsentHiddenField,
+} from './templates';
 
 // Local-login rendering helper (Checkpoint 3a)
 export { renderLocalLoginPage, toLoginExtraFields, withoutSecretFieldValues } from './local-login.helper';

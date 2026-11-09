@@ -57,6 +57,7 @@ import { oauthBasePath } from '../../flows/flow.http-path';
 import { authUiExtraPath, buildAuthUiPage, buildConsentState, type AuthTool, type AuthUiRegistry } from '../auth-ui';
 import { initialAuthorizedApps, withoutSkippedApps } from '../authorized-apps.utils';
 import { projectConsentTools } from '../consent-tools.helper';
+import { answerFederatedStep, FEDERATED_STEP_FIELD, renderFederatedStep } from '../federated-steps';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 import { requiredProviderIds } from '../required-providers.utils';
 import { parseFormBody } from './form-body.utils';
@@ -275,8 +276,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
   @Stage('validatePendingAuth')
   async validatePendingAuth() {
-    const { pendingAuthId, isFederated, selectedProviders, selectedTools, consentSubmitted, loginFields } = this.state;
-    let { email, name } = this.state;
+    const { pendingAuthId, isFederated, selectedTools, consentSubmitted } = this.state;
+    let { email, name, selectedProviders, loginFields } = this.state;
 
     if (!pendingAuthId) {
       this.logger.warn('Missing pending_auth_id in callback');
@@ -326,6 +327,19 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     this.state.set({ isIncremental, targetAppId });
     if (isIncremental) {
       this.logger.info(`Incremental auth callback for app: ${targetAppId}`);
+    }
+
+    // The picker shows one provider per page: each step is answered on the pending record, and the last one
+    // goes on as a picker submission with the providers the steps linked.
+    const answersSteps = !isIncremental && pendingAuth.federatedLogin?.currentStep !== undefined;
+    if (answersSteps) {
+      const stepSelection = await this.answerStepPage(pendingAuth);
+      if (!stepSelection) return;
+      selectedProviders = stepSelection;
+      if (loginFields) {
+        const { [FEDERATED_STEP_FIELD]: _step, ...fields } = loginFields;
+        loginFields = fields;
+      }
     }
 
     // Checkpoint 3a — a configured custom `authenticate` verifier takes over the
@@ -451,6 +465,11 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     // failure, re-render the login page with the error instead of proceeding.
     if (authenticateFn && !isIncremental && !verifiedLogin) {
       const result = await this.runAuthenticate(authenticateFn, loginFields ?? {}, pendingAuth);
+      if (!result.ok && answersSteps) {
+        const clientName = await this.resolveClientName(pendingAuth.clientId);
+        this.respond(renderFederatedStep(this.scope, pendingAuth, { clientName, error: result.message }));
+        return;
+      }
       if (!result.ok) {
         // Keep the pending auth alive so the user can retry on the re-rendered page.
         // A `login.render` page is the app's own markup: no CSP is imposed on it.
@@ -1347,6 +1366,63 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       error: failure.message,
     };
     return renderLocalLoginPage(login, ctx, fields);
+  }
+
+  /**
+   * Answer one page of the step-by-step provider picker (`incrementalAuth.showAllAppsAtOnce: false`).
+   *
+   * The submission must be a federated one carrying the pending authorization's CSRF token, from this origin.
+   * The answer is recorded on the pending record (see {@link answerFederatedStep}); until the last step this
+   * responds with the next step's page.
+   *
+   * @returns the providers the steps linked, once the last step is answered; undefined when it responded.
+   */
+  private async answerStepPage(pendingAuth: PendingAuthorizationRecord): Promise<string[] | undefined> {
+    const { request } = this.rawInput;
+    const refuse = (message: string) => {
+      this.respond(this.htmlPage(this.renderErrorPage('invalid_request', message), 400));
+      return undefined;
+    };
+    if (!this.state.isFederated) return refuse('Invalid provider selection');
+    const submitted = this.state.csrf;
+    if (!pendingAuth.authUiCsrf || !submitted || !timingSafeEqualStr(pendingAuth.authUiCsrf, submitted)) {
+      this.logger.warn('Federated step submitted without its CSRF token');
+      return refuse('Invalid or missing CSRF token');
+    }
+    if (this.isCrossOriginSubmission()) {
+      this.logger.warn('Cross-origin federated step rejected (CSRF)');
+      return refuse('Cross-origin request blocked');
+    }
+
+    const federatedConfig = (this.scope.auth?.options as { federatedAuth?: { minProviders?: number } } | undefined)
+      ?.federatedAuth;
+    const outcome = answerFederatedStep(
+      pendingAuth,
+      { step: this.readParam(request, FEDERATED_STEP_FIELD), action: this.readParam(request, 'action') },
+      {
+        requiredProviderIds: requiredProviderIds(this.scope.auth?.options, this.scope.apps.getApps()),
+        minProviders: federatedConfig?.minProviders ?? 1,
+      },
+    );
+    if (outcome.kind === 'refuse') {
+      this.logger.warn(`Federated step refused: ${outcome.message}`);
+      return refuse(outcome.message);
+    }
+
+    try {
+      await (this.scope.auth as LocalPrimaryAuth).authorizationStore.storePendingAuthorization(pendingAuth);
+    } catch (err) {
+      this.logger.error(`Failed to keep the federated step: ${err instanceof Error ? err.message : String(err)}`);
+      this.respond(
+        this.htmlPage(this.renderErrorPage('server_error', 'Failed to keep your answer. Please try again.'), 500),
+      );
+      return undefined;
+    }
+    if (outcome.kind === 'done') return outcome.selectedProviderIds;
+
+    const clientName = await this.resolveClientName(pendingAuth.clientId);
+    this.respond(renderFederatedStep(this.scope, pendingAuth, { clientName }));
+    return undefined;
   }
 
   /**

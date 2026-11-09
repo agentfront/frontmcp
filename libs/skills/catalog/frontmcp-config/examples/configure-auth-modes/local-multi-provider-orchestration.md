@@ -91,3 +91,4 @@ class Server {}
 - See `configure-auth` → "Multi-provider orchestration" for the full provider schema and the `this.orchestration` API
 - See `configure-auth-modes` for a comparison of all auth modes
 - See `local-single-operator` for the no-provider single-operator local setup
+- Set `incrementalAuth: { showAllAppsAtOnce: false }` to ask about GitHub, then Slack, one page each instead of on one picker page (see `configure-auth`)

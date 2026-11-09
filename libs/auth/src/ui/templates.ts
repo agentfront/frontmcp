@@ -345,6 +345,109 @@ export function buildFederatedLoginPage(params: {
 }
 
 /**
+ * One step of the step-by-step provider picker (`incrementalAuth.showAllAppsAtOnce: false`).
+ */
+export interface FederatedStepView {
+  /** 0-based index of the step, into the picker's providers */
+  index: number;
+  /** How many steps there are */
+  count: number;
+  /** The last step: it carries the sign-in fields and finishes the sign-in */
+  last: boolean;
+  /** Whether Back is offered (every step but the first) */
+  canGoBack: boolean;
+  /** Whether Skip is offered: not for a provider the sign-in must link */
+  canSkip: boolean;
+}
+
+/**
+ * Build one page of the step-by-step provider picker: the provider of this step, and Continue (link it), Skip
+ * and Back as `action` values posted to the callback with `federated_step` and the CSRF token. The last step adds
+ * the email field the one-page picker carries.
+ */
+export function buildFederatedStepPage(params: {
+  provider: ProviderCard;
+  step: FederatedStepView;
+  clientName: string;
+  pendingAuthId: string;
+  callbackPath: string;
+  csrfToken: string;
+  error?: string;
+}): string {
+  const { provider, step, clientName, pendingAuthId, callbackPath, csrfToken, error } = params;
+
+  const primaryBadge = provider.isPrimary
+    ? `<span class="px-2 py-0.5 text-xs font-medium bg-blue-600 text-white rounded-full">Primary</span>`
+    : '';
+  const providerUrl = provider.providerUrl
+    ? `<p class="text-xs text-gray-400 font-mono truncate">${escapeHtml(provider.providerUrl)}</p>`
+    : '';
+  const appIds =
+    provider.appIds.length > 0
+      ? `<p class="text-xs text-gray-500 mt-1">Apps: ${provider.appIds.map((id) => escapeHtml(id)).join(', ')}</p>`
+      : '';
+  const errorBanner = error
+    ? `<div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">${escapeHtml(error)}</div>`
+    : '';
+  const emailField = step.last
+    ? `<div class="mb-6">
+        <label for="email" class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+        <input type="email" id="email" name="email" required placeholder="you@example.com"
+          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+      </div>`
+    : '';
+  const secondaryButton =
+    'flex-1 px-6 py-3 text-gray-700 bg-gray-100 hover:bg-gray-200 font-medium rounded-lg transition-colors';
+  const skipButton = step.canSkip
+    ? `<button type="submit" name="action" value="skip" class="${secondaryButton}">Skip</button>`
+    : '';
+  const backButton = step.canGoBack
+    ? `<button type="submit" name="action" value="back" formnovalidate class="${secondaryButton}">Back</button>`
+    : '';
+  const skipNote = step.canSkip
+    ? `<div class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+      A skipped provider can be authorized later when you try to use its tools (progressive authorization).
+    </div>`
+    : '';
+
+  const content = `
+    <p class="text-sm font-medium text-blue-600 mb-2">Step ${step.index + 1} of ${step.count}</p>
+    <h1 class="text-3xl font-bold text-gray-900 mb-4">Authorize ${escapeHtml(provider.providerName)}</h1>
+    <p class="text-gray-600 mb-8">
+      ${escapeHtml(clientName)} uses multiple authentication providers. Authorize them one at a time.
+    </p>
+    ${errorBanner}
+    <form method="POST" action="${escapeHtml(callbackPath)}" id="federated-step-form">
+      <input type="hidden" name="pending_auth_id" value="${escapeHtml(pendingAuthId)}">
+      <input type="hidden" name="federated" value="true">
+      <input type="hidden" name="federated_step" value="${step.index}">
+      <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
+
+      <div class="p-4 bg-white border-2 border-blue-500 rounded-xl mb-8">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="font-semibold text-gray-900">${escapeHtml(provider.providerName)}</span>
+          ${primaryBadge}
+        </div>
+        <p class="text-sm text-gray-500">Mode: ${escapeHtml(provider.mode)}</p>
+        ${providerUrl}
+        ${appIds}
+      </div>
+      ${emailField}
+      <div class="flex flex-row-reverse gap-4">
+        <button type="submit" name="action" value="continue"
+          class="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
+          ${step.last ? 'Finish' : 'Continue'}
+        </button>
+        ${skipButton}
+        ${backButton}
+      </div>
+    </form>
+    ${skipNote}`;
+
+  return wideLayout(content, { title: `Authorize ${provider.providerName}` });
+}
+
+/**
  * A hidden field to round-trip on the consent form (identity / federated
  * context) so the consent POST back to `/oauth/callback` carries everything the
  * mint step needs.

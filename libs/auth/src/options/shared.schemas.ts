@@ -800,10 +800,15 @@ export const incrementalAuthConfigSchema = z.object({
   allowSkip: z.boolean().default(true),
 
   /**
-   * Show all apps in a single authorization page (vs step-by-step)
+   * Show every provider on one picker page (`true`), or one per page (`false`):
+   * the sign-in then walks the picker's providers in order, and each step
+   * links or skips one of them (with Back to change an answer). Each step is
+   * checked server-side: a CSRF token, and `allowSkip` and
+   * `federatedAuth.requiredProviders` refuse skipping a required provider.
+   * The last step carries the sign-in fields, and finishes the sign-in as the
+   * one-page picker does. A custom `@AuthUi({ slot: 'federated' })` page gets
+   * the step in `extras.step` (see `FederatedStep`).
    * @default true
-   * @deprecated Has no effect: the provider picker always shows every app on
-   * one page, and `false` logs a startup warning.
    */
   showAllAppsAtOnce: z.boolean().default(true),
 });

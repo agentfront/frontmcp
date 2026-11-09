@@ -87,6 +87,8 @@ const upstreamProviders = buildUpstreamProviders();
     providers: upstreamProviders,
     // No JWT until at least one provider is linked.
     federatedAuth: { stateValidation: 'strict', minProviders: 1 },
+    // PROVIDER_STEPS=1 asks about one provider per page instead of one picker page.
+    ...(process.env['PROVIDER_STEPS'] === '1' ? { incrementalAuth: { enabled: true, showAllAppsAtOnce: false } } : {}),
   },
   transport: {
     sessionMode: 'stateful',
