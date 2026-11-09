@@ -65,7 +65,7 @@ import { checkHookOrder, hookRunsOf } from '../hooks/hook-order';
 import HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls, serverProviderHooks } from '../hooks/hooks.utils';
 import { type JobExecutionManager } from '../job/execution/job-execution.manager';
-import type { JobsConfig } from '../job/job-scope.helper';
+import type { JobsConfig, WorkflowEventListening } from '../job/job-scope.helper';
 import type JobRegistry from '../job/job.registry';
 import { normalizeJob } from '../job/job.utils';
 import { type JobDefinitionStore } from '../job/store/job-definition.interface';
@@ -235,6 +235,7 @@ export class Scope extends ScopeEntry {
   private _scopeChannels?: ChannelRegistry;
   private _channelNotificationService?: ChannelNotificationService;
   private _channelEventBus?: ChannelEventBus;
+  private _workflowEvents?: WorkflowEventListening;
   private _channelTeardown?: () => Promise<void>;
 
   /** Health service for liveness and readiness probes (optional) */
@@ -1589,7 +1590,7 @@ export class Scope extends ScopeEntry {
   }
 
   get channelEventBus(): ChannelEventBus | undefined {
-    return this._channelEventBus;
+    return this._channelEventBus ?? this._workflowEvents?.bus;
   }
 
   /**
@@ -1636,7 +1637,8 @@ export class Scope extends ScopeEntry {
     this._jobExecutionManager = result.executionManager;
     this._jobStateStore = result.stateStore;
     this._jobDefinitionStore = result.definitionStore;
-    this._channelEventBus = result.eventBus;
+    this._workflowEvents = result.workflowEvents;
+    this._channelEventBus ??= result.workflowEvents?.bus;
 
     // Register job/workflow management tools
     for (const toolCls of result.managementTools) {

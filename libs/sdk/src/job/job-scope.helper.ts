@@ -9,6 +9,7 @@ import {
 } from '../channel/sources/completion-events';
 import { type JobCompletionEvent } from '../channel/sources/job-completion.source';
 import { type EntryOwnerRef, type RedisOptionsInput, type ScopeEntry } from '../common';
+import { type WorkflowEntry } from '../common/entries/workflow.entry';
 import { type JobType } from '../common/interfaces/job.interface';
 import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
@@ -144,8 +145,15 @@ export interface JobCapabilitiesResult {
   stateStore: JobStateStore;
   definitionStore: JobDefinitionStore;
   managementTools: any[];
-  /** The bus `trigger: 'event'` workflows listen on; undefined when none has that trigger, or in a detached runner. */
-  eventBus?: ChannelEventBus;
+  /** What starts the `trigger: 'event'` workflows' runs; undefined in a detached runner. */
+  workflowEvents?: WorkflowEventListening;
+}
+
+/** The `trigger: 'event'` workflows listening on the scope's event bus, those registered later included. */
+export interface WorkflowEventListening {
+  /** The bus they listen on; undefined until a workflow has `trigger: 'event'`. */
+  readonly bus: ChannelEventBus | undefined;
+  stop(): void;
 }
 
 /**
@@ -237,10 +245,10 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
   });
   scope.resources.registerDynamicResource(JobRunResource);
   // `trigger: 'event'` workflows listen on the scope's event bus, which app-event channel sources share
-  const eventBus = jobWorker
+  const workflowEvents = jobWorker
     ? undefined
     : listenToEvents(scope, workflowRegistry, executionManager, jobRegistry, logger);
-  if (eventBus) scope.onDispose(eventBus.stop);
+  if (workflowEvents) scope.onDispose(() => workflowEvents.stop());
   // Runs a dead runner left in a shared store are settled in the background, once the registries exist
   if (stateStoreType !== 'memory' && !jobWorker) {
     void executionManager
@@ -282,7 +290,7 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     stateStore,
     definitionStore,
     managementTools,
-    eventBus: eventBus?.bus,
+    workflowEvents,
   };
 }
 
@@ -333,25 +341,46 @@ export function unregistersAppJobEntries(
   };
 }
 
-/** A bus that starts the `trigger: 'event'` workflows' runs, and what stops it; undefined when no workflow has one. */
+/**
+ * Start the runs of the `trigger: 'event'` workflows on the scope's event bus, and keep doing so as workflows are
+ * registered and unregistered later (an ESM app's new version). The bus is the scope's when it has one, else one made
+ * for the first such workflow.
+ */
 function listenToEvents(
   scope: ScopeEntry,
   workflows: WorkflowRegistryInterface,
   manager: JobExecutionManager,
   jobs: JobRegistryInterface,
   logger: FrontMcpLogger,
-): { bus: ChannelEventBus; stop: () => void } | undefined {
-  const listening = eventWorkflows(workflows.getWorkflows(true));
-  if (listening.length === 0) return undefined;
-  const bus = new ChannelEventBus(logger);
-  const stop = listenToWorkflowEvents(listening, {
-    bus,
-    manager,
-    jobs,
-    authoritiesContextBuilder: () => scope.authoritiesContextBuilder,
-    logger,
-  });
-  return { bus, stop };
+): WorkflowEventListening {
+  let bus: ChannelEventBus | undefined;
+  const listening = new Map<WorkflowEntry, () => void>();
+  const listeners = { manager, jobs, authoritiesContextBuilder: () => scope.authoritiesContextBuilder, logger };
+  const followRegistry = () => {
+    const current = new Set(eventWorkflows(workflows.getWorkflows(true)));
+    for (const [workflow, stopListening] of listening) {
+      if (current.has(workflow)) continue;
+      stopListening();
+      listening.delete(workflow);
+    }
+    for (const workflow of current) {
+      if (listening.has(workflow)) continue;
+      bus ??= scope.channelEventBus ?? new ChannelEventBus(logger);
+      listening.set(workflow, listenToWorkflowEvents([workflow], { ...listeners, bus }));
+    }
+  };
+  followRegistry();
+  const unsubscribe = workflows.subscribe({}, followRegistry);
+  return {
+    get bus() {
+      return bus;
+    },
+    stop: () => {
+      unsubscribe();
+      for (const stopListening of listening.values()) stopListening();
+      listening.clear();
+    },
+  };
 }
 
 /** Why a server cannot start detached runs, and what to do instead; undefined when it can. */
