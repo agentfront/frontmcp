@@ -30,6 +30,8 @@ The return value must be an `AuthoritiesResult`:
 interface AuthoritiesResult {
   /** Whether access was granted */
   granted: boolean;
+  /** With `granted: false`: the check could not be decided, so a `not` around it still denies */
+  unresolved?: boolean;
   /** Human-readable reason for denial (kept for backward compatibility) */
   deniedBy?: string;
   /** Structured denial data (machine-parsable) */
