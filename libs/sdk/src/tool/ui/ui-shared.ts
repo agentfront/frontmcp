@@ -8,6 +8,7 @@ import type { RenderToolTemplateOptions } from '@frontmcp/uipack/adapters';
 import type { ImportResolver } from '@frontmcp/uipack/resolver';
 
 import { InternalMcpError } from '../../errors/mcp.error';
+import { ToolUiConfigurationError } from '../../errors/tool-ui.errors';
 import { detectUIType, warnIfComponentReference } from './template-detection';
 
 /** The `tools/call` `_meta` key a widget's bridge sets on its own calls, as `@frontmcp/uipack/bridge-runtime` names it. */
@@ -116,6 +117,18 @@ export class ToolUIRegistry {
     warnIfComponent(toolName, template, this.options.logger ?? console);
   }
 
+  /**
+   * Refuse, at startup, a tool whose `ui` sets a rendering option its template cannot take.
+   *
+   * @throws ToolUiConfigurationError naming the tool and each option
+   */
+  async checkRenderOptions(toolName: string, uiConfig: Record<string, unknown> | undefined): Promise<void> {
+    if (!uiConfig) return;
+    await this.load();
+    const problems = this.loadedRenderer.describeRenderOptionProblems(uiConfig['template'], renderOptions(uiConfig));
+    if (problems.length > 0) throw new ToolUiConfigurationError(toolName, problems);
+  }
+
   /** The tool that advertised `uri` as its custom `ui.resourceUri`. */
   resolveCustomUri(uri: string): string | undefined {
     return this.customUris.get(uri);
@@ -197,6 +210,7 @@ export class ToolUIRegistry {
       displayMode: uiConfig?.['displayMode'] as RenderToolTemplateOptions['displayMode'],
       csp: pageCsp(uiConfig),
       ...this.stringResultOptions(uiConfig),
+      ...renderOptions(uiConfig),
     });
 
     this.widgets.set(toolName, result.html);
@@ -303,10 +317,18 @@ export class ToolUIRegistry {
       displayMode: uiConfig?.['displayMode'] as RenderToolTemplateOptions['displayMode'],
       csp: pageCsp(uiConfig),
       ...this.stringResultOptions(uiConfig),
+      ...renderOptions(uiConfig),
     });
 
     return { meta: result.meta };
   }
+}
+
+/** A tool's `ui` rendering options, as `renderToolTemplate` takes them. */
+function renderOptions(
+  uiConfig: Record<string, unknown> | undefined,
+): Pick<RenderToolTemplateOptions, 'contentSecurity'> {
+  return { contentSecurity: uiConfig?.['contentSecurity'] as RenderToolTemplateOptions['contentSecurity'] };
 }
 
 // ============================================

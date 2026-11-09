@@ -1192,6 +1192,10 @@ export class Scope extends ScopeEntry {
       const resourceUri = tool.metadata.ui?.resourceUri;
       this.toolUIRegistry.registerTool(tool.metadata.name, typeof resourceUri === 'string' ? resourceUri : undefined);
       this.toolUIRegistry.checkTemplate(tool.metadata.name, tool.metadata.ui?.template);
+      await this.toolUIRegistry.checkRenderOptions(
+        tool.metadata.name,
+        tool.metadata.ui as Record<string, unknown> | undefined,
+      );
       for (const message of describeIgnoredUiOptions(
         tool.metadata.name,
         tool.metadata.ui as Record<string, unknown> | undefined,

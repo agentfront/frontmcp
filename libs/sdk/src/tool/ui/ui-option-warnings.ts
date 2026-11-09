@@ -5,7 +5,6 @@ import { validateCSPDomain } from '@frontmcp/uipack/shell';
  * but a developer who sets it expects an effect, so startup says that there is none.
  */
 const IGNORED_UI_OPTIONS = [
-  'contentSecurity',
   'hydrate',
   'runtimeOptions',
   'mdxComponents',

@@ -46,6 +46,9 @@ export {
 // Trusted Markup
 export { html, trustedHtml, isTrustedHtml, type TrustedHtml } from './trusted-html';
 
+// Markup Sanitizer (`ui.contentSecurity`)
+export { sanitizeHtml } from './sanitize-html';
+
 // Custom Shell Types
 export type {
   ShellPlaceholderName,
