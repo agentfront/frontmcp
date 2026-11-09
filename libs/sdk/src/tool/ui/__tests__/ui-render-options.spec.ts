@@ -44,6 +44,35 @@ describe('ToolUIRegistry rendering options', () => {
     await expect(check).rejects.toThrow('Tool "weather": `ui.contentSecurity` sanitizes the markup');
   });
 
+  it('converts a Markdown template with runtimeOptions.markdown, in a call render and at startup', async () => {
+    const registry = new ToolUIRegistry();
+    const uiConfig = {
+      template: '| a | b |\n|---|---|\n| 1 | ~~2~~ |\n\n```json\n{"a": 1}\n```',
+      runtimeOptions: { markdown: { gfm: true, highlightTheme: 'github' } },
+    };
+    await registry.checkRenderOptions('report', uiConfig);
+
+    const { meta } = await registry.renderAndRegisterAsync({ toolName: 'report', uiConfig });
+    expect(body(meta)).toContain('<td>1</td><td><del>2</del></td>');
+    expect(body(meta)).toContain('<code class="hljs language-json">');
+
+    await registry.compileStaticWidgetAsync({ toolName: 'report', template: uiConfig.template, uiConfig });
+    expect(registry.getStaticWidget('report')).toContain('<td>1</td><td><del>2</del></td>');
+  });
+
+  it('refuses runtimeOptions.markdown on a template that is not Markdown, and a theme that does not exist', async () => {
+    const registry = new ToolUIRegistry();
+    await expect(
+      registry.checkRenderOptions('report', { template: '<p>x</p>', runtimeOptions: { markdown: { gfm: true } } }),
+    ).rejects.toThrow('Tool "report": `ui.runtimeOptions.markdown` applies to a Markdown template');
+    const missingTheme = registry.checkRenderOptions('report', {
+      template: '# x',
+      runtimeOptions: { markdown: { highlightTheme: 'no-such-theme' } },
+    });
+    await expect(missingTheme).rejects.toBeInstanceOf(ToolUiConfigurationError);
+    await expect(missingTheme).rejects.toThrow('"no-such-theme", which is not a highlight.js theme');
+  });
+
   it('accepts a tool without rendering options', async () => {
     await expect(
       new ToolUIRegistry().checkRenderOptions('weather', { template: { file: './weather.widget.tsx' } }),

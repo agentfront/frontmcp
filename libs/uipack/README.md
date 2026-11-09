@@ -12,6 +12,7 @@ npm install @frontmcp/uipack
 
 - No React. The one runtime dependency is `zod`; npm 7 and later also install the peer `@frontmcp/lazy-zod`, at the same version.
 - `esbuild` is an optional peer, needed only to bundle `.tsx` and `.jsx` widget files. Install it as a dependency, not a dev dependency, since it's loaded when a widget is rendered.
+- `highlight.js` is an optional peer, needed only for `markdown.highlightTheme` (`ui.runtimeOptions.markdown.highlightTheme`). It's loaded from your project when a template uses it.
 - It runs on Node.js 24 or later.
 
 ## Usage
@@ -167,11 +168,11 @@ It fetches the `.d.ts` files of each import from esm.sh, following their own imp
 
 ### Adapters
 
-| Export                                            | Description                                                                                                                                                                                                                                                                                                                        |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `renderToolTemplate(options)`                     | Renders a template as a call does: `{ html, uiType, hash, size, meta }`. Options: `toolName`, `input`, `output`, `template`, `platformType?`, `resourceMode?`, `sizing?`, `csp?`, `escapeStringResults?`, `contentSecurity?` (sanitize the template's markup with `sanitizeHtml()`). Throws for an option the template can't take. |
-| `describeRenderOptionProblems(template, options)` | The rendering options set for a template that it can't take, one sentence each; `[]` when there are none.                                                                                                                                                                                                                          |
-| `MCP_APPS_MIME_TYPE`                              | `"text/html;profile=mcp-app"`.                                                                                                                                                                                                                                                                                                     |
+| Export                                            | Description                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `renderToolTemplate(options)`                     | Renders a template as a call does: `{ html, uiType, hash, size, meta }`. Options: `toolName`, `input`, `output`, `template`, `platformType?`, `resourceMode?`, `sizing?`, `csp?`, `escapeStringResults?`, `contentSecurity?` (sanitize the template's markup with `sanitizeHtml()`), `markdown?` (`{ gfm?, highlightTheme? }` for a Markdown template). Throws for an option the template can't take. |
+| `describeRenderOptionProblems(template, options)` | The rendering options set for a template that it can't take, one sentence each; `[]` when there are none.                                                                                                                                                                                                                                                                                             |
+| `MCP_APPS_MIME_TYPE`                              | `"text/html;profile=mcp-app"`.                                                                                                                                                                                                                                                                                                                                                                        |
 
 ### Shell
 

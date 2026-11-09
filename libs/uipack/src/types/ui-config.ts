@@ -612,18 +612,35 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
 
   /**
    * Runtime options for specific renderers.
-   *
-   * @deprecated Has no effect: there is no hydration, and Markdown is converted with fixed rules.
-   * Startup logs a warning when it is set.
    */
   runtimeOptions?: {
     /** Enable React hydration after SSR */
     hydrate?: boolean;
-    /** Markdown rendering options */
+    /**
+     * How a Markdown template (a string template without both `<` and `>`) is converted to HTML.
+     * Unset, the converter writes headings, paragraphs, lists, fenced code, emphasis, inline code
+     * and links. Setting `gfm` or `highlightTheme` on a template that isn't Markdown fails startup.
+     *
+     * @example
+     * ```typescript
+     * ui: {
+     *   template: '| Region | Sales |\n|---|---:|\n| EU | 12 |\n\n```ts\nconst total = 12;\n```',
+     *   runtimeOptions: { markdown: { gfm: true, highlightTheme: 'github' } },
+     * }
+     * ```
+     */
     markdown?: {
-      /** Enable GitHub-flavored markdown */
+      /**
+       * GitHub-flavored Markdown: tables (with `:---:` alignment), task list items (`- [x]`),
+       * `~~strikethrough~~`, and links for bare `https://` and `www.` URLs. Raw HTML stays escaped.
+       */
       gfm?: boolean;
-      /** Syntax highlighting theme */
+      /**
+       * Highlight fenced code that names its language (```` ```ts ````) on the server with highlight.js,
+       * an optional peer to install, and put this theme's stylesheet in the page: the name of a
+       * stylesheet in `highlight.js/styles`, such as `'github'`, `'github-dark'` or
+       * `'base16/dracula'`. A missing highlight.js or theme fails startup.
+       */
       highlightTheme?: string;
     };
   };
