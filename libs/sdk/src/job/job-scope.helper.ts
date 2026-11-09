@@ -37,7 +37,7 @@ import GetJobStatusTool from './tools/get-job-status.tool';
 import ListJobsTool from './tools/list-jobs.tool';
 import RegisterJobTool from './tools/register-job.tool';
 import RemoveJobTool from './tools/remove-job.tool';
-import { describeIgnoredTrigger } from './unread-job-options';
+import { describeIgnoredTrigger, describeUncheckedPermissions } from './unread-job-options';
 
 export interface JobsConfig {
   enabled: boolean;
@@ -187,7 +187,7 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
 
   // Options the schemas accept and nothing reads: say so once, in the server that serves the entries
   if (!jobWorker) {
-    for (const message of describeUnreadOptions(workflowRegistry)) logger.warn(message);
+    for (const message of describeUnreadOptions(jobRegistry, workflowRegistry)) logger.warn(message);
   }
 
   // A detached job is refused here, at boot, where its process could not outlive the server
@@ -339,6 +339,14 @@ function completionStatusOf(state: unknown): JobCompletionEvent['status'] | unde
 }
 
 /** The startup warnings about the job and workflow options nothing reads. */
-function describeUnreadOptions(workflows: WorkflowRegistryInterface): string[] {
-  return workflows.getWorkflows(true).flatMap((workflow) => describeIgnoredTrigger(workflow.metadata));
+function describeUnreadOptions(jobs: JobRegistryInterface, workflows: WorkflowRegistryInterface): string[] {
+  return [
+    ...jobs.getJobs(true).flatMap((job) => describeUncheckedPermissions('Job', job.name, job.metadata.permissions)),
+    ...workflows
+      .getWorkflows(true)
+      .flatMap((workflow) => [
+        ...describeIgnoredTrigger(workflow.metadata),
+        ...describeUncheckedPermissions('Workflow', workflow.name, workflow.metadata.permissions),
+      ]),
+  ];
 }
