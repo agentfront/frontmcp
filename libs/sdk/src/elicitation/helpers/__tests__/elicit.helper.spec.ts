@@ -1,7 +1,7 @@
 import { z } from '@frontmcp/lazy-zod';
 
-import { type FrontMcpContext } from '../../../context';
-import { ElicitationFallbackRequired } from '../../../errors';
+import { FrontMcpContext } from '../../../context';
+import { ElicitationFallbackRequired, InvalidInputError } from '../../../errors';
 import { type ElicitOptions, type ElicitResult } from '../../elicitation.types';
 import { performElicit, type ElicitHelperDeps } from '../elicit.helper';
 
@@ -19,8 +19,14 @@ function depsWith(context: Partial<FrontMcpContext>): ElicitHelperDeps {
   };
 }
 
-function transportAnswering(answer: ElicitResult): Partial<FrontMcpContext> {
-  return { transport: { elicit: async () => answer } } as unknown as Partial<FrontMcpContext>;
+function transportAnswering(answer: ElicitResult): FrontMcpContext {
+  const context = new FrontMcpContext({ sessionId: 'session-1', scopeId: 'scope-1' });
+  context.setTransport({
+    type: 'streamable-http',
+    jsonRpcRequestId: 1,
+    sendElicitRequest: async () => answer,
+  } as unknown as Parameters<FrontMcpContext['setTransport']>[0]);
+  return context;
 }
 
 describe('performElicit: an accepted URL-mode answer carries no content', () => {
@@ -78,5 +84,61 @@ describe('performElicit: an empty elicitationId counts as left out', () => {
 
     await expect(asking).rejects.toBeInstanceOf(ElicitationFallbackRequired);
     await expect(asking).rejects.toMatchObject({ elicitId: expect.stringMatching(/^elicit-/) });
+  });
+});
+
+describe('performElicit: an answer reaches the caller only as the requested schema reads it', () => {
+  const confirmSchema = z.object({ confirm: z.boolean() });
+  const wrongType: ElicitResult = { status: 'accept', content: { confirm: 'yes' } };
+
+  function preResolved(answer: ElicitResult): Partial<FrontMcpContext> {
+    return {
+      getPreResolvedElicitResult: () => answer,
+      clearPreResolvedElicitResult: () => undefined,
+    } as unknown as Partial<FrontMcpContext>;
+  }
+
+  function mrtrAnswering(answer: ElicitResult): Partial<FrontMcpContext> {
+    return {
+      getMrtrExchange: () => ({ clientDeclaredRevision: true, resolveElicitation: () => answer }),
+    } as unknown as Partial<FrontMcpContext>;
+  }
+
+  it('refuses a session answer that does not match the schema', async () => {
+    const asking = performElicit(depsWith(transportAnswering(wrongType)), 'Proceed?', confirmSchema);
+
+    await expect(asking).rejects.toBeInstanceOf(InvalidInputError);
+  });
+
+  it('refuses an answer given through sendElicitationResult that does not match the schema', async () => {
+    const asking = performElicit(depsWith(preResolved(wrongType)), 'Proceed?', confirmSchema);
+
+    await expect(asking).rejects.toBeInstanceOf(InvalidInputError);
+  });
+
+  it('hands over the parsed content of a matching session answer', async () => {
+    const answer: ElicitResult = { status: 'accept', content: { confirm: true, extra: 'dropped' } };
+
+    const result = await performElicit(depsWith(transportAnswering(answer)), 'Proceed?', confirmSchema);
+
+    expect(result).toStrictEqual({ status: 'accept', content: { confirm: true } });
+  });
+
+  it.each<[string, Partial<FrontMcpContext>]>([
+    ['a session', transportAnswering({ status: 'decline', content: { confirm: 'yes' } })],
+    ['sendElicitationResult', preResolved({ status: 'decline', content: { confirm: 'yes' } })],
+    ['MCP 2026-07-28', mrtrAnswering({ status: 'decline', content: { confirm: 'yes' } })],
+  ])('drops the content of a declined answer from %s', async (_label, context) => {
+    const result = await performElicit(depsWith(context), 'Proceed?', confirmSchema);
+
+    expect(result).toStrictEqual({ status: 'decline' });
+  });
+
+  it('drops the content of a cancelled answer', async () => {
+    const answer: ElicitResult = { status: 'cancel', content: { confirm: true } };
+
+    const result = await performElicit(depsWith(transportAnswering(answer)), 'Proceed?', confirmSchema);
+
+    expect(result).toStrictEqual({ status: 'cancel' });
   });
 });

@@ -19,6 +19,7 @@ import { randomUUID, sha256Hex } from '@frontmcp/utils';
 import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { type SessionIdPayload } from '../common/types';
 import { type ElicitOptions, type ElicitResult } from '../elicitation';
+import { checkedElicitAnswer } from '../elicitation/helpers/checked-elicit-answer';
 import { InvalidInputError } from '../errors/mcp.error';
 import type { AIPlatformType, ClientInfo } from '../notification';
 import { STATELESS_SESSION_ID } from '../transport/transport.types';
@@ -155,9 +156,10 @@ export interface TransportAccessor {
    * @param message - Message to display to the user
    * @param requestedSchema - Zod schema for validating the response
    * @param options - Elicit options (mode, ttl, elicitationId)
-   * @returns Typed elicit result with status and validated content
+   * @returns Typed elicit result with status, and content parsed by the schema when the answer is an accepted form
    * @throws ElicitationNotSupportedError if client doesn't support elicitation
    * @throws ElicitationTimeoutError if request times out
+   * @throws InvalidInputError if accepted content does not match the schema
    */
   elicit<S extends ZodType>(
     message: string,
@@ -456,7 +458,7 @@ export class FrontMcpContext {
       // TODO: Consider deriving supportsElicit from transport capabilities
       // instead of hardcoding true when transport is available
       supportsElicit: true,
-      elicit: (message, schema, options) => {
+      elicit: async (message, schema, options) => {
         // Use the JSON-RPC request ID from the transport for proper stream routing
         // The MCP SDK uses this to route elicitation requests through the correct SSE stream
         const relatedRequestId = transportRef.jsonRpcRequestId;
@@ -468,7 +470,8 @@ export class FrontMcpContext {
               'Ensure the transport context is properly initialized before calling elicit().',
           );
         }
-        return transportRef.sendElicitRequest(relatedRequestId, message, schema, options);
+        const answer = await transportRef.sendElicitRequest(relatedRequestId, message, schema, options);
+        return checkedElicitAnswer(answer, schema, options);
       },
     };
   }
