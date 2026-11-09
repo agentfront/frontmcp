@@ -140,7 +140,7 @@ describe('McpTestClient on protocol 2026-07-28', () => {
     expect(mcp.sessionId).toBe('');
   });
 
-  it('declares the revision and client in every request', async () => {
+  it('declares the revision, client and log level in every request', async () => {
     const sent = stubStatelessServer();
 
     await connectStateless();
@@ -154,7 +154,20 @@ describe('McpTestClient on protocol 2026-07-28', () => {
       [META_VERSION]: PROTOCOL,
       'io.modelcontextprotocol/clientInfo': { name: '@frontmcp/testing', version: '0.4.0' },
       'io.modelcontextprotocol/clientCapabilities': { sampling: {}, elicitation: { form: {} } },
+      'io.modelcontextprotocol/logLevel': 'debug',
     });
+  });
+
+  it('asks for no log messages with mcpLogLevel false', async () => {
+    const sent = stubStatelessServer();
+    const mcp = McpTestClient.create({ baseUrl: BASE_URL, publicMode: true, protocolVersion: PROTOCOL })
+      .withMcpLogLevel(false)
+      .build();
+    clients.push(mcp);
+
+    await mcp.connect();
+
+    expect(sent[0].body.params?.['_meta']).not.toHaveProperty('io.modelcontextprotocol/logLevel');
   });
 
   it('lists the tools once before the first call, and mirrors x-mcp-header arguments into headers', async () => {

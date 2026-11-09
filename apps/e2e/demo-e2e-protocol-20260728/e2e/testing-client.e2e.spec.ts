@@ -50,12 +50,18 @@ test.describe('protocol 2026-07-28 — McpTestClient', () => {
     expect(result.json()).toEqual({ action: 'ship it', confirmed: true });
   });
 
-  test("has the call's progress when tools.call() returns", async ({ mcp }) => {
+  test("has the call's progress and log messages when tools.call() returns", async ({ mcp }) => {
     const progress = mcp.notifications.collectProgress();
 
     await mcp.tools.call('chatty', { steps: 2 });
 
-    expect(progress.all.map(({ progress: value }) => value)).toEqual([1, 2]);
+    expect(progress.all.map(({ progress: value, message }) => ({ value, message }))).toEqual([
+      { value: 1, message: 'step 1' },
+      { value: 2, message: 'step 2' },
+    ]);
+    expect(
+      mcp.notifications.collect().received.filter(({ method }) => method === 'notifications/message'),
+    ).toHaveLength(4);
   });
 
   test('fails with the JSON-RPC error of a method 2026-07-28 removed', async ({ mcp }) => {

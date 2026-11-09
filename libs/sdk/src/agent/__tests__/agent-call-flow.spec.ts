@@ -145,7 +145,7 @@ describe('the agents:call-agent flow under the invoke_<agent> tool', () => {
 describe('the agents:call-agent flow keeps the tools/call request correlation', () => {
   // The JSON-RPC id routes an elicitation through the request's stream, and the progress token
   // tags progress notifications. Both belong to the tools/call request that invoked the agent.
-  const seen: { relatedRequestId?: unknown; progressToken?: unknown } = {};
+  const seen: { relatedRequestId?: unknown; progressToken?: unknown; progressRequestId?: unknown } = {};
 
   @Agent({ name: 'correlated_helper', inputSchema: {}, llm: { adapter: answeringAdapter } })
   class CorrelatedHelperAgent extends AgentContext {
@@ -162,7 +162,7 @@ describe('the agents:call-agent flow keeps the tools/call request correlation', 
   @App({ id: 'correlated', name: 'Correlated', agents: [CorrelatedHelperAgent] })
   class CorrelatedApp {}
 
-  it('routes elicitation with the tools/call request id and sends progress with its token', async () => {
+  it('routes elicitation and progress with the tools/call request id, and sends progress with its token', async () => {
     const instance = await FrontMcpInstance.createForGraph({
       info: { name: 'agent-call-flow-correlation', version: '1.0.0' },
       apps: [CorrelatedApp],
@@ -174,8 +174,9 @@ describe('the agents:call-agent flow keeps the tools/call request correlation', 
     }>;
     const sendProgress = jest
       .spyOn(scope.notifications, 'sendProgressNotification')
-      .mockImplementation(async (_sessionId, token) => {
+      .mockImplementation(async (_sessionId, token, _progress, _total, _message, requestId) => {
         seen.progressToken = token;
+        seen.progressRequestId = requestId;
         return true;
       });
     const transport = {
@@ -197,6 +198,7 @@ describe('the agents:call-agent flow keeps the tools/call request correlation', 
     expect(JSON.stringify(result)).toContain('correlated');
     expect(seen.relatedRequestId).toBe(42);
     expect(seen.progressToken).toBe('progress-7');
+    expect(seen.progressRequestId).toBe(42);
     sendProgress.mockRestore();
   });
 });

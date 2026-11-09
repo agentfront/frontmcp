@@ -94,12 +94,17 @@ test.use({
   publicMode: true, // send no Authorization header, for auth: { mode: 'public' }
   logLevel: 'debug', // the server's own log level
   protocolVersion: '2026-07-28', // default: '2025-06-18'
+  mcpLogLevel: 'info', // the log messages the clients ask for; default: 'debug', false for none
   env: { API_KEY: 'test' },
   startupTimeout: 30_000,
 });
 ```
 
 Call `test.use()` at the top of a file to configure every test in it, or inside `test.describe()` to configure that block, which then gets a server of its own. `baseUrl` tests a server that's already running instead of starting one.
+
+## Notifications
+
+A tool's progress and log messages reach `mcp.notifications` by the time `mcp.tools.call()` returns, from a FrontMCP server that sends them on the call's own response (1.11.3 and later). The client asks for every log message unless `mcpLogLevel` says otherwise, and each progress update keeps its `message`.
 
 ## Protocol versions
 

@@ -5,6 +5,8 @@
 
 import type { JWK } from 'jose';
 
+import type { LoggingLevel } from '@frontmcp/protocol';
+
 import type { McpTestClient } from '../client/mcp-test-client';
 import type { McpTestClientBuilder } from '../client/mcp-test-client.builder';
 
@@ -57,6 +59,11 @@ export interface TestConfig {
    * see `McpTestClientConfig.protocolVersion`.
    */
   protocolVersion?: string;
+  /**
+   * The level of the log messages (`notifications/message`) the clients ask the server for
+   * (default: 'debug'); `false` asks for none. Not the server's own log level, which is `logLevel`.
+   */
+  mcpLogLevel?: LoggingLevel | false;
   /** Environment variables to pass to the server */
   env?: Record<string, string>;
   /** Startup timeout in ms (default: 30000) */
