@@ -1,13 +1,16 @@
 import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
+import { type CallToolResult } from '@frontmcp/protocol';
 
+import { createTestFetchServer, rpc20260728 } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { App, Job, JobContext, LogLevel, Provider } from '../../common';
 import { type DirectMcpServer } from '../../direct/direct.types';
-import { InvalidOutputError } from '../../errors';
+import { InvalidInputError, InvalidOutputError, JobTimeoutError, PublicMcpError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
 import { JobExecutionManager } from '../execution/job-execution.manager';
+import { runJobAttemptFlow, willRetryJobAttempt } from '../job-attempt';
 import { MemoryJobStateStore } from '../store/memory-job-state.store';
 
 @Provider({ name: 'TicketStore' })
@@ -87,11 +90,56 @@ class EarlyAnswerJob extends JobContext {
   }
 }
 
+let ticketRuns = 0;
+
+@Job({
+  name: 'file_ticket',
+  inputSchema: { title: z.string() },
+  outputSchema: { filed: z.string() },
+  retry: { maxAttempts: 3, backoffMs: 1 },
+})
+class FileTicketJob extends JobContext {
+  async execute(input: { title: string }) {
+    ticketRuns++;
+    return { filed: input.title };
+  }
+}
+
+let refusalRuns = 0;
+
+@Job({ name: 'refuse_sync', inputSchema: {}, outputSchema: {}, retry: { maxAttempts: 3, backoffMs: 1 } })
+class RefuseSyncJob extends JobContext {
+  async execute(): Promise<Record<string, never>> {
+    refusalRuns++;
+    throw new PublicMcpError('The account is closed', 'ACCOUNT_CLOSED', 409);
+  }
+}
+
+let slowRuns = 0;
+
+@Job({
+  name: 'slow_sync',
+  inputSchema: {},
+  outputSchema: {},
+  timeout: 20,
+  retry: { maxAttempts: 2, backoffMs: 1 },
+})
+class SlowSyncJob extends JobContext {
+  async execute() {
+    slowRuns++;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    return {};
+  }
+}
+
 @App({
   id: 'desk',
   name: 'Desk',
   providers: [TicketStore],
   jobs: [
+    FileTicketJob,
+    RefuseSyncJob,
+    SlowSyncJob,
     CountTicketsJob,
     FlakySyncJob,
     WrongShapeJob,
@@ -186,5 +234,66 @@ describe('job execution', () => {
     expect(result.structuredContent).toEqual(
       expect.objectContaining({ state: 'completed', result: { answer: 'early' } }),
     );
+  });
+
+  it('fails bad input with INVALID_INPUT and its issues on the first attempt, and never retries it', async () => {
+    ticketRuns = 0;
+    const scope = (server as unknown as { scope: Scope }).scope;
+    const job = scope.jobs?.findByName('file_ticket');
+    if (!job) throw new Error('file_ticket is not registered');
+    const manager = new JobExecutionManager(new MemoryJobStateStore(), scope.logger);
+
+    const run = manager.executeJob(job, { title: 7 });
+
+    await expect(run).rejects.toBeInstanceOf(InvalidInputError);
+    await expect(run).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      validationErrors: [expect.objectContaining({ path: ['title'] })],
+    });
+    expect(ticketRuns).toBe(0);
+    const [failed] = await manager.listRuns({ jobId: 'file_ticket' });
+    expect(failed).toEqual(expect.objectContaining({ state: 'failed', attempt: 1 }));
+  });
+
+  it('tells execute_job callers what is wrong with the input, without a stack', async () => {
+    const fetchServer = await createTestFetchServer({ info: { name: 'job-input', version: '1.0.0' }, apps: [DeskApp] });
+    const { message } = await rpc20260728(fetchServer.handler, 'tools/call', {
+      name: 'execute_job',
+      arguments: { name: 'file_ticket', input: { title: 7 } },
+    });
+
+    const result = message.result as CallToolResult;
+    const text = (result.content[0] as { text: string }).text;
+    expect(result.isError).toBe(true);
+    expect(text).toMatch(/^Invalid input for job "file_ticket"\nDetails: /);
+    expect(text).toContain('"title"');
+    expect(text).not.toMatch(/\n\s+at /);
+  });
+
+  it("fails an attempt given bad input (a workflow step's, or a hook's) with INVALID_INPUT, which is not retried", async () => {
+    const scope = (server as unknown as { scope: Scope }).scope;
+    const job = scope.jobs?.findByName('file_ticket');
+    if (!job) throw new Error('file_ticket is not registered');
+    ticketRuns = 0;
+
+    const attempt = runJobAttemptFlow({ job, input: { title: 7 }, attempt: 1, authInfo: {} });
+
+    await expect(attempt).rejects.toBeInstanceOf(InvalidInputError);
+    expect(willRetryJobAttempt(new InvalidInputError('bad'), 1, 3)).toBe(false);
+    expect(ticketRuns).toBe(0);
+  });
+
+  it('does not retry a job that fails with a PublicMcpError', async () => {
+    refusalRuns = 0;
+
+    await expect(runJob('refuse_sync')).rejects.toThrow('The account is closed');
+    expect(refusalRuns).toBe(1);
+  });
+
+  it('still retries an attempt that timed out', async () => {
+    slowRuns = 0;
+
+    await expect(runJob('slow_sync')).rejects.toBeInstanceOf(JobTimeoutError);
+    expect(slowRuns).toBe(2);
   });
 });
