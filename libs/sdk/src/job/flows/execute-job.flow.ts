@@ -19,6 +19,7 @@ import { runOnSurface } from '../../context/call-surface';
 import { InternalMcpError, JobNotAuthorizedError, JobTimeoutError } from '../../errors';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
+import type ProviderRegistry from '../../provider/provider.registry';
 import { type JobAdmissionSlot } from '../job-admission';
 import {
   EXECUTE_JOB_FLOW,
@@ -154,7 +155,9 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
   static override resolveHookOwnerId(rawInput: unknown, scope: ScopeEntry): string | undefined {
     const job = jobOf(rawInput);
     if (!job) return undefined;
-    return scope.apps.getApps().find((app) => app.providers === job.providers)?.id;
+    // The app whose provider registry the job is built on, or one below it (an ESM app's loaded version)
+    const appProviders = job.providers.subtreeBelow(scope.providers as ProviderRegistry);
+    return scope.apps.getApps().find((app) => app.providers === appProviders)?.id;
   }
 
   /** The class of the job, whose `static` hooks run from `parseInput` on (#701). */

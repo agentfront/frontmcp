@@ -20,10 +20,12 @@ import ListWorkflowsTool from '../workflow/tools/list-workflows.tool';
 import RegisterWorkflowTool from '../workflow/tools/register-workflow.tool';
 import RemoveWorkflowTool from '../workflow/tools/remove-workflow.tool';
 import WorkflowRegistry, { type WorkflowRegistryInterface } from '../workflow/workflow.registry';
+import { normalizeWorkflow } from '../workflow/workflow.utils';
 import { DETACHED_FLUSH_MS, JobExecutionManager } from './execution/job-execution.manager';
 import ExecuteJobFlow from './flows/execute-job.flow';
 import { JobAdmission, type JobAdmissionOptions } from './job-admission';
 import JobRegistry, { type JobRegistryInterface } from './job.registry';
+import { normalizeJob } from './job.utils';
 import { JobRunResource } from './resources/job-run.resource';
 import { assertRunnersAvailable } from './runner/job-runner';
 import { createJobDefinitionStore } from './store/job-definition-store.factory';
@@ -269,6 +271,53 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     stateStore,
     definitionStore,
     managementTools,
+  };
+}
+
+/**
+ * Register jobs and workflows an app serves after the job system started (an ESM app's new version). A job whose
+ * runner the server can't start is refused, as startup refuses it. Resolves to a function that unregisters them.
+ */
+export async function registerAppJobEntries(args: {
+  jobRegistry: JobRegistryInterface;
+  workflowRegistry: WorkflowRegistryInterface;
+  jobs: readonly JobType[];
+  workflows: readonly WorkflowType[];
+  providers: ProviderRegistry;
+  runner?: JobRunner;
+}): Promise<() => void> {
+  const { jobRegistry, workflowRegistry } = args;
+  assertRunnersAvailable(
+    args.jobs.map((job) => {
+      const { metadata } = normalizeJob(job);
+      return { name: metadata.name, metadata };
+    }),
+    args.runner,
+  );
+  const jobTokens = await jobRegistry.registerAppJobs(args.jobs, args.providers);
+  try {
+    const workflowTokens = workflowRegistry.registerAppWorkflows(args.workflows);
+    return () => {
+      jobRegistry.unregisterJobs(jobTokens);
+      workflowRegistry.unregisterWorkflows(workflowTokens);
+    };
+  } catch (error) {
+    jobRegistry.unregisterJobs(jobTokens);
+    throw error;
+  }
+}
+
+/** A function that unregisters the jobs and workflows an app loaded itself, which startup registered with the declared ones. */
+export function unregistersAppJobEntries(
+  jobRegistry: JobRegistryInterface,
+  workflowRegistry: WorkflowRegistryInterface,
+  entries: { jobs: readonly JobType[]; workflows: readonly WorkflowType[] },
+): () => void {
+  const jobTokens = entries.jobs.map((job) => normalizeJob(job).provide as Token);
+  const workflowTokens = entries.workflows.map((workflow) => normalizeWorkflow(workflow).provide as Token);
+  return () => {
+    jobRegistry.unregisterJobs(jobTokens);
+    workflowRegistry.unregisterWorkflows(workflowTokens);
   };
 }
 

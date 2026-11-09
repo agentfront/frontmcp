@@ -6,12 +6,15 @@ import {
   type AppFilterConfig,
   type EntryOwnerRef,
   type FrontMcpLogger,
+  type JobType,
   type LateEntryKind,
   type PrimitiveFilterKey,
   type ProviderType,
   type SkillRecord,
+  type WorkflowType,
 } from '../../common';
 import { isPrimitiveIncluded } from '../../common/utils/primitive-filter';
+import { InvalidEntityError } from '../../errors';
 import {
   esmManifestRecords,
   esmPromptRecord,
@@ -20,11 +23,13 @@ import {
   esmToolRecord,
 } from '../../esm-loader/esm-entries';
 import { type FrontMcpPackageManifest } from '../../esm-loader/esm-manifest';
+import { normalizeJob } from '../../job/job.utils';
 import { PromptInstance } from '../../prompt/prompt.instance';
 import ProviderRegistry from '../../provider/provider.registry';
 import { ResourceInstance } from '../../resource/resource.instance';
 import SkillRegistry from '../../skill/skill.registry';
 import { ToolInstance } from '../../tool/tool.instance';
+import { normalizeWorkflow } from '../../workflow/workflow.utils';
 
 /** The app a package version's entries are built for. */
 export interface EsmPackageTarget {
@@ -36,19 +41,28 @@ export interface EsmPackageTarget {
   logger: FrontMcpLogger;
 }
 
+/** The entries one loaded version of an ESM app's package serves. */
+export interface EsmVersionEntries {
+  tools: ToolInstance[];
+  resources: ResourceInstance[];
+  prompts: PromptInstance[];
+  /** The version's agents, in a registry of its own that the app's adopts while the version is served. */
+  agents?: AgentRegistry;
+  /** The version's skills, in a registry of its own that the app's adopts while the version is served. */
+  skills?: SkillRegistry;
+  /** The version's jobs, which the scope's job system builds on the version's providers. */
+  jobs: JobType[];
+  workflows: WorkflowType[];
+}
+
 /**
- * The entries one loaded version of an ESM app's package serves. The package's providers are registered in a
- * provider registry of the version's own, below the app's, and every entry of the version is built on it. Its agents
- * and skills are held in registries of the version's own too, which the app's registries adopt while it is served.
+ * One loaded version of an ESM app's package. The package's providers are registered in a provider registry of the
+ * version's own, below the app's, and every entry of the version is built on it.
  */
 export class EsmPackageVersion {
   private constructor(
     readonly providers: ProviderRegistry,
-    readonly tools: ToolInstance[],
-    readonly resources: ResourceInstance[],
-    readonly prompts: PromptInstance[],
-    readonly agents: AgentRegistry | undefined,
-    readonly skills: SkillRegistry | undefined,
+    readonly entries: EsmVersionEntries,
   ) {}
 
   /** Build every entry of `manifest`; when one fails, the providers built for it are shut down and the error thrown. */
@@ -88,11 +102,18 @@ export class EsmPackageVersion {
       const agentList = (manifest.agents ?? []).filter((raw) =>
         isPrimitiveIncluded(normalizeAgent(raw as AgentType).metadata.name, 'agents', target.filter),
       ) as AgentType[];
+      const jobs = (manifest.jobs ?? []).filter((raw) =>
+        isPrimitiveIncluded(namedEntryOf('job', normalizeJob(raw)), 'jobs', target.filter),
+      ) as JobType[];
+      const workflows = (manifest.workflows ?? []).filter((raw) =>
+        isPrimitiveIncluded(namedEntryOf('workflow', normalizeWorkflow(raw)), 'workflows', target.filter),
+      ) as WorkflowType[];
+
       const agents = agentList.length > 0 ? new AgentRegistry(providers, agentList, target.owner) : undefined;
       const skills = skillRecords.length > 0 ? new SkillRegistry(providers, skillRecords, target.owner) : undefined;
       await Promise.all([agents?.ready, skills?.ready]);
 
-      return new EsmPackageVersion(providers, tools, resources, prompts, agents, skills);
+      return new EsmPackageVersion(providers, { tools, resources, prompts, agents, skills, jobs, workflows });
     } catch (error) {
       await discardProviders(providers, target.logger);
       throw error;
@@ -107,20 +128,30 @@ export class EsmPackageVersion {
   /** The kinds of entry the version has that a scope serves only once it has one. */
   lateEntryKinds(): LateEntryKind[] {
     const kinds: LateEntryKind[] = [];
-    if (this.agents) kinds.push('agents');
-    if (this.skills) kinds.push('skills');
+    if (this.entries.agents) kinds.push('agents');
+    if (this.entries.skills) kinds.push('skills');
     return kinds;
   }
 
   /** How many entries of each kind the version serves, for the log. */
   describe(): string {
-    const agentCount = this.agents?.listAllInstances().length ?? 0;
-    const skillCount = this.skills?.getSkills(true).length ?? 0;
+    const { tools, resources, prompts, agents, skills, jobs, workflows } = this.entries;
+    const agentCount = agents?.listAllInstances().length ?? 0;
+    const skillCount = skills?.getSkills(true).length ?? 0;
     return (
-      `${this.tools.length} tools, ${this.resources.length} resources, ${this.prompts.length} prompts, ` +
-      `${agentCount} agents, ${skillCount} skills`
+      `${tools.length} tools, ${resources.length} resources, ${prompts.length} prompts, ${agentCount} agents, ` +
+      `${skillCount} skills, ${jobs.length} jobs, ${workflows.length} workflows`
     );
   }
+}
+
+/** The name of a job or workflow export; one without a name is not one, as an undecorated class isn't. */
+function namedEntryOf(kind: 'job' | 'workflow', record: { metadata: { name?: string } }): string {
+  const name = record.metadata.name;
+  if (typeof name !== 'string' || name.length === 0) {
+    throw new InvalidEntityError(kind, String(name), `a class decorated with @${kind === 'job' ? 'Job' : 'Workflow'}`);
+  }
+  return name;
 }
 
 /**

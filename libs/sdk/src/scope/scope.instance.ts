@@ -19,6 +19,7 @@ import {
   FrontMcpServer,
   ProviderScope,
   ScopeEntry,
+  type AppJobEntries,
   type EntryOwnerRef,
   type FlowInputOf,
   type FlowName,
@@ -47,7 +48,7 @@ import { FrontMcpContextProvider, FrontMcpContextStorage } from '../context';
 import { proxyTrustOf } from '../context/metadata.utils';
 import type { ElicitationStore } from '../elicitation';
 import type { PersistentQuestions } from '../elicitation/questions/question-scope.helper';
-import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors';
+import { AuthConfigurationError, FlowExitedWithoutOutputError, InternalMcpError } from '../errors';
 import { PluginConfiguredTwiceError, UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
 import { assertAuthoritiesRules } from '../front-mcp/authorities-rules.check';
@@ -115,6 +116,12 @@ function keptUntilFailure(start: Promise<void>, forget: () => void): Promise<voi
     forget();
     throw error;
   });
+}
+
+/** Jobs and workflows an app loaded itself, and how to unregister them once they are registered. */
+interface ServedAppJobs {
+  entries: AppJobEntries;
+  unregister?: () => void;
 }
 
 export class Scope extends ScopeEntry {
@@ -186,6 +193,14 @@ export class Scope extends ScopeEntry {
   private agentCallsServed?: Promise<void>;
   /** Set once the scope serves skills: from startup, or since an app added the first one. */
   private skillsServed?: Promise<void>;
+  /** The jobs and workflows apps loaded themselves before startup decided whether the job system runs. */
+  private readonly pendingAppJobs: ServedAppJobs[] = [];
+  /** Whether startup has decided whether the job system runs. */
+  private jobsDecided = false;
+  /** The top-level SQLite startup resolved, for a job system an app's jobs start later. */
+  private topLevelSqlite?: SqliteOptionsInput & { path: string };
+  /** The start of a job system the first jobs an app loaded after startup brought. */
+  private lateJobsStart?: Promise<void>;
 
   /** EventStore for SSE resumability support (optional) */
   private _eventStore?: EventStore;
@@ -906,6 +921,14 @@ export class Scope extends ScopeEntry {
       const appMeta = app.metadata as unknown as Record<string, unknown>;
       if (Array.isArray(appMeta['workflows'])) appWorkflows.push(...(appMeta['workflows'] as WorkflowType[]));
     }
+    // The jobs and workflows an app loaded itself (an ESM app's package) count as declared ones
+    for (const served of this.pendingAppJobs) {
+      appJobs.push(...served.entries.jobs);
+      for (const job of served.entries.jobs) {
+        jobProviders.set(normalizeJob(job).provide, served.entries.providers as ProviderRegistry);
+      }
+      appWorkflows.push(...served.entries.workflows);
+    }
 
     const allJobs = [...jobsList, ...appJobs];
     const allWorkflows = [...workflowsList, ...appWorkflows];
@@ -930,61 +953,20 @@ export class Scope extends ScopeEntry {
         );
       }
 
-      const notifyFn = async (data: Record<string, unknown>) => {
-        if (this.notificationService) {
-          this.logger.debug('Job notification', data);
-        }
-      };
-
-      const { registerJobCapabilities, resolveJobsStore, jobsServerStore } = await import('../job/job-scope.helper.js');
-      refuseServerStoresInBrowser({ jobs: jobsServerStore(jobsConfig?.store, this.metadata) });
-      const jobsStore = resolveJobsStore(jobsConfig?.store, {
-        redis: this.metadata.redis,
-        sqlite: resolvedTopLevelSqlite,
-      });
-      const effectiveConfig: JobsConfig = { ...(jobsConfig ?? {}), enabled: true, store: jobsStore };
-      topLevelSqliteUsed ||= Boolean(resolvedTopLevelSqlite) && jobsStore?.sqlite === resolvedTopLevelSqlite;
-      const result = await registerJobCapabilities({
-        providers: this.scopeProviders,
-        flowRegistry: this.scopeFlows,
-        owner: scopeRef,
-        jobsList: allJobs,
-        jobProviders,
-        workflowsList: allWorkflows,
-        jobsConfig: effectiveConfig,
-        logger: this.logger,
-        notifyFn,
-        entryServer: isEntryServer(this.metadata),
-        jobWorker: isJobWorker(this.metadata),
-      });
-
-      this._scopeJobs = result.jobRegistry as JobRegistry;
-      this._scopeWorkflows = result.workflowRegistry as WorkflowRegistry;
-      this._jobExecutionManager = result.executionManager;
-      this._jobStateStore = result.stateStore;
-      this._jobDefinitionStore = result.definitionStore;
-
-      // Register job/workflow management tools
-      for (const toolCls of result.managementTools) {
-        try {
-          const toolRecord = normalizeTool(toolCls);
-          const toolInstance = new ToolInstance(toolRecord, this.scopeProviders, {
-            kind: 'scope',
-            id: '_jobs',
-            ref: toolCls,
-          });
-          this.scopeTools.registerToolInstance(toolInstance);
-        } catch (error) {
-          this.logger.warn(
-            `Failed to register job management tool: ${error instanceof Error ? error.message : String(error)}`,
-          );
+      const jobsUseTopLevelSqlite = await this.startJobs(allJobs, jobProviders, allWorkflows, resolvedTopLevelSqlite);
+      topLevelSqliteUsed ||= jobsUseTopLevelSqlite;
+      const jobRegistry = this._scopeJobs;
+      const workflowRegistry = this._scopeWorkflows;
+      if (jobRegistry && workflowRegistry && this.pendingAppJobs.length > 0) {
+        const { unregistersAppJobEntries } = await import('../job/job-scope.helper.js');
+        for (const served of this.pendingAppJobs) {
+          served.unregister = unregistersAppJobEntries(jobRegistry, workflowRegistry, served.entries);
         }
       }
-
-      this.logger.info(
-        `Jobs system initialized: ${this._scopeJobs.getJobs().length} jobs, ${this._scopeWorkflows.getWorkflows().length} workflows`,
-      );
     }
+    this.pendingAppJobs.length = 0;
+    this.jobsDecided = true;
+    this.topLevelSqlite = resolvedTopLevelSqlite;
 
     // A browser opens no SQLite file, so a top-level `sqlite` kept for a server sharing the config is no mistake there
     if (this.metadata.sqlite && !topLevelSqliteUsed && getRuntimeContext().runtime !== 'browser') {
@@ -1533,6 +1515,115 @@ export class Scope extends ScopeEntry {
 
   get channelEventBus(): ChannelEventBus | undefined {
     return this._channelEventBus;
+  }
+
+  /**
+   * Start the job system with these jobs and workflows: its stores, registries, execution manager and management
+   * tools. Answers whether its store is the top-level SQLite.
+   */
+  private async startJobs(
+    jobs: JobType[],
+    jobProviders: Map<Token, ProviderRegistry>,
+    workflows: WorkflowType[],
+    topLevelSqlite: (SqliteOptionsInput & { path: string }) | undefined,
+  ): Promise<boolean> {
+    const jobsConfig = this.metadata.jobs as JobsConfig | undefined;
+    const scopeRef: EntryOwnerRef = { kind: 'scope', id: this.id, ref: Scope };
+    const notifyFn = async (data: Record<string, unknown>) => {
+      if (this.notificationService) {
+        this.logger.debug('Job notification', data);
+      }
+    };
+
+    const { registerJobCapabilities, resolveJobsStore, jobsServerStore } = await import('../job/job-scope.helper.js');
+    refuseServerStoresInBrowser({ jobs: jobsServerStore(jobsConfig?.store, this.metadata) });
+    const jobsStore = resolveJobsStore(jobsConfig?.store, {
+      redis: this.metadata.redis,
+      sqlite: topLevelSqlite,
+    });
+    const effectiveConfig: JobsConfig = { ...(jobsConfig ?? {}), enabled: true, store: jobsStore };
+    const result = await registerJobCapabilities({
+      providers: this.scopeProviders,
+      flowRegistry: this.scopeFlows,
+      owner: scopeRef,
+      jobsList: jobs,
+      jobProviders,
+      workflowsList: workflows,
+      jobsConfig: effectiveConfig,
+      logger: this.logger,
+      notifyFn,
+      entryServer: isEntryServer(this.metadata),
+      jobWorker: isJobWorker(this.metadata),
+    });
+
+    this._scopeJobs = result.jobRegistry as JobRegistry;
+    this._scopeWorkflows = result.workflowRegistry as WorkflowRegistry;
+    this._jobExecutionManager = result.executionManager;
+    this._jobStateStore = result.stateStore;
+    this._jobDefinitionStore = result.definitionStore;
+
+    // Register job/workflow management tools
+    for (const toolCls of result.managementTools) {
+      try {
+        const toolRecord = normalizeTool(toolCls);
+        const toolInstance = new ToolInstance(toolRecord, this.scopeProviders, {
+          kind: 'scope',
+          id: '_jobs',
+          ref: toolCls,
+        });
+        this.scopeTools.registerToolInstance(toolInstance);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to register job management tool: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    this.logger.info(
+      `Jobs system initialized: ${this._scopeJobs.getJobs().length} jobs, ${this._scopeWorkflows.getWorkflows().length} workflows`,
+    );
+    return Boolean(topLevelSqlite) && jobsStore?.sqlite === topLevelSqlite;
+  }
+
+  override async serveAppJobs(entries: AppJobEntries): Promise<() => void> {
+    const served: ServedAppJobs = { entries };
+    const withdraw = () => {
+      const pending = this.pendingAppJobs.indexOf(served);
+      if (pending !== -1) this.pendingAppJobs.splice(pending, 1);
+      served.unregister?.();
+      served.unregister = undefined;
+    };
+    if (!this.jobsDecided) {
+      this.pendingAppJobs.push(served);
+      return withdraw;
+    }
+    if (this.metadata.jobs?.enabled === false) {
+      this.logger.warn(
+        `Jobs are explicitly disabled, so the ${entries.jobs.length} job(s) and ${entries.workflows.length} ` +
+          'workflow(s) an app loaded are not served. Remove jobs.enabled: false to serve them.',
+      );
+      return withdraw;
+    }
+    this.lateJobsStart ??= this._scopeJobs
+      ? Promise.resolve()
+      : keptUntilFailure(
+          this.startJobs([], new Map(), [], this.topLevelSqlite).then(() => undefined),
+          () => (this.lateJobsStart = undefined),
+        );
+    await this.lateJobsStart;
+    const jobRegistry = this._scopeJobs;
+    const workflowRegistry = this._scopeWorkflows;
+    if (!jobRegistry || !workflowRegistry) throw new InternalMcpError('The job system did not start');
+    const { registerAppJobEntries } = await import('../job/job-scope.helper.js');
+    served.unregister = await registerAppJobEntries({
+      jobRegistry,
+      workflowRegistry,
+      jobs: entries.jobs,
+      workflows: entries.workflows,
+      providers: entries.providers as ProviderRegistry,
+      runner: this.metadata.jobs?.runner,
+    });
+    return withdraw;
   }
 
   override serveLateEntries(kinds: readonly LateEntryKind[]): Promise<void> {

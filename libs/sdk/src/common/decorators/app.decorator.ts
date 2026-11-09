@@ -22,7 +22,7 @@ const APP_DECORATOR_BASENAMES = ['app.decorator.ts', 'app.decorator.js'] as cons
  * Decorator that marks a class as a McpApp module and provides metadata.
  *
  * Also provides static methods for declaring external apps:
- * - `App.esm()` — load an @App class from an npm package
+ * - `App.esm()` — load an npm package's entries as an app
  * - `App.remote()` — connect to an external MCP server
  *
  * @example
@@ -99,7 +99,19 @@ function namespaceIdOf(options?: { name?: string; namespace?: string }): Pick<Re
 }
 
 /**
- * Load an @App-decorated class from an npm package at runtime.
+ * Load an npm package at runtime as an app: a default-exported `@App` or `@FrontMcp` class, a
+ * `FrontMcpPackageManifest`, or named exports of entry arrays or decorated classes.
+ *
+ * Every kind of entry the package exports is served as a local `@App`'s is: its tools, resources and prompts (under
+ * the `namespace` prefix), skills, agents, jobs and workflows (under their own names). Its `providers` are registered
+ * for the package's own entries only. Each loaded version gets its own providers: `onBootstrap()` runs when it loads,
+ * `onReady()` when the server is ready, `onShutdown()` when the server shuts down. Jobs and workflows join the
+ * server's job system, which they turn on unless `jobs.enabled` is `false`.
+ *
+ * With `autoUpdate`, a newer version that satisfies the range replaces the loaded one, every kind of entry at once,
+ * after it built and passed the checks startup runs on an app; until then the loaded version keeps serving. Clients
+ * get one `list_changed` per list that changed. Calls, agent runs and job runs that started on the old version finish
+ * on it, and its providers stay up until the server shuts down.
  *
  * @param specifier - npm package specifier (e.g., '@acme/tools@^1.0.0')
  * @param options - Optional per-app overrides

@@ -7,12 +7,15 @@ import 'reflect-metadata';
 import {
   App,
   FlowHooksOf,
+  Job,
+  JobContext,
   LogLevel,
   LogTransport,
   LogTransportInterface,
   Plugin,
   Tool,
   ToolContext,
+  Workflow,
   type EsmAppOptions,
   type LogRecord,
 } from '../../common';
@@ -78,8 +81,18 @@ describe('App.esm()', () => {
     expect((await srv.listResources()).resources.map((resource) => resource.uri)).toEqual(['status://acme']);
   });
 
-  it('warns that the jobs and workflows of the package are not loaded', async () => {
-    load.mockResolvedValue({ ...loadResult, manifest: { ...loadResult.manifest, jobs: [{}], workflows: [{}] } });
+  it('loads every kind of entry the manifest exports, and warns about none', async () => {
+    @Job({ name: 'nightly', inputSchema: {}, outputSchema: {} })
+    class NightlyJob extends JobContext {
+      async execute() {
+        return {};
+      }
+    }
+    @Workflow({ name: 'nightly-flow', steps: [{ id: 'run', jobName: 'nightly' }] })
+    class NightlyFlow {}
+    const manifest = { ...loadResult.manifest, jobs: [NightlyJob], workflows: [NightlyFlow] };
+    load.mockResolvedValue({ ...loadResult, manifest });
+    warnings.length = 0;
     const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
     server = await FrontMcpInstance.createDirect({
       info: { name: 'esm-gateway', version: '1.0.0' },
@@ -87,32 +100,7 @@ describe('App.esm()', () => {
       logging: { transports: [WarningCapture] },
     });
 
-    expect(warnings).toContain(
-      "ESM app acme: App.esm() loads only tools, resources, prompts, agents, skills and providers; the package's jobs, workflows are not loaded",
-    );
-  });
-
-  it('warns about the kinds it skips before an entry fails to build', async () => {
-    warnings.length = 0;
-    const manifest = { ...loadResult.manifest, jobs: [{}] };
-    Object.defineProperty(manifest, 'tools', {
-      get: () => {
-        throw new Error('tool needs the package provider');
-      },
-    });
-    load.mockResolvedValue({ ...loadResult, manifest });
-    const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
-
-    await expect(
-      FrontMcpInstance.createDirect({
-        info: { name: 'esm-gateway', version: '1.0.0' },
-        apps: [App.esm('@acme/tools@^1.0.0', { namespace: 'acme' })],
-        logging: { transports: [WarningCapture] },
-      }),
-    ).rejects.toThrow('tool needs the package provider');
-    expect(warnings).toContain(
-      "ESM app acme: App.esm() loads only tools, resources, prompts, agents, skills and providers; the package's jobs are not loaded",
-    );
+    expect(warnings.filter((warning) => warning.includes('not loaded'))).toEqual([]);
   });
 
   it("merges the app's loader with the server's, so the server's token reaches the app's registry", async () => {
