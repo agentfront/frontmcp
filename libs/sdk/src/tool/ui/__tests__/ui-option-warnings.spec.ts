@@ -8,16 +8,20 @@ describe('describeIgnoredUiOptions (#645)', () => {
   });
 
   it('names a single ignored option in the singular', () => {
-    const [message] = describeIgnoredUiOptions('weather', { bundlingMode: 'static' });
+    const [message] = describeIgnoredUiOptions('weather', { htmlResponsePrefix: 'x' });
     expect(message).toContain('Tool "weather"');
-    expect(message).toContain('`ui.bundlingMode` is deprecated and has no effect; remove it.');
+    expect(message).toContain('`ui.htmlResponsePrefix` is deprecated and has no effect; remove it.');
   });
 
-  it('lists several ignored options in one message', () => {
-    const messages = describeIgnoredUiOptions('weather', { htmlResponsePrefix: 'x', bundlingMode: 'x' });
-    expect(messages).toHaveLength(1);
-    expect(messages[0]).toContain('`ui.bundlingMode`, `ui.htmlResponsePrefix`');
-    expect(messages[0]).toContain('are deprecated and have no effect; remove them.');
+  it('says nothing about the rendering options and bundlingMode, which take effect', () => {
+    expect(
+      describeIgnoredUiOptions('weather', {
+        uiType: 'html',
+        hydrate: true,
+        contentSecurity: {},
+        bundlingMode: 'static',
+      }),
+    ).toEqual([]);
   });
 
   it('says nothing about the URL serving modes and their options, which serve the widget from a URL', () => {

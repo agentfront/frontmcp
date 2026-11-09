@@ -2,6 +2,7 @@ import { App } from '@frontmcp/sdk';
 
 import UiShowcasePrompt from './prompts/ui-showcase.prompt';
 import UiTemplatesResource from './resources/ui-templates.resource';
+import { BundledDynamicNoteTool, BundledStaticNoteTool } from './tools/bundled-notes.tool';
 import CustomUriTool from './tools/custom-uri.tool';
 import CustomUrlForecastTool from './tools/custom-url-forecast.tool';
 import DirectUrlForecastTool from './tools/direct-url-forecast.tool';
@@ -44,6 +45,8 @@ import StatusCardTool from './tools/status-card.tool';
     HydratedCounterTool,
     DirectUrlForecastTool,
     CustomUrlForecastTool,
+    BundledStaticNoteTool,
+    BundledDynamicNoteTool,
   ],
   resources: [UiTemplatesResource],
   prompts: [UiShowcasePrompt],
