@@ -14,7 +14,7 @@
 [![Discord](https://img.shields.io/badge/discord-join-16A34A?style=flat-square&labelColor=0b1117&logo=discord&logoColor=white)](https://discord.gg/53AHnJnmwR)
 [![FrontMCP docs MCP connector – tool definition quality and endpoint health on Glama](https://glama.ai/mcp/connectors/dev.frontmcp.mcp/frontmcp/badges/score.svg)](https://glama.ai/mcp/connectors/dev.frontmcp.mcp/frontmcp)
 
-**[frontmcp.dev](https://frontmcp.dev)** &nbsp;&middot;&nbsp; **[Learn][docs-learn]** &nbsp;&middot;&nbsp; **[Reference][docs-reference]** &nbsp;&middot;&nbsp; **[Examples][docs-examples]** &nbsp;&middot;&nbsp; **[Playground][docs-playground]** &nbsp;&middot;&nbsp; **[Blog][docs-blog]**
+**[frontmcp.dev](https://frontmcp.dev)** &nbsp;&middot;&nbsp; **[Learn][docs-learn]** &nbsp;&middot;&nbsp; **[Reference][docs-reference]** &nbsp;&middot;&nbsp; **[Examples][docs-examples]** &nbsp;&middot;&nbsp; **[Playground][docs-playground]** &nbsp;&middot;&nbsp; **[Compare][docs-compare]** &nbsp;&middot;&nbsp; **[Blog][docs-blog]**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme/terminal.svg">
@@ -75,6 +75,10 @@ npx frontmcp init                 # or add FrontMCP to an existing one
 ```
 
 Then follow **[Learn][docs-learn]** on [frontmcp.dev](https://frontmcp.dev), or browse [Tools][docs-tools], [Resources][docs-resources], [Prompts][docs-prompts], [Agents][docs-agents], [Auth][docs-auth], [Plugins][docs-plugins], [Tool UI][docs-ext-apps], [Testing][docs-testing] and [Deployment][docs-deploy]. Try it live in the [Playground][docs-playground].
+
+## How it compares
+
+[TypeScript MCP server frameworks for production][docs-compare] puts FrontMCP next to [the official TypeScript SDK][compare-sdk], [FastMCP for TypeScript][compare-fastmcp], [Prefect's FastMCP TypeScript][compare-fastmcp-ts], [mcp-framework][compare-mcp-framework], [mcp-use][compare-mcp-use], [ViteMCP][compare-vitemcp] and [xmcp][compare-xmcp], on auth, testing, protocol support and deployment. Each library's hello world was run and asked which MCP revisions it serves. [Why FrontMCP][compare-why] says when the official SDK alone is enough, and [The Best TypeScript MCP Server Frameworks in 2026][blog-best-frameworks] sums up the field. Moving a server over? See [Migrate from the TypeScript SDK][migrate-sdk] and [Migrate from FastMCP][migrate-fastmcp].
 
 ## Packages
 
@@ -137,6 +141,18 @@ PRs welcome: see [CONTRIBUTING](./CONTRIBUTING.md). Released under the [Apache-2
 [docs-examples]: https://frontmcp.dev/examples 'Examples'
 [docs-playground]: https://frontmcp.dev/playground 'Playground'
 [docs-blog]: https://frontmcp.dev/blog 'Blog'
+[docs-compare]: https://frontmcp.dev/compare 'TypeScript MCP server frameworks compared'
+[compare-sdk]: https://frontmcp.dev/compare/official-typescript-sdk 'FrontMCP vs the official MCP TypeScript SDK'
+[compare-fastmcp]: https://frontmcp.dev/compare/fastmcp-typescript 'FrontMCP vs FastMCP for TypeScript'
+[compare-fastmcp-ts]: https://frontmcp.dev/compare/fastmcp-ts "FrontMCP vs Prefect's FastMCP TypeScript"
+[compare-mcp-framework]: https://frontmcp.dev/compare/mcp-framework 'FrontMCP vs mcp-framework'
+[compare-mcp-use]: https://frontmcp.dev/compare/mcp-use 'FrontMCP vs mcp-use'
+[compare-vitemcp]: https://frontmcp.dev/compare/vitemcp 'FrontMCP vs ViteMCP'
+[compare-xmcp]: https://frontmcp.dev/compare/xmcp 'FrontMCP vs xmcp'
+[compare-why]: https://frontmcp.dev/compare/why-frontmcp 'Why FrontMCP'
+[blog-best-frameworks]: https://frontmcp.dev/blog/best-typescript-mcp-frameworks 'The Best TypeScript MCP Server Frameworks in 2026'
+[migrate-sdk]: https://frontmcp.dev/learn/migrating-from-the-typescript-sdk 'Migrate from the TypeScript SDK'
+[migrate-fastmcp]: https://frontmcp.dev/learn/migrating-from-fastmcp 'Migrate from FastMCP'
 [docs-tools]: https://frontmcp.dev/reference/sdk/tool 'Tools'
 [docs-resources]: https://frontmcp.dev/reference/sdk/resource 'Resources'
 [docs-prompts]: https://frontmcp.dev/reference/sdk/prompt 'Prompts'
