@@ -532,6 +532,9 @@ the server keeps running, and:
 
 The same holds while the first load is still running, with the reason `the first bundle has not loaded yet`.
 
+While no bundle is loaded, each request that needs the skills applies the bundle the source gave again, so a first
+apply that failed for a reason that has passed doesn't leave the server without skills until the next poll.
+
 Once a bundle loads (a watched file is fixed, a poll succeeds), the tools work again, the skill surfaces list the
 bundle's skills with its `bundleVersion`, connected clients get `notifications/skills/list_changed`, and the check is
 `healthy`, with `details: { state: 'loaded', bundleId, bundleVersion }`.
@@ -673,7 +676,9 @@ npm install @frontmcp/plugin-skilled-openapi @enclave-vm/browser @enclave-vm/ast
   `new webpack.IgnorePlugin({ resourceRegExp: /^(node:)?(dns|http|https|path|fs\/promises)$/, contextRegExp: /mcp-from-openapi/ })`.
 
 Up to 1.11.0 the plugin didn't start in a browser (`setImmediate is not defined`), refused every request to a named
-host, and `run_workflow` needed `@enclave-vm/core`.
+host, and `run_workflow` needed `@enclave-vm/core`. Up to 1.11.2 a browser Web Worker could apply the first bundle
+before the server had its skills registry, and the server then never got its skills: the first bundle now waits for
+the server to be ready, and a request applies a bundle that failed to apply again.
 
 ## Security
 

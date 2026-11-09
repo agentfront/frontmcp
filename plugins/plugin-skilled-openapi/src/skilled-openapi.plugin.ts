@@ -482,19 +482,20 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
           sync.attachSource(source);
           // A source that takes pushed bundles is served at POST /__skilled_openapi/push, through a hookable flow.
           if (source.push) await scope.registryFlows(BundlePushFlow);
-          // Proactively boot on runtimes WITH a background event loop (Node) so
-          // the catalog is ready without an explicit meta-tool call (preserves
-          // startup-time sync + skill:// resources). Deferred to a later task, with
-          // setTimeout as every runtime has it (a browser has no setImmediate), so
-          // scope.skills is wired first. SKIPPED on stateless workers
-          // (`disablePolling`): a deferred task never runs there, and a promise
-          // created in this scope-init context is canceled when later awaited from
-          // a request context — the meta-tools / list-tools hook drive
-          // `ensureReady()` in-request instead.
+          // Proactively boot on runtimes WITH a background event loop (Node, a
+          // browser) so the catalog is ready without an explicit meta-tool call
+          // (preserves startup-time sync + skill:// resources), once the scope is
+          // ready and so has its skills registry. A timer could fire first, as in a
+          // browser Worker, and the first bundle was then never applied. SKIPPED on
+          // stateless workers (`disablePolling`): a promise created in this
+          // scope-init context is canceled when later awaited from a request
+          // context — the meta-tools / list-tools hook drive `ensureReady()`
+          // in-request instead.
           if (!runtimeDeps?.disablePolling) {
-            setTimeout(() => {
-              void sync.ensureReady();
-            }, 0);
+            void Promise.resolve(scope.ready).then(
+              () => sync.ensureReady(),
+              () => undefined,
+            );
           }
           builtSyncs.add(sync);
           return sync;

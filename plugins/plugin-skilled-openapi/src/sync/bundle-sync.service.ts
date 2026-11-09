@@ -119,6 +119,10 @@ export class BundleSyncService {
   private lastSync?: BundleSyncOutcome;
   /** The last queued apply: the source's bundles and pushed ones apply one at a time, in the order they arrive. */
   private applyQueue?: Promise<BundleApplyResult>;
+  /** The source's last bundle while it is not applied and no bundle serves: the next {@link ensureReady} applies it again. */
+  private unappliedBundle?: { bundle: ResolvedBundle; origin?: BundleOrigin };
+  /** The apply of {@link unappliedBundle} in progress. */
+  private retryingApply?: Promise<BundleApplyResult>;
 
   constructor(
     private readonly skillRegistry: SkillRegistryInterface,
@@ -149,13 +153,23 @@ export class BundleSyncService {
   /**
    * Ensure the source has started and its FIRST bundle has been applied, so
    * `scope.skills` and the hidden-op registry are populated before a meta-tool
-   * (search_skill / load_skill / run_workflow) reads them. Memoized — the
-   * underlying start + apply runs at most once per service instance.
+   * (search_skill / load_skill / run_workflow) reads them. The source starts
+   * once per service instance. While no bundle serves, a later call applies
+   * the bundle the source gave again, as when the skills registry was not
+   * ready for the first apply.
    */
   async ensureReady(): Promise<void> {
     if (!this.source) return;
+    const startsSource = this.readyPromise === undefined;
     this.readyPromise ??= this.bootstrap(this.source);
-    return this.readyPromise;
+    await this.readyPromise;
+    if (startsSource) return;
+    const unapplied = this.unappliedBundle;
+    if (!unapplied || this.bundleStore.current()) return;
+    this.retryingApply ??= this.enqueueSourceApply(unapplied.bundle, unapplied.origin).finally(() => {
+      this.retryingApply = undefined;
+    });
+    await this.retryingApply;
   }
 
   /**
@@ -261,7 +275,7 @@ export class BundleSyncService {
     // later emits re-apply in order. The source waits for each apply, so a Cron
     // refresh ends once its bundle is applied and kept.
     source.onChange(async (bundle, origin) => {
-      const applied = this.enqueueApply(bundle, origin);
+      const applied = this.enqueueSourceApply(bundle, origin);
       if (!firstSettled) {
         firstSettled = true;
         void applied.then(() => resolveFirst());
@@ -285,6 +299,13 @@ export class BundleSyncService {
       this.recordLoadFailure(reason);
       this.recordPullFailure(reason, false, tokenFailureOf(e));
     }
+  }
+
+  /** {@link enqueueApply} for a bundle the source gave, kept for {@link ensureReady} to apply again while none serves. */
+  private async enqueueSourceApply(bundle: ResolvedBundle, origin?: BundleOrigin): Promise<BundleApplyResult> {
+    const result = await this.enqueueApply(bundle, origin);
+    this.unappliedBundle = result.applied || this.bundleStore.current() ? undefined : { bundle, origin };
+    return result;
   }
 
   /** Record why no bundle could be loaded; clients read it through {@link ensureLoaded} and `/readyz`. */
