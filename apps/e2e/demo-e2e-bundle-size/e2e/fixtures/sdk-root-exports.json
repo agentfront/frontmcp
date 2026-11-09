@@ -487,6 +487,7 @@
   "SharedServerStartError": "class",
   "SignInLockedError": "class",
   "SignInRefusedError": "class",
+  "SigningKeyInvalidError": "class",
   "Skill": "function",
   "SkillBundleNotLoadedError": "class",
   "SkillCatalogSourceToken": "symbol",

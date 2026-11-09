@@ -11,6 +11,7 @@ import {
   isRedisTokenStorage,
   isSqliteTokenStorage,
   JwksService,
+  LocalTokenKeys,
   resolveUpstreamClient,
   SessionCredentialVault,
   StorageAuthorizationStore,
@@ -24,6 +25,7 @@ import {
   type DcrRegistryConfig,
   type FederatedAuthSessionStore,
   type JSONWebKeySet,
+  type LocalSigningKeyConfig,
   type SecureStoreBackend,
   type SecureStoreConfig,
   type TokenRefreshCallback,
@@ -325,6 +327,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   readonly secret: Uint8Array;
   readonly logger: FrontMcpLogger;
   private jwks = new JwksService();
+  /** The keys this server signs and verifies its own tokens with: `signKey`, else HS256 with {@link secret}. */
+  private readonly tokenKeys: LocalTokenKeys;
   private cimdService: CimdService | undefined;
 
   /**
@@ -541,6 +545,13 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.secret = getDefaultNoAuthSecret();
     }
 
+    this.tokenKeys = LocalTokenKeys.fromConfig(
+      this.signingConfig(options),
+      this.secret,
+      isPublicMode(options) ? 'auth' : 'auth.local',
+    );
+    this.jwks.setPublicJwks(this.tokenKeys.publicJwks);
+
     // Read the token-storage selection. Only local/remote/orchestrated modes
     // carry `tokenStorage`; public mode does not (treated as 'memory').
     this.tokenStorage = this.readTokenStorage(options);
@@ -588,6 +599,12 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    */
   private deriveIssuer(options: LocalPrimaryAuthOptions): string {
     return this.configuredIssuer(options) ?? `http://${this.host}:${this.port}${this.scope.fullPath}`;
+  }
+
+  /** The `signKey` and `jwks`: top-level in public mode, under `local` in local and remote mode. */
+  private signingConfig(options: LocalPrimaryAuthOptions): LocalSigningKeyConfig {
+    if (isPublicMode(options)) return { signKey: options.signKey, jwks: options.jwks };
+    return isOrchestratedMode(options) ? (options.local ?? {}) : {};
   }
 
   /**
@@ -982,13 +999,13 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   async signAnonymousJwt(options: { audience?: string; issuer?: string } = {}) {
     const { SignJWT } = await loadJose();
     const jwt = new SignJWT({ sub: `anon:${randomUUID()}`, anonymous: true, scope: this.anonymousScopes().join(' ') })
-      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setProtectedHeader(this.tokenKeys.protectedHeader())
       .setIssuedAt()
       .setIssuer(options.issuer ?? this.issuer)
       .setExpirationTime(`${this.anonymousTokenTtlSeconds()}s`)
       .setJti(randomUUID());
     if (options.audience) jwt.setAudience(options.audience);
-    return jwt.sign(this.secret);
+    return jwt.sign(await this.tokenKeys.signingKey());
   }
 
   /** How long an anonymous token lives: public mode's `sessionTtl` (default an hour), a day otherwise. */
@@ -1006,10 +1023,11 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * Cryptographically verify a gateway-issued access token (public/local/remote
    * "gateway" modes). Gateway tokens — both authenticated access tokens
    * ({@link signAccessToken}) and anonymous tokens ({@link signAnonymousJwt}) —
-   * are HS256-signed with `this.secret`.
+   * are signed with {@link tokenKeys}: the configured `signKey`, else HS256 with
+   * `this.secret`.
    *
-   * The secret alone doesn't make a token this server's: every server started
-   * with the same JWT_SECRET holds it. So a token must also (#269):
+   * The key alone doesn't make a token this server's: every server started
+   * with the same JWT_SECRET or `signKey` holds it. So a token must also (#269):
    * - name THIS instance as its issuer (`iss`): `expectedIssuer` (one issuer or
    *   several), which callers take from {@link acceptedIssuersFor} the request,
    *   matching what the token endpoint names when it signs ({@link issuerFor});
@@ -1020,7 +1038,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    *   `auth.expectedAudience` when there is one.
    *
    * Lifetime: `exp` is required (#272) and checked with `nbf` by `jose`. The
-   * algorithm is pinned to HS256 to block `alg` confusion.
+   * algorithms are pinned to the ones the keys sign with, to block `alg` confusion.
    */
   override async verifyGatewayToken(
     token: string,
@@ -1029,9 +1047,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     expectedIssuer?: string | readonly string[],
   ): Promise<VerifyResult> {
     try {
-      const { jwtVerify } = await loadJose();
-      const { payload, protectedHeader } = await jwtVerify(token, this.secret, {
-        algorithms: ['HS256'],
+      const { payload, protectedHeader } = await this.tokenKeys.verify(token, {
         issuer:
           typeof expectedIssuer === 'string' ? expectedIssuer : expectedIssuer ? [...expectedIssuer] : this.issuer,
         requiredClaims: ['exp'],
@@ -1114,7 +1130,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
     const { SignJWT } = await loadJose();
     const jwt = new SignJWT(claims)
-      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setProtectedHeader(this.tokenKeys.protectedHeader())
       .setIssuedAt()
       .setIssuer(issuer ?? this.issuer)
       .setExpirationTime(`${this.accessTokenTtlSeconds}s`)
@@ -1124,7 +1140,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       jwt.setAudience(audience);
     }
 
-    return jwt.sign(this.secret);
+    return jwt.sign(await this.tokenKeys.signingKey());
   }
 
   /**
@@ -1545,6 +1561,9 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   }
 
   protected async initialize(): Promise<void> {
+    // A configured signKey that can't be imported stops the server here, not on the first token.
+    await this.tokenKeys.signingKey();
+
     // Swap in persistent (Redis/SQLite) stores when configured. Runs before the
     // server signals ready, so flows always see the final store instances.
     await this.initializeStores();

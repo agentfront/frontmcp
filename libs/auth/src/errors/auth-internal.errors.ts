@@ -104,6 +104,15 @@ export class JwtSecretWeakError extends AuthInternalError {
 }
 
 /**
+ * Thrown at startup when the configured `signKey` or `jwks` can't sign or be published.
+ */
+export class SigningKeyInvalidError extends AuthInternalError {
+  constructor(message: string) {
+    super(message, 'SIGNING_KEY_INVALID');
+  }
+}
+
+/**
  * Thrown when a credential provider is already registered.
  */
 export class CredentialProviderAlreadyRegisteredError extends AuthInternalError {

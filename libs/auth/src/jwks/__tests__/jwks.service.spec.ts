@@ -24,39 +24,27 @@ describe('JwksService', () => {
   });
 
   describe('getPublicJwks', () => {
-    it('should return valid JWKS with RS256 algorithm', async () => {
+    it('serves no keys until the server sets the keys its tokens verify with', async () => {
       const service = new JwksService({ orchestratorAlg: 'RS256' });
-      const jwks = await service.getPublicJwks();
 
-      expect(jwks).toBeDefined();
-      expect(jwks.keys).toBeInstanceOf(Array);
-      expect(jwks.keys.length).toBe(1);
-      expect(jwks.keys[0].kty).toBe('RSA');
-      expect(jwks.keys[0].alg).toBe('RS256');
-      expect(jwks.keys[0].use).toBe('sig');
-      expect(jwks.keys[0].kid).toBeDefined();
+      expect(await service.getPublicJwks()).toEqual({ keys: [] });
     });
 
-    it('should return valid JWKS with ES256 algorithm', async () => {
-      const service = new JwksService({ orchestratorAlg: 'ES256' });
-      const jwks = await service.getPublicJwks();
-
-      expect(jwks).toBeDefined();
-      expect(jwks.keys).toBeInstanceOf(Array);
-      expect(jwks.keys.length).toBe(1);
-      expect(jwks.keys[0].kty).toBe('EC');
-      expect(jwks.keys[0].alg).toBe('ES256');
-      expect(jwks.keys[0].use).toBe('sig');
-      expect(jwks.keys[0].kid).toBeDefined();
-    });
-
-    it('should return same JWKS on subsequent calls (caching)', async () => {
+    it('serves the keys set with setPublicJwks', async () => {
       const service = new JwksService();
-      const jwks1 = await service.getPublicJwks();
-      const jwks2 = await service.getPublicJwks();
+      const key = { kty: 'EC', crv: 'P-256', x: 'x', y: 'y', kid: 'k1', alg: 'ES256', use: 'sig' };
+      service.setPublicJwks({ keys: [key] });
 
-      expect(jwks1).toBe(jwks2);
-      expect(jwks1.keys[0].kid).toBe(jwks2.keys[0].kid);
+      expect(await service.getPublicJwks()).toEqual({ keys: [key] });
+    });
+
+    it('does not generate or persist a key of its own', async () => {
+      const service = new JwksService();
+      const generated = jest.spyOn(service as unknown as { generateKey: () => unknown }, 'generateKey');
+
+      await service.getPublicJwks();
+
+      expect(generated).not.toHaveBeenCalled();
     });
   });
 
@@ -81,9 +69,9 @@ describe('JwksService', () => {
       expect(alg).toBe('ES256');
     });
 
-    it('should return consistent kid between getPublicJwks and getOrchestratorSigningKey', async () => {
+    it('should return consistent kid between getOrchestratorJwks and getOrchestratorSigningKey', async () => {
       const service = new JwksService();
-      const jwks = await service.getPublicJwks();
+      const jwks = await service.getOrchestratorJwks();
       const { kid } = await service.getOrchestratorSigningKey();
 
       expect(jwks.keys[0].kid).toBe(kid);
@@ -255,16 +243,15 @@ describe('JwksService', () => {
   });
 
   describe('concurrent key initialization', () => {
-    it('should handle concurrent calls to getPublicJwks', async () => {
+    it('should handle concurrent calls to getOrchestratorJwks', async () => {
       const service = new JwksService();
 
-      // Make multiple concurrent calls
       const results = await Promise.all([
-        service.getPublicJwks(),
-        service.getPublicJwks(),
-        service.getPublicJwks(),
-        service.getPublicJwks(),
-        service.getPublicJwks(),
+        service.getOrchestratorJwks(),
+        service.getOrchestratorJwks(),
+        service.getOrchestratorJwks(),
+        service.getOrchestratorJwks(),
+        service.getOrchestratorJwks(),
       ]);
 
       // All should return the same JWKS with the same kid

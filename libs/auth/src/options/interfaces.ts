@@ -45,14 +45,17 @@ export interface PublicAccessConfig {
  */
 export interface LocalSigningConfig {
   /**
-   * Private key for signing tokens
-   * @default auto-generated
+   * Private key to sign tokens with, in place of `JWT_SECRET` (HS256).
+   * An RSA, EC or Ed25519 private JWK signs with its `alg` (default by key type) and is published at
+   * `/.well-known/jwks.json`; a `Uint8Array` or `oct` JWK is an HMAC key and is never published.
+   * @default HS256 with `JWT_SECRET`
    */
   signKey?: JWK | Uint8Array;
 
   /**
-   * JWKS for token verification
-   * @default auto-generated
+   * Public keys published at `/.well-known/jwks.json` beside the `signKey`'s, and accepted on verification
+   * (e.g. a retired key's, while its tokens expire). Needs an RSA, EC or Ed25519 `signKey`.
+   * @default the `signKey`'s public key only
    */
   jwks?: JSONWebKeySet;
 
@@ -848,7 +851,18 @@ export interface PublicAuthOptionsInterface {
   sessionTtl?: number;
   anonymousScopes?: string[];
   publicAccess?: PublicAccessConfig;
+  /**
+   * Public keys published at `/.well-known/jwks.json` beside the `signKey`'s, and accepted on verification
+   * (e.g. a retired key's, while its tokens expire). Needs an RSA, EC or Ed25519 `signKey`.
+   * @default the `signKey`'s public key only
+   */
   jwks?: JSONWebKeySet;
+  /**
+   * Private key to sign tokens with, in place of `JWT_SECRET` (HS256).
+   * An RSA, EC or Ed25519 private JWK signs with its `alg` (default by key type) and is published at
+   * `/.well-known/jwks.json`; a `Uint8Array` or `oct` JWK is an HMAC key and is never published.
+   * @default HS256 with `JWT_SECRET`
+   */
   signKey?: JWK | Uint8Array;
 }
 
