@@ -26,6 +26,7 @@ import {
   type FlowType,
   type FrontMcpAuth,
   type LateAppRegistries,
+  type LateEntryKind,
   type PublicAuthOptions,
   type ScopeRecord,
   type ServerRequest,
@@ -76,7 +77,11 @@ import ResourceRegistry from '../resource/resource.registry';
 import type { HttpRouteRegistrar, RegisteredHttpRoute } from '../server/custom-routes.helper';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
 import type { SkillSessionManager } from '../skill/session';
-import { pluginsRegisterDynamicSkills, registerSkillCapabilities } from '../skill/skill-scope.helper';
+import {
+  pluginsRegisterDynamicSkills,
+  registerSkillCapabilities,
+  serveSkillMethods,
+} from '../skill/skill-scope.helper';
 import SkillRegistry from '../skill/skill.registry';
 import { LiveSurface } from '../surface/live-surface';
 import type { InProcessTaskRunner, TaskRegistry, TaskStore } from '../task';
@@ -169,6 +174,10 @@ export class Scope extends ScopeEntry {
 
   /** Optional skill session manager for tool authorization enforcement */
   private _skillSession?: SkillSessionManager;
+  /** Set once the `agents:call-agent` flow is registered, or being registered. */
+  private agentCallsServed?: Promise<void>;
+  /** Set once the scope serves skills: from startup, or since an app added the first one. */
+  private skillsServed?: Promise<void>;
 
   /** EventStore for SSE resumability support (optional) */
   private _eventStore?: EventStore;
@@ -829,35 +838,7 @@ export class Scope extends ScopeEntry {
 
     // Initialize skill session manager if skills are available, or a plugin registers them at runtime
     if (this.scopeSkills.hasAny() || dynamicSkills) {
-      const [skillSession, { createSkillToolGuardHook }] = await Promise.all([
-        import('../skill/session/index.js'),
-        import('../skill/hooks/index.js'),
-      ]);
-      const store = skillSession.createSkillSessionStore({ type: 'memory' });
-
-      this._skillSession = new skillSession.SkillSessionManager(
-        {
-          defaultPolicyMode: 'permissive',
-        },
-        this.logger,
-        store,
-      );
-
-      // Register skill tool authorization guard hook
-      const GuardHookClass = createSkillToolGuardHook(this._skillSession, {
-        logger: this.logger,
-        trackToolCalls: true,
-      });
-      const guardHookInstance = new GuardHookClass();
-      const hookRecords = normalizeHooksFromCls(guardHookInstance);
-      if (hookRecords.length > 0) {
-        await this.scopeHooks.registerHooks(false, ...hookRecords);
-        this.logger.verbose('Skill tool authorization guard hook registered');
-      }
-
-      this.logger.verbose('Skill session manager initialized', {
-        storeType: store.type,
-      });
+      await this.startSkillSession();
     }
 
     // Validate all skills after everything is initialized
@@ -894,6 +875,7 @@ export class Scope extends ScopeEntry {
       logger: this.logger,
       dynamicSkills,
     });
+    if (this.scopeSkills.servesSkills()) this.skillsServed = Promise.resolve();
 
     // Initialize jobs and workflows (issue #408).
     //
@@ -1026,8 +1008,7 @@ export class Scope extends ScopeEntry {
     // Register logging and completion flows, and the agent, elicitation and task flows when those are on.
     await this.scopeFlows.registryFlows([SetLevelFlow, CompleteFlow]);
     if (this.scopeAgents.listAllInstances().length > 0) {
-      const { CallAgentFlow } = await import('../agent/flows/index.js');
-      await this.scopeFlows.registryFlows([CallAgentFlow]);
+      await this.serveAgentCalls();
     }
     if (this.metadata.elicitation?.enabled === true) {
       const { ElicitationRequestFlow, ElicitationResultFlow } = await import('../elicitation/flows/index.js');
@@ -1544,6 +1525,69 @@ export class Scope extends ScopeEntry {
 
   get channelEventBus(): ChannelEventBus | undefined {
     return this._channelEventBus;
+  }
+
+  override serveLateEntries(kinds: readonly LateEntryKind[]): Promise<void> {
+    return Promise.all(
+      kinds.map((kind) => (kind === 'agents' ? this.serveAgentCalls() : this.serveSkillsAddedLater())),
+    ).then(() => undefined);
+  }
+
+  /** Register the `agents:call-agent` flow an agent's tool runs through, once. */
+  private serveAgentCalls(): Promise<void> {
+    this.agentCallsServed ??= import('../agent/flows/index.js').then(({ CallAgentFlow }) =>
+      this.scopeFlows.registryFlows([CallAgentFlow]),
+    );
+    return this.agentCallsServed;
+  }
+
+  /** Serve skills to a scope that served none at startup: the skill session guard, the skill methods and resources. */
+  private serveSkillsAddedLater(): Promise<void> {
+    this.skillsServed ??= (async () => {
+      if (!this._skillSession) await this.startSkillSession();
+      await serveSkillMethods({
+        skillRegistry: this.scopeSkills,
+        flowRegistry: this.scopeFlows,
+        resourceRegistry: this.scopeResources,
+        providers: this.scopeProviders,
+        skillsConfig: this.metadata.skillsConfig,
+        logger: this.logger,
+      });
+    })();
+    return this.skillsServed;
+  }
+
+  /** Start the skill session manager, and the hook that guards tool calls by the active skill's allowlist. */
+  private async startSkillSession(): Promise<void> {
+    const [skillSession, { createSkillToolGuardHook }] = await Promise.all([
+      import('../skill/session/index.js'),
+      import('../skill/hooks/index.js'),
+    ]);
+    const store = skillSession.createSkillSessionStore({ type: 'memory' });
+
+    this._skillSession = new skillSession.SkillSessionManager(
+      {
+        defaultPolicyMode: 'permissive',
+      },
+      this.logger,
+      store,
+    );
+
+    // Register skill tool authorization guard hook
+    const GuardHookClass = createSkillToolGuardHook(this._skillSession, {
+      logger: this.logger,
+      trackToolCalls: true,
+    });
+    const guardHookInstance = new GuardHookClass();
+    const hookRecords = normalizeHooksFromCls(guardHookInstance);
+    if (hookRecords.length > 0) {
+      await this.scopeHooks.registerHooks(false, ...hookRecords);
+      this.logger.verbose('Skill tool authorization guard hook registered');
+    }
+
+    this.logger.verbose('Skill session manager initialized', {
+      storeType: store.type,
+    });
   }
 
   /**
