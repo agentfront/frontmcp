@@ -7,7 +7,7 @@ tags: [setup, oauth, auth, transport, multi-app, remote]
 features:
   - '`app.esm()` loads an `@App` class from an npm package with namespace and auto-update'
   - '`app.remote()` proxies tools from external MCP servers with configurable auth modes'
-  - "`remoteAuth` supports `'static'` (fixed credentials), `'forward'` (pass gateway user token), `'mapped'` (credentials from a per-caller mapper), and `'oauth'` (no gateway credentials)"
+  - "`remoteAuth` supports `'static'` (fixed credentials), `'forward'` (pass gateway user token), `'mapped'` (credentials from a per-caller mapper), and `'oauth'` (an OAuth client credentials token from the remote's authorization server)"
   - '`namespace` prevents tool name collisions between apps (`crm:tool_name`, `slack:tool_name`)'
   - '`transportOptions` configure timeout, retries, and SSE fallback for remote connections'
 ---
@@ -73,7 +73,7 @@ export default class Server {}
 
 - `app.esm()` loads an `@App` class from an npm package with namespace and auto-update
 - `app.remote()` proxies tools from external MCP servers with configurable auth modes
-- `remoteAuth` supports `'static'` (fixed credentials), `'forward'` (pass gateway user token), `'mapped'` (credentials from a per-caller mapper), and `'oauth'` (no gateway credentials)
+- `remoteAuth` supports `'static'` (fixed credentials), `'forward'` (pass gateway user token), `'mapped'` (credentials from a per-caller mapper), and `'oauth'` (an OAuth client credentials token from the remote's authorization server)
 - `namespace` prevents tool name collisions between apps (`crm:tool_name`, `slack:tool_name`)
 - `transportOptions` configure timeout, retries, and SSE fallback for remote connections
 
