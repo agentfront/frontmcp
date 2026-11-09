@@ -33,7 +33,12 @@ describe('CodeCallPlugin', () => {
   describe('dynamicProviders', () => {
     it('should return array of providers', () => {
       const providers = CodeCallPlugin.dynamicProviders({});
-      expect(providers).toHaveLength(4);
+      expect(providers.map((p) => p.name)).toEqual([
+        'codecall:config',
+        'codecall:enclave',
+        'codecall:audit-logger',
+        'codecall:tool-search',
+      ]);
     });
 
     it('should include codecall:config provider', () => {
@@ -110,8 +115,10 @@ describe('CodeCallPlugin', () => {
       const providers = CodeCallPlugin.dynamicProviders({});
       const enclaveProvider = providers.find((p) => p.name === 'codecall:enclave') as FactoryProvider | undefined;
       const config = new CodeCallConfig({});
-      const service = await enclaveProvider?.useFactory?.(config);
+      const child = jest.fn().mockReturnValue({ info: jest.fn() });
+      const service = await enclaveProvider?.useFactory?.(config, { logger: { child } });
       expect(service).toBeInstanceOf(EnclaveService);
+      expect(child).toHaveBeenCalledWith('CodeCall:script');
     });
 
     it('should create ToolSearchService using factory', async () => {

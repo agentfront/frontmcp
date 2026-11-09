@@ -18,9 +18,11 @@
 import { expect, TestServer } from '@frontmcp/testing';
 
 const SERVER_ENTRY = 'apps/e2e/demo-e2e-local-auth/src/main.auth-ui-split.ts';
+// A split app serves its OAuth endpoints under its own path (its id, here its name)
+const APP_PATH = '/SplitAuthUi';
 
 async function postExtra(baseUrl: string, body: Record<string, string>): Promise<Response> {
-  return fetch(`${baseUrl}/oauth/ui/extra`, {
+  return fetch(`${baseUrl}${APP_PATH}/oauth/ui/extra`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(body).toString(),
@@ -60,7 +62,7 @@ describe('LOCAL-mode auth E2E — PER-APP auth.ui under splitByApp (#469)', () =
 
   it('does NOT serve a separate per-slot bundle route (the module is inlined now)', async () => {
     // The old `/oauth/ui/:slot.js` IIFE route is gone in the transform model.
-    const res = await fetch(`${baseUrl}/oauth/ui/login.js`, { method: 'GET' });
+    const res = await fetch(`${baseUrl}${APP_PATH}/oauth/ui/login.js`, { method: 'GET' });
     expect(res.status).toBe(404);
   });
 });

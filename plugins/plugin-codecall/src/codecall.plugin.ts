@@ -101,9 +101,9 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
       {
         name: 'codecall:enclave',
         provide: EnclaveService,
-        inject: () => [CodeCallConfig],
-        useFactory: async (cfg: CodeCallConfig) => {
-          return new EnclaveService(cfg);
+        inject: () => [CodeCallConfig, ScopeEntry],
+        useFactory: async (cfg: CodeCallConfig, scope: ScopeEntry) => {
+          return new EnclaveService(cfg, scope.logger.child('CodeCall:script'));
         },
       },
       {

@@ -135,7 +135,7 @@ const Stage = StageHookOf(name);
   plan,
   inputSchema,
   outputSchema: authVerifyOutputSchema,
-  access: 'authorized',
+  access: 'public',
 })
 export default class AuthVerifyFlow extends FlowBase<typeof name> {
   private logger = this.scope.logger.child('AuthVerifyFlow');
@@ -300,9 +300,9 @@ export default class AuthVerifyFlow extends FlowBase<typeof name> {
     let verifyResult: VerifyResult;
 
     if (authMode === 'orchestrated') {
-      // Orchestrated (gateway) mode — verify the token's HS256 signature +
-      // expiration via the auth instance's own secret. The instance is the sole
-      // holder of the signing key (LocalPrimaryAuth.verifyGatewayToken).
+      // Orchestrated (gateway) mode — verify the token's signature +
+      // expiration via the auth instance's own keys (`signKey`, else JWT_SECRET)
+      // in LocalPrimaryAuth.verifyGatewayToken.
       const auth = this.scope.auth;
       if (!auth) {
         this.logger.warn('No auth instance available for orchestrated verification');

@@ -96,12 +96,13 @@ class Server {}
 ```
 
 - `local.issuer` -- the issuer named everywhere (a trailing slash is dropped, so `<issuer>/oauth/provider/<id>/callback` never gets `//`): discovery's `issuer` and `authorization_servers`, the RFC 9207 `iss` on every authorization response (errors included), and the tokens' `iss`. Without it: `FRONTMCP_PUBLIC_URL` (plus the entry path) when pinned, else the `FRONTMCP_PUBLIC_HOST` boot-time issuer (`http://<host>:<port>`), else the request's origin -- the same on the Node server and under `createFetchHandler()`.
-- `local.signKey` / `local.jwks` -- accepted but not used yet: tokens are always HS256-signed with `JWT_SECRET` (set it, at least 32 bytes, the same on every instance). `incrementalAuth.allowSkip` / `showAllAppsAtOnce` are likewise accepted and not read.
+- `local.signKey` -- the key tokens are signed with in place of `JWT_SECRET`. An RSA, EC (P-256/384/521) or Ed25519 **private JWK** signs with its `alg` (default RS256, ES256/384/512 by curve, EdDSA), names its `kid` (default: its RFC 7638 thumbprint) in each token, and its public half is published at `/.well-known/jwks.json`, so other services can verify the tokens. A `Uint8Array` or an `oct` JWK is an HMAC key (HS256, or the `oct` key's HS384/HS512; at least as long as the hash) and is never published. A public key, a key with `use: "enc"`, or an alg its key type can't sign with stops the server at startup (`SIGNING_KEY_INVALID`).
+- `local.jwks` -- public keys published beside the `signKey` and accepted on verification: keep a retired key's public half here while its tokens expire. It needs an asymmetric `signKey`, and holds public RSA/EC/OKP keys only; anything else stops the server at startup.
 - The protected resource metadata's `scopes_supported` is what the mode grants: `allowedScopes` (local/remote), `anonymousScopes` (public), `scopes` (static), `requiredScopes` then `scopes` (transparent), plus `authProviders` scopes outside local/remote mode.
 - An MCP 2026-07-28 request has no session: anonymous and static-key callers get none minted, so `MCP_SESSION_SECRET` is needed only for session clients; `this.context.verifiedSessionId` is `undefined` there.
 - A session client's `mcp-session-id` (or legacy SSE `?sessionId=`) is served only when `session:verify` verified it: in `public`, `static` and anonymous `transparent` mode it must decrypt under `MCP_SESSION_SECRET` with the mode's signature (static: of the token that opened it); in authenticated modes it must also belong to the caller's token. Any other id gets HTTP 404 (`-32000`) and the client re-initializes -- the raw id is never used to look up a transport, since anonymous sessions share an empty token and the id is their only credential. Run every instance with the same `MCP_SESSION_SECRET`; any instance then serves a session another one minted.
 
-Token signing uses **HS256, a symmetric secret** read from the `JWT_SECRET` environment variable -- there is **no RSA/EC key pair** and no key store. Generate a stable secret (`JWT_SECRET=$(openssl rand -hex 32)`); if it is unset, FrontMCP falls back to a random per-process secret and all tokens are invalidated on restart.
+Without `local.signKey`, token signing uses **HS256, a symmetric secret** read from the `JWT_SECRET` environment variable, and `/.well-known/jwks.json` serves an empty key set (`{ "keys": [] }`): an HMAC secret is never published. Generate a stable secret (`JWT_SECRET=$(openssl rand -hex 32)`); if it is unset, FrontMCP falls back to a random per-process secret and all tokens are invalidated on restart. `JWT_SECRET` stays required in production even with a `signKey`: it also encrypts stored upstream tokens and signs the sign-in and incremental-auth state.
 
 Key local-mode options:
 
@@ -109,9 +110,11 @@ Key local-mode options:
 - `requireEmail` (default `true`) -- when `false`, the login callback mints a code without prompting for an email, deriving a stable `sub` from `anonymousSubject` (default `'local-operator'`). Use for single-operator setups (e.g. Claude Code).
 - `consent` -- enables an **interactive tool-selection screen** during login AND **call-time enforcement**. When `consent.enabled` is `true`, `/oauth/callback` renders a consent screen (after authentication) listing the available tools; the user's checked tools are GET-submitted back to `/oauth/callback`, embedded in the token's `consent` claim, and enforced on every `tools/call` — a call to an unselected tool is rejected with `TOOL_NOT_CONSENTED` (JSON-RPC `-32003`). Honored flags: `groupByApp` (default `true`), `showDescriptions` (default `true`), `allowSelectAll` (default `true`), `requireSelection` (default `true` — rejects an empty submit), `customMessage`, `rememberConsent` (default `true`), `excludedTools` (never offered, always available), `defaultSelectedTools` (pre-checked). Federated logins show the screen after the last provider links. Tokens minted without consent (disabled, or via the test factory) carry no claim and stay all-tools-allowed. `rememberConsent` persists each user's per-client selection (keyed by `consent:{userSub}:{clientId}`, sharing the configured `tokenStorage` backend) and reuses it on the next login: the screen is skipped when no new tool appeared, or re-shown pre-filled when a NEW tool was added (a newly-added tool is never silently granted). Set `rememberConsent: false` to always re-show the screen. An agent is offered as its `invoke_<agent>` tool. The tools declared inside an `@Agent` and its nested agents are never offered, and the consent given to the agent covers them; the other agents and server tools an agent calls (`swarm`, `execution.inheritParentTools`) are offered and need their own consent.
 - `login` -- customize the built-in login page: `title` / `subtitle` / `logoUri`, declarative `fields` (each `{ type: 'text'|'password'|'email'|'select'|'hidden'; label?; required?; placeholder?; options? }`), a full HTML `render(ctx)` override, and a `subject` strategy (`{ fromField, strategy: 'per-session'|'per-account' }`). Omitting `login` keeps the default email/name page.
+- The `subject` strategy applies when `authenticate` returns `{ ok: true }` without a `sub`: `per-session` (the default) gives each login a fresh `sub`, and `per-account` hashes the `fromField` value into a stable `sub` (a login without that value gets a fresh one). `anonymousSubject` is only for `requireEmail: false` without `authenticate`. Up to 1.11.2, such a login without a `per-account` value got the `sub` of `anonymousSubject`, the same for every user.
 - `authenticate(input, ctx)` -- custom verification run at the login callback **before** a token is minted. `input.fields` carries the submitted login fields (reserved OAuth params excluded); `ctx` is `{ get, fetch, logger, clientId?, clientName? }`. Return `{ ok: true, sub?, claims? }` to mint a token (custom `claims` are embedded in the JWT; reserved claims like `sub`/`iss`/`exp`/`scope` are stripped) or `{ ok: false, message, retryField? }` to re-render the login page with the error (no code issued). When set, the email requirement no longer applies.
 - `providers` -- declarative upstream OAuth providers (GitHub, Slack, Jira, …) to orchestrate. When set, FrontMCP federates them at `/oauth/authorize`, stores each provider's tokens **encrypted server-side**, and exposes them to tools via `this.orchestration.getToken(id)`. See [Multi-provider orchestration](#multi-provider-orchestration-providers--federatedauth) below.
 - `federatedAuth` -- gates JWT issuance during federated login: `minProviders` (default `1` when `providers` are set — "no JWT until ≥1 linked"), `requiredProviders` (ids that must all be linked), and `stateValidation` (`'strict'` default).
+- `incrementalAuth` -- app-level grants and progressive authorization (see [configure-auth-modes](./configure-auth-modes.md)). `allowSkip: false` makes a sign-in through the provider picker link the provider of every app with its own `auth`: the picker shows them checked and required, and the sign-in is refused when one is left out or declined. `showAllAppsAtOnce: false` makes the picker ask one provider per page, in the picker's order: Continue links the provider, Skip leaves it for later, and Back answers the previous step again. Each step is checked server-side (the CSRF token, the `Origin`, and a refusal to skip a provider `allowSkip: false` or `federatedAuth.requiredProviders` requires, or one that leaves fewer than `minProviders` to link), and the answer is kept on the pending authorization. The last step carries the email field, and finishes the sign-in as the one-page picker does. A custom `ui.federated` page gets the step in `extras.step` (see `frontmcp-auth-ui`).
 - `dcr` -- declarative control surface for the built-in Dynamic Client Registration endpoint (`POST /oauth/register`) and the `/oauth/authorize` client allowlist. All fields optional; omitting `dcr` preserves today's behavior (DCR on in dev, off in prod). See [Dynamic Client Registration](#dynamic-client-registration-dcr) below.
 - `anonymousScopes` (default `['anonymous']`) -- scopes assigned to anonymous sessions (used when `allowDefaultPublic` lets an unauthenticated request through).
 - `allowDefaultPublic` (default `false`) -- when `true`, requests without a token are allowed through as anonymous instead of being rejected with a 401. Keep `false` to require auth on every request.
@@ -196,13 +199,17 @@ class Server {}
 
 - `enabled` -- when `false`, `/oauth/register` responds `404` and `registration_endpoint` is omitted from `/.well-known/oauth-authorization-server`. When unset, defaults to on in dev / off in prod.
 - `allowedRedirectUris` -- exact or simple-`*`-glob allowlist. A `redirect_uri` not on it is rejected at **register** (`400 invalid_redirect_uri`) and at **authorize** (error page — the unlisted URI is never redirected to, an open-redirect guard).
-- `allowedClientIds` -- only these `client_id`s may be used at `/oauth/authorize`. CIMD URL client ids are validated by the CIMD layer and are exempt.
+- `allowedClientIds` -- only these `client_id`s may be used at `/oauth/authorize`. CIMD URL client ids are validated by the CIMD layer and are exempt. With it set, `/oauth/register` refuses every registration (`400 access_denied`), since a minted `client_id` is never on it: list the clients in `clients`. Up to 1.11.2, with `clients` set too, it answered `201` with a `client_id` the allowlist then refused.
 - `initialAccessToken` -- when set, `/oauth/register` requires a matching `Authorization: Bearer <token>` (constant-time compared); otherwise `401 invalid_token`.
-- `clients` -- pre-registered trusted clients (`{ clientId, redirectUris, clientName?, clientSecret?, tokenEndpointAuthMethod?, grantTypes?, responseTypes?, scope? }`) seeded at startup; accepted by the authorize/token flows **without** a DCR round-trip. Lets you disable DCR and still ship known clients.
+- `clients` -- pre-registered trusted clients (`{ clientId, redirectUris, clientName?, clientSecret?, tokenEndpointAuthMethod?, grantTypes?, responseTypes?, scope? }`) seeded at startup; accepted by the authorize/token flows **without** a DCR round-trip. Lets you disable DCR and still ship known clients. `grantTypes` defaults to `['authorization_code', 'refresh_token']` (it was documented as `['authorization_code']`, which nothing enforced).
+
+What a client declared is enforced, for a registered client (DCR or `clients`) as for a CIMD document (RFC 7591): its `scope` limits the scopes it is granted (a request for others is narrowed, as `allowedScopes` narrows it), and its `grant_types` limit the token endpoint: without `refresh_token` it gets no refresh token and a refresh is refused (`400 unauthorized_client`), and without `authorization_code` a code exchange is refused the same way. A DCR registration or a CIMD document that leaves out `grant_types` gets both grants, and the registration response says so. Up to 1.11.2 none of this was enforced.
 
 A successful registration responds `201 Created`. This `dcr` block governs the **local Authorization Server only** — it is unrelated to the upstream-provider `providerConfig.dcrEnabled` / `registrationEndpoint` fields (which register THIS server against an upstream IdP).
 
-**CIMD** (`cimd`): `cache.type: 'redis'` with `cache.redis` (`{ url }` or `{ host, port, … }`) caches client metadata documents in Redis, connected at startup (it was always in memory up to 1.9.2). With `cimd.enabled: false`, a CIMD URL client id that isn't registered is refused (`CimdDisabledError`, 400 page) even with `requireRegisteredClients: false`.
+**CIMD** (`cimd`): `cache.type: 'redis'` with `cache.redis` (`{ url }` or `{ host, port, … }`) caches client metadata documents in Redis, connected at startup (it was always in memory up to 1.9.2). With `cimd.enabled: false`, a CIMD URL client id that isn't registered is refused (`CimdDisabledError`, 400 page) even with `requireRegisteredClients: false`. A document declares `token_endpoint_auth_method: 'none'` (the default, a public client) or `'private_key_jwt'` (a confidential client authenticated by its key, below). A public document holds no shared secret, so `client_secret_basic` / `client_secret_post` are refused at `/oauth/authorize` (400 page) and at the token endpoint (`invalid_client`). Its `grant_types` must include `authorization_code` (the default), and its `scope` and `grant_types` are enforced as above. Up to 1.11.2 only `redirect_uris` was checked.
+
+**`private_key_jwt` CIMD clients** (RFC 7523): the document lists its public keys in exactly one of `jwks` or `jwks_uri` (an `http` or private-address `jwks_uri` gets the 400 page at `/oauth/authorize`). Every token request, code exchange and refresh alike, carries `client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer` and `client_assertion=<JWT>`; `client_id` may be left out, since the assertion's `sub` names the client. The JWT is accepted only when it is signed with an asymmetric algorithm (`RS256/384/512`, `PS256/384/512`, `ES256/384/512`, `EdDSA`; never `none` or `HS*`) by a key from that set, `iss` and `sub` both equal the `client_id`, `aud` names the token endpoint (as discovery advertises it) or the issuer, `exp` is present and at most 10 minutes ahead, `nbf` and `iat` aren't in the future (30 seconds of skew), and its `jti` is unused. Each `jti` is kept until the assertion expires, in the same replay guard as incremental-authorization tickets (the Redis/SQLite `tokenStorage` when configured, else memory, which holds within one instance). Anything else answers `400 invalid_client` (`Client authentication failed`); the log names the check that failed. `jwks_uri` is fetched like the document (HTTPS, the SSRF guard on every hop, `network.redirectPolicy`, `network.timeoutMs`, `network.maxResponseSizeBytes`) and cached in memory for what its cache headers say, within `cache.minTtlMs` and `cache.maxTtlMs`; an assertion naming a `kid` the cached set lacks fetches it again, at most every 30 seconds. `/.well-known/oauth-authorization-server` lists `token_endpoint_auth_methods_supported: ['none', 'client_secret_basic', 'client_secret_post', 'private_key_jwt']` (`private_key_jwt` only with CIMD enabled; it listed none up to 1.11.2) and `token_endpoint_auth_signing_alg_values_supported`. Pin `FRONTMCP_PUBLIC_URL` (or `local.issuer`) in production, so the token endpoint and issuer an assertion must name don't follow the request's `Host`.
 
 ### Custom login + verification (`login` / `authenticate`)
 
@@ -336,9 +343,10 @@ the upstream IdP** — there is no FrontMCP login page and no provider-selection
 page. The IdP returns to `/oauth/provider/{id}/callback`; FrontMCP exchanges the
 code, stores the upstream tokens encrypted (server-side), derives the session
 identity (`sub`/`email`/`name`) from the **upstream user**, and mints its own
-HS256 session token for the MCP client: an access token that lasts an hour and a
-refresh token that lasts 30 days (rotated on each use). The IdP controls only the
-upstream tokens' lifetime.
+session token for the MCP client: an access token that lasts an hour, signed with
+HS256 and `JWT_SECRET`, or with `local.signKey` when set, and a refresh token that
+lasts 30 days (rotated on each use). The IdP controls only the upstream tokens'
+lifetime.
 
 ```typescript
 @FrontMcp({
@@ -347,7 +355,7 @@ upstream tokens' lifetime.
   auth: {
     mode: 'remote',
     provider: 'https://auth.example.com',
-    clientId: 'xxx', // pre-registered (DCR not yet wired)
+    clientId: 'xxx', // pre-registered (or omit it and set providerConfig.dcrEnabled)
     clientSecret: process.env['OAUTH_CLIENT_SECRET'],
     scopes: ['openid', 'profile', 'email'],
     providerConfig: { id: 'idp' }, // stable provider id (defaults to provider host)
@@ -388,9 +396,29 @@ old token only once the refresh token has been rotated, so a failed refresh can 
 retried with the same refresh token; of two redemptions of one refresh token at once,
 one may get `invalid_grant`.
 
-**Deferred (not yet wired):** upstream **Dynamic Client Registration**
-(`providerConfig.dcrEnabled` / `registrationEndpoint`) — provide a pre-registered
-`clientId`.
+**Dynamic client registration** (`providerConfig.dcrEnabled`): without a `clientId`,
+FrontMCP registers itself with the provider (RFC 7591) at startup and signs in
+with that client. It registers at `providerConfig.registrationEndpoint`, or at the
+`registration_endpoint` of the provider's metadata
+(`/.well-known/oauth-authorization-server`, then `/.well-known/openid-configuration`,
+whose `issuer` must be `provider`). The provider must allow open registration (no
+initial access token). The redirect URI it registers is
+`<issuer>/oauth/provider/<id>/callback`, so set `local.issuer` to your public URL.
+With a persistent `tokenStorage` the client is kept there (secret encrypted with
+`JWT_SECRET`) and every instance and restart reuses it; with memory storage the
+server registers again on each start. A refused or failed registration fails
+startup with `UPSTREAM_CLIENT_REGISTRATION_FAILED`. A set `clientId` wins over `dcrEnabled`.
+
+```typescript
+auth: {
+  mode: 'remote',
+  provider: 'https://auth.example.com',
+  scopes: ['openid', 'profile', 'email'],
+  local: { issuer: 'https://mcp.example.com' },
+  tokenStorage: { redis: { host: process.env['REDIS_HOST'] ?? 'localhost', port: 6379 } },
+  providerConfig: { dcrEnabled: true },
+}
+```
 
 ## OAuth Local Dev Flow
 
@@ -492,7 +520,7 @@ key is random to the process, and startup logs a warning. Otherwise, or with
 of an anonymous caller without a verified session isn't kept.
 
 On a server without `authProvidersVault`, `get()` and `headers()` throw `AuthProvidersNotConfiguredError`, naming
-the provider. A provider name listed twice is refused at startup. A name the vault doesn't register answers `null`,
+the provider; uncaught, the client gets it under the code `AUTH_PROVIDERS_NOT_CONFIGURED`, with its message. A provider name listed twice is refused at startup. A name the vault doesn't register answers `null`,
 so `@Tool({ authProviders })` and `@frontmcp/plugin-skilled-openapi` read the session credential vault's key of
 that name instead.
 

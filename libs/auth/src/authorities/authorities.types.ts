@@ -265,6 +265,8 @@ export interface AuthoritiesDenial {
 export interface AuthoritiesResult {
   /** Whether access was granted */
   granted: boolean;
+  /** With `granted: false`: the check couldn't be decided (e.g. a missing `{ fromInput }` value), so `not` keeps the denial */
+  unresolved?: boolean;
   /** Human-readable reason for denial (kept for backward compatibility) */
   deniedBy?: string;
   /** Structured denial data (machine-parsable) */
@@ -322,6 +324,8 @@ export interface AuthoritiesEvaluationContext {
     permissions: string[];
     /** Raw JWT claims */
     claims: Record<string, unknown>;
+    /** Tenant or organization id, read from the claim `claimsMapping.tenantId` names; undefined without one */
+    tenantId?: string;
   };
   /** Tool/prompt input arguments */
   input: Record<string, unknown>;

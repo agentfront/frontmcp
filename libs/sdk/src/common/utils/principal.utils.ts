@@ -15,6 +15,38 @@ export interface ResolvedPrincipal {
   claims: Record<string, unknown>;
 }
 
+/**
+ * Who a workflow run a trigger started runs as: not a signed-in caller, but an identity that permission rules allow by
+ * its role, `webhook:<workflow>` for a webhook or `event:<event>` for an event. No token can carry it: it is an object
+ * of this class on `authInfo.extra.workflowTrigger`, which only the server puts there.
+ */
+export class WorkflowTriggerPrincipal {
+  constructor(
+    /** What started the run. */
+    readonly kind: 'webhook' | 'event',
+    /** The workflow a webhook belongs to, or the event's name. */
+    readonly name: string,
+  ) {}
+
+  /** The role `execute` rules name to allow it: `webhook:<workflow>` or `event:<event>`. */
+  get role(): string {
+    return `${this.kind}:${this.name}`;
+  }
+
+  /** The auth a run this trigger starts carries. */
+  toAuthInfo(): Record<string, unknown> {
+    return { extra: { workflowTrigger: this } };
+  }
+}
+
+/** The trigger a run's auth names, when a webhook or an event started it. */
+export function workflowTriggerOf(
+  authInfo: Partial<Record<string, unknown>> | undefined,
+): WorkflowTriggerPrincipal | undefined {
+  const trigger = asRecord(authInfo?.['extra'])?.['workflowTrigger'];
+  return trigger instanceof WorkflowTriggerPrincipal ? trigger : undefined;
+}
+
 function toStringArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string');
   if (typeof value === 'string' && value.length > 0) return value.split(' ').filter(Boolean);
@@ -50,11 +82,17 @@ function firstPresent(sources: unknown[], convert: (value: unknown) => string[])
  *
  * Scopes are read from AuthInfo directly (the verified token's scope set) and,
  * as a fallback, from a `scope`/`scopes` claim.
+ *
+ * A run a webhook or an event started resolves to its trigger's role alone (see {@link WorkflowTriggerPrincipal}).
  */
 export function resolvePrincipal(
   authInfo: Partial<Record<string, unknown>> | undefined,
   contextBuilder?: AuthoritiesContextBuilder,
 ): ResolvedPrincipal {
+  // A trigger has its role and nothing else, whatever `claimsMapping` says
+  const trigger = workflowTriggerOf(authInfo);
+  if (trigger) return { sub: '', roles: [trigger.role], permissions: [], scopes: [], claims: {} };
+
   const info = authInfo ?? {};
   const user = asRecord(info['user']) ?? {};
   const extraAuthorization = asRecord(asRecord(info['extra'])?.['authorization']);

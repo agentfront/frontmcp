@@ -46,6 +46,20 @@ export interface FlowMetadata<Name extends FlowName> {
   plan: FlowPlan<ExtendFlows[Name]['stage']>;
   inputSchema: ExtendFlows[Name]['input'];
   outputSchema: ExtendFlows[Name]['output'];
+  /**
+   * Who the flow runs for, checked before its first stage.
+   *
+   * - `'authorized'`: a caller the server's auth admitted. Over HTTP, `session:verify` must accept the request: a flow
+   *   that serves a request no flow has verified yet (one mounted with `middleware`, or one it runs) verifies it
+   *   first, and refuses it with `UnauthorizedError` (401) or an `INSUFFICIENT_SCOPE` error (403), each with its
+   *   `WWW-Authenticate` challenge. The anonymous callers of public mode and `allowAnonymous` are admitted. stdio,
+   *   `connect()`, direct calls and the work the server starts itself (a scheduled job, a channel notification) are
+   *   the server process's own callers. A flow run from another flow, a tool or a job is checked against the caller of
+   *   the request it runs in.
+   * - `'public'`: any caller that reaches it; the flow authorizes in its stages, if at all.
+   *
+   * A flow whose metadata lacks it at run time (JavaScript) is `'public'`.
+   */
   access: 'public' | 'authorized';
   dependsOn?: Token[];
   middleware?: FlowMiddlewareOptions;

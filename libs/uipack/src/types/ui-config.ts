@@ -68,92 +68,94 @@ export interface UIContentSecurityPolicy {
 }
 
 /**
- * XSS protection and content security settings.
+ * Sanitization of widget markup (`ui.contentSecurity`).
  *
- * Controls sanitization of HTML content rendered in widgets.
- * By default, strict sanitization is applied to prevent XSS attacks.
+ * Without `contentSecurity`, template markup reaches the page as written: a `<script>`, an
+ * `onclick` or a `javascript:` link in markup a template builds (`ctx.helpers.html`, `trustedHtml`,
+ * an HTML string) is kept, which is what widgets with inline scripts rely on. Values interpolated
+ * into `` html`…` `` are escaped either way, and so are plain string results unless
+ * `escapeStringResults: false`.
  *
- * ## Platform Isolation Context
+ * With `contentSecurity` set, even to `{}`, the markup FrontMCP builds on the server from the
+ * template is sanitized before it goes into the page. The sanitizer reads the markup as the
+ * browser's HTML tokenizer does and writes every tag back out, each attribute value decoded once,
+ * checked, and written back escaped, so the page gets exactly what was checked. It removes:
  *
- * Both OpenAI and Claude render widgets in **double-iframe isolation**:
+ * - `<script>` elements and `on*` handler attributes;
+ * - `srcdoc`, and `<object>`, `<embed>`, `<applet>`, `<base>` and `<meta>` elements;
+ * - SVG animation elements (`<animate>`, `<set>`, `<animateMotion>`, `<animateTransform>`), which
+ *   can set any attribute of their parent, an `href` included;
+ * - `data-tool-call` and `data-tool-args`, with which the bridge calls a tool when the element is
+ *   clicked;
+ * - every URL attribute (`href`, `src`, `action`, `formaction`, `xlink:href`, `srcset`, `ping`, …)
+ *   whose scheme isn't `http:`, `https:` or `mailto:`; relative URLs stay, and so do raster
+ *   `data:image/…` URLs in `<img src>`;
+ * - `@import` rules in `<style>` elements, `<link rel="stylesheet">` to another origin, and
+ *   `position: fixed` and `position: sticky` in `style` attributes, which would let the markup lay
+ *   itself over the widget;
+ * - comments, doctypes and processing instructions.
  *
- * ```
- * ┌─────────────────────────────────────────────────┐
- * │  ChatGPT / Claude Desktop                       │
- * │  ┌─────────────────────────────────────────────┐│
- * │  │  Outer Sandbox Iframe                       ││
- * │  │  - sandbox="allow-scripts allow-same-origin"││
- * │  │  - No access to parent cookies              ││
- * │  │  ┌─────────────────────────────────────────┐││
- * │  │  │  Inner Widget Iframe                    │││
- * │  │  │  - CSP: script-src 'self' 'unsafe-inline'│││
- * │  │  │  - CSP: connect-src based on config     │││
- * │  │  │  - Your widget HTML renders here        │││
- * │  │  └─────────────────────────────────────────┘││
- * │  └─────────────────────────────────────────────┘│
- * └─────────────────────────────────────────────────┘
- * ```
+ * Other CSS is not filtered: a `<style>` element can still position or hide elements, and
+ * `url(…)` in CSS still loads from the origins the widget's Content-Security-Policy allows.
  *
- * This isolation means XSS attacks are **contained** but can still:
- * - Access widget data (input/output)
- * - Make API calls within CSP-allowed domains
- * - Display fake/phishing UI to users
+ * It applies to HTML, Markdown and MDX strings, to a template function's result, and to a
+ * component rendered on the server with `uiType: 'react'`. The page FrontMCP builds around the
+ * markup (the bridge, the call's data) is not touched, and a `{ file }` widget, which renders in
+ * the page, can't take it: the server refuses to start such a tool. It must be a plain object whose
+ * flags are booleans; anything else fails startup.
  *
- * **Recommendation:** Only disable protection for fully trusted content.
+ * Both OpenAI and Claude render widgets in sandboxed iframes, so script in a widget is contained,
+ * but it can still read the widget's data, call tools the widget may call and show a fake UI.
+ * Sanitize when the markup carries values you don't control and you'd rather not rely on escaping
+ * every one of them.
  */
 export interface UIContentSecurity {
   /**
-   * Allow `javascript:` and other potentially dangerous URL schemes in links.
-   *
-   * When `false` (default), URLs are validated to only allow:
-   * - `http://`, `https://` (web URLs)
-   * - `/`, `#` (relative paths, anchors)
-   * - `mailto:` (email links)
-   *
-   * When `true`, allows any URL scheme including:
-   * - `javascript:` (inline script execution)
-   * - `data:` (data URIs)
-   * - `vbscript:` (legacy script)
+   * Keep any scheme but `data:` in the attributes that navigate when the user follows them: `href`
+   * of `<a>` and `<area>`, `action` of `<form>`, and `formaction` of `<button>` and `<input>`. A
+   * `javascript:` link then runs when it is clicked. Every other URL attribute, such as `src` of an
+   * `<iframe>`, `<frame>` or `<img>`, keeps the `http:` / `https:` / `mailto:` rule.
    *
    * @default false
    */
   allowUnsafeLinks?: boolean;
 
   /**
-   * Allow inline `<script>` tags and event handlers (onclick, onerror, etc).
-   *
-   * When `false` (default), HTML content is sanitized to remove:
-   * - `<script>...</script>` tags
-   * - Event handler attributes (`onclick`, `onerror`, `onload`, etc.)
-   *
-   * When `true`, these elements are preserved in the output.
-   *
-   * **Note:** Even with this enabled, CSP may still block script execution
-   * depending on the platform's iframe sandbox settings.
+   * Keep script written in the markup: `<script>` elements without a `src` (or SVG `href`), and
+   * `on*` event handler attributes. A `<script src>`, `<object>`, `<embed>`, `<applet>` and
+   * `srcdoc` are still removed. Inline script can do anything script can, loading more script
+   * included, so this turns script protection off for whoever controls the markup: set it only for
+   * markup you trust. Hosts may still block a script through the widget's Content-Security-Policy.
    *
    * @default false
    */
   allowInlineScripts?: boolean;
 
   /**
-   * Completely bypass all HTML sanitization.
+   * Keep `data-tool-call` and `data-tool-args`. The bridge calls the tool `data-tool-call` names,
+   * with the JSON in `data-tool-args`, when the element (or anything inside it) is clicked, so
+   * whoever controls the markup chooses which tool a click calls and with what. Set it only when
+   * the markup's tool-call attributes are your own.
    *
-   * **⚠️ DANGEROUS:** Only use with fully trusted, server-generated content.
-   *
-   * When `true`, no sanitization is applied:
-   * - Script tags are preserved
-   * - Event handlers are preserved
-   * - All URL schemes are allowed
-   * - No HTML escaping is performed
-   *
-   * This is useful for:
-   * - Embedding trusted third-party widgets
-   * - Complex interactive dashboards from trusted sources
-   * - Content that was pre-sanitized server-side
+   * @default false
+   */
+  allowToolCallAttributes?: boolean;
+
+  /**
+   * Skip sanitization: the markup is used as written, as if `contentSecurity` were unset. Only for
+   * markup you fully trust.
    *
    * @default false
    */
   bypassSanitization?: boolean;
+
+  /**
+   * The longest markup, in characters, that is sanitized. Longer markup is not rendered: the render
+   * fails, and the tool call returns without its widget.
+   *
+   * @default 2097152 (2 Mi)
+   */
+  maxMarkupLength?: number;
 }
 
 // ============================================
@@ -254,7 +256,8 @@ export type TemplateBuilderFn<In = unknown, Out = unknown> = (ctx: TemplateConte
  * Widget serving mode determines how the widget HTML is delivered to the client.
  *
  * - `'auto'` (default): Automatically select mode based on client capabilities.
- *   For OpenAI/ext-apps: uses 'inline'. For Claude: uses 'inline' with dual-payload.
+ *   For ext-apps and Claude: uses 'inline'. For OpenAI: uses 'static', so no result carries
+ *   the page: the OpenAI Apps SDK renders the widget from its `ui://` resource.
  *   For unsupported clients (e.g., Gemini): skips UI entirely (returns JSON only).
  *
  * - `'inline'`: HTML embedded directly in tool response `_meta['ui/html']`.
@@ -268,9 +271,13 @@ export type TemplateBuilderFn<In = unknown, Out = unknown> = (ctx: TemplateConte
  * - `'hybrid'`: Shell (React runtime + bridge) pre-compiled at startup.
  *   Component code transpiled per-request and delivered in `_meta['ui/component']`.
  *
- * - `'direct-url'`: HTTP endpoint on MCP server.
+ * - `'direct-url'`: Compiled at startup, as with `'static'`, and served on a route of the server
+ *   (`directPath`). The `ui://` resource is a small page that frames that URL and relays the host's
+ *   bridge messages. Results carry no page.
  *
- * - `'custom-url'`: Custom URL (CDN or external hosting).
+ * - `'custom-url'`: The page at `customWidgetUrl` (a CDN, a separate deployment) is the widget; the
+ *   `ui://` resource frames it, as for `'direct-url'`. FrontMCP doesn't render `template` for it.
+ *   Results carry no page.
  *
  * ## Claude target caveat (issue #447)
  *
@@ -288,8 +295,8 @@ export type WidgetServingMode =
   | 'inline' // HTML embedded directly in tool response _meta
   | 'static' // Pre-compiled at startup, resolved via tools/list (ui:// resource URI)
   | 'hybrid' // Shell (React + renderer) cached, component + data in response
-  | 'direct-url' // HTTP endpoint on MCP server
-  | 'custom-url'; // Custom URL (CDN or external hosting)
+  | 'direct-url' // Compiled at startup, served on a server route that the ui:// resource frames
+  | 'custom-url'; // The page at customWidgetUrl, which the ui:// resource frames
 
 // ============================================
 // Display Mode
@@ -341,8 +348,10 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * Supports multiple formats (auto-detected by renderer):
    * - Template builder function: `(ctx) => string` - receives input/output/helpers, returns HTML
    * - Static HTML/MDX string: `"<div>...</div>"` or `"# Title\n<Card />"`
-   * - React component: `MyWidget` - receives props with input/output/helpers
+   * - React component: `MyWidget` - rendered on the server with `uiType: 'react'`, with props output/input/loading
    * - FileSource object: `{ file: './my-widget.tsx' }` - transpiled client-side via esm.sh CDN
+   *
+   * Not rendered for `servingMode: 'custom-url'`, whose page is at `customWidgetUrl`.
    */
 
   template: TemplateBuilderFn<In, Out> | string | ((props: any) => any) | FileSource;
@@ -354,47 +363,17 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   csp?: UIContentSecurityPolicy;
 
   /**
-   * Content security and XSS protection settings.
-   *
-   * By default, FrontMCP sanitizes HTML content to prevent XSS attacks:
-   * - Removes `<script>` tags and event handlers (onclick, onerror, etc.)
-   * - Validates URL schemes in links (blocks `javascript:`, `data:`, `vbscript:`)
-   *
-   * These protections can be disabled for trusted content that requires
-   * inline scripts, custom event handlers, or special URL schemes.
-   *
-   * ## Security Context
-   *
-   * **OpenAI/Claude run widgets in double-iframe isolation:**
-   * - Outer sandbox iframe with restricted permissions
-   * - Inner content iframe with CSP headers
-   * - No access to parent window or cookies
-   * - Network requests restricted by CSP
-   *
-   * This isolation provides defense-in-depth, making XSS less impactful.
-   * However, XSS can still:
-   * - Steal widget state/data
-   * - Make unauthorized API calls (within CSP limits)
-   * - Phish users with fake UI
-   *
-   * **Best Practice:** Keep XSS protection enabled unless you have a specific
-   * need for inline scripts/handlers AND trust your content source completely.
+   * Sanitize the markup FrontMCP builds on the server from the template. Unset (the default), it is
+   * used as written; set, even to `{}`, scripts, event handlers and unsafe links are removed unless
+   * the flags allow them. See {@link UIContentSecurity}.
    *
    * @example
    * ```typescript
-   * // Default: Full XSS protection
-   * ui: { template: MyWidget }
-   *
-   * // Allow inline scripts for trusted dashboard
+   * // Render the HTML a tool returns, without its scripts, handlers or unsafe links
    * ui: {
-   *   template: TrustedDashboard,
-   *   contentSecurity: { allowInlineScripts: true }
-   * }
-   *
-   * // Bypass all sanitization for fully trusted HTML
-   * ui: {
-   *   template: FullyTrustedContent,
-   *   contentSecurity: { bypassSanitization: true }
+   *   template: (ctx) => ctx.output.summaryHtml,
+   *   escapeStringResults: false,
+   *   contentSecurity: {},
    * }
    * ```
    */
@@ -513,8 +492,9 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * How the widget HTML should be served to the client.
    *
    * - `'auto'` (default): Automatically select mode based on client capabilities.
-   *   For OpenAI/ext-apps clients: uses `'inline'` with `_meta`.
-   *   For Claude clients: uses `'inline'` with dual-payload format.
+   *   For ext-apps and Claude clients: uses `'inline'` with `_meta`.
+   *   For OpenAI clients: uses `'static'`, so no result carries the page, not even the one a widget's
+   *   own `window.openai.callTool()` gets: the OpenAI Apps SDK renders the widget from its `ui://` resource.
    *   For unsupported clients (Gemini, unknown): skips UI (returns JSON only).
    *
    * - `'inline'`: HTML embedded directly in tool response `_meta['ui/html']`.
@@ -527,11 +507,16 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - `'hybrid'`: Shell (React runtime + bridge) pre-compiled at startup.
    *   Component code transpiled per-request and delivered in `_meta['ui/component']`.
    *
-   * - `'direct-url'`: Served from MCP server's HTTP endpoint.
-   *   Avoids third-party cookie issues since widget loads from same domain.
+   * - `'direct-url'`: Compiled at startup, as with `'static'`, and served from the server's own
+   *   HTTP route (`directPath`). The `ui://` resource is a small page that frames that URL, so the
+   *   widget runs on the server's origin, and relays the host's bridge messages to it. The resource
+   *   declares the URL's origin as a frame: `_meta.ui.csp.frameDomains` (MCP Apps) and
+   *   `_meta['openai/widgetCSP'].frame_domains` (OpenAI Apps SDK). Results carry no page; the host
+   *   sends each call's data to the widget.
    *
-   * - `'custom-url'`: Served from a custom URL (CDN, external hosting).
-   *   Requires `customWidgetUrl` to be set.
+   * - `'custom-url'`: The page at `customWidgetUrl`, such as a CDN's, is the widget. The `ui://`
+   *   resource frames it and declares its origin as a frame, as for `'direct-url'`. FrontMCP doesn't
+   *   render `template` for this mode. Results carry no page.
    *
    * When unset, the FrontMCP SDK uses the app's `@App({ ui: { servingMode } })` default, else the
    * server's `@FrontMcp({ ui: { servingMode } })`, else `'auto'`.
@@ -541,45 +526,69 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   servingMode?: WidgetServingMode;
 
   /**
-   * Custom URL for widget serving when `servingMode: 'custom-url'`.
-   * The URL can include `{token}` placeholder which will be replaced with
-   * the widget access token.
+   * The URL of the widget page when `servingMode: 'custom-url'`: an `https://` URL (or `http://` on
+   * localhost), such as a CDN's. The `ui://` resource frames it, declares its origin as a frame
+   * (`_meta.ui.csp.frameDomains`, `_meta['openai/widgetCSP'].frame_domains`) and relays the host's
+   * bridge messages to it.
+   *
+   * The page is yours: FrontMCP doesn't render `template` for it, and it must answer the host over
+   * the MCP Apps bridge (JSON-RPC over `postMessage` to its parent): a page built with `buildShell()`
+   * from `@frontmcp/uipack/shell` has FrontMCP's bridge, and `@modelcontextprotocol/ext-apps` works
+   * too. It must allow framing (no `X-Frame-Options: DENY`).
+   *
+   * The URL is used as written: FrontMCP adds no token or call data to it, and the page gets each
+   * call's result from the host. Startup refuses a URL with a `{…}` placeholder or credentials, a
+   * `'custom-url'` widget without this option, and this option on a widget not served `'custom-url'`.
    *
    * @example
    * ```typescript
-   * customWidgetUrl: 'https://cdn.example.com/widgets/weather.html?token={token}'
+   * ui: { template: '', servingMode: 'custom-url', customWidgetUrl: 'https://cdn.example.com/widgets/weather.html' }
    * ```
    */
   customWidgetUrl?: string;
 
   /**
-   * Path for direct URL serving when `servingMode: 'direct-url'`.
-   * This path is appended to the MCP server's base URL.
+   * The route a `servingMode: 'direct-url'` widget is served on, from the server's root. Default:
+   * `/widgets/` and the tool name (characters other than letters, digits, `.`, `_`, `~` and `-`
+   * become `-`).
+   *
+   * The route answers `GET` without auth, in every auth mode, because a host loads it in a frame,
+   * which sends no credentials. It serves the page compiled at startup, which holds no call's data.
+   * The URL the `ui://` resource frames starts with `FRONTMCP_PUBLIC_URL` when set, else with the
+   * scheme and host the `resources/read` request came to. Startup refuses a path that collides with
+   * another route of the server or another widget, and a `directPath` on a widget not served
+   * `'direct-url'`.
    *
    * @example
    * ```typescript
-   * directPath: '/widgets/weather'
-   * // Results in: https://mcp-server.example.com/widgets/weather?token=...
+   * ui: { template: WeatherWidget, servingMode: 'direct-url', directPath: '/widgets/weather' }
+   * // ui://widget/get_weather.html frames https://mcp.example.com/widgets/weather
    * ```
    */
   directPath?: string;
 
   /**
-   * Custom React components available in MDX templates.
-   * These components can be used directly in MDX content without importing.
+   * React components for an MDX template. With `mdxComponents` set, a string template is MDX: it is
+   * compiled once with `@mdx-js/mdx` and rendered to HTML on the server with React for each render,
+   * with these components for the tags it names (and for HTML elements it overrides, such as `h1`).
+   * Its expressions read the call's data as `input`, `output` and `helpers`; the data is rendered as
+   * escaped text, never compiled. The page carries the rendered HTML, not React, so event handlers
+   * in the template don't run in the page.
+   *
+   * Needs `@mdx-js/mdx`, `react` and `react-dom` installed (and `remark-gfm` for
+   * `runtimeOptions.markdown.gfm`); `runtimeOptions.markdown.highlightTheme` highlights its fenced
+   * code. The template compiles at startup, so a syntax error or a missing package fails it. Only a
+   * string template can be MDX: a template function's result carries the call's data, and compiling
+   * it would run that data as code, so `mdxComponents` on a function fails startup.
    *
    * @example
    * ```typescript
    * ui: {
-   *   template: `# Weather\n<Alert type="info">Data loaded</Alert>`,
-   *   mdxComponents: {
-   *     Alert: ({ type, children }) => <div className={type}>{children}</div>,
-   *     Card: MyCardComponent,
-   *   }
+   *   template: `# {output.title}\n\n<Alert type="info">{output.items.length} items</Alert>`,
+   *   mdxComponents: { Alert },
    * }
    * ```
    */
-
   mdxComponents?: Record<string, any>;
 
   // ============================================
@@ -640,51 +649,24 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   // ============================================
 
   /**
-   * Enable client-side React hydration after server-side rendering (SSR).
+   * Render a React widget on the server and hydrate it in the page.
    *
-   * **Default: `false`**
+   * Applies to a `{ file }` `.tsx` / `.jsx` widget. FrontMCP bundles the widget for the server too,
+   * renders it there with the call's data (the props the page's mount gives it: `output`, `input`,
+   * `loading`) inside `McpBridgeProvider`, and puts that HTML in the page's `#root`; the page's mount
+   * then calls `hydrateRoot` with the same props instead of rendering into an empty root. The widget
+   * shows its content before its script runs, and stays interactive.
    *
-   * When `false` (default):
-   * - SSR output is static HTML
-   * - No React runtime is loaded on the client
-   * - All interactivity is handled by the FrontMCP Bridge IIFE
-   * - This prevents React Hydration Error #418 in MCP clients
+   * Hydration expects the page to render what the server did: a widget whose first render reads
+   * `window`, the time or random values, or a host-specific hook value, may not match, and React then
+   * renders it again in the page (logging a recoverable error). A widget compiled at startup
+   * (`servingMode: 'static'`) is rendered with no data, in its `loading` state.
    *
-   * When `true`:
-   * - React/ReactDOM CDN scripts are included
-   * - Client attempts to hydrate React components
-   * - May cause hydration mismatch errors in some MCP clients (Claude, ChatGPT)
+   * A component reference (`template: MyWidget`) has no source file to bundle for the page, so it
+   * can't be hydrated: render it on the server only with `uiType: 'react'`, or use `{ file }`. Any
+   * other template fails startup with `hydrate: true`.
    *
-   * **Why disabled by default?**
-   * MCP clients like Claude and ChatGPT render HTML in sandboxed iframes.
-   * React hydration expects the client-rendered HTML to exactly match the
-   * server-rendered HTML. Due to timing differences, random data, and
-   * different execution contexts, mismatches frequently occur causing
-   * React Error #418 ("Hydration failed...").
-   *
-   * The FrontMCP Bridge IIFE already provides all necessary interactivity
-   * (tool calls via `data-tool-call`, state updates, loading states) without
-   * requiring React hydration.
-   *
-   * **Only enable if:**
-   * - You need React state management on the client
-   * - You're sure your template produces deterministic HTML
-   * - You've tested hydration works in your target MCP client
-   *
-   * @example
-   * ```typescript
-   * // Disable hydration (default behavior - recommended)
-   * ui: {
-   *   template: MyReactComponent,
-   *   hydrate: false
-   * }
-   *
-   * // Enable hydration (use with caution)
-   * ui: {
-   *   template: MyStatefulComponent,
-   *   hydrate: true
-   * }
-   * ```
+   * @default false
    */
   hydrate?: boolean;
 
@@ -693,25 +675,42 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   // ============================================
 
   /**
-   * UI renderer type.
+   * The renderer, instead of the one detected from the template.
    *
-   * - `'html'`: HTML with optional Handlebars
-   * - `'react'`: React component (SSR)
-   * - `'mdx'`: MDX template
-   * - `'markdown'`: Pure Markdown
-   * - `'auto'`: Auto-detect from template (default)
+   * - `'auto'` (default): detected. A string with both `<` and `>` is HTML, any other string is
+   *   Markdown (MDX with `mdxComponents`), a function is an HTML builder unless it is a React
+   *   component, and `{ file: '….tsx' }` is a React widget.
+   * - `'html'`: a string is used as written, even without `<` and `>`, and a function is called as
+   *   an HTML builder, even with a capitalized name.
+   * - `'markdown'`: a string is converted from Markdown even with `<` and `>` (raw HTML is escaped),
+   *   and so is a template function's string result.
+   * - `'mdx'`: a string is rendered as MDX on the server, with `mdxComponents` if set.
+   * - `'react'`: a component reference (function, class, `memo` / `forwardRef`) is rendered to
+   *   static HTML on the server with React, with the widget props (`output`, `input`, `loading`);
+   *   it can't be bundled for the page, so its handlers don't run there. A `{ file }` `.tsx` /
+   *   `.jsx` widget is bundled for the page as with `'auto'`.
+   *
+   * A template the renderer can't take fails startup, such as `'react'` on a string or `'mdx'` on a
+   * function. `'react'`, `'mdx'` and `hydrate` load `react` and `react-dom` from the server's project.
    *
    * @default 'auto'
    */
   uiType?: 'html' | 'react' | 'mdx' | 'markdown' | 'auto';
 
   /**
-   * Bundling mode.
+   * When the widget page is built.
    *
-   * - `'static'`: Pre-compile widget shell, inject data at runtime (default)
-   * - `'dynamic'`: Generate fresh HTML per tool invocation
+   * - `'static'`: once, without a call's data; the host sends each call's result to the page.
+   * - `'dynamic'`: for each call, with that call's data in the page.
    *
-   * @default 'static'
+   * It picks the serving mode where `servingMode` leaves the choice open: with `servingMode` unset
+   * (an app or server default included) or `'auto'`, `'dynamic'` serves `'inline'` on every
+   * platform, and `'static'` serves `'static'`, or keeps an inherited `'hybrid'`, `'direct-url'` or
+   * `'custom-url'`, which build the page once as well. Startup refuses a tool's own `servingMode`
+   * that contradicts it: `'dynamic'` goes with `'inline'` only, and `'static'` with anything but
+   * `'inline'`.
+   *
+   * Unset (the default): `servingMode` alone decides, as before this option worked.
    */
   bundlingMode?: 'static' | 'dynamic';
 
@@ -744,13 +743,33 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * Runtime options for specific renderers.
    */
   runtimeOptions?: {
-    /** Enable React hydration after SSR */
+    /** Same as {@link UITemplateConfig.hydrate}, which wins when both are set. */
     hydrate?: boolean;
-    /** Markdown rendering options */
+    /**
+     * How a Markdown template (a string template without both `<` and `>`) is converted to HTML.
+     * Unset, the converter writes headings, paragraphs, lists, fenced code, emphasis, inline code
+     * and links. Setting `gfm` or `highlightTheme` on a template that isn't Markdown fails startup.
+     *
+     * @example
+     * ```typescript
+     * ui: {
+     *   template: '| Region | Sales |\n|---|---:|\n| EU | 12 |\n\n```ts\nconst total = 12;\n```',
+     *   runtimeOptions: { markdown: { gfm: true, highlightTheme: 'github' } },
+     * }
+     * ```
+     */
     markdown?: {
-      /** Enable GitHub-flavored markdown */
+      /**
+       * GitHub-flavored Markdown: tables (with `:---:` alignment), task list items (`- [x]`),
+       * `~~strikethrough~~`, and links for bare `https://` and `www.` URLs. Raw HTML stays escaped.
+       */
       gfm?: boolean;
-      /** Syntax highlighting theme */
+      /**
+       * Highlight fenced code that names its language (```` ```ts ````) on the server with highlight.js,
+       * an optional peer to install, and put this theme's stylesheet in the page: the name of a
+       * stylesheet in `highlight.js/styles`, such as `'github'`, `'github-dark'` or
+       * `'base16/dracula'`. A missing highlight.js or theme fails startup.
+       */
       highlightTheme?: string;
     };
   };
@@ -760,32 +779,23 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   // ============================================
 
   /**
-   * Prefix text shown before HTML in dual-payload responses (Claude).
+   * Turns on the "dual payload" for clients that render no widget, and is the text it opens with.
    *
-   * When the output mode is `'dual-payload'` (auto-detected for Claude clients),
-   * the tool response contains two TextContent blocks:
-   * 1. Pure JSON data: `{"temperature": 72, ...}`
-   * 2. Markdown-wrapped HTML: `{prefix}:\n\n```html\n<!DOCTYPE html>...\n```
+   * A `tools/call` from a client FrontMCP detects as `'claude'` (a Claude client that declares no
+   * MCP Apps support, so it renders no widget) gets two text blocks:
+   * 1. the JSON of the result, as without this option;
+   * 2. `{htmlResponsePrefix}:` and the page rendered with this call's data, in an `html` code fence,
+   *    which such a client can show (an Artifact in Claude).
    *
-   * This field controls the prefix text in block 2.
-   *
-   * @default 'Here is the visual result'
+   * The page is rendered for the call whatever `servingMode` is, and goes to that caller only. MCP
+   * Apps hosts, ChatGPT and every other client get the result as without this option, and so do
+   * calls a widget or an agent makes. Unset (the default): no client gets the second block. Startup
+   * refuses an empty value or one longer than 500 characters.
    *
    * @example
    * ```typescript
-   * // Weather tool
-   * ui: {
-   *   template: WeatherWidget,
-   *   htmlResponsePrefix: 'Here is the weather dashboard',
-   * }
-   * // Output block 2: "Here is the weather dashboard:\n\n```html\n..."
-   *
-   * // Stock tool
-   * ui: {
-   *   template: StockWidget,
-   *   htmlResponsePrefix: 'Here is the stock information',
-   * }
-   * // Output block 2: "Here is the stock information:\n\n```html\n..."
+   * ui: { template: WeatherWidget, htmlResponsePrefix: 'Here is the weather dashboard' }
+   * // Block 2: "Here is the weather dashboard:\n\n```html\n<!DOCTYPE html>…\n```"
    * ```
    */
   htmlResponsePrefix?: string;

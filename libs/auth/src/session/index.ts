@@ -120,6 +120,7 @@ export type { CredentialResumePayload } from './credential-resume-link';
 export {
   signIncrementalAuthTicket,
   verifyIncrementalAuthTicket,
+  openIncrementalAuthTicketProfile,
   DEFAULT_INCREMENTAL_TICKET_TTL_MS,
 } from './incremental-auth-ticket';
 export type { IncrementalAuthTicketPayload } from './incremental-auth-ticket';
@@ -242,6 +243,7 @@ export {
   decryptSessionJson,
   safeDecrypt,
   resetCachedKey,
+  isSessionSecretConfigured,
   TinyTtlCache,
 } from './utils';
 export type { AnonymousCallerClaimsOptions } from './utils';

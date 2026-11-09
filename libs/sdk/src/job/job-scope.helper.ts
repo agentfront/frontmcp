@@ -1,13 +1,15 @@
 import { type Token } from '@frontmcp/di';
 import { type SqliteAdapterOptions } from '@frontmcp/utils';
 
+import { ChannelEventBus } from '../channel/sources/app-event.source';
 import {
   completionEventsOf,
   completionOutputText,
   type ScopeCompletionEvents,
 } from '../channel/sources/completion-events';
 import { type JobCompletionEvent } from '../channel/sources/job-completion.source';
-import { type EntryOwnerRef, type RedisOptionsInput } from '../common';
+import { type EntryOwnerRef, type RedisOptionsInput, type ScopeEntry } from '../common';
+import { type WorkflowEntry } from '../common/entries/workflow.entry';
 import { type JobType } from '../common/interfaces/job.interface';
 import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
@@ -19,11 +21,16 @@ import GetWorkflowStatusTool from '../workflow/tools/get-workflow-status.tool';
 import ListWorkflowsTool from '../workflow/tools/list-workflows.tool';
 import RegisterWorkflowTool from '../workflow/tools/register-workflow.tool';
 import RemoveWorkflowTool from '../workflow/tools/remove-workflow.tool';
+import UpdateWorkflowTool from '../workflow/tools/update-workflow.tool';
+import { listenToWorkflowEvents } from '../workflow/trigger/workflow-events';
+import { assertWorkflowTriggers, eventWorkflows } from '../workflow/trigger/workflow-triggers';
 import WorkflowRegistry, { type WorkflowRegistryInterface } from '../workflow/workflow.registry';
+import { normalizeWorkflow } from '../workflow/workflow.utils';
 import { DETACHED_FLUSH_MS, JobExecutionManager } from './execution/job-execution.manager';
 import ExecuteJobFlow from './flows/execute-job.flow';
 import { JobAdmission, type JobAdmissionOptions } from './job-admission';
 import JobRegistry, { type JobRegistryInterface } from './job.registry';
+import { normalizeJob } from './job.utils';
 import { JobRunResource } from './resources/job-run.resource';
 import { assertRunnersAvailable } from './runner/job-runner';
 import { createJobDefinitionStore } from './store/job-definition-store.factory';
@@ -37,6 +44,7 @@ import GetJobStatusTool from './tools/get-job-status.tool';
 import ListJobsTool from './tools/list-jobs.tool';
 import RegisterJobTool from './tools/register-job.tool';
 import RemoveJobTool from './tools/remove-job.tool';
+import UpdateJobTool from './tools/update-job.tool';
 
 export interface JobsConfig {
   enabled: boolean;
@@ -138,6 +146,15 @@ export interface JobCapabilitiesResult {
   stateStore: JobStateStore;
   definitionStore: JobDefinitionStore;
   managementTools: any[];
+  /** What starts the `trigger: 'event'` workflows' runs; undefined in a detached runner. */
+  workflowEvents?: WorkflowEventListening;
+}
+
+/** The `trigger: 'event'` workflows listening on the scope's event bus, those registered later included. */
+export interface WorkflowEventListening {
+  /** The bus they listen on; undefined until a workflow has `trigger: 'event'`. */
+  readonly bus: ChannelEventBus | undefined;
+  stop(): void;
 }
 
 /**
@@ -184,9 +201,10 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     workflowRegistry.registerDynamic(dynWf);
   }
 
-  // A detached job is refused here, at boot, where its process could not outlive the server
+  // Refused at boot: a detached job this server can't outlive, or a webhook workflow without a usable secret or path
   try {
     assertRunnersAvailable(jobRegistry.getJobs(), jobsConfig.runner);
+    assertWorkflowTriggers(workflowRegistry.getWorkflows(true));
   } catch (error) {
     await stateStore.dispose();
     await definitionStore.dispose();
@@ -222,6 +240,11 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     await definitionStore.dispose();
   });
   scope.resources.registerDynamicResource(JobRunResource);
+  // `trigger: 'event'` workflows listen on the scope's event bus, which app-event channel sources share
+  const workflowEvents = jobWorker
+    ? undefined
+    : listenToEvents(scope, workflowRegistry, executionManager, jobRegistry, logger);
+  if (workflowEvents) scope.onDispose(() => workflowEvents.stop());
   // Runs a dead runner left in a shared store are settled in the background, once the registries exist
   if (stateStoreType !== 'memory' && !jobWorker) {
     void executionManager
@@ -246,9 +269,9 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
   ];
 
   if (jobsConfig.allowDynamicRegistration === true) {
-    managementTools.push(RegisterJobTool, RegisterWorkflowTool);
+    managementTools.push(RegisterJobTool, UpdateJobTool, RegisterWorkflowTool, UpdateWorkflowTool);
     logger.warn(
-      'Dynamic job registration is ENABLED: register_job/register_workflow accept a raw script and register it as an executable job.',
+      'Dynamic job registration is ENABLED: register_job/register_workflow accept a raw script and register it as an executable job, and update_job/update_workflow change one.',
     );
   }
 
@@ -263,6 +286,96 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     stateStore,
     definitionStore,
     managementTools,
+    workflowEvents,
+  };
+}
+
+/**
+ * Register jobs and workflows an app serves after the job system started (an ESM app's new version). A job whose
+ * runner the server can't start is refused, as startup refuses it. Resolves to a function that unregisters them.
+ */
+export async function registerAppJobEntries(args: {
+  jobRegistry: JobRegistryInterface;
+  workflowRegistry: WorkflowRegistryInterface;
+  jobs: readonly JobType[];
+  workflows: readonly WorkflowType[];
+  providers: ProviderRegistry;
+  runner?: JobRunner;
+}): Promise<() => void> {
+  const { jobRegistry, workflowRegistry } = args;
+  assertRunnersAvailable(
+    args.jobs.map((job) => {
+      const { metadata } = normalizeJob(job);
+      return { name: metadata.name, metadata };
+    }),
+    args.runner,
+  );
+  const jobTokens = await jobRegistry.registerAppJobs(args.jobs, args.providers);
+  try {
+    const workflowTokens = workflowRegistry.registerAppWorkflows(args.workflows);
+    return () => {
+      jobRegistry.unregisterJobs(jobTokens);
+      workflowRegistry.unregisterWorkflows(workflowTokens);
+    };
+  } catch (error) {
+    jobRegistry.unregisterJobs(jobTokens);
+    throw error;
+  }
+}
+
+/** A function that unregisters the jobs and workflows an app loaded itself, which startup registered with the declared ones. */
+export function unregistersAppJobEntries(
+  jobRegistry: JobRegistryInterface,
+  workflowRegistry: WorkflowRegistryInterface,
+  entries: { jobs: readonly JobType[]; workflows: readonly WorkflowType[] },
+): () => void {
+  const jobTokens = entries.jobs.map((job) => normalizeJob(job).provide as Token);
+  const workflowTokens = entries.workflows.map((workflow) => normalizeWorkflow(workflow).provide as Token);
+  return () => {
+    jobRegistry.unregisterJobs(jobTokens);
+    workflowRegistry.unregisterWorkflows(workflowTokens);
+  };
+}
+
+/**
+ * Start the runs of the `trigger: 'event'` workflows on the scope's event bus, and keep doing so as workflows are
+ * registered and unregistered later (an ESM app's new version). The bus is the scope's when it has one, else one made
+ * for the first such workflow.
+ */
+function listenToEvents(
+  scope: ScopeEntry,
+  workflows: WorkflowRegistryInterface,
+  manager: JobExecutionManager,
+  jobs: JobRegistryInterface,
+  logger: FrontMcpLogger,
+): WorkflowEventListening {
+  let bus: ChannelEventBus | undefined;
+  const listening = new Map<WorkflowEntry, () => void>();
+  const listeners = { manager, jobs, authoritiesContextBuilder: () => scope.authoritiesContextBuilder, logger };
+  const followRegistry = () => {
+    const current = new Set(eventWorkflows(workflows.getWorkflows(true)));
+    for (const [workflow, stopListening] of listening) {
+      if (current.has(workflow)) continue;
+      stopListening();
+      listening.delete(workflow);
+    }
+    for (const workflow of current) {
+      if (listening.has(workflow)) continue;
+      bus ??= scope.channelEventBus ?? new ChannelEventBus(logger);
+      listening.set(workflow, listenToWorkflowEvents([workflow], { ...listeners, bus }));
+    }
+  };
+  followRegistry();
+  const unsubscribe = workflows.subscribe({}, followRegistry);
+  return {
+    get bus() {
+      return bus;
+    },
+    stop: () => {
+      unsubscribe();
+      for (const stopListening of listening.values()) stopListening();
+      listening.clear();
+    },
   };
 }
 

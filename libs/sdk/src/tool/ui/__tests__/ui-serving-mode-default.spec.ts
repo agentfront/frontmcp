@@ -166,13 +166,13 @@ describe('startup notices for a default that does not do what it says', () => {
     warnings.length = 0;
     await serve({
       apps: [TravelApp, HybridReportsApp],
-      ui: { servingMode: 'custom-url' },
+      ui: { servingMode: 'hybrid' },
       logging: { level: LogLevel.Warn, enableConsole: false, transports: [CaptureLogTransport] },
     });
 
     const notices = warnings.filter((line) => line.includes('ui.servingMode'));
     expect(notices).toEqual([
-      expect.stringMatching(/^`@FrontMcp\(\{ ui \}\)`: `ui.servingMode: 'custom-url'` is not implemented/),
+      expect.stringMatching(/^`@FrontMcp\(\{ ui \}\)`: `ui.servingMode: 'hybrid'`/),
       expect.stringMatching(/^App "hybrid-reports" `@App\(\{ ui \}\)`: `ui.servingMode: 'hybrid'`/),
     ]);
   });
@@ -181,8 +181,13 @@ describe('startup notices for a default that does not do what it says', () => {
 describe('toolServingMode', () => {
   type FakeTool = Parameters<typeof toolServingMode>[0];
 
-  function tool(servingMode: string | undefined, owner: Pick<FakeTool['owner'], 'kind' | 'id'>): FakeTool {
-    return { metadata: { name: 't', ui: servingMode ? { servingMode } : {} }, owner } as FakeTool;
+  function tool(
+    servingMode: string | undefined,
+    owner: Pick<FakeTool['owner'], 'kind' | 'id'>,
+    bundlingMode?: string,
+  ): FakeTool {
+    const ui = { ...(servingMode ? { servingMode } : {}), ...(bundlingMode ? { bundlingMode } : {}) };
+    return { metadata: { name: 't', ui }, owner } as FakeTool;
   }
 
   function scope(serverMode?: string, apps: Array<{ id: string; ui?: object }> = []): ServingModeScope<FakeTool> {
@@ -206,6 +211,30 @@ describe('toolServingMode', () => {
   it("prefers the tool's own mode", () => {
     expect(toolServingMode(tool('inline', { kind: 'app', id: 'a' }), scope('static'))).toBe('inline');
   });
+
+  describe('with ui.bundlingMode', () => {
+    const owner = { kind: 'app', id: 'a' } as const;
+
+    it("serves 'dynamic' inline, where the mode is 'auto' or inherited", () => {
+      expect(toolServingMode(tool(undefined, owner, 'dynamic'), scope())).toBe('inline');
+      expect(toolServingMode(tool('auto', owner, 'dynamic'), scope())).toBe('inline');
+      expect(toolServingMode(tool(undefined, owner, 'dynamic'), scope('static'))).toBe('inline');
+    });
+
+    it("serves 'static' static, or keeps an inherited mode that builds the page once", () => {
+      expect(toolServingMode(tool(undefined, owner, 'static'), scope())).toBe('static');
+      expect(toolServingMode(tool('auto', owner, 'static'), scope())).toBe('static');
+      expect(toolServingMode(tool(undefined, owner, 'static'), scope('inline'))).toBe('static');
+      for (const inherited of ['hybrid', 'direct-url', 'custom-url']) {
+        expect(toolServingMode(tool(undefined, owner, 'static'), scope(inherited))).toBe(inherited);
+      }
+    });
+
+    it("leaves the tool's own explicit mode as it is", () => {
+      expect(toolServingMode(tool('static', owner, 'static'), scope())).toBe('static');
+      expect(toolServingMode(tool('inline', owner, 'dynamic'), scope())).toBe('inline');
+    });
+  });
 });
 
 describe('resolveWidgetServingMode', () => {
@@ -218,18 +247,14 @@ describe('resolveWidgetServingMode', () => {
 });
 
 describe('describeServingModeDefault', () => {
-  it('says once that an unimplemented default serves inline', () => {
-    expect(describeServingModeDefault('`@FrontMcp({ ui })`', 'custom-url')).toEqual([
-      expect.stringContaining("`ui.servingMode: 'custom-url'` is not implemented"),
-    ]);
-  });
-
   it('explains what a hybrid default sends', () => {
     expect(describeServingModeDefault('App "a" `@App({ ui })`', 'hybrid')[0]).toContain("_meta['ui/component']");
   });
 
   it('has nothing to say about the modes that do what they say, or no default', () => {
     expect(describeServingModeDefault('x', 'static')).toEqual([]);
+    expect(describeServingModeDefault('x', 'direct-url')).toEqual([]);
+    expect(describeServingModeDefault('x', 'custom-url')).toEqual([]);
     expect(describeServingModeDefault('x', undefined)).toEqual([]);
   });
 });

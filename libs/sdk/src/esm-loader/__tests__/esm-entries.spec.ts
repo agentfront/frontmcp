@@ -25,7 +25,7 @@ import {
 import type { DirectMcpServer } from '../../direct/direct.types';
 import { ExternalEntryLoadError, ExternalEntryNotFoundError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
-import { registryAuthOf } from '../esm-entries';
+import { mergePackageLoaders, registryAuthOf } from '../esm-entries';
 import { type FrontMcpPackageManifest } from '../esm-manifest';
 import { EsmModuleLoader, type EsmLoadResult } from '../esm-module-loader';
 import { type ParsedPackageSpecifier } from '../package-specifier';
@@ -330,5 +330,33 @@ describe('registryAuthOf()', () => {
       'https://npm.internal',
     );
     expect(registryAuthOf(undefined)).toBeUndefined();
+  });
+});
+
+describe('mergePackageLoaders()', () => {
+  const server = { url: 'https://esm.acme.example', registryUrl: 'https://npm.acme.example', token: 'server-token' };
+
+  it('keeps the server fields the entry does not set', () => {
+    expect(mergePackageLoaders(server, { registryUrl: 'https://npm.other.example' })).toEqual({
+      url: 'https://esm.acme.example',
+      registryUrl: 'https://npm.other.example',
+      token: 'server-token',
+      tokenEnvVar: undefined,
+    });
+  });
+
+  it("replaces both of the server's token fields with an entry's token", () => {
+    expect(mergePackageLoaders(server, { tokenEnvVar: 'OTHER_TOKEN' })).toEqual({
+      url: 'https://esm.acme.example',
+      registryUrl: 'https://npm.acme.example',
+      token: undefined,
+      tokenEnvVar: 'OTHER_TOKEN',
+    });
+  });
+
+  it('is whichever loader is set when only one is', () => {
+    expect(mergePackageLoaders(server, undefined)).toBe(server);
+    expect(mergePackageLoaders(undefined, server)).toBe(server);
+    expect(mergePackageLoaders(undefined, undefined)).toBeUndefined();
   });
 });

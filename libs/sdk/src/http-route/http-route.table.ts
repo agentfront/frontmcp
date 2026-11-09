@@ -19,6 +19,7 @@ import { servedHealthPaths } from '../health/health.routes';
 import type ProviderRegistry from '../provider/provider.registry';
 import type { Scope } from '../scope/scope.instance';
 import { assertNotReserved, computeReservedPaths } from '../server/custom-routes.helper';
+import { workflowWebhookRoutes, type WorkflowWebhookRoute } from '../workflow/trigger/workflow-webhook.routes';
 import { PEOPLE_SIGN_IN_ROUTES } from './people-sign-in.routes';
 import type { SseRouteStream } from './sse-route.stream';
 
@@ -128,6 +129,7 @@ export function attachHttpRoutes(scope: Scope, server: object): void {
     const routes = (app.metadata as { routes?: readonly unknown[] }).routes ?? [];
     return routes.map((target) => ({ target, providers: app.providers }));
   });
+  const webhooks = workflowWebhookRoutes(scope.workflows?.getWorkflows(true) ?? []);
   const peopleOption = scope.metadata.http?.auth?.people;
   const questions = scope.persistentQuestions;
   if (questions && peopleOption === undefined) {
@@ -136,7 +138,7 @@ export function attachHttpRoutes(scope: Scope, server: object): void {
         "set http: { auth: { people: 'loopback-token' } } to answer questions at /_frontmcp/inbox or with frontmcp inbox",
     );
   }
-  if (declared.length === 0 && peopleOption === undefined) return;
+  if (declared.length === 0 && webhooks.length === 0 && peopleOption === undefined) return;
 
   const people = peopleOption === undefined ? undefined : peopleAuthFor(server, peopleOption, scope.providers);
   const builtInRoutes = [...PEOPLE_SIGN_IN_ROUTES, ...(questions ? questionInboxRoutes(questions.store) : [])];
@@ -145,7 +147,13 @@ export function attachHttpRoutes(scope: Scope, server: object): void {
   const mcpPath = scope.fullPath || '/';
   const served = new Set<string>();
 
-  const routes = [...builtIn, ...declared].map(({ target, providers }): HttpRouteEntry => {
+  const toEntry = ({
+    target,
+    providers,
+  }: {
+    target: unknown;
+    providers: ProviderRegistryInterface;
+  }): HttpRouteEntry => {
     const metadata = httpRouteMetadataOf(target);
     if (!metadata) {
       throw new InvalidHttpRouteError('?', String((target as { name?: string }).name), 'not an @HttpRoute class');
@@ -184,8 +192,34 @@ export function attachHttpRoutes(scope: Scope, server: object): void {
       providers,
       sharesMcpPath,
     };
-  });
+  };
+  const routes = [...builtIn, ...declared].map(toEntry);
+  for (const webhook of webhooks) {
+    assertWebhookPathFree(webhook, routes, scope.metadata.http?.routes ?? [], { reserved, mcpPath });
+    routes.push(toEntry({ target: webhook.target, providers: scope.providers }));
+  }
   const table = new HttpRouteTable(routes, people);
   scope.httpRouteTable = table;
   scope.onDispose(() => table.closeStreams());
+}
+
+/**
+ * Refuse a workflow's webhook on a path another route answers for its method (an `@HttpRoute`, another webhook or an
+ * `http.routes` entry, `:name` parameters included), on the MCP endpoint's path, or on a reserved FrontMCP path.
+ */
+function assertWebhookPathFree(
+  webhook: WorkflowWebhookRoute,
+  routes: readonly HttpRouteEntry[],
+  customRoutes: readonly { method: string; path: string }[],
+  paths: { reserved: ReturnType<typeof computeReservedPaths>; mcpPath: string },
+): void {
+  const { method, path, workflow } = webhook;
+  const refuse = (reason: string) =>
+    new InvalidHttpRouteError(method, path, `the webhook of workflow "${workflow}" ${reason}`);
+  if (withoutTrailingSlash(path) === paths.mcpPath) throw refuse("is on the MCP endpoint's path");
+  assertNotReserved(method, path, paths.reserved);
+  const other = [...routes, ...customRoutes].find(
+    (route) => route.method.toUpperCase() === method && matchRoutePath(route.path, path) !== undefined,
+  );
+  if (other) throw refuse(`collides with the route ${other.method} ${other.path}`);
 }

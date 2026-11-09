@@ -28,7 +28,6 @@ describe('EnclaveService', () => {
         inputSchema: { type: 'object' },
         outputSchema: { type: 'object' },
       }),
-      console: undefined,
       mcpLog: jest.fn(),
       mcpNotify: jest.fn(),
     };
@@ -2113,6 +2112,40 @@ describe('EnclaveService', () => {
       expect(result.success).toBe(false);
       expect(result.error?.toolName).toBeUndefined();
       expect(result.error?.message).toBe('mine');
+    });
+  });
+
+  describe('script console', () => {
+    const consoleConfig = () => new CodeCallConfig({ vm: { preset: 'secure', allowConsole: true } });
+
+    it("writes a script's console calls to the logger it was given", async () => {
+      const info = jest.fn();
+      const withLogger = new EnclaveService(consoleConfig(), { info } as never);
+
+      const result = await withLogger.execute(`console.log('hello', 1); return 'ok';`, mockEnvironment);
+
+      expect(result).toMatchObject({ success: true, result: 'ok' });
+      expect(info).toHaveBeenCalledWith('hello 1');
+    });
+
+    it('keeps a throwing logger from the script', async () => {
+      const throwing = () => {
+        throw new Error('logger down');
+      };
+      const withLogger = new EnclaveService(consoleConfig(), { info: throwing } as never);
+
+      const result = await withLogger.execute(`console.log('x'); return 'still ok';`, mockEnvironment);
+
+      expect(result).toMatchObject({ success: true, result: 'still ok' });
+    });
+
+    it('refuses console without a logger, even with allowConsole', async () => {
+      const withoutLogger = new EnclaveService(consoleConfig());
+
+      const result = await withoutLogger.execute(`console.log('x'); return 1;`, mockEnvironment);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain('unless vm.allowConsole is true');
     });
   });
 });

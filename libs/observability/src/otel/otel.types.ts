@@ -100,7 +100,7 @@ export const FrontMcpAttributes = {
   /** Auth mode: "public" | "transparent" | "orchestrated" */
   AUTH_MODE: 'frontmcp.auth.mode',
 
-  /** Auth result: "authorized" | "unauthorized" | "anonymous" */
+  /** Auth result: "authorized" | "anonymous" | "unauthorized" | "forbidden" | "error" */
   AUTH_RESULT: 'frontmcp.auth.result',
 
   // ── OAuth ──
@@ -210,7 +210,7 @@ export interface TracingOptions {
   /** Instrument transport flows — SSE, streamable-http, stateless-http (default: true) */
   transportSpans?: boolean;
 
-  /** Instrument auth verify/session verify flows (default: true) */
+  /** An `auth session:verify` span for each HTTP request's authentication, with `frontmcp.auth.result` (default: true) */
   authSpans?: boolean;
 
   /** Instrument OAuth flows — token, authorize, callback, register (default: true) */

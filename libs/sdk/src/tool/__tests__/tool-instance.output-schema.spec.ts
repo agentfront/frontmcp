@@ -107,8 +107,19 @@ describe('ToolInstance output JSON Schema', () => {
     expect(tool.getUnlistedOutputSchemaReason()).toContain('Date cannot be represented in JSON Schema');
   });
 
+  it('lists a primitive literal as the structuredContent it answers with', () => {
+    const { tool } = toolWithOutput('number');
+
+    expect(tool.getOutputJsonSchema()).toEqual({
+      type: 'object',
+      properties: { content: { type: 'number' } },
+      required: ['content'],
+      additionalProperties: false,
+    });
+    expect(tool.getUnlistedOutputSchemaReason()).toBeUndefined();
+  });
+
   it.each([
-    ['a primitive literal', 'number'],
     ['a Zod primitive', z.string()],
     ['a Zod date', z.date()],
     ['a media literal', 'image'],

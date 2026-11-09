@@ -107,10 +107,15 @@ export interface ConsentStateRecord {
 export interface FederatedLoginStateRecord {
   /** Available provider IDs */
   providerIds: string[];
-  /** Selected provider IDs */
+  /** Selected provider IDs: on the step-by-step picker, the ones linked so far */
   selectedProviderIds?: string[];
-  /** Skipped provider IDs */
+  /** Skipped provider IDs: on the step-by-step picker, the ones skipped so far */
   skippedProviderIds?: string[];
+  /**
+   * The step the step-by-step picker shows (`incrementalAuth.showAllAppsAtOnce: false`), an index into
+   * `providerIds`. Absent on the one-page picker.
+   */
+  currentStep?: number;
   /** Provider-specific user data (after auth) */
   providerUserData?: Record<string, { email?: string; name?: string; sub?: string }>;
 }
@@ -184,6 +189,8 @@ export interface PendingAuthorizationRecord {
    * secret (see `sealPendingLogin`). The consent form then carries no login
    * fields: the consent submission completes this sign-in instead of running
    * `authenticate()` again with credentials round-tripped through the browser.
+   * On an incremental authorization, the email and name its ticket carried for
+   * `incrementalSub`.
    */
   verifiedLogin?: string;
 

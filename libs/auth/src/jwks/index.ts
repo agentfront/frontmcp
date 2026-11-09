@@ -9,6 +9,8 @@ export type { JwksServiceOptions, ProviderVerifyRef, TokenVerifyFailure, VerifyR
 
 // Service
 export { JwksService } from './jwks.service';
+export { LocalTokenKeys } from './local-token-keys';
+export type { LocalSigningKeyConfig } from './local-token-keys';
 
 // Utils
 export { trimSlash, normalizeIssuer, decodeJwtPayloadSafe } from './jwks.utils';

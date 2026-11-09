@@ -1,5 +1,5 @@
 // errors/mcp.error.ts
-import { AuthorityDeniedError } from '@frontmcp/auth';
+import { AuthInternalError, AuthorityDeniedError } from '@frontmcp/auth';
 import { GuardError, GuardStorageUnavailableError } from '@frontmcp/guard';
 import { brandClass, bytesToHex, isBrandedInstance, isProduction, randomBytes } from '@frontmcp/utils';
 
@@ -542,6 +542,8 @@ export interface InvalidOutputErrorDetails {
   value?: string;
   /** Free-form reason for the rejection (e.g., 'non-finite-number'). */
   reason?: string;
+  /** What returned the output, named in the message. Defaults to 'Tool'. */
+  entry?: 'Tool' | 'Prompt' | 'Resource';
 }
 
 export class InvalidOutputError extends InternalMcpError {
@@ -556,7 +558,7 @@ export class InvalidOutputError extends InternalMcpError {
     const details: InvalidOutputErrorDetails | undefined =
       typeof errorIdOrDetails === 'object' && errorIdOrDetails !== null ? errorIdOrDetails : maybeDetails;
 
-    const baseMsg = 'Tool output validation failed';
+    const baseMsg = `${details?.entry ?? 'Tool'} output validation failed`;
     const detailFragment = details?.reason
       ? ` (${details.reason}${details.path ? ` at ${details.path}` : ''}${details.value !== undefined ? `: ${details.value}` : ''})`
       : '';
@@ -577,6 +579,20 @@ export class InvalidOutputError extends InternalMcpError {
     }
     return 'Output validation failed. Please contact support.';
   }
+}
+
+/** The InvalidOutputError for an entry's output that failed to parse, naming the first issue's path and reason. */
+export function invalidOutputFromParseFailure(
+  entry: InvalidOutputErrorDetails['entry'],
+  error: Error,
+): InvalidOutputError {
+  const issues = (error as { issues?: ReadonlyArray<{ path?: ReadonlyArray<PropertyKey>; message?: string }> }).issues;
+  const firstIssue = issues?.[0];
+  return new InvalidOutputError({
+    entry,
+    reason: firstIssue?.message ?? error.message,
+    path: firstIssue?.path?.length ? firstIssue.path.map(String).join('.') : undefined,
+  });
 }
 
 /**
@@ -921,10 +937,21 @@ function publicGuardMessage(error: GuardError): string {
 
 /**
  * Whether an error thrown inside an entry already says what the client should see
- * (a public error, or an authorities refusal), so a flow passes it on unwrapped.
+ * (a public error, an authorities refusal, or an `@frontmcp/auth` error with its own code),
+ * so a flow passes it on unwrapped.
  */
 export function isClientFacingError(error: unknown): boolean {
-  return isPublicError(error) || error instanceof AuthorityDeniedError;
+  return isPublicError(error) || error instanceof AuthorityDeniedError || error instanceof AuthInternalError;
+}
+
+/** An `@frontmcp/auth` error keeps its code and error ID; its message reaches the client only when it is public. */
+function fromAuthError(error: AuthInternalError): McpError {
+  const converted = error.isPublic
+    ? new PublicMcpError(error.message, error.code, error.statusCode)
+    : new InternalMcpError(error.message, error.code);
+  converted.errorId = error.errorId;
+  converted.stack = error.stack;
+  return converted;
 }
 
 const CONVERTED_ERRORS = Symbol.for('@frontmcp/sdk/converted-errors');
@@ -963,6 +990,10 @@ function convertToMcpError(error: unknown): McpError {
 
   if (error instanceof GuardError) {
     return new GuardLimitMcpError(error);
+  }
+
+  if (error instanceof AuthInternalError) {
+    return fromAuthError(error);
   }
 
   if (error instanceof Error) {

@@ -16,6 +16,7 @@ import {
   type AuthProvider,
   type AuthSubmitMethod,
   type AuthTool,
+  type FederatedStep,
 } from './auth-ui.contract';
 
 /**
@@ -82,7 +83,7 @@ export function buildConsentState(
 /** Build the `federated` slot state. */
 export function buildFederatedState(
   common: SlotCommon,
-  data: { clientId: string; clientName?: string; providers: AuthProvider[]; redirectUri: string },
+  data: { clientId: string; clientName?: string; providers: AuthProvider[]; redirectUri: string; step?: FederatedStep },
 ): AuthFlowState {
   return {
     slot: 'federated',
@@ -97,7 +98,7 @@ export function buildFederatedState(
     extraUrl: common.extraUrl,
     addedItems: common.addedItems,
     // The federated form marks itself with `federated=true`.
-    extras: { [AUTH_WIRE_FIELDS.federated]: true },
+    extras: { [AUTH_WIRE_FIELDS.federated]: true, ...(data.step ? { step: data.step } : {}) },
   };
 }
 

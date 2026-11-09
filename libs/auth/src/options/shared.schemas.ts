@@ -46,14 +46,17 @@ export type PublicAccessConfigInput = z.input<typeof publicAccessConfigSchema>;
  */
 export const localSigningConfigSchema = z.object({
   /**
-   * Private key for signing tokens
-   * @default auto-generated
+   * Private key to sign tokens with, in place of `JWT_SECRET` (HS256).
+   * An RSA, EC or Ed25519 private JWK signs with its `alg` (default by key type) and is published at
+   * `/.well-known/jwks.json`; a `Uint8Array` or `oct` JWK is an HMAC key and is never published.
+   * @default HS256 with `JWT_SECRET`
    */
   signKey: jwkSchema.or(z.instanceof(Uint8Array)).optional(),
 
   /**
-   * JWKS for token verification
-   * @default auto-generated
+   * Public keys published at `/.well-known/jwks.json` beside the `signKey`'s, and accepted on verification
+   * (e.g. a retired key's, while its tokens expire). Needs an RSA, EC or Ed25519 `signKey`.
+   * @default the `signKey`'s public key only
    */
   jwks: jsonWebKeySetSchema.optional(),
 
@@ -116,7 +119,11 @@ export const providerConfigSchema = z.object({
   verifyIssuer: z.boolean().optional(),
 
   /**
-   * Enable Dynamic Client Registration (DCR)
+   * Remote mode: without a `clientId`, register this server with the provider by
+   * dynamic client registration (RFC 7591) at startup, and sign in with that client.
+   * With a persistent `tokenStorage` the client is kept there (its secret encrypted
+   * with `JWT_SECRET`) and reused across restarts and instances. Startup fails when
+   * the registration fails. Ignored when `clientId` is set, and in transparent mode.
    * @default false
    */
   dcrEnabled: z.boolean().default(false),
@@ -127,7 +134,10 @@ export const providerConfigSchema = z.object({
   /** Token endpoint override */
   tokenEndpoint: z.string().url().optional(),
 
-  /** Registration endpoint override (for DCR) */
+  /**
+   * Registration endpoint for `dcrEnabled`.
+   * @default the `registration_endpoint` of the provider's RFC 8414 or OpenID metadata
+   */
   registrationEndpoint: z.string().url().optional(),
 
   /** User info endpoint override */
@@ -190,7 +200,11 @@ export const remoteProviderConfigSchema = z.object({
   scopes: z.array(z.string()).optional(),
 
   /**
-   * Enable Dynamic Client Registration (DCR)
+   * Remote mode: without a `clientId`, register this server with the provider by
+   * dynamic client registration (RFC 7591) at startup, and sign in with that client.
+   * With a persistent `tokenStorage` the client is kept there (its secret encrypted
+   * with `JWT_SECRET`) and reused across restarts and instances. Startup fails when
+   * the registration fails. Ignored when `clientId` is set, and in transparent mode.
    * @default false
    */
   dcrEnabled: z.boolean().default(false),
@@ -206,7 +220,8 @@ export const remoteProviderConfigSchema = z.object({
   tokenEndpoint: z.string().url().optional(),
 
   /**
-   * Registration endpoint override (for DCR)
+   * Registration endpoint for `dcrEnabled`.
+   * @default the `registration_endpoint` of the provider's RFC 8414 or OpenID metadata
    */
   registrationEndpoint: z.string().url().optional(),
 
@@ -323,11 +338,11 @@ export const localDcrClientSchema = z.object({
    * Token-endpoint auth method. Defaults to `'none'` (public PKCE client).
    */
   tokenEndpointAuthMethod: z.enum(['none', 'client_secret_basic', 'client_secret_post']).default('none'),
-  /** Allowed grant types. Defaults to `['authorization_code']`. */
-  grantTypes: z.array(z.enum(['authorization_code', 'refresh_token'])).default(['authorization_code']),
+  /** Allowed grant types; without `refresh_token`, the client gets no refresh token. Defaults to both. */
+  grantTypes: z.array(z.enum(['authorization_code', 'refresh_token'])).default(['authorization_code', 'refresh_token']),
   /** Allowed response types. Defaults to `['code']`. */
   responseTypes: z.array(z.enum(['code'])).default(['code']),
-  /** Optional space-delimited default scope string. */
+  /** Space-delimited scopes this client may be granted; a request for others is narrowed to these. */
   scope: z.string().optional(),
 });
 
@@ -776,13 +791,23 @@ export const incrementalAuthConfigSchema = z.object({
   skippedAppBehavior: skippedAppBehaviorSchema.default('anonymous'),
 
   /**
-   * Allow users to skip app authorization during initial auth flow
+   * Allow users to skip app authorization during initial auth flow. With
+   * `false`, a sign-in through the provider picker must link the provider of
+   * every app with its own `auth`: the picker shows them checked and required,
+   * and the callbacks refuse a sign-in that leaves one out or declines it.
    * @default true
    */
   allowSkip: z.boolean().default(true),
 
   /**
-   * Show all apps in a single authorization page (vs step-by-step)
+   * Show every provider on one picker page (`true`), or one per page (`false`):
+   * the sign-in then walks the picker's providers in order, and each step
+   * links or skips one of them (with Back to change an answer). Each step is
+   * checked server-side: a CSRF token, and `allowSkip` and
+   * `federatedAuth.requiredProviders` refuse skipping a required provider.
+   * The last step carries the sign-in fields, and finishes the sign-in as the
+   * one-page picker does. A custom `@AuthUi({ slot: 'federated' })` page gets
+   * the step in `extras.step` (see `FederatedStep`).
    * @default true
    */
   showAllAppsAtOnce: z.boolean().default(true),

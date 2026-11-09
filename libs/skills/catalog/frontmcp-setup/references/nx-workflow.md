@@ -196,7 +196,7 @@ Creates a `@Provider` class in `apps/my-app/src/providers/`. Providers are named
 nx g @frontmcp/nx:flow my-flow --project=my-app
 ```
 
-Creates a `@Flow` class extending `FlowBase` in `apps/my-app/src/flows/`. Flows define execution pipelines with hooks and stages. The generated flow declares its schemas, registers itself through `declare global { interface ExtendFlows }` so `runFlow` is typed, and implements each plan step with a `@Stage` method from `FlowHooksOf(name)`.
+Creates a `@Flow` class extending `FlowBase` in `apps/my-app/src/flows/`. Flows define execution pipelines with hooks and stages. The generated flow declares its schemas, registers itself through `declare global { interface ExtendFlows }` so `runFlow` is typed, runs only for authorized callers (`access: 'authorized'`; set `'public'` to open it), and implements each plan step with a `@Stage` method from `FlowHooksOf(name)`.
 
 ### Job
 

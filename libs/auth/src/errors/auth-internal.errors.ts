@@ -104,6 +104,15 @@ export class JwtSecretWeakError extends AuthInternalError {
 }
 
 /**
+ * Thrown at startup when the configured `signKey` or `jwks` can't sign or be published.
+ */
+export class SigningKeyInvalidError extends AuthInternalError {
+  constructor(message: string) {
+    super(message, 'SIGNING_KEY_INVALID');
+  }
+}
+
+/**
  * Thrown when a credential provider is already registered.
  */
 export class CredentialProviderAlreadyRegisteredError extends AuthInternalError {
@@ -114,13 +123,16 @@ export class CredentialProviderAlreadyRegisteredError extends AuthInternalError 
 
 /**
  * Thrown when a tool reads an auth provider's credential on a server that registers no auth providers.
+ * Public: the client sees the message, which names the provider and the setting to add.
  */
 export class AuthProvidersNotConfiguredError extends AuthInternalError {
+  override readonly isPublic = true;
+
   constructor(providerName?: string) {
     const register = 'Register it in @FrontMcp({ authProvidersVault: { providers: [...] } }).';
     super(
       providerName === undefined
-        ? 'Auth providers are not configured: this server registers no auth providers.'
+        ? 'Auth providers are not configured: this server registers no auth providers. Register them in @FrontMcp({ authProvidersVault: { providers: [...] } }).'
         : `Auth provider "${providerName}" is not configured: this server registers no auth providers. ${register}`,
       'AUTH_PROVIDERS_NOT_CONFIGURED',
     );

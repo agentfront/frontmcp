@@ -29,11 +29,18 @@ import {
   type Tracer,
 } from '@opentelemetry/api';
 
-import { addHookObserver, FlowControl, InternalMcpError, toMcpError, type HookObserver } from '@frontmcp/sdk';
+import {
+  addHookObserver,
+  FlowControl,
+  InternalMcpError,
+  isAnonymousSubject,
+  toMcpError,
+  type HookObserver,
+} from '@frontmcp/sdk';
 import { sha256Hex } from '@frontmcp/utils';
 
 import { FrontMcpAttributes, McpAttributes, type TracingOptions } from '../otel/otel.types';
-import { setAuthMode, setAuthResult, startAuthSpan } from '../otel/spans/auth.span';
+import { setAuthResult, startAuthSpan } from '../otel/spans/auth.span';
 import { setFetchResponseStatus, startFetchSpan } from '../otel/spans/fetch.span';
 import { startHookSpan } from '../otel/spans/hook.span';
 import { setHttpResponseStatus, startHttpServerSpan } from '../otel/spans/http-server.span';
@@ -734,50 +741,47 @@ export function onTransportDidFinalize(flowCtx: any): void {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Auth Flow Hooks (auth:verify, session:verify)
+// Authentication of an HTTP request (its `checkAuthorization` stage, which runs session:verify)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function onAuthWillStart(flowName: string, options: TracingOptions, flowCtx: any): void {
-  if (options.authSpans === false) return;
+/** The span of the HTTP request's authentication, on the HTTP flow's state */
+const AUTH_SPAN_KEY = Symbol.for('frontmcp:otel:auth-span');
+
+interface VerifyResultLike {
+  kind?: string;
+  authorization?: { user?: { sub?: unknown } };
+}
+
+/** How `session:verify` answered: `authorized`, `anonymous` (an anonymous subject), `unauthorized` or `forbidden`. */
+function authResultOf(verifyResult: VerifyResultLike | undefined): string {
+  const kind = verifyResult?.kind ?? 'unauthorized';
+  const sub = verifyResult?.authorization?.user?.sub;
+  if (kind === 'authorized' && (typeof sub !== 'string' || isAnonymousSubject(sub))) return 'anonymous';
+  return kind;
+}
+
+/** Opens the `auth session:verify` span of the request's authentication, inside its HTTP span. */
+export function onHttpWillAuthenticate(options: TracingOptions, flowCtx: any): void {
+  if (options.authSpans === false || !flowCtx.state) return;
   const ctx = extractContext(flowCtx);
   if (!ctx) return;
-
-  const tracer = getTracer();
-  const parentOTelCtx = parentContextOf(ctx);
-
-  const { span, context: spanCtx } = startAuthSpan(tracer, {
-    flowName,
-    parentContext: parentOTelCtx,
-  });
-
-  beginFlowSpan(flowCtx, options, span, spanCtx);
-  recordStageEvent(span, 'parseInput', flowCtx.state);
+  const { span } = startAuthSpan(getTracer(), { flowName: 'session:verify', parentContext: parentContextOf(ctx) });
+  flowCtx.state[AUTH_SPAN_KEY] = span;
 }
 
-export function onAuthDidDetermineMode(flowCtx: any): void {
-  const span: Span | undefined = flowCtx.state?.[SPAN_KEY];
+/** Ends the authentication span, whatever the stage's outcome, with `frontmcp.auth.result`. */
+export function onHttpDidAuthenticate(flowCtx: any): void {
+  const span: Span | undefined = flowCtx.state?.[AUTH_SPAN_KEY];
   if (!span) return;
-  recordStageEvent(span, 'determineAuthMode', flowCtx.state);
-  const mode = flowCtx.state?.authMode;
-  if (mode) setAuthMode(span, mode);
-}
-
-export function onAuthStage(stageName: string, flowCtx: any): void {
-  const span: Span | undefined = flowCtx.state?.[SPAN_KEY];
-  if (span) recordStageEvent(span, stageName, flowCtx.state);
-}
-
-export function onAuthDidFinalize(flowCtx: any): void {
-  const span: Span | undefined = flowCtx.state?.[SPAN_KEY];
-  if (!span) return;
+  flowCtx.state[AUTH_SPAN_KEY] = undefined;
   const error = flowCtx.state?.flowError;
   if (error) {
-    setAuthResult(span, 'unauthorized');
+    setAuthResult(span, 'error');
     endFailedSpan(span, error);
-  } else {
-    setAuthResult(span, 'authorized');
-    endSpanOk(span);
+    return;
   }
+  setAuthResult(span, authResultOf(flowCtx.state?.verifyResult));
+  endSpanOk(span);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

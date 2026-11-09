@@ -149,11 +149,15 @@ describe('codecall:execute result kinds', () => {
       expect(outcome.error).toMatchObject({ source: 'tool', toolName: 'mail.fail', code: 'EXECUTION' });
     });
 
-    it('reports a tool that timed out, although the script did not run out of time', async () => {
+    it('does not read a code from the words of an internal error (#1166)', async () => {
       const outcome = await run("return await callTool('mail.slow', {});");
 
       expect(outcome.status).toBe('tool_error');
-      expect(outcome.error).toMatchObject({ toolName: 'mail.slow', code: 'TIMEOUT' });
+      expect(outcome.error).toMatchObject({
+        toolName: 'mail.slow',
+        code: 'EXECUTION',
+        message: 'Tool "mail.slow" execution failed',
+      });
     });
 
     it("keeps a tool's error that reads like the sandbox's iteration limit", async () => {
@@ -165,7 +169,7 @@ describe('codecall:execute result kinds', () => {
           source: 'tool',
           toolName: 'mail.import',
           message: 'Maximum iteration limit exceeded in the validation of 50000 rows',
-          code: 'VALIDATION',
+          code: 'EXECUTION',
         },
       });
     });

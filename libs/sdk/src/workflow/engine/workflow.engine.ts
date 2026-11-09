@@ -23,7 +23,8 @@ import { WorkflowStepExecutor, type WorkflowStepExecutorExtra } from './workflow
  * 1. Validate DAG (topological sort, detect cycles)
  * 2. Build step dependency graph
  * 3. Loop:
- *    a. Find ready steps (all dependsOn completed/skipped)
+ *    a. Find ready steps (all dependsOn completed, or skipped by their condition); a step that
+ *       depends on a failed step, directly or not, is skipped
  *    b. Evaluate conditions
  *    c. Compute inputs
  *    d. Execute ready steps in parallel (bounded by maxConcurrency)
@@ -51,7 +52,13 @@ export class WorkflowEngine {
     });
   }
 
-  async execute(workflowInput?: Record<string, unknown>): Promise<WorkflowExecutionResult> {
+  /**
+   * Run the workflow's steps.
+   *
+   * @param workflowInput - The run's input, as the workflow's `inputSchema` parsed it: a step without `input` gets it,
+   *   and each step's `input` and `condition` functions receive it
+   */
+  async execute(workflowInput: Record<string, unknown> = {}): Promise<WorkflowExecutionResult> {
     const startedAt = Date.now();
     const steps = this.metadata.steps;
 
@@ -76,6 +83,8 @@ export class WorkflowEngine {
     const completed = new Set<string>();
     const failed = new Set<string>();
     const skipped = new Set<string>();
+    // Skipped because a step they depend on failed: their dependents are skipped too
+    const blocked = new Set<string>();
     const allStepIds = new Set(steps.map((s) => s.id));
 
     // Timeout handling
@@ -87,24 +96,25 @@ export class WorkflowEngine {
         throw new WorkflowTimeoutError(this.metadata.name, timeoutMs);
       }
 
-      // Find ready steps: all dependsOn are completed or skipped
+      // Find ready steps: all dependsOn are completed, or skipped by their condition
       const ready = steps.filter((step) => {
         if (completed.has(step.id) || failed.has(step.id) || skipped.has(step.id)) return false;
         const deps = step.dependsOn ?? [];
-        return deps.every((d) => completed.has(d) || skipped.has(d));
+        return deps.every((d) => completed.has(d) || (skipped.has(d) && !blocked.has(d)));
       });
 
       if (ready.length === 0) {
         // Capture size before skip propagation to detect progress
         const sizeBefore = completed.size + failed.size + skipped.size;
 
-        // Check if we have unresolvable steps (deps on failed steps)
+        // Check if we have unresolvable steps (deps on failed steps, or on steps skipped for one)
         const remaining = steps.filter((s) => !completed.has(s.id) && !failed.has(s.id) && !skipped.has(s.id));
         for (const step of remaining) {
           const deps = step.dependsOn ?? [];
-          const hasFailedDep = deps.some((d) => failed.has(d));
+          const hasFailedDep = deps.some((d) => failed.has(d) || blocked.has(d));
           if (hasFailedDep) {
             skipped.add(step.id);
+            blocked.add(step.id);
             stepResults.set(step.id, { outputs: {}, state: 'skipped' });
             this.logger.info(`Skipping step "${step.id}" due to failed dependency`);
           }
@@ -133,7 +143,7 @@ export class WorkflowEngine {
           // Evaluate condition
           if (step.condition) {
             try {
-              const shouldRun = step.condition(stepsContext);
+              const shouldRun = step.condition(stepsContext, workflowInput);
               if (!shouldRun) {
                 skipped.add(step.id);
                 stepResults.set(step.id, { outputs: {}, state: 'skipped' });
@@ -151,12 +161,10 @@ export class WorkflowEngine {
           // Execute step
           try {
             // Compute input
-            let input: Record<string, unknown>;
-            if (typeof step.input === 'function') {
-              input = step.input(stepsContext);
-            } else {
-              input = step.input ?? workflowInput ?? {};
-            }
+            const input =
+              typeof step.input === 'function'
+                ? step.input(stepsContext, workflowInput)
+                : (step.input ?? workflowInput);
 
             const result = await this.stepExecutor.executeStep(step, input);
             completed.add(step.id);

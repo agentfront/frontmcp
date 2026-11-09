@@ -92,7 +92,7 @@ export function pluginsRegisterDynamicSkills(plugins: Iterable<PluginType>): boo
  * ```
  */
 export async function registerSkillCapabilities(options: SkillScopeRegistrationOptions): Promise<void> {
-  const { skillRegistry, flowRegistry, resourceRegistry, providers, skillsConfig, logger, dynamicSkills } = options;
+  const { skillRegistry, flowRegistry, providers, skillsConfig, logger, dynamicSkills } = options;
 
   // Register the skill audit writer first — registration is independent of
   // whether any skills are present at scope-init time. Plugins that mount
@@ -119,6 +119,16 @@ export async function registerSkillCapabilities(options: SkillScopeRegistrationO
   if (!skillRegistry.servesSkills()) {
     return;
   }
+
+  await serveSkillMethods(options);
+}
+
+/**
+ * Register the skill methods (search and load), the `skill://` resources and the skills HTTP flows: for a scope that
+ * serves skills from startup, or one whose first skill an app adds after it started (an ESM app's new version).
+ */
+export async function serveSkillMethods(options: Omit<SkillScopeRegistrationOptions, 'dynamicSkills'>): Promise<void> {
+  const { skillRegistry, flowRegistry, resourceRegistry, providers, skillsConfig, logger } = options;
 
   // Always register MCP flows for skills
   const { LlmFullTxtFlow, LlmTxtFlow, LoadSkillFlow, SearchSkillsFlow, SkillsApiFlow } = await import(

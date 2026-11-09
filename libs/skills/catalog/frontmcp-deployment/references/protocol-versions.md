@@ -96,6 +96,16 @@ Override per server:
 The Worker default is stateless on purpose: no session means no Durable Object
 binding is needed to serve MCP.
 
+The fallback also decides what a production server does without
+`MCP_SESSION_SECRET`, which encrypts the session ids of clients before
+2026-07-28. With `'legacy'`, `bootstrap()`, `createHandler()` and
+`runUnixSocket()` refuse to start (`SESSION_SECRET_REQUIRED`). With
+`'2026-07-28'` the server starts and logs a warning; a client that names an
+older revision still gets `500 SESSION_SECRET_REQUIRED` on `initialize`, and
+`/readyz` lists a `degraded` `session-secret` check (the server stays ready).
+stdio, `createDirect()` and `connect()` mint no encrypted session ids and never
+need it.
+
 When the SERVER defaults a request to 2026-07-28, the mirrored-header rules are
 NOT enforced — the client never opted into SEP-2243. Headers that ARE present
 are still validated. A client that declares the revision itself gets the full
@@ -183,6 +193,10 @@ A client opts in per request:
 `this.notify()` and `this.progress()` then stream on that request's own SSE
 response (over stdio, as lines before the result), terminated by the final result. Omit `logLevel` and the server emits
 no `notifications/message` at all.
+
+Before 2026-07-28 they also go on the response stream of the request that ran the tool or agent, after the
+session's `logging/setLevel` for log messages. Up to 1.11.2 they went to the session's `GET` stream instead, so a
+client could get them after the call's result.
 
 ## Tasks extension
 

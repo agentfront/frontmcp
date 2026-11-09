@@ -20,13 +20,13 @@ const EchoTool = Tool.esm('@my-org/tools@^1.0.0', 'echo', {
 class MainApp {}
 ```
 
-| Arg          | Purpose                                                                                                                                    |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `specifier`  | npm package + optional semver range or tag (`'@my-org/tools@^1.0.0'`, `'my-tools@latest'`). URLs are rejected.                             |
-| `targetName` | The `name` of the tool to take from the package                                                                                            |
-| `options`    | Optional `{ loader, cacheTTL, metadata }` — `loader` overrides the registry/CDN, `metadata` overrides the tool's metadata (`description`…) |
+| Arg          | Purpose                                                                                                                                                                                                                                                                                                                                            |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `specifier`  | npm package + optional semver range or tag (`'@my-org/tools@^1.0.0'`, `'my-tools@latest'`). URLs are rejected.                                                                                                                                                                                                                                     |
+| `targetName` | The `name` of the tool to take from the package                                                                                                                                                                                                                                                                                                    |
+| `options`    | Optional `{ loader, cacheTTL, metadata }` — `loader` sets the registry/CDN fields that differ from the server's `loader` (the others come from it; a `token` or `tokenEnvVar` replaces both of the server's), `cacheTTL` is how long a bundle is reused (`0`: downloaded on every load), `metadata` overrides the tool's metadata (`description`…) |
 
-The server loads the package at startup, before it serves requests, and registers the tool under its own name (`echo`, no namespace prefix). `metadata` is laid over the loaded metadata; a new `name` renames the tool and calls still run the package's `echo`. The package must provide the tool as a `@Tool`-decorated class or a plain `{ name, description?, inputSchema?, execute }` object, in its default-export manifest or as named exports.
+The server loads the package at startup, before it serves requests, and registers the tool under its own name (`echo`, no namespace prefix). `metadata` is laid over the loaded metadata; a new `name` renames the tool and calls still run the package's `echo`. The package must provide the tool as a `@Tool`-decorated class or a plain `{ name, description?, inputSchema?, execute }` object, in its default-export manifest or as named exports. A plain tool's arguments are checked against its JSON Schema `inputSchema`; without an `outputSchema`, an object answer is sent as JSON text with `structuredContent`, and a string or number as its text.
 
 A package specifier string in `tools` registers every tool of the package: `tools: ['@my-org/tools@^1.0.0']`.
 

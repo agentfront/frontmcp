@@ -70,11 +70,15 @@ describe('Remember Tools', () => {
       });
 
       it('should accept valid scope values', () => {
-        const scopes = ['session', 'user', 'tool', 'global'];
+        const scopes = ['session', 'user', 'global'];
         scopes.forEach((scope) => {
           const result = rememberThisSchema.safeParse({ key: 'k', value: 'v', scope });
           expect(result.success).toBe(true);
         });
+      });
+
+      it("should reject tool scope, which recall can't read back", () => {
+        expect(rememberThisSchema.safeParse({ key: 'k', value: 'v', scope: 'tool' }).success).toBe(false);
       });
 
       it('should reject invalid scope', () => {
@@ -241,7 +245,8 @@ describe('Remember Tools', () => {
     it('says what every scope means, and that an anonymous caller is refused', () => {
       const [description] = scopeDescriptions();
 
-      expect(description).toEqual(expect.stringMatching(/session:.*user:.*tool:.*global:.*anonymous caller/s));
+      expect(description).toEqual(expect.stringMatching(/session:.*user:.*global:.*anonymous caller/s));
+      expect(description).not.toMatch(/\btool:/);
     });
 
     it('says that a caller without a session keeps session memory as the signed-in caller', () => {

@@ -11,7 +11,10 @@ import {
 
 import type { ResolvedCodeCallVmOptions } from '../codecall.symbol';
 
-type ScriptPolicyOptions = Pick<ResolvedCodeCallVmOptions, 'allowLoops' | 'disabledBuiltins' | 'disabledGlobals'>;
+type ScriptPolicyOptions = Pick<
+  ResolvedCodeCallVmOptions,
+  'allowLoops' | 'disabledBuiltins' | 'disabledGlobals' | 'allowConsole'
+>;
 
 interface AstNode {
   type: string;
@@ -93,12 +96,23 @@ class DisallowedGlobalsRule implements ValidationRule {
   }
 }
 
-function disallowedGlobalMessages({ disabledBuiltins, disabledGlobals }: ScriptPolicyOptions): Map<string, string> {
-  return new Map([
+/** Why each refused global is refused; `console` is refused unless the server set `vm.allowConsole: true`. */
+function disallowedGlobalMessages({
+  disabledBuiltins,
+  disabledGlobals,
+  allowConsole,
+}: ScriptPolicyOptions): Map<string, string> {
+  const messages = new Map([
     ...disabledBuiltins.map((name): [string, string] => [name, `${name} is disabled by vm.disabledBuiltins`]),
     ...disabledGlobals.map((name): [string, string] => [name, `${name} is disabled by vm.disabledGlobals`]),
-    ['console', 'console is not available in CodeCall scripts; use mcpLog(level, message)'],
   ]);
+  if (!allowConsole) {
+    messages.set(
+      'console',
+      'console is not available in CodeCall scripts unless vm.allowConsole is true; use mcpLog(level, message)',
+    );
+  }
+  return messages;
 }
 
 function scriptPolicyRules(options: ScriptPolicyOptions): ValidationRule[] {
@@ -120,8 +134,7 @@ function scriptPolicyRules(options: ScriptPolicyOptions): ValidationRule[] {
 
 /**
  * The places a script uses a loop `vm.allowLoops: false` turns off, a global `vm.disabledBuiltins` or
- * `vm.disabledGlobals` lists, or `console`, which the sandbox never gives a script, in the script's
- * own lines. The sandbox takes no option for these, so CodeCall checks before it runs the script,
+ * `vm.disabledGlobals` lists, or `console` without `vm.allowConsole: true`, in the script's own lines. The sandbox takes no option for these, so CodeCall checks before it runs the script,
  * parsing it the way the sandbox does. A script none of those parses accept is left to the sandbox,
  * which fails on the same parse and reports the syntax error.
  */

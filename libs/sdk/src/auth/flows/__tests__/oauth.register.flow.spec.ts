@@ -72,6 +72,24 @@ describe('OAuth Register Flow (#462 DCR)', () => {
       expect(registry.has(output.body.client_id)).toBe(true);
     });
 
+    it.each<[string, Record<string, unknown>, string[]]>([
+      ['both grants when it leaves grant_types out', {}, ['authorization_code', 'refresh_token']],
+      ['the grant types it declared', { grant_types: ['authorization_code'] }, ['authorization_code']],
+    ])('registers and returns %s', async (_label, metadata, expected) => {
+      const { scope, registry } = createDcrScope();
+      const flow = new OauthRegisterFlow(
+        createRegisterMetadata(),
+        registerInput({ redirect_uris: ['http://localhost:8080/cb'], ...metadata }),
+        scope,
+        jest.fn(),
+        new Map(),
+      );
+
+      const { output } = await runFlowStages(flow, STAGES);
+      expect(output.body.grant_types).toEqual(expected);
+      expect(registry.get(output.body.client_id)?.grant_types).toEqual(expected);
+    });
+
     it('rejects a non-localhost redirect_uri (400 invalid_redirect_uri)', async () => {
       const { scope } = createDcrScope();
       const flow = new OauthRegisterFlow(
@@ -221,6 +239,27 @@ describe('OAuth Register Flow (#462 DCR)', () => {
 
       const { output } = await runFlowStages(flow, STAGES);
       expect(output.status).toBe(201);
+    });
+  });
+
+  describe('dcr.allowedClientIds with pre-registered clients', () => {
+    it('rejects DCR with 400, since the minted client_id is never on the allowlist', async () => {
+      const { scope, registry } = createDcrScope({
+        allowedClientIds: ['dashboard'],
+        clients: [{ clientId: 'dashboard', redirectUris: ['http://localhost:8080/cb'] }],
+      });
+      const flow = new OauthRegisterFlow(
+        createRegisterMetadata(),
+        registerInput({ redirect_uris: ['http://localhost:8080/cb'] }),
+        scope,
+        jest.fn(),
+        new Map(),
+      );
+
+      const { output } = await runFlowStages(flow, STAGES);
+      expect(output.status).toBe(400);
+      expect(output.body.error).toBe('access_denied');
+      expect(registry.has('dashboard')).toBe(true);
     });
   });
 

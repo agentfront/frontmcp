@@ -12,7 +12,8 @@ Real API references:
 - `TestServer.start({ command, port })` returns a `TestServer` instance with `info.baseUrl` and `stop()` — `libs/testing/src/server/test-server.ts:101`. There is no `TestServer.create(ServerClass)`.
 - Build a client with `await McpTestClient.create({ baseUrl }).withTransport('streamable-http').buildAndConnect()` — `libs/testing/src/client/mcp-test-client.builder.ts`.
 - The public client API is namespaced: `client.tools.list()`, `client.tools.call(name, args)`, `client.resources.list()`, `client.resources.read(uri)`, `client.prompts.list()`, `client.prompts.get(name, args)`, `client.disconnect()` — `libs/testing/src/client/mcp-test-client.ts:306-402`.
-- `client.resources.subscribe(uri)` / `unsubscribe(uri)` send `resources/subscribe` / `resources/unsubscribe` and throw with the server's error when it refuses; the `notifications/resources/updated` that follow arrive in `client.notifications.collect().received`.
+- `client.resources.subscribe(uri)` / `unsubscribe(uri)` send `resources/subscribe` / `resources/unsubscribe` and throw with the server's error when it refuses; the `notifications/resources/updated` that follow arrive in `client.notifications.collect().received`. On `2026-07-28`, which removed both methods, they open the client's `subscriptions/listen` stream again with the URI added or removed, and `subscribe` throws when the server doesn't acknowledge the URI.
+- `client.discover()` sends `server/discover` and returns the server's `supportedVersions`, `capabilities`, `instructions` and `_meta`. It's sent as a `2026-07-28` request whatever version the client speaks.
 - `tools.list()`, `resources.list()`, `resources.listTemplates()` and `prompts.list()` return **every page**: they follow `nextCursor` until the server stops returning one (a FrontMCP server pages at 40 by default), and throw if a cursor repeats or paging passes 1000 pages. Assert on the full list; there is no cursor to pass.
 
 ```typescript
@@ -83,26 +84,34 @@ A tool without an `outputSchema` that returns a plain number sends `{ value: 8 }
 
 ## Notifications and Progress
 
-After `initialize`, `McpTestClient` opens the session's notification stream (a `GET` on the MCP endpoint) and records what the server sends there and on each request's own response:
+`McpTestClient` records the notifications the server sends on each request's own response and on its notification stream: after `initialize`, the session's `GET` stream; on `2026-07-28`, a `subscriptions/listen` stream for list changes and subscribed resources.
 
 ```typescript
 it('records progress and log messages', async () => {
   const progress = client.notifications.collectProgress(); // tools.call now sends a _meta.progressToken
   const notifications = client.notifications.collect();
-  await client.raw.request({ jsonrpc: '2.0', id: 1, method: 'logging/setLevel', params: { level: 'info' } });
 
   await client.tools.call('import_files', {});
 
-  await progress.waitForComplete(5000);
-  expect(progress.all.length).toBeGreaterThan(0);
-  await notifications.waitFor('notifications/message', 5000);
+  expect(progress.all.map((update) => update.message)).toEqual(['file 1', 'file 2']);
+  expect(notifications.has('notifications/message')).toBe(true);
 });
 ```
 
 - Pass `{ progressToken }` as the third argument of `tools.call()` to choose the token yourself.
-- The server sends `notifications/message` (from `this.notify()`) only after `logging/setLevel`.
-- Session-stream notifications can arrive after the call's result, so wait with `waitFor()` / `waitForComplete()` before asserting.
-- `McpTestClient` speaks `2025-06-18` by default. `2026-07-28` has no `initialize` handshake, so `withProtocolVersion('2026-07-28')` makes `build()` throw.
+- The client asks for every log message (`notifications/message`, from `this.notify()`) by default: it sends `logging/setLevel` `'debug'` after `initialize` when the server has the logging capability, and on `2026-07-28` puts the level in each request's `_meta`. Choose the level with `mcpLogLevel` (`McpTestClient.create({ baseUrl, mcpLogLevel: 'warning' })`, `.withMcpLogLevel()`, or `test.use({ mcpLogLevel })`); `false` asks for none.
+- A FrontMCP server sends a tool's progress and log messages on the call's own response, so they're recorded by the time `tools.call()` returns. Each progress update keeps its `message`.
+- Notifications that don't belong to a call, like `list_changed`, can arrive at any time: wait for them with `waitFor()`.
+
+## Protocol Versions
+
+`McpTestClient` speaks `2025-06-18` by default. Set `protocolVersion` (`McpTestClient.create({ baseUrl, protocolVersion: '2026-07-28' })`, `.withProtocolVersion()`, or `test.use({ protocolVersion })`) to speak another:
+
+- Up to `2025-11-25`, the client opens a session with `initialize`.
+- `2026-07-28` is stateless. `connect()` sends `server/discover` instead, and fills `serverInfo`, `capabilities` and `instructions` from it; `sessionId` stays empty. Each request carries the version, client info, capabilities and log level in its `_meta`, with the `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name` and `Mcp-Param-*` headers. The first `tools.call()` lists the tools once, to learn which arguments their `x-mcp-header` annotations mirror into headers.
+- On `2026-07-28`, a tool's `this.elicit()` reaches the client as an `input_required` result: the client answers it with the `onElicitation()` handler (`decline` without one, `cancel` when it throws) and sends the call again, so `tools.call()` returns the final result. A request for sampling or roots fails the call, since the client doesn't answer them.
+- A `2026-07-28` server answers a refused request with an HTTP error that carries the JSON-RPC error, and the client returns that error: removed methods like `ping` fail with `-32601`, and an unknown resource with `-32602` (`-32002` before).
+- `2026-07-28` has no HTTP+SSE transport, so `transport: 'sse'` with it throws.
 
 ## Examples
 

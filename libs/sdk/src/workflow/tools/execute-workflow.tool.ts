@@ -9,7 +9,10 @@ import type { JobExecutionManager } from '../../job/execution/job-execution.mana
   description: 'Execute a registered workflow by name. Supports inline and background execution.',
   inputSchema: {
     name: z.string().describe('Workflow name to execute'),
-    input: z.record(z.string(), z.unknown()).optional().describe('Workflow input data'),
+    input: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe("Workflow input, checked against the workflow's inputSchema"),
     background: z.boolean().optional().default(false).describe('Run in background (returns runId)'),
   },
   outputSchema: {

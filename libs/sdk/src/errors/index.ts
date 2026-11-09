@@ -276,6 +276,7 @@ export {
   TokenLeakDetectedError,
   JwtSecretRequiredError,
   JwtSecretWeakError,
+  SigningKeyInvalidError,
   SessionSecretRequiredError,
   CredentialProviderAlreadyRegisteredError,
   AuthProvidersNotConfiguredError,
@@ -294,6 +295,7 @@ export {
   WorkflowTimeoutError,
   WorkflowDagValidationError,
   WorkflowJobTimeoutError,
+  WorkflowTriggerConfigError,
 } from './workflow.errors';
 
 // Export ESM loader errors
@@ -349,3 +351,4 @@ export {
 } from './sdk.errors';
 export * from './job.errors';
 export * from './plugin.errors';
+export * from './tool-ui.errors';

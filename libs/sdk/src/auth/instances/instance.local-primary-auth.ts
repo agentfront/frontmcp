@@ -11,6 +11,8 @@ import {
   isRedisTokenStorage,
   isSqliteTokenStorage,
   JwksService,
+  LocalTokenKeys,
+  resolveUpstreamClient,
   SessionCredentialVault,
   StorageAuthorizationStore,
   StorageConsentStore,
@@ -19,10 +21,12 @@ import {
   TokenNotAvailableError,
   verifyPkce,
   type AuthorizationStore,
+  type ClientAssertionInput,
   type ConsentStore,
   type DcrRegistryConfig,
   type FederatedAuthSessionStore,
   type JSONWebKeySet,
+  type LocalSigningKeyConfig,
   type SecureStoreBackend,
   type SecureStoreConfig,
   type TokenRefreshCallback,
@@ -324,6 +328,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   readonly secret: Uint8Array;
   readonly logger: FrontMcpLogger;
   private jwks = new JwksService();
+  /** The keys this server signs and verifies its own tokens with: `signKey`, else HS256 with {@link secret}. */
+  private readonly tokenKeys: LocalTokenKeys;
   private cimdService: CimdService | undefined;
 
   /**
@@ -540,6 +546,13 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.secret = getDefaultNoAuthSecret();
     }
 
+    this.tokenKeys = LocalTokenKeys.fromConfig(
+      this.signingConfig(options),
+      this.secret,
+      isPublicMode(options) ? 'auth' : 'auth.local',
+    );
+    this.jwks.setPublicJwks(this.tokenKeys.publicJwks);
+
     // Read the token-storage selection. Only local/remote/orchestrated modes
     // carry `tokenStorage`; public mode does not (treated as 'memory').
     this.tokenStorage = this.readTokenStorage(options);
@@ -587,6 +600,12 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    */
   private deriveIssuer(options: LocalPrimaryAuthOptions): string {
     return this.configuredIssuer(options) ?? `http://${this.host}:${this.port}${this.scope.fullPath}`;
+  }
+
+  /** The `signKey` and `jwks`: top-level in public mode, under `local` in local and remote mode. */
+  private signingConfig(options: LocalPrimaryAuthOptions): LocalSigningKeyConfig {
+    if (isPublicMode(options)) return { signKey: options.signKey, jwks: options.jwks };
+    return isOrchestratedMode(options) ? (options.local ?? {}) : {};
   }
 
   /**
@@ -751,7 +770,16 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * @returns true when this caller claimed the ticket, false when it was already used.
    */
   async claimIncrementalTicket(jti: string, ttlMs: number): Promise<boolean> {
-    const key = `incremental-ticket:${jti}`;
+    return this.claimOnce(`incremental-ticket:${jti}`, ttlMs);
+  }
+
+  /**
+   * Claim `key` for `ttlMs`, exactly once: the replay guard of incremental-authorization tickets and of
+   * `private_key_jwt` client assertions. See {@link claimIncrementalTicket}.
+   *
+   * @returns true when this caller claimed the key, false when it was already claimed or the guard is unavailable.
+   */
+  async claimOnce(key: string, ttlMs: number): Promise<boolean> {
     const nonce = randomUUID();
     const ttlSeconds = Math.max(1, Math.ceil(ttlMs / 1000));
 
@@ -761,22 +789,22 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     } catch (error) {
       // A backend without compare-and-set (Cloudflare KV raises
       // StorageNotSupportedError) cannot host this guard at all. Rejecting
-      // every ticket would disable incremental authorization silently, so fall
+      // every claim would disable what it guards silently, so fall
       // back to the in-memory guard once and keep single use within this
       // instance. Any other error is transient and fails CLOSED.
       if (!isUnsupportedOperation(error)) {
-        this.logger.warn(`Incremental ticket replay guard unavailable: ${String(error)}`);
+        this.logger.warn(`Replay guard unavailable: ${String(error)}`);
         return false;
       }
       this.logger.warn(
-        'Incremental ticket replay guard: the configured storage has no conditional write; ' +
+        'Replay guard: the configured storage has no conditional write; ' +
           'falling back to an in-memory guard (single use holds within this instance only).',
       );
       storage = await this.useInMemoryTicketReplayStorage();
       try {
         await storage.set(key, nonce, { ifNotExists: true, ttlSeconds });
       } catch (fallbackError) {
-        this.logger.warn(`Incremental ticket replay guard unavailable: ${String(fallbackError)}`);
+        this.logger.warn(`Replay guard unavailable: ${String(fallbackError)}`);
         return false;
       }
     }
@@ -784,7 +812,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     try {
       return (await storage.get(key)) === nonce;
     } catch (error) {
-      this.logger.warn(`Incremental ticket replay guard unavailable: ${String(error)}`);
+      this.logger.warn(`Replay guard unavailable: ${String(error)}`);
       return false;
     }
   }
@@ -798,7 +826,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
         // — but so are the pending authorizations and codes this flow depends
         // on, so such a deployment is single-instance by construction.
         this.logger.debug(
-          'Incremental ticket replay guard is in-memory (no persistent tokenStorage configured); ' +
+          'Replay guard is in-memory (no persistent tokenStorage configured); ' +
             'single use holds within this instance only.',
         );
         this.ticketReplayStorage = this.useInMemoryTicketReplayStorage();
@@ -981,13 +1009,13 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   async signAnonymousJwt(options: { audience?: string; issuer?: string } = {}) {
     const { SignJWT } = await loadJose();
     const jwt = new SignJWT({ sub: `anon:${randomUUID()}`, anonymous: true, scope: this.anonymousScopes().join(' ') })
-      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setProtectedHeader(this.tokenKeys.protectedHeader())
       .setIssuedAt()
       .setIssuer(options.issuer ?? this.issuer)
       .setExpirationTime(`${this.anonymousTokenTtlSeconds()}s`)
       .setJti(randomUUID());
     if (options.audience) jwt.setAudience(options.audience);
-    return jwt.sign(this.secret);
+    return jwt.sign(await this.tokenKeys.signingKey());
   }
 
   /** How long an anonymous token lives: public mode's `sessionTtl` (default an hour), a day otherwise. */
@@ -1005,10 +1033,11 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * Cryptographically verify a gateway-issued access token (public/local/remote
    * "gateway" modes). Gateway tokens — both authenticated access tokens
    * ({@link signAccessToken}) and anonymous tokens ({@link signAnonymousJwt}) —
-   * are HS256-signed with `this.secret`.
+   * are signed with {@link tokenKeys}: the configured `signKey`, else HS256 with
+   * `this.secret`.
    *
-   * The secret alone doesn't make a token this server's: every server started
-   * with the same JWT_SECRET holds it. So a token must also (#269):
+   * The key alone doesn't make a token this server's: every server started
+   * with the same JWT_SECRET or `signKey` holds it. So a token must also (#269):
    * - name THIS instance as its issuer (`iss`): `expectedIssuer` (one issuer or
    *   several), which callers take from {@link acceptedIssuersFor} the request,
    *   matching what the token endpoint names when it signs ({@link issuerFor});
@@ -1019,7 +1048,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    *   `auth.expectedAudience` when there is one.
    *
    * Lifetime: `exp` is required (#272) and checked with `nbf` by `jose`. The
-   * algorithm is pinned to HS256 to block `alg` confusion.
+   * algorithms are pinned to the ones the keys sign with, to block `alg` confusion.
    */
   override async verifyGatewayToken(
     token: string,
@@ -1028,9 +1057,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     expectedIssuer?: string | readonly string[],
   ): Promise<VerifyResult> {
     try {
-      const { jwtVerify } = await loadJose();
-      const { payload, protectedHeader } = await jwtVerify(token, this.secret, {
-        algorithms: ['HS256'],
+      const { payload, protectedHeader } = await this.tokenKeys.verify(token, {
         issuer:
           typeof expectedIssuer === 'string' ? expectedIssuer : expectedIssuer ? [...expectedIssuer] : this.issuer,
         requiredClaims: ['exp'],
@@ -1113,7 +1140,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
     const { SignJWT } = await loadJose();
     const jwt = new SignJWT(claims)
-      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setProtectedHeader(this.tokenKeys.protectedHeader())
       .setIssuedAt()
       .setIssuer(issuer ?? this.issuer)
       .setExpirationTime(`${this.accessTokenTtlSeconds}s`)
@@ -1123,7 +1150,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       jwt.setAudience(audience);
     }
 
-    return jwt.sign(this.secret);
+    return jwt.sign(await this.tokenKeys.signingKey());
   }
 
   /**
@@ -1139,6 +1166,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     defaultAudience?: string,
     /** The issuer the access token names: {@link issuerFor} the token request. */
     issuer?: string,
+    /** The client assertion a `private_key_jwt` client authenticates with (RFC 7523). */
+    clientAssertion?: ClientAssertionInput,
   ): Promise<TokenResponse | { error: string; error_description: string }> {
     // Authenticate confidential clients (RFC 6749 §2.3 / §3.2.1). Public and
     // unregistered / CIMD clients ('none' / 'unknown') carry no secret and are
@@ -1148,6 +1177,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.logger.warn('Client authentication failed at token endpoint (authorization_code)');
       return { error: 'invalid_client', error_description: 'Client authentication failed' };
     }
+    const declared = await this.checkDeclaredGrant(clientId, 'authorization_code', clientAssertion);
+    if ('error' in declared) return declared;
 
     // Get the authorization code record
     const codeRecord = await this.authorizationStore.getAuthorizationCode(code);
@@ -1249,6 +1280,16 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       providerTokensId = await this.moveProviderTokens(`pending:${codeRecord.pendingAuthId}`, accessToken);
     }
 
+    this.logger.info(`Tokens issued for user: ${user.sub}`);
+    const tokens: TokenResponse = {
+      access_token: accessToken,
+      token_type: 'Bearer',
+      expires_in: this.accessTokenTtlSeconds,
+      scope: codeRecord.scopes.join(' '),
+    };
+    // A client that declared grant_types without refresh_token gets no refresh token
+    if (declared.grantTypes && !declared.grantTypes.includes('refresh_token')) return tokens;
+
     // Create refresh token — carry the grant's consent / progressive-auth /
     // custom-claim metadata so a later refresh re-mints an access token with
     // the SAME claims (otherwise refresh silently drops `consent` /
@@ -1274,15 +1315,46 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // replay of this code can revoke the token family it minted.
     await this.authorizationStore.markCodeUsed(code, refreshTokenRecord.token);
 
-    this.logger.info(`Tokens issued for user: ${user.sub}`);
+    return { ...tokens, refresh_token: refreshTokenRecord.token };
+  }
 
-    return {
-      access_token: accessToken,
-      token_type: 'Bearer',
-      expires_in: this.accessTokenTtlSeconds,
-      refresh_token: refreshTokenRecord.token,
-      scope: codeRecord.scopes.join(' '),
-    };
+  /**
+   * Refuse a grant the client did not declare in its `grant_types` (RFC 7591): in its registration, its
+   * `dcr.clients` entry or its client ID metadata document. A client that declared nothing (an unregistered
+   * id under `requireRegisteredClients: false`) is not limited, and gets `grantTypes: undefined`. A CIMD client
+   * whose document declares `private_key_jwt` must also present a valid client assertion.
+   */
+  private async checkDeclaredGrant(
+    clientId: string,
+    grantType: 'authorization_code' | 'refresh_token',
+    clientAssertion: ClientAssertionInput | undefined,
+  ): Promise<{ grantTypes: string[] | undefined } | { error: string; error_description: string }> {
+    let grantTypes: string[] | undefined;
+    try {
+      const cimd = this.cimdService;
+      if (cimd?.enabled && cimd.isCimdClientId(clientId)) {
+        const { metadata } = await cimd.resolveClientMetadata(clientId);
+        if (metadata) cimd.assertSupportedClient(metadata);
+        if (metadata?.token_endpoint_auth_method === 'private_key_jwt') {
+          await cimd.verifyClientAssertion(metadata, {
+            audiences: [],
+            ...clientAssertion,
+            claimOnce: (key, ttlMs) => this.claimOnce(key, ttlMs),
+          });
+        }
+        grantTypes = metadata?.grant_types;
+      } else {
+        grantTypes = this.dcrClientRegistryImpl.get(clientId)?.grant_types;
+      }
+    } catch (err) {
+      this.logger.warn(`Client metadata refused at token endpoint (${grantType}): ${(err as Error).message}`);
+      return { error: 'invalid_client', error_description: 'Client authentication failed' };
+    }
+    if (grantTypes && !grantTypes.includes(grantType)) {
+      this.logger.warn(`Client did not declare the ${grantType} grant`);
+      return { error: 'unauthorized_client', error_description: `This client may not use the ${grantType} grant` };
+    }
+    return { grantTypes };
   }
 
   /**
@@ -1344,6 +1416,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     defaultAudience?: string,
     /** The issuer the access token names: {@link issuerFor} the token request. */
     issuer?: string,
+    /** The client assertion a `private_key_jwt` client authenticates with (RFC 7523). */
+    clientAssertion?: ClientAssertionInput,
   ): Promise<TokenResponse | { error: string; error_description: string }> {
     // Authenticate confidential clients on refresh too (RFC 6749 §6): a stolen
     // refresh token must not be redeemable with just the public client_id.
@@ -1351,6 +1425,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.logger.warn('Client authentication failed at token endpoint (refresh_token)');
       return { error: 'invalid_client', error_description: 'Client authentication failed' };
     }
+    const declared = await this.checkDeclaredGrant(clientId, 'refresh_token', clientAssertion);
+    if ('error' in declared) return declared;
 
     const tokenRecord = await this.authorizationStore.getRefreshToken(refreshToken);
 
@@ -1508,6 +1584,9 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   }
 
   protected async initialize(): Promise<void> {
+    // A configured signKey that can't be imported stops the server here, not on the first token.
+    await this.tokenKeys.signingKey();
+
     // Swap in persistent (Redis/SQLite) stores when configured. Runs before the
     // server signals ready, so flows always see the final store instances.
     await this.initializeStores();
@@ -1521,7 +1600,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // single MANDATORY upstream provider so /oauth/authorize federates straight
     // to the upstream IdP (no in-tree login page) and the provider-callback flow
     // exchanges/stores its tokens + derives the session identity from upstream.
-    this.registerRemoteProvider();
+    await this.registerRemoteProvider();
 
     // Build the per-session credential vault and register `this.credentials`
     // (Checkpoint 3b). Runs after initializeStores so it can share the same
@@ -1719,12 +1798,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * discovery. The provider id comes from `providerConfig.id` when set, else it
    * is derived from the provider hostname (mirroring `deriveProviderId`).
    *
+   * Without a `clientId`, `providerConfig.dcrEnabled` registers this server with
+   * the provider (RFC 7591) and uses that client; a failed registration fails startup.
+   *
    * No-op outside remote mode, so local/public/transparent are unaffected.
    *
    * Security: only non-PII provider metadata is read here; the client secret is
    * kept in the provider config and never logged or exposed to the LLM.
    */
-  private registerRemoteProvider(): void {
+  private async registerRemoteProvider(): Promise<void> {
     if (!isRemoteMode(this.options)) {
       return;
     }
@@ -1736,14 +1818,10 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     const id = cfg?.id ?? this.deriveRemoteProviderId(options.provider);
     this.remoteProviderIdImpl = id;
 
-    if (!options.clientId) {
-      // The schema marks clientId optional (DCR placeholder), but without it we
-      // cannot drive the upstream authorization-code flow. Skip registration so
-      // the failure is a clear "provider not configured" rather than an upstream
-      // 400 mid-redirect. DCR (deriving clientId at runtime) is not yet wired.
-      this.logger.warn(
-        `Remote mode: no clientId configured for provider "${id}"; upstream OAuth is not available (DCR is not yet wired)`,
-      );
+    const callbackUrl = `${this.issuer}/oauth/provider/${id}/callback`;
+    const scopes = options.scopes ?? ['openid'];
+    const client = await this.resolveRemoteClient(options, id, callbackUrl, scopes);
+    if (!client) {
       return;
     }
 
@@ -1755,15 +1833,55 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       userInfoEndpoint: cfg?.userInfoEndpoint ?? `${base}/userinfo`,
       jwksUri: cfg?.jwksUri ?? `${base}/.well-known/jwks.json`,
       jwks: cfg?.jwks,
-      clientId: options.clientId,
-      clientSecret: options.clientSecret,
-      scopes: options.scopes ?? ['openid'],
-      callbackUrl: `${this.issuer}/oauth/provider/${id}/callback`,
+      clientId: client.clientId,
+      clientSecret: client.clientSecret,
+      scopes,
+      callbackUrl,
       // The provider is the issuer, as in transparent mode (#271): an RFC 9207
       // `iss` on its callback and its id_token's `iss` must name it.
       issuer: options.provider,
       additionalIssuers: cfg?.additionalIssuers,
       verifyIssuer: cfg?.verifyIssuer,
+    });
+  }
+
+  /**
+   * The client remote mode signs in to the provider with: the configured `clientId`, or one
+   * registered with the provider when `providerConfig.dcrEnabled` is set. Undefined when there is neither.
+   */
+  private async resolveRemoteClient(
+    options: RemoteAuthOptions,
+    providerId: string,
+    callbackUrl: string,
+    scopes: string[],
+  ): Promise<{ clientId: string; clientSecret?: string } | undefined> {
+    const cfg = options.providerConfig;
+    if (options.clientId) {
+      if (cfg?.dcrEnabled) {
+        this.logger.info(`Remote mode: clientId is set, so provider "${providerId}" is not registered dynamically`);
+      }
+      return { clientId: options.clientId, clientSecret: options.clientSecret };
+    }
+
+    if (!cfg?.dcrEnabled) {
+      // Without a client we cannot drive the upstream authorization-code flow. Skip registration so
+      // the failure is a clear "provider not configured" rather than an upstream 400 mid-redirect.
+      this.logger.warn(
+        `Remote mode: no clientId configured for provider "${providerId}"; upstream OAuth is not available. ` +
+          'Set clientId, or providerConfig.dcrEnabled to register with the provider.',
+      );
+      return undefined;
+    }
+
+    return resolveUpstreamClient({
+      provider: options.provider,
+      registrationEndpoint: cfg.registrationEndpoint,
+      redirectUri: callbackUrl,
+      clientName: this.scope.metadata.info?.name ?? 'FrontMCP',
+      scopes,
+      storage: this.storageAdapter,
+      encryptionKey: this.secret,
+      logger: this.logger,
     });
   }
 

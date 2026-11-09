@@ -1,8 +1,11 @@
 import {
   buildCDNInfoForUIType,
+  buildHtmlResponseText,
   buildToolResponseContent,
+  describeRenderOptionProblems,
   isUIRenderFailure,
   MCP_APPS_MIME_TYPE,
+  prepareRenderOptions,
   renderToolTemplate,
   resolveServingMode,
   warnIfComponentReference,
@@ -13,9 +16,12 @@ import { type UIResourceMeta } from './ui-shared';
 
 export {
   buildCDNInfoForUIType,
+  buildHtmlResponseText,
   buildToolResponseContent,
+  describeRenderOptionProblems,
   isUIRenderFailure,
   MCP_APPS_MIME_TYPE,
+  prepareRenderOptions,
   renderToolTemplate,
   resolveServingMode,
   warnIfComponentReference,

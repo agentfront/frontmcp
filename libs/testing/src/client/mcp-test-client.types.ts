@@ -5,6 +5,7 @@
 
 import type {
   CallToolResult,
+  DiscoverResult,
   GetPromptResult,
   Implementation,
   InitializeResult,
@@ -12,6 +13,7 @@ import type {
   ListResourcesResult,
   ListResourceTemplatesResult,
   ListToolsResult,
+  LoggingLevel,
   Prompt,
   ReadResourceResult,
   Resource,
@@ -166,8 +168,20 @@ export interface McpTestClientConfig {
   timeout?: number;
   /** Enable debug logging (default: false) */
   debug?: boolean;
-  /** MCP protocol version to request (default: '2025-06-18'; '2026-07-28' is not supported and throws) */
+  /**
+   * The MCP protocol version the client speaks (default: '2025-06-18'). Up to '2025-11-25' it opens a
+   * session with `initialize`. '2026-07-28' is stateless: `connect()` sends `server/discover`, and every
+   * request carries the version, client info, capabilities and log level in its `_meta`, with the
+   * `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name` and `Mcp-Param-*` headers. It needs the
+   * 'streamable-http' transport.
+   */
   protocolVersion?: string;
+  /**
+   * The level of the log messages (`notifications/message`) the client asks the server for
+   * (default: 'debug', every message). Sent with `logging/setLevel` after `initialize`, when the server
+   * has the logging capability, or in each request's `_meta` on 2026-07-28. `false` asks for none.
+   */
+  mcpLogLevel?: LoggingLevel | false;
   /** Client info to send during initialization and for platform detection */
   clientInfo?: ClientInfo;
   /**
@@ -373,6 +387,8 @@ export interface ProgressUpdate {
   progress: number;
   /** Total value */
   total?: number;
+  /** The update's message, when the server sent one */
+  message?: string;
   /** Progress token */
   progressToken?: string | number;
   /** Timestamp */
@@ -455,6 +471,7 @@ export type ElicitationHandler = (request: ElicitationCreateRequest) => Promise<
 // ═══════════════════════════════════════════════════════════════════
 
 export type {
+  DiscoverResult,
   InitializeResult,
   ListToolsResult,
   CallToolResult,

@@ -1,3 +1,5 @@
+import { getRuntimeContext } from '@frontmcp/utils';
+
 import { type FrontMcpLogger, type PluginType } from '../common';
 import { type ObservabilityOptionsInput } from '../common/types/options/observability/schema';
 import { FrontMcpContextStorage } from '../context';
@@ -12,6 +14,11 @@ export interface ObservabilityScopeOptions {
   globalProviders: ProviderRegistry;
   /** The config is the one `frontmcp dev` implies for dev events, not one the server set. */
   implied?: boolean;
+}
+
+/** The sink `observability.logging` writes to when it names none: NDJSON on stdout, or the console in a browser. */
+function defaultLogSinks(): Array<{ type: string }> {
+  return [{ type: getRuntimeContext().runtime === 'browser' ? 'console' : 'stdout' }];
 }
 
 /** The ObservabilityPlugin `observability` asks for, wired to the SDK logger and tracing; none if it fails to load. */
@@ -80,7 +87,9 @@ export function observabilityPlugins({
             const rawLogging = pluginOptions.logging;
             const loggingOpts: Record<string, unknown> =
               rawLogging === true ? {} : typeof rawLogging === 'object' ? rawLogging : {};
-            const sinks = createSinks(loggingOpts['sinks'] as any);
+            // Without `logging`, the transport only feeds request logs; `logging` without `sinks` writes NDJSON
+            const sinkConfigs = loggingOpts['sinks'] ?? (rawLogging === undefined ? [] : defaultLogSinks());
+            const sinks = createSinks(sinkConfigs);
             let contextStorage: any;
             try {
               contextStorage = globalProviders.get(FrontMcpContextStorage);

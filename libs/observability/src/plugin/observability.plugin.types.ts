@@ -32,7 +32,7 @@ export interface ObservabilityPluginOptions {
  * Logging options within the plugin.
  */
 export interface ObservabilityLoggingOptions {
-  /** Sink configurations (default: StdoutSink in Node.js, ConsoleSink in browser) */
+  /** Sink configurations; through `@FrontMcp({ observability })`, a stdout sink (console in a browser) when omitted */
   sinks?: SinkConfig[];
 
   /** Field names to redact from log attributes */

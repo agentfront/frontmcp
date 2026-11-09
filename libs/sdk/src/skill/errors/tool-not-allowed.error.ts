@@ -1,6 +1,6 @@
 // file: libs/sdk/src/skill/errors/tool-not-allowed.error.ts
 
-import { PublicMcpError, MCP_ERROR_CODES } from '../../errors';
+import { MCP_ERROR_CODES, PublicMcpError } from '../../errors';
 import type { ToolAuthorizationResult } from '../session/skill-session.types';
 
 /**
@@ -78,7 +78,7 @@ export class ToolNotAllowedError extends PublicMcpError {
       case 'no_active_skill':
         return (
           `Cannot call tool '${toolName}': no skill is active and explicit activation is required.\n\n` +
-          `Please load a skill first using the loadSkill tool with activateSession: true.`
+          `Activate a skill first: send a skills/load request with activateSession: true.`
         );
 
       default:

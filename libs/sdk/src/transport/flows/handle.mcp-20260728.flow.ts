@@ -227,7 +227,7 @@ function errorResponse(status: number, error: JsonRpcErrorPayload, id: unknown) 
 @Flow({
   name,
   plan,
-  access: 'public',
+  access: 'authorized',
   inputSchema: httpInputSchema,
   outputSchema: httpOutputSchema,
 })

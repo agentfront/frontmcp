@@ -4,10 +4,15 @@
 
 import 'reflect-metadata';
 
-import { type AgentCompletion, type AgentCompletionChunk, type AgentLlmAdapter } from '../../common';
+import {
+  type AgentCompletion,
+  type AgentCompletionChunk,
+  type AgentCompletionOptions,
+  type AgentLlmAdapter,
+} from '../../common';
+import { AgentLlmError, AgentLoopExceededError, AgentTimeoutError, PublicMcpError } from '../../errors';
 import {
   AgentExecutionLoop,
-  AgentMaxIterationsError,
   type AgentExecutionResult,
   type AgentStreamEvent,
   type ToolExecutor,
@@ -118,7 +123,7 @@ describe('AgentExecutionLoop', () => {
           messages: expect.arrayContaining([expect.objectContaining({ role: 'user', content: 'Hello' })]),
         }),
         undefined,
-        undefined,
+        { signal: expect.any(AbortSignal) },
       );
     });
   });
@@ -265,7 +270,8 @@ describe('AgentExecutionLoop', () => {
       const result = await loop.run('Start infinite loop', toolExecutor);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBeInstanceOf(AgentMaxIterationsError);
+      expect(result.error).toBeInstanceOf(AgentLoopExceededError);
+      expect(result.error).toMatchObject({ code: 'AGENT_LOOP_EXCEEDED', maxIterations: 3 });
       expect(result.iterations).toBe(3);
     });
 
@@ -292,7 +298,7 @@ describe('AgentExecutionLoop', () => {
       const result = await loop.run('Loop forever', toolExecutor);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBeInstanceOf(AgentMaxIterationsError);
+      expect(result.error).toBeInstanceOf(AgentLoopExceededError);
     });
   });
 
@@ -473,6 +479,221 @@ describe('AgentExecutionLoop', () => {
 
       expect(result.durationMs).toBeDefined();
       expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('Stopping the run', () => {
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const lookupCall = (id: string) => ({ id, name: 'lookup', arguments: {} });
+    const askForLookups = (...ids: string[]): AgentCompletion => ({
+      content: null,
+      finishReason: 'tool_calls',
+      toolCalls: ids.map(lookupCall),
+    });
+
+    it('starts no model request and no tool call after the timeout fires', async () => {
+      const completion = jest.fn(async () => {
+        await wait(60);
+        return askForLookups('c1');
+      });
+      const toolExecutor = jest.fn().mockResolvedValue('found');
+      const loop = new AgentExecutionLoop({
+        adapter: { completion },
+        agentId: 'triage',
+        systemInstructions: 'x',
+        tools: [],
+        timeout: 20,
+      });
+
+      const result = await loop.run('Hi', toolExecutor);
+      await wait(120);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeInstanceOf(AgentTimeoutError);
+      expect(result.error).toMatchObject({ code: 'AGENT_TIMEOUT', agentId: 'triage', timeoutMs: 20 });
+      expect(result.error?.message).toBe('Agent "triage" execution timed out after 20ms');
+      expect(completion).toHaveBeenCalledTimes(1);
+      expect(toolExecutor).not.toHaveBeenCalled();
+    });
+
+    it('runs none of the remaining tool calls after the timeout fires', async () => {
+      const completion = jest.fn().mockResolvedValue(askForLookups('c1', 'c2'));
+      const toolExecutor = jest.fn(async () => {
+        await wait(60);
+        return 'found';
+      });
+      const loop = new AgentExecutionLoop({ adapter: { completion }, systemInstructions: 'x', tools: [], timeout: 20 });
+
+      const result = await loop.run('Hi', toolExecutor);
+      await wait(120);
+
+      expect(result.error).toBeInstanceOf(AgentTimeoutError);
+      expect(toolExecutor).toHaveBeenCalledTimes(1);
+      expect(completion).toHaveBeenCalledTimes(1);
+    });
+
+    it('passes each model request a signal that aborts when the timeout fires', async () => {
+      const completion = jest.fn(async (..._args: [unknown, unknown, AgentCompletionOptions?]) => {
+        await wait(60);
+        return { content: 'late', finishReason: 'stop' as const };
+      });
+      const loop = new AgentExecutionLoop({
+        adapter: { completion },
+        systemInstructions: 'x',
+        tools: [],
+        timeout: 20,
+        completionOptions: { temperature: 0.1 },
+      });
+
+      await loop.run('Hi', jest.fn());
+
+      const options = completion.mock.calls[0][2];
+      expect(options).toMatchObject({ temperature: 0.1 });
+      expect(options?.signal?.aborted).toBe(true);
+      expect(options?.signal?.reason).toBeInstanceOf(AgentTimeoutError);
+    });
+
+    it('stops when the signal it was given aborts, and fails with its reason', async () => {
+      const controller = new AbortController();
+      const cancelled = new Error('The call was cancelled');
+      const completion = jest.fn(async () => {
+        controller.abort(cancelled);
+        return askForLookups('c1');
+      });
+      const toolExecutor = jest.fn();
+      const loop = new AgentExecutionLoop({
+        adapter: { completion },
+        systemInstructions: 'x',
+        tools: [],
+        signal: controller.signal,
+      });
+
+      const result = await loop.run('Hi', toolExecutor);
+      await wait(20);
+
+      expect(result.error).toBe(cancelled);
+      expect(toolExecutor).not.toHaveBeenCalled();
+    });
+
+    it('fails with AgentLlmError when a model request fails, keeping the cause', async () => {
+      const cause = new Error('model down');
+      const loop = new AgentExecutionLoop({
+        adapter: { completion: jest.fn().mockRejectedValue(cause) },
+        agentId: 'triage',
+        systemInstructions: 'x',
+        tools: [],
+      });
+
+      const result = await loop.run('Hi', jest.fn());
+
+      expect(result.error).toBeInstanceOf(AgentLlmError);
+      expect(result.error).toMatchObject({ code: 'AGENT_LLM_ERROR', agentId: 'triage', originalError: cause });
+    });
+
+    it('keeps a FrontMCP error a model request fails with as it is', async () => {
+      const refusal = new PublicMcpError('Model quota used up', 'MODEL_QUOTA', 429);
+      const loop = new AgentExecutionLoop({
+        adapter: { completion: jest.fn().mockRejectedValue(refusal) },
+        systemInstructions: 'x',
+        tools: [],
+      });
+
+      const result = await loop.run('Hi', jest.fn());
+
+      expect(result.error).toBe(refusal);
+    });
+
+    it.each([
+      ['the timeout fires', AgentTimeoutError, () => wait(60).then(() => askForLookups('c1'))],
+      ['a model request fails', AgentLlmError, () => Promise.reject(new Error('model down'))],
+      ['the model keeps calling tools', AgentLoopExceededError, () => Promise.resolve(askForLookups('c1'))],
+    ])('tells onComplete once, with the error, when %s', async (_case, errorClass, reply) => {
+      const onComplete = jest.fn();
+      const loop = new AgentExecutionLoop({
+        adapter: { completion: jest.fn(reply) },
+        systemInstructions: 'x',
+        tools: [],
+        timeout: 20,
+        maxIterations: 2,
+        onComplete,
+      });
+
+      await loop.run('Hi', jest.fn().mockResolvedValue('found'));
+
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(onComplete).toHaveBeenCalledWith(null, expect.any(errorClass));
+    });
+
+    describe('streamed', () => {
+      async function drainStream(stream: AsyncGenerator<AgentStreamEvent, AgentExecutionResult>) {
+        for (let step = await stream.next(); ; step = await stream.next()) {
+          if (step.done) return step.value;
+        }
+      }
+
+      it('starts no tool call and no model request after the timeout fires', async () => {
+        const streamCompletion = jest.fn(async function* (): AsyncGenerator<AgentCompletionChunk> {
+          await wait(60);
+          yield { type: 'done', completion: askForLookups('c1') };
+        });
+        const toolExecutor = jest.fn().mockResolvedValue('found');
+        const loop = new AgentExecutionLoop({
+          adapter: { completion: jest.fn(), streamCompletion },
+          systemInstructions: 'x',
+          tools: [],
+          timeout: 20,
+        });
+
+        const result = await drainStream(loop.runStreaming('Hi', toolExecutor));
+        await wait(120);
+
+        expect(result.error).toBeInstanceOf(AgentTimeoutError);
+        expect(streamCompletion).toHaveBeenCalledTimes(1);
+        expect(toolExecutor).not.toHaveBeenCalled();
+      });
+
+      it('passes the streamed request a signal that aborts when the timeout fires', async () => {
+        let requestSignal: AbortSignal | undefined;
+        const loop = new AgentExecutionLoop({
+          adapter: {
+            completion: jest.fn(),
+            streamCompletion: async function* (_prompt, _tools, options): AsyncGenerator<AgentCompletionChunk> {
+              requestSignal = options?.signal;
+              await wait(60);
+              yield { type: 'done', completion: { content: 'late', finishReason: 'stop' } };
+            },
+          },
+          systemInstructions: 'x',
+          tools: [],
+          timeout: 20,
+        });
+
+        await drainStream(loop.runStreaming('Hi', jest.fn()));
+
+        expect(requestSignal?.aborted).toBe(true);
+      });
+
+      it('fails with AgentLlmError when the stream fails, and tells onComplete', async () => {
+        const onComplete = jest.fn();
+        const loop = new AgentExecutionLoop({
+          adapter: {
+            completion: jest.fn(),
+            streamCompletion: async function* (): AsyncGenerator<AgentCompletionChunk> {
+              yield { type: 'content', content: 'Thin' };
+              throw new Error('stream reset');
+            },
+          },
+          systemInstructions: 'x',
+          tools: [],
+          onComplete,
+        });
+
+        const result = await drainStream(loop.runStreaming('Hi', jest.fn()));
+
+        expect(result.error).toBeInstanceOf(AgentLlmError);
+        expect(onComplete).toHaveBeenCalledTimes(1);
+        expect(onComplete).toHaveBeenCalledWith(null, result.error);
+      });
     });
   });
 
@@ -691,7 +912,7 @@ describe('AgentExecutionLoop', () => {
       const { events, result } = await drain(loop.runStreaming('Hi', jest.fn().mockResolvedValue('again')));
 
       expect(result.success).toBe(false);
-      expect(result.error).toBeInstanceOf(AgentMaxIterationsError);
+      expect(result.error).toBeInstanceOf(AgentLoopExceededError);
       expect(events.slice(-2).map((event) => event.type)).toEqual(['error', 'done']);
     });
 
@@ -703,12 +924,19 @@ describe('AgentExecutionLoop', () => {
           await new Promise(() => undefined);
         },
       };
-      const loop = new AgentExecutionLoop({ adapter, systemInstructions: 'x', tools: [], timeout: 20 });
+      const loop = new AgentExecutionLoop({
+        adapter,
+        agentId: 'triage',
+        systemInstructions: 'x',
+        tools: [],
+        timeout: 20,
+      });
 
       const { events, result } = await drain(loop.runStreaming('Hi', jest.fn()));
 
       expect(result.success).toBe(false);
-      expect(result.error?.message).toBe('Agent execution timed out after 20ms');
+      expect(result.error).toBeInstanceOf(AgentTimeoutError);
+      expect(result.error?.message).toBe('Agent "triage" execution timed out after 20ms');
       expect(events.map((event) => event.type)).toEqual(['iteration', 'content', 'error', 'done']);
     });
 

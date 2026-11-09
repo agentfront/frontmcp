@@ -167,6 +167,31 @@ const clientId = cimdServer.registerClient({
 await cimdServer.stop();
 ```
 
+A client that authenticates with `private_key_jwt` lists its public keys with `jwks` (inline) or `jwksUri`, and signs
+a client assertion for every `/oauth/token` request (`client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer`,
+`client_assertion=<JWT>` with `iss` and `sub` = the `client_id`, `aud` = the token endpoint, `exp` and a fresh `jti`):
+
+```typescript
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+
+const { privateKey, publicKey } = await generateKeyPair('ES256');
+const publicJwk = { ...(await exportJWK(publicKey)), kid: 'k1', alg: 'ES256', use: 'sig' };
+const clientId = cimdServer.registerClient({
+  name: 'Signed Client',
+  tokenEndpointAuthMethod: 'private_key_jwt',
+  jwks: { keys: [publicJwk] },
+});
+
+const clientAssertion = await new SignJWT({ jti: crypto.randomUUID() })
+  .setProtectedHeader({ alg: 'ES256', kid: 'k1' })
+  .setIssuer(clientId)
+  .setSubject(clientId)
+  .setAudience(`${baseUrl}/oauth/token`)
+  .setIssuedAt()
+  .setExpirationTime('2m')
+  .sign(privateKey);
+```
+
 ## Examples
 
 | Example                                                                     | Level        | Description                                                                                                                                                                                                    |

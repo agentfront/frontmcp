@@ -6,7 +6,7 @@
 import { EsmRegistryAuthError, EsmVersionResolutionError } from '../errors/esm.errors';
 import { getRegistryUrl, resolveRegistryToken, type EsmRegistryAuth } from './esm-auth.types';
 import { type ParsedPackageSpecifier } from './package-specifier';
-import { isValidVersion, maxSatisfying } from './semver.utils';
+import { isDistTag, isValidVersion, maxSatisfying } from './semver.utils';
 
 /**
  * Result of a version resolution.
@@ -144,6 +144,11 @@ export class VersionResolver {
           publishedAt: data.time?.[tagVersion],
         };
       }
+    }
+
+    if (specifier.range !== 'latest' && isDistTag(specifier.range)) {
+      const tags = Object.keys(data['dist-tags'] ?? {}).join(', ') || 'none';
+      throw new Error(`"${specifier.range}" is not a dist-tag of "${specifier.fullName}" (its dist-tags: ${tags})`);
     }
 
     // Semver range resolution

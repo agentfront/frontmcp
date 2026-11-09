@@ -169,7 +169,7 @@ function findAgentForCall(agents: NonNullable<ScopeEntry['agents']>, toolName: s
   plan,
   inputSchema,
   outputSchema,
-  access: 'authorized',
+  access: 'public',
 })
 export default class CallAgentFlow extends FlowBase<typeof name> {
   /** The class of the agent the call names, whose `static` hooks run from `parseInput` on (#701). */
@@ -434,6 +434,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
       // Without a JSON-RPC request id this transport can't route an elicitation, so the one the
       // caller's flow (tools:call-tool for the agent tool) set on the context stays in place.
       const jsonRpcRequestId = this.state.jsonRpcRequestId;
+      context._jsonRpcRequestIdInternal = jsonRpcRequestId;
       if (frontmcpContext && sdkAuthInfo?.transport?.sendElicitRequest && jsonRpcRequestId !== undefined) {
         const transport = sdkAuthInfo.transport;
         // Pass the JSON-RPC request ID for proper elicitation routing

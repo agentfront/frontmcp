@@ -7,7 +7,7 @@ import 'reflect-metadata';
 
 import { type JobEntry } from '../../common/entries/job.entry';
 import { FRONTMCP_CONTEXT, FrontMcpContext } from '../../context';
-import { jobContextProviders } from '../job-context-providers';
+import { detachedRunContext, jobContextProviders } from '../job-context-providers';
 
 const ORCHESTRATED_ACCESSOR = Symbol('orchestrated-accessor');
 
@@ -31,5 +31,16 @@ describe('jobContextProviders', () => {
     expect(sessionKey).toBe('session-1');
     expect(contextDeps.get(FRONTMCP_CONTEXT)).toBe(context);
     expect(contextDeps.get(ORCHESTRATED_ACCESSOR)).toBe(accessor);
+  });
+});
+
+describe('detachedRunContext', () => {
+  it('keeps whether the caller is authorized: a background run of an unverified request stays unverified', () => {
+    const request = { headers: {} };
+    const unverified = new FrontMcpContext({ sessionId: 'session-1', scopeId: 'scope', unverifiedRequest: request });
+    const inProcess = new FrontMcpContext({ sessionId: 'session-2', scopeId: 'scope' });
+
+    expect(detachedRunContext(unverified).unverifiedRequest).toBe(request);
+    expect(detachedRunContext(inProcess).unverifiedRequest).toBeUndefined();
   });
 });

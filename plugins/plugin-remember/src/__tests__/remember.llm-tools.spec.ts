@@ -137,18 +137,31 @@ describe('RememberPlugin LLM tools', () => {
       expect(recall?.description).not.toMatch(/(?<!memory_)remember_this/);
     });
 
-    it('keeps each prefixed tool’s own `tool`-scope memory', async () => {
+    it("doesn't offer `tool` scope, which recall could never read back", async () => {
       client = await connect(serverWith({ tools: { enabled: true, prefix: 'm_' } }));
 
-      await client.callTool('m_remember_this', { key: 'k', value: 'v', scope: 'tool' });
+      const stored = (await client.callTool('m_remember_this', { key: 'k', value: 'v', scope: 'tool' })) as {
+        isError?: boolean;
+      };
+      const tools = (await client.listTools()) as Array<{ name: string; inputSchema?: unknown }>;
 
-      expect(structured(await client.callTool('m_recall', { key: 'k', scope: 'tool' }))).toMatchObject({
-        found: false,
-      });
+      expect(stored.isError).toBe(true);
+      for (const tool of tools) {
+        expect(JSON.stringify(tool.inputSchema)).not.toContain('"tool"');
+      }
     });
   });
 
   describe('allowedScopes', () => {
+    it('leaves `tool` out of the scopes it lists, when the list names it', async () => {
+      client = await connect(serverWith({ tools: { enabled: true, allowedScopes: ['tool', 'user'] } }));
+
+      const result = (await client.callTool('recall', { key: 'k' })) as { content?: Array<{ text?: string }> };
+
+      expect(result.content?.[0]?.text).toContain('user');
+      expect(result.content?.[0]?.text).not.toContain('tool');
+    });
+
     it('rejects a scope outside the list', async () => {
       client = await connect(serverWith({ tools: { enabled: true, allowedScopes: ['session'] } }));
 

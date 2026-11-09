@@ -272,13 +272,16 @@ export interface AgentSwarmConfig {
  */
 export interface AgentExecutionConfig {
   /**
-   * Maximum execution time in milliseconds.
+   * Maximum execution time of the model loop in milliseconds. When it passes, the call fails with
+   * `AgentTimeoutError` (`AGENT_TIMEOUT`), the model request in progress is aborted (its adapter
+   * receives `options.signal`), and no model request or tool call starts after it.
    * @default 120000 (2 minutes)
    */
   timeout?: number;
 
   /**
-   * Maximum iterations for the agent loop.
+   * Maximum iterations for the agent loop. A model that still asks for tools after them fails the call
+   * with `AgentLoopExceededError` (`AGENT_LOOP_EXCEEDED`).
    * @default 10
    */
   maxIterations?: number;
@@ -347,6 +350,8 @@ export interface AgentExecutionConfig {
    * Whether to automatically send progress notifications during agent execution.
    * When true, the agent sends notifications about LLM calls, tool executions,
    * and completion status via `notifications/progress` and `notifications/message`.
+   * The last update is `Agent completed`, or `Agent failed: <public message>` whatever ends the run
+   * (the timeout, a model error, `maxIterations`).
    * Requires `enableNotifications` to also be true. A run that streams its text
    * (`enableStreaming`) sends no automatic `notifications/progress`, only the log messages.
    * @default false (opt-in feature)

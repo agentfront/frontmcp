@@ -14,7 +14,12 @@
  */
 import 'reflect-metadata';
 
-import { generatePkceChallenge, SessionCredentialVault } from '@frontmcp/auth';
+import {
+  generatePkceChallenge,
+  InMemoryFederatedAuthSessionStore,
+  sealPendingLogin,
+  SessionCredentialVault,
+} from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { MemoryStorageAdapter } from '@frontmcp/utils';
 
@@ -46,7 +51,12 @@ const APPS = [
 /** Seed an INCREMENTAL pending authorization for app B carrying prior apps. */
 async function seedIncrementalPending(
   scope: any,
-  opts: { targetAppId: string; priorAuthorizedAppIds?: string[] },
+  opts: {
+    targetAppId: string;
+    priorAuthorizedAppIds?: string[];
+    ticketProfile?: { email?: string; name?: string };
+    federatedProviderIds?: string[];
+  },
 ): Promise<string> {
   const store = scope.auth.authorizationStore;
   const pkce = generatePkceChallenge('a'.repeat(64));
@@ -63,10 +73,34 @@ async function seedIncrementalPending(
     incrementalSub: 'user-1',
     targetAppId: opts.targetAppId,
     priorAuthorizedAppIds: opts.priorAuthorizedAppIds,
+    federatedLogin: opts.federatedProviderIds
+      ? { providerIds: opts.federatedProviderIds, selectedProviderIds: undefined, skippedProviderIds: undefined }
+      : undefined,
   });
+  if (opts.ticketProfile) {
+    pending.verifiedLogin = sealPendingLogin(scope.auth.secret, pending.id, { sub: 'user-1', ...opts.ticketProfile });
+  }
   await store.storePendingAuthorization(bindSignin(pending, pending.id));
   return pending.id;
 }
+
+/** Capture what the callback passes to createAuthorizationCode. */
+function captureMint(scope: any): { params?: any } {
+  const captured: { params?: any } = {};
+  scope.auth.createAuthorizationCode = jest.fn(async (params: any) => {
+    captured.params = params;
+    return 'minted-code';
+  });
+  return captured;
+}
+
+const MINT_STAGES = [
+  'parseInput',
+  'validatePendingAuth',
+  'handleIncrementalAuth',
+  'handleFederatedAuth',
+  'createAuthorizationCode',
+];
 
 function makeCallback(scope: any, pendingAuthId: string, extraQuery: Record<string, string> = {}) {
   const input = createMockHttpRequest({
@@ -274,5 +308,125 @@ describe('OAuth Callback Flow — incremental authorization expansion', () => {
     const { state } = await runFlowStages(flow, ['parseInput', 'validatePendingAuth', 'handleIncrementalAuth']);
 
     expect(state.authorizedAppIds).toBeUndefined();
+  });
+
+  it('keeps the email and name the ticket proved, not the ones submitted with the form', async () => {
+    const scope = createMockScopeEntry({
+      auth: { mode: 'local', incrementalAuth: { enabled: true } } as any,
+      apps: APPS,
+    });
+    const minted = captureMint(scope);
+    const pendingAuthId = await seedIncrementalPending(scope, {
+      targetAppId: 'tasks',
+      priorAuthorizedAppIds: ['notes'],
+      ticketProfile: { email: 'ada@example.com', name: 'Ada Lovelace' },
+    });
+
+    await runFlowStages(makeCallback(scope, pendingAuthId, { name: 'Someone Else' }), MINT_STAGES);
+
+    expect(minted.params.userSub).toBe('user-1');
+    expect(minted.params.userEmail).toBe('ada@example.com');
+    expect(minted.params.userName).toBe('Ada Lovelace');
+  });
+
+  it('mints no email the ticket did not carry, whatever the form submits', async () => {
+    const scope = createMockScopeEntry({
+      auth: { mode: 'local', incrementalAuth: { enabled: true } } as any,
+      apps: APPS,
+    });
+    const minted = captureMint(scope);
+    const pendingAuthId = await seedIncrementalPending(scope, { targetAppId: 'tasks' });
+
+    await runFlowStages(makeCallback(scope, pendingAuthId), MINT_STAGES);
+
+    expect(minted.params.userEmail).toBeUndefined();
+    expect(minted.params.userName).toBeUndefined();
+  });
+
+  it('expands the grant in a scope whose sign-in goes through the provider picker', async () => {
+    const scope = createMockScopeEntry({
+      auth: { mode: 'local', incrementalAuth: { enabled: true } } as any,
+      apps: [APPS[0], { ...APPS[1], auth: { mode: 'public' } }],
+    });
+    const minted = captureMint(scope);
+    const pendingAuthId = await seedIncrementalPending(scope, {
+      targetAppId: 'tasks',
+      priorAuthorizedAppIds: ['notes'],
+      federatedProviderIds: ['__parent__', 'tasks'],
+    });
+
+    await runFlowStages(makeCallback(scope, pendingAuthId), MINT_STAGES);
+
+    expect(new Set(minted.params.authorizedAppIds)).toEqual(new Set(['notes', 'tasks']));
+  });
+});
+
+describe('OAuth Callback Flow — authorized_apps of a sign-in through the provider picker', () => {
+  const PICKER_APPS = [
+    { id: 'notes', name: 'Notes' },
+    { id: 'tasks', name: 'Tasks', auth: { mode: 'public' } },
+  ];
+
+  async function seedPickerPending(scope: any, providerIds: string[]): Promise<string> {
+    const store = scope.auth.authorizationStore;
+    const pending = store.createPendingRecord({
+      clientId: 'local-client',
+      redirectUri: 'http://127.0.0.1:54321/callback',
+      scopes: ['openid'],
+      pkce: generatePkceChallenge('a'.repeat(64)),
+      state: 'xyz',
+      federatedLogin: { providerIds, selectedProviderIds: undefined, skippedProviderIds: undefined },
+    });
+    await store.storePendingAuthorization(bindSignin(pending, pending.id));
+    return pending.id;
+  }
+
+  function pickerScope(configuredProviderIds: string[]) {
+    const scope = createMockScopeEntry({
+      auth: { mode: 'local', incrementalAuth: { enabled: true } } as any,
+      apps: PICKER_APPS,
+    });
+    const federatedSessionStore = new InMemoryFederatedAuthSessionStore();
+    Object.assign(scope.auth, {
+      federatedSessionStore,
+      getProviderConfig: (id: string) => (configuredProviderIds.includes(id) ? { id } : undefined),
+      buildProviderAuthorizeUrl: async (id: string) => `https://${id}.example.com/authorize`,
+    });
+    return { scope, federatedSessionStore };
+  }
+
+  function pick(scope: any, pendingAuthId: string, providers: string[]) {
+    return makeCallback(scope, pendingAuthId, { federated: 'true', providers } as any);
+  }
+
+  it('grants the apps it signed in for when it mints at once, leaving out a skipped app provider', async () => {
+    const { scope } = pickerScope([]);
+    const minted = captureMint(scope);
+    const pendingAuthId = await seedPickerPending(scope, ['__parent__', 'tasks']);
+
+    await runFlowStages(pick(scope, pendingAuthId, ['__parent__']), MINT_STAGES);
+
+    expect(minted.params.authorizedAppIds).toEqual(['notes']);
+  });
+
+  it('grants every app when the picker links each app provider', async () => {
+    const { scope } = pickerScope([]);
+    const minted = captureMint(scope);
+    const pendingAuthId = await seedPickerPending(scope, ['__parent__', 'tasks']);
+
+    await runFlowStages(pick(scope, pendingAuthId, ['__parent__', 'tasks']), MINT_STAGES);
+
+    expect(new Set(minted.params.authorizedAppIds)).toEqual(new Set(['notes', 'tasks']));
+  });
+
+  it('carries the grant in the federated session the provider callback mints from', async () => {
+    const { scope, federatedSessionStore } = pickerScope(['github']);
+    const store = jest.spyOn(federatedSessionStore, 'store');
+    const pendingAuthId = await seedPickerPending(scope, ['github', 'tasks']);
+
+    const { output } = await runFlowStages(pick(scope, pendingAuthId, ['github']), MINT_STAGES);
+
+    expect(output?.kind).toBe('redirect');
+    expect(store.mock.calls[0]?.[0].authorizedAppIds).toEqual(['notes']);
   });
 });

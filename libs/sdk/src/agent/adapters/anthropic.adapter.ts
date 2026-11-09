@@ -29,7 +29,7 @@ import {
   type AgentToolCall,
   type AgentToolDefinition,
 } from '../../common';
-import { BaseLlmAdapter, LlmAdapterError, type BaseLlmAdapterConfig } from './base.adapter';
+import { BaseLlmAdapter, LlmAdapterError, type BaseLlmAdapterConfig, type LlmRequestOptions } from './base.adapter';
 
 // ============================================================================
 // Types for the Anthropic SDK (duck-typed to avoid import dependency)
@@ -37,9 +37,18 @@ import { BaseLlmAdapter, LlmAdapterError, type BaseLlmAdapterConfig } from './ba
 
 interface AnthropicClient {
   messages: {
-    create(params: AnthropicCreateParams & { stream?: false }): Promise<AnthropicMessage>;
-    create(params: AnthropicCreateParams & { stream: true }): Promise<AnthropicStream>;
-    create(params: AnthropicCreateParams): Promise<AnthropicMessage | AnthropicStream>;
+    create(
+      params: AnthropicCreateParams & { stream?: false },
+      requestOptions?: LlmRequestOptions,
+    ): Promise<AnthropicMessage>;
+    create(
+      params: AnthropicCreateParams & { stream: true },
+      requestOptions?: LlmRequestOptions,
+    ): Promise<AnthropicStream>;
+    create(
+      params: AnthropicCreateParams,
+      requestOptions?: LlmRequestOptions,
+    ): Promise<AnthropicMessage | AnthropicStream>;
   };
 }
 
@@ -183,15 +192,19 @@ export class AnthropicAdapter extends BaseLlmAdapter implements AgentLlmAdapter 
     const merged = this.mergeOptions(options);
     const params = this.buildParams(prompt, tools, merged, false);
 
-    return this.withRetry(async () => {
-      try {
-        const client = await this.getClient();
-        const response = (await client.messages.create(params)) as AnthropicMessage;
-        return this.parseResponse(response);
-      } catch (error) {
-        throw this.wrapError(error);
-      }
-    });
+    return this.withRetry(
+      async () => {
+        try {
+          const client = await this.getClient();
+          const response = (await client.messages.create(params, this.requestOptions(merged))) as AnthropicMessage;
+          return this.parseResponse(response);
+        } catch (error) {
+          throw this.wrapError(error);
+        }
+      },
+      this.config.maxRetries,
+      merged.signal,
+    );
   }
 
   override async *streamCompletion(
@@ -211,7 +224,7 @@ export class AnthropicAdapter extends BaseLlmAdapter implements AgentLlmAdapter 
 
     try {
       const client = await this.getClient();
-      const stream = (await client.messages.create(params)) as AnthropicStream;
+      const stream = (await client.messages.create(params, this.requestOptions(merged))) as AnthropicStream;
 
       for await (const event of stream) {
         switch (event.type) {

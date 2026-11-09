@@ -2,7 +2,7 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { Tool, ToolContext } from '../../common';
 import { WorkflowKind } from '../../common/records/workflow.record';
-import { DynamicJobRegistrationDisabledError } from '../../errors';
+import { DynamicJobRegistrationDisabledError, InvalidInputError } from '../../errors';
 
 @Tool({
   name: 'register_workflow',
@@ -22,7 +22,13 @@ import { DynamicJobRegistrationDisabledError } from '../../errors';
         }),
       )
       .describe('Workflow step definitions'),
-    trigger: z.enum(['manual', 'webhook', 'event']).optional().describe('Trigger type'),
+    trigger: z
+      .enum(['manual', 'webhook', 'event'])
+      .optional()
+      .describe(
+        "Trigger type; 'webhook' and 'event' are refused: a workflow registered at runtime runs through " +
+          'execute_workflow, and a triggered workflow is declared with @Workflow',
+      ),
     tags: z.array(z.string()).optional().describe('Tags for categorization'),
   },
   outputSchema: {
@@ -58,6 +64,15 @@ export default class RegisterWorkflowTool extends ToolContext {
     // (GHSA-58v2-gpcc-jmqv).
     if (!this.dynamicRegistrationEnabled()) {
       return this.fail(new DynamicJobRegistrationDisabledError('workflow'));
+    }
+
+    // A webhook's route and an event's listener are set up when the server starts
+    if (input.trigger === 'webhook' || input.trigger === 'event') {
+      return this.fail(
+        new InvalidInputError(
+          `A workflow registered at runtime can't have trigger: '${input.trigger}': declare it with @Workflow`,
+        ),
+      );
     }
 
     const existing = workflowRegistry.findByName(input.name);

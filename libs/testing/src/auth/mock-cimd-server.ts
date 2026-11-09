@@ -25,7 +25,7 @@
  * ```
  */
 
-import { createServer, Server, IncomingMessage, ServerResponse } from 'http';
+import { createServer, IncomingMessage, Server, ServerResponse } from 'http';
 
 // ═══════════════════════════════════════════════════════════════════
 // TYPES
@@ -60,8 +60,18 @@ export interface MockCimdClientOptions {
   tokenEndpointAuthMethod?: 'none' | 'client_secret_basic' | 'client_secret_post' | 'private_key_jwt';
 
   /**
-   * OAuth grant types the client can use.
-   * @default ['authorization_code']
+   * Inline public keys a `private_key_jwt` client signs its client assertions with. Not together with `jwksUri`.
+   */
+  jwks?: { keys: Array<Record<string, unknown>> };
+
+  /**
+   * URL of the key set a `private_key_jwt` client signs its client assertions with. Not together with `jwks`.
+   */
+  jwksUri?: string;
+
+  /**
+   * OAuth grant types the client can use. Without `refresh_token`, FrontMCP issues the client no refresh token.
+   * @default ['authorization_code', 'refresh_token']
    */
   grantTypes?: string[];
 
@@ -142,6 +152,8 @@ interface CimdDocument {
   response_types: string[];
   client_uri?: string;
   logo_uri?: string;
+  jwks?: { keys: Array<Record<string, unknown>> };
+  jwks_uri?: string;
   scope?: string;
   contacts?: string[];
 }
@@ -262,10 +274,12 @@ export class MockCimdServer {
       client_name: options.name,
       redirect_uris: options.redirectUris ?? ['http://localhost:3000/callback'],
       token_endpoint_auth_method: options.tokenEndpointAuthMethod ?? 'none',
-      grant_types: options.grantTypes ?? ['authorization_code'],
+      grant_types: options.grantTypes ?? ['authorization_code', 'refresh_token'],
       response_types: options.responseTypes ?? ['code'],
       ...(options.clientUri && { client_uri: options.clientUri }),
       ...(options.logoUri && { logo_uri: options.logoUri }),
+      ...(options.jwks && { jwks: options.jwks }),
+      ...(options.jwksUri && { jwks_uri: options.jwksUri }),
       ...(options.scope && { scope: options.scope }),
       ...(options.contacts && { contacts: options.contacts }),
     };

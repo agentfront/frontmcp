@@ -1,7 +1,7 @@
 // auth/flows/well-known.oauth-authorization-server.flow.ts
 import 'reflect-metadata';
 
-import { advertisedScopes, trimSlash } from '@frontmcp/auth';
+import { advertisedScopes, CLIENT_ASSERTION_SIGNING_ALGORITHMS, trimSlash } from '@frontmcp/auth';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 import { isProduction } from '@frontmcp/utils';
 
@@ -26,6 +26,7 @@ import {
   type ServerRequest,
 } from '../../common';
 import { FlowInputMissingError } from '../../errors/sdk.errors';
+import { oauthBasePath } from '../../flows/flow.http-path';
 
 /**
  * Resolve whether the local-AS Dynamic Client Registration endpoint is active
@@ -46,6 +47,8 @@ function resolveDcrEnabled(auth: unknown): boolean {
 
 const inputSchema = httpInputSchema;
 
+const tokenEndpointAuthMethodSchema = z.enum(['none', 'client_secret_basic', 'client_secret_post', 'private_key_jwt']);
+
 // ===== Result =====
 const AuthServerMetadataSchema = z.object({
   kind: z.literal('json'),
@@ -63,9 +66,8 @@ const AuthServerMetadataSchema = z.object({
       userinfo_endpoint: z.string().min(1).optional(),
       jwks_uri: z.string().min(1),
       registration_endpoint: z.string().min(1).optional(),
-      token_endpoint_auth_methods_supported: z
-        .array(z.enum(['client_secret_basic', 'client_secret_post', 'private_key_jwt']))
-        .optional(),
+      token_endpoint_auth_methods_supported: z.array(tokenEndpointAuthMethodSchema).optional(),
+      token_endpoint_auth_signing_alg_values_supported: z.array(z.string()).optional(),
       response_types_supported: z.array(z.enum(['code'])).default(['code']),
       grant_types_supported: z
         .array(z.enum(['authorization_code', 'refresh_token']))
@@ -87,12 +89,13 @@ export const wellKnownAsStateSchema = z.object({
   // endpoints (/oauth/authorize, /oauth/token, /oauth/register, …) are
   // registered at literal root paths by their flows, NOT under entryPath, so
   // they must be advertised relative to this root rather than `baseUrl`
-  // (which carries the entryPath) — see #467.
+  // (which carries the entryPath) — see #467. An app's own scope adds its path.
   oauthBaseUrl: z.string().min(1),
   scopesSupported: z.array(z.string()).default(['openid', 'profile', 'email']),
+  // What the token endpoint accepts: public clients, registered clients' secrets, and CIMD clients' assertions
   tokenEndpointAuthMethods: z
-    .array(z.enum(['client_secret_basic', 'client_secret_post', 'private_key_jwt']))
-    .default(['client_secret_basic', 'client_secret_post']),
+    .array(tokenEndpointAuthMethodSchema)
+    .default(['none', 'client_secret_basic', 'client_secret_post']),
   dcrEnabled: z.boolean().default(true),
   isOrchestrated: z.boolean(),
   // CIMD support
@@ -159,8 +162,8 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
     const issuer = (this.scope.auth as { issuerFor?: (request: ServerRequest) => string } | undefined)?.issuerFor?.(
       request,
     );
-    // Root origin (no entryPath) — OAuth endpoints are mounted at root.
-    const oauthBaseUrl = getRequestBaseUrl(request);
+    // Root origin (no entryPath) — OAuth endpoints are mounted at root, an app's own scope's under its path.
+    const oauthBaseUrl = getRequestBaseUrl(request, oauthBasePath(this.scope));
 
     // Check if CIMD is enabled (default true if auth is orchestrated)
     let cimdEnabled = true;
@@ -177,7 +180,9 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
         // entries; a `*` glob names no scope a client could ask for.
         scopesSupported:
           metadata.auth && isOrchestratedMode(metadata.auth) ? advertisedScopes(metadata.auth.allowedScopes) : [],
-        tokenEndpointAuthMethods: [],
+        tokenEndpointAuthMethods: cimdEnabled
+          ? ['none', 'client_secret_basic', 'client_secret_post', 'private_key_jwt']
+          : ['none', 'client_secret_basic', 'client_secret_post'],
         // #462 — advertise registration_endpoint only when local-AS DCR is
         // actually active (explicit auth.dcr.enabled, else dev/prod default).
         dcrEnabled: resolveDcrEnabled(metadata.auth),
@@ -228,6 +233,9 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
           // adopted CIMD yet; new clients should prefer CIMD.
           ...(dcrEnabled ? { registration_endpoint: `${oauthBaseUrl}/oauth/register` } : {}),
           token_endpoint_auth_methods_supported: tokenEndpointAuthMethods,
+          ...(tokenEndpointAuthMethods.includes('private_key_jwt')
+            ? { token_endpoint_auth_signing_alg_values_supported: CLIENT_ASSERTION_SIGNING_ALGORITHMS }
+            : {}),
           response_types_supported: ['code'],
           grant_types_supported: ['authorization_code', 'refresh_token'],
           scopes_supported: scopesSupported,

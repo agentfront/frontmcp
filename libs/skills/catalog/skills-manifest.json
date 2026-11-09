@@ -396,6 +396,18 @@
             "Including `output?` for examples where showing the expected result helps an agent understand the tool",
             "Why `examples` are advisory metadata — not emitted in `tools/list`, only consumed by `codecall:describe`"
           ]
+        },
+        {
+          "name": "28-tool-with-ui-served-from-a-url",
+          "description": "Tool widget served from a URL instead of from the `ui://` resource's own HTML: `servingMode: 'direct-url'` serves the page on a route of the server, and `'custom-url'` loads it from a CDN; the `ui://` resource frames that URL.",
+          "level": "advanced",
+          "tags": ["ui", "direct-url", "custom-url", "frame-domains", "serving-mode"],
+          "features": [
+            "Serving the page compiled at startup on a server route with `servingMode: 'direct-url'` and `directPath`",
+            "Loading a page deployed elsewhere with `servingMode: 'custom-url'` and `customWidgetUrl`",
+            "Rendering call data from the bridge (`tool:result`), because the page holds no call data",
+            "Pinning the framed URL with `FRONTMCP_PUBLIC_URL`, and what the host must allow (`frameDomains`)"
+          ]
         }
       ],
       "rules": [
@@ -490,6 +502,19 @@
                 "Binding the add-row form to `useExtraField('envs:add').onSubmit` (POSTs to `/oauth/ui/extra` with `pending_auth_id` + `csrf` attached)",
                 "Reflecting the server-side accumulator reactively with `useAddedItems('envs:add')` after each successful add",
                 "Declaring both the `auth.ui` slot and the `auth.extras` handler under `auth`: `@FrontMcp({ auth: { mode, ui, extras } })`"
+              ]
+            },
+            {
+              "name": "federated-steps",
+              "description": "Walk the provider picker one provider per page with incrementalAuth.showAllAppsAtOnce: false and a custom federated slot that reads extras.step and answers continue, skip or back.",
+              "level": "advanced",
+              "tags": ["auth", "auth-ui", "federated", "incremental-auth", "multi-step", "react"],
+              "features": [
+                "Turning on the step-by-step provider picker with `incrementalAuth: { showAllAppsAtOnce: false }`",
+                "Reading the step a page answers from `extras.step` (`index`, `count`, `providerId`, `last`, `canGoBack`, `canSkip`)",
+                "Answering it with `submitFinish({ federated, federated_step, action })`, where `action` is `continue`, `skip` or `back`",
+                "Sending the sign-in fields (`email`) with the answer to the last step, which finishes the sign-in",
+                "Hiding Skip for a provider the sign-in must link, which the server refuses to skip anyway"
               ]
             }
           ]
@@ -2268,14 +2293,15 @@
             },
             {
               "name": "webhook-triggered-workflow",
-              "description": "A CI/CD workflow triggered by a webhook, featuring `continueOnError`, per-step conditions, and the `workflow()` function builder.",
+              "description": "A CI/CD workflow triggered by a signed webhook, featuring `continueOnError`, per-step conditions, and the `workflow()` function builder.",
               "level": "advanced",
               "tags": ["development", "workflow", "webhook", "triggered"],
               "features": [
-                "Webhook trigger with `trigger: 'webhook'` and `webhook: { path, secret, methods }`",
+                "Webhook trigger with `trigger: 'webhook'` and `webhook: { path, secret, methods }`, and a CI step that signs its request",
+                "An `execute` rule that allows the webhook's role, `webhook:<workflow>`, beside the people who may run it",
                 "Using `continueOnError: true` to allow the workflow to proceed past non-critical step failures",
                 "Conditional branching: separate success and failure notification steps based on prior step state",
-                "Workflow-level `permissions` for access control",
+                "An `@HttpRoute` for a sender that signs its own way, such as a GitHub webhook",
                 "The `workflow()` function builder as a lighter alternative to the class pattern"
               ]
             }
@@ -2361,7 +2387,7 @@
                 "Configuring all 5 stable official plugins together in a production server",
                 "CodeCall in `codecall_only` mode with TF-IDF search and synonym expansion for semantic tool discovery",
                 "Remember plugin with Redis storage, encryption enabled, and LLM-accessible memory tools",
-                "Approval plugin in `webhook` mode with external PKCE-secured approval flow and audit logging",
+                "Approval plugin in `webhook` mode: a signed approval request to an external system, whose signed decision comes back on `/approval/callback`, with an audit trail and bounded delegation chains",
                 "Cache plugin with Redis storage and 24-hour default TTL",
                 "Feature Flags with LaunchDarkly integration for external flag management",
                 "Per-tool `approval` metadata with risk level and scope configuration",
@@ -3454,9 +3480,9 @@
               "level": "intermediate",
               "tags": ["setup", "oauth", "auth", "transport", "multi-app", "remote"],
               "features": [
-                "`app.esm()` loads an `@App` class from an npm package with namespace and auto-update",
+                "`app.esm()` loads the tools, resources, prompts, skills, agents, jobs and workflows of an npm package, and the providers they use, with namespace and auto-update",
                 "`app.remote()` proxies tools from external MCP servers with configurable auth modes",
-                "`remoteAuth` supports `'static'` (fixed credentials), `'forward'` (pass gateway user token), `'mapped'` (credentials from a per-caller mapper), and `'oauth'` (no gateway credentials)",
+                "`remoteAuth` supports `'static'` (fixed credentials), `'forward'` (pass gateway user token), `'mapped'` (credentials from a per-caller mapper), and `'oauth'` (an OAuth client credentials token from the remote's authorization server)",
                 "`namespace` prevents tool name collisions between apps (`crm:tool_name`, `slack:tool_name`)",
                 "`transportOptions` configure timeout, retries, and SSE fallback for remote connections"
               ]

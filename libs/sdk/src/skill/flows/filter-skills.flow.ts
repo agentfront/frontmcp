@@ -58,7 +58,7 @@ const { Stage } = FlowHooksOf<'skills:filter'>(name);
   plan,
   inputSchema,
   outputSchema,
-  access: 'authorized',
+  access: 'public',
 })
 export default class FilterSkillsFlow extends FlowBase<typeof name> {
   @Stage('parseInput')

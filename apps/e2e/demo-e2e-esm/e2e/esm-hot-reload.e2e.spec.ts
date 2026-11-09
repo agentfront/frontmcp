@@ -8,9 +8,16 @@
  * 4. Verify the new tool appears in tools/list
  * 5. Call the new tool to confirm it works
  *
+ * And for `@test/esm-full`, whose version 1.1.0 has its own provider, skill, agent, job and workflow: each kind
+ * of entry is replaced by the new version's.
+ *
  * Set DEBUG_E2E=1 for verbose logging.
  */
-import { test, expect, TestServer } from '@frontmcp/testing';
+import * as path from 'node:path';
+
+import { buildSync } from 'esbuild';
+
+import { expect, test, TestServer } from '@frontmcp/testing';
 
 const DEBUG = process.env['DEBUG_E2E'] === '1';
 const log = DEBUG ? console.log.bind(console) : () => {};
@@ -73,6 +80,30 @@ module.exports = {
   },
 };
 `;
+
+/** `@test/esm-full` at `version`, built as the package server builds its fixtures. */
+function fullPackageBundle(version: string): string {
+  const result = buildSync({
+    entryPoints: [path.join(__dirname, '../src/esm-package-server/fixtures/full-package.ts')],
+    bundle: true,
+    format: 'cjs',
+    platform: 'node',
+    target: 'es2022',
+    write: false,
+    external: ['@frontmcp/sdk', 'zod', 'reflect-metadata'],
+    define: { PACKAGE_VERSION: JSON.stringify(version) },
+  });
+  return result.outputFiles[0].text.replace(/\/\/ Annotate the CommonJS export names for ESM import in node:\n/g, '');
+}
+
+async function publish(packageName: string, version: string, bundle: string): Promise<void> {
+  const publishRes = await fetch(`http://127.0.0.1:${esmServer!.info.port}/_admin/publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ package: packageName, version, bundle }),
+  });
+  expect(publishRes.ok).toBe(true);
+}
 
 // Start local ESM package server before all tests
 beforeAll(async () => {
@@ -164,5 +195,33 @@ test.describe('ESM Hot-Reload E2E', () => {
     const result = await mcp.tools.call('esm:multiply', { a: 3, b: 4 });
     expect(result).toBeSuccessful();
     expect(result).toHaveTextContent('12');
+  });
+
+  test('replaces every kind of entry of a package with the new version', async ({ mcp }) => {
+    const greeting = async () => (await mcp.tools.call('full:greet', { name: 'Ada' })).text() ?? '';
+    for (let i = 0; i < 15 && !(await greeting()).includes('from 1.0.0'); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    expect(await greeting()).toContain('Hello, Ada, from 1.0.0');
+    expect(await mcp.resources.list()).toContainResource('skill://welcome/SKILL.md');
+
+    await publish('@test/esm-full', '1.1.0', fullPackageBundle('1.1.0'));
+
+    let updated = false;
+    for (let i = 0; i < 15 && !updated; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      updated = (await greeting()).includes('from 1.1.0');
+    }
+    expect(updated).toBe(true);
+
+    const resources = await mcp.resources.list();
+    expect(resources).toContainResource('skill://farewell/SKILL.md');
+    expect(resources.map((resource: { uri: string }) => resource.uri)).not.toContain('skill://welcome/SKILL.md');
+    const agent = await mcp.tools.call('invoke_concierge', { name: 'Grace' });
+    expect(agent).toHaveTextContent('Hello, Grace, from 1.1.0');
+    const job = await mcp.tools.call('execute_job', { name: 'welcome-batch', input: { names: ['Ada'] } });
+    expect(job).toHaveTextContent('1.1.0');
+    const workflow = await mcp.tools.call('execute_workflow', { name: 'welcome-flow' });
+    expect(workflow).toHaveTextContent('completed');
   });
 });

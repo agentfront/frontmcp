@@ -1163,6 +1163,35 @@ describe('OAuth Authorize Flow', () => {
       // No __parent__ placeholder leaks into the configured-provider path.
       expect(output.body).not.toContain('__parent__');
     });
+
+    it("requires each app's own provider on the picker under incrementalAuth.allowSkip: false", async () => {
+      const scope = createMockScopeEntry({
+        auth: { mode: 'local', incrementalAuth: { enabled: true, allowSkip: false } } as never,
+        apps: [
+          { id: 'notes', name: 'Notes' },
+          { id: 'tasks', name: 'Tasks', auth: { mode: 'public' } as never },
+        ],
+      });
+      const flow = new OauthAuthorizeFlow(
+        createFlowMetadata(),
+        createOAuthInput(createValidOAuthRequest()),
+        scope,
+        jest.fn(),
+        new Map(),
+      );
+
+      const { output } = await runFlowStages(flow, [
+        'parseInput',
+        'validateInput',
+        'checkIfAuthorized',
+        'prepareAuthorizationRequest',
+        'buildAuthorizeOutput',
+      ]);
+
+      expect(output.kind).toBe('html');
+      expect(output.body).toMatch(/value="tasks"[^>]*checked required>/);
+      expect(output.body).not.toContain('Skip All');
+    });
   });
 
   // ----------------------------------------------------------------
@@ -1237,6 +1266,36 @@ describe('OAuth Authorize Flow', () => {
       // No in-tree identity is collected — userInfo is empty (filled from upstream).
       expect(session!.userInfo.sub).toBeUndefined();
       expect(session!.userInfo.email).toBeUndefined();
+    });
+
+    it('carries the apps= grant in the federated session when incremental auth is enabled', async () => {
+      const scope = createMockScopeEntry({
+        auth: {
+          mode: 'remote',
+          provider: 'https://idp.example.com',
+          providerConfig: { id: 'upstream' },
+          incrementalAuth: { enabled: true },
+        } as never,
+        apps: [
+          { id: 'notes', name: 'Notes' },
+          { id: 'tasks', name: 'Tasks' },
+        ],
+      });
+      const input = createOAuthInput({ ...createValidOAuthRequest(), apps: 'notes' });
+      const flow = new OauthAuthorizeFlow(createFlowMetadata(), input, scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, [
+        'parseInput',
+        'validateInput',
+        'checkIfAuthorized',
+        'prepareAuthorizationRequest',
+        'buildAuthorizeOutput',
+      ]);
+
+      const sessionId = String(new URL(output.location).searchParams.get('state')).split(':')[1];
+      const sessionStore = (scope.auth as unknown as { federatedSessionStore: InMemoryFederatedAuthSessionStore })
+        .federatedSessionStore;
+      expect((await sessionStore.get(sessionId))?.authorizedAppIds).toEqual(['notes']);
     });
   });
 

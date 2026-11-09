@@ -30,6 +30,7 @@ import { InternalMcpError, InvalidInputError, InvalidMethodError } from '../../e
 import { type Scope } from '../../scope/scope.instance';
 import { isSkillsOnlyRequest } from '../../skill/skill-mode.utils';
 import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
+import { isListedByAuthorities } from '../../surface/entry-authorized';
 import { toolOutputPolicies } from '../tool-output-policy';
 import { buildStaticWidgetUri, hasUIConfig } from '../ui/ui-shared';
 
@@ -360,7 +361,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
   /**
    * Filter tools by entry-level authorities (RBAC/ABAC/ReBAC).
-   * Removes tools the current user is not authorized to see.
+   * Removes tools the current user is not authorized to see, and a tool whose policy throws.
    * Hookable: developers can use Will/Did/Around on 'filterByAuthorities'.
    */
   @Stage('filterByAuthorities')
@@ -382,9 +383,15 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         const authorities = metadata['authorities'];
         if (!authorities) return item;
 
-        const evalCtx = ctxBuilder.build(authInfo);
-        const result = await engine.evaluate(authorities as import('@frontmcp/auth').AuthoritiesMetadata, evalCtx);
-        return result.granted ? item : null;
+        const listed = await isListedByAuthorities(
+          engine,
+          ctxBuilder,
+          authorities as import('@frontmcp/auth').AuthoritiesMetadata,
+          authInfo,
+          item.tool.fullName || item.tool.name,
+          this.logger,
+        );
+        return listed ? item : null;
       }),
     );
 
@@ -603,7 +610,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           let detectedType: string;
           try {
             manifest = scope.toolUI.getManifest(finalName);
-            detectedType = scope.toolUI.detectUIType(uiConfig.template);
+            detectedType = scope.toolUI.detectUIType(uiConfig.template, uiConfig);
           } catch (error) {
             this.logger.warn(`parseTools: failed to access toolUI for ${finalName}`, error);
             return item;

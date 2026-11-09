@@ -168,8 +168,19 @@ export type McpRemoteAuthConfig =
       mapper: (authInfo: AuthInfo | undefined) => McpStaticCredentials | Promise<McpStaticCredentials>;
     }
   | {
-      /** Let remote server handle its own OAuth flow */
+      /**
+       * OAuth 2.0 client credentials: every request carries an access token from the remote's authorization
+       * server, renewed before it expires and when the remote answers 401. Without `clientId`, nothing is sent.
+       */
       mode: 'oauth';
+      /** OAuth client id at the remote's authorization server */
+      clientId?: string;
+      /** OAuth client secret, required with `clientId` */
+      clientSecret?: string;
+      /** Space-separated scopes to ask for */
+      scope?: string;
+      /** Token endpoint; default: the one the remote's authorization server publishes */
+      tokenUrl?: string;
     };
 
 /**
@@ -265,7 +276,7 @@ export interface McpHealthCheckOptions {
  * Configuration for the MCP client service
  */
 export interface McpClientServiceOptions {
-  /** Interval for capability refresh in ms (0 = no refresh, default: 0) */
+  /** Interval for capability refresh in ms, for a connection whose request sets no `refreshInterval` (0 = no refresh, default: 0) */
   capabilityRefreshInterval?: number;
   /** Client name reported to remote servers (default: 'frontmcp-gateway') */
   clientName?: string;
@@ -319,6 +330,8 @@ export interface McpConnectRequest {
   auth?: McpRemoteAuthConfig;
   /** Namespace prefix for tool names (default: appId) */
   namespace?: string;
+  /** Interval in ms to re-list the remote's capabilities (0 = never; default: the service's `capabilityRefreshInterval`) */
+  refreshInterval?: number;
 }
 
 /**

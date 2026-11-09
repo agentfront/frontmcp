@@ -48,15 +48,18 @@ import {
   httpInputSchema,
   HttpRedirectSchema,
   httpRespond,
-  isOrchestratedMode,
   StageHookOf,
   type FlowPlan,
   type FlowRunOptions,
   type ServerRequest,
 } from '../../common';
+import { oauthBasePath } from '../../flows/flow.http-path';
 import { authUiExtraPath, buildAuthUiPage, buildConsentState, type AuthTool, type AuthUiRegistry } from '../auth-ui';
+import { initialAuthorizedApps, withoutSkippedApps } from '../authorized-apps.utils';
 import { projectConsentTools } from '../consent-tools.helper';
+import { answerFederatedStep, FEDERATED_STEP_FIELD, renderFederatedStep } from '../federated-steps';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
+import { requiredProviderIds } from '../required-providers.utils';
 import { parseFormBody } from './form-body.utils';
 import {
   clearedSigninBindingCookie,
@@ -273,8 +276,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
   @Stage('validatePendingAuth')
   async validatePendingAuth() {
-    const { pendingAuthId, isFederated, selectedProviders, selectedTools, consentSubmitted, loginFields } = this.state;
-    let { email, name } = this.state;
+    const { pendingAuthId, isFederated, selectedTools, consentSubmitted } = this.state;
+    let { email, name, selectedProviders, loginFields } = this.state;
 
     if (!pendingAuthId) {
       this.logger.warn('Missing pending_auth_id in callback');
@@ -326,6 +329,22 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       this.logger.info(`Incremental auth callback for app: ${targetAppId}`);
     }
 
+    // A sign-in the provider picker started (not an incremental one, which renders its own page).
+    const answersPicker = !isIncremental && !!pendingAuth.federatedLogin;
+
+    // The picker shows one provider per page: each step is answered on the pending record, and the last one
+    // goes on as a picker submission with the providers the steps linked.
+    const answersSteps = !isIncremental && pendingAuth.federatedLogin?.currentStep !== undefined;
+    if (answersSteps) {
+      const stepSelection = await this.answerStepPage(pendingAuth);
+      if (!stepSelection) return;
+      selectedProviders = stepSelection;
+      if (loginFields) {
+        const { [FEDERATED_STEP_FIELD]: _step, ...fields } = loginFields;
+        loginFields = fields;
+      }
+    }
+
     // Checkpoint 3a — a configured custom `authenticate` verifier takes over the
     // login-completion decision. When it is set, the built-in email requirement
     // no longer applies (the verifier owns required-field semantics via
@@ -356,6 +375,17 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       this.state.set({ email, name });
       if (verifiedLogin.claims) this.state.set('customClaims', verifiedLogin.claims);
       if (verifiedLogin.credentials?.length) this.state.set('credentials', verifiedLogin.credentials);
+    }
+
+    // An incremental grant keeps the email and name its ticket proved, never ones submitted with the form.
+    if (isIncremental) {
+      const ticketLogin = pendingAuth.verifiedLogin
+        ? openPendingLogin(localAuth.secret, pendingAuth.id, pendingAuth.verifiedLogin)
+        : undefined;
+      const provenLogin = ticketLogin?.sub === pendingAuth.incrementalSub ? ticketLogin : undefined;
+      email = provenLogin?.email;
+      name = provenLogin?.name;
+      this.state.set({ email, name });
     }
 
     // #468 — email opt-out for single-operator local setups.
@@ -433,12 +463,22 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     }
 
     // Checkpoint 3a — run the custom verifier (non-incremental logins only).
-    // On success, derive the subject (explicit `sub` → subject strategy → the
-    // anonymous fallback) and stash custom claims for the minted token. On
+    // On success, derive the subject (explicit `sub` → subject strategy) and
+    // stash custom claims for the minted token. On
     // failure, re-render the login page with the error instead of proceeding.
     if (authenticateFn && !isIncremental && !verifiedLogin) {
       const result = await this.runAuthenticate(authenticateFn, loginFields ?? {}, pendingAuth);
+      if (!result.ok && answersSteps) {
+        const clientName = await this.resolveClientName(pendingAuth.clientId);
+        this.respond(renderFederatedStep(this.scope, pendingAuth, { clientName, error: result.message }));
+        return;
+      }
       if (!result.ok) {
+        // The login page shown again carries no provider selection: keep the one submitted for the retry.
+        if (answersPicker && pendingAuth.federatedLogin && selectedProviders) {
+          pendingAuth.federatedLogin.selectedProviderIds = selectedProviders;
+          await localAuth.authorizationStore.storePendingAuthorization(pendingAuth);
+        }
         // Keep the pending auth alive so the user can retry on the re-rendered page.
         // A `login.render` page is the app's own markup: no CSP is imposed on it.
         this.respond(
@@ -450,10 +490,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         );
         return;
       }
-      userSub =
-        result.sub ??
-        this.deriveSubjectFromStrategy(localOptions.login, loginFields ?? {}) ??
-        this.generateUserSub(localOptions.anonymousSubject ?? 'local-operator');
+      userSub = result.sub ?? this.deriveSubjectFromStrategy(localOptions.login, loginFields ?? {});
       if (result.claims) {
         this.state.set('customClaims', result.claims);
       }
@@ -479,21 +516,22 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Calculate skipped providers from federated login
+    // Calculate skipped providers from federated login. Every submission completing a sign-in the provider
+    // picker started is held to its rules, with or without `federated=true`.
     let skippedProviders: string[] | undefined;
-    if (isFederated && pendingAuth.federatedLogin) {
+    if ((isFederated || answersPicker) && pendingAuth.federatedLogin) {
       // Gate JWT issuance on the configured threshold. When top-level
       // `auth.providers` are declared, the default minimum is 1 ("no JWT until
       // ≥1 linked"); `federatedAuth.minProviders` raises it. The app-level
       // federation path (no configured providers) keeps the historical ≥1 rule.
-      const federatedConfig = (
-        localAuth.options as { federatedAuth?: { minProviders?: number; requiredProviders?: string[] } }
-      ).federatedAuth;
+      const federatedConfig = (localAuth.options as { federatedAuth?: { minProviders?: number } }).federatedAuth;
       // Default minimum is 1 in both the configured-providers and the legacy
       // app-level federation paths (historical "≥1 selected" behavior).
       const minProviders = federatedConfig?.minProviders ?? 1;
-      const requiredProviders = federatedConfig?.requiredProviders ?? [];
+      const requiredProviders = requiredProviderIds(this.scope.auth?.options, this.scope.apps.getApps());
 
+      // The login page shown again after a refused authenticate() completes the selection kept then.
+      selectedProviders ??= pendingAuth.federatedLogin.selectedProviderIds;
       const selected = selectedProviders ?? [];
 
       // Refuse to mint a token until the minimum number of providers is linked.
@@ -521,7 +559,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         return;
       }
 
-      // Require every explicitly-required provider to be among the selected set.
+      // Require every required provider (`requiredProviders`, and app providers
+      // under `incrementalAuth.allowSkip: false`) to be among the selected set.
       const missingRequired = requiredProviders.filter((id) => !selected.includes(id));
       if (missingRequired.length > 0) {
         this.logger.warn(`Missing required providers: ${missingRequired.join(', ')}`);
@@ -731,7 +770,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    *
    *  - INITIAL login: grant = the apps the client requested via `apps=`
    *    (`priorAuthorizedAppIds`); if none requested, grant ALL scope apps (a
-   *    plain login keeps working for everything).
+   *    plain login keeps working for everything). A sign-in through the
+   *    provider picker leaves out the apps whose own provider it skipped.
    *  - INCREMENTAL authorize (`mode=incremental&app=B`): grant = the prior apps
    *    (carried forward via `apps=`) UNION the newly-authorized `targetAppId`.
    *    So after authorizing app B, a `tools/call` on B's tool succeeds while app
@@ -741,8 +781,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    * orchestrated scope. When incremental auth is disabled or the scope is not
    * orchestrated, it leaves `authorizedAppIds` undefined → NO `authorized_apps`
    * claim is minted → NO app-level gating (the historical allow-all behavior is
-   * preserved exactly). Federated logins mint their token in the provider
-   * callback flow, so this stage is a no-op for them.
+   * preserved exactly). A federated sign-in carries the grant in its federated
+   * session, and the provider callback mints it.
    *
    * Unknown app ids (not present in the scope) are dropped so a client can never
    * forge a grant to a non-existent app; app-level gating is per-real-app, so a
@@ -750,61 +790,28 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    */
   @Stage('handleIncrementalAuth')
   async handleIncrementalAuth() {
-    const { isIncremental, isFederated, targetAppId, existingAuthorizationId, priorAuthorizedAppIds } = this.state;
-
-    // Federated logins mint elsewhere (provider-callback flow) — nothing to do.
-    if (isFederated) {
-      return;
-    }
-
-    // App-level grants are an orchestrated-mode feature gated by
-    // `incrementalAuth.enabled`. When the scope is not orchestrated, or the flag
-    // is explicitly disabled, emit NO grant (no claim → no gating, as before).
+    const { isIncremental, targetAppId, existingAuthorizationId, priorAuthorizedAppIds, skippedProviders } = this.state;
     const authOptions = this.scope.auth?.options;
-    if (!authOptions || !isOrchestratedMode(authOptions)) {
-      return;
-    }
-    const incrementalConfig = (authOptions as { incrementalAuth?: { enabled?: boolean } }).incrementalAuth;
-    // Incremental auth is OPT-IN: only emit a grant when explicitly enabled.
-    // (The schema default is `enabled: true`, but that default only applies once
-    // an `incrementalAuth` block is present; a scope with no block at all stays
-    // allow-all so existing orchestrated servers are unaffected.)
-    if (!incrementalConfig || incrementalConfig.enabled === false) {
-      return;
-    }
+    const apps = this.scope.apps.getApps();
 
-    // Validate ids against the REAL scope app ids. The tool-owner id used by
-    // `checkToolAuthorization` is `app.id`, so the claim must carry `app.id`
-    // values (falling back to metadata.id for parity).
-    const knownAppIds = new Set(
-      this.scope.apps.getApps().map((a) => {
-        const app = a as { id?: string; metadata?: { id?: string } };
-        return app.id ?? app.metadata?.id ?? '';
-      }),
-    );
-
-    const prior = (priorAuthorizedAppIds ?? []).filter((id) => knownAppIds.has(id));
-
-    let grant: string[];
     if (isIncremental && targetAppId) {
-      if (!knownAppIds.has(targetAppId)) {
+      const grant = initialAuthorizedApps(authOptions, apps, [...(priorAuthorizedAppIds ?? []), targetAppId]);
+      if (!grant) return;
+      if (!grant.includes(targetAppId)) {
         this.logger.warn(`Incremental auth: target app "${targetAppId}" is not a known app — ignoring expansion`);
-        // Fall back to the prior grant (still a valid, enforceable set).
-        grant = prior;
-      } else {
-        grant = Array.from(new Set([...prior, targetAppId]));
       }
       this.logger.info(
         `Incremental auth: granting [${grant.join(', ')}] (target "${targetAppId}")` +
           `${existingAuthorizationId ? ` (existing auth: ${existingAuthorizationId})` : ''}`,
       );
-    } else {
-      // Initial login: grant the requested apps, or ALL scope apps when the
-      // client did not narrow the set (a plain login keeps working everywhere).
-      grant = priorAuthorizedAppIds ? prior : Array.from(knownAppIds).filter(Boolean);
-      this.logger.info(`Incremental auth enabled: initial grant [${grant.join(', ')}]`);
+      this.state.set('authorizedAppIds', grant);
+      return;
     }
 
+    const requested = initialAuthorizedApps(authOptions, apps, priorAuthorizedAppIds);
+    if (!requested) return;
+    const grant = withoutSkippedApps(requested, apps, skippedProviders);
+    this.logger.info(`Incremental auth enabled: initial grant [${grant.join(', ')}]`);
     this.state.set('authorizedAppIds', grant);
   }
 
@@ -829,6 +836,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       scopes,
       originalState,
       resource,
+      authorizedAppIds,
     } = this.state;
 
     // Skip if not federated auth or no providers selected
@@ -881,6 +889,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       providerIds: selectedProviders,
       // The provider callback checks the same browser binding.
       signinBinding: this.state.signinBinding,
+      authorizedAppIds,
     });
 
     // Store the session
@@ -1330,23 +1339,20 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Derive a subject from the configured login subject strategy.
+   * Derive the subject of a login whose authenticate() returned no `sub`, from the login subject strategy.
    *
    * - `per-account`: hash the value of `login.subject.fromField` into a stable
    *   subject (same account → same `sub`).
-   * - otherwise (`per-session` / unset): return undefined so the caller falls
-   *   back to the anonymous subject.
+   * - otherwise (`per-session` / unset), or a login without that value: a fresh
+   *   subject for this login, never one another login shares.
    */
-  private deriveSubjectFromStrategy(
-    login: LoginConfig | undefined,
-    fields: Record<string, string>,
-  ): string | undefined {
+  private deriveSubjectFromStrategy(login: LoginConfig | undefined, fields: Record<string, string>): string {
     const subject = login?.subject;
     if (subject?.strategy === 'per-account' && subject.fromField) {
       const seed = fields[subject.fromField];
       if (seed) return this.generateUserSub(seed);
     }
-    return undefined;
+    return randomUUID();
   }
 
   /**
@@ -1360,7 +1366,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     fields: Record<string, string>,
     failure: { message: string; retryField?: string },
   ): string {
-    const callbackPath = '/oauth/callback';
+    const callbackPath = `${oauthBasePath(this.scope)}/oauth/callback`;
     const ctx: LoginRenderContext = {
       clientId: pendingAuth.clientId,
       clientName: pendingAuth.clientId,
@@ -1371,6 +1377,63 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       error: failure.message,
     };
     return renderLocalLoginPage(login, ctx, fields);
+  }
+
+  /**
+   * Answer one page of the step-by-step provider picker (`incrementalAuth.showAllAppsAtOnce: false`).
+   *
+   * The submission must be a federated one carrying the pending authorization's CSRF token, from this origin.
+   * The answer is recorded on the pending record (see {@link answerFederatedStep}); until the last step this
+   * responds with the next step's page.
+   *
+   * @returns the providers the steps linked, once the last step is answered; undefined when it responded.
+   */
+  private async answerStepPage(pendingAuth: PendingAuthorizationRecord): Promise<string[] | undefined> {
+    const { request } = this.rawInput;
+    const refuse = (message: string) => {
+      this.respond(this.htmlPage(this.renderErrorPage('invalid_request', message), 400));
+      return undefined;
+    };
+    if (!this.state.isFederated) return refuse('Invalid provider selection');
+    const submitted = this.state.csrf;
+    if (!pendingAuth.authUiCsrf || !submitted || !timingSafeEqualStr(pendingAuth.authUiCsrf, submitted)) {
+      this.logger.warn('Federated step submitted without its CSRF token');
+      return refuse('Invalid or missing CSRF token');
+    }
+    if (this.isCrossOriginSubmission()) {
+      this.logger.warn('Cross-origin federated step rejected (CSRF)');
+      return refuse('Cross-origin request blocked');
+    }
+
+    const federatedConfig = (this.scope.auth?.options as { federatedAuth?: { minProviders?: number } } | undefined)
+      ?.federatedAuth;
+    const outcome = answerFederatedStep(
+      pendingAuth,
+      { step: this.readParam(request, FEDERATED_STEP_FIELD), action: this.readParam(request, 'action') },
+      {
+        requiredProviderIds: requiredProviderIds(this.scope.auth?.options, this.scope.apps.getApps()),
+        minProviders: federatedConfig?.minProviders ?? 1,
+      },
+    );
+    if (outcome.kind === 'refuse') {
+      this.logger.warn(`Federated step refused: ${outcome.message}`);
+      return refuse(outcome.message);
+    }
+
+    try {
+      await (this.scope.auth as LocalPrimaryAuth).authorizationStore.storePendingAuthorization(pendingAuth);
+    } catch (err) {
+      this.logger.error(`Failed to keep the federated step: ${err instanceof Error ? err.message : String(err)}`);
+      this.respond(
+        this.htmlPage(this.renderErrorPage('server_error', 'Failed to keep your answer. Please try again.'), 500),
+      );
+      return undefined;
+    }
+    if (outcome.kind === 'done') return outcome.selectedProviderIds;
+
+    const clientName = await this.resolveClientName(pendingAuth.clientId);
+    this.respond(renderFederatedStep(this.scope, pendingAuth, { clientName }));
+    return undefined;
   }
 
   /**
@@ -1442,7 +1505,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     const state = buildConsentState(
       {
         pendingAuthId: pendingAuth.id,
-        submitUrl: '/oauth/callback',
+        submitUrl: `${oauthBasePath(this.scope)}/oauth/callback`,
         extraUrl: authUiExtraPath(this.scope.fullPath),
         csrfToken,
         addedItems: authUi.getAddedItems(pendingAuth.id),
@@ -1532,7 +1595,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
      */
     preSelectedTools?: string[],
   ): string {
-    const callbackPath = '/oauth/callback';
+    const callbackPath = `${oauthBasePath(this.scope)}/oauth/callback`;
 
     // Derive the offered tool cards from the scope via the shared projection so
     // the screen, the validation set, and call-time enforcement agree (and

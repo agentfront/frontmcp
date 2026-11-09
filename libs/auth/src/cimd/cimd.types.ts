@@ -13,6 +13,13 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 // ============================================
 
 /**
+ * A client's JSON Web Key Set: its inline `jwks`, or the document at its `jwks_uri`.
+ */
+export const clientJwksSchema = z.object({
+  keys: z.array(z.record(z.string(), z.unknown())),
+});
+
+/**
  * OAuth Client Metadata Document schema.
  *
  * When a client_id is an HTTPS URL, this document is fetched from that URL
@@ -40,7 +47,9 @@ export const clientMetadataDocumentSchema = z.object({
 
   // OPTIONAL per RFC 7591
   /**
-   * Token endpoint authentication method.
+   * Token endpoint authentication method. FrontMCP's authorization server accepts `none` (a public client) and
+   * `private_key_jwt` (a client assertion signed with a key from `jwks` / `jwks_uri`, RFC 7523). A public document
+   * holds no shared secret, so `client_secret_*` is refused.
    * @default 'none'
    */
   token_endpoint_auth_method: z
@@ -48,10 +57,10 @@ export const clientMetadataDocumentSchema = z.object({
     .default('none'),
 
   /**
-   * OAuth grant types the client can use.
-   * @default ['authorization_code']
+   * OAuth grant types the client can use. Without `refresh_token`, the client gets no refresh token.
+   * @default ['authorization_code', 'refresh_token']
    */
-  grant_types: z.array(z.string()).default(['authorization_code']),
+  grant_types: z.array(z.string()).default(['authorization_code', 'refresh_token']),
 
   /**
    * OAuth response types the client can request.
@@ -70,18 +79,15 @@ export const clientMetadataDocumentSchema = z.object({
   logo_uri: z.string().url().optional(),
 
   /**
-   * URL of the client's JWKS (for private_key_jwt).
+   * URL of the client's JWKS, for `private_key_jwt`. Fetched with the same protections as the document itself,
+   * and cached. Not together with `jwks`.
    */
   jwks_uri: z.string().url().optional(),
 
   /**
-   * Inline JWKS (for private_key_jwt).
+   * Inline JWKS, for `private_key_jwt`. Not together with `jwks_uri`.
    */
-  jwks: z
-    .object({
-      keys: z.array(z.record(z.string(), z.unknown())),
-    })
-    .optional(),
+  jwks: clientJwksSchema.optional(),
 
   /**
    * URL of the client's terms of service.
@@ -94,7 +100,7 @@ export const clientMetadataDocumentSchema = z.object({
   policy_uri: z.string().url().optional(),
 
   /**
-   * Requested OAuth scopes.
+   * Space-separated scopes the client may be granted (RFC 7591); a request for others is narrowed to these.
    */
   scope: z.string().optional(),
 

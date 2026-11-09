@@ -140,6 +140,8 @@ class GenerateReportJob extends JobContext {
 
 Configure automatic retries with exponential backoff using the `retry` field.
 
+**What is retried.** A failed attempt is retried while `maxAttempts` leaves attempts, unless it failed with a `PublicMcpError` (or a subclass), which another attempt would only repeat: input that doesn't match the `inputSchema` (`INVALID_INPUT`, with the issues and no stack, before `execute()` runs), a permission denial, a cancel, a shutdown, an admission refusal, or an error the job throws on purpose (`this.fail(new PublicMcpError(...))`). A result that fails `outputSchema` (`INVALID_OUTPUT`) is not retried either. A timeout (`JOB_TIMEOUT`) and any other error are. A workflow step follows the same rules. Up to 1.11.2 bad input failed with `TOOL_EXECUTION_ERROR` and the raw `ZodError` with its stack, and was retried, as was a `PublicMcpError`.
+
 ### RetryPolicy Fields
 
 | Field               | Type     | Default | Description                                          |
@@ -216,7 +218,7 @@ With this configuration (`maxAttempts: 5`), if the job fails:
 
 The backoff is capped at `maxBackoffMs` (60000ms), so no delay exceeds 60 seconds.
 
-> **Default:** when you omit `retry`, the framework uses `maxAttempts: 3`, `backoffMs: 1000`, `backoffMultiplier: 2`, `maxBackoffMs: 60000` -- i.e., the initial run plus two retries (at ~1s and ~2s).
+> **Default:** when you omit `retry`, the job is tried once, and so is a workflow step that runs it (unless the step sets its own `retry`). A `retry` that omits fields uses `maxAttempts: 3`, `backoffMs: 1000`, `backoffMultiplier: 2`, `maxBackoffMs: 60000` -- i.e., the initial run plus two retries (at ~1s and ~2s). Up to 1.11.2 a workflow step whose job had no `retry` was tried 3 times.
 
 ## Progress Tracking
 
@@ -399,7 +401,7 @@ Control who can interact with jobs using the `permissions` field. **`permissions
 
 **Requires 1.7.2 or later.** Before 1.7.2 (GHSA-58v2-gpcc-jmqv) the `permissions` array was validated and stored but never evaluated — every job was reachable by every caller who could reach `execute_job`. On older versions do not rely on this field for access control.
 
-Semantics: no rules for an action means allow (the documented default); once any rule targets an action, **all** rules for that action must pass, and `roles`/`scopes` within a single rule are **any-of**. A directly executed job is checked in `JobExecutionManager` when the run starts, before any run record exists (the `execute_job` tool, triggers, background runs); every attempt is then checked again by the `checkJobAuthorization` stage of its `jobs:execute-job` flow, and that is where a job reached as a workflow step is checked against its own rules, so authorizing the workflow does not launder the jobs it references. A denial is not retried. `list_jobs` hides entries the caller could not run, and a denial is indistinguishable from "not found" so restricted job names cannot be enumerated.
+Semantics: no rules for an action means allow (the documented default); once any rule targets an action, **all** rules for that action must pass, and `roles`/`scopes` within a single rule are **any-of**. A directly executed job is checked in `JobExecutionManager` when the run is submitted, against its `create` and `execute` rules, before any run record exists (the `execute_job` tool, triggers, background runs); every attempt is then checked again against its `execute` rules by the `checkJobAuthorization` stage of its `jobs:execute-job` flow, and that is where a job reached as a workflow step is checked against its own rules, so authorizing the workflow does not launder the jobs it references. A denial is not retried. `list_jobs` hides entries the caller could not submit, and a denial is indistinguishable from "not found" so restricted job names cannot be enumerated.
 
 ### Permission Rule Shape
 
@@ -414,14 +416,16 @@ interface JobPermission {
 
 ### Permission Actions
 
-| Action    | Description                                                                                                     |
-| --------- | --------------------------------------------------------------------------------------------------------------- |
-| `create`  | Submit a new job                                                                                                |
-| `read`    | View another caller's runs (`get_job_status`, `job://runs/{runId}`); the caller who started a run always may    |
-| `update`  | Modify a running job                                                                                            |
-| `delete`  | Cancel another caller's runs (`cancel_job`), or remove a job; the caller who started a run may always cancel it |
-| `execute` | Trigger job execution                                                                                           |
-| `list`    | List jobs matching filters                                                                                      |
+| Action    | Description                                                                                                                                                                                |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `create`  | Submit a new run: `execute_job` / `execute_workflow`, a webhook or an event. Checked once, with `execute`, before the run exists; not for a workflow step, which submits no run of its job |
+| `execute` | Run the job: when a run is submitted, then each attempt, and each workflow step's job                                                                                                      |
+| `read`    | View another caller's runs (`get_job_status`, `get_workflow_status`, `job://runs/{runId}`); the caller who started a run always may                                                        |
+| `update`  | Modify a job or workflow registered at runtime (`update_job`, `update_workflow`, with `jobs.allowDynamicRegistration`); one declared in code can't be updated                              |
+| `delete`  | Cancel another caller's runs (`cancel_job`), or remove a dynamic job or workflow; the caller who started a run may always cancel it                                                        |
+| `list`    | See the entry in `list_jobs` / `list_workflows`, which also leave out an entry the caller may not submit (`create` and `execute`)                                                          |
+
+`create` and `execute` differ for a job that is also a workflow step: `{ action: 'create', roles: ['admin'] }` lets only admins submit a run of it with `execute_job`, while any workflow that lists it still runs it as a step for its own callers, checked against `execute`. Up to 1.11.2, `create` and `update` rules were ignored, though this table described `create` as "Submit a new job" and `update` as "Modify a running job".
 
 ### Permission Configuration
 
@@ -499,7 +503,7 @@ class JobAuditPlugin {
 }
 ```
 
-Stages: `parseInput` -> `checkJobAuthorization` -> `validateInput` -> `admit` -> `createJobContext` -> `execute` -> `validateOutput` -> `updateRunState` -> `finalize`, and the error stage `cleanup`, which runs the job's `cleanup` when the attempt failed after it was aborted. `admit` waits for a slot under `jobs.admission`. `updateRunState` writes the attempt to the run record (`completed`, `retrying` or `failed`) and notifies; a workflow step has no run record of its own (`state.runId` unset, `state.workflow` set). One flow run per attempt: a job with `retry.maxAttempts: 3` can run a hook three times per call. A hook that throws fails the attempt (a `JobNotAuthorizedError` is not retried); a hook that calls `flowCtx.respond({ result, logs })` answers for the job and the run records that result, checked against the job's `outputSchema` like a returned one (undeclared fields are dropped; a mismatch fails the attempt with `INVALID_OUTPUT`, not retried; up to 1.9.4 a hook's result skipped the schema). If a hook keeps `updateRunState` from running, or the run store fails its write, the manager records the attempt itself; a store failure never runs a completed job again (if the manager's write fails too, the call fails with the store's error). The hooks of a plugin installed on an app run for that app's jobs only.
+Stages: `parseInput` -> `checkJobAuthorization` -> `validateInput` -> `admit` -> `createJobContext` -> `execute` -> `validateOutput` -> `updateRunState` -> `finalize`, and the error stage `cleanup`, which runs the job's `cleanup` when the attempt failed after it was aborted. `admit` waits for a slot under `jobs.admission`. `updateRunState` writes the attempt to the run record (`completed`, `retrying` or `failed`) and notifies; a workflow step has no run record of its own (`state.runId` unset, `state.workflow` set). One flow run per attempt: a job with `retry.maxAttempts: 3` can run a hook three times per call. A hook that throws fails the attempt (a `PublicMcpError`, such as `JobNotAuthorizedError`, is not retried); input a hook leaves invalid fails `validateInput` with `INVALID_INPUT`, not retried; a hook that calls `flowCtx.respond({ result, logs })` answers for the job and the run records that result, checked against the job's `outputSchema` like a returned one (undeclared fields are dropped; a mismatch fails the attempt with `INVALID_OUTPUT`, not retried; up to 1.9.4 a hook's result skipped the schema). If a hook keeps `updateRunState` from running, or the run store fails its write, the manager records the attempt itself; a store failure never runs a completed job again (if the manager's write fails too, the call fails with the store's error). The hooks of a plugin installed on an app run for that app's jobs only.
 
 A `@Job` class can declare hooks for `jobs:execute-job` itself, which run only for its attempts: instance methods from `createJobContext` on (`Did('createJobContext')`, `Will('execute')`, ...), `static` methods for the earlier stages (`parseInput`, `checkJobAuthorization`, `validateInput`). A hook for another flow fails startup with `InvalidHookFlowError`. Up to 1.9.3 jobs ran outside any flow and any hook on a job class failed startup.
 
@@ -636,20 +640,21 @@ Setting `jobs: { enabled: false }` is an explicit opt-out — declared jobs will
 
 ### Calling Jobs from an Agent
 
-Once jobs are registered, the SDK exposes six MCP tools (snake_case per ecosystem convention; hyphen aliases like `execute-job` keep working with a deprecation log line for one release):
+Once jobs are registered, the SDK exposes these MCP tools (snake_case per ecosystem convention; hyphen aliases like `execute-job` keep working with a deprecation log line for one release):
 
-| Tool             | Purpose                                                                |
-| ---------------- | ---------------------------------------------------------------------- |
-| `list_jobs`      | List registered jobs with optional `tags` / `labels` / `query` filters |
-| `execute_job`    | Execute a registered job by name (`{ name, input?, background? }`)     |
-| `get_job_status` | Get the run state for a `runId` returned by `execute_job`              |
-| `cancel_job`     | Cancel a run by `runId`; its `cleanup` runs (see above)                |
-| `register_job`   | Register a dynamic job at runtime — **opt-in**, see below              |
-| `remove_job`     | Remove a dynamic job by name (`hideFromDiscovery: true`)               |
+| Tool             | Purpose                                                                  |
+| ---------------- | ------------------------------------------------------------------------ |
+| `list_jobs`      | List registered jobs with optional `tags` / `labels` / `query` filters   |
+| `execute_job`    | Execute a registered job by name (`{ name, input?, background? }`)       |
+| `get_job_status` | Get the run state for a `runId` returned by `execute_job`                |
+| `cancel_job`     | Cancel a run by `runId`; its `cleanup` runs (see above)                  |
+| `register_job`   | Register a dynamic job at runtime — **opt-in**, see below                |
+| `update_job`     | Update a dynamic job's script, schemas, description or tags — **opt-in** |
+| `remove_job`     | Remove a dynamic job by name (`hideFromDiscovery: true`)                 |
 
-Workflows expose a parallel set: `list_workflows`, `execute_workflow`, `get_workflow_status`, `register_workflow`, `remove_workflow`.
+Workflows expose a parallel set: `list_workflows`, `execute_workflow`, `get_workflow_status`, `register_workflow`, `update_workflow`, `remove_workflow`.
 
-`register_job` / `register_workflow` take a **raw script string** and register it as an executable job. Since 1.7.2 they are not registered unless you opt in:
+`register_job` / `register_workflow` take a **raw script string** and register it as an executable job, and `update_job` / `update_workflow` replace a dynamic entry's fields with the ones given (an entry declared in code can't be updated; the entry's `update` rules decide who may, and a caller they deny reads it as unknown). A run already started keeps the definition it started with. Since 1.7.2 they are not registered unless you opt in:
 
 ```typescript
 @FrontMcp({ jobs: { enabled: true, allowDynamicRegistration: true } })
@@ -667,7 +672,7 @@ import { App, ExecuteJobTool, GetJobStatusTool, ListJobsTool } from '@frontmcp/s
 @App({
   name: 'data-app',
   jobs: [GenerateReportJob],
-  tools: [ExecuteJobTool, ListJobsTool, GetJobStatusTool], // omit register/remove
+  tools: [ExecuteJobTool, ListJobsTool, GetJobStatusTool], // omit register/update/remove
 })
 class DataApp {}
 ```
@@ -854,7 +859,7 @@ class DataServer {}
 | Problem                                                 | Cause                                                                                                   | Solution                                                                                                                    |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Job not activated                                       | `@App` doesn't declare `jobs: [...]` AND `@FrontMcp({ jobs: { enabled: true } })` isn't set             | Add the job class to `@App({ jobs: [...] })` (auto-enables) OR set `@FrontMcp({ jobs: { enabled: true, store: { ... } } })` |
-| Job fails without retrying                              | No `retry` policy configured                                                                            | Add `retry: { maxAttempts: 3, backoffMs: 2000 }` to `@Job` options                                                          |
+| Job fails without retrying                              | No `retry` policy configured, or it failed with a `PublicMcpError` (bad input included), never retried  | Add `retry: { maxAttempts: 3, backoffMs: 2000 }` to `@Job` options; throw a plain `Error` for a failure worth retrying      |
 | Progress not visible                                    | Not calling `this.progress()` during execution                                                          | Add `this.progress(pct, total, message)` calls at each stage                                                                |
 | Job times out unexpectedly                              | Default 5-minute timeout too short (it applies to `execute_job` since 1.11)                             | Set `timeout` in `@Job` (e.g., `600000`), `jobs.defaultTimeoutMs`, or `0` for no limit                                      |
 | `JOB_ADMISSION_TIMEOUT`                                 | `jobs.admission` had no slot (or not enough free memory) within `maxWaitMs`                             | Retry later, run in the background, or raise `concurrency` / `maxWaitMs`                                                    |

@@ -84,10 +84,10 @@ plugin reaches it, the server doesn't start.
 
 The plugin adds `featureFlag` to `@Tool`, `@Resource`, `@ResourceTemplate`, `@Prompt`, `@Skill` and `@Agent`:
 
-| Form                    | Meaning                                                                                                                                                                |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `'key'`                 | Gated by the flag `key`. When the adapter has no answer for it, the entry is off, unless the plugin's `gateDefaultValue` is `true`.                                    |
-| `{ key, defaultValue }` | The same, except that `defaultValue` decides when the adapter has no answer for the flag, or throws while a call is checked. A flag the adapter reports off stays off. |
+| Form                    | Meaning                                                                                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'key'`                 | Gated by the flag `key`. When the adapter has no answer for it, the entry is off, unless the plugin's `gateDefaultValue` is `true`.            |
+| `{ key, defaultValue }` | The same, except that `defaultValue` decides when the adapter has no answer for the flag, or throws. A flag the adapter reports off stays off. |
 
 ## Options
 
@@ -103,14 +103,14 @@ The plugin adds `featureFlag` to `@Tool`, `@Resource`, `@ResourceTemplate`, `@Pr
 
 Every adapter also takes:
 
-| Option               | Type                                                | Default            | Description                                                                                                                                          |
-| -------------------- | --------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `defaultValue`       | `boolean`                                           | `false`            | What `this.featureFlags.isEnabled()` returns, when the call passes no default, for an unknown flag or an error.                                      |
-| `gateDefaultValue`   | `boolean`                                           | `false`            | What lists and gates answer for an unknown flag, or an error during a call, when the entry's `featureFlag` has no `defaultValue`. `true` fails open. |
-| `cacheStrategy`      | `'session' \| 'request' \| 'none'`                  | `'none'`           | Caches `this.featureFlags.isEnabled()` results. Lists and gates never cache.                                                                         |
-| `cacheTtlMs`         | `number`                                            | `30000`            | How long a cached result lasts, in milliseconds.                                                                                                     |
-| `userIdResolver`     | `(ctx: FrontMcpContext) => string \| undefined`     | the signed-in user | The `userId` adapters evaluate flags for. An anonymous caller has none.                                                                              |
-| `attributesResolver` | `(ctx: FrontMcpContext) => Record<string, unknown>` | `{}`               | Targeting attributes, such as a tenant or a plan.                                                                                                    |
+| Option               | Type                                                | Default            | Description                                                                                                                                    |
+| -------------------- | --------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `defaultValue`       | `boolean`                                           | `false`            | What `this.featureFlags.isEnabled()` returns, when the call passes no default, for an unknown flag or an error.                                |
+| `gateDefaultValue`   | `boolean`                                           | `false`            | What lists and gates answer for an unknown flag, or an adapter error, when the entry's `featureFlag` has no `defaultValue`. `true` fails open. |
+| `cacheStrategy`      | `'session' \| 'request' \| 'none'`                  | `'none'`           | Caches `this.featureFlags.isEnabled()` results. Lists and gates never cache.                                                                   |
+| `cacheTtlMs`         | `number`                                            | `30000`            | How long a cached result lasts, in milliseconds.                                                                                               |
+| `userIdResolver`     | `(ctx: FrontMcpContext) => string \| undefined`     | the signed-in user | The `userId` adapters evaluate flags for. An anonymous caller has none.                                                                        |
+| `attributesResolver` | `(ctx: FrontMcpContext) => Record<string, unknown>` | `{}`               | Targeting attributes, such as a tenant or a plan.                                                                                              |
 
 `FeatureFlagPlugin.init()` without a supported `adapter` throws a `FeatureFlagConfigurationError`.
 
@@ -196,14 +196,14 @@ or `undefined` where the plugin isn't installed.
 
 ## When the flag service fails
 
-| Where                             | What happens when the adapter throws                                          |
-| --------------------------------- | ----------------------------------------------------------------------------- |
-| A list, such as `tools/list`      | The whole request fails with the adapter's error. No default applies.         |
-| A gate, such as `tools/call`      | The ref's `defaultValue`, else the plugin's `gateDefaultValue`, else `false`. |
-| `this.featureFlags.isEnabled()`   | The call's `defaultValue`, else the plugin's `defaultValue`, else `false`.    |
-| `getVariant()`, `evaluateFlags()` | The error is thrown to your code.                                             |
+| Where                             | What happens when the adapter throws                                                                                                     |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| A list, such as `tools/list`      | The ref's `defaultValue`, else the plugin's `gateDefaultValue`, else `false`, with a warning in the log. The rest of the list is served. |
+| A gate, such as `tools/call`      | The ref's `defaultValue`, else the plugin's `gateDefaultValue`, else `false`.                                                            |
+| `this.featureFlags.isEnabled()`   | The call's `defaultValue`, else the plugin's `defaultValue`, else `false`.                                                               |
+| `getVariant()`, `evaluateFlags()` | The error is thrown to your code.                                                                                                        |
 
-If an outage mustn't take your lists down, catch errors inside a custom adapter and answer from a last known value.
+Up to 1.11.2 a list failed with the adapter's error (`-32603`), and no default applied.
 
 ## Docs
 

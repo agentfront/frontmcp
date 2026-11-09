@@ -149,9 +149,13 @@ The sandboxed VM runs AgentScript (a restricted JavaScript subset). Presets cont
 - `balanced` -- Relaxed constraints for development. `for` and `for-of` loops, with iteration limits.
 - `experimental` -- Minimal restrictions. `for` and `for-of` loops, extended builtins. Development only.
 
-`while`, `do-while` and `for-in` loops are always refused by the sandbox. Scripts have no `console` in any preset
-(`vm.allowConsole` has no effect); a script that refers to the global `console` is refused before it runs (a field named
-`console` is fine). Log with `mcpLog(level, message)`. The `codecall:execute` description is written from the effective
+`while`, `do-while` and `for-in` loops are always refused by the sandbox. Scripts have `console` only when the server
+sets `vm.allowConsole: true` explicitly; no preset turns it on. Then each `console.log`, `info`, `warn`, `error` and
+`debug` call is one line of the server's logger `CodeCall:script` (`log` and `info` at info level), within the sandbox's
+per-script limits (1000 calls, 1 MB; one more call fails the script) and at most 50 lines a second per server (the rest
+of that second's are dropped, with one warning). Without it, a script that refers to the global `console` is refused
+before it runs (a field named `console` is fine): log with `mcpLog(level, message)`. Up to 1.11.2 `vm.allowConsole` had
+no effect. The `codecall:execute` description is written from the effective
 `vm` options (loops, `disabledBuiltins`/`disabledGlobals`, `timeoutMs`, the `maxSteps` tool-call cap), and
 `codecall:search`'s from `topK` and the `minRelevanceScore` default, `0.1` (up to 1.9.2 both named fixed values).
 `vm.disabledBuiltins` and `vm.disabledGlobals` refuse a script that refers to a listed global (`illegal_access`,
@@ -212,7 +216,8 @@ CodeCallPlugin.init({
 - A lazy app's tools (`apps: [{ name, lazy }]`) are judged by what `frontmcp.manifest.json` records until the app's first call imports it, so they cannot declare `codecall` (`LazyAppConfigurationError: ... cannot be lazy`), and a filter should read their name, `appId`, tags or annotations rather than other metadata.
 - Namespace bindings (`mail.send({...})` for a tool named `mail.send`) are AgentScript wrappers over `callTool()` inside the sandbox: they count toward `vm.maxSteps` and pass the rate limit and suspicious-sequence checks exactly like `callTool('mail.send', {...})`. A binding with no argument sends `{}`.
 - The sandbox's rate checks: more than `vm.rapidEnumerationThreshold` calls (default 30; per tool with `vm.rapidEnumerationOverrides`) to one tool within about 2 seconds stop the script with `Suspicious pattern detected: … [RAPID_ENUMERATION]`, and all tool calls together are capped at 100 per second. Calls made through `parallel()` count, so a `parallel()` of 31 calls to one tool is stopped by default; batch it, or raise the threshold. The sandbox's message says "in 5s", but it keeps only the last 2 seconds of calls. The `codecall:execute` description names the effective limit.
-- A failed `callTool()` carries one of these codes (`error.code` with `{ throwOnError: false }`, the thrown error's `code`, and `tool_error.code` when the script doesn't catch it): `NOT_FOUND`, `VALIDATION` (the input fails the tool's schema; the message is what an MCP client would see), `EXECUTION`, `TIMEOUT`, `ACCESS_DENIED`, `RATE_LIMITED` (a rate limit, quota or concurrency limit refused the call; message `Tool "<name>" was rate limited`). Up to 1.9.4 schema and rate-limit refusals came back as `EXECUTION`.
+- A failed `callTool()` carries one of these codes (`error.code` with `{ throwOnError: false }`, the thrown error's `code`, and `tool_error.code` when the script doesn't catch it): `NOT_FOUND`, `VALIDATION` (the input fails the tool's schema), `EXECUTION`, `TIMEOUT` (the tool ran past its `timeout.executeMs`), `ACCESS_DENIED`, `RATE_LIMITED` (a rate limit, quota or concurrency limit refused the call). Up to 1.9.4 schema and rate-limit refusals came back as `EXECUTION`.
+- The code comes from the error's type, never from the words of its message, and the message is what an MCP client calling the tool would be told, without stack frames or server paths: a tool's `PublicMcpError` or `this.fail(...)` message reaches the script as written, and an internal error (a plain `Error`) reads `Tool "<name>" execution failed`. Up to 1.11.2 the code was guessed from the message's words, so `User u9 not found` became `NOT_FOUND` with `Tool "<name>" was not found`, and only `VALIDATION` kept the tool's message.
 - `codecall:execute` results never include a `stack`, in any environment. In `runtime_error`, `syntax_error` and `tool_error` messages, stack frames are dropped and absolute paths (POSIX, Windows, UNC, `file:` URLs, quoted paths) become `[path]`; other URLs are kept.
 - `illegal_access` messages name the script's own lines (`FORBIDDEN_LOOP (line 3): …`), whatever the enclave's transform printed; a line that is none of the script's is left out. `tool_error` results carry no `toolInput` (deprecated in the schema, never set).
 
@@ -428,10 +433,10 @@ With `RememberPlugin.init({ inject, useFactory })`, `tools` is read from the opt
 
 All four take an optional `scope` (default `session`) and describe it to the model the same way:
 `session` is this session, or without one (stateless HTTP, MCP 2026-07-28) the signed-in caller
-across its requests; `user` is the signed-in caller across all of its sessions; `tool` is the tool
-running the call, for the same caller as `session` -- each memory tool has its own, so `recall`
-does not see what `remember_this` stored in `tool` scope; `global` is shared by every caller. An
-anonymous caller cannot use `user`, nor `session` or `tool` without a session. No scope lasts
+across its requests; `user` is the signed-in caller across all of its sessions; `global` is shared
+by every caller. An anonymous caller cannot use `user`, nor `session` without a session. The tools
+don't offer `tool` scope, which is per tool: `recall` would never see what `remember_this` stored
+there (up to 1.11.2 they accepted it, and `tools.allowedScopes` naming it is ignored). No scope lasts
 "until disconnect" or "forever": entries last until forgotten or until their `ttl` (or `defaultTTL`) runs out, and
 `remember_this` and `recall` report when that is, as `expiresAt`.
 
@@ -458,24 +463,40 @@ class BasicServer {}
   plugins: [
     ApprovalPlugin.init({
       mode: 'recheck',
-      enableAudit: true,
+      storage: { type: 'redis', redis: { url: process.env.REDIS_URL } },
     }),
   ],
 })
-class AuditedServer {}
+class RedisApprovalServer {}
 
-// Webhook mode -- also registers the PKCE ChallengeService (the webhook options are reserved, see Modes)
+// Recheck mode against an approval API -- a call without an approval polls it until it decides
+@FrontMcp({
+  plugins: [
+    ApprovalPlugin.init({
+      mode: 'recheck',
+      recheck: {
+        url: 'https://approvals.example.com/status',
+        auth: 'bearer',
+        token: process.env.APPROVALS_API_TOKEN,
+        interval: 2000,
+        maxAttempts: 5,
+      },
+    }),
+  ],
+})
+class RecheckServer {}
+
+// Webhook mode -- a call without an approval sends a signed request; the decision comes back on callbackPath
 @FrontMcp({
   plugins: [
     ApprovalPlugin.init({
       mode: 'webhook',
       webhook: {
-        url: 'https://approval.example.com/webhook',
+        url: 'https://approvals.example.com/webhook',
+        secret: process.env.APPROVAL_WEBHOOK_SECRET, // required with url, at least 24 bytes
         challengeTtl: 300,
         callbackPath: '/approval/callback',
       },
-      enableAudit: true,
-      maxDelegationDepth: 3,
     }),
   ],
 })
@@ -498,12 +519,93 @@ opened them.
 
 ### Modes
 
-- `recheck` -- Re-evaluates approval status on every tool call. Approval can be granted programmatically via `this.approval.grantSessionApproval()`. Good for interactive approval flows where the user confirms in-band.
-- `webhook` -- Also registers the `ChallengeService` (`ChallengeServiceToken`), PKCE challenges for an external approval flow you build yourself.
+- `recheck` (default) -- Re-evaluates approval status on every tool call. Approval can be granted programmatically via
+  `this.approval.grantSessionApproval()`. With `recheck.url`, a call that has no approval also polls that URL.
+- `webhook` -- Also registers the `ChallengeService` (`ChallengeServiceToken`). With `webhook.url`, a call that has no
+  approval sends a signed approval request there, and the approval system decides on `webhook.callbackPath`.
 
-Neither mode contacts an external system in 1.9: `recheck.url`/`auth`/`interval`/`maxAttempts` poll nothing, and
-`webhook.url`/`includeJwt`/`callbackPath` send no request and serve no route. Ask with `this.elicit()` (or your own
-UI) and record the answer with `this.approval.grantSessionApproval()`.
+Without `recheck.url` or `webhook.url`, neither mode contacts an external system: ask with `this.elicit()` (or your own
+UI) and record the answer with `this.approval.grantSessionApproval()`. A recorded denial always refuses the call before
+anything external is asked.
+
+**Recheck polling** (`recheck.url`). Each poll is a JSON POST of
+`{ type: 'approval.status', requestId, attempt, toolId, toolName, userId?, requestedScope, allowedScopes?, maxTtlMs?, ... }`
+(`requestId` is the same for every poll of one caller and tool, and names neither). The answer is
+`{ approved, pending?, scope?, ttlMs?, grantedBy?, denialReason? }`:
+
+- `{ approved: true }` records an approval (`scope` defaults to the tool's `defaultScope`, held to `allowedScopes` and
+  `maxTtlMs`; `grantedBy` gets `origin: 'recheck'`) and the call runs. An `alwaysPrompt` tool's approval lets that call
+  alone through and is not stored.
+- `{ approved: false, pending: true }` polls again after `interval` ms (default `2000`, 100 to 60000), up to
+  `maxAttempts` polls (default `5`, 1 to 60; `interval × (maxAttempts − 1)` is at most 2 minutes), then refuses the call as
+  `pending`.
+- `{ approved: false }` refuses the call as `denied`, and records nothing: the next call polls again.
+- An error status, a redirect, a body that isn't such an answer, more than 64 KB, or no answer in 10 seconds refuses the
+  call as `pending` and logs a warning naming the URL's origin only.
+
+`recheck.auth` is `'none'` (default), `'bearer'` (sends `recheck.token`), `'jwt'` (forwards the caller's own access
+token; a call without one is not polled) or `'custom'` (`recheck.headers(request)` returns the headers). `recheck.secret`
+signs each poll the way webhook requests are signed.
+
+**Webhook requests** (`webhook.url`). A call without an approval sends one JSON POST per caller and tool, until it is
+decided or `challengeTtl` seconds pass, and is refused as `pending`:
+`{ type: 'approval.requested', codeChallenge, codeVerifier, toolId, toolName, category?, riskLevel?, approvalMessage?, requestedScope, allowedScopes?, maxTtlMs?, userId?, callbackPath, callbackUrl?, expiresAt, timestamp, jwt? }`.
+It never carries the session id. `callbackUrl` is `FRONTMCP_PUBLIC_URL` + `callbackPath`, when that variable is set.
+`jwt` is the caller's access token, sent only with `webhook.includeJwt: true` (default `false`): set it only when the
+approval system must act as the caller. A request that fails (error status, redirect, timeout) is sent again by the next
+call.
+
+The approval system decides by POSTing `{ codeVerifier, approved, scope?, ttlMs?, grantedBy?, reason? }` to
+`callbackPath` (default `/approval/callback`), signed with the same secret:
+
+- An approval is recorded for the caller the request was for (never one the body names), held to the tool's
+  `allowedScopes` and `maxTtlMs`, with `grantedBy` and `origin: 'webhook'`. A denial is recorded for the caller's session
+  and lasts `ttlMs`, or `challengeTtl` without it.
+- Each `codeVerifier` works once, until `challengeTtl`: a replayed or late decision does nothing. Every signed,
+  well-formed callback is answered `202 { status: 'received' }`, whether or not it matched a request, so the route never
+  says whether an approval is pending. An unsigned or mis-signed one, or one signed more than five minutes away, gets
+  `401`; a body that isn't a decision `400`; one over 16 KB `413`.
+
+**Signatures** are HMAC-SHA256 in the Standard Webhooks format, so a receiver can check them with a Standard Webhooks
+library: headers `webhook-id`, `webhook-timestamp` (Unix seconds) and `webhook-signature: v1,<base64>` over
+`<id>.<timestamp>.<body>`. A `whsec_` secret is base64 after the prefix; any other secret is used as UTF-8 bytes.
+
+**Startup checks.** `ApprovalPlugin.init()` throws `ApprovalConfigurationError` (code `APPROVAL_CONFIGURATION`), so the
+server doesn't start, for: `webhook.url` without `webhook.secret` (or a secret under 24 bytes); `webhook.*` other than
+`challengeTtl` outside `mode: 'webhook'`, or without `webhook.url`; `recheck` in `mode: 'webhook'`, or without
+`recheck.url`; a URL that isn't `https://` (`http://localhost`, `127.0.0.1` or `[::1]` is accepted when `NODE_ENV` isn't
+`production`) or that carries credentials; `auth: 'bearer'` without `token`, `auth: 'custom'` without `headers`, either
+of those set for another `auth`; an `interval`/`maxAttempts` out of range; and a `callbackPath` that isn't a plain path,
+or that the server reserves (the MCP endpoint, `/oauth/*`, `/.well-known/*`) or another `ApprovalPlugin` serves. Up to
+1.11.2 these options were accepted and ignored.
+
+**Audit trail** (`enableAudit: true`, default `false`). Each event is an `info` line of the `ApprovalAudit` logger:
+the message is `<event> <toolId>`, and the first argument the fields. `approval.requested` is a call that had no approval
+it could use, with `state` (`pending`, `expired`, `denied`, or `approved` by the recheck system) and `via` (`webhook` or
+`recheck`); `approval.granted` and `approval.denied` an approval or denial recorded (by `this.approval`, the store, a
+webhook callback or a recheck answer); `approval.revoked` a revocation (`count` for `clearSessionApprovals()`); and
+`approval.expired` an expired record the cleanup deleted (a backend that expires keys itself, such as Redis, may delete
+it first: `approval.granted` carries `expiresAt`). Lines carry the tool, scope, user id, context, grantor or revoker and
+reason; never a session id, a token or a record's `metadata`. The default is `false` because the option did nothing up
+to 1.11.2 (its documented default was `true`), and turning it on adds lines with user ids to the server's logs.
+
+**Delegation chains** (`maxDelegationDepth`, default `3`, 0 to 64). A delegated approval names
+`grantedBy.delegationContext`; a delegate that delegates further records the delegations above it in
+`delegationContext.chain`, the original delegator's first. `extendDelegation(context, delegateId, { purpose? })` builds
+the next context:
+
+```typescript
+import { agentGrantor, extendDelegation } from '@frontmcp/plugin-approval';
+
+const toPlanner = { delegatorId: 'user-123', delegateId: 'planner-agent', purpose: 'release' };
+const toDeployer = extendDelegation(toPlanner, 'deploy-agent'); // depth 2
+await this.approval.grantSessionApproval('ops:deploy', { grantedBy: agentGrantor('deploy-agent', toDeployer) });
+```
+
+A grant whose chain is deeper than `maxDelegationDepth`, broken (a delegator that wasn't the previous delegate) or names
+a party twice throws `ApprovalOperationError`, and a stored approval like that doesn't let a call through. Denials are
+kept whatever their chain. `1` allows only direct delegation, `0` no delegated approval. `delegationDepth(context)` and
+`delegationProblem(context, maxDepth)` check a context yourself. Up to 1.11.2 both options did nothing.
 
 ### Pre-approved contexts come from the session
 
@@ -731,6 +833,9 @@ class GlobalCacheServer {}
 - `redis-client` -- Bring your own ioredis client instance.
 - `global-store` -- Reuses the Redis connection from `@FrontMcp({ redis: {...} })`.
 
+Any other `type` (`'memcached'`) throws `CachePluginConfigurationError` from `init()`, listing these four. Up to 1.11.2
+it started a server that cached in memory.
+
 In a browser build these refuse Redis as RememberPlugin's do: `redis`, `redis-client` and `global-store` on a Redis
 `redis` fail startup with `BrowserStoreUnavailableError`, in the server's one refusal, naming `type: 'memory'` (up to
 1.10 `redis` and `redis-client` threw from `init()`). `ioredis` loads only when a Redis cache is built, so a page on
@@ -860,7 +965,9 @@ The plugin has two fallbacks, kept apart on purpose:
 - `gateDefaultValue` (default `false`) -- what every gate (`tools/call`, `resources/read`, `prompts/get`,
   `completion/complete`, and the list and skill filters) answers for an entry whose ref has no `defaultValue`. A ref's
   own `defaultValue` wins over it. Setting it to `true` makes every such entry available while the flag service is down,
-  so it is an explicit opt-in. A non-boolean value fails startup with `FeatureFlagConfigurationError`.
+  so it is an explicit opt-in. A non-boolean value fails startup with `FeatureFlagConfigurationError`. When the adapter
+  throws while a list (`tools/list`, `resources/list`, `prompts/list`, skills) is filtered, each flag gets this same
+  fallback, a warning is logged, and the rest of the list is served. Up to 1.11.2 the whole list failed with `-32603`.
 - `defaultValue` (default `false`) -- the fallback of `this.featureFlags.isEnabled()` and `resolveRef()` only. Gates
   never read it, so a plugin-wide `defaultValue: true` does not open gated entries.
 

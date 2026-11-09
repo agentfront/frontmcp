@@ -79,15 +79,15 @@ subject, so one user never gets another user's cached answer.
 
 ## Options
 
-| Option          | Default                      | Description                                                                                                                                                                  |
-| --------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `type`          | `'memory'`                   | Where entries are kept: `'memory'`, `'redis'`, `'redis-client'` or `'global-store'`. Required when you pass options.                                                         |
-| `defaultTTL`    | `86400` (a day)              | Seconds an entry lives when the tool's `cache` gives no `ttl`, and for tools matched by `toolPatterns`.                                                                      |
-| `keyByIdentity` | `true`                       | Keep separate entries per caller. See [Who gets which entry](#who-gets-which-entry).                                                                                         |
-| `toolPatterns`  | `[]`                         | Cache these tools too, without `cache` in their metadata. A tool name or `<app id>:<tool name>`, where `*` matches anything: `'catalog:*'`, `'get_*'`.                       |
-| `bypassHeader`  | `'x-frontmcp-disable-cache'` | A request header that skips the cache for that call when its value is `true` or `1`. It must start with `x-frontmcp-`, or `init()` throws a `CachePluginConfigurationError`. |
-| `config`        |                              | With `type: 'redis'`: `{ host, port, password?, db? }`.                                                                                                                      |
-| `client`        |                              | With `type: 'redis-client'`: an `ioredis` client you created.                                                                                                                |
+| Option          | Default                      | Description                                                                                                                                                                                  |
+| --------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`          | `'memory'`                   | Where entries are kept: `'memory'`, `'redis'`, `'redis-client'` or `'global-store'`. Required when you pass options. Any other value makes `init()` throw a `CachePluginConfigurationError`. |
+| `defaultTTL`    | `86400` (a day)              | Seconds an entry lives when the tool's `cache` gives no `ttl`, and for tools matched by `toolPatterns`.                                                                                      |
+| `keyByIdentity` | `true`                       | Keep separate entries per caller. See [Who gets which entry](#who-gets-which-entry).                                                                                                         |
+| `toolPatterns`  | `[]`                         | Cache these tools too, without `cache` in their metadata. A tool name or `<app id>:<tool name>`, where `*` matches anything: `'catalog:*'`, `'get_*'`.                                       |
+| `bypassHeader`  | `'x-frontmcp-disable-cache'` | A request header that skips the cache for that call when its value is `true` or `1`. It must start with `x-frontmcp-`, or `init()` throws a `CachePluginConfigurationError`.                 |
+| `config`        |                              | With `type: 'redis'`: `{ host, port, password?, db? }`.                                                                                                                                      |
+| `client`        |                              | With `type: 'redis-client'`: an `ioredis` client you created.                                                                                                                                |
 
 ## Stores
 

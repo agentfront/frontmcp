@@ -536,26 +536,71 @@ export const createDatabaseProvider = AsyncProvider({
 
 **Key fields:**
 
-| Field          | Description                         |
-| -------------- | ----------------------------------- |
-| `name`         | Flow name                           |
-| `plan`         | Array of stages to execute in order |
-| `inputSchema`  | Zod schema for flow input           |
-| `outputSchema` | Zod schema for flow output          |
-| `access`       | Access control configuration        |
+| Field          | Description                                                                                          |
+| -------------- | ---------------------------------------------------------------------------------------------------- |
+| `name`         | Flow name, also declared in `ExtendFlows` so `runFlow()` and `FlowHooksOf()` know its types          |
+| `plan`         | Stage names by phase: `{ pre?, execute?, post?, finalize?, error? }`, each a `@Stage` of the class   |
+| `inputSchema`  | Zod schema for flow input                                                                            |
+| `outputSchema` | Zod schema for flow output                                                                           |
+| `access`       | Who the flow runs for: `'authorized'` (a caller the server's auth admitted) or `'public'`. See below |
+| `description?` | What the flow does                                                                                   |
 
 ```typescript
-import { Flow, z } from '@frontmcp/sdk';
+import { Flow, FlowBase, FlowHooksOf, z, type FlowPlan, type FlowRunOptions } from '@frontmcp/sdk';
 
-@Flow({
-  name: 'approval-flow',
-  plan: [ValidateStage, EnrichStage, ApproveStage, ExecuteStage],
-  inputSchema: z.object({ action: z.string(), target: z.string() }),
-  outputSchema: z.object({ approved: z.boolean(), result: z.unknown() }),
-  access: { roles: ['admin'] },
-})
-class ApprovalFlow {}
+const name = 'approval-flow' as const;
+const inputSchema = z.object({ action: z.string(), target: z.string() });
+const outputSchema = z.object({ approved: z.boolean() });
+const stateSchema = z.object({ approved: z.boolean() });
+const plan = { pre: ['validate'], execute: ['approve'], finalize: ['finalize'] } as const satisfies FlowPlan<string>;
+
+declare global {
+  interface ExtendFlows {
+    [name]: FlowRunOptions<ApprovalFlow, typeof plan, typeof inputSchema, typeof outputSchema, typeof stateSchema>;
+  }
+}
+
+const { Stage } = FlowHooksOf<typeof name>(name);
+
+@Flow({ name, plan, inputSchema, outputSchema, access: 'authorized' })
+export default class ApprovalFlow extends FlowBase<typeof name> {
+  @Stage('validate')
+  async validate() {
+    if (!this.rawInput.target) throw new Error('target is required');
+  }
+
+  @Stage('approve')
+  async approve() {
+    this.state.set('approved', this.rawInput.action !== 'delete');
+  }
+
+  @Stage('finalize')
+  async finalize() {
+    if (this.state.approved === undefined) return;
+    this.respond({ approved: this.state.approved });
+  }
+}
 ```
+
+`finalize` runs after a hook's answer too. A `Will('approve')` hook that answers with `ctx.respond({ approved: true })`
+skips `approve`, so `finalize` answers only when `approve` set `approved`: its `respond()` would replace the hook's
+answer.
+
+`access` is checked before the first stage. An `'authorized'` flow runs only for a caller the server's auth admitted:
+
+- Over HTTP, `session:verify` must accept the request. `http:request` verifies every MCP request first. A flow that
+  serves a request no flow verified yet (one mounted on a route with `middleware`, or a flow such a route runs)
+  verifies it itself, and refuses it with `401` (`UnauthorizedError`) or `403` (`INSUFFICIENT_SCOPE`), each with its
+  `WWW-Authenticate` challenge. No stage or hook of the flow runs.
+- The anonymous callers that public mode and `allowAnonymous` admit are authorized. To require a signed-in caller,
+  check `this.context.authInfo` in a stage. `authorities` on the tools, resources and prompts the flow serves restrict
+  those entries only: they do not stop a caller from running the flow itself.
+- stdio, `connect()`, direct calls, and the work the server starts itself (a scheduled job, a channel notification) are
+  the server process's own callers, and are authorized.
+- A flow run from another flow, a tool or a job is checked against the caller of the request it runs in.
+
+A `'public'` flow runs for any caller that reaches it. A flow whose metadata lacks `access` at run time (JavaScript) is
+`'public'`. Register a flow from a plugin provider that injects `ScopeEntry`: `await scope.registryFlows(ApprovalFlow)`.
 
 ---
 
@@ -610,34 +655,35 @@ class SyncDataJob extends JobContext {
 
 **Key fields:**
 
-| Field                | Description                                                        |
-| -------------------- | ------------------------------------------------------------------ |
-| `name`               | Workflow name                                                      |
-| `description`        | What this workflow accomplishes                                    |
-| `steps`              | Array of step definitions (see step fields below)                  |
-| `trigger?`           | `'manual'` \| `'webhook'` \| `'event'`                             |
-| `webhook?`           | `{ path, secret, methods }` — required when trigger is `'webhook'` |
-| `timeout?`           | Overall workflow timeout in ms                                     |
-| `maxConcurrency?`    | Maximum parallel step concurrency (default: 5)                     |
-| `tags?`              | Categorization tags                                                |
-| `labels?`            | Key-value labels (e.g., `{ env: 'prod' }`)                         |
-| `hideFromDiscovery?` | Hide from workflow listing                                         |
-| `permissions?`       | Access control: `[{ action: 'execute', roles: ['admin'] }]`        |
-| `inputSchema?`       | Zod schema for workflow input parameters                           |
-| `outputSchema?`      | Zod schema for workflow output                                     |
+| Field                | Description                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------- |
+| `name`               | Workflow name                                                                             |
+| `description`        | What this workflow accomplishes                                                           |
+| `steps`              | Array of step definitions (see step fields below)                                         |
+| `trigger?`           | `'manual'` \| `'webhook'` \| `'event'`                                                    |
+| `webhook?`           | `{ path, secret, methods, maxBodyBytes }` — `secret` required when trigger is `'webhook'` |
+| `event?`             | The event that starts a `trigger: 'event'` workflow (default: its name)                   |
+| `timeout?`           | Overall workflow timeout in ms                                                            |
+| `maxConcurrency?`    | Maximum parallel step concurrency (default: 5)                                            |
+| `tags?`              | Categorization tags                                                                       |
+| `labels?`            | Key-value labels (e.g., `{ env: 'prod' }`)                                                |
+| `hideFromDiscovery?` | Hide from workflow listing                                                                |
+| `permissions?`       | Access control: `[{ action: 'execute', roles: ['admin'] }]`                               |
+| `inputSchema?`       | Zod raw shape for the workflow's input, checked when a run starts                         |
+| `outputSchema?`      | Zod schema for workflow output                                                            |
 
 **Step fields:**
 
-| Step Field         | Description                                                     |
-| ------------------ | --------------------------------------------------------------- |
-| `id`               | Unique step identifier                                          |
-| `jobName`          | Name of the `@Job` to execute                                   |
-| `input?`           | Static object or `(steps) => object` function for dynamic input |
-| `dependsOn?`       | Array of step IDs that must complete first                      |
-| `condition?`       | `(steps) => boolean` — skip step if returns false               |
-| `continueOnError?` | Continue workflow if this step fails (default: `false`)         |
-| `timeout?`         | Per-step timeout in ms; aborts the job's `this.signal`          |
-| `retry?`           | Per-step retry config (same shape as `@Job.retry`)              |
+| Step Field         | Description                                                                            |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| `id`               | Unique step identifier                                                                 |
+| `jobName`          | Name of the `@Job` to execute                                                          |
+| `input?`           | Static object, or `(steps, workflowInput) => object`; without it, the workflow's input |
+| `dependsOn?`       | Array of step IDs that must complete first                                             |
+| `condition?`       | `(steps, workflowInput) => boolean` — skip step if returns false                       |
+| `continueOnError?` | Continue workflow if this step fails (default: `false`)                                |
+| `timeout?`         | Per-step timeout in ms; aborts the job's `this.signal`                                 |
+| `retry?`           | Per-step retry config (same shape as `@Job.retry`)                                     |
 
 ```typescript
 import { Workflow } from '@frontmcp/sdk';
@@ -651,7 +697,12 @@ import { Workflow } from '@frontmcp/sdk';
   steps: [
     { id: 'build', jobName: 'build_app', input: { env: 'production' } },
     { id: 'test', jobName: 'run_tests', dependsOn: ['build'] },
-    { id: 'deploy', jobName: 'deploy_app', dependsOn: ['test'], condition: (steps) => steps.test.success },
+    {
+      id: 'deploy',
+      jobName: 'deploy_app',
+      dependsOn: ['test'],
+      condition: (steps) => steps.get('test').state === 'completed',
+    },
   ],
 })
 class DeployPipeline {}

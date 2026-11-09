@@ -33,6 +33,7 @@ import { detachedJobRunId, markEntryServer } from './detached-job.flag';
 import { markDirectOnly } from './direct-only.flag';
 import { createMcpGlobalProviders } from './front-mcp.providers';
 import { markManifestMode } from './manifest-mode.flag';
+import { checkSessionSecret, MISSING_SESSION_SECRET_WARNING, missingSessionSecretProbe } from './session-secret.check';
 import {
   DEFAULT_SHUTDOWN_DEADLINE_MS,
   exitOnShutdownSignals,
@@ -219,6 +220,12 @@ export class FrontMcpInstance implements FrontMcpInterface {
     } catch (error) {
       return this.releaseFailedStart(error);
     }
+  }
+
+  /** A production server that serves MCP over HTTP and starts without `MCP_SESSION_SECRET` says so, and on `/readyz`. */
+  private reportMissingSessionSecret(): void {
+    this.log?.warn(MISSING_SESSION_SECRET_WARNING);
+    for (const scope of this.getScopes()) scope.registerHealthProbe(missingSessionSecretProbe);
   }
 
   /** Where this server serves MCP, as reported to the `frontmcp dev --stdio` bridge. */
@@ -419,8 +426,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
     }
 
     markEntryServer(parsedConfig);
+    const sessionSecretMissing = parsedConfig.serve !== false && checkSessionSecret(parsedConfig, 'legacy');
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
+    if (sessionSecretMissing) frontMcp.reportMissingSessionSecret();
 
     await frontMcp.startOrRelease();
     exitOnShutdownSignals(() => frontMcp.shutdown(), {
@@ -443,8 +452,11 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * export default FrontMcpInstance.createHandler(config);
    */
   public static async createHandler(options: FrontMcpConfigInput | FrontMcpConfigType): Promise<unknown> {
-    const frontMcp = new FrontMcpInstance(frontMcpMetadataSchema.parse(options));
+    const parsedConfig = frontMcpMetadataSchema.parse(options);
+    const sessionSecretMissing = checkSessionSecret(parsedConfig, 'legacy');
+    const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
+    if (sessionSecretMissing) frontMcp.reportMissingSessionSecret();
 
     const server = frontMcp.providers.get(FrontMcpServer);
     if (!server) {
@@ -486,9 +498,12 @@ export class FrontMcpInstance implements FrontMcpInterface {
     );
     const build = async (deferred: boolean): Promise<WebFetchHandler> => {
       let frontMcp: FrontMcpInstance | undefined;
+      let sessionSecretMissing: boolean;
       try {
         // A fetch handler never listens, so it gets no HTTP host (a browser or worker build has no Express)
-        frontMcp = new FrontMcpInstance(frontMcpMetadataSchema.parse({ ...options, serve: false }));
+        const parsedConfig = frontMcpMetadataSchema.parse({ ...options, serve: false });
+        sessionSecretMissing = checkSessionSecret(parsedConfig, '2026-07-28');
+        frontMcp = new FrontMcpInstance(parsedConfig);
         await frontMcp.ready;
       } catch (err) {
         // A deferred build fails on a request, which may only be answered with a code and a remedy:
@@ -504,6 +519,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
         }
         throw err;
       }
+      if (sessionSecretMissing) frontMcp.reportMissingSessionSecret();
       const scope = frontMcp.getPrimaryScope() as Scope | undefined;
       if (!scope) {
         throw new ServerNotFoundError();
@@ -746,8 +762,10 @@ export class FrontMcpInstance implements FrontMcpInterface {
     });
 
     markEntryServer(parsedConfig);
+    const sessionSecretMissing = checkSessionSecret(parsedConfig, 'legacy');
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
+    if (sessionSecretMissing) frontMcp.reportMissingSessionSecret();
 
     await frontMcp.startOrRelease();
     frontMcp.log?.info(`MCP server listening on unix://${socketPath}`);

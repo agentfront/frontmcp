@@ -10,9 +10,9 @@
  * ```typescript
  * import { JwksService, buildLoginPage, InMemoryAuthorizationVault } from '@frontmcp/auth';
  *
- * // JWKS management
- * const jwks = new JwksService({ orchestratorAlg: 'RS256' });
- * const publicJwks = await jwks.getPublicJwks();
+ * // Provider JWKS verification
+ * const jwks = new JwksService();
+ * const result = await jwks.verifyTransparentToken(token, [{ id: 'idp', issuerUrl: 'https://idp.example.com' }]);
  *
  * // Auth UI templates
  * const html = buildLoginPage({
@@ -34,8 +34,14 @@
 // ============================================
 // JWKS Module
 // ============================================
-export { JwksService, trimSlash, normalizeIssuer, decodeJwtPayloadSafe } from './jwks';
-export type { JwksServiceOptions, ProviderVerifyRef, TokenVerifyFailure, VerifyResult } from './jwks';
+export { JwksService, LocalTokenKeys, trimSlash, normalizeIssuer, decodeJwtPayloadSafe } from './jwks';
+export type {
+  JwksServiceOptions,
+  LocalSigningKeyConfig,
+  ProviderVerifyRef,
+  TokenVerifyFailure,
+  VerifyResult,
+} from './jwks';
 
 // ============================================
 // UI Module
@@ -57,6 +63,7 @@ export {
   buildConsentPage,
   buildIncrementalAuthPage,
   buildFederatedLoginPage,
+  buildFederatedStepPage,
   buildToolConsentPage,
   buildLoginPage,
   buildConnectPage,
@@ -75,6 +82,7 @@ export type {
   BaseLayoutOptions,
   AppAuthCard,
   ProviderCard,
+  FederatedStepView,
   ToolCard,
   LoginExtraField,
   ConsentHiddenField,
@@ -183,6 +191,7 @@ export {
   decryptSessionJson,
   safeDecrypt,
   resetCachedKey,
+  isSessionSecretConfigured,
   // Redis Session Store
   RedisSessionStore,
   // Vercel KV Session Store
@@ -229,6 +238,7 @@ export {
   // Incremental-authorization ticket signing (GHSA-2c4g-9c8x-6m8g)
   signIncrementalAuthTicket,
   verifyIncrementalAuthTicket,
+  openIncrementalAuthTicketProfile,
   DEFAULT_INCREMENTAL_TICKET_TTL_MS,
   // Credentials accessor (`this.credentials`)
   CREDENTIALS_ACCESSOR,
@@ -466,6 +476,7 @@ export {
   TokenLeakDetectedError,
   JwtSecretRequiredError,
   JwtSecretWeakError,
+  SigningKeyInvalidError,
   SessionSecretRequiredError,
   CredentialProviderAlreadyRegisteredError,
   AuthProvidersNotConfiguredError,
@@ -634,6 +645,14 @@ export {
   RedirectUriMismatchError,
   CimdResponseTooLargeError,
   CimdDisabledError,
+  CimdClientAssertionError,
+  type ClientAssertionRefusal,
+  // Client authentication (private_key_jwt)
+  CLIENT_ASSERTION_TYPE_JWT_BEARER,
+  CLIENT_ASSERTION_SIGNING_ALGORITHMS,
+  MAX_CLIENT_ASSERTION_LIFETIME_SECONDS,
+  type ClientAssertionInput,
+  type ClientAssertionCheck,
   // Validator
   isCimdClientId,
   validateClientIdUrl,
@@ -648,6 +667,12 @@ export {
   // Service
   CimdService,
 } from './cimd';
+
+// ============================================
+// Upstream Client Registration Module
+// ============================================
+export { resolveUpstreamClient, UpstreamClientRegistrationError } from './upstream';
+export type { UpstreamClient, UpstreamClientRegistrationOptions } from './upstream';
 
 // ============================================
 // Auth Context Module

@@ -211,6 +211,44 @@ export class CimdResponseTooLargeError extends CimdError {
 }
 
 /**
+ * Which check refused a `private_key_jwt` client assertion. For the server's own logs: the client is told only
+ * that its authentication failed.
+ */
+export type ClientAssertionRefusal =
+  | 'missing_assertion'
+  | 'unsupported_assertion_type'
+  | 'malformed'
+  | 'unsupported_algorithm'
+  | 'no_keys'
+  | 'unknown_key'
+  | 'bad_signature'
+  | 'wrong_issuer'
+  | 'wrong_subject'
+  | 'wrong_audience'
+  | 'missing_claim'
+  | 'expired'
+  | 'not_yet_valid'
+  | 'lifetime_too_long'
+  | 'replayed';
+
+/**
+ * Thrown when a client that authenticates with `private_key_jwt` presents no valid client assertion
+ * (RFC 7523 §3). The token endpoint answers `invalid_client`.
+ */
+export class CimdClientAssertionError extends CimdError {
+  readonly reason: ClientAssertionRefusal;
+
+  constructor(clientIdUrl: string, reason: ClientAssertionRefusal) {
+    super(`Client assertion refused for ${clientIdUrl}: ${reason}`, 'CIMD_CLIENT_ASSERTION_INVALID', 401, clientIdUrl);
+    this.reason = reason;
+  }
+
+  override getPublicMessage(): string {
+    return 'Client authentication failed';
+  }
+}
+
+/**
  * Thrown when CIMD is disabled but a CIMD client_id is used.
  */
 export class CimdDisabledError extends CimdError {

@@ -211,7 +211,7 @@ interface ResourceTemplateMetadata extends ExtendFrontMcpResourceTemplateMetadat
   annotations?: ResourceAnnotations;
 
   /**
-   * Free-form metadata forwarded in `resources/list` responses; reserve
+   * Free-form metadata forwarded in `resources/templates/list` responses; reserve
    * reverse-DNS prefixed keys per the MCP spec.
    */
   _meta?: Record<string, unknown>;

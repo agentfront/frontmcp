@@ -44,11 +44,10 @@ jest.mock('@frontmcp/sdk', () => {
 
 // Lazily-imported optional peer. We capture init() args + return a fake plugin.
 const pluginInit = jest.fn((_opts: unknown) => ({ __plugin: true }));
-jest.mock(
-  '@frontmcp/plugin-skilled-openapi',
-  () => ({ __esModule: true, default: { init: (opts: unknown) => pluginInit(opts) } }),
-  { virtual: true },
-);
+jest.mock('@frontmcp/plugin-skilled-openapi', () => ({
+  __esModule: true,
+  default: { init: (opts: unknown) => pluginInit(opts) },
+}));
 
 // Session host seam — assert the factory delegates, without the DO internals.
 const createEdgeSessionRouter = jest.fn<string, unknown[]>(() => 'ROUTER');

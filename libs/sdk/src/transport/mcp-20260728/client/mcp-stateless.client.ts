@@ -80,7 +80,7 @@ export class McpStatelessError extends Error {
 }
 
 /** A `Retry-After` header in milliseconds: delay seconds, or an HTTP date. */
-function retryAfterMsOf(header: string | null): number | undefined {
+export function retryAfterMsOf(header: string | null): number | undefined {
   if (!header) return undefined;
   const seconds = Number(header);
   const ms = Number.isNaN(seconds) ? Date.parse(header) - Date.now() : seconds * 1000;

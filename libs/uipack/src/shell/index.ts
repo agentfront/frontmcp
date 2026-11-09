@@ -23,6 +23,9 @@ export { buildShell } from './builder';
 // Sizing CSS
 export { buildSizingStyleTag } from './sizing-css';
 
+// URL-served widgets
+export { buildUrlWidgetShell, widgetUrlOrigin, type UrlWidgetShellOptions } from './url-widget-shell';
+
 // CSP
 export {
   DEFAULT_CDN_DOMAINS,
@@ -45,6 +48,9 @@ export {
 
 // Trusted Markup
 export { html, trustedHtml, isTrustedHtml, type TrustedHtml } from './trusted-html';
+
+// Markup Sanitizer (`ui.contentSecurity`)
+export { sanitizeHtml, describeContentSecurityProblems, DEFAULT_MAX_MARKUP_LENGTH } from './sanitize-html';
 
 // Custom Shell Types
 export type {

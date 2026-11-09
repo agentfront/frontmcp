@@ -34,6 +34,11 @@ this.logger.info('message', { userId: 123 })
 })
 ```
 
+`logging: true`, or a `logging` object without `sinks`, writes each entry as one JSON object per line on stdout
+(stderr over stdio, the console in a browser); `sinks: []` writes nothing. The server's own console lines still print
+as well: set `logging: { enableConsole: false }` on the server for NDJSON alone. Up to 1.11.2, `logging: true` wrote
+nothing.
+
 ## Log Entry Format
 
 Every `this.logger.info()` call produces:

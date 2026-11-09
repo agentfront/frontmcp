@@ -55,7 +55,7 @@ class QueryDataTool extends ToolContext {
   auth: {
     mode: 'remote',
     provider: 'https://auth.example.com',
-    clientId: process.env['OAUTH_CLIENT_ID']!, // pre-registered (DCR not yet wired)
+    clientId: process.env['OAUTH_CLIENT_ID']!, // pre-registered at the IdP
     clientSecret: process.env['OAUTH_CLIENT_SECRET'],
     scopes: ['openid', 'profile', 'email'],
     tokenStorage: {
@@ -81,9 +81,9 @@ class Server {}
 - Session identity (sub/email/name) is derived from the upstream user
 - Tools read the upstream token via `this.orchestration.getToken(providerId)`
 
-## Not Yet Wired
+## Without a Pre-registered Client
 
-- **Dynamic Client Registration** (`providerConfig.dcrEnabled`): a pre-registered `clientId` is required.
+If the IdP allows open dynamic client registration, drop `clientId`/`clientSecret` and set `providerConfig: { dcrEnabled: true }` (plus `local.issuer`, so the registered redirect URI is your public URL). FrontMCP registers itself at startup, keeps the client in the Redis `tokenStorage` above so every instance reuses it, and refuses to start if the IdP rejects the registration.
 
 ## Related
 

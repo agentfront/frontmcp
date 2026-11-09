@@ -56,6 +56,7 @@ import type {
   McpUnsubscribeFn,
 } from './mcp-client.types';
 import { McpStatelessClientAdapter, negotiateRemoteProtocol } from './mcp-stateless-client.adapter';
+import { RemoteOAuthTokenSource } from './remote-oauth';
 import { createRemoteRequestFetch, withRemoteRequestHeaders } from './remote-request-headers';
 import {
   CircuitBreakerManager,
@@ -130,6 +131,7 @@ export class McpClientService {
   private readonly connections: Map<string, McpClientConnection> = new Map();
   private readonly capabilities: Map<string, McpRemoteCapabilities> = new Map();
   private readonly configs: Map<string, McpConnectRequest> = new Map();
+  private readonly oauthSources: Map<string, RemoteOAuthTokenSource> = new Map();
   private readonly options: Required<McpClientServiceOptions>;
   private readonly logger: FrontMcpLogger;
 
@@ -191,6 +193,7 @@ export class McpClientService {
 
     // Store config for reconnection
     this.configs.set(appId, request);
+    this.setUpOAuth(request);
 
     // Update status
     this.updateConnectionStatus(appId, 'connecting');
@@ -205,7 +208,7 @@ export class McpClientService {
       if (connection2026) {
         this.connections.set(appId, connection2026);
         await this.discoverCapabilities(appId);
-        if (this.options.capabilityRefreshInterval > 0) this.startCapabilityRefresh(appId);
+        this.startCapabilityRefresh(appId, request);
         this.startHealthCheck(appId);
         this.reconnectAttempts.delete(appId);
         this.cancelAutoReconnect(appId);
@@ -233,7 +236,7 @@ export class McpClientService {
 
       // Connect to server with fallback support for HTTP transport
       try {
-        await client.connect(transport);
+        await this.connectWithin(appId, client, transport);
       } catch (connectError) {
         // If Streamable HTTP fails and fallback is enabled, try SSE
         if (this.shouldFallbackToSSE(request)) {
@@ -242,7 +245,7 @@ export class McpClientService {
               `Falling back to SSE transport.`,
           );
           transport = this.createFallbackSSETransport(protocolClient, request, headers);
-          await client.connect(transport);
+          await this.connectWithin(appId, client, transport);
         } else {
           throw connectError;
         }
@@ -265,9 +268,7 @@ export class McpClientService {
       await this.discoverCapabilities(appId);
 
       // Set up capability refresh if configured
-      if (this.options.capabilityRefreshInterval > 0) {
-        this.startCapabilityRefresh(appId);
-      }
+      this.startCapabilityRefresh(appId, request);
 
       // Start health checking
       this.startHealthCheck(appId);
@@ -322,6 +323,7 @@ export class McpClientService {
     this.connections.delete(appId);
     this.capabilities.delete(appId);
     this.configs.delete(appId);
+    this.oauthSources.delete(appId);
 
     this.updateConnectionStatus(appId, 'disconnected');
 
@@ -388,11 +390,12 @@ export class McpClientService {
 
     try {
       // Fetch all capabilities in parallel (including resource templates)
+      const request = { timeout: this.timeoutOf(appId) };
       const [toolsResult, resourcesResult, resourceTemplatesResult, promptsResult] = await Promise.all([
-        this.listToolsInternal(connection),
-        this.listResourcesInternal(connection),
-        this.listResourceTemplatesInternal(connection),
-        this.listPromptsInternal(connection),
+        this.listToolsInternal(connection, request),
+        this.listResourcesInternal(connection, request),
+        this.listResourceTemplatesInternal(connection, request),
+        this.listPromptsInternal(connection, request),
       ]);
 
       const capabilities: McpRemoteCapabilities = {
@@ -512,10 +515,6 @@ export class McpClientService {
       const connection = this.getConnection(appId);
       const startTime = Date.now();
 
-      // Get timeout from stored config
-      const config = this.configs.get(appId);
-      const timeout = (config?.transportOptions as McpHttpTransportOptions | undefined)?.timeout ?? 30000;
-
       try {
         // Verify tool exists
         const capabilities = this.capabilities.get(appId);
@@ -524,17 +523,11 @@ export class McpClientService {
           throw new RemoteToolNotFoundError(appId, toolName);
         }
 
-        // Call the tool with timeout
-        const toolCallPromise = withRemoteRequestHeaders(callerHeaders, () =>
-          connection.client.callTool({ name: toolName, arguments: args }),
+        const result = await this.withinTimeout(appId, toolName, () =>
+          withRemoteRequestHeaders(callerHeaders, () =>
+            connection.client.callTool({ name: toolName, arguments: args }),
+          ),
         );
-
-        let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timeoutTimer = setTimeout(() => reject(new RemoteTimeoutError(appId, toolName, timeout)), timeout);
-        });
-
-        const result = await Promise.race([toolCallPromise, timeoutPromise]).finally(() => clearTimeout(timeoutTimer));
 
         // Update heartbeat
         connection.lastHeartbeat = new Date();
@@ -603,7 +596,9 @@ export class McpClientService {
 
     try {
       const callerHeaders = await this.callerHeaders(appId, authContext);
-      const result = await withRemoteRequestHeaders(callerHeaders, () => connection.client.readResource({ uri }));
+      const result = await this.withinTimeout(appId, uri, () =>
+        withRemoteRequestHeaders(callerHeaders, () => connection.client.readResource({ uri })),
+      );
 
       // Update heartbeat
       connection.lastHeartbeat = new Date();
@@ -613,6 +608,7 @@ export class McpClientService {
 
       return result;
     } catch (error) {
+      if (error instanceof RemoteTimeoutError) throw error;
       // Check if it's a not found error
       const errorMessage = (error as Error).message?.toLowerCase() || '';
       if (errorMessage.includes('not found') || errorMessage.includes('404')) {
@@ -645,8 +641,10 @@ export class McpClientService {
       }
 
       const callerHeaders = await this.callerHeaders(appId, authContext);
-      const result = await withRemoteRequestHeaders(callerHeaders, () =>
-        connection.client.getPrompt({ name: promptName, arguments: args }),
+      const result = await this.withinTimeout(appId, promptName, () =>
+        withRemoteRequestHeaders(callerHeaders, () =>
+          connection.client.getPrompt({ name: promptName, arguments: args }),
+        ),
       );
 
       // Update heartbeat
@@ -657,7 +655,7 @@ export class McpClientService {
 
       return result;
     } catch (error) {
-      if (error instanceof RemotePromptNotFoundError) {
+      if (error instanceof RemotePromptNotFoundError || error instanceof RemoteTimeoutError) {
         throw error;
       }
       throw this.authFailureOf(appId, error) ?? new RemotePromptGetError(appId, promptName, error as Error);
@@ -728,9 +726,10 @@ export class McpClientService {
           throw new RemoteAuthError(appId, `Auth mapping failed: ${(error as Error).message}`);
         }
 
-      case 'oauth':
-        // Remote server handles OAuth - no headers needed from gateway
-        return {};
+      case 'oauth': {
+        const oauth = this.oauthSources.get(appId);
+        return oauth ? { Authorization: await oauth.authorization() } : {};
+      }
 
       default:
         return {};
@@ -818,6 +817,56 @@ export class McpClientService {
     };
   }
 
+  /** Client credentials for a remote with `remoteAuth: { mode: 'oauth', clientId, clientSecret }`. */
+  private setUpOAuth(request: McpConnectRequest): void {
+    const { appId, auth } = request;
+    if (auth?.mode !== 'oauth') return;
+    if (auth.clientId === undefined || auth.clientSecret === undefined) {
+      this.logger.warn(`remoteAuth oauth for ${appId} has no clientId and clientSecret, so no credentials are sent`);
+      return;
+    }
+    if (this.oauthSources.has(appId)) return;
+    const { clientId, clientSecret, scope, tokenUrl } = auth;
+    this.oauthSources.set(
+      appId,
+      new RemoteOAuthTokenSource(appId, request.url, { clientId, clientSecret, scope, tokenUrl }),
+    );
+  }
+
+  /** The `fetch` a transport to the remote sends through, with the connection's OAuth token when it has one. */
+  private remoteFetchOf(request: McpConnectRequest, headers: Record<string, string> | undefined): typeof fetch {
+    return createRemoteRequestFetch(headers !== undefined, this.oauthSources.get(request.appId));
+  }
+
+  /** Milliseconds one request to `appId` may take: its `transportOptions.timeout`, else 30 seconds. */
+  private timeoutOf(appId: string): number {
+    return (this.configs.get(appId)?.transportOptions as McpHttpTransportOptions | undefined)?.timeout ?? 30000;
+  }
+
+  /** `run`, failing with `RemoteTimeoutError` naming `operation` once it takes longer than the app's timeout. */
+  private async withinTimeout<T>(appId: string, operation: string, run: () => Promise<T>): Promise<T> {
+    const timeout = this.timeoutOf(appId);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new RemoteTimeoutError(appId, operation, timeout)), timeout);
+    });
+    return Promise.race([run(), timedOut]).finally(() => clearTimeout(timer));
+  }
+
+  /** Connects `client` over `transport` within the app's timeout; a connection that times out is closed. */
+  private async connectWithin(
+    appId: string,
+    client: McpClientConnection['client'],
+    transport: Transport,
+  ): Promise<void> {
+    try {
+      await this.withinTimeout(appId, 'connect', () => client.connect(transport));
+    } catch (error) {
+      if (error instanceof RemoteTimeoutError) await transport.close().catch(() => undefined);
+      throw error;
+    }
+  }
+
   private getConnection(appId: string): McpClientConnection {
     const connection = this.connections.get(appId);
     if (!connection || connection.status !== 'connected') {
@@ -856,8 +905,11 @@ export class McpClientService {
       }
       return undefined;
     }
-    const remoteFetch = createRemoteRequestFetch(headers !== undefined);
-    const negotiated = await negotiateRemoteProtocol(request.url, httpOptions?.protocolVersion, headers, remoteFetch);
+    const remoteFetch = this.remoteFetchOf(request, headers);
+    const requestTimeoutMs = this.timeoutOf(request.appId);
+    const negotiated = await negotiateRemoteProtocol(request.url, httpOptions?.protocolVersion, headers, remoteFetch, {
+      requestTimeoutMs,
+    });
     if (negotiated !== '2026-07-28') return undefined;
 
     const adapter = new McpStatelessClientAdapter({
@@ -865,6 +917,7 @@ export class McpClientService {
       clientInfo: { name: this.options.clientName, version: this.options.clientVersion },
       headers,
       fetchImpl: remoteFetch,
+      requestTimeoutMs,
     });
     await adapter.connect();
 
@@ -889,7 +942,7 @@ export class McpClientService {
     const { transportType, url } = request;
     const options = {
       requestInit: headers ? { headers } : undefined,
-      fetch: createRemoteRequestFetch(headers !== undefined),
+      fetch: this.remoteFetchOf(request, headers),
     };
 
     switch (transportType) {
@@ -921,7 +974,7 @@ export class McpClientService {
   ): Transport {
     return new SSEClientTransport(new URL(request.url), {
       requestInit: headers ? { headers } : undefined,
-      fetch: createRemoteRequestFetch(headers !== undefined),
+      fetch: this.remoteFetchOf(request, headers),
     });
   }
 
@@ -937,10 +990,10 @@ export class McpClientService {
   // Each list follows `nextCursor` to the end: a FrontMCP remote pages its lists
   // (40 per page by default), and proxying only the first page silently dropped
   // everything after it.
-  private async listToolsInternal(connection: McpClientConnection): Promise<Tool[]> {
+  private async listToolsInternal(connection: McpClientConnection, request: { timeout: number }): Promise<Tool[]> {
     try {
       return await listAllPages('tools/list', async (cursor) => {
-        const result = await connection.client.listTools(cursor ? { cursor } : undefined);
+        const result = await connection.client.listTools(cursor ? { cursor } : undefined, request);
         return { items: result.tools, nextCursor: result.nextCursor };
       });
     } catch (error) {
@@ -949,10 +1002,13 @@ export class McpClientService {
     }
   }
 
-  private async listResourcesInternal(connection: McpClientConnection): Promise<Resource[]> {
+  private async listResourcesInternal(
+    connection: McpClientConnection,
+    request: { timeout: number },
+  ): Promise<Resource[]> {
     try {
       return await listAllPages('resources/list', async (cursor) => {
-        const result = await connection.client.listResources(cursor ? { cursor } : undefined);
+        const result = await connection.client.listResources(cursor ? { cursor } : undefined, request);
         return { items: result.resources, nextCursor: result.nextCursor };
       });
     } catch (error) {
@@ -961,10 +1017,13 @@ export class McpClientService {
     }
   }
 
-  private async listResourceTemplatesInternal(connection: McpClientConnection): Promise<ResourceTemplate[]> {
+  private async listResourceTemplatesInternal(
+    connection: McpClientConnection,
+    request: { timeout: number },
+  ): Promise<ResourceTemplate[]> {
     try {
       return await listAllPages('resources/templates/list', async (cursor) => {
-        const result = await connection.client.listResourceTemplates(cursor ? { cursor } : undefined);
+        const result = await connection.client.listResourceTemplates(cursor ? { cursor } : undefined, request);
         return { items: result.resourceTemplates, nextCursor: result.nextCursor };
       });
     } catch (error) {
@@ -973,10 +1032,10 @@ export class McpClientService {
     }
   }
 
-  private async listPromptsInternal(connection: McpClientConnection): Promise<Prompt[]> {
+  private async listPromptsInternal(connection: McpClientConnection, request: { timeout: number }): Promise<Prompt[]> {
     try {
       return await listAllPages('prompts/list', async (cursor) => {
-        const result = await connection.client.listPrompts(cursor ? { cursor } : undefined);
+        const result = await connection.client.listPrompts(cursor ? { cursor } : undefined, request);
         return { items: result.prompts, nextCursor: result.nextCursor };
       });
     } catch (error) {
@@ -1008,35 +1067,22 @@ export class McpClientService {
     current: McpRemoteCapabilities,
   ): void {
     const changes: McpCapabilityChangeEvent[] = [];
-
-    if (previous.tools.length !== current.tools.length) {
-      changes.push({
-        appId,
-        kind: 'tools',
-        previousCount: previous.tools.length,
-        newCount: current.tools.length,
-        timestamp: new Date(),
-      });
-    }
-
-    if (previous.resources.length !== current.resources.length) {
-      changes.push({
-        appId,
+    const changed = (before: readonly unknown[], after: readonly unknown[]) =>
+      JSON.stringify(before) !== JSON.stringify(after);
+    const kinds = [
+      { kind: 'tools', before: previous.tools, after: current.tools },
+      {
         kind: 'resources',
-        previousCount: previous.resources.length,
-        newCount: current.resources.length,
-        timestamp: new Date(),
-      });
-    }
+        before: [...previous.resources, ...previous.resourceTemplates],
+        after: [...current.resources, ...current.resourceTemplates],
+      },
+      { kind: 'prompts', before: previous.prompts, after: current.prompts },
+    ] as const;
 
-    if (previous.prompts.length !== current.prompts.length) {
-      changes.push({
-        appId,
-        kind: 'prompts',
-        previousCount: previous.prompts.length,
-        newCount: current.prompts.length,
-        timestamp: new Date(),
-      });
+    for (const { kind, before, after } of kinds) {
+      if (changed(before, after)) {
+        changes.push({ appId, kind, previousCount: before.length, newCount: after.length, timestamp: new Date() });
+      }
     }
 
     // Emit events
@@ -1051,8 +1097,9 @@ export class McpClientService {
     }
   }
 
-  private startCapabilityRefresh(appId: string): void {
-    if (this.options.capabilityRefreshInterval <= 0) {
+  private startCapabilityRefresh(appId: string, request: McpConnectRequest): void {
+    const interval = request.refreshInterval ?? this.options.capabilityRefreshInterval;
+    if (interval <= 0) {
       return;
     }
 
@@ -1071,7 +1118,7 @@ export class McpClientService {
       } finally {
         this.refreshInProgress.delete(appId);
       }
-    }, this.options.capabilityRefreshInterval);
+    }, interval);
 
     this.refreshTimers.set(appId, timer);
   }

@@ -3,7 +3,9 @@ import type { JSONWebKeySet } from 'jose';
 import type { AuthLogger } from '../common/auth-logger.interface';
 
 export type JwksServiceOptions = {
+  /** @deprecated Only for `getOrchestratorJwks()`/`getOrchestratorSigningKey()`, which FrontMCP never signs with. */
   orchestratorAlg?: 'RS256' | 'ES256';
+  /** @deprecated Only for `getOrchestratorJwks()`/`getOrchestratorSigningKey()`, which FrontMCP never signs with. */
   rotateDays?: number;
   /** TTL (ms) for cached provider JWKS before attempting refresh. Default: 6h */
   providerJwksTtlMs?: number;

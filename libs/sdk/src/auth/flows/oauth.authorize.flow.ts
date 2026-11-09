@@ -24,16 +24,18 @@ import {
   escapeHtml,
   grantScopes,
   isLoopbackRedirectUri,
+  openIncrementalAuthTicketProfile,
   renderLocalLoginPage,
+  sealPendingLogin,
   startNextProvider,
   verifyIncrementalAuthTicket,
   type AppAuthCard,
   type AuthProviderDetectionResult,
   type ConsentStateRecord,
-  type DetectedAuthProvider,
   type FederatedLoginStateRecord,
   type IncrementalAuthTicketPayload,
   type LoginConfig,
+  type PendingAuthorizationRecord,
   type ProviderCard,
   type ProviderPkce,
 } from '@frontmcp/auth';
@@ -62,6 +64,7 @@ import {
   type HttpCookie,
   type ServerRequest,
 } from '../../common';
+import { oauthBasePath } from '../../flows/flow.http-path';
 import {
   authUiExtraPath,
   buildAuthUiPage,
@@ -69,12 +72,22 @@ import {
   buildIncrementalState,
   buildLoginState,
   type AuthFlowState,
-  type AuthProvider,
   type AuthUiRegistry,
 } from '../auth-ui';
+import { initialAuthorizedApps } from '../authorized-apps.utils';
 import { CimdDisabledError, CimdService, clientMetadataDocumentSchema } from '../cimd';
 import { projectConsentTools } from '../consent-tools.helper';
+import {
+  getConfiguredProviders,
+  pickerProviders,
+  providerAuthorizationEndpoints,
+  renderFederatedStep,
+  showsProvidersStepByStep,
+  startFederatedSteps,
+  toAuthProvider,
+} from '../federated-steps';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
+import { allowsSkippingApps, requiredProviderIds } from '../required-providers.utils';
 import { createRequestSigninBinding, signinBindingCookie, signinCookiePath, withCookie } from './signin-binding.utils';
 
 /**
@@ -241,21 +254,6 @@ declare global {
 const name = 'oauth:authorize' as const;
 const Stage = StageHookOf(name);
 
-/**
- * Top-level `auth.providers` declared for local-mode multi-provider
- * orchestration. Only `local` mode carries `providers`; everything else
- * returns an empty list so the app-level federation path is unchanged.
- */
-function getConfiguredProviders(auth: unknown): Array<{ id: string; scopes?: string[] }> {
-  const providers = (auth as { providers?: unknown } | undefined)?.providers;
-  if (!Array.isArray(providers)) {
-    return [];
-  }
-  return providers.filter(
-    (p): p is { id: string; scopes?: string[] } => !!p && typeof (p as { id?: unknown }).id === 'string',
-  );
-}
-
 /** Provider ids declared via top-level `auth.providers` (local-mode federation). */
 function getConfiguredProviderIds(auth: unknown): string[] {
   return getConfiguredProviders(auth).map((p) => p.id);
@@ -294,6 +292,8 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   private signinCookie: HttpCookie | undefined;
   /** Its hash, kept on the pending authorization and on remote mode's federated session. */
   private signinBindingHash: string | undefined;
+  /** The pending authorization, when the picker shows one provider per page (its first step is rendered). */
+  private federatedStepRecord: PendingAuthorizationRecord | undefined;
 
   /**
    * Respond, giving the browser the sign-in binding cookie once a pending
@@ -530,7 +530,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
           .join(' ')}`,
       );
     }
-    const validatedRequest: OAuthAuthorizeRequest = {
+    let validatedRequest: OAuthAuthorizeRequest = {
       ...result.data,
       scope: grantedScopes.length > 0 ? grantedScopes.join(' ') : undefined,
     };
@@ -548,6 +548,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     const registry = (this.scope.auth as Partial<LocalPrimaryAuth> | undefined)?.dcrClientRegistry;
     const redirectAllowlisted = !!registry?.hasRedirectAllowlist() && registry.isRedirectUriAllowed(redirect_uri);
     let redirectVerified = redirectAllowlisted;
+    let declaredClientScope: string | undefined;
 
     // Local-AS DCR allowlist enforcement (#462). When `auth.dcr` declares a
     // redirect_uri allowlist, a redirect_uri outside it is refused BEFORE a
@@ -580,6 +581,8 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
           // Validate redirect_uri against CIMD document
           cimdService.validateRedirectUri(redirect_uri, resolution.metadata);
           redirectVerified = true;
+          cimdService.assertSupportedClient(resolution.metadata);
+          declaredClientScope = resolution.metadata.scope;
 
           // Store CIMD metadata for later use (e.g., consent page client_name)
           this.state.set('isCimdClient', true);
@@ -617,6 +620,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         return;
       }
       redirectVerified = true;
+      declaredClientScope = registered.scope;
     }
 
     // `dcr.allowedClientIds` (#462): a client the operator didn't list may not
@@ -652,6 +656,17 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         rawState,
       );
       return;
+    }
+
+    // A client that declared its scope (RFC 7591) is granted only scopes in it
+    if (declaredClientScope !== undefined) {
+      const clientScopes = declaredClientScope.split(' ');
+      const clientGrantedScopes = grantedScopes.filter((scope) => clientScopes.includes(scope));
+      validatedRequest = {
+        ...validatedRequest,
+        scope: clientGrantedScopes.length > 0 ? clientGrantedScopes.join(' ') : undefined,
+      };
+      this.state.set('validatedRequest', validatedRequest);
     }
 
     // Validate resource parameter against server's canonical URI (RFC 8707).
@@ -849,6 +864,27 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       consent,
     });
 
+    // The token the grant expansion mints keeps the email and name of the subject the ticket proved.
+    const ticketProfile =
+      effectiveIncremental && incrementalTicket && localAuth.signingSecret
+        ? openIncrementalAuthTicketProfile(incrementalTicket, localAuth.signingSecret)
+        : undefined;
+    if (ticketProfile) {
+      pendingRecord.verifiedLogin = sealPendingLogin(localAuth.secret, pendingRecord.id, ticketProfile);
+    }
+
+    // The picker asks one provider per page: the sign-in starts on the first step.
+    if (
+      federatedLogin &&
+      !effectiveIncremental &&
+      metadata.auth &&
+      !isRemoteMode(metadata.auth) &&
+      showsProvidersStepByStep(this.scope.auth?.options)
+    ) {
+      startFederatedSteps(pendingRecord, this.scope);
+      this.federatedStepRecord = pendingRecord;
+    }
+
     // Tie the sign-in to this browser (RFC 9700 §4.7): the callbacks that
     // resume it require the cookie every response from here on sets.
     const binding = createRequestSigninBinding(this.rawInput.request, pendingRecord.id);
@@ -938,52 +974,15 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
     // For federated login (multiple providers), render provider selection page
     if (requiresFederatedLogin) {
-      const apps = this.scope.apps.getApps();
-      const providers: DetectedAuthProvider[] = [];
-      const { metadata } = this.scope;
-
-      // Add top-level configured providers (local-mode multi-provider
-      // orchestration). These are real upstream providers the user links.
-      const configuredProviders = getConfiguredProviders(metadata.auth);
-      const hasConfiguredProviders = configuredProviders.length > 0;
-      for (const p of configuredProviders) {
-        providers.push({
-          id: p.id,
-          mode: 'local',
-          appIds: [p.id],
-          scopes: p.scopes ?? [],
-          isParentProvider: false,
-        });
+      if (this.federatedStepRecord) {
+        this.respond(renderFederatedStep(this.scope, this.federatedStepRecord, { clientName: clientDisplayName }));
+        return;
       }
 
-      // Add parent provider only on the legacy app-level federation path
-      // (no top-level configured providers).
-      if (!hasConfiguredProviders && metadata.auth && isOrchestratedMode(metadata.auth)) {
-        providers.push({
-          id: '__parent__',
-          mode: metadata.auth.mode,
-          appIds: ['__parent__'],
-          scopes: [],
-          isParentProvider: true,
-        });
-      }
-
-      // Add app-level providers
-      for (const app of apps) {
-        if (app.metadata.auth) {
-          const appId = app.metadata.id || app.metadata.name;
-          if (!providers.some((p) => p.id === appId)) {
-            providers.push({
-              id: appId,
-              providerUrl: app.metadata.auth.mode === 'transparent' ? app.metadata.auth.provider : undefined,
-              mode: app.metadata.auth.mode,
-              appIds: [appId],
-              scopes: [],
-              isParentProvider: false,
-            });
-          }
-        }
-      }
+      // The top-level configured providers (local-mode multi-provider orchestration), else the
+      // parent provider on the legacy app-level federation path, then the app-level providers.
+      const providers = pickerProviders(this.scope);
+      const hasConfiguredProviders = getConfiguredProviders(metadata.auth).length > 0;
 
       const detection: AuthProviderDetectionResult = {
         providers: new Map(providers.map((p) => [p.id, p])),
@@ -1004,19 +1003,10 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
             clientId: validatedRequest.client_id,
             clientName: clientDisplayName,
             redirectUri: validatedRequest.redirect_uri,
-            providers: [...detection.providers.values()].map(
-              (p): AuthProvider => ({
-                id: p.id,
-                name: p.id,
-                url: p.providerUrl,
-                mode: p.mode,
-                appIds: p.appIds.filter((id) => id !== '__parent__'),
-                primary: p.isParentProvider,
-              }),
-            ),
+            providers: [...detection.providers.values()].map(toAuthProvider),
           }),
         // The selection is answered with a redirect to the first chosen provider.
-        [validatedRequest.redirect_uri, ...this.providerAuthorizationEndpoints(detection.providers.keys())],
+        [validatedRequest.redirect_uri, ...providerAuthorizationEndpoints(this.scope, detection.providers.keys())],
       );
       if (customFederated) return;
 
@@ -1110,7 +1100,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
     const state = buildState({
       pendingAuthId,
-      submitUrl: '/oauth/callback',
+      submitUrl: `${oauthBasePath(this.scope)}/oauth/callback`,
       extraUrl: authUiExtraPath(this.scope.fullPath),
       csrfToken,
       addedItems: authUi.getAddedItems(pendingAuthId),
@@ -1121,18 +1111,6 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
     this.respond(httpRespond.html(page.html, 200, page.headers));
     return true;
-  }
-
-  /** The authorization endpoints of the upstream providers among `providerIds` (others have none). */
-  private providerAuthorizationEndpoints(providerIds: Iterable<string>): string[] {
-    const localAuth = this.scope.auth as Partial<LocalPrimaryAuth> | undefined;
-    if (typeof localAuth?.getProviderConfig !== 'function') return [];
-    const endpoints: string[] = [];
-    for (const id of providerIds) {
-      const endpoint = localAuth.getProviderConfig(id)?.authorizationEndpoint;
-      if (endpoint) endpoints.push(endpoint);
-    }
-    return endpoints;
   }
 
   /**
@@ -1160,7 +1138,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     const localAuth = auth as LocalPrimaryAuth;
     const providerId = localAuth.remoteProviderId;
 
-    // No upstream provider registered (e.g. missing clientId / DCR not wired).
+    // No upstream provider registered (no clientId and no providerConfig.dcrEnabled).
     if (!providerId || !localAuth.getProviderConfig(providerId)) {
       this.logger.error('Remote mode: no upstream provider configured for federation');
       // Drop the pending authorization stored just before this call so it does
@@ -1185,6 +1163,11 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       frontmcpPkce: { challenge: validatedRequest.code_challenge, method: 'S256' },
       providerIds: [providerId],
       signinBinding: this.signinBindingHash,
+      authorizedAppIds: initialAuthorizedApps(
+        this.scope.auth?.options,
+        this.scope.apps.getApps(),
+        this.state.priorAuthorizedAppIds,
+      ),
     });
 
     // Fresh PKCE + state for the upstream authorization-code exchange.
@@ -1321,7 +1304,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     logoUri?: string;
   }): string {
     const { pendingAuthId, clientId, clientName, scope, logoUri } = params;
-    const callbackPath = '/oauth/callback';
+    const callbackPath = `${oauthBasePath(this.scope)}/oauth/callback`;
 
     // Read the optional login customization from the local auth options.
     // Only local mode carries `login`; any other mode leaves it undefined,
@@ -1355,7 +1338,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     redirectUri: string;
   }): string {
     const { pendingAuthId, appId, appName, appDescription, toolId } = params;
-    const callbackPath = '/oauth/callback';
+    const callbackPath = `${oauthBasePath(this.scope)}/oauth/callback`;
 
     const app: AppAuthCard = {
       appId,
@@ -1381,7 +1364,9 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     redirectUri: string;
   }): string {
     const { pendingAuthId, detection, clientId } = params;
-    const callbackPath = '/oauth/callback';
+    const callbackPath = `${oauthBasePath(this.scope)}/oauth/callback`;
+    const authOptions = this.scope.auth?.options;
+    const required = requiredProviderIds(authOptions, this.scope.apps.getApps());
 
     // Convert detection providers to ProviderCard format
     const providers: ProviderCard[] = [...detection.providers.values()].map((provider) => ({
@@ -1391,6 +1376,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       mode: provider.mode,
       appIds: provider.appIds.filter((id) => id !== '__parent__'),
       isPrimary: provider.isParentProvider,
+      required: required.includes(provider.id),
     }));
 
     return buildFederatedLoginPage({
@@ -1398,6 +1384,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       clientName: clientId,
       pendingAuthId,
       callbackPath,
+      allowSkip: allowsSkippingApps(authOptions),
     });
   }
 

@@ -3,6 +3,7 @@
  */
 import { App } from '@frontmcp/sdk';
 
+import { FlowAccessPlugin } from '../flow-access/flow-access.plugin';
 import { WhoamiTool } from './tools/whoami.tool';
 
 @App({
@@ -10,5 +11,6 @@ import { WhoamiTool } from './tools/whoami.tool';
   name: 'Profile',
   description: 'Reads the upstream IdP token via orchestration in remote-proxy mode',
   tools: [WhoamiTool],
+  plugins: [FlowAccessPlugin],
 })
 export class ProfileApp {}

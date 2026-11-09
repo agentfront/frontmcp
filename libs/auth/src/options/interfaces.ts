@@ -45,14 +45,17 @@ export interface PublicAccessConfig {
  */
 export interface LocalSigningConfig {
   /**
-   * Private key for signing tokens
-   * @default auto-generated
+   * Private key to sign tokens with, in place of `JWT_SECRET` (HS256).
+   * An RSA, EC or Ed25519 private JWK signs with its `alg` (default by key type) and is published at
+   * `/.well-known/jwks.json`; a `Uint8Array` or `oct` JWK is an HMAC key and is never published.
+   * @default HS256 with `JWT_SECRET`
    */
   signKey?: JWK | Uint8Array;
 
   /**
-   * JWKS for token verification
-   * @default auto-generated
+   * Public keys published at `/.well-known/jwks.json` beside the `signKey`'s, and accepted on verification
+   * (e.g. a retired key's, while its tokens expire). Needs an RSA, EC or Ed25519 `signKey`.
+   * @default the `signKey`'s public key only
    */
   jwks?: JSONWebKeySet;
 
@@ -115,7 +118,11 @@ export interface ProviderConfig {
   verifyIssuer?: boolean;
 
   /**
-   * Enable Dynamic Client Registration (DCR)
+   * Remote mode: without a `clientId`, register this server with the provider by
+   * dynamic client registration (RFC 7591) at startup, and sign in with that client.
+   * With a persistent `tokenStorage` the client is kept there (its secret encrypted
+   * with `JWT_SECRET`) and reused across restarts and instances. Startup fails when
+   * the registration fails. Ignored when `clientId` is set, and in transparent mode.
    * @default false
    */
   dcrEnabled?: boolean;
@@ -126,7 +133,10 @@ export interface ProviderConfig {
   /** Token endpoint override */
   tokenEndpoint?: string;
 
-  /** Registration endpoint override (for DCR) */
+  /**
+   * Registration endpoint for `dcrEnabled`.
+   * @default the `registration_endpoint` of the provider's RFC 8414 or OpenID metadata
+   */
   registrationEndpoint?: string;
 
   /** User info endpoint override */
@@ -171,7 +181,11 @@ export interface RemoteProviderConfig {
   scopes?: string[];
 
   /**
-   * Enable Dynamic Client Registration (DCR)
+   * Remote mode: without a `clientId`, register this server with the provider by
+   * dynamic client registration (RFC 7591) at startup, and sign in with that client.
+   * With a persistent `tokenStorage` the client is kept there (its secret encrypted
+   * with `JWT_SECRET`) and reused across restarts and instances. Startup fails when
+   * the registration fails. Ignored when `clientId` is set, and in transparent mode.
    * @default false
    */
   dcrEnabled?: boolean;
@@ -182,7 +196,10 @@ export interface RemoteProviderConfig {
   /** Token endpoint override */
   tokenEndpoint?: string;
 
-  /** Registration endpoint override (for DCR) */
+  /**
+   * Registration endpoint for `dcrEnabled`.
+   * @default the `registration_endpoint` of the provider's RFC 8414 or OpenID metadata
+   */
   registrationEndpoint?: string;
 
   /** User info endpoint override */
@@ -435,8 +452,8 @@ export interface LocalDcrClient {
    */
   tokenEndpointAuthMethod?: 'none' | 'client_secret_basic' | 'client_secret_post';
   /**
-   * Allowed grant types.
-   * @default ['authorization_code']
+   * Allowed grant types, enforced at the token endpoint: without `refresh_token`, the client gets no refresh token.
+   * @default ['authorization_code', 'refresh_token']
    */
   grantTypes?: Array<'authorization_code' | 'refresh_token'>;
   /**
@@ -444,7 +461,7 @@ export interface LocalDcrClient {
    * @default ['code']
    */
   responseTypes?: Array<'code'>;
-  /** Optional space-delimited default scope string. */
+  /** Space-delimited scopes this client may be granted; a request for others is narrowed to these. */
   scope?: string;
 }
 
@@ -515,13 +532,23 @@ export interface IncrementalAuthConfig {
   skippedAppBehavior?: SkippedAppBehavior;
 
   /**
-   * Allow users to skip app authorization during initial auth flow
+   * Allow users to skip app authorization during initial auth flow. With
+   * `false`, a sign-in through the provider picker must link the provider of
+   * every app with its own `auth`: the picker shows them checked and required,
+   * and the callbacks refuse a sign-in that leaves one out or declines it.
    * @default true
    */
   allowSkip?: boolean;
 
   /**
-   * Show all apps in a single authorization page (vs step-by-step)
+   * Show every provider on one picker page (`true`), or one per page (`false`):
+   * the sign-in then walks the picker's providers in order, and each step
+   * links or skips one of them (with Back to change an answer). Each step is
+   * checked server-side: a CSRF token, and `allowSkip` and
+   * `federatedAuth.requiredProviders` refuse skipping a required provider.
+   * The last step carries the sign-in fields, and finishes the sign-in as the
+   * one-page picker does. A custom `@AuthUi({ slot: 'federated' })` page gets
+   * the step in `extras.step` (see `FederatedStep`).
    * @default true
    */
   showAllAppsAtOnce?: boolean;
@@ -558,7 +585,10 @@ export interface LoginFieldConfig {
  *
  * - `per-session` (default): every login yields a fresh subject (stateless).
  * - `per-account`: the value of {@link LoginSubjectConfig.fromField} is hashed
- *   into a stable subject so the same account maps to the same `sub`.
+ *   into a stable subject so the same account maps to the same `sub`. A login
+ *   without that value gets a fresh subject.
+ *
+ * Applies when {@link LocalAuthOptionsInterface.authenticate} returns no `sub`.
  */
 export interface LoginSubjectConfig {
   /** Login field whose submitted value seeds a stable subject. */
@@ -698,7 +728,10 @@ export interface AuthenticateCredential {
  */
 export interface AuthenticateSuccess {
   ok: true;
-  /** Explicit subject. When omitted, the subject is derived from the login subject strategy / anonymousSubject. */
+  /**
+   * Explicit subject. When omitted, the login subject strategy derives it: a fresh subject for each login
+   * (`per-session`, the default), or the hash of the `login.subject.fromField` value (`per-account`).
+   */
   sub?: string;
   /** Custom claims to embed in the minted access token (namespaced to avoid clobbering reserved claims). */
   claims?: Record<string, unknown>;
@@ -828,7 +861,18 @@ export interface PublicAuthOptionsInterface {
   sessionTtl?: number;
   anonymousScopes?: string[];
   publicAccess?: PublicAccessConfig;
+  /**
+   * Public keys published at `/.well-known/jwks.json` beside the `signKey`'s, and accepted on verification
+   * (e.g. a retired key's, while its tokens expire). Needs an RSA, EC or Ed25519 `signKey`.
+   * @default the `signKey`'s public key only
+   */
   jwks?: JSONWebKeySet;
+  /**
+   * Private key to sign tokens with, in place of `JWT_SECRET` (HS256).
+   * An RSA, EC or Ed25519 private JWK signs with its `alg` (default by key type) and is published at
+   * `/.well-known/jwks.json`; a `Uint8Array` or `oct` JWK is an HMAC key and is never published.
+   * @default HS256 with `JWT_SECRET`
+   */
   signKey?: JWK | Uint8Array;
 }
 
@@ -853,6 +897,11 @@ export interface StaticAuthOptionsInterface {
 
 export interface TransparentAuthOptionsInterface {
   mode: 'transparent';
+  /**
+   * The provider's issuer identifier, spelled as its metadata's `issuer`. The protected resource metadata
+   * names it in `authorization_servers` (RFC 9728, RFC 8414 §3.3), and a token's `iss` is checked against it
+   * and `providerConfig.additionalIssuers` unless `providerConfig.verifyIssuer` is `false`.
+   */
   provider: string;
   clientId?: string;
   clientSecret?: string;

@@ -304,6 +304,35 @@ describe('ProviderRegistry', () => {
       expect(ownDispose).not.toHaveBeenCalled();
     });
 
+    describe('a registry whose dependency graph fails to build', () => {
+      const FIRST = Symbol('FIRST');
+      const SECOND = Symbol('SECOND');
+      const dependingOn = (provide: symbol, dependency: symbol) => ({
+        ...createFactoryProvider(provide, () => ({})),
+        inject: () => [dependency] as const,
+      });
+
+      afterEach(() => jest.restoreAllMocks());
+
+      it.each([
+        [
+          'a dependency no registry provides',
+          [createClassProvider(DependentService, { name: 'DependentService' })],
+          /not registered/i,
+        ],
+        ['a dependency cycle', [dependingOn(FIRST, SECOND), dependingOn(SECOND, FIRST)], /circular dependency/i],
+      ])('is not left below its parent: %s', async (_failure, providers, error) => {
+        const parent = new ProviderRegistry([]);
+        await parent.ready;
+        expect(() => new ProviderRegistry(providers, parent)).toThrow(error);
+        const dispose = jest.spyOn(ProviderRegistry.prototype, 'dispose');
+
+        parent.dispose();
+
+        expect(dispose).toHaveBeenCalledTimes(1);
+      });
+    });
+
     it('should throw error if dependency not found in hierarchy', () => {
       const DependentServiceAnnotated = createClassProvider(DependentService, {
         name: 'DependentService',

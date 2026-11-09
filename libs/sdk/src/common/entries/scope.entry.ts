@@ -36,8 +36,10 @@ import type {
   FlowType,
   FrontMcpAuth,
   FrontMcpLogger,
+  JobType,
   PluginRegistryInterface,
   ProviderRegistryInterface,
+  WorkflowType,
 } from '../interfaces';
 import type { FlowName, ScopeMetadata } from '../metadata';
 import type { ScopeRecord } from '../records';
@@ -47,6 +49,16 @@ import { BaseEntry } from './base.entry';
 
 /** The registries of an app loaded after startup. */
 export type LateAppRegistries = Omit<EnforcedMetadataScope, 'hooks'>;
+
+/** The kinds of entry an app may add after startup that the scope serves only once it has one. */
+export type LateEntryKind = 'agents' | 'skills';
+
+/** Jobs and workflows an app loads itself (an ESM app's package), and the provider registry its jobs are built on. */
+export interface AppJobEntries {
+  jobs: readonly JobType[];
+  workflows: readonly WorkflowType[];
+  providers: ProviderRegistryInterface;
+}
 
 export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMetadata> {
   abstract readonly id: string;
@@ -139,8 +151,9 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
   abstract get channelNotifications(): ChannelNotificationService | undefined;
 
   /**
-   * The bus `app-event` channel sources listen on: `this.scope.channelEventBus?.emit('app:error', payload)`.
-   * `undefined` unless `channels.enabled`.
+   * The scope's in-process event bus: `app-event` channel sources and `trigger: 'event'` workflows listen on it.
+   * `this.scope.channelEventBus?.emit('user.signup', payload)`. `undefined` unless `channels.enabled`, or a workflow
+   * with `trigger: 'event'` is registered, at startup or later (an ESM app's new version).
    */
   abstract get channelEventBus(): ChannelEventBus | undefined;
 
@@ -161,6 +174,21 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
    * metadata only a plugin enforces, the hooks' order, and the guard its tools' limits need. Throws what startup would.
    */
   abstract checkLateApp(app: LateAppRegistries): Promise<void>;
+
+  /**
+   * Make the scope serve entries of these kinds that an app adds after startup (an ESM app's new version), as startup
+   * would have, had they been there: the `agents:call-agent` flow for agents; the skill session guard, the skill
+   * methods and the `skill://` resources for skills. A kind the scope serves already is left as it is.
+   */
+  abstract serveLateEntries(kinds: readonly LateEntryKind[]): Promise<void>;
+
+  /**
+   * Serve jobs and workflows an app loads itself (an ESM app's package version), as the ones apps declare are. Before
+   * startup starts the job system they join those, and turn it on as they do. After, they are registered at once,
+   * and the job system starts if nothing turned it on. With `jobs.enabled: false` they are not served. Resolves to a
+   * function that unregisters them.
+   */
+  abstract serveAppJobs(entries: AppJobEntries): Promise<() => void>;
 
   /**
    * Lifecycle callbacks registered by plugins via onServerStarted().

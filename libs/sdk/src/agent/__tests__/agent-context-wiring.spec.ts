@@ -305,8 +305,14 @@ describe('agent context wiring', () => {
     await server.callTool('invoke_overriding', {});
     await server.callTool('invoke_tuned', {});
 
-    expect(seen['overriding:options']).toEqual([{}, {}]);
-    expect(seen['tuned:options']).toEqual([{ temperature: 0.2 }, { temperature: 0.2 }]);
+    expect(seen['overriding:options']).toEqual([
+      { signal: expect.any(AbortSignal) },
+      { signal: expect.any(AbortSignal) },
+    ]);
+    expect(seen['tuned:options']).toEqual([
+      { temperature: 0.2, signal: expect.any(AbortSignal) },
+      { temperature: 0.2, signal: expect.any(AbortSignal) },
+    ]);
   });
 });
 
@@ -554,5 +560,110 @@ describe('agent progress order and failure messages', () => {
 
   it("tells the client a public error's message", async () => {
     expect(await logMessages('invoke_refuser')).toContain('Tool refuse failed: The ticket is locked');
+  });
+});
+
+// ---------------------------------------------------------------- how a run ends
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** What the stopped agent's model and tool did, in order. */
+const stoppedRun: string[] = [];
+
+@Tool({ name: 'file_ticket', inputSchema: {} })
+class FileTicketTool extends ToolContext {
+  async execute() {
+    stoppedRun.push('file_ticket');
+    return { filed: true };
+  }
+}
+
+const slowFilingModel = {
+  completion: async () => {
+    stoppedRun.push('model');
+    await pause(150);
+    return {
+      content: null,
+      finishReason: 'tool_calls' as const,
+      toolCalls: [{ id: 'file-1', name: 'file_ticket', arguments: {} }],
+    };
+  },
+};
+
+@Agent({
+  name: 'clerk',
+  inputSchema: {},
+  llm: { adapter: slowFilingModel },
+  tools: [FileTicketTool],
+  execution: { timeout: 50, enableAutoProgress: true },
+})
+class ClerkAgent extends AgentContext {}
+
+@Agent({
+  name: 'unlucky',
+  inputSchema: {},
+  llm: {
+    adapter: {
+      completion: async () => {
+        throw new Error('upstream 503 from model-gateway.internal');
+      },
+    },
+  },
+  execution: { enableAutoProgress: true },
+})
+class UnluckyAgent extends AgentContext {}
+
+@Agent({
+  name: 'restless',
+  inputSchema: {},
+  llm: { adapter: callingModel('restless', 'list_tickets') },
+  tools: [ListTicketsTool],
+  execution: { maxIterations: 1 },
+})
+class RestlessAgent extends AgentContext {}
+
+@App({ id: 'registry', name: 'Registry', providers: [TicketStore], agents: [ClerkAgent, UnluckyAgent, RestlessAgent] })
+class RegistryApp {}
+
+describe('how an agent run ends', () => {
+  let fetchServer: TestFetchServer;
+
+  beforeAll(async () => {
+    fetchServer = await createTestFetchServer({
+      info: { name: 'agent-run-end', version: '1.0.0' },
+      apps: [RegistryApp],
+    });
+  });
+
+  const call = (name: string) =>
+    rpc20260728(fetchServer.handler, 'tools/call', { name, arguments: {} }, { meta: { progressToken: name } });
+
+  const errorText = (message: Awaited<ReturnType<typeof call>>['message']) =>
+    ((message.result as CallToolResult | undefined)?.content?.[0] as { text?: string } | undefined)?.text;
+
+  it('stops at execution.timeout: AGENT_TIMEOUT, then no tool call and no model request', async () => {
+    stoppedRun.length = 0;
+    const { message, notifications } = await call('invoke_clerk');
+    await pause(250);
+
+    expect(errorText(message)).toBe('Agent "clerk" execution timed out after 50ms');
+    expect(stoppedRun).toEqual(['model']);
+    expect(notifications.map((notification) => notification.params?.['message']).pop()).toBe(
+      'Agent failed: Agent "clerk" execution timed out after 50ms',
+    );
+  });
+
+  it('sends the last progress update when the model request fails, without its internal text', async () => {
+    const { notifications } = await call('invoke_unlucky');
+
+    const last = notifications.map((notification) => String(notification.params?.['message'])).pop();
+    expect(last).toMatch(/^Agent failed: Internal FrontMCP error/);
+    expect(last).not.toContain('model-gateway');
+  });
+
+  it('fails with AgentLoopExceededError when the model still calls tools after maxIterations', async () => {
+    const { message } = await call('invoke_restless');
+
+    expect(errorText(message)).toBe('Agent "restless" exceeded maximum iterations (1)');
   });
 });

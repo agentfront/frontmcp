@@ -186,13 +186,13 @@ describe('CodeCall vm.allowLoops', () => {
 });
 
 describe('CodeCall console in scripts', () => {
-  const server = useCodeCallServer({ mode: 'codecall_only', vm: { allowConsole: true } });
+  const server = useCodeCallServer({ mode: 'codecall_only' });
 
-  it('refuses console with a message that names mcpLog', async () => {
+  it('refuses console with a message that names mcpLog and vm.allowConsole', async () => {
     const outcome = await runScript(server(), 'console.log("hi");\nreturn 1;');
 
     expect(outcome.status).toBe('illegal_access');
-    expect(JSON.stringify(outcome.error)).toContain('use mcpLog');
+    expect(JSON.stringify(outcome.error)).toContain('unless vm.allowConsole is true; use mcpLog');
   });
 
   it('reads a field named console from a tool result', async () => {

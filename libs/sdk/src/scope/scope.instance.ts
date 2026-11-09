@@ -19,6 +19,7 @@ import {
   FrontMcpServer,
   ProviderScope,
   ScopeEntry,
+  type AppJobEntries,
   type EntryOwnerRef,
   type FlowInputOf,
   type FlowName,
@@ -26,6 +27,7 @@ import {
   type FlowType,
   type FrontMcpAuth,
   type LateAppRegistries,
+  type LateEntryKind,
   type PublicAuthOptions,
   type ScopeRecord,
   type ServerRequest,
@@ -46,7 +48,12 @@ import { FrontMcpContextProvider, FrontMcpContextStorage } from '../context';
 import { proxyTrustOf } from '../context/metadata.utils';
 import type { ElicitationStore } from '../elicitation';
 import type { PersistentQuestions } from '../elicitation/questions/question-scope.helper';
-import { AuthConfigurationError, FlowExitedWithoutOutputError } from '../errors';
+import {
+  AuthConfigurationError,
+  FlowExitedWithoutOutputError,
+  InternalMcpError,
+  InvalidToolUiConfigError,
+} from '../errors';
 import { PluginConfiguredTwiceError, UnenforcedMetadataError } from '../errors/plugin.errors';
 import FlowRegistry from '../flows/flow.registry';
 import { assertAuthoritiesRules } from '../front-mcp/authorities-rules.check';
@@ -58,7 +65,7 @@ import { checkHookOrder, hookRunsOf } from '../hooks/hook-order';
 import HookRegistry from '../hooks/hook.registry';
 import { normalizeHooksFromCls, serverProviderHooks } from '../hooks/hooks.utils';
 import { type JobExecutionManager } from '../job/execution/job-execution.manager';
-import type { JobsConfig } from '../job/job-scope.helper';
+import type { JobsConfig, WorkflowEventListening } from '../job/job-scope.helper';
 import type JobRegistry from '../job/job.registry';
 import { normalizeJob } from '../job/job.utils';
 import { type JobDefinitionStore } from '../job/store/job-definition.interface';
@@ -76,7 +83,11 @@ import ResourceRegistry from '../resource/resource.registry';
 import type { HttpRouteRegistrar, RegisteredHttpRoute } from '../server/custom-routes.helper';
 import { SkillValidationError } from '../skill/errors/skill-validation.error';
 import type { SkillSessionManager } from '../skill/session';
-import { pluginsRegisterDynamicSkills, registerSkillCapabilities } from '../skill/skill-scope.helper';
+import {
+  pluginsRegisterDynamicSkills,
+  registerSkillCapabilities,
+  serveSkillMethods,
+} from '../skill/skill-scope.helper';
 import SkillRegistry from '../skill/skill.registry';
 import { LiveSurface } from '../surface/live-surface';
 import type { InProcessTaskRunner, TaskRegistry, TaskStore } from '../task';
@@ -103,6 +114,20 @@ import { reportStartup } from './startup-report.helper';
  * is run directly for the MCP entry path, so excluding it avoids double-handling.
  */
 const SCOPE_NON_DISPATCHABLE_FLOWS: ReadonlySet<string> = new Set(['http:request']);
+
+/** `start`, which `forget` drops when it fails, so the next caller starts it again. */
+function keptUntilFailure(start: Promise<void>, forget: () => void): Promise<void> {
+  return start.catch((error: unknown) => {
+    forget();
+    throw error;
+  });
+}
+
+/** Jobs and workflows an app loaded itself, and how to unregister them once they are registered. */
+interface ServedAppJobs {
+  entries: AppJobEntries;
+  unregister?: () => void;
+}
 
 export class Scope extends ScopeEntry {
   readonly id: string;
@@ -169,6 +194,18 @@ export class Scope extends ScopeEntry {
 
   /** Optional skill session manager for tool authorization enforcement */
   private _skillSession?: SkillSessionManager;
+  /** Set once the `agents:call-agent` flow is registered, or being registered. */
+  private agentCallsServed?: Promise<void>;
+  /** Set once the scope serves skills: from startup, or since an app added the first one. */
+  private skillsServed?: Promise<void>;
+  /** The jobs and workflows apps loaded themselves before startup decided whether the job system runs. */
+  private readonly pendingAppJobs: ServedAppJobs[] = [];
+  /** Whether startup has decided whether the job system runs. */
+  private jobsDecided = false;
+  /** The top-level SQLite startup resolved, for a job system an app's jobs start later. */
+  private topLevelSqlite?: SqliteOptionsInput & { path: string };
+  /** The start of a job system the first jobs an app loaded after startup brought. */
+  private lateJobsStart?: Promise<void>;
 
   /** EventStore for SSE resumability support (optional) */
   private _eventStore?: EventStore;
@@ -198,6 +235,7 @@ export class Scope extends ScopeEntry {
   private _scopeChannels?: ChannelRegistry;
   private _channelNotificationService?: ChannelNotificationService;
   private _channelEventBus?: ChannelEventBus;
+  private _workflowEvents?: WorkflowEventListening;
   private _channelTeardown?: () => Promise<void>;
 
   /** Health service for liveness and readiness probes (optional) */
@@ -829,35 +867,7 @@ export class Scope extends ScopeEntry {
 
     // Initialize skill session manager if skills are available, or a plugin registers them at runtime
     if (this.scopeSkills.hasAny() || dynamicSkills) {
-      const [skillSession, { createSkillToolGuardHook }] = await Promise.all([
-        import('../skill/session/index.js'),
-        import('../skill/hooks/index.js'),
-      ]);
-      const store = skillSession.createSkillSessionStore({ type: 'memory' });
-
-      this._skillSession = new skillSession.SkillSessionManager(
-        {
-          defaultPolicyMode: 'permissive',
-        },
-        this.logger,
-        store,
-      );
-
-      // Register skill tool authorization guard hook
-      const GuardHookClass = createSkillToolGuardHook(this._skillSession, {
-        logger: this.logger,
-        trackToolCalls: true,
-      });
-      const guardHookInstance = new GuardHookClass();
-      const hookRecords = normalizeHooksFromCls(guardHookInstance);
-      if (hookRecords.length > 0) {
-        await this.scopeHooks.registerHooks(false, ...hookRecords);
-        this.logger.verbose('Skill tool authorization guard hook registered');
-      }
-
-      this.logger.verbose('Skill session manager initialized', {
-        storeType: store.type,
-      });
+      await this.startSkillSession();
     }
 
     // Validate all skills after everything is initialized
@@ -894,6 +904,7 @@ export class Scope extends ScopeEntry {
       logger: this.logger,
       dynamicSkills,
     });
+    if (this.scopeSkills.servesSkills()) this.skillsServed = Promise.resolve();
 
     // Initialize jobs and workflows (issue #408).
     //
@@ -915,6 +926,14 @@ export class Scope extends ScopeEntry {
     for (const app of this.scopeApps.getApps()) {
       const appMeta = app.metadata as unknown as Record<string, unknown>;
       if (Array.isArray(appMeta['workflows'])) appWorkflows.push(...(appMeta['workflows'] as WorkflowType[]));
+    }
+    // The jobs and workflows an app loaded itself (an ESM app's package) count as declared ones
+    for (const served of this.pendingAppJobs) {
+      appJobs.push(...served.entries.jobs);
+      for (const job of served.entries.jobs) {
+        jobProviders.set(normalizeJob(job).provide, served.entries.providers as ProviderRegistry);
+      }
+      appWorkflows.push(...served.entries.workflows);
     }
 
     const allJobs = [...jobsList, ...appJobs];
@@ -940,61 +959,20 @@ export class Scope extends ScopeEntry {
         );
       }
 
-      const notifyFn = async (data: Record<string, unknown>) => {
-        if (this.notificationService) {
-          this.logger.debug('Job notification', data);
-        }
-      };
-
-      const { registerJobCapabilities, resolveJobsStore, jobsServerStore } = await import('../job/job-scope.helper.js');
-      refuseServerStoresInBrowser({ jobs: jobsServerStore(jobsConfig?.store, this.metadata) });
-      const jobsStore = resolveJobsStore(jobsConfig?.store, {
-        redis: this.metadata.redis,
-        sqlite: resolvedTopLevelSqlite,
-      });
-      const effectiveConfig: JobsConfig = { ...(jobsConfig ?? {}), enabled: true, store: jobsStore };
-      topLevelSqliteUsed ||= Boolean(resolvedTopLevelSqlite) && jobsStore?.sqlite === resolvedTopLevelSqlite;
-      const result = await registerJobCapabilities({
-        providers: this.scopeProviders,
-        flowRegistry: this.scopeFlows,
-        owner: scopeRef,
-        jobsList: allJobs,
-        jobProviders,
-        workflowsList: allWorkflows,
-        jobsConfig: effectiveConfig,
-        logger: this.logger,
-        notifyFn,
-        entryServer: isEntryServer(this.metadata),
-        jobWorker: isJobWorker(this.metadata),
-      });
-
-      this._scopeJobs = result.jobRegistry as JobRegistry;
-      this._scopeWorkflows = result.workflowRegistry as WorkflowRegistry;
-      this._jobExecutionManager = result.executionManager;
-      this._jobStateStore = result.stateStore;
-      this._jobDefinitionStore = result.definitionStore;
-
-      // Register job/workflow management tools
-      for (const toolCls of result.managementTools) {
-        try {
-          const toolRecord = normalizeTool(toolCls);
-          const toolInstance = new ToolInstance(toolRecord, this.scopeProviders, {
-            kind: 'scope',
-            id: '_jobs',
-            ref: toolCls,
-          });
-          this.scopeTools.registerToolInstance(toolInstance);
-        } catch (error) {
-          this.logger.warn(
-            `Failed to register job management tool: ${error instanceof Error ? error.message : String(error)}`,
-          );
+      const jobsUseTopLevelSqlite = await this.startJobs(allJobs, jobProviders, allWorkflows, resolvedTopLevelSqlite);
+      topLevelSqliteUsed ||= jobsUseTopLevelSqlite;
+      const jobRegistry = this._scopeJobs;
+      const workflowRegistry = this._scopeWorkflows;
+      if (jobRegistry && workflowRegistry && this.pendingAppJobs.length > 0) {
+        const { unregistersAppJobEntries } = await import('../job/job-scope.helper.js');
+        for (const served of this.pendingAppJobs) {
+          served.unregister = unregistersAppJobEntries(jobRegistry, workflowRegistry, served.entries);
         }
       }
-
-      this.logger.info(
-        `Jobs system initialized: ${this._scopeJobs.getJobs().length} jobs, ${this._scopeWorkflows.getWorkflows().length} workflows`,
-      );
     }
+    this.pendingAppJobs.length = 0;
+    this.jobsDecided = true;
+    this.topLevelSqlite = resolvedTopLevelSqlite;
 
     // A browser opens no SQLite file, so a top-level `sqlite` kept for a server sharing the config is no mistake there
     if (this.metadata.sqlite && !topLevelSqliteUsed && getRuntimeContext().runtime !== 'browser') {
@@ -1026,8 +1004,7 @@ export class Scope extends ScopeEntry {
     // Register logging and completion flows, and the agent, elicitation and task flows when those are on.
     await this.scopeFlows.registryFlows([SetLevelFlow, CompleteFlow]);
     if (this.scopeAgents.listAllInstances().length > 0) {
-      const { CallAgentFlow } = await import('../agent/flows/index.js');
-      await this.scopeFlows.registryFlows([CallAgentFlow]);
+      await this.serveAgentCalls();
     }
     if (this.metadata.elicitation?.enabled === true) {
       const { ElicitationRequestFlow, ElicitationResultFlow } = await import('../elicitation/flows/index.js');
@@ -1110,6 +1087,7 @@ export class Scope extends ScopeEntry {
         channelsList: appChannels,
         channelProviders,
         channelsConfig,
+        eventBus: this._channelEventBus,
         notificationService: this.notificationService,
         flowRegistry: this.scopeFlows,
         toolRegistry: this.scopeTools,
@@ -1136,6 +1114,8 @@ export class Scope extends ScopeEntry {
       // A detached job runner runs one run: the server that started it already listens to the services
       if (!isJobWorker(this.metadata)) await channelResult.connectServices();
     }
+
+    await this.registerWidgetRoutes(httpServing);
 
     // Initialize health service (after all registries and stores are ready)
     if (httpServing && this.metadata.health?.enabled !== false) {
@@ -1210,17 +1190,25 @@ export class Scope extends ScopeEntry {
     const toolsWithUI = this.scopeTools.getTools(true).filter((t) => hasUIConfig(t.metadata));
     if (toolsWithUI.length === 0) return;
 
-    const [{ describeIgnoredUiOptions, describeServingModeDefault }, { StaticWidgetResourceTemplate }] =
-      await Promise.all([
-        import('../tool/ui/ui-option-warnings.js'),
-        import('../tool/ui/ui-resource-template.js'),
-        this.toolUIRegistry.load(),
-      ]);
+    const [
+      { describeIgnoredUiOptions, describeServingModeDefault },
+      { StaticWidgetResourceTemplate },
+      { describeWidgetServingProblems, widgetUrlSourceOf },
+    ] = await Promise.all([
+      import('../tool/ui/ui-option-warnings.js'),
+      import('../tool/ui/ui-resource-template.js'),
+      import('../tool/ui/widget-serving.js'),
+      this.toolUIRegistry.load(),
+    ]);
 
     for (const tool of toolsWithUI) {
       const resourceUri = tool.metadata.ui?.resourceUri;
       this.toolUIRegistry.registerTool(tool.metadata.name, typeof resourceUri === 'string' ? resourceUri : undefined);
-      this.toolUIRegistry.checkTemplate(tool.metadata.name, tool.metadata.ui?.template);
+      this.toolUIRegistry.checkTemplate(tool.metadata.name, tool.metadata.ui?.template, tool.metadata.ui?.uiType);
+      await this.toolUIRegistry.checkRenderOptions(
+        tool.metadata.name,
+        tool.metadata.ui as Record<string, unknown> | undefined,
+      );
       for (const message of describeIgnoredUiOptions(
         tool.metadata.name,
         tool.metadata.ui as Record<string, unknown> | undefined,
@@ -1247,10 +1235,30 @@ export class Scope extends ScopeEntry {
     // Each tool's serving mode: its own `ui.servingMode`, else its app's or the server's default
     const servingModes = new Map(toolsWithUI.map((t) => [t, toolServingMode(t, this)] as const));
 
-    // Pre-compile static widgets for tools served in 'static' mode
-    const staticModeTools = toolsWithUI.filter(
-      (t) => t.metadata.ui && servingModes.get(t) === 'static' && t.metadata.ui.template,
+    const servingProblems = toolsWithUI.flatMap((t) =>
+      describeWidgetServingProblems(
+        t.metadata.name,
+        (t.metadata.ui ?? {}) as Record<string, unknown>,
+        servingModes.get(t) ?? 'auto',
+      ),
     );
+    if (servingProblems.length > 0) throw new InvalidToolUiConfigError(servingProblems);
+
+    // A 'custom-url' page is not rendered here, so its resource `_meta` (csp, border, domain) is recorded now
+    for (const tool of toolsWithUI) {
+      const uiConfig = (tool.metadata.ui ?? {}) as Record<string, unknown>;
+      const source = widgetUrlSourceOf(tool.metadata.name, uiConfig, servingModes.get(tool) ?? 'auto');
+      if (!source) continue;
+      this.toolUIRegistry.registerWidgetUrl(tool.metadata.name, source);
+      if (source.servingMode === 'custom-url')
+        this.toolUIRegistry.updateResourceMetaFromConfig(tool.metadata.name, uiConfig);
+    }
+
+    // Pre-compile the page of widgets served from `ui://` ('static') or from the server's route ('direct-url')
+    const staticModeTools = toolsWithUI.filter((t) => {
+      const mode = servingModes.get(t);
+      return t.metadata.ui && (mode === 'static' || mode === 'direct-url') && t.metadata.ui.template;
+    });
 
     if (staticModeTools.length > 0) {
       let staticCompiledCount = 0;
@@ -1353,6 +1361,45 @@ export class Scope extends ScopeEntry {
         `Pre-compiled ${hybridCompiledCount}/${hybridTools.length} hybrid widget shell(s) for hybrid mode tools`,
       );
     }
+  }
+
+  /**
+   * Serve each `'direct-url'` widget's page on its route, once every other route of the scope is
+   * known, so a path that collides with one refuses startup. A scope without HTTP has no route to
+   * serve them from.
+   */
+  private async registerWidgetRoutes(httpServing: typeof import('./http-scope.helper.js') | undefined): Promise<void> {
+    const widgets = this.toolUIRegistry?.widgetRoutes() ?? [];
+    if (widgets.length === 0) return;
+    if (!httpServing) {
+      for (const { toolName, path } of widgets) {
+        this.logger.warn(
+          `Tool "${toolName}": \`ui.servingMode: 'direct-url'\` serves the widget on GET ${path}, and this in-process ` +
+            'server serves no HTTP, so hosts cannot load it.',
+        );
+      }
+      return;
+    }
+    const { registerWidgetRoutes } = await import('../tool/ui/widget-routes.js');
+    await registerWidgetRoutes({
+      widgets,
+      registry: this.toolUIRegistry,
+      server: this.httpRouteRegistrar,
+      checkClientIp: (request, response) =>
+        this.runFlow('http:ip-filter', {
+          request: request as unknown as Record<string, unknown>,
+          response: response as unknown as Record<string, unknown>,
+        }),
+      entryPath: this.entryPath,
+      routeBase: this.routeBase,
+      healthPaths: httpServing.servedHealthPaths(this.metadata.health),
+      takenRoutes: [
+        ...this.registeredHttpRoutes.map((route) => ({ ...route, owner: 'a route of the server' })),
+        ...(this.httpRouteTable?.routes ?? []).map((route) => ({ ...route, owner: 'an @HttpRoute' })),
+      ],
+      flowFor: (request) => this.findHttpFlowName(request),
+      logger: this.logger,
+    });
   }
 
   /**
@@ -1543,7 +1590,185 @@ export class Scope extends ScopeEntry {
   }
 
   get channelEventBus(): ChannelEventBus | undefined {
-    return this._channelEventBus;
+    return this._channelEventBus ?? this._workflowEvents?.bus;
+  }
+
+  /**
+   * Start the job system with these jobs and workflows: its stores, registries, execution manager and management
+   * tools. Answers whether its store is the top-level SQLite.
+   */
+  private async startJobs(
+    jobs: JobType[],
+    jobProviders: Map<Token, ProviderRegistry>,
+    workflows: WorkflowType[],
+    topLevelSqlite: (SqliteOptionsInput & { path: string }) | undefined,
+  ): Promise<boolean> {
+    const jobsConfig = this.metadata.jobs as JobsConfig | undefined;
+    const scopeRef: EntryOwnerRef = { kind: 'scope', id: this.id, ref: Scope };
+    const notifyFn = async (data: Record<string, unknown>) => {
+      if (this.notificationService) {
+        this.logger.debug('Job notification', data);
+      }
+    };
+
+    const { registerJobCapabilities, resolveJobsStore, jobsServerStore } = await import('../job/job-scope.helper.js');
+    refuseServerStoresInBrowser({ jobs: jobsServerStore(jobsConfig?.store, this.metadata) });
+    const jobsStore = resolveJobsStore(jobsConfig?.store, {
+      redis: this.metadata.redis,
+      sqlite: topLevelSqlite,
+    });
+    const effectiveConfig: JobsConfig = { ...(jobsConfig ?? {}), enabled: true, store: jobsStore };
+    const result = await registerJobCapabilities({
+      providers: this.scopeProviders,
+      flowRegistry: this.scopeFlows,
+      owner: scopeRef,
+      jobsList: jobs,
+      jobProviders,
+      workflowsList: workflows,
+      jobsConfig: effectiveConfig,
+      logger: this.logger,
+      notifyFn,
+      entryServer: isEntryServer(this.metadata),
+      jobWorker: isJobWorker(this.metadata),
+    });
+
+    this._scopeJobs = result.jobRegistry as JobRegistry;
+    this._scopeWorkflows = result.workflowRegistry as WorkflowRegistry;
+    this._jobExecutionManager = result.executionManager;
+    this._jobStateStore = result.stateStore;
+    this._jobDefinitionStore = result.definitionStore;
+    this._workflowEvents = result.workflowEvents;
+    this._channelEventBus ??= result.workflowEvents?.bus;
+
+    // Register job/workflow management tools
+    for (const toolCls of result.managementTools) {
+      try {
+        const toolRecord = normalizeTool(toolCls);
+        const toolInstance = new ToolInstance(toolRecord, this.scopeProviders, {
+          kind: 'scope',
+          id: '_jobs',
+          ref: toolCls,
+        });
+        this.scopeTools.registerToolInstance(toolInstance);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to register job management tool: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    this.logger.info(
+      `Jobs system initialized: ${this._scopeJobs.getJobs().length} jobs, ${this._scopeWorkflows.getWorkflows().length} workflows`,
+    );
+    return Boolean(topLevelSqlite) && jobsStore?.sqlite === topLevelSqlite;
+  }
+
+  override async serveAppJobs(entries: AppJobEntries): Promise<() => void> {
+    const served: ServedAppJobs = { entries };
+    const withdraw = () => {
+      const pending = this.pendingAppJobs.indexOf(served);
+      if (pending !== -1) this.pendingAppJobs.splice(pending, 1);
+      served.unregister?.();
+      served.unregister = undefined;
+    };
+    if (!this.jobsDecided) {
+      this.pendingAppJobs.push(served);
+      return withdraw;
+    }
+    if (this.metadata.jobs?.enabled === false) {
+      this.logger.warn(
+        `Jobs are explicitly disabled, so the ${entries.jobs.length} job(s) and ${entries.workflows.length} ` +
+          'workflow(s) an app loaded are not served. Remove jobs.enabled: false to serve them.',
+      );
+      return withdraw;
+    }
+    this.lateJobsStart ??= this._scopeJobs
+      ? Promise.resolve()
+      : keptUntilFailure(
+          this.startJobs([], new Map(), [], this.topLevelSqlite).then(() => undefined),
+          () => (this.lateJobsStart = undefined),
+        );
+    await this.lateJobsStart;
+    const jobRegistry = this._scopeJobs;
+    const workflowRegistry = this._scopeWorkflows;
+    if (!jobRegistry || !workflowRegistry) throw new InternalMcpError('The job system did not start');
+    const { registerAppJobEntries } = await import('../job/job-scope.helper.js');
+    served.unregister = await registerAppJobEntries({
+      jobRegistry,
+      workflowRegistry,
+      jobs: entries.jobs,
+      workflows: entries.workflows,
+      providers: entries.providers as ProviderRegistry,
+      runner: this.metadata.jobs?.runner,
+    });
+    return withdraw;
+  }
+
+  override serveLateEntries(kinds: readonly LateEntryKind[]): Promise<void> {
+    return Promise.all(
+      kinds.map((kind) => (kind === 'agents' ? this.serveAgentCalls() : this.serveSkillsAddedLater())),
+    ).then(() => undefined);
+  }
+
+  /** Register the `agents:call-agent` flow an agent's tool runs through, once. */
+  private serveAgentCalls(): Promise<void> {
+    this.agentCallsServed ??= keptUntilFailure(
+      import('../agent/flows/index.js').then(({ CallAgentFlow }) => this.scopeFlows.registryFlows([CallAgentFlow])),
+      () => (this.agentCallsServed = undefined),
+    );
+    return this.agentCallsServed;
+  }
+
+  /** Serve skills to a scope that served none at startup: the skill session guard, the skill methods and resources. */
+  private serveSkillsAddedLater(): Promise<void> {
+    this.skillsServed ??= keptUntilFailure(
+      (async () => {
+        if (!this._skillSession) await this.startSkillSession();
+        await serveSkillMethods({
+          skillRegistry: this.scopeSkills,
+          flowRegistry: this.scopeFlows,
+          resourceRegistry: this.scopeResources,
+          providers: this.scopeProviders,
+          skillsConfig: this.metadata.skillsConfig,
+          logger: this.logger,
+        });
+      })(),
+      () => (this.skillsServed = undefined),
+    );
+    return this.skillsServed;
+  }
+
+  /** Start the skill session manager, and the hook that guards tool calls by the active skill's allowlist. */
+  private async startSkillSession(): Promise<void> {
+    const [skillSession, { createSkillToolGuardHook }] = await Promise.all([
+      import('../skill/session/index.js'),
+      import('../skill/hooks/index.js'),
+    ]);
+    const store = skillSession.createSkillSessionStore({ type: 'memory' });
+
+    this._skillSession = new skillSession.SkillSessionManager(
+      {
+        defaultPolicyMode: 'permissive',
+      },
+      this.logger,
+      store,
+    );
+
+    // Register skill tool authorization guard hook
+    const GuardHookClass = createSkillToolGuardHook(this._skillSession, {
+      logger: this.logger,
+      trackToolCalls: true,
+    });
+    const guardHookInstance = new GuardHookClass();
+    const hookRecords = normalizeHooksFromCls(guardHookInstance);
+    if (hookRecords.length > 0) {
+      await this.scopeHooks.registerHooks(false, ...hookRecords);
+      this.logger.verbose('Skill tool authorization guard hook registered');
+    }
+
+    this.logger.verbose('Skill session manager initialized', {
+      storeType: store.type,
+    });
   }
 
   /**

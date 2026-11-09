@@ -249,7 +249,8 @@ export const frontMcpLocalAppMetadataSchema = z.looseObject({
  */
 export interface RemoteTransportOptions {
   /**
-   * Request timeout in milliseconds.
+   * Limit in milliseconds on each request to the remote: connecting, listing, tool calls, resource reads and
+   * prompts. A request past it fails with `RemoteTimeoutError`.
    * @default 30000
    */
   timeout?: number;
@@ -344,10 +345,25 @@ export type RemoteAuthConfig =
     }
   | {
       /**
-       * Let remote server handle its own OAuth flow.
-       * No auth headers are added by the gateway.
+       * OAuth 2.0 client credentials. The gateway gets an access token from the remote's authorization server and
+       * sends it as `Authorization: Bearer <token>` with every request to the remote, connecting included. It gets a
+       * new one before the token expires, and when the remote answers 401 (the request is then sent once more).
+       *
+       * The token endpoint is `tokenUrl`, else the one the remote's authorization server publishes: found through the
+       * remote's protected resource metadata (RFC 9728), else at the remote's origin (RFC 8414). The token request
+       * names the remote as its `resource` (RFC 8707). A token that can't be had fails with `RemoteAuthError`.
+       *
+       * Without `clientId` and `clientSecret`, no credentials are sent, and the server logs a warning.
        */
       mode: 'oauth';
+      /** OAuth client id at the remote's authorization server */
+      clientId?: string;
+      /** OAuth client secret, required with `clientId`. Read it from the environment, not from source. */
+      clientSecret?: string;
+      /** Space-separated scopes to ask for */
+      scope?: string;
+      /** Token endpoint URL; default: the one the remote's authorization server publishes */
+      tokenUrl?: string;
     };
 
 /**
@@ -431,8 +447,8 @@ export interface RemoteAppMetadata {
   auth?: AuthOptionsInput;
 
   /**
-   * Interval in milliseconds to refresh capabilities from the remote server.
-   * Set to 0 to disable automatic refresh.
+   * Interval in milliseconds to refresh capabilities from the remote server, for this app.
+   * A list counts as changed when any of its entries differs. Set to 0 to disable automatic refresh.
    * @default 0
    */
   refreshInterval?: number;
@@ -451,7 +467,8 @@ export interface RemoteAppMetadata {
   packageConfig?: {
     /**
      * Unified loader configuration for registry API + bundle fetching.
-     * Overrides the gateway-level `loader` when set.
+     * The fields it sets replace the gateway-level `loader` fields; the rest come from the gateway's.
+     * A `token` or `tokenEnvVar` here replaces both of the gateway's.
      */
     loader?: PackageLoader;
     /** Auto-update configuration for semver-based polling */
@@ -461,7 +478,7 @@ export interface RemoteAppMetadata {
       /** Polling interval in milliseconds (default: 300000 = 5 min) */
       intervalMs?: number;
     };
-    /** Local cache TTL in milliseconds (default: 86400000 = 24 hours) */
+    /** Local cache TTL in milliseconds (default: 86400000 = 24 hours); `0` downloads the bundle on every load */
     cacheTTL?: number;
     /** Import map overrides for ESM resolution */
     importMap?: Record<string, string>;
@@ -503,7 +520,7 @@ const esmAutoUpdateOptionsSchema = z.object({
 const packageConfigSchema = z.object({
   loader: packageLoaderSchema.optional(),
   autoUpdate: esmAutoUpdateOptionsSchema.optional(),
-  cacheTTL: z.number().positive().optional(),
+  cacheTTL: z.number().nonnegative().optional(),
   importMap: z.record(z.string(), z.string()).optional(),
 });
 
@@ -538,9 +555,17 @@ const remoteAuthConfigSchema = z.discriminatedUnion('mode', [
       message: 'remoteAuth.mapper must be a function',
     }),
   }),
-  z.object({
-    mode: z.literal('oauth'),
-  }),
+  z
+    .object({
+      mode: z.literal('oauth'),
+      clientId: z.string().min(1).optional(),
+      clientSecret: z.string().min(1).optional(),
+      scope: z.string().optional(),
+      tokenUrl: z.string().url().optional(),
+    })
+    .refine((auth) => (auth.clientId === undefined) === (auth.clientSecret === undefined), {
+      message: 'remoteAuth oauth needs both clientId and clientSecret, or neither',
+    }),
 ]);
 
 export const frontMcpRemoteAppMetadataSchema = z
@@ -611,17 +636,20 @@ export type AppMetadata = LocalAppMetadata | RemoteAppMetadata;
 export interface EsmAppOptions extends EsmOptions {
   /** Override the auto-derived app name */
   name?: string;
-  /** Namespace prefix for tools, resources, and prompts */
+  /** Namespace prefix for tools, resources, and prompts; skills, agents, jobs and workflows keep their own names */
   namespace?: string;
   /** Human-readable description */
   description?: string;
   /** Standalone mode */
   standalone?: boolean | 'includeInParent';
-  /** Auto-update configuration for semver-based polling */
+  /**
+   * Poll for a newer version that satisfies the range, and swap every kind of entry to it; the loaded version keeps
+   * serving until the new one built and passed the checks startup runs on an app
+   */
   autoUpdate?: { enabled: boolean; intervalMs?: number };
   /** Import map overrides for ESM resolution */
   importMap?: Record<string, string>;
-  /** Include/exclude filter for selectively importing primitives */
+  /** Include/exclude filter for selectively importing primitives, by their names in the package */
   filter?: AppFilterConfig;
 }
 
@@ -638,7 +666,7 @@ export interface RemoteUrlAppOptions extends RemoteOptions {
   description?: string;
   /** Standalone mode */
   standalone?: boolean | 'includeInParent';
-  /** Interval (ms) to refresh capabilities from the remote server */
+  /** Interval (ms) to refresh capabilities from the remote server, for this app (0 = off) */
   refreshInterval?: number;
   /** TTL (ms) for cached capabilities */
   cacheTTL?: number;

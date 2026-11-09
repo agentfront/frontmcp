@@ -98,6 +98,9 @@ export {
   trustedHtml,
   isTrustedHtml,
   type TrustedHtml,
+  sanitizeHtml,
+  describeContentSecurityProblems,
+  DEFAULT_MAX_MARKUP_LENGTH,
   // Custom Shell
   type ShellPlaceholderName,
   type InlineShellSource,
@@ -119,6 +122,10 @@ export {
   applyShellTemplate,
   resolveShellTemplate,
   clearShellTemplateCache,
+  // URL-served widgets
+  buildUrlWidgetShell,
+  widgetUrlOrigin,
+  type UrlWidgetShellOptions,
 } from './shell';
 
 // ============================================

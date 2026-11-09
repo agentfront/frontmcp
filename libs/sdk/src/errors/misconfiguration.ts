@@ -21,6 +21,9 @@ export const MISCONFIGURATION_REMEDIES: Record<string, string> = {
     'Set JWT_SECRET in the deployment environment (e.g. `wrangler secret put JWT_SECRET`). ' +
     'Tokens are signed with it; production refuses the random per-process fallback because tokens would ' +
     'not survive a restart or verify across instances.',
+  SIGNING_KEY_INVALID:
+    'The configured `signKey` or `jwks` (`auth.local.*` in local and remote mode, `auth.*` in public mode) cannot ' +
+    'sign tokens or be published, so the server refuses to start. The server log names the key and the problem.',
   // The startup checks: a server whose entries ask for protection nothing gives them does not start.
   UNENFORCED_METADATA:
     'An entry declares a field only a plugin enforces (approval, featureFlag, ...) and no installed plugin that ' +
@@ -39,6 +42,10 @@ export const MISCONFIGURATION_REMEDIES: Record<string, string> = {
   DUPLICATE_PLUGIN_ENTRY:
     'One plugins list names a plugin twice, so the server refuses to start. List it once with all its options, ' +
     'or install the other configuration on another app; the server log names the plugin, the list and both entries.',
+  TOOL_UI_CONFIGURATION:
+    "A tool's `ui` sets a rendering option its template cannot take (for example `contentSecurity` on a " +
+    '`{ file }` widget), so the server refuses to start. Change the template or remove the option; the server ' +
+    'log names the tool and the option.',
   PLUGIN_CONFIGURED_TWICE:
     'A server option (such as `observability`) installs a plugin that the server plugins list names too, so the ' +
     'server refuses to start. Configure the plugin in one place; the server log names the option and the plugin.',

@@ -112,6 +112,8 @@ If no `claimsMapping` is provided, the engine falls back to (in order):
 - **roles**: `authInfo.user.roles` → `authInfo.extra.authorization.scopes` → `[]`
 - **permissions**: `authInfo.user.permissions` → `[]`
 
+`tenantId` has no fallback: with the mapping, a non-empty string claim becomes `user.tenantId`, which rules match on (`match: { 'user.tenantId': 'acme' }`) and guards read as `ctx.user.tenantId`; without it, `user.tenantId` is `undefined`.
+
 The OAuth-scopes-as-roles fallback means a token with no `roles` claim but with `scope: "admin read"` will be treated as having `roles: ['admin', 'read']`. Configure explicit `claimsMapping.roles` to opt out. For non-standard token shapes, use `claimsResolver` instead (see Common Patterns below).
 
 ### Step 3: Register Named Profiles
@@ -342,6 +344,12 @@ denies such a rule if it runs anyway (even under `not`):
 - an ABAC condition with no `value`, or one the operator can't use: `exists` needs `true`/`false`;
   `in`/`notIn` a non-empty list; `gt`/`gte`/`lt`/`lte` a number; `startsWith`/`endsWith`/`matches`
   a string (a `{ fromInput }` / `{ fromClaims }` reference works for all but `exists`)
+
+A `{ fromInput }` / `{ fromClaims }` reference that resolves to nothing at call time fails `match`
+and every operator, `neq` and `notIn` included, and a ReBAC `resourceId` reference that resolves to
+no string fails its relationship. Such a check is unknown rather than false, so it never leads to a
+grant: `not` around it denies too, `anyOf` (or `operator: 'OR'`) grants only through another branch
+that passes, and `allOf` (or `operator: 'AND'`) counts as false only when another branch fails.
 
 To leave an entry open, remove its `authorities`. There is no opt-out.
 

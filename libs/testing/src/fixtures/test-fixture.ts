@@ -318,6 +318,8 @@ async function buildFixtures(chain: readonly Scope[]): Promise<TestFixtures> {
     entryPath: clientConfig.entryPath,
     transport: clientConfig.transport ?? 'streamable-http',
     publicMode,
+    protocolVersion: config.protocolVersion,
+    mcpLogLevel: config.mcpLogLevel,
   }).build();
 
   try {
@@ -501,6 +503,8 @@ function createServerFixture(
         auth: opts?.token ? { token: opts.token } : undefined,
         clientInfo: opts?.clientInfo,
         publicMode: config.publicMode,
+        protocolVersion: opts?.protocolVersion ?? config.protocolVersion,
+        mcpLogLevel: config.mcpLogLevel,
       }).buildAndConnect();
       context.extraClients.push(client);
       return client;
@@ -513,6 +517,8 @@ function createServerFixture(
         baseUrl: resolveClientBaseUrl(server, config),
         entryPath: config.entryPath,
         publicMode: config.publicMode,
+        protocolVersion: config.protocolVersion,
+        mcpLogLevel: config.mcpLogLevel,
       });
       return builder;
     },

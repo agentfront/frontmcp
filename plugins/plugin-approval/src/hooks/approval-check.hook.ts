@@ -4,12 +4,23 @@
  * @module @frontmcp/plugin-approval
  */
 
-import { DynamicPlugin, isEntryGatedBy, Plugin, ScopeEntry, ToolHook, type FlowCtxOf } from '@frontmcp/sdk';
+import {
+  DynamicPlugin,
+  isEntryGatedBy,
+  Plugin,
+  ProviderNotAvailableError,
+  ScopeEntry,
+  ToolHook,
+  type FlowCtxOf,
+  type Reference,
+} from '@frontmcp/sdk';
 
 import { ApprovalRequiredError } from '../approval';
-import { resolveApprovalIdentity } from '../approval.identity';
-import { ApprovalStoreToken } from '../approval.symbols';
+import { isUnidentifiedSession, resolveApprovalIdentity } from '../approval.identity';
+import { ApprovalAuditToken, ApprovalStoreToken, ExternalApproverToken } from '../approval.symbols';
 import { isApprovalExpired, isApprovalUsable, resolveApprovalRequirement } from '../approval/policy';
+import type { ApprovalAuditEvent, ApprovalAuditSink } from '../audit/approval-audit';
+import type { ExternalApprover } from '../external/approval-decisions';
 import type { ApprovalStore } from '../stores/approval-store.interface';
 import { ApprovalState, type ApprovalContext, type ApprovalRecord, type ToolApprovalRequirement } from '../types';
 
@@ -85,7 +96,8 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
     approvalConfig: ToolApprovalRequirement,
     stores: readonly ApprovalStore[],
   ): Promise<void> {
-    const { sessionId, userId } = resolveApprovalIdentity(toolContext.tryGetContext?.());
+    const callerContext = toolContext.tryGetContext?.();
+    const { sessionId, userId } = resolveApprovalIdentity(callerContext);
     const currentContext = this.getCurrentContext(flowCtx);
     const stored: StoredApproval[] = [];
     for (const store of stores) {
@@ -94,8 +106,19 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
     }
     const records = stored.map(({ record }) => record);
 
+    const requested = (state: ApprovalAuditEvent['state'], via?: ApprovalAuditEvent['via']) =>
+      this.optional(ApprovalAuditToken)?.record({
+        type: 'approval.requested',
+        toolId: tool.fullName,
+        userId,
+        context: currentContext && { type: currentContext.type, identifier: currentContext.identifier },
+        state,
+        via,
+      });
+
     // A recorded denial outranks every way of skipping the prompt, pre-approved contexts included.
     if (records.some((record) => record.state === ApprovalState.DENIED)) {
+      requested('denied');
       throw new ApprovalRequiredError({
         toolId: tool.fullName,
         state: 'denied',
@@ -125,11 +148,44 @@ export default class ApprovalCheckPlugin extends DynamicPlugin<Record<string, ne
       return;
     }
 
-    await this.handleApprovalRequired(
-      flowCtx,
-      approvalConfig,
-      approved.find((record) => isApprovalExpired(record, approvalConfig, now)) ?? approved[0],
-    );
+    const external = isUnidentifiedSession(sessionId) ? undefined : this.optional(ExternalApproverToken);
+    const outcome = await external?.requestApproval({
+      toolId: tool.fullName,
+      toolName: tool.name,
+      sessionId,
+      userId,
+      context: currentContext,
+      requirement: approvalConfig,
+      accessToken: callerContext?.authInfo?.token,
+      signal: toolContext.signal,
+    });
+    const expiredApproval = approved.find((record) => isApprovalExpired(record, approvalConfig, now));
+    const callState =
+      outcome === 'approved' || outcome === 'denied' ? outcome : expiredApproval ? 'expired' : 'pending';
+    requested(callState, external?.via);
+    if (outcome === 'approved') return;
+    if (outcome === 'denied') {
+      throw new ApprovalRequiredError({
+        toolId: tool.fullName,
+        state: 'denied',
+        message: `Tool "${tool.fullName}" execution denied.`,
+      });
+    }
+
+    await this.handleApprovalRequired(flowCtx, approvalConfig, expiredApproval ?? approved[0]);
+  }
+
+  /**
+   * A provider the plugin's options may leave out: the approval system `webhook.url` or `recheck.url` configures, or
+   * the audit trail of `enableAudit`. `undefined` without it.
+   */
+  private optional<T extends ExternalApprover | ApprovalAuditSink>(token: Reference<T>): T | undefined {
+    try {
+      return this.get(token) as T | undefined;
+    } catch (error) {
+      if (error instanceof ProviderNotAvailableError) return undefined;
+      throw error;
+    }
   }
 
   /**

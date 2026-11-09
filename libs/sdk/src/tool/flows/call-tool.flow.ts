@@ -36,6 +36,7 @@ import {
   FlowHooksOf,
   GLOBAL_RATE_LIMIT_CHECKED,
   isOrchestratedMode,
+  resolveAllowNonFinite,
   resolveOutputBudget,
   resolveOutputSchemaMode,
   resolveUndeclaredKeysPolicy,
@@ -136,6 +137,15 @@ interface ElicitationFallbackResponse {
       instructions: string;
     };
   };
+}
+
+/**
+ * The `ui.htmlResponsePrefix` of a call that gets the dual payload: from a client detected as
+ * `'claude'` (a Claude client that declares no MCP Apps support, so it renders no widget).
+ */
+function htmlResponsePrefixFor(ui: { htmlResponsePrefix?: string } | undefined, platformType: AIPlatformType) {
+  const prefix = ui?.htmlResponsePrefix;
+  return typeof prefix === 'string' && platformType === 'claude' ? prefix : undefined;
 }
 
 /** Whether a `tools/call`'s `_meta` marks it as a widget's own call (see `WIDGET_CALL_META_KEY`). */
@@ -270,7 +280,7 @@ const MAX_REPORTED_UNDECLARED_KEY_PATHS = 100;
   plan,
   inputSchema,
   outputSchema,
-  access: 'authorized',
+  access: 'public',
 })
 export default class CallToolFlow extends FlowBase<typeof name> {
   static override readonly tracesHooksInAnswer = true;
@@ -889,9 +899,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // the top level on the Node one. Read both, or the ticket is silently
     // omitted on the worker and every incremental link falls back to a full
     // login.
-    const extraUser = (authInfo?.extra as { user?: { sub?: string } } | undefined)?.user;
-    const sub = extraUser?.sub ?? authInfo?.user?.sub;
-    if (!sub) return undefined;
+    const extraUser = (authInfo?.extra as { user?: { sub?: string; email?: string; name?: string } } | undefined)?.user;
+    const user = extraUser?.sub ? extraUser : authInfo?.user;
+    if (!user?.sub) return undefined;
+    const sub = user.sub;
 
     const secret = (this.scope.auth as { signingSecret?: string } | undefined)?.signingSecret;
     if (!secret) return undefined;
@@ -902,6 +913,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         appId,
         toolId,
         ...(priorAppIds && priorAppIds.size > 0 ? { priorAppIds: [...priorAppIds] } : {}),
+        ...(typeof user.email === 'string' ? { email: user.email } : {}),
+        ...(typeof user.name === 'string' ? { name: user.name } : {}),
       },
       secret,
     );
@@ -1001,6 +1014,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       context._toolNameInternal = tool.metadata.id ?? tool.metadata.name;
       context._toolInputInternal = input.arguments;
       context._jsonRpcRequestIdInternal = this.state.jsonRpcRequestId;
+      // A hook that answers with `respond(value)` ends the call before validateOutput records the output
+      context._onRespondInternal = (value) => this.state.set('rawOutput', value);
 
       // Wire transport to FrontMcpContext for elicitation support
       // The transport is stored in authInfo.transport by the local adapter
@@ -1243,7 +1258,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       await (timeoutMs ? withTimeout(() => running, timeoutMs, tool.metadata.name) : running);
       this.logger.verbose('execute:done');
     } catch (error) {
-      // FlowControl is a control-flow signal (this.fail / this.respond / this.handled
+      // `this.respond(value)` set the output and ends execute(), which validateOutput and finalize treat as returned
+      if (error instanceof FlowControl && error.type === 'respond') {
+        this.logger.verbose('execute:done (respond)');
+        return;
+      }
+      // FlowControl is a control-flow signal (this.fail / this.handled
       // from inside the tool). Re-throw without wrapping so callers (HTTP /
       // Direct / CLI) can extract the originating error from `originalError`
       // and surface its public message instead of a generic "Unknown error".
@@ -1454,6 +1474,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       const requestId: string = randomUUID();
 
       const platformType = this.callerPlatformType();
+      const htmlResponsePrefix = htmlResponsePrefixFor(tool.metadata.ui, platformType);
 
       // Resolve the effective serving mode based on configuration and client capabilities.
       // The tool's own `ui.servingMode` wins, then its app's and the server's `ui.servingMode`
@@ -1473,6 +1494,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
           configuredMode,
           reason: resolvedMode.reason,
         });
+        if (htmlResponsePrefix !== undefined) await this.applyHtmlResponse(htmlResponsePrefix, undefined, platformType);
         return;
       }
 
@@ -1486,12 +1508,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         return;
       }
 
-      if (servingMode === 'static') {
-        // For static mode: no additional rendering needed
-        // Widget was already registered at server startup
-        this.logger.verbose('applyUI: UI using static mode (structured data only)', {
+      if (servingMode === 'static' || servingMode === 'direct-url' || servingMode === 'custom-url') {
+        // The page is not rendered per call: the host loads it from the `ui://` resource, or from the
+        // URL that resource frames, and gets this call's data from the result
+        this.logger.verbose('applyUI: UI served from its resource (structured data only)', {
           tool: tool.metadata.name,
           platform: platformType,
+          servingMode,
         });
       } else if (servingMode === 'hybrid') {
         // For hybrid mode: build the component payload
@@ -1565,6 +1588,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       // Store UI result and metadata in state for finalize stage
       this.state.set('uiResult', uiResult);
       this.state.set('uiMeta', uiMeta);
+      if (htmlResponsePrefix !== undefined) await this.applyHtmlResponse(htmlResponsePrefix, htmlContent, platformType);
 
       this.logger.verbose('applyUI: UI processed', {
         tool: tool.metadata.name,
@@ -1609,6 +1633,42 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   }
 
   /**
+   * Add the dual payload (`ui.htmlResponsePrefix`): a second text block holding this call's page in
+   * an `html` code fence, after the JSON text, for a Claude client that renders no widget. The page
+   * is rendered for this call when the serving mode didn't, and goes to this caller only.
+   */
+  private async applyHtmlResponse(prefix: string, renderedHtml: string | undefined, platformType: AIPlatformType) {
+    const { tool, rawOutput: executeOutput, input } = this.state;
+    if (!tool || !this.scope.toolUI) return;
+    const rawOutput = declaredOutput(tool, executeOutput);
+    const { buildHtmlResponseText, buildToolResponseContent, isUIRenderFailure } = await import('../ui/ui-render.js');
+
+    let html = renderedHtml;
+    if (html === undefined) {
+      const rendered = await this.scope.toolUI.renderAndRegisterAsync({
+        toolName: tool.metadata.name,
+        input:
+          input?.arguments && typeof input.arguments === 'object' && !Array.isArray(input.arguments)
+            ? input.arguments
+            : {},
+        output: rawOutput,
+        uiConfig: tool.metadata.ui,
+        platformType,
+      });
+      html = isUIRenderFailure(rendered) ? undefined : (rendered.meta['ui/html'] as string | undefined);
+    }
+    if (!html) return;
+
+    const uiResult =
+      this.state.uiResult ??
+      buildToolResponseContent({ rawOutput, servingMode: 'none', useStructuredContent: false, platformType });
+    this.state.set('uiResult', {
+      ...uiResult,
+      content: [...uiResult.content, { type: 'text', text: buildHtmlResponseText(prefix, html) }],
+    });
+  }
+
+  /**
    * Finalize the tool response.
    * Validates output, applies UI result from applyUI stage, and sends the response.
    *
@@ -1628,15 +1688,16 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       return;
     }
 
-    if (rawOutput === undefined) {
-      // No output means execute stage failed - skip finalization
+    if (rawOutput === undefined || this.state.flowError) {
+      // No output, or a failed run (whatever output respond() recorded before the failure): skip finalization
       // The original error will be propagated by the flow framework
-      this.logger.verbose('finalize: skipping (no output - execute stage likely failed)');
+      this.logger.verbose('finalize: skipping (no output, or the call failed)');
       return;
     }
 
     // Parse and construct the MCP-compliant output using safeParseOutput
-    const undeclaredKeys = resolveUndeclaredKeysPolicy(...toolOutputPolicies(tool, this.scope));
+    const outputPolicies = toolOutputPolicies(tool, this.scope);
+    const undeclaredKeys = resolveUndeclaredKeysPolicy(...outputPolicies);
     const parseResult = tool.safeParseOutput(rawOutput, {
       // A call that renders the tool's UI sends declared keys only, whatever the policy
       undeclaredKeys: uiResult && undeclaredKeys === 'keep' ? 'strip' : undeclaredKeys,
@@ -1654,9 +1715,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // Reject non-finite numbers (Infinity / -Infinity / NaN) — JSON.stringify
     // silently coerces them to `null`, which Zod's `z.number()` accepts as
     // valid input but produces corrupted output for downstream consumers.
-    // Opt-out via `@FrontMcp({ output: { allowNonFinite: true } })`.
-    const allowNonFinite = (this.scope.metadata as { output?: { allowNonFinite?: boolean } }).output?.allowNonFinite;
-    if (allowNonFinite !== true) {
+    // Opt-out via `output: { allowNonFinite: true }` on the tool, its app or the server.
+    if (!resolveAllowNonFinite(...outputPolicies)) {
       const found = findNonFiniteNumber(parseResult.data);
       if (found) {
         this.logger.error('finalize: non-finite number in tool output', {
@@ -1694,9 +1754,15 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // Apply UI result if available (from applyUI stage)
     if (uiResult) {
       result.content = uiResult.content;
+      // A listed outputSchema describes the parsed structuredContent, which a primitive output's UI result is not
+      const keepsListedStructuredContent = result.structuredContent !== undefined && this.listsOutputSchema(tool);
       // Set structuredContent from UI result (contains raw tool output)
       // Cast to Record<string, unknown> since MCP protocol expects object type
-      if (uiResult.structuredContent !== undefined && uiResult.structuredContent !== null) {
+      if (
+        uiResult.structuredContent !== undefined &&
+        uiResult.structuredContent !== null &&
+        !keepsListedStructuredContent
+      ) {
         result.structuredContent = uiResult.structuredContent as Record<string, unknown>;
       }
       if (uiMeta) {

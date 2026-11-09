@@ -30,6 +30,8 @@ The return value must be an `AuthoritiesResult`:
 interface AuthoritiesResult {
   /** Whether access was granted */
   granted: boolean;
+  /** With `granted: false`: the check could not be decided, so a `not` around it still denies */
+  unresolved?: boolean;
   /** Human-readable reason for denial (kept for backward compatibility) */
   deniedBy?: string;
   /** Structured denial data (machine-parsable) */
@@ -177,6 +179,12 @@ Guards combine with sibling policy fields via `operator` (default AND). They are
 simplest async authorization mechanism — no registry, no `name` field, no `custom.*`
 indirection — and are preferred over hooks for "this single entry needs an extra
 async check" scenarios.
+
+A guard or custom evaluator that throws while a list (`tools/list`, `resources/list`,
+`resources/templates/list`, `prompts/list`, or a skill listing) is filtered leaves out only
+the entry it protects, with a warning in the log; the rest of the list is served. Up to
+1.11.2 it failed the whole list with `-32603` for every caller. On a call, the error fails
+that call.
 
 ## Using Custom Evaluators in Policies
 

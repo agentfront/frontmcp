@@ -10,7 +10,7 @@
  */
 import 'reflect-metadata';
 
-import { signIncrementalAuthTicket } from '@frontmcp/auth';
+import { openPendingLogin, signIncrementalAuthTicket } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 
 import {
@@ -75,5 +75,30 @@ describe('OAuth Authorize Flow — replayed incremental ticket', () => {
     // An ordinary login grants the whole scope; a leftover list would narrow it
     // to exactly the apps that already failed to cover the caller's tool.
     expect(replayed?.priorAuthorizedAppIds).toBeUndefined();
+  });
+});
+
+describe('OAuth Authorize Flow — the profile an incremental ticket carries', () => {
+  it("keeps the subject's email and name, sealed, on the pending authorization", async () => {
+    const scope = flowScenarios.incrementalAuth('slack');
+    const ticket = signIncrementalAuthTicket(
+      { sub: 'user-1', appId: 'slack', email: 'ada@example.com', name: 'Ada Lovelace' },
+      MOCK_SIGNING_SECRET,
+    );
+    const params = { ...createValidOAuthRequest(), mode: 'incremental', app: 'slack', ticket };
+    const flow = new OauthAuthorizeFlow(authorizeMetadata(), createOAuthInput(params), scope, jest.fn(), new Map());
+    await runFlowStages(flow, [...STAGES]);
+    const localAuth = scope.auth as LocalPrimaryAuth;
+    const pending = await localAuth.authorizationStore.getPendingAuthorization(
+      flow.state.snapshot()['pendingAuthId'] as string,
+    );
+    if (!pending?.verifiedLogin) throw new Error('expected the ticket profile on the pending authorization');
+
+    expect(pending.verifiedLogin).not.toContain('ada@example.com');
+    expect(openPendingLogin(localAuth.secret, pending.id, pending.verifiedLogin)).toEqual({
+      sub: 'user-1',
+      email: 'ada@example.com',
+      name: 'Ada Lovelace',
+    });
   });
 });

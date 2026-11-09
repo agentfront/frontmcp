@@ -4,6 +4,7 @@
 
 import 'reflect-metadata';
 
+import { ServerRequestTokens } from '../../common/tokens';
 import { RequestContextNotAvailableError } from '../../errors/mcp.error';
 import { FrontMcpContext } from '../frontmcp-context';
 import { FrontMcpContextStorage } from '../frontmcp-context-storage';
@@ -54,6 +55,42 @@ describe('FrontMcpContextStorage', () => {
 
       expect(sessionIds[0]).toMatch(/^anon:/);
       expect(sessionIds[0]).not.toBe(sessionIds[1]);
+    });
+
+    it('holds the request as unverified until its caller is admitted, which records the auth info', () => {
+      const request = { headers: { authorization: 'Bearer t' } };
+
+      storage.runForHttpRequest(request, 'scope', () => {
+        const ctx = storage.getStoreOrThrow();
+        expect(ctx.unverifiedRequest).toBe(request);
+        ctx.recordAuthorization({ token: 't', clientId: 'alice' });
+        expect(ctx.unverifiedRequest).toBeUndefined();
+        expect(ctx.authInfo).toMatchObject({ token: 't', clientId: 'alice' });
+      });
+    });
+
+    it('treats a request the stdio transport hands over as the local process, not an unverified caller', () => {
+      const request = { headers: {}, [ServerRequestTokens.stdio]: { principal: 'stdio:1' } };
+
+      storage.runForHttpRequest(request, 'scope', () => {
+        expect(storage.getStoreOrThrow().unverifiedRequest).toBeUndefined();
+      });
+    });
+
+    it("records the server's base URL from the request's scheme and Host, ignoring forwarded headers by default", () => {
+      const serverUrl = storage.runForHttpRequest(
+        { headers: { host: 'mcp.example.com', 'x-forwarded-host': 'attacker.example' }, protocol: 'https' },
+        'scope',
+        () => storage.getStoreOrThrow().metadata.serverUrl,
+      );
+
+      expect(serverUrl).toBe('https://mcp.example.com');
+    });
+
+    it('records no base URL for a request without a Host', () => {
+      expect(
+        storage.runForHttpRequest({ headers: {} }, 'scope', () => storage.getStoreOrThrow().metadata.serverUrl),
+      ).toBeUndefined();
     });
   });
 

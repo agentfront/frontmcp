@@ -7,9 +7,18 @@
  * @module @frontmcp/plugin-approval
  */
 
-import { PublicMcpError } from '@frontmcp/sdk';
+import { InternalMcpError, PublicMcpError } from '@frontmcp/sdk';
 
 import type { ApprovalScope } from './types';
+
+/** Raised at startup for `ApprovalPlugin` options that cannot work, such as a webhook without a secret. */
+export class ApprovalConfigurationError extends InternalMcpError {
+  override readonly name = 'ApprovalConfigurationError';
+
+  constructor(message: string) {
+    super(message, 'APPROVAL_CONFIGURATION');
+  }
+}
 
 /**
  * Base class for approval-related errors.

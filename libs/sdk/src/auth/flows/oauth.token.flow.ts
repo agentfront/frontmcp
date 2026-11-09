@@ -56,6 +56,7 @@
  * That's it. No pages with complex consent screens are required; reuse your normal /oauth/authorize
  */
 
+import { decodeJwtPayloadSafe, type ClientAssertionInput } from '@frontmcp/auth';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 import { randomUUID } from '@frontmcp/utils';
 
@@ -66,6 +67,7 @@ import {
   enforceIpFilter,
   Flow,
   FlowBase,
+  getRequestBaseUrl,
   httpInputSchema,
   HttpJsonSchema,
   httpRespond,
@@ -77,6 +79,7 @@ import {
   type FlowRunOptions,
   type ServerRequest,
 } from '../../common';
+import { oauthBasePath } from '../../flows/flow.http-path';
 import type { LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 
 const inputSchema = httpInputSchema;
@@ -170,6 +173,10 @@ const authorizationCodeGrant = z.object({
   client_id: z.string().min(1),
   /** Client secret (confidential clients; also accepted via HTTP Basic). */
   client_secret: z.string().optional(),
+  /** `urn:ietf:params:oauth:client-assertion-type:jwt-bearer` for a `private_key_jwt` client (RFC 7523) */
+  client_assertion_type: z.string().optional(),
+  /** The JWT a `private_key_jwt` client authenticates with (RFC 7523) */
+  client_assertion: z.string().optional(),
   /** PKCE verifier bound to the code */
   code_verifier: z
     .string()
@@ -184,6 +191,10 @@ const refreshTokenGrant = z.object({
   client_id: z.string().min(1),
   /** Client secret (confidential clients; also accepted via HTTP Basic). */
   client_secret: z.string().optional(),
+  /** `urn:ietf:params:oauth:client-assertion-type:jwt-bearer` for a `private_key_jwt` client (RFC 7523) */
+  client_assertion_type: z.string().optional(),
+  /** The JWT a `private_key_jwt` client authenticates with (RFC 7523) */
+  client_assertion: z.string().optional(),
 });
 
 const anonymousGrant = z.object({
@@ -302,6 +313,11 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
       if (b['client_id'] === undefined) b['client_id'] = basic.clientId;
       if (b['client_secret'] === undefined) b['client_secret'] = basic.clientSecret;
     }
+    // RFC 7521 §4.2: with a client assertion, client_id is optional; the assertion's `sub` names the client
+    if (rawBody['client_id'] === undefined && typeof rawBody['client_assertion'] === 'string') {
+      const subject = decodeJwtPayloadSafe(rawBody['client_assertion'])?.['sub'];
+      if (typeof subject === 'string') rawBody['client_id'] = subject;
+    }
 
     const parsed = tokenRequestSchema.safeParse(rawBody);
     if (parsed.success) {
@@ -382,6 +398,7 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
       body.client_secret,
       this.canonicalResource(),
       localAuth.issuerFor(this.rawInput.request),
+      this.clientAssertion(body, localAuth),
     );
 
     if ('error' in result) {
@@ -453,6 +470,7 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
       body.client_secret,
       this.canonicalResource(),
       localAuth.issuerFor(this.rawInput.request),
+      this.clientAssertion(body, localAuth),
     );
 
     if ('error' in result) {
@@ -569,6 +587,23 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
    */
   private canonicalResource(): string {
     return computeResource(this.rawInput.request, this.scope.entryPath, this.scope.routeBase);
+  }
+
+  /**
+   * The request's client assertion, and what its `aud` may name (RFC 7523 §3): this token endpoint, as the
+   * authorization server metadata advertises it, or the issuer.
+   */
+  private clientAssertion(
+    body: { client_assertion_type?: string; client_assertion?: string },
+    localAuth: LocalPrimaryAuth,
+  ): ClientAssertionInput {
+    const { request } = this.rawInput;
+    const tokenEndpoint = `${getRequestBaseUrl(request, oauthBasePath(this.scope))}/oauth/token`;
+    return {
+      type: body.client_assertion_type,
+      assertion: body.client_assertion,
+      audiences: [tokenEndpoint, localAuth.issuerFor(request)],
+    };
   }
 }
 

@@ -1,15 +1,7 @@
 // auth/jwks/jwks.service.ts
 import type { JSONWebKeySet, JWK } from 'jose';
 
-import {
-  bytesToHex,
-  createKeyPersistence,
-  isProduction,
-  isRedirectResponse,
-  randomBytes,
-  rsaVerify,
-  type KeyPersistence,
-} from '@frontmcp/utils';
+import { bytesToHex, isProduction, isRedirectResponse, randomBytes, rsaVerify } from '@frontmcp/utils';
 
 import { resolveAndCheckHostname } from '../cimd/cimd.validator';
 import { noopAuthLogger, type AuthLogger } from '../common/auth-logger.interface';
@@ -128,18 +120,14 @@ export class JwksService {
     createdAt: number;
   };
 
+  // The keys this server's own tokens verify with (see setPublicJwks)
+  private publicJwks: JSONWebKeySet = { keys: [] };
+
   // Provider JWKS cache (providerId -> jwks + fetchedAt)
   private providerJwks = new Map<string, { jwks: JSONWebKeySet; fetchedAt: number }>();
 
   // The last key refetch an unknown `kid` started, per provider (see refetchForUnknownKid)
   private unknownKidRefetches = new Map<string, { startedAt: number; done: Promise<JSONWebKeySet | undefined> }>();
-
-  // Track if key has been initialized (for async loading)
-  private keyInitialized = false;
-  // Promise guard to prevent concurrent key generation
-  private keyInitPromise: Promise<void> | undefined;
-  // KeyPersistence instance for unified key storage
-  private keyPersistence?: KeyPersistence;
 
   constructor(opts?: JwksServiceOptions) {
     this.logger = opts?.logger ?? noopAuthLogger;
@@ -152,30 +140,17 @@ export class JwksService {
   }
 
   // ===========================================================================
-  // Key Persistence Helpers
-  // ===========================================================================
-
-  /**
-   * Get or create the KeyPersistence instance.
-   * Returns null if persistence is disabled (production).
-   */
-  private async getKeyPersistence(): Promise<KeyPersistence | null> {
-    if (isProduction()) return null;
-    if (!this.keyPersistence) {
-      this.keyPersistence = await createKeyPersistence({
-        baseDir: '.frontmcp/keys',
-      });
-    }
-    return this.keyPersistence;
-  }
-
-  // ===========================================================================
   // Public JWKS (what /.well-known/jwks.json serves)
   // ===========================================================================
 
-  /** Gateway's public JWKS (publish at /.well-known/jwks.json when orchestrated). */
+  /** The public keys this server's tokens verify with, served at `/.well-known/jwks.json`; empty for HMAC tokens. */
   async getPublicJwks(): Promise<JSONWebKeySet> {
-    return this.getOrchestratorJwks();
+    return { keys: [...this.publicJwks.keys] };
+  }
+
+  /** Set the public keys {@link getPublicJwks} serves (`LocalTokenKeys.publicJwks`). */
+  setPublicJwks(jwks: JSONWebKeySet): void {
+    this.publicJwks = { keys: [...jwks.keys] };
   }
 
   // ===========================================================================
@@ -530,15 +505,21 @@ export class JwksService {
   // Orchestrator keys (generation/rotation)
   // ===========================================================================
 
-  /** Return the orchestrator public JWKS (generates/rotates as needed). */
+  /**
+   * Return the orchestrator public JWKS (generates/rotates as needed, in memory).
+   * @deprecated FrontMCP never signs with this key; `getPublicJwks()` serves the keys its tokens verify with.
+   */
   async getOrchestratorJwks(): Promise<JSONWebKeySet> {
-    await this.ensureOrchestratorKey();
+    this.ensureOrchestratorKey();
     return this.orchestratorKey.publicJwk;
   }
 
-  /** Return private signing key + kid for issuing orchestrator tokens. */
+  /**
+   * Return private signing key + kid for issuing orchestrator tokens.
+   * @deprecated FrontMCP never signs with this key; configure `signKey` to sign tokens with your own key.
+   */
   async getOrchestratorSigningKey(): Promise<{ kid: string; key: import('node:crypto').KeyObject; alg: string }> {
-    await this.ensureOrchestratorKey();
+    this.ensureOrchestratorKey();
     return { kid: this.orchestratorKey.kid, key: this.orchestratorKey.privateKey, alg: this.opts.orchestratorAlg };
   }
 
@@ -631,91 +612,10 @@ export class JwksService {
     }
   }
 
-  private async ensureOrchestratorKey() {
-    const now = Date.now();
+  private ensureOrchestratorKey(): void {
     const maxAge = this.opts.rotateDays * 24 * 60 * 60 * 1000;
-
-    // If key exists and not expired, use it
-    if (this.orchestratorKey && now - this.orchestratorKey.createdAt <= maxAge) {
-      return;
-    }
-
-    // Use promise guard to prevent concurrent key generation (race condition fix)
-    if (this.keyInitPromise) {
-      await this.keyInitPromise;
-      return;
-    }
-
-    // Create promise guard and initialize key
-    this.keyInitPromise = this.initializeOrchestratorKey(now, maxAge);
-    try {
-      await this.keyInitPromise;
-    } finally {
-      // Clear promise guard after initialization to allow future rotation
-      this.keyInitPromise = undefined;
-    }
-  }
-
-  private async initializeOrchestratorKey(now: number, maxAge: number) {
-    // Try to load persisted key (in development mode)
-    const persistence = await this.getKeyPersistence();
-
-    if (persistence && !this.keyInitialized) {
-      this.keyInitialized = true;
-      const loaded = await persistence.getAsymmetric('jwks-orchestrator');
-
-      if (loaded && now - loaded.createdAt <= maxAge) {
-        // Validate algorithm matches config
-        if (loaded.alg !== this.opts.orchestratorAlg) {
-          this.logger.warn(
-            "[JwksService] Persisted key algorithm (%s) doesn't match config (%s), generating new key",
-            loaded.alg,
-            this.opts.orchestratorAlg,
-          );
-        } else {
-          // Reconstruct KeyObject from JWK
-          try {
-            const { createPrivateKey } = require('node:crypto') as typeof import('node:crypto');
-            const privateKey = createPrivateKey({
-              key: loaded.privateKey as import('node:crypto').JsonWebKey,
-              format: 'jwk',
-            });
-            this.orchestratorKey = {
-              kid: loaded.kid,
-              privateKey,
-              publicJwk: loaded.publicJwk,
-              createdAt: loaded.createdAt,
-            };
-            return;
-          } catch (error) {
-            this.logger.warn(
-              '[JwksService] Failed to load persisted key: %s, generating new key',
-              (error as Error).message,
-            );
-          }
-        }
-      }
-    }
-
-    // Generate new key
-    this.orchestratorKey = this.generateKey(this.opts.orchestratorAlg);
-    this.keyInitialized = true;
-
-    // Save if persistence enabled
-    if (persistence) {
-      try {
-        await persistence.set({
-          type: 'asymmetric',
-          kid: this.orchestratorKey.kid,
-          alg: this.opts.orchestratorAlg,
-          privateKey: this.orchestratorKey.privateKey.export({ format: 'jwk' }) as JsonWebKey,
-          publicJwk: this.orchestratorKey.publicJwk,
-          createdAt: this.orchestratorKey.createdAt,
-          version: 1,
-        });
-      } catch (error) {
-        this.logger.warn('[JwksService] Failed to persist dev key: %s', (error as Error).message);
-      }
+    if (!this.orchestratorKey || Date.now() - this.orchestratorKey.createdAt > maxAge) {
+      this.orchestratorKey = this.generateKey(this.opts.orchestratorAlg);
     }
   }
 

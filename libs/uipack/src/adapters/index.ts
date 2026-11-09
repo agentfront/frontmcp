@@ -28,6 +28,7 @@ export {
 // ============================================
 export {
   buildToolResponseContent,
+  buildHtmlResponseText,
   type ToolResponseContent,
   type BuildToolResponseContentOptions,
 } from './response-builder';
@@ -45,7 +46,10 @@ export {
   warnIfComponentReference,
   type RenderToolTemplateOptions,
   type RenderToolTemplateResult,
+  type MarkdownRenderOptions,
 } from './template-renderer';
+export { describeRenderOptionProblems, prepareRenderOptions } from './render-options';
+export { loadCodeHighlighter, type CodeHighlighter } from './code-highlight';
 
 // ============================================
 // Content Detection & Rendering

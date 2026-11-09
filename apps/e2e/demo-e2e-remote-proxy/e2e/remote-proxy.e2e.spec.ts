@@ -157,6 +157,13 @@ test.describe('Remote OAuth Proxy E2E', () => {
     expect(typeof claims.sub).toBe('string');
     expect(claims.sub).not.toMatch(/^anon:/);
 
+    // An `access: 'authorized'` flow on its own route runs for the caller the token names.
+    const flow = await browserFetch(`${server.info.baseUrl}/flow-access/authorized`, {
+      headers: { Authorization: `Bearer ${tokenJson.access_token!}` },
+    });
+    expect(flow.status).toBe(200);
+    expect(await flow.json()).toEqual({ sub: claims.sub });
+
     // 4) Use the FrontMCP token to call a tool that reads the upstream token.
     const client = await server.createClient({ token: tokenJson.access_token! });
     try {
@@ -195,5 +202,16 @@ test.describe('Remote OAuth Proxy E2E', () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get('WWW-Authenticate')).toContain('Bearer');
+  });
+
+  test("an access: 'authorized' flow answers 401 with the challenge without a token; a 'public' one answers", async ({
+    server,
+  }) => {
+    const authorized = await browserFetch(`${server.info.baseUrl}/flow-access/authorized`);
+    const open = await browserFetch(`${server.info.baseUrl}/flow-access/public`);
+
+    expect(authorized.status).toBe(401);
+    expect(authorized.headers.get('WWW-Authenticate')).toContain('Bearer');
+    expect(open.status).toBe(200);
   });
 });

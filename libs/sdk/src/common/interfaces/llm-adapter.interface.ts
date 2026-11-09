@@ -139,6 +139,12 @@ export interface AgentCompletionOptions {
   toolChoice?: 'auto' | 'required' | 'none' | { name: string };
 
   /**
+   * Aborts when the agent's run stops (its `execution.timeout`, or the call is cancelled or fails).
+   * The agent loop sets it on every request; an adapter that can cancel its request should pass it on.
+   */
+  signal?: AbortSignal;
+
+  /**
    * Additional provider-specific options.
    */
   [key: string]: unknown;

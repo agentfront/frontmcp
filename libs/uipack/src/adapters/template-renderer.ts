@@ -11,13 +11,20 @@ import type { FileSource } from '../component/types';
 import type { ImportResolver } from '../resolver/types';
 import { buildShell } from '../shell/builder';
 import { createTemplateHelpers, hasSizing } from '../shell/data-injector';
+import { sanitizeHtml } from '../shell/sanitize-html';
 import { isTrustedHtml } from '../shell/trusted-html';
 import type { ShellConfig, WidgetSizing } from '../shell/types';
+import type { UIContentSecurity } from '../types/ui-config';
+import type { UIType } from '../types/ui-runtime';
 import { escapeHtml } from '../utils';
+import { loadCodeHighlighter, type CodeHighlighter } from './code-highlight';
 import { MCP_APPS_MIME_TYPE } from './constants';
 import { detectContentType } from './content-detector';
 import { wrapDetectedContent } from './content-renderers';
 import { markdownToHtml } from './markdown';
+import { renderMdxTemplate } from './mdx';
+import { describeRenderOptionProblems, forcedUiType, resolveUiType } from './render-options';
+import { renderComponentOnServer } from './server-react';
 import { detectUIType } from './type-detector';
 
 /**
@@ -65,6 +72,44 @@ export interface RenderToolTemplateOptions {
   escapeStringResults?: boolean;
   /** Receives the one-time string-result notice. Defaults to `console`. */
   logger?: { warn: (message: string) => void };
+  /**
+   * `ui.contentSecurity`: when set, the markup built on the server from the template (an HTML,
+   * Markdown or MDX string, a template function's result, a component rendered with
+   * `uiType: 'react'`) is sanitized with {@link sanitizeHtml}. Unset, the markup is used as written.
+   */
+  contentSecurity?: UIContentSecurity;
+  /**
+   * `ui.runtimeOptions.markdown`, for a Markdown or MDX template: `gfm` adds GitHub-flavored Markdown
+   * (tables, task lists, strikethrough, links for bare URLs), and `highlightTheme` highlights fenced
+   * code that names its language with highlight.js and puts that theme's stylesheet in the page.
+   */
+  markdown?: MarkdownRenderOptions;
+  /**
+   * `ui.mdxComponents`: a string template is MDX, compiled with `@mdx-js/mdx` and rendered on the
+   * server with React. Its tags name these components, and its expressions read `input`, `output`
+   * and `helpers`.
+   */
+  mdxComponents?: Record<string, unknown>;
+  /**
+   * `ui.uiType`: the renderer, instead of the one detected from the template. `'html'` uses a string
+   * as written and calls a function as an HTML builder; `'markdown'` converts a string, or a
+   * function's string result, from Markdown; `'mdx'` renders a string as MDX; `'react'` renders a
+   * component reference on the server, or bundles a `{ file }` widget. `'auto'` (or unset) detects.
+   */
+  uiType?: UIType;
+  /**
+   * `ui.hydrate` (or `ui.runtimeOptions.hydrate`): a `{ file }` `.tsx`/`.jsx` widget is rendered on
+   * the server into the page, and the page hydrates it instead of rendering it from scratch.
+   */
+  hydrate?: boolean;
+}
+
+/** `ui.runtimeOptions.markdown`. */
+export interface MarkdownRenderOptions {
+  /** GitHub-flavored Markdown. */
+  gfm?: boolean;
+  /** A highlight.js theme, such as `'github'` or `'github-dark'`. */
+  highlightTheme?: string;
 }
 
 /**
@@ -149,6 +194,28 @@ function renderUnwrappedResult(rawResult: unknown, options: RenderToolTemplateOp
   return escapeHtml(rawResult);
 }
 
+/** A Markdown or MDX template as HTML, with the `ui.runtimeOptions.markdown` options. */
+function convertMarkdown(source: string, options: RenderToolTemplateOptions, mdx: boolean): string {
+  const { gfm, highlightTheme } = options.markdown ?? {};
+  const highlighter: CodeHighlighter | undefined = highlightTheme ? loadCodeHighlighter(highlightTheme) : undefined;
+  const converted = mdx
+    ? renderMdxTemplate(source, {
+        input: options.input ?? {},
+        output: options.output ?? {},
+        helpers: createTemplateHelpers(),
+        components: options.mdxComponents,
+        gfm,
+        highlighter,
+      })
+    : markdownToHtml(source, { gfm, highlight: highlighter?.highlight });
+  return highlighter ? `<style>${highlighter.css}</style>\n${converted}` : converted;
+}
+
+/** The template's markup, sanitized when the tool sets `ui.contentSecurity`. */
+function secureMarkup(markup: string, options: RenderToolTemplateOptions): string {
+  return options.contentSecurity === undefined ? markup : sanitizeHtml(markup, options.contentSecurity);
+}
+
 /** The tools already warned about, per component, so the warning is given once. */
 const warnedComponentReferences = new WeakMap<object, Set<string>>();
 
@@ -160,7 +227,7 @@ function warnComponentReference(template: object, toolName: string, logger: { wa
   logger.warn(
     `[FrontMCP] Tool "${toolName}": \`ui.template\` is a React component reference, which cannot be bundled ` +
       `(there is no source file to compile), so the widget would render an empty page. ` +
-      `Use \`template: { file: './widget.tsx' }\` instead.`,
+      `Use \`template: { file: './widget.tsx' }\` instead, or set \`ui.uiType: 'react'\` to render it on the server.`,
   );
 }
 
@@ -215,12 +282,16 @@ function isDefinitelyReactComponent(template: unknown): boolean {
  * - HTML template builder function `(ctx) => string | TrustedHtml`
  * - Static HTML/MDX string
  *
- * React function references (`template: MyComponent`) are NOT supported for bundling.
- * Use `template: { file: './my-component.tsx' }` instead.
+ * React function references (`template: MyComponent`) can't be bundled for the page: with
+ * `uiType: 'react'` they render on the server to static HTML; otherwise use
+ * `template: { file: './my-component.tsx' }`.
  */
 export function renderToolTemplate(options: RenderToolTemplateOptions): RenderToolTemplateResult {
   const { toolName, input, output, template, resolver, platformType, sizing } = options;
-  const uiType = detectUIType(template);
+  const problems = describeRenderOptionProblems(template, options);
+  if (problems.length > 0) throw new Error(`Tool "${toolName}": ${problems.join(' ')}`);
+  const uiType = resolveUiType(template, options);
+  const forced = forcedUiType(options);
 
   // When the user didn't pick a resourceMode, host-detect: Claude widget
   // iframes block all external script execution (esm.sh, cdnjs — see #447),
@@ -252,12 +323,20 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     // When the user set `resourceMode: 'inline'`, propagate it as `inlineReact`
     // so the bundler inlines React (fix for #454: makes Claude render the widget).
     const result = renderComponent(
-      { source: template as FileSource, inlineReact: resourceMode === 'inline' },
+      { source: template as FileSource, inlineReact: resourceMode === 'inline', hydrate: options.hydrate === true },
       { ...shellConfig, csp: buildCspConfig(resolver, options.csp) },
     );
     html = result.html;
     hash = result.hash;
     size = result.size;
+  } else if (typeof template === 'function' && forced === 'react') {
+    const shellResult = buildShell(
+      secureMarkup(renderComponentOnServer(template, input, output), options),
+      shellConfig,
+    );
+    html = shellResult.html;
+    hash = shellResult.hash;
+    size = shellResult.size;
   } else if (typeof template === 'function') {
     const helpers = createTemplateHelpers();
     // A render without a call's data (a widget compiled at startup) still gives the template objects
@@ -266,14 +345,15 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     // A capitalized name only *suggests* a React component. A real one (class, memo/forwardRef, or
     // anything that throws or returns an element when called outside React) cannot be bundled from a
     // reference; a capitalized plain builder is still an HTML builder and must render.
+    // A forced `'html'` or `'markdown'` is always a builder
     let rawResult: unknown;
-    let isHtmlBuilder = uiType !== 'react' || !isDefinitelyReactComponent(template);
+    let isHtmlBuilder = forced !== undefined || uiType !== 'react' || !isDefinitelyReactComponent(template);
     if (isHtmlBuilder) {
       try {
         rawResult = (template as (ctx: unknown) => unknown)(ctx);
-        isHtmlBuilder = !isReactTypedObject(rawResult);
+        isHtmlBuilder = forced !== undefined || !isReactTypedObject(rawResult);
       } catch (error) {
-        if (uiType !== 'react') throw error;
+        if (forced !== undefined || uiType !== 'react') throw error;
         isHtmlBuilder = false;
       }
     }
@@ -285,13 +365,23 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
       html = shellResult.html;
       hash = shellResult.hash;
       size = shellResult.size;
+    } else if (forced === 'markdown') {
+      // The result is Markdown source, which the converter escapes; trusted markup stays HTML
+      const markup =
+        typeof rawResult === 'string'
+          ? convertMarkdown(rawResult, options, false)
+          : renderUnwrappedResult(rawResult, options);
+      const shellResult = buildShell(secureMarkup(markup, options), shellConfig);
+      html = shellResult.html;
+      hash = shellResult.hash;
+      size = shellResult.size;
     } else {
       // Auto-detect the result type and wrap accordingly; trusted markup is always an HTML body
       const wrapped = isTrustedHtml(rawResult) ? undefined : wrapDetectedContent(rawResult);
       if (wrapped) {
         html = wrapped;
       } else {
-        const shellResult = buildShell(renderUnwrappedResult(rawResult, options), shellConfig);
+        const shellResult = buildShell(secureMarkup(renderUnwrappedResult(rawResult, options), options), shellConfig);
         html = shellResult.html;
         hash = shellResult.hash;
         size = shellResult.size;
@@ -299,7 +389,18 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     }
   } else if (typeof template === 'string') {
     // String template — a Markdown string is converted to HTML, an HTML string is used as written
-    const shellResult = buildShell(uiType === 'markdown' ? markdownToHtml(template) : template, shellConfig);
+    const markup =
+      uiType === 'markdown' || uiType === 'mdx' ? convertMarkdown(template, options, uiType === 'mdx') : template;
+    const shellResult = buildShell(secureMarkup(markup, options), shellConfig);
+    html = shellResult.html;
+    hash = shellResult.hash;
+    size = shellResult.size;
+  } else if (forced === 'react') {
+    // A React.memo / forwardRef component, rendered on the server
+    const shellResult = buildShell(
+      secureMarkup(renderComponentOnServer(template, input, output), options),
+      shellConfig,
+    );
     html = shellResult.html;
     hash = shellResult.hash;
     size = shellResult.size;

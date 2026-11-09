@@ -5,6 +5,8 @@
 
 import type { JWK } from 'jose';
 
+import type { LoggingLevel } from '@frontmcp/protocol';
+
 import type { McpTestClient } from '../client/mcp-test-client';
 import type { McpTestClientBuilder } from '../client/mcp-test-client.builder';
 
@@ -52,6 +54,16 @@ export interface TestConfig {
    * `debug` also prints the server's command and output.
    */
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  /**
+   * The MCP protocol version the clients speak (default: '2025-06-18'). '2026-07-28' is stateless:
+   * see `McpTestClientConfig.protocolVersion`.
+   */
+  protocolVersion?: string;
+  /**
+   * The level of the log messages (`notifications/message`) the clients ask the server for
+   * (default: 'debug'); `false` asks for none. Not the server's own log level, which is `logLevel`.
+   */
+  mcpLogLevel?: LoggingLevel | false;
   /** Environment variables to pass to the server */
   env?: Record<string, string>;
   /** Startup timeout in ms (default: 30000) */
@@ -177,6 +189,8 @@ export interface ServerFixture {
     clientInfo?: { name: string; version: string };
     /** Override the MCP entry path for this client (default: `test.use()`'s). */
     entryPath?: string;
+    /** Override the protocol version for this client (default: `test.use()`'s). */
+    protocolVersion?: string;
   }): Promise<McpTestClient>;
 
   /**

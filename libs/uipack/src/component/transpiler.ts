@@ -89,6 +89,26 @@ export function transpileReactSource(source: string, filename?: string): string 
  * @param componentName - Name of the component to mount (extracted from source)
  * @returns Bundled JavaScript source code
  */
+const FIRST_RENDER = `  // Render immediately (component shows loading state until data arrives)
+  __render(undefined);
+`;
+
+const INJECTED_DATA_RENDER = `  // 2. Try injected data globals (null: the page carries no call's data, e.g. compiled at startup)
+  if (__hasData(window.__mcpToolOutput) && window.__mcpToolOutput !== null) { __render(window.__mcpToolOutput); }
+`;
+
+/** The first render of a hydrated widget: the props the server rendered it with, from the data the page carries. */
+function hydrateFirstRender(componentName: string): string {
+  return `  // Hydrate the markup rendered on the server, with the data the page carries
+  var __initial = window.__mcpToolOutput !== null ? window.__mcpToolOutput : undefined;
+  __reactRoot = hydrateRoot(__root,
+    __h(McpBridgeProvider, null,
+      __h(${componentName}, { output: __hasData(__initial) ? __initial : null, input: window.__mcpToolInput, loading: !__hasData(__initial) })
+    )
+  );
+`;
+}
+
 /**
  * Options for `bundleFileSource`.
  */
@@ -103,6 +123,11 @@ export interface BundleFileSourceOptions {
    * behavior where React is loaded from the CDN via an import map.
    */
   bundleReact?: boolean;
+  /**
+   * `ui.hydrate`: the page's `#root` holds the widget rendered on the server, so the mount hydrates
+   * it with `hydrateRoot` and the data the page carries, instead of rendering into an empty root.
+   */
+  hydrate?: boolean;
 }
 
 export function bundleFileSource(
@@ -126,15 +151,16 @@ export function bundleFileSource(
   }
 
   const esbuild = loadEsbuild(filename);
+  const hydrate = options.hydrate === true;
 
   const mountCode = `
 // --- Auto-generated mount ---
 import { createElement as __h } from 'react';
-import { createRoot } from 'react-dom/client';
+import { ${hydrate ? 'hydrateRoot' : 'createRoot'} } from 'react-dom/client';
 import { McpBridgeProvider } from '@frontmcp/ui/react';
 var __root = document.getElementById('root');
 if (__root) {
-  var __reactRoot = createRoot(__root);
+  var __reactRoot${hydrate ? '' : ' = createRoot(__root)'};
   function __hasData(v) { return v !== undefined; }
   function __render(output) {
     __reactRoot.render(
@@ -143,9 +169,7 @@ if (__root) {
       )
     );
   }
-  // Render immediately (component shows loading state until data arrives)
-  __render(undefined);
-  // 1. Try OpenAI SDK (toolOutput set synchronously or after load)
+${hydrate ? hydrateFirstRender(componentName) : FIRST_RENDER}  // 1. Try OpenAI SDK (toolOutput set synchronously or after load)
   if (typeof window !== 'undefined') {
     if (!window.openai) window.openai = {};
     var __cur = window.openai.toolOutput;
@@ -156,9 +180,7 @@ if (__root) {
       configurable: true, enumerable: true
     });
   }
-  // 2. Try injected data globals (null: the page carries no call's data, e.g. compiled at startup)
-  if (__hasData(window.__mcpToolOutput) && window.__mcpToolOutput !== null) { __render(window.__mcpToolOutput); }
-  // 3. Listen for bridge tool-result (ext-apps / MCP Inspector)
+${hydrate ? '' : INJECTED_DATA_RENDER}  // 3. Listen for bridge tool-result (ext-apps / MCP Inspector)
   var __bridge = window.FrontMcpBridge;
   if (__bridge && typeof __bridge.onToolResult === 'function') {
     __bridge.onToolResult(function(data) { __render(data); });
@@ -236,6 +258,56 @@ if (__root) {
         `If the error mentions @frontmcp/ui or @frontmcp/uipack, ensure both packages are installed in the consuming project.`,
       { cause: err },
     );
+  }
+}
+
+/**
+ * Bundle a FileSource `.tsx`/`.jsx` widget for the server, for `ui.hydrate`: one CommonJS module
+ * whose `render(props)` returns the widget rendered to HTML inside the `McpBridgeProvider` the page
+ * mounts it in. Its packages are bundled, as in the page's bundle; React is left to the widget's
+ * project, so the widget and react-dom/server share one copy.
+ *
+ * @param filePath - The widget's absolute path
+ * @param exportName - The component's export, `default` when unset
+ */
+export function bundleFileSourceForServer(filePath: string, exportName: string | undefined): { code: string } {
+  const path = require('path') as typeof import('path');
+  const resolveDir = path.dirname(filePath);
+  if (!isFrontmcpUiResolvable(resolveDir, process.cwd())) {
+    throw new Error(
+      `FileSource widget "${filePath}" requires the @frontmcp/ui package, whose McpBridgeProvider it renders in. ` +
+        `Install it (e.g. \`npm install @frontmcp/ui\`) and try again.`,
+    );
+  }
+  const esbuild = loadEsbuild(filePath);
+  const component = JSON.stringify(exportName ?? 'default');
+  const entry = `import * as __widget from ${JSON.stringify(`./${path.basename(filePath)}`)};
+import { createElement } from 'react';
+import { renderToString } from 'react-dom/server';
+import { McpBridgeProvider } from '@frontmcp/ui/react';
+var Component = __widget[${component}] ?? __widget.default;
+export function render(props) {
+  return renderToString(createElement(McpBridgeProvider, null, createElement(Component, props)));
+}`;
+
+  try {
+    const result = esbuild.buildSync({
+      stdin: { contents: entry, loader: 'jsx', resolveDir, sourcefile: 'widget-server-entry.jsx' },
+      bundle: true,
+      write: false,
+      format: 'cjs',
+      platform: 'node',
+      target: 'node20',
+      jsx: 'automatic',
+      external: ['react', 'react-dom', 'react/*', 'react-dom/*'],
+      define: { 'process.env.NODE_ENV': '"production"' },
+      logLevel: 'silent',
+      loader: { '.tsx': 'tsx', '.jsx': 'jsx' },
+    });
+    return { code: result.outputFiles[0].text };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to bundle FileSource "${filePath}" for the server: ${message}`, { cause: err });
   }
 }
 

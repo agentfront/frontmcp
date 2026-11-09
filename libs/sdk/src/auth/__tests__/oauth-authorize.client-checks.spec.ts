@@ -12,6 +12,8 @@
  */
 import 'reflect-metadata';
 
+import { CimdService, type ClientMetadataDocument } from '@frontmcp/auth';
+
 import {
   createTestFetchServer,
   rpc20260728,
@@ -297,5 +299,90 @@ describe('the server grants only the scopes it allows (#262)', () => {
 
     expect(html).toContain('tickets:read');
     expect(html).not.toContain('admin');
+  });
+});
+
+describe('the server honors the metadata a client declared (RFC 7591, client ID metadata documents)', () => {
+  const CIMD_CLIENT = 'https://client.example.com/oauth/metadata.json';
+
+  function serveCimdDocument(overrides: Partial<ClientMetadataDocument>) {
+    const document: ClientMetadataDocument = {
+      client_id: CIMD_CLIENT,
+      client_name: 'Desk companion',
+      redirect_uris: [REGISTERED_REDIRECT],
+      token_endpoint_auth_method: 'none',
+      grant_types: ['authorization_code'],
+      response_types: ['code'],
+      ...overrides,
+    };
+    jest
+      .spyOn(CimdService.prototype, 'resolveClientMetadata')
+      .mockResolvedValue({ isCimdClient: true, metadata: document, fromCache: true });
+  }
+
+  async function authorizeCimd(server: TestFetchServer, scope?: string) {
+    return httpGet(
+      server.handler,
+      authorizePath({ client_id: CIMD_CLIENT, redirect_uri: REGISTERED_REDIRECT, scope, state: 's' }),
+      HOST,
+    );
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('grants a pre-registered client only the scopes it declared', async () => {
+    const server = await serverWith(
+      localAuth({
+        allowedScopes: ['tickets:*'],
+        dcr: {
+          clients: [{ clientId: REGISTERED_CLIENT, redirectUris: [REGISTERED_REDIRECT], scope: 'tickets:read' }],
+        },
+      }),
+    );
+
+    const { grantedScope } = await signIn(server, 'tickets:read tickets:write');
+
+    expect(grantedScope).toBe('tickets:read');
+  });
+
+  it('grants a CIMD client only the scopes its document declares', async () => {
+    serveCimdDocument({ scope: 'tickets:read' });
+    const server = await serverWith(localAuth({ allowedScopes: ['tickets:*'] }));
+
+    const html = await (await authorizeCimd(server, 'tickets:read tickets:write')).text();
+
+    expect(html).toContain('tickets:read');
+    expect(html).not.toContain('tickets:write');
+  });
+
+  it.each<[string, Partial<ClientMetadataDocument>]>([
+    ['private_key_jwt without jwks or jwks_uri', { token_endpoint_auth_method: 'private_key_jwt' }],
+    ['client_secret_post', { token_endpoint_auth_method: 'client_secret_post' }],
+    ['no authorization_code grant', { grant_types: ['refresh_token'] }],
+  ])('refuses a CIMD client whose document declares %s, with an error page', async (_label, overrides) => {
+    serveCimdDocument(overrides);
+    const server = await serverWith(localAuth());
+
+    const response = await authorizeCimd(server);
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get('location')).toBeNull();
+  });
+
+  it.each<[string, Partial<ClientMetadataDocument>]>([
+    ['a public client', {}],
+    [
+      'a private_key_jwt client with its keys',
+      { token_endpoint_auth_method: 'private_key_jwt', jwks: { keys: [{ kty: 'RSA', n: 'x', e: 'AQAB' }] } },
+    ],
+  ])('serves the sign-in page to %s', async (_label, overrides) => {
+    serveCimdDocument(overrides);
+    const server = await serverWith(localAuth());
+
+    const response = await authorizeCimd(server);
+
+    expect(response.status).toBe(200);
   });
 });

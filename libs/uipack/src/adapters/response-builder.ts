@@ -83,3 +83,17 @@ export function buildToolResponseContent(options: BuildToolResponseContentOption
 
   return result;
 }
+
+/**
+ * The second text block of a "dual payload" (`ui.htmlResponsePrefix`): the prefix, a colon, and the
+ * page in an `html` code fence, for a client that renders no widget but shows HTML from a code
+ * block. The fence is longer than any run of backticks in the page, so the page can't close it.
+ *
+ * @example buildHtmlResponseText('Here is the weather dashboard', html)
+ * // 'Here is the weather dashboard:\n\n```html\n<!DOCTYPE html>…\n```'
+ */
+export function buildHtmlResponseText(prefix: string, html: string): string {
+  const longestRun = Math.max(0, ...(html.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = '`'.repeat(Math.max(3, longestRun + 1));
+  return `${prefix}:\n\n${fence}html\n${html}\n${fence}`;
+}

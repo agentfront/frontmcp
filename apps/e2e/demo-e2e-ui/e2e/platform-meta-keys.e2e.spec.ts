@@ -8,7 +8,7 @@
  * These tests verify namespace isolation — no platform should receive
  * openai/* or frontmcp/* keys (no cross-contamination).
  */
-import { test, expect, UIAssertions } from '@frontmcp/testing';
+import { expect, test, UIAssertions } from '@frontmcp/testing';
 
 test.describe('Platform Meta Keys E2E', () => {
   test.use({
@@ -17,7 +17,25 @@ test.describe('Platform Meta Keys E2E', () => {
     publicMode: true,
   });
 
+  // An 'auto' tool sends OpenAI no page (the Apps SDK renders the widget from its ui:// resource),
+  // so the tests that read the page call a tool whose servingMode is 'inline'
   test.describe('OpenAI Platform Meta Keys', () => {
+    test("should send no page for an 'auto' tool", async ({ server }) => {
+      const client = await server.createClient({
+        transport: 'streamable-http',
+        clientInfo: { name: 'ChatGPT', version: '1.0.0' },
+      });
+
+      try {
+        const result = await client.tools.call('html-card', { title: 'OpenAI Test', content: 'Auto mode' });
+
+        expect(result).toBeSuccessful();
+        expect(result).toNotHaveMetaKey('ui/html');
+      } finally {
+        await client.disconnect();
+      }
+    });
+
     test('should have ui/* meta keys in tool call response', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
@@ -25,10 +43,7 @@ test.describe('Platform Meta Keys E2E', () => {
       });
 
       try {
-        const result = await client.tools.call('html-card', {
-          title: 'OpenAI Test',
-          content: 'Testing OpenAI meta keys',
-        });
+        const result = await client.tools.call('leaky-report', { title: 'OpenAI Test' });
 
         expect(result).toBeSuccessful();
 
@@ -50,10 +65,7 @@ test.describe('Platform Meta Keys E2E', () => {
       });
 
       try {
-        const result = await client.tools.call('react-chart', {
-          data: [{ label: 'A', value: 10 }],
-          title: 'OpenAI Chart',
-        });
+        const result = await client.tools.call('leaky-report', { title: 'OpenAI Chart' });
 
         expect(result).toBeSuccessful();
 
@@ -80,10 +92,7 @@ test.describe('Platform Meta Keys E2E', () => {
       });
 
       try {
-        const result = await client.tools.call('html-table', {
-          headers: ['A', 'B'],
-          rows: [['1', '2']],
-        });
+        const result = await client.tools.call('leaky-report', { title: 'OpenAI Table' });
 
         expect(result).toBeSuccessful();
         expect(result).toHavePlatformMeta('openai');
@@ -325,12 +334,12 @@ test.describe('Platform Meta Keys E2E', () => {
 
       try {
         const [openaiResult, claudeResult, cursorResult] = await Promise.all([
-          openaiClient.tools.call('html-card', { title: 'OpenAI', content: 'Test' }),
+          openaiClient.tools.call('leaky-report', { title: 'OpenAI' }),
           claudeClient.tools.call('html-card', { title: 'Claude', content: 'Test' }),
           cursorClient.tools.call('html-card', { title: 'Cursor', content: 'Test' }),
         ]);
 
-        // OpenAI: ui/* keys only (unified namespace)
+        // OpenAI: ui/* keys only (unified namespace); leaky-report is 'inline', as an 'auto' tool sends OpenAI no page
         expect(openaiResult).toHaveMetaKey('ui/html');
         expect(openaiResult).toNotHaveMetaKey('openai/html');
         expect(openaiResult).toNotHaveMetaKey('frontmcp/html');
@@ -356,10 +365,7 @@ test.describe('Platform Meta Keys E2E', () => {
       });
 
       try {
-        const result = await client.tools.call('html-table', {
-          headers: ['A'],
-          rows: [['1']],
-        });
+        const result = await client.tools.call('leaky-report', { title: 'Platform Report' });
 
         expect(result).toBeSuccessful();
 
@@ -367,7 +373,7 @@ test.describe('Platform Meta Keys E2E', () => {
         UIAssertions.assertOpenAIMeta(result);
         UIAssertions.assertPlatformMimeType(result, 'openai');
         const html = UIAssertions.assertPlatformHtml(result, 'openai');
-        expect(html).toContain('table');
+        expect(html).toContain('Platform Report');
       } finally {
         await client.disconnect();
       }
@@ -382,7 +388,7 @@ test.describe('Platform Meta Keys E2E', () => {
       });
 
       try {
-        const result = await client.tools.call('html-card', { title: 'Test', content: 'Content' });
+        const result = await client.tools.call('leaky-report', { title: 'Test' });
 
         expect(result).toBeSuccessful();
         expect(result).toHaveMetaValue('ui/mimeType', 'text/html;profile=mcp-app');

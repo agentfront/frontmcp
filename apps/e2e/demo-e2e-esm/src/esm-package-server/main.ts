@@ -8,6 +8,7 @@
  * - @test/esm-tools v1.0.0 — 2 tools: echo, add (plain objects)
  * - @test/esm-multi v1.0.0 — 1 tool + 1 resource + 1 prompt (plain objects)
  * - @test/esm-decorated v1.0.0 — 2 tools + 1 resource + 1 prompt (real @Tool/@Resource/@Prompt decorators, esbuild-transpiled)
+ * - @test/esm-full v1.0.0 — a provider, a tool, a skill, an agent, a job and a workflow (esbuild-transpiled)
  *
  * URL patterns (same as esm.sh / npm registry):
  * - GET /{packageName}         → npm registry JSON (versions, dist-tags)
@@ -15,8 +16,9 @@
  */
 
 import * as http from 'node:http';
-import { buildSync } from 'esbuild';
 import * as path from 'node:path';
+
+import { buildSync } from 'esbuild';
 
 const rawPort = parseInt(process.env['PORT'] ?? process.env['ESM_SERVER_PORT'] ?? '50400', 10);
 const port = Number.isInteger(rawPort) && rawPort > 0 && rawPort <= 65535 ? rawPort : 50400;
@@ -122,7 +124,7 @@ module.exports = {
 // DECORATED FIXTURE (esbuild-transpiled TypeScript with real decorators)
 // ═══════════════════════════════════════════════════════════════════
 
-function buildFixture(filename: string): string {
+function buildFixture(filename: string, define?: Record<string, string>): string {
   const result = buildSync({
     entryPoints: [path.join(__dirname, 'fixtures', filename)],
     bundle: true,
@@ -131,6 +133,7 @@ function buildFixture(filename: string): string {
     target: 'es2022',
     write: false,
     external: ['@frontmcp/sdk', 'zod', 'reflect-metadata'],
+    define,
   });
   // Strip esbuild's CJS annotation comment that contains the word "import",
   // which would cause the ESM loader's isEsmSource() to misdetect this as ESM
@@ -141,6 +144,7 @@ const ESM_DECORATED_BUNDLE = buildFixture('decorated-package.ts');
 const ESM_TOOLS_DECORATED_BUNDLE = buildFixture('tools-only-package.ts');
 const ESM_RESOURCES_DECORATED_BUNDLE = buildFixture('resources-only-package.ts');
 const ESM_PROMPTS_DECORATED_BUNDLE = buildFixture('prompts-only-package.ts');
+const ESM_FULL_BUNDLE = buildFixture('full-package.ts', { PACKAGE_VERSION: JSON.stringify('1.0.0') });
 
 // ═══════════════════════════════════════════════════════════════════
 // PACKAGE REGISTRY
@@ -201,6 +205,12 @@ packages.set('@test/esm-resources-decorated', {
 packages.set('@test/esm-prompts-decorated', {
   name: '@test/esm-prompts-decorated',
   versions: { '1.0.0': createVersionEntry('@test/esm-prompts-decorated', '1.0.0', ESM_PROMPTS_DECORATED_BUNDLE) },
+  'dist-tags': { latest: '1.0.0' },
+});
+
+packages.set('@test/esm-full', {
+  name: '@test/esm-full',
+  versions: { '1.0.0': createVersionEntry('@test/esm-full', '1.0.0', ESM_FULL_BUNDLE) },
   'dist-tags': { latest: '1.0.0' },
 });
 

@@ -245,6 +245,7 @@ export type {
   ListResourcesResult,
   ListResourceTemplatesResult,
   ListPromptsResult,
+  CompleteResult,
   // Server/Client metadata (used by DirectClient interface)
   ServerCapabilities,
   Implementation,
@@ -346,6 +347,7 @@ export {
   ListJobsTool,
   RegisterJobTool,
   RemoveJobTool,
+  UpdateJobTool,
 } from './subsystems';
 
 // Workflow exports - managed multi-step job pipelines
@@ -371,6 +373,7 @@ export {
   ListWorkflowsTool,
   RegisterWorkflowTool,
   RemoveWorkflowTool,
+  UpdateWorkflowTool,
 } from './subsystems';
 
 // Channel exports - push-based notification channels for Claude Code
@@ -681,6 +684,27 @@ export type {
   CallToolOptions,
   ClientInfo,
   LLMPlatform,
+  SearchSkillsOptions,
+  SearchSkillsResult,
+  SkillSearchResultItem,
+  LoadSkillsFormat,
+  LoadSkillsOptions,
+  LoadSkillsResult,
+  LoadedSkillItem,
+  LoadedSkillMarkdownItem,
+  ListSkillsOptions,
+  ListSkillsResult,
+  ElicitationRequest,
+  ElicitationResponse,
+  ElicitationHandler,
+  CompleteOptions,
+  McpLogLevel,
+  SkillAssetEntry,
+  SkillAssetManifest,
+  Sep2640IndexEntry,
+  Sep2640SkillEntry,
+  Sep2640ResourceTemplateEntry,
+  Sep2640ArchiveEntry,
 } from './direct';
 
 // LLM platform utilities (for advanced use)

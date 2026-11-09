@@ -119,7 +119,7 @@ class DeleteRecordsTool extends ToolContext {
 2. Server sends an `elicitation/request` to the client
 3. Client displays the request to the user (UI varies by client)
 4. User responds with structured data matching the schema
-5. `this.elicit()` returns the user's response
+5. `this.elicit()` returns the user's response, parsed by the schema; an accepted answer that doesn't match it fails the call with `INVALID_INPUT`
 6. Tool continues execution with the response
 
 ## Persistent Questions (Outlive the Session)

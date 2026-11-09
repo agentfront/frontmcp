@@ -3,6 +3,7 @@
  */
 
 import {
+  createPublicToolCallError,
   createToolCallError,
   SelfReferenceError,
   TOOL_CALL_ERROR_CODES,
@@ -19,6 +20,29 @@ describe('TOOL_CALL_ERROR_CODES', () => {
     expect(TOOL_CALL_ERROR_CODES.ACCESS_DENIED).toBe('ACCESS_DENIED');
     expect(TOOL_CALL_ERROR_CODES.RATE_LIMITED).toBe('RATE_LIMITED');
     expect(TOOL_CALL_ERROR_CODES.SELF_REFERENCE).toBe('SELF_REFERENCE');
+  });
+});
+
+describe('createPublicToolCallError', () => {
+  it("keeps the tool's own message under the code it is given", () => {
+    const error = createPublicToolCallError('EXECUTION', 'users:get', 'User u9 not found');
+    expect(error).toEqual({ code: 'EXECUTION', message: 'User u9 not found', toolName: 'users:get' });
+    expect(Object.isFrozen(error)).toBe(true);
+  });
+
+  it('removes stack frames and server paths, and nothing else', () => {
+    const error = createPublicToolCallError(
+      'EXECUTION',
+      'users:get',
+      'Row 7 at 10:30:00 failed in /srv/app/import.ts\n    at run (/srv/app/import.ts:1:2)',
+    );
+    expect(error.message).toBe('Row 7 at 10:30:00 failed in [path]');
+  });
+
+  it("falls back to the code's generic message for an empty one", () => {
+    expect(createPublicToolCallError('TIMEOUT', 'slow:tool', '  ').message).toBe(
+      'Tool "slow:tool" execution timed out',
+    );
   });
 });
 

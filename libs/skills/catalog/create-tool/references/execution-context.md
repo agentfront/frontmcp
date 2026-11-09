@@ -40,16 +40,16 @@ description: What ToolContext provides at runtime — this.get, this.fetch, this
 
 ## `this.context` (FrontMcpContext)
 
-| Property            | Type                  | Description                                                                                                                                                                                                                                         |
-| ------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `requestId`         | `string`              | Unique ID for this request                                                                                                                                                                                                                          |
-| `sessionId`         | `string`              | Session identifier (for stateful transports)                                                                                                                                                                                                        |
-| `verifiedSessionId` | `string \| undefined` | `sessionId` when the server verified that session; `undefined` for a stateless request (shared stateless id, or the per-request id of a request without `mcp-session-id`). Key per-session state on it and fall back to the authenticated principal |
-| `scopeId`           | `string`              | Scope identifier (for multi-app servers)                                                                                                                                                                                                            |
-| `authInfo`          | `AuthInfo`            | Raw validated access token — `token`, `clientId`, `scopes`, `expiresAt?`, `resource?`, `extra?`. For user identity / JWT claims use `this.auth` (`this.auth.user.sub`, `this.auth.claims['…']`) instead.                                            |
-| `traceContext`      | `TraceContext`        | Distributed-tracing context (propagated to `this.fetch` automatically)                                                                                                                                                                              |
-| `timestamp`         | `number`              | Request start timestamp                                                                                                                                                                                                                             |
-| `metadata`          | `RequestMetadata`     | Request headers, client IP, MCP client name/version                                                                                                                                                                                                 |
+| Property            | Type                  | Description                                                                                                                                                                                                                                                               |
+| ------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `requestId`         | `string`              | Unique ID for this request                                                                                                                                                                                                                                                |
+| `sessionId`         | `string`              | Session identifier (for stateful transports)                                                                                                                                                                                                                              |
+| `verifiedSessionId` | `string \| undefined` | `sessionId` when the server verified that session; `undefined` for a stateless request (shared stateless id, or the per-request id of a request without `mcp-session-id`). Key per-session state on it and fall back to the authenticated principal                       |
+| `scopeId`           | `string`              | Scope identifier (for multi-app servers)                                                                                                                                                                                                                                  |
+| `authInfo`          | `AuthInfo`            | Raw validated access token — `token`, `clientId`, `scopes`, `expiresAt?` (the token's `exp`, in epoch seconds; milliseconds up to 1.11.2), `resource?`, `extra?`. For user identity / JWT claims use `this.auth` (`this.auth.user.sub`, `this.auth.claims['…']`) instead. |
+| `traceContext`      | `TraceContext`        | Distributed-tracing context (propagated to `this.fetch` automatically)                                                                                                                                                                                                    |
+| `timestamp`         | `number`              | Request start timestamp                                                                                                                                                                                                                                                   |
+| `metadata`          | `RequestMetadata`     | Request headers, client IP, MCP client name/version                                                                                                                                                                                                                       |
 
 ## DI: `this.get` vs `this.tryGet`
 
@@ -128,6 +128,7 @@ async execute(input: { items: string[] }) {
 
 - `this.notify(msg, level?)` — sends `notifications/message` to the client at any of the eight MCP levels (`debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`), only once the client has asked for that level or a lower one (`logging/setLevel`, or `_meta["io.modelcontextprotocol/logLevel"]` under 2026-07-28). Always-best-effort: returns `false` when nothing was sent.
 - `this.progress(n, total?, msg?)` — sends `notifications/progress` IF the request had a progress token. Returns `false` when no token was provided (so the call costs almost nothing if nobody's listening).
+- Both go on the response stream of the `tools/call` request that runs the tool, so the client has them before the call's result. Up to 1.11.2, over a session, they went to the session's `GET` stream, which can deliver them after the result.
 - `this.mark(stage)` — server-side breadcrumb, surfaced in logs / metrics / traces. No client notification.
 - `this.notifyResourceUpdated(uri)` — sends `notifications/resources/updated` to every session subscribed to `uri` (via `resources/subscribe`) and to every MCP 2026-07-28 `subscriptions/listen` stream subscribed to it, as a resource's own `this.notifyUpdated()` does; no-op for non-subscribers. Call it when a tool mutates state that backs a `@Resource` so subscribers re-fetch.
 - `this.notifyResourceListChanged()` — broadcasts `notifications/resources/list_changed` so clients re-run `resources/list`. Call it after a tool adds or removes resources at runtime.
@@ -156,7 +157,7 @@ async execute(input: Input) {
 }
 ```
 
-> `this.respond` doesn't bypass `outputSchema` — its argument is validated like a normal return value.
+> `this.respond` doesn't bypass `outputSchema` — its argument is validated like a normal return value and sent as `content` and `structuredContent`. A complete `CallToolResult` (a `content` array) is sent as it is, as a returned one is. Up to 1.11.2 the argument was sent as the whole result: no `content` (a string was spread into `{"0":"C",…}`) and no `outputSchema` check.
 
 ## See also
 

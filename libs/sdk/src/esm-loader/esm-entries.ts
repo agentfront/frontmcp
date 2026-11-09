@@ -19,14 +19,18 @@ import {
   type ResourceEsmTargetRecord,
   type ResourceRecord,
   type ScopeEntry,
+  type SkillMetadata,
+  type SkillRecord,
   type ToolEsmRecord,
   type ToolEsmTargetRecord,
   type ToolRecord,
 } from '../common';
+import { frontMcpSkill } from '../common/decorators/skill.decorator';
 import { pickExternalEntry } from '../common/utils/external-entry.utils';
 import { ExternalEntryLoadError, type ExternalEntryKind } from '../errors/external-entry.errors';
 import { normalizePrompt } from '../prompt/prompt.utils';
 import { normalizeResource } from '../resource/resource.utils';
+import { isSkillRecord, normalizeSkill } from '../skill/skill.utils';
 import { normalizeTool } from '../tool/tool.utils';
 import { type EsmRegistryAuth } from './esm-auth.types';
 import { EsmCacheManager } from './esm-cache';
@@ -40,6 +44,20 @@ export function registryAuthOf(loader?: PackageLoader): EsmRegistryAuth | undefi
   return loader
     ? { registryUrl: loader.registryUrl ?? loader.url, token: loader.token, tokenEnvVar: loader.tokenEnvVar }
     : undefined;
+}
+
+/**
+ * The loader an entry uses: the server's, with the fields the entry's own loader sets in place of the server's.
+ * A token is taken as a whole: an entry that sets `token` or `tokenEnvVar` gets neither of the server's.
+ */
+export function mergePackageLoaders(
+  serverLoader?: PackageLoader,
+  entryLoader?: PackageLoader,
+): PackageLoader | undefined {
+  if (!serverLoader || !entryLoader) return entryLoader ?? serverLoader;
+  const entrySetsToken = entryLoader.token !== undefined || entryLoader.tokenEnvVar !== undefined;
+  const tokenSource = entrySetsToken ? entryLoader : serverLoader;
+  return { ...serverLoader, ...entryLoader, token: tokenSource.token, tokenEnvVar: tokenSource.tokenEnvVar };
 }
 
 /**
@@ -96,6 +114,15 @@ export function esmPromptRecord(raw: unknown, namespace?: string): PromptRecord 
   return definition && buildEsmPromptRecord(definition, namespace);
 }
 
+/**
+ * The record of a manifest's skill export: a `@Skill` class, a `skill()` result, or a plain
+ * `{ name, description, instructions }` object, checked as `skill()` checks it. Anything else is not a skill, and throws.
+ */
+export function esmSkillRecord(raw: unknown): SkillRecord {
+  if (raw !== null && typeof raw === 'object' && !isSkillRecord(raw)) return frontMcpSkill(raw as SkillMetadata);
+  return normalizeSkill(raw);
+}
+
 /** The records of a manifest's exports of one kind; exports that are not entries of that kind are skipped. */
 export function esmManifestRecords<R>(exported: unknown[] | undefined, recordOf: (raw: unknown) => R | undefined): R[] {
   return (exported ?? []).map((raw) => recordOf(raw)).filter((record): record is R => record !== undefined);
@@ -114,7 +141,7 @@ function loadPackageOnce(
     loads = new Map();
     packageLoadsByScope.set(scope, loads);
   }
-  const packageLoader = options?.loader ?? scope.metadata.loader;
+  const packageLoader = mergePackageLoaders(scope.metadata.loader, options?.loader);
   const loaderFingerprint = sha256Hex(JSON.stringify({ packageLoader, cacheTTL: options?.cacheTTL })).slice(0, 16);
   const key = `${specifier.fullName}@${specifier.range}#${loaderFingerprint}`;
   let load = loads.get(key);

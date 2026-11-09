@@ -166,6 +166,9 @@ export class AgentContext<
   // ---- Progress token from request's _meta (for progress notifications)
   private readonly _progressToken?: string | number;
 
+  /** @internal JSON-RPC id of the request that called the agent - set by CallAgentFlow, for its notifications */
+  _jsonRpcRequestIdInternal?: string | number;
+
   constructor(args: AgentCtorArgs<In>) {
     const {
       metadata,
@@ -263,6 +266,8 @@ export class AgentContext<
     const autoProgress = (progress: number, message: string, isFinal = false) => {
       // A streamed run's progress notifications carry its text: automatic updates would be mixed into it
       if (streaming) return;
+      // The call has already ended: its client takes no more updates
+      if (this.signal?.aborted) return;
       const now = Date.now();
       // MCP requires every progress value to be higher than the one before it
       if (progress <= lastSentProgress) return;
@@ -281,10 +286,13 @@ export class AgentContext<
           streamCompletion: (prompt, tools, options) => this.streamCompletion(prompt, tools, options),
         }),
       },
+      agentId: this.agentId,
       systemInstructions: this.systemInstructions,
       tools: this.toolDefinitions,
       maxIterations,
       timeout: this.metadata.execution?.timeout ?? 120000,
+      // The call's own stop (cancelled, or failed by `timeout.executeMs`) stops the loop too
+      signal: this.signal,
       logger: this.logger,
       completionOptions: this.completionOptions(),
 
@@ -596,7 +604,8 @@ export class AgentContext<
 
   /**
    * Send a notification message to the current session.
-   * Uses 'notifications/message' per MCP 2025-11-25 spec.
+   * Uses 'notifications/message' per MCP 2025-11-25 spec, on the call's own response stream,
+   * so the client has it before the call's result.
    *
    * Use this to report progress during long-running operations.
    *
@@ -636,12 +645,19 @@ export class AgentContext<
       return false;
     }
 
-    return this.scope.notifications.sendLogMessageToSession(sessionId, level, this.agentName, data);
+    return this.scope.notifications.sendLogMessageToSession(
+      sessionId,
+      level,
+      this.agentName,
+      data,
+      this._jsonRpcRequestIdInternal,
+    );
   }
 
   /**
    * Send a progress notification to the current session.
-   * Uses 'notifications/progress' per MCP 2025-11-25 spec.
+   * Uses 'notifications/progress' per MCP 2025-11-25 spec, on the call's own response stream,
+   * so the client has it before the call's result.
    *
    * Only works if the client requested progress updates by including a
    * progressToken in the request's _meta field. If no progressToken was
@@ -679,7 +695,14 @@ export class AgentContext<
       return false;
     }
 
-    return this.scope.notifications.sendProgressNotification(sessionId, this._progressToken, progress, total, message);
+    return this.scope.notifications.sendProgressNotification(
+      sessionId,
+      this._progressToken,
+      progress,
+      total,
+      message,
+      this._jsonRpcRequestIdInternal,
+    );
   }
 
   /**

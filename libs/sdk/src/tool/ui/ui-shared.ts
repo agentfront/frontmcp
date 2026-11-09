@@ -8,7 +8,9 @@ import type { RenderToolTemplateOptions } from '@frontmcp/uipack/adapters';
 import type { ImportResolver } from '@frontmcp/uipack/resolver';
 
 import { InternalMcpError } from '../../errors/mcp.error';
+import { ToolUiConfigurationError } from '../../errors/tool-ui.errors';
 import { detectUIType, warnIfComponentReference } from './template-detection';
+import type { WidgetUrlSource } from './widget-serving';
 
 /** The `tools/call` `_meta` key a widget's bridge sets on its own calls, as `@frontmcp/uipack/bridge-runtime` names it. */
 export const WIDGET_CALL_META_KEY = 'frontmcp/widgetCall';
@@ -40,7 +42,7 @@ export interface UIResourceMeta {
    * the resource content item's `_meta` so MCP Apps hosts (Claude) actually
    * honor it — `_meta.ui.csp` on the tool is ignored (#455).
    */
-  csp?: { connectDomains?: string[]; resourceDomains?: string[] };
+  csp?: { connectDomains?: string[]; resourceDomains?: string[]; frameDomains?: string[] };
   /**
    * MCP Apps permissions (future-compatibility slot — currently sourced from
    * `uiConfig.permissions` if present so it round-trips to the resource).
@@ -67,6 +69,7 @@ export class ToolUIRegistry {
   private resourceMeta = new Map<string, UIResourceMeta>();
   private uiTools = new Set<string>();
   private customUris = new Map<string, string>();
+  private widgetUrls = new Map<string, WidgetUrlSource>();
   private resolver?: ImportResolver;
   private readonly options: ToolUIRegistryOptions;
   private renderer?: UIRenderer;
@@ -109,11 +112,51 @@ export class ToolUIRegistry {
     return this.renderer;
   }
 
-  /** Warn at startup when a tool's `ui.template` is a React component reference it cannot bundle. */
-  checkTemplate(toolName: string, template: unknown): void {
+  /**
+   * Warn at startup when a tool's `ui.template` is a React component reference it cannot bundle,
+   * unless `ui.uiType: 'react'` renders it on the server.
+   */
+  checkTemplate(toolName: string, template: unknown, uiType?: unknown): void {
+    if (uiType === 'react') return;
     // Once loaded, the renderer's own check shares its once-per-tool memory with the warning a render gives
     const warnIfComponent = this.renderer?.warnIfComponentReference ?? warnIfComponentReference;
     warnIfComponent(toolName, template, this.options.logger ?? console);
+  }
+
+  /**
+   * Refuse, at startup, a tool whose `ui` sets a rendering option its template cannot take.
+   *
+   * @throws ToolUiConfigurationError naming the tool and each option
+   */
+  async checkRenderOptions(toolName: string, uiConfig: Record<string, unknown> | undefined): Promise<void> {
+    if (!uiConfig) return;
+    await this.load();
+    const { describeRenderOptionProblems, prepareRenderOptions } = this.loadedRenderer;
+    const template = uiConfig['template'];
+    const problems = describeRenderOptionProblems(template, renderOptions(uiConfig));
+    if (problems.length > 0) throw new ToolUiConfigurationError(toolName, problems);
+    try {
+      await prepareRenderOptions(template, renderOptions(uiConfig));
+    } catch (error) {
+      throw new ToolUiConfigurationError(toolName, [error instanceof Error ? error.message : String(error)]);
+    }
+  }
+
+  /** Record that `toolName`'s widget page loads from a URL, which its `ui://` resource frames. */
+  registerWidgetUrl(toolName: string, source: WidgetUrlSource): void {
+    this.widgetUrls.set(toolName, source);
+  }
+
+  /** Where `toolName`'s widget page loads from, when it is served from a URL. */
+  getWidgetUrl(toolName: string): WidgetUrlSource | undefined {
+    return this.widgetUrls.get(toolName);
+  }
+
+  /** The `'direct-url'` widgets: each tool and the server route its page is served on. */
+  widgetRoutes(): Array<{ toolName: string; path: string }> {
+    return [...this.widgetUrls].flatMap(([toolName, source]) =>
+      source.servingMode === 'direct-url' ? [{ toolName, path: source.path }] : [],
+    );
   }
 
   /** The tool that advertised `uri` as its custom `ui.resourceUri`. */
@@ -153,7 +196,10 @@ export class ToolUIRegistry {
     return this.resourceMeta.get(toolName);
   }
 
-  detectUIType(template: unknown): string {
+  /** How the template renders: as `ui.uiType` says, as MDX for a string with `ui.mdxComponents`, else as detected. */
+  detectUIType(template: unknown, uiConfig?: { mdxComponents?: unknown; uiType?: unknown }): string {
+    if (typeof uiConfig?.uiType === 'string' && uiConfig.uiType !== 'auto') return uiConfig.uiType;
+    if (typeof template === 'string' && uiConfig?.mdxComponents) return 'mdx';
     return detectUIType(template);
   }
 
@@ -197,6 +243,7 @@ export class ToolUIRegistry {
       displayMode: uiConfig?.['displayMode'] as RenderToolTemplateOptions['displayMode'],
       csp: pageCsp(uiConfig),
       ...this.stringResultOptions(uiConfig),
+      ...renderOptions(uiConfig),
     });
 
     this.widgets.set(toolName, result.html);
@@ -211,9 +258,10 @@ export class ToolUIRegistry {
    * Sync `resourceMeta[toolName]` to the current `uiConfig`. Called before
    * every render so the entry stays consistent with the latest decorator
    * state, including the case where a user removes a previously-set
-   * `ui.csp` / `ui.permissions` field on re-compile.
+   * `ui.csp` / `ui.permissions` field on re-compile, and at startup for a
+   * `'custom-url'` widget, which FrontMCP doesn't render.
    */
-  private updateResourceMetaFromConfig(toolName: string, uiConfig: Record<string, unknown> | undefined): void {
+  updateResourceMetaFromConfig(toolName: string, uiConfig: Record<string, unknown> | undefined): void {
     const resourceMeta: UIResourceMeta = {
       csp: uiConfig?.['csp'] as UIResourceMeta['csp'] | undefined,
       permissions: uiConfig?.['permissions'],
@@ -244,7 +292,7 @@ export class ToolUIRegistry {
       const toolName = options['toolName'] as string;
       const template = options['template'];
       if (toolName && template) {
-        const uiType = detectUIType(template);
+        const uiType = this.detectUIType(template, options['uiConfig'] as Record<string, unknown> | undefined);
         this.manifests.set(toolName, { uiType, hash: '', size: 0 });
       }
     }
@@ -303,10 +351,27 @@ export class ToolUIRegistry {
       displayMode: uiConfig?.['displayMode'] as RenderToolTemplateOptions['displayMode'],
       csp: pageCsp(uiConfig),
       ...this.stringResultOptions(uiConfig),
+      ...renderOptions(uiConfig),
     });
 
     return { meta: result.meta };
   }
+}
+
+/** A tool's `ui` rendering options, as `renderToolTemplate` takes them. */
+function renderOptions(
+  uiConfig: Record<string, unknown> | undefined,
+): Pick<RenderToolTemplateOptions, 'contentSecurity' | 'markdown' | 'mdxComponents' | 'uiType' | 'hydrate'> {
+  const runtimeOptions = uiConfig?.['runtimeOptions'] as
+    | { markdown?: RenderToolTemplateOptions['markdown']; hydrate?: boolean }
+    | undefined;
+  return {
+    contentSecurity: uiConfig?.['contentSecurity'] as RenderToolTemplateOptions['contentSecurity'],
+    markdown: runtimeOptions?.markdown,
+    mdxComponents: uiConfig?.['mdxComponents'] as RenderToolTemplateOptions['mdxComponents'],
+    uiType: uiConfig?.['uiType'] as RenderToolTemplateOptions['uiType'],
+    hydrate: (uiConfig?.['hydrate'] as boolean | undefined) ?? runtimeOptions?.hydrate,
+  };
 }
 
 // ============================================

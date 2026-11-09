@@ -7,17 +7,28 @@ describe('describeIgnoredUiOptions (#645)', () => {
     expect(describeIgnoredUiOptions('t', { servingMode: 'inline' })).toEqual([]);
   });
 
-  it('names a single ignored option in the singular', () => {
-    const [message] = describeIgnoredUiOptions('weather', { hydrate: true });
-    expect(message).toContain('Tool "weather"');
-    expect(message).toContain('`ui.hydrate` is accepted but not used yet');
+  it('says nothing about the rendering options, bundlingMode and htmlResponsePrefix, which take effect', () => {
+    expect(
+      describeIgnoredUiOptions('weather', {
+        uiType: 'html',
+        hydrate: true,
+        contentSecurity: {},
+        bundlingMode: 'static',
+        htmlResponsePrefix: 'Widget',
+      }),
+    ).toEqual([]);
   });
 
-  it('lists several ignored options in one message', () => {
-    const messages = describeIgnoredUiOptions('weather', { uiType: 'html', hydrate: true, bundlingMode: 'x' });
-    expect(messages).toHaveLength(1);
-    expect(messages[0]).toContain('`ui.hydrate`, `ui.bundlingMode`, `ui.uiType`');
-    expect(messages[0]).toContain('are accepted but not used yet');
+  it('says nothing about the URL serving modes and their options, which serve the widget from a URL', () => {
+    expect(describeIgnoredUiOptions('weather', { servingMode: 'direct-url', directPath: '/widgets/weather' })).toEqual(
+      [],
+    );
+    expect(
+      describeIgnoredUiOptions('weather', {
+        servingMode: 'custom-url',
+        customWidgetUrl: 'https://cdn.example.com/weather.html',
+      }),
+    ).toEqual([]);
   });
 
   it('says nothing about the options sent to the host', () => {
@@ -30,11 +41,6 @@ describe('describeIgnoredUiOptions (#645)', () => {
         sandboxDomain: 'https://weather.example',
       }),
     ).toEqual([]);
-  });
-
-  it.each(['direct-url', 'custom-url'])('flags servingMode %s as not implemented', (servingMode) => {
-    const messages = describeIgnoredUiOptions('t', { servingMode });
-    expect(messages).toEqual([expect.stringContaining(`servingMode: '${servingMode}'\` is not implemented`)]);
   });
 
   it('says hybrid sends only a component reference', () => {

@@ -3,11 +3,19 @@
  * @description StreamableHTTP transport implementation for MCP Test Client
  */
 
+import { MCP_20260728_META, PROTOCOL_2026_07_28, type SubscriptionFilter } from '@frontmcp/protocol';
 import { trimSlashes, trimTrailing } from '@frontmcp/utils';
 
 import type { ClientInfo, ElicitationCreateRequest, ElicitationHandler } from '../client/mcp-test-client.types';
 import type { InterceptorChain } from '../interceptor';
 import { errorMessage, isAbortError, markInterceptedError } from './error-utils';
+import {
+  acknowledgedFilterIn,
+  isStatelessRequest,
+  jsonRpcErrorIn,
+  revisionHeaders,
+  withRequestMeta,
+} from './mcp-20260728';
 import type {
   JsonRpcRequest,
   JsonRpcResponse,
@@ -28,7 +36,17 @@ const NOTIFICATION_STREAM_REOPEN_DELAY_MS = 250;
  */
 export class StreamableHttpTransport implements McpTransport {
   private readonly config: Required<
-    Omit<TransportConfig, 'interceptors' | 'clientInfo' | 'elicitationHandler' | 'notificationHandler' | 'entryPath'>
+    Omit<
+      TransportConfig,
+      | 'interceptors'
+      | 'clientInfo'
+      | 'elicitationHandler'
+      | 'notificationHandler'
+      | 'entryPath'
+      | 'protocolVersion'
+      | 'capabilities'
+      | 'logLevel'
+    >
   > & {
     interceptors?: InterceptorChain;
     clientInfo?: ClientInfo;
@@ -47,6 +65,10 @@ export class StreamableHttpTransport implements McpTransport {
   private notificationStream?: AbortController;
   private notificationProtocolVersion = '';
   private notificationStreamReopenTimer?: ReturnType<typeof setTimeout>;
+  private subscriptionStream?: AbortController;
+  private readonly protocolVersion?: string;
+  private readonly requestMeta: Record<string, unknown>;
+  private readonly toolInputSchemas = new Map<string, unknown>();
 
   constructor(config: TransportConfig) {
     this.config = {
@@ -65,6 +87,13 @@ export class StreamableHttpTransport implements McpTransport {
     this.publicMode = config.publicMode ?? false;
     this.elicitationHandler = config.elicitationHandler;
     this.notificationHandler = config.notificationHandler;
+    this.protocolVersion = config.protocolVersion;
+    this.requestMeta = {
+      [MCP_20260728_META.protocolVersion]: PROTOCOL_2026_07_28,
+      ...(config.clientInfo && { [MCP_20260728_META.clientInfo]: config.clientInfo }),
+      [MCP_20260728_META.clientCapabilities]: config.capabilities ?? {},
+      ...(config.logLevel && { [MCP_20260728_META.logLevel]: config.logLevel }),
+    };
   }
 
   async connect(): Promise<void> {
@@ -169,11 +198,13 @@ export class StreamableHttpTransport implements McpTransport {
       }
     }
 
-    const headers = this.buildHeaders();
+    const stateless = isStatelessRequest(this.protocolVersion, message.method);
+    const outgoing = stateless ? withRequestMeta(message, this.requestMeta) : message;
+    const headers = this.buildHeaders(stateless, outgoing);
     this.lastRequestHeaders = headers;
 
     const url = this.mcpUrl();
-    this.log(`POST ${url}`, message);
+    this.log(`POST ${url}`, outgoing);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
@@ -182,7 +213,7 @@ export class StreamableHttpTransport implements McpTransport {
       const response = await fetch(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify(message),
+        body: JSON.stringify(outgoing),
         signal: controller.signal,
       });
 
@@ -202,7 +233,9 @@ export class StreamableHttpTransport implements McpTransport {
         const errorText = await response.text();
         this.log(`HTTP Error ${response.status}: ${errorText}`);
 
-        jsonResponse = {
+        // A 2026-07-28 server answers a refused request with an HTTP error carrying the JSON-RPC error
+        const rpcError = stateless && !isAuthStatus(response.status) ? jsonRpcErrorIn(errorText) : undefined;
+        jsonResponse = rpcError ?? {
           jsonrpc: '2.0',
           id: message.id ?? null,
           error: {
@@ -235,6 +268,8 @@ export class StreamableHttpTransport implements McpTransport {
         }
       }
 
+      if (stateless && message.method === 'tools/list') this.rememberToolInputSchemas(jsonResponse.result);
+
       // Process response through interceptors
       if (this.interceptors) {
         jsonResponse = await this.interceptors.processResponse(message, jsonResponse, Date.now() - startTime);
@@ -264,7 +299,7 @@ export class StreamableHttpTransport implements McpTransport {
   async notify(message: JsonRpcRequest): Promise<void> {
     this.ensureConnected();
 
-    const headers = this.buildHeaders();
+    const headers = this.buildHeaders(isStatelessRequest(this.protocolVersion, message.method), message);
     this.lastRequestHeaders = headers;
 
     const url = this.mcpUrl();
@@ -305,7 +340,7 @@ export class StreamableHttpTransport implements McpTransport {
   async sendRaw(data: string): Promise<JsonRpcResponse> {
     this.ensureConnected();
 
-    const headers = this.buildHeaders();
+    const headers = this.buildHeaders(isStatelessRequest(this.protocolVersion, undefined));
     this.lastRequestHeaders = headers;
 
     const url = this.mcpUrl();
@@ -358,8 +393,29 @@ export class StreamableHttpTransport implements McpTransport {
     await this.connectNotificationStream();
   }
 
+  async listen(id: string | number, notifications: SubscriptionFilter): Promise<SubscriptionFilter | undefined> {
+    this.ensureConnected();
+    this.closeSubscriptionStream();
+    const controller = new AbortController();
+    this.subscriptionStream = controller;
+    const message = withRequestMeta(
+      { jsonrpc: '2.0', id, method: 'subscriptions/listen', params: { notifications } },
+      this.requestMeta,
+    );
+
+    let ackTimer: ReturnType<typeof setTimeout> | undefined;
+    const acknowledged = await new Promise<SubscriptionFilter | undefined>((resolve) => {
+      ackTimer = setTimeout(() => resolve(undefined), this.config.timeout);
+      void this.readSubscriptionStream(controller, message, resolve);
+    });
+    clearTimeout(ackTimer);
+    if (!acknowledged && this.subscriptionStream === controller) this.closeSubscriptionStream();
+    return acknowledged;
+  }
+
   async close(): Promise<void> {
     this.closeNotificationStream();
+    this.closeSubscriptionStream();
     this.state = 'disconnected';
     this.sessionId = undefined;
     this.log('StreamableHTTP transport closed');
@@ -411,6 +467,7 @@ export class StreamableHttpTransport implements McpTransport {
 
   async simulateDisconnect(): Promise<void> {
     this.closeNotificationStream();
+    this.closeSubscriptionStream();
     this.state = 'disconnected';
     this.sessionId = undefined;
   }
@@ -480,9 +537,57 @@ export class StreamableHttpTransport implements McpTransport {
     if (this.notificationStream === controller) this.notificationStream = undefined;
   }
 
+  private closeSubscriptionStream(): void {
+    this.subscriptionStream?.abort();
+    this.subscriptionStream = undefined;
+  }
+
+  /** Posts `subscriptions/listen`, acknowledges the accepted filter, then records the notifications. */
+  private async readSubscriptionStream(
+    controller: AbortController,
+    message: JsonRpcRequest,
+    acknowledge: (filter: SubscriptionFilter | undefined) => void,
+  ): Promise<void> {
+    try {
+      const response = await fetch(this.mcpUrl(), {
+        method: 'POST',
+        headers: this.buildHeaders(true, message),
+        body: JSON.stringify(message),
+        signal: controller.signal,
+      });
+      const isEventStream = response.headers.get('content-type')?.includes('text/event-stream') ?? false;
+      if (!response.ok || !response.body || !isEventStream) {
+        await response.body?.cancel();
+        this.log(`Server opened no subscriptions/listen stream (HTTP ${response.status})`);
+      } else {
+        await this.readEventStream(response.body.getReader(), async (event) => {
+          const filter = acknowledgedFilterIn(event.data);
+          if (filter) acknowledge(filter);
+          else await this.handleSSEEvent(event);
+        });
+      }
+    } catch (error) {
+      this.log('subscriptions/listen failed:', error);
+    }
+    acknowledge(undefined);
+  }
+
   private async readNotificationStream(
     controller: AbortController,
     reader: ReadableStreamDefaultReader<Uint8Array>,
+  ): Promise<void> {
+    await this.readEventStream(reader, (event) => this.handleSSEEvent(event));
+    if (controller.signal.aborted || this.notificationStream !== controller) return;
+    this.releaseNotificationStream(controller);
+    this.notificationStreamReopenTimer = setTimeout(
+      () => void this.connectNotificationStream(),
+      NOTIFICATION_STREAM_REOPEN_DELAY_MS,
+    );
+  }
+
+  private async readEventStream(
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    onEvent: (event: { type: string; data: string; id?: string }) => Promise<unknown>,
   ): Promise<void> {
     const decoder = new TextDecoder();
     let buffer = '';
@@ -492,21 +597,23 @@ export class StreamableHttpTransport implements McpTransport {
         buffer = remainder;
         for (const eventText of completeEvents) {
           for (const event of this.parseSSEEvents(eventText, undefined).events) {
-            await this.handleSSEEvent(event);
+            await onEvent(event);
           }
         }
       }
     } catch (error) {
-      this.log('Notification stream ended:', error);
+      this.log('Event stream ended:', error);
     } finally {
       reader.releaseLock();
     }
-    if (controller.signal.aborted || this.notificationStream !== controller) return;
-    this.releaseNotificationStream(controller);
-    this.notificationStreamReopenTimer = setTimeout(
-      () => void this.connectNotificationStream(),
-      NOTIFICATION_STREAM_REOPEN_DELAY_MS,
-    );
+  }
+
+  private rememberToolInputSchemas(result: unknown): void {
+    const tools = (result as { tools?: unknown } | undefined)?.tools;
+    if (!Array.isArray(tools)) return;
+    for (const tool of tools as Array<{ name?: unknown; inputSchema?: unknown } | null>) {
+      if (typeof tool?.name === 'string') this.toolInputSchemas.set(tool.name, tool.inputSchema);
+    }
   }
 
   /**
@@ -801,7 +908,8 @@ export class StreamableHttpTransport implements McpTransport {
     return url.toString();
   }
 
-  private buildHeaders(): Record<string, string> {
+  /** `stateless` sends the request as 2026-07-28: no session, and the headers mirrored from `message`. */
+  private buildHeaders(stateless = false, message?: JsonRpcRequest): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'application/json, text/event-stream',
@@ -820,8 +928,16 @@ export class StreamableHttpTransport implements McpTransport {
     }
 
     // Always send session ID if we have one (even in public mode - server creates sessions)
-    if (this.sessionId) {
+    if (this.sessionId && !stateless) {
       headers['mcp-session-id'] = this.sessionId;
+    }
+
+    if (stateless) {
+      const toolName = message?.params?.['name'];
+      Object.assign(
+        headers,
+        revisionHeaders(message, typeof toolName === 'string' ? this.toolInputSchemas.get(toolName) : undefined),
+      );
     }
 
     // Add custom headers from config (allow override even in public mode)
@@ -911,6 +1027,10 @@ export class StreamableHttpTransport implements McpTransport {
       sseSessionId,
     };
   }
+}
+
+function isAuthStatus(status: number): boolean {
+  return status === 401 || status === 403;
 }
 
 /** Splits complete SSE events off the buffer, accepting CRLF, CR and LF line endings, even split across chunks. */

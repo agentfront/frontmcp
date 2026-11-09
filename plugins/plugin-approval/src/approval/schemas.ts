@@ -40,11 +40,21 @@ export const approvalContextSchema = z.object({
 // Delegation
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** The longest delegation chain a record can hold, whatever `maxDelegationDepth` says. */
+export const MAX_DELEGATION_CHAIN_LINKS = 64;
+
+export const delegationLinkSchema = z.object({
+  delegatorId: z.string().min(1),
+  delegateId: z.string().min(1),
+  purpose: z.string().optional(),
+});
+
 export const delegationContextSchema = z.object({
   delegatorId: z.string().min(1),
   delegateId: z.string().min(1),
   purpose: z.string().optional(),
   constraints: z.record(z.string(), z.unknown()).optional(),
+  chain: z.array(delegationLinkSchema).max(MAX_DELEGATION_CHAIN_LINKS).optional(),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,6 +122,7 @@ export const toolApprovalRequirementSchema = z.object({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type ApprovalContextInput = z.input<typeof approvalContextSchema>;
+export type DelegationLinkInput = z.input<typeof delegationLinkSchema>;
 export type DelegationContextInput = z.input<typeof delegationContextSchema>;
 export type ApprovalGrantorInput = z.input<typeof approvalGrantorSchema>;
 export type ApprovalRevokerInput = z.input<typeof approvalRevokerSchema>;

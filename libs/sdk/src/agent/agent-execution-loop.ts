@@ -11,6 +11,8 @@ import {
   type AgentToolDefinition,
   type FrontMcpLogger,
 } from '../common';
+import { AgentLlmError, AgentLoopExceededError, AgentTimeoutError, McpError } from '../errors';
+import { linkedAbortController } from '../utils/abort.utils';
 
 // ============================================================================
 // Types
@@ -42,10 +44,22 @@ export interface AgentExecutionLoopConfig {
   maxIterations?: number;
 
   /**
-   * Timeout for the entire execution in milliseconds.
+   * The id of the agent the loop runs for, named by the errors it fails with.
+   * @default 'agent'
+   */
+  agentId?: string;
+
+  /**
+   * Timeout for the entire execution in milliseconds. When it passes, the run fails with
+   * `AgentTimeoutError`, and no model request or tool call starts after it.
    * @default 120000 (2 minutes)
    */
   timeout?: number;
+
+  /**
+   * Stops the run when it aborts, as the timeout does: the run fails with the signal's reason.
+   */
+  signal?: AbortSignal;
 
   /**
    * Completion options (temperature, maxTokens, etc.).
@@ -98,7 +112,7 @@ export interface AgentExecutionLoopConfig {
   onToolStart?: (toolCall: AgentToolCall, index: number, total: number) => void;
 
   /**
-   * Callback when agent execution is complete.
+   * Callback when agent execution is complete, or has failed, whatever the reason.
    */
   onComplete?: (content: string | null, error?: Error) => void;
 }
@@ -215,21 +229,11 @@ export class AgentExecutionLoop {
     let iterations = 0;
     let totalPromptTokens = 0;
     let totalCompletionTokens = 0;
-    // Cleared when the run ends, so a finished run doesn't keep a timer (and the process) alive.
-    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const stop = this.startStopSignal();
 
     try {
-      // Set up timeout
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeout = setTimeout(
-          () => reject(new Error(`Agent execution timed out after ${this.config.timeout}ms`)),
-          this.config.timeout,
-        );
-      });
-
-      // Run the loop with timeout
       const result = await Promise.race([
-        this.executeLoop(messages, toolExecutor, {
+        this.executeLoop(messages, toolExecutor, stop.signal, {
           onIteration: (iter, msg) => {
             iterations = iter;
             this.config.onIteration?.(iter, msg);
@@ -239,7 +243,7 @@ export class AgentExecutionLoop {
             totalCompletionTokens += completion;
           },
         }),
-        timeoutPromise,
+        stop.stopped,
       ]);
 
       return {
@@ -254,7 +258,9 @@ export class AgentExecutionLoop {
         success: true,
         durationMs: Date.now() - startTime,
       };
-    } catch (error) {
+    } catch (caught) {
+      const error = caught as Error;
+      this.config.onComplete?.(null, error);
       return {
         content: null,
         messages,
@@ -265,11 +271,11 @@ export class AgentExecutionLoop {
           totalTokens: totalPromptTokens + totalCompletionTokens,
         },
         success: false,
-        error: error as Error,
+        error,
         durationMs: Date.now() - startTime,
       };
     } finally {
-      clearTimeout(timeout);
+      stop.end();
     }
   }
 
@@ -284,7 +290,7 @@ export class AgentExecutionLoop {
    * The model is streamed through the adapter's `streamCompletion()` when it has one, and called
    * through `completion()` otherwise. Tool calls are taken from the completion the stream ends with
    * (its `done` chunk), which holds their complete arguments; the `tool_call` chunks before it only
-   * announce them. The whole run is bounded by `timeout`, as {@link run} is.
+   * announce them. The whole run is bounded by `timeout` and `signal`, as {@link run} is.
    *
    * @param userMessage - The user's input message
    * @param toolExecutor - Function to execute tools
@@ -297,7 +303,6 @@ export class AgentExecutionLoop {
     existingMessages: AgentMessage[] = [],
   ): AsyncGenerator<AgentStreamEvent, AgentExecutionResult> {
     const startTime = Date.now();
-    const deadline = startTime + this.config.timeout;
     const messages: AgentMessage[] = [...existingMessages, { role: 'user', content: userMessage }];
 
     let iterations = 0;
@@ -317,10 +322,11 @@ export class AgentExecutionLoop {
       durationMs: Date.now() - startTime,
     });
 
-    const events = this.executeLoopStreaming(messages, toolExecutor);
+    const stop = this.startStopSignal();
+    const events = this.executeLoopStreaming(messages, toolExecutor, stop.signal);
     try {
       for (;;) {
-        const step = await this.beforeDeadline(events.next(), deadline);
+        const step = await Promise.race([events.next(), stop.stopped]);
         if (step.done) {
           const done = result(step.value.content);
           yield { type: 'done', result: done };
@@ -335,33 +341,73 @@ export class AgentExecutionLoop {
         yield event;
       }
     } catch (caught) {
-      // A timed-out step keeps running in the background, as in run(); its result is dropped
+      // A stopped step ends at its next model request or tool call; its result is dropped
       void events.return({ content: null }).catch(() => undefined);
       const error = caught as Error;
+      this.config.onComplete?.(null, error);
       const failed = result(null, error);
       yield { type: 'error', error };
       yield { type: 'done', result: failed };
       return failed;
+    } finally {
+      stop.end();
     }
   }
 
   /**
-   * `step`, or the run's timeout error when `deadline` passes first. The timer is cleared either way,
-   * so a finished run leaves none behind.
+   * The signal that stops a run: it aborts with `AgentTimeoutError` when the timeout passes, or with the
+   * reason of the config's `signal`. `stopped` rejects with that reason; `end()` clears the timer.
    */
-  private async beforeDeadline<T>(step: Promise<T>, deadline: number): Promise<T> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error(`Agent execution timed out after ${this.config.timeout}ms`)),
-        Math.max(0, deadline - Date.now()),
-      );
+  private startStopSignal(): { signal: AbortSignal; stopped: Promise<never>; end: () => void } {
+    const controller = linkedAbortController(this.config.signal);
+    const timer = setTimeout(
+      () => controller.abort(new AgentTimeoutError(this.agentId, this.config.timeout)),
+      this.config.timeout,
+    );
+    const stopped = new Promise<never>((_, reject) => {
+      if (controller.signal.aborted) reject(controller.signal.reason);
+      controller.signal.addEventListener('abort', () => reject(controller.signal.reason), { once: true });
     });
+    stopped.catch(() => undefined);
+    return { signal: controller.signal, stopped, end: () => clearTimeout(timer) };
+  }
+
+  private get agentId(): string {
+    return this.config.agentId ?? 'agent';
+  }
+
+  /** A model request, which the stop signal aborts: it fails with `AgentLlmError` unless the run was stopped. */
+  private async requestCompletion(prompt: AgentPrompt, signal: AbortSignal): Promise<AgentCompletion> {
     try {
-      return await Promise.race([step, timeout]);
-    } finally {
-      clearTimeout(timer);
+      const completion = await this.config.adapter.completion(
+        prompt,
+        this.toolsForModel(),
+        this.completionOptions(signal),
+      );
+      signal.throwIfAborted();
+      return completion;
+    } catch (error) {
+      throw this.modelError(error, signal);
     }
+  }
+
+  private toolsForModel(): AgentToolDefinition[] | undefined {
+    return this.config.tools.length > 0 ? this.config.tools : undefined;
+  }
+
+  private completionOptions(signal: AbortSignal): AgentCompletionOptions {
+    return { ...this.config.completionOptions, signal };
+  }
+
+  /** What a failed model request fails the run with: the stop reason, a FrontMCP error as it is, or `AgentLlmError`. */
+  private modelError(error: unknown, signal: AbortSignal): Error {
+    if (signal.aborted) return signal.reason as Error;
+    if (error instanceof McpError) return error;
+    return new AgentLlmError(this.agentId, error instanceof Error ? error : new Error(String(error)));
+  }
+
+  private loopExceededError(): AgentLoopExceededError {
+    return new AgentLoopExceededError(this.agentId, this.config.maxIterations);
   }
 
   // ============================================================================
@@ -371,12 +417,14 @@ export class AgentExecutionLoop {
   private async executeLoop(
     messages: AgentMessage[],
     toolExecutor: ToolExecutor,
+    signal: AbortSignal,
     callbacks: {
       onIteration: (iteration: number, message: AgentMessage) => void;
       onUsage: (promptTokens: number, completionTokens: number) => void;
     },
   ): Promise<{ content: string | null }> {
     for (let iteration = 1; iteration <= this.config.maxIterations; iteration++) {
+      signal.throwIfAborted();
       this.config.logger?.debug(`Agent loop iteration ${iteration}/${this.config.maxIterations}`);
 
       // Notify LLM start
@@ -389,11 +437,7 @@ export class AgentExecutionLoop {
       };
 
       // Call LLM
-      const completion = await this.config.adapter.completion(
-        prompt,
-        this.config.tools.length > 0 ? this.config.tools : undefined,
-        this.config.completionOptions,
-      );
+      const completion = await this.requestCompletion(prompt, signal);
 
       // Notify LLM complete with usage
       this.config.onLlmComplete?.(iteration, completion.usage);
@@ -423,6 +467,7 @@ export class AgentExecutionLoop {
         // Execute tool calls
         const totalTools = completion.toolCalls.length;
         for (let toolIndex = 0; toolIndex < totalTools; toolIndex++) {
+          signal.throwIfAborted();
           const toolCall = completion.toolCalls[toolIndex];
           this.config.onToolStart?.(toolCall, toolIndex, totalTools);
           this.config.onToolCall?.(toolCall);
@@ -436,6 +481,7 @@ export class AgentExecutionLoop {
             error = e as Error;
             result = { error: error.message };
           }
+          signal.throwIfAborted();
 
           this.config.onToolResult?.(toolCall, result, error);
 
@@ -464,20 +510,16 @@ export class AgentExecutionLoop {
       }
     }
 
-    // Max iterations reached
-    const error = new AgentMaxIterationsError(
-      `Agent reached maximum iterations (${this.config.maxIterations}) without completing`,
-      this.config.maxIterations,
-    );
-    this.config.onComplete?.(null, error);
-    throw error;
+    throw this.loopExceededError();
   }
 
   private async *executeLoopStreaming(
     messages: AgentMessage[],
     toolExecutor: ToolExecutor,
+    signal: AbortSignal,
   ): AsyncGenerator<AgentStreamEvent, { content: string | null }> {
     for (let iteration = 1; iteration <= this.config.maxIterations; iteration++) {
+      signal.throwIfAborted();
       this.config.logger?.debug(`Agent loop iteration ${iteration}/${this.config.maxIterations}`);
 
       // Notify LLM start
@@ -492,7 +534,7 @@ export class AgentExecutionLoop {
       };
 
       // Stream the model's reply (or get it in one piece from an adapter that can't stream)
-      const completion = yield* this.streamCompletion(prompt);
+      const completion = yield* this.streamCompletion(prompt, signal);
 
       // Notify LLM complete
       this.config.onLlmComplete?.(iteration, completion.usage);
@@ -517,6 +559,7 @@ export class AgentExecutionLoop {
         // Execute tool calls
         const totalTools = toolCalls.length;
         for (let toolIndex = 0; toolIndex < totalTools; toolIndex++) {
+          signal.throwIfAborted();
           const toolCall = toolCalls[toolIndex];
           this.config.onToolStart?.(toolCall, toolIndex, totalTools);
           this.config.onToolCall?.(toolCall);
@@ -531,6 +574,7 @@ export class AgentExecutionLoop {
             error = e as Error;
             result = { error: error.message };
           }
+          signal.throwIfAborted();
 
           this.config.onToolResult?.(toolCall, result, error);
           yield { type: 'tool_end', toolCall, result, error };
@@ -557,13 +601,7 @@ export class AgentExecutionLoop {
       }
     }
 
-    // Max iterations reached
-    const error = new AgentMaxIterationsError(
-      `Agent reached maximum iterations (${this.config.maxIterations}) without completing`,
-      this.config.maxIterations,
-    );
-    this.config.onComplete?.(null, error);
-    throw error;
+    throw this.loopExceededError();
   }
 
   /**
@@ -573,16 +611,32 @@ export class AgentExecutionLoop {
    * announce before they are known. A reply that arrives in one piece (an adapter without
    * `streamCompletion()`, or one whose stream only ends with `done`) yields its text as one chunk.
    */
-  private async *streamCompletion(prompt: AgentPrompt): AsyncGenerator<AgentStreamEvent, AgentCompletion> {
+  private async *streamCompletion(
+    prompt: AgentPrompt,
+    signal: AbortSignal,
+  ): AsyncGenerator<AgentStreamEvent, AgentCompletion> {
+    try {
+      return yield* this.streamModelReply(prompt, signal);
+    } catch (error) {
+      throw this.modelError(error, signal);
+    }
+  }
+
+  private async *streamModelReply(
+    prompt: AgentPrompt,
+    signal: AbortSignal,
+  ): AsyncGenerator<AgentStreamEvent, AgentCompletion> {
     const adapter = this.config.adapter;
-    const tools = this.config.tools.length > 0 ? this.config.tools : undefined;
+    const tools = this.toolsForModel();
+    const options = this.completionOptions(signal);
 
     let streamedText = '';
     let completion: AgentCompletion;
     if (supportsStreaming(adapter)) {
       const announced = new Map<string, Partial<AgentToolCall> & { id: string }>();
       let done: AgentCompletion | undefined;
-      for await (const chunk of adapter.streamCompletion(prompt, tools, this.config.completionOptions)) {
+      for await (const chunk of adapter.streamCompletion(prompt, tools, options)) {
+        signal.throwIfAborted();
         if (chunk.type === 'content' && chunk.content) {
           streamedText += chunk.content;
           yield { type: 'content', content: chunk.content };
@@ -609,8 +663,9 @@ export class AgentExecutionLoop {
         ...(done?.usage && { usage: done.usage }),
       };
     } else {
-      completion = await adapter.completion(prompt, tools, this.config.completionOptions);
+      completion = await adapter.completion(prompt, tools, options);
     }
+    signal.throwIfAborted();
 
     if (!streamedText && completion.content) {
       yield { type: 'content', content: completion.content };
@@ -650,22 +705,3 @@ export type AgentStreamEvent =
   | { type: 'usage'; promptTokens: number; completionTokens: number }
   | { type: 'error'; error: Error }
   | { type: 'done'; result: AgentExecutionResult };
-
-// ============================================================================
-// Errors
-// ============================================================================
-
-/**
- * Error thrown when agent reaches maximum iterations.
- */
-export class AgentMaxIterationsError extends Error {
-  constructor(
-    message: string,
-    public readonly maxIterations: number,
-  ) {
-    super(message);
-    this.name = 'AgentMaxIterationsError';
-  }
-}
-
-// AgentTimeoutError is exported from ../../errors/agent.errors.ts

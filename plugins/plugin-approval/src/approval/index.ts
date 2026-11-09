@@ -46,6 +46,7 @@ export {
   type ApprovalSourceType,
   type ApprovalMethod,
   type DelegationContext,
+  type DelegationLink,
   type ApprovalGrantor,
   type RevocationSourceType,
   type RevocationMethod,
@@ -67,6 +68,8 @@ export {
   riskLevelSchema,
   approvalContextSchema,
   delegationContextSchema,
+  delegationLinkSchema,
+  MAX_DELEGATION_CHAIN_LINKS,
   approvalGrantorSchema,
   approvalRevokerSchema,
   approvalRecordSchema,
@@ -74,6 +77,7 @@ export {
   // Input types
   type ApprovalContextInput,
   type DelegationContextInput,
+  type DelegationLinkInput,
   type ApprovalGrantorInput,
   type ApprovalRevokerInput,
   type ApprovalRecordInput,
@@ -103,6 +107,9 @@ export {
   normalizeRevoker,
 } from './factories';
 
+// Delegation chains
+export { delegationDepth, delegationProblem, extendDelegation } from './delegation';
+
 // Guards
 export {
   isGrantorSource,
@@ -122,4 +129,5 @@ export {
   ApprovalScopeNotAllowedError,
   ApprovalExpiredError,
   ChallengeValidationError,
+  ApprovalConfigurationError,
 } from './errors';

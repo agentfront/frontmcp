@@ -50,6 +50,8 @@ setupOTel({
     },
     requestLogs: {
       maxEntries: 500,
+      // Adds input_summary and output_summary: argument names, result keys, content types and sizes, never values
+      includeSummaries: true,
       // Called once per HTTP request, off the response path, when its response is finalized (tool/resource/prompt name,
       // entries, status, the real HTTP status_code including 200/401/429, error as the client sees it,
       // authenticated, auth_type and hooks_triggered)

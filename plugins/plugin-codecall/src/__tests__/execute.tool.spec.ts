@@ -924,47 +924,6 @@ describe('ExecuteTool', () => {
   });
 
   describe('Console and Logging Environment', () => {
-    it('should provide console when allowConsole is true', async () => {
-      const { tool, mockEnclave, mockConfig } = createExecuteTool();
-
-      mockConfig.get.mockImplementation((key: string) => {
-        if (key === 'resolvedVm.allowConsole') return true;
-        return 5000;
-      });
-      mockConfig.getAll.mockReturnValue({
-        resolvedVm: { timeoutMs: 5000, allowConsole: true },
-      });
-
-      let capturedEnv: any;
-      mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
-        capturedEnv = env;
-        return { success: true, result: null, logs: [], timedOut: false };
-      });
-
-      await tool.execute({ script: 'console.log("test");' });
-
-      expect(capturedEnv.console).toBeDefined();
-    });
-
-    it('should not provide console when allowConsole is false', async () => {
-      const { tool, mockEnclave, mockConfig } = createExecuteTool();
-
-      mockConfig.get.mockImplementation((key: string) => {
-        if (key === 'resolvedVm.allowConsole') return false;
-        return 5000;
-      });
-
-      let capturedEnv: any;
-      mockEnclave.execute.mockImplementation(async (_script: string, env: unknown) => {
-        capturedEnv = env;
-        return { success: true, result: null, logs: [], timedOut: false };
-      });
-
-      await tool.execute({ script: 'return 1;' });
-
-      expect(capturedEnv.console).toBeUndefined();
-    });
-
     it('should provide mcpLog function', async () => {
       const { tool, mockEnclave } = createExecuteTool();
 

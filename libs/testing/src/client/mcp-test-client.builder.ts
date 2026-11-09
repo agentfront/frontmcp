@@ -3,15 +3,17 @@
  * @description Builder pattern for creating McpTestClient instances
  */
 
+import type { LoggingLevel } from '@frontmcp/protocol';
+
+import { getPlatformCapabilities, getPlatformClientInfo } from '../platform/platform-client-info';
+import type { TestPlatformType } from '../platform/platform-types';
+import { McpTestClient } from './mcp-test-client';
 import type {
   McpTestClientConfig,
-  TestTransportType,
   TestAuthConfig,
   TestClientCapabilities,
+  TestTransportType,
 } from './mcp-test-client.types';
-import { McpTestClient } from './mcp-test-client';
-import type { TestPlatformType } from '../platform/platform-types';
-import { getPlatformClientInfo, getPlatformCapabilities } from '../platform/platform-client-info';
 
 /**
  * Builder for creating McpTestClient instances with fluent API
@@ -95,11 +97,19 @@ export class McpTestClientBuilder {
   }
 
   /**
-   * Set the MCP protocol version to request (default '2025-06-18').
-   * '2026-07-28' has no initialize handshake, so `build()` throws for it.
+   * Set the MCP protocol version the client speaks (default '2025-06-18').
+   * '2026-07-28' is stateless: the client sends `server/discover` instead of `initialize`.
    */
   withProtocolVersion(version: string): this {
     this.config.protocolVersion = version;
+    return this;
+  }
+
+  /**
+   * Set the level of the log messages the client asks the server for (default 'debug'); `false` asks for none.
+   */
+  withMcpLogLevel(level: LoggingLevel | false): this {
+    this.config.mcpLogLevel = level;
     return this;
   }
 

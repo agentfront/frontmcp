@@ -14,7 +14,9 @@
  */
 import 'reflect-metadata';
 
-import { createMockScopeEntry } from '../../../__test-utils__';
+import { openIncrementalAuthTicketProfile, verifyIncrementalAuthTicket } from '@frontmcp/auth';
+
+import { createMockScopeEntry, MOCK_SIGNING_SECRET } from '../../../__test-utils__';
 import { AuthorizationRequiredError } from '../../../errors';
 import { serverEntryOwner } from '../../../utils/lineage.utils';
 import CallToolFlow from '../call-tool.flow';
@@ -72,6 +74,30 @@ describe('call-tool app-level authorization (progressive/incremental)', () => {
       authInfo: { extra: { user: { sub: 'u1', authorized_apps: ['notes'] } } },
     });
     await expect(flow.checkToolAuthorization()).rejects.toBeInstanceOf(AuthorizationRequiredError);
+  });
+
+  it("seals the caller's email and name into the ticket of the auth_url", async () => {
+    const flow = makeFlow({
+      tool: TASKS_TOOL,
+      apps: APPS,
+      incrementalAuth: { enabled: true },
+      authInfo: {
+        extra: { user: { sub: 'u1', email: 'ada@example.com', name: 'Ada Lovelace', authorized_apps: ['notes'] } },
+      },
+    });
+
+    const error = (await flow
+      .checkToolAuthorization()
+      .catch((caught: unknown) => caught)) as AuthorizationRequiredError;
+    const ticket = new URL(String(error.authUrl), 'http://localhost').searchParams.get('ticket') ?? '';
+    const payload = verifyIncrementalAuthTicket(ticket, MOCK_SIGNING_SECRET);
+    if (!payload) throw new Error('expected a verifiable ticket');
+
+    expect(openIncrementalAuthTicketProfile(payload, MOCK_SIGNING_SECRET)).toEqual({
+      sub: 'u1',
+      email: 'ada@example.com',
+      name: 'Ada Lovelace',
+    });
   });
 
   it('names the scopes the tool asks of its auth providers in required_scopes', async () => {

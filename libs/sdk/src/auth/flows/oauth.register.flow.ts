@@ -12,7 +12,7 @@
  * initial access token. When configured, this flow enforces:
  *   - `dcr.enabled === false` → 404 (behave as if the endpoint does not exist)
  *   - `dcr.initialAccessToken` → require `Authorization: Bearer <token>` (401)
- *   - `dcr.allowedClientIds` → registrations are pinned to an allowed id (400)
+ *   - `dcr.allowedClientIds` → registration is refused: a minted id is never on it (400)
  *   - `dcr.allowedRedirectUris` → reject unlisted redirect_uris (400)
  * Registered clients are stored on the per-instance {@link DcrClientRegistry}
  * (LocalPrimaryAuth), so the authorize/token flows can validate them.
@@ -60,9 +60,10 @@ const registrationRequestSchema = z
     token_endpoint_auth_method: z
       .enum(['none', 'client_secret_basic', 'client_secret_post', 'private_key_jwt', 'tls_client_auth'])
       .default('none'),
+    // Left out, both grants are registered and returned (RFC 7591 §3.2.1 lets the server choose)
     grant_types: z
       .array(z.enum(['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code']))
-      .default(['authorization_code']),
+      .default(['authorization_code', 'refresh_token']),
     response_types: z.array(z.enum(['code'])).default(['code']),
     client_name: z.string().optional(),
     scope: z.string().optional(),
@@ -164,7 +165,6 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
   @Stage('validateInput')
   async validateInput() {
     const { request } = this.rawInput;
-    const dcr = this.localAuth.getDcrConfig?.();
     const registry = this.localAuth.dcrClientRegistry;
 
     // (1) Disabled — behave like the endpoint does not exist.
@@ -281,9 +281,10 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
 
     // (4) client_id allowlist sanity. DCR mints a server-side client_id, so we
     // cannot honor a client-supplied id, but if an allowlist is configured a
-    // freshly-minted random id can never satisfy it — surface that as a clear
-    // configuration error rather than issuing an unusable client.
-    if (registry?.hasClientIdAllowlist?.() && !dcr?.clients?.length) {
+    // freshly-minted random id can never satisfy it, with or without
+    // `dcr.clients` — surface that as a clear error rather than issuing an
+    // unusable client.
+    if (registry?.hasClientIdAllowlist?.()) {
       this.respond(
         httpRespond.json(
           {

@@ -56,6 +56,8 @@ export abstract class ToolContext<
   _toolInputInternal?: unknown;
   /** @internal JSON-RPC id of the tools/call request - set by CallToolFlow, for flows the call is handed on to */
   _jsonRpcRequestIdInternal?: string | number;
+  /** @internal Set by CallToolFlow: records the value `respond()` ends the call with as the tool's output */
+  _onRespondInternal?: (value: Out) => void;
 
   // ---- INPUT storages (backing fields)
   private _rawInput?: Partial<In> | any;
@@ -142,9 +144,17 @@ export abstract class ToolContext<
     return this._outputHistory;
   }
 
+  /**
+   * End the call with `value` as the tool's output, as if `execute()` returned it: it is checked
+   * against `outputSchema` and sent as `content` and `structuredContent`. A hook that calls it
+   * (`ctx.state.toolContext.respond(value)`) answers for the tool, which then does not run.
+   * To send a whole `CallToolResult` you built, pass one with a `content` array: it is sent as it is.
+   *
+   * @param value - The tool's output
+   */
   respond(value: Out): never {
-    // record validated output and surface the value via control flow
     this.output = value;
+    this._onRespondInternal?.(value);
     FlowControl.respond<Out>(value);
   }
 
@@ -154,7 +164,8 @@ export abstract class ToolContext<
 
   /**
    * Send a notification message to the current session.
-   * Uses 'notifications/message' per MCP 2025-11-25 spec.
+   * Uses 'notifications/message' per MCP 2025-11-25 spec, on the call's own response stream,
+   * so the client has it before the call's result.
    *
    * @param message - The notification message (string) or structured data (object)
    * @param level - One of the eight MCP log levels, 'debug' through 'emergency' (default: 'info')
@@ -187,12 +198,19 @@ export abstract class ToolContext<
       return false;
     }
 
-    return this.scope.notifications.sendLogMessageToSession(sessionId, level, this.toolName, data);
+    return this.scope.notifications.sendLogMessageToSession(
+      sessionId,
+      level,
+      this.toolName,
+      data,
+      this._jsonRpcRequestIdInternal,
+    );
   }
 
   /**
    * Send a progress notification to the current session.
-   * Uses 'notifications/progress' per MCP 2025-11-25 spec.
+   * Uses 'notifications/progress' per MCP 2025-11-25 spec, on the call's own response stream,
+   * so the client has it before the call's result.
    *
    * Only works if the client requested progress updates by including a
    * progressToken in the request's _meta field. If no progressToken was
@@ -222,7 +240,7 @@ export abstract class ToolContext<
     const sink = this.tryGetContext()?.getRequestNotificationSink?.();
     if (sink) return sink.progress(progress, total, message);
 
-    if (!this._progressToken) {
+    if (this._progressToken === undefined) {
       this.logger.debug('Cannot send progress: no progressToken in request');
       return false;
     }
@@ -233,7 +251,14 @@ export abstract class ToolContext<
       return false;
     }
 
-    return this.scope.notifications.sendProgressNotification(sessionId, this._progressToken, progress, total, message);
+    return this.scope.notifications.sendProgressNotification(
+      sessionId,
+      this._progressToken,
+      progress,
+      total,
+      message,
+      this._jsonRpcRequestIdInternal,
+    );
   }
 
   /**

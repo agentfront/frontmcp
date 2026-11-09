@@ -145,6 +145,8 @@ Supported return shapes:
 - **Plain string**: wrapped into a single text content block
 - **Plain object**: serialized with `JSON.stringify` into a single text content block
 
+A value that cannot become content fails the read with `INVALID_OUTPUT`: neither `JSON.stringify()` nor `String()` can turn it into text, as for an object without a prototype that holds a `BigInt`. The error's message, which the server logs and a development server sends, names the problem, such as `Resource output validation failed (Cannot convert object to primitive value)`.
+
 ## Materialized Resources
 
 A materialized resource serves a stored value with a revision and an update time. Code writes the value through a typed API, in this process or another one, and FrontMCP answers `resources/subscribe` for the resource and sends `notifications/resources/updated` to its subscribers after the revision changes. A notification is a signal to read again, not one event per revision: writes within `coalesceMs`, or that a polling store sees together, are announced once, and a subscriber reads the latest value. Use it for state that reducers, workers or tools keep up to date, instead of a resource that recomputes on every read and never tells anyone it changed.
@@ -200,6 +202,8 @@ The `@ResourceTemplate` decorator accepts:
 - `description` (optional) -- human-readable description
 - `mimeType` (optional) -- MIME type of the resource content
 - `icons` (optional) -- array of Icon objects for UI representation (per MCP spec)
+- `annotations` (optional) -- MCP annotations (`audience`, `priority`, `lastModified`), listed with the template in `resources/templates/list` (a `clients` profile with `annotations: 'no-numbers'` drops `priority`, as for resources)
+- `_meta` (optional) -- free-form metadata listed with the template in `resources/templates/list`; use reverse-DNS prefixed keys
 - `enabled` (optional) -- as on `@Resource`: a template that is off is left out of `resources/templates/list`, a read of any URI it matches answers `FEATURE_OFF`, and its completers complete nothing
 
 When a template returns a plain value (an object, a string, or an array of items), each content item's `uri` is based on the URI that was read: `users://42/profile`, or `users://42/profile#0`, `#1` for array items without their own `uri`.

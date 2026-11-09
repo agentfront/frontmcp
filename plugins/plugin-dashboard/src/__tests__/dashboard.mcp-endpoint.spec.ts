@@ -182,13 +182,17 @@ describe('Dashboard MCP endpoint', () => {
   describe('the production default (no `enabled`)', () => {
     let server: Running;
     const previous = process.env['NODE_ENV'];
+    const previousSessionSecret = process.env['MCP_SESSION_SECRET'];
     beforeAll(async () => {
       process.env['NODE_ENV'] = 'production';
+      process.env['MCP_SESSION_SECRET'] = 'dashboard-production-test-session-secret';
       server = await startServer({});
     });
     afterAll(async () => {
       await server.close();
       process.env['NODE_ENV'] = previous;
+      if (previousSessionSecret === undefined) delete process.env['MCP_SESSION_SECRET'];
+      else process.env['MCP_SESSION_SECRET'] = previousSessionSecret;
       resetDashboardOptions();
     });
 

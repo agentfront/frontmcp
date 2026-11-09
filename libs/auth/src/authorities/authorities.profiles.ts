@@ -39,7 +39,7 @@ export interface AuthoritiesClaimsMapping {
   roles?: string;
   /** Dot-path to permissions array/string in JWT claims */
   permissions?: string;
-  /** Dot-path to tenant/org ID in JWT claims */
+  /** Dot-path to tenant/org ID in JWT claims; a string value becomes `user.tenantId` for rules and guards */
   tenantId?: string;
   /** Dot-path to user ID in JWT claims (default: 'sub') */
   userId?: string;

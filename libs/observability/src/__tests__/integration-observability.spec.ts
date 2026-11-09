@@ -28,11 +28,11 @@ import {
   onAgentDidFinalize,
   onAgentWillExecute,
   onAgentWillParse,
-  onAuthDidFinalize,
-  onAuthWillStart,
   onGenericFlowDidFinalize,
   onGenericFlowWillStart,
+  onHttpDidAuthenticate,
   onHttpDidFinalize,
+  onHttpWillAuthenticate,
   onHttpWillTrace,
   onPromptDidExecute,
   onPromptDidFinalize,
@@ -329,17 +329,16 @@ describe('Integration: HTTP + Transport + Auth flow', () => {
     onTransportDidRoute(transportCtx);
     onTransportDidFinalize(transportCtx);
 
-    // Auth flow
-    const authCtx = makeFlowCtx();
-    onAuthWillStart('auth:verify', TRACE_OPTS, authCtx);
-    onAuthDidFinalize(authCtx);
+    // Authentication, in the HTTP flow
+    onHttpWillAuthenticate(TRACE_OPTS, ctx);
+    onHttpDidAuthenticate(ctx);
 
     onHttpDidFinalize(ctx);
 
     const spans = exporter.getFinishedSpans();
     const httpSpan = spans.find((s) => s.name.includes('/mcp'));
     const transportSpan = spans.find((s) => s.name === 'transport streamable-http');
-    const authSpan = spans.find((s) => s.name === 'auth auth:verify');
+    const authSpan = spans.find((s) => s.name === 'auth session:verify');
 
     expect(httpSpan).toBeTruthy();
     expect(transportSpan).toBeTruthy();

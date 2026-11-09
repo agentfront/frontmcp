@@ -49,6 +49,16 @@ function assertReadableBypassHeader(bypassHeader: string | undefined): void {
   );
 }
 
+const CACHE_TYPES: readonly string[] = ['memory', 'redis', 'redis-client', 'global-store'];
+
+/** Refuse a `type` the plugin has no store for: it started a server that cached in memory (#1178). */
+function assertKnownCacheType(type: unknown): void {
+  if (type === undefined || CACHE_TYPES.includes(type as string)) return;
+  throw new CachePluginConfigurationError(
+    `CachePlugin type ${JSON.stringify(type)} is not supported. Supported types: ${CACHE_TYPES.map((name) => `"${name}"`).join(', ')}.`,
+  );
+}
+
 /**
  * Check if a tool name matches any of the provided patterns.
  * Supports exact names and glob patterns with wildcards (*).
@@ -168,6 +178,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 
   constructor(options: CachePluginOptions = CachePlugin.defaultOptions) {
     super();
+    assertKnownCacheType(options.type);
     assertReadableBypassHeader(options.bypassHeader);
     this.options = {
       defaultTTL: 60 * 60 * 24,
@@ -283,12 +294,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
       flowCtx.state.set('resultMeta', { ...flowCtx.state.resultMeta, cache: 'hit' });
 
       /**
-       * cache hit, set output to the main flow context
-       */
-      flowCtx.state.set('rawOutput', cached);
-
-      /**
-       * call respond to bypass tool execution
+       * Answer with the cached output in place of the tool: the call finalizes it as a returned value
        */
       toolContext.respond(cached);
     }

@@ -216,8 +216,18 @@ describe('EsmModuleLoader', () => {
         statusText: 'Internal Server Error',
       });
 
-      await expect(loader.load(specifier)).rejects.toThrow('esm.sh returned 500');
+      await expect(loader.load(specifier)).rejects.toThrow('https://esm.sh returned 500');
       await expect(loader.load(specifier)).rejects.toThrow(EsmPackageLoadError);
+    });
+
+    it('names the loader url, not esm.sh, when the bundle server refuses', async () => {
+      mockCache.get.mockResolvedValue(undefined);
+      mockFetch.mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
+      const customLoader = new EsmModuleLoader({ cache: mockCache, esmBaseUrl: 'https://esm.acme.example' });
+
+      await expect(customLoader.load(specifier)).rejects.toThrow(
+        'https://esm.acme.example returned 404 for "@acme/tools@1.2.0": Not Found',
+      );
     });
 
     it('throws on generic fetch error', async () => {
@@ -258,6 +268,65 @@ describe('EsmModuleLoader', () => {
 
       const url = mockFetch.mock.calls[0][0] as string;
       expect(url).toContain('https://my-esm.example.com/');
+    });
+
+    describe('the registry token', () => {
+      beforeEach(() => {
+        mockCache.get.mockResolvedValue(undefined);
+        mockFetch.mockResolvedValue({
+          ok: true,
+          status: 200,
+          text: async () => 'export default {}',
+          headers: { get: () => null },
+        });
+        mockCache.put.mockResolvedValue({
+          packageUrl: 'url',
+          packageName: '@acme/tools',
+          resolvedVersion: '1.2.0',
+          cachedAt: Date.now(),
+          bundlePath: '/tmp/cache/bundle.mjs',
+        });
+      });
+
+      async function bundleRequestOf(options: ConstructorParameters<typeof EsmModuleLoader>[0]) {
+        const tokenLoader = new EsmModuleLoader(options);
+        jest
+          .spyOn(tokenLoader as unknown as Record<string, unknown>, 'importFromPath' as never)
+          .mockResolvedValue({} as never);
+        await tokenLoader.load(specifier);
+        return mockFetch.mock.calls[0][1] as RequestInit;
+      }
+
+      it('goes with the bundle download from the loader url', async () => {
+        const request = await bundleRequestOf({
+          cache: mockCache,
+          esmBaseUrl: 'https://esm.acme.example',
+          registryAuth: { token: 'npm-token' },
+        });
+
+        expect(request.headers).toEqual({ Authorization: 'Bearer npm-token' });
+      });
+
+      it('is read from tokenEnvVar for the bundle download', async () => {
+        process.env['ACME_BUNDLE_TOKEN'] = 'env-token';
+        try {
+          const request = await bundleRequestOf({
+            cache: mockCache,
+            esmBaseUrl: 'https://esm.acme.example',
+            registryAuth: { tokenEnvVar: 'ACME_BUNDLE_TOKEN' },
+          });
+
+          expect(request.headers).toEqual({ Authorization: 'Bearer env-token' });
+        } finally {
+          delete process.env['ACME_BUNDLE_TOKEN'];
+        }
+      });
+
+      it('is not sent to the default esm.sh', async () => {
+        const request = await bundleRequestOf({ cache: mockCache, registryAuth: { token: 'npm-token' } });
+
+        expect(request.headers).toBeUndefined();
+      });
     });
   });
 

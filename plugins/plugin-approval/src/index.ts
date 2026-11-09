@@ -31,7 +31,9 @@ export {
   default as ApprovalPlugin,
   ApprovalPlugin as ApprovalPluginClass,
   type ApprovalPluginOptions,
+  type RecheckHeaders,
 } from './approval.plugin';
+export type { RecheckRequest } from './external/recheck-approver';
 
 // Symbols
 export { ApprovalStoreToken, ApprovalServiceToken, ChallengeServiceToken } from './approval.symbols';
@@ -77,6 +79,7 @@ export {
   ApprovalScopeNotAllowedError,
   ApprovalExpiredError,
   ChallengeValidationError,
+  ApprovalConfigurationError,
   // Grantor factories
   userGrantor,
   adminGrantor,
@@ -95,6 +98,10 @@ export {
   sessionEndRevoker,
   policyRevoker,
   normalizeRevoker,
+  // Delegation chains
+  delegationDepth,
+  delegationProblem,
+  extendDelegation,
   // Type guards
   isGrantorSource,
   isHumanGrantor,

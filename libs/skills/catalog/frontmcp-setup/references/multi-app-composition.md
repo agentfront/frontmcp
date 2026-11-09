@@ -70,7 +70,7 @@ export default class Server {}
 
 ## ESM Apps (npm Packages)
 
-Load an npm package at runtime using `app.esm()`. The package is fetched and cached, and the `tools`, `resources` and `prompts` its manifest exports are registered under the namespace. Its `skills`, `agents`, `jobs`, `workflows` and `providers` are not loaded; the server logs a warning naming them.
+Load an npm package at runtime using `app.esm()`. The package is fetched and cached, and every kind of entry it exports is served as a local `@App`'s is: its `tools`, `resources` and `prompts` under the namespace, its `skills`, `agents`, `jobs` and `workflows` under their own names, and its `providers` for the package's own entries. Up to 1.11.2 only tools, resources and prompts were loaded, and the server warned about the rest.
 
 ```typescript
 import { app, FrontMcp } from '@frontmcp/sdk';
@@ -84,16 +84,17 @@ export default class Server {}
 
 `app.esm(specifier, options?)` accepts a package specifier (e.g., `'@acme/tools@^1.0.0'`) and optional `EsmAppOptions`:
 
-| Option        | Type                                        | Description                                        |
-| ------------- | ------------------------------------------- | -------------------------------------------------- |
-| `name`        | `string`                                    | Override the auto-derived app name                 |
-| `namespace`   | `string`                                    | Namespace prefix for tools, resources, and prompts |
-| `description` | `string`                                    | Human-readable description                         |
-| `standalone`  | `boolean \| 'includeInParent'`              | Scope isolation mode (default: `false`)            |
-| `loader`      | `PackageLoader`                             | Custom registry/bundle URLs and auth token         |
-| `autoUpdate`  | `{ enabled: boolean; intervalMs?: number }` | Background version polling                         |
-| `importMap`   | `Record<string, string>`                    | Rewrites the package's imports (import-map rules)  |
-| `filter`      | `AppFilterConfig`                           | Include/exclude primitives by their package names  |
+| Option        | Type                                        | Description                                                                                                                                                           |
+| ------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | `string`                                    | Override the auto-derived app name                                                                                                                                    |
+| `namespace`   | `string`                                    | Namespace prefix for tools, resources, and prompts                                                                                                                    |
+| `description` | `string`                                    | Human-readable description                                                                                                                                            |
+| `standalone`  | `boolean \| 'includeInParent'`              | Scope isolation mode (default: `false`)                                                                                                                               |
+| `loader`      | `PackageLoader`                             | Custom registry/bundle URLs and auth token, merged with the server's `loader`: the fields set here win, a `token` or `tokenEnvVar` here replaces both of the server's |
+| `cacheTTL`    | `number`                                    | Milliseconds a downloaded bundle is reused (default: 24 hours); `0` downloads it on every load                                                                        |
+| `autoUpdate`  | `{ enabled: boolean; intervalMs?: number }` | Background version polling                                                                                                                                            |
+| `importMap`   | `Record<string, string>`                    | Rewrites the package's imports (import-map rules)                                                                                                                     |
+| `filter`      | `AppFilterConfig`                           | Include/exclude primitives by their package names                                                                                                                     |
 
 `importMap` keys match an exact specifier, or every specifier under a key ending in `/` (the longest matching key wins); only real import and re-export specifiers are rewritten, never text in strings or comments. The bundle is fetched with those packages external (esm.sh `external`) and their imports are rewritten to the targets; Node cannot import `https://` URLs, so map to a `file://` URL or an installed package name there.
 
@@ -109,6 +110,16 @@ app.esm('@internal/tools@^2.0.0', {
   autoUpdate: { enabled: true, intervalMs: 300_000 },
 });
 ```
+
+- **Versions:** `latest` or another dist-tag resolves to the version the tag points at; a word that isn't one of the package's dist-tags (a typo like `@stabel`) stops the server with `ESM_VERSION_RESOLUTION_ERROR`, naming it and the dist-tags there are. A range resolves to the highest version that satisfies it, never a prerelease.
+- **Token:** the `loader` token goes to the registry and, when `loader.url` is set, with every bundle download from it. It is never sent to the default esm.sh.
+- **Bundle errors:** a refused bundle download names the server it came from, `https://esm.sh returned 404 for "…"` or the `loader.url`.
+- **Auto-update:** a newer version that fails to download or register leaves the loaded version serving, and is tried again at the next poll. A new version is checked as startup checks an app (metadata that only a plugin enforces, such as `approval`, with no such plugin fails the check; a `rateLimit` gets its guard), and a version that fails the check isn't swapped in.
+- **What a package exports:** a manifest (`{ name, version, tools?, resources?, prompts?, skills?, agents?, jobs?, workflows?, providers? }`), arrays or decorated classes as named exports, or a default-exported `@App` class, or `@FrontMcp` class whose own and `@App` entries are read. Give an exported `@FrontMcp` class `serve: false`, or importing the bundle starts that server.
+- **Plain-object tools** (`{ name, inputSchema?, execute }`): the arguments are checked against a JSON Schema `inputSchema` (`Invalid tool input` otherwise). Without an `outputSchema`, an object answer is sent as JSON text with `structuredContent`, and a string or number as its text.
+- **Providers:** the package's `providers` (a `providers` array, or exported `@Provider` classes) serve the package's own entries, before the server's providers, and no other app. Its tools, resources, prompts, agents and jobs resolve them with `this.get(Token)`; a plain-object one gets the call's context as its last argument (`execute(input, context)`, `read(uri, params, context)`), and `context.get(Token)`. Each loaded version has its own: a `GLOBAL` provider (the default) is built when the version loads, a `CONTEXT` one for the calls that use it. `onBootstrap()` runs when the version loads, `onReady()` when the server is ready (for a version auto-update loads, before it is swapped in), and `onShutdown()` when the server shuts down. A version that auto-update replaces keeps its providers until then, so calls, agent runs and job runs still running on it finish. An entry of `providers` that isn't a provider, or a provider that fails to build, stops the server; auto-update keeps the loaded version and shuts down what the new one built. Up to 1.11.2 a package's providers were not loaded.
+- **Skills and agents** are served as a local `@App`'s are, under their own names (the namespace prefixes only tools, resources and prompts), and `filter` matches them under `skills` and `agents`. A skill is a `@Skill` class, a `skill()` result, or a plain `{ name, description, instructions, tools? }` object checked as `skill()` checks it; a tool it names that the package exports gets the name the app serves it under (`echo` becomes `acme:echo`). An agent is listed and called as its `invoke_<agent>` tool. A value in `skills` or `agents` that isn't one stops the server. When auto-update loads a new version, its skills and agents replace the old version's, clients get one `list_changed` for each list that changed (`tools`, `resources`, `skills`), and an agent run already going finishes on the old version. A server that had no skills or agents serves the first ones a new version brings. Up to 1.11.2 a package's skills and agents were not loaded.
+- **Jobs and workflows** join the server's job system as a local `@App`'s do, under their own names (a workflow's steps name the package's jobs as the package does), and `filter` matches them under `jobs` and `workflows`. A job is a `@Job` class or a `job()` function, built on the package's providers; a workflow is a `@Workflow` class or a `workflow()` value. They turn the job system on (`execute_job`, `list_jobs`, ...) unless the server sets `jobs.enabled: false`, which leaves them unserved. When auto-update loads a new version, its jobs and workflows replace the old version's, starting the job system if the old version had none. A job run already going finishes on the old version's job; each workflow step runs the job the server has when the step starts. A value in `jobs` or `workflows` that isn't one stops the server.
 
 ## Remote Apps (External MCP Servers)
 
@@ -135,30 +146,34 @@ export default class Server {}
 
 `app.remote(url, options?)` accepts a URL and optional `RemoteUrlAppOptions`:
 
-| Option             | Type                           | Description                                                                                                                                            |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `name`             | `string`                       | Override the auto-derived app name (defaults to hostname)                                                                                              |
-| `namespace`        | `string`                       | Namespace prefix for tools, resources, and prompts                                                                                                     |
-| `description`      | `string`                       | Human-readable description                                                                                                                             |
-| `standalone`       | `boolean \| 'includeInParent'` | Scope isolation mode (default: `false`)                                                                                                                |
-| `transportOptions` | `RemoteTransportOptions`       | Timeout, retries, headers, SSE fallback, MCP revision                                                                                                  |
-| `remoteAuth`       | `RemoteAuthConfig`             | Auth config: `'static'`, `'forward'` (transparent servers only), or `'oauth'`; requests carrying credentials never follow a redirect to another origin |
-| `refreshInterval`  | `number`                       | Interval (ms) to refresh capabilities from remote                                                                                                      |
-| `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities (default: 60000)                                                                                                      |
-| `filter`           | `AppFilterConfig`              | Include/exclude filter for primitives                                                                                                                  |
+| Option             | Type                           | Description                                                                                                                                                                             |
+| ------------------ | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`             | `string`                       | Override the auto-derived app name (defaults to hostname)                                                                                                                               |
+| `namespace`        | `string`                       | Namespace prefix for tools, resources, and prompts                                                                                                                                      |
+| `description`      | `string`                       | Human-readable description                                                                                                                                                              |
+| `standalone`       | `boolean \| 'includeInParent'` | Scope isolation mode (default: `false`)                                                                                                                                                 |
+| `transportOptions` | `RemoteTransportOptions`       | Timeout, retries, headers, SSE fallback, MCP revision                                                                                                                                   |
+| `remoteAuth`       | `RemoteAuthConfig`             | Auth config: `'static'`, `'forward'` (transparent servers only), `'mapped'`, or `'oauth'` (client credentials); requests carrying credentials never follow a redirect to another origin |
+| `refreshInterval`  | `number`                       | Interval (ms) to re-list the remote's capabilities, per app (default: `0`, off); a list counts as changed when any entry differs, not only its length                                   |
+| `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities (default: 60000)                                                                                                                                       |
+| `filter`           | `AppFilterConfig`              | Include/exclude filter for primitives                                                                                                                                                   |
 
 `RemoteTransportOptions` fields:
 
-| Field             | Type                                 | Default    | Description                                                                                                                |
-| ----------------- | ------------------------------------ | ---------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `timeout`         | `number`                             | `30000`    | Request timeout in ms                                                                                                      |
-| `retryAttempts`   | `number`                             | `2`        | Retries of a tool call that failed with a transient error (`0` turns retries off)                                          |
-| `retryDelayMs`    | `number`                             | `1000`     | Delay before the first retry in ms; each later retry waits twice as long                                                   |
-| `fallbackToSSE`   | `boolean`                            | `true`     | Fallback to SSE if Streamable HTTP fails                                                                                   |
-| `headers`         | `Record<string, string>`             | -          | Additional headers for all requests                                                                                        |
-| `protocolVersion` | `'legacy' \| '2026-07-28' \| 'auto'` | `'legacy'` | MCP revision: session + `initialize`, the stateless 2026-07-28 client (URL remotes only), or probe `server/discover` first |
+| Field             | Type                                 | Default    | Description                                                                                                                     |
+| ----------------- | ------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `timeout`         | `number`                             | `30000`    | Limit in ms on each request to the remote: connecting, listing, tool calls, resource reads and prompts (`REMOTE_TIMEOUT_ERROR`) |
+| `retryAttempts`   | `number`                             | `2`        | Retries of a tool call that failed with a transient error (`0` turns retries off)                                               |
+| `retryDelayMs`    | `number`                             | `1000`     | Delay before the first retry in ms; each later retry waits twice as long                                                        |
+| `fallbackToSSE`   | `boolean`                            | `true`     | Fallback to SSE if Streamable HTTP fails                                                                                        |
+| `headers`         | `Record<string, string>`             | -          | Additional headers for all requests                                                                                             |
+| `protocolVersion` | `'legacy' \| '2026-07-28' \| 'auto'` | `'legacy'` | MCP revision: session + `initialize`, the stateless 2026-07-28 client (URL remotes only), or probe `server/discover` first      |
 
-A transient error is a network failure, a call that ran past `timeout`, or an HTTP `408`, `425`, `429` or `5xx` answer other than `501` and `505`, whatever its body says; a `400` or `404` is not retried. A call that timed out or got a `5xx` may have run on the remote already, so a retry can run it twice: set `retryAttempts: 0` for a remote whose tools must not run twice. Up to 1.9.2 a call that ran past `timeout` was not retried. On a 2026-07-28 remote, a `Retry-After` header on the answer sets the wait, up to the backoff's longest one.
+A transient error is a network failure, a call that ran past `timeout`, or an HTTP `408`, `425`, `429` or `5xx` answer other than `501` and `505`, whatever its body says; a `400` or `404` is not retried. A call that timed out or got a `5xx` may have run on the remote already, so a retry can run it twice: set `retryAttempts: 0` for a remote whose tools must not run twice. Up to 1.9.2 a call that ran past `timeout` was not retried. A `Retry-After` header on the refused answer sets the wait, up to the backoff's longest one, on every revision (up to 1.11.2, only on a 2026-07-28 remote).
+
+While a remote's circuit breaker is open (5 failed tries within a minute), its tool calls fail at once for 30 seconds with `REMOTE_CIRCUIT_OPEN` (HTTP 503), whose message the client sees: `Circuit breaker is open for <app>. Retry in <n>s`. Up to 1.11.2 production clients saw `Internal FrontMCP error`.
+
+Remote tools keep their `title` and `outputSchema` in `tools/list`, and remote resources, resource templates and prompts their `title`.
 
 Each remote tool, resource, resource template and prompt is listed once; when `cacheTTL` expires the gateway re-reads the remote's lists and replaces what it proxied before (dropped entries disappear, nothing is duplicated).
 
@@ -167,7 +182,7 @@ Each remote tool, resource, resource template and prompt is listed once; when `c
 - `{ mode: 'static', credentials: { type: 'bearer' | 'basic' | 'apiKey', value: string } }` -- static credentials for trusted internal services, sent on every request (discovery included)
 - `{ mode: 'forward', tokenClaim?: string, headerName?: string }` -- forward the calling user's token (or one claim of it with `tokenClaim`) as `Bearer <token>` in `headerName` (default `Authorization`) on that user's calls; discovery runs outside any request and carries only `transportOptions.headers`
 - `{ mode: 'mapped', mapper: (authInfo) => credentials }` -- credentials (as in `static`) computed from each caller's auth info, on that caller's calls; a mapper that throws fails the call with `RemoteAuthError`
-- `{ mode: 'oauth' }` -- no gateway credentials; the gateway runs no OAuth flow against the remote, so this only fits a remote that serves it without credentials
+- `{ mode: 'oauth', clientId, clientSecret, scope?, tokenUrl? }` -- OAuth 2.0 client credentials: the gateway gets an access token from the remote's authorization server and sends it as `Authorization: Bearer <token>` with every request, connecting and discovery included. It gets a new one before the token expires, and when the remote answers `401` (the request is then sent once more). The token endpoint is `tokenUrl`, else the one the remote's authorization server publishes, found through the remote's protected resource metadata (RFC 9728) or at the remote's origin (RFC 8414); the token request names the remote as its `resource` (RFC 8707) and authenticates with HTTP Basic (or in the body when the server supports only `client_secret_post`). A refused token request fails with `RemoteAuthError`, so the server doesn't start. Without `clientId` and `clientSecret`, nothing is sent and the server logs a warning. Up to 1.11.2, `oauth` took no options and sent nothing.
 
 A call the remote refuses with HTTP `401` fails with `RemoteAuthError` (`REMOTE_AUTH_ERROR`, JSON-RPC `-32001`), whatever the mode.
 
@@ -278,6 +293,8 @@ class AnalyticsApp {}
 The type is: `standalone?: 'includeInParent' | boolean` (defaults to `false`).
 
 A `standalone` app (and, with `splitByApp: true`, every app) is served over HTTP at `<entryPath>/<appId>`, by the Node server and `createFetchHandler()` alike; with `splitByApp` nothing is served at the entry path itself (404, listing every endpoint's path). In process, `FrontMcpInstance.createDirect(config, { app: 'admin' })` and `connect(config, { app: 'admin' })` reach that app's own endpoint; without `app` they serve the server's main endpoint.
+
+Such an app with its own `local` or `remote` auth is its own authorization server: its discovery document (`/.well-known/oauth-authorization-server<entryPath>/<appId>`) names its OAuth endpoints under `<entryPath>/<appId>/oauth/` (`authorize`, `token`, `register`, `callback`, the remote provider's callback), and they run that app's auth. The server's main endpoint keeps its OAuth endpoints at the root `/oauth/`. Up to 1.11.2 every app's endpoints were the root ones, which the first such app served for all of them, so a sign-in for another app went to the first app's provider, and a remote-mode app's provider callback was not served.
 
 ## Tool Namespacing
 

@@ -8,7 +8,7 @@ This is the React-free core package. For React components and hooks, use `@front
 
 **Key Principles:**
 
-- Zero React dependency
+- Zero React dependency: uipack never imports React. Rendering a template on the server (`mdxComponents`, `uiType: 'react'`, `hydrate`) loads `react`, `react-dom` and `@mdx-js/mdx`, optional peers, from the server's project with `requireFromProject()`
 - HTML shell generation with CSP, data injection, bridge runtime
 - Pluggable import resolution (esm.sh default, custom resolvers)
 - NPM component loading (npm, file, URL, or inline function)
@@ -51,7 +51,7 @@ libs/uipack/src/
 ## Shell Builder
 
 ```typescript
-import { buildShell, buildCSPMetaTag } from '@frontmcp/uipack/shell';
+import { buildCSPMetaTag, buildShell } from '@frontmcp/uipack/shell';
 
 // Build an HTML shell with CSP, data injection, and bridge
 const result = buildShell({
@@ -65,7 +65,7 @@ const result = buildShell({
 ## Import Resolver
 
 ```typescript
-import { resolveImports, createEsmShResolver } from '@frontmcp/uipack/resolver';
+import { createEsmShResolver, resolveImports } from '@frontmcp/uipack/resolver';
 
 // Resolve NPM imports to CDN URLs
 const resolver = createEsmShResolver();
@@ -87,7 +87,7 @@ const component = await loadComponent({ source: 'url', href: 'https://cdn.exampl
 ## Custom Shell Templates
 
 ```typescript
-import { resolveShellTemplate, applyShellTemplate } from '@frontmcp/uipack/shell';
+import { applyShellTemplate, resolveShellTemplate } from '@frontmcp/uipack/shell';
 
 // Resolve a custom shell from npm, URL, or inline source
 const template = await resolveShellTemplate({ source: 'npm', package: '@my-org/shell' });

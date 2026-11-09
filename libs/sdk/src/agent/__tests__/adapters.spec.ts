@@ -3,15 +3,16 @@
  */
 
 import 'reflect-metadata';
-import { OpenAIAdapter, AnthropicAdapter, createAdapter, LlmAdapterError } from '../adapters';
+
 import {
-  AgentLlmBuiltinConfig,
-  AgentLlmAdapterConfig,
+  AgentCompletion,
   AgentLlmAdapter,
+  AgentLlmAdapterConfig,
+  AgentLlmBuiltinConfig,
   AgentPrompt,
   AgentToolDefinition,
-  AgentCompletion,
 } from '../../common';
+import { AnthropicAdapter, createAdapter, LlmAdapterError, OpenAIAdapter } from '../adapters';
 
 describe('LLM Adapters', () => {
   describe('OpenAIAdapter', () => {
@@ -1130,6 +1131,82 @@ describe('LLM Adapters', () => {
       expect(() => new OpenAIAdapter({ model: 'gpt-4o', apiKey: 'test', maxRetries: -1 })).toThrow(
         'maxRetries must be a non-negative number',
       );
+    });
+  });
+
+  describe('cancelling a request', () => {
+    const prompt: AgentPrompt = { messages: [{ role: 'user', content: 'Hi' }] };
+
+    it('passes the signal of the options to the OpenAI client, outside the request body', async () => {
+      const create = jest.fn().mockResolvedValue({
+        choices: [{ message: { role: 'assistant', content: 'Hi' }, finish_reason: 'stop' }],
+      });
+      const adapter = new OpenAIAdapter({
+        model: 'gpt-4o',
+        client: { chat: { completions: { create } }, responses: { create: jest.fn() } } as never,
+      });
+      const { signal } = new AbortController();
+
+      await adapter.completion(prompt, undefined, { signal });
+      await adapter.completion(prompt);
+
+      expect(create.mock.calls[0][0]).not.toHaveProperty('signal');
+      expect(create.mock.calls[0][1]).toEqual({ signal });
+      expect(create.mock.calls[1][1]).toBeUndefined();
+    });
+
+    it('passes the signal to a streamed Anthropic request', async () => {
+      const create = jest.fn().mockResolvedValue({
+        [Symbol.asyncIterator]: async function* () {
+          yield { type: 'message_stop' };
+        },
+      });
+      const adapter = new AnthropicAdapter({
+        model: 'claude-sonnet-4-20250514',
+        client: { messages: { create } } as never,
+      });
+      const { signal } = new AbortController();
+
+      const chunks: unknown[] = [];
+      for await (const chunk of adapter.streamCompletion(prompt, undefined, { signal })) chunks.push(chunk);
+
+      expect(create.mock.calls[0][1]).toEqual({ signal });
+    });
+
+    it('retries nothing once the signal has aborted', async () => {
+      const controller = new AbortController();
+      const create = jest.fn(async () => {
+        controller.abort();
+        throw new Error('Request was aborted.');
+      });
+      const adapter = new AnthropicAdapter({
+        model: 'claude-sonnet-4-20250514',
+        client: { messages: { create } } as never,
+        maxRetries: 3,
+      });
+
+      await expect(adapter.completion(prompt, undefined, { signal: controller.signal })).rejects.toThrow(
+        'Request was aborted.',
+      );
+      expect(create).toHaveBeenCalledTimes(1);
+    });
+
+    it('makes no request after the signal aborts during the backoff, with a client that ignores the signal', async () => {
+      const controller = new AbortController();
+      const create = jest.fn(async () => {
+        throw new Error('Overloaded');
+      });
+      const adapter = new AnthropicAdapter({
+        model: 'claude-sonnet-4-20250514',
+        client: { messages: { create } } as never,
+        maxRetries: 3,
+      });
+      jest
+        .spyOn(adapter as unknown as { sleep(ms: number): Promise<void> }, 'sleep')
+        .mockImplementation(async () => controller.abort());
+
+      await expect(adapter.completion(prompt, undefined, { signal: controller.signal })).rejects.toThrow('Overloaded');
+      expect(create).toHaveBeenCalledTimes(1);
     });
   });
 

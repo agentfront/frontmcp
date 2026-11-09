@@ -43,7 +43,7 @@ export function warnIfComponentReference(
     logger.warn(
       `[FrontMCP] Tool "${toolName}": \`ui.template\` is a React component reference, which cannot be bundled ` +
         `(there is no source file to compile), so the widget would render an empty page. ` +
-        `Use \`template: { file: './widget.tsx' }\` instead.`,
+        `Use \`template: { file: './widget.tsx' }\` instead, or set \`ui.uiType: 'react'\` to render it on the server.`,
     );
   }
   return true;

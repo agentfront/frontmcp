@@ -17,6 +17,7 @@ export { type CimdLogger, noopLogger } from './cimd.logger';
 // ============================================
 export {
   // Schemas
+  clientJwksSchema,
   clientMetadataDocumentSchema,
   cimdCacheConfigSchema,
   cimdRedisCacheConfigSchema,
@@ -48,7 +49,20 @@ export {
   RedirectUriMismatchError,
   CimdResponseTooLargeError,
   CimdDisabledError,
+  CimdClientAssertionError,
+  type ClientAssertionRefusal,
 } from './cimd.errors';
+
+// ============================================
+// Client authentication (private_key_jwt)
+// ============================================
+export {
+  CLIENT_ASSERTION_TYPE_JWT_BEARER,
+  CLIENT_ASSERTION_SIGNING_ALGORITHMS,
+  MAX_CLIENT_ASSERTION_LIFETIME_SECONDS,
+  type ClientAssertionInput,
+  type ClientAssertionCheck,
+} from './cimd-client-assertion';
 
 // ============================================
 // Validator
