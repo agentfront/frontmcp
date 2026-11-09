@@ -7,8 +7,8 @@
  * so every hand-written tool shipped with no `outputSchema`.
  *
  * Verifies the SDK now converts structured object outputs (symmetric with
- * inputSchema), while primitive outputs correctly remain unadvertised (they flow
- * through `content`, and MCP requires `outputSchema` to be a top-level object).
+ * inputSchema). A primitive literal is listed as the object its `structuredContent`
+ * is (`{ content }`), since MCP requires `outputSchema` to be a top-level object.
  * A union whose members are all objects is listed too, typed `object` at the top.
  */
 import { App, connect, FrontMcpInstance, Tool, ToolContext, z, type DirectMcpServer } from '@frontmcp/sdk';
@@ -152,11 +152,15 @@ describe('tools/list outputSchema advertisement (E2E)', () => {
     expect(out?.properties?.['label']).toBeDefined();
   });
 
-  it('does not advertise an outputSchema for primitive output (flows via content)', async () => {
+  it('advertises a primitive literal output as the structuredContent it answers with', async () => {
     const { tools } = await server.listTools();
     const tool = tools.find((t) => t.name === 'count_primitive');
-    expect(tool).toBeDefined();
-    expect(tool?.outputSchema).toBeUndefined();
+    expect(tool?.outputSchema).toEqual({
+      type: 'object',
+      properties: { content: { type: 'number' } },
+      required: ['content'],
+      additionalProperties: false,
+    });
   });
 
   it('advertises a z.union() of objects with a top-level object type and anyOf', async () => {
