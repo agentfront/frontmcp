@@ -1,9 +1,9 @@
 // file: libs/sdk/src/skill/__tests__/tool-authorization.spec.ts
 
-import { ToolAuthorizationGuard } from '../guards/tool-authorization.guard';
-import { SkillSessionManager, MemorySkillSessionStore } from '../session';
-import { ToolNotAllowedError, ToolApprovalRequiredError } from '../errors/tool-not-allowed.error';
 import type { SkillContent } from '../../common/interfaces';
+import { ToolApprovalRequiredError, ToolNotAllowedError } from '../errors/tool-not-allowed.error';
+import { ToolAuthorizationGuard } from '../guards/tool-authorization.guard';
+import { MemorySkillSessionStore, SkillSessionManager } from '../session';
 import type { SkillLoadResult } from '../skill-storage.interface';
 
 describe('ToolAuthorizationGuard', () => {
@@ -280,7 +280,8 @@ describe('ToolNotAllowedError', () => {
     });
 
     expect(error.message).toContain('no skill is active');
-    expect(error.message).toContain('loadSkill');
+    expect(error.message).toContain('send a skills/load request with activateSession: true');
+    expect(error.message).not.toContain('loadSkill');
     expect(error.reason).toBe('no_active_skill');
   });
 
