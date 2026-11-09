@@ -532,7 +532,10 @@ export interface IncrementalAuthConfig {
   skippedAppBehavior?: SkippedAppBehavior;
 
   /**
-   * Allow users to skip app authorization during initial auth flow
+   * Allow users to skip app authorization during initial auth flow. With
+   * `false`, a sign-in through the provider picker must link the provider of
+   * every app with its own `auth`: the picker shows them checked and required,
+   * and the callbacks refuse a sign-in that leaves one out or declines it.
    * @default true
    */
   allowSkip?: boolean;
@@ -540,6 +543,8 @@ export interface IncrementalAuthConfig {
   /**
    * Show all apps in a single authorization page (vs step-by-step)
    * @default true
+   * @deprecated Has no effect: the provider picker always shows every app on
+   * one page, and `false` logs a startup warning.
    */
   showAllAppsAtOnce?: boolean;
 }

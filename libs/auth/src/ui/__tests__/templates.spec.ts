@@ -347,6 +347,18 @@ describe('buildFederatedLoginPage', () => {
     expect(html).toContain('checked');
   });
 
+  it('renders a required provider checked and required, with no way to skip it, when skipping is off', () => {
+    const html = buildFederatedLoginPage({
+      ...defaultParams,
+      allowSkip: false,
+      providers: [{ providerId: 'tasks', providerName: 'tasks', mode: 'public', appIds: ['tasks'], required: true }],
+    });
+
+    expect(html).toMatch(/value="tasks"[^>]*checked required>/);
+    expect(html).not.toContain('Skip All');
+    expect(html).not.toContain('can be authorized later');
+  });
+
   it('should handle multiple providers', () => {
     const html = buildFederatedLoginPage({
       ...defaultParams,

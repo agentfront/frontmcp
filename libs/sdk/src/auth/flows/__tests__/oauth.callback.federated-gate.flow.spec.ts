@@ -175,4 +175,45 @@ describe('OAuth Callback Flow — federated JWT gating', () => {
     expect(output?.status).toBe(400);
     expect(String(output?.body)).toContain('At least 1 provider');
   });
+
+  describe('incrementalAuth.allowSkip: false', () => {
+    const scopeWithAppAuth = (allowSkip: boolean) =>
+      createMockScopeEntry({
+        auth: { mode: 'local', incrementalAuth: { enabled: true, allowSkip } } as any,
+        apps: [
+          { id: 'notes', name: 'Notes' },
+          { id: 'tasks', name: 'Tasks', auth: { mode: 'public' } as any },
+        ],
+      });
+
+    it("refuses a sign-in that leaves an app's own provider for later", async () => {
+      const scope = scopeWithAppAuth(false);
+      const pendingAuthId = await seedFederatedPendingAuth(scope, ['__parent__', 'tasks']);
+
+      const { output } = await runCallback(scope, pendingAuthId, ['__parent__']);
+
+      expect(output?.status).toBe(400);
+      expect(String(output?.body)).toContain('Required provider(s) not linked: tasks');
+    });
+
+    it("passes a sign-in that links every app's own provider", async () => {
+      const scope = scopeWithAppAuth(false);
+      const pendingAuthId = await seedFederatedPendingAuth(scope, ['__parent__', 'tasks']);
+
+      const { output, state } = await runCallback(scope, pendingAuthId, ['__parent__', 'tasks']);
+
+      expect(output).toBeUndefined();
+      expect(state.selectedProviders).toEqual(['__parent__', 'tasks']);
+    });
+
+    it('still lets the default allowSkip leave an app provider for later', async () => {
+      const scope = scopeWithAppAuth(true);
+      const pendingAuthId = await seedFederatedPendingAuth(scope, ['__parent__', 'tasks']);
+
+      const { output, state } = await runCallback(scope, pendingAuthId, ['__parent__']);
+
+      expect(output).toBeUndefined();
+      expect(state.skippedProviders).toEqual(['tasks']);
+    });
+  });
 });

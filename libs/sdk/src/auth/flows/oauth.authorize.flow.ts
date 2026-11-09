@@ -79,6 +79,7 @@ import { initialAuthorizedApps } from '../authorized-apps.utils';
 import { CimdDisabledError, CimdService, clientMetadataDocumentSchema } from '../cimd';
 import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
+import { allowsSkippingApps, requiredProviderIds } from '../required-providers.utils';
 import { createRequestSigninBinding, signinBindingCookie, signinCookiePath, withCookie } from './signin-binding.utils';
 
 /**
@@ -1415,6 +1416,8 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   }): string {
     const { pendingAuthId, detection, clientId } = params;
     const callbackPath = `${oauthBasePath(this.scope)}/oauth/callback`;
+    const authOptions = this.scope.auth?.options;
+    const required = requiredProviderIds(authOptions, this.scope.apps.getApps());
 
     // Convert detection providers to ProviderCard format
     const providers: ProviderCard[] = [...detection.providers.values()].map((provider) => ({
@@ -1424,6 +1427,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       mode: provider.mode,
       appIds: provider.appIds.filter((id) => id !== '__parent__'),
       isPrimary: provider.isParentProvider,
+      required: required.includes(provider.id),
     }));
 
     return buildFederatedLoginPage({
@@ -1431,6 +1435,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       clientName: clientId,
       pendingAuthId,
       callbackPath,
+      allowSkip: allowsSkippingApps(authOptions),
     });
   }
 
