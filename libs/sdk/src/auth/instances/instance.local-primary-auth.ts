@@ -1148,6 +1148,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.logger.warn('Client authentication failed at token endpoint (authorization_code)');
       return { error: 'invalid_client', error_description: 'Client authentication failed' };
     }
+    const declared = await this.checkDeclaredGrant(clientId, 'authorization_code');
+    if ('error' in declared) return declared;
 
     // Get the authorization code record
     const codeRecord = await this.authorizationStore.getAuthorizationCode(code);
@@ -1249,6 +1251,16 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       providerTokensId = await this.moveProviderTokens(`pending:${codeRecord.pendingAuthId}`, accessToken);
     }
 
+    this.logger.info(`Tokens issued for user: ${user.sub}`);
+    const tokens: TokenResponse = {
+      access_token: accessToken,
+      token_type: 'Bearer',
+      expires_in: this.accessTokenTtlSeconds,
+      scope: codeRecord.scopes.join(' '),
+    };
+    // A client that declared grant_types without refresh_token gets no refresh token
+    if (declared.grantTypes && !declared.grantTypes.includes('refresh_token')) return tokens;
+
     // Create refresh token — carry the grant's consent / progressive-auth /
     // custom-claim metadata so a later refresh re-mints an access token with
     // the SAME claims (otherwise refresh silently drops `consent` /
@@ -1274,15 +1286,37 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     // replay of this code can revoke the token family it minted.
     await this.authorizationStore.markCodeUsed(code, refreshTokenRecord.token);
 
-    this.logger.info(`Tokens issued for user: ${user.sub}`);
+    return { ...tokens, refresh_token: refreshTokenRecord.token };
+  }
 
-    return {
-      access_token: accessToken,
-      token_type: 'Bearer',
-      expires_in: this.accessTokenTtlSeconds,
-      refresh_token: refreshTokenRecord.token,
-      scope: codeRecord.scopes.join(' '),
-    };
+  /**
+   * Refuse a grant the client did not declare in its `grant_types` (RFC 7591): in its registration, its
+   * `dcr.clients` entry or its client ID metadata document. A client that declared nothing (an unregistered
+   * id under `requireRegisteredClients: false`) is not limited, and gets `grantTypes: undefined`.
+   */
+  private async checkDeclaredGrant(
+    clientId: string,
+    grantType: 'authorization_code' | 'refresh_token',
+  ): Promise<{ grantTypes: string[] | undefined } | { error: string; error_description: string }> {
+    let grantTypes: string[] | undefined;
+    try {
+      const cimd = this.cimdService;
+      if (cimd?.enabled && cimd.isCimdClientId(clientId)) {
+        const { metadata } = await cimd.resolveClientMetadata(clientId);
+        if (metadata) cimd.assertSupportedClient(metadata);
+        grantTypes = metadata?.grant_types;
+      } else {
+        grantTypes = this.dcrClientRegistryImpl.get(clientId)?.grant_types;
+      }
+    } catch (err) {
+      this.logger.warn(`Client metadata refused at token endpoint (${grantType}): ${(err as Error).message}`);
+      return { error: 'invalid_client', error_description: 'Client authentication failed' };
+    }
+    if (grantTypes && !grantTypes.includes(grantType)) {
+      this.logger.warn(`Client did not declare the ${grantType} grant`);
+      return { error: 'unauthorized_client', error_description: `This client may not use the ${grantType} grant` };
+    }
+    return { grantTypes };
   }
 
   /**
@@ -1351,6 +1385,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.logger.warn('Client authentication failed at token endpoint (refresh_token)');
       return { error: 'invalid_client', error_description: 'Client authentication failed' };
     }
+    const declared = await this.checkDeclaredGrant(clientId, 'refresh_token');
+    if ('error' in declared) return declared;
 
     const tokenRecord = await this.authorizationStore.getRefreshToken(refreshToken);
 

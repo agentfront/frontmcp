@@ -323,11 +323,11 @@ export const localDcrClientSchema = z.object({
    * Token-endpoint auth method. Defaults to `'none'` (public PKCE client).
    */
   tokenEndpointAuthMethod: z.enum(['none', 'client_secret_basic', 'client_secret_post']).default('none'),
-  /** Allowed grant types. Defaults to `['authorization_code']`. */
-  grantTypes: z.array(z.enum(['authorization_code', 'refresh_token'])).default(['authorization_code']),
+  /** Allowed grant types; without `refresh_token`, the client gets no refresh token. Defaults to both. */
+  grantTypes: z.array(z.enum(['authorization_code', 'refresh_token'])).default(['authorization_code', 'refresh_token']),
   /** Allowed response types. Defaults to `['code']`. */
   responseTypes: z.array(z.enum(['code'])).default(['code']),
-  /** Optional space-delimited default scope string. */
+  /** Space-delimited scopes this client may be granted; a request for others is narrowed to these. */
   scope: z.string().optional(),
 });
 
