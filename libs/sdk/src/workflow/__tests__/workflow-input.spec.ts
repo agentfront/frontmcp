@@ -13,18 +13,16 @@ import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { jobExecutionManagerOf } from '../../job/job-run-access';
 import { type Scope } from '../../scope/scope.instance';
 
-@Job({
-  name: 'echo',
-  inputSchema: {
-    name: z.string().optional(),
-    excited: z.boolean().optional(),
-    greeting: z.string().optional(),
-    extra: z.number().optional(),
-  },
-  outputSchema: {},
-})
+const echoFields = {
+  name: z.string().optional(),
+  excited: z.boolean().optional(),
+  greeting: z.string().optional(),
+  extra: z.number().optional(),
+};
+
+@Job({ name: 'echo', inputSchema: echoFields, outputSchema: echoFields })
 class EchoJob extends JobContext {
-  async execute(input: Record<string, unknown>) {
+  async execute(input: { name?: string; excited?: boolean; greeting?: string; extra?: number }) {
     return input;
   }
 }
