@@ -180,6 +180,7 @@ export abstract class BaseLlmAdapter implements AgentLlmAdapter {
         if (attempt < retries) {
           const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
           await this.sleep(delay);
+          if (signal?.aborted) throw lastError;
         }
       }
     }

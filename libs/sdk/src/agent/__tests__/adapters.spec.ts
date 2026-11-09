@@ -1190,6 +1190,24 @@ describe('LLM Adapters', () => {
       );
       expect(create).toHaveBeenCalledTimes(1);
     });
+
+    it('makes no request after the signal aborts during the backoff, with a client that ignores the signal', async () => {
+      const controller = new AbortController();
+      const create = jest.fn(async () => {
+        throw new Error('Overloaded');
+      });
+      const adapter = new AnthropicAdapter({
+        model: 'claude-sonnet-4-20250514',
+        client: { messages: { create } } as never,
+        maxRetries: 3,
+      });
+      jest
+        .spyOn(adapter as unknown as { sleep(ms: number): Promise<void> }, 'sleep')
+        .mockImplementation(async () => controller.abort());
+
+      await expect(adapter.completion(prompt, undefined, { signal: controller.signal })).rejects.toThrow('Overloaded');
+      expect(create).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('createAdapter', () => {
