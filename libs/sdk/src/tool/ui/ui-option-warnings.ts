@@ -4,10 +4,7 @@ import { validateCSPDomain } from '@frontmcp/uipack/shell';
  * Deprecated `ui` options that the schema accepts and nothing reads. Declaring one is not an error,
  * but a developer who sets it expects an effect, so startup says that there is none.
  */
-const IGNORED_UI_OPTIONS = ['bundlingMode', 'htmlResponsePrefix', 'customWidgetUrl'] as const;
-
-/** Deprecated serving modes, served as `'inline'` is. */
-const UNSUPPORTED_SERVING_MODES = ['custom-url'] as const;
+const IGNORED_UI_OPTIONS = ['bundlingMode', 'htmlResponsePrefix'] as const;
 
 /** Describe the parts of a tool's `ui` config that have no effect, one message per problem. */
 export function describeIgnoredUiOptions(toolName: string, ui: Record<string, unknown> | undefined): string[] {
@@ -25,16 +22,9 @@ export function describeIgnoredUiOptions(toolName: string, ui: Record<string, un
     );
   }
 
-  const mode = ui['servingMode'];
-  if ((UNSUPPORTED_SERVING_MODES as readonly unknown[]).includes(mode)) {
-    messages.push(
-      `Tool "${toolName}": \`ui.servingMode: '${String(mode)}'\` is deprecated; the widget is served inline, as with \`servingMode: 'inline'\`.`,
-    );
-  }
-
   messages.push(...describeInvalidCspOrigins(toolName, ui['csp']));
 
-  if (mode === 'hybrid') {
+  if (ui['servingMode'] === 'hybrid') {
     messages.push(
       `Tool "${toolName}": \`ui.servingMode: 'hybrid'\` sends only a reference in \`_meta['ui/component']\` ({ type, hash, toolName }), not the component code; the widget is rendered from its \`ui://\` resource.`,
     );
@@ -51,11 +41,6 @@ export function describeIgnoredUiOptions(toolName: string, ui: Record<string, un
  * @param mode - The default, if set
  */
 export function describeServingModeDefault(owner: string, mode: string | undefined): string[] {
-  if ((UNSUPPORTED_SERVING_MODES as readonly unknown[]).includes(mode)) {
-    return [
-      `${owner}: \`ui.servingMode: '${String(mode)}'\` is deprecated; tools that inherit it are served inline, as with \`servingMode: 'inline'\`.`,
-    ];
-  }
   if (mode === 'hybrid') {
     return [
       `${owner}: \`ui.servingMode: 'hybrid'\` sends only a reference in \`_meta['ui/component']\` ({ type, hash, toolName }), not the component code; the widgets of the tools that inherit it are rendered from their \`ui://\` resource.`,

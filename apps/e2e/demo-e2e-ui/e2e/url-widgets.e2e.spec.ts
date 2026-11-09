@@ -1,8 +1,9 @@
 /**
  * E2E Tests for URL-served widgets
  *
- * `servingMode: 'direct-url'` serves the page compiled at startup on a route of the server, and the
- * widget's ui:// resource is a page that frames that route and declares its origin as a frame.
+ * `servingMode: 'direct-url'` serves the page compiled at startup on a route of the server, and
+ * `'custom-url'` loads the page at `customWidgetUrl`. Either way the widget's ui:// resource is a page
+ * that frames that URL and declares its origin as a frame.
  */
 import { expect, test } from '@frontmcp/testing';
 
@@ -106,6 +107,47 @@ test.describe('URL-served widgets E2E', () => {
         const tool = (await client.tools.list()).find((candidate) => candidate.name === 'direct-url-forecast');
         expect((tool?._meta?.['ui'] as Record<string, unknown>)?.['resourceUri']).toBe(
           'ui://widget/direct-url-forecast.html',
+        );
+      } finally {
+        await client.disconnect();
+      }
+    });
+  });
+
+  test.describe("servingMode: 'custom-url'", () => {
+    test('sends the data only, no page', async ({ server }) => {
+      const client = await server
+        .createClientBuilder()
+        .withTransport('streamable-http')
+        .withPlatform('ext-apps')
+        .buildAndConnect();
+      try {
+        const result = await client.tools.call('custom-url-forecast', { city: 'Faro' });
+
+        expect(result).toBeSuccessful();
+        expect(result.raw._meta?.['ui/html']).toBeUndefined();
+        expect(result.raw.structuredContent).toEqual({ city: 'Faro', low: 12 });
+      } finally {
+        await client.disconnect();
+      }
+    });
+
+    test('gives a ui:// resource that frames the URL and allows its origin', async ({ server }) => {
+      const client = await server.createClient({
+        transport: 'streamable-http',
+        clientInfo: { name: 'ChatGPT', version: '1.0.0' },
+      });
+      try {
+        const resource = await client.resources.read('ui://widget/custom-url-forecast.html');
+        const content = resource.raw.contents[0] as ResourceContent;
+
+        expect(resource).toBeSuccessful();
+        expect(content.text).toContain('src="https://widgets.forecast.example/low.html"');
+        expect(content._meta?.['ui']?.['csp']).toEqual(
+          expect.objectContaining({ frameDomains: ['https://widgets.forecast.example'] }),
+        );
+        expect(content._meta?.['openai/widgetCSP']).toEqual(
+          expect.objectContaining({ frame_domains: ['https://widgets.forecast.example'] }),
         );
       } finally {
         await client.disconnect();

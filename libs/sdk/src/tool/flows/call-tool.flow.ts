@@ -1497,9 +1497,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         return;
       }
 
-      if (servingMode === 'static' || servingMode === 'direct-url') {
-        // The page was compiled at startup: the host loads it from the `ui://` resource, or from the
-        // server route that resource frames, and gets this call's data from the result
+      if (servingMode === 'static' || servingMode === 'direct-url' || servingMode === 'custom-url') {
+        // The page is not rendered per call: the host loads it from the `ui://` resource, or from the
+        // URL that resource frames, and gets this call's data from the result
         this.logger.verbose('applyUI: UI served from its resource (structured data only)', {
           tool: tool.metadata.name,
           platform: platformType,

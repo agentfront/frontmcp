@@ -1,13 +1,21 @@
 import type { WidgetServingMode } from '../../common';
 
-/** Where a URL-served widget's page comes from (`servingMode: 'direct-url'`). */
-export interface WidgetUrlSource {
-  servingMode: 'direct-url';
-  /** The server's route that serves the page, from its root, e.g. `/widgets/weather`. */
-  path: string;
-}
+/** Where a URL-served widget's page comes from: a route of the server, or a URL such as a CDN's. */
+export type WidgetUrlSource =
+  | {
+      servingMode: 'direct-url';
+      /** The server's route that serves the page, from its root, e.g. `/widgets/weather`. */
+      path: string;
+    }
+  | {
+      servingMode: 'custom-url';
+      /** The absolute URL of the page, e.g. `https://cdn.example.com/widgets/weather.html`. */
+      url: string;
+    };
 
 const MAX_WIDGET_PATH_LENGTH = 512;
+const MAX_WIDGET_URL_LENGTH = 2048;
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 const WIDGET_PATH_SEGMENT = /^[A-Za-z0-9._~-]+$/;
 
 /**
@@ -30,6 +38,28 @@ function describeInvalidWidgetPath(path: unknown): string | undefined {
   return valid
     ? undefined
     : 'may hold only letters, digits, ".", "_", "~", "-" and "/" between non-empty segments, without "." or ".." segments';
+}
+
+/** Why `url` cannot be a `customWidgetUrl`, or `undefined` when it can. */
+function describeInvalidWidgetUrl(url: unknown): string | undefined {
+  if (typeof url !== 'string') return 'is not a string';
+  if (url.length > MAX_WIDGET_URL_LENGTH) return `is longer than ${MAX_WIDGET_URL_LENGTH} characters`;
+  if (/[{}]/.test(url)) {
+    return (
+      'has a `{…}` placeholder, which FrontMCP does not fill: a widget URL carries no token or call data, ' +
+      'and the page gets each call’s result from the host'
+    );
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return 'is not an absolute URL';
+  }
+  const local = parsed.protocol === 'http:' && LOOPBACK_HOSTS.has(parsed.hostname);
+  if (parsed.protocol !== 'https:' && !local) return 'must be an https:// URL (or http:// on localhost)';
+  if (parsed.username || parsed.password) return 'must not hold credentials';
+  return undefined;
 }
 
 /**
@@ -75,5 +105,35 @@ export function describeWidgetServingProblems(
     }
   }
 
+  const customWidgetUrl = ui['customWidgetUrl'];
+  if (servingMode === 'custom-url' && customWidgetUrl === undefined) {
+    problems.push(
+      `Tool "${toolName}": \`ui.servingMode: 'custom-url'\` needs \`ui.customWidgetUrl\`, the URL of the widget page.`,
+    );
+  } else if (customWidgetUrl !== undefined && servingMode !== 'custom-url') {
+    problems.push(
+      `Tool "${toolName}": \`ui.customWidgetUrl\` is set, but the widget is served '${servingMode}', so nothing loads that URL. ` +
+        `Set \`ui.servingMode: 'custom-url'\`, or remove \`ui.customWidgetUrl\`.`,
+    );
+  } else if (customWidgetUrl !== undefined) {
+    const invalid = describeInvalidWidgetUrl(customWidgetUrl);
+    // The URL is not repeated: it may hold a credential or a key
+    if (invalid) problems.push(`Tool "${toolName}": \`ui.customWidgetUrl\` ${invalid}.`);
+  }
+
   return problems;
+}
+
+/**
+ * Where a tool's widget page loads from when it is served from a URL, or `undefined` for the other
+ * modes. Reads a config {@link describeWidgetServingProblems} accepted.
+ */
+export function widgetUrlSourceOf(
+  toolName: string,
+  ui: Record<string, unknown>,
+  servingMode: WidgetServingMode,
+): WidgetUrlSource | undefined {
+  if (servingMode === 'direct-url') return { servingMode, path: widgetPathOf(toolName, ui) };
+  if (servingMode === 'custom-url') return { servingMode, url: String(ui['customWidgetUrl']) };
+  return undefined;
 }

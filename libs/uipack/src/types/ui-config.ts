@@ -235,8 +235,9 @@ export type TemplateBuilderFn<In = unknown, Out = unknown> = (ctx: TemplateConte
  *   (`directPath`). The `ui://` resource is a small page that frames that URL and relays the host's
  *   bridge messages. Results carry no page.
  *
- * - `'custom-url'`: Deprecated. Served as `'inline'` is: nothing serves the widget from a URL, and
- *   startup logs a warning.
+ * - `'custom-url'`: The page at `customWidgetUrl` (a CDN, a separate deployment) is the widget; the
+ *   `ui://` resource frames it, as for `'direct-url'`. FrontMCP doesn't render `template` for it.
+ *   Results carry no page.
  *
  * ## Claude target caveat (issue #447)
  *
@@ -255,7 +256,7 @@ export type WidgetServingMode =
   | 'static' // Pre-compiled at startup, resolved via tools/list (ui:// resource URI)
   | 'hybrid' // Shell (React + renderer) cached, component + data in response
   | 'direct-url' // Compiled at startup, served on a server route that the ui:// resource frames
-  | 'custom-url'; // Deprecated: served as 'inline'
+  | 'custom-url'; // The page at customWidgetUrl, which the ui:// resource frames
 
 // ============================================
 // Display Mode
@@ -309,6 +310,8 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - Static HTML/MDX string: `"<div>...</div>"` or `"# Title\n<Card />"`
    * - React component: `MyWidget` - rendered on the server with `uiType: 'react'`, with props output/input/loading
    * - FileSource object: `{ file: './my-widget.tsx' }` - transpiled client-side via esm.sh CDN
+   *
+   * Not rendered for `servingMode: 'custom-url'`, whose page is at `customWidgetUrl`.
    */
 
   template: TemplateBuilderFn<In, Out> | string | ((props: any) => any) | FileSource;
@@ -471,8 +474,9 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    *   `_meta['openai/widgetCSP'].frame_domains` (OpenAI Apps SDK). Results carry no page; the host
    *   sends each call's data to the widget.
    *
-   * - `'custom-url'`: Deprecated. Served as `'inline'` is, with a startup warning: nothing serves
-   *   the widget from a URL.
+   * - `'custom-url'`: The page at `customWidgetUrl`, such as a CDN's, is the widget. The `ui://`
+   *   resource frames it and declares its origin as a frame, as for `'direct-url'`. FrontMCP doesn't
+   *   render `template` for this mode. Results carry no page.
    *
    * When unset, the FrontMCP SDK uses the app's `@App({ ui: { servingMode } })` default, else the
    * server's `@FrontMcp({ ui: { servingMode } })`, else `'auto'`.
@@ -482,9 +486,24 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   servingMode?: WidgetServingMode;
 
   /**
-   * Custom URL for widget serving when `servingMode: 'custom-url'`.
+   * The URL of the widget page when `servingMode: 'custom-url'`: an `https://` URL (or `http://` on
+   * localhost), such as a CDN's. The `ui://` resource frames it, declares its origin as a frame
+   * (`_meta.ui.csp.frameDomains`, `_meta['openai/widgetCSP'].frame_domains`) and relays the host's
+   * bridge messages to it.
    *
-   * @deprecated Has no effect: `'custom-url'` is served as `'inline'`. Startup logs a warning when it is set.
+   * The page is yours: FrontMCP doesn't render `template` for it, and it must answer the host over
+   * the MCP Apps bridge (JSON-RPC over `postMessage` to its parent): a page built with `buildShell()`
+   * from `@frontmcp/uipack/shell` has FrontMCP's bridge, and `@modelcontextprotocol/ext-apps` works
+   * too. It must allow framing (no `X-Frame-Options: DENY`).
+   *
+   * The URL is used as written: FrontMCP adds no token or call data to it, and the page gets each
+   * call's result from the host. Startup refuses a URL with a `{…}` placeholder or credentials, a
+   * `'custom-url'` widget without this option, and this option on a widget not served `'custom-url'`.
+   *
+   * @example
+   * ```typescript
+   * ui: { template: '', servingMode: 'custom-url', customWidgetUrl: 'https://cdn.example.com/widgets/weather.html' }
+   * ```
    */
   customWidgetUrl?: string;
 

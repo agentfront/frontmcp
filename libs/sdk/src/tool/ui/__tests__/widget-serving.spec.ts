@@ -1,4 +1,4 @@
-import { defaultWidgetPath, describeWidgetServingProblems, widgetPathOf } from '../widget-serving';
+import { defaultWidgetPath, describeWidgetServingProblems, widgetPathOf, widgetUrlSourceOf } from '../widget-serving';
 
 describe('defaultWidgetPath', () => {
   it('serves a widget under /widgets/ and its tool name', () => {
@@ -53,5 +53,73 @@ describe('describeWidgetServingProblems', () => {
     const [problem] = describeWidgetServingProblems('weather', { directPath }, 'direct-url');
     expect(problem).toContain('Tool "weather": `ui.directPath`');
     expect(problem).toContain(reason);
+  });
+});
+
+describe("describeWidgetServingProblems for 'custom-url'", () => {
+  it('accepts an https URL, or http on localhost, with a query and a fragment', () => {
+    for (const customWidgetUrl of [
+      'https://cdn.example.com/widgets/weather.html?v=3#top',
+      'http://localhost:5173/weather.html',
+      'http://127.0.0.1:5173/weather.html',
+    ]) {
+      expect(describeWidgetServingProblems('weather', { customWidgetUrl }, 'custom-url')).toEqual([]);
+    }
+  });
+
+  it("refuses a 'custom-url' widget without a customWidgetUrl, its own mode or an inherited one", () => {
+    expect(describeWidgetServingProblems('weather', {}, 'custom-url')).toEqual([
+      'Tool "weather": `ui.servingMode: \'custom-url\'` needs `ui.customWidgetUrl`, the URL of the widget page.',
+    ]);
+  });
+
+  it("refuses a customWidgetUrl on a widget that isn't served 'custom-url'", () => {
+    expect(
+      describeWidgetServingProblems('weather', { customWidgetUrl: 'https://cdn.example.com/w.html' }, 'static'),
+    ).toEqual([
+      'Tool "weather": `ui.customWidgetUrl` is set, but the widget is served \'static\', so nothing loads that URL. ' +
+        "Set `ui.servingMode: 'custom-url'`, or remove `ui.customWidgetUrl`.",
+    ]);
+  });
+
+  it.each([
+    ['https://cdn.example.com/w.html?token={token}', 'has a `{…}` placeholder, which FrontMCP does not fill'],
+    ['https://cdn.example.com/{tool}.html', 'has a `{…}` placeholder'],
+    ['http://cdn.example.com/w.html', 'must be an https:// URL (or http:// on localhost)'],
+    ['javascript:alert(1)', 'must be an https:// URL'],
+    ['data:text/html,<p>x</p>', 'must be an https:// URL'],
+    ['/widgets/weather.html', 'is not an absolute URL'],
+    ['https://user:secret@cdn.example.com/w.html', 'must not hold credentials'],
+    [`https://cdn.example.com/${'a'.repeat(2100)}`, 'is longer than 2048 characters'],
+    [42, 'is not a string'],
+  ])('refuses the customWidgetUrl %p', (customWidgetUrl, reason) => {
+    const [problem] = describeWidgetServingProblems('weather', { customWidgetUrl }, 'custom-url');
+    expect(problem).toContain('Tool "weather": `ui.customWidgetUrl`');
+    expect(problem).toContain(reason);
+  });
+
+  it('never repeats the URL in a refusal, as it may hold a credential or a key', () => {
+    for (const customWidgetUrl of [
+      'https://user:secret@cdn.example.com/w.html',
+      'http://cdn.example.com/w.html?key=secret',
+      'https://cdn.example.com/w.html?key=secret&t={token}',
+    ]) {
+      const [problem] = describeWidgetServingProblems('weather', { customWidgetUrl }, 'custom-url');
+      expect(problem).not.toContain('secret');
+    }
+  });
+});
+
+describe('widgetUrlSourceOf', () => {
+  it('names the route of a direct-url widget and the URL of a custom-url one', () => {
+    expect(widgetUrlSourceOf('weather', {}, 'direct-url')).toEqual({
+      servingMode: 'direct-url',
+      path: '/widgets/weather',
+    });
+    expect(widgetUrlSourceOf('weather', { customWidgetUrl: 'https://cdn.example.com/w.html' }, 'custom-url')).toEqual({
+      servingMode: 'custom-url',
+      url: 'https://cdn.example.com/w.html',
+    });
+    expect(widgetUrlSourceOf('weather', {}, 'static')).toBeUndefined();
   });
 });

@@ -20,18 +20,16 @@ describe('describeIgnoredUiOptions (#645)', () => {
     expect(messages[0]).toContain('are deprecated and have no effect; remove them.');
   });
 
-  it('flags customWidgetUrl, which only the deprecated custom-url mode named', () => {
-    const messages = describeIgnoredUiOptions('weather', {
-      servingMode: 'inline',
-      customWidgetUrl: 'https://cdn.example.com/w.html',
-    });
-    expect(messages).toEqual([expect.stringContaining('`ui.customWidgetUrl` is deprecated')]);
-  });
-
-  it("says nothing about direct-url and its directPath, which serve the widget from the server's route", () => {
+  it('says nothing about the URL serving modes and their options, which serve the widget from a URL', () => {
     expect(describeIgnoredUiOptions('weather', { servingMode: 'direct-url', directPath: '/widgets/weather' })).toEqual(
       [],
     );
+    expect(
+      describeIgnoredUiOptions('weather', {
+        servingMode: 'custom-url',
+        customWidgetUrl: 'https://cdn.example.com/weather.html',
+      }),
+    ).toEqual([]);
   });
 
   it('says nothing about the options sent to the host', () => {
@@ -44,13 +42,6 @@ describe('describeIgnoredUiOptions (#645)', () => {
         sandboxDomain: 'https://weather.example',
       }),
     ).toEqual([]);
-  });
-
-  it.each(['custom-url'])('flags servingMode %s as deprecated and served inline', (servingMode) => {
-    const messages = describeIgnoredUiOptions('t', { servingMode });
-    expect(messages).toEqual([
-      expect.stringContaining(`servingMode: '${servingMode}'\` is deprecated; the widget is served inline`),
-    ]);
   });
 
   it('says hybrid sends only a component reference', () => {
