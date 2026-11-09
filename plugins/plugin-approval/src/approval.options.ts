@@ -6,9 +6,10 @@
 
 import { isProduction } from '@frontmcp/utils';
 
-import { ApprovalConfigurationError } from './approval';
+import { ApprovalConfigurationError, MAX_DELEGATION_CHAIN_LINKS } from './approval';
 import type { ApprovalPluginOptions, RecheckHeaders } from './approval.plugin';
 import { signingKeyOf } from './external/webhook-signature';
+import { DEFAULT_MAX_DELEGATION_DEPTH } from './stores/approval-storage.store';
 
 /** Where `mode: 'webhook'` takes decisions when `webhook.callbackPath` is not set. */
 export const DEFAULT_CALLBACK_PATH = '/approval/callback';
@@ -177,4 +178,10 @@ function resolveRecheck(options: ApprovalPluginOptions): ResolvedRecheck | undef
  */
 export function resolveExternalApproval(options: ApprovalPluginOptions): ResolvedExternalApproval {
   return { webhook: resolveWebhook(options), recheck: resolveRecheck(options) };
+}
+
+/** The deepest delegation chain a delegated approval may name: `maxDelegationDepth`, a whole number from 0 to 64. */
+export function resolveMaxDelegationDepth(options: ApprovalPluginOptions): number {
+  const depth = options.maxDelegationDepth ?? DEFAULT_MAX_DELEGATION_DEPTH;
+  return checkWholeNumber('maxDelegationDepth', depth, 0, MAX_DELEGATION_CHAIN_LINKS);
 }
