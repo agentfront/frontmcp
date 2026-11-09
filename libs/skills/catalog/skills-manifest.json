@@ -2239,7 +2239,7 @@
         },
         {
           "name": "create-workflow",
-          "description": "Connect multiple jobs into managed DAG pipelines with dependencies, conditions, and triggers",
+          "description": "Connect multiple jobs into managed DAG pipelines with dependencies and conditions, run by execute_workflow or a webhook route",
           "examples": [
             {
               "name": "basic-deploy-pipeline",
@@ -2268,14 +2268,14 @@
             },
             {
               "name": "webhook-triggered-workflow",
-              "description": "A CI/CD workflow triggered by a webhook, featuring `continueOnError`, per-step conditions, and the `workflow()` function builder.",
+              "description": "A CI/CD workflow that an `@HttpRoute` starts from a signed webhook, featuring `continueOnError`, per-step conditions, and the `workflow()` function builder.",
               "level": "advanced",
               "tags": ["development", "workflow", "webhook", "triggered"],
               "features": [
-                "Webhook trigger with `trigger: 'webhook'` and `webhook: { path, secret, methods }`",
+                "An `@HttpRoute` that checks an HMAC signature over the body as received and starts the workflow with `execute_workflow`",
                 "Using `continueOnError: true` to allow the workflow to proceed past non-critical step failures",
                 "Conditional branching: separate success and failure notification steps based on prior step state",
-                "Workflow-level `permissions` for access control",
+                "Workflow-level `read` and `list` permissions, so admins and the CI bot can follow the runs the webhook starts",
                 "The `workflow()` function builder as a lighter alternative to the class pattern"
               ]
             }
