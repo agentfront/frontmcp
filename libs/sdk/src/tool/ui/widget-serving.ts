@@ -1,4 +1,5 @@
 import type { WidgetServingMode } from '../../common';
+import { BUILT_ONCE_SERVING_MODES } from './serving-mode-default';
 
 /** Where a URL-served widget's page comes from: a route of the server, or a URL such as a CDN's. */
 export type WidgetUrlSource =
@@ -105,6 +106,8 @@ export function describeWidgetServingProblems(
     }
   }
 
+  problems.push(...describeBundlingModeProblems(toolName, ui));
+
   const customWidgetUrl = ui['customWidgetUrl'];
   if (servingMode === 'custom-url' && customWidgetUrl === undefined) {
     problems.push(
@@ -122,6 +125,33 @@ export function describeWidgetServingProblems(
   }
 
   return problems;
+}
+
+/**
+ * A `ui.bundlingMode` that isn't `'static'` or `'dynamic'`, or that contradicts the tool's own
+ * `ui.servingMode`: `'dynamic'` renders the page for each call, which only `'inline'` does, and
+ * `'static'` builds it once, which `'inline'` doesn't.
+ */
+function describeBundlingModeProblems(toolName: string, ui: Record<string, unknown>): string[] {
+  const bundlingMode = ui['bundlingMode'];
+  if (bundlingMode === undefined) return [];
+  if (bundlingMode !== 'static' && bundlingMode !== 'dynamic') {
+    return [`Tool "${toolName}": \`ui.bundlingMode\` is ${JSON.stringify(bundlingMode)}; use 'static' or 'dynamic'.`];
+  }
+  const servingMode = ui['servingMode'];
+  const contradicts =
+    bundlingMode === 'dynamic'
+      ? (BUILT_ONCE_SERVING_MODES as readonly unknown[]).includes(servingMode)
+      : servingMode === 'inline';
+  if (!contradicts) return [];
+  const what =
+    bundlingMode === 'dynamic'
+      ? `\`ui.bundlingMode: 'dynamic'\` renders the page for each call, but \`ui.servingMode: '${String(servingMode)}'\` builds it once`
+      : "`ui.bundlingMode: 'static'` builds the page once, at startup, but `ui.servingMode: 'inline'` renders it for each call";
+  return [
+    `Tool "${toolName}": ${what}. Remove one, or make them agree: 'dynamic' goes with 'inline', ` +
+      "and 'static' with 'static', 'hybrid', 'direct-url' or 'custom-url'.",
+  ];
 }
 
 /**

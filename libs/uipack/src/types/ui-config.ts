@@ -658,13 +658,19 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   uiType?: 'html' | 'react' | 'mdx' | 'markdown' | 'auto';
 
   /**
-   * Bundling mode.
+   * When the widget page is built.
    *
-   * - `'static'`: Pre-compile widget shell, inject data at runtime (default)
-   * - `'dynamic'`: Generate fresh HTML per tool invocation
+   * - `'static'`: once, without a call's data; the host sends each call's result to the page.
+   * - `'dynamic'`: for each call, with that call's data in the page.
    *
-   * @deprecated Has no effect: `servingMode` decides it (`'static'` compiles the page at startup,
-   * `'inline'` renders it for each call). Startup logs a warning when it is set.
+   * It picks the serving mode where `servingMode` leaves the choice open: with `servingMode` unset
+   * (an app or server default included) or `'auto'`, `'dynamic'` serves `'inline'` on every
+   * platform, and `'static'` serves `'static'`, or keeps an inherited `'hybrid'`, `'direct-url'` or
+   * `'custom-url'`, which build the page once as well. Startup refuses a tool's own `servingMode`
+   * that contradicts it: `'dynamic'` goes with `'inline'` only, and `'static'` with anything but
+   * `'inline'`.
+   *
+   * Unset (the default): `servingMode` alone decides, as before this option worked.
    */
   bundlingMode?: 'static' | 'dynamic';
 

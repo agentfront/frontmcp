@@ -123,3 +123,50 @@ describe('widgetUrlSourceOf', () => {
     expect(widgetUrlSourceOf('weather', {}, 'static')).toBeUndefined();
   });
 });
+
+describe("describeWidgetServingProblems for 'bundlingMode'", () => {
+  it.each([
+    [undefined, 'dynamic'],
+    ['auto', 'dynamic'],
+    ['inline', 'dynamic'],
+    [undefined, 'static'],
+    ['auto', 'static'],
+    ['static', 'static'],
+    ['hybrid', 'static'],
+    ['direct-url', 'static'],
+  ])('accepts servingMode %p with bundlingMode %p', (servingMode, bundlingMode) => {
+    expect(describeWidgetServingProblems('weather', { servingMode, bundlingMode }, 'auto')).toEqual([]);
+  });
+
+  it.each(['static', 'hybrid', 'direct-url', 'custom-url'])(
+    "refuses bundlingMode 'dynamic' with the tool's own servingMode '%s', which builds the page once",
+    (servingMode) => {
+      expect(describeBundling(servingMode, 'dynamic')).toEqual([
+        `Tool "weather": \`ui.bundlingMode: 'dynamic'\` renders the page for each call, but \`ui.servingMode: '${servingMode}'\` ` +
+          "builds it once. Remove one, or make them agree: 'dynamic' goes with 'inline', and 'static' with " +
+          "'static', 'hybrid', 'direct-url' or 'custom-url'.",
+      ]);
+    },
+  );
+
+  it("refuses bundlingMode 'static' with the tool's own servingMode 'inline'", () => {
+    expect(describeBundling('inline', 'static')).toEqual([
+      "Tool \"weather\": `ui.bundlingMode: 'static'` builds the page once, at startup, but `ui.servingMode: 'inline'` " +
+        "renders it for each call. Remove one, or make them agree: 'dynamic' goes with 'inline', and 'static' with " +
+        "'static', 'hybrid', 'direct-url' or 'custom-url'.",
+    ]);
+  });
+
+  it('refuses a value other than static or dynamic', () => {
+    expect(describeBundling(undefined, 'lazy')).toEqual([
+      'Tool "weather": `ui.bundlingMode` is "lazy"; use \'static\' or \'dynamic\'.',
+    ]);
+  });
+
+  function describeBundling(servingMode: string | undefined, bundlingMode: string): string[] {
+    const ui = { servingMode, bundlingMode, customWidgetUrl: 'https://cdn.example.com/w.html' };
+    return describeWidgetServingProblems('weather', ui, servingMode === 'custom-url' ? 'custom-url' : 'static').filter(
+      (problem) => problem.includes('bundlingMode'),
+    );
+  }
+});

@@ -71,24 +71,25 @@ export type UIType = 'html' | 'react' | 'mdx' | 'markdown' | 'auto';
 // ============================================
 
 /**
- * Widget bundling strategy.
+ * Widget bundling strategy (a tool's `ui.bundlingMode`).
  *
- * - `'static'`: Widget shell is pre-compiled at startup and cached.
- *   Tool responses reference the cached widget via `ui://widget/{toolName}`.
- *   Data is injected at runtime via FrontMCP Bridge. **Default mode.**
+ * - `'static'`: Widget page is built once, at startup, and served from `ui://widget/{toolName}`.
+ *   Data reaches it at runtime via the FrontMCP Bridge.
  *
- * - `'dynamic'`: Fresh HTML is generated for each tool invocation.
- *   Use for debugging or when template logic depends on invocation context.
+ * - `'dynamic'`: Fresh HTML is generated for each tool invocation, with that call's data
+ *   (served `'inline'`).
+ *
+ * Unset, the tool's `servingMode` alone decides. See `UITemplateConfig.bundlingMode`.
  *
  * @example
  * ```typescript
- * // Static mode (default, recommended)
+ * // Built once at startup; the host sends each call's data
  * ui: {
  *   template: WeatherWidget,
  *   bundlingMode: 'static'
  * }
  *
- * // Dynamic mode (debugging, fresh per call)
+ * // Built for each call, with its data
  * ui: {
  *   template: (ctx) => `<div>${ctx.output.debug}</div>`,
  *   bundlingMode: 'dynamic'
@@ -755,10 +756,8 @@ export interface WidgetConfig<Input = Record<string, unknown>, Output = unknown>
   /**
    * Bundling mode.
    *
-   * - `'static'`: Pre-compile widget shell, inject data at runtime (default)
+   * - `'static'`: Pre-compile widget shell, inject data at runtime
    * - `'dynamic'`: Generate fresh HTML per tool invocation
-   *
-   * @default 'static'
    */
   bundlingMode?: BundlingMode;
 
