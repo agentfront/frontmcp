@@ -76,6 +76,22 @@ describe('FrontMcpContextStorage', () => {
         expect(storage.getStoreOrThrow().unverifiedRequest).toBeUndefined();
       });
     });
+
+    it("records the server's base URL from the request's scheme and Host, ignoring forwarded headers by default", () => {
+      const serverUrl = storage.runForHttpRequest(
+        { headers: { host: 'mcp.example.com', 'x-forwarded-host': 'attacker.example' }, protocol: 'https' },
+        'scope',
+        () => storage.getStoreOrThrow().metadata.serverUrl,
+      );
+
+      expect(serverUrl).toBe('https://mcp.example.com');
+    });
+
+    it('records no base URL for a request without a Host', () => {
+      expect(
+        storage.runForHttpRequest({ headers: {} }, 'scope', () => storage.getStoreOrThrow().metadata.serverUrl),
+      ).toBeUndefined();
+    });
   });
 
   describe('run', () => {

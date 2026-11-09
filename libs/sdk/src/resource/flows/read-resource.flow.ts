@@ -23,6 +23,7 @@ import {
   type Token,
 } from '../../common';
 import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../../common/availability';
+import { getPinnedPublicUrl } from '../../common/utils/path.utils';
 import { runOnSurface } from '../../context/call-surface';
 import {
   InvalidInputError,
@@ -255,7 +256,8 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       }
 
       const { handleUIResourceRead } = await import('../../tool/ui/ui-resource.handler.js');
-      const uiResult = handleUIResourceRead(uri, this.scope.toolUI, platformType);
+      const serverUrl = this.tryGetContext()?.metadata.serverUrl ?? getPinnedPublicUrl();
+      const uiResult = handleUIResourceRead(uri, this.scope.toolUI, platformType, serverUrl);
 
       if (uiResult.handled) {
         if (uiResult.error) {

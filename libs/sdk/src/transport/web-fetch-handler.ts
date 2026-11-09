@@ -294,12 +294,17 @@ function buildWebFetchHandler(
 
   /**
    * Merge the resolved security headers into a response without overriding ones the flow already
-   * set. A distributed instance also names itself on every response (`X-FrontMCP-Machine-Id`),
-   * exactly as the Express host does.
+   * set, and without `X-Frame-Options` where the response's own CSP names its `frame-ancestors`
+   * (a `'direct-url'` widget page), as browsers ignore it there. A distributed instance also names
+   * itself on every response (`X-FrontMCP-Machine-Id`), exactly as the Express host does.
    */
   const withSecurityHeaders = (response: Response): Response => {
     const headers = new Headers(response.headers);
-    for (const [k, v] of Object.entries(securityHeaders)) if (!headers.has(k)) headers.set(k, v);
+    const namesFrameAncestors = /(^|;)\s*frame-ancestors\b/i.test(headers.get('content-security-policy') ?? '');
+    for (const [k, v] of Object.entries(securityHeaders)) {
+      if (namesFrameAncestors && k.toLowerCase() === 'x-frame-options') continue;
+      if (!headers.has(k)) headers.set(k, v);
+    }
     const machineId = machineIdHeader();
     if (machineId) headers.set(machineId[0], machineId[1]);
     headers.delete('x-powered-by');
