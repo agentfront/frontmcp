@@ -433,8 +433,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     }
 
     // Checkpoint 3a — run the custom verifier (non-incremental logins only).
-    // On success, derive the subject (explicit `sub` → subject strategy → the
-    // anonymous fallback) and stash custom claims for the minted token. On
+    // On success, derive the subject (explicit `sub` → subject strategy) and
+    // stash custom claims for the minted token. On
     // failure, re-render the login page with the error instead of proceeding.
     if (authenticateFn && !isIncremental && !verifiedLogin) {
       const result = await this.runAuthenticate(authenticateFn, loginFields ?? {}, pendingAuth);
@@ -450,10 +450,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         );
         return;
       }
-      userSub =
-        result.sub ??
-        this.deriveSubjectFromStrategy(localOptions.login, loginFields ?? {}) ??
-        this.generateUserSub(localOptions.anonymousSubject ?? 'local-operator');
+      userSub = result.sub ?? this.deriveSubjectFromStrategy(localOptions.login, loginFields ?? {});
       if (result.claims) {
         this.state.set('customClaims', result.claims);
       }
@@ -1330,23 +1327,20 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Derive a subject from the configured login subject strategy.
+   * Derive the subject of a login whose authenticate() returned no `sub`, from the login subject strategy.
    *
    * - `per-account`: hash the value of `login.subject.fromField` into a stable
    *   subject (same account → same `sub`).
-   * - otherwise (`per-session` / unset): return undefined so the caller falls
-   *   back to the anonymous subject.
+   * - otherwise (`per-session` / unset), or a login without that value: a fresh
+   *   subject for this login, never one another login shares.
    */
-  private deriveSubjectFromStrategy(
-    login: LoginConfig | undefined,
-    fields: Record<string, string>,
-  ): string | undefined {
+  private deriveSubjectFromStrategy(login: LoginConfig | undefined, fields: Record<string, string>): string {
     const subject = login?.subject;
     if (subject?.strategy === 'per-account' && subject.fromField) {
       const seed = fields[subject.fromField];
       if (seed) return this.generateUserSub(seed);
     }
-    return undefined;
+    return randomUUID();
   }
 
   /**
