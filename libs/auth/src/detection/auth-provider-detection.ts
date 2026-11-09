@@ -189,12 +189,6 @@ export function detectAuthProviders(
     );
   }
 
-  if (parentAuth && isOrchestratedMode(parentAuth) && parentAuth.incrementalAuth?.showAllAppsAtOnce === false) {
-    warnings.push(
-      'incrementalAuth.showAllAppsAtOnce: false has no effect: the provider picker shows every app on one page.',
-    );
-  }
-
   return {
     providers,
     requiresOrchestration,

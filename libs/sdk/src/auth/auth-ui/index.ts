@@ -25,6 +25,7 @@ export {
   type AuthSlot,
   type AuthProvider,
   type AuthTool,
+  type FederatedStep,
   type AuthExtraResult,
   type AuthUiFileSource,
 } from './auth-ui.contract';
