@@ -104,6 +104,25 @@ describe('App.esm()', () => {
     );
   });
 
+  it("merges the app's loader with the server's, so the server's token reaches the app's registry", async () => {
+    const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'esm-gateway', version: '1.0.0' },
+      loader: { url: 'https://esm.acme.example', token: 'server-token' },
+      apps: [App.esm('@acme/tools@^1.0.0', { namespace: 'acme', loader: { registryUrl: 'https://npm.acme.example' } })],
+    });
+
+    const loader = load.mock.contexts[0] as { registryAuth: unknown; esmBaseUrl: string };
+    expect(loader.registryAuth).toEqual({ registryUrl: 'https://npm.acme.example', token: 'server-token' });
+    expect(loader.esmBaseUrl).toBe('https://esm.acme.example');
+  });
+
+  it('accepts a cacheTTL of 0', async () => {
+    const srv = await createGateway({ cacheTTL: 0 });
+
+    expect((await srv.listTools()).tools.map((tool) => tool.name)).toContain('acme:echo');
+  });
+
   it('hands the import map to the loader', async () => {
     await createGateway({ importMap: { zod: 'https://cdn.example.com/zod.mjs' } });
 

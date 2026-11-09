@@ -84,16 +84,17 @@ export default class Server {}
 
 `app.esm(specifier, options?)` accepts a package specifier (e.g., `'@acme/tools@^1.0.0'`) and optional `EsmAppOptions`:
 
-| Option        | Type                                        | Description                                        |
-| ------------- | ------------------------------------------- | -------------------------------------------------- |
-| `name`        | `string`                                    | Override the auto-derived app name                 |
-| `namespace`   | `string`                                    | Namespace prefix for tools, resources, and prompts |
-| `description` | `string`                                    | Human-readable description                         |
-| `standalone`  | `boolean \| 'includeInParent'`              | Scope isolation mode (default: `false`)            |
-| `loader`      | `PackageLoader`                             | Custom registry/bundle URLs and auth token         |
-| `autoUpdate`  | `{ enabled: boolean; intervalMs?: number }` | Background version polling                         |
-| `importMap`   | `Record<string, string>`                    | Rewrites the package's imports (import-map rules)  |
-| `filter`      | `AppFilterConfig`                           | Include/exclude primitives by their package names  |
+| Option        | Type                                        | Description                                                                                                                                                           |
+| ------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | `string`                                    | Override the auto-derived app name                                                                                                                                    |
+| `namespace`   | `string`                                    | Namespace prefix for tools, resources, and prompts                                                                                                                    |
+| `description` | `string`                                    | Human-readable description                                                                                                                                            |
+| `standalone`  | `boolean \| 'includeInParent'`              | Scope isolation mode (default: `false`)                                                                                                                               |
+| `loader`      | `PackageLoader`                             | Custom registry/bundle URLs and auth token, merged with the server's `loader`: the fields set here win, a `token` or `tokenEnvVar` here replaces both of the server's |
+| `cacheTTL`    | `number`                                    | Milliseconds a downloaded bundle is reused (default: 24 hours); `0` downloads it on every load                                                                        |
+| `autoUpdate`  | `{ enabled: boolean; intervalMs?: number }` | Background version polling                                                                                                                                            |
+| `importMap`   | `Record<string, string>`                    | Rewrites the package's imports (import-map rules)                                                                                                                     |
+| `filter`      | `AppFilterConfig`                           | Include/exclude primitives by their package names                                                                                                                     |
 
 `importMap` keys match an exact specifier, or every specifier under a key ending in `/` (the longest matching key wins); only real import and re-export specifiers are rewritten, never text in strings or comments. The bundle is fetched with those packages external (esm.sh `external`) and their imports are rewritten to the targets; Node cannot import `https://` URLs, so map to a `file://` URL or an installed package name there.
 
@@ -112,6 +113,7 @@ app.esm('@internal/tools@^2.0.0', {
 
 - **Versions:** `latest` or another dist-tag resolves to the version the tag points at; a word that isn't one of the package's dist-tags (a typo like `@stabel`) stops the server with `ESM_VERSION_RESOLUTION_ERROR`, naming it and the dist-tags there are. A range resolves to the highest version that satisfies it, never a prerelease.
 - **Token:** the `loader` token goes to the registry and, when `loader.url` is set, with every bundle download from it. It is never sent to the default esm.sh.
+- **Bundle errors:** a refused bundle download names the server it came from, `https://esm.sh returned 404 for "…"` or the `loader.url`.
 - **Auto-update:** a newer version that fails to download or register leaves the loaded version serving, and is tried again at the next poll.
 
 ## Remote Apps (External MCP Servers)

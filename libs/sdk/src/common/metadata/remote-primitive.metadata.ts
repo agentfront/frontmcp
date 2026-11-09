@@ -4,7 +4,7 @@
  * on primitive decorators (Tool, Resource, Prompt, Agent, Skill, Job) and App.
  */
 
-import type { PackageLoader, RemoteTransportOptions, RemoteAuthConfig } from './app.metadata';
+import type { PackageLoader, RemoteAuthConfig, RemoteTransportOptions } from './app.metadata';
 
 /**
  * Base ESM loading options shared by all `.esm()` methods (primitives and apps).
@@ -13,9 +13,12 @@ import type { PackageLoader, RemoteTransportOptions, RemoteAuthConfig } from './
  *   When provided, allows overriding the loaded primitive's metadata via `metadata`.
  */
 export interface EsmOptions<M = Record<string, unknown>> {
-  /** Per-primitive loader override (registry URL, auth token) */
+  /**
+   * Loader for this entry: the fields it sets replace the server's `loader` fields, the rest come from the server's.
+   * A `token` or `tokenEnvVar` here replaces both of the server's.
+   */
   loader?: PackageLoader;
-  /** Cache TTL in milliseconds */
+  /** Milliseconds a downloaded bundle is reused (default: 86400000 = 24 hours); `0` downloads it on every load */
   cacheTTL?: number;
   /** Override or extend the loaded primitive's metadata (e.g., name, description) */
   metadata?: Partial<M>;

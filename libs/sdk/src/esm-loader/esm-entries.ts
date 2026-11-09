@@ -43,6 +43,20 @@ export function registryAuthOf(loader?: PackageLoader): EsmRegistryAuth | undefi
 }
 
 /**
+ * The loader an entry uses: the server's, with the fields the entry's own loader sets in place of the server's.
+ * A token is taken as a whole: an entry that sets `token` or `tokenEnvVar` gets neither of the server's.
+ */
+export function mergePackageLoaders(
+  serverLoader?: PackageLoader,
+  entryLoader?: PackageLoader,
+): PackageLoader | undefined {
+  if (!serverLoader || !entryLoader) return entryLoader ?? serverLoader;
+  const entrySetsToken = entryLoader.token !== undefined || entryLoader.tokenEnvVar !== undefined;
+  const tokenSource = entrySetsToken ? entryLoader : serverLoader;
+  return { ...serverLoader, ...entryLoader, token: tokenSource.token, tokenEnvVar: tokenSource.tokenEnvVar };
+}
+
+/**
  * A module loader for packages fetched through `loader` (the registry and bundle CDN), cached for `cacheTTL` ms,
  * with the imports `importMap` names rewritten.
  */
@@ -114,7 +128,7 @@ function loadPackageOnce(
     loads = new Map();
     packageLoadsByScope.set(scope, loads);
   }
-  const packageLoader = options?.loader ?? scope.metadata.loader;
+  const packageLoader = mergePackageLoaders(scope.metadata.loader, options?.loader);
   const loaderFingerprint = sha256Hex(JSON.stringify({ packageLoader, cacheTTL: options?.cacheTTL })).slice(0, 16);
   const key = `${specifier.fullName}@${specifier.range}#${loaderFingerprint}`;
   let load = loads.get(key);
