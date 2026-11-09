@@ -19,34 +19,23 @@ import {
   type RemoteAppMetadata,
   type SkillEntry,
 } from '../../common';
-import { isPrimitiveIncluded } from '../../common/utils/primitive-filter';
 import { InternalMcpError } from '../../errors';
 import { type EsmModuleLoader } from '../../esm-loader';
-import {
-  createPackageModuleLoader,
-  esmManifestRecords,
-  esmPromptRecord,
-  esmResourceRecord,
-  esmToolRecord,
-  mergePackageLoaders,
-  registryAuthOf,
-} from '../../esm-loader/esm-entries';
+import { createPackageModuleLoader, mergePackageLoaders, registryAuthOf } from '../../esm-loader/esm-entries';
 import { type FrontMcpPackageManifest } from '../../esm-loader/esm-manifest';
 import { type EsmLoadResult } from '../../esm-loader/esm-module-loader';
 import { parsePackageSpecifier, type ParsedPackageSpecifier } from '../../esm-loader/package-specifier';
 import { VersionPoller } from '../../esm-loader/version-poller';
-import { PromptInstance } from '../../prompt/prompt.instance';
 import PromptRegistry from '../../prompt/prompt.registry';
-import type ProviderRegistry from '../../provider/provider.registry';
-import { ResourceInstance } from '../../resource/resource.instance';
+import ProviderRegistry from '../../provider/provider.registry';
 import ResourceRegistry from '../../resource/resource.registry';
 import { type SkillRegistryInterface } from '../../skill/skill.registry';
-import { ToolInstance } from '../../tool/tool.instance';
 import ToolRegistry from '../../tool/tool.registry';
 import { appIdOf } from '../app.utils';
+import { EsmPackageVersion, type EsmPackageTarget } from './esm-package-version';
 
 /** The kinds of entry a package manifest may export that an ESM app does not load. */
-const UNLOADED_MANIFEST_KINDS = ['skills', 'agents', 'jobs', 'workflows', 'providers'] as const;
+const UNLOADED_MANIFEST_KINDS = ['skills', 'agents', 'jobs', 'workflows'] as const;
 
 /**
  * Empty plugin registry for ESM apps.
@@ -163,6 +152,8 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
   }
 
   private readonly scopeProviders: ProviderRegistry;
+  /** The app's own providers, below the scope's; each loaded version registers the package's providers below them. */
+  private readonly ownProviders: ProviderRegistry;
   private readonly appOwner: EntryOwnerRef;
   private readonly loader: EsmModuleLoader;
   private readonly packageLoader?: PackageLoader;
@@ -170,7 +161,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
   private poller?: VersionPoller;
   private loadResult?: EsmLoadResult;
   private updateInProgress = false;
-  private registered: EsmAppEntries = { tools: [], resources: [], prompts: [] };
+  private registered?: EsmPackageVersion;
 
   // Standard registries
   private readonly _tools: ToolRegistry;
@@ -204,10 +195,12 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
       logger: scope.logger,
     });
 
-    // Initialize standard registries (empty initially - populated on load)
-    this._tools = new ToolRegistry(this.scopeProviders, [], this.appOwner);
-    this._resources = new ResourceRegistry(this.scopeProviders, [], this.appOwner);
-    this._prompts = new PromptRegistry(this.scopeProviders, [], this.appOwner);
+    // Initialize standard registries (empty initially - populated on load). `adopt: false`: the scope adopts their
+    // entries from this app, and they adopt nothing of the scope's.
+    this.ownProviders = new ProviderRegistry([], scopeProviders);
+    this._tools = new ToolRegistry(this.ownProviders, [], this.appOwner, { adopt: false });
+    this._resources = new ResourceRegistry(this.ownProviders, [], this.appOwner, { adopt: false });
+    this._prompts = new PromptRegistry(this.ownProviders, [], this.appOwner, { adopt: false });
     this._plugins = new EmptyPluginRegistry();
     this._adapters = new EmptyAdapterRegistry();
     this._skills = new EmptySkillRegistry();
@@ -221,7 +214,8 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
 
     try {
       // Wait for registries to be ready
-      await Promise.all([this._tools.ready, this._resources.ready, this._prompts.ready]);
+      await Promise.all([this.ownProviders.ready, this._tools.ready, this._resources.ready, this._prompts.ready]);
+      this.scopeProviders.getActiveScope().onDispose(() => this.dispose());
 
       // Load the ESM package
       this.loadResult = await this.loader.load(this.specifier);
@@ -256,7 +250,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
   // ═══════════════════════════════════════════════════════════════════
 
   override get providers(): ProviderRegistryInterface {
-    return this.scopeProviders;
+    return this.ownProviders;
   }
 
   override get adapters(): AdapterRegistryInterface {
@@ -305,7 +299,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     logger.info(`Reloading ESM app ${this.id}`);
 
     const loadResult = await this.loader.load(this.specifier);
-    await this.registerFromManifest(loadResult.manifest);
+    await this.registerFromManifest(loadResult.manifest, { replacing: true });
     this.loadResult = loadResult;
 
     if (this.poller) {
@@ -325,60 +319,55 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
   // ═══════════════════════════════════════════════════════════════════
 
   /**
-   * Register primitives from a loaded package manifest into standard registries, in place of the ones registered
-   * before. Every entry is built first, so an entry that fails to build leaves the previous ones registered.
+   * Register the entries of a loaded package manifest in place of the ones registered before. Every entry is built
+   * first, on the version's own providers, so an entry that fails to build leaves the previous version serving. A
+   * version that replaces a served one has its providers' `onReady()` run before it is swapped in; the replaced
+   * version's providers stay up, for the calls still running on its entries, until the server shuts down.
    */
-  private async registerFromManifest(manifest: FrontMcpPackageManifest): Promise<void> {
+  private async registerFromManifest(
+    manifest: FrontMcpPackageManifest,
+    { replacing }: { replacing: boolean } = { replacing: false },
+  ): Promise<void> {
     const logger = this.scopeProviders.getActiveScope().logger;
-    const namespace = this.metadata.namespace ?? this.metadata.name;
 
-    // Before any entry is built, so a tool that fails on a missing manifest provider follows the warning.
+    // Before any entry is built, so an entry that fails to build follows the warning.
     const notLoaded = UNLOADED_MANIFEST_KINDS.filter((kind) => (manifest[kind]?.length ?? 0) > 0);
     if (notLoaded.length > 0) {
       logger.warn(
-        `ESM app ${this.id}: App.esm() loads only tools, resources and prompts; ` +
+        `ESM app ${this.id}: App.esm() loads only tools, resources, prompts and providers; ` +
           `the package's ${notLoaded.join(', ')} are not loaded`,
       );
     }
 
-    const filter = this.metadata.filter;
-    const prefixLength = namespace ? namespace.length + 1 : 0;
-    const included =
-      (kind: 'tools' | 'resources' | 'prompts') =>
-      (record: { metadata: { name: string } }): boolean =>
-        isPrimitiveIncluded(record.metadata.name.slice(prefixLength), kind, filter);
+    const next = await EsmPackageVersion.build(manifest, this.packageTarget());
+    try {
+      if (replacing) await next.providers.runReadyHooks(logger);
+      this.swapEntries(next);
+    } catch (error) {
+      await next.discard(logger);
+      throw error;
+    }
 
-    const tools = esmManifestRecords(manifest.tools, (raw) => esmToolRecord(raw, namespace)).filter(included('tools'));
-    const resources = esmManifestRecords(manifest.resources, (raw) => esmResourceRecord(raw, namespace)).filter(
-      included('resources'),
-    );
-    const prompts = esmManifestRecords(manifest.prompts, (raw) => esmPromptRecord(raw, namespace)).filter(
-      included('prompts'),
-    );
+    logger.info(`ESM app ${this.id} registered: ${next.describe()}`);
+  }
 
-    const entries: EsmAppEntries = {
-      tools: await Promise.all(
-        tools.map((record) => readyInstance(new ToolInstance(record, this.scopeProviders, this.appOwner))),
-      ),
-      resources: await Promise.all(
-        resources.map((record) => readyInstance(new ResourceInstance(record, this.scopeProviders, this.appOwner))),
-      ),
-      prompts: await Promise.all(
-        prompts.map((record) => readyInstance(new PromptInstance(record, this.scopeProviders, this.appOwner))),
-      ),
+  private packageTarget(): EsmPackageTarget {
+    return {
+      providers: this.ownProviders,
+      owner: this.appOwner,
+      namespace: this.metadata.namespace ?? this.metadata.name,
+      filter: this.metadata.filter,
+      logger: this.scopeProviders.getActiveScope().logger,
     };
-    this.swapEntries(entries);
-
-    logger.info(
-      `ESM app ${this.id} registered: ${tools.length} tools, ${resources.length} resources, ${prompts.length} prompts`,
-    );
   }
 
   /**
    * Handle a new version detected by the version poller.
    */
   private async handleVersionUpdate(_packageName: string, oldVersion: string, newVersion: string): Promise<void> {
-    const logger = this.scopeProviders.getActiveScope().logger;
+    const scope = this.scopeProviders.getActiveScope();
+    const logger = scope.logger;
+    if (scope.isDisposed) return;
 
     if (this.updateInProgress) {
       throw new InternalMcpError(`An update of ESM app ${this.id} is already in progress`, 'ESM_UPDATE_IN_PROGRESS');
@@ -389,7 +378,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
 
     try {
       const loadResult = await this.loader.load(this.specifier);
-      await this.registerFromManifest(loadResult.manifest);
+      await this.registerFromManifest(loadResult.manifest, { replacing: true });
       this.loadResult = loadResult;
 
       logger.info(`ESM app ${this.id} updated to ${newVersion}`);
@@ -402,40 +391,28 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
   }
 
   /** Registers `next` in place of the registered entries; if one fails to register, the previous ones are put back. */
-  private swapEntries(next: EsmAppEntries): void {
+  private swapEntries(next: EsmPackageVersion): void {
     const previous = this.registered;
-    this.unregisterEntries(previous);
+    if (previous) this.unregisterEntries(previous);
     try {
       this.registerEntries(next);
     } catch (error) {
       this.unregisterEntries(next);
-      this.registerEntries(previous);
+      if (previous) this.registerEntries(previous);
       throw error;
     }
     this.registered = next;
   }
 
-  private registerEntries(entries: EsmAppEntries): void {
+  private registerEntries(entries: EsmPackageVersion): void {
     for (const tool of entries.tools) this._tools.registerToolInstance(tool);
     for (const resource of entries.resources) this._resources.registerResourceInstance(resource);
     for (const prompt of entries.prompts) this._prompts.registerPromptInstance(prompt);
   }
 
-  private unregisterEntries(entries: EsmAppEntries): void {
+  private unregisterEntries(entries: EsmPackageVersion): void {
     for (const tool of entries.tools) this._tools.unregisterToolInstance(tool.record.provide);
     for (const resource of entries.resources) this._resources.unregisterResourceInstance(resource.record.provide);
     for (const prompt of entries.prompts) this._prompts.unregisterPromptInstance(prompt.record.provide);
   }
-}
-
-/** The entries an ESM app registered from its package. */
-interface EsmAppEntries {
-  tools: ToolInstance[];
-  resources: ResourceInstance[];
-  prompts: PromptInstance[];
-}
-
-async function readyInstance<T extends { ready: Promise<void> }>(instance: T): Promise<T> {
-  await instance.ready;
-  return instance;
 }

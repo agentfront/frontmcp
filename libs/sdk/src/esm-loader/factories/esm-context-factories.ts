@@ -16,17 +16,30 @@ import { PromptContext, ResourceContext, ToolContext, type ToolInputType, type T
  * Handler type for ESM tool execution.
  * This is the execute function exported by the ESM package.
  */
-export type EsmToolExecuteHandler = (input: Record<string, unknown>) => Promise<CallToolResult>;
+/** A plain-object tool's `execute`; `context` is the call's tool context, whose `get()` resolves the package's providers. */
+export type EsmToolExecuteHandler = (
+  input: Record<string, unknown>,
+  context: ToolContext<ToolInputType, ToolOutputType, unknown, CallToolResult>,
+) => Promise<CallToolResult>;
 
 /**
  * Handler type for ESM resource reading.
  */
-export type EsmResourceReadHandler = (uri: string, params: Record<string, string>) => Promise<ReadResourceResult>;
+/** A plain-object resource's `read`; `context` is the read's resource context. */
+export type EsmResourceReadHandler = (
+  uri: string,
+  params: Record<string, string>,
+  context: ResourceContext,
+) => Promise<ReadResourceResult>;
 
 /**
  * Handler type for ESM prompt execution.
  */
-export type EsmPromptExecuteHandler = (args: Record<string, string>) => Promise<GetPromptResult>;
+/** A plain-object prompt's `execute`; `context` is the request's prompt context. */
+export type EsmPromptExecuteHandler = (
+  args: Record<string, string>,
+  context: PromptContext,
+) => Promise<GetPromptResult>;
 
 /**
  * Creates an ESM tool context class that executes locally in-process.
@@ -44,7 +57,7 @@ export function createEsmToolContextClass(
 ): Type<ToolContext<ToolInputType, ToolOutputType, unknown, CallToolResult>> {
   const cls = class DynamicEsmToolContext extends ToolContext<ToolInputType, ToolOutputType, unknown, CallToolResult> {
     async execute(input: unknown): Promise<CallToolResult> {
-      return executeFn(input as Record<string, unknown>);
+      return executeFn(input as Record<string, unknown>, this);
     }
   };
 
@@ -67,7 +80,7 @@ export function createEsmResourceContextClass<Params extends Record<string, stri
 ): Type<ResourceContext<Params, ReadResourceResult>> {
   const cls = class DynamicEsmResourceContext extends ResourceContext<Params, ReadResourceResult> {
     async execute(uri: string, params: Params): Promise<ReadResourceResult> {
-      return readFn(uri, params);
+      return readFn(uri, params, this as unknown as ResourceContext);
     }
   };
 
@@ -89,7 +102,7 @@ export function createEsmPromptContextClass(
 ): Type<PromptContext> {
   const cls = class DynamicEsmPromptContext extends PromptContext {
     async execute(args: Record<string, string>): Promise<GetPromptResult> {
-      return executeFn(args);
+      return executeFn(args, this);
     }
   };
 

@@ -11,17 +11,19 @@
 
 import { getMetadata, isClass } from '@frontmcp/di';
 import { isValidMcpUri } from '@frontmcp/utils';
+
 import {
-  FrontMcpToolTokens,
-  FrontMcpResourceTokens,
-  FrontMcpPromptTokens,
-  FrontMcpLocalAppTokens,
-  FrontMcpSkillTokens,
-  FrontMcpJobTokens,
   FrontMcpAgentTokens,
+  FrontMcpJobTokens,
+  FrontMcpLocalAppTokens,
+  FrontMcpPromptTokens,
+  FrontMcpProviderTokens,
+  FrontMcpResourceTokens,
+  FrontMcpSkillTokens,
+  FrontMcpToolTokens,
   FrontMcpWorkflowTokens,
 } from '../../common/tokens';
-import type { EsmToolDefinition, EsmResourceDefinition, EsmPromptDefinition } from '../../esm-loader/factories';
+import type { EsmPromptDefinition, EsmResourceDefinition, EsmToolDefinition } from '../../esm-loader/factories';
 
 // ═══════════════════════════════════════════════════════════════════
 // DECORATED CLASS DETECTION
@@ -83,6 +85,11 @@ export function isDecoratedAgentClass(raw: unknown): boolean {
  */
 export function isDecoratedWorkflowClass(raw: unknown): boolean {
   return isClass(raw) && getMetadata(FrontMcpWorkflowTokens.type, raw) === true;
+}
+
+/** Check if a raw ESM export is a class decorated with @Provider. */
+export function isDecoratedProviderClass(raw: unknown): boolean {
+  return isClass(raw) && getMetadata(FrontMcpProviderTokens.type, raw) === true;
 }
 
 // ═══════════════════════════════════════════════════════════════════

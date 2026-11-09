@@ -12,6 +12,7 @@ import {
   isDecoratedAgentClass,
   isDecoratedJobClass,
   isDecoratedPromptClass,
+  isDecoratedProviderClass,
   isDecoratedResourceClass,
   isDecoratedSkillClass,
   isDecoratedToolClass,
@@ -256,7 +257,8 @@ function hasDecoratedClassExports(obj: Record<string, unknown>): boolean {
 
 /**
  * Collect individually exported decorated classes into a manifest.
- * Scans all exports (including `default`) and groups them by decorator type.
+ * Scans all exports (including `default`) and groups them by decorator type; `@Provider` classes are the
+ * package's providers.
  */
 function collectDecoratedExports(mod: Record<string, unknown>): FrontMcpPackageManifest {
   const tools: unknown[] = [];
@@ -266,6 +268,7 @@ function collectDecoratedExports(mod: Record<string, unknown>): FrontMcpPackageM
   const jobs: unknown[] = [];
   const agents: unknown[] = [];
   const workflows: unknown[] = [];
+  const providers: unknown[] = [];
 
   for (const value of Object.values(mod)) {
     if (!value || typeof value !== 'function') continue;
@@ -276,6 +279,7 @@ function collectDecoratedExports(mod: Record<string, unknown>): FrontMcpPackageM
     else if (isDecoratedJobClass(value)) jobs.push(value);
     else if (isDecoratedAgentClass(value)) agents.push(value);
     else if (isDecoratedWorkflowClass(value)) workflows.push(value);
+    else if (isDecoratedProviderClass(value)) providers.push(value);
   }
 
   return {
@@ -288,6 +292,7 @@ function collectDecoratedExports(mod: Record<string, unknown>): FrontMcpPackageM
     ...(jobs.length ? { jobs } : {}),
     ...(agents.length ? { agents } : {}),
     ...(workflows.length ? { workflows } : {}),
+    ...(providers.length ? { providers } : {}),
   };
 }
 
