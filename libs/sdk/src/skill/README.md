@@ -482,7 +482,7 @@ sequenceDiagram
 Skills can be accessed programmatically using the DirectClient:
 
 ```typescript
-import { connect } from '@frontmcp/sdk/direct';
+import { connect } from '@frontmcp/sdk';
 
 const client = await connect(scope);
 
