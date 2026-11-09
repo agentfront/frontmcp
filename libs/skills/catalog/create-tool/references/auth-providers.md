@@ -53,7 +53,8 @@ export default class Server {}
 - A provider name listed twice is refused at startup (`CredentialProviderAlreadyRegisteredError`), and so is a
   provider entry with a field it doesn't take.
 - On a server without `authProvidersVault`, `this.authProviders.get(name)` and `headers(name)` throw
-  `AuthProvidersNotConfiguredError`, naming the provider.
+  `AuthProvidersNotConfiguredError`, naming the provider. Left uncaught, the call fails with the code
+  `AUTH_PROVIDERS_NOT_CONFIGURED` and that message, which says to register the provider in `authProvidersVault`.
 - A name the vault doesn't register answers `null` (`headers()`: `{}`), so the session credential vault can answer
   for it instead (see "Credential vault" below).
 

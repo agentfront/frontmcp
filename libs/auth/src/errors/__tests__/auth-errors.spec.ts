@@ -306,6 +306,18 @@ describe('AuthProvidersNotConfiguredError', () => {
         'Register it in @FrontMcp({ authProvidersVault: { providers: [...] } }).',
     );
   });
+
+  it('says where to register providers when it names none', () => {
+    expect(new AuthProvidersNotConfiguredError().message).toContain(
+      'Register them in @FrontMcp({ authProvidersVault: { providers: [...] } }).',
+    );
+  });
+
+  it('is public, so the client reads the message (#1162)', () => {
+    const err = new AuthProvidersNotConfiguredError('github');
+    expect(err.isPublic).toBe(true);
+    expect(err.getPublicMessage()).toBe(err.message);
+  });
 });
 
 describe('OrchestratedAuthNotAvailableError', () => {

@@ -492,7 +492,7 @@ key is random to the process, and startup logs a warning. Otherwise, or with
 of an anonymous caller without a verified session isn't kept.
 
 On a server without `authProvidersVault`, `get()` and `headers()` throw `AuthProvidersNotConfiguredError`, naming
-the provider. A provider name listed twice is refused at startup. A name the vault doesn't register answers `null`,
+the provider; uncaught, the client gets it under the code `AUTH_PROVIDERS_NOT_CONFIGURED`, with its message. A provider name listed twice is refused at startup. A name the vault doesn't register answers `null`,
 so `@Tool({ authProviders })` and `@frontmcp/plugin-skilled-openapi` read the session credential vault's key of
 that name instead.
 

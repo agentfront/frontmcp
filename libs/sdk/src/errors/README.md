@@ -5,7 +5,7 @@ Production-ready error handling for MCP servers with type-safe errors, automatic
 ## Quick Start
 
 ```typescript
-import { ToolNotFoundError, InvalidInputError, ToolExecutionError, formatMcpErrorResponse } from '@frontmcp/sdk/errors';
+import { formatMcpErrorResponse, InvalidInputError, ToolExecutionError, ToolNotFoundError } from '@frontmcp/sdk/errors';
 
 // Throw specific errors in your tools
 throw new ToolNotFoundError('my-tool');
@@ -83,6 +83,10 @@ McpError (abstract base)
 | `UnsupportedClientVersionError` | Public | 400  | Client version not supported |
 | `AuthorizationRequiredError`    | Public | 403  | App authorization required   |
 | `AuthConfigurationError`        | Public | 500  | Auth misconfiguration        |
+
+The errors `@frontmcp/auth` throws (`AuthProvidersNotConfiguredError`, `VaultLoadError` and the rest) reach the client
+under their own code, such as `AUTH_PROVIDERS_NOT_CONFIGURED`. Their message is redacted unless the error is public, as
+`AuthProvidersNotConfiguredError` is.
 
 ### Rate Limiting
 
@@ -200,7 +204,7 @@ MCP_ERROR_CODES.PARSE_ERROR; // -32700
 ### In Tools
 
 ```typescript
-import { ToolContext, Tool } from '@frontmcp/sdk';
+import { Tool, ToolContext } from '@frontmcp/sdk';
 import { InvalidInputError } from '@frontmcp/sdk/errors';
 
 @Tool({ name: 'create-user' })
@@ -220,7 +224,7 @@ class CreateUserTool {
 ### In Resources
 
 ```typescript
-import { ResourceContext, Resource } from '@frontmcp/sdk';
+import { Resource, ResourceContext } from '@frontmcp/sdk';
 import { ResourceNotFoundError } from '@frontmcp/sdk/errors';
 
 @Resource({ uri: 'file:///{path}' })
@@ -241,7 +245,7 @@ class FileResource {
 
 ```typescript
 import { Flow, Stage } from '@frontmcp/sdk';
-import { ToolNotFoundError, ToolExecutionError } from '@frontmcp/sdk/errors';
+import { ToolExecutionError, ToolNotFoundError } from '@frontmcp/sdk/errors';
 
 class CallToolFlow extends Flow {
   @Stage('findTool')
@@ -281,7 +285,7 @@ async function handleRequest(request) {
 ## Creating Custom Errors
 
 ```typescript
-import { PublicMcpError, InternalMcpError } from '@frontmcp/sdk/errors';
+import { InternalMcpError, PublicMcpError } from '@frontmcp/sdk/errors';
 
 // Public error - shown to users
 export class PaymentRequiredError extends PublicMcpError {

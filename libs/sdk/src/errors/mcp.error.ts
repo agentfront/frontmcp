@@ -1,5 +1,5 @@
 // errors/mcp.error.ts
-import { AuthorityDeniedError } from '@frontmcp/auth';
+import { AuthInternalError, AuthorityDeniedError } from '@frontmcp/auth';
 import { GuardError, GuardStorageUnavailableError } from '@frontmcp/guard';
 import { brandClass, bytesToHex, isBrandedInstance, isProduction, randomBytes } from '@frontmcp/utils';
 
@@ -921,10 +921,21 @@ function publicGuardMessage(error: GuardError): string {
 
 /**
  * Whether an error thrown inside an entry already says what the client should see
- * (a public error, or an authorities refusal), so a flow passes it on unwrapped.
+ * (a public error, an authorities refusal, or an `@frontmcp/auth` error with its own code),
+ * so a flow passes it on unwrapped.
  */
 export function isClientFacingError(error: unknown): boolean {
-  return isPublicError(error) || error instanceof AuthorityDeniedError;
+  return isPublicError(error) || error instanceof AuthorityDeniedError || error instanceof AuthInternalError;
+}
+
+/** An `@frontmcp/auth` error keeps its code and error ID; its message reaches the client only when it is public. */
+function fromAuthError(error: AuthInternalError): McpError {
+  const converted = error.isPublic
+    ? new PublicMcpError(error.message, error.code, error.statusCode)
+    : new InternalMcpError(error.message, error.code);
+  converted.errorId = error.errorId;
+  converted.stack = error.stack;
+  return converted;
 }
 
 const CONVERTED_ERRORS = Symbol.for('@frontmcp/sdk/converted-errors');
@@ -963,6 +974,10 @@ function convertToMcpError(error: unknown): McpError {
 
   if (error instanceof GuardError) {
     return new GuardLimitMcpError(error);
+  }
+
+  if (error instanceof AuthInternalError) {
+    return fromAuthError(error);
   }
 
   if (error instanceof Error) {
