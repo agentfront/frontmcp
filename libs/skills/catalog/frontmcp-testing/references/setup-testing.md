@@ -408,6 +408,7 @@ test.beforeEach(async ({ mcp }) => {
 - `port: 0` (or omitting `port`) picks any free port. Ports are reserved with a cross-process lock, so parallel Jest workers do not collide.
 - `auth: { mode, type }` reaches the server process as `FRONTMCP_TEST_AUTH_MODE` / `FRONTMCP_TEST_AUTH_TYPE`; `mode: 'public'` also keeps the `mcp` client anonymous.
 - `logLevel` reaches the server process as `FRONTMCP_LOG_LEVEL`, its log level unless its `logging.level` is set; `'debug'` also prints the server's command and output. Up to 1.9.2 only `'debug'` did anything.
+- `mcpLogLevel` is the level of the log messages (`notifications/message`) the clients ask the server for: `'debug'` (every message) by default, `false` for none. It isn't the server's own log level, which is `logLevel`.
 - `protocolVersion` is the MCP protocol version the clients speak: `'2025-06-18'` by default, or `'2026-07-28'`, which is stateless (`server/discover` instead of `initialize`, no session). `server.createClient({ protocolVersion })` overrides it for one client. See [Protocol Versions](test-e2e-handler.md#protocol-versions).
 - `test.each` / `test.describe.each` pass the row values to the callback (fixtures first for `test.each`):
 

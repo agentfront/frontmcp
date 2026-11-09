@@ -6,6 +6,7 @@ import {
   type McpServer,
   type ProgressNotificationParams,
   type ProgressToken,
+  type RequestId,
   type Root,
 } from '@frontmcp/protocol';
 import { awaitOutsideRequest } from '@frontmcp/utils';
@@ -951,6 +952,7 @@ export class NotificationService {
    * @param level - The log level of this message
    * @param loggerName - Optional logger name/component identifier
    * @param data - The log message data
+   * @param relatedRequestId - The JSON-RPC id of the request it belongs to, whose response stream carries it
    * @returns true if the message was sent (session exists and level allows)
    */
   sendLogMessageToSession(
@@ -958,6 +960,7 @@ export class NotificationService {
     level: McpLoggingLevel,
     loggerName: string | undefined,
     data: unknown,
+    relatedRequestId?: RequestId,
   ): boolean {
     const registered = this.servers.get(sessionId);
     if (!registered) {
@@ -986,7 +989,7 @@ export class NotificationService {
       params['logger'] = loggerName;
     }
 
-    this.sendNotificationToServer(registered.server, sessionId, 'notifications/message', params);
+    this.sendNotificationToServer(registered.server, sessionId, 'notifications/message', params, relatedRequestId);
     return true;
   }
 
@@ -1004,6 +1007,7 @@ export class NotificationService {
    * @param progress - Current progress value (should increase monotonically)
    * @param total - Total progress value (optional)
    * @param message - Progress message (optional)
+   * @param relatedRequestId - The JSON-RPC id of the request it belongs to, whose response stream carries it
    * @returns true if the notification was sent
    */
   sendProgressNotification(
@@ -1012,6 +1016,7 @@ export class NotificationService {
     progress: number,
     total?: number,
     message?: string,
+    relatedRequestId?: RequestId,
   ): boolean {
     const registered = this.servers.get(sessionId);
     if (!registered) {
@@ -1028,7 +1033,7 @@ export class NotificationService {
       ...(message !== undefined && { message }),
     };
 
-    this.sendNotificationToServer(registered.server, sessionId, 'notifications/progress', params);
+    this.sendNotificationToServer(registered.server, sessionId, 'notifications/progress', params, relatedRequestId);
     return true;
   }
 
@@ -1294,7 +1299,12 @@ export class NotificationService {
     sessionId: string,
     method: McpNotificationMethod,
     params?: Record<string, unknown>,
+    relatedRequestId?: RequestId,
   ): void {
+    if (relatedRequestId !== undefined) {
+      void this.sendOnRequestStream(server, sessionId, method, params, relatedRequestId);
+      return;
+    }
     try {
       // MCP SDK's server.notification() sends a JSON-RPC notification
       server.notification({ method, params: params ?? {} });
@@ -1308,6 +1318,25 @@ export class NotificationService {
       );
       // Optionally unregister dead sessions
       this.unregisterServer(sessionId);
+    }
+  }
+
+  /**
+   * Send a notification on the response stream of the request it belongs to, so the client has it before
+   * that request's response. Once that stream is gone, it goes to the session's stream instead.
+   */
+  private async sendOnRequestStream(
+    server: McpServer,
+    sessionId: string,
+    method: McpNotificationMethod,
+    params: Record<string, unknown> | undefined,
+    relatedRequestId: RequestId,
+  ): Promise<void> {
+    try {
+      await server.notification({ method, params: params ?? {} }, { relatedRequestId });
+      this.logger.verbose(`Sent ${method} to session ${sessionId.slice(0, 20)}... for request ${relatedRequestId}`);
+    } catch {
+      this.sendNotificationToServer(server, sessionId, method, params);
     }
   }
 }

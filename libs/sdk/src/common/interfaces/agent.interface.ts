@@ -166,6 +166,9 @@ export class AgentContext<
   // ---- Progress token from request's _meta (for progress notifications)
   private readonly _progressToken?: string | number;
 
+  /** @internal JSON-RPC id of the request that called the agent - set by CallAgentFlow, for its notifications */
+  _jsonRpcRequestIdInternal?: string | number;
+
   constructor(args: AgentCtorArgs<In>) {
     const {
       metadata,
@@ -601,7 +604,8 @@ export class AgentContext<
 
   /**
    * Send a notification message to the current session.
-   * Uses 'notifications/message' per MCP 2025-11-25 spec.
+   * Uses 'notifications/message' per MCP 2025-11-25 spec, on the call's own response stream,
+   * so the client has it before the call's result.
    *
    * Use this to report progress during long-running operations.
    *
@@ -641,12 +645,19 @@ export class AgentContext<
       return false;
     }
 
-    return this.scope.notifications.sendLogMessageToSession(sessionId, level, this.agentName, data);
+    return this.scope.notifications.sendLogMessageToSession(
+      sessionId,
+      level,
+      this.agentName,
+      data,
+      this._jsonRpcRequestIdInternal,
+    );
   }
 
   /**
    * Send a progress notification to the current session.
-   * Uses 'notifications/progress' per MCP 2025-11-25 spec.
+   * Uses 'notifications/progress' per MCP 2025-11-25 spec, on the call's own response stream,
+   * so the client has it before the call's result.
    *
    * Only works if the client requested progress updates by including a
    * progressToken in the request's _meta field. If no progressToken was
@@ -684,7 +695,14 @@ export class AgentContext<
       return false;
     }
 
-    return this.scope.notifications.sendProgressNotification(sessionId, this._progressToken, progress, total, message);
+    return this.scope.notifications.sendProgressNotification(
+      sessionId,
+      this._progressToken,
+      progress,
+      total,
+      message,
+      this._jsonRpcRequestIdInternal,
+    );
   }
 
   /**

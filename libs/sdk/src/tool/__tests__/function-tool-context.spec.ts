@@ -59,10 +59,12 @@ describe.each(['class_report', 'function_report'])('the %s tool', (toolName) => 
     await client.close();
   });
 
-  it("sends its notify() calls as log messages to the caller's session", async () => {
+  it("sends its notify() calls as log messages to the caller's session, on the call's response stream", async () => {
     await client.callTool(toolName, { id: 'n1' });
 
-    expect(logMessages.mock.calls).toEqual([[expect.any(String), 'info', toolName, { message: 'saving n1' }]]);
+    expect(logMessages.mock.calls).toEqual([
+      [expect.any(String), 'info', toolName, { message: 'saving n1' }, expect.any(Number)],
+    ]);
   });
 
   it('announces the resource it changed and the resource list change', async () => {

@@ -37,6 +37,35 @@ test.describe('McpTestClient notification collectors', () => {
     expect(logMessage.params).toMatchObject({ level: 'info', data: { message: 'Importing 2 files' } });
   });
 
+  test("has the call's progress and log messages when tools.call() returns, with each update's message", async ({
+    mcp,
+  }) => {
+    const notifications = mcp.notifications.collect();
+    const progress = mcp.notifications.collectProgress();
+
+    await mcp.tools.call('test-notify-method', { message: 'Importing 2 files', level: 'debug' });
+    await mcp.tools.call('test-progress-method', { steps: 2, includeTotal: true, includeMessage: true });
+
+    expect(notifications.received.filter(({ method }) => method === 'notifications/message')).toEqual([
+      expect.objectContaining({ params: expect.objectContaining({ data: { message: 'Importing 2 files' } }) }),
+    ]);
+    expect(progress.all.map(({ progress: value, message }) => ({ value, message }))).toEqual([
+      { value: 1, message: 'Step 1 of 2' },
+      { value: 2, message: 'Step 2 of 2' },
+    ]);
+  });
+
+  test.describe('with mcpLogLevel false', () => {
+    test.use({ mcpLogLevel: false });
+
+    test('asks for no log messages', async ({ mcp }) => {
+      const result = await mcp.tools.call('test-notify-method', { message: 'Quiet', level: 'error' });
+
+      expect(result.json()).toMatchObject({ notificationSent: false });
+      expect(mcp.notifications.collect().has('notifications/message')).toBe(false);
+    });
+  });
+
   test('toBeError matches the tool error code of an invalid call', async ({ mcp }) => {
     const result = await mcp.tools.call('test-progress-method', { steps: 0 });
 

@@ -154,6 +154,16 @@ describe('StreamableHttpTransport server notifications on SSE responses', () => 
     ]);
   });
 
+  it("keeps each progress update's message", async () => {
+    stubStreamingServer();
+    const mcp = await connectClient();
+    const progress = mcp.notifications.collectProgress();
+
+    await mcp.tools.call('import_files', {});
+
+    expect(progress.all.map(({ message }) => message)).toEqual(['file 1', 'file 2']);
+  });
+
   it('sends a _meta.progressToken with tools/call while progress is being collected', async () => {
     const sentMessages = stubStreamingServer();
     const mcp = await connectClient();

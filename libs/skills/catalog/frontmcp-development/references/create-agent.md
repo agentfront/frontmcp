@@ -89,8 +89,8 @@ class CodeReviewerAgent extends AgentContext {
 - `this.fail(err)` -- abort execution, triggers error flow (never returns)
 - `this.mark(stage)` -- set the active execution stage for debugging/tracking
 - `this.fetch(input, init?)` -- HTTP fetch with context propagation
-- `this.notify(message, level?)` -- send a log-level notification to the client (the request's stream under MCP 2026-07-28, else the session once the client set a log level)
-- `this.progress(progress, total?, message?)` -- send a progress notification to the client (needs the request's `progressToken`)
+- `this.notify(message, level?)` -- send a log-level notification to the client, on the calling request's response stream (under MCP 2026-07-28 when the request asks for a log level, else once the session set one)
+- `this.progress(progress, total?, message?)` -- send a progress notification to the client, on the calling request's response stream (needs the request's `progressToken`)
 
 **Properties:**
 
