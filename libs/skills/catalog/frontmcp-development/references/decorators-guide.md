@@ -593,7 +593,8 @@ answer.
   verifies it itself, and refuses it with `401` (`UnauthorizedError`) or `403` (`INSUFFICIENT_SCOPE`), each with its
   `WWW-Authenticate` challenge. No stage or hook of the flow runs.
 - The anonymous callers that public mode and `allowAnonymous` admit are authorized. To require a signed-in caller,
-  check `this.context.authInfo` in a stage, or put `authorities` on the tools, resources and prompts it serves.
+  check `this.context.authInfo` in a stage. `authorities` on the tools, resources and prompts the flow serves restrict
+  those entries only: they do not stop a caller from running the flow itself.
 - stdio, `connect()`, direct calls, and the work the server starts itself (a scheduled job, a channel notification) are
   the server process's own callers, and are authorized.
 - A flow run from another flow, a tool or a job is checked against the caller of the request it runs in.
