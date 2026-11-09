@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/services/tool-search.service.ts
 
-import { TFIDFVectoria, VectoriaDB, type DocumentMetadata } from 'vectoriadb';
+import { VectoriaDB, type DocumentMetadata } from 'vectoriadb';
 
 import { type ScopeEntry, type ToolEntry } from '@frontmcp/sdk';
 
@@ -22,6 +22,7 @@ import {
   toCodeCallPolicyTool,
 } from '../security/codecall-tool-policy';
 import { SynonymExpansionService, type SynonymExpansionConfig } from './synonym-expansion.service';
+import { ToolTfidfIndex } from './tool-tfidf.index';
 
 /**
  * Universal Intent Mapping & Query Normalization
@@ -321,7 +322,7 @@ export class ToolSearchService implements ToolSearch {
   private static readonly INITIAL_RETRY_DELAY_MS = 10;
   private static readonly MAX_RETRY_DELAY_MS = 1000;
 
-  private vectorDB: TFIDFVectoria<ToolMetadata> | VectoriaDB<ToolMetadata>;
+  private vectorDB: ToolTfidfIndex<ToolMetadata> | VectoriaDB<ToolMetadata>;
   private strategy: EmbeddingStrategy;
   private initialized = false;
   private mlInitialized = false;
@@ -402,11 +403,8 @@ export class ToolSearchService implements ToolSearch {
     this.setupSubscription();
   }
 
-  private createTfidfIndex(): TFIDFVectoria<ToolMetadata> {
-    return new TFIDFVectoria<ToolMetadata>({
-      defaultTopK: this.config.defaultTopK,
-      defaultSimilarityThreshold: this.config.defaultSimilarityThreshold,
-    });
+  private createTfidfIndex(documents: ToolDocument[] = []): ToolTfidfIndex<ToolMetadata> {
+    return new ToolTfidfIndex<ToolMetadata>(documents, STOP_WORDS);
   }
 
   private createSynonymService(): SynonymExpansionService | null {
@@ -557,10 +555,7 @@ export class ToolSearchService implements ToolSearch {
         this.fallBackToTfidf(error);
       }
     }
-    const index = this.createTfidfIndex();
-    index.addDocuments(documents);
-    index.reindex();
-    this.vectorDB = index;
+    this.vectorDB = this.createTfidfIndex(documents);
   }
 
   /** The embedding model could not be loaded or used: search with TF-IDF for the rest of the process. */
@@ -749,8 +744,7 @@ export class ToolSearchService implements ToolSearch {
     // For example: "add user" -> "add create new insert make user account member profile"
     const effectiveQuery = this.synonymService ? this.synonymService.expandQuery(query) : query;
 
-    // Search using vectoriadb
-    const results = await this.vectorDB.search(effectiveQuery, {
+    const results: Array<{ metadata: ToolMetadata; score: number }> = await this.vectorDB.search(effectiveQuery, {
       topK,
       threshold: minScore,
       filter,
@@ -803,7 +797,11 @@ export class ToolSearchService implements ToolSearch {
    * Clears the entire index
    */
   clear(): void {
-    this.vectorDB.clear();
+    if (this.vectorDB instanceof VectoriaDB) {
+      this.vectorDB.clear();
+    } else {
+      this.vectorDB = this.createTfidfIndex();
+    }
     this.availabilityByTool = new Map();
     this.initialized = false;
   }
