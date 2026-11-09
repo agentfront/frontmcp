@@ -148,6 +148,12 @@ export interface FederatedAuthSession {
    */
   signinBinding?: string;
 
+  /**
+   * The `authorized_apps` grant the minted token carries, computed at the provider picker when incremental auth is
+   * enabled. The provider callback leaves out the apps whose provider was declined.
+   */
+  authorizedAppIds?: string[];
+
   /** Session creation timestamp */
   createdAt: number;
 
@@ -183,6 +189,7 @@ export interface FederatedAuthSessionRecord {
   currentProviderState?: string;
   consentCsrf?: string;
   signinBinding?: string;
+  authorizedAppIds?: string[];
   createdAt: number;
   expiresAt: number;
 }
@@ -239,6 +246,8 @@ export interface FederatedAuthSessionCreateParams {
   providerIds: string[];
   /** SHA-256 of the sign-in binding cookie, from the pending authorization. */
   signinBinding?: string;
+  /** The `authorized_apps` grant (see `FederatedAuthSession.authorizedAppIds`). */
+  authorizedAppIds?: string[];
 }
 
 /**
@@ -336,6 +345,7 @@ export class InMemoryFederatedAuthSessionStore implements FederatedAuthSessionSt
       completedProviders: new Map(),
       skippedProviders: [],
       signinBinding: params.signinBinding,
+      authorizedAppIds: params.authorizedAppIds,
       createdAt: now,
       expiresAt: now + this.sessionTtlMs,
     };
@@ -384,6 +394,7 @@ export function createFederatedAuthSession(
     completedProviders: new Map(),
     skippedProviders: [],
     signinBinding: params.signinBinding,
+    authorizedAppIds: params.authorizedAppIds,
     createdAt: now,
     expiresAt: now + ttlMs,
   };

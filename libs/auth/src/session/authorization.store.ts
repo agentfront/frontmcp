@@ -184,6 +184,8 @@ export interface PendingAuthorizationRecord {
    * secret (see `sealPendingLogin`). The consent form then carries no login
    * fields: the consent submission completes this sign-in instead of running
    * `authenticate()` again with credentials round-tripped through the browser.
+   * On an incremental authorization, the email and name its ticket carried for
+   * `incrementalSub`.
    */
   verifiedLogin?: string;
 

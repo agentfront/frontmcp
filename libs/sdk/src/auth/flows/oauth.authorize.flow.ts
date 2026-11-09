@@ -24,7 +24,9 @@ import {
   escapeHtml,
   grantScopes,
   isLoopbackRedirectUri,
+  openIncrementalAuthTicketProfile,
   renderLocalLoginPage,
+  sealPendingLogin,
   startNextProvider,
   verifyIncrementalAuthTicket,
   type AppAuthCard,
@@ -73,6 +75,7 @@ import {
   type AuthProvider,
   type AuthUiRegistry,
 } from '../auth-ui';
+import { initialAuthorizedApps } from '../authorized-apps.utils';
 import { CimdDisabledError, CimdService, clientMetadataDocumentSchema } from '../cimd';
 import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
@@ -865,6 +868,15 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       consent,
     });
 
+    // The token the grant expansion mints keeps the email and name of the subject the ticket proved.
+    const ticketProfile =
+      effectiveIncremental && incrementalTicket && localAuth.signingSecret
+        ? openIncrementalAuthTicketProfile(incrementalTicket, localAuth.signingSecret)
+        : undefined;
+    if (ticketProfile) {
+      pendingRecord.verifiedLogin = sealPendingLogin(localAuth.secret, pendingRecord.id, ticketProfile);
+    }
+
     // Tie the sign-in to this browser (RFC 9700 §4.7): the callbacks that
     // resume it require the cookie every response from here on sets.
     const binding = createRequestSigninBinding(this.rawInput.request, pendingRecord.id);
@@ -1201,6 +1213,11 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       frontmcpPkce: { challenge: validatedRequest.code_challenge, method: 'S256' },
       providerIds: [providerId],
       signinBinding: this.signinBindingHash,
+      authorizedAppIds: initialAuthorizedApps(
+        this.scope.auth?.options,
+        this.scope.apps.getApps(),
+        this.state.priorAuthorizedAppIds,
+      ),
     });
 
     // Fresh PKCE + state for the upstream authorization-code exchange.
