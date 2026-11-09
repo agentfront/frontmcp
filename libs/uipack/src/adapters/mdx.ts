@@ -7,17 +7,10 @@
 
 import type { CodeHighlighter } from './code-highlight';
 import { preloadFromProject, requireFromProject } from './project-require';
+import { loadServerReact, type ReactApi } from './server-react';
 
 interface MdxCompiler {
   compileSync(source: string, options: Record<string, unknown>): { toString(): string };
-}
-
-interface ReactApi {
-  createElement(type: unknown, props?: Record<string, unknown> | null, ...children: unknown[]): unknown;
-}
-
-interface ReactDomServer {
-  renderToStaticMarkup(element: unknown): string;
 }
 
 /** The compiled template: given the JSX runtime and the call's data, its module, whose default export is the content. */
@@ -65,25 +58,12 @@ export interface RenderMdxOptions {
   highlighter?: CodeHighlighter;
 }
 
-/**
- * The React an MDX template renders with, from the server's project.
- *
- * @throws When react or react-dom isn't installed
- */
-export function loadMdxRuntime(): { react: ReactApi; runtime: unknown; server: ReactDomServer } {
-  return {
-    react: requireFromProject<ReactApi>('react', PURPOSE),
-    runtime: requireFromProject<unknown>('react/jsx-runtime', PURPOSE),
-    server: requireFromProject<ReactDomServer>('react-dom/server', PURPOSE),
-  };
-}
-
 /** Render an MDX template to static HTML on the server. */
 export function renderMdxTemplate(source: string, options: RenderMdxOptions): string {
   const compiled = compileMdxTemplate(source, options.gfm);
-  const { react, runtime, server } = loadMdxRuntime();
+  const { react, jsxRuntime, server } = loadServerReact(PURPOSE);
 
-  const { default: content } = compiled(runtime, options.input, options.output, options.helpers);
+  const { default: content } = compiled(jsxRuntime, options.input, options.output, options.helpers);
   const components = {
     ...(options.highlighter ? { code: highlightedCode(react, options.highlighter) } : {}),
     ...options.components,

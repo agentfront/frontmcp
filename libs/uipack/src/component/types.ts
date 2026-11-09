@@ -91,6 +91,11 @@ export interface UIConfig<In = unknown, Out = unknown> {
    * exclusive with {@link inlineReact}. Default `false`.
    */
   transformOnly?: boolean;
+  /**
+   * `ui.hydrate`: a FileSource `.tsx`/`.jsx` widget is rendered on the server into `#root` too, and
+   * the page hydrates it. Default `false`.
+   */
+  hydrate?: boolean;
 }
 
 /** Auto-detected or declared metadata on a component module */
@@ -118,6 +123,8 @@ export interface ResolvedComponent {
   code?: string;
   /** External import specifiers found in the transpiled code */
   imports?: string[];
+  /** The widget rendered on the server, for the page to hydrate (`hydrate`) */
+  serverHtml?: string;
   /** Export name for the component (default: 'default') */
   exportName: string;
   /** Detected metadata */

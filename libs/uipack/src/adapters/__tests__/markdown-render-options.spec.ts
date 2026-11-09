@@ -46,7 +46,7 @@ describe('runtimeOptions.markdown', () => {
     for (const markdown of [{ gfm: true }, { highlightTheme: 'github' }]) {
       expect(describeRenderOptionProblems(template, { markdown })).toEqual([
         expect.stringContaining(
-          `\`ui.runtimeOptions.markdown\` applies to a Markdown template, a string without both \`<\` and \`>\`, or an MDX template, and this template is ${described}.`,
+          `\`ui.runtimeOptions.markdown\` applies to a Markdown template (a string without both \`<\` and \`>\`, or any template with \`uiType: 'markdown'\`) or an MDX template, and this template is ${described}.`,
         ),
       ]);
     }

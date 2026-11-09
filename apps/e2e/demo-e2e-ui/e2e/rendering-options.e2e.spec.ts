@@ -85,4 +85,39 @@ test.describe('Tool UI rendering options E2E', () => {
       await client.disconnect();
     }
   });
+
+  test("uiType: 'react' renders a component reference on the server", async ({ server }) => {
+    const client = await server.createClient({
+      transport: 'streamable-http',
+      clientInfo: { name: 'claude-desktop', version: '1.0.0' },
+    });
+    try {
+      const result = await client.tools.call('status-card', { service: '<api>' });
+      expect(result).toBeSuccessful();
+      expect(result.raw._meta?.['ui/type']).toBe('react');
+      expect(body(String(result.raw._meta?.['ui/html']))).toContain(
+        '<div class="status-card status-up"><strong>&lt;api&gt;</strong> is up</div>',
+      );
+    } finally {
+      await client.disconnect();
+    }
+  });
+
+  test('hydrate renders a { file } widget on the server and hydrates it in the page', async ({ server }) => {
+    const client = await server.createClient({
+      transport: 'streamable-http',
+      clientInfo: { name: 'claude-desktop', version: '1.0.0' },
+    });
+    try {
+      const result = await client.tools.call('hydrated-counter', { label: 'Clicks', start: 3 });
+      expect(result).toBeSuccessful();
+      const html = String(result.raw._meta?.['ui/html']);
+      expect(html).toMatch(
+        /<div id="root"><div class="counter"><span>Clicks<!-- -->: <!-- -->3<\/span><button type="button">\+1<\/button><\/div><\/div>/,
+      );
+      expect(html).toMatch(/\.hydrateRoot\)\(\s*__root,/);
+    } finally {
+      await client.disconnect();
+    }
+  });
 });
