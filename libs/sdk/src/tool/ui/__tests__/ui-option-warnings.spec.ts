@@ -10,14 +10,23 @@ describe('describeIgnoredUiOptions (#645)', () => {
   it('names a single ignored option in the singular', () => {
     const [message] = describeIgnoredUiOptions('weather', { hydrate: true });
     expect(message).toContain('Tool "weather"');
-    expect(message).toContain('`ui.hydrate` is accepted but not used yet');
+    expect(message).toContain('`ui.hydrate` is deprecated and has no effect; remove it.');
   });
 
   it('lists several ignored options in one message', () => {
     const messages = describeIgnoredUiOptions('weather', { uiType: 'html', hydrate: true, bundlingMode: 'x' });
     expect(messages).toHaveLength(1);
     expect(messages[0]).toContain('`ui.hydrate`, `ui.bundlingMode`, `ui.uiType`');
-    expect(messages[0]).toContain('are accepted but not used yet');
+    expect(messages[0]).toContain('are deprecated and have no effect; remove them.');
+  });
+
+  it('flags customWidgetUrl and directPath, which only the deprecated URL serving modes named', () => {
+    const messages = describeIgnoredUiOptions('weather', {
+      servingMode: 'inline',
+      customWidgetUrl: 'https://cdn.example.com/w.html',
+      directPath: '/widgets/weather',
+    });
+    expect(messages).toEqual([expect.stringContaining('`ui.customWidgetUrl`, `ui.directPath` are deprecated')]);
   });
 
   it('says nothing about the options sent to the host', () => {
@@ -32,9 +41,11 @@ describe('describeIgnoredUiOptions (#645)', () => {
     ).toEqual([]);
   });
 
-  it.each(['direct-url', 'custom-url'])('flags servingMode %s as not implemented', (servingMode) => {
+  it.each(['direct-url', 'custom-url'])('flags servingMode %s as deprecated and served inline', (servingMode) => {
     const messages = describeIgnoredUiOptions('t', { servingMode });
-    expect(messages).toEqual([expect.stringContaining(`servingMode: '${servingMode}'\` is not implemented`)]);
+    expect(messages).toEqual([
+      expect.stringContaining(`servingMode: '${servingMode}'\` is deprecated; the widget is served inline`),
+    ]);
   });
 
   it('says hybrid sends only a component reference', () => {
