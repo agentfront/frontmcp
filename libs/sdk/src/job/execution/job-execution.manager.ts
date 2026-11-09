@@ -21,6 +21,7 @@ import {
 import { outlasts } from '../../provider/provider.lifecycle';
 import { isAlive } from '../../task/helpers/process-liveness';
 import { WorkflowEngine } from '../../workflow/engine/workflow.engine';
+import { parseWorkflowInput } from '../../workflow/workflow.utils';
 import { type JobAdmission } from '../job-admission';
 import {
   abortableDelay,
@@ -105,6 +106,7 @@ export interface ExecuteJobOptions {
 }
 
 export interface ExecuteWorkflowOptions extends ExecuteJobOptions {
+  /** The run's input, which the workflow's `inputSchema` checks. */
   workflowInput?: Record<string, unknown>;
 }
 
@@ -240,7 +242,11 @@ export class JobExecutionManager {
   }
 
   /**
-   * Execute a workflow inline or in background.
+   * Execute a workflow inline or in background. The caller must pass the workflow's `execute` permissions, and the
+   * input its `inputSchema`, before the run is created.
+   *
+   * @throws JobNotAuthorizedError when the caller may not execute the workflow
+   * @throws InvalidInputError when `workflowInput` doesn't match the workflow's `inputSchema`
    */
   async executeWorkflow(
     workflow: WorkflowEntry,
@@ -248,6 +254,9 @@ export class JobExecutionManager {
     opts: ExecuteWorkflowOptions = {},
   ): Promise<InlineJobResult | BackgroundJobResult> {
     await this.assertMayExecute(workflow.metadata.permissions, workflow.name, opts);
+    // Checked before the run exists, so bad input leaves no run behind
+    const workflowInput = parseWorkflowInput(workflow, opts.workflowInput);
+    const runOptions = { ...opts, workflowInput };
 
     const runId = randomUUID();
 
@@ -259,7 +268,7 @@ export class JobExecutionManager {
       sessionId: opts.sessionId,
       ownerSub: resolvePrincipal(opts.authInfo, opts.authoritiesContextBuilder).sub || undefined,
       state: 'pending',
-      input: opts.workflowInput,
+      input: workflowInput,
       startedAt: Date.now(),
       attempt: 1,
       maxAttempts: 1,
@@ -271,7 +280,7 @@ export class JobExecutionManager {
     await this.stateStore.createRun(runRecord);
 
     if (opts.background) {
-      const runOpts = withBackgroundContext(opts, (this.scope ?? workflow.providers.getActiveScope()).id);
+      const runOpts = withBackgroundContext(runOptions, (this.scope ?? workflow.providers.getActiveScope()).id);
       runRequestExclusive(() => this.executeWorkflowBackground(workflow, jobRegistry, runId, runOpts)).catch(
         async (err) => {
           this.logger.error(`Background workflow execution failed: ${err}`);
@@ -289,7 +298,7 @@ export class JobExecutionManager {
       return { runId, state: 'pending' };
     }
 
-    return this.executeWorkflowInline(workflow, jobRegistry, runId, opts);
+    return this.executeWorkflowInline(workflow, jobRegistry, runId, runOptions);
   }
 
   /**
