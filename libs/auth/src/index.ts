@@ -10,9 +10,9 @@
  * ```typescript
  * import { JwksService, buildLoginPage, InMemoryAuthorizationVault } from '@frontmcp/auth';
  *
- * // JWKS management
- * const jwks = new JwksService({ orchestratorAlg: 'RS256' });
- * const publicJwks = await jwks.getPublicJwks();
+ * // Provider JWKS verification
+ * const jwks = new JwksService();
+ * const result = await jwks.verifyTransparentToken(token, [{ id: 'idp', issuerUrl: 'https://idp.example.com' }]);
  *
  * // Auth UI templates
  * const html = buildLoginPage({
@@ -34,8 +34,14 @@
 // ============================================
 // JWKS Module
 // ============================================
-export { JwksService, trimSlash, normalizeIssuer, decodeJwtPayloadSafe } from './jwks';
-export type { JwksServiceOptions, ProviderVerifyRef, TokenVerifyFailure, VerifyResult } from './jwks';
+export { JwksService, LocalTokenKeys, trimSlash, normalizeIssuer, decodeJwtPayloadSafe } from './jwks';
+export type {
+  JwksServiceOptions,
+  LocalSigningKeyConfig,
+  ProviderVerifyRef,
+  TokenVerifyFailure,
+  VerifyResult,
+} from './jwks';
 
 // ============================================
 // UI Module
@@ -466,6 +472,7 @@ export {
   TokenLeakDetectedError,
   JwtSecretRequiredError,
   JwtSecretWeakError,
+  SigningKeyInvalidError,
   SessionSecretRequiredError,
   CredentialProviderAlreadyRegisteredError,
   AuthProvidersNotConfiguredError,

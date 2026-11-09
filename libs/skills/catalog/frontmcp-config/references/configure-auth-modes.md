@@ -22,7 +22,7 @@ auth: {
 
 Anonymous callers hold `anonymousScopes`. With `publicAccess`, they list, call and complete (`completion/complete`) only the named tools/prompts (a name two apps share stays app-qualified, e.g. `billing:search`) (others answer `PUBLIC_ACCESS_DENIED`, -32003/403), within `rateLimit` (default 60) calls a minute per IP; callers with a verified token are not restricted.
 
-A JWT bearer is still verified against this instance's own HS256 secret. A bearer that is **not** a JWT is ignored and the request is served anonymously — public mode has no issuer or JWKS to verify it against, and a credentialed request must never fare worse than an anonymous one. For a first-class shared secret, use static mode below.
+A JWT bearer is still verified against this instance's own key: HS256 with `JWT_SECRET`, or the `signKey` option (the same as local mode's `local.signKey`, with `jwks` beside it). A bearer that is **not** a JWT is ignored and the request is served anonymously — public mode has no issuer or JWKS to verify it against, and a credentialed request must never fare worse than an anonymous one. For a first-class shared secret, use static mode below.
 
 Public and static mode have no authorization server: `/.well-known/oauth-authorization-server` answers 404 and the protected resource metadata omits `authorization_servers` (local/remote serve their own metadata and name themselves; transparent names `provider` in `authorization_servers`, and its own `/.well-known/oauth-authorization-server` redirects to the provider's).
 
@@ -90,7 +90,7 @@ auth: {
 }
 ```
 
-Signing is **HS256 with a symmetric `JWT_SECRET`** (no key pair). Set a stable `JWT_SECRET` or tokens are invalidated on every restart. For a single operator (e.g. Claude Code), add `requireEmail: false` to skip the email prompt (a stable `sub` is derived from `anonymousSubject`, default `'local-operator'`).
+Signing is **HS256 with a symmetric `JWT_SECRET`** unless `local.signKey` names a private JWK (RSA, EC or Ed25519), whose public half `/.well-known/jwks.json` then publishes; without one that endpoint serves `{ "keys": [] }`. Set a stable `JWT_SECRET` or tokens are invalidated on every restart. For a single operator (e.g. Claude Code), add `requireEmail: false` to skip the email prompt (a stable `sub` is derived from `anonymousSubject`, default `'local-operator'`).
 
 Local mode also accepts `allowDefaultPublic` (default `false` — set `true` to admit tokenless requests as anonymous instead of returning 401), `anonymousScopes` (default `['anonymous']` — scopes for those anonymous sessions), and `expectedAudience` (reject tokens minted for a different `aud`).
 
@@ -187,17 +187,17 @@ upstream-token access in tools, and an optional consent layer.
 
 ## Comparison Table
 
-| Feature                  | Public        | Static               | Transparent     | Local                           | Remote                          |
-| ------------------------ | ------------- | -------------------- | --------------- | ------------------------------- | ------------------------------- |
-| Token issuance           | Anonymous JWT | None (opaque secret) | None (upstream) | Self-signed (HS256)             | Self-signed (HS256)             |
-| Signing                  | HS256 secret  | n/a                  | Upstream JWKS   | HS256 secret (`JWT_SECRET`)     | HS256 secret (`JWT_SECRET`)     |
-| Session-token refresh    | No            | No                   | No              | Yes                             | Yes                             |
-| Upstream-token refresh   | n/a           | n/a                  | n/a             | On demand (`refresh`)           | On demand (`refresh`)           |
-| Identity source          | Anonymous     | Configured token     | Upstream token  | Login form / `authenticate()`   | Upstream IdP user               |
-| PKCE support             | No            | No                   | No              | Yes                             | Yes                             |
-| Token persistence        | n/a           | n/a                  | n/a             | memory / sqlite / redis         | memory / sqlite / redis         |
-| Consent (tool selection) | No            | No                   | No              | Optional (screen + enforcement) | Optional (screen + enforcement) |
-| Upstream OAuth providers | No            | No                   | No              | 0..N (declared `providers[]`)   | Exactly 1 (mandatory)           |
+| Feature                  | Public                     | Static               | Transparent     | Local                            | Remote                           |
+| ------------------------ | -------------------------- | -------------------- | --------------- | -------------------------------- | -------------------------------- |
+| Token issuance           | Anonymous JWT              | None (opaque secret) | None (upstream) | Self-signed                      | Self-signed                      |
+| Signing                  | `JWT_SECRET`, or `signKey` | n/a                  | Upstream JWKS   | `JWT_SECRET`, or `local.signKey` | `JWT_SECRET`, or `local.signKey` |
+| Session-token refresh    | No                         | No                   | No              | Yes                              | Yes                              |
+| Upstream-token refresh   | n/a                        | n/a                  | n/a             | On demand (`refresh`)            | On demand (`refresh`)            |
+| Identity source          | Anonymous                  | Configured token     | Upstream token  | Login form / `authenticate()`    | Upstream IdP user                |
+| PKCE support             | No                         | No                   | No              | Yes                              | Yes                              |
+| Token persistence        | n/a                        | n/a                  | n/a             | memory / sqlite / redis          | memory / sqlite / redis          |
+| Consent (tool selection) | No                         | No                   | No              | Optional (screen + enforcement)  | Optional (screen + enforcement)  |
+| Upstream OAuth providers | No                         | No                   | No              | 0..N (declared `providers[]`)    | Exactly 1 (mandatory)            |
 
 > "Remote" still issues its own HS256 session token to the MCP client; it delegates **user authentication** to a single upstream IdP rather than delegating token signing. `GET /oauth/authorize` redirects straight to that IdP (no in-tree login page), and tools read the upstream token via `this.orchestration.getToken(id)`.
 

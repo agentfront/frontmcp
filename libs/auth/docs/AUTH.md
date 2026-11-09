@@ -851,8 +851,7 @@ The `JwksService` manages cryptographic keys for token signing and verification.
 
 **Features:**
 
-- Auto-generates RS256 or ES256 key pairs for orchestrated mode
-- Key rotation (configurable, default: 30 days)
+- Serves the public keys the server's own tokens verify with (`setPublicJwks`, from `LocalTokenKeys`); none while tokens are HS256
 - Provider JWKS caching with TTL (default: 6 hours)
 - Discovery via `.well-known/oauth-authorization-server`
 
@@ -860,11 +859,9 @@ The `JwksService` manages cryptographic keys for token signing and verification.
 
 ```typescript
 class JwksService {
-  // Get gateway's public JWKS (for /.well-known/jwks.json)
-  getPublicJwks(): JSONWebKeySet;
-
-  // Get signing key for issuing tokens
-  getOrchestratorSigningKey(): { kid: string; key: KeyObject; alg: string };
+  // The public keys served at /.well-known/jwks.json ({ keys: [] } while tokens are HS256)
+  getPublicJwks(): Promise<JSONWebKeySet>;
+  setPublicJwks(jwks: JSONWebKeySet): void;
 
   // Verify a token from external providers (transparent mode)
   verifyTransparentToken(token: string, candidates: ProviderVerifyRef[]): Promise<VerifyResult>;
@@ -874,20 +871,22 @@ class JwksService {
 }
 ```
 
-> **Gateway tokens** (public/local/orchestrated modes) are HS256-signed by the
-> auth instance with its own secret, so verification lives on the instance
+> **Gateway tokens** (public/local/orchestrated modes) are signed by the auth
+> instance with its `LocalTokenKeys`: the configured `signKey`, else HS256 with
+> its own secret. Verification lives on the instance
 > (`LocalPrimaryAuth.verifyGatewayToken`, exposed on the `FrontMcpAuth` base),
-> not on `JwksService`. It enforces signature + expiration and pins HS256;
+> not on `JwksService`. It enforces signature + expiration and pins the
+> algorithms the keys sign with;
 > issuer equality is intentionally not enforced (proxy/tunnel tolerance).
 
 ### Token Structure
 
 FrontMCP-issued **gateway tokens** (public/local/orchestrated modes) are JWTs
-HS256-signed with the instance secret, so the header carries `alg: "HS256"` and
-no `kid` (verification is instance-secret-based via
-`LocalPrimaryAuth.verifyGatewayToken`, not key-id lookup). RS256/ES256 apply
-only to **external** JWTs verified by `JwksService` (transparent-mode upstream
-tokens), which do carry a `kid`.
+HS256-signed with the instance secret by default, so the header carries
+`alg: "HS256"` and no `kid`. With an RSA, EC or Ed25519 private JWK as
+`signKey` (`local.signKey` in local and remote mode), the header names that
+key's `alg` and `kid`, and its public half is published at
+`/.well-known/jwks.json`.
 
 ```json
 {

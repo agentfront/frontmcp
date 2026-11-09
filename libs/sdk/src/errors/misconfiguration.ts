@@ -21,6 +21,9 @@ export const MISCONFIGURATION_REMEDIES: Record<string, string> = {
     'Set JWT_SECRET in the deployment environment (e.g. `wrangler secret put JWT_SECRET`). ' +
     'Tokens are signed with it; production refuses the random per-process fallback because tokens would ' +
     'not survive a restart or verify across instances.',
+  SIGNING_KEY_INVALID:
+    'The configured `signKey` or `jwks` (`auth.local.*` in local and remote mode, `auth.*` in public mode) cannot ' +
+    'sign tokens or be published, so the server refuses to start. The server log names the key and the problem.',
   // The startup checks: a server whose entries ask for protection nothing gives them does not start.
   UNENFORCED_METADATA:
     'An entry declares a field only a plugin enforces (approval, featureFlag, ...) and no installed plugin that ' +
