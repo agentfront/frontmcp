@@ -114,6 +114,7 @@ export default createEdgeMcp({
     expectedAudience: 'billing-prod',
     jwksUrl: 'https://bundles.example.com/.well-known/jwks.json',
     expectedIssuer: 'https://bundles.example.com',
+    trustedKeys: [{ keyId: 'billing-2026-11', alg: 'EdDSA', publicKeyPem: env.BUNDLE_SIGNING_KEY }],
     cache: kvBundleCacheFromEnv('BUNDLE_CACHE'),
   },
 });
@@ -131,19 +132,22 @@ crons = ["*/5 * * * *"]
 
 `BUNDLE_PULL_TOKEN` is a secret (`npx wrangler secret put BUNDLE_PULL_TOKEN`). The configuration is evaluated when the module loads, so read the secret from the `env` that `cloudflare:workers` exports, not from a request.
 
-| Field                                                               | Description                                                                                    |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `endpoint`                                                          | HTTPS URL that serves the signed bundle                                                        |
-| `authToken`                                                         | The token the bundle server issued for this server                                             |
-| `expectedAudience`, `jwksUrl`, `expectedIssuer`                     | How the bundle server's tokens are verified                                                    |
-| `cache`                                                             | Keeps the last bundle applied: `kvBundleCacheFromEnv('BINDING')`, or a store of your own       |
-| `enableWebhook`                                                     | Also take bundles pushed to `POST /__skilled_openapi/push`, as below                           |
-| `requirePushBodyDigest`                                             | Refuse a push token without a `body_sha256` claim, as below. Default `false`                   |
-| `pushReplay`                                                        | Where pushed tokens' `jti`s are kept: `{ binding }` (default `FRONTMCP_PUSH_REPLAY`), as below |
-| `allowRollback`                                                     | Apply a pulled or pushed bundle older than the one being served, as below. Default `false`     |
-| `requireSignature`, `trustedKeys`, `dev`, `credentials`, `outbound` | Passed to the Skilled OpenAPI plugin. `dev` skips signature checks: never use it in production |
-| `confirm`                                                           | Actions that ask the user before their request, as the plugin's `confirm`; see below           |
-| `pollIntervalMs`, `bundleCacheDir`                                  | Ignored on a Worker, which has no timers or file system                                        |
+`BUNDLE_SIGNING_KEY` is the PEM of the public key the bundle server signs bundles with, and `keyId` is the key id its bundles name. It isn't secret: a `[vars]` entry in `wrangler.toml` will do. The keys at `jwksUrl` verify only the pull token, not the bundle, so without `trustedKeys` every bundle is refused with `unknown signing keyId` and the Worker serves no skills. Up to 1.11.2 this example left `trustedKeys` out.
+
+| Field                                                | Description                                                                                    |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `endpoint`                                           | HTTPS URL that serves the signed bundle                                                        |
+| `authToken`                                          | The token the bundle server issued for this server                                             |
+| `expectedAudience`, `jwksUrl`, `expectedIssuer`      | How the bundle server's tokens are verified                                                    |
+| `trustedKeys`                                        | The public keys bundles are signed with: `{ keyId, alg: 'RS256' \| 'EdDSA', publicKeyPem }`    |
+| `cache`                                              | Keeps the last bundle applied: `kvBundleCacheFromEnv('BINDING')`, or a store of your own       |
+| `enableWebhook`                                      | Also take bundles pushed to `POST /__skilled_openapi/push`, as below                           |
+| `requirePushBodyDigest`                              | Refuse a push token without a `body_sha256` claim, as below. Default `false`                   |
+| `pushReplay`                                         | Where pushed tokens' `jti`s are kept: `{ binding }` (default `FRONTMCP_PUSH_REPLAY`), as below |
+| `allowRollback`                                      | Apply a pulled or pushed bundle older than the one being served, as below. Default `false`     |
+| `requireSignature`, `dev`, `credentials`, `outbound` | Passed to the Skilled OpenAPI plugin. `dev` skips signature checks: never use it in production |
+| `confirm`                                            | Actions that ask the user before their request, as the plugin's `confirm`; see below           |
+| `pollIntervalMs`, `bundleCacheDir`                   | Ignored on a Worker, which has no timers or file system                                        |
 
 A Cron run ends once the bundle it pulled is applied and kept in `cache`, also when it is the first event an isolate gets: it then starts the bundle sync, whose first pull is the run's pull. A bundle that fails its signature or its other checks is not applied and not kept, so a cold start that can't reach the bundle server serves the last bundle the Worker applied.
 

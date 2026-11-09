@@ -33,6 +33,8 @@
  *     expectedAudience: 'acme-mcp',
  *     jwksUrl: 'https://cloud.frontmcp.dev/.well-known/jwks.json',
  *     expectedIssuer: 'https://cloud.frontmcp.dev',
+ *     // The bundle server's signing public key; the jwksUrl keys verify only the pull token.
+ *     trustedKeys: [{ keyId: 'acme-2026-11', alg: 'EdDSA', publicKeyPem: env.BUNDLE_SIGNING_KEY }],
  *   },
  * });
  * ```
