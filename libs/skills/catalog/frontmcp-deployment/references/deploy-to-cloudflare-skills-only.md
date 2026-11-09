@@ -437,6 +437,7 @@ Action outputs:
 - **Mixing `acme-api` as both a spec id AND an AgentScript namespace.** Dashes aren't valid JS identifiers — add `bindingName: acmeApi` on the spec entry, or rename the spec.
 - **Assuming `notifications/resources/updated` carries no URI.** It does — `notifications/resources/list_changed` is the one with empty params.
 - **Wrapping `callTool` in `try`/`catch`.** AgentScript has none (`Unsupported statement: TryStatement`). Pass `{ throwOnError: false }` and branch on `ok` and `status`.
+- **Using `fetch`, `console` or another global in a `run_workflow` script.** A script has `callTool`, `Math` and `JSON` only, and one that names anything else is refused before it runs: ``AgentScript rejected: `fetch` isn't available in run_workflow. A script reaches the API only through `callTool(actionId, input)`, and can use `Math` and `JSON`.`` Reach the API through `callTool`. Up to 1.11.1 the script ran and failed with the sandbox's internal name, `'__safe_fetch' is not defined`.
 - **Expecting the API's error body with `outbound.errorBodies: 'status-only'`.** With it, the thrown error names the status alone, and a `{ throwOnError: false }` result has no `data`.
 
 ## See Also
