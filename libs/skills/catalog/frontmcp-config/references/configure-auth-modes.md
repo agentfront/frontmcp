@@ -24,7 +24,7 @@ Anonymous callers hold `anonymousScopes`. With `publicAccess`, they list, call a
 
 A JWT bearer is still verified against this instance's own HS256 secret. A bearer that is **not** a JWT is ignored and the request is served anonymously — public mode has no issuer or JWKS to verify it against, and a credentialed request must never fare worse than an anonymous one. For a first-class shared secret, use static mode below.
 
-Public and static mode have no authorization server: `/.well-known/oauth-authorization-server` answers 404 and the protected resource metadata omits `authorization_servers` (local/remote serve their own metadata; transparent redirects to the provider's).
+Public and static mode have no authorization server: `/.well-known/oauth-authorization-server` answers 404 and the protected resource metadata omits `authorization_servers` (local/remote serve their own metadata and name themselves; transparent names `provider` in `authorization_servers`, and its own `/.well-known/oauth-authorization-server` redirects to the provider's).
 
 ## Static Mode
 
@@ -65,6 +65,8 @@ auth: {
 ```
 
 **Use when:** Behind an API gateway or reverse proxy that handles auth.
+
+Set `provider` to the provider's issuer identifier exactly as its metadata's `issuer` spells it (a trailing slash included): the protected resource metadata names it in `authorization_servers`, so an MCP client fetches the authorization server metadata from the provider and checks that `issuer` against it (RFC 8414 §3.3). Up to 1.11.2 it named the MCP server itself, whose metadata path redirects to the provider's document, so a strict client refused the mismatched `issuer`.
 
 > Transparent also accepts `allowAnonymous` (default `false`) + `anonymousScopes` (default `['anonymous']`) to admit tokenless requests as anonymous, and `requiredScopes` to reject tokens missing a scope (read from the `scope` and `scp` claims, which `this.auth.scopes` also merges). Without `providerConfig.jwks`/`jwksUri`, keys come from `<provider>/.well-known/jwks.json`, else the discovered `jwks_uri`; they are cached for 6 hours, and a token whose `kid` the cache lacks triggers a refetch first (at most once a minute per provider), so rotated keys work immediately. A token without `sub` takes its subject from `client_id`, else `azp`; one with none of the three is refused with 401 `invalid_token` (never served as anonymous). `expectedAudience` is shared across transparent/local/remote, not transparent-only.
 
