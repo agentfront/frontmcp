@@ -205,6 +205,19 @@ describe('EsmCacheManager', () => {
       expect(entry).toBeUndefined();
     });
 
+    it('never returns an entry with a maxAgeMs of 0', async () => {
+      const noReuseCache = new EsmCacheManager({ cacheDir, maxAgeMs: 0 });
+      jest.spyOn(Date, 'now').mockReturnValue(1_000);
+      try {
+        await noReuseCache.put('@acme/tools', '1.0.0', 'code', 'https://esm.sh/x');
+
+        expect(await noReuseCache.get('@acme/tools', '1.0.0')).toBeUndefined();
+        expect(await new EsmCacheManager({ cacheDir, maxAgeMs: 0 }).get('@acme/tools', '1.0.0')).toBeUndefined();
+      } finally {
+        jest.restoreAllMocks();
+      }
+    });
+
     it('returns from in-memory cache even when bundle file is deleted from disk', async () => {
       await cache.put('@acme/tools', '1.0.0', 'code', 'https://esm.sh/x');
       const entry = await cache.get('@acme/tools', '1.0.0');

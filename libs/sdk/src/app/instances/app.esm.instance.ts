@@ -12,6 +12,7 @@ import {
   type AdapterRegistryInterface,
   type AppRecord,
   type EntryOwnerRef,
+  type PackageLoader,
   type PluginInstance,
   type PluginRegistryInterface,
   type ProviderRegistryInterface,
@@ -27,6 +28,7 @@ import {
   esmPromptRecord,
   esmResourceRecord,
   esmToolRecord,
+  mergePackageLoaders,
   registryAuthOf,
 } from '../../esm-loader/esm-entries';
 import { type FrontMcpPackageManifest } from '../../esm-loader/esm-manifest';
@@ -163,6 +165,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
   private readonly scopeProviders: ProviderRegistry;
   private readonly appOwner: EntryOwnerRef;
   private readonly loader: EsmModuleLoader;
+  private readonly packageLoader?: PackageLoader;
   private readonly specifier: ParsedPackageSpecifier;
   private poller?: VersionPoller;
   private loadResult?: EsmLoadResult;
@@ -191,11 +194,11 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     // Parse the package specifier from the url field
     this.specifier = parsePackageSpecifier(this.metadata.url);
 
-    // Merge gateway-level loader with app-level packageConfig.loader
     const scope = scopeProviders.getActiveScope();
     const appConfig = this.metadata.packageConfig;
+    this.packageLoader = mergePackageLoaders(scope.metadata.loader, appConfig?.loader);
     this.loader = createPackageModuleLoader({
-      loader: appConfig?.loader ?? scope.metadata.loader,
+      loader: this.packageLoader,
       cacheTTL: appConfig?.cacheTTL,
       importMap: appConfig?.importMap,
       logger: scope.logger,
@@ -233,12 +236,9 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
       // Start version poller if auto-update is enabled
       const autoUpdate = this.metadata.packageConfig?.autoUpdate;
       if (autoUpdate?.enabled) {
-        const scopeMeta = this.scopeProviders.getActiveScope().metadata;
-        const pollerLoader = this.metadata.packageConfig?.loader ?? scopeMeta.loader;
-
         this.poller = new VersionPoller({
           intervalMs: autoUpdate.intervalMs,
-          registryAuth: registryAuthOf(pollerLoader),
+          registryAuth: registryAuthOf(this.packageLoader),
           logger,
           onNewVersion: (pkg, oldVer, newVer) => this.handleVersionUpdate(pkg, oldVer, newVer),
         });

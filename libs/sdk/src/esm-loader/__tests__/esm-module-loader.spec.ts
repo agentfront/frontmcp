@@ -216,8 +216,18 @@ describe('EsmModuleLoader', () => {
         statusText: 'Internal Server Error',
       });
 
-      await expect(loader.load(specifier)).rejects.toThrow('esm.sh returned 500');
+      await expect(loader.load(specifier)).rejects.toThrow('https://esm.sh returned 500');
       await expect(loader.load(specifier)).rejects.toThrow(EsmPackageLoadError);
+    });
+
+    it('names the loader url, not esm.sh, when the bundle server refuses', async () => {
+      mockCache.get.mockResolvedValue(undefined);
+      mockFetch.mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
+      const customLoader = new EsmModuleLoader({ cache: mockCache, esmBaseUrl: 'https://esm.acme.example' });
+
+      await expect(customLoader.load(specifier)).rejects.toThrow(
+        'https://esm.acme.example returned 404 for "@acme/tools@1.2.0": Not Found',
+      );
     });
 
     it('throws on generic fetch error', async () => {
