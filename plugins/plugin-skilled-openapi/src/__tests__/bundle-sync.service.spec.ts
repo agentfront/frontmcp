@@ -205,6 +205,26 @@ describe('BundleSyncService', () => {
       expect(reg.registered).toHaveLength(1);
     });
 
+    it('applies a first bundle that failed to apply again, without restarting the source (#1169)', async () => {
+      const reg = new FakeRegistry();
+      reg.failNext = true;
+      const sync = makeSync(reg);
+      const { calls, source } = makeSource(buildBundle());
+      sync.attachSource(source);
+
+      await sync.ensureReady();
+      expect(reg.registered).toHaveLength(0);
+      expect(sync.loadState().status).toBe('failed');
+
+      await sync.ensureReady();
+      expect(calls.start).toBe(1);
+      expect(reg.registered.map((skill) => skill.id)).toEqual(['invoices']);
+      expect(sync.loadState().status).toBe('loaded');
+
+      await sync.ensureReady();
+      expect(reg.registered).toHaveLength(1);
+    });
+
     it('is a no-op when no source is attached', async () => {
       const sync = makeSync(new FakeRegistry());
       await expect(sync.ensureReady()).resolves.toBeUndefined();
