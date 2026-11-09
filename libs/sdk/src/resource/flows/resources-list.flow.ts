@@ -76,7 +76,7 @@ const { Stage } = FlowHooksOf('resources:list-resources');
   plan,
   inputSchema,
   outputSchema,
-  access: 'authorized',
+  access: 'public',
 })
 export default class ResourcesListFlow extends FlowBase<typeof name> {
   logger = this.scopeLogger.child('ResourcesListFlow');

@@ -144,7 +144,7 @@ function jobOf(rawInput: unknown): JobEntry | undefined {
   plan,
   inputSchema,
   outputSchema,
-  access: 'authorized',
+  access: 'public',
 })
 export default class ExecuteJobFlow extends FlowBase<typeof name> {
   /**

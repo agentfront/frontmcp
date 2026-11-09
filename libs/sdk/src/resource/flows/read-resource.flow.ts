@@ -115,7 +115,7 @@ const resolvedResources = new ResolvedEntries<{ instance: ResourceEntry; params:
   plan,
   inputSchema,
   outputSchema,
-  access: 'authorized',
+  access: 'public',
 })
 export default class ReadResourceFlow extends FlowBase<typeof name> {
   static override readonly tracesHooksInAnswer = true;

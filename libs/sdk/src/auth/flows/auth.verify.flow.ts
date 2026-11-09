@@ -135,7 +135,7 @@ const Stage = StageHookOf(name);
   plan,
   inputSchema,
   outputSchema: authVerifyOutputSchema,
-  access: 'authorized',
+  access: 'public',
 })
 export default class AuthVerifyFlow extends FlowBase<typeof name> {
   private logger = this.scope.logger.child('AuthVerifyFlow');

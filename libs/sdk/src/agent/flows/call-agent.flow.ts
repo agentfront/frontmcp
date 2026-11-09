@@ -169,7 +169,7 @@ function findAgentForCall(agents: NonNullable<ScopeEntry['agents']>, toolName: s
   plan,
   inputSchema,
   outputSchema,
-  access: 'authorized',
+  access: 'public',
 })
 export default class CallAgentFlow extends FlowBase<typeof name> {
   /** The class of the agent the call names, whose `static` hooks run from `parseInput` on (#701). */

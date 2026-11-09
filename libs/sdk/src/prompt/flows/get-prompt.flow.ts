@@ -117,7 +117,7 @@ function findPromptForGet(prompts: ScopeEntry['prompts'], name: string): PromptE
   plan,
   inputSchema,
   outputSchema,
-  access: 'authorized',
+  access: 'public',
 })
 export default class GetPromptFlow extends FlowBase<typeof name> {
   static override readonly tracesHooksInAnswer = true;

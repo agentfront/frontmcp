@@ -47,7 +47,7 @@ async function runCheckAuthorization(opts: {
 }): Promise<Map<unknown, unknown>> {
   const contextTokens = new Map<unknown, unknown>();
   const fakeContext = {
-    updateAuthInfo: jest.fn(),
+    recordAuthorization: jest.fn(),
     setContextToken: (token: unknown, instance: unknown) => contextTokens.set(token, instance),
     getContextTokens: () => new Map(contextTokens),
     requestId: 'req-test',

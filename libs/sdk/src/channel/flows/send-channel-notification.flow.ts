@@ -59,7 +59,7 @@ const { Stage } = FlowHooksOf<'channels:send-notification'>(name);
   plan,
   inputSchema,
   outputSchema,
-  access: 'authorized',
+  access: 'public',
 })
 export default class SendChannelNotificationFlow extends FlowBase<typeof name> {
   logger = this.scopeLogger.child('SendChannelNotificationFlow');
