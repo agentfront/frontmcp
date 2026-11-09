@@ -45,8 +45,10 @@ export {
   warnIfComponentReference,
   type RenderToolTemplateOptions,
   type RenderToolTemplateResult,
+  type MarkdownRenderOptions,
 } from './template-renderer';
-export { describeRenderOptionProblems } from './render-options';
+export { describeRenderOptionProblems, prepareRenderOptions } from './render-options';
+export { loadCodeHighlighter, type CodeHighlighter } from './code-highlight';
 
 // ============================================
 // Content Detection & Rendering

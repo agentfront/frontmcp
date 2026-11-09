@@ -125,8 +125,15 @@ export class ToolUIRegistry {
   async checkRenderOptions(toolName: string, uiConfig: Record<string, unknown> | undefined): Promise<void> {
     if (!uiConfig) return;
     await this.load();
-    const problems = this.loadedRenderer.describeRenderOptionProblems(uiConfig['template'], renderOptions(uiConfig));
+    const { describeRenderOptionProblems, prepareRenderOptions } = this.loadedRenderer;
+    const template = uiConfig['template'];
+    const problems = describeRenderOptionProblems(template, renderOptions(uiConfig));
     if (problems.length > 0) throw new ToolUiConfigurationError(toolName, problems);
+    try {
+      prepareRenderOptions(template, renderOptions(uiConfig));
+    } catch (error) {
+      throw new ToolUiConfigurationError(toolName, [error instanceof Error ? error.message : String(error)]);
+    }
   }
 
   /** The tool that advertised `uri` as its custom `ui.resourceUri`. */
@@ -327,8 +334,14 @@ export class ToolUIRegistry {
 /** A tool's `ui` rendering options, as `renderToolTemplate` takes them. */
 function renderOptions(
   uiConfig: Record<string, unknown> | undefined,
-): Pick<RenderToolTemplateOptions, 'contentSecurity'> {
-  return { contentSecurity: uiConfig?.['contentSecurity'] as RenderToolTemplateOptions['contentSecurity'] };
+): Pick<RenderToolTemplateOptions, 'contentSecurity' | 'markdown'> {
+  const runtimeOptions = uiConfig?.['runtimeOptions'] as
+    | { markdown?: RenderToolTemplateOptions['markdown'] }
+    | undefined;
+  return {
+    contentSecurity: uiConfig?.['contentSecurity'] as RenderToolTemplateOptions['contentSecurity'],
+    markdown: runtimeOptions?.markdown,
+  };
 }
 
 // ============================================
