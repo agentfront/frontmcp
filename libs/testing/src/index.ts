@@ -146,6 +146,7 @@ export {
 // ═══════════════════════════════════════════════════════════════════
 
 export type {
+  DiscoverResult,
   InitializeResult,
   ListToolsResult,
   CallToolResult,

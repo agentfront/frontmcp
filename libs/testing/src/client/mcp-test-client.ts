@@ -3,6 +3,15 @@
  * @description Main MCP Test Client implementation for E2E testing
  */
 
+import {
+  MCP_20260728_META,
+  PROTOCOL_2026_07_28,
+  type DiscoverResult,
+  type InputRequests,
+  type InputRequiredResult,
+  type InputResponses,
+  type SubscriptionFilter,
+} from '@frontmcp/protocol';
 import { trimSlashes } from '@frontmcp/utils';
 
 import {
@@ -22,7 +31,9 @@ import { McpTestClientBuilder } from './mcp-test-client.builder';
 import type {
   AuthState,
   CallToolResult,
+  ElicitationCreateRequest,
   ElicitationHandler,
+  ElicitResponse,
   GetPromptResult,
   InitializeResult,
   JSONRPCResponse,
@@ -57,7 +68,13 @@ import type {
 
 const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_PROTOCOL_VERSION = '2025-06-18';
-const UNSUPPORTED_PROTOCOL_VERSIONS = ['2026-07-28'];
+/** Most `input_required` answers one call gives before it fails, so a server that never settles can't hang a spec. */
+const MAX_INPUT_ROUNDS = 10;
+const LIST_CHANGED_SUBSCRIPTIONS: SubscriptionFilter = {
+  toolsListChanged: true,
+  promptsListChanged: true,
+  resourcesListChanged: true,
+};
 const DEFAULT_CLIENT_INFO = {
   name: '@frontmcp/testing',
   version: '0.4.0',
@@ -83,6 +100,21 @@ function describeInitializeError(error: McpErrorInfo | undefined): string {
   const data = error?.data;
   const detail = typeof data === 'string' ? data.trim() : '';
   return detail ? `${message} - ${detail.slice(0, 500)}` : message;
+}
+
+/** What `initialize` would have told a 2025 client, from a 2026-07-28 `server/discover` result. */
+function initializeResultFrom(discovered: DiscoverResult): InitializeResult {
+  const serverInfo = discovered._meta?.[MCP_20260728_META.serverInfo] ?? { name: '', version: '' };
+  return {
+    protocolVersion: PROTOCOL_2026_07_28,
+    capabilities: discovered.capabilities,
+    serverInfo,
+    ...(discovered.instructions !== undefined && { instructions: discovered.instructions }),
+  };
+}
+
+function isInputRequired(result: unknown): result is InputRequiredResult {
+  return (result as { resultType?: unknown } | undefined)?.resultType === 'input_required';
 }
 
 /**
@@ -115,6 +147,10 @@ export class McpTestClient {
     Omit<McpTestClientConfig, 'platform' | 'capabilities' | 'queryParams' | 'entryPath'>
   > &
     Pick<McpTestClientConfig, 'platform' | 'capabilities' | 'queryParams' | 'entryPath'>;
+  /** Protocol 2026-07-28: the resources `resources.subscribe()` listens to. */
+  private readonly resourceSubscriptions = new Set<string>();
+  /** Protocol 2026-07-28: whether the tools were listed since connecting, which mirrors `x-mcp-header` arguments. */
+  private toolsListed = false;
   private transport: McpTransport | null = null;
   private initResult: InitializeResult | null = null;
   private requestIdCounter = 0;
@@ -144,10 +180,10 @@ export class McpTestClient {
   // ═══════════════════════════════════════════════════════════════════
 
   constructor(config: McpTestClientConfig) {
-    if (config.protocolVersion && UNSUPPORTED_PROTOCOL_VERSIONS.includes(config.protocolVersion)) {
+    if (config.protocolVersion === PROTOCOL_2026_07_28 && config.transport === 'sse') {
       throw new Error(
-        `McpTestClient does not support protocol version ${config.protocolVersion}: it has no initialize handshake. ` +
-          `Use ${DEFAULT_PROTOCOL_VERSION} or earlier.`,
+        `Protocol version ${PROTOCOL_2026_07_28} has no HTTP+SSE transport: use 'streamable-http', ` +
+          `or a protocol version before it with 'sse'.`,
       );
     }
     this.config = {
@@ -202,6 +238,7 @@ export class McpTestClient {
     // server that now serves a different path.
     this.triedDiscoveredEntryPath = false;
     this.initResult = null;
+    this.toolsListed = false;
 
     // Create transport based on config
     this.transport = this.createTransport();
@@ -219,7 +256,7 @@ export class McpTestClient {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       attemptsMade = attempt;
-      const initResponse = await this.initialize();
+      const initResponse = this.isStateless ? await this.discoverServer() : await this.initialize();
 
       if (initResponse.success && initResponse.data) {
         this.initResult = initResponse.data;
@@ -271,14 +308,18 @@ export class McpTestClient {
       requestCount: 1,
     };
 
-    // Send initialized notification per MCP protocol
-    // This notification MUST be sent after receiving initialize response
-    // before the client can make any other requests
-    await this.transport.notify({
-      jsonrpc: '2.0',
-      method: 'notifications/initialized',
-    });
-    await this.transport.openNotificationStream?.(this.initResult.protocolVersion);
+    if (this.isStateless) {
+      await this.listen();
+    } else {
+      // Send initialized notification per MCP protocol
+      // This notification MUST be sent after receiving initialize response
+      // before the client can make any other requests
+      await this.transport.notify({
+        jsonrpc: '2.0',
+        method: 'notifications/initialized',
+      });
+      await this.transport.openNotificationStream?.(this.initResult.protocolVersion);
+    }
 
     this.log('info', `Connected to ${this.initResult.serverInfo?.name ?? 'MCP Server'}`);
 
@@ -428,6 +469,17 @@ export class McpTestClient {
     return !!this.capabilities[name];
   }
 
+  /**
+   * Send `server/discover` and return what the server answers: its supported versions, capabilities,
+   * instructions and `_meta` (with its server info). Sent as a 2026-07-28 request whatever revision
+   * this client speaks, since the method exists only there. Throws with the server's error.
+   */
+  async discover(): Promise<DiscoverResult> {
+    const response = await this.request<DiscoverResult>('server/discover', {});
+    if (!response.success || !response.data) throw new Error(`server/discover failed: ${response.error?.message}`);
+    return response.data;
+  }
+
   // ═══════════════════════════════════════════════════════════════════
   // TOOLS API
   // ═══════════════════════════════════════════════════════════════════
@@ -436,13 +488,16 @@ export class McpTestClient {
     /**
      * List all available tools
      */
-    list: async (): Promise<Tool[]> =>
-      this.listAllPages(
+    list: async (): Promise<Tool[]> => {
+      const tools = await this.listAllPages(
         'tools/list',
         'tools',
         (cursor) => this.listTools(cursor),
         (page) => page.tools,
-      ),
+      );
+      this.toolsListed = true;
+      return tools;
+    },
 
     /**
      * Call a tool by name with arguments
@@ -452,6 +507,7 @@ export class McpTestClient {
       args?: Record<string, unknown>,
       options: ToolCallOptions = {},
     ): Promise<ToolResultWrapper> => {
+      await this.learnToolSchemas();
       const response = await this.callTool(name, args, this.progressTokenFor(options));
       return this.wrapToolResult(response);
     },
@@ -494,9 +550,12 @@ export class McpTestClient {
 
     /**
      * Subscribe to a resource: the server then sends `notifications/resources/updated` when it changes.
-     * Throws with the server's error when it refuses the subscription.
+     * Throws with the server's error when it refuses the subscription. On 2026-07-28, which has no
+     * `resources/subscribe`, the client listens again (`subscriptions/listen`) with the URI added, and
+     * throws when the server doesn't acknowledge it.
      */
     subscribe: async (uri: string): Promise<void> => {
+      if (this.isStateless) return this.listenToResource(uri);
       const response = await this.request('resources/subscribe', { uri });
       if (!response.success) throw new Error(`Failed to subscribe to ${uri}: ${response.error?.message}`);
     },
@@ -505,6 +564,11 @@ export class McpTestClient {
      * Unsubscribe from a resource's changes.
      */
     unsubscribe: async (uri: string): Promise<void> => {
+      if (this.isStateless) {
+        this.resourceSubscriptions.delete(uri);
+        await this.listen();
+        return;
+      }
       const response = await this.request('resources/unsubscribe', { uri });
       if (!response.success) throw new Error(`Failed to unsubscribe from ${uri}: ${response.error?.message}`);
     },
@@ -965,21 +1029,56 @@ export class McpTestClient {
   // PRIVATE: MCP OPERATIONS
   // ═══════════════════════════════════════════════════════════════════
 
-  private async initialize(): Promise<McpResponse<InitializeResult>> {
-    // Use configured capabilities or default to base capabilities
+  private get isStateless(): boolean {
+    return this.config.protocolVersion === PROTOCOL_2026_07_28;
+  }
+
+  private get clientCapabilities(): TestClientCapabilities {
     // Default includes elicitation.form for testing elicitation workflows
     // Note: MCP SDK expects form to be an object, not boolean
-    const capabilities: TestClientCapabilities = this.config.capabilities ?? {
-      sampling: {},
-      elicitation: {
-        form: {},
-      },
-    };
+    return this.config.capabilities ?? { sampling: {}, elicitation: { form: {} } };
+  }
 
+  private async initialize(): Promise<McpResponse<InitializeResult>> {
     return this.request<InitializeResult>('initialize', {
       protocolVersion: this.config.protocolVersion,
-      capabilities,
+      capabilities: this.clientCapabilities,
       clientInfo: this.config.clientInfo,
+    });
+  }
+
+  /** Protocol 2026-07-28 has no `initialize`: `server/discover` tells the client what the server offers. */
+  private async discoverServer(): Promise<McpResponse<InitializeResult>> {
+    const response = await this.request<DiscoverResult>('server/discover', {});
+    const data = response.data && initializeResultFrom(response.data);
+    return { ...response, data };
+  }
+
+  /** Protocol 2026-07-28: open the `subscriptions/listen` stream for list changes and the subscribed resources. */
+  private async listen(): Promise<SubscriptionFilter | undefined> {
+    const resourceSubscriptions = [...this.resourceSubscriptions];
+    const acknowledged = await this.transport?.listen?.(++this.requestIdCounter, {
+      ...LIST_CHANGED_SUBSCRIPTIONS,
+      ...(resourceSubscriptions.length > 0 && { resourceSubscriptions }),
+    });
+    if (!acknowledged) this.log('warn', 'The server opened no subscriptions/listen stream');
+    return acknowledged;
+  }
+
+  private async listenToResource(uri: string): Promise<void> {
+    this.resourceSubscriptions.add(uri);
+    const acknowledged = await this.listen();
+    if (acknowledged?.resourceSubscriptions?.includes(uri)) return;
+    this.resourceSubscriptions.delete(uri);
+    throw new Error(`Failed to subscribe to ${uri}: the server did not acknowledge it in subscriptions/listen`);
+  }
+
+  /** Protocol 2026-07-28 mirrors `x-mcp-header` arguments into headers, so the tools' schemas are listed once. */
+  private async learnToolSchemas(): Promise<void> {
+    if (!this.isStateless || this.toolsListed) return;
+    this.toolsListed = true;
+    await this.tools.list().catch((error: unknown) => {
+      this.log('warn', `Listing the tools before the first call failed: ${errorMessage(error)}`);
     });
   }
 
@@ -1108,6 +1207,8 @@ export class McpTestClient {
           clientInfo: this.config.clientInfo,
           elicitationHandler: this._elicitationHandler,
           notificationHandler: this.recordNotification,
+          protocolVersion: this.config.protocolVersion,
+          capabilities: this.clientCapabilities,
         });
       case 'sse':
         return new SseTransport({
@@ -1127,7 +1228,60 @@ export class McpTestClient {
     }
   }
 
+  /**
+   * Send a request, and answer each `input_required` result (protocol 2026-07-28) by sending the
+   * request again with the answers and the server's `requestState`, until the server settles.
+   */
   private async request<T>(method: string, params: Record<string, unknown>): Promise<McpResponse<T>> {
+    let response = await this.send<T>(method, params);
+    for (let round = 1; response.success && isInputRequired(response.data); round++) {
+      const { inputRequests, requestState } = response.data;
+      const inputResponses =
+        round > MAX_INPUT_ROUNDS
+          ? `the server asked for input more than ${MAX_INPUT_ROUNDS} times`
+          : await this.answerInputRequests(inputRequests);
+      if (typeof inputResponses === 'string') {
+        return {
+          ...response,
+          success: false,
+          data: undefined,
+          error: { code: -32603, message: `${method}: ${inputResponses}` },
+        };
+      }
+      const retried = await this.send<T>(method, {
+        ...params,
+        inputResponses,
+        ...(requestState !== undefined && { requestState }),
+      });
+      response = { ...retried, durationMs: response.durationMs + retried.durationMs };
+    }
+    return response;
+  }
+
+  /** The answers to an `input_required` result's requests, or why the client can't give them. */
+  private async answerInputRequests(inputRequests: InputRequests = {}): Promise<InputResponses | string> {
+    const answers: InputResponses = {};
+    for (const [key, inputRequest] of Object.entries(inputRequests)) {
+      if (inputRequest.method !== 'elicitation/create') {
+        return `the server asked for ${inputRequest.method}, which McpTestClient doesn't answer`;
+      }
+      answers[key] = { ...(await this.answerElicitation(inputRequest.params ?? {})) };
+    }
+    return answers;
+  }
+
+  /** As over a session: the handler's answer, `decline` without a handler, and `cancel` when it throws. */
+  private async answerElicitation(params: Record<string, unknown>): Promise<ElicitResponse> {
+    if (!this._elicitationHandler) return { action: 'decline' };
+    try {
+      return await this._elicitationHandler({ mode: 'form', ...params } as ElicitationCreateRequest);
+    } catch (error) {
+      this.log('warn', `The elicitation handler threw: ${errorMessage(error)}`);
+      return { action: 'cancel' };
+    }
+  }
+
+  private async send<T>(method: string, params: Record<string, unknown>): Promise<McpResponse<T>> {
     const transport = this.getConnectedTransport();
 
     const id = ++this.requestIdCounter;

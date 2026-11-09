@@ -92,13 +92,18 @@ test.use({
   transport: 'streamable-http', // or 'sse'
   entryPath: '/mcp', // if the server sets http.entryPath
   publicMode: true, // send no Authorization header, for auth: { mode: 'public' }
-  logLevel: 'debug',
+  logLevel: 'debug', // the server's own log level
+  protocolVersion: '2026-07-28', // default: '2025-06-18'
   env: { API_KEY: 'test' },
   startupTimeout: 30_000,
 });
 ```
 
 Call `test.use()` at the top of a file to configure every test in it, or inside `test.describe()` to configure that block, which then gets a server of its own. `baseUrl` tests a server that's already running instead of starting one.
+
+## Protocol versions
+
+The client speaks MCP `2025-06-18` by default, and any revision up to `2025-11-25` opens a session with `initialize`. With `protocolVersion: '2026-07-28'` it's stateless: it connects with `server/discover`, sends each request with its `_meta` and mirrored headers (`MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`, `Mcp-Param-*`), answers a tool's `this.elicit()` through `input_required` with your `mcp.onElicitation()` handler, and listens for changes with `subscriptions/listen`. `mcp.discover()` sends `server/discover` from a client on any version.
 
 ## Other exports
 
