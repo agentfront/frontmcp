@@ -25,11 +25,11 @@ import { runOnSurface } from '../../context/call-surface';
 import {
   InvalidInputError,
   InvalidMethodError,
-  InvalidOutputError,
   isClientFacingError,
   PromptExecutionError,
   PromptNotFoundError,
 } from '../../errors';
+import { invalidOutputFromParseFailure } from '../../errors/mcp.error';
 import { ResolvedEntries } from '../../flows/resolved-entries';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
@@ -448,7 +448,7 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
         errors: parseResult.error,
       });
 
-      throw new InvalidOutputError();
+      throw invalidOutputFromParseFailure('Prompt', parseResult.error);
     }
 
     // Respond with the properly formatted MCP result

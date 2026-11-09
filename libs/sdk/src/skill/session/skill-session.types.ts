@@ -124,7 +124,7 @@ export interface SkillSessionOptions {
   defaultPolicyMode?: SkillPolicyMode;
 
   /**
-   * Whether skills must be explicitly activated via loadSkill.
+   * Whether skills must be explicitly activated, by a `skills/load` request with `activateSession: true`.
    * If false, tool calls without an active skill are always allowed.
    * @default false
    */

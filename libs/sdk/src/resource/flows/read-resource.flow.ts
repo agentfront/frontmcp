@@ -27,11 +27,11 @@ import { runOnSurface } from '../../context/call-surface';
 import {
   InvalidInputError,
   InvalidMethodError,
-  InvalidOutputError,
   isClientFacingError,
   ResourceNotFoundError,
   ResourceReadError,
 } from '../../errors';
+import { invalidOutputFromParseFailure } from '../../errors/mcp.error';
 import { ResolvedEntries } from '../../flows/resolved-entries';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
@@ -518,7 +518,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
         errors: parseResult.error,
       });
 
-      throw new InvalidOutputError();
+      throw invalidOutputFromParseFailure('Resource', parseResult.error);
     }
 
     // Respond with the properly formatted MCP result; 'fitAnswer' may replace it

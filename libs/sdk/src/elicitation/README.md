@@ -311,12 +311,7 @@ const result = await this.elicit(message, schema, { ttl: 60000 }); // 1 minute
 DirectClient supports elicitation handling for programmatic MCP access:
 
 ```typescript
-import {
-  connect,
-  type ElicitationHandler,
-  type ElicitationRequest,
-  type ElicitationResponse,
-} from '@frontmcp/sdk/direct';
+import { connect, type ElicitationHandler, type ElicitationRequest, type ElicitationResponse } from '@frontmcp/sdk';
 
 const client = await connect(scope);
 
