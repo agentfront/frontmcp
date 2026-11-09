@@ -3,6 +3,7 @@ import {
   FlowHooksOf,
   FRONTMCP_CONTEXT,
   FrontMcpContextStorage,
+  FrontMcpLogger,
   isEntryGatedBy,
   ListResourcesHook,
   ListResourceTemplatesHook,
@@ -523,14 +524,33 @@ export default class FeatureFlagPlugin extends DynamicPlugin<FeatureFlagPluginOp
   }
 
   /**
-   * Batch evaluate all collected flag refs via the adapter.
+   * Batch evaluate all collected flag refs via the adapter. When the adapter throws, no flag has an answer,
+   * so each falls back as the execution gates do: the ref's `defaultValue`, then `gateDefaultValue`, then `false`.
    */
   private async batchEvaluateRefs(
     adapter: FeatureFlagAdapter,
     refs: Map<string, FeatureFlagRef>,
   ): Promise<Map<string, boolean>> {
     const keys = Array.from(refs.keys());
-    return adapter.evaluateFlags(keys, this.currentFlagContext());
+    try {
+      return await adapter.evaluateFlags(keys, this.currentFlagContext());
+    } catch (error) {
+      this.warn(
+        `The feature flag adapter failed to evaluate ${keys.join(', ')}, so each flag's default applies: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return new Map();
+    }
+  }
+
+  /** Log a warning, where the plugin runs in a server that has a logger. */
+  private warn(message: string): void {
+    let logger: FrontMcpLogger | undefined;
+    try {
+      logger = this.get(FrontMcpLogger) as FrontMcpLogger | undefined;
+    } catch {
+      logger = undefined;
+    }
+    logger?.child('FeatureFlagPlugin').warn(message);
   }
 
   /**
