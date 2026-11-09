@@ -110,8 +110,12 @@ export class ToolUIRegistry {
     return this.renderer;
   }
 
-  /** Warn at startup when a tool's `ui.template` is a React component reference it cannot bundle. */
-  checkTemplate(toolName: string, template: unknown): void {
+  /**
+   * Warn at startup when a tool's `ui.template` is a React component reference it cannot bundle,
+   * unless `ui.uiType: 'react'` renders it on the server.
+   */
+  checkTemplate(toolName: string, template: unknown, uiType?: unknown): void {
+    if (uiType === 'react') return;
     // Once loaded, the renderer's own check shares its once-per-tool memory with the warning a render gives
     const warnIfComponent = this.renderer?.warnIfComponentReference ?? warnIfComponentReference;
     warnIfComponent(toolName, template, this.options.logger ?? console);
@@ -173,8 +177,9 @@ export class ToolUIRegistry {
     return this.resourceMeta.get(toolName);
   }
 
-  /** How the template renders: a string template is MDX with `ui.mdxComponents`, else as detected. */
-  detectUIType(template: unknown, uiConfig?: { mdxComponents?: unknown }): string {
+  /** How the template renders: as `ui.uiType` says, as MDX for a string with `ui.mdxComponents`, else as detected. */
+  detectUIType(template: unknown, uiConfig?: { mdxComponents?: unknown; uiType?: unknown }): string {
+    if (typeof uiConfig?.uiType === 'string' && uiConfig.uiType !== 'auto') return uiConfig.uiType;
     if (typeof template === 'string' && uiConfig?.mdxComponents) return 'mdx';
     return detectUIType(template);
   }
@@ -336,14 +341,16 @@ export class ToolUIRegistry {
 /** A tool's `ui` rendering options, as `renderToolTemplate` takes them. */
 function renderOptions(
   uiConfig: Record<string, unknown> | undefined,
-): Pick<RenderToolTemplateOptions, 'contentSecurity' | 'markdown' | 'mdxComponents'> {
+): Pick<RenderToolTemplateOptions, 'contentSecurity' | 'markdown' | 'mdxComponents' | 'uiType' | 'hydrate'> {
   const runtimeOptions = uiConfig?.['runtimeOptions'] as
-    | { markdown?: RenderToolTemplateOptions['markdown'] }
+    | { markdown?: RenderToolTemplateOptions['markdown']; hydrate?: boolean }
     | undefined;
   return {
     contentSecurity: uiConfig?.['contentSecurity'] as RenderToolTemplateOptions['contentSecurity'],
     markdown: runtimeOptions?.markdown,
     mdxComponents: uiConfig?.['mdxComponents'] as RenderToolTemplateOptions['mdxComponents'],
+    uiType: uiConfig?.['uiType'] as RenderToolTemplateOptions['uiType'],
+    hydrate: (uiConfig?.['hydrate'] as boolean | undefined) ?? runtimeOptions?.hydrate,
   };
 }
 
