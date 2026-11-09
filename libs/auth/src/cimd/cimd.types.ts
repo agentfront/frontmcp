@@ -40,7 +40,7 @@ export const clientMetadataDocumentSchema = z.object({
 
   // OPTIONAL per RFC 7591
   /**
-   * Token endpoint authentication method.
+   * Token endpoint authentication method. FrontMCP's authorization server accepts only `none`.
    * @default 'none'
    */
   token_endpoint_auth_method: z
@@ -48,10 +48,10 @@ export const clientMetadataDocumentSchema = z.object({
     .default('none'),
 
   /**
-   * OAuth grant types the client can use.
-   * @default ['authorization_code']
+   * OAuth grant types the client can use. Without `refresh_token`, the client gets no refresh token.
+   * @default ['authorization_code', 'refresh_token']
    */
-  grant_types: z.array(z.string()).default(['authorization_code']),
+  grant_types: z.array(z.string()).default(['authorization_code', 'refresh_token']),
 
   /**
    * OAuth response types the client can request.
@@ -94,7 +94,7 @@ export const clientMetadataDocumentSchema = z.object({
   policy_uri: z.string().url().optional(),
 
   /**
-   * Requested OAuth scopes.
+   * Space-separated scopes the client may be granted (RFC 7591); a request for others is narrowed to these.
    */
   scope: z.string().optional(),
 

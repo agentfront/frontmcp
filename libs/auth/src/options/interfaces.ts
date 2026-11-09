@@ -435,8 +435,8 @@ export interface LocalDcrClient {
    */
   tokenEndpointAuthMethod?: 'none' | 'client_secret_basic' | 'client_secret_post';
   /**
-   * Allowed grant types.
-   * @default ['authorization_code']
+   * Allowed grant types, enforced at the token endpoint: without `refresh_token`, the client gets no refresh token.
+   * @default ['authorization_code', 'refresh_token']
    */
   grantTypes?: Array<'authorization_code' | 'refresh_token'>;
   /**
@@ -444,7 +444,7 @@ export interface LocalDcrClient {
    * @default ['code']
    */
   responseTypes?: Array<'code'>;
-  /** Optional space-delimited default scope string. */
+  /** Space-delimited scopes this client may be granted; a request for others is narrowed to these. */
   scope?: string;
 }
 

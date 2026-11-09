@@ -205,6 +205,32 @@ export class CimdService {
   }
 
   /**
+   * Check that this server can honor the client as its document declares it: it authenticates at the token
+   * endpoint with `none` (a public document holds no shared secret, and this server verifies no `private_key_jwt`
+   * assertion against `jwks` / `jwks_uri`), and it uses the authorization code grant with `response_type=code`.
+   *
+   * @param metadata - The client's metadata document
+   * @throws CimdValidationError naming each declaration this server cannot honor
+   */
+  assertSupportedClient(metadata: ClientMetadataDocument): void {
+    const problems: string[] = [];
+    if (metadata.token_endpoint_auth_method !== 'none') {
+      problems.push(
+        `token_endpoint_auth_method "${metadata.token_endpoint_auth_method}" is not supported, only "none"`,
+      );
+    }
+    if (!metadata.grant_types.includes('authorization_code')) {
+      problems.push('grant_types must include "authorization_code"');
+    }
+    if (!metadata.response_types.includes('code')) {
+      problems.push('response_types must include "code"');
+    }
+    if (problems.length > 0) {
+      throw new CimdValidationError(metadata.client_id, problems);
+    }
+  }
+
+  /**
    * Clear the cache for a specific client or all clients.
    *
    * @param clientId - Optional client_id to clear; clears all if not provided
