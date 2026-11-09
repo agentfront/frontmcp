@@ -37,6 +37,7 @@ export interface ObservabilityOptionsInterface {
         fetchSpans?: boolean;
         flowStageEvents?: boolean;
         transportSpans?: boolean;
+        /** An `auth session:verify` span for each HTTP request's authentication, with `frontmcp.auth.result` */
         authSpans?: boolean;
         oauthSpans?: boolean;
         elicitationSpans?: boolean;
@@ -46,9 +47,9 @@ export interface ObservabilityOptionsInterface {
   /**
    * Enable/configure structured JSON logging.
    *
-   * - `true` — enable with default StdoutSink (NDJSON)
+   * - `true` — enable with the default sink: NDJSON on stdout (stderr in stdio mode), or the console in a browser
    * - `false` — disable structured logging
-   * - Object — configure sinks, redaction, etc.
+   * - Object — configure sinks, redaction, etc.; without `sinks`, the default sink, and `sinks: []` writes nothing
    *
    * @default false
    */
@@ -74,6 +75,7 @@ export interface ObservabilityOptionsInterface {
     | boolean
     | {
         maxEntries?: number;
+        /** Add `input_summary` and `output_summary`: argument names, result keys, content types and sizes, never values (default: false) */
         includeSummaries?: boolean;
         onRequestComplete?: (log: unknown) => void | Promise<void>;
       };

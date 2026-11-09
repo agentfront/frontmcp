@@ -82,13 +82,13 @@ const shutdown = setupOTel({ serviceName: 'help-desk', exporter: 'otlp', endpoin
 
 ### Options
 
-| Option        | Type                                                              | Default | Description                                                                                   |
-| ------------- | ----------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------- |
-| `tracing`     | `boolean \| TracingOptions`                                       | `true`  | Spans for requests and calls, and `this.telemetry` in tools, resources and prompts            |
-| `logging`     | `boolean \| { sinks, redactFields, includeStacks, staticFields }` | `false` | Structured log entries, sent to `sinks`. `logging: true` has no sinks and writes nothing      |
-| `requestLogs` | `boolean \| { maxEntries, includeSummaries, onRequestComplete }`  | `false` | One object per HTTP request, passed to `onRequestComplete`. `includeSummaries` isn't read yet |
+| Option        | Type                                                              | Default | Description                                                                                                                                                                                        |
+| ------------- | ----------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tracing`     | `boolean \| TracingOptions`                                       | `true`  | Spans for requests and calls, and `this.telemetry` in tools, resources and prompts                                                                                                                 |
+| `logging`     | `boolean \| { sinks, redactFields, includeStacks, staticFields }` | `false` | Structured log entries, sent to `sinks`. Without `sinks` (`logging: true` included), one JSON object per line on stdout (stderr over stdio; the console in a browser)                              |
+| `requestLogs` | `boolean \| { maxEntries, includeSummaries, onRequestComplete }`  | `false` | One object per HTTP request, passed to `onRequestComplete`. `includeSummaries: true` adds `input_summary` and `output_summary`: argument names, result keys, content types and sizes, never values |
 
-`TracingOptions` turns span groups on or off: `httpSpans`, `executionSpans`, `fetchSpans`, `transportSpans`, `authSpans`, `oauthSpans`, `elicitationSpans`, `flowStageEvents` and `startupReport` default to `true`, and `hookSpans` (a span for each hook, verbose) to `false`.
+`TracingOptions` turns span groups on or off: `httpSpans`, `executionSpans`, `fetchSpans`, `transportSpans`, `authSpans`, `oauthSpans`, `elicitationSpans`, `flowStageEvents` and `startupReport` default to `true`, and `hookSpans` (a span for each hook, verbose) to `false`. `authSpans` gives each HTTP request an `auth session:verify` span, with `frontmcp.auth.result` (`authorized`, `anonymous`, `unauthorized`, `forbidden` or `error`).
 
 The log sinks are `{ type: 'stdout', pretty? }` (one JSON object per line), `{ type: 'console' }` (a readable line), `{ type: 'callback', fn }`, `{ type: 'otlp', endpoint?, headers?, batchSize?, flushIntervalMs?, serviceName? }`, `{ type: 'pino', logger }` and `{ type: 'winston', logger }`.
 

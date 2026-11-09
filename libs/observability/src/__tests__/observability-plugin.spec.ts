@@ -69,6 +69,7 @@ describe('ObservabilityPlugin', () => {
     it('_httpDidSemaphore', () => plugin._httpDidSemaphore(emptyCtx));
     it('_httpWillAuth', () => plugin._httpWillAuth(emptyCtx));
     it('_httpDidAuth', () => plugin._httpDidAuth(emptyCtx));
+    it('_httpFinallyAuth', () => plugin._httpFinallyAuth(emptyCtx));
     it('_httpWillRoute', () => plugin._httpWillRoute(emptyCtx));
     it('_httpDidRoute', () => plugin._httpDidRoute(emptyCtx));
     it('_httpFinallyFinalize', () => plugin._httpFinallyFinalize(emptyCtx));
@@ -151,15 +152,6 @@ describe('ObservabilityPlugin', () => {
     it('_slhttpDidHandle', () => plugin._slhttpDidHandle(emptyCtx));
     it('_slhttpFinallyCleanup', () => plugin._slhttpFinallyCleanup(emptyCtx));
 
-    // Auth
-    it('_authVerifyWill', () => plugin._authVerifyWill(emptyCtx));
-    it('_authVerifyDidMode', () => plugin._authVerifyDidMode(emptyCtx));
-    it('_authVerifyDidToken', () => plugin._authVerifyDidToken(emptyCtx));
-    it('_authVerifyDidBuild', () => plugin._authVerifyDidBuild(emptyCtx));
-    it('_sessionVerifyWill', () => plugin._sessionVerifyWill(emptyCtx));
-    it('_sessionVerifyDidJwt', () => plugin._sessionVerifyDidJwt(emptyCtx));
-    it('_sessionVerifyDidBuild', () => plugin._sessionVerifyDidBuild(emptyCtx));
-
     // OAuth
     it('_oauthTokenWill', () => plugin._oauthTokenWill(emptyCtx));
     it('_oauthTokenDone', () => plugin._oauthTokenDone(emptyCtx));
@@ -232,6 +224,7 @@ describe('ObservabilityPlugin', () => {
       plugin._httpDidSemaphore(noop);
       plugin._httpWillAuth(noop);
       plugin._httpDidAuth(noop);
+      plugin._httpFinallyAuth(noop);
       plugin._httpWillRoute(noop);
       plugin._httpDidRoute(noop);
       plugin._httpFinallyFinalize(noop);
@@ -313,15 +306,6 @@ describe('ObservabilityPlugin', () => {
       plugin._slhttpWillParse(noop);
       plugin._slhttpDidHandle(noop);
       plugin._slhttpFinallyCleanup(noop);
-
-      // Auth
-      plugin._authVerifyWill(noop);
-      plugin._authVerifyDidMode(noop);
-      plugin._authVerifyDidToken(noop);
-      plugin._authVerifyDidBuild(noop);
-      plugin._sessionVerifyWill(noop);
-      plugin._sessionVerifyDidJwt(noop);
-      plugin._sessionVerifyDidBuild(noop);
 
       // OAuth
       plugin._oauthTokenWill(noop);

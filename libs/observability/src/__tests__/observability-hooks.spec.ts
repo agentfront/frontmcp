@@ -9,18 +9,16 @@ import {
   onAgentWillExecute,
   onAgentWillFind,
   onAgentWillParse,
-  onAuthDidDetermineMode,
-  onAuthDidFinalize,
-  onAuthStage,
-  onAuthWillStart,
   onGenericFlowDidFinalize,
   onGenericFlowStage,
   onGenericFlowWillStart,
   onHttpDidAcquireQuota,
+  onHttpDidAuthenticate,
   onHttpDidCheckAuth,
   onHttpDidFinalize,
   onHttpDidRoute,
   onHttpWillAcquireQuota,
+  onHttpWillAuthenticate,
   onHttpWillCheckAuth,
   onHttpWillRoute,
   onHttpWillTrace,
@@ -395,52 +393,53 @@ describe('Auto-instrumentation Hooks', () => {
     });
   });
 
-  describe('Auth flow', () => {
-    it('should create auth span with stage events', () => {
+  describe('Authentication of an HTTP request', () => {
+    it('ends an auth session:verify span with the result session:verify answered', () => {
       const ctx = makeFlowCtx();
-      onAuthWillStart('auth:verify', DEFAULT_OPTS, ctx);
-      onAuthDidDetermineMode(ctx);
-      onAuthStage('verifyToken', ctx);
-      onAuthDidFinalize(ctx);
+      onHttpWillAuthenticate(DEFAULT_OPTS, ctx);
+      ctx.state['verifyResult'] = { kind: 'authorized', authorization: { user: { sub: 'user-1' } } };
+      onHttpDidAuthenticate(ctx);
 
       const span = exporter.getFinishedSpans()[0];
-      expect(span.name).toBe('auth auth:verify');
-      expect(span.attributes['frontmcp.flow.name']).toBe('auth:verify');
+      expect(span.name).toBe('auth session:verify');
+      expect(span.attributes['frontmcp.flow.name']).toBe('session:verify');
       expect(span.attributes['frontmcp.auth.result']).toBe('authorized');
+      expect(span.status.code).not.toBe(SpanStatusCode.ERROR);
     });
 
-    it('should set auth mode from state', () => {
+    it.each([
+      [{ kind: 'authorized', authorization: { user: { sub: 'anon:1' } } }, 'anonymous'],
+      [{ kind: 'unauthorized' }, 'unauthorized'],
+      [{ kind: 'forbidden' }, 'forbidden'],
+    ])('records %j as %s', (verifyResult, result) => {
       const ctx = makeFlowCtx();
-      onAuthWillStart('auth:verify', DEFAULT_OPTS, ctx);
-      ctx.state.authMode = 'orchestrated';
-      onAuthDidDetermineMode(ctx);
-      onAuthDidFinalize(ctx);
+      onHttpWillAuthenticate(DEFAULT_OPTS, ctx);
+      ctx.state['verifyResult'] = verifyResult;
+      onHttpDidAuthenticate(ctx);
 
-      const span = exporter.getFinishedSpans()[0];
-      expect(span.attributes['frontmcp.auth.mode']).toBe('orchestrated');
+      expect(exporter.getFinishedSpans()[0].attributes['frontmcp.auth.result']).toBe(result);
     });
 
-    it('should record unauthorized on error', () => {
+    it('ends the span with an error when the stage failed', () => {
       const ctx = makeFlowCtx();
-      onAuthWillStart('auth:verify', DEFAULT_OPTS, ctx);
-      ctx.state.flowError = new Error('unauthorized');
-      onAuthDidFinalize(ctx);
+      onHttpWillAuthenticate(DEFAULT_OPTS, ctx);
+      ctx.state['flowError'] = new Error('verifier down');
+      onHttpDidAuthenticate(ctx);
 
       const span = exporter.getFinishedSpans()[0];
       expect(span.status.code).toBe(SpanStatusCode.ERROR);
-      expect(span.attributes['frontmcp.auth.result']).toBe('unauthorized');
+      expect(span.attributes['frontmcp.auth.result']).toBe('error');
     });
 
-    it('should skip when authSpans is false', () => {
+    it('opens no span with authSpans: false', () => {
       const ctx = makeFlowCtx();
-      onAuthWillStart('auth:verify', { ...DEFAULT_OPTS, authSpans: false }, ctx);
-      expect(ctx.state[SPAN_KEY]).toBeUndefined();
+      onHttpWillAuthenticate({ ...DEFAULT_OPTS, authSpans: false }, ctx);
+      onHttpDidAuthenticate(ctx);
+      expect(exporter.getFinishedSpans()).toEqual([]);
     });
 
-    it('should handle missing span in stages', () => {
-      onAuthDidDetermineMode({ state: {} });
-      onAuthStage('test', { state: {} });
-      onAuthDidFinalize({ state: {} });
+    it('does nothing without a span', () => {
+      onHttpDidAuthenticate({ state: {} });
     });
   });
 
