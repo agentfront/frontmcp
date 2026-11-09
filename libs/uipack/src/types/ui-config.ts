@@ -68,34 +68,51 @@ export interface UIContentSecurityPolicy {
 }
 
 /**
- * Sanitization switches for widget HTML.
+ * Sanitization of widget markup (`ui.contentSecurity`).
  *
- * FrontMCP never sanitizes template markup: a `<script>`, an `onclick` or a `javascript:` link in
- * markup a template builds (`ctx.helpers.html`, `trustedHtml`, an HTML string, a `.tsx` widget)
- * reaches the page as written. Values interpolated into `` html`…` `` are escaped, and so are plain
- * string results unless `escapeStringResults: false`.
+ * Without `contentSecurity`, template markup reaches the page as written: a `<script>`, an
+ * `onclick` or a `javascript:` link in markup a template builds (`ctx.helpers.html`, `trustedHtml`,
+ * an HTML string) is kept, which is what widgets with inline scripts rely on. Values interpolated
+ * into `` html`…` `` are escaped either way, and so are plain string results unless
+ * `escapeStringResults: false`.
  *
- * @deprecated Has no effect: there is no sanitizer for these settings to relax.
+ * With `contentSecurity` set, even to `{}`, the markup FrontMCP builds on the server from the
+ * template is sanitized before it goes into the page: `<script>` elements, `on*` handler
+ * attributes, `srcdoc`, `<object>` / `<embed>` / `<applet>`, `<base>` and `<meta>` are removed, and so
+ * is every URL attribute (`href`, `src`, `action`, `formaction`, `xlink:href`, `srcset`, …) whose
+ * scheme isn't `http:`, `https:` or `mailto:`. Relative URLs stay, and so do raster
+ * `data:image/…` URLs in `<img src>`. Comments are dropped. The flags below relax it.
+ *
+ * It applies to HTML and Markdown strings and to a template function's result. The page FrontMCP
+ * builds around the markup (the bridge, the call's data) is not touched, and a `{ file }` widget,
+ * which renders in the page, can't take it: the server refuses to start such a tool.
+ *
+ * Both OpenAI and Claude render widgets in sandboxed iframes, so script in a widget is contained,
+ * but it can still read the widget's data, call tools the widget may call and show a fake UI.
+ * Sanitize when the markup carries values you don't control and you'd rather not rely on escaping
+ * every one of them.
  */
 export interface UIContentSecurity {
   /**
-   * Allow `javascript:` and other potentially dangerous URL schemes in links.
+   * Keep URL attributes with any scheme, including `javascript:`, `data:` and `vbscript:`.
    *
-   * @deprecated Has no effect: links are never rewritten.
+   * @default false
    */
   allowUnsafeLinks?: boolean;
 
   /**
-   * Allow inline `<script>` tags and event handlers (onclick, onerror, etc).
+   * Keep `<script>` elements, `on*` event handler attributes, `srcdoc` and `<object>` / `<embed>` /
+   * `<applet>`. Hosts may still block a script through the widget's Content-Security-Policy.
    *
-   * @deprecated Has no effect: scripts and event handlers are never removed.
+   * @default false
    */
   allowInlineScripts?: boolean;
 
   /**
-   * Completely bypass all HTML sanitization.
+   * Skip sanitization: the markup is used as written, as if `contentSecurity` were unset. Only for
+   * markup you fully trust.
    *
-   * @deprecated Has no effect: there is no sanitization to bypass.
+   * @default false
    */
   bypassSanitization?: boolean;
 }
@@ -298,13 +315,19 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   csp?: UIContentSecurityPolicy;
 
   /**
-   * Content security and XSS protection settings.
+   * Sanitize the markup FrontMCP builds on the server from the template. Unset (the default), it is
+   * used as written; set, even to `{}`, scripts, event handlers and unsafe links are removed unless
+   * the flags allow them. See {@link UIContentSecurity}.
    *
-   * FrontMCP does not sanitize template markup, with or without this option: see
-   * {@link UIContentSecurity}. Keep untrusted values out of trusted markup and interpolate them
-   * with `ctx.helpers.html`, which escapes them.
-   *
-   * @deprecated Has no effect; startup logs a warning when it is set.
+   * @example
+   * ```typescript
+   * // Render the HTML a tool returns, without its scripts, handlers or unsafe links
+   * ui: {
+   *   template: (ctx) => ctx.output.summaryHtml,
+   *   escapeStringResults: false,
+   *   contentSecurity: {},
+   * }
+   * ```
    */
   contentSecurity?: UIContentSecurity;
 

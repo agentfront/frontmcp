@@ -11,13 +11,16 @@ import type { FileSource } from '../component/types';
 import type { ImportResolver } from '../resolver/types';
 import { buildShell } from '../shell/builder';
 import { createTemplateHelpers, hasSizing } from '../shell/data-injector';
+import { sanitizeHtml } from '../shell/sanitize-html';
 import { isTrustedHtml } from '../shell/trusted-html';
 import type { ShellConfig, WidgetSizing } from '../shell/types';
+import type { UIContentSecurity } from '../types/ui-config';
 import { escapeHtml } from '../utils';
 import { MCP_APPS_MIME_TYPE } from './constants';
 import { detectContentType } from './content-detector';
 import { wrapDetectedContent } from './content-renderers';
 import { markdownToHtml } from './markdown';
+import { describeRenderOptionProblems } from './render-options';
 import { detectUIType } from './type-detector';
 
 /**
@@ -65,6 +68,12 @@ export interface RenderToolTemplateOptions {
   escapeStringResults?: boolean;
   /** Receives the one-time string-result notice. Defaults to `console`. */
   logger?: { warn: (message: string) => void };
+  /**
+   * `ui.contentSecurity`: when set, the markup built on the server from the template (an HTML or
+   * Markdown string, a template function's result) is sanitized with {@link sanitizeHtml}. Unset,
+   * the markup is used as written.
+   */
+  contentSecurity?: UIContentSecurity;
 }
 
 /**
@@ -149,6 +158,11 @@ function renderUnwrappedResult(rawResult: unknown, options: RenderToolTemplateOp
   return escapeHtml(rawResult);
 }
 
+/** The template's markup, sanitized when the tool sets `ui.contentSecurity`. */
+function secureMarkup(markup: string, options: RenderToolTemplateOptions): string {
+  return options.contentSecurity ? sanitizeHtml(markup, options.contentSecurity) : markup;
+}
+
 /** The tools already warned about, per component, so the warning is given once. */
 const warnedComponentReferences = new WeakMap<object, Set<string>>();
 
@@ -220,6 +234,8 @@ function isDefinitelyReactComponent(template: unknown): boolean {
  */
 export function renderToolTemplate(options: RenderToolTemplateOptions): RenderToolTemplateResult {
   const { toolName, input, output, template, resolver, platformType, sizing } = options;
+  const problems = describeRenderOptionProblems(template, options);
+  if (problems.length > 0) throw new Error(`Tool "${toolName}": ${problems.join(' ')}`);
   const uiType = detectUIType(template);
 
   // When the user didn't pick a resourceMode, host-detect: Claude widget
@@ -291,7 +307,7 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
       if (wrapped) {
         html = wrapped;
       } else {
-        const shellResult = buildShell(renderUnwrappedResult(rawResult, options), shellConfig);
+        const shellResult = buildShell(secureMarkup(renderUnwrappedResult(rawResult, options), options), shellConfig);
         html = shellResult.html;
         hash = shellResult.hash;
         size = shellResult.size;
@@ -299,7 +315,8 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     }
   } else if (typeof template === 'string') {
     // String template — a Markdown string is converted to HTML, an HTML string is used as written
-    const shellResult = buildShell(uiType === 'markdown' ? markdownToHtml(template) : template, shellConfig);
+    const markup = uiType === 'markdown' ? markdownToHtml(template) : template;
+    const shellResult = buildShell(secureMarkup(markup, options), shellConfig);
     html = shellResult.html;
     hash = shellResult.hash;
     size = shellResult.size;

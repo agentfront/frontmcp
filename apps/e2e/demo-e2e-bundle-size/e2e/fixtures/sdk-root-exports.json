@@ -549,6 +549,7 @@
   "ToolNotConsentedError": "class",
   "ToolNotFoundError": "class",
   "ToolRegistry": "class",
+  "ToolUiConfigurationError": "class",
   "TransportAlreadyStartedError": "class",
   "TransportBusRequiredError": "class",
   "TransportNotConnectedError": "class",
