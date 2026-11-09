@@ -62,13 +62,40 @@ class LabelRatioTool extends ToolContext {
   }
 }
 
+@Tool({
+  name: 'measure_unbounded_ratio',
+  inputSchema: {},
+  outputSchema: { ratio: z.number() },
+  output: { allowNonFinite: true },
+})
+class MeasureUnboundedRatioTool extends ToolContext {
+  async execute() {
+    return { ratio: Infinity };
+  }
+}
+
+@Tool({
+  name: 'measure_bounded_ratio',
+  inputSchema: {},
+  outputSchema: { ratio: z.number() },
+  output: { allowNonFinite: false },
+})
+class MeasureBoundedRatioTool extends ToolContext {
+  async execute() {
+    return { ratio: Infinity };
+  }
+}
+
 @App({
   id: 'billing',
   name: 'Billing',
-  tools: [GetInvoiceTool, MeasureRatioTool, LabelRatioTool],
+  tools: [GetInvoiceTool, MeasureRatioTool, LabelRatioTool, MeasureUnboundedRatioTool, MeasureBoundedRatioTool],
   plugins: [RefusalProbe],
 })
 class BillingApp {}
+
+@App({ id: 'non-finite', name: 'NonFinite', tools: [MeasureRatioTool], output: { allowNonFinite: true } })
+class NonFiniteApp {}
 
 describe('tools/call output schema enforcement', () => {
   let server: TestFetchServer;
@@ -138,6 +165,43 @@ describe('tools/call output schema enforcement', () => {
       expect(isError).toBe(false);
       expect(result['structuredContent']).toEqual({ ratio: null });
       expect(content.map((block) => block.text ?? '').join('\n')).not.toContain('CC-7731');
+    });
+
+    it('accepts a number field holding Infinity when the app sets output.allowNonFinite', async () => {
+      const allowingServer = await createTestFetchServer({
+        info: { name: 'output-schema-non-finite-app', version: '1.0.0' },
+        apps: [NonFiniteApp],
+      });
+
+      const { isError, result } = await callTool(allowingServer, 'measure_ratio');
+
+      expect(isError).toBe(false);
+      expect(result['structuredContent']).toEqual({ ratio: null });
+    });
+
+    it('accepts a number field holding Infinity when the tool sets output.allowNonFinite', async () => {
+      const allowingServer = await createTestFetchServer({
+        info: { name: 'output-schema-non-finite-tool', version: '1.0.0' },
+        apps: [BillingApp],
+      });
+
+      const { isError, result } = await callTool(allowingServer, 'measure_unbounded_ratio');
+
+      expect(isError).toBe(false);
+      expect(result['structuredContent']).toEqual({ ratio: null });
+    });
+
+    it("fails a number field holding Infinity when the tool's allowNonFinite: false overrides the server's", async () => {
+      const allowingServer = await createTestFetchServer({
+        info: { name: 'output-schema-non-finite-override', version: '1.0.0' },
+        apps: [BillingApp],
+        output: { allowNonFinite: true },
+      });
+
+      expect(await callTool(allowingServer, 'measure_bounded_ratio')).toMatchObject({
+        isError: true,
+        code: 'INVALID_OUTPUT',
+      });
     });
 
     it('still fails a string field holding Infinity when output.allowNonFinite is true', async () => {

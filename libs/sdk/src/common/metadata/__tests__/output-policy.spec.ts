@@ -13,6 +13,7 @@ import {
   DEFAULT_SCHEMA_DESCRIPTION_FORMAT,
   formatOutputSchemaForDescription,
   outputPolicySchema,
+  resolveAllowNonFinite,
   resolveOutputSchemaMode,
   resolveSchemaDescriptionFormat,
   type OutputPolicy,
@@ -51,6 +52,23 @@ describe('output-policy', () => {
       expect(resolveOutputSchemaMode({}, { schemaMode: 'description' }, { schemaMode: 'none' })).toBe('description');
       // tool + app present but no schemaMode → server value
       expect(resolveOutputSchemaMode({}, {}, { schemaMode: 'none' })).toBe('none');
+    });
+  });
+
+  describe('resolveAllowNonFinite', () => {
+    it('is false when no level sets allowNonFinite', () => {
+      expect(resolveAllowNonFinite()).toBe(false);
+      expect(resolveAllowNonFinite({}, {}, {})).toBe(false);
+    });
+
+    it('uses the most specific level that sets it: tool, then app, then server', () => {
+      expect(resolveAllowNonFinite(undefined, undefined, { allowNonFinite: true })).toBe(true);
+      expect(resolveAllowNonFinite(undefined, { allowNonFinite: true }, undefined)).toBe(true);
+      expect(resolveAllowNonFinite({ allowNonFinite: true }, undefined, undefined)).toBe(true);
+      expect(resolveAllowNonFinite({ allowNonFinite: false }, { allowNonFinite: true }, { allowNonFinite: true })).toBe(
+        false,
+      );
+      expect(resolveAllowNonFinite({}, { allowNonFinite: false }, { allowNonFinite: true })).toBe(false);
     });
   });
 
