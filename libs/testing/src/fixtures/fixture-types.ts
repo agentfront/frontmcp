@@ -52,6 +52,11 @@ export interface TestConfig {
    * `debug` also prints the server's command and output.
    */
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  /**
+   * The MCP protocol version the clients speak (default: '2025-06-18'). '2026-07-28' is stateless:
+   * see `McpTestClientConfig.protocolVersion`.
+   */
+  protocolVersion?: string;
   /** Environment variables to pass to the server */
   env?: Record<string, string>;
   /** Startup timeout in ms (default: 30000) */
@@ -177,6 +182,8 @@ export interface ServerFixture {
     clientInfo?: { name: string; version: string };
     /** Override the MCP entry path for this client (default: `test.use()`'s). */
     entryPath?: string;
+    /** Override the protocol version for this client (default: `test.use()`'s). */
+    protocolVersion?: string;
   }): Promise<McpTestClient>;
 
   /**

@@ -5,6 +5,7 @@
 
 import type {
   CallToolResult,
+  DiscoverResult,
   GetPromptResult,
   Implementation,
   InitializeResult,
@@ -166,7 +167,13 @@ export interface McpTestClientConfig {
   timeout?: number;
   /** Enable debug logging (default: false) */
   debug?: boolean;
-  /** MCP protocol version to request (default: '2025-06-18'; '2026-07-28' is not supported and throws) */
+  /**
+   * The MCP protocol version the client speaks (default: '2025-06-18'). Up to '2025-11-25' it opens a
+   * session with `initialize`. '2026-07-28' is stateless: `connect()` sends `server/discover`, and every
+   * request carries the version, client info and capabilities in its `_meta`, with the
+   * `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name` and `Mcp-Param-*` headers. It needs the
+   * 'streamable-http' transport.
+   */
   protocolVersion?: string;
   /** Client info to send during initialization and for platform detection */
   clientInfo?: ClientInfo;
@@ -455,6 +462,7 @@ export type ElicitationHandler = (request: ElicitationCreateRequest) => Promise<
 // ═══════════════════════════════════════════════════════════════════
 
 export type {
+  DiscoverResult,
   InitializeResult,
   ListToolsResult,
   CallToolResult,
