@@ -731,6 +731,9 @@ class GlobalCacheServer {}
 - `redis-client` -- Bring your own ioredis client instance.
 - `global-store` -- Reuses the Redis connection from `@FrontMcp({ redis: {...} })`.
 
+Any other `type` (`'memcached'`) throws `CachePluginConfigurationError` from `init()`, listing these four. Up to 1.11.2
+it started a server that cached in memory.
+
 In a browser build these refuse Redis as RememberPlugin's do: `redis`, `redis-client` and `global-store` on a Redis
 `redis` fail startup with `BrowserStoreUnavailableError`, in the server's one refusal, naming `type: 'memory'` (up to
 1.10 `redis` and `redis-client` threw from `init()`). `ioredis` loads only when a Redis cache is built, so a page on
