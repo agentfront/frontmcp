@@ -33,16 +33,21 @@ export interface WorkflowStep {
   id: string;
   /** Reference to a registered job name. */
   jobName: string;
-  /** Static input or dynamic callback from previous steps. */
-  input?: Record<string, unknown> | ((steps: WorkflowStepContext) => Record<string, unknown>);
+  /**
+   * The step job's input: a static object, or a function of the earlier steps' results and the workflow's input.
+   * Without it, the step gets the workflow's input.
+   */
+  input?:
+    | Record<string, unknown>
+    | ((steps: WorkflowStepContext, workflowInput: Record<string, unknown>) => Record<string, unknown>);
   /**
    * Step IDs that must complete before this step. A step skipped by its `condition` counts as done; when
    * one of them fails (without `continueOnError`), or is skipped because a step it depends on failed,
    * this step is skipped too.
    */
   dependsOn?: string[];
-  /** Condition callback. Skip if returns false. */
-  condition?: (steps: WorkflowStepContext) => boolean;
+  /** Whether the step runs, from the earlier steps' results and the workflow's input; `false` skips it. */
+  condition?: (steps: WorkflowStepContext, workflowInput: Record<string, unknown>) => boolean;
   /** Let the steps that depend on this one run even if it fails. Default: false */
   continueOnError?: boolean;
   /** Per-step timeout override in ms. */
@@ -149,7 +154,9 @@ export interface WorkflowMetadata extends ExtendFrontMcpWorkflowMetadata {
   permissions?: JobPermission[];
 
   /**
-   * Workflow-level input schema (passed to first steps).
+   * The workflow's input, checked when a run starts: input that doesn't match fails with `INVALID_INPUT` before the
+   * run exists. The parsed input goes to each step without an `input`, and to each step's `input` and `condition`
+   * functions. Without it, the input is passed on as given.
    */
   inputSchema?: ToolInputType;
 
