@@ -45,9 +45,9 @@ async execute(input: { id: string }) {
 
 ## Infrastructure errors → propagate
 
-For errors the framework should handle uniformly (network failure, DB unavailable, timeout), just let them throw. The framework wraps them in an `InternalMcpError` with the message redacted before reaching the client, and logs it once, with the same `errorId` the client sees. The logged message includes the original error's message and stack in every environment; the wrapper's own stack is logged in development only. A `PublicMcpError` (or subclass) thrown from `execute()` is not wrapped: tools, resources and prompts pass it on with its own message and code.
+For errors the framework should handle uniformly (network failure, DB unavailable, timeout), just let them throw. The framework wraps them in an `InternalMcpError` with the message redacted before reaching the client, and logs it once, with the same `errorId` the client sees. The logged message includes the original error's message and stack in every environment; the wrapper's own stack is logged in development only. A `PublicMcpError` (or subclass) thrown from `execute()` is not wrapped: tools, resources and prompts pass it on with its own message and code. An `@frontmcp/auth` error (`AuthProvidersNotConfiguredError`, `VaultLoadError`, …) isn't wrapped either: it keeps its own code, such as `AUTH_PROVIDERS_NOT_CONFIGURED` or `VAULT_LOAD_ERROR`, and its message is redacted unless the error is public, as `AuthProvidersNotConfiguredError` is.
 
-Code that catches errors around entries, such as a hook, can apply the same rules with two predicates from `@frontmcp/sdk`. `isClientFacingError(error)` is true for a public error or an authorities refusal, which pass through unwrapped. `isMrtrSignal(error)` is true for an `InputRequiredSignal` or a `MissingClientCapabilityError`, which the 2026-07-28 dispatcher answers itself, so rethrow them.
+Code that catches errors around entries, such as a hook, can apply the same rules with two predicates from `@frontmcp/sdk`. `isClientFacingError(error)` is true for a public error, an authorities refusal or an `@frontmcp/auth` error, which pass through unwrapped. `isMrtrSignal(error)` is true for an `InputRequiredSignal` or a `MissingClientCapabilityError`, which the 2026-07-28 dispatcher answers itself, so rethrow them.
 
 ## MCP error classes
 
