@@ -179,7 +179,8 @@ export class ExtAppsMessageHandler {
   /**
    * Handle a JSON-RPC notification from a widget (`notifications/message`,
    * `ui/notifications/request-teardown`). A notification gets no answer, so a failure is only
-   * logged, and a notification this handler does not know is ignored.
+   * logged, and a notification this handler does not know is ignored, as is a
+   * `ui/notifications/request-teardown` when the context has no `close` callback.
    *
    * @param notification - The JSON-RPC notification
    */
@@ -188,6 +189,12 @@ export class ExtAppsMessageHandler {
 
     if (method !== 'notifications/message' && method !== 'ui/notifications/request-teardown') {
       this.logger.verbose(`handleNotification: ignoring method=${method}`);
+      return;
+    }
+
+    // Without a close callback the server is not the one that tears the widget down: nothing to do
+    if (method === 'ui/notifications/request-teardown' && !this.context.close) {
+      this.logger.verbose('handleNotification: ignoring ui/notifications/request-teardown (no close callback)');
       return;
     }
 
