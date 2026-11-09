@@ -530,7 +530,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
           .join(' ')}`,
       );
     }
-    const validatedRequest: OAuthAuthorizeRequest = {
+    let validatedRequest: OAuthAuthorizeRequest = {
       ...result.data,
       scope: grantedScopes.length > 0 ? grantedScopes.join(' ') : undefined,
     };
@@ -548,6 +548,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     const registry = (this.scope.auth as Partial<LocalPrimaryAuth> | undefined)?.dcrClientRegistry;
     const redirectAllowlisted = !!registry?.hasRedirectAllowlist() && registry.isRedirectUriAllowed(redirect_uri);
     let redirectVerified = redirectAllowlisted;
+    let declaredClientScope: string | undefined;
 
     // Local-AS DCR allowlist enforcement (#462). When `auth.dcr` declares a
     // redirect_uri allowlist, a redirect_uri outside it is refused BEFORE a
@@ -580,6 +581,8 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
           // Validate redirect_uri against CIMD document
           cimdService.validateRedirectUri(redirect_uri, resolution.metadata);
           redirectVerified = true;
+          cimdService.assertSupportedClient(resolution.metadata);
+          declaredClientScope = resolution.metadata.scope;
 
           // Store CIMD metadata for later use (e.g., consent page client_name)
           this.state.set('isCimdClient', true);
@@ -617,6 +620,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         return;
       }
       redirectVerified = true;
+      declaredClientScope = registered.scope;
     }
 
     // `dcr.allowedClientIds` (#462): a client the operator didn't list may not
@@ -652,6 +656,17 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         rawState,
       );
       return;
+    }
+
+    // A client that declared its scope (RFC 7591) is granted only scopes in it
+    if (declaredClientScope !== undefined) {
+      const clientScopes = declaredClientScope.split(' ');
+      const clientGrantedScopes = grantedScopes.filter((scope) => clientScopes.includes(scope));
+      validatedRequest = {
+        ...validatedRequest,
+        scope: clientGrantedScopes.length > 0 ? clientGrantedScopes.join(' ') : undefined,
+      };
+      this.state.set('validatedRequest', validatedRequest);
     }
 
     // Validate resource parameter against server's canonical URI (RFC 8707).

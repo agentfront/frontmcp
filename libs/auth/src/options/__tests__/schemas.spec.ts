@@ -1088,7 +1088,7 @@ describe('localAuthSchema', () => {
       const client = result.data.dcr?.clients?.[0];
       expect(client?.clientId).toBe('dashboard');
       expect(client?.tokenEndpointAuthMethod).toBe('none');
-      expect(client?.grantTypes).toEqual(['authorization_code']);
+      expect(client?.grantTypes).toEqual(['authorization_code', 'refresh_token']);
       expect(client?.responseTypes).toEqual(['code']);
     }
   });

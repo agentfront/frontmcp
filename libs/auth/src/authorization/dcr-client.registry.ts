@@ -210,7 +210,7 @@ export class DcrClientRegistry {
         client_id: c.clientId,
         client_secret: c.clientSecret,
         token_endpoint_auth_method: c.tokenEndpointAuthMethod ?? 'none',
-        grant_types: c.grantTypes ?? ['authorization_code'],
+        grant_types: c.grantTypes ?? ['authorization_code', 'refresh_token'],
         response_types: c.responseTypes ?? ['code'],
         redirect_uris: c.redirectUris,
         client_name: c.clientName,

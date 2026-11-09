@@ -52,7 +52,9 @@ class Server {}
 To keep DCR open but authenticated instead of closed, drop `enabled: false` and set
 `initialAccessToken` — then `POST /oauth/register` requires an
 `Authorization: Bearer <token>` header that matches it (constant-time compared), and
-requests without it get `401 invalid_token`.
+requests without it get `401 invalid_token`. Drop `allowedClientIds` too: with it set,
+`POST /oauth/register` refuses every registration (`400 access_denied`), since a minted
+`client_id` is never on it.
 
 `dcr.maxDynamicClients` (default `1000`) caps how many dynamically-registered clients
 are kept in memory: once the cap is reached, further DCR registrations are **rejected**

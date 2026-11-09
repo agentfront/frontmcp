@@ -32,7 +32,7 @@ describe('DcrClientRegistry', () => {
       expect(client).toBeDefined();
       expect(client?.client_id).toBe('dashboard');
       expect(client?.token_endpoint_auth_method).toBe('none');
-      expect(client?.grant_types).toEqual(['authorization_code']);
+      expect(client?.grant_types).toEqual(['authorization_code', 'refresh_token']);
       expect(client?.response_types).toEqual(['code']);
       expect(client?.preRegistered).toBe(true);
       expect(client?.dev).toBe(false);
