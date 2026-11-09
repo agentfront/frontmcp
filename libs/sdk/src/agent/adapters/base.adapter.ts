@@ -54,6 +54,13 @@ export interface BaseLlmAdapterConfig {
   maxRetries?: number;
 }
 
+/**
+ * The per-request options a provider SDK takes besides the request body: the signal that cancels it.
+ */
+export interface LlmRequestOptions {
+  signal?: AbortSignal;
+}
+
 // ============================================================================
 // Base Adapter Class
 // ============================================================================
@@ -149,9 +156,13 @@ export abstract class BaseLlmAdapter implements AgentLlmAdapter {
   protected abstract parseResponse(response: unknown): AgentCompletion;
 
   /**
-   * Execute with retry logic.
+   * Execute with retry logic. Nothing is retried once `signal` aborts.
    */
-  protected async withRetry<T>(fn: () => Promise<T>, retries = this.config.maxRetries): Promise<T> {
+  protected async withRetry<T>(
+    fn: () => Promise<T>,
+    retries = this.config.maxRetries,
+    signal?: AbortSignal,
+  ): Promise<T> {
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -161,7 +172,7 @@ export abstract class BaseLlmAdapter implements AgentLlmAdapter {
         lastError = error instanceof Error ? error : new Error(String(error));
 
         // Don't retry on certain errors
-        if (this.isNonRetryableError(lastError)) {
+        if (signal?.aborted || this.isNonRetryableError(lastError)) {
           throw lastError;
         }
 
@@ -195,6 +206,13 @@ export abstract class BaseLlmAdapter implements AgentLlmAdapter {
    */
   protected sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * The request options to pass the provider SDK: the agent loop's `signal`, so a stopped run cancels its request.
+   */
+  protected requestOptions(options: AgentCompletionOptions): LlmRequestOptions | undefined {
+    return options.signal ? { signal: options.signal } : undefined;
   }
 
   /**

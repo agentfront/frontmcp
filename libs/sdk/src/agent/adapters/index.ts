@@ -51,7 +51,7 @@
 
 // Base adapter utilities
 export { BaseLlmAdapter, LlmAdapterError, LlmRateLimitError, LlmContextLengthError } from './base.adapter';
-export type { BaseLlmAdapterConfig } from './base.adapter';
+export type { BaseLlmAdapterConfig, LlmRequestOptions } from './base.adapter';
 
 // OpenAI adapter
 export { OpenAIAdapter } from './openai.adapter';
