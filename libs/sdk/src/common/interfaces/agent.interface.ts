@@ -263,6 +263,8 @@ export class AgentContext<
     const autoProgress = (progress: number, message: string, isFinal = false) => {
       // A streamed run's progress notifications carry its text: automatic updates would be mixed into it
       if (streaming) return;
+      // The call has already ended: its client takes no more updates
+      if (this.signal?.aborted) return;
       const now = Date.now();
       // MCP requires every progress value to be higher than the one before it
       if (progress <= lastSentProgress) return;
@@ -281,10 +283,13 @@ export class AgentContext<
           streamCompletion: (prompt, tools, options) => this.streamCompletion(prompt, tools, options),
         }),
       },
+      agentId: this.agentId,
       systemInstructions: this.systemInstructions,
       tools: this.toolDefinitions,
       maxIterations,
       timeout: this.metadata.execution?.timeout ?? 120000,
+      // The call's own stop (cancelled, or failed by `timeout.executeMs`) stops the loop too
+      signal: this.signal,
       logger: this.logger,
       completionOptions: this.completionOptions(),
 

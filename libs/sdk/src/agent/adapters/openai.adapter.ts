@@ -44,7 +44,7 @@ import {
   type AgentToolCall,
   type AgentToolDefinition,
 } from '../../common';
-import { BaseLlmAdapter, LlmAdapterError, type BaseLlmAdapterConfig } from './base.adapter';
+import { BaseLlmAdapter, LlmAdapterError, type BaseLlmAdapterConfig, type LlmRequestOptions } from './base.adapter';
 
 // ============================================================================
 // OpenAI API mode
@@ -64,15 +64,33 @@ export type OpenAIApiMode = 'chat' | 'responses';
 interface OpenAIClient {
   chat: {
     completions: {
-      create(params: OpenAIChatParams & { stream?: false }): Promise<OpenAIChatCompletion>;
-      create(params: OpenAIChatParams & { stream: true }): Promise<OpenAIChatStream>;
-      create(params: OpenAIChatParams): Promise<OpenAIChatCompletion | OpenAIChatStream>;
+      create(
+        params: OpenAIChatParams & { stream?: false },
+        requestOptions?: LlmRequestOptions,
+      ): Promise<OpenAIChatCompletion>;
+      create(
+        params: OpenAIChatParams & { stream: true },
+        requestOptions?: LlmRequestOptions,
+      ): Promise<OpenAIChatStream>;
+      create(
+        params: OpenAIChatParams,
+        requestOptions?: LlmRequestOptions,
+      ): Promise<OpenAIChatCompletion | OpenAIChatStream>;
     };
   };
   responses: {
-    create(params: OpenAIResponsesParams & { stream?: false }): Promise<OpenAIResponseObject>;
-    create(params: OpenAIResponsesParams & { stream: true }): Promise<OpenAIResponsesStream>;
-    create(params: OpenAIResponsesParams): Promise<OpenAIResponseObject | OpenAIResponsesStream>;
+    create(
+      params: OpenAIResponsesParams & { stream?: false },
+      requestOptions?: LlmRequestOptions,
+    ): Promise<OpenAIResponseObject>;
+    create(
+      params: OpenAIResponsesParams & { stream: true },
+      requestOptions?: LlmRequestOptions,
+    ): Promise<OpenAIResponsesStream>;
+    create(
+      params: OpenAIResponsesParams,
+      requestOptions?: LlmRequestOptions,
+    ): Promise<OpenAIResponseObject | OpenAIResponsesStream>;
   };
 }
 
@@ -356,15 +374,22 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
   ): Promise<AgentCompletion> {
     const params = this.buildChatParams(prompt, tools, options, false);
 
-    return this.withRetry(async () => {
-      try {
-        const client = await this.getClient();
-        const response = (await client.chat.completions.create(params)) as OpenAIChatCompletion;
-        return this.parseChatResponse(response);
-      } catch (error) {
-        throw this.wrapError(error);
-      }
-    });
+    return this.withRetry(
+      async () => {
+        try {
+          const client = await this.getClient();
+          const response = (await client.chat.completions.create(
+            params,
+            this.requestOptions(options),
+          )) as OpenAIChatCompletion;
+          return this.parseChatResponse(response);
+        } catch (error) {
+          throw this.wrapError(error);
+        }
+      },
+      this.config.maxRetries,
+      options.signal,
+    );
   }
 
   private async *streamViaChat(
@@ -381,7 +406,7 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
 
     try {
       const client = await this.getClient();
-      const stream = (await client.chat.completions.create(params)) as OpenAIChatStream;
+      const stream = (await client.chat.completions.create(params, this.requestOptions(options))) as OpenAIChatStream;
 
       for await (const chunk of stream) {
         // Handle usage (often in last chunk with stream_options) — check before choice
@@ -458,23 +483,30 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
   ): Promise<AgentCompletion> {
     const params = this.buildResponsesParams(prompt, tools, options, false);
 
-    return this.withRetry(async () => {
-      try {
-        const client = await this.getClient();
-        if (!client.responses) {
-          throw new LlmAdapterError(
-            'The OpenAI client does not support the Responses API.\n' +
-              'Upgrade the "openai" package to v4.85+ or use api: \'chat\' instead.',
-            'openai',
-            'unsupported_api',
-          );
+    return this.withRetry(
+      async () => {
+        try {
+          const client = await this.getClient();
+          if (!client.responses) {
+            throw new LlmAdapterError(
+              'The OpenAI client does not support the Responses API.\n' +
+                'Upgrade the "openai" package to v4.85+ or use api: \'chat\' instead.',
+              'openai',
+              'unsupported_api',
+            );
+          }
+          const response = (await client.responses.create(
+            params,
+            this.requestOptions(options),
+          )) as OpenAIResponseObject;
+          return this.parseResponsesResponse(response);
+        } catch (error) {
+          throw this.wrapError(error);
         }
-        const response = (await client.responses.create(params)) as OpenAIResponseObject;
-        return this.parseResponsesResponse(response);
-      } catch (error) {
-        throw this.wrapError(error);
-      }
-    });
+      },
+      this.config.maxRetries,
+      options.signal,
+    );
   }
 
   private async *streamViaResponses(
@@ -499,7 +531,7 @@ export class OpenAIAdapter extends BaseLlmAdapter implements AgentLlmAdapter {
           'unsupported_api',
         );
       }
-      const stream = (await client.responses.create(params)) as OpenAIResponsesStream;
+      const stream = (await client.responses.create(params, this.requestOptions(options))) as OpenAIResponsesStream;
 
       for await (const event of stream) {
         switch (event.type) {

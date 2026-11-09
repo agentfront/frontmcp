@@ -25,7 +25,7 @@ const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
   { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_306_803 },
 ];
 
-const VITE_INITIAL_CHUNK_MAX_BYTES = 769_376;
+const VITE_INITIAL_CHUNK_MAX_BYTES = 769_597;
 
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {
