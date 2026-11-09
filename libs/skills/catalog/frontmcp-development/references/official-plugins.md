@@ -429,10 +429,10 @@ With `RememberPlugin.init({ inject, useFactory })`, `tools` is read from the opt
 
 All four take an optional `scope` (default `session`) and describe it to the model the same way:
 `session` is this session, or without one (stateless HTTP, MCP 2026-07-28) the signed-in caller
-across its requests; `user` is the signed-in caller across all of its sessions; `tool` is the tool
-running the call, for the same caller as `session` -- each memory tool has its own, so `recall`
-does not see what `remember_this` stored in `tool` scope; `global` is shared by every caller. An
-anonymous caller cannot use `user`, nor `session` or `tool` without a session. No scope lasts
+across its requests; `user` is the signed-in caller across all of its sessions; `global` is shared
+by every caller. An anonymous caller cannot use `user`, nor `session` without a session. The tools
+don't offer `tool` scope, which is per tool: `recall` would never see what `remember_this` stored
+there (up to 1.11.2 they accepted it, and `tools.allowedScopes` naming it is ignored). No scope lasts
 "until disconnect" or "forever": entries last until forgotten or until their `ttl` (or `defaultTTL`) runs out, and
 `remember_this` and `recall` report when that is, as `expiresAt`.
 

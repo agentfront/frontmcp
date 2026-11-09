@@ -159,7 +159,7 @@ export interface BaseRememberPluginOptions {
   tools?: {
     /** Whether to expose tools to LLM (default: false) */
     enabled?: boolean;
-    /** Restrict which scopes tools can access */
+    /** Restrict which scopes tools can access. The tools never offer `tool` scope, which is per tool. */
     allowedScopes?: RememberScope[];
     /** Tool name prefix (default: none) */
     prefix?: string;

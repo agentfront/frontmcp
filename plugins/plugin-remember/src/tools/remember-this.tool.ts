@@ -3,7 +3,7 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { RememberScopeNotAllowedError } from '../remember.errors';
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
-import { REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
+import { allowedMemoryToolScopes, MEMORY_TOOL_SCOPES, REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
 import { rememberToolNames, type RememberToolNames } from './remember-tool-names';
 
 /**
@@ -12,7 +12,7 @@ import { rememberToolNames, type RememberToolNames } from './remember-tool-names
 export const rememberThisInputSchema = {
   key: z.string().min(1).describe('What to call this memory (e.g., "user_preference", "last_action")'),
   value: z.unknown().describe('The value to remember (any JSON-serializable data)'),
-  scope: z.enum(['session', 'user', 'tool', 'global']).optional().describe(REMEMBER_SCOPE_DESCRIPTION),
+  scope: z.enum(MEMORY_TOOL_SCOPES).optional().describe(REMEMBER_SCOPE_DESCRIPTION),
   ttl: z.number().int().positive().optional().describe('Forget after this many whole seconds'),
   brand: z
     .enum(['preference', 'cache', 'state', 'conversation', 'custom'])
@@ -65,7 +65,7 @@ export default class RememberThisTool extends ToolContext {
 
     // Validate scope is allowed for tools
     const scope = input.scope ?? 'session';
-    const allowedScopes = config.tools?.allowedScopes ?? ['session', 'user', 'tool', 'global'];
+    const allowedScopes = allowedMemoryToolScopes(config.tools?.allowedScopes);
 
     if (!allowedScopes.includes(scope)) {
       throw this.fail(new RememberScopeNotAllowedError(scope, allowedScopes));

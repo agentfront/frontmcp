@@ -3,7 +3,7 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { RememberScopeNotAllowedError } from '../remember.errors';
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
-import { REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
+import { allowedMemoryToolScopes, MEMORY_TOOL_SCOPES, REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
 import { rememberToolNames, type RememberToolNames } from './remember-tool-names';
 
 /**
@@ -11,7 +11,7 @@ import { rememberToolNames, type RememberToolNames } from './remember-tool-names
  */
 export const forgetInputSchema = {
   key: z.string().min(1).describe('What memory to forget'),
-  scope: z.enum(['session', 'user', 'tool', 'global']).optional().describe(REMEMBER_SCOPE_DESCRIPTION),
+  scope: z.enum(MEMORY_TOOL_SCOPES).optional().describe(REMEMBER_SCOPE_DESCRIPTION),
 };
 
 /**
@@ -56,7 +56,7 @@ export default class ForgetTool extends ToolContext {
 
     // Validate scope is allowed for tools
     const scope = input.scope ?? 'session';
-    const allowedScopes = config.tools?.allowedScopes ?? ['session', 'user', 'tool', 'global'];
+    const allowedScopes = allowedMemoryToolScopes(config.tools?.allowedScopes);
 
     if (!allowedScopes.includes(scope)) {
       throw this.fail(new RememberScopeNotAllowedError(scope, allowedScopes));
