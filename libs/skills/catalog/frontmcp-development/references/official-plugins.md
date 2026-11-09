@@ -149,9 +149,13 @@ The sandboxed VM runs AgentScript (a restricted JavaScript subset). Presets cont
 - `balanced` -- Relaxed constraints for development. `for` and `for-of` loops, with iteration limits.
 - `experimental` -- Minimal restrictions. `for` and `for-of` loops, extended builtins. Development only.
 
-`while`, `do-while` and `for-in` loops are always refused by the sandbox. Scripts have no `console` in any preset
-(`vm.allowConsole` has no effect, and a server that sets it logs a warning when it starts; up to 1.11.2 nothing said
-so); a script that refers to the global `console` is refused before it runs (a field named `console` is fine). Log with `mcpLog(level, message)`. The `codecall:execute` description is written from the effective
+`while`, `do-while` and `for-in` loops are always refused by the sandbox. Scripts have `console` only when the server
+sets `vm.allowConsole: true` explicitly; no preset turns it on. Then each `console.log`, `info`, `warn`, `error` and
+`debug` call is one line of the server's logger `CodeCall:script` (`log` and `info` at info level), within the sandbox's
+per-script limits (1000 calls, 1 MB; one more call fails the script) and at most 50 lines a second per server (the rest
+of that second's are dropped, with one warning). Without it, a script that refers to the global `console` is refused
+before it runs (a field named `console` is fine): log with `mcpLog(level, message)`. Up to 1.11.2 `vm.allowConsole` had
+no effect. The `codecall:execute` description is written from the effective
 `vm` options (loops, `disabledBuiltins`/`disabledGlobals`, `timeoutMs`, the `maxSteps` tool-call cap), and
 `codecall:search`'s from `topK` and the `minRelevanceScore` default, `0.1` (up to 1.9.2 both named fixed values).
 `vm.disabledBuiltins` and `vm.disabledGlobals` refuse a script that refers to a listed global (`illegal_access`,

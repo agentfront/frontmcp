@@ -122,8 +122,13 @@ export const codeCallVmOptionsSchema = z
     disabledGlobals: z.array(z.string()).optional(),
 
     /**
-     * @deprecated Has no effect: scripts never get `console`, and one that uses it is refused before it runs.
-     * Scripts log with `mcpLog(level, message)`. A server that sets it logs a warning when it starts.
+     * Give scripts `console`: with `true`, a script's `console.log`, `info`, `warn`, `error` and `debug` write to the
+     * server's logger (logger `CodeCall:script`; `log` and `info` at info level), each call one line. The sandbox
+     * bounds each script's console calls and bytes, and the server writes at most 50 script lines a second across
+     * all scripts, dropping the rest. Without it a script that uses `console` is refused before it runs.
+     *
+     * Only an explicit `true` here turns it on: no preset does, whatever its other defaults.
+     * @default false
      */
     allowConsole: z.boolean().optional(),
 

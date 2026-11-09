@@ -17,7 +17,6 @@ function environment(): CodeCallVmEnvironment {
   return {
     callTool: jest.fn(async () => ({ ok: true })),
     getTool: jest.fn(),
-    console: undefined,
     mcpLog: jest.fn(),
     mcpNotify: jest.fn(),
   } as unknown as CodeCallVmEnvironment;
