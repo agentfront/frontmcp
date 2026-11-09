@@ -47,6 +47,34 @@ export interface AuthProvider {
 }
 
 /**
+ * The step a `federated` page answers when the picker shows one provider per page
+ * (`incrementalAuth.showAllAppsAtOnce: false`), injected as `extras.step`. Absent on the one-page picker.
+ *
+ * The page submits to `submitUrl` with `pending_auth_id`, `federated=true`, `csrf`, `federated_step` (this
+ * `index`) and `action`: `continue` to link `providerId`, `skip` to leave it for later (refused for a provider the
+ * sign-in must link), or `back` to answer the previous step again. The server records the answer on the pending
+ * authorization and answers with the next step's page. The submission that answers the `last` step also carries
+ * the sign-in fields (`email`, as on the one-page picker), and finishes the sign-in. A `federated_step` other
+ * than the step the server is on gets that step's page again, unanswered.
+ */
+export interface FederatedStep {
+  /** 0-based index of this step, into `providers`. */
+  index: number;
+  /** How many steps there are. */
+  count: number;
+  /** The provider this step links or skips: one of the `providers` ids. */
+  providerId: string;
+  /** The last step: its submission carries the sign-in fields and finishes the sign-in. */
+  last: boolean;
+  /** Whether `back` is accepted (every step but the first). */
+  canGoBack: boolean;
+  /** Whether `skip` is accepted: not for a provider the sign-in must link. */
+  canSkip: boolean;
+  /** What this step was answered before the user went back to it. */
+  decision?: 'continue' | 'skip';
+}
+
+/**
  * A selectable tool surfaced on the consent slot. Matches `AuthTool` in
  * `@frontmcp/ui/auth`. The `id` is the effective runtime tool id.
  */

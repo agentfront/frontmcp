@@ -121,10 +121,11 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 
 ### `custom-auth-ui`
 
-| Example                                                                       | Level        | Description                                                                                                              |
-| ----------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| [`login-slot`](./examples/custom-auth-ui/login-slot.md)                       | Intermediate | Replace the built-in login page with a custom React component via `auth.ui: { login: './login.tsx' }` and `useAuthFlow`. |
-| [`multi-step-auth-extra`](./examples/custom-auth-ui/multi-step-auth-extra.md) | Advanced     | Add a server-validated multi-step field with `auth.extras: { 'envs:add': fn }`, `useExtraField`, and `useAddedItems`.    |
+| Example                                                                       | Level        | Description                                                                                                                                         |
+| ----------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`login-slot`](./examples/custom-auth-ui/login-slot.md)                       | Intermediate | Replace the built-in login page with a custom React component via `auth.ui: { login: './login.tsx' }` and `useAuthFlow`.                            |
+| [`multi-step-auth-extra`](./examples/custom-auth-ui/multi-step-auth-extra.md) | Advanced     | Add a server-validated multi-step field with `auth.extras: { 'envs:add': fn }`, `useExtraField`, and `useAddedItems`.                               |
+| [`federated-steps`](./examples/custom-auth-ui/federated-steps.md)             | Advanced     | Walk the provider picker one provider per page with `incrementalAuth.showAllAppsAtOnce: false` and a custom `federated` slot reading `extras.step`. |
 
 ## Accessing This Skill
 

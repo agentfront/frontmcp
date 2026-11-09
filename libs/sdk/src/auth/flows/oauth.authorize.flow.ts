@@ -32,10 +32,10 @@ import {
   type AppAuthCard,
   type AuthProviderDetectionResult,
   type ConsentStateRecord,
-  type DetectedAuthProvider,
   type FederatedLoginStateRecord,
   type IncrementalAuthTicketPayload,
   type LoginConfig,
+  type PendingAuthorizationRecord,
   type ProviderCard,
   type ProviderPkce,
 } from '@frontmcp/auth';
@@ -72,12 +72,20 @@ import {
   buildIncrementalState,
   buildLoginState,
   type AuthFlowState,
-  type AuthProvider,
   type AuthUiRegistry,
 } from '../auth-ui';
 import { initialAuthorizedApps } from '../authorized-apps.utils';
 import { CimdDisabledError, CimdService, clientMetadataDocumentSchema } from '../cimd';
 import { projectConsentTools } from '../consent-tools.helper';
+import {
+  getConfiguredProviders,
+  pickerProviders,
+  providerAuthorizationEndpoints,
+  renderFederatedStep,
+  showsProvidersStepByStep,
+  startFederatedSteps,
+  toAuthProvider,
+} from '../federated-steps';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 import { allowsSkippingApps, requiredProviderIds } from '../required-providers.utils';
 import { createRequestSigninBinding, signinBindingCookie, signinCookiePath, withCookie } from './signin-binding.utils';
@@ -246,21 +254,6 @@ declare global {
 const name = 'oauth:authorize' as const;
 const Stage = StageHookOf(name);
 
-/**
- * Top-level `auth.providers` declared for local-mode multi-provider
- * orchestration. Only `local` mode carries `providers`; everything else
- * returns an empty list so the app-level federation path is unchanged.
- */
-function getConfiguredProviders(auth: unknown): Array<{ id: string; scopes?: string[] }> {
-  const providers = (auth as { providers?: unknown } | undefined)?.providers;
-  if (!Array.isArray(providers)) {
-    return [];
-  }
-  return providers.filter(
-    (p): p is { id: string; scopes?: string[] } => !!p && typeof (p as { id?: unknown }).id === 'string',
-  );
-}
-
 /** Provider ids declared via top-level `auth.providers` (local-mode federation). */
 function getConfiguredProviderIds(auth: unknown): string[] {
   return getConfiguredProviders(auth).map((p) => p.id);
@@ -299,6 +292,8 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
   private signinCookie: HttpCookie | undefined;
   /** Its hash, kept on the pending authorization and on remote mode's federated session. */
   private signinBindingHash: string | undefined;
+  /** The pending authorization, when the picker shows one provider per page (its first step is rendered). */
+  private federatedStepRecord: PendingAuthorizationRecord | undefined;
 
   /**
    * Respond, giving the browser the sign-in binding cookie once a pending
@@ -878,6 +873,18 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       pendingRecord.verifiedLogin = sealPendingLogin(localAuth.secret, pendingRecord.id, ticketProfile);
     }
 
+    // The picker asks one provider per page: the sign-in starts on the first step.
+    if (
+      federatedLogin &&
+      !effectiveIncremental &&
+      metadata.auth &&
+      !isRemoteMode(metadata.auth) &&
+      showsProvidersStepByStep(this.scope.auth?.options)
+    ) {
+      startFederatedSteps(pendingRecord, this.scope);
+      this.federatedStepRecord = pendingRecord;
+    }
+
     // Tie the sign-in to this browser (RFC 9700 §4.7): the callbacks that
     // resume it require the cookie every response from here on sets.
     const binding = createRequestSigninBinding(this.rawInput.request, pendingRecord.id);
@@ -967,52 +974,15 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
     // For federated login (multiple providers), render provider selection page
     if (requiresFederatedLogin) {
-      const apps = this.scope.apps.getApps();
-      const providers: DetectedAuthProvider[] = [];
-      const { metadata } = this.scope;
-
-      // Add top-level configured providers (local-mode multi-provider
-      // orchestration). These are real upstream providers the user links.
-      const configuredProviders = getConfiguredProviders(metadata.auth);
-      const hasConfiguredProviders = configuredProviders.length > 0;
-      for (const p of configuredProviders) {
-        providers.push({
-          id: p.id,
-          mode: 'local',
-          appIds: [p.id],
-          scopes: p.scopes ?? [],
-          isParentProvider: false,
-        });
+      if (this.federatedStepRecord) {
+        this.respond(renderFederatedStep(this.scope, this.federatedStepRecord, { clientName: clientDisplayName }));
+        return;
       }
 
-      // Add parent provider only on the legacy app-level federation path
-      // (no top-level configured providers).
-      if (!hasConfiguredProviders && metadata.auth && isOrchestratedMode(metadata.auth)) {
-        providers.push({
-          id: '__parent__',
-          mode: metadata.auth.mode,
-          appIds: ['__parent__'],
-          scopes: [],
-          isParentProvider: true,
-        });
-      }
-
-      // Add app-level providers
-      for (const app of apps) {
-        if (app.metadata.auth) {
-          const appId = app.metadata.id || app.metadata.name;
-          if (!providers.some((p) => p.id === appId)) {
-            providers.push({
-              id: appId,
-              providerUrl: app.metadata.auth.mode === 'transparent' ? app.metadata.auth.provider : undefined,
-              mode: app.metadata.auth.mode,
-              appIds: [appId],
-              scopes: [],
-              isParentProvider: false,
-            });
-          }
-        }
-      }
+      // The top-level configured providers (local-mode multi-provider orchestration), else the
+      // parent provider on the legacy app-level federation path, then the app-level providers.
+      const providers = pickerProviders(this.scope);
+      const hasConfiguredProviders = getConfiguredProviders(metadata.auth).length > 0;
 
       const detection: AuthProviderDetectionResult = {
         providers: new Map(providers.map((p) => [p.id, p])),
@@ -1033,19 +1003,10 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
             clientId: validatedRequest.client_id,
             clientName: clientDisplayName,
             redirectUri: validatedRequest.redirect_uri,
-            providers: [...detection.providers.values()].map(
-              (p): AuthProvider => ({
-                id: p.id,
-                name: p.id,
-                url: p.providerUrl,
-                mode: p.mode,
-                appIds: p.appIds.filter((id) => id !== '__parent__'),
-                primary: p.isParentProvider,
-              }),
-            ),
+            providers: [...detection.providers.values()].map(toAuthProvider),
           }),
         // The selection is answered with a redirect to the first chosen provider.
-        [validatedRequest.redirect_uri, ...this.providerAuthorizationEndpoints(detection.providers.keys())],
+        [validatedRequest.redirect_uri, ...providerAuthorizationEndpoints(this.scope, detection.providers.keys())],
       );
       if (customFederated) return;
 
@@ -1150,18 +1111,6 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
 
     this.respond(httpRespond.html(page.html, 200, page.headers));
     return true;
-  }
-
-  /** The authorization endpoints of the upstream providers among `providerIds` (others have none). */
-  private providerAuthorizationEndpoints(providerIds: Iterable<string>): string[] {
-    const localAuth = this.scope.auth as Partial<LocalPrimaryAuth> | undefined;
-    if (typeof localAuth?.getProviderConfig !== 'function') return [];
-    const endpoints: string[] = [];
-    for (const id of providerIds) {
-      const endpoint = localAuth.getProviderConfig(id)?.authorizationEndpoint;
-      if (endpoint) endpoints.push(endpoint);
-    }
-    return endpoints;
   }
 
   /**

@@ -39,15 +39,31 @@ Absolute paths pass through unchanged. If the declaring file's directory can't b
 
 ### Slots
 
-| Slot          | Replaces the built-in…                      | Key fields the component receives         |
-| ------------- | ------------------------------------------- | ----------------------------------------- |
-| `login`       | Local sign-in page                          | `clientName`, `scopes`, `redirectUri`     |
-| `consent`     | Tool-consent screen                         | `tools[]` (selectable tool cards)         |
-| `incremental` | Single-app incremental authorization screen | `extras.appId` / `extras.appName`         |
-| `federated`   | Multi-provider selection                    | `providers[]` (selectable provider cards) |
-| `error`       | OAuth error page                            | `error` text                              |
+| Slot          | Replaces the built-in…                      | Key fields the component receives                                                   |
+| ------------- | ------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `login`       | Local sign-in page                          | `clientName`, `scopes`, `redirectUri`                                               |
+| `consent`     | Tool-consent screen                         | `tools[]` (selectable tool cards)                                                   |
+| `incremental` | Single-app incremental authorization screen | `extras.appId` / `extras.appName`                                                   |
+| `federated`   | Multi-provider selection                    | `providers[]` (selectable provider cards), `extras.step` on the step-by-step picker |
+| `error`       | OAuth error page                            | `error` text                                                                        |
 
 Map only the slots you want to customize — the rest keep their built-in pages.
+
+### The `federated` slot, one provider per page
+
+With `incrementalAuth: { showAllAppsAtOnce: false }` the sign-in asks about one provider per page, in the picker's order, and the `federated` page is rendered once per step. Its state carries every provider in `providers`, plus the step it answers in `extras.step`:
+
+| Field        | Type                    | Notes                                                                                    |
+| ------------ | ----------------------- | ---------------------------------------------------------------------------------------- |
+| `index`      | `number`                | 0-based index of this step.                                                              |
+| `count`      | `number`                | How many steps there are.                                                                |
+| `providerId` | `string`                | The provider this step links or skips (one of the `providers` ids).                      |
+| `last`       | `boolean`               | The last step: its answer carries the sign-in fields (`email`) and finishes the sign-in. |
+| `canGoBack`  | `boolean`               | Whether `back` is accepted (every step but the first).                                   |
+| `canSkip`    | `boolean`               | Whether `skip` is accepted: not for a provider the sign-in must link.                    |
+| `decision`   | `'continue' \| 'skip'?` | The earlier answer, when the user went back to this step.                                |
+
+The page answers with `submitFinish({ federated: 'true', federated_step: String(step.index), action })` (`submitFinish` adds `pending_auth_id` and `csrf`), where `action` is `continue` (link the provider), `skip` (leave it for later) or `back` (answer the previous step again). The server checks the CSRF token and the `Origin` on every step, refuses a `skip` of a required provider (`federatedAuth.requiredProviders`, or every app's provider under `incrementalAuth.allowSkip: false`) and one that leaves fewer than `federatedAuth.minProviders` to link, keeps the answer on the pending authorization, and serves the next step's page. An answer for another step than the current one gets the current step's page again. The answer to the last step goes on like the one-page picker's submission. See the [`federated-steps`](../examples/custom-auth-ui/federated-steps.md) example.
 
 ### Per-app scoping (`splitByApp`)
 
@@ -154,6 +170,7 @@ A non-esm.sh override URL is left as-is (no `?external=react`). Once published, 
 | ------------------------------------------------------------------------------ | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`login-slot`](../examples/custom-auth-ui/login-slot.md)                       | Intermediate | Replace the built-in login page with a custom React component via auth.ui: { login: './login.tsx' } and useAuthFlow, while the framework keeps owning CSRF and CSP.                                             |
 | [`multi-step-auth-extra`](../examples/custom-auth-ui/multi-step-auth-extra.md) | Advanced     | Add a server-validated multi-step field to a custom login page with auth.extras: { 'envs:add': fn }, useExtraField, and useAddedItems — accepted rows accumulate server-side and reflect back without a reload. |
+| [`federated-steps`](../examples/custom-auth-ui/federated-steps.md)             | Advanced     | Walk the provider picker one provider per page with incrementalAuth.showAllAppsAtOnce: false and a custom federated slot that reads extras.step and answers continue, skip or back.                             |
 
 ## See also
 

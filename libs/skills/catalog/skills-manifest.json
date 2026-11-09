@@ -503,6 +503,19 @@
                 "Reflecting the server-side accumulator reactively with `useAddedItems('envs:add')` after each successful add",
                 "Declaring both the `auth.ui` slot and the `auth.extras` handler under `auth`: `@FrontMcp({ auth: { mode, ui, extras } })`"
               ]
+            },
+            {
+              "name": "federated-steps",
+              "description": "Walk the provider picker one provider per page with incrementalAuth.showAllAppsAtOnce: false and a custom federated slot that reads extras.step and answers continue, skip or back.",
+              "level": "advanced",
+              "tags": ["auth", "auth-ui", "federated", "incremental-auth", "multi-step", "react"],
+              "features": [
+                "Turning on the step-by-step provider picker with `incrementalAuth: { showAllAppsAtOnce: false }`",
+                "Reading the step a page answers from `extras.step` (`index`, `count`, `providerId`, `last`, `canGoBack`, `canSkip`)",
+                "Answering it with `submitFinish({ federated, federated_step, action })`, where `action` is `continue`, `skip` or `back`",
+                "Sending the sign-in fields (`email`) with the answer to the last step, which finishes the sign-in",
+                "Hiding Skip for a provider the sign-in must link, which the server refuses to skip anyway"
+              ]
             }
           ]
         }

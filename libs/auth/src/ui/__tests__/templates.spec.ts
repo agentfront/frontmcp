@@ -5,6 +5,7 @@ import {
   buildConsentPage,
   buildErrorPage,
   buildFederatedLoginPage,
+  buildFederatedStepPage,
   buildIncrementalAuthPage,
   buildLoginPage,
   buildToolConsentPage,
@@ -967,5 +968,48 @@ describe('renderToHtml', () => {
     const result = renderToHtml(input, { title: 'Ignored' });
 
     expect(result).toBe(input);
+  });
+});
+
+describe('buildFederatedStepPage', () => {
+  const provider: ProviderCard = { providerId: 'tasks', providerName: 'tasks', mode: 'public', appIds: ['tasks'] };
+  const params = {
+    provider,
+    clientName: 'Desk <companion>',
+    pendingAuthId: 'pending-1',
+    callbackPath: '/oauth/callback',
+    csrfToken: 'csrf-1',
+  };
+
+  it('posts the step, its CSRF token and the pending authorization, with Continue as the default button', () => {
+    const html = buildFederatedStepPage({
+      ...params,
+      step: { index: 1, count: 3, last: false, canGoBack: true, canSkip: true },
+    });
+
+    expect(html).toContain('Step 2 of 3');
+    expect(html).toContain('name="federated_step" value="1"');
+    expect(html).toContain('name="csrf" value="csrf-1"');
+    expect(html).toContain('name="pending_auth_id" value="pending-1"');
+    expect(html).toContain('Desk &lt;companion&gt;');
+    expect(html.indexOf('value="continue"')).toBeLessThan(html.indexOf('value="skip"'));
+    expect(html.indexOf('value="skip"')).toBeLessThan(html.indexOf('value="back"'));
+    expect(html).toMatch(/value="back" formnovalidate/);
+    expect(html).not.toContain('name="email"');
+  });
+
+  it('asks for the email on the last step and offers neither Back on the first step nor Skip for a required one', () => {
+    const html = buildFederatedStepPage({
+      ...params,
+      step: { index: 0, count: 1, last: true, canGoBack: false, canSkip: false },
+      error: 'Unknown <account>',
+    });
+
+    expect(html).toContain('name="email"');
+    expect(html).toContain('Finish');
+    expect(html).not.toContain('value="back"');
+    expect(html).not.toContain('value="skip"');
+    expect(html).not.toContain('authorized later');
+    expect(html).toContain('Unknown &lt;account&gt;');
   });
 });
