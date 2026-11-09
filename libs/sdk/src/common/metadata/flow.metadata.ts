@@ -46,7 +46,11 @@ export interface FlowMetadata<Name extends FlowName> {
   plan: FlowPlan<ExtendFlows[Name]['stage']>;
   inputSchema: ExtendFlows[Name]['input'];
   outputSchema: ExtendFlows[Name]['output'];
-  access: 'public' | 'authorized';
+  /**
+   * @deprecated Never read: a flow runs for every caller that reaches it, whatever this says. Authorize in a stage or
+   * a hook of the flow, or with the `authorities` of the tools, resources and prompts it serves.
+   */
+  access?: 'public' | 'authorized';
   dependsOn?: Token[];
   middleware?: FlowMiddlewareOptions;
 }

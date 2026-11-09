@@ -536,26 +536,54 @@ export const createDatabaseProvider = AsyncProvider({
 
 **Key fields:**
 
-| Field          | Description                         |
-| -------------- | ----------------------------------- |
-| `name`         | Flow name                           |
-| `plan`         | Array of stages to execute in order |
-| `inputSchema`  | Zod schema for flow input           |
-| `outputSchema` | Zod schema for flow output          |
-| `access`       | Access control configuration        |
+| Field          | Description                                                                                        |
+| -------------- | -------------------------------------------------------------------------------------------------- |
+| `name`         | Flow name, also declared in `ExtendFlows` so `runFlow()` and `FlowHooksOf()` know its types        |
+| `plan`         | Stage names by phase: `{ pre?, execute?, post?, finalize?, error? }`, each a `@Stage` of the class |
+| `inputSchema`  | Zod schema for flow input                                                                          |
+| `outputSchema` | Zod schema for flow output                                                                         |
+| `description?` | What the flow does                                                                                 |
+| `access?`      | Deprecated and never read: it controls nothing. See below                                          |
 
 ```typescript
-import { Flow, z } from '@frontmcp/sdk';
+import { Flow, FlowBase, FlowHooksOf, z, type FlowPlan, type FlowRunOptions } from '@frontmcp/sdk';
 
-@Flow({
-  name: 'approval-flow',
-  plan: [ValidateStage, EnrichStage, ApproveStage, ExecuteStage],
-  inputSchema: z.object({ action: z.string(), target: z.string() }),
-  outputSchema: z.object({ approved: z.boolean(), result: z.unknown() }),
-  access: { roles: ['admin'] },
-})
-class ApprovalFlow {}
+const name = 'approval-flow' as const;
+const inputSchema = z.object({ action: z.string(), target: z.string() });
+const outputSchema = z.object({ approved: z.boolean() });
+const stateSchema = z.object({ approved: z.boolean().default(false) });
+const plan = { pre: ['validate'], execute: ['approve'], finalize: ['finalize'] } as const satisfies FlowPlan<string>;
+
+declare global {
+  interface ExtendFlows {
+    [name]: FlowRunOptions<ApprovalFlow, typeof plan, typeof inputSchema, typeof outputSchema, typeof stateSchema>;
+  }
+}
+
+const { Stage } = FlowHooksOf<typeof name>(name);
+
+@Flow({ name, plan, inputSchema, outputSchema })
+export default class ApprovalFlow extends FlowBase<typeof name> {
+  @Stage('validate')
+  async validate() {
+    if (!this.rawInput.target) throw new Error('target is required');
+  }
+
+  @Stage('approve')
+  async approve() {
+    this.state.set('approved', this.rawInput.action !== 'delete');
+  }
+
+  @Stage('finalize')
+  async finalize() {
+    this.respond({ approved: this.state.approved ?? false });
+  }
+}
 ```
+
+`access: 'public' | 'authorized'` is accepted for compatibility but never read: a flow runs for every caller that
+reaches it. To restrict a flow, check the caller in a stage or a hook, or put `authorities` on the tools, resources and
+prompts it serves.
 
 ---
 
