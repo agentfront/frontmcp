@@ -53,11 +53,11 @@ Create a class decorated with `@Workflow`. The decorator requires `name` and `st
 | `id`              | `string`                                   | Yes      | Unique step identifier within the workflow                                  |
 | `jobName`         | `string`                                   | Yes      | Name of the registered job to run                                           |
 | `input`           | `object \| (steps: StepResults) => object` | No       | Static input object or function that receives previous step results         |
-| `dependsOn`       | `string[]`                                 | No       | Array of step IDs that must complete before this step runs                  |
+| `dependsOn`       | `string[]`                                 | No       | Array of step IDs that must complete before this step runs (see below)      |
 | `condition`       | `(steps: StepResults) => boolean`          | No       | Predicate that determines if the step should run                            |
-| `continueOnError` | `boolean`                                  | No       | If `true`, workflow continues even if this step fails                       |
+| `continueOnError` | `boolean`                                  | No       | If `true`, the steps that depend on this one run even if it fails           |
 | `timeout`         | `number`                                   | No       | Per-step timeout in milliseconds (overrides workflow timeout for this step) |
-| `retry`           | `RetryPolicy`                              | No       | Per-step retry policy (overrides the job's retry policy for this step)      |
+| `retry`           | `RetryPolicy`                              | No       | Per-step retry policy (overrides the job's); with neither, one attempt      |
 
 When a step's `timeout` passes, the step fails with `WorkflowJobTimeoutError`. An attempt whose job has not started never starts it. A job already in `execute()` is not stopped: its `this.signal` (`ctx.signal` in a `job()` function) is aborted with the timeout as its reason, so pass it to `fetch` and other cancellable work, or check it. Its attempt's `jobs:execute-job` flow ends as failed at once: `Did('execute')` and `Did('validateOutput')` don't run, the job's `cleanup` runs with `'timeout'`, and the finalize hooks see the `WorkflowJobTimeoutError` as `state.flowError`. Up to 1.10 the flow waited for `execute()` to return first; up to 1.9.4 the flow of such an attempt ran on as a success, so audit and metrics hooks recorded a success for a step the workflow reported as failed. Each step attempt also waits for a slot under `jobs.admission` (see `create-job`). `cancel_job` cancels job runs only: a workflow run is refused with `JOB_RUN_NOT_CANCELLABLE`. A step whose job sets `runner: 'worker'` runs its `execute()` on the offload pool; a job on the `'detached'` runner runs inline as a step, in the workflow's process, since the workflow run owns its steps.
 
@@ -102,7 +102,9 @@ Steps form a directed acyclic graph (DAG) based on their `dependsOn` declaration
 1. Identifies steps with no dependencies and runs them in parallel (up to `maxConcurrency`)
 2. As each step completes, checks which dependent steps have all their dependencies satisfied
 3. Runs newly unblocked steps in parallel
-4. Continues until all steps complete or a step fails (unless `continueOnError` is set)
+4. Continues until every step has run or been skipped. A step that fails (without `continueOnError`) skips every step that depends on it, directly or not; the steps that don't depend on it still run, and the run ends `failed`
+
+A step is tried as many times as its `retry` says, else its job's `retry`; with neither it is tried once, as `execute_job` runs the job. Up to 1.11.2 a step whose job had no `retry` was tried 3 times, and a failed step skipped only the steps that named it in `dependsOn`: their own dependents still ran.
 
 ### Parallel Steps
 
@@ -223,6 +225,7 @@ Use `condition` to conditionally run a step based on the results of previous ste
       id: 'test',
       jobName: 'run-tests',
       input: { suite: 'all', coverage: true },
+      continueOnError: true, // lets notify-failure run when the tests fail
     },
     {
       id: 'deploy',
@@ -249,11 +252,11 @@ Use `condition` to conditionally run a step based on the results of previous ste
 class ConditionalDeploy {}
 ```
 
-When a `condition` returns `false`, the step is marked as `skipped`. Downstream steps that depend on a skipped step check their own conditions with the skipped step's state.
+When a `condition` returns `false`, the step is marked as `skipped`. Downstream steps that depend on a skipped step check their own conditions with the skipped step's state. A step that depends on a failed step is skipped without its `condition` being called, so a step that reacts to a failure (`notify-failure` here) needs `continueOnError: true` on the step it watches.
 
 ## Error Handling with continueOnError
 
-By default, a failed step stops the entire workflow. Set `continueOnError: true` on a step to allow the workflow to proceed even if that step fails.
+By default, a failed step skips every step that depends on it, directly or not, and the run ends `failed`; steps that don't depend on it still run. Set `continueOnError: true` on a step to let the steps that depend on it run even if it fails: they see its `state` as `'failed'`.
 
 ```typescript
 @Workflow({
@@ -623,6 +626,7 @@ class NotifyTeamJob extends JobContext {
       id: 'lint',
       jobName: 'run-linter',
       dependsOn: ['checkout'],
+      continueOnError: true, // build and notify-failure check its state
       input: (steps) => ({
         workDir: steps.get('checkout').outputs.workDir,
       }),
@@ -631,6 +635,7 @@ class NotifyTeamJob extends JobContext {
       id: 'test',
       jobName: 'run-unit-tests',
       dependsOn: ['checkout'],
+      continueOnError: true, // build and notify-failure check its state
       input: (steps) => ({
         workDir: steps.get('checkout').outputs.workDir,
         coverage: true,
@@ -741,13 +746,14 @@ class CiServer {}
 
 ## Troubleshooting
 
-| Problem                                             | Cause                                                          | Solution                                                                                           |
-| --------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Step never executes                                 | `dependsOn` references a step ID that does not exist           | Verify all `dependsOn` entries match actual step `id` values in the workflow                       |
-| Workflow fails at startup with "job not found"      | `jobName` references an unregistered job                       | Add the job class to the `jobs` array in `@App` before registering the workflow                    |
-| Dynamic `input` callback receives undefined outputs | Dependent step was skipped or failed without `continueOnError` | Add a `condition` guard that checks `steps.get(id).state === 'completed'` before accessing outputs |
-| Webhook trigger does not fire                       | Missing or mismatched `webhook.secret`                         | Ensure `webhook.secret` matches the sender's HMAC secret and `webhook.path` is correct             |
-| Workflow exceeds timeout                            | Total step execution time exceeds the default 600000 ms        | Increase `timeout` at the workflow level or add per-step `timeout` overrides                       |
+| Problem                                             | Cause                                                                   | Solution                                                                                           |
+| --------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Step never executes                                 | `dependsOn` references a step ID that does not exist                    | Verify all `dependsOn` entries match actual step `id` values in the workflow                       |
+| Workflow fails at startup with "job not found"      | `jobName` references an unregistered job                                | Add the job class to the `jobs` array in `@App` before registering the workflow                    |
+| Dynamic `input` callback receives undefined outputs | A step it depends on was skipped, or failed with `continueOnError`      | Add a `condition` guard that checks `steps.get(id).state === 'completed'` before accessing outputs |
+| Webhook trigger does not fire                       | Missing or mismatched `webhook.secret`                                  | Ensure `webhook.secret` matches the sender's HMAC secret and `webhook.path` is correct             |
+| Workflow exceeds timeout                            | Total step execution time exceeds the default 600000 ms                 | Increase `timeout` at the workflow level or add per-step `timeout` overrides                       |
+| A failure-notification step never runs              | The step it watches failed without `continueOnError`, so it was skipped | Set `continueOnError: true` on the watched step                                                    |
 
 ## Examples
 
