@@ -643,6 +643,14 @@ export {
   RedirectUriMismatchError,
   CimdResponseTooLargeError,
   CimdDisabledError,
+  CimdClientAssertionError,
+  type ClientAssertionRefusal,
+  // Client authentication (private_key_jwt)
+  CLIENT_ASSERTION_TYPE_JWT_BEARER,
+  CLIENT_ASSERTION_SIGNING_ALGORITHMS,
+  MAX_CLIENT_ASSERTION_LIFETIME_SECONDS,
+  type ClientAssertionInput,
+  type ClientAssertionCheck,
   // Validator
   isCimdClientId,
   validateClientIdUrl,

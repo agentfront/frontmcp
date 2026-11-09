@@ -21,6 +21,7 @@ import {
   TokenNotAvailableError,
   verifyPkce,
   type AuthorizationStore,
+  type ClientAssertionInput,
   type ConsentStore,
   type DcrRegistryConfig,
   type FederatedAuthSessionStore,
@@ -769,7 +770,16 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * @returns true when this caller claimed the ticket, false when it was already used.
    */
   async claimIncrementalTicket(jti: string, ttlMs: number): Promise<boolean> {
-    const key = `incremental-ticket:${jti}`;
+    return this.claimOnce(`incremental-ticket:${jti}`, ttlMs);
+  }
+
+  /**
+   * Claim `key` for `ttlMs`, exactly once: the replay guard of incremental-authorization tickets and of
+   * `private_key_jwt` client assertions. See {@link claimIncrementalTicket}.
+   *
+   * @returns true when this caller claimed the key, false when it was already claimed or the guard is unavailable.
+   */
+  async claimOnce(key: string, ttlMs: number): Promise<boolean> {
     const nonce = randomUUID();
     const ttlSeconds = Math.max(1, Math.ceil(ttlMs / 1000));
 
@@ -779,22 +789,22 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     } catch (error) {
       // A backend without compare-and-set (Cloudflare KV raises
       // StorageNotSupportedError) cannot host this guard at all. Rejecting
-      // every ticket would disable incremental authorization silently, so fall
+      // every claim would disable what it guards silently, so fall
       // back to the in-memory guard once and keep single use within this
       // instance. Any other error is transient and fails CLOSED.
       if (!isUnsupportedOperation(error)) {
-        this.logger.warn(`Incremental ticket replay guard unavailable: ${String(error)}`);
+        this.logger.warn(`Replay guard unavailable: ${String(error)}`);
         return false;
       }
       this.logger.warn(
-        'Incremental ticket replay guard: the configured storage has no conditional write; ' +
+        'Replay guard: the configured storage has no conditional write; ' +
           'falling back to an in-memory guard (single use holds within this instance only).',
       );
       storage = await this.useInMemoryTicketReplayStorage();
       try {
         await storage.set(key, nonce, { ifNotExists: true, ttlSeconds });
       } catch (fallbackError) {
-        this.logger.warn(`Incremental ticket replay guard unavailable: ${String(fallbackError)}`);
+        this.logger.warn(`Replay guard unavailable: ${String(fallbackError)}`);
         return false;
       }
     }
@@ -802,7 +812,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     try {
       return (await storage.get(key)) === nonce;
     } catch (error) {
-      this.logger.warn(`Incremental ticket replay guard unavailable: ${String(error)}`);
+      this.logger.warn(`Replay guard unavailable: ${String(error)}`);
       return false;
     }
   }
@@ -816,7 +826,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
         // — but so are the pending authorizations and codes this flow depends
         // on, so such a deployment is single-instance by construction.
         this.logger.debug(
-          'Incremental ticket replay guard is in-memory (no persistent tokenStorage configured); ' +
+          'Replay guard is in-memory (no persistent tokenStorage configured); ' +
             'single use holds within this instance only.',
         );
         this.ticketReplayStorage = this.useInMemoryTicketReplayStorage();
@@ -1156,6 +1166,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     defaultAudience?: string,
     /** The issuer the access token names: {@link issuerFor} the token request. */
     issuer?: string,
+    /** The client assertion a `private_key_jwt` client authenticates with (RFC 7523). */
+    clientAssertion?: ClientAssertionInput,
   ): Promise<TokenResponse | { error: string; error_description: string }> {
     // Authenticate confidential clients (RFC 6749 §2.3 / §3.2.1). Public and
     // unregistered / CIMD clients ('none' / 'unknown') carry no secret and are
@@ -1165,7 +1177,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.logger.warn('Client authentication failed at token endpoint (authorization_code)');
       return { error: 'invalid_client', error_description: 'Client authentication failed' };
     }
-    const declared = await this.checkDeclaredGrant(clientId, 'authorization_code');
+    const declared = await this.checkDeclaredGrant(clientId, 'authorization_code', clientAssertion);
     if ('error' in declared) return declared;
 
     // Get the authorization code record
@@ -1309,11 +1321,13 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   /**
    * Refuse a grant the client did not declare in its `grant_types` (RFC 7591): in its registration, its
    * `dcr.clients` entry or its client ID metadata document. A client that declared nothing (an unregistered
-   * id under `requireRegisteredClients: false`) is not limited, and gets `grantTypes: undefined`.
+   * id under `requireRegisteredClients: false`) is not limited, and gets `grantTypes: undefined`. A CIMD client
+   * whose document declares `private_key_jwt` must also present a valid client assertion.
    */
   private async checkDeclaredGrant(
     clientId: string,
     grantType: 'authorization_code' | 'refresh_token',
+    clientAssertion: ClientAssertionInput | undefined,
   ): Promise<{ grantTypes: string[] | undefined } | { error: string; error_description: string }> {
     let grantTypes: string[] | undefined;
     try {
@@ -1321,6 +1335,13 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       if (cimd?.enabled && cimd.isCimdClientId(clientId)) {
         const { metadata } = await cimd.resolveClientMetadata(clientId);
         if (metadata) cimd.assertSupportedClient(metadata);
+        if (metadata?.token_endpoint_auth_method === 'private_key_jwt') {
+          await cimd.verifyClientAssertion(metadata, {
+            audiences: [],
+            ...clientAssertion,
+            claimOnce: (key, ttlMs) => this.claimOnce(key, ttlMs),
+          });
+        }
         grantTypes = metadata?.grant_types;
       } else {
         grantTypes = this.dcrClientRegistryImpl.get(clientId)?.grant_types;
@@ -1395,6 +1416,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     defaultAudience?: string,
     /** The issuer the access token names: {@link issuerFor} the token request. */
     issuer?: string,
+    /** The client assertion a `private_key_jwt` client authenticates with (RFC 7523). */
+    clientAssertion?: ClientAssertionInput,
   ): Promise<TokenResponse | { error: string; error_description: string }> {
     // Authenticate confidential clients on refresh too (RFC 6749 §6): a stolen
     // refresh token must not be redeemable with just the public client_id.
@@ -1402,7 +1425,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.logger.warn('Client authentication failed at token endpoint (refresh_token)');
       return { error: 'invalid_client', error_description: 'Client authentication failed' };
     }
-    const declared = await this.checkDeclaredGrant(clientId, 'refresh_token');
+    const declared = await this.checkDeclaredGrant(clientId, 'refresh_token', clientAssertion);
     if ('error' in declared) return declared;
 
     const tokenRecord = await this.authorizationStore.getRefreshToken(refreshToken);
