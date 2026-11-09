@@ -249,7 +249,8 @@ export const frontMcpLocalAppMetadataSchema = z.looseObject({
  */
 export interface RemoteTransportOptions {
   /**
-   * Request timeout in milliseconds.
+   * Limit in milliseconds on each request to the remote: connecting, listing, tool calls, resource reads and
+   * prompts. A request past it fails with `RemoteTimeoutError`.
    * @default 30000
    */
   timeout?: number;
@@ -431,8 +432,8 @@ export interface RemoteAppMetadata {
   auth?: AuthOptionsInput;
 
   /**
-   * Interval in milliseconds to refresh capabilities from the remote server.
-   * Set to 0 to disable automatic refresh.
+   * Interval in milliseconds to refresh capabilities from the remote server, for this app.
+   * A list counts as changed when any of its entries differs. Set to 0 to disable automatic refresh.
    * @default 0
    */
   refreshInterval?: number;
@@ -639,7 +640,7 @@ export interface RemoteUrlAppOptions extends RemoteOptions {
   description?: string;
   /** Standalone mode */
   standalone?: boolean | 'includeInParent';
-  /** Interval (ms) to refresh capabilities from the remote server */
+  /** Interval (ms) to refresh capabilities from the remote server, for this app (0 = off) */
   refreshInterval?: number;
   /** TTL (ms) for cached capabilities */
   cacheTTL?: number;

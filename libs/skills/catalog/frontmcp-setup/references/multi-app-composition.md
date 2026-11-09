@@ -151,22 +151,26 @@ export default class Server {}
 | `standalone`       | `boolean \| 'includeInParent'` | Scope isolation mode (default: `false`)                                                                                                                |
 | `transportOptions` | `RemoteTransportOptions`       | Timeout, retries, headers, SSE fallback, MCP revision                                                                                                  |
 | `remoteAuth`       | `RemoteAuthConfig`             | Auth config: `'static'`, `'forward'` (transparent servers only), or `'oauth'`; requests carrying credentials never follow a redirect to another origin |
-| `refreshInterval`  | `number`                       | Interval (ms) to refresh capabilities from remote                                                                                                      |
+| `refreshInterval`  | `number`                       | Interval (ms) to re-list the remote's capabilities, per app (default: `0`, off); a list counts as changed when any entry differs, not only its length  |
 | `cacheTTL`         | `number`                       | TTL (ms) for cached capabilities (default: 60000)                                                                                                      |
 | `filter`           | `AppFilterConfig`              | Include/exclude filter for primitives                                                                                                                  |
 
 `RemoteTransportOptions` fields:
 
-| Field             | Type                                 | Default    | Description                                                                                                                |
-| ----------------- | ------------------------------------ | ---------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `timeout`         | `number`                             | `30000`    | Request timeout in ms                                                                                                      |
-| `retryAttempts`   | `number`                             | `2`        | Retries of a tool call that failed with a transient error (`0` turns retries off)                                          |
-| `retryDelayMs`    | `number`                             | `1000`     | Delay before the first retry in ms; each later retry waits twice as long                                                   |
-| `fallbackToSSE`   | `boolean`                            | `true`     | Fallback to SSE if Streamable HTTP fails                                                                                   |
-| `headers`         | `Record<string, string>`             | -          | Additional headers for all requests                                                                                        |
-| `protocolVersion` | `'legacy' \| '2026-07-28' \| 'auto'` | `'legacy'` | MCP revision: session + `initialize`, the stateless 2026-07-28 client (URL remotes only), or probe `server/discover` first |
+| Field             | Type                                 | Default    | Description                                                                                                                     |
+| ----------------- | ------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `timeout`         | `number`                             | `30000`    | Limit in ms on each request to the remote: connecting, listing, tool calls, resource reads and prompts (`REMOTE_TIMEOUT_ERROR`) |
+| `retryAttempts`   | `number`                             | `2`        | Retries of a tool call that failed with a transient error (`0` turns retries off)                                               |
+| `retryDelayMs`    | `number`                             | `1000`     | Delay before the first retry in ms; each later retry waits twice as long                                                        |
+| `fallbackToSSE`   | `boolean`                            | `true`     | Fallback to SSE if Streamable HTTP fails                                                                                        |
+| `headers`         | `Record<string, string>`             | -          | Additional headers for all requests                                                                                             |
+| `protocolVersion` | `'legacy' \| '2026-07-28' \| 'auto'` | `'legacy'` | MCP revision: session + `initialize`, the stateless 2026-07-28 client (URL remotes only), or probe `server/discover` first      |
 
-A transient error is a network failure, a call that ran past `timeout`, or an HTTP `408`, `425`, `429` or `5xx` answer other than `501` and `505`, whatever its body says; a `400` or `404` is not retried. A call that timed out or got a `5xx` may have run on the remote already, so a retry can run it twice: set `retryAttempts: 0` for a remote whose tools must not run twice. Up to 1.9.2 a call that ran past `timeout` was not retried. On a 2026-07-28 remote, a `Retry-After` header on the answer sets the wait, up to the backoff's longest one.
+A transient error is a network failure, a call that ran past `timeout`, or an HTTP `408`, `425`, `429` or `5xx` answer other than `501` and `505`, whatever its body says; a `400` or `404` is not retried. A call that timed out or got a `5xx` may have run on the remote already, so a retry can run it twice: set `retryAttempts: 0` for a remote whose tools must not run twice. Up to 1.9.2 a call that ran past `timeout` was not retried. A `Retry-After` header on the refused answer sets the wait, up to the backoff's longest one, on every revision (up to 1.11.2, only on a 2026-07-28 remote).
+
+While a remote's circuit breaker is open (5 failed tries within a minute), its tool calls fail at once for 30 seconds with `REMOTE_CIRCUIT_OPEN` (HTTP 503), whose message the client sees: `Circuit breaker is open for <app>. Retry in <n>s`. Up to 1.11.2 production clients saw `Internal FrontMCP error`.
+
+Remote tools keep their `title` and `outputSchema` in `tools/list`, and remote resources, resource templates and prompts their `title`.
 
 Each remote tool, resource, resource template and prompt is listed once; when `cacheTTL` expires the gateway re-reads the remote's lists and replaces what it proxied before (dropped entries disappear, nothing is duplicated).
 

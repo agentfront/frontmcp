@@ -126,12 +126,13 @@ export async function negotiateRemoteProtocol(
   configured: string | undefined,
   headers: Record<string, string> | undefined,
   fetchImpl: typeof fetch = fetch,
+  options: Pick<McpStatelessClientOptions, 'requestTimeoutMs'> = {},
 ): Promise<'2026-07-28' | 'legacy'> {
   if (configured === '2026-07-28') return '2026-07-28';
   if (configured !== 'auto') return 'legacy';
 
   try {
-    const probe = new McpStatelessClient({ url, headers, fetchImpl });
+    const probe = new McpStatelessClient({ url, headers, fetchImpl, ...options });
     const result = await probe.discover();
     const supported = result['supportedVersions'];
     return Array.isArray(supported) && supported.includes('2026-07-28') ? '2026-07-28' : 'legacy';
