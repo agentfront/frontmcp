@@ -8,6 +8,7 @@
 
 import type { Type } from '@frontmcp/di';
 import { internalZ as z } from '@frontmcp/lazy-zod';
+import type { CallToolResult } from '@frontmcp/protocol';
 
 import {
   PromptKind,
@@ -23,6 +24,7 @@ import {
   type ToolContext,
   type ToolMetadata,
 } from '../../common';
+import { InvalidInputError } from '../../errors/mcp.error';
 import {
   createEsmPromptContextClass,
   createEsmResourceContextClass,
@@ -87,8 +89,6 @@ function isZodShape(schema: Record<string, unknown>): boolean {
 export function buildEsmToolRecord(tool: EsmToolDefinition, namespace?: string): ToolClassTokenRecord {
   const toolName = namespace ? `${namespace}:${tool.name}` : tool.name;
 
-  const ContextClass = createEsmToolContextClass(tool.execute, tool.name);
-
   let inputSchema: Record<string, unknown> = {};
   let rawInputSchema: Record<string, unknown> | undefined = undefined;
 
@@ -102,13 +102,15 @@ export function buildEsmToolRecord(tool: EsmToolDefinition, namespace?: string):
     }
   }
 
+  const ContextClass = createEsmToolContextClass(esmToolHandler(tool, rawInputSchema), tool.name);
+
   const metadata: ToolMetadata & Record<string, unknown> = {
     name: toolName,
     id: toolName,
     description: tool.description ?? `ESM tool: ${tool.name}`,
     inputSchema: inputSchema as ToolMetadata['inputSchema'],
     rawInputSchema,
-    outputSchema: (tool.outputSchema ?? 'json') as ToolMetadata['outputSchema'],
+    outputSchema: tool.outputSchema as ToolMetadata['outputSchema'],
     annotations: {
       'frontmcp:esm': true,
       'frontmcp:esmTool': tool.name,
@@ -120,6 +122,38 @@ export function buildEsmToolRecord(tool: EsmToolDefinition, namespace?: string):
     provide: ContextClass as Type<ToolContext>,
     metadata,
   };
+}
+
+/**
+ * A plain-object tool's `execute`, with the arguments checked against its JSON Schema `inputSchema` first. Without an
+ * `outputSchema`, a string, number or boolean answer is sent as its text; an object answer is sent as JSON.
+ */
+function esmToolHandler(tool: EsmToolDefinition, jsonInputSchema?: Record<string, unknown>): EsmToolExecuteHandler {
+  const inputParser = jsonInputSchema && jsonSchemaParserOf(jsonInputSchema);
+  return async (input) => {
+    const parsed = inputParser?.safeParse(input);
+    if (parsed && !parsed.success) throw new InvalidInputError('Invalid tool input', parsed.error.issues);
+    const answer: unknown = await tool.execute((parsed?.data ?? input) as Record<string, unknown>);
+    return (tool.outputSchema === undefined ? primitiveAnswerAsText(answer) : answer) as CallToolResult;
+  };
+}
+
+/** A parser for a JSON Schema, or nothing for a schema Zod cannot read, whose arguments are then not checked. */
+function jsonSchemaParserOf(jsonSchema: Record<string, unknown>): z.ZodType | undefined {
+  try {
+    return z.fromJSONSchema(
+      jsonSchema as Parameters<typeof z.fromJSONSchema>[0],
+      { defaultTarget: 'draft-2020-12' } as Parameters<typeof z.fromJSONSchema>[1],
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+function primitiveAnswerAsText(answer: unknown): unknown {
+  if (answer === undefined || answer === null) return { content: [] };
+  if (typeof answer === 'object') return answer;
+  return { content: [{ type: 'text', text: String(answer) }] };
 }
 
 /**

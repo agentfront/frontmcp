@@ -253,3 +253,68 @@ describe('App.esm() with autoUpdate', () => {
     expect(await toolNames(srv)).toEqual(['acme:echo_v2']);
   });
 });
+
+describe('App.esm() plain-object tools', () => {
+  const statusOf = async (input: Record<string, unknown>) => ({ service: input['service'], up: true });
+  let server: DirectMcpServer | undefined;
+
+  beforeEach(() => {
+    jest.spyOn(EsmModuleLoader.prototype, 'load').mockResolvedValue({
+      ...loadResult,
+      manifest: {
+        name: '@acme/tools',
+        version: '1.0.0',
+        tools: [
+          {
+            name: 'get_status',
+            inputSchema: {
+              type: 'object',
+              properties: { service: { type: 'string' } },
+              required: ['service'],
+            },
+            execute: statusOf,
+          },
+          { name: 'count', execute: async () => 3 },
+          { name: 'hello', execute: async () => 'hello' },
+        ],
+      },
+    });
+  });
+
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    await server?.dispose().catch(() => undefined);
+    server = undefined;
+  });
+
+  async function createGateway(): Promise<DirectMcpServer> {
+    const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'esm-gateway', version: '1.0.0' },
+      apps: [App.esm('@acme/tools@^1.0.0', { namespace: 'acme' })],
+    });
+    return server;
+  }
+
+  it('sends an object answer as JSON, with its structuredContent', async () => {
+    const srv = await createGateway();
+
+    const result = await srv.callTool('acme:get_status', { service: 'api' });
+
+    expect(result.content).toEqual([{ type: 'text', text: '{"service":"api","up":true}' }]);
+    expect(result.structuredContent).toEqual({ service: 'api', up: true });
+  });
+
+  it('sends a string or a number answer as its text', async () => {
+    const srv = await createGateway();
+
+    expect((await srv.callTool('acme:hello', {})).content).toEqual([{ type: 'text', text: 'hello' }]);
+    expect((await srv.callTool('acme:count', {})).content).toEqual([{ type: 'text', text: '3' }]);
+  });
+
+  it('checks the arguments against the JSON Schema inputSchema', async () => {
+    const srv = await createGateway();
+
+    await expect(srv.callTool('acme:get_status', { service: 42 })).rejects.toThrow('Invalid tool input');
+  });
+});

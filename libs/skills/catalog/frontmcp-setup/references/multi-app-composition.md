@@ -115,6 +115,8 @@ app.esm('@internal/tools@^2.0.0', {
 - **Token:** the `loader` token goes to the registry and, when `loader.url` is set, with every bundle download from it. It is never sent to the default esm.sh.
 - **Bundle errors:** a refused bundle download names the server it came from, `https://esm.sh returned 404 for "…"` or the `loader.url`.
 - **Auto-update:** a newer version that fails to download or register leaves the loaded version serving, and is tried again at the next poll.
+- **What a package exports:** a manifest (`{ name, version, tools?, resources?, prompts? }`), arrays or decorated classes as named exports, or a default-exported `@App` class, or `@FrontMcp` class whose own and `@App` entries are read. Give an exported `@FrontMcp` class `serve: false`, or importing the bundle starts that server.
+- **Plain-object tools** (`{ name, inputSchema?, execute }`): the arguments are checked against a JSON Schema `inputSchema` (`Invalid tool input` otherwise). Without an `outputSchema`, an object answer is sent as JSON text with `structuredContent`, and a string or number as its text.
 
 ## Remote Apps (External MCP Servers)
 
