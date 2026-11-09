@@ -193,7 +193,8 @@ export default class ManageContentTool extends ToolContext { ... }
 
 ### not (Negation)
 
-Inverts a nested policy.
+Inverts a nested policy. A nested check whose `{ fromInput }` / `{ fromClaims }` value is missing
+stays a denial: `not` never turns it into a grant.
 
 ```typescript
 @Tool({

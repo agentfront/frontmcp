@@ -344,7 +344,10 @@ denies such a rule if it runs anyway (even under `not`):
   a string (a `{ fromInput }` / `{ fromClaims }` reference works for all but `exists`)
 
 A `{ fromInput }` / `{ fromClaims }` reference that resolves to nothing at call time fails `match`
-and every operator, `neq` and `notIn` included.
+and every operator, `neq` and `notIn` included, and a ReBAC `resourceId` reference that resolves to
+no string fails its relationship. Such a check is unknown rather than false, so it never leads to a
+grant: `not` around it denies too, `anyOf` (or `operator: 'OR'`) grants only through another branch
+that passes, and `allOf` (or `operator: 'AND'`) counts as false only when another branch fails.
 
 To leave an entry open, remove its `authorities`. There is no opt-out.
 

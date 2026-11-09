@@ -265,6 +265,8 @@ export interface AuthoritiesDenial {
 export interface AuthoritiesResult {
   /** Whether access was granted */
   granted: boolean;
+  /** With `granted: false`: the check couldn't be decided (e.g. a missing `{ fromInput }` value), so `not` keeps the denial */
+  unresolved?: boolean;
   /** Human-readable reason for denial (kept for backward compatibility) */
   deniedBy?: string;
   /** Structured denial data (machine-parsable) */

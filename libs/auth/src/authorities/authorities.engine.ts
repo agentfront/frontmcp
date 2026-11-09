@@ -39,6 +39,23 @@ function invalidRule(problems: string[], policies: string[] = []): AuthoritiesRe
   };
 }
 
+/** AND in order: a plain denial stops; an unresolved one is reported only if nothing after it denies. */
+async function evaluateEvery<T>(
+  items: T[],
+  evaluateItem: (item: T) => Promise<AuthoritiesResult>,
+  evaluatedPolicies: string[] = [],
+): Promise<AuthoritiesResult> {
+  let unresolved: AuthoritiesResult | undefined;
+  for (const item of items) {
+    const result = await evaluateItem(item);
+    evaluatedPolicies.push(...result.evaluatedPolicies);
+    if (result.granted) continue;
+    if (!result.unresolved) return { ...result, evaluatedPolicies };
+    unresolved ??= result;
+  }
+  return unresolved ? { ...unresolved, evaluatedPolicies } : { granted: true, evaluatedPolicies };
+}
+
 /**
  * The main evaluation engine.
  *
@@ -148,17 +165,7 @@ export class AuthoritiesEngine {
    * Evaluate an array of profile names (AND semantics).
    */
   private async evaluateProfileArray(names: string[], ctx: AuthoritiesEvaluationContext): Promise<AuthoritiesResult> {
-    const allPolicies: string[] = [];
-
-    for (const name of names) {
-      const result = await this.evaluateProfile(name, ctx);
-      allPolicies.push(...result.evaluatedPolicies);
-      if (!result.granted) {
-        return { ...result, evaluatedPolicies: allPolicies };
-      }
-    }
-
-    return { granted: true, evaluatedPolicies: allPolicies };
+    return evaluateEvery(names, (name) => this.evaluateProfile(name, ctx));
   }
 
   /**
@@ -218,7 +225,7 @@ export class AuthoritiesEngine {
     const allPolicies = results.flatMap((r) => r.evaluatedPolicies);
 
     if (operator === 'AND') {
-      const denied = results.find((r) => !r.granted);
+      const denied = results.find((r) => !r.granted && !r.unresolved) ?? results.find((r) => !r.granted);
       if (denied) {
         return { ...denied, evaluatedPolicies: allPolicies };
       }
@@ -231,11 +238,13 @@ export class AuthoritiesEngine {
       return { granted: true, evaluatedPolicies: allPolicies };
     }
 
-    // All denied — report the first denial
-    const firstDenied = results.find((r) => !r.granted);
+    // All denied — an unresolved denial keeps the result unresolved, else report the first denial
+    const unresolved = results.find((r) => r.unresolved);
+    const reported = unresolved ?? results.find((r) => !r.granted);
     return {
       granted: false,
-      deniedBy: firstDenied?.deniedBy ?? 'all policies denied (OR)',
+      ...(unresolved && { unresolved: true }),
+      deniedBy: reported?.deniedBy ?? 'all policies denied (OR)',
       evaluatedPolicies: allPolicies,
     };
   }
@@ -247,27 +256,18 @@ export class AuthoritiesEngine {
     custom: Record<string, unknown>,
     ctx: AuthoritiesEvaluationContext,
   ): Promise<AuthoritiesResult> {
-    const allPolicies: string[] = [];
-
-    for (const [name, config] of Object.entries(custom)) {
+    return evaluateEvery(Object.entries(custom), async ([name, config]) => {
       const evaluator = this.evaluators.get(name);
       if (!evaluator) {
         return {
           granted: false,
           deniedBy: `custom evaluator '${name}' is not registered`,
-          evaluatedPolicies: [...allPolicies, `custom.${name}`],
+          evaluatedPolicies: [`custom.${name}`],
         };
       }
-
       const result = await evaluator.evaluate(config, ctx);
-      allPolicies.push(`custom.${name}`, ...result.evaluatedPolicies);
-
-      if (!result.granted) {
-        return { ...result, evaluatedPolicies: allPolicies };
-      }
-    }
-
-    return { granted: true, evaluatedPolicies: allPolicies };
+      return { ...result, evaluatedPolicies: [`custom.${name}`, ...result.evaluatedPolicies] };
+    });
   }
 
   /**
@@ -307,17 +307,7 @@ export class AuthoritiesEngine {
     policies: AuthoritiesPolicyMetadata[],
     ctx: AuthoritiesEvaluationContext,
   ): Promise<AuthoritiesResult> {
-    const allPolicies: string[] = ['allOf'];
-
-    for (const policy of policies) {
-      const result = await this.evaluatePolicy(policy, ctx);
-      allPolicies.push(...result.evaluatedPolicies);
-      if (!result.granted) {
-        return { ...result, evaluatedPolicies: allPolicies };
-      }
-    }
-
-    return { granted: true, evaluatedPolicies: allPolicies };
+    return evaluateEvery(policies, (policy) => this.evaluatePolicy(policy, ctx), ['allOf']);
   }
 
   /**
@@ -329,6 +319,7 @@ export class AuthoritiesEngine {
   ): Promise<AuthoritiesResult> {
     const allPolicies: string[] = ['anyOf'];
     let lastDenied: AuthoritiesResult | undefined;
+    let unresolved: AuthoritiesResult | undefined;
 
     for (const policy of policies) {
       const result = await this.evaluatePolicy(policy, ctx);
@@ -337,24 +328,30 @@ export class AuthoritiesEngine {
         return { granted: true, evaluatedPolicies: allPolicies };
       }
       lastDenied = result;
+      if (result.unresolved) unresolved ??= result;
     }
 
+    const reported = unresolved ?? lastDenied;
     return {
       granted: false,
-      deniedBy: lastDenied?.deniedBy ?? 'no policies in anyOf',
-      denial: lastDenied?.denial ?? { kind: 'anyOf', path: 'anyOf' },
+      ...(unresolved && { unresolved: true }),
+      deniedBy: reported?.deniedBy ?? 'no policies in anyOf',
+      denial: reported?.denial ?? { kind: 'anyOf', path: 'anyOf' },
       evaluatedPolicies: allPolicies,
     };
   }
 
   /**
-   * not combinator — inverts the nested policy result.
+   * not combinator — inverts the nested policy result; an unresolved denial stays a denial.
    */
   private async evaluateNot(
     policy: AuthoritiesPolicyMetadata,
     ctx: AuthoritiesEvaluationContext,
   ): Promise<AuthoritiesResult> {
     const result = await this.evaluatePolicy(policy, ctx);
+    if (!result.granted && result.unresolved) {
+      return { ...result, evaluatedPolicies: ['not', ...result.evaluatedPolicies] };
+    }
 
     return {
       granted: !result.granted,
