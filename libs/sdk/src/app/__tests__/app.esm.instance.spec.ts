@@ -7,6 +7,8 @@ import 'reflect-metadata';
 import { App, LogLevel, LogTransport, LogTransportInterface, type EsmAppOptions, type LogRecord } from '../../common';
 import type { DirectMcpServer } from '../../direct/direct.types';
 import { EsmModuleLoader, type EsmLoadResult } from '../../esm-loader/esm-module-loader';
+import { VersionPoller } from '../../esm-loader/version-poller';
+import { VersionResolver } from '../../esm-loader/version-resolver';
 
 const loadResult: EsmLoadResult = {
   manifest: {
@@ -155,5 +157,80 @@ describe('App.esm() of one package more than once', () => {
     await expect(
       createGateway(App.esm('@acme/deploy-tools@^1.0.0'), App.esm('@acme/deploy-tools@next')),
     ).rejects.toThrow(/apps share the id "acme-deploy-tools".*name/);
+  });
+});
+
+describe('App.esm() with autoUpdate', () => {
+  const versionOf = (version: string, toolName: string): EsmLoadResult => ({
+    ...loadResult,
+    resolvedVersion: version,
+    manifest: { name: '@acme/tools', version, tools: [{ name: toolName, execute: async () => ({ content: [] }) }] },
+  });
+  const brokenVersion = (version: string): EsmLoadResult => {
+    const manifest = { name: '@acme/tools', version };
+    Object.defineProperty(manifest, 'tools', {
+      get: () => {
+        throw new Error('the new version does not build');
+      },
+    });
+    return { ...loadResult, resolvedVersion: version, manifest: manifest as EsmLoadResult['manifest'] };
+  };
+
+  let server: DirectMcpServer | undefined;
+  let poller: { poll(): Promise<void> } | undefined;
+  let load: jest.SpyInstance;
+
+  beforeEach(() => {
+    load = jest.spyOn(EsmModuleLoader.prototype, 'load').mockResolvedValueOnce(versionOf('1.0.0', 'echo'));
+    jest.spyOn(VersionPoller.prototype, 'start').mockImplementation(function (this: VersionPoller) {
+      poller = this as unknown as { poll(): Promise<void> };
+    });
+    jest
+      .spyOn(VersionResolver.prototype, 'resolve')
+      .mockResolvedValue({ resolvedVersion: '1.1.0', availableVersions: ['1.0.0', '1.1.0'] });
+  });
+
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    await server?.dispose().catch(() => undefined);
+    server = undefined;
+    poller = undefined;
+  });
+
+  async function startPolling(): Promise<{ srv: DirectMcpServer; poll: () => Promise<void> }> {
+    const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'esm-gateway', version: '1.0.0' },
+      apps: [App.esm('@acme/tools@^1.0.0', { namespace: 'acme', autoUpdate: { enabled: true } })],
+    });
+    const started = poller;
+    if (!started) throw new Error('the version poller did not start');
+    return { srv: server, poll: () => started.poll() };
+  }
+
+  const toolNames = async (srv: DirectMcpServer) => (await srv.listTools()).tools.map((tool) => tool.name);
+
+  it('keeps the loaded version when the new one fails to register, and tries it again at the next poll', async () => {
+    const { srv, poll } = await startPolling();
+    load.mockResolvedValueOnce(brokenVersion('1.1.0'));
+
+    await poll();
+    expect(await toolNames(srv)).toEqual(['acme:echo']);
+
+    load.mockResolvedValueOnce(versionOf('1.1.0', 'echo_v2'));
+    await poll();
+    expect(load).toHaveBeenCalledTimes(3);
+    expect(await toolNames(srv)).toEqual(['acme:echo_v2']);
+  });
+
+  it('swaps the entries once per new version', async () => {
+    const { srv, poll } = await startPolling();
+    load.mockResolvedValueOnce(versionOf('1.1.0', 'echo_v2'));
+
+    await poll();
+    await poll();
+
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(await toolNames(srv)).toEqual(['acme:echo_v2']);
   });
 });

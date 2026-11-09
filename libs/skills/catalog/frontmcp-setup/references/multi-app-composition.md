@@ -110,6 +110,10 @@ app.esm('@internal/tools@^2.0.0', {
 });
 ```
 
+- **Versions:** `latest` or another dist-tag resolves to the version the tag points at; a word that isn't one of the package's dist-tags (a typo like `@stabel`) stops the server with `ESM_VERSION_RESOLUTION_ERROR`, naming it and the dist-tags there are. A range resolves to the highest version that satisfies it, never a prerelease.
+- **Token:** the `loader` token goes to the registry and, when `loader.url` is set, with every bundle download from it. It is never sent to the default esm.sh.
+- **Auto-update:** a newer version that fails to download or register leaves the loaded version serving, and is tried again at the next poll.
+
 ## Remote Apps (External MCP Servers)
 
 Proxy tools, resources, and prompts from an external MCP server using `app.remote()`. The gateway connects via Streamable HTTP (with SSE fallback) and exposes the remote primitives as if they were local.
