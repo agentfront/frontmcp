@@ -37,6 +37,7 @@ export interface ResolvedCodeCallVmOptions {
   maxSteps?: number;
   disabledBuiltins: string[];
   disabledGlobals: string[];
+  /** `true` only when the server's options set `vm.allowConsole: true`; no preset sets it. */
   allowConsole: boolean;
   maxSanitizeDepth: number;
   maxSanitizeProperties: number;
@@ -92,8 +93,6 @@ export interface CodeCallVmEnvironment {
    * schema, for example) — callers cannot distinguish "not visible" from "not projectable".
    */
   getTool: (name: string) => CodeCallToolDescription | undefined;
-
-  console?: Console;
 
   mcpLog?: (level: 'debug' | 'info' | 'warn' | 'error', message: string, metadata?: Record<string, unknown>) => void;
 

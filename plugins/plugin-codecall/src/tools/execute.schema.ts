@@ -24,6 +24,10 @@ export function buildExecuteToolDescription(vmOptions: ResolvedCodeCallVmOptions
   const timeoutSeconds = vmOptions.timeoutMs / 1000;
   const maxToolCalls = maxToolCallsOf(vmOptions);
   const callsPerTool = rapidEnumerationThresholdOf(vmOptions);
+  const blockedConsole = vmOptions.allowConsole ? '' : 'console (use mcpLog), ';
+  const consoleLine = vmOptions.allowConsole
+    ? '\nLOGGING: console.log/info/warn/error/debug or mcpLog(level, message)'
+    : '';
   return `Execute AgentScript (safe JS subset) for multi-tool orchestration.
 
 API: await callTool(name, args, opts?)
@@ -40,7 +44,7 @@ for (const u of users.items) {
 return results;
 
 ALLOWED: ${loops}, arrow fn, map/filter/reduce/find, ${namespaces.join('')}if/else, destructuring, spread, template literals
-BLOCKED: ${blockedLoops}, console (use mcpLog), function decl, ${[...blockedNames].join(', ')}
+BLOCKED: ${blockedLoops}, ${blockedConsole}function decl, ${[...blockedNames].join(', ')}${consoleLine}
 
 ERRORS: NOT_FOUND | VALIDATION | EXECUTION | TIMEOUT | ACCESS_DENIED | RATE_LIMITED
 STATUS: ok | syntax_error | illegal_access | runtime_error | tool_error | timeout

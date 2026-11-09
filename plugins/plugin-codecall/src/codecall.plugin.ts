@@ -15,7 +15,6 @@ import {
   type FlowCtxOf,
   type HookGatedEntry,
   type ProviderType,
-  type Token,
   type ToolEntry,
   type ToolType,
 } from '@frontmcp/sdk';
@@ -35,14 +34,6 @@ import EnclaveService from './services/enclave.service';
 import { DescribeTool, ExecuteTool, InvokeTool, SearchKnowledgeTool, SearchSkillsTool, SearchTool } from './tools';
 import { buildExecuteToolDescription } from './tools/execute.schema';
 import { buildSearchToolDescription } from './tools/search.schema';
-
-/** Whether the options set `vm.allowConsole`, which is logged as ignored when the server starts. */
-const CodeCallOptionWarningsToken: Token<boolean> = Symbol('plugin:codecall:option-warnings');
-
-/** Logged at startup for a `vm.allowConsole` the options set, which no script can use. */
-const ALLOW_CONSOLE_IGNORED =
-  '`vm.allowConsole` has no effect and is ignored: scripts never get `console`, and a script that uses it is ' +
-  'refused before it runs. Log from a script with `mcpLog(level, message)`, and remove `allowConsole`.';
 
 /**
  * What a CodeCall audit event contributes to a log line.
@@ -108,21 +99,11 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
         useValue: config,
       },
       {
-        name: 'codecall:option-warnings',
-        provide: CodeCallOptionWarningsToken,
-        inject: () => [ScopeEntry],
-        useFactory: (scope: ScopeEntry) => {
-          const ignored = parsedOptions.vm?.allowConsole !== undefined;
-          if (ignored) scope.logger.child('CodeCall').warn(ALLOW_CONSOLE_IGNORED);
-          return ignored;
-        },
-      },
-      {
         name: 'codecall:enclave',
         provide: EnclaveService,
-        inject: () => [CodeCallConfig],
-        useFactory: async (cfg: CodeCallConfig) => {
-          return new EnclaveService(cfg);
+        inject: () => [CodeCallConfig, ScopeEntry],
+        useFactory: async (cfg: CodeCallConfig, scope: ScopeEntry) => {
+          return new EnclaveService(cfg, scope.logger.child('CodeCall:script'));
         },
       },
       {
