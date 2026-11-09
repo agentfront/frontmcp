@@ -258,6 +258,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
       await next.discard(logger);
       throw error;
     }
+    if (replacing) this.replacedVersionCount++;
 
     logger.info(`ESM app ${this.id} registered: ${next.describe()}`);
   }
@@ -291,7 +292,6 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
       const loadResult = await this.loader.load(this.specifier);
       await this.registerFromManifest(loadResult.manifest, { replacing: true });
       this.loadResult = loadResult;
-      this.replacedVersionCount++;
 
       logger.info(
         `ESM app ${this.id} updated to ${newVersion}; ${this.replacedVersionCount} replaced version(s) keep their providers until shutdown`,

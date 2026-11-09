@@ -44,39 +44,51 @@ describe('SkillToolGuardHook', () => {
     sessionManager = new SkillSessionManager({ defaultPolicyMode: 'strict' }, undefined, store);
   });
 
-  describe("the caller's MCP session", () => {
-    const callOf = (toolName: string, sessionId?: string): SkillToolHookContext => ({
-      state: { tool: { metadata: { name: toolName } }, ...(sessionId && { authInfo: { sessionId } }) },
-    });
+  describe("the caller's verified MCP session", () => {
+    let callerSessionId: string | undefined;
+    const callOf = (toolName: string): SkillToolHookContext => ({ state: { tool: { metadata: { name: toolName } } } });
+    const guard = () => new (createSkillToolGuardHook(sessionManager, { verifiedSessionId: () => callerSessionId }))();
 
     beforeEach(async () => {
+      callerSessionId = undefined;
       await sessionManager.runWithSession('session-1', async () => {
         sessionManager.activateSkill('test-skill', mockSkillContent, mockLoadResult);
       });
     });
 
     it('checks a later tool call against the skill its session activated', async () => {
-      const hook = new (createSkillToolGuardHook(sessionManager, {}))();
+      callerSessionId = 'session-1';
 
-      await expect(hook.checkSkillToolAuthorization(callOf('allowed_tool', 'session-1'))).resolves.toBeUndefined();
-      await expect(hook.checkSkillToolAuthorization(callOf('unlisted_tool', 'session-1'))).rejects.toBeInstanceOf(
+      await expect(guard().checkSkillToolAuthorization(callOf('allowed_tool'))).resolves.toBeUndefined();
+      await expect(guard().checkSkillToolAuthorization(callOf('unlisted_tool'))).rejects.toBeInstanceOf(
         ToolNotAllowedError,
       );
     });
 
-    it('leaves the tool calls of another session, or of none, unchecked', async () => {
-      const hook = new (createSkillToolGuardHook(sessionManager, {}))();
+    it("checks the caller's session, not another skill session the call runs inside", async () => {
+      callerSessionId = 'session-1';
 
-      await expect(hook.checkSkillToolAuthorization(callOf('unlisted_tool', 'session-2'))).resolves.toBeUndefined();
-      await expect(hook.checkSkillToolAuthorization(callOf('unlisted_tool'))).resolves.toBeUndefined();
+      await sessionManager.runWithSession('session-2', async () => {
+        await expect(guard().checkSkillToolAuthorization(callOf('unlisted_tool'))).rejects.toBeInstanceOf(
+          ToolNotAllowedError,
+        );
+      });
+    });
+
+    it('leaves the tool calls of another session, or of none, unchecked', async () => {
+      callerSessionId = 'session-2';
+      await expect(guard().checkSkillToolAuthorization(callOf('unlisted_tool'))).resolves.toBeUndefined();
+
+      callerSessionId = undefined;
+      await expect(guard().checkSkillToolAuthorization(callOf('unlisted_tool'))).resolves.toBeUndefined();
     });
 
     it('forgets the skill once the session ends', async () => {
-      const hook = new (createSkillToolGuardHook(sessionManager, {}))();
+      callerSessionId = 'session-1';
 
       await sessionManager.endSession('session-1');
 
-      await expect(hook.checkSkillToolAuthorization(callOf('unlisted_tool', 'session-1'))).resolves.toBeUndefined();
+      await expect(guard().checkSkillToolAuthorization(callOf('unlisted_tool'))).resolves.toBeUndefined();
     });
   });
 

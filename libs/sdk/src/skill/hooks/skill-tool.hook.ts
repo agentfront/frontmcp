@@ -28,6 +28,9 @@ export interface SkillToolGuardHookOptions {
    * @default true
    */
   trackToolCalls?: boolean;
+
+  /** The MCP session the server verified for the request being served; its skill session is the one checked. */
+  verifiedSessionId?: () => string | undefined;
 }
 
 /**
@@ -38,8 +41,6 @@ export interface SkillToolHookContext {
   state: {
     tool?: { metadata: { name: string }; fullName?: string };
     input?: { name: string };
-    /** The caller; its MCP session's skill session is the one checked. */
-    authInfo?: { sessionId?: string };
   };
 }
 
@@ -134,7 +135,7 @@ export function createSkillToolGuardHook(
   sessionManager: SkillSessionManager,
   options: SkillToolGuardHookOptions = {},
 ): SkillToolGuardHookClass {
-  const { logger, onApprovalRequired, trackToolCalls = true } = options;
+  const { logger, onApprovalRequired, trackToolCalls = true, verifiedSessionId } = options;
 
   /**
    * Skill tool authorization guard hook.
@@ -169,12 +170,12 @@ export function createSkillToolGuardHook(
         ? rawToolName.substring(rawToolName.lastIndexOf(':') + 1)
         : rawToolName;
 
-      const sessionId = ctx.state.authInfo?.sessionId;
-      if (sessionManager.getActiveSession() || !sessionId) {
-        await authorizeInActiveSession(toolName);
+      const sessionId = verifiedSessionId?.();
+      if (sessionId && sessionManager.getActiveSession()?.sessionId !== sessionId) {
+        await sessionManager.runWithSession(sessionId, () => authorizeInActiveSession(toolName));
         return;
       }
-      await sessionManager.runWithSession(sessionId, () => authorizeInActiveSession(toolName));
+      await authorizeInActiveSession(toolName);
     }
   }
 

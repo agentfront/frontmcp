@@ -202,7 +202,7 @@ Each skill in the result then has `session: { activated: true, sessionId, policy
 | `strict`               | Fails: `Tool '<name>' is not permitted during the '<skill>' skill session.`, with the tools the skills allow |
 | `approval`             | Fails: `Tool '<name>' requires approval to be used with skill '<skill>'.`                                    |
 
-The activation lasts as long as the MCP session; a session the client ends with `DELETE` forgets it. A request without an MCP session activates nothing, and its result has no `session`. Up to 1.11.2, `activateSession: true` activated nothing.
+The activation lasts as long as the MCP session; a session the client ends with `DELETE` forgets it. A request without an MCP session the server verified (a stateless transport, or MCP 2026-07-28) activates nothing: each skill in its result has `session: { activated: false }`, so check `session.activated`, not whether `session` is there. Up to 1.11.2, `activateSession: true` activated nothing.
 
 ## Instruction Sources
 

@@ -194,11 +194,11 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
       }
     };
 
-    const sessionId = this.callerSessionId();
-    if (sessionManager.getActiveSession()) {
-      await activate();
-    } else if (sessionId) {
+    const sessionId = this.tryGetContext()?.verifiedSessionId;
+    if (sessionId && sessionManager.getActiveSession()?.sessionId !== sessionId) {
       await sessionManager.runWithSession(sessionId, activate);
+    } else if (sessionManager.getActiveSession()) {
+      await activate();
     } else {
       this.logger.warn('activateSessions: the request has no MCP session, cannot activate skill sessions');
       return;
@@ -206,12 +206,6 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
 
     this.state.set({ loadResults });
     this.logger.verbose('activateSessions:done');
-  }
-
-  /** The MCP session the request belongs to, which a skill session is kept for. */
-  private callerSessionId(): string | undefined {
-    const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as { authInfo?: { sessionId?: string } } | undefined;
-    return ctx?.authInfo?.sessionId;
   }
 
   @Stage('finalize')
