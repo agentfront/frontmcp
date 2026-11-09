@@ -22,8 +22,6 @@ describe('ApprovalPlugin', () => {
       expect(ApprovalPlugin.defaultOptions).toEqual({
         namespace: 'approval',
         mode: 'recheck',
-        enableAudit: true,
-        maxDelegationDepth: 3,
         cleanupIntervalSeconds: 60,
       });
     });
@@ -39,13 +37,11 @@ describe('ApprovalPlugin', () => {
       const plugin = new ApprovalPlugin({
         namespace: 'custom-approval',
         mode: 'webhook',
-        maxDelegationDepth: 5,
       });
 
       expect(plugin.options.namespace).toBe('custom-approval');
       expect(plugin.options.mode).toBe('webhook');
-      expect(plugin.options.maxDelegationDepth).toBe(5);
-      expect(plugin.options.enableAudit).toBe(true); // default retained
+      expect(plugin.options.cleanupIntervalSeconds).toBe(60); // default retained
     });
 
     it('should accept storage config', () => {
@@ -102,7 +98,7 @@ describe('ApprovalPlugin', () => {
     it('should return store and service providers for recheck mode', () => {
       const providers = ApprovalPlugin.dynamicProviders({}) as ProviderRecord[];
 
-      expect(providers.length).toBe(2);
+      expect(providers.map((p) => p.name)).toEqual(['approval:store', 'approval:option-warnings', 'approval:service']);
 
       const storeProvider = providers.find((p) => p.provide === ApprovalStoreToken);
       const serviceProvider = providers.find((p) => p.provide === ApprovalServiceToken);
@@ -116,7 +112,7 @@ describe('ApprovalPlugin', () => {
     it('should include challenge service for webhook mode', () => {
       const providers = ApprovalPlugin.dynamicProviders({ mode: 'webhook' }) as ProviderRecord[];
 
-      expect(providers.length).toBe(3);
+      expect(providers.length).toBe(4);
 
       const challengeProvider = providers.find((p) => p.provide === ChallengeServiceToken);
       expect(challengeProvider).toBeDefined();

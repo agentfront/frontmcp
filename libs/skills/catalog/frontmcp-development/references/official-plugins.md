@@ -459,24 +459,18 @@ class BasicServer {}
   plugins: [
     ApprovalPlugin.init({
       mode: 'recheck',
-      enableAudit: true,
+      storage: { type: 'redis', redis: { url: process.env.REDIS_URL } },
     }),
   ],
 })
-class AuditedServer {}
+class RedisApprovalServer {}
 
-// Webhook mode -- also registers the PKCE ChallengeService (the webhook options are reserved, see Modes)
+// Webhook mode -- also registers the PKCE ChallengeService (it sends no webhook, see Modes)
 @FrontMcp({
   plugins: [
     ApprovalPlugin.init({
       mode: 'webhook',
-      webhook: {
-        url: 'https://approval.example.com/webhook',
-        challengeTtl: 300,
-        callbackPath: '/approval/callback',
-      },
-      enableAudit: true,
-      maxDelegationDepth: 3,
+      webhook: { challengeTtl: 300 },
     }),
   ],
 })
@@ -502,9 +496,12 @@ opened them.
 - `recheck` -- Re-evaluates approval status on every tool call. Approval can be granted programmatically via `this.approval.grantSessionApproval()`. Good for interactive approval flows where the user confirms in-band.
 - `webhook` -- Also registers the `ChallengeService` (`ChallengeServiceToken`), PKCE challenges for an external approval flow you build yourself.
 
-Neither mode contacts an external system in 1.9: `recheck.url`/`auth`/`interval`/`maxAttempts` poll nothing, and
-`webhook.url`/`includeJwt`/`callbackPath` send no request and serve no route. Ask with `this.elicit()` (or your own
-UI) and record the answer with `this.approval.grantSessionApproval()`.
+Neither mode contacts an external system: `recheck.url`/`auth`/`interval`/`maxAttempts` poll nothing, and
+`webhook.url`/`includeJwt`/`callbackPath` send no request and serve no route. `enableAudit` and `maxDelegationDepth`
+have no effect either: each approval record keeps who granted or revoked it, and a delegated grant names one delegator.
+These options are `@deprecated`, and a server that sets any of them logs `ApprovalPlugin ignores ...` when it starts
+(up to 1.11.2 nothing said so). Ask with `this.elicit()` (or your own UI) and record the answer with
+`this.approval.grantSessionApproval()`.
 
 ### Pre-approved contexts come from the session
 
