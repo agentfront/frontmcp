@@ -68,6 +68,21 @@ test.describe('Elicitation E2E', () => {
       expect(result).toBeSuccessful();
       expect(result.text()).toContain('was cancelled');
     });
+
+    test('should fail the call when the accepted content does not match the schema', async ({ mcp }) => {
+      mcp.onElicitation(async () => ({
+        action: 'accept',
+        content: { confirmed: 'false' },
+      }));
+
+      const result = await mcp.tools.call('confirm-action', {
+        action: 'delete file',
+      });
+
+      expect(result).toBeError();
+      expect(result.text()).toContain('does not match the requested schema');
+      expect(result.text()).not.toContain('confirmed and executed');
+    });
   });
 
   test.describe('get-user-input tool', () => {
@@ -462,6 +477,30 @@ test.describe('Elicitation E2E', () => {
         // Step 3: Verify confirmation was processed
         expect(finalResult).toBeSuccessful();
         expect(finalResult.text()).toContain('confirmed and executed');
+      } finally {
+        await noElicitClient.disconnect();
+      }
+    });
+
+    test('should not run the tool on fallback content that does not match the schema', async ({ server }) => {
+      const noElicitClient = await server.createClientBuilder().withCapabilities({}).withPublicMode().buildAndConnect();
+
+      try {
+        const fallbackResult = await noElicitClient.tools.call('confirm-action', {
+          action: 'send email',
+        });
+        const meta = fallbackResult.raw._meta as Record<string, unknown>;
+        const elicitId = (meta?.elicitationPending as { elicitId: string })?.elicitId;
+
+        const finalResult = await noElicitClient.tools.call('sendElicitationResult', {
+          elicitId,
+          action: 'accept',
+          content: { confirmed: 'yes' },
+        });
+
+        expect(finalResult.isError).toBe(true);
+        expect(finalResult.text()).toContain('does not match the requested schema');
+        expect(finalResult.text()).not.toContain('confirmed and executed');
       } finally {
         await noElicitClient.disconnect();
       }
