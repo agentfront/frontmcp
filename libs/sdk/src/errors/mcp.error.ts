@@ -542,6 +542,8 @@ export interface InvalidOutputErrorDetails {
   value?: string;
   /** Free-form reason for the rejection (e.g., 'non-finite-number'). */
   reason?: string;
+  /** What returned the output, named in the message. Defaults to 'Tool'. */
+  entry?: 'Tool' | 'Prompt' | 'Resource';
 }
 
 export class InvalidOutputError extends InternalMcpError {
@@ -556,7 +558,7 @@ export class InvalidOutputError extends InternalMcpError {
     const details: InvalidOutputErrorDetails | undefined =
       typeof errorIdOrDetails === 'object' && errorIdOrDetails !== null ? errorIdOrDetails : maybeDetails;
 
-    const baseMsg = 'Tool output validation failed';
+    const baseMsg = `${details?.entry ?? 'Tool'} output validation failed`;
     const detailFragment = details?.reason
       ? ` (${details.reason}${details.path ? ` at ${details.path}` : ''}${details.value !== undefined ? `: ${details.value}` : ''})`
       : '';
@@ -577,6 +579,20 @@ export class InvalidOutputError extends InternalMcpError {
     }
     return 'Output validation failed. Please contact support.';
   }
+}
+
+/** The InvalidOutputError for an entry's output that failed to parse, naming the first issue's path and reason. */
+export function invalidOutputFromParseFailure(
+  entry: InvalidOutputErrorDetails['entry'],
+  error: Error,
+): InvalidOutputError {
+  const issues = (error as { issues?: ReadonlyArray<{ path?: ReadonlyArray<PropertyKey>; message?: string }> }).issues;
+  const firstIssue = issues?.[0];
+  return new InvalidOutputError({
+    entry,
+    reason: firstIssue?.message ?? error.message,
+    path: firstIssue?.path?.length ? firstIssue.path.map(String).join('.') : undefined,
+  });
 }
 
 /**

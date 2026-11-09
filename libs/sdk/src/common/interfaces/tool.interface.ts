@@ -222,7 +222,7 @@ export abstract class ToolContext<
     const sink = this.tryGetContext()?.getRequestNotificationSink?.();
     if (sink) return sink.progress(progress, total, message);
 
-    if (!this._progressToken) {
+    if (this._progressToken === undefined) {
       this.logger.debug('Cannot send progress: no progressToken in request');
       return false;
     }

@@ -110,7 +110,7 @@ Messages use two roles:
 - `user` -- represents the human side of the conversation
 - `assistant` -- primes the conversation with expected response patterns
 
-The result is checked against this shape. A message with another `role`, such as `'system'`, or content that is not a valid content block fails the call with `INVALID_OUTPUT`.
+The result is checked against this shape. A message with another `role`, such as `'system'`, or content that is not a valid content block fails the call with `INVALID_OUTPUT`. The error's message, which the server logs and a development server sends, names the field and the problem, such as `Prompt output validation failed (Invalid option: expected one of "user"|"assistant" at messages.0.role)`.
 
 ### Available Context Methods and Properties
 

@@ -19,6 +19,7 @@ import {
   type ResourceTemplate,
 } from '@frontmcp/protocol';
 
+import { annotationsForClient, callerClientProfile, type ClientNameSources } from '../../answer';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
@@ -282,6 +283,13 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
     try {
       const resolved = this.state.required.resolvedTemplates;
 
+      // A `clients` profile can drop numeric annotations, as it does for resources
+      const annotationsMode = callerClientProfile(this.scope.metadata.clients, {
+        context: this.tryGetContext(),
+        authInfo: (this.input.ctx as { authInfo?: ClientNameSources['authInfo'] } | undefined)?.authInfo,
+        notifications: this.scope.notifications,
+      })?.annotations;
+
       const resourceTemplates: ResponseTemplateItem[] = resolved
         .filter(({ template }) => template.uriTemplate != null)
         .map(({ finalName, template }) => {
@@ -297,13 +305,20 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
             icons: template.metadata.icons,
           };
 
-          // Add _meta for MCP Apps widget templates (ui/* namespace per spec)
+          const annotations = annotationsForClient(template.metadata.annotations, annotationsMode, false);
+          if (annotations) item.annotations = annotations;
+
+          const metaFromMetadata = template.metadata._meta;
+          if (metaFromMetadata && Object.keys(metaFromMetadata).length > 0) item._meta = { ...metaFromMetadata };
+
+          // Add _meta for MCP Apps widget templates (ui/* namespace per spec), keeping the template's own ui keys
           if (template.metadata.mimeType === 'text/html;profile=mcp-app') {
-            item._meta = {
-              ui: {
-                resourceUri: uriTemplate,
-              },
-            };
+            const rawUi = item._meta?.['ui'];
+            const existingUi: Record<string, unknown> =
+              rawUi !== null && typeof rawUi === 'object' && !Array.isArray(rawUi)
+                ? (rawUi as Record<string, unknown>)
+                : {};
+            item._meta = { ...(item._meta ?? {}), ui: { ...existingUi, resourceUri: uriTemplate } };
           }
 
           return item;

@@ -25,7 +25,7 @@ FrontMCP supports multiple ways to connect to MCP servers. Choose based on your 
 
 ```typescript
 // DirectClient: Same process, direct calls
-import { connectOpenAI } from '@frontmcp/sdk/direct';
+import { connectOpenAI } from '@frontmcp/sdk';
 
 const client = await connectOpenAI(scope);
 const tools = await client.listTools(); // Direct function call
@@ -82,7 +82,7 @@ npm install @frontmcp/sdk
 ### Basic Connection
 
 ```typescript
-import { connect } from '@frontmcp/sdk/direct';
+import { connect } from '@frontmcp/sdk';
 
 import { MyServer } from './server';
 
@@ -105,7 +105,7 @@ await client.close();
 For automatic tool/result formatting based on LLM platform:
 
 ```typescript
-import { connectClaude, connectLangChain, connectOpenAI, connectVercelAI } from '@frontmcp/sdk/direct';
+import { connectClaude, connectLangChain, connectOpenAI, connectVercelAI } from '@frontmcp/sdk';
 
 // OpenAI format (function calling)
 const openaiClient = await connectOpenAI(scope, {
@@ -172,7 +172,7 @@ Skills are modular knowledge packages that teach AI how to perform multi-step ta
 #### Search Skills
 
 ```typescript
-import type { SearchSkillsOptions, SearchSkillsResult } from '@frontmcp/sdk/direct';
+import type { SearchSkillsOptions, SearchSkillsResult } from '@frontmcp/sdk';
 
 const options: SearchSkillsOptions = {
   tags: ['code-review'], // Filter by tags
@@ -195,7 +195,7 @@ const result: SearchSkillsResult = await client.searchSkills('code review', opti
 #### Load Skills
 
 ```typescript
-import type { LoadSkillsOptions, LoadSkillsResult } from '@frontmcp/sdk/direct';
+import type { LoadSkillsOptions, LoadSkillsResult } from '@frontmcp/sdk';
 
 const options: LoadSkillsOptions = {
   format: 'full', // 'full' (default) | 'markdown' (formattedContent alone, each part once) | 'instructions-only' (no tool schemas)
@@ -230,7 +230,7 @@ const asMarkdown: LoadSkillsResult<'markdown'> = await client.loadSkills(['skill
 #### List Skills
 
 ```typescript
-import type { ListSkillsOptions, ListSkillsResult } from '@frontmcp/sdk/direct';
+import type { ListSkillsOptions, ListSkillsResult } from '@frontmcp/sdk';
 
 const options: ListSkillsOptions = {
   offset: 0,
@@ -258,7 +258,7 @@ Elicitation allows tools to request user input during execution.
 #### Register Elicitation Handler
 
 ```typescript
-import type { ElicitationHandler, ElicitationRequest, ElicitationResponse } from '@frontmcp/sdk/direct';
+import type { ElicitationHandler, ElicitationRequest, ElicitationResponse } from '@frontmcp/sdk';
 
 const handler: ElicitationHandler = async (request: ElicitationRequest) => {
   // request structure:
@@ -301,7 +301,7 @@ await client.submitElicitationResult('elicit-123', {
 Request argument completion for prompts or resources.
 
 ```typescript
-import type { CompleteOptions, CompleteResult } from '@frontmcp/sdk/direct';
+import type { CompleteOptions, CompleteResult } from '@frontmcp/sdk';
 
 // Complete for a prompt argument
 const promptResult: CompleteResult = await client.complete({
@@ -351,7 +351,7 @@ unsubscribe();
 Control server-side logging level.
 
 ```typescript
-import type { McpLogLevel } from '@frontmcp/sdk/direct';
+import type { McpLogLevel } from '@frontmcp/sdk';
 
 // Set logging level
 // Levels: 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency'
@@ -425,7 +425,7 @@ interface ConnectOptions {
 
 ## Type Exports
 
-All types are exported from `@frontmcp/sdk/direct`:
+All types are exported from `@frontmcp/sdk`:
 
 ```typescript
 import type {
@@ -456,7 +456,7 @@ import type {
   SearchSkillsResult,
   SessionOptions,
   SkillSearchResultItem,
-} from '@frontmcp/sdk/direct';
+} from '@frontmcp/sdk';
 ```
 
 ## Platform-Specific Formatting
