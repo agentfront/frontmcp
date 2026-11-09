@@ -447,6 +447,8 @@ export default class SkillRegistry
 
   /** Children registries */
   private children = new Set<SkillRegistry>();
+  /** The subscription to each adopted child's changes, ended by {@link removeChild}. */
+  private readonly childSubscriptions = new Map<SkillRegistry, () => void>();
   /** The registries that adopted this one: a skill registered here is served through them too. */
   private readonly adopters = new Set<SkillRegistry>();
 
@@ -585,8 +587,8 @@ export default class SkillRegistry
         // Adopt skills from app's skill registry
         const appSkillsRegistry = app.skills;
         if (appSkillsRegistry && 'adoptFromChild' in this && appSkillsRegistry !== this) {
-          // For local apps, adopt from their SkillRegistry
-          if (!app.isRemote && appSkillsRegistry instanceof SkillRegistry) {
+          // A local app's, or an ESM app's skills; a remote app has none of its own
+          if (appSkillsRegistry instanceof SkillRegistry) {
             await this.adoptFromChild(appSkillsRegistry, appSkillsRegistry.owner);
           }
         }
@@ -637,7 +639,7 @@ export default class SkillRegistry
     child.adopters.add(this);
 
     // Subscribe to child changes
-    child.subscribe({ immediate: false }, () => {
+    const unsubscribe = child.subscribe({ immediate: false }, () => {
       const previous = this.adopted.get(child) ?? [];
       const latest = child.listAllIndexed().map((r) => this.relineage(r, prepend));
       this.adopted.set(child, latest);
@@ -657,6 +659,7 @@ export default class SkillRegistry
       }
       this.bump('reset');
     });
+    this.childSubscriptions.set(child, unsubscribe);
 
     // Add adopted skills to storage provider - await to ensure they're searchable. Queued per id
     // like the change handler's writes, so a removal the child makes meanwhile runs after this write
@@ -675,6 +678,23 @@ export default class SkillRegistry
     );
 
     this.reindex();
+    this.bump('reset');
+  }
+
+  /**
+   * Stop serving a child registry adopted with {@link adoptFromChild}: its skills leave this registry, and the
+   * registries that adopted this one, and are withdrawn from the storage provider.
+   */
+  removeChild(child: SkillRegistry): void {
+    if (!this.children.has(child)) return;
+    this.childSubscriptions.get(child)?.();
+    this.childSubscriptions.delete(child);
+    const previous = this.adopted.get(child) ?? [];
+    this.adopted.delete(child);
+    this.children.delete(child);
+    child.adopters.delete(this);
+    this.reindex();
+    this.withdrawGoneAdoptedSkills(previous);
     this.bump('reset');
   }
 

@@ -4,7 +4,18 @@
  */
 import 'reflect-metadata';
 
-import { App, LogLevel, LogTransport, LogTransportInterface, type EsmAppOptions, type LogRecord } from '../../common';
+import {
+  App,
+  FlowHooksOf,
+  LogLevel,
+  LogTransport,
+  LogTransportInterface,
+  Plugin,
+  Tool,
+  ToolContext,
+  type EsmAppOptions,
+  type LogRecord,
+} from '../../common';
 import type { DirectMcpServer } from '../../direct/direct.types';
 import { EsmModuleLoader, type EsmLoadResult } from '../../esm-loader/esm-module-loader';
 import { VersionPoller } from '../../esm-loader/version-poller';
@@ -67,8 +78,8 @@ describe('App.esm()', () => {
     expect((await srv.listResources()).resources.map((resource) => resource.uri)).toEqual(['status://acme']);
   });
 
-  it('warns that the skills, agents, jobs and workflows of the package are not loaded', async () => {
-    load.mockResolvedValue({ ...loadResult, manifest: { ...loadResult.manifest, skills: [{}], jobs: [{}] } });
+  it('warns that the jobs and workflows of the package are not loaded', async () => {
+    load.mockResolvedValue({ ...loadResult, manifest: { ...loadResult.manifest, jobs: [{}], workflows: [{}] } });
     const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
     server = await FrontMcpInstance.createDirect({
       info: { name: 'esm-gateway', version: '1.0.0' },
@@ -77,13 +88,13 @@ describe('App.esm()', () => {
     });
 
     expect(warnings).toContain(
-      "ESM app acme: App.esm() loads only tools, resources, prompts and providers; the package's skills, jobs are not loaded",
+      "ESM app acme: App.esm() loads only tools, resources, prompts, agents, skills and providers; the package's jobs, workflows are not loaded",
     );
   });
 
   it('warns about the kinds it skips before an entry fails to build', async () => {
     warnings.length = 0;
-    const manifest = { ...loadResult.manifest, agents: [{}] };
+    const manifest = { ...loadResult.manifest, jobs: [{}] };
     Object.defineProperty(manifest, 'tools', {
       get: () => {
         throw new Error('tool needs the package provider');
@@ -100,7 +111,7 @@ describe('App.esm()', () => {
       }),
     ).rejects.toThrow('tool needs the package provider');
     expect(warnings).toContain(
-      "ESM app acme: App.esm() loads only tools, resources, prompts and providers; the package's agents are not loaded",
+      "ESM app acme: App.esm() loads only tools, resources, prompts, agents, skills and providers; the package's jobs are not loaded",
     );
   });
 
@@ -240,6 +251,32 @@ describe('App.esm() with autoUpdate', () => {
     await poll();
     expect(load).toHaveBeenCalledTimes(3);
     expect(await toolNames(srv)).toEqual(['acme:echo_v2']);
+  });
+
+  it('keeps the loaded version when the new one declares metadata no installed plugin enforces', async () => {
+    @Plugin({ name: 'esm-approval', enforcesMetadata: ['approval'] })
+    class ApprovalPlugin {
+      @(FlowHooksOf('tools:call-tool').Will('execute'))
+      gate() {
+        // only declares the key
+      }
+    }
+    @Tool({ name: 'payout', inputSchema: {}, ...({ approval: true } as Record<string, unknown>) })
+    class PayoutTool extends ToolContext {
+      async execute() {
+        return 'paid';
+      }
+    }
+    expect(ApprovalPlugin).toBeDefined();
+    const { srv, poll } = await startPolling();
+    load.mockResolvedValueOnce({
+      ...versionOf('1.1.0', 'echo'),
+      manifest: { name: '@acme/tools', version: '1.1.0', tools: [PayoutTool] },
+    });
+
+    await poll();
+
+    expect(await toolNames(srv)).toEqual(['acme:echo']);
   });
 
   it('swaps the entries once per new version', async () => {

@@ -4,7 +4,14 @@ import { tokenName, type Token } from '@frontmcp/di';
 import type { ServerCapabilities, Tool } from '@frontmcp/protocol';
 import { getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
 
-import { type AgentEntry, type AgentRecord, type AgentType, type EntryLineage, type EntryOwnerRef } from '../common';
+import {
+  type AgentEntry,
+  type AgentRecord,
+  type AgentType,
+  type EntryLineage,
+  type EntryOwnerRef,
+  type ScopeEntry,
+} from '../common';
 import { logAvailabilityFiltering } from '../common/availability';
 import { DependencyNotFoundError } from '../errors/mcp.error';
 import type ProviderRegistry from '../provider/provider.registry';
@@ -60,6 +67,12 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
 
   /** Unsubscribe functions for child registry subscriptions */
   private childSubscriptions = new Map<AgentRegistry, () => void>();
+
+  /** Whether this registry registers its agents' entries in its parent scope, and has begun to. */
+  private servesParentScope = false;
+
+  /** The agents whose tool, and exported resources and prompts, this registry registered in its parent scope. */
+  private readonly servedInParentScope = new Set<AgentInstance>();
 
   // ---- O(1) indexes over EFFECTIVE set (local + adopted) ----
   private byQualifiedId = new Map<string, IndexedAgent>();
@@ -205,38 +218,33 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
    */
   private async registerAgentToolsInParentScope(): Promise<void> {
     const scope = this.providers.getActiveScope();
-    const toolRegistry = scope.tools;
 
     // Skip if no tool registry available (e.g., in isolated test environments)
-    if (!toolRegistry) {
+    if (!scope.tools) {
       return;
     }
 
-    // Register ALL agents (local + adopted from apps/plugins)
-    for (const agentInstance of this.listAllInstances()) {
-      const toolInstance = agentInstance.getToolInstance();
+    this.servesParentScope = true;
+    this.syncParentScope();
+  }
 
-      if (toolInstance) {
-        try {
-          // Register the agent's tool in the parent scope's tool registry
-          toolRegistry.registerToolInstance(toolInstance);
-          scope.logger.debug(`Registered agent tool ${toolInstance.name} in parent ToolRegistry`);
-        } catch (error) {
-          // Log warning but don't fail - agent registration failure shouldn't break the system
-          scope.logger.warn(
-            `Failed to register agent tool for ${agentInstance.name}: ${
-              error instanceof Error ? error.message : 'Unknown error'
-            }`,
-          );
-        }
-      }
-
-      for (const resource of agentInstance.getExportedResources()) {
-        scope.resources?.registerResourceInstance(resource);
-      }
-      for (const prompt of agentInstance.getExportedPrompts()) {
-        scope.prompts?.registerPromptInstance(prompt);
-      }
+  /**
+   * Register in the parent scope the agents this registry gained since it last did, and take out the entries of
+   * those it no longer has (an ESM app's agents, replaced by a new version of its package).
+   */
+  private syncParentScope(): void {
+    if (!this.servesParentScope) return;
+    const scope = this.providers.getActiveScope();
+    const live = new Set(this.listAllInstances());
+    for (const agent of [...this.servedInParentScope]) {
+      if (live.has(agent)) continue;
+      this.servedInParentScope.delete(agent);
+      withdrawAgentFromScope(scope, agent);
+    }
+    for (const agent of live) {
+      if (this.servedInParentScope.has(agent)) continue;
+      this.servedInParentScope.add(agent);
+      serveAgentInScope(scope, agent);
     }
   }
 
@@ -263,6 +271,7 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
       const latest = child.listAllIndexed().map((r) => this.relineage(r, prepend));
       this.adopted.set(child, latest);
       this.reindex();
+      this.syncParentScope();
       this.bump('reset');
     });
     this.childSubscriptions.set(child, unsubscribe);
@@ -287,6 +296,7 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
     this.adopted.delete(child);
     this.children.delete(child);
     this.reindex();
+    this.syncParentScope();
     this.bump('reset');
   }
 
@@ -549,4 +559,38 @@ function dedupLineage(l: EntryLineage): EntryLineage {
     if (!last || last.kind !== o.kind || last.id !== o.id) out.push(o);
   }
   return out;
+}
+
+/** Register an agent's tool, and the resources and prompts it exports, in `scope`. */
+function serveAgentInScope(scope: ScopeEntry, agent: AgentInstance): void {
+  const toolInstance = agent.getToolInstance();
+  if (toolInstance) {
+    try {
+      scope.tools.registerToolInstance(toolInstance);
+      scope.logger.debug(`Registered agent tool ${toolInstance.name} in parent ToolRegistry`);
+    } catch (error) {
+      // An agent whose tool can't be registered shouldn't break the system
+      scope.logger.warn(
+        `Failed to register agent tool for ${agent.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+  for (const resource of agent.getExportedResources()) {
+    scope.resources?.registerResourceInstance(resource);
+  }
+  for (const prompt of agent.getExportedPrompts()) {
+    scope.prompts?.registerPromptInstance(prompt);
+  }
+}
+
+/** Take an agent's tool, and the resources and prompts it exports, out of `scope`. */
+function withdrawAgentFromScope(scope: ScopeEntry, agent: AgentInstance): void {
+  const toolInstance = agent.getToolInstance();
+  if (toolInstance) scope.tools.unregisterToolInstance(toolInstance.record.provide);
+  for (const resource of agent.getExportedResources()) {
+    scope.resources?.unregisterResourceInstance(resource.record.provide);
+  }
+  for (const prompt of agent.getExportedPrompts()) {
+    scope.prompts?.unregisterPromptInstance(prompt.record.provide);
+  }
 }

@@ -19,14 +19,18 @@ import {
   type ResourceEsmTargetRecord,
   type ResourceRecord,
   type ScopeEntry,
+  type SkillMetadata,
+  type SkillRecord,
   type ToolEsmRecord,
   type ToolEsmTargetRecord,
   type ToolRecord,
 } from '../common';
+import { frontMcpSkill } from '../common/decorators/skill.decorator';
 import { pickExternalEntry } from '../common/utils/external-entry.utils';
 import { ExternalEntryLoadError, type ExternalEntryKind } from '../errors/external-entry.errors';
 import { normalizePrompt } from '../prompt/prompt.utils';
 import { normalizeResource } from '../resource/resource.utils';
+import { isSkillRecord, normalizeSkill } from '../skill/skill.utils';
 import { normalizeTool } from '../tool/tool.utils';
 import { type EsmRegistryAuth } from './esm-auth.types';
 import { EsmCacheManager } from './esm-cache';
@@ -108,6 +112,15 @@ export function esmPromptRecord(raw: unknown, namespace?: string): PromptRecord 
   }
   const definition = normalizePromptFromEsmExport(raw);
   return definition && buildEsmPromptRecord(definition, namespace);
+}
+
+/**
+ * The record of a manifest's skill export: a `@Skill` class, a `skill()` result, or a plain
+ * `{ name, description, instructions }` object, checked as `skill()` checks it. Anything else is not a skill, and throws.
+ */
+export function esmSkillRecord(raw: unknown): SkillRecord {
+  if (raw !== null && typeof raw === 'object' && !isSkillRecord(raw)) return frontMcpSkill(raw as SkillMetadata);
+  return normalizeSkill(raw);
 }
 
 /** The records of a manifest's exports of one kind; exports that are not entries of that kind are skipped. */
