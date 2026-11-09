@@ -90,11 +90,27 @@ class AllowedWorkflow {}
 @webhookWorkflow('step-guarded', { steps: [{ id: 'admin', jobName: 'admin-only' }] })
 class StepGuardedWorkflow {}
 
+@webhookWorkflow('create-guarded', {
+  permissions: [
+    { action: 'execute', roles: ['webhook:create-guarded'] },
+    { action: 'create', roles: ['admin'] },
+  ],
+})
+class CreateGuardedWorkflow {}
+
 @App({
   id: 'hooks',
   name: 'Hooks',
   jobs: [RecordJob, AdminOnlyJob],
-  workflows: [DeployWorkflow, NightlyWorkflow, SmallWorkflow, GuardedWorkflow, AllowedWorkflow, StepGuardedWorkflow],
+  workflows: [
+    DeployWorkflow,
+    NightlyWorkflow,
+    SmallWorkflow,
+    GuardedWorkflow,
+    AllowedWorkflow,
+    StepGuardedWorkflow,
+    CreateGuardedWorkflow,
+  ],
 })
 class HooksApp {}
 
@@ -278,6 +294,13 @@ describe('workflow webhooks', () => {
       expect(response.status).toBe(202);
       const run = await runEnd(scope, ((await response.json()) as { runId: string }).runId);
       expect(run.state).toBe('completed');
+    });
+
+    it('is refused with 403 by create rules that do not allow it, whatever its execute rules allow', async () => {
+      const response = await handler(signedRequest('/workflows/webhook/create-guarded', '{}'));
+
+      expect(response.status).toBe(403);
+      expect(warnings).toContainEqual(expect.stringContaining('don\'t allow the role "webhook:create-guarded"'));
     });
 
     it("is checked against each step job's execute rules too", async () => {

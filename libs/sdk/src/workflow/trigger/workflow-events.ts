@@ -55,7 +55,7 @@ async function startEventRun(
     });
   } catch (error) {
     if (error instanceof JobNotAuthorizedError) {
-      cannotStart(`its execute rules don't allow the role "${principal.role}"; add it to a rule's roles`);
+      cannotStart(`its create or execute rules don't allow the role "${principal.role}"; add it to their roles`);
     } else if (error instanceof InvalidInputError) {
       cannotStart(error.getInternalMessage());
     } else {

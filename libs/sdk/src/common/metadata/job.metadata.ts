@@ -16,15 +16,19 @@ declare global {
 // ============================================
 
 /**
- * What a permission rule gates: `execute` starting a run (`execute_job`, `execute_workflow`, each attempt and
- * workflow step), `read` another caller's runs, `delete` cancelling another caller's runs or removing a dynamic
- * entry, `list` seeing the entry in `list_jobs` / `list_workflows`. `create` and `update` are deprecated and checked
- * by nothing: no operation creates or updates a job, a workflow or a run, and startup warns about such rules.
+ * What a permission rule gates:
+ * - `create` submitting a new run: `execute_job`, `execute_workflow`, a webhook or an event, checked once, with
+ *   `execute`, before the run exists. A workflow step doesn't submit a run of its job, so it isn't checked there;
+ * - `execute` running the entry: when a run is submitted, then each attempt and each workflow step's job;
+ * - `read` reading another caller's runs;
+ * - `update` modifying an entry registered at runtime (`update_job`, `update_workflow`);
+ * - `delete` cancelling another caller's runs, or removing an entry registered at runtime;
+ * - `list` seeing the entry in `list_jobs` / `list_workflows`, which also hide one the caller may not submit.
  */
 export type JobPermissionAction = 'create' | 'read' | 'update' | 'delete' | 'execute' | 'list';
 
 export interface JobPermission {
-  /** The action the rule gates; `'create'` and `'update'` are deprecated and never checked (see {@link JobPermissionAction}). */
+  /** The action the rule gates (see {@link JobPermissionAction}). */
   action: JobPermissionAction;
   roles?: string[];
   scopes?: string[];

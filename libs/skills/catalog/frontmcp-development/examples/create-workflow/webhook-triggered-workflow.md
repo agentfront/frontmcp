@@ -39,8 +39,9 @@ import { Workflow, z } from '@frontmcp/sdk';
   timeout: 900000, // 15 minutes
   maxConcurrency: 3,
   permissions: [
-    // The webhook's runs run as the role webhook:ci-deploy; admins may start runs with execute_workflow too
+    // The webhook submits runs as the role webhook:ci-deploy; admins may submit them with execute_workflow too
     { action: 'execute', roles: ['admin', 'webhook:ci-deploy'] },
+    { action: 'create', roles: ['admin', 'webhook:ci-deploy'] },
     { action: 'read', roles: ['admin', 'ci-bot'] },
     { action: 'list', roles: ['admin', 'ci-bot'] },
   ],

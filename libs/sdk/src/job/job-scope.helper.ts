@@ -21,6 +21,7 @@ import GetWorkflowStatusTool from '../workflow/tools/get-workflow-status.tool';
 import ListWorkflowsTool from '../workflow/tools/list-workflows.tool';
 import RegisterWorkflowTool from '../workflow/tools/register-workflow.tool';
 import RemoveWorkflowTool from '../workflow/tools/remove-workflow.tool';
+import UpdateWorkflowTool from '../workflow/tools/update-workflow.tool';
 import { listenToWorkflowEvents } from '../workflow/trigger/workflow-events';
 import { assertWorkflowTriggers, eventWorkflows } from '../workflow/trigger/workflow-triggers';
 import WorkflowRegistry, { type WorkflowRegistryInterface } from '../workflow/workflow.registry';
@@ -43,7 +44,7 @@ import GetJobStatusTool from './tools/get-job-status.tool';
 import ListJobsTool from './tools/list-jobs.tool';
 import RegisterJobTool from './tools/register-job.tool';
 import RemoveJobTool from './tools/remove-job.tool';
-import { describeUncheckedPermissions } from './unread-job-options';
+import UpdateJobTool from './tools/update-job.tool';
 
 export interface JobsConfig {
   enabled: boolean;
@@ -200,11 +201,6 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     workflowRegistry.registerDynamic(dynWf);
   }
 
-  // Options the schemas accept and nothing reads: say so once, in the server that serves the entries
-  if (!jobWorker) {
-    for (const message of describeUnreadOptions(jobRegistry, workflowRegistry)) logger.warn(message);
-  }
-
   // Refused at boot: a detached job this server can't outlive, or a webhook workflow without a usable secret or path
   try {
     assertRunnersAvailable(jobRegistry.getJobs(), jobsConfig.runner);
@@ -273,9 +269,9 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
   ];
 
   if (jobsConfig.allowDynamicRegistration === true) {
-    managementTools.push(RegisterJobTool, RegisterWorkflowTool);
+    managementTools.push(RegisterJobTool, UpdateJobTool, RegisterWorkflowTool, UpdateWorkflowTool);
     logger.warn(
-      'Dynamic job registration is ENABLED: register_job/register_workflow accept a raw script and register it as an executable job.',
+      'Dynamic job registration is ENABLED: register_job/register_workflow accept a raw script and register it as an executable job, and update_job/update_workflow change one.',
     );
   }
 
@@ -447,14 +443,4 @@ function completionStatusOf(state: unknown): JobCompletionEvent['status'] | unde
     default:
       return undefined;
   }
-}
-
-/** The startup warnings about the job and workflow options nothing reads. */
-function describeUnreadOptions(jobs: JobRegistryInterface, workflows: WorkflowRegistryInterface): string[] {
-  return [
-    ...jobs.getJobs(true).flatMap((job) => describeUncheckedPermissions('Job', job.name, job.metadata.permissions)),
-    ...workflows
-      .getWorkflows(true)
-      .flatMap((workflow) => describeUncheckedPermissions('Workflow', workflow.name, workflow.metadata.permissions)),
-  ];
 }
