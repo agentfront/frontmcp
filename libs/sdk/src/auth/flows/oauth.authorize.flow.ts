@@ -1176,7 +1176,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     const localAuth = auth as LocalPrimaryAuth;
     const providerId = localAuth.remoteProviderId;
 
-    // No upstream provider registered (e.g. missing clientId / DCR not wired).
+    // No upstream provider registered (no clientId and no providerConfig.dcrEnabled).
     if (!providerId || !localAuth.getProviderConfig(providerId)) {
       this.logger.error('Remote mode: no upstream provider configured for federation');
       // Drop the pending authorization stored just before this call so it does

@@ -350,7 +350,7 @@ upstream tokens' lifetime.
   auth: {
     mode: 'remote',
     provider: 'https://auth.example.com',
-    clientId: 'xxx', // pre-registered (DCR not yet wired)
+    clientId: 'xxx', // pre-registered (or omit it and set providerConfig.dcrEnabled)
     clientSecret: process.env['OAUTH_CLIENT_SECRET'],
     scopes: ['openid', 'profile', 'email'],
     providerConfig: { id: 'idp' }, // stable provider id (defaults to provider host)
@@ -391,9 +391,29 @@ old token only once the refresh token has been rotated, so a failed refresh can 
 retried with the same refresh token; of two redemptions of one refresh token at once,
 one may get `invalid_grant`.
 
-**Deferred (not yet wired):** upstream **Dynamic Client Registration**
-(`providerConfig.dcrEnabled` / `registrationEndpoint`) — provide a pre-registered
-`clientId`.
+**Dynamic client registration** (`providerConfig.dcrEnabled`): without a `clientId`,
+FrontMCP registers itself with the provider (RFC 7591) at startup and signs in
+with that client. It registers at `providerConfig.registrationEndpoint`, or at the
+`registration_endpoint` of the provider's metadata
+(`/.well-known/oauth-authorization-server`, then `/.well-known/openid-configuration`,
+whose `issuer` must be `provider`). The provider must allow open registration (no
+initial access token). The redirect URI it registers is
+`<issuer>/oauth/provider/<id>/callback`, so set `local.issuer` to your public URL.
+With a persistent `tokenStorage` the client is kept there (secret encrypted with
+`JWT_SECRET`) and every instance and restart reuses it; with memory storage the
+server registers again on each start. A refused or failed registration fails
+startup with `UPSTREAM_CLIENT_REGISTRATION_FAILED`. A set `clientId` wins over `dcrEnabled`.
+
+```typescript
+auth: {
+  mode: 'remote',
+  provider: 'https://auth.example.com',
+  scopes: ['openid', 'profile', 'email'],
+  local: { issuer: 'https://mcp.example.com' },
+  tokenStorage: { redis: { host: process.env['REDIS_HOST'] ?? 'localhost', port: 6379 } },
+  providerConfig: { dcrEnabled: true },
+}
+```
 
 ## OAuth Local Dev Flow
 
