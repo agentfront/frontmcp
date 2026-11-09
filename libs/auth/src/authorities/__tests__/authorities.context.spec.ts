@@ -153,6 +153,40 @@ describe('AuthoritiesContextBuilder', () => {
       expect(ctx.user.roles).toEqual(['Admin']);
       expect(ctx.user.permissions).toEqual(['fe.read', 'fe.write']);
       expect(ctx.user.claims['tenantId']).toBe('tenant-1');
+      expect(ctx.user.tenantId).toBe('tenant-1');
+    });
+
+    it('resolves tenantId from a dot path, for user.tenantId in rules', () => {
+      const builder = new AuthoritiesContextBuilder({ claimsMapping: { tenantId: 'org.id' } });
+      const ctx = builder.build({ user: { sub: 'u1', org: { id: 'acme' } } }, { tenantId: 'acme' });
+
+      expect(ctx.user.tenantId).toBe('acme');
+      expect(evaluateAbac({ match: { 'user.tenantId': 'acme' } }, ctx).granted).toBe(true);
+      expect(evaluateAbac({ match: { 'user.tenantId': 'globex' } }, ctx).granted).toBe(false);
+      expect(
+        evaluateAbac({ conditions: [{ path: 'user.tenantId', op: 'eq', value: { fromInput: 'tenantId' } }] }, ctx)
+          .granted,
+      ).toBe(true);
+    });
+
+    it('resolves tenantId from authorization claims', () => {
+      const builder = new AuthoritiesContextBuilder({ claimsMapping: { tenantId: 'org_id' } });
+      const ctx = builder.build({ user: { sub: 'u1' }, extra: { authorization: { claims: { org_id: 'org-42' } } } });
+      expect(ctx.user.tenantId).toBe('org-42');
+    });
+
+    it.each([
+      ['a missing claim', { sub: 'u1' }],
+      ['an empty string', { sub: 'u1', org_id: '' }],
+      ['a value that is not a string', { sub: 'u1', org_id: { id: 'acme' } }],
+    ])('leaves tenantId undefined for %s', (_label, user) => {
+      const builder = new AuthoritiesContextBuilder({ claimsMapping: { tenantId: 'org_id' } });
+      expect(builder.build({ user }).user.tenantId).toBeUndefined();
+    });
+
+    it('leaves tenantId undefined without a tenantId mapping', () => {
+      const builder = new AuthoritiesContextBuilder({ claimsMapping: { roles: 'roles' } });
+      expect(builder.build({ user: { sub: 'u1', tenantId: 'acme' } }).user.tenantId).toBeUndefined();
     });
 
     it('should resolve userId from custom path', () => {

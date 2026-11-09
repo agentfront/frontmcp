@@ -26,6 +26,17 @@ interface AuthoritiesClaimsMapping {
 }
 ```
 
+What each mapped field becomes in the evaluation context:
+
+| Mapping       | Context field      | Without the mapping                                |
+| ------------- | ------------------ | -------------------------------------------------- |
+| `roles`       | `user.roles`       | the `roles` claim, then the authorization's scopes |
+| `permissions` | `user.permissions` | the `permissions` claim                            |
+| `userId`      | `user.sub`         | the `sub` claim                                    |
+| `tenantId`    | `user.tenantId`    | `undefined`; the claim is still under `claims.*`   |
+
+`user.tenantId` is the mapped claim when it is a non-empty string, and `undefined` otherwise. Rules read it as `user.tenantId` (`match: { 'user.tenantId': 'acme' }`, or `{ path: 'user.tenantId', op: 'eq', value: { fromInput: 'tenantId' } }`), and guards and custom evaluators as `ctx.user.tenantId`. Up to 1.11.2 the `tenantId` mapping was accepted and not read. With a `claimsResolver`, `claimsMapping` isn't read, `tenantId` included. `this.auth` has no tenant field: add one with a pipe (`authorities.pipes`).
+
 ## Auth0
 
 Auth0 stores roles in a custom namespaced claim (you define the namespace) and permissions in a flat `permissions` array. The org ID (if using Auth0 Organizations) is in `org_id`.
