@@ -5,15 +5,20 @@
  *
  * @see https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-00
  */
+import type { JSONWebKeySet } from 'jose';
+
 import { isRedirectResponse } from '@frontmcp/utils';
 
-import { createCimdCache, type CimdCacheBackend } from './cimd.cache';
+import { verifyClientAssertion, type ClientAssertionCheck } from './cimd-client-assertion';
+import { createCimdCache, extractCacheHeaders, parseCacheHeaders, type CimdCacheBackend } from './cimd.cache';
 import {
+  CimdClientAssertionError,
   CimdClientIdMismatchError,
   CimdFetchError,
   CimdResponseTooLargeError,
   CimdSecurityError,
   CimdValidationError,
+  InvalidClientIdUrlError,
   RedirectUriMismatchError,
 } from './cimd.errors';
 import { noopLogger, type CimdLogger } from './cimd.logger';
@@ -22,6 +27,7 @@ import {
   cimdConfigSchema,
   cimdNetworkConfigSchema,
   cimdSecurityConfigSchema,
+  clientJwksSchema,
   clientMetadataDocumentSchema,
   type CimdCacheConfig,
   type CimdConfig,
@@ -32,6 +38,22 @@ import {
   type ClientMetadataDocument,
 } from './cimd.types';
 import { assertHostNotSsrf, hasOnlyLocalhostRedirectUris, isCimdClientId, validateClientIdUrl } from './cimd.validator';
+
+/** How many `jwks_uri` key sets are kept in memory; the oldest goes first. */
+const MAX_CACHED_KEY_SETS = 500;
+
+/** How soon a key set may be fetched again for an assertion naming a key it lacks (a rotation). */
+const KEY_SET_REFRESH_COOLDOWN_MS = 30_000;
+
+interface CachedKeySet {
+  keys: JSONWebKeySet;
+  fetchedAt: number;
+  expiresAt: number;
+}
+
+type FetchedJson =
+  | { notModified: true; headers: Headers }
+  | { notModified: false; document: unknown; headers: Headers };
 
 /**
  * CIMD Service for resolving and validating client metadata documents.
@@ -44,6 +66,7 @@ export class CimdService {
   private readonly securityConfig: CimdSecurityConfig;
   private readonly networkConfig: CimdNetworkConfig;
   private cacheBackend?: Promise<CimdCacheBackend>;
+  private readonly keySets = new Map<string, CachedKeySet>();
   private readonly logger: CimdLogger;
 
   /**
@@ -206,18 +229,20 @@ export class CimdService {
 
   /**
    * Check that this server can honor the client as its document declares it: it authenticates at the token
-   * endpoint with `none` (a public document holds no shared secret, and this server verifies no `private_key_jwt`
-   * assertion against `jwks` / `jwks_uri`), and it uses the authorization code grant with `response_type=code`.
+   * endpoint with `none`, or with `private_key_jwt` and exactly one of `jwks` / `jwks_uri` (a public document holds
+   * no shared secret, so `client_secret_*` is refused), and it uses the authorization code grant with
+   * `response_type=code`.
    *
    * @param metadata - The client's metadata document
    * @throws CimdValidationError naming each declaration this server cannot honor
    */
   assertSupportedClient(metadata: ClientMetadataDocument): void {
     const problems: string[] = [];
-    if (metadata.token_endpoint_auth_method !== 'none') {
-      problems.push(
-        `token_endpoint_auth_method "${metadata.token_endpoint_auth_method}" is not supported, only "none"`,
-      );
+    const method = metadata.token_endpoint_auth_method;
+    if (method === 'private_key_jwt') {
+      problems.push(...this.keySourceProblems(metadata));
+    } else if (method !== 'none') {
+      problems.push(`token_endpoint_auth_method "${method}" is not supported, only "none" or "private_key_jwt"`);
     }
     if (!metadata.grant_types.includes('authorization_code')) {
       problems.push('grant_types must include "authorization_code"');
@@ -227,6 +252,71 @@ export class CimdService {
     }
     if (problems.length > 0) {
       throw new CimdValidationError(metadata.client_id, problems);
+    }
+  }
+
+  /**
+   * Authenticate a `private_key_jwt` client by its assertion (RFC 7523): see {@link verifyClientAssertion}.
+   *
+   * @param metadata - The client's metadata document, which declares `private_key_jwt`
+   * @param check - The token request's assertion, the audiences it may name, and the `jti` store
+   * @throws CimdClientAssertionError when the assertion is missing or refused
+   * @throws CimdFetchError, CimdResponseTooLargeError or CimdSecurityError when `jwks_uri` can't be fetched
+   */
+  async verifyClientAssertion(metadata: ClientMetadataDocument, check: ClientAssertionCheck): Promise<void> {
+    await verifyClientAssertion({
+      ...check,
+      clientId: metadata.client_id,
+      keys: (refresh) => this.clientKeys(metadata, refresh),
+    });
+  }
+
+  /**
+   * The client's keys: its inline `jwks`, or the key set at its `jwks_uri`, fetched like the document itself
+   * (SSRF guard, redirect policy, timeout, size limit) and cached for the TTL its cache headers give, within
+   * `cache.minTtlMs` and `cache.maxTtlMs`. With `refresh`, a cached key set at least
+   * {@link KEY_SET_REFRESH_COOLDOWN_MS} old is fetched again.
+   */
+  private async clientKeys(metadata: ClientMetadataDocument, refresh: boolean): Promise<JSONWebKeySet> {
+    if (metadata.jwks) return metadata.jwks as JSONWebKeySet;
+    const jwksUri = metadata.jwks_uri;
+    if (!jwksUri) throw new CimdClientAssertionError(metadata.client_id, 'no_keys');
+
+    const now = Date.now();
+    const cached = this.keySets.get(jwksUri);
+    const reusable =
+      cached && cached.expiresAt > now && (!refresh || now - cached.fetchedAt < KEY_SET_REFRESH_COOLDOWN_MS);
+    if (reusable) return cached.keys;
+
+    validateClientIdUrl(jwksUri, this.securityConfig);
+    const fetched = await this.fetchJson(jwksUri);
+    if (fetched.notModified) throw new CimdFetchError(jwksUri, '304 Not Modified to an unconditional request');
+    const parsed = clientJwksSchema.safeParse(fetched.document);
+    if (!parsed.success) throw new CimdValidationError(jwksUri, ['jwks_uri did not return a JSON Web Key Set']);
+
+    const { ttlMs } = parseCacheHeaders(extractCacheHeaders(fetched.headers), this.cacheConfig);
+    this.keySets.delete(jwksUri);
+    this.keySets.set(jwksUri, { keys: parsed.data as JSONWebKeySet, fetchedAt: now, expiresAt: now + ttlMs });
+    if (this.keySets.size > MAX_CACHED_KEY_SETS) {
+      const oldest = this.keySets.keys().next().value;
+      if (oldest !== undefined) this.keySets.delete(oldest);
+    }
+    return parsed.data as JSONWebKeySet;
+  }
+
+  /** Why a `private_key_jwt` document's keys can't be used: neither or both of `jwks` / `jwks_uri`, or a bad URI. */
+  private keySourceProblems(metadata: ClientMetadataDocument): string[] {
+    if (!metadata.jwks === !metadata.jwks_uri) {
+      return ['token_endpoint_auth_method "private_key_jwt" needs exactly one of "jwks" or "jwks_uri"'];
+    }
+    if (!metadata.jwks_uri) return [];
+    try {
+      validateClientIdUrl(metadata.jwks_uri, this.securityConfig);
+      return [];
+    } catch (error) {
+      if (error instanceof InvalidClientIdUrlError) return [`jwks_uri is not allowed: ${error.reason}`];
+      if (error instanceof CimdSecurityError) return [`jwks_uri is not allowed: ${error.securityReason}`];
+      throw error;
     }
   }
 
@@ -257,22 +347,38 @@ export class CimdService {
   }
 
   /**
-   * Fetch a metadata document from a CIMD URL.
+   * Fetch a metadata document from a CIMD URL, revalidating a cached one with a conditional request.
+   */
+  private async fetchMetadataDocument(clientId: string): Promise<{ document: unknown; headers: Headers }> {
+    const cache = await this.cache();
+    const conditionalHeaders = await cache.getConditionalHeaders(clientId);
+    const fetched = await this.fetchJson(clientId, conditionalHeaders);
+    if (!fetched.notModified) return fetched;
+
+    const staleEntry = await cache.getStale(clientId);
+    if (!staleEntry) {
+      throw new CimdFetchError(clientId, '304 Not Modified but no cached entry', { httpStatus: 304 });
+    }
+    await cache.revalidate(clientId, fetched.headers);
+    this.logger.debug(`CIMD document not modified: ${clientId}`);
+    return { document: staleEntry.document, headers: fetched.headers };
+  }
+
+  /**
+   * Fetch a JSON document (a client metadata document or a client's `jwks_uri`) with the SSRF guard on every hop,
+   * the redirect policy, the timeout and the size limit. `url` names the document in every error.
    *
    * Following the JwksService.fetchJson() pattern.
    */
-  private async fetchMetadataDocument(clientId: string): Promise<{ document: unknown; headers: Headers }> {
+  private async fetchJson(url: string, conditionalHeaders?: Record<string, string>): Promise<FetchedJson> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.networkConfig.timeoutMs);
 
     try {
-      // Check for conditional request headers
-      const cache = await this.cache();
-      const conditionalHeaders = await cache.getConditionalHeaders(clientId);
-      const originalOrigin = new URL(clientId).origin;
+      const originalOrigin = new URL(url).origin;
       const maxRedirects = this.networkConfig.maxRedirects;
 
-      let currentUrl = clientId;
+      let currentUrl = url;
       let redirectCount = 0;
       let isFirstRequest = true;
 
@@ -280,13 +386,13 @@ export class CimdService {
         // SSRF guard (DNS-aware): resolve the current host and reject if it (or
         // any resolved address) is internal. Runs for the initial URL AND every
         // redirect hop, immediately before the fetch, so an attacker-supplied
-        // client_id host cannot reach cloud-metadata / private addresses via a
+        // host cannot reach cloud-metadata / private addresses via a
         // DNS record or a 3xx to an internal target. `validateClientIdUrl`
         // (literal-IP checks) already ran for the initial URL and each redirect
         // target; this adds the resolved-address check. Skipped for localhost
         // testing (allowInsecureForTesting) and when blockPrivateIPs is off.
         if (this.securityConfig.blockPrivateIPs && !this.securityConfig.allowInsecureForTesting) {
-          await assertHostNotSsrf(new URL(currentUrl).hostname, clientId);
+          await assertHostNotSsrf(new URL(currentUrl).hostname, url);
         }
 
         const headers: Record<string, string> = {
@@ -303,28 +409,15 @@ export class CimdService {
           redirect: 'manual',
         });
 
-        // Handle 304 Not Modified
         if (response.status === 304) {
-          const staleEntry = await cache.getStale(clientId);
-          if (staleEntry) {
-            await cache.revalidate(clientId, response.headers);
-            this.logger.debug(`CIMD document not modified: ${clientId}`);
-            return {
-              document: staleEntry.document,
-              headers: response.headers,
-            };
-          }
-          // No cached entry to revalidate, treat as error
-          throw new CimdFetchError(clientId, '304 Not Modified but no cached entry', {
-            httpStatus: 304,
-          });
+          return { notModified: true, headers: response.headers };
         }
 
         // Handle redirects based on policy (an opaque redirect has no readable Location and is refused)
         if (isRedirectResponse(response)) {
           const location = response.headers.get('location');
           if (!location) {
-            throw new CimdFetchError(clientId, 'Redirect response missing Location header', {
+            throw new CimdFetchError(url, 'Redirect response missing Location header', {
               httpStatus: response.status,
             });
           }
@@ -334,7 +427,7 @@ export class CimdService {
 
           if (redirectPolicy === 'deny') {
             throw new CimdFetchError(
-              clientId,
+              url,
               `CIMD fetch redirected to "${nextUrl}" but redirects are disabled. ` +
                 'Host the metadata at the client_id URL or set auth.cimd.network.redirectPolicy to "same-origin" or "allow".',
               { httpStatus: response.status },
@@ -345,7 +438,7 @@ export class CimdService {
             const nextOrigin = new URL(nextUrl).origin;
             if (nextOrigin !== originalOrigin) {
               throw new CimdFetchError(
-                clientId,
+                url,
                 `CIMD fetch redirected to "${nextUrl}" which is not the same origin as "${originalOrigin}". ` +
                   'Host the metadata at the client_id URL or set auth.cimd.network.redirectPolicy to "allow".',
                 { httpStatus: response.status },
@@ -359,7 +452,7 @@ export class CimdService {
           redirectCount += 1;
           if (redirectCount > maxRedirects) {
             throw new CimdFetchError(
-              clientId,
+              url,
               `CIMD fetch exceeded max redirects (${maxRedirects}). ` +
                 'Host the metadata at the client_id URL or increase auth.cimd.network.maxRedirects.',
             );
@@ -372,7 +465,7 @@ export class CimdService {
         }
 
         if (!response.ok) {
-          throw new CimdFetchError(clientId, `HTTP ${response.status} ${response.statusText}`, {
+          throw new CimdFetchError(url, `HTTP ${response.status} ${response.statusText}`, {
             httpStatus: response.status,
           });
         }
@@ -382,24 +475,24 @@ export class CimdService {
         if (contentLength) {
           const length = parseInt(contentLength, 10);
           if (!isNaN(length) && length > this.networkConfig.maxResponseSizeBytes) {
-            throw new CimdResponseTooLargeError(clientId, this.networkConfig.maxResponseSizeBytes, length);
+            throw new CimdResponseTooLargeError(url, this.networkConfig.maxResponseSizeBytes, length);
           }
         }
 
         // Read response with size limit
-        const text = await this.readResponseWithLimit(response, this.networkConfig.maxResponseSizeBytes, clientId);
+        const text = await this.readResponseWithLimit(response, this.networkConfig.maxResponseSizeBytes, url);
 
         // Parse JSON
         let document: unknown;
         try {
           document = JSON.parse(text);
         } catch (e) {
-          throw new CimdFetchError(clientId, 'Invalid JSON response', {
+          throw new CimdFetchError(url, 'Invalid JSON response', {
             originalError: e instanceof Error ? e : new Error(String(e)),
           });
         }
 
-        return { document, headers: response.headers };
+        return { notModified: false, document, headers: response.headers };
       }
     } catch (error) {
       if (
@@ -413,12 +506,12 @@ export class CimdService {
 
       // Handle abort/timeout
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new CimdFetchError(clientId, 'Request timeout', {
+        throw new CimdFetchError(url, 'Request timeout', {
           originalError: error,
         });
       }
 
-      throw new CimdFetchError(clientId, error instanceof Error ? error.message : 'Unknown error', {
+      throw new CimdFetchError(url, error instanceof Error ? error.message : 'Unknown error', {
         originalError: error instanceof Error ? error : undefined,
       });
     } finally {

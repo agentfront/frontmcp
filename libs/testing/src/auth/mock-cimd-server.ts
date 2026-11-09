@@ -60,6 +60,16 @@ export interface MockCimdClientOptions {
   tokenEndpointAuthMethod?: 'none' | 'client_secret_basic' | 'client_secret_post' | 'private_key_jwt';
 
   /**
+   * Inline public keys a `private_key_jwt` client signs its client assertions with. Not together with `jwksUri`.
+   */
+  jwks?: { keys: Array<Record<string, unknown>> };
+
+  /**
+   * URL of the key set a `private_key_jwt` client signs its client assertions with. Not together with `jwks`.
+   */
+  jwksUri?: string;
+
+  /**
    * OAuth grant types the client can use. Without `refresh_token`, FrontMCP issues the client no refresh token.
    * @default ['authorization_code', 'refresh_token']
    */
@@ -142,6 +152,8 @@ interface CimdDocument {
   response_types: string[];
   client_uri?: string;
   logo_uri?: string;
+  jwks?: { keys: Array<Record<string, unknown>> };
+  jwks_uri?: string;
   scope?: string;
   contacts?: string[];
 }
@@ -266,6 +278,8 @@ export class MockCimdServer {
       response_types: options.responseTypes ?? ['code'],
       ...(options.clientUri && { client_uri: options.clientUri }),
       ...(options.logoUri && { logo_uri: options.logoUri }),
+      ...(options.jwks && { jwks: options.jwks }),
+      ...(options.jwksUri && { jwks_uri: options.jwksUri }),
       ...(options.scope && { scope: options.scope }),
       ...(options.contacts && { contacts: options.contacts }),
     };

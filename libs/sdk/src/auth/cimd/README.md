@@ -345,22 +345,54 @@ The metadata document is a JSON file hosted at the client's URL:
 
 ### Optional Fields
 
-| Field                        | Type       | Default                  | Description                                                                         |
-| ---------------------------- | ---------- | ------------------------ | ----------------------------------------------------------------------------------- |
-| `token_endpoint_auth_method` | `string`   | `"none"`                 | Auth method: `none`, `client_secret_basic`, `client_secret_post`, `private_key_jwt` |
-| `grant_types`                | `string[]` | `["authorization_code"]` | OAuth grant types                                                                   |
-| `response_types`             | `string[]` | `["code"]`               | OAuth response types                                                                |
-| `client_uri`                 | `string`   | -                        | URL of the client's home page                                                       |
-| `logo_uri`                   | `string`   | -                        | URL of the client's logo image                                                      |
-| `jwks_uri`                   | `string`   | -                        | URL of the client's JWKS (for `private_key_jwt`)                                    |
-| `jwks`                       | `object`   | -                        | Inline JWKS `{ keys: [...] }`                                                       |
-| `tos_uri`                    | `string`   | -                        | URL of the terms of service                                                         |
-| `policy_uri`                 | `string`   | -                        | URL of the privacy policy                                                           |
-| `scope`                      | `string`   | -                        | Requested OAuth scopes                                                              |
-| `contacts`                   | `string[]` | -                        | Array of contact email addresses                                                    |
-| `software_statement`         | `string`   | -                        | Signed JWT software statement                                                       |
-| `software_id`                | `string`   | -                        | Unique identifier for the client software                                           |
-| `software_version`           | `string`   | -                        | Version of the client software                                                      |
+| Field                        | Type       | Default     | Description                                                                        |
+| ---------------------------- | ---------- | ----------- | ---------------------------------------------------------------------------------- |
+| `token_endpoint_auth_method` | `string`   | `"none"`    | `none` (public client) or `private_key_jwt` (see below); `client_secret_*` refused |
+| `grant_types`                | `string[]` | both grants | `authorization_code`, and `refresh_token` for refresh tokens                       |
+| `response_types`             | `string[]` | `["code"]`  | OAuth response types                                                               |
+| `client_uri`                 | `string`   | -           | URL of the client's home page                                                      |
+| `logo_uri`                   | `string`   | -           | URL of the client's logo image                                                     |
+| `jwks_uri`                   | `string`   | -           | URL of the client's JWKS (for `private_key_jwt`); not with `jwks`                  |
+| `jwks`                       | `object`   | -           | Inline JWKS `{ keys: [...] }` (for `private_key_jwt`); not with `jwks_uri`         |
+| `tos_uri`                    | `string`   | -           | URL of the terms of service                                                        |
+| `policy_uri`                 | `string`   | -           | URL of the privacy policy                                                          |
+| `scope`                      | `string`   | -           | Requested OAuth scopes                                                             |
+| `contacts`                   | `string[]` | -           | Array of contact email addresses                                                   |
+| `software_statement`         | `string`   | -           | Signed JWT software statement                                                      |
+| `software_id`                | `string`   | -           | Unique identifier for the client software                                          |
+| `software_version`           | `string`   | -           | Version of the client software                                                     |
+
+### Confidential Clients: `private_key_jwt`
+
+A document that declares `"token_endpoint_auth_method": "private_key_jwt"` makes its client confidential: every
+request it sends to `/oauth/token`, code exchange and refresh alike, carries a client assertion (RFC 7523 §2.2):
+
+```text
+client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer
+client_assertion=<JWT>
+```
+
+`client_id` may be left out; the assertion's `sub` names the client (RFC 7521 §4.2). The JWT must be signed with a
+key from the document's `jwks` or `jwks_uri` (exactly one of them), and is accepted only when:
+
+- its `alg` is asymmetric: `RS256/384/512`, `PS256/384/512`, `ES256/384/512` or `EdDSA` (never `none` or `HS*`);
+- its `kid`, when given, names a key in the set;
+- `iss` and `sub` both equal the `client_id`;
+- `aud` names the token endpoint (`token_endpoint` in the authorization server metadata) or the issuer;
+- `exp` is present and at most 10 minutes ahead, and `nbf` and `iat`, when present, aren't in the future (30 seconds
+  of clock skew allowed);
+- `jti` is present and hasn't been used before. Each `jti` is kept, in the server's token storage, until the
+  assertion expires.
+
+Anything else answers `400 invalid_client` (`Client authentication failed`); the server log names the check that
+failed. `jwks_uri` is fetched with the same protections as the document (HTTPS, SSRF guard on every hop, redirect
+policy, `network.timeoutMs`, `network.maxResponseSizeBytes`), and the key set is cached in memory for the TTL its
+cache headers give, within `cache.minTtlMs` and `cache.maxTtlMs`. An assertion naming a `kid` the cached set lacks
+fetches the set again, at most once every 30 seconds, so a rotated key works right away.
+
+The authorization server metadata lists `private_key_jwt` in `token_endpoint_auth_methods_supported`, and the
+algorithms in `token_endpoint_auth_signing_alg_values_supported`. Pin `FRONTMCP_PUBLIC_URL` (or `local.issuer`) in
+production, so the token endpoint and issuer an assertion must name don't follow the request's `Host`.
 
 ## Security Features
 
@@ -472,6 +504,12 @@ class CimdService {
   // Validate that a redirect_uri is registered
   validateRedirectUri(redirectUri: string, metadata: ClientMetadataDocument): void;
 
+  // Refuse a document whose token endpoint auth method, grant types or response types this server can't honor
+  assertSupportedClient(metadata: ClientMetadataDocument): void;
+
+  // Authenticate a private_key_jwt client by its client assertion (RFC 7523)
+  async verifyClientAssertion(metadata: ClientMetadataDocument, check: ClientAssertionCheck): Promise<void>;
+
   // Clear cache (specific client or all)
   clearCache(clientId?: string): void;
 
@@ -487,40 +525,39 @@ class CimdService {
 
 ```typescript
 // Document schema and type
+// Configuration schemas and types
+
+// Resolution result
+
+// Cache types
 import {
+  CimdCache,
+  cimdCacheConfigSchema,
+  cimdConfigSchema,
+  cimdNetworkConfigSchema,
+  cimdSecurityConfigSchema,
   clientMetadataDocumentSchema,
+  type CacheableHeaders,
+  type CimdCacheConfig,
+  type CimdCacheEntry,
+  type CimdConfig,
+  type CimdConfigInput,
+  type CimdNetworkConfig,
+  type CimdResolutionResult,
+  type CimdSecurityConfig,
   type ClientMetadataDocument,
   type ClientMetadataDocumentInput,
 } from '@frontmcp/sdk';
-
-// Configuration schemas and types
-import {
-  cimdConfigSchema,
-  cimdCacheConfigSchema,
-  cimdSecurityConfigSchema,
-  cimdNetworkConfigSchema,
-  type CimdConfig,
-  type CimdConfigInput,
-  type CimdCacheConfig,
-  type CimdSecurityConfig,
-  type CimdNetworkConfig,
-} from '@frontmcp/sdk';
-
-// Resolution result
-import { type CimdResolutionResult } from '@frontmcp/sdk';
-
-// Cache types
-import { CimdCache, type CimdCacheEntry, type CacheableHeaders } from '@frontmcp/sdk';
 ```
 
 ### Utility Functions
 
 ```typescript
 import {
-  isCimdClientId, // Check if string is a CIMD URL
-  validateClientIdUrl, // Validate URL (throws on error)
   checkSsrfProtection, // Check hostname against SSRF rules
   hasOnlyLocalhostRedirectUris, // Check for dev-only redirects
+  isCimdClientId, // Check if string is a CIMD URL
+  validateClientIdUrl, // Validate URL (throws on error)
 } from '@frontmcp/sdk';
 ```
 
@@ -528,21 +565,22 @@ import {
 
 ### Error Classes
 
-| Error                       | HTTP Status | Description                                          |
-| --------------------------- | ----------- | ---------------------------------------------------- |
-| `InvalidClientIdUrlError`   | 400         | Invalid CIMD URL format (HTTP, missing path, etc.)   |
-| `CimdFetchError`            | 502         | Failed to fetch document (network error, HTTP error) |
-| `CimdValidationError`       | 400         | Document failed schema validation                    |
-| `CimdClientIdMismatchError` | 400         | `client_id` in document doesn't match URL            |
-| `CimdSecurityError`         | 403         | URL blocked by security policy                       |
-| `RedirectUriMismatchError`  | 400         | `redirect_uri` not registered for client             |
-| `CimdResponseTooLargeError` | 502         | Response exceeds size limit                          |
-| `CimdDisabledError`         | 400         | CIMD disabled but CIMD client_id used                |
+| Error                       | HTTP Status | Description                                           |
+| --------------------------- | ----------- | ----------------------------------------------------- |
+| `InvalidClientIdUrlError`   | 400         | Invalid CIMD URL format (HTTP, missing path, etc.)    |
+| `CimdFetchError`            | 502         | Failed to fetch document (network error, HTTP error)  |
+| `CimdValidationError`       | 400         | Document failed schema validation                     |
+| `CimdClientIdMismatchError` | 400         | `client_id` in document doesn't match URL             |
+| `CimdSecurityError`         | 403         | URL blocked by security policy                        |
+| `RedirectUriMismatchError`  | 400         | `redirect_uri` not registered for client              |
+| `CimdResponseTooLargeError` | 502         | Response exceeds size limit                           |
+| `CimdDisabledError`         | 400         | CIMD disabled but CIMD client_id used                 |
+| `CimdClientAssertionError`  | 401         | `private_key_jwt` client assertion missing or refused |
 
 ### Example Error Handling
 
 ```typescript
-import { CimdError, InvalidClientIdUrlError, CimdSecurityError, CimdFetchError } from '@frontmcp/sdk';
+import { CimdError, CimdFetchError, CimdSecurityError, InvalidClientIdUrlError } from '@frontmcp/sdk';
 
 try {
   const result = await cimdService.resolveClientMetadata(clientId);

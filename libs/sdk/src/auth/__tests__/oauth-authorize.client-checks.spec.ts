@@ -358,7 +358,7 @@ describe('the server honors the metadata a client declared (RFC 7591, client ID 
   });
 
   it.each<[string, Partial<ClientMetadataDocument>]>([
-    ['private_key_jwt', { token_endpoint_auth_method: 'private_key_jwt', jwks: { keys: [{ kty: 'RSA', e: 'AQAB' }] } }],
+    ['private_key_jwt without jwks or jwks_uri', { token_endpoint_auth_method: 'private_key_jwt' }],
     ['client_secret_post', { token_endpoint_auth_method: 'client_secret_post' }],
     ['no authorization_code grant', { grant_types: ['refresh_token'] }],
   ])('refuses a CIMD client whose document declares %s, with an error page', async (_label, overrides) => {
@@ -371,8 +371,14 @@ describe('the server honors the metadata a client declared (RFC 7591, client ID 
     expect(response.headers.get('location')).toBeNull();
   });
 
-  it('serves the sign-in page to a CIMD client this server can honor', async () => {
-    serveCimdDocument({});
+  it.each<[string, Partial<ClientMetadataDocument>]>([
+    ['a public client', {}],
+    [
+      'a private_key_jwt client with its keys',
+      { token_endpoint_auth_method: 'private_key_jwt', jwks: { keys: [{ kty: 'RSA', n: 'x', e: 'AQAB' }] } },
+    ],
+  ])('serves the sign-in page to %s', async (_label, overrides) => {
+    serveCimdDocument(overrides);
     const server = await serverWith(localAuth());
 
     const response = await authorizeCimd(server);

@@ -149,7 +149,7 @@ describe('LocalPrimaryAuth — declared grant types at the token endpoint', () =
     expect('refresh_token' in result && result.refresh_token).toBeTruthy();
   });
 
-  it('refuses a CIMD client whose document declares private_key_jwt', async () => {
+  it('refuses a private_key_jwt CIMD client that presents no client assertion', async () => {
     const auth = await makeAuth();
     serveCimdDocument(
       cimdDocument({
