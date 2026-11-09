@@ -52,7 +52,13 @@ export class WorkflowEngine {
     });
   }
 
-  async execute(workflowInput?: Record<string, unknown>): Promise<WorkflowExecutionResult> {
+  /**
+   * Run the workflow's steps.
+   *
+   * @param workflowInput - The run's input, as the workflow's `inputSchema` parsed it: a step without `input` gets it,
+   *   and each step's `input` and `condition` functions receive it
+   */
+  async execute(workflowInput: Record<string, unknown> = {}): Promise<WorkflowExecutionResult> {
     const startedAt = Date.now();
     const steps = this.metadata.steps;
 
@@ -137,7 +143,7 @@ export class WorkflowEngine {
           // Evaluate condition
           if (step.condition) {
             try {
-              const shouldRun = step.condition(stepsContext);
+              const shouldRun = step.condition(stepsContext, workflowInput);
               if (!shouldRun) {
                 skipped.add(step.id);
                 stepResults.set(step.id, { outputs: {}, state: 'skipped' });
@@ -155,12 +161,10 @@ export class WorkflowEngine {
           // Execute step
           try {
             // Compute input
-            let input: Record<string, unknown>;
-            if (typeof step.input === 'function') {
-              input = step.input(stepsContext);
-            } else {
-              input = step.input ?? workflowInput ?? {};
-            }
+            const input =
+              typeof step.input === 'function'
+                ? step.input(stepsContext, workflowInput)
+                : (step.input ?? workflowInput);
 
             const result = await this.stepExecutor.executeStep(step, input);
             completed.add(step.id);

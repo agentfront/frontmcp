@@ -45,19 +45,20 @@ Create a class decorated with `@Workflow`. The decorator requires `name` and `st
 | `timeout`        | `number`                           | No          | `600000` (10 min) | Maximum total workflow execution time in milliseconds                                                                                                                                          |
 | `maxConcurrency` | `number`                           | No          | `5`               | Maximum number of steps running in parallel                                                                                                                                                    |
 | `permissions`    | `JobPermission[]`                  | No          | --                | Array of permission rules. Multiple rules may target the same action; all matching rules must pass. Same shape and semantics as job permissions; **enforced from 1.7.2** (GHSA-58v2-gpcc-jmqv) |
+| `inputSchema`    | Zod raw shape                      | No          | --                | The workflow's input, checked when a run starts (see [Workflow Input](#workflow-input))                                                                                                        |
 
 ### WorkflowStep Fields
 
-| Field             | Type                                       | Required | Description                                                                 |
-| ----------------- | ------------------------------------------ | -------- | --------------------------------------------------------------------------- |
-| `id`              | `string`                                   | Yes      | Unique step identifier within the workflow                                  |
-| `jobName`         | `string`                                   | Yes      | Name of the registered job to run                                           |
-| `input`           | `object \| (steps: StepResults) => object` | No       | Static input object or function that receives previous step results         |
-| `dependsOn`       | `string[]`                                 | No       | Array of step IDs that must complete before this step runs (see below)      |
-| `condition`       | `(steps: StepResults) => boolean`          | No       | Predicate that determines if the step should run                            |
-| `continueOnError` | `boolean`                                  | No       | If `true`, the steps that depend on this one run even if it fails           |
-| `timeout`         | `number`                                   | No       | Per-step timeout in milliseconds (overrides workflow timeout for this step) |
-| `retry`           | `RetryPolicy`                              | No       | Per-step retry policy (overrides the job's); with neither, one attempt      |
+| Field             | Type                                         | Required | Description                                                                                                    |
+| ----------------- | -------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| `id`              | `string`                                     | Yes      | Unique step identifier within the workflow                                                                     |
+| `jobName`         | `string`                                     | Yes      | Name of the registered job to run                                                                              |
+| `input`           | `object \| (steps, workflowInput) => object` | No       | Static input, or a function of earlier step results and the workflow's input; without it, the workflow's input |
+| `dependsOn`       | `string[]`                                   | No       | Array of step IDs that must complete before this step runs (see below)                                         |
+| `condition`       | `(steps, workflowInput) => boolean`          | No       | Predicate that determines if the step should run                                                               |
+| `continueOnError` | `boolean`                                    | No       | If `true`, the steps that depend on this one run even if it fails                                              |
+| `timeout`         | `number`                                     | No       | Per-step timeout in milliseconds (overrides workflow timeout for this step)                                    |
+| `retry`           | `RetryPolicy`                                | No       | Per-step retry policy (overrides the job's); with neither, one attempt                                         |
 
 When a step's `timeout` passes, the step fails with `WorkflowJobTimeoutError`. An attempt whose job has not started never starts it. A job already in `execute()` is not stopped: its `this.signal` (`ctx.signal` in a `job()` function) is aborted with the timeout as its reason, so pass it to `fetch` and other cancellable work, or check it. Its attempt's `jobs:execute-job` flow ends as failed at once: `Did('execute')` and `Did('validateOutput')` don't run, the job's `cleanup` runs with `'timeout'`, and the finalize hooks see the `WorkflowJobTimeoutError` as `state.flowError`. Up to 1.10 the flow waited for `execute()` to return first; up to 1.9.4 the flow of such an attempt ran on as a success, so audit and metrics hooks recorded a success for a step the workflow reported as failed. Each step attempt also waits for a slot under `jobs.admission` (see `create-job`). `cancel_job` cancels job runs only: a workflow run is refused with `JOB_RUN_NOT_CANCELLABLE`. A step whose job sets `runner: 'worker'` runs its `execute()` on the offload pool; a job on the `'detached'` runner runs inline as a step, in the workflow's process, since the workflow run owns its steps.
 
@@ -185,7 +186,7 @@ class BuildAndPublish {}
 
 ## Dynamic Input from Previous Steps
 
-Use a function for `input` to pass data from completed steps. The function receives a `StepResults` map where each entry contains the step's state and outputs.
+Use a function for `input` to pass data from completed steps. The function receives a `StepResults` map where each entry contains the step's state and outputs, and the workflow's input as its second argument (see [Workflow Input](#workflow-input)).
 
 ```typescript
 {
@@ -204,13 +205,40 @@ The `steps.get(stepId)` method returns a step result object:
 
 ```typescript
 interface StepResult {
-  state: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
-  outputs: Record<string, unknown>; // job output from the completed step
-  error?: string; // error message if the step failed
-  startedAt?: string;
-  completedAt?: string;
+  state: 'completed' | 'failed' | 'skipped';
+  outputs: Record<string, unknown>; // job output from the completed step; {} when it failed or was skipped
 }
 ```
+
+## Workflow Input
+
+A run's input is what `execute_workflow` passes as `input`. Declare `inputSchema` (a Zod raw shape, as for a job) to check it when the run starts: input that doesn't match fails with `INVALID_INPUT` (`Invalid input for workflow "<name>"`, with the issues), after the `execute` permissions and before the run exists. The parsed input, with defaults applied and unknown keys dropped, is what the steps see:
+
+- a step without `input` gets the workflow's input as its job's input;
+- a step's `input` and `condition` functions receive it as their second argument.
+
+```typescript
+@Workflow({
+  name: 'release',
+  inputSchema: {
+    version: z.string(),
+    dryRun: z.boolean().default(false),
+  },
+  steps: [
+    { id: 'build', jobName: 'build-project' }, // gets { version, dryRun }
+    {
+      id: 'publish',
+      jobName: 'publish-to-registry',
+      dependsOn: ['build'],
+      condition: (steps, input) => input.dryRun !== true,
+      input: (steps, input) => ({ artifact: steps.get('build').outputs.bundlePath, tag: input.version }),
+    },
+  ],
+})
+class Release {}
+```
+
+Without `inputSchema`, the input is passed on as given. Up to 1.11.2 `inputSchema` wasn't checked, and `input` and `condition` functions received only the step results.
 
 ## Conditional Steps
 
@@ -679,6 +707,7 @@ class CiServer {}
 | Dynamic `input` callback receives undefined outputs | A step it depends on was skipped, or failed with `continueOnError`      | Add a `condition` guard that checks `steps.get(id).state === 'completed'` before accessing outputs |
 | Webhook never starts the workflow                   | `trigger: 'webhook'` and `webhook` register no route (startup warns)    | Serve an `@HttpRoute` that checks the signature and calls `execute_workflow`                       |
 | Workflow exceeds timeout                            | Total step execution time exceeds the default 600000 ms                 | Increase `timeout` at the workflow level or add per-step `timeout` overrides                       |
+| `Invalid input for workflow "<name>"`               | The run's input doesn't match the workflow's `inputSchema`              | Pass `input` that matches it; the error's details name each field that doesn't                     |
 | A failure-notification step never runs              | The step it watches failed without `continueOnError`, so it was skipped | Set `continueOnError: true` on the watched step                                                    |
 
 ## Examples
