@@ -33,9 +33,6 @@ import { appIdOf } from '../app.utils';
 import { EmptyAdapterRegistry, EmptyPluginRegistry } from './empty-app-registries';
 import { EsmPackageVersion, type EsmPackageTarget } from './esm-package-version';
 
-/** The kinds of entry a package manifest may export that an ESM app does not load. */
-const UNLOADED_MANIFEST_KINDS = ['jobs', 'workflows'] as const;
-
 // ═══════════════════════════════════════════════════════════════════
 // APP ESM INSTANCE
 // ═══════════════════════════════════════════════════════════════════
@@ -69,6 +66,8 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
   private loadResult?: EsmLoadResult;
   private updateInProgress = false;
   private registered?: EsmPackageVersion;
+  /** For each version whose jobs and workflows the scope serves, the function that withdraws them. */
+  private readonly jobWithdrawals = new Map<EsmPackageVersion, () => void>();
 
   // Standard registries
   private readonly _tools: ToolRegistry;
@@ -250,16 +249,6 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     { replacing }: { replacing: boolean } = { replacing: false },
   ): Promise<void> {
     const logger = this.scopeProviders.getActiveScope().logger;
-
-    // Before any entry is built, so an entry that fails to build follows the warning.
-    const notLoaded = UNLOADED_MANIFEST_KINDS.filter((kind) => (manifest[kind]?.length ?? 0) > 0);
-    if (notLoaded.length > 0) {
-      logger.warn(
-        `ESM app ${this.id}: App.esm() loads only tools, resources, prompts, agents, skills and providers; ` +
-          `the package's ${notLoaded.join(', ')} are not loaded`,
-      );
-    }
-
     const next = await EsmPackageVersion.build(manifest, this.packageTarget());
     try {
       if (replacing) await next.providers.runReadyHooks(logger);
@@ -335,19 +324,27 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     this.registered = next;
   }
 
-  private async registerEntries(entries: EsmPackageVersion): Promise<void> {
-    for (const tool of entries.tools) this._tools.registerToolInstance(tool);
-    for (const resource of entries.resources) this._resources.registerResourceInstance(resource);
-    for (const prompt of entries.prompts) this._prompts.registerPromptInstance(prompt);
-    if (entries.agents) this._agents.adoptFromChild(entries.agents, entries.agents.owner);
-    if (entries.skills) await this._skills.adoptFromChild(entries.skills, entries.skills.owner);
+  private async registerEntries(version: EsmPackageVersion): Promise<void> {
+    const { tools, resources, prompts, agents, skills, jobs, workflows } = version.entries;
+    for (const tool of tools) this._tools.registerToolInstance(tool);
+    for (const resource of resources) this._resources.registerResourceInstance(resource);
+    for (const prompt of prompts) this._prompts.registerPromptInstance(prompt);
+    if (agents) this._agents.adoptFromChild(agents, agents.owner);
+    if (skills) await this._skills.adoptFromChild(skills, skills.owner);
+    if (jobs.length > 0 || workflows.length > 0) {
+      const scope = this.scopeProviders.getActiveScope();
+      this.jobWithdrawals.set(version, await scope.serveAppJobs({ jobs, workflows, providers: version.providers }));
+    }
   }
 
-  private unregisterEntries(entries: EsmPackageVersion): void {
-    for (const tool of entries.tools) this._tools.unregisterToolInstance(tool.record.provide);
-    for (const resource of entries.resources) this._resources.unregisterResourceInstance(resource.record.provide);
-    for (const prompt of entries.prompts) this._prompts.unregisterPromptInstance(prompt.record.provide);
-    if (entries.agents) this._agents.removeChild(entries.agents);
-    if (entries.skills) this._skills.removeChild(entries.skills);
+  private unregisterEntries(version: EsmPackageVersion): void {
+    const { tools, resources, prompts, agents, skills } = version.entries;
+    for (const tool of tools) this._tools.unregisterToolInstance(tool.record.provide);
+    for (const resource of resources) this._resources.unregisterResourceInstance(resource.record.provide);
+    for (const prompt of prompts) this._prompts.unregisterPromptInstance(prompt.record.provide);
+    if (agents) this._agents.removeChild(agents);
+    if (skills) this._skills.removeChild(skills);
+    this.jobWithdrawals.get(version)?.();
+    this.jobWithdrawals.delete(version);
   }
 }

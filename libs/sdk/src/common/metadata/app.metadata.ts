@@ -636,17 +636,20 @@ export type AppMetadata = LocalAppMetadata | RemoteAppMetadata;
 export interface EsmAppOptions extends EsmOptions {
   /** Override the auto-derived app name */
   name?: string;
-  /** Namespace prefix for tools, resources, and prompts */
+  /** Namespace prefix for tools, resources, and prompts; skills, agents, jobs and workflows keep their own names */
   namespace?: string;
   /** Human-readable description */
   description?: string;
   /** Standalone mode */
   standalone?: boolean | 'includeInParent';
-  /** Auto-update configuration for semver-based polling */
+  /**
+   * Poll for a newer version that satisfies the range, and swap every kind of entry to it; the loaded version keeps
+   * serving until the new one built and passed the checks startup runs on an app
+   */
   autoUpdate?: { enabled: boolean; intervalMs?: number };
   /** Import map overrides for ESM resolution */
   importMap?: Record<string, string>;
-  /** Include/exclude filter for selectively importing primitives */
+  /** Include/exclude filter for selectively importing primitives, by their names in the package */
   filter?: AppFilterConfig;
 }
 

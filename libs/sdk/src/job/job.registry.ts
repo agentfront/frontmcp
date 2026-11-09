@@ -33,6 +33,8 @@ export interface JobRegistryInterface {
   hasAny(): boolean;
   registerDynamic(record: JobDynamicRecord): void;
   removeDynamic(jobId: string): boolean;
+  registerAppJobs(jobs: readonly JobType[], providers: ProviderRegistry): Promise<Token[]>;
+  unregisterJobs(tokens: readonly Token[]): void;
   subscribe(opts: { immediate?: boolean }, cb: (evt: JobChangeEvent) => void): () => void;
 }
 
@@ -188,6 +190,38 @@ export default class JobRegistry
     this.dynamicRows.push(row);
     this.reindex();
     this.bump('added');
+  }
+
+  /**
+   * Register jobs an app serves after the registry was built (an ESM app's new version), built on the app's
+   * providers as the jobs an app declares are. Throws, registering none, when one can't be built.
+   *
+   * @returns The jobs' tokens, which {@link unregisterJobs} takes.
+   */
+  async registerAppJobs(jobs: readonly JobType[], providers: ProviderRegistry): Promise<Token[]> {
+    const built = jobs.map((raw) => {
+      const record = normalizeJob(raw);
+      for (const dependency of jobDiscoveryDeps(record)) providers.get(dependency);
+      return { token: record.provide as Token, instance: new JobInstance(record, providers, this.owner) };
+    });
+    await Promise.all(built.map(({ instance }) => instance.ready));
+    const lineage: EntryLineage = this.owner ? [this.owner] : [];
+    for (const { token, instance } of built) {
+      this.instances.set(token as Token<JobInstance>, instance);
+      this.localRows.push(this.makeRow(token, instance, lineage));
+    }
+    this.reindex();
+    this.bump('added');
+    return built.map(({ token }) => token);
+  }
+
+  /** Unregister jobs {@link registerAppJobs} registered. */
+  unregisterJobs(tokens: readonly Token[]): void {
+    const leaving = new Set(tokens);
+    for (const token of leaving) this.instances.delete(token as Token<JobInstance>);
+    this.localRows = this.localRows.filter((row) => !leaving.has(row.token));
+    this.reindex();
+    this.bump('removed');
   }
 
   removeDynamic(jobId: string): boolean {

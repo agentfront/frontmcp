@@ -1,4 +1,4 @@
-import { FrontMcp, App, LogLevel } from '@frontmcp/sdk';
+import { App, FrontMcp, LogLevel } from '@frontmcp/sdk';
 
 const port = parseInt(process.env['PORT'] ?? '3116', 10);
 const esmServerUrl = `http://127.0.0.1:${parseInt(process.env['ESM_SERVER_PORT'] ?? '50400', 10)}`;
@@ -9,6 +9,11 @@ const esmServerUrl = `http://127.0.0.1:${parseInt(process.env['ESM_SERVER_PORT']
   apps: [
     App.esm('@test/esm-tools@^1.0.0', {
       namespace: 'esm',
+      autoUpdate: { enabled: true, intervalMs: 2000 },
+      cacheTTL: 1000,
+    }),
+    App.esm('@test/esm-full@^1.0.0', {
+      namespace: 'full',
       autoUpdate: { enabled: true, intervalMs: 2000 },
       cacheTTL: 1000,
     }),
