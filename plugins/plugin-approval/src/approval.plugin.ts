@@ -14,6 +14,7 @@ import {
   type FrontMcpContext,
   type PluginStoreInBrowser,
   type ProviderType,
+  type Token,
 } from '@frontmcp/sdk';
 import type { NamespacedStorage, RootStorage, StorageConfig } from '@frontmcp/utils';
 
@@ -53,7 +54,7 @@ export interface ApprovalPluginOptions {
   namespace?: string;
 
   /**
-   * Approval workflow mode. Neither contacts an external system yet: approvals are recorded by your code.
+   * Approval workflow mode. Neither contacts an external system: approvals are recorded by your code.
    * - 'recheck': Check the stored approvals on every call
    * - 'webhook': Also register the PKCE `ChallengeService` (`ChallengeServiceToken`)
    * @default 'recheck'
@@ -61,7 +62,7 @@ export interface ApprovalPluginOptions {
   mode?: ApprovalMode;
 
   /**
-   * Recheck mode configuration. Reserved: accepted and not used, nothing is polled.
+   * @deprecated Has no effect: nothing is polled. A server that sets it logs a warning when it starts.
    */
   recheck?: {
     /** URL to check for approval status */
@@ -78,25 +79,25 @@ export interface ApprovalPluginOptions {
    * Webhook mode configuration. Only `challengeTtl` is used; no request is sent and no callback route is served.
    */
   webhook?: {
-    /** URL to send approval requests */
+    /** @deprecated Has no effect: no request is sent. A server that sets it logs a warning when it starts. */
     url?: string;
-    /** Include JWT in webhook payload */
+    /** @deprecated Has no effect: no request is sent. A server that sets it logs a warning when it starts. */
     includeJwt?: boolean;
     /** Challenge TTL in seconds */
     challengeTtl?: number;
-    /** Callback path for approval responses */
+    /** @deprecated Has no effect: no callback route is served. A server that sets it logs a warning when it starts. */
     callbackPath?: string;
   };
 
   /**
-   * Enable approval audit logging.
-   * @default true
+   * @deprecated Has no effect: an approval record already keeps who granted or revoked it, and nothing else is
+   * logged. A server that sets it logs a warning when it starts.
    */
   enableAudit?: boolean;
 
   /**
-   * Maximum delegation depth for delegated approvals.
-   * @default 3
+   * @deprecated Has no effect: a delegated grant names one delegator, so there is no chain to bound. A server that
+   * sets it logs a warning when it starts.
    */
   maxDelegationDepth?: number;
 
@@ -105,6 +106,30 @@ export interface ApprovalPluginOptions {
    * @default 60
    */
   cleanupIntervalSeconds?: number;
+}
+
+/** The options set that the plugin ignores, logged when the server starts. */
+const ApprovalOptionWarningsToken: Token<string[]> = Symbol('plugin:approval:option-warnings');
+
+/** The options in `options` that are accepted and have no effect, by their path. */
+function ignoredApprovalOptions(options: ApprovalPluginOptions): string[] {
+  const ignored = [
+    options.webhook?.url !== undefined && 'webhook.url',
+    options.webhook?.includeJwt !== undefined && 'webhook.includeJwt',
+    options.webhook?.callbackPath !== undefined && 'webhook.callbackPath',
+    options.recheck !== undefined && 'recheck',
+    options.enableAudit !== undefined && 'enableAudit',
+    options.maxDelegationDepth !== undefined && 'maxDelegationDepth',
+  ];
+  return ignored.filter((path): path is string => path !== false);
+}
+
+function describeIgnoredOptions(ignored: readonly string[]): string {
+  return (
+    `ApprovalPlugin ignores \`${ignored.join('`, `')}\`: the plugin sends no webhook, serves no callback route, polls ` +
+    'nothing and logs no audit trail. Approvals are recorded by your code, such as this.approval.grantSessionApproval(), ' +
+    'and each record keeps who granted or revoked it. Remove these options.'
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -118,7 +143,7 @@ export interface ApprovalPluginOptions {
  * - Tool approval checking via hook
  * - Multiple approval scopes (session, user, time-limited, context-specific)
  * - PKCE challenges (`mode: 'webhook'`) to build an external approval flow on
- * - Full audit trail support
+ * - Who granted or revoked each approval, kept with it
  *
  * @example Basic usage
  * ```typescript
@@ -136,10 +161,7 @@ export interface ApprovalPluginOptions {
  *   plugins: [
  *     ApprovalPlugin.init({
  *       mode: 'webhook',
- *       webhook: {
- *         url: 'https://approval.example.com/webhook',
- *         challengeTtl: 300,
- *       },
+ *       webhook: { challengeTtl: 300 },
  *     }),
  *   ],
  * })
@@ -162,8 +184,6 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
   static defaultOptions: ApprovalPluginOptions = {
     namespace: 'approval',
     mode: 'recheck',
-    enableAudit: true,
-    maxDelegationDepth: 3,
     cleanupIntervalSeconds: 60,
   };
 
@@ -244,6 +264,17 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
         }),
       );
     }
+
+    providers.push({
+      name: 'approval:option-warnings',
+      provide: ApprovalOptionWarningsToken,
+      inject: () => [ScopeEntry] as const,
+      useFactory: (scope: ScopeEntry) => {
+        const ignored = ignoredApprovalOptions(options);
+        if (ignored.length > 0) scope.logger.child('ApprovalPlugin').warn(describeIgnoredOptions(ignored));
+        return ignored;
+      },
+    });
 
     // ─────────────────────────────────────────────────────────────────────────
     // Approval Service (Context-scoped)
