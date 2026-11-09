@@ -71,7 +71,7 @@ test.describe('Widget Sizing E2E (#40)', () => {
     test('should carry ui/* sizing meta keys', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
-        clientInfo: { name: 'ChatGPT', version: '1.0.0' },
+        clientInfo: { name: 'mcp-inspector', version: '1.0.0' },
       });
 
       try {
@@ -95,7 +95,7 @@ test.describe('Widget Sizing E2E (#40)', () => {
     test('should embed sizing CSS, __mcpWidgetSizing, and the auto-resize runtime', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
-        clientInfo: { name: 'ChatGPT', version: '1.0.0' },
+        clientInfo: { name: 'mcp-inspector', version: '1.0.0' },
       });
 
       try {

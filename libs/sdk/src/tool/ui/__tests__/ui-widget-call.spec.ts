@@ -6,6 +6,7 @@
 import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
+import { MCP_20260728_META } from '@frontmcp/protocol';
 import { WIDGET_CALL_META_KEY } from '@frontmcp/uipack/bridge-runtime';
 
 import {
@@ -29,8 +30,24 @@ class GetTicketTool extends ToolContext {
   }
 }
 
-@App({ id: 'desk', name: 'Desk', tools: [GetTicketTool] })
+@Tool({
+  name: 'get_inline_ticket',
+  inputSchema: { id: z.string() },
+  ui: {
+    servingMode: 'inline',
+    template: (ctx: TemplateContext<TicketInput, Ticket>) => ctx.helpers.html`<h2>${ctx.output.id}</h2>`,
+  },
+})
+class GetInlineTicketTool extends ToolContext {
+  async execute(input: TicketInput): Promise<Ticket> {
+    return { id: input.id, status: 'open' };
+  }
+}
+
+@App({ id: 'desk', name: 'Desk', tools: [GetTicketTool, GetInlineTicketTool] })
 class DeskApp {}
+
+const OPENAI_CLIENT = { [MCP_20260728_META.clientInfo]: { name: 'openai-mcp', version: '1.0.0' } };
 
 describe('a widget calling a tool that has a widget', () => {
   let server: TestFetchServer;
@@ -49,6 +66,29 @@ describe('a widget calling a tool that has a widget', () => {
 
     expect(message.result?.['structuredContent']).toEqual({ id: 'T-1', status: 'open' });
     expect(message.result?.['_meta']).not.toHaveProperty('ui/html');
+  });
+
+  it('gets the data without the page under the OpenAI Apps SDK, whose window.openai.callTool() cannot mark it', async () => {
+    const { message } = await rpc20260728(
+      server.handler,
+      'tools/call',
+      { name: 'get_ticket', arguments: { id: 'T-1' } },
+      { meta: OPENAI_CLIENT },
+    );
+
+    expect(message.result?.['structuredContent']).toEqual({ id: 'T-1', status: 'open' });
+    expect(message.result?.['_meta'] ?? {}).not.toHaveProperty('ui/html');
+  });
+
+  it("still renders the page for an OpenAI client when the tool asks for servingMode 'inline'", async () => {
+    const { message } = await rpc20260728(
+      server.handler,
+      'tools/call',
+      { name: 'get_inline_ticket', arguments: { id: 'T-1' } },
+      { meta: OPENAI_CLIENT },
+    );
+
+    expect(message.result?.['_meta']).toHaveProperty('ui/html');
   });
 
   it('still renders the page for the model and the host', async () => {

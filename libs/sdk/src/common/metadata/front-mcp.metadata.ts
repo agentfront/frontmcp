@@ -359,7 +359,8 @@ export interface FrontMcpBaseMetadata {
     /**
      * Serving mode for every tool whose `ui` does not set `servingMode` (an `@App({ ui })` default
      * overrides it for that app's tools). Same values as a tool's `ui.servingMode`; unset means
-     * `'auto'`, which renders the widget into every `tools/call` result (`_meta['ui/html']`).
+     * `'auto'`, which renders the widget into every `tools/call` result (`_meta['ui/html']`), except
+     * for OpenAI Apps SDK clients, which render it from its `ui://` resource.
      *
      * @example MCP Apps hosts and ChatGPT load widgets from `ui://` — skip the per-call page
      * ```typescript
