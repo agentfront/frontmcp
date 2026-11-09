@@ -55,6 +55,7 @@ export function renderComponent(config: UIConfig, shellConfig: ShellConfig): She
     output: shellConfig.output,
     inlineReact: config.inlineReact === true,
     transformOnly: config.transformOnly === true,
+    hydrate: config.hydrate === true,
   });
 
   const mergedShellConfig = {
@@ -112,7 +113,7 @@ function buildModuleContent(
       parts.push(generateImportMapScriptTag(importMap));
     }
 
-    parts.push('<div id="root"></div>');
+    parts.push(`<div id="root">${resolved.serverHtml ?? ''}</div>`);
     parts.push(`<script type="module">\n${resolved.code}\n</script>`);
   } else if (resolved.code) {
     // === INLINE MODULE PATH (transpiled .tsx/.jsx, non-bundled) ===

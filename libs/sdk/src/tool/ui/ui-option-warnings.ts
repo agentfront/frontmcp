@@ -4,14 +4,7 @@ import { validateCSPDomain } from '@frontmcp/uipack/shell';
  * Deprecated `ui` options that the schema accepts and nothing reads. Declaring one is not an error,
  * but a developer who sets it expects an effect, so startup says that there is none.
  */
-const IGNORED_UI_OPTIONS = [
-  'hydrate',
-  'bundlingMode',
-  'uiType',
-  'htmlResponsePrefix',
-  'customWidgetUrl',
-  'directPath',
-] as const;
+const IGNORED_UI_OPTIONS = ['bundlingMode', 'htmlResponsePrefix', 'customWidgetUrl', 'directPath'] as const;
 
 /** Deprecated serving modes, served as `'inline'` is. */
 const UNSUPPORTED_SERVING_MODES = ['direct-url', 'custom-url'] as const;

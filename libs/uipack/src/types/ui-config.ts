@@ -83,9 +83,10 @@ export interface UIContentSecurityPolicy {
  * scheme isn't `http:`, `https:` or `mailto:`. Relative URLs stay, and so do raster
  * `data:image/…` URLs in `<img src>`. Comments are dropped. The flags below relax it.
  *
- * It applies to HTML and Markdown strings and to a template function's result. The page FrontMCP
- * builds around the markup (the bridge, the call's data) is not touched, and a `{ file }` widget,
- * which renders in the page, can't take it: the server refuses to start such a tool.
+ * It applies to HTML, Markdown and MDX strings, to a template function's result, and to a
+ * component rendered on the server with `uiType: 'react'`. The page FrontMCP builds around the
+ * markup (the bridge, the call's data) is not touched, and a `{ file }` widget, which renders in
+ * the page, can't take it: the server refuses to start such a tool.
  *
  * Both OpenAI and Claude render widgets in sandboxed iframes, so script in a widget is contained,
  * but it can still read the widget's data, call tools the widget may call and show a fake UI.
@@ -302,7 +303,7 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * Supports multiple formats (auto-detected by renderer):
    * - Template builder function: `(ctx) => string` - receives input/output/helpers, returns HTML
    * - Static HTML/MDX string: `"<div>...</div>"` or `"# Title\n<Card />"`
-   * - React component: `MyWidget` - receives props with input/output/helpers
+   * - React component: `MyWidget` - rendered on the server with `uiType: 'react'`, with props output/input/loading
    * - FileSource object: `{ file: './my-widget.tsx' }` - transpiled client-side via esm.sh CDN
    */
 
@@ -566,10 +567,24 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   // ============================================
 
   /**
-   * Enable client-side React hydration after server-side rendering (SSR).
+   * Render a React widget on the server and hydrate it in the page.
    *
-   * @deprecated Has no effect: widgets are not rendered on the server, so there is nothing to
-   * hydrate. A `.tsx` FileSource widget is rendered in the page. Startup logs a warning when it is set.
+   * Applies to a `{ file }` `.tsx` / `.jsx` widget. FrontMCP bundles the widget for the server too,
+   * renders it there with the call's data (the props the page's mount gives it: `output`, `input`,
+   * `loading`) inside `McpBridgeProvider`, and puts that HTML in the page's `#root`; the page's mount
+   * then calls `hydrateRoot` with the same props instead of rendering into an empty root. The widget
+   * shows its content before its script runs, and stays interactive.
+   *
+   * Hydration expects the page to render what the server did: a widget whose first render reads
+   * `window`, the time or random values, or a host-specific hook value, may not match, and React then
+   * renders it again in the page (logging a recoverable error). A widget compiled at startup
+   * (`servingMode: 'static'`) is rendered with no data, in its `loading` state.
+   *
+   * A component reference (`template: MyWidget`) has no source file to bundle for the page, so it
+   * can't be hydrated: render it on the server only with `uiType: 'react'`, or use `{ file }`. Any
+   * other template fails startup with `hydrate: true`.
+   *
+   * @default false
    */
   hydrate?: boolean;
 
@@ -578,15 +593,25 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   // ============================================
 
   /**
-   * UI renderer type.
+   * The renderer, instead of the one detected from the template.
    *
-   * - `'html'`: HTML with optional Handlebars
-   * - `'react'`: React component (SSR)
-   * - `'mdx'`: MDX template
-   * - `'markdown'`: Pure Markdown
-   * - `'auto'`: Auto-detect from template (default)
+   * - `'auto'` (default): detected. A string with both `<` and `>` is HTML, any other string is
+   *   Markdown (MDX with `mdxComponents`), a function is an HTML builder unless it is a React
+   *   component, and `{ file: '….tsx' }` is a React widget.
+   * - `'html'`: a string is used as written, even without `<` and `>`, and a function is called as
+   *   an HTML builder, even with a capitalized name.
+   * - `'markdown'`: a string is converted from Markdown even with `<` and `>` (raw HTML is escaped),
+   *   and so is a template function's string result.
+   * - `'mdx'`: a string is rendered as MDX on the server, with `mdxComponents` if set.
+   * - `'react'`: a component reference (function, class, `memo` / `forwardRef`) is rendered to
+   *   static HTML on the server with React, with the widget props (`output`, `input`, `loading`);
+   *   it can't be bundled for the page, so its handlers don't run there. A `{ file }` `.tsx` /
+   *   `.jsx` widget is bundled for the page as with `'auto'`.
    *
-   * @deprecated Has no effect: the type is always detected from `template`. Startup logs a warning when it is set.
+   * A template the renderer can't take fails startup, such as `'react'` on a string or `'mdx'` on a
+   * function. `'react'`, `'mdx'` and `hydrate` load `react` and `react-dom` from the server's project.
+   *
+   * @default 'auto'
    */
   uiType?: 'html' | 'react' | 'mdx' | 'markdown' | 'auto';
 
@@ -630,7 +655,7 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * Runtime options for specific renderers.
    */
   runtimeOptions?: {
-    /** Enable React hydration after SSR */
+    /** Same as {@link UITemplateConfig.hydrate}, which wins when both are set. */
     hydrate?: boolean;
     /**
      * How a Markdown template (a string template without both `<` and `>`) is converted to HTML.

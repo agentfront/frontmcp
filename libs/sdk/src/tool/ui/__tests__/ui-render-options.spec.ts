@@ -111,6 +111,48 @@ describe('ToolUIRegistry rendering options', () => {
     ).rejects.toBeInstanceOf(ToolUiConfigurationError);
   });
 
+  it("renders a component reference on the server with uiType: 'react', without the startup warning", async () => {
+    // A React element written out, so the SDK spec doesn't import react
+    const StatusCard = ({ output, loading }: { output: { state: string } | null; loading: boolean }) => ({
+      $$typeof: Symbol.for('react.transitional.element'),
+      type: 'p',
+      key: null,
+      ref: null,
+      props: { className: 'status', children: loading || !output ? 'Loading' : output.state },
+      _owner: null,
+      _store: {},
+    });
+    const warn = jest.fn();
+    const registry = new ToolUIRegistry(undefined, { logger: { warn } });
+    const uiConfig = { template: StatusCard, uiType: 'react' };
+    await registry.checkRenderOptions('status', uiConfig);
+    registry.checkTemplate('status', StatusCard, 'react');
+    expect(warn).not.toHaveBeenCalled();
+    expect(registry.detectUIType(StatusCard, uiConfig)).toBe('react');
+
+    const { meta } = await registry.renderAndRegisterAsync({ toolName: 'status', output: { state: 'up' }, uiConfig });
+    expect(body(meta).trim()).toBe('<p class="status">up</p>');
+
+    await registry.compileStaticWidgetAsync({ toolName: 'status', template: StatusCard, uiConfig });
+    expect(registry.getStaticWidget('status')).toContain('<p class="status">Loading</p>');
+  });
+
+  it('refuses a uiType the template cannot take, and hydrate (or runtimeOptions.hydrate) off a { file } widget', async () => {
+    const registry = new ToolUIRegistry();
+    await expect(registry.checkRenderOptions('status', { template: '# x', uiType: 'react' })).rejects.toThrow(
+      'Tool "status": `ui.uiType: \'react\'` renders a React component',
+    );
+    await expect(registry.checkRenderOptions('status', { template: () => '<p>x</p>', hydrate: true })).rejects.toThrow(
+      '`ui.hydrate` hydrates a React widget rendered on the server',
+    );
+    await expect(
+      registry.checkRenderOptions('status', { template: '<p>x</p>', runtimeOptions: { hydrate: true } }),
+    ).rejects.toThrow('`ui.hydrate` hydrates a React widget rendered on the server');
+    await expect(
+      registry.checkRenderOptions('status', { template: './w.tsx', hydrate: false }),
+    ).resolves.toBeUndefined();
+  });
+
   it('accepts a tool without rendering options', async () => {
     await expect(
       new ToolUIRegistry().checkRenderOptions('weather', { template: { file: './weather.widget.tsx' } }),

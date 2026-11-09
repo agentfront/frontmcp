@@ -11,6 +11,7 @@ import { createEsmShResolver } from '../resolver/esm-sh.resolver';
 import { getPackageName, parseImports } from '../resolver/import-parser';
 import type { ImportResolver, ResolvedImport } from '../resolver/types';
 import { safeJsonForScript } from '../utils';
+import { renderFileSourceOnServer, widgetProps } from './server-render';
 import { bundleFileSource, extractDefaultExportName, transpileReactSource } from './transpiler';
 import {
   FRONTMCP_META_KEY,
@@ -66,6 +67,11 @@ export function resolveUISource(
      * exclusive with {@link inlineReact} (bundling). Default `false`.
      */
     transformOnly?: boolean;
+    /**
+     * `ui.hydrate`: a FileSource `.tsx`/`.jsx` widget is also rendered on the server with the call's
+     * data (`serverHtml`), and its mount hydrates that markup.
+     */
+    hydrate?: boolean;
   },
 ): ResolvedComponent {
   // `inlineReact` (bundle React in) and `transformOnly` (single-file transform,
@@ -86,7 +92,13 @@ export function resolveUISource(
   }
 
   if (isFileSource(source)) {
-    return resolveFileSource(source, { inlineReact: options?.inlineReact, transformOnly: options?.transformOnly });
+    return resolveFileSource(source, {
+      inlineReact: options?.inlineReact,
+      transformOnly: options?.transformOnly,
+      hydrate: options?.hydrate,
+      input: options?.input,
+      output: options?.output,
+    });
   }
 
   if (isFunctionSource(source)) {
@@ -187,7 +199,13 @@ function findSourceWidget(filePath: string): string | undefined {
 
 function resolveFileSource(
   source: FileSource,
-  options: { inlineReact?: boolean; transformOnly?: boolean } = {},
+  options: {
+    inlineReact?: boolean;
+    transformOnly?: boolean;
+    hydrate?: boolean;
+    input?: unknown;
+    output?: unknown;
+  } = {},
 ): ResolvedComponent {
   const path = require('path') as typeof import('path');
   const ext = path.extname(source.file).toLowerCase();
@@ -243,9 +261,14 @@ function resolveFileSource(
     // Bundle: workspace deps resolved locally. When `inlineReact` is set
     // (resourceMode: 'inline'), React itself is bundled in — see #454.
     // Otherwise React stays external and loads from the CDN at runtime.
+    const hydrate = options.hydrate === true;
     const bundled = bundleFileSource(rawSource, source.file, path.dirname(filePath), componentName, {
       bundleReact: options.inlineReact === true,
+      hydrate,
     });
+    const serverHtml = hydrate
+      ? renderFileSourceOnServer(filePath, rawSource, source.exportName, widgetProps(options.input, options.output))
+      : undefined;
 
     // Parse bundled output for remaining external imports (react/react-dom subpaths)
     const parsed = parseImports(bundled.code);
@@ -258,6 +281,7 @@ function resolveFileSource(
       meta: { mcpAware: true, renderer: 'react' },
       peerDependencies: source.peerDependencies || ['react', 'react-dom'],
       bundled: true,
+      serverHtml,
     };
   }
 
