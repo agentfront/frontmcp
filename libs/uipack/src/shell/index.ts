@@ -23,6 +23,9 @@ export { buildShell } from './builder';
 // Sizing CSS
 export { buildSizingStyleTag } from './sizing-css';
 
+// URL-served widgets
+export { buildUrlWidgetShell, widgetUrlOrigin, type UrlWidgetShellOptions } from './url-widget-shell';
+
 // CSP
 export {
   DEFAULT_CDN_DOMAINS,

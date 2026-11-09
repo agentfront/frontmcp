@@ -9,7 +9,8 @@
  *
  * The static widget is registered at server startup for tools with
  * `servingMode: 'static'`. The widget HTML includes the FrontMCP Bridge
- * which reads tool output from the platform context at runtime.
+ * which reads tool output from the platform context at runtime. A widget
+ * served from a URL (`'direct-url'`) gets a page that frames that URL.
  *
  * @example
  * ```typescript
@@ -25,6 +26,7 @@
 
 import type { ReadResourceResult } from '@frontmcp/protocol';
 import { createDefaultBaseTemplate } from '@frontmcp/uipack/adapters';
+import { buildUrlWidgetShell, widgetUrlOrigin } from '@frontmcp/uipack/shell';
 
 import type { AIPlatformType } from '../../notification/notification.service';
 import { getUIResourceMimeType } from './ui-render';
@@ -52,6 +54,8 @@ export interface HandleUIResourceOptions {
   registry: ToolUIRegistry;
   /** Platform type of the connected client */
   platformType?: AIPlatformType;
+  /** The server's public base URL for this request, which a `'direct-url'` widget's URL starts with */
+  serverUrl?: string;
 }
 
 /**
@@ -74,6 +78,14 @@ function generatePlaceholderWidget(toolName: string): string {
 }
 
 /**
+ * The page a tool's widget is: the one compiled at startup, or a placeholder that reads the
+ * host's result at runtime when none was. Neither holds a call's data.
+ */
+export function widgetPageOf(registry: ToolUIRegistry, toolName: string): string {
+  return registry.getStaticWidget(toolName) ?? generatePlaceholderWidget(toolName);
+}
+
+/**
  * Build the `_meta` payload to attach to the widget resource's `contents[]`
  * item: the MCP Apps `_meta.ui` fields and their OpenAI Apps SDK `openai/widget*`
  * aliases. Returns `undefined` when nothing was configured so the caller can
@@ -86,8 +98,13 @@ function generatePlaceholderWidget(toolName: string): string {
  * `_meta.ui.csp` uses the MCP Apps `McpUiResourceCsp` keys (camelCase), and
  * `_meta['openai/widgetCSP']` the OpenAI Apps SDK's snake_case keys.
  */
-function buildResourceMetaForWidget(registry: ToolUIRegistry, toolName: string): Record<string, unknown> | undefined {
-  const meta = registry.getResourceMeta(toolName);
+function buildResourceMetaForWidget(
+  registry: ToolUIRegistry,
+  toolName: string,
+  frameOrigin?: string,
+): Record<string, unknown> | undefined {
+  const configured = registry.getResourceMeta(toolName);
+  const meta = frameOrigin ? { ...configured, csp: withFrameOrigin(configured?.csp, frameOrigin) } : configured;
   if (!meta) return undefined;
   const ui: Record<string, unknown> = {};
   if (meta.csp) {
@@ -114,15 +131,29 @@ function buildResourceMetaForWidget(registry: ToolUIRegistry, toolName: string):
 }
 
 /**
- * The OpenAI Apps SDK `openai/widgetCSP` shape: `connect_domains` / `resource_domains` in place
- * of the user-facing camelCase keys. Any other key the caller passed goes through unchanged.
+ * A URL-served widget's CSP: the tool's `ui.csp` with the widget URL's origin allowed as a frame
+ * (`frameDomains`), and empty connect and resource lists where the tool declares none.
+ */
+function withFrameOrigin(
+  csp: UIResourceMeta['csp'] | undefined,
+  frameOrigin: string,
+): NonNullable<UIResourceMeta['csp']> {
+  const frameDomains = [...new Set([...(csp?.frameDomains ?? []), frameOrigin])];
+  return { connectDomains: [], resourceDomains: [], ...csp, frameDomains };
+}
+
+/**
+ * The OpenAI Apps SDK `openai/widgetCSP` shape: `connect_domains` / `resource_domains` /
+ * `frame_domains` in place of the user-facing camelCase keys. Any other key the caller passed
+ * goes through unchanged.
  */
 function toOpenAiWidgetCsp(csp: NonNullable<UIResourceMeta['csp']>): Record<string, unknown> {
-  const { connectDomains, resourceDomains, ...otherKeys } = csp as NonNullable<UIResourceMeta['csp']> &
+  const { connectDomains, resourceDomains, frameDomains, ...otherKeys } = csp as NonNullable<UIResourceMeta['csp']> &
     Record<string, unknown>;
   const openAiCsp: Record<string, unknown> = { ...otherKeys };
   if (connectDomains !== undefined) openAiCsp['connect_domains'] = connectDomains;
   if (resourceDomains !== undefined) openAiCsp['resource_domains'] = resourceDomains;
+  if (frameDomains !== undefined) openAiCsp['frame_domains'] = frameDomains;
   return openAiCsp;
 }
 
@@ -147,6 +178,7 @@ export function handleUIResourceRead(
   uri: string,
   registry: ToolUIRegistry,
   platformType?: AIPlatformType,
+  serverUrl?: string,
 ): UIResourceHandleResult {
   // Check if this is a UI resource URI
   if (!isUIResourceUri(uri)) {
@@ -167,6 +199,11 @@ export function handleUIResourceRead(
       return { handled: true, error: `No UI widget is registered for ${uri}` };
     }
 
+    const widgetUrl = registry.getWidgetUrl(widgetParsed.toolName);
+    if (widgetUrl) {
+      return readUrlWidgetResource(uri, mimeType, registry, widgetParsed.toolName, widgetUrl.path, serverUrl);
+    }
+
     // Per-resource `_meta` (CSP / permissions). Claude only honors CSP
     // declared on the resource content item, not on the tool's
     // `_meta.ui.csp` — see issue #455.
@@ -175,7 +212,7 @@ export function handleUIResourceRead(
     // The developer's compiled template (includes the FrontMCP Bridge for runtime data access),
     // or, when none was pre-compiled, a placeholder that reads `window.openai.toolOutput` at
     // runtime — OpenAI caches this HTML, so it must not embed data.
-    const html = registry.getStaticWidget(widgetParsed.toolName) ?? generatePlaceholderWidget(widgetParsed.toolName);
+    const html = widgetPageOf(registry, widgetParsed.toolName);
 
     return {
       handled: true,
@@ -196,6 +233,49 @@ export function handleUIResourceRead(
   return {
     handled: true,
     error: `Invalid UI resource URI format: ${uri}. Expected: ui://widget/{toolName}.html`,
+  };
+}
+
+/**
+ * The resource of a widget served from a URL: a page that frames the URL, with the URL's origin
+ * allowed as a frame in the resource's CSP.
+ */
+function readUrlWidgetResource(
+  uri: string,
+  mimeType: string,
+  registry: ToolUIRegistry,
+  toolName: string,
+  path: string,
+  serverUrl: string | undefined,
+): UIResourceHandleResult {
+  if (!serverUrl) {
+    return {
+      handled: true,
+      error:
+        `The widget of tool "${toolName}" is served from the server's route ${path}, and this read did not come ` +
+        "over HTTP, so its URL is unknown: set FRONTMCP_PUBLIC_URL to the server's public origin.",
+    };
+  }
+  const url = `${serverUrl.replace(/\/+$/, '')}${path}`;
+  let origin: string;
+  try {
+    origin = widgetUrlOrigin(url);
+  } catch {
+    return { handled: true, error: `The widget URL of tool "${toolName}" is not a valid http(s) URL` };
+  }
+  const resourceMeta = buildResourceMetaForWidget(registry, toolName, origin);
+  return {
+    handled: true,
+    result: {
+      contents: [
+        {
+          uri,
+          mimeType,
+          text: buildUrlWidgetShell({ url, title: toolName }),
+          ...(resourceMeta ? { _meta: resourceMeta } : {}),
+        },
+      ],
+    },
   };
 }
 

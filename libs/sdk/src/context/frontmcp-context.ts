@@ -97,6 +97,12 @@ export interface RequestMetadata {
   clientIp?: string;
   /** Custom headers matching x-frontmcp-* pattern */
   customHeaders: Record<string, string>;
+  /**
+   * The server's public base URL as this HTTP request reached it: `FRONTMCP_PUBLIC_URL` when set,
+   * else the request's scheme and `Host` (`X-Forwarded-*` only behind a trusted proxy). Unset
+   * outside an HTTP request.
+   */
+  serverUrl?: string;
 }
 
 /**

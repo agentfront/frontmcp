@@ -231,8 +231,12 @@ export type TemplateBuilderFn<In = unknown, Out = unknown> = (ctx: TemplateConte
  * - `'hybrid'`: Shell (React runtime + bridge) pre-compiled at startup.
  *   Component code transpiled per-request and delivered in `_meta['ui/component']`.
  *
- * - `'direct-url'`, `'custom-url'`: Deprecated. Served as `'inline'` is: nothing serves the widget
- *   from a URL, and startup logs a warning.
+ * - `'direct-url'`: Compiled at startup, as with `'static'`, and served on a route of the server
+ *   (`directPath`). The `ui://` resource is a small page that frames that URL and relays the host's
+ *   bridge messages. Results carry no page.
+ *
+ * - `'custom-url'`: Deprecated. Served as `'inline'` is: nothing serves the widget from a URL, and
+ *   startup logs a warning.
  *
  * ## Claude target caveat (issue #447)
  *
@@ -250,7 +254,7 @@ export type WidgetServingMode =
   | 'inline' // HTML embedded directly in tool response _meta
   | 'static' // Pre-compiled at startup, resolved via tools/list (ui:// resource URI)
   | 'hybrid' // Shell (React + renderer) cached, component + data in response
-  | 'direct-url' // Deprecated: served as 'inline'
+  | 'direct-url' // Compiled at startup, served on a server route that the ui:// resource frames
   | 'custom-url'; // Deprecated: served as 'inline'
 
 // ============================================
@@ -460,8 +464,15 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * - `'hybrid'`: Shell (React runtime + bridge) pre-compiled at startup.
    *   Component code transpiled per-request and delivered in `_meta['ui/component']`.
    *
-   * - `'direct-url'`, `'custom-url'`: Deprecated. Served as `'inline'` is, with a startup
-   *   warning: nothing serves the widget from a URL.
+   * - `'direct-url'`: Compiled at startup, as with `'static'`, and served from the server's own
+   *   HTTP route (`directPath`). The `ui://` resource is a small page that frames that URL, so the
+   *   widget runs on the server's origin, and relays the host's bridge messages to it. The resource
+   *   declares the URL's origin as a frame: `_meta.ui.csp.frameDomains` (MCP Apps) and
+   *   `_meta['openai/widgetCSP'].frame_domains` (OpenAI Apps SDK). Results carry no page; the host
+   *   sends each call's data to the widget.
+   *
+   * - `'custom-url'`: Deprecated. Served as `'inline'` is, with a startup warning: nothing serves
+   *   the widget from a URL.
    *
    * When unset, the FrontMCP SDK uses the app's `@App({ ui: { servingMode } })` default, else the
    * server's `@FrontMcp({ ui: { servingMode } })`, else `'auto'`.
@@ -478,10 +489,22 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   customWidgetUrl?: string;
 
   /**
-   * Path for direct URL serving when `servingMode: 'direct-url'`.
+   * The route a `servingMode: 'direct-url'` widget is served on, from the server's root. Default:
+   * `/widgets/` and the tool name (characters other than letters, digits, `.`, `_`, `~` and `-`
+   * become `-`).
    *
-   * @deprecated Has no effect: `'direct-url'` is served as `'inline'`, and no route serves the widget.
-   * Startup logs a warning when it is set.
+   * The route answers `GET` without auth, in every auth mode, because a host loads it in a frame,
+   * which sends no credentials. It serves the page compiled at startup, which holds no call's data.
+   * The URL the `ui://` resource frames starts with `FRONTMCP_PUBLIC_URL` when set, else with the
+   * scheme and host the `resources/read` request came to. Startup refuses a path that collides with
+   * another route of the server or another widget, and a `directPath` on a widget not served
+   * `'direct-url'`.
+   *
+   * @example
+   * ```typescript
+   * ui: { template: WeatherWidget, servingMode: 'direct-url', directPath: '/widgets/weather' }
+   * // ui://widget/get_weather.html frames https://mcp.example.com/widgets/weather
+   * ```
    */
   directPath?: string;
 

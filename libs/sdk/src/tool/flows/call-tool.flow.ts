@@ -1497,12 +1497,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         return;
       }
 
-      if (servingMode === 'static') {
-        // For static mode: no additional rendering needed
-        // Widget was already registered at server startup
-        this.logger.verbose('applyUI: UI using static mode (structured data only)', {
+      if (servingMode === 'static' || servingMode === 'direct-url') {
+        // The page was compiled at startup: the host loads it from the `ui://` resource, or from the
+        // server route that resource frames, and gets this call's data from the result
+        this.logger.verbose('applyUI: UI served from its resource (structured data only)', {
           tool: tool.metadata.name,
           platform: platformType,
+          servingMode,
         });
       } else if (servingMode === 'hybrid') {
         // For hybrid mode: build the component payload

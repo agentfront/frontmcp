@@ -10,6 +10,7 @@ import type { ImportResolver } from '@frontmcp/uipack/resolver';
 import { InternalMcpError } from '../../errors/mcp.error';
 import { ToolUiConfigurationError } from '../../errors/tool-ui.errors';
 import { detectUIType, warnIfComponentReference } from './template-detection';
+import type { WidgetUrlSource } from './widget-serving';
 
 /** The `tools/call` `_meta` key a widget's bridge sets on its own calls, as `@frontmcp/uipack/bridge-runtime` names it. */
 export const WIDGET_CALL_META_KEY = 'frontmcp/widgetCall';
@@ -41,7 +42,7 @@ export interface UIResourceMeta {
    * the resource content item's `_meta` so MCP Apps hosts (Claude) actually
    * honor it — `_meta.ui.csp` on the tool is ignored (#455).
    */
-  csp?: { connectDomains?: string[]; resourceDomains?: string[] };
+  csp?: { connectDomains?: string[]; resourceDomains?: string[]; frameDomains?: string[] };
   /**
    * MCP Apps permissions (future-compatibility slot — currently sourced from
    * `uiConfig.permissions` if present so it round-trips to the resource).
@@ -68,6 +69,7 @@ export class ToolUIRegistry {
   private resourceMeta = new Map<string, UIResourceMeta>();
   private uiTools = new Set<string>();
   private customUris = new Map<string, string>();
+  private widgetUrls = new Map<string, WidgetUrlSource>();
   private resolver?: ImportResolver;
   private readonly options: ToolUIRegistryOptions;
   private renderer?: UIRenderer;
@@ -138,6 +140,21 @@ export class ToolUIRegistry {
     } catch (error) {
       throw new ToolUiConfigurationError(toolName, [error instanceof Error ? error.message : String(error)]);
     }
+  }
+
+  /** Record that `toolName`'s widget page loads from a URL, which its `ui://` resource frames. */
+  registerWidgetUrl(toolName: string, source: WidgetUrlSource): void {
+    this.widgetUrls.set(toolName, source);
+  }
+
+  /** Where `toolName`'s widget page loads from, when it is served from a URL. */
+  getWidgetUrl(toolName: string): WidgetUrlSource | undefined {
+    return this.widgetUrls.get(toolName);
+  }
+
+  /** The `'direct-url'` widgets: each tool and the server route its page is served on. */
+  widgetRoutes(): Array<{ toolName: string; path: string }> {
+    return [...this.widgetUrls].map(([toolName, source]) => ({ toolName, path: source.path }));
   }
 
   /** The tool that advertised `uri` as its custom `ui.resourceUri`. */
