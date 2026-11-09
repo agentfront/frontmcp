@@ -33,6 +33,8 @@ export interface OAuthAuthorizeParams {
   session_id?: string;
   /** Framework-signed incremental-authorization ticket (GHSA-2c4g-9c8x-6m8g). */
   ticket?: string;
+  /** Comma-separated app ids an ordinary login narrows its grant to. */
+  apps?: string;
 }
 
 /**

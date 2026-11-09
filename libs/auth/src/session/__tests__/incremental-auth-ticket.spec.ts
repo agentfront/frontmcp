@@ -8,6 +8,7 @@
  */
 import {
   DEFAULT_INCREMENTAL_TICKET_TTL_MS,
+  openIncrementalAuthTicketProfile,
   signIncrementalAuthTicket,
   verifyIncrementalAuthTicket,
 } from '../incremental-auth-ticket';
@@ -95,5 +96,52 @@ describe('signIncrementalAuthTicket / verifyIncrementalAuthTicket', () => {
         SECRET,
       ),
     ).toBeNull();
+    expect(
+      verifyIncrementalAuthTicket(
+        encode({ sub: 'u', appId: 'B', jti: 'j', exp: Date.now() + 1000, profile: 1 }),
+        SECRET,
+      ),
+    ).toBeNull();
+  });
+});
+
+describe('openIncrementalAuthTicketProfile', () => {
+  it("carries the subject's email and name, sealed rather than readable in the URL", () => {
+    const token = signIncrementalAuthTicket(
+      { sub: 'user-1', appId: 'B', email: 'ada@example.com', name: 'Ada Lovelace' },
+      SECRET,
+    );
+    const payload = verifyIncrementalAuthTicket(token, SECRET);
+    if (!payload) throw new Error('expected a verifiable ticket');
+
+    expect(Buffer.from(token, 'base64url').toString('utf8')).not.toContain('ada@example.com');
+    expect(openIncrementalAuthTicketProfile(payload, SECRET)).toEqual({
+      sub: 'user-1',
+      email: 'ada@example.com',
+      name: 'Ada Lovelace',
+    });
+  });
+
+  it('is undefined for a ticket without a profile', () => {
+    const payload = verifyIncrementalAuthTicket(signIncrementalAuthTicket({ sub: 'u', appId: 'B' }, SECRET), SECRET);
+    if (!payload) throw new Error('expected a verifiable ticket');
+
+    expect(payload.profile).toBeUndefined();
+    expect(openIncrementalAuthTicketProfile(payload, SECRET)).toBeUndefined();
+  });
+
+  it("refuses a profile sealed for another ticket's subject", () => {
+    const victim = verifyIncrementalAuthTicket(
+      signIncrementalAuthTicket({ sub: 'victim', appId: 'B', email: 'victim@example.com' }, SECRET),
+      SECRET,
+    );
+    const attacker = verifyIncrementalAuthTicket(
+      signIncrementalAuthTicket({ sub: 'attacker', appId: 'B', email: 'attacker@example.com' }, SECRET),
+      SECRET,
+    );
+    if (!victim || !attacker) throw new Error('expected verifiable tickets');
+
+    expect(openIncrementalAuthTicketProfile({ ...attacker, profile: victim.profile }, SECRET)).toBeUndefined();
+    expect(openIncrementalAuthTicketProfile(victim, 'other-secret')).toBeUndefined();
   });
 });

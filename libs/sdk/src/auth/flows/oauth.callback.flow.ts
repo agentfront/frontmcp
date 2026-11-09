@@ -48,7 +48,6 @@ import {
   httpInputSchema,
   HttpRedirectSchema,
   httpRespond,
-  isOrchestratedMode,
   StageHookOf,
   type FlowPlan,
   type FlowRunOptions,
@@ -56,6 +55,7 @@ import {
 } from '../../common';
 import { oauthBasePath } from '../../flows/flow.http-path';
 import { authUiExtraPath, buildAuthUiPage, buildConsentState, type AuthTool, type AuthUiRegistry } from '../auth-ui';
+import { initialAuthorizedApps, withoutSkippedApps } from '../authorized-apps.utils';
 import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 import { parseFormBody } from './form-body.utils';
@@ -357,6 +357,17 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       this.state.set({ email, name });
       if (verifiedLogin.claims) this.state.set('customClaims', verifiedLogin.claims);
       if (verifiedLogin.credentials?.length) this.state.set('credentials', verifiedLogin.credentials);
+    }
+
+    // An incremental grant keeps the email and name its ticket proved, never ones submitted with the form.
+    if (isIncremental) {
+      const ticketLogin = pendingAuth.verifiedLogin
+        ? openPendingLogin(localAuth.secret, pendingAuth.id, pendingAuth.verifiedLogin)
+        : undefined;
+      const provenLogin = ticketLogin?.sub === pendingAuth.incrementalSub ? ticketLogin : undefined;
+      email = provenLogin?.email;
+      name = provenLogin?.name;
+      this.state.set({ email, name });
     }
 
     // #468 — email opt-out for single-operator local setups.
@@ -729,7 +740,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    *
    *  - INITIAL login: grant = the apps the client requested via `apps=`
    *    (`priorAuthorizedAppIds`); if none requested, grant ALL scope apps (a
-   *    plain login keeps working for everything).
+   *    plain login keeps working for everything). A sign-in through the
+   *    provider picker leaves out the apps whose own provider it skipped.
    *  - INCREMENTAL authorize (`mode=incremental&app=B`): grant = the prior apps
    *    (carried forward via `apps=`) UNION the newly-authorized `targetAppId`.
    *    So after authorizing app B, a `tools/call` on B's tool succeeds while app
@@ -739,8 +751,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    * orchestrated scope. When incremental auth is disabled or the scope is not
    * orchestrated, it leaves `authorizedAppIds` undefined → NO `authorized_apps`
    * claim is minted → NO app-level gating (the historical allow-all behavior is
-   * preserved exactly). Federated logins mint their token in the provider
-   * callback flow, so this stage is a no-op for them.
+   * preserved exactly). A federated sign-in carries the grant in its federated
+   * session, and the provider callback mints it.
    *
    * Unknown app ids (not present in the scope) are dropped so a client can never
    * forge a grant to a non-existent app; app-level gating is per-real-app, so a
@@ -748,61 +760,28 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
    */
   @Stage('handleIncrementalAuth')
   async handleIncrementalAuth() {
-    const { isIncremental, isFederated, targetAppId, existingAuthorizationId, priorAuthorizedAppIds } = this.state;
-
-    // Federated logins mint elsewhere (provider-callback flow) — nothing to do.
-    if (isFederated) {
-      return;
-    }
-
-    // App-level grants are an orchestrated-mode feature gated by
-    // `incrementalAuth.enabled`. When the scope is not orchestrated, or the flag
-    // is explicitly disabled, emit NO grant (no claim → no gating, as before).
+    const { isIncremental, targetAppId, existingAuthorizationId, priorAuthorizedAppIds, skippedProviders } = this.state;
     const authOptions = this.scope.auth?.options;
-    if (!authOptions || !isOrchestratedMode(authOptions)) {
-      return;
-    }
-    const incrementalConfig = (authOptions as { incrementalAuth?: { enabled?: boolean } }).incrementalAuth;
-    // Incremental auth is OPT-IN: only emit a grant when explicitly enabled.
-    // (The schema default is `enabled: true`, but that default only applies once
-    // an `incrementalAuth` block is present; a scope with no block at all stays
-    // allow-all so existing orchestrated servers are unaffected.)
-    if (!incrementalConfig || incrementalConfig.enabled === false) {
-      return;
-    }
+    const apps = this.scope.apps.getApps();
 
-    // Validate ids against the REAL scope app ids. The tool-owner id used by
-    // `checkToolAuthorization` is `app.id`, so the claim must carry `app.id`
-    // values (falling back to metadata.id for parity).
-    const knownAppIds = new Set(
-      this.scope.apps.getApps().map((a) => {
-        const app = a as { id?: string; metadata?: { id?: string } };
-        return app.id ?? app.metadata?.id ?? '';
-      }),
-    );
-
-    const prior = (priorAuthorizedAppIds ?? []).filter((id) => knownAppIds.has(id));
-
-    let grant: string[];
     if (isIncremental && targetAppId) {
-      if (!knownAppIds.has(targetAppId)) {
+      const grant = initialAuthorizedApps(authOptions, apps, [...(priorAuthorizedAppIds ?? []), targetAppId]);
+      if (!grant) return;
+      if (!grant.includes(targetAppId)) {
         this.logger.warn(`Incremental auth: target app "${targetAppId}" is not a known app — ignoring expansion`);
-        // Fall back to the prior grant (still a valid, enforceable set).
-        grant = prior;
-      } else {
-        grant = Array.from(new Set([...prior, targetAppId]));
       }
       this.logger.info(
         `Incremental auth: granting [${grant.join(', ')}] (target "${targetAppId}")` +
           `${existingAuthorizationId ? ` (existing auth: ${existingAuthorizationId})` : ''}`,
       );
-    } else {
-      // Initial login: grant the requested apps, or ALL scope apps when the
-      // client did not narrow the set (a plain login keeps working everywhere).
-      grant = priorAuthorizedAppIds ? prior : Array.from(knownAppIds).filter(Boolean);
-      this.logger.info(`Incremental auth enabled: initial grant [${grant.join(', ')}]`);
+      this.state.set('authorizedAppIds', grant);
+      return;
     }
 
+    const requested = initialAuthorizedApps(authOptions, apps, priorAuthorizedAppIds);
+    if (!requested) return;
+    const grant = withoutSkippedApps(requested, apps, skippedProviders);
+    this.logger.info(`Incremental auth enabled: initial grant [${grant.join(', ')}]`);
     this.state.set('authorizedAppIds', grant);
   }
 
@@ -827,6 +806,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       scopes,
       originalState,
       resource,
+      authorizedAppIds,
     } = this.state;
 
     // Skip if not federated auth or no providers selected
@@ -879,6 +859,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       providerIds: selectedProviders,
       // The provider callback checks the same browser binding.
       signinBinding: this.state.signinBinding,
+      authorizedAppIds,
     });
 
     // Store the session

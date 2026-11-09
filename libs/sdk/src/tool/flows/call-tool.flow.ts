@@ -890,9 +890,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // the top level on the Node one. Read both, or the ticket is silently
     // omitted on the worker and every incremental link falls back to a full
     // login.
-    const extraUser = (authInfo?.extra as { user?: { sub?: string } } | undefined)?.user;
-    const sub = extraUser?.sub ?? authInfo?.user?.sub;
-    if (!sub) return undefined;
+    const extraUser = (authInfo?.extra as { user?: { sub?: string; email?: string; name?: string } } | undefined)?.user;
+    const user = extraUser?.sub ? extraUser : authInfo?.user;
+    if (!user?.sub) return undefined;
+    const sub = user.sub;
 
     const secret = (this.scope.auth as { signingSecret?: string } | undefined)?.signingSecret;
     if (!secret) return undefined;
@@ -903,6 +904,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         appId,
         toolId,
         ...(priorAppIds && priorAppIds.size > 0 ? { priorAppIds: [...priorAppIds] } : {}),
+        ...(typeof user.email === 'string' ? { email: user.email } : {}),
+        ...(typeof user.name === 'string' ? { name: user.name } : {}),
       },
       secret,
     );

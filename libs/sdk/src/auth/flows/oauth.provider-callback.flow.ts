@@ -59,6 +59,7 @@ import {
   type FlowRunOptions,
 } from '../../common';
 import { InternalMcpError } from '../../errors';
+import { initialAuthorizedApps, withoutSkippedApps } from '../authorized-apps.utils';
 import { projectConsentTools } from '../consent-tools.helper';
 import { LocalPrimaryAuth, validateAuthorizationIssuer } from '../instances/instance.local-primary-auth';
 import { parseFormBody } from './form-body.utils';
@@ -851,6 +852,10 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       }
     }
 
+    const apps = this.scope.apps.getApps();
+    const grant = session.authorizedAppIds ?? initialAuthorizedApps(this.scope.auth?.options, apps, undefined);
+    const authorizedAppIds = grant && withoutSkippedApps(grant, apps, skippedProviderIds);
+
     // Create authorization code with consent/federated data
     // Include pendingAuthId for token migration in token exchange flow
     const code = await localAuth.createAuthorizationCode({
@@ -870,6 +875,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       // Consent data (only set when consent mode is enabled)
       consentEnabled: consentEnabled || undefined,
       selectedToolIds,
+      authorizedAppIds,
       // Token migration: pendingAuthId links to tokens stored during provider callbacks
       pendingAuthId: session.pendingAuthId,
     });

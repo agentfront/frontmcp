@@ -235,6 +235,7 @@ export {
   // Incremental-authorization ticket signing (GHSA-2c4g-9c8x-6m8g)
   signIncrementalAuthTicket,
   verifyIncrementalAuthTicket,
+  openIncrementalAuthTicketProfile,
   DEFAULT_INCREMENTAL_TICKET_TTL_MS,
   // Credentials accessor (`this.credentials`)
   CREDENTIALS_ACCESSOR,
