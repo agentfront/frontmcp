@@ -151,7 +151,6 @@ export default class ProviderRegistry
     options?: ProviderRegistryOptions,
   ) {
     super('ProviderRegistry', parentProviders, list, false);
-    parentProviders?.childRegistries.add(this);
 
     this.providedBy = new Map();
     // A registry below another (an app's, a plugin's, an agent's) follows its parent unless configured itself
@@ -166,6 +165,8 @@ export default class ProviderRegistry
 
     this.buildGraph();
     this.topoSort();
+    // Joined only once its graph holds: a registry whose constructor throws is never disposed
+    parentProviders?.childRegistries.add(this);
 
     this.ready = this.initialize();
   }

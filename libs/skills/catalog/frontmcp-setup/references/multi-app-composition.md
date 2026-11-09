@@ -70,7 +70,7 @@ export default class Server {}
 
 ## ESM Apps (npm Packages)
 
-Load an npm package at runtime using `app.esm()`. The package is fetched and cached, and the `tools`, `resources` and `prompts` its manifest exports are registered under the namespace. Its `skills`, `agents`, `jobs`, `workflows` and `providers` are not loaded; the server logs a warning naming them.
+Load an npm package at runtime using `app.esm()`. The package is fetched and cached, and the `tools`, `resources` and `prompts` its manifest exports are registered under the namespace, with its `providers`. Its `skills`, `agents`, `jobs` and `workflows` are not loaded; the server logs a warning naming them.
 
 ```typescript
 import { app, FrontMcp } from '@frontmcp/sdk';
@@ -115,8 +115,9 @@ app.esm('@internal/tools@^2.0.0', {
 - **Token:** the `loader` token goes to the registry and, when `loader.url` is set, with every bundle download from it. It is never sent to the default esm.sh.
 - **Bundle errors:** a refused bundle download names the server it came from, `https://esm.sh returned 404 for "…"` or the `loader.url`.
 - **Auto-update:** a newer version that fails to download or register leaves the loaded version serving, and is tried again at the next poll.
-- **What a package exports:** a manifest (`{ name, version, tools?, resources?, prompts? }`), arrays or decorated classes as named exports, or a default-exported `@App` class, or `@FrontMcp` class whose own and `@App` entries are read. Give an exported `@FrontMcp` class `serve: false`, or importing the bundle starts that server.
+- **What a package exports:** a manifest (`{ name, version, tools?, resources?, prompts?, providers? }`), arrays or decorated classes as named exports, or a default-exported `@App` class, or `@FrontMcp` class whose own and `@App` entries are read. Give an exported `@FrontMcp` class `serve: false`, or importing the bundle starts that server.
 - **Plain-object tools** (`{ name, inputSchema?, execute }`): the arguments are checked against a JSON Schema `inputSchema` (`Invalid tool input` otherwise). Without an `outputSchema`, an object answer is sent as JSON text with `structuredContent`, and a string or number as its text.
+- **Providers:** the package's `providers` (a `providers` array, or exported `@Provider` classes) serve the package's own entries, before the server's providers, and no other app. Its tools, resources and prompts resolve them with `this.get(Token)`; a plain-object one gets the call's context as its last argument (`execute(input, context)`, `read(uri, params, context)`), and `context.get(Token)`. Each loaded version has its own: a `GLOBAL` provider (the default) is built when the version loads, a `CONTEXT` one for the calls that use it. `onBootstrap()` runs when the version loads, `onReady()` when the server is ready (for a version auto-update loads, before it is swapped in), and `onShutdown()` when the server shuts down. A version that auto-update replaces keeps its providers until then, so calls still running on it finish. An entry of `providers` that isn't a provider, or a provider that fails to build, stops the server; auto-update keeps the loaded version and shuts down what the new one built. Up to 1.11.2 a package's providers were not loaded.
 
 ## Remote Apps (External MCP Servers)
 
