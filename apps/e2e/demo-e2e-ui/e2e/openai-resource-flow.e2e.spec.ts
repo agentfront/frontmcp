@@ -8,10 +8,12 @@
  * 1. tools/list includes ui.resourceUri for static mode tools
  * 2. resources/read returns pre-compiled widget with text/html;profile=mcp-app
  * 3. Static mode tool call returns JSON only (no HTML in _meta)
- * 4. Inline/dynamic mode tool call has HTML in _meta
- * 5. Response structure: structuredContent + content + _meta
+ * 4. Auto mode tool call returns JSON only too: the OpenAI Apps SDK renders the widget from its
+ *    ui:// resource, and a widget's own call through window.openai.callTool() can't be told apart
+ * 5. Inline mode tool call has HTML in _meta
+ * 6. Response structure: structuredContent + content + _meta
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('OpenAI Resource Flow E2E', () => {
   test.use({
@@ -204,17 +206,31 @@ test.describe('OpenAI Resource Flow E2E', () => {
     });
   });
 
-  test.describe('Inline/Dynamic Mode Tool Response', () => {
+  test.describe('Auto Mode Tool Response', () => {
+    test('should return JSON only, no HTML in _meta', async ({ server }) => {
+      const client = await server.createClient({
+        transport: 'streamable-http',
+        clientInfo: { name: 'ChatGPT', version: '1.0.0' },
+      });
+
+      const result = await client.tools.call('html-card', { title: 'Auto Test', content: 'Content' });
+
+      expect(result).toBeSuccessful();
+      expect(result).toNotHaveMetaKey('ui/html');
+      expect(result.raw.structuredContent).toBeDefined();
+
+      await client.disconnect();
+    });
+  });
+
+  test.describe('Inline Mode Tool Response', () => {
     test('should have HTML in _meta for inline mode tools', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
         clientInfo: { name: 'ChatGPT', version: '1.0.0' },
       });
 
-      const result = await client.tools.call('html-card', {
-        title: 'Dynamic Test',
-        content: 'Content',
-      });
+      const result = await client.tools.call('leaky-report', { title: 'Dynamic Test' });
 
       expect(result).toBeSuccessful();
       expect(result.hasToolUI()).toBe(true);
@@ -229,10 +245,7 @@ test.describe('OpenAI Resource Flow E2E', () => {
         clientInfo: { name: 'ChatGPT', version: '1.0.0' },
       });
 
-      const result = await client.tools.call('html-card', {
-        title: 'MIME Test',
-        content: 'Content',
-      });
+      const result = await client.tools.call('leaky-report', { title: 'MIME Test' });
 
       expect(result).toBeSuccessful();
       expect(result).toHaveMetaValue('ui/mimeType', 'text/html;profile=mcp-app');
@@ -246,10 +259,7 @@ test.describe('OpenAI Resource Flow E2E', () => {
         clientInfo: { name: 'ChatGPT', version: '1.0.0' },
       });
 
-      const result = await client.tools.call('html-card', {
-        title: 'HTML Validation',
-        content: 'Test content',
-      });
+      const result = await client.tools.call('leaky-report', { title: 'HTML Validation' });
 
       expect(result).toBeSuccessful();
       const html = result.raw._meta?.['ui/html'] as string;
@@ -266,10 +276,7 @@ test.describe('OpenAI Resource Flow E2E', () => {
         clientInfo: { name: 'ChatGPT', version: '1.0.0' },
       });
 
-      const result = await client.tools.call('html-card', {
-        title: 'Structured Test',
-        content: 'Content',
-      });
+      const result = await client.tools.call('leaky-report', { title: 'Structured Test' });
 
       expect(result).toBeSuccessful();
       expect(result.raw.structuredContent).toBeDefined();
@@ -326,10 +333,7 @@ test.describe('OpenAI Resource Flow E2E', () => {
         clientInfo: { name: 'ChatGPT', version: '1.0.0' },
       });
 
-      const result = await client.tools.call('html-card', {
-        title: 'Namespace Test',
-        content: 'Content',
-      });
+      const result = await client.tools.call('leaky-report', { title: 'Namespace Test' });
 
       expect(result).toBeSuccessful();
 
@@ -355,10 +359,7 @@ test.describe('OpenAI Resource Flow E2E', () => {
         clientInfo: { name: 'ChatGPT', version: '1.0.0' },
       });
 
-      const result = await client.tools.call('html-card', {
-        title: 'Response Test',
-        content: 'Content',
-      });
+      const result = await client.tools.call('leaky-report', { title: 'Response Test' });
 
       expect(result).toBeSuccessful();
       expect(result.raw.content).toBeDefined();
@@ -373,10 +374,7 @@ test.describe('OpenAI Resource Flow E2E', () => {
         clientInfo: { name: 'ChatGPT', version: '1.0.0' },
       });
 
-      const result = await client.tools.call('html-card', {
-        title: 'Meta Test',
-        content: 'Content',
-      });
+      const result = await client.tools.call('leaky-report', { title: 'Meta Test' });
 
       expect(result).toBeSuccessful();
       expect(result.raw._meta).toBeDefined();

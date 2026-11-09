@@ -50,7 +50,10 @@ export interface ServingModeResult {
  * Resolve the effective serving mode based on platform capabilities.
  *
  * - Gemini: No UI support
- * - OpenAI, ext-apps, claude, generic-mcp, unknown: UI supported, inline mode
+ * - OpenAI: UI supported; `'auto'` is `'static'`, so a result carries no page: the OpenAI Apps SDK
+ *   renders the widget from its `ui://` resource and never reads `_meta['ui/html']`, and a widget's
+ *   own call through `window.openai.callTool()` cannot be told from the model's
+ * - ext-apps, claude, generic-mcp, unknown: UI supported, `'auto'` is `'inline'`
  * - OpenAI/ext-apps/generic-mcp/codex/unknown: include structuredContent
  */
 export function resolveServingMode(options: ResolveServingModeOptions): ServingModeResult {
@@ -68,7 +71,8 @@ export function resolveServingMode(options: ResolveServingModeOptions): ServingM
   }
 
   // Determine effective mode
-  const effectiveMode: string | null = configuredMode === 'auto' ? 'inline' : configuredMode;
+  const autoMode = platformType === 'openai' ? 'static' : 'inline';
+  const effectiveMode: string | null = configuredMode === 'auto' ? autoMode : configuredMode;
 
   // Hybrid mode is only supported by widget-capable platforms
   if (effectiveMode === 'hybrid') {

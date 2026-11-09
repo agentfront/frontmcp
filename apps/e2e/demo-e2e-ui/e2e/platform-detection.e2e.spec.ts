@@ -9,7 +9,7 @@
  * - Cody: structuredContent format (HTML in content, raw data in structuredContent)
  * - Gemini/Unknown: JSON only (no UI rendering, no widget support)
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Platform Detection E2E', () => {
   test.use({
@@ -18,8 +18,9 @@ test.describe('Platform Detection E2E', () => {
     publicMode: true,
   });
 
+  // The OpenAI Apps SDK renders a widget from its ui:// resource, so an 'auto' tool sends it no page
   test.describe('OpenAI Platform', () => {
-    test('should return UI HTML for ChatGPT client', async ({ server }) => {
+    test('should return the data without a page for ChatGPT client', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
         clientInfo: { name: 'ChatGPT', version: '1.0.0' },
@@ -32,12 +33,13 @@ test.describe('Platform Detection E2E', () => {
       });
 
       expect(result).toBeSuccessful();
-      expect(result.hasToolUI()).toBe(true);
+      expect(result.hasToolUI()).toBe(false);
+      expect(result.raw.structuredContent).toBeDefined();
 
       await client.disconnect();
     });
 
-    test('should return UI HTML for OpenAI client variant', async ({ server }) => {
+    test('should return the data without a page for OpenAI client variant', async ({ server }) => {
       const client = await server.createClient({
         transport: 'streamable-http',
         clientInfo: { name: 'OpenAI', version: '2.0.0' },
@@ -49,7 +51,8 @@ test.describe('Platform Detection E2E', () => {
       });
 
       expect(result).toBeSuccessful();
-      expect(result.hasToolUI()).toBe(true);
+      expect(result.hasToolUI()).toBe(false);
+      expect(result.raw.structuredContent).toBeDefined();
 
       await client.disconnect();
     });
@@ -68,7 +71,7 @@ test.describe('Platform Detection E2E', () => {
 
       results.forEach((result) => {
         expect(result).toBeSuccessful();
-        expect(result.hasToolUI()).toBe(true);
+        expect(result.hasToolUI()).toBe(false);
       });
 
       await client.disconnect();
@@ -522,8 +525,8 @@ test.describe('Platform Detection E2E', () => {
       expect(result1).toBeSuccessful();
       expect(result2).toBeSuccessful();
 
-      // Both should have correct platform behavior (structuredContent format)
-      expect(result1.hasToolUI()).toBe(true);
+      // Each gets its own platform's answer: no page for ChatGPT under 'auto', the page for Claude
+      expect(result1.hasToolUI()).toBe(false);
       expect(result2.hasToolUI()).toBe(true);
 
       await client1.disconnect();

@@ -198,7 +198,8 @@ export type TemplateBuilderFn<In = unknown, Out = unknown> = (ctx: TemplateConte
  * Widget serving mode determines how the widget HTML is delivered to the client.
  *
  * - `'auto'` (default): Automatically select mode based on client capabilities.
- *   For OpenAI/ext-apps: uses 'inline'. For Claude: uses 'inline' with dual-payload.
+ *   For ext-apps and Claude: uses 'inline'. For OpenAI: uses 'static', so no result carries
+ *   the page: the OpenAI Apps SDK renders the widget from its `ui://` resource.
  *   For unsupported clients (e.g., Gemini): skips UI entirely (returns JSON only).
  *
  * - `'inline'`: HTML embedded directly in tool response `_meta['ui/html']`.
@@ -420,8 +421,9 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
    * How the widget HTML should be served to the client.
    *
    * - `'auto'` (default): Automatically select mode based on client capabilities.
-   *   For OpenAI/ext-apps clients: uses `'inline'` with `_meta`.
-   *   For Claude clients: uses `'inline'` with dual-payload format.
+   *   For ext-apps and Claude clients: uses `'inline'` with `_meta`.
+   *   For OpenAI clients: uses `'static'`, so no result carries the page, not even the one a widget's
+   *   own `window.openai.callTool()` gets: the OpenAI Apps SDK renders the widget from its `ui://` resource.
    *   For unsupported clients (Gemini, unknown): skips UI (returns JSON only).
    *
    * - `'inline'`: HTML embedded directly in tool response `_meta['ui/html']`.
