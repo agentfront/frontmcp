@@ -4,6 +4,7 @@ import { tokenName } from '@frontmcp/di';
 import { isDebug, isDevelopment } from '@frontmcp/utils';
 
 import {
+  authInfoFromAuthorization,
   FlowControl,
   FlowEntry,
   withHttpHeaders,
@@ -29,7 +30,7 @@ import {
 } from '../common';
 import { FRONTMCP_CONTEXT, FrontMcpContextStorage, type FrontMcpContext } from '../context';
 import { runAsFlow } from '../context/running-flow';
-import { InternalMcpError, PublicMcpError, RequestContextNotAvailableError } from '../errors';
+import { InternalMcpError, PublicMcpError, RequestContextNotAvailableError, UnauthorizedError } from '../errors';
 import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
 import { entryContextStageOf } from '../hooks/entry-class-hooks';
 import {
@@ -428,13 +429,41 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       );
     }
 
-    // `this.context.flow` and `this.context.scope` name the innermost flow running in this async call chain
-    const runStages = () =>
-      runAsFlow({ context: currentContext, flow: this, scope }, () =>
+    const runStages = async () => {
+      await this.authorizeCaller(currentContext, scope);
+      // `this.context.flow` and `this.context.scope` name the innermost flow running in this async call chain
+      return runAsFlow({ context: currentContext, flow: this, scope }, () =>
         this.runStages(input, deps, scope, currentContext, sessionKey),
       );
+    };
     const responseHeaders = this.metadata.middleware?.responseHeaders;
     return responseHeaders ? this.respondWithHeaders(runStages, responseHeaders) : runStages();
+  }
+
+  /**
+   * `access: 'authorized'`: the flow runs only for a caller the server's auth admitted. The context of an HTTP request
+   * that no flow has verified yet holds that request: it is verified here with `session:verify`, without minting a
+   * session, and the caller it admits is recorded in the context for the run and the flows it runs. Every other
+   * context's caller is authorized: an MCP client `http:request` verified, or the server process itself.
+   */
+  private async authorizeCaller(context: FrontMcpContext, scope: ScopeEntry): Promise<void> {
+    const request = context.unverifiedRequest;
+    if (this.metadata.access !== 'authorized' || !request) return;
+    const verified = await scope.runFlow('session:verify', { request, sessionless: true });
+    if (verified?.kind === 'authorized') {
+      context.recordAuthorization(authInfoFromAuthorization(verified.authorization));
+      return;
+    }
+    this.logger.verbose(`run: refused '${this.name}': its caller is not authorized`);
+    if (verified?.kind === 'forbidden') {
+      throw new PublicMcpError(
+        'The caller lacks the scopes the server requires',
+        'INSUFFICIENT_SCOPE',
+        403,
+        verified.prmMetadataHeader,
+      );
+    }
+    throw new UnauthorizedError('Unauthorized', verified?.prmMetadataHeader);
   }
 
   /**

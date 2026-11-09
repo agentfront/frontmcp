@@ -1,6 +1,6 @@
 /**
- * `@Flow({ access })` is never read, so it is optional and deprecated: the decorators skill's `@Flow` example, which
- * leaves it out, compiles under strict.
+ * `@Flow({ access })` says who a flow runs for, so every flow sets it, as 1.11.2 required: the decorators skill's `@Flow`
+ * example compiles under strict, and a flow without `access` does not.
  */
 import { resolve } from 'node:path';
 
@@ -27,6 +27,10 @@ function strictCompileErrors(fileName: string): string[] {
   );
 }
 
-it("compiles the decorators skill's @Flow example, which sets no access, under strict", () => {
+it("compiles the decorators skill's @Flow example under strict", () => {
+  expect(strictCompileErrors(resolve(__dirname, 'fixtures/decorators-guide-flow.fixture.ts'))).toEqual([]);
+}, 60_000);
+
+it('refuses a @Flow without access: its fixture expects the error', () => {
   expect(strictCompileErrors(resolve(__dirname, 'fixtures/flow-without-access.fixture.ts'))).toEqual([]);
 }, 60_000);

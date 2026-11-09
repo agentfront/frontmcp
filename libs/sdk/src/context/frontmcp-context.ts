@@ -138,6 +138,12 @@ export interface FrontMcpContextArgs {
    * `workerEnv` a direct call passes). Present only when the runtime or caller supplies one.
    */
   platformEnv?: unknown;
+  /**
+   * The incoming HTTP request whose caller the server's auth has not admitted yet. Only the HTTP entry
+   * points set it: any other context is the server process's own, and its caller is authorized.
+   * @internal
+   */
+  unverifiedRequest?: Record<string, unknown>;
 }
 
 /**
@@ -288,6 +294,7 @@ export class FrontMcpContext {
   private _platformType?: AIPlatformType;
   private _sessionMetadata?: SessionIdPayload;
   private _credentialMiddleware?: FetchCredentialApplier;
+  private _unverifiedRequest?: Record<string, unknown>;
 
   // =====================
   // References (pointers)
@@ -324,6 +331,7 @@ export class FrontMcpContext {
     this.traceContext = args.traceContext ?? generateTraceContext();
     this.timestamp = args.timestamp ?? Date.now();
     this._authInfo = args.authInfo ?? {};
+    this._unverifiedRequest = args.unverifiedRequest;
     this.platformEnv = args.platformEnv;
 
     // Configuration with defaults
@@ -366,6 +374,26 @@ export class FrontMcpContext {
    */
   updateAuthInfo(authInfo: Partial<AuthInfo>): void {
     this._authInfo = { ...this._authInfo, ...authInfo };
+  }
+
+  /**
+   * The incoming HTTP request whose caller the server's auth has not admitted yet; undefined once
+   * `session:verify` admits it, and for every context that does not serve an HTTP request.
+   * @internal
+   */
+  get unverifiedRequest(): Record<string, unknown> | undefined {
+    return this._unverifiedRequest;
+  }
+
+  /**
+   * Record the caller the server's auth admitted for this request, with its auth info.
+   *
+   * @param authInfo - The auth info of the verified authorization
+   * @internal
+   */
+  recordAuthorization(authInfo: Partial<AuthInfo>): void {
+    this.updateAuthInfo(authInfo);
+    this._unverifiedRequest = undefined;
   }
 
   /**

@@ -1,33 +1,24 @@
 import { Flow, FlowBase, FlowHooksOf, z, type FlowPlan, type FlowRunOptions } from '../../../index';
 
-const name = 'approval-flow' as const;
-const inputSchema = z.object({ action: z.string(), target: z.string() });
-const outputSchema = z.object({ approved: z.boolean() });
-const stateSchema = z.object({ approved: z.boolean().default(false) });
-const plan = { pre: ['validate'], execute: ['approve'], finalize: ['finalize'] } as const satisfies FlowPlan<string>;
+const name = 'unscoped-flow' as const;
+const inputSchema = z.object({});
+const outputSchema = z.object({ done: z.boolean() });
+const stateSchema = z.object({});
+const plan = { execute: ['finish'] } as const satisfies FlowPlan<string>;
 
 declare global {
   interface ExtendFlows {
-    [name]: FlowRunOptions<ApprovalFlow, typeof plan, typeof inputSchema, typeof outputSchema, typeof stateSchema>;
+    [name]: FlowRunOptions<UnscopedFlow, typeof plan, typeof inputSchema, typeof outputSchema, typeof stateSchema>;
   }
 }
 
 const { Stage } = FlowHooksOf<typeof name>(name);
 
+// @ts-expect-error `access` is required: every flow says who it runs for
 @Flow({ name, plan, inputSchema, outputSchema })
-export default class ApprovalFlow extends FlowBase<typeof name> {
-  @Stage('validate')
-  async validate() {
-    if (!this.rawInput.target) throw new Error('target is required');
-  }
-
-  @Stage('approve')
-  async approve() {
-    this.state.set('approved', this.rawInput.action !== 'delete');
-  }
-
-  @Stage('finalize')
-  async finalize() {
-    this.respond({ approved: this.state.approved ?? false });
+export default class UnscopedFlow extends FlowBase<typeof name> {
+  @Stage('finish')
+  async finish() {
+    this.respond({ done: true });
   }
 }

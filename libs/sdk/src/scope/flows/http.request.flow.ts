@@ -331,7 +331,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
           // Only a session the request presented is its verified session. MCP 2026-07-28 has no
           // sessions, so an `mcp-session-id` sent with such a request is not one either.
           const presentedSessionId = this.servesProtocol20260728() ? undefined : sessionIdPresentedBy(request);
-          ctx.updateAuthInfo(authInfoFromAuthorization(result.authorization, presentedSessionId));
+          ctx.recordAuthorization(authInfoFromAuthorization(result.authorization, presentedSessionId));
 
           // Bind `this.orchestration` for tools in orchestrated (local/remote)
           // mode so `this.orchestration.getToken(id)` resolves a live upstream

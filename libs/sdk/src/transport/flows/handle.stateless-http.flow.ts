@@ -48,7 +48,7 @@ declare global {
 @Flow({
   name,
   plan,
-  access: 'public', // Can be accessed without full auth
+  access: 'authorized',
   inputSchema: httpInputSchema,
   outputSchema: httpOutputSchema,
 })

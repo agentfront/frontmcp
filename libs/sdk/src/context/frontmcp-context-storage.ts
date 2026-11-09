@@ -134,7 +134,7 @@ export class FrontMcpContextStorage {
    * Run with the context of an incoming HTTP request: its `mcp-session-id` (a fresh anonymous
    * id when it sends none), its trace context and metadata, and the socket peer when the
    * runtime exposes one. Every adapter enters its flows through this, so they all see the
-   * same context for the same request.
+   * same context for the same request. Its caller is not authorized until `session:verify` admits it.
    *
    * @param request - The request's headers, and its socket where the runtime has one
    * @param scopeId - Scope handling the request
@@ -151,9 +151,17 @@ export class FrontMcpContextStorage {
     const sessionId = headerSessionId.length > 0 ? headerSessionId : `anon:${randomUUID()}`;
     // The web-fetch adapter carries the Worker's bindings on the request (ServerRequestTokens.webEnv).
     const platformEnv = (request as Record<PropertyKey, unknown>)[ServerRequestTokens.webEnv];
+    // A request the stdio transport hands over comes from the process that launched the server
+    const fromStdio = (request as Record<PropertyKey, unknown>)[ServerRequestTokens.stdio] !== undefined;
     return this.runFromHeaders(
       headers,
-      { sessionId, scopeId, peerAddress: request.socket?.remoteAddress, platformEnv },
+      {
+        sessionId,
+        scopeId,
+        peerAddress: request.socket?.remoteAddress,
+        platformEnv,
+        unverifiedRequest: fromStdio ? undefined : request,
+      },
       fn,
     );
   }

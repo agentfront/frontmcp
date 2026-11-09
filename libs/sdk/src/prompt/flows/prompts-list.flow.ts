@@ -85,7 +85,7 @@ const { Stage } = FlowHooksOf('prompts:list-prompts');
   plan,
   inputSchema,
   outputSchema,
-  access: 'authorized',
+  access: 'public',
 })
 export default class PromptsListFlow extends FlowBase<typeof name> {
   logger = this.scopeLogger.child('PromptsListFlow');
