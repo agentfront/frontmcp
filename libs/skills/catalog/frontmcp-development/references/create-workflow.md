@@ -429,14 +429,17 @@ The route runs through the `http:route` flow, like an `@HttpRoute`: the `throttl
 | `413`  | `{ error: 'Payload too large' }`   | The body is larger than `maxBodyBytes`                                                                                             |
 | `401`  | `{ error: 'Unauthorized' }`        | Unsigned, malformed, outside the 5 minutes, a wrong signature, or sent before: always the same answer; the server's log says which |
 | `400`  | `{ error }` or `{ error, issues }` | A signed body that isn't a JSON object, or that doesn't match the workflow's `inputSchema`                                         |
-| `403`  | `{ error: 'Forbidden' }`           | The workflow's `execute` rules don't allow `webhook:<workflow>`                                                                    |
+| `403`  | `{ error: 'Forbidden' }`           | The workflow's `create` or `execute` rules don't allow `webhook:<workflow>`                                                        |
 
 #### Who the Run Runs As
 
-A webhook's caller isn't signed in, so its run runs as the role `webhook:<workflow name>`, and nothing else: no subject, scopes or claims, whatever `authorities.claimsMapping` says. Only the server can give a run that identity. A workflow without `execute` rules runs for any signed request. One with them must allow the role, in the same rule as the people who may run it, since every `execute` rule must pass:
+A webhook's caller isn't signed in, so its run runs as the role `webhook:<workflow name>`, and nothing else: no subject, scopes or claims, whatever `authorities.claimsMapping` says. Only the server can give a run that identity. A webhook submits a run, so the workflow's `create` and `execute` rules both apply. A workflow without them runs for any signed request. One with them must allow the role, in the same rule as the people who may run it, since every rule for an action must pass:
 
 ```typescript
-permissions: [{ action: 'execute', roles: ['admin', 'webhook:ci-deploy'] }],
+permissions: [
+  { action: 'execute', roles: ['admin', 'webhook:ci-deploy'] },
+  { action: 'create', roles: ['admin', 'webhook:ci-deploy'] },
+],
 ```
 
 Each step's job checks its own `execute` rules against the same role, so a step job with rules must allow it too, or that step fails. A `custom` rule can read the identity as `authInfo.extra.workflowTrigger` (`{ kind: 'webhook', name, role }`). The run has no owner: who may read it with `get_workflow_status` is up to the workflow's `read` rules.
@@ -517,7 +520,7 @@ class SignUpTool extends ToolContext {
 
 - **The bus** exists when a workflow has `trigger: 'event'` or `channels.enabled` is set; else `channelEventBus` is `undefined`. It is in-process: an event emitted in one server process starts the workflows of that process, and a detached job runner listens to none.
 - **The payload** is the run's input, checked against the workflow's `inputSchema`. No payload starts the run with `{}`. A payload that isn't an object, or doesn't match the schema, starts no run.
-- **Who the run runs as**: the role `event:<event>`, and nothing else, as a webhook's run runs as `webhook:<workflow>` (see [Who the Run Runs As](#who-the-run-runs-as)). A workflow with `execute` rules must allow it, and so must each step job with rules.
+- **Who the run runs as**: the role `event:<event>`, and nothing else, as a webhook's run runs as `webhook:<workflow>` (see [Who the Run Runs As](#who-the-run-runs-as)). A workflow with `create` or `execute` rules must allow it, and so must each step job with `execute` rules.
 - **`emit()` doesn't wait** for the run, and nothing it does throws at the emitter: a run that can't start (a denial, bad input) is logged as a warning that names the event, the workflow and the reason.
 - A job of the run that emits the event that started it starts another run.
 
@@ -744,6 +747,7 @@ class NotifyTeamJob extends JobContext {
   maxConcurrency: 3,
   permissions: [
     { action: 'execute', roles: ['admin', 'ci-bot', 'webhook:ci-cd-pipeline'] },
+    { action: 'create', roles: ['admin', 'ci-bot', 'webhook:ci-cd-pipeline'] },
     { action: 'read', roles: ['admin', 'ci-bot'] },
     { action: 'list', roles: ['admin', 'ci-bot'] },
   ],
@@ -886,7 +890,7 @@ class CiServer {}
 | Workflow fails at startup with "job not found"      | `jobName` references an unregistered job                                                                                  | Add the job class to the `jobs` array in `@App` before registering the workflow                                               |
 | Dynamic `input` callback receives undefined outputs | A step it depends on was skipped, or failed with `continueOnError`                                                        | Add a `condition` guard that checks `steps.get(id).state === 'completed'` before accessing outputs                            |
 | Webhook answers `401`                               | The signature doesn't cover the exact body sent, the timestamp is more than 5 minutes off, or the request was sent before | Sign `<timestamp>.<body>` over the bytes you send, with a fresh timestamp for each request; the server's log names the reason |
-| Webhook answers `403`                               | The workflow's `execute` rules don't allow its webhook                                                                    | Add `webhook:<workflow name>` to the roles of its `execute` rule                                                              |
+| Webhook answers `403`                               | The workflow's `create` or `execute` rules don't allow its webhook                                                        | Add `webhook:<workflow name>` to the roles of those rules                                                                     |
 | Server refuses to start: `needs webhook.secret`     | A `trigger: 'webhook'` workflow without a secret (an unset env var)                                                       | Set the secret, at least 32 characters (`openssl rand -hex 32`), one for each webhook workflow                                |
 | An event starts no run                              | The bus has no listener for that name, or the run can't start                                                             | Check the workflow's `event` (default: its name); the server's log names a denial or bad input                                |
 | Workflow exceeds timeout                            | Total step execution time exceeds the default 600000 ms                                                                   | Increase `timeout` at the workflow level or add per-step `timeout` overrides                                                  |

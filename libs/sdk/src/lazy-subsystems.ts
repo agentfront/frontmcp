@@ -89,7 +89,15 @@
   );
   defineLazyExports(
     () => require('./job/tools'),
-    ['ExecuteJobTool', 'GetJobStatusTool', 'CancelJobTool', 'ListJobsTool', 'RegisterJobTool', 'RemoveJobTool'],
+    [
+      'ExecuteJobTool',
+      'GetJobStatusTool',
+      'CancelJobTool',
+      'ListJobsTool',
+      'RegisterJobTool',
+      'RemoveJobTool',
+      'UpdateJobTool',
+    ],
   );
   defineLazyExports(
     () => require('./workflow'),
@@ -97,7 +105,14 @@
   );
   defineLazyExports(
     () => require('./workflow/tools'),
-    ['ExecuteWorkflowTool', 'GetWorkflowStatusTool', 'ListWorkflowsTool', 'RegisterWorkflowTool', 'RemoveWorkflowTool'],
+    [
+      'ExecuteWorkflowTool',
+      'GetWorkflowStatusTool',
+      'ListWorkflowsTool',
+      'RegisterWorkflowTool',
+      'RemoveWorkflowTool',
+      'UpdateWorkflowTool',
+    ],
   );
   defineLazyExports(
     () => require('./transport/adapters/streamable-http-transport'),

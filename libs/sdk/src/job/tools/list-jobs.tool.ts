@@ -61,14 +61,16 @@ export default class ListJobsTool extends ToolContext {
   }
 
   /**
-   * A job is listable when the caller passes its `list` rules and is not
-   * blocked from executing it. Checking `execute` too keeps the listing honest:
-   * showing a job the caller can never run is the disclosure this closes.
+   * A job is listable when the caller passes its `list` rules and may submit
+   * a run of it (`create` and `execute`). Checking those too keeps the listing
+   * honest: showing a job the caller can never run is the disclosure this closes.
    */
   private async maySee(job: JobEntry): Promise<boolean> {
     const permissions = job.metadata.permissions;
     const builder = this.scope.authoritiesContextBuilder;
-    if (!(await JobPermissionGuard.check(permissions, 'list', this.authInfo, builder))) return false;
-    return JobPermissionGuard.check(permissions, 'execute', this.authInfo, builder);
+    for (const action of ['list', 'create', 'execute'] as const) {
+      if (!(await JobPermissionGuard.check(permissions, action, this.authInfo, builder))) return false;
+    }
+    return true;
   }
 }

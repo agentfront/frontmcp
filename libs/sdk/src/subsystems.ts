@@ -20,6 +20,7 @@ export {
   ListJobsTool,
   RegisterJobTool,
   RemoveJobTool,
+  UpdateJobTool,
 } from './job/tools';
 export { WorkflowRegistry, WorkflowInstance, WorkflowEngine, WorkflowStepExecutor, WorkflowEmitter } from './workflow';
 export {
@@ -28,6 +29,7 @@ export {
   ListWorkflowsTool,
   RegisterWorkflowTool,
   RemoveWorkflowTool,
+  UpdateWorkflowTool,
 } from './workflow/tools';
 export { RecreateableStreamableHTTPServerTransport } from './transport/adapters/streamable-http-transport';
 export { RecreateableSSEServerTransport } from './transport/adapters/sse-transport';

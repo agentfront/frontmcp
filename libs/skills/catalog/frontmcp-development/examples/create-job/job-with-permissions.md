@@ -41,6 +41,7 @@ import { Job, job, JobContext, z } from '@frontmcp/sdk';
       scopes: ['jobs:write', 'data:export'],
       custom: (authInfo) => (authInfo as { department?: string }).department === 'engineering',
     },
+    { action: 'create', roles: ['admin', 'data-engineer'] },
     { action: 'read', roles: ['admin', 'data-engineer', 'auditor'] },
     { action: 'list', roles: ['admin', 'data-engineer', 'auditor'] },
   ],

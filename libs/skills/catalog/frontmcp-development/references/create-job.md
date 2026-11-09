@@ -401,13 +401,13 @@ Control who can interact with jobs using the `permissions` field. **`permissions
 
 **Requires 1.7.2 or later.** Before 1.7.2 (GHSA-58v2-gpcc-jmqv) the `permissions` array was validated and stored but never evaluated — every job was reachable by every caller who could reach `execute_job`. On older versions do not rely on this field for access control.
 
-Semantics: no rules for an action means allow (the documented default); once any rule targets an action, **all** rules for that action must pass, and `roles`/`scopes` within a single rule are **any-of**. A directly executed job is checked in `JobExecutionManager` when the run starts, before any run record exists (the `execute_job` tool, triggers, background runs); every attempt is then checked again by the `checkJobAuthorization` stage of its `jobs:execute-job` flow, and that is where a job reached as a workflow step is checked against its own rules, so authorizing the workflow does not launder the jobs it references. A denial is not retried. `list_jobs` hides entries the caller could not run, and a denial is indistinguishable from "not found" so restricted job names cannot be enumerated.
+Semantics: no rules for an action means allow (the documented default); once any rule targets an action, **all** rules for that action must pass, and `roles`/`scopes` within a single rule are **any-of**. A directly executed job is checked in `JobExecutionManager` when the run is submitted, against its `create` and `execute` rules, before any run record exists (the `execute_job` tool, triggers, background runs); every attempt is then checked again against its `execute` rules by the `checkJobAuthorization` stage of its `jobs:execute-job` flow, and that is where a job reached as a workflow step is checked against its own rules, so authorizing the workflow does not launder the jobs it references. A denial is not retried. `list_jobs` hides entries the caller could not submit, and a denial is indistinguishable from "not found" so restricted job names cannot be enumerated.
 
 ### Permission Rule Shape
 
 ```typescript
 interface JobPermission {
-  action: 'create' | 'read' | 'update' | 'delete' | 'execute' | 'list'; // singular! 'create' and 'update' are never checked
+  action: 'create' | 'read' | 'update' | 'delete' | 'execute' | 'list'; // singular!
   roles?: string[]; // caller must have one of these roles
   scopes?: string[]; // token must include one of these scopes
   custom?: (authInfo: Partial<Record<string, unknown>>) => boolean | Promise<boolean>;
@@ -416,16 +416,16 @@ interface JobPermission {
 
 ### Permission Actions
 
-| Action    | Description                                                                                                                                                                |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `execute` | Start a run: `execute_job` / `execute_workflow`, each attempt, and each workflow step's job; a caller who fails it doesn't see the entry in `list_jobs` / `list_workflows` |
-| `read`    | View another caller's runs (`get_job_status`, `get_workflow_status`, `job://runs/{runId}`); the caller who started a run always may                                        |
-| `delete`  | Cancel another caller's runs (`cancel_job`), or remove a dynamic job or workflow; the caller who started a run may always cancel it                                        |
-| `list`    | See the entry in `list_jobs` / `list_workflows`                                                                                                                            |
-| `create`  | **Deprecated, never checked**: no operation creates a job or a run under the entry's rules (`execute` starts runs); startup warns                                          |
-| `update`  | **Deprecated, never checked**: no operation updates a job, a workflow or a run; startup warns                                                                              |
+| Action    | Description                                                                                                                                                                                |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `create`  | Submit a new run: `execute_job` / `execute_workflow`, a webhook or an event. Checked once, with `execute`, before the run exists; not for a workflow step, which submits no run of its job |
+| `execute` | Run the job: when a run is submitted, then each attempt, and each workflow step's job                                                                                                      |
+| `read`    | View another caller's runs (`get_job_status`, `get_workflow_status`, `job://runs/{runId}`); the caller who started a run always may                                                        |
+| `update`  | Modify a job or workflow registered at runtime (`update_job`, `update_workflow`, with `jobs.allowDynamicRegistration`); one declared in code can't be updated                              |
+| `delete`  | Cancel another caller's runs (`cancel_job`), or remove a dynamic job or workflow; the caller who started a run may always cancel it                                                        |
+| `list`    | See the entry in `list_jobs` / `list_workflows`, which also leave out an entry the caller may not submit (`create` and `execute`)                                                          |
 
-Up to 1.11.2, `create` and `update` rules were ignored without a warning, though this table described `create` as "Submit a new job" and `update` as "Modify a running job".
+`create` and `execute` differ for a job that is also a workflow step: `{ action: 'create', roles: ['admin'] }` lets only admins submit a run of it with `execute_job`, while any workflow that lists it still runs it as a step for its own callers, checked against `execute`. Up to 1.11.2, `create` and `update` rules were ignored, though this table described `create` as "Submit a new job" and `update` as "Modify a running job".
 
 ### Permission Configuration
 
@@ -640,20 +640,21 @@ Setting `jobs: { enabled: false }` is an explicit opt-out — declared jobs will
 
 ### Calling Jobs from an Agent
 
-Once jobs are registered, the SDK exposes six MCP tools (snake_case per ecosystem convention; hyphen aliases like `execute-job` keep working with a deprecation log line for one release):
+Once jobs are registered, the SDK exposes these MCP tools (snake_case per ecosystem convention; hyphen aliases like `execute-job` keep working with a deprecation log line for one release):
 
-| Tool             | Purpose                                                                |
-| ---------------- | ---------------------------------------------------------------------- |
-| `list_jobs`      | List registered jobs with optional `tags` / `labels` / `query` filters |
-| `execute_job`    | Execute a registered job by name (`{ name, input?, background? }`)     |
-| `get_job_status` | Get the run state for a `runId` returned by `execute_job`              |
-| `cancel_job`     | Cancel a run by `runId`; its `cleanup` runs (see above)                |
-| `register_job`   | Register a dynamic job at runtime — **opt-in**, see below              |
-| `remove_job`     | Remove a dynamic job by name (`hideFromDiscovery: true`)               |
+| Tool             | Purpose                                                                  |
+| ---------------- | ------------------------------------------------------------------------ |
+| `list_jobs`      | List registered jobs with optional `tags` / `labels` / `query` filters   |
+| `execute_job`    | Execute a registered job by name (`{ name, input?, background? }`)       |
+| `get_job_status` | Get the run state for a `runId` returned by `execute_job`                |
+| `cancel_job`     | Cancel a run by `runId`; its `cleanup` runs (see above)                  |
+| `register_job`   | Register a dynamic job at runtime — **opt-in**, see below                |
+| `update_job`     | Update a dynamic job's script, schemas, description or tags — **opt-in** |
+| `remove_job`     | Remove a dynamic job by name (`hideFromDiscovery: true`)                 |
 
-Workflows expose a parallel set: `list_workflows`, `execute_workflow`, `get_workflow_status`, `register_workflow`, `remove_workflow`.
+Workflows expose a parallel set: `list_workflows`, `execute_workflow`, `get_workflow_status`, `register_workflow`, `update_workflow`, `remove_workflow`.
 
-`register_job` / `register_workflow` take a **raw script string** and register it as an executable job. Since 1.7.2 they are not registered unless you opt in:
+`register_job` / `register_workflow` take a **raw script string** and register it as an executable job, and `update_job` / `update_workflow` replace a dynamic entry's fields with the ones given (an entry declared in code can't be updated; the entry's `update` rules decide who may, and a caller they deny reads it as unknown). A run already started keeps the definition it started with. Since 1.7.2 they are not registered unless you opt in:
 
 ```typescript
 @FrontMcp({ jobs: { enabled: true, allowDynamicRegistration: true } })
@@ -671,7 +672,7 @@ import { App, ExecuteJobTool, GetJobStatusTool, ListJobsTool } from '@frontmcp/s
 @App({
   name: 'data-app',
   jobs: [GenerateReportJob],
-  tools: [ExecuteJobTool, ListJobsTool, GetJobStatusTool], // omit register/remove
+  tools: [ExecuteJobTool, ListJobsTool, GetJobStatusTool], // omit register/update/remove
 })
 class DataApp {}
 ```
@@ -726,6 +727,7 @@ import { App, FrontMcp, Job, job, JobContext, z } from '@frontmcp/sdk';
   labels: { team: 'data-engineering', priority: 'high' },
   permissions: [
     { action: 'execute', roles: ['admin', 'data-engineer'], scopes: ['jobs:execute', 'data:write'] },
+    { action: 'create', roles: ['admin', 'data-engineer'] },
     { action: 'read', roles: ['admin', 'data-engineer'] },
     { action: 'list', roles: ['admin', 'data-engineer'] },
   ],

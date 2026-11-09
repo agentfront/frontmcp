@@ -347,6 +347,7 @@ export {
   ListJobsTool,
   RegisterJobTool,
   RemoveJobTool,
+  UpdateJobTool,
 } from './subsystems';
 
 // Workflow exports - managed multi-step job pipelines
@@ -372,6 +373,7 @@ export {
   ListWorkflowsTool,
   RegisterWorkflowTool,
   RemoveWorkflowTool,
+  UpdateWorkflowTool,
 } from './subsystems';
 
 // Channel exports - push-based notification channels for Claude Code

@@ -6,22 +6,24 @@
 // a subset manually via @App({ tools: [...] }).
 
 describe('issue #408 — public exports for job/workflow management tools', () => {
-  it('re-exports all five job tool classes from the main barrel', async () => {
+  it('re-exports all six job tool classes from the main barrel', async () => {
     const sdk = await import('../index');
     expect(typeof (sdk as Record<string, unknown>)['ExecuteJobTool']).toBe('function');
     expect(typeof (sdk as Record<string, unknown>)['GetJobStatusTool']).toBe('function');
     expect(typeof (sdk as Record<string, unknown>)['ListJobsTool']).toBe('function');
     expect(typeof (sdk as Record<string, unknown>)['RegisterJobTool']).toBe('function');
     expect(typeof (sdk as Record<string, unknown>)['RemoveJobTool']).toBe('function');
+    expect(typeof (sdk as Record<string, unknown>)['UpdateJobTool']).toBe('function');
   });
 
-  it('re-exports all five workflow tool classes from the main barrel', async () => {
+  it('re-exports all six workflow tool classes from the main barrel', async () => {
     const sdk = await import('../index');
     expect(typeof (sdk as Record<string, unknown>)['ExecuteWorkflowTool']).toBe('function');
     expect(typeof (sdk as Record<string, unknown>)['GetWorkflowStatusTool']).toBe('function');
     expect(typeof (sdk as Record<string, unknown>)['ListWorkflowsTool']).toBe('function');
     expect(typeof (sdk as Record<string, unknown>)['RegisterWorkflowTool']).toBe('function');
     expect(typeof (sdk as Record<string, unknown>)['RemoveWorkflowTool']).toBe('function');
+    expect(typeof (sdk as Record<string, unknown>)['UpdateWorkflowTool']).toBe('function');
   });
 
   it('re-exports the same class from the ./job/tools subpath barrel and the main barrel', async () => {
@@ -54,6 +56,7 @@ describe('issue #408 — snake_case tool naming', () => {
     ['ListJobsTool', 'list_jobs'],
     ['RegisterJobTool', 'register_job'],
     ['RemoveJobTool', 'remove_job'],
+    ['UpdateJobTool', 'update_job'],
   ])('%s decorator exposes snake_case `name: %s`', async (className, expectedName) => {
     const sdk = (await import('../index')) as Record<string, unknown>;
     const { normalizeTool } = (await import('../tool/tool.utils')) as {
@@ -70,6 +73,7 @@ describe('issue #408 — snake_case tool naming', () => {
     ['ListWorkflowsTool', 'list_workflows'],
     ['RegisterWorkflowTool', 'register_workflow'],
     ['RemoveWorkflowTool', 'remove_workflow'],
+    ['UpdateWorkflowTool', 'update_workflow'],
   ])('%s decorator exposes snake_case `name: %s`', async (className, expectedName) => {
     const sdk = (await import('../index')) as Record<string, unknown>;
     const { normalizeTool } = (await import('../tool/tool.utils')) as {

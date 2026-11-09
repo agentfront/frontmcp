@@ -162,8 +162,8 @@ describe('workflow events', () => {
   it("starts no run when the workflow's execute rules don't allow event:<event>, and says how to allow it", async () => {
     expect(await emitted('admin-report', {})).toEqual([]);
     expect(warnings).toContainEqual(
-      'Event "admin-report" did not start workflow "admin-report": its execute rules don\'t allow the role ' +
-        '"event:admin-report"; add it to a rule\'s roles',
+      'Event "admin-report" did not start workflow "admin-report": its create or execute rules don\'t allow the ' +
+        'role "event:admin-report"; add it to their roles',
     );
   });
 
