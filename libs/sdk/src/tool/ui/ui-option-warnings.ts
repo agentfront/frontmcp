@@ -1,26 +1,9 @@
 import { validateCSPDomain } from '@frontmcp/uipack/shell';
 
-/**
- * Deprecated `ui` options that the schema accepts and nothing reads. Declaring one is not an error,
- * but a developer who sets it expects an effect, so startup says that there is none.
- */
-const IGNORED_UI_OPTIONS = [] as const;
-
 /** Describe the parts of a tool's `ui` config that have no effect, one message per problem. */
 export function describeIgnoredUiOptions(toolName: string, ui: Record<string, unknown> | undefined): string[] {
   if (!ui) return [];
   const messages: string[] = [];
-
-  const ignored = IGNORED_UI_OPTIONS.filter((key) => ui[key] !== undefined);
-  if (ignored.length > 0) {
-    messages.push(
-      `Tool "${toolName}": \`ui.${ignored.join('`, `ui.')}\` ${
-        ignored.length === 1
-          ? 'is deprecated and has no effect; remove it.'
-          : 'are deprecated and have no effect; remove them.'
-      }`,
-    );
-  }
 
   messages.push(...describeInvalidCspOrigins(toolName, ui['csp']));
 
