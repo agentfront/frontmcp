@@ -343,6 +343,9 @@ denies such a rule if it runs anyway (even under `not`):
   `in`/`notIn` a non-empty list; `gt`/`gte`/`lt`/`lte` a number; `startsWith`/`endsWith`/`matches`
   a string (a `{ fromInput }` / `{ fromClaims }` reference works for all but `exists`)
 
+A `{ fromInput }` / `{ fromClaims }` reference that resolves to nothing at call time fails `match`
+and every operator, `neq` and `notIn` included.
+
 To leave an entry open, remove its `authorities`. There is no opt-out.
 
 `@Agent({ authorities })` gates the agent's `invoke_<id>` tool like any tool (hidden from

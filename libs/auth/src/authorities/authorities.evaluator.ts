@@ -125,10 +125,11 @@ function resolveValue(value: unknown, ctx: AuthoritiesEvaluationContext): unknow
  * Apply an ABAC operator to compare actual vs expected values.
  */
 function applyOperator(actual: unknown, op: string, expected: unknown): boolean {
+  // A missing expected value (e.g. an absent fromInput) never matches, for every operator
+  if (expected === undefined) return false;
   switch (op) {
-    // A missing expected value (e.g. an absent fromInput) never matches, even an absent actual value
     case 'eq':
-      return expected !== undefined && actual === expected;
+      return actual === expected;
     case 'neq':
       return actual !== expected;
     case 'in':
