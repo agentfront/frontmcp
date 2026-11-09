@@ -108,7 +108,7 @@ describe('splitByApp: each app with its own auth is its own authorization server
 });
 
 describe('splitByApp: an app with local auth signs in through its own endpoints', () => {
-  it('serves the login page, takes its form and redeems the code under the app path', async () => {
+  it('serves the sign-in page, takes its form and redeems the code under the app path', async () => {
     const handler = await FrontMcpInstance.createFetchHandler({
       info: { name: 'split-local', version: '1.0.0' },
       apps: [DeskApp, BillingApp],
@@ -126,7 +126,13 @@ describe('splitByApp: an app with local auth signs in through its own endpoints'
     const callback = await postForm(
       handler,
       '/desk/oauth/callback',
-      { pending_auth_id: inputValue(html, 'pending_auth_id') ?? '', email: 'ada@example.com' },
+      // What the page's form posts: it lists the app's own sign-in, checked.
+      {
+        pending_auth_id: inputValue(html, 'pending_auth_id') ?? '',
+        federated: 'true',
+        providers: '__parent__',
+        email: 'ada@example.com',
+      },
       HOST,
       { origin: `http://${HOST}` },
     );

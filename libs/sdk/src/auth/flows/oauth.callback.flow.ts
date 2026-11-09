@@ -329,6 +329,9 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       this.logger.info(`Incremental auth callback for app: ${targetAppId}`);
     }
 
+    // A sign-in the provider picker started (not an incremental one, which renders its own page).
+    const answersPicker = !isIncremental && !!pendingAuth.federatedLogin;
+
     // The picker shows one provider per page: each step is answered on the pending record, and the last one
     // goes on as a picker submission with the providers the steps linked.
     const answersSteps = !isIncremental && pendingAuth.federatedLogin?.currentStep !== undefined;
@@ -471,6 +474,11 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         return;
       }
       if (!result.ok) {
+        // The login page shown again carries no provider selection: keep the one submitted for the retry.
+        if (answersPicker && pendingAuth.federatedLogin && selectedProviders) {
+          pendingAuth.federatedLogin.selectedProviderIds = selectedProviders;
+          await localAuth.authorizationStore.storePendingAuthorization(pendingAuth);
+        }
         // Keep the pending auth alive so the user can retry on the re-rendered page.
         // A `login.render` page is the app's own markup: no CSP is imposed on it.
         this.respond(
@@ -508,9 +516,10 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Calculate skipped providers from federated login
+    // Calculate skipped providers from federated login. Every submission completing a sign-in the provider
+    // picker started is held to its rules, with or without `federated=true`.
     let skippedProviders: string[] | undefined;
-    if (isFederated && pendingAuth.federatedLogin) {
+    if ((isFederated || answersPicker) && pendingAuth.federatedLogin) {
       // Gate JWT issuance on the configured threshold. When top-level
       // `auth.providers` are declared, the default minimum is 1 ("no JWT until
       // ≥1 linked"); `federatedAuth.minProviders` raises it. The app-level
@@ -521,6 +530,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       const minProviders = federatedConfig?.minProviders ?? 1;
       const requiredProviders = requiredProviderIds(this.scope.auth?.options, this.scope.apps.getApps());
 
+      // The login page shown again after a refused authenticate() completes the selection kept then.
+      selectedProviders ??= pendingAuth.federatedLogin.selectedProviderIds;
       const selected = selectedProviders ?? [];
 
       // Refuse to mint a token until the minimum number of providers is linked.
