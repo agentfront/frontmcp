@@ -16,12 +16,13 @@ import { isTrustedHtml } from '../shell/trusted-html';
 import type { ShellConfig, WidgetSizing } from '../shell/types';
 import type { UIContentSecurity } from '../types/ui-config';
 import { escapeHtml } from '../utils';
-import { loadCodeHighlighter } from './code-highlight';
+import { loadCodeHighlighter, type CodeHighlighter } from './code-highlight';
 import { MCP_APPS_MIME_TYPE } from './constants';
 import { detectContentType } from './content-detector';
 import { wrapDetectedContent } from './content-renderers';
 import { markdownToHtml } from './markdown';
-import { describeRenderOptionProblems } from './render-options';
+import { renderMdxTemplate } from './mdx';
+import { describeRenderOptionProblems, resolveUiType } from './render-options';
 import { detectUIType } from './type-detector';
 
 /**
@@ -81,6 +82,12 @@ export interface RenderToolTemplateOptions {
    * code that names its language with highlight.js and puts that theme's stylesheet in the page.
    */
   markdown?: MarkdownRenderOptions;
+  /**
+   * `ui.mdxComponents`: a string template is MDX, compiled with `@mdx-js/mdx` and rendered on the
+   * server with React. Its tags name these components, and its expressions read `input`, `output`
+   * and `helpers`.
+   */
+  mdxComponents?: Record<string, unknown>;
 }
 
 /** `ui.runtimeOptions.markdown`. */
@@ -173,11 +180,20 @@ function renderUnwrappedResult(rawResult: unknown, options: RenderToolTemplateOp
   return escapeHtml(rawResult);
 }
 
-/** A Markdown template as HTML, with the `ui.runtimeOptions.markdown` options. */
-function convertMarkdown(source: string, options: RenderToolTemplateOptions): string {
+/** A Markdown or MDX template as HTML, with the `ui.runtimeOptions.markdown` options. */
+function convertMarkdown(source: string, options: RenderToolTemplateOptions, mdx: boolean): string {
   const { gfm, highlightTheme } = options.markdown ?? {};
-  const highlighter = highlightTheme ? loadCodeHighlighter(highlightTheme) : undefined;
-  const converted = markdownToHtml(source, { gfm, highlight: highlighter?.highlight });
+  const highlighter: CodeHighlighter | undefined = highlightTheme ? loadCodeHighlighter(highlightTheme) : undefined;
+  const converted = mdx
+    ? renderMdxTemplate(source, {
+        input: options.input ?? {},
+        output: options.output ?? {},
+        helpers: createTemplateHelpers(),
+        components: options.mdxComponents,
+        gfm,
+        highlighter,
+      })
+    : markdownToHtml(source, { gfm, highlight: highlighter?.highlight });
   return highlighter ? `<style>${highlighter.css}</style>\n${converted}` : converted;
 }
 
@@ -259,7 +275,7 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
   const { toolName, input, output, template, resolver, platformType, sizing } = options;
   const problems = describeRenderOptionProblems(template, options);
   if (problems.length > 0) throw new Error(`Tool "${toolName}": ${problems.join(' ')}`);
-  const uiType = detectUIType(template);
+  const uiType = resolveUiType(template, options);
 
   // When the user didn't pick a resourceMode, host-detect: Claude widget
   // iframes block all external script execution (esm.sh, cdnjs — see #447),
@@ -338,7 +354,8 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     }
   } else if (typeof template === 'string') {
     // String template — a Markdown string is converted to HTML, an HTML string is used as written
-    const markup = uiType === 'markdown' ? convertMarkdown(template, options) : template;
+    const markup =
+      uiType === 'markdown' || uiType === 'mdx' ? convertMarkdown(template, options, uiType === 'mdx') : template;
     const shellResult = buildShell(secureMarkup(markup, options), shellConfig);
     html = shellResult.html;
     hash = shellResult.hash;

@@ -57,4 +57,32 @@ test.describe('Tool UI rendering options E2E', () => {
       await client.disconnect();
     }
   });
+
+  test('mdxComponents renders an MDX template on the server, with the call data in its expressions', async ({
+    server,
+  }) => {
+    const client = await server.createClient({
+      transport: 'streamable-http',
+      clientInfo: { name: 'claude-desktop', version: '1.0.0' },
+    });
+    try {
+      const result = await client.tools.call('mdx-interactive', {
+        topic: 'Caching <b>tips</b>',
+        points: ['Measure first', 'Expire {wisely}'],
+        codeExample: 'cache.set(key, value)',
+      });
+      expect(result).toBeSuccessful();
+      expect(result.raw._meta?.['ui/type']).toBe('mdx');
+
+      const markup = body(String(result.raw._meta?.['ui/html']));
+      expect(markup).toContain('<h1>Caching &lt;b&gt;tips&lt;/b&gt;</h1>');
+      expect(markup).toContain('<div class="alert alert-info"');
+      expect(markup).toContain('This is an interactive MDX document with 2 key points.');
+      expect(markup).toContain('<div class="highlight-box"');
+      expect(markup).toContain('<li>Measure first</li><li>Expire {wisely}</li>');
+      expect(markup).toContain('<code>cache.set(key, value)</code>');
+    } finally {
+      await client.disconnect();
+    }
+  });
 });

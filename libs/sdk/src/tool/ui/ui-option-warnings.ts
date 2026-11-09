@@ -6,7 +6,6 @@ import { validateCSPDomain } from '@frontmcp/uipack/shell';
  */
 const IGNORED_UI_OPTIONS = [
   'hydrate',
-  'mdxComponents',
   'bundlingMode',
   'uiType',
   'htmlResponsePrefix',

@@ -46,17 +46,17 @@ describe('runtimeOptions.markdown', () => {
     for (const markdown of [{ gfm: true }, { highlightTheme: 'github' }]) {
       expect(describeRenderOptionProblems(template, { markdown })).toEqual([
         expect.stringContaining(
-          `\`ui.runtimeOptions.markdown\` applies to a Markdown template, a string without both \`<\` and \`>\`, and this template is ${described}.`,
+          `\`ui.runtimeOptions.markdown\` applies to a Markdown template, a string without both \`<\` and \`>\`, or an MDX template, and this template is ${described}.`,
         ),
       ]);
     }
     expect(describeRenderOptionProblems(template, { markdown: { gfm: false } })).toEqual([]);
   });
 
-  it('loads the theme at startup, so a missing one fails before any call', () => {
-    expect(() => prepareRenderOptions('# x', { markdown: { highlightTheme: 'nope' } })).toThrow(
+  it('loads the theme at startup, so a missing one fails before any call', async () => {
+    await expect(prepareRenderOptions('# x', { markdown: { highlightTheme: 'nope' } })).rejects.toThrow(
       'not a highlight.js theme',
     );
-    expect(() => prepareRenderOptions('# x', { markdown: { highlightTheme: 'github-dark' } })).not.toThrow();
+    await expect(prepareRenderOptions('# x', { markdown: { highlightTheme: 'github-dark' } })).resolves.toBeUndefined();
   });
 });
