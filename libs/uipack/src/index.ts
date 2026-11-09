@@ -99,6 +99,8 @@ export {
   isTrustedHtml,
   type TrustedHtml,
   sanitizeHtml,
+  describeContentSecurityProblems,
+  DEFAULT_MAX_MARKUP_LENGTH,
   // Custom Shell
   type ShellPlaceholderName,
   type InlineShellSource,
