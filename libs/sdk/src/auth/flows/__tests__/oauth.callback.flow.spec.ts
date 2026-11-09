@@ -277,6 +277,64 @@ describe('OAuth Callback Flow — custom authenticate() (Checkpoint 3a)', () => 
     expect(subB).toBe(subA);
   });
 
+  async function subjectOfLogin(auth: Record<string, unknown>, query: Record<string, string>): Promise<string> {
+    const scope = createMockScopeEntry({ auth: { mode: 'local', ...auth } as any });
+    const pendingAuthId = await seedPendingAuth(scope);
+    const input = createMockHttpRequest({
+      headers: { cookie: signinCookie(pendingAuthId) },
+      method: 'GET',
+      path: '/oauth/callback',
+      query: { pending_auth_id: pendingAuthId, ...query },
+    });
+    const flow = new OauthCallbackFlow(createCallbackMetadata(), input as any, scope, jest.fn(), new Map());
+    const { state } = await runFlowStages(flow, ['parseInput', 'validatePendingAuth']);
+    return state.userSub as string;
+  }
+
+  it('gives each login a fresh subject under the default per-session strategy when no sub is returned', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ ok: true });
+
+    const subA = await subjectOfLogin({ authenticate }, { account: 'alice' });
+    const subB = await subjectOfLogin({ authenticate }, { account: 'bob' });
+    const operatorSub = await subjectOfLogin({ requireEmail: false }, {});
+
+    expect(subA).toBeTruthy();
+    expect(subB).toBeTruthy();
+    expect(subB).not.toBe(subA);
+    expect([subA, subB]).not.toContain(operatorSub);
+  });
+
+  it('gives each login a fresh subject under per-session even when a fromField is named', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ ok: true });
+    const login = { subject: { fromField: 'account', strategy: 'per-session' } };
+
+    const subA = await subjectOfLogin({ authenticate, login }, { account: 'alice' });
+    const subB = await subjectOfLogin({ authenticate, login }, { account: 'alice' });
+
+    expect(subB).not.toBe(subA);
+  });
+
+  it('gives a per-account login without a value for fromField a fresh subject', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ ok: true });
+    const login = { subject: { fromField: 'account', strategy: 'per-account' } };
+
+    const subA = await subjectOfLogin({ authenticate, login }, {});
+    const subB = await subjectOfLogin({ authenticate, login }, {});
+
+    expect(subA).toBeTruthy();
+    expect(subB).not.toBe(subA);
+  });
+
+  it('gives different accounts different subjects under per-account', async () => {
+    const authenticate = jest.fn().mockResolvedValue({ ok: true });
+    const login = { subject: { fromField: 'account', strategy: 'per-account' } };
+
+    const subA = await subjectOfLogin({ authenticate, login }, { account: 'alice' });
+    const subB = await subjectOfLogin({ authenticate, login }, { account: 'bob' });
+
+    expect(subB).not.toBe(subA);
+  });
+
   it('captures credentials returned by authenticate() into flow state (Checkpoint 3b)', async () => {
     const authenticate = jest.fn().mockResolvedValue({
       ok: true,

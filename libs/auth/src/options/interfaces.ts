@@ -558,7 +558,10 @@ export interface LoginFieldConfig {
  *
  * - `per-session` (default): every login yields a fresh subject (stateless).
  * - `per-account`: the value of {@link LoginSubjectConfig.fromField} is hashed
- *   into a stable subject so the same account maps to the same `sub`.
+ *   into a stable subject so the same account maps to the same `sub`. A login
+ *   without that value gets a fresh subject.
+ *
+ * Applies when {@link LocalAuthOptionsInterface.authenticate} returns no `sub`.
  */
 export interface LoginSubjectConfig {
   /** Login field whose submitted value seeds a stable subject. */
@@ -698,7 +701,10 @@ export interface AuthenticateCredential {
  */
 export interface AuthenticateSuccess {
   ok: true;
-  /** Explicit subject. When omitted, the subject is derived from the login subject strategy / anonymousSubject. */
+  /**
+   * Explicit subject. When omitted, the login subject strategy derives it: a fresh subject for each login
+   * (`per-session`, the default), or the hash of the `login.subject.fromField` value (`per-account`).
+   */
   sub?: string;
   /** Custom claims to embed in the minted access token (namespaced to avoid clobbering reserved claims). */
   claims?: Record<string, unknown>;
