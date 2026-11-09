@@ -859,6 +859,10 @@ export interface StaticAuthOptionsInterface {
 
 export interface TransparentAuthOptionsInterface {
   mode: 'transparent';
+  /**
+   * The provider's issuer identifier, spelled as its metadata's `issuer`. Tokens must name it as `iss`,
+   * and the protected resource metadata names it in `authorization_servers` (RFC 9728, RFC 8414 §3.3).
+   */
   provider: string;
   clientId?: string;
   clientSecret?: string;

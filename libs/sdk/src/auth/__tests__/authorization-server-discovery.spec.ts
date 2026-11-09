@@ -69,14 +69,28 @@ describe('authorization server discovery by auth mode', () => {
     } as AuthConfig);
 
     const metadata = await httpGet(server.handler, '/.well-known/oauth-authorization-server', HOST);
-    const resource = (await (
-      await httpGet(server.handler, '/.well-known/oauth-protected-resource', HOST)
-    ).json()) as Record<string, unknown>;
 
     expect(metadata.status).toBe(302);
     expect(metadata.headers.get('location')).toBe('https://idp.example.com/.well-known/oauth-authorization-server');
-    expect(resource['authorization_servers']).toEqual([`http://${HOST}`]);
   });
+
+  it.each([['https://idp.example.com'], ['https://idp.example.com/'], ['https://idp.example.com/tenants/acme']])(
+    'transparent: names the provider %s as the authorization server, not itself',
+    async (provider) => {
+      const server = await serverWith({
+        mode: 'transparent',
+        provider,
+        expectedAudience: `http://${HOST}`,
+      } as AuthConfig);
+
+      const resource = (await (
+        await httpGet(server.handler, '/.well-known/oauth-protected-resource', HOST)
+      ).json()) as Record<string, unknown>;
+
+      expect(resource['resource']).toBe(`http://${HOST}`);
+      expect(resource['authorization_servers']).toEqual([provider]);
+    },
+  );
 
   it('local: serves its own metadata and names itself in the resource metadata', async () => {
     const server = await serverWith({ mode: 'local' } as AuthConfig);
