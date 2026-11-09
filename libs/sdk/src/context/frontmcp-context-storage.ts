@@ -24,6 +24,7 @@ import { AsyncLocalStorage, randomUUID } from '@frontmcp/utils';
 import { Provider } from '../common/decorators';
 import { ProviderScope } from '../common/metadata';
 import { ServerRequestTokens } from '../common/tokens';
+import { getRequestBaseUrl } from '../common/utils/path.utils';
 import { RequestContextNotAvailableError } from '../errors/mcp.error';
 import { FrontMcpContext, type FrontMcpContextArgs, type FrontMcpContextConfig } from './frontmcp-context';
 import { extractMetadata, type MetadataOptions } from './metadata.utils';
@@ -112,14 +113,15 @@ export class FrontMcpContextStorage {
    */
   runFromHeaders<T>(
     headers: Record<string, unknown>,
-    args: Omit<FrontMcpContextArgs, 'traceContext' | 'metadata'> & { peerAddress?: string },
+    args: Omit<FrontMcpContextArgs, 'traceContext' | 'metadata'> & { peerAddress?: string; serverUrl?: string },
     fn: () => T | Promise<T>,
   ): T | Promise<T> {
-    const { peerAddress, ...contextArgs } = args;
+    const { peerAddress, serverUrl, ...contextArgs } = args;
     const traceContext = parseTraceContext(headers);
     // The socket peer is the only client address a caller cannot forge; forwarding headers
     // are used in its place only behind a trusted proxy (GHSA-p3qf-fcwm-35x4).
     const metadata = extractMetadata(headers, { ...this.metadataOptions, peerAddress });
+    if (serverUrl !== undefined) metadata.serverUrl = serverUrl;
     const context = new FrontMcpContext(
       this.withServerConfig({
         ...contextArgs,
@@ -142,7 +144,7 @@ export class FrontMcpContextStorage {
    * @returns Result of the callback
    */
   runForHttpRequest<T>(
-    request: { headers?: Record<string, unknown>; socket?: { remoteAddress?: string } },
+    request: { headers?: Record<string, unknown>; socket?: { remoteAddress?: string }; protocol?: string },
     scopeId: string,
     fn: () => T | Promise<T>,
   ): T | Promise<T> {
@@ -153,6 +155,10 @@ export class FrontMcpContextStorage {
     const platformEnv = (request as Record<PropertyKey, unknown>)[ServerRequestTokens.webEnv];
     // A request the stdio transport hands over comes from the process that launched the server
     const fromStdio = (request as Record<PropertyKey, unknown>)[ServerRequestTokens.stdio] !== undefined;
+    const serverUrl =
+      typeof headers['host'] === 'string'
+        ? getRequestBaseUrl(request as Parameters<typeof getRequestBaseUrl>[0])
+        : undefined;
     return this.runFromHeaders(
       headers,
       {
@@ -160,6 +166,7 @@ export class FrontMcpContextStorage {
         scopeId,
         peerAddress: request.socket?.remoteAddress,
         platformEnv,
+        serverUrl,
         unverifiedRequest: fromStdio ? undefined : request,
       },
       fn,

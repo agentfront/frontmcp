@@ -120,6 +120,10 @@ export {
   applyShellTemplate,
   resolveShellTemplate,
   clearShellTemplateCache,
+  // URL-served widgets
+  buildUrlWidgetShell,
+  widgetUrlOrigin,
+  type UrlWidgetShellOptions,
 } from './shell';
 
 // ============================================

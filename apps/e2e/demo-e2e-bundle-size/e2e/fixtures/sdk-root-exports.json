@@ -276,6 +276,7 @@
   "InvalidRetryOptionsError": "class",
   "InvalidSharedServerOptionsError": "class",
   "InvalidSkillError": "class",
+  "InvalidToolUiConfigError": "class",
   "InvalidTransportSessionError": "class",
   "InvalidUseClassError": "class",
   "InvalidUseFactoryError": "class",

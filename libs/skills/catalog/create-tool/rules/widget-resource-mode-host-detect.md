@@ -46,7 +46,7 @@ ui: { template: { file: widgetPath }, resourceMode: 'inline' }
 
 ## Static-mode caveat
 
-For `servingMode: 'static'` tools (pre-compiled at server startup, before any client connects), there's no platformType to detect against. Static widgets default to `'cdn'` regardless. If a static-mode tool needs to render in Claude, set `resourceMode: 'inline'` explicitly.
+For `servingMode: 'static'` and `'direct-url'` tools (pre-compiled at server startup, before any client connects), there's no platformType to detect against. Static widgets default to `'cdn'` regardless. If a static-mode tool needs to render in Claude, set `resourceMode: 'inline'` explicitly.
 
 ## Verification
 
