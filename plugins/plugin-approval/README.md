@@ -3,9 +3,9 @@
 A FrontMCP plugin that refuses to run a tool until an approval is recorded for the caller. Use it for tools that
 shouldn't run without someone's say-so, like deleting a ticket or refunding a payment. Mark a tool with `approval`,
 and every call to it is refused until your code grants an approval, through `this.approval` or the plugin's store.
-Each approval records who granted it, and can be revoked or set to expire. The plugin doesn't ask anyone itself:
-there's no prompt, webhook or callback, so you decide how a person says yes, for example with a form from
-`this.elicit()`.
+Each approval records who granted it, and can be revoked or set to expire. You decide how a person says yes: with a
+form from `this.elicit()`, or with an external approval system the plugin asks for you, by
+[webhook](#webhook-mode) or by [polling](#recheck-mode).
 
 [![npm](https://img.shields.io/npm/v/@frontmcp/plugin-approval.svg)](https://www.npmjs.com/package/@frontmcp/plugin-approval) [![License](https://img.shields.io/npm/l/@frontmcp/plugin-approval.svg)](https://github.com/agentfront/frontmcp/blob/main/LICENSE)
 
@@ -179,14 +179,13 @@ ApprovalPlugin.init({
 | `storageInstance`        |                    | A storage you made with `createStorage()` from `@frontmcp/utils`. Wins over `storage`.                                                                                                                         |
 | `namespace`              | `'approval'`       | The prefix of the plugin's keys.                                                                                                                                                                               |
 | `cleanupIntervalSeconds` | `60`               | How often expired approvals are deleted. `0` turns it off.                                                                                                                                                     |
-| `mode`                   | `'recheck'`        | `'webhook'` also registers a `ChallengeService` (below). Neither mode contacts an external system.                                                                                                             |
-| `webhook.challengeTtl`   | `300`              | How long the `ChallengeService`'s challenges last, in seconds.                                                                                                                                                 |
+| `mode`                   | `'recheck'`        | `'recheck'` polls `recheck.url` when it is set; `'webhook'` registers a `ChallengeService` and sends requests to `webhook.url` when it is set. Without a URL, neither contacts an external system.             |
+| `recheck`                |                    | See [Recheck mode](#recheck-mode).                                                                                                                                                                             |
+| `webhook`                |                    | See [Webhook mode](#webhook-mode). `webhook.challengeTtl` (default `300`) is how long a challenge lasts, in seconds.                                                                                           |
 
-`webhook.url`, `webhook.callbackPath`, `webhook.includeJwt`, the `recheck` options, `enableAudit` and
-`maxDelegationDepth` are deprecated and have no effect: nothing is sent, polled, served or logged, each approval record
-keeps who granted or revoked it, and a delegated grant names one delegator. A server that sets any of them logs
-`ApprovalPlugin ignores ...` when it starts. Up to 1.11.2 nothing said so, and `defaultOptions` listed `enableAudit:
-true` and `maxDelegationDepth: 3`.
+`enableAudit` and `maxDelegationDepth` are deprecated and have no effect: each approval record keeps who granted or
+revoked it, and a delegated grant names one delegator. A server that sets either logs `ApprovalPlugin ignores ...` when
+it starts.
 
 In a browser build (`create()` in a web page, WebMCP), `storage: { type: 'redis' }` or `{ type: 'sqlite' }` throws
 `BrowserStoreUnavailableError` from `init()`, naming `storage: { type: 'memory' }`: a page has no TCP socket and no
@@ -194,11 +193,137 @@ file. `{ type: 'auto' }` picks memory there.
 
 ## Webhook mode
 
-With `mode: 'webhook'`, `this.get(ChallengeServiceToken)` returns a `ChallengeService`: a store of one-time PKCE
-(Proof Key for Code Exchange, RFC 7636) challenges you can build an external approval flow on.
-`createChallenge({ toolId, sessionId, requestedScope, requestInfo, ... })` returns a code verifier and its SHA-256
-challenge, and `verifyAndConsume(codeVerifier)` returns the stored request once, or throws `ChallengeValidationError`.
-The plugin itself doesn't call it, send a webhook or serve a callback route.
+With `mode: 'webhook'` and `webhook.url`, a call that needs an approval it doesn't have sends a signed approval request
+to your approval system (a Slack app, a ticketing system, an admin console), and is refused as `pending`. The system
+decides by POSTing back to `webhook.callbackPath`, and the caller's next call runs, or is refused as `denied`.
+
+```ts
+ApprovalPlugin.init({
+  storage: { type: 'redis', redis: { url: process.env.REDIS_URL } },
+  mode: 'webhook',
+  webhook: {
+    url: 'https://approvals.example.com/webhook',
+    secret: process.env.APPROVAL_WEBHOOK_SECRET, // required with url, at least 24 bytes
+    challengeTtl: 300,
+    callbackPath: '/approval/callback',
+  },
+});
+```
+
+| Option                 | Default                | Description                                                                                                                                      |
+| ---------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `webhook.url`          |                        | Where requests are POSTed. `https://`; `http://localhost`, `127.0.0.1` or `[::1]` only when `NODE_ENV` isn't `production`. No credentials in it. |
+| `webhook.secret`       |                        | Signs each request and verifies each callback. Required with `url`. A `whsec_` secret (Standard Webhooks) is base64 after the prefix.            |
+| `webhook.includeJwt`   | `false`                | Adds the caller's access token to the request as `jwt`. Set it only when the approval system must act as the caller.                             |
+| `webhook.challengeTtl` | `300`                  | Seconds a request waits for its decision, and a denial without `ttlMs` lasts.                                                                    |
+| `webhook.callbackPath` | `'/approval/callback'` | The path the server takes decisions on (`POST`).                                                                                                 |
+
+The request, sent once per caller and tool until it is decided or `challengeTtl` passes:
+
+```json
+{
+  "type": "approval.requested",
+  "codeChallenge": "…",
+  "codeVerifier": "…",
+  "toolId": "ops:delete_ticket",
+  "toolName": "delete_ticket",
+  "category": "delete",
+  "riskLevel": "high",
+  "approvalMessage": "…",
+  "requestedScope": "session",
+  "userId": "user-123",
+  "callbackPath": "/approval/callback",
+  "callbackUrl": "https://mcp.example.com/approval/callback",
+  "expiresAt": 1700000300000,
+  "timestamp": 1700000000000
+}
+```
+
+It never names the session. `callbackUrl` is there when `FRONTMCP_PUBLIC_URL` is set; `allowedScopes` and `maxTtlMs`
+when the tool limits them; `jwt` only with `includeJwt: true`. Keep `codeVerifier` secret: it is what decides the
+request. A request that fails (an error status, a redirect, no answer in 10 seconds) is sent again by the next call.
+
+The decision, POSTed to `callbackPath` and signed with the same secret:
+
+```json
+{
+  "codeVerifier": "…",
+  "approved": true,
+  "scope": "session",
+  "ttlMs": 3600000,
+  "grantedBy": { "source": "user", "identifier": "lead-7" },
+  "reason": "ok"
+}
+```
+
+- An approval is recorded for the caller the request was for, never one the body names, held to the tool's
+  `allowedScopes` and `maxTtlMs` (`scope` defaults to `requestedScope`), with `grantedBy` and `origin: 'webhook'`. A
+  denial (`approved: false`) is recorded for the caller's session, and lasts `ttlMs`, or `challengeTtl` without it.
+- Each `codeVerifier` works once, until `challengeTtl` passes. A replayed or late decision does nothing.
+- Every signed, well-formed callback gets `202 { "status": "received" }`, whether or not it matched a request, so the
+  route never says whether an approval is pending. An unsigned or mis-signed callback, or one signed more than five
+  minutes ago, gets `401`; a body that isn't a decision `400`; one over 16 KB `413`.
+
+Requests and callbacks are signed with HMAC-SHA256 in the [Standard Webhooks](https://www.standardwebhooks.com)
+format, so any Standard Webhooks library checks them: headers `webhook-id`, `webhook-timestamp` (Unix seconds) and
+`webhook-signature: v1,<base64>`, over `<webhook-id>.<webhook-timestamp>.<body>`. Check the timestamp on your side too,
+and reject a `webhook-id` you have seen.
+
+`this.get(ChallengeServiceToken)` returns the plugin's `ChallengeService`, the store of these one-time PKCE (Proof Key
+for Code Exchange, RFC 7636) challenges: `createChallenge(...)`, `consume(codeVerifier)` (the request once, or
+`undefined`) and `verifyAndConsume(codeVerifier)` (the request once, or `ChallengeValidationError`).
+
+## Recheck mode
+
+With `mode: 'recheck'` (the default) and `recheck.url`, a call that needs an approval it doesn't have polls your
+approval API until it decides.
+
+```ts
+ApprovalPlugin.init({
+  recheck: {
+    url: 'https://approvals.example.com/status',
+    auth: 'bearer',
+    token: process.env.APPROVALS_API_TOKEN,
+    interval: 2000,
+    maxAttempts: 5,
+  },
+});
+```
+
+| Option                | Default  | Description                                                                                                                                                                          |
+| --------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `recheck.url`         |          | The status URL, with the same rules as `webhook.url`.                                                                                                                                |
+| `recheck.auth`        | `'none'` | `'bearer'` sends `recheck.token`; `'jwt'` forwards the caller's own access token (a call without one isn't polled); `'custom'` sends the headers `recheck.headers(request)` returns. |
+| `recheck.token`       |          | The token `auth: 'bearer'` sends.                                                                                                                                                    |
+| `recheck.headers`     |          | `(request) => headers`, for `auth: 'custom'`.                                                                                                                                        |
+| `recheck.secret`      |          | Signs each poll as webhook requests are signed.                                                                                                                                      |
+| `recheck.interval`    | `2000`   | Milliseconds between polls, 100 to 60000.                                                                                                                                            |
+| `recheck.maxAttempts` | `5`      | Polls per call, 1 to 60. `interval × (maxAttempts − 1)` is at most 2 minutes.                                                                                                        |
+
+Each poll POSTs `{ type: 'approval.status', requestId, attempt, toolId, toolName, userId?, requestedScope, ... }`
+(`requestId` is the same for every poll of one caller and tool, and names neither), and reads
+`{ approved, pending?, scope?, ttlMs?, grantedBy?, denialReason? }`:
+
+- `{ "approved": true }` records an approval, as a webhook approval is recorded but with `origin: 'recheck'`, and the
+  call runs. An `alwaysPrompt` tool's approval lets that call alone through, and isn't stored.
+- `{ "approved": false, "pending": true }` polls again after `interval`; after `maxAttempts` polls the call is refused as
+  `pending`.
+- `{ "approved": false }` refuses the call as `denied`. Nothing is stored: the next call polls again.
+- An error status, a redirect, a body that isn't such an answer, more than 64 KB, or no answer in 10 seconds refuses the
+  call as `pending`, and logs a warning that names only the URL's origin.
+
+A recorded denial refuses a call before anything is polled or sent, in both modes.
+
+## Startup checks
+
+`ApprovalPlugin.init()` throws `ApprovalConfigurationError` (code `APPROVAL_CONFIGURATION`), and the server doesn't
+start, for options that can't work: `webhook.url` without `webhook.secret`, or a secret under 24 bytes; `webhook.*`
+(other than `challengeTtl`) outside `mode: 'webhook'` or without `webhook.url`; `recheck` in `mode: 'webhook'` or
+without `recheck.url`; a URL that isn't `https://` (or loopback outside production), or has credentials in it;
+`auth: 'bearer'` without `token`, `auth: 'custom'` without `headers`, or either one set for another `auth`; an
+`interval` or `maxAttempts` out of range; and a `callbackPath` that isn't a plain path, that the server reserves (the
+MCP endpoint, `/oauth/*`, `/.well-known/*`), or that another `ApprovalPlugin` serves. Up to 1.11.2 these options were
+accepted and ignored.
 
 ## Docs
 

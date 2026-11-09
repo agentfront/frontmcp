@@ -16,6 +16,14 @@ export interface ApprovalIdentity {
 
 type ApprovalCallerContext = Pick<FrontMcpContext, 'verifiedSessionId' | 'authInfo'>;
 
+/** The prefix of the key a call with neither a verified session nor a principal gets. */
+const UNIDENTIFIED_SESSION_PREFIX = 'unidentified:';
+
+/** Whether a session key names no one: no approval granted to it can ever match a later call. */
+export function isUnidentifiedSession(sessionId: string): boolean {
+  return sessionId.startsWith(UNIDENTIFIED_SESSION_PREFIX);
+}
+
 function nonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
@@ -36,5 +44,5 @@ export function resolveApprovalIdentity(ctx: ApprovalCallerContext | undefined):
     return { sessionId, userId };
   }
 
-  return { sessionId: userId ? `stateless-user:${userId}` : `unidentified:${randomUUID()}`, userId };
+  return { sessionId: userId ? `stateless-user:${userId}` : `${UNIDENTIFIED_SESSION_PREFIX}${randomUUID()}`, userId };
 }

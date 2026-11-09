@@ -29,6 +29,9 @@ jest.mock('@frontmcp/sdk', () => ({
   Plugin: () => (target: unknown) => target,
   // The approval errors are public MCP errors
   PublicMcpError: jest.requireActual<typeof import('@frontmcp/sdk')>('@frontmcp/sdk').PublicMcpError,
+  InternalMcpError: jest.requireActual<typeof import('@frontmcp/sdk')>('@frontmcp/sdk').InternalMcpError,
+  ProviderNotAvailableError:
+    jest.requireActual<typeof import('@frontmcp/sdk')>('@frontmcp/sdk').ProviderNotAvailableError,
   ToolHook: { Will: () => () => (target: unknown) => target },
 }));
 

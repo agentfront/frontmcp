@@ -160,6 +160,13 @@ export interface ApprovalStore {
   grantApproval(options: GrantApprovalOptions): Promise<ApprovalRecord>;
 
   /**
+   * Record a denial of a tool: a record in state `denied`, stored where a grant with the same options would be and
+   * lasting `ttlMs` when given, which refuses the caller's calls of the tool whatever else is approved.
+   * `grantedBy` says who denied it. Optional: the webhook callback logs a denial it can't record.
+   */
+  denyApproval?(options: GrantApprovalOptions): Promise<ApprovalRecord>;
+
+  /**
    * Revoke approval for a tool: every approval of the tool stored for the given session or user
    * (only the given context's, when `context` is set). Recorded denials are kept.
    */
