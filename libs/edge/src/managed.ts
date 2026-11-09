@@ -53,7 +53,10 @@ export interface ManagedEdgeOptions {
   allowRollback?: boolean;
   /** Require a signed bundle. Default true. */
   requireSignature?: boolean;
-  /** Trusted public keys for bundle signature verification. */
+  /**
+   * The public keys bundles are signed with (`{ keyId, alg, publicKeyPem }`). Needed unless `requireSignature` is
+   * false: the `jwksUrl` keys verify only the pull token, so without these every bundle is refused.
+   */
   trustedKeys?: unknown[];
   /** Dev mode — bypass signature checks + relax defaults (loud warning). Never in production. */
   dev?: boolean;

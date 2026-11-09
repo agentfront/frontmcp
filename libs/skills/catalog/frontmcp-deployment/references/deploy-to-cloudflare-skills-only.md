@@ -131,6 +131,10 @@ export default createEdgeMcp({
     expectedAudience: 'acme-mcp',
     jwksUrl: 'https://cloud.example.com/.well-known/jwks.json',
     expectedIssuer: 'https://cloud.example.com',
+    // The public key the SaaS signs bundles with, under the key id its bundles name. The
+    // jwksUrl keys verify only the pull token: without trustedKeys every bundle is refused
+    // with `unknown signing keyId` (requireSignature defaults to true).
+    trustedKeys: [{ keyId: 'acme-2026-11', alg: 'EdDSA', publicKeyPem: env.BUNDLE_SIGNING_KEY }],
     // KV cache of the last bundle applied, resolved from the per-request `env`.
     cache: kvBundleCacheFromEnv('BUNDLE_CACHE'),
   },
