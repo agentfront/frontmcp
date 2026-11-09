@@ -26,6 +26,7 @@ import {
   type ServerRequest,
 } from '../../common';
 import { FlowInputMissingError } from '../../errors/sdk.errors';
+import { oauthBasePath } from '../../flows/flow.http-path';
 
 /**
  * Resolve whether the local-AS Dynamic Client Registration endpoint is active
@@ -87,7 +88,7 @@ export const wellKnownAsStateSchema = z.object({
   // endpoints (/oauth/authorize, /oauth/token, /oauth/register, …) are
   // registered at literal root paths by their flows, NOT under entryPath, so
   // they must be advertised relative to this root rather than `baseUrl`
-  // (which carries the entryPath) — see #467.
+  // (which carries the entryPath) — see #467. An app's own scope adds its path.
   oauthBaseUrl: z.string().min(1),
   scopesSupported: z.array(z.string()).default(['openid', 'profile', 'email']),
   tokenEndpointAuthMethods: z
@@ -159,8 +160,8 @@ export default class WellKnownAsFlow extends FlowBase<typeof name> {
     const issuer = (this.scope.auth as { issuerFor?: (request: ServerRequest) => string } | undefined)?.issuerFor?.(
       request,
     );
-    // Root origin (no entryPath) — OAuth endpoints are mounted at root.
-    const oauthBaseUrl = getRequestBaseUrl(request);
+    // Root origin (no entryPath) — OAuth endpoints are mounted at root, an app's own scope's under its path.
+    const oauthBaseUrl = getRequestBaseUrl(request, oauthBasePath(this.scope));
 
     // Check if CIMD is enabled (default true if auth is orchestrated)
     let cimdEnabled = true;
