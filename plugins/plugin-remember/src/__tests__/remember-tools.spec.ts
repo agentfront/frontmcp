@@ -70,11 +70,15 @@ describe('Remember Tools', () => {
       });
 
       it('should accept valid scope values', () => {
-        const scopes = ['session', 'user', 'tool', 'global'];
+        const scopes = ['session', 'user', 'global'];
         scopes.forEach((scope) => {
           const result = rememberThisSchema.safeParse({ key: 'k', value: 'v', scope });
           expect(result.success).toBe(true);
         });
+      });
+
+      it("should reject tool scope, which recall can't read back", () => {
+        expect(rememberThisSchema.safeParse({ key: 'k', value: 'v', scope: 'tool' }).success).toBe(false);
       });
 
       it('should reject invalid scope', () => {

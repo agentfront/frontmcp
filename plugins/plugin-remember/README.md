@@ -153,6 +153,9 @@ With `tools.enabled: true`, the plugin registers four tools, named with `tools.p
 | `forget`        | `key`, `scope?`                                          |
 | `list_memories` | `scope?`, `pattern?`, `limit?` (default 50, at most 100) |
 
+Their `scope` is `session` (the default), `user` or `global`. They don't offer `tool` scope: it belongs to the tool
+that runs the call, so `recall` would never find what `remember_this` stored there. Up to 1.11.2 they accepted it.
+
 The package also exports their classes, `RememberThisTool`, `RecallTool`, `ForgetTool` and `ListMemoriesTool`, to list
 in an app's `tools` yourself. Use one way or the other, not both.
 
