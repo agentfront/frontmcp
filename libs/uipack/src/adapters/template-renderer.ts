@@ -16,6 +16,7 @@ import { isTrustedHtml } from '../shell/trusted-html';
 import type { ShellConfig, WidgetSizing } from '../shell/types';
 import type { UIContentSecurity } from '../types/ui-config';
 import { escapeHtml } from '../utils';
+import { loadCodeHighlighter } from './code-highlight';
 import { MCP_APPS_MIME_TYPE } from './constants';
 import { detectContentType } from './content-detector';
 import { wrapDetectedContent } from './content-renderers';
@@ -74,6 +75,20 @@ export interface RenderToolTemplateOptions {
    * the markup is used as written.
    */
   contentSecurity?: UIContentSecurity;
+  /**
+   * `ui.runtimeOptions.markdown`, for a Markdown template: `gfm` adds GitHub-flavored Markdown
+   * (tables, task lists, strikethrough, links for bare URLs), and `highlightTheme` highlights fenced
+   * code that names its language with highlight.js and puts that theme's stylesheet in the page.
+   */
+  markdown?: MarkdownRenderOptions;
+}
+
+/** `ui.runtimeOptions.markdown`. */
+export interface MarkdownRenderOptions {
+  /** GitHub-flavored Markdown. */
+  gfm?: boolean;
+  /** A highlight.js theme, such as `'github'` or `'github-dark'`. */
+  highlightTheme?: string;
 }
 
 /**
@@ -156,6 +171,14 @@ function renderUnwrappedResult(rawResult: unknown, options: RenderToolTemplateOp
     noticeStringResult(options.toolName, options.logger ?? console);
   }
   return escapeHtml(rawResult);
+}
+
+/** A Markdown template as HTML, with the `ui.runtimeOptions.markdown` options. */
+function convertMarkdown(source: string, options: RenderToolTemplateOptions): string {
+  const { gfm, highlightTheme } = options.markdown ?? {};
+  const highlighter = highlightTheme ? loadCodeHighlighter(highlightTheme) : undefined;
+  const converted = markdownToHtml(source, { gfm, highlight: highlighter?.highlight });
+  return highlighter ? `<style>${highlighter.css}</style>\n${converted}` : converted;
 }
 
 /** The template's markup, sanitized when the tool sets `ui.contentSecurity`. */
@@ -315,7 +338,7 @@ export function renderToolTemplate(options: RenderToolTemplateOptions): RenderTo
     }
   } else if (typeof template === 'string') {
     // String template — a Markdown string is converted to HTML, an HTML string is used as written
-    const markup = uiType === 'markdown' ? markdownToHtml(template) : template;
+    const markup = uiType === 'markdown' ? convertMarkdown(template, options) : template;
     const shellResult = buildShell(secureMarkup(markup, options), shellConfig);
     html = shellResult.html;
     hash = shellResult.hash;

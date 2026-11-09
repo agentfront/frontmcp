@@ -3013,8 +3013,11 @@ __metadata:
   peerDependencies:
     "@frontmcp/lazy-zod": 1.11.2
     esbuild: ">=0.27.0 <1"
+    highlight.js: ^11.0.0
   peerDependenciesMeta:
     esbuild:
+      optional: true
+    highlight.js:
       optional: true
   languageName: unknown
   linkType: soft

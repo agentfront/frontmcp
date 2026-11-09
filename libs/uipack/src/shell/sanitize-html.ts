@@ -326,5 +326,5 @@ function decodeCharacterReferences(value: string): string {
 }
 
 function fromCodePoint(codePoint: number): string {
-  return codePoint > 0 && codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : '�';
+  return codePoint > 0 && codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : '\uFFFD';
 }
