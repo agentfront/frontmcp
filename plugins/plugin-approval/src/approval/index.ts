@@ -122,4 +122,5 @@ export {
   ApprovalScopeNotAllowedError,
   ApprovalExpiredError,
   ChallengeValidationError,
+  ApprovalConfigurationError,
 } from './errors';

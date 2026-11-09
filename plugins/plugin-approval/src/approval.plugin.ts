@@ -8,6 +8,7 @@ import {
   DynamicPlugin,
   FRONTMCP_CONTEXT,
   Plugin,
+  ProviderRegistry,
   ProviderScope,
   ScopeEntry,
   storeProvider,
@@ -20,17 +21,63 @@ import type { NamespacedStorage, RootStorage, StorageConfig } from '@frontmcp/ut
 
 import type { ToolApprovalRequirement } from './approval';
 import { resolveApprovalIdentity } from './approval.identity';
-import { ApprovalServiceToken, ApprovalStoreToken, ChallengeServiceToken } from './approval.symbols';
+import { resolveExternalApproval, type ResolvedExternalApproval, type ResolvedRecheck } from './approval.options';
+import {
+  ApprovalServiceToken,
+  ApprovalStoreToken,
+  ChallengeServiceToken,
+  ExternalApproverToken,
+} from './approval.symbols';
 import { resolveApprovalRequirement } from './approval/policy';
+import { serveApprovalCallback } from './external/approval-callback.flow';
+import { ApprovalDecisionRecorder } from './external/approval-decisions';
+import { RecheckApprover, type RecheckRequest } from './external/recheck-approver';
+import { WebhookApprover } from './external/webhook-approver';
 import ApprovalCheckPlugin from './hooks/approval-check.hook';
-import { createApprovalService } from './services/approval.service';
+import { createApprovalService, type ApprovalRequirementLookup } from './services/approval.service';
 import { ChallengeService } from './services/challenge.service';
 import { ApprovalStorageStore } from './stores/approval-storage.store';
 import type { ApprovalMode } from './types';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Configuration
-// ─────────────────────────────────────────────────────────────────────────────
+/** The approval policy of the scope's tool with this full name, or `undefined` when there is no such tool. */
+function toolRequirementLookup(scope: ScopeEntry): ApprovalRequirementLookup {
+  return (toolId) => {
+    const tool = scope.tools.getTools(true).find((entry) => entry.fullName === toolId);
+    if (!tool) return undefined;
+    const approval = (tool.metadata as { approval?: ToolApprovalRequirement | boolean }).approval;
+    return resolveApprovalRequirement(approval);
+  };
+}
+
+/**
+ * The provider of the external approver `external` configures, which also serves the webhook's callback route. The
+ * store and the challenge service are built beside it, at the same time, so it reads them on first use.
+ */
+function externalApproverProvider(external: ResolvedExternalApproval): ProviderType | undefined {
+  const { webhook, recheck } = external;
+  if (!webhook && !recheck) return undefined;
+  return {
+    name: 'approval:external-approver',
+    provide: ExternalApproverToken,
+    inject: () => [ProviderRegistry, ScopeEntry] as const,
+    useFactory: async (providers: ProviderRegistry, scope: ScopeEntry) => {
+      const logger = scope.logger.child('ApprovalPlugin');
+      const requirementOf = toolRequirementLookup(scope);
+      const dependencies = {
+        get challenges(): ChallengeService {
+          return providers.get(ChallengeServiceToken);
+        },
+        get decisions(): ApprovalDecisionRecorder {
+          return new ApprovalDecisionRecorder(providers.get(ApprovalStoreToken), requirementOf, logger);
+        },
+      };
+      if (!webhook) return new RecheckApprover(recheck as ResolvedRecheck, dependencies, logger);
+      const approver = new WebhookApprover(webhook, dependencies, logger);
+      await serveApprovalCallback(scope, webhook.callbackPath, approver);
+      return approver;
+    },
+  };
+}
 
 /**
  * Configuration options for ApprovalPlugin.
@@ -54,38 +101,70 @@ export interface ApprovalPluginOptions {
   namespace?: string;
 
   /**
-   * Approval workflow mode. Neither contacts an external system: approvals are recorded by your code.
-   * - 'recheck': Check the stored approvals on every call
-   * - 'webhook': Also register the PKCE `ChallengeService` (`ChallengeServiceToken`)
+   * Approval workflow mode. Approvals are recorded by your code (`this.approval`, the store) in both; an external
+   * approval system is asked only when its URL is set.
+   * - 'recheck': Check the stored approvals on every call. With `recheck.url`, a call without one polls that URL until
+   *   it decides.
+   * - 'webhook': Also register the PKCE `ChallengeService` (`ChallengeServiceToken`). With `webhook.url`, a call
+   *   without an approval sends a signed request there, and the decision comes back on `webhook.callbackPath`.
    * @default 'recheck'
    */
   mode?: ApprovalMode;
 
   /**
-   * @deprecated Has no effect: nothing is polled. A server that sets it logs a warning when it starts.
+   * Recheck mode: poll an approval system's URL for a decision about a call that has no approval. Each poll is a signed
+   * (with `secret`) JSON POST of `{ type: 'approval.status', requestId, attempt, toolId, toolName, userId?, ... }`,
+   * answered with `{ approved, pending?, scope?, ttlMs?, grantedBy?, denialReason? }`: an approval is recorded, as the
+   * tool's policy allows, and the call runs; `{ approved: false }` refuses it as denied; `pending: true` polls again.
+   * A failed poll, or `maxAttempts` pending answers, refuses the call as pending. Needs `mode: 'recheck'`.
    */
   recheck?: {
-    /** URL to check for approval status */
+    /** The approval system's status URL: `https://`, or `http://localhost` when NODE_ENV is not production. */
     url?: string;
-    /** Authentication method */
+    /**
+     * How each poll authenticates:
+     * - `'none'`: no `Authorization` header (sign the polls with `secret`).
+     * - `'bearer'`: `Authorization: Bearer <token>`.
+     * - `'jwt'`: forwards the caller's own access token as `Authorization: Bearer`; a call without one isn't polled.
+     * - `'custom'`: the headers `headers(request)` returns.
+     * @default 'none'
+     */
     auth?: 'jwt' | 'bearer' | 'none' | 'custom';
-    /** Interval between rechecks (ms) */
+    /** The token `auth: 'bearer'` sends. */
+    token?: string;
+    /** The headers `auth: 'custom'` sends, for the poll's body. */
+    headers?: RecheckHeaders;
+    /** Signs each poll (HMAC-SHA256, Standard Webhooks headers); at least 24 bytes. A `whsec_` secret is base64. */
+    secret?: string;
+    /** Interval between polls (ms), 100 to 60000. @default 2000 */
     interval?: number;
-    /** Maximum recheck attempts */
+    /** Most polls per call, 1 to 60; `interval × (maxAttempts − 1)` must be 2 minutes or less. @default 5 */
     maxAttempts?: number;
   };
 
   /**
-   * Webhook mode configuration. Only `challengeTtl` is used; no request is sent and no callback route is served.
+   * Webhook mode: ask an approval system by webhook. With `url`, a call that needs an approval it doesn't have sends
+   * one signed JSON POST (`WebhookPayload`) there per caller and tool, and is refused as pending; the system decides by
+   * POSTing `{ codeVerifier, approved, scope?, ttlMs?, grantedBy?, reason? }`, signed with the same secret, to
+   * `callbackPath`. Needs `mode: 'webhook'`.
    */
   webhook?: {
-    /** @deprecated Has no effect: no request is sent. A server that sets it logs a warning when it starts. */
+    /** Where approval requests are sent: `https://`, or `http://localhost` when NODE_ENV is not production. */
     url?: string;
-    /** @deprecated Has no effect: no request is sent. A server that sets it logs a warning when it starts. */
+    /**
+     * Signs each request and verifies each callback (HMAC-SHA256 in the Standard Webhooks format); required with
+     * `url`, at least 24 bytes. A `whsec_` secret (a Standard Webhooks secret) is base64 after the prefix.
+     */
+    secret?: string;
+    /**
+     * Forward the caller's access token to `url`, as the request's `jwt` field. Only set it when the approval system
+     * must act as the caller: the token reaches that system as is.
+     * @default false
+     */
     includeJwt?: boolean;
-    /** Challenge TTL in seconds */
+    /** Challenge TTL in seconds: how long a request waits for its decision, and a denial without `ttlMs` lasts */
     challengeTtl?: number;
-    /** @deprecated Has no effect: no callback route is served. A server that sets it logs a warning when it starts. */
+    /** The path the server takes decisions on (`POST`). @default '/approval/callback' */
     callbackPath?: string;
   };
 
@@ -108,16 +187,12 @@ export interface ApprovalPluginOptions {
   cleanupIntervalSeconds?: number;
 }
 
-/** The options set that the plugin ignores, logged when the server starts. */
-const ApprovalOptionWarningsToken: Token<string[]> = Symbol('plugin:approval:option-warnings');
+/** The headers `recheck.auth: 'custom'` sends with a poll. */
+export type RecheckHeaders = (request: RecheckRequest) => Record<string, string> | Promise<Record<string, string>>;
 
 /** The options in `options` that are accepted and have no effect, by their path. */
 function ignoredApprovalOptions(options: ApprovalPluginOptions): string[] {
   const ignored = [
-    options.webhook?.url !== undefined && 'webhook.url',
-    options.webhook?.includeJwt !== undefined && 'webhook.includeJwt',
-    options.webhook?.callbackPath !== undefined && 'webhook.callbackPath',
-    options.recheck !== undefined && 'recheck',
     options.enableAudit !== undefined && 'enableAudit',
     options.maxDelegationDepth !== undefined && 'maxDelegationDepth',
   ];
@@ -126,11 +201,13 @@ function ignoredApprovalOptions(options: ApprovalPluginOptions): string[] {
 
 function describeIgnoredOptions(ignored: readonly string[]): string {
   return (
-    `ApprovalPlugin ignores \`${ignored.join('`, `')}\`: the plugin sends no webhook, serves no callback route, polls ` +
-    'nothing and logs no audit trail. Approvals are recorded by your code, such as this.approval.grantSessionApproval(), ' +
-    'and each record keeps who granted or revoked it. Remove these options.'
+    `ApprovalPlugin ignores \`${ignored.join('`, `')}\`: the plugin logs no audit trail and bounds no delegation. ` +
+    'Each approval record keeps who granted or revoked it. Remove these options.'
   );
 }
+
+/** The options set that the plugin ignores, logged when the server starts. */
+const ApprovalOptionWarningsToken: Token<string[]> = Symbol('plugin:approval:option-warnings');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ApprovalPlugin
@@ -142,7 +219,8 @@ function describeIgnoredOptions(ignored: readonly string[]): string {
  * Features:
  * - Tool approval checking via hook
  * - Multiple approval scopes (session, user, time-limited, context-specific)
- * - PKCE challenges (`mode: 'webhook'`) to build an external approval flow on
+ * - Signed approval requests to an external system, decided on a PKCE-bound callback (`mode: 'webhook'`)
+ * - Polling an external approval API (`mode: 'recheck'` with `recheck.url`)
  * - Who granted or revoked each approval, kept with it
  *
  * @example Basic usage
@@ -161,7 +239,11 @@ function describeIgnoredOptions(ignored: readonly string[]): string {
  *   plugins: [
  *     ApprovalPlugin.init({
  *       mode: 'webhook',
- *       webhook: { challengeTtl: 300 },
+ *       webhook: {
+ *         url: 'https://approval.example.com/webhook',
+ *         secret: process.env.APPROVAL_WEBHOOK_SECRET,
+ *         challengeTtl: 300,
+ *       },
  *     }),
  *   ],
  * })
@@ -218,6 +300,7 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
       ...ApprovalPlugin.defaultOptions,
       ...options,
     };
+    const external = resolveExternalApproval(config);
 
     // ─────────────────────────────────────────────────────────────────────────
     // Approval Store
@@ -265,6 +348,9 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
       );
     }
 
+    const externalApprover = externalApproverProvider(external);
+    if (externalApprover) providers.push(externalApprover);
+
     providers.push({
       name: 'approval:option-warnings',
       provide: ApprovalOptionWarningsToken,
@@ -288,13 +374,7 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
       useFactory: (store, ctx: FrontMcpContext, scope: ScopeEntry) => {
         const { sessionId, userId } = resolveApprovalIdentity(ctx);
         // Grants are checked against the tool's `allowedScopes` and `maxTtlMs`.
-        const requirementOf = (toolId: string) => {
-          const tool = scope.tools.getTools(true).find((entry) => entry.fullName === toolId);
-          if (!tool) return undefined;
-          const approval = (tool.metadata as { approval?: ToolApprovalRequirement | boolean }).approval;
-          return resolveApprovalRequirement(approval);
-        };
-        return createApprovalService(store, sessionId, userId, requirementOf);
+        return createApprovalService(store, sessionId, userId, toolRequirementLookup(scope));
       },
     });
 

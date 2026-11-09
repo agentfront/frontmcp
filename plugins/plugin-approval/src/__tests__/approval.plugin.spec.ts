@@ -119,6 +119,30 @@ describe('ApprovalPlugin', () => {
       expect(challengeProvider?.name).toBe('approval:challenge-service');
     });
 
+    it('adds the external approver when webhook.url or recheck.url is set', () => {
+      const webhook = ApprovalPlugin.dynamicProviders({
+        mode: 'webhook',
+        webhook: { url: 'https://approval.example.com/hook', secret: 'a-webhook-secret-of-at-least-32-chars' },
+      }) as ProviderRecord[];
+      const recheck = ApprovalPlugin.dynamicProviders({
+        recheck: { url: 'https://approval.example.com/status' },
+      }) as ProviderRecord[];
+
+      expect(webhook.map((p) => p.name)).toEqual([
+        'approval:store',
+        'approval:challenge-service',
+        'approval:external-approver',
+        'approval:option-warnings',
+        'approval:service',
+      ]);
+      expect(recheck.map((p) => p.name)).toEqual([
+        'approval:store',
+        'approval:external-approver',
+        'approval:option-warnings',
+        'approval:service',
+      ]);
+    });
+
     it('should not include challenge service for recheck mode', () => {
       const providers = ApprovalPlugin.dynamicProviders({ mode: 'recheck' }) as ProviderRecord[];
 
