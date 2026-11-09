@@ -610,7 +610,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
           let detectedType: string;
           try {
             manifest = scope.toolUI.getManifest(finalName);
-            detectedType = scope.toolUI.detectUIType(uiConfig.template);
+            detectedType = scope.toolUI.detectUIType(uiConfig.template, uiConfig);
           } catch (error) {
             this.logger.warn(`parseTools: failed to access toolUI for ${finalName}`, error);
             return item;
