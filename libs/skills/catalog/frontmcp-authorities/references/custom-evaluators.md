@@ -180,6 +180,12 @@ simplest async authorization mechanism — no registry, no `name` field, no `cus
 indirection — and are preferred over hooks for "this single entry needs an extra
 async check" scenarios.
 
+A guard or custom evaluator that throws while a list (`tools/list`, `resources/list`,
+`resources/templates/list`, `prompts/list`, or a skill listing) is filtered leaves out only
+the entry it protects, with a warning in the log; the rest of the list is served. Up to
+1.11.2 it failed the whole list with `-32603` for every caller. On a call, the error fails
+that call.
+
 ## Using Custom Evaluators in Policies
 
 Reference custom evaluators via the `custom` field on any `AuthoritiesPolicyMetadata`. The key under `custom` must match the registered evaluator name.

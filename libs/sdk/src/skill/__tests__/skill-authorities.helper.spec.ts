@@ -170,6 +170,21 @@ describe('skill authorities enforcement', () => {
       expect(names).toContain('admin-skill');
     });
 
+    it('leaves out only the skill whose policy throws, and logs it (#1163)', async () => {
+      const registry = await buildRegistry();
+      const all = registry.getSkills(true);
+      const scope = buildAuthoritiesScope();
+      const warn = jest.fn();
+      jest.spyOn(scope.authoritiesEngine, 'evaluate').mockRejectedValue(new Error('policy store down'));
+
+      const visible = await filterSkillsByAuthorities({ ...scope, logger: { warn } }, all, ADMIN_AUTH);
+
+      expect(visible.map((s) => s.name)).toEqual(['public-skill']);
+      expect(warn).toHaveBeenCalledWith(
+        'The authorities of "test-app:admin-skill" failed to answer, so it is left out of the list: policy store down',
+      );
+    });
+
     it('returns all skills unchanged when no engine is configured (default preserved)', async () => {
       const registry = await buildRegistry();
       const all = registry.getSkills(true);

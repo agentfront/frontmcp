@@ -227,6 +227,44 @@ describe('FeatureFlagPlugin — gate defaults (#719)', () => {
       }
     });
 
+    it("serves the lists with each flag's default instead of failing them (#1163)", async () => {
+      const server = await buildServer({ adapter: 'custom', adapterInstance: failingAdapter() });
+      try {
+        const tools = await listedTools(server);
+        expect(tools).toEqual(expect.arrayContaining(['ref_open_tool', 'check_flag']));
+        expect(tools).not.toContain('unknown_flag_tool');
+        expect(tools).not.toContain('ref_closed_tool');
+
+        const { resources } = await server.listResources(caller);
+        expect(resources.map((resource) => resource.uri)).not.toContain('flags://unknown');
+
+        const { prompts } = await server.listPrompts(caller);
+        expect(prompts.map((prompt) => prompt.name)).not.toContain('unknown-flag-prompt');
+      } finally {
+        await server.dispose();
+      }
+    });
+
+    it('lists what gateDefaultValue opens when the adapter throws, as the gate serves it', async () => {
+      const server = await buildServer({
+        adapter: 'custom',
+        adapterInstance: failingAdapter(),
+        gateDefaultValue: true,
+      });
+      try {
+        expect(await listedTools(server)).toContain('unknown_flag_tool');
+        await expect(callGated(server, 'unknown_flag_tool')).resolves.toBe('ran');
+
+        const { resources } = await server.listResources(caller);
+        expect(resources.map((resource) => resource.uri)).toContain('flags://unknown');
+
+        const { prompts } = await server.listPrompts(caller);
+        expect(prompts.map((prompt) => prompt.name)).toContain('unknown-flag-prompt');
+      } finally {
+        await server.dispose();
+      }
+    });
+
     it("answers the gate with the ref's defaultValue, then false, without gateDefaultValue", async () => {
       const server = await buildServer({ adapter: 'custom', adapterInstance: failingAdapter(), defaultValue: true });
       try {

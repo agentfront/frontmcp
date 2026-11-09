@@ -19,6 +19,7 @@ import { isPubliclyListed, publicAccessFor } from '../../auth/public-access.util
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
+import { isListedByAuthorities } from '../../surface/entry-authorized';
 
 const inputSchema = z.object({
   request: ListPromptsRequestSchema,
@@ -241,9 +242,15 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
         const authorities = metadata?.['authorities'];
         if (!authorities) return item;
 
-        const evalCtx = ctxBuilder.build(authInfo);
-        const result = await engine.evaluate(authorities as import('@frontmcp/auth').AuthoritiesMetadata, evalCtx);
-        return result.granted ? item : null;
+        const listed = await isListedByAuthorities(
+          engine,
+          ctxBuilder,
+          authorities as import('@frontmcp/auth').AuthoritiesMetadata,
+          authInfo,
+          String(metadata?.['name']),
+          this.logger,
+        );
+        return listed ? item : null;
       }),
     );
 

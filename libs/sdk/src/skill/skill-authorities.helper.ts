@@ -24,13 +24,14 @@
 
 import { AuthorityDeniedError, resolveRequiredScopes } from '@frontmcp/auth';
 
-import type { ScopeEntry, SkillEntry } from '../common';
+import type { FrontMcpLogger, ScopeEntry, SkillEntry } from '../common';
+import { isListedByAuthorities } from '../surface/entry-authorized';
 
 /** Minimal duck-typed surface of the scope we rely on for authorities. */
 type AuthoritiesScopeView = Pick<
   ScopeEntry,
   'authoritiesEngine' | 'authoritiesContextBuilder' | 'authoritiesScopeMapping'
->;
+> & { readonly logger?: Pick<FrontMcpLogger, 'warn'> };
 
 /**
  * Normalise the request AuthInfo so the authorities context builder can read
@@ -117,7 +118,8 @@ export async function assertSkillAuthorized(
  * discover. Mirrors `filterByAuthorities` for tools/resources.
  *
  * Skills without `authorities` always pass. When no engine/context builder is
- * configured the list is returned unchanged.
+ * configured the list is returned unchanged. A skill whose policy throws is
+ * left out and logged; the rest are still served.
  *
  * Evaluated WITHOUT request input: `fromInput`/ReBAC-by-input policies cannot
  * be evaluated during discovery and will therefore be treated as a denial when
@@ -146,9 +148,14 @@ export async function filterSkillsByAuthorities<T extends SkillEntry>(
     skills.map(async (skill): Promise<boolean> => {
       const authorities = getSkillAuthorities(skill);
       if (!authorities) return true;
-      const evalCtx = ctxBuilder.build(normalized);
-      const result = await engine.evaluate(authorities, evalCtx);
-      return result.granted;
+      return isListedByAuthorities(
+        engine,
+        ctxBuilder,
+        authorities,
+        normalized,
+        skill.fullName || skill.name,
+        scope.logger,
+      );
     }),
   );
 
