@@ -70,6 +70,8 @@ export interface RecheckDependencies {
 }
 
 export class RecheckApprover implements ExternalApprover {
+  readonly via = 'recheck';
+
   constructor(
     private readonly recheck: ResolvedRecheck,
     private readonly dependencies: RecheckDependencies,

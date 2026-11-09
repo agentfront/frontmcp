@@ -4,6 +4,7 @@ import 'reflect-metadata';
 
 import { STATELESS_SESSION_ID, type ProviderType, type Type } from '@frontmcp/sdk';
 
+import { ApprovalConfigurationError } from '../approval';
 import ApprovalPlugin from '../approval.plugin';
 import { ApprovalServiceToken, ApprovalStoreToken, ChallengeServiceToken } from '../approval.symbols';
 import { createApprovalService, type ApprovalService } from '../services/approval.service';
@@ -22,6 +23,8 @@ describe('ApprovalPlugin', () => {
       expect(ApprovalPlugin.defaultOptions).toEqual({
         namespace: 'approval',
         mode: 'recheck',
+        enableAudit: false,
+        maxDelegationDepth: 3,
         cleanupIntervalSeconds: 60,
       });
     });
@@ -37,11 +40,13 @@ describe('ApprovalPlugin', () => {
       const plugin = new ApprovalPlugin({
         namespace: 'custom-approval',
         mode: 'webhook',
+        maxDelegationDepth: 5,
       });
 
       expect(plugin.options.namespace).toBe('custom-approval');
       expect(plugin.options.mode).toBe('webhook');
-      expect(plugin.options.cleanupIntervalSeconds).toBe(60); // default retained
+      expect(plugin.options.maxDelegationDepth).toBe(5);
+      expect(plugin.options.enableAudit).toBe(false); // default retained
     });
 
     it('should accept storage config', () => {
@@ -98,7 +103,7 @@ describe('ApprovalPlugin', () => {
     it('should return store and service providers for recheck mode', () => {
       const providers = ApprovalPlugin.dynamicProviders({}) as ProviderRecord[];
 
-      expect(providers.map((p) => p.name)).toEqual(['approval:store', 'approval:option-warnings', 'approval:service']);
+      expect(providers.map((p) => p.name)).toEqual(['approval:store', 'approval:service']);
 
       const storeProvider = providers.find((p) => p.provide === ApprovalStoreToken);
       const serviceProvider = providers.find((p) => p.provide === ApprovalServiceToken);
@@ -112,7 +117,7 @@ describe('ApprovalPlugin', () => {
     it('should include challenge service for webhook mode', () => {
       const providers = ApprovalPlugin.dynamicProviders({ mode: 'webhook' }) as ProviderRecord[];
 
-      expect(providers.length).toBe(4);
+      expect(providers.length).toBe(3);
 
       const challengeProvider = providers.find((p) => p.provide === ChallengeServiceToken);
       expect(challengeProvider).toBeDefined();
@@ -132,15 +137,19 @@ describe('ApprovalPlugin', () => {
         'approval:store',
         'approval:challenge-service',
         'approval:external-approver',
-        'approval:option-warnings',
         'approval:service',
       ]);
-      expect(recheck.map((p) => p.name)).toEqual([
-        'approval:store',
-        'approval:external-approver',
-        'approval:option-warnings',
-        'approval:service',
-      ]);
+      expect(recheck.map((p) => p.name)).toEqual(['approval:store', 'approval:external-approver', 'approval:service']);
+    });
+
+    it('adds the audit trail with enableAudit: true', () => {
+      const providers = ApprovalPlugin.dynamicProviders({ enableAudit: true }) as ProviderRecord[];
+
+      expect(providers.map((p) => p.name)).toEqual(['approval:store', 'approval:audit', 'approval:service']);
+    });
+
+    it.each([-1, 1.5, 65])('refuses maxDelegationDepth %s', (maxDelegationDepth) => {
+      expect(() => ApprovalPlugin.dynamicProviders({ maxDelegationDepth })).toThrow(ApprovalConfigurationError);
     });
 
     it('should not include challenge service for recheck mode', () => {

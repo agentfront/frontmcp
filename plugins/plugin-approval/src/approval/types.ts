@@ -111,11 +111,30 @@ export type ApprovalMethod = 'interactive' | 'implicit' | 'delegation' | 'batch'
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * One delegation in a chain: `delegatorId` authorized `delegateId`.
+ */
+export interface DelegationLink {
+  /** Who authorized the delegate */
+  delegatorId: string;
+
+  /** Who was authorized */
+  delegateId: string;
+
+  /** Purpose of the delegation */
+  purpose?: string;
+}
+
+/**
  * Context for delegated approvals (e.g., AI agent with delegated authority).
  * Per MCP spec, tracks the delegation chain for audit purposes.
+ *
+ * A delegate can delegate further: `chain` lists the delegations the delegator's own authority came from, the original
+ * delegator's first. Each link's `delegateId` is the next link's `delegatorId`, and the last link's is this context's
+ * `delegatorId`. The chain's depth, `chain.length + 1`, is bounded by `ApprovalPlugin`'s `maxDelegationDepth`; build a
+ * deeper one with `extendDelegation()`.
  */
 export interface DelegationContext {
-  /** Who authorized the delegate (user ID, admin ID) */
+  /** Who authorized the delegate (user ID, admin ID, or a delegate that delegates further) */
   delegatorId: string;
 
   /** Who was authorized (agent ID, service account) */
@@ -126,6 +145,9 @@ export interface DelegationContext {
 
   /** Constraints on the delegation (paths, actions, etc.) */
   constraints?: Record<string, unknown>;
+
+  /** The delegations above this one, the original delegator's first; absent for a direct delegation */
+  chain?: DelegationLink[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -575,9 +575,33 @@ of those set for another `auth`; an `interval`/`maxAttempts` out of range; and a
 or that the server reserves (the MCP endpoint, `/oauth/*`, `/.well-known/*`) or another `ApprovalPlugin` serves. Up to
 1.11.2 these options were accepted and ignored.
 
-`enableAudit` and `maxDelegationDepth` have no effect: each approval record keeps who granted or revoked it, and a
-delegated grant names one delegator. They are `@deprecated`, and a server that sets either logs
-`ApprovalPlugin ignores ...` when it starts.
+**Audit trail** (`enableAudit: true`, default `false`). Each event is an `info` line of the `ApprovalAudit` logger:
+the message is `<event> <toolId>`, and the first argument the fields. `approval.requested` is a call that had no approval
+it could use, with `state` (`pending`, `expired`, `denied`, or `approved` by the recheck system) and `via` (`webhook` or
+`recheck`); `approval.granted` and `approval.denied` an approval or denial recorded (by `this.approval`, the store, a
+webhook callback or a recheck answer); `approval.revoked` a revocation (`count` for `clearSessionApprovals()`); and
+`approval.expired` an expired record the cleanup deleted (a backend that expires keys itself, such as Redis, may delete
+it first: `approval.granted` carries `expiresAt`). Lines carry the tool, scope, user id, context, grantor or revoker and
+reason; never a session id, a token or a record's `metadata`. The default is `false` because the option did nothing up
+to 1.11.2 (its documented default was `true`), and turning it on adds lines with user ids to the server's logs.
+
+**Delegation chains** (`maxDelegationDepth`, default `3`, 0 to 64). A delegated approval names
+`grantedBy.delegationContext`; a delegate that delegates further records the delegations above it in
+`delegationContext.chain`, the original delegator's first. `extendDelegation(context, delegateId, { purpose? })` builds
+the next context:
+
+```typescript
+import { agentGrantor, extendDelegation } from '@frontmcp/plugin-approval';
+
+const toPlanner = { delegatorId: 'user-123', delegateId: 'planner-agent', purpose: 'release' };
+const toDeployer = extendDelegation(toPlanner, 'deploy-agent'); // depth 2
+await this.approval.grantSessionApproval('ops:deploy', { grantedBy: agentGrantor('deploy-agent', toDeployer) });
+```
+
+A grant whose chain is deeper than `maxDelegationDepth`, broken (a delegator that wasn't the previous delegate) or names
+a party twice throws `ApprovalOperationError`, and a stored approval like that doesn't let a call through. Denials are
+kept whatever their chain. `1` allows only direct delegation, `0` no delegated approval. `delegationDepth(context)` and
+`delegationProblem(context, maxDepth)` check a context yourself. Up to 1.11.2 both options did nothing.
 
 ### Pre-approved contexts come from the session
 

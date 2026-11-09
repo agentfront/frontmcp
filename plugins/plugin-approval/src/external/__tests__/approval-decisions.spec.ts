@@ -64,6 +64,23 @@ describe('ApprovalDecisionRecorder', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('a time-limited approval needs ttlMs'));
   });
 
+  it('records nothing for an approval whose delegation chain is deeper than maxDelegationDepth', async () => {
+    const delegationContext = {
+      delegatorId: 'c',
+      delegateId: 'd',
+      chain: [
+        { delegatorId: 'a', delegateId: 'b' },
+        { delegatorId: 'b', delegateId: 'c' },
+        { delegatorId: 'c0', delegateId: 'c' },
+      ],
+    };
+
+    await expect(
+      decisions.approve(subject, { decidedBy: { source: 'agent', identifier: 'd', delegationContext } }, 'webhook'),
+    ).resolves.toBe(false);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('maxDelegationDepth is 3'));
+  });
+
   it('passes on a failure of the store itself', async () => {
     jest.spyOn(store, 'grantApproval').mockRejectedValue(new Error('storage down'));
 

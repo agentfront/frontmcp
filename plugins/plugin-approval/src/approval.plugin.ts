@@ -15,20 +15,26 @@ import {
   type FrontMcpContext,
   type PluginStoreInBrowser,
   type ProviderType,
-  type Token,
 } from '@frontmcp/sdk';
 import type { NamespacedStorage, RootStorage, StorageConfig } from '@frontmcp/utils';
 
 import type { ToolApprovalRequirement } from './approval';
 import { resolveApprovalIdentity } from './approval.identity';
-import { resolveExternalApproval, type ResolvedExternalApproval, type ResolvedRecheck } from './approval.options';
 import {
+  resolveExternalApproval,
+  resolveMaxDelegationDepth,
+  type ResolvedExternalApproval,
+  type ResolvedRecheck,
+} from './approval.options';
+import {
+  ApprovalAuditToken,
   ApprovalServiceToken,
   ApprovalStoreToken,
   ChallengeServiceToken,
   ExternalApproverToken,
 } from './approval.symbols';
 import { resolveApprovalRequirement } from './approval/policy';
+import { LoggerAuditSink } from './audit/approval-audit';
 import { serveApprovalCallback } from './external/approval-callback.flow';
 import { ApprovalDecisionRecorder } from './external/approval-decisions';
 import { RecheckApprover, type RecheckRequest } from './external/recheck-approver';
@@ -36,7 +42,7 @@ import { WebhookApprover } from './external/webhook-approver';
 import ApprovalCheckPlugin from './hooks/approval-check.hook';
 import { createApprovalService, type ApprovalRequirementLookup } from './services/approval.service';
 import { ChallengeService } from './services/challenge.service';
-import { ApprovalStorageStore } from './stores/approval-storage.store';
+import { ApprovalStorageStore, DEFAULT_MAX_DELEGATION_DEPTH } from './stores/approval-storage.store';
 import type { ApprovalMode } from './types';
 
 /** The approval policy of the scope's tool with this full name, or `undefined` when there is no such tool. */
@@ -169,14 +175,20 @@ export interface ApprovalPluginOptions {
   };
 
   /**
-   * @deprecated Has no effect: an approval record already keeps who granted or revoked it, and nothing else is
-   * logged. A server that sets it logs a warning when it starts.
+   * Log an audit trail through the server's logger (logger `ApprovalAudit`, level `info`): one line per call that had
+   * no approval it could use (`approval.requested`, with what became of it) and per approval or denial recorded,
+   * revoked or expired (`approval.granted`, `approval.denied`, `approval.revoked`, `approval.expired`). Each line names
+   * the tool, scope, user, grantor or revoker and reason, never a session id, a token or a record's `metadata`.
+   * Off by default: up to 1.11.2 the option did nothing, and turning it on adds lines with user ids to the logs.
+   * @default false
    */
   enableAudit?: boolean;
 
   /**
-   * @deprecated Has no effect: a delegated grant names one delegator, so there is no chain to bound. A server that
-   * sets it logs a warning when it starts.
+   * The deepest delegation chain a delegated approval may name (`grantedBy.delegationContext`, its `chain` included):
+   * a grant with a deeper or broken chain is refused (`ApprovalOperationError`), and a stored one doesn't let a call
+   * through. `1` allows only direct delegation, `0` no delegated approval at all. A whole number from 0 to 64.
+   * @default 3
    */
   maxDelegationDepth?: number;
 
@@ -190,25 +202,6 @@ export interface ApprovalPluginOptions {
 /** The headers `recheck.auth: 'custom'` sends with a poll. */
 export type RecheckHeaders = (request: RecheckRequest) => Record<string, string> | Promise<Record<string, string>>;
 
-/** The options in `options` that are accepted and have no effect, by their path. */
-function ignoredApprovalOptions(options: ApprovalPluginOptions): string[] {
-  const ignored = [
-    options.enableAudit !== undefined && 'enableAudit',
-    options.maxDelegationDepth !== undefined && 'maxDelegationDepth',
-  ];
-  return ignored.filter((path): path is string => path !== false);
-}
-
-function describeIgnoredOptions(ignored: readonly string[]): string {
-  return (
-    `ApprovalPlugin ignores \`${ignored.join('`, `')}\`: the plugin logs no audit trail and bounds no delegation. ` +
-    'Each approval record keeps who granted or revoked it. Remove these options.'
-  );
-}
-
-/** The options set that the plugin ignores, logged when the server starts. */
-const ApprovalOptionWarningsToken: Token<string[]> = Symbol('plugin:approval:option-warnings');
-
 // ─────────────────────────────────────────────────────────────────────────────
 // ApprovalPlugin
 // ─────────────────────────────────────────────────────────────────────────────
@@ -221,7 +214,8 @@ const ApprovalOptionWarningsToken: Token<string[]> = Symbol('plugin:approval:opt
  * - Multiple approval scopes (session, user, time-limited, context-specific)
  * - Signed approval requests to an external system, decided on a PKCE-bound callback (`mode: 'webhook'`)
  * - Polling an external approval API (`mode: 'recheck'` with `recheck.url`)
- * - Who granted or revoked each approval, kept with it
+ * - Who granted or revoked each approval, kept with it, and an audit trail in the server's log (`enableAudit`)
+ * - Delegation chains, bounded by `maxDelegationDepth`
  *
  * @example Basic usage
  * ```typescript
@@ -266,6 +260,8 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
   static defaultOptions: ApprovalPluginOptions = {
     namespace: 'approval',
     mode: 'recheck',
+    enableAudit: false,
+    maxDelegationDepth: DEFAULT_MAX_DELEGATION_DEPTH,
     cleanupIntervalSeconds: 60,
   };
 
@@ -301,6 +297,7 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
       ...options,
     };
     const external = resolveExternalApproval(config);
+    const maxDelegationDepth = resolveMaxDelegationDepth(config);
 
     // ─────────────────────────────────────────────────────────────────────────
     // Approval Store
@@ -310,13 +307,15 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
       storeProvider({
         name: 'approval:store',
         provide: ApprovalStoreToken,
-        inject: () => [] as const,
-        useFactory: async () => {
+        inject: () => [ScopeEntry] as const,
+        useFactory: async (scope: ScopeEntry) => {
           const store = new ApprovalStorageStore({
             storage: config.storage,
             storageInstance: config.storageInstance,
             namespace: config.namespace,
             cleanupIntervalSeconds: config.cleanupIntervalSeconds,
+            maxDelegationDepth,
+            audit: config.enableAudit ? new LoggerAuditSink(scope.logger.child('ApprovalAudit')) : undefined,
           });
           await store.initialize();
           return store;
@@ -351,16 +350,14 @@ export default class ApprovalPlugin extends DynamicPlugin<ApprovalPluginOptions>
     const externalApprover = externalApproverProvider(external);
     if (externalApprover) providers.push(externalApprover);
 
-    providers.push({
-      name: 'approval:option-warnings',
-      provide: ApprovalOptionWarningsToken,
-      inject: () => [ScopeEntry] as const,
-      useFactory: (scope: ScopeEntry) => {
-        const ignored = ignoredApprovalOptions(options);
-        if (ignored.length > 0) scope.logger.child('ApprovalPlugin').warn(describeIgnoredOptions(ignored));
-        return ignored;
-      },
-    });
+    if (config.enableAudit) {
+      providers.push({
+        name: 'approval:audit',
+        provide: ApprovalAuditToken,
+        inject: () => [ScopeEntry] as const,
+        useFactory: (scope: ScopeEntry) => new LoggerAuditSink(scope.logger.child('ApprovalAudit')),
+      });
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Approval Service (Context-scoped)

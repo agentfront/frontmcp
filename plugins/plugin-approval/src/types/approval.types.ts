@@ -18,6 +18,7 @@ export {
   type ApprovalGrantor,
   type ApprovalRevoker,
   type DelegationContext,
+  type DelegationLink,
   type ApprovalRecord,
   type ToolApprovalRequirement,
   type ApprovalCategory,
