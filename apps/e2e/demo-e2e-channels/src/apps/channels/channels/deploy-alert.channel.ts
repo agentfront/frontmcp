@@ -1,5 +1,4 @@
-import { Channel, ChannelContext } from '@frontmcp/sdk';
-import type { ChannelNotification } from '@frontmcp/sdk';
+import { Channel, ChannelContext, type ChannelNotification } from '@frontmcp/sdk';
 
 @Channel({
   name: 'deploy-alerts',

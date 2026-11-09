@@ -3,7 +3,7 @@
  * @description Tests for ext-apps integration in the streamable HTTP flow.
  */
 
-import { stateSchema, plan } from '../handle.streamable-http.flow';
+import { plan, stateSchema } from '../handle.streamable-http.flow';
 
 describe('HandleStreamableHttpFlow - ExtApps Integration', () => {
   describe('stateSchema', () => {

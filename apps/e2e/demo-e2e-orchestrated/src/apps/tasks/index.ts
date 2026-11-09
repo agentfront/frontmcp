@@ -1,9 +1,10 @@
 import { App } from '@frontmcp/sdk';
-import CreateTaskTool from './tools/create-task.tool';
-import CompleteTaskTool from './tools/complete-task.tool';
-import ListTasksTool from './tools/list-tasks.tool';
-import TasksListResource from './resources/tasks-list.resource';
+
 import PrioritizeTasksPrompt from './prompts/prioritize-tasks.prompt';
+import TasksListResource from './resources/tasks-list.resource';
+import CompleteTaskTool from './tools/complete-task.tool';
+import CreateTaskTool from './tools/create-task.tool';
+import ListTasksTool from './tools/list-tasks.tool';
 
 @App({
   name: 'Tasks',

@@ -1,5 +1,6 @@
-import { InMemoryOrchestratedTokenStore } from '../session/orchestrated-token.store';
 import { randomBytes } from '@frontmcp/utils';
+
+import { InMemoryOrchestratedTokenStore } from '../session/orchestrated-token.store';
 
 describe('InMemoryOrchestratedTokenStore', () => {
   let store: InMemoryOrchestratedTokenStore;

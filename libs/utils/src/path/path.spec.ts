@@ -1,4 +1,4 @@
-import { trimSlashes, joinPath } from './path';
+import { joinPath, trimSlashes } from './path';
 
 describe('Path Utils', () => {
   describe('trimSlashes', () => {

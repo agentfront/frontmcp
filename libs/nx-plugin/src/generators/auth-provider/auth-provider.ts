@@ -1,7 +1,9 @@
-import { type Tree, formatFiles, generateFiles, names, type GeneratorCallback } from '@nx/devkit';
 import { join } from 'path';
-import type { AuthProviderGeneratorSchema } from './schema.js';
+
+import { formatFiles, generateFiles, names, type GeneratorCallback, type Tree } from '@nx/devkit';
+
 import { normalizePrimitiveOptions } from '../../utils/normalize-options.js';
+import type { AuthProviderGeneratorSchema } from './schema.js';
 
 export async function authProviderGenerator(
   tree: Tree,

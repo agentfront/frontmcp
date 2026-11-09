@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { AgentAdaptersApp } from './apps/agent-adapters';
 
 const port = parseInt(process.env['PORT'] ?? '3101', 10);

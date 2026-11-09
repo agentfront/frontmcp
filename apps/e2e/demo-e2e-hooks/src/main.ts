@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { AuditApp } from './apps/audit';
 
 const port = parseInt(process.env['PORT'] ?? '3120', 10);

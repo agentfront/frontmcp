@@ -6,8 +6,9 @@
  */
 
 import React from 'react';
-import { Card, Badge } from '@frontmcp/ui/components';
-import { McpBridgeProvider, useToolInput, useToolOutput, useTheme, useMcpBridgeContext } from '@frontmcp/ui/react';
+
+import { Badge, Card } from '@frontmcp/ui/components';
+import { McpBridgeProvider, useMcpBridgeContext, useTheme, useToolInput, useToolOutput } from '@frontmcp/ui/react';
 
 // Type definitions
 interface DataPoint {

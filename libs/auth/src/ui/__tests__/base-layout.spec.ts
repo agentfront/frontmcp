@@ -2,17 +2,17 @@
  * Base Layout Tests
  */
 import {
-  escapeHtml,
-  baseLayout,
-  createLayout,
-  centeredCardLayout,
-  wideLayout,
-  extraWideLayout,
   authLayout,
-  CDN,
-  DEFAULT_THEME,
+  baseLayout,
   BUILT_IN_AUTH_PAGE_CSP,
   builtInAuthPageHeaders,
+  CDN,
+  centeredCardLayout,
+  createLayout,
+  DEFAULT_THEME,
+  escapeHtml,
+  extraWideLayout,
+  wideLayout,
 } from '../base-layout';
 
 describe('escapeHtml', () => {

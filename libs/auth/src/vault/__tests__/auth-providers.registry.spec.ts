@@ -6,10 +6,10 @@
  * credential provider configurations.
  */
 
-import { AuthProvidersRegistry } from '../auth-providers.registry';
-import { CredentialProviderAlreadyRegisteredError } from '../../errors/auth-internal.errors';
-import type { CredentialProviderConfig, CredentialScope, LoadingStrategy } from '../auth-providers.types';
 import { assertDefined } from '../../__test-utils__/assertion.helpers';
+import { CredentialProviderAlreadyRegisteredError } from '../../errors/auth-internal.errors';
+import { AuthProvidersRegistry } from '../auth-providers.registry';
+import type { CredentialProviderConfig, CredentialScope, LoadingStrategy } from '../auth-providers.types';
 
 /**
  * Helper to create a minimal valid CredentialProviderConfig.

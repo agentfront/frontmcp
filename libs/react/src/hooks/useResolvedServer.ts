@@ -6,10 +6,11 @@
  */
 
 import { useContext } from 'react';
-import { FrontMcpContext } from '../provider/FrontMcpContext';
-import { useServer } from './useServer';
-import type { ServerEntry } from '../registry/ServerRegistry';
+
 import type { ComponentRegistry } from '../components/ComponentRegistry';
+import { FrontMcpContext } from '../provider/FrontMcpContext';
+import type { ServerEntry } from '../registry/ServerRegistry';
+import { useServer } from './useServer';
 
 export interface ResolvedServerEntry {
   entry: ServerEntry | undefined;

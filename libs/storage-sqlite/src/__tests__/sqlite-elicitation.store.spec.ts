@@ -1,8 +1,8 @@
-import * as path from 'path';
-import * as os from 'os';
 import * as fs from 'fs';
-import { SqliteElicitationStore } from '../sqlite-elicitation.store';
-import type { PendingElicitRecord } from '../sqlite-elicitation.store';
+import * as os from 'os';
+import * as path from 'path';
+
+import { SqliteElicitationStore, type PendingElicitRecord } from '../sqlite-elicitation.store';
 
 function tmpDbPath(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-elicit-'));

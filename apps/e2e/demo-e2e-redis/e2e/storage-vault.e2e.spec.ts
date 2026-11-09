@@ -8,7 +8,7 @@
  * - Pending auth workflow (create, complete, cancel)
  * - App authorization
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Storage Authorization Vault E2E', () => {
   test.use({

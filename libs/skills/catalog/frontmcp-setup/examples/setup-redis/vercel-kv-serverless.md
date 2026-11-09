@@ -20,6 +20,7 @@ Configure a FrontMCP server with Vercel KV as the session store for serverless d
 ```typescript
 // src/main.ts
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({
@@ -42,6 +43,7 @@ For testing Vercel KV locally with explicit credentials:
 ```typescript
 // src/main.ts (local testing variant)
 import 'reflect-metadata';
+
 import { FrontMcp } from '@frontmcp/sdk';
 
 @FrontMcp({

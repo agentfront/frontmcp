@@ -5,9 +5,10 @@
  * for authorization vault storage.
  */
 
-import { MemoryStorageAdapter, createNamespacedStorage } from '@frontmcp/utils';
-import { StorageAuthorizationVault } from '../storage-authorization-vault';
+import { createNamespacedStorage, MemoryStorageAdapter } from '@frontmcp/utils';
+
 import type { AppCredential, VaultConsentRecord, VaultFederatedRecord } from '../../authorization-vault';
+import { StorageAuthorizationVault } from '../storage-authorization-vault';
 
 describe('StorageAuthorizationVault', () => {
   let adapter: MemoryStorageAdapter;

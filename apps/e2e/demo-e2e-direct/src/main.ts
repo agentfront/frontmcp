@@ -7,6 +7,7 @@
  * - FrontMcpInstance.runStdio() for stdio transport (Claude Code)
  */
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { serverConfig } from './config.js';
 
 // Validate port - fallback to 3117 if invalid

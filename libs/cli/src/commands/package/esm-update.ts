@@ -7,8 +7,9 @@
  */
 
 import { Command } from 'commander';
-import { readRegistry, writeRegistry } from './registry';
+
 import { PM_DIRS } from '../pm/paths';
+import { readRegistry, writeRegistry } from './registry';
 
 /**
  * Register the `esm-update` subcommand.

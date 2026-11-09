@@ -5,7 +5,7 @@
  * Uses MockAPIServer to provide both the OpenAPI spec and mock API responses.
  * Uses @frontmcp/testing McpTestClient for clean, type-safe MCP interactions.
  */
-import { TestServer, MockAPIServer, McpTestClient, expect } from '@frontmcp/testing';
+import { expect, McpTestClient, MockAPIServer, TestServer } from '@frontmcp/testing';
 
 import { ECOMMERCE_OPENAPI_SPEC } from './helpers/ecommerce-openapi-spec';
 

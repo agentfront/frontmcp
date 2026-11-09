@@ -20,6 +20,7 @@ Default health endpoints with Redis session store, showing /healthz and /readyz 
 ```typescript
 // src/server.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { MyApp } from './apps/my-app';
 
 @FrontMcp({

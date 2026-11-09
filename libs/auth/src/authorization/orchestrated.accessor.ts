@@ -10,6 +10,7 @@
  */
 
 import { Token } from '@frontmcp/di';
+
 import { OrchestratedAuthNotAvailableError } from '../errors/auth-internal.errors';
 
 /**

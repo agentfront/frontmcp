@@ -1,6 +1,5 @@
 import { Prompt } from '../../common/decorators/prompt.decorator';
-import { PromptKind } from '../../common/records/prompt.record';
-import type { PromptEsmTargetRecord, PromptRemoteRecord } from '../../common/records/prompt.record';
+import { PromptKind, type PromptEsmTargetRecord, type PromptRemoteRecord } from '../../common/records/prompt.record';
 import { normalizePrompt, promptDiscoveryDeps } from '../prompt.utils';
 
 describe('Prompt.esm()', () => {

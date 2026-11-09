@@ -8,7 +8,7 @@
  * - XSS prevention
  * - Data transformation
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('HTML Tools E2E', () => {
   test.use({

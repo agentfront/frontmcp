@@ -1,12 +1,14 @@
-import React from 'react';
 import { renderHook } from '@testing-library/react';
-import { useResolvedServer } from '../useResolvedServer';
-import { FrontMcpContext } from '../../provider/FrontMcpContext';
-import { serverRegistry } from '../../registry/ServerRegistry';
-import { ComponentRegistry } from '../../components/ComponentRegistry';
-import { DynamicRegistry } from '../../registry/DynamicRegistry';
-import type { FrontMcpContextValue } from '../../types';
+import React from 'react';
+
 import type { DirectMcpServer } from '@frontmcp/sdk';
+
+import { ComponentRegistry } from '../../components/ComponentRegistry';
+import { FrontMcpContext } from '../../provider/FrontMcpContext';
+import { DynamicRegistry } from '../../registry/DynamicRegistry';
+import { serverRegistry } from '../../registry/ServerRegistry';
+import type { FrontMcpContextValue } from '../../types';
+import { useResolvedServer } from '../useResolvedServer';
 
 const mockServer = {} as DirectMcpServer;
 

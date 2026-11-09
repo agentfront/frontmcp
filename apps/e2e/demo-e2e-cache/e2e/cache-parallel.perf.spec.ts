@@ -4,7 +4,7 @@
  * Tests cache system under parallel load using multiple clients
  * to achieve higher throughput (100+ req/s on CI, 400-2000+ locally)
  */
-import { perfTest, expect } from '@frontmcp/testing';
+import { expect, perfTest } from '@frontmcp/testing';
 
 perfTest.describe('Cache Parallel Stress Testing', () => {
   perfTest.use({

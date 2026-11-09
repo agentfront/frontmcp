@@ -8,7 +8,7 @@
  * if the session infrastructure isn't fully established. The tests verify
  * that the progressToken is properly extracted and passed through.
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 // Helper to parse tool result from raw response
 function parseToolResult(response: { result?: { content?: Array<{ type: string; text?: string }> } }) {

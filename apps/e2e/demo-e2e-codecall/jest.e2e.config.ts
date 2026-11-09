@@ -1,5 +1,6 @@
-import type { Config } from '@jest/types';
 import { createRequire } from 'module';
+
+import type { Config } from '@jest/types';
 
 // @ts-expect-error createRequire with import.meta.url
 const require = createRequire(import.meta.url);

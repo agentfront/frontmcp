@@ -1,5 +1,6 @@
-import { FrontMcpThemeProvider } from '@frontmcp/ui/theme';
 import { ContentView } from '@frontmcp/ui/renderer';
+import { FrontMcpThemeProvider } from '@frontmcp/ui/theme';
+
 import { getGroup } from './fixtures';
 
 interface RenderOnlyProps {

@@ -2,15 +2,16 @@
  * KeyPersistence Tests
  */
 
-import { KeyPersistence } from '../key-persistence';
-import { validateKeyData, parseKeyData, isSecretKeyData, isAsymmetricKeyData } from '../schemas';
-import { createKeyPersistence, createKeyPersistenceWithStorage } from '../factory';
-import { MemoryStorageAdapter } from '../../../storage/adapters/memory';
-import { FileSystemStorageAdapter } from '../../../storage/adapters/filesystem';
-import type { SecretKeyData, AsymmetricKeyData } from '../types';
-import { rm, mkdtemp } from '../../../fs';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
+
+import { mkdtemp, rm } from '../../../fs';
+import { FileSystemStorageAdapter } from '../../../storage/adapters/filesystem';
+import { MemoryStorageAdapter } from '../../../storage/adapters/memory';
+import { createKeyPersistence, createKeyPersistenceWithStorage } from '../factory';
+import { KeyPersistence } from '../key-persistence';
+import { isAsymmetricKeyData, isSecretKeyData, parseKeyData, validateKeyData } from '../schemas';
+import type { AsymmetricKeyData, SecretKeyData } from '../types';
 
 describe('KeyPersistence', () => {
   let storage: MemoryStorageAdapter;

@@ -5,12 +5,12 @@
  * Credentials are loaded in parallel at session start.
  */
 
-import type { Credential } from '../../session';
-import type { CredentialFactoryContext, ResolvedCredential } from '../auth-providers.types';
-import { extractCredentialExpiry } from '../credential-helpers';
-import { CredentialCache } from '../credential-cache';
-import type { AuthProvidersRegistry, NormalizedProviderConfig } from '../auth-providers.registry';
 import type { AuthLogger } from '../../common/auth-logger.interface';
+import type { Credential } from '../../session';
+import type { AuthProvidersRegistry, NormalizedProviderConfig } from '../auth-providers.registry';
+import type { CredentialFactoryContext, ResolvedCredential } from '../auth-providers.types';
+import { CredentialCache } from '../credential-cache';
+import { extractCredentialExpiry } from '../credential-helpers';
 
 /**
  * Result of eager loading

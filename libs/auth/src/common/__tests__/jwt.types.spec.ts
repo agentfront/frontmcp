@@ -4,7 +4,7 @@
  * Tests the Zod schemas for JWK Parameters, JWK, and JSON Web Key Set.
  * These schemas contain runtime validation logic.
  */
-import { jwkParametersSchema, jwkSchema, jsonWebKeySetSchema } from '../jwt.types';
+import { jsonWebKeySetSchema, jwkParametersSchema, jwkSchema } from '../jwt.types';
 
 // ============================================
 // jwkParametersSchema

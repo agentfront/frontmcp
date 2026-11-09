@@ -8,7 +8,7 @@
  * - Queued calls succeed when slots free in time
  * - Queued calls fail when slots don't free in time
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Guard Concurrency', () => {
   test.use({

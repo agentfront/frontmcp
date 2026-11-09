@@ -2,8 +2,9 @@
  * PromptForm — headless form generator from prompt.arguments.
  */
 
-import React, { useState, useCallback } from 'react';
-import type { PromptInfo, FieldRenderProps } from '../types';
+import React, { useCallback, useState } from 'react';
+
+import type { FieldRenderProps, PromptInfo } from '../types';
 
 export interface PromptFormProps {
   prompt: PromptInfo;

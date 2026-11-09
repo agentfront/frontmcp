@@ -11,7 +11,7 @@
  *
  * Uses @frontmcp/testing McpTestClient for clean, type-safe MCP interactions.
  */
-import { TestServer, TestTokenFactory, MockOAuthServer, McpTestClient, expect } from '@frontmcp/testing';
+import { expect, McpTestClient, MockOAuthServer, TestServer, TestTokenFactory } from '@frontmcp/testing';
 
 describe('Transparent Auth Mode E2E', () => {
   let mockOAuth: MockOAuthServer;

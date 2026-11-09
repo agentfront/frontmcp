@@ -1,4 +1,4 @@
-import { parseArgs, isDeploymentAdapter, isBuildTarget } from '../args';
+import { isBuildTarget, isDeploymentAdapter, parseArgs } from '../args';
 
 describe('parseArgs', () => {
   describe('positional arguments', () => {

@@ -18,8 +18,7 @@ Notify Claude Code when background jobs and workflows complete
 
 ```typescript
 // src/apps/automation/channels/job-done.channel.ts
-import { Channel, ChannelContext } from '@frontmcp/sdk';
-import type { ChannelNotification } from '@frontmcp/sdk';
+import { Channel, ChannelContext, type ChannelNotification } from '@frontmcp/sdk';
 
 @Channel({
   name: 'job-alerts',

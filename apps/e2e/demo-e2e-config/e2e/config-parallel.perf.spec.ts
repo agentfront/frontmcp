@@ -4,7 +4,7 @@
  * Tests configuration operations under parallel load using multiple clients
  * to achieve higher throughput (400-2000+ req/s)
  */
-import { perfTest, expect } from '@frontmcp/testing';
+import { expect, perfTest } from '@frontmcp/testing';
 
 perfTest.describe('Config Parallel Stress Testing', () => {
   perfTest.use({

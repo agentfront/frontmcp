@@ -3,15 +3,15 @@
  *
  * Tests for the zero-knowledge encrypted vault implementation.
  */
+import { EncryptionContextNotSetError } from '../errors';
 import {
-  EncryptedRedisVault,
   createEncryptedVault,
+  EncryptedRedisVault,
   VaultEncryption,
-  type VaultKeyDerivationClaims,
   type AppCredential,
   type VaultConsentRecord,
+  type VaultKeyDerivationClaims,
 } from '../session';
-import { EncryptionContextNotSetError } from '../errors';
 
 /**
  * Mock Redis client for testing

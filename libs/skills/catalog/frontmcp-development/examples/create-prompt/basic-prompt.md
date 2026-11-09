@@ -19,8 +19,8 @@ A simple prompt that generates a structured code review message from user-provid
 
 ```typescript
 // src/apps/main/prompts/code-review.prompt.ts
-import { Prompt, PromptContext } from '@frontmcp/sdk';
 import { GetPromptResult } from '@frontmcp/protocol';
+import { Prompt, PromptContext } from '@frontmcp/sdk';
 
 @Prompt({
   name: 'code-review',

@@ -18,8 +18,9 @@ Forward FrontMCP structured log entries to your existing winston logger. Each en
 
 ```typescript
 // src/server.ts
-import { FrontMcp } from '@frontmcp/sdk';
 import winston from 'winston';
+
+import { FrontMcp } from '@frontmcp/sdk';
 
 const logger = winston.createLogger({
   level: 'info',

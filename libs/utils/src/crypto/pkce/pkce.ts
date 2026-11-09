@@ -7,7 +7,7 @@
  * @see https://datatracker.ietf.org/doc/html/rfc7636
  */
 
-import { randomBytes, sha256, base64urlEncode } from '../';
+import { base64urlEncode, randomBytes, sha256 } from '../';
 
 /**
  * Minimum length for code verifier per RFC 7636

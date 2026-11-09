@@ -4,12 +4,12 @@
  * Tests for RFC 9728 and RFC 6750 compliant header building and parsing.
  */
 import {
-  buildWwwAuthenticate,
-  buildPrmUrl,
-  buildUnauthorizedHeader,
-  buildInvalidTokenHeader,
   buildInsufficientScopeHeader,
   buildInvalidRequestHeader,
+  buildInvalidTokenHeader,
+  buildPrmUrl,
+  buildUnauthorizedHeader,
+  buildWwwAuthenticate,
   parseWwwAuthenticate,
 } from '../www-authenticate.utils';
 

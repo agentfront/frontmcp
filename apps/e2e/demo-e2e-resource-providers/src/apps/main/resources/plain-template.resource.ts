@@ -1,4 +1,4 @@
-import { ResourceTemplate, ResourceContext } from '@frontmcp/sdk';
+import { ResourceContext, ResourceTemplate } from '@frontmcp/sdk';
 
 /**
  * Resource template with NO completer.

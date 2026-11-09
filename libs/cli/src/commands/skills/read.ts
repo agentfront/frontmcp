@@ -1,7 +1,9 @@
 import * as path from 'path';
-import { c } from '../../core/colors';
+
 import { fileExists, readFile } from '@frontmcp/utils';
-import { loadCatalog, getCatalogDir } from './catalog';
+
+import { c } from '../../core/colors';
+import { getCatalogDir, loadCatalog } from './catalog';
 
 /**
  * Strip YAML frontmatter from markdown content.

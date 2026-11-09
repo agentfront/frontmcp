@@ -40,9 +40,9 @@ describe('ToolTfidfIndex', () => {
 
   it('applies the threshold, the filter and topK', () => {
     expect(index.search('send', { topK: 5, threshold: 0.01 }).map((result) => result.id)).toEqual(['a']);
-    expect(index.search('email', { topK: 5, threshold: 0, filter: (id) => id === 'b' }).map((r) => r.id)).toEqual([
-      'b',
-    ]);
+    expect(
+      index.search('email', { topK: 5, threshold: 0, filter: (metadata) => metadata === 'b' }).map((r) => r.id),
+    ).toEqual(['b']);
     expect(index.search('email', { topK: 1, threshold: 0 })).toHaveLength(1);
   });
 

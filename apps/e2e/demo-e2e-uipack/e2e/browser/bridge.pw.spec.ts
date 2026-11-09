@@ -7,7 +7,8 @@
  * - Platform detection defaults to 'generic' in standalone page
  * - bridge:ready event is dispatched
  */
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+
 import { serveShell, stopServer } from './helpers';
 
 test.afterEach(async () => {

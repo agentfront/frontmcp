@@ -1,6 +1,6 @@
+import { detectPlatform, getServicePath, installService, uninstallService } from '.';
 import { ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
-import { installService, uninstallService, detectPlatform, getServicePath } from '.';
 
 export async function runService(opts: ParsedArgs): Promise<void> {
   const action = opts._[1]; // 'install' or 'uninstall'

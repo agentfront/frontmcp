@@ -1,13 +1,14 @@
 import 'reflect-metadata';
+
 import {
-  normalizeToolFromEsmExport,
-  normalizeResourceFromEsmExport,
-  normalizePromptFromEsmExport,
-  isDecoratedToolClass,
-  isDecoratedResourceClass,
   isDecoratedPromptClass,
+  isDecoratedResourceClass,
+  isDecoratedToolClass,
+  normalizePromptFromEsmExport,
+  normalizeResourceFromEsmExport,
+  normalizeToolFromEsmExport,
 } from '../../app/instances/esm-normalize.utils';
-import { FrontMcpToolTokens, FrontMcpResourceTokens, FrontMcpPromptTokens } from '../../common/tokens';
+import { FrontMcpPromptTokens, FrontMcpResourceTokens, FrontMcpToolTokens } from '../../common/tokens';
 
 describe('esm-normalize.utils', () => {
   // ═══════════════════════════════════════════════════════════════

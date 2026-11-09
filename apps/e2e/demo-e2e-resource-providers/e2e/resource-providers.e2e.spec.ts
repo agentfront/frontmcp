@@ -7,7 +7,7 @@
  * 2. Plugin providers exposed via contextExtensions (e.g., this.counter) work
  *    correctly in resource contexts, not just tool contexts.
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 /**
  * Extract JSON content from a resource read result.

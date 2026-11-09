@@ -112,14 +112,14 @@ class MyTool extends ToolContext {
 
 ```typescript
 import {
-  hkdfSha256, // HKDF-SHA256 key derivation
-  encryptAesGcm, // AES-256-GCM encryption
+  base64urlDecode, // Base64url decoding
+  base64urlEncode, // Base64url encoding
   decryptAesGcm, // AES-256-GCM decryption
+  encryptAesGcm, // AES-256-GCM encryption
+  hkdfSha256, // HKDF-SHA256 key derivation
   randomBytes, // Cryptographic random bytes
   sha256,
   sha256Hex, // SHA-256 hashing
-  base64urlEncode, // Base64url encoding
-  base64urlDecode, // Base64url decoding
 } from '@frontmcp/utils';
 ```
 
@@ -232,6 +232,9 @@ class FileWriteTool extends ToolContext { ... }
 ### Correct vs. Incorrect Patterns
 
 ```typescript
+// ✅ CORRECT: Proper ES module imports
+import { ExecutionContextBase } from '@frontmcp/sdk';
+
 // ❌ WRONG: Side effect at module load (causes circular deps)
 // At top level of module:
 installExtension(); // Called immediately when module loads
@@ -247,9 +250,6 @@ class MyPlugin extends DynamicPlugin {
 // ❌ WRONG: Using require() for SDK imports
 const sdk = require('@frontmcp/sdk');
 const ExecutionContextBase = sdk.ExecutionContextBase;
-
-// ✅ CORRECT: Proper ES module imports
-import { ExecutionContextBase } from '@frontmcp/sdk';
 
 // ✅ CORRECT: Module augmentation for context properties (with runtime extension)
 declare module '@frontmcp/sdk' {

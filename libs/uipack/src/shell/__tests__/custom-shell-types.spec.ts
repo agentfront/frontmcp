@@ -5,15 +5,18 @@
  */
 
 import {
+  isInlineShellSource,
+  isNpmShellSource,
+  isUrlShellSource,
+  OPTIONAL_PLACEHOLDERS,
+  REQUIRED_PLACEHOLDERS,
   SHELL_PLACEHOLDER_NAMES,
   SHELL_PLACEHOLDERS,
-  REQUIRED_PLACEHOLDERS,
-  OPTIONAL_PLACEHOLDERS,
-  isInlineShellSource,
-  isUrlShellSource,
-  isNpmShellSource,
+  type CustomShellSource,
+  type InlineShellSource,
+  type NpmShellSource,
+  type UrlShellSource,
 } from '../custom-shell-types';
-import type { InlineShellSource, UrlShellSource, NpmShellSource, CustomShellSource } from '../custom-shell-types';
 
 // ============================================
 // Constants

@@ -4,9 +4,9 @@
  * Tests for the Redis-backed session storage implementation.
  * Uses mocked RedisStorageAdapter from @frontmcp/utils.
  */
+import { SessionIdEmptyError } from '../errors';
 import { RedisSessionStore } from '../session/redis-session.store';
 import type { StoredSession, TransportSession } from '../session/transport-session.types';
-import { SessionIdEmptyError } from '../errors';
 
 // Mock the RedisStorageAdapter from @frontmcp/utils
 const mockStorageAdapter = {

@@ -3,10 +3,11 @@
  */
 
 import 'reflect-metadata';
-import { IndexedRegistry } from '../registry/indexed.registry.js';
-import type { IndexedEntry, EntryLineage, EntryOwnerRef, ChangeEvent } from '../registry/indexed.types.js';
-import type { RegistryBuildMapResult } from '../registry/registry.base.js';
+
 import type { Token } from '../interfaces/base.interface.js';
+import { IndexedRegistry } from '../registry/indexed.registry.js';
+import type { ChangeEvent, EntryLineage, EntryOwnerRef, IndexedEntry } from '../registry/indexed.types.js';
+import type { RegistryBuildMapResult } from '../registry/registry.base.js';
 
 // Test types
 interface TestInstance {

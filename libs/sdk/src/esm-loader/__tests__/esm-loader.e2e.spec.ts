@@ -11,15 +11,17 @@
 
 import * as os from 'node:os';
 import * as path from 'node:path';
+
 import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
-import { LocalEsmServer } from './helpers/local-esm-server';
-import { SIMPLE_TOOLS_V1, SIMPLE_TOOLS_V2, MULTI_PRIMITIVE, NAMED_EXPORTS } from './helpers/esm-fixtures';
+
 import { EsmCacheManager } from '../esm-cache';
-import { EsmModuleLoader } from '../esm-module-loader';
-import { VersionResolver } from '../version-resolver';
-import { VersionPoller } from '../version-poller';
-import { parsePackageSpecifier } from '../package-specifier';
 import { normalizeEsmExport } from '../esm-manifest';
+import { EsmModuleLoader } from '../esm-module-loader';
+import { parsePackageSpecifier } from '../package-specifier';
+import { VersionPoller } from '../version-poller';
+import { VersionResolver } from '../version-resolver';
+import { MULTI_PRIMITIVE, NAMED_EXPORTS, SIMPLE_TOOLS_V1, SIMPLE_TOOLS_V2 } from './helpers/esm-fixtures';
+import { LocalEsmServer } from './helpers/local-esm-server';
 
 /**
  * Load a CJS bundle from disk (Jest-compatible alternative to dynamic import).

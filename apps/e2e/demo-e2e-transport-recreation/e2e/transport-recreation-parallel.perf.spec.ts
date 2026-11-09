@@ -3,7 +3,7 @@
  *
  * Tests stateful transport operations under parallel load using multiple clients
  */
-import { perfTest, expect } from '@frontmcp/testing';
+import { expect, perfTest } from '@frontmcp/testing';
 
 perfTest.describe('Transport Recreation Parallel Stress Testing', () => {
   perfTest.use({

@@ -1,6 +1,6 @@
-import { getGlobalStoreConfig } from '../global-config.utils';
 import { GlobalConfigNotFoundError } from '../../../errors';
 import type { FrontMcpConfigType } from '../../metadata';
+import { getGlobalStoreConfig } from '../global-config.utils';
 
 describe('getGlobalStoreConfig', () => {
   const mockInfo = { name: 'test', version: '1.0.0' };

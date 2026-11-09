@@ -1,10 +1,10 @@
+import { CimdSecurityError, InvalidClientIdUrlError } from '../cimd.errors';
 import {
-  isCimdClientId,
-  validateClientIdUrl,
   checkSsrfProtection,
   hasOnlyLocalhostRedirectUris,
+  isCimdClientId,
+  validateClientIdUrl,
 } from '../cimd.validator';
-import { InvalidClientIdUrlError, CimdSecurityError } from '../cimd.errors';
 
 describe('cimd.validator', () => {
   describe('isCimdClientId', () => {

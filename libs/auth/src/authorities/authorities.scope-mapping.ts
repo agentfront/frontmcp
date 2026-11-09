@@ -5,8 +5,8 @@
  * using explicit scopeMapping configuration.
  */
 
-import type { AuthoritiesDenial, AuthoritiesMetadata } from './authorities.types';
 import type { AuthoritiesScopeMapping } from './authorities.profiles';
+import type { AuthoritiesDenial, AuthoritiesMetadata } from './authorities.types';
 
 /**
  * Resolve required OAuth scopes from a structured denial and scopeMapping.

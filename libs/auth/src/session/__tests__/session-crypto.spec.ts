@@ -5,6 +5,12 @@
  */
 
 import { SessionSecretRequiredError } from '../../errors/auth-internal.errors';
+// ---------------------------------------------------------------------------
+// Import SUT after mocks
+// ---------------------------------------------------------------------------
+
+import { isSignedSession, signSession, verifyOrParseSession, verifySession } from '../session-crypto';
+import type { StoredSession } from '../transport-session.types';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -22,13 +28,6 @@ jest.mock('@frontmcp/utils', () => ({
   isSignedData: (...args: unknown[]) => mockIsSignedData(...args),
   verifyOrParseData: (...args: unknown[]) => mockVerifyOrParseData(...args),
 }));
-
-// ---------------------------------------------------------------------------
-// Import SUT after mocks
-// ---------------------------------------------------------------------------
-
-import { signSession, verifySession, isSignedSession, verifyOrParseSession } from '../session-crypto';
-import type { StoredSession } from '../transport-session.types';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -7,17 +7,17 @@
 
 import type { Token, Type } from '../interfaces/base.interface.js';
 import type { ProviderType } from '../interfaces/provider.interface.js';
+import type { ProviderMetadata } from '../metadata/provider.metadata.js';
 import {
   ProviderKind,
-  type ProviderRecord,
-  type ProviderClassTokenRecord,
   type ProviderClassRecord,
-  type ProviderValueRecord,
+  type ProviderClassTokenRecord,
   type ProviderFactoryRecord,
+  type ProviderRecord,
+  type ProviderValueRecord,
 } from '../records/provider.record.js';
-import type { ProviderMetadata } from '../metadata/provider.metadata.js';
-import { isClass } from './token.utils.js';
 import { getMetadata } from './metadata.utils.js';
+import { isClass } from './token.utils.js';
 
 /**
  * Token set for reading provider metadata from classes.

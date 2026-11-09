@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { NotesApp } from './apps/notes';
 import { TasksApp } from './apps/tasks';
 

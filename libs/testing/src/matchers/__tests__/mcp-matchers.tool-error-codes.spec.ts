@@ -1,6 +1,7 @@
 import { McpTestClient } from '../../client/mcp-test-client';
 import type { ToolResultWrapper } from '../../client/mcp-test-client.types';
 import { mcpMatchers } from '../mcp-matchers';
+
 import type {} from '../matcher-types';
 
 expect.extend(mcpMatchers);

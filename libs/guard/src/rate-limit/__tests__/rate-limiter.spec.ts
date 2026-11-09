@@ -1,5 +1,6 @@
-import { SlidingWindowRateLimiter } from '../index';
 import type { StorageAdapter } from '@frontmcp/utils';
+
+import { SlidingWindowRateLimiter } from '../index';
 
 function createMockStorage(): jest.Mocked<StorageAdapter> {
   const data = new Map<string, string>();

@@ -1,5 +1,6 @@
-import type { Config } from '@jest/types';
 import { createRequire } from 'module';
+
+import type { Config } from '@jest/types';
 
 const require = createRequire(import.meta.url);
 const e2eCoveragePreset: Config.InitialOptions = require('../../../jest.e2e.coverage.preset.js');

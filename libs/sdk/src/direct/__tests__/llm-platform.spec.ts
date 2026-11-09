@@ -2,18 +2,19 @@
  * LLM Platform Detection and Formatting Tests
  */
 
-import type { Tool as McpTool, CallToolResult } from '@frontmcp/protocol';
+import type { CallToolResult, Tool as McpTool } from '@frontmcp/protocol';
+
+import type { ClientInfo, LLMPlatform } from '../client.types';
 import {
   detectPlatform,
-  formatToolsForPlatform,
   formatResultForPlatform,
+  formatToolsForPlatform,
   PLATFORM_CLIENT_INFO,
-  type OpenAITool,
   type ClaudeTool,
   type LangChainTool,
+  type OpenAITool,
   type VercelAITools,
 } from '../llm-platform';
-import type { ClientInfo, LLMPlatform } from '../client.types';
 
 describe('llm-platform', () => {
   describe('PLATFORM_CLIENT_INFO', () => {

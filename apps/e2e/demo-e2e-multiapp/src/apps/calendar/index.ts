@@ -1,11 +1,9 @@
 import { App } from '@frontmcp/sdk';
 
+import ScheduleOverviewPrompt from './prompts/schedule-overview.prompt';
+import EventsAllResource from './resources/events-all.resource';
 import CreateEventTool from './tools/create-event.tool';
 import ListEventsTool from './tools/list-events.tool';
-
-import EventsAllResource from './resources/events-all.resource';
-
-import ScheduleOverviewPrompt from './prompts/schedule-overview.prompt';
 
 @App({
   name: 'calendar',

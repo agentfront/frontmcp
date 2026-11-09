@@ -7,27 +7,27 @@
  * @packageDocumentation
  */
 
-import type {
-  TypeFetchResult,
-  TypeFetchError,
-  TypeFetchErrorCode,
-  TypeFetchBatchRequest,
-  TypeFetchBatchResult,
-  TypeFetcherOptions,
-  PackageResolution,
-  TypeCacheEntry,
-  TypeFile,
-} from './types';
-import { TYPE_CACHE_PREFIX, DEFAULT_ALLOWED_PACKAGES } from './types';
-import type { TypeCacheAdapter } from './cache';
-import { globalTypeCache } from './cache';
+import { globalTypeCache, type TypeCacheAdapter } from './cache';
 import {
-  parseDtsImports,
-  parseImportStatement,
+  combineDtsContents,
   getPackageFromSpecifier,
   getSubpathFromSpecifier,
-  combineDtsContents,
+  parseDtsImports,
+  parseImportStatement,
 } from './dts-parser';
+import {
+  DEFAULT_ALLOWED_PACKAGES,
+  TYPE_CACHE_PREFIX,
+  type PackageResolution,
+  type TypeCacheEntry,
+  type TypeFetchBatchRequest,
+  type TypeFetchBatchResult,
+  type TypeFetcherOptions,
+  type TypeFetchError,
+  type TypeFetchErrorCode,
+  type TypeFetchResult,
+  type TypeFile,
+} from './types';
 
 // ============================================
 // Semaphore for Concurrency Control

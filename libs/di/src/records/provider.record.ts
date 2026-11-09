@@ -4,7 +4,7 @@
  * These types represent normalized provider definitions stored in the registry.
  */
 
-import type { Type, Token, ClassType, ValueType } from '../interfaces/base.interface.js';
+import type { ClassType, Token, Type, ValueType } from '../interfaces/base.interface.js';
 import type { ProviderMetadata } from '../metadata/provider.metadata.js';
 
 /**

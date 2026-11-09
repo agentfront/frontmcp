@@ -4,10 +4,11 @@
  * Tests for the storage-based elicitation store.
  */
 
-import { StorageElicitationStore } from '../storage-elicitation.store';
 import { createMemoryStorage, type RootStorage } from '@frontmcp/utils';
+
+import type { ElicitResult, FallbackExecutionResult, PendingElicitFallback } from '../../elicitation.types';
 import type { PendingElicitRecord } from '../elicitation.store';
-import type { PendingElicitFallback, ElicitResult, FallbackExecutionResult } from '../../elicitation.types';
+import { StorageElicitationStore } from '../storage-elicitation.store';
 
 describe('StorageElicitationStore', () => {
   const testSessionId = 'session-abc-123';

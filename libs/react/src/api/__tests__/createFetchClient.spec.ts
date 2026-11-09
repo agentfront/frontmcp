@@ -1,5 +1,5 @@
-import { createFetchClient } from '../createFetchClient';
 import type { HttpClient, HttpRequestConfig } from '../api.types';
+import { createFetchClient } from '../createFetchClient';
 
 describe('createFetchClient', () => {
   it('returns an HttpClient with a request method', () => {

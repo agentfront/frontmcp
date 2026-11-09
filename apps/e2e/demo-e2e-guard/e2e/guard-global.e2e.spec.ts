@@ -12,7 +12,7 @@
  * For exhaustion testing, see the Playwright browser tests which test
  * against the HTTP layer directly.
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Guard Global Rate Limit', () => {
   test.use({

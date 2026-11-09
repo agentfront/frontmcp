@@ -1,5 +1,6 @@
+import { addProjectConfiguration, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { type Tree, addProjectConfiguration } from '@nx/devkit';
+
 import { resourceGenerator } from './resource';
 
 describe('resource generator', () => {

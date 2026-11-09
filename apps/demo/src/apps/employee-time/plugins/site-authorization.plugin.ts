@@ -1,4 +1,4 @@
-import { DynamicPlugin, Plugin, ToolHook, FlowCtxOf } from '@frontmcp/sdk';
+import { DynamicPlugin, FlowCtxOf, Plugin, ToolHook } from '@frontmcp/sdk';
 
 declare global {
   interface ExtendFrontMcpToolMetadata {

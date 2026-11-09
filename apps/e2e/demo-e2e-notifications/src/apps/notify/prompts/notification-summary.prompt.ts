@@ -1,5 +1,6 @@
-import { Prompt, PromptContext, GetPromptResult } from '@frontmcp/sdk';
-import { notificationLogStore, NotificationLogEntry } from '../data/notification-log.store';
+import { GetPromptResult, Prompt, PromptContext } from '@frontmcp/sdk';
+
+import { NotificationLogEntry, notificationLogStore } from '../data/notification-log.store';
 
 @Prompt({
   name: 'notification-summary',

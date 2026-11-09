@@ -19,9 +19,7 @@
  * ```
  */
 
-import { hmacSha256 } from './index';
-import { base64urlEncode, base64urlDecode } from './index';
-import { timingSafeEqual } from './index';
+import { base64urlDecode, base64urlEncode, hmacSha256, timingSafeEqual } from './index';
 
 /**
  * Signed data wrapper structure.

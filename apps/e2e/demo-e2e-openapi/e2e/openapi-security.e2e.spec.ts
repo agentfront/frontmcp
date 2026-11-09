@@ -7,7 +7,7 @@
  * These tests use MockAPIServer with handler functions to capture
  * and verify the actual headers received by the mock API.
  */
-import { TestServer, MockAPIServer, McpTestClient, expect, MockRequest, MockResponseHelper } from '@frontmcp/testing';
+import { expect, McpTestClient, MockAPIServer, MockRequest, MockResponseHelper, TestServer } from '@frontmcp/testing';
 
 // OpenAPI spec with bearer auth
 const SECURED_OPENAPI_SPEC = {

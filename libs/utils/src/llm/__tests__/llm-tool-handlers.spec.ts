@@ -1,5 +1,5 @@
+import type { CallToolFn, ClaudeToolUseBlock, OpenAIToolCallItem, VercelToolCallInfo } from '../llm-tool-handler.types';
 import { processPlatformToolCalls } from '../llm-tool-handlers';
-import type { CallToolFn, OpenAIToolCallItem, ClaudeToolUseBlock, VercelToolCallInfo } from '../llm-tool-handler.types';
 
 describe('processPlatformToolCalls', () => {
   let mockCallTool: jest.MockedFunction<CallToolFn>;

@@ -20,7 +20,7 @@ Verify that a compiled CLI binary starts correctly and responds to health checks
 
 ```typescript
 // src/__tests__/cli-binary.spec.ts
-import { spawn, execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import * as path from 'path';
 
 const BINARY = path.resolve(__dirname, '../dist/my-server');

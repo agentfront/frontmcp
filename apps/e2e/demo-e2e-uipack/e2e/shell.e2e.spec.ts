@@ -10,7 +10,7 @@
  * - Custom title
  * - Hash and size output
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Shell Builder E2E', () => {
   test.use({

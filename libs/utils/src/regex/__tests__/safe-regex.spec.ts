@@ -1,25 +1,25 @@
 import {
-  analyzePattern,
-  isPatternSafe,
-  createSafeRegExp,
-  safeTest,
-  safeMatch,
-  safeReplace,
-  safeExec,
-  isInputLengthSafe,
-  DEFAULT_MAX_INPUT_LENGTH,
-} from '../safe-regex';
-import {
-  trimLeading,
-  trimTrailing,
-  trimBoth,
-  trimChars,
-  extractBracedParams,
-  expandTemplate,
-  hasTemplatePlaceholders,
   collapseChar,
   collapseWhitespace,
+  expandTemplate,
+  extractBracedParams,
+  hasTemplatePlaceholders,
+  trimBoth,
+  trimChars,
+  trimLeading,
+  trimTrailing,
 } from '../patterns';
+import {
+  analyzePattern,
+  createSafeRegExp,
+  DEFAULT_MAX_INPUT_LENGTH,
+  isInputLengthSafe,
+  isPatternSafe,
+  safeExec,
+  safeMatch,
+  safeReplace,
+  safeTest,
+} from '../safe-regex';
 
 describe('safe-regex', () => {
   describe('analyzePattern', () => {

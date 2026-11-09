@@ -17,6 +17,7 @@ A simple example showing how to set up the docs skill.
 
 ```typescript
 import { FrontMcp } from '@frontmcp/sdk';
+
 // Basic setup code
 ```
 

@@ -9,7 +9,7 @@
  *
  * Each describe block starts a fresh server to ensure clean rate limit state.
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Guard Rate Limit — Basic', () => {
   test.use({

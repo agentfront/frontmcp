@@ -1,5 +1,4 @@
-import { TestUsers, createTestUser } from '../user-fixtures';
-import type { TestUserFixture } from '../user-fixtures';
+import { createTestUser, TestUsers, type TestUserFixture } from '../user-fixtures';
 
 describe('TestUsers', () => {
   it('should contain all expected user keys', () => {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useCallTool } from '@frontmcp/react';
-import type { CallToolResult } from '@frontmcp/react';
+
+import { useCallTool, type CallToolResult } from '@frontmcp/react';
 
 export function ToolCalling(): React.ReactElement {
   const [inputValue, setInputValue] = useState('');

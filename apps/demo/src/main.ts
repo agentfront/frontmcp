@@ -1,11 +1,11 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 
+import CalculatorMcpApp from './apps/calculator';
+import CrmMcpApp from './apps/crm';
+import EmployeeTimeMcpApp from './apps/employee-time';
+import ExpenseMcpApp from './apps/expenses';
 // Other demo apps available but not active:
 import WeatherMcpApp from './apps/weather';
-import ExpenseMcpApp from './apps/expenses';
-import CalculatorMcpApp from './apps/calculator';
-import EmployeeTimeMcpApp from './apps/employee-time';
-import CrmMcpApp from './apps/crm';
 
 const defaultIdpProvider = process.env['IDP_PROVIDER_URL'] ?? 'https://sample-app.frontegg.com';
 

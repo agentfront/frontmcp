@@ -1,6 +1,5 @@
 import { NavigateTool } from '../navigate.tool';
-import { setNavigate, clearBridge } from '../router-bridge';
-import type { NavigateFn } from '../router-bridge';
+import { clearBridge, setNavigate, type NavigateFn } from '../router-bridge';
 
 describe('NavigateTool', () => {
   beforeEach(() => {

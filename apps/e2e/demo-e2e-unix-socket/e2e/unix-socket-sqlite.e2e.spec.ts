@@ -5,13 +5,15 @@
  * for session/event storage.
  */
 
-import * as os from 'node:os';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
 import { FrontMcpInstance } from '@frontmcp/sdk';
-import { serverConfig } from '../src/config';
+
 import { notesStore } from '../src/apps/notes/data/notes.store';
+import { serverConfig } from '../src/config';
 import { UnixSocketMcpClient } from './helpers/unix-socket-client';
 
 function uniqueSocketPath(): string {

@@ -1,9 +1,10 @@
-import * as path from 'path';
-import * as os from 'os';
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+import { PublicMcpError } from '../../../errors';
 import { createEventStore } from '../event-store.factory';
 import { MemoryEventStore } from '../memory.event-store';
-import { PublicMcpError } from '../../../errors';
 
 describe('createEventStore', () => {
   describe('disabled configuration', () => {

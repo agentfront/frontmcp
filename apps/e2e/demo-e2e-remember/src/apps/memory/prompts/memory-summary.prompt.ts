@@ -1,5 +1,5 @@
-import { Prompt, PromptContext, GetPromptResult } from '@frontmcp/sdk';
-import { RememberAccessorToken, RememberAccessor } from '@frontmcp/plugin-remember';
+import { RememberAccessor, RememberAccessorToken } from '@frontmcp/plugin-remember';
+import { GetPromptResult, Prompt, PromptContext } from '@frontmcp/sdk';
 
 @Prompt({
   name: 'memory-summary',

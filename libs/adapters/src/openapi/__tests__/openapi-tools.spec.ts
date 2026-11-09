@@ -2,8 +2,9 @@
  * OpenAPI Tool creation tests
  */
 
-import { createOpenApiTool } from '../openapi.tool';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
+
+import { createOpenApiTool } from '../openapi.tool';
 import { createMockLogger } from './fixtures';
 
 // Mock mcp-from-openapi

@@ -58,7 +58,7 @@ Shows how to configure package.json for browser-compatible SDK distribution with
 // src/index.ts — Browser-safe public API
 // No Node.js-only imports (fs, path, child_process, net, crypto)
 // All crypto uses @frontmcp/utils (wraps Web Crypto API)
-import { sha256Hex, randomUUID, base64urlEncode } from '@frontmcp/utils';
+import { base64urlEncode, randomUUID, sha256Hex } from '@frontmcp/utils';
 
 export { create } from './client';
 export type { McpBrowserClient, McpToolResult } from './types';

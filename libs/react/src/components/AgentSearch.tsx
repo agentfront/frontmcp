@@ -9,11 +9,12 @@
  * search result rendering.
  */
 
-import React, { useState, useCallback } from 'react';
-import type { ReactNode } from 'react';
+import React, { useCallback, useState, type ReactNode } from 'react';
+
 import type { CallToolResult, ReadResourceResult } from '@frontmcp/sdk';
-import { useDynamicTool } from '../hooks/useDynamicTool';
+
 import { useDynamicResource } from '../hooks/useDynamicResource';
+import { useDynamicTool } from '../hooks/useDynamicTool';
 
 export interface SearchInputRenderProps {
   value: string;

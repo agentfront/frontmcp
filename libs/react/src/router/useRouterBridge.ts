@@ -5,9 +5,9 @@
  */
 
 import { useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { setNavigate, setLocation, clearBridge } from './router-bridge';
-import type { NavigateFn } from './router-bridge';
+import { useLocation, useNavigate } from 'react-router-dom';
+
+import { clearBridge, setLocation, setNavigate, type NavigateFn } from './router-bridge';
 
 export function useRouterBridge(): void {
   const navigate = useNavigate();

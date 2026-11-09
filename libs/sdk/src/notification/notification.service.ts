@@ -551,6 +551,9 @@ export class NotificationService {
     // This is critical: without cleanup, terminated session providers remain cached forever
     this.scope.providers.cleanupSession(sessionId);
     this.logger.verbose(`Cleaned up provider cache for terminated session: ${sessionId.slice(0, 20)}...`);
+    this.scope.skillSession?.endSession(sessionId).catch((error: unknown) => {
+      this.logger.warn(`Failed to forget the skill session of ${sessionId.slice(0, 20)}...: ${String(error)}`);
+    });
 
     // Add to terminated sessions set (even if not registered, to handle edge cases)
     // Implement LRU-style eviction to prevent unbounded memory growth

@@ -19,8 +19,8 @@ Demonstrates using built-in and custom format resolvers to enrich tool input sch
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'format-demo',

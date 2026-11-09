@@ -6,26 +6,27 @@
  * into ToolClassTokenRecords — the same path used by local tools.
  */
 import 'reflect-metadata';
+
 import {
-  FrontMcpToolTokens,
-  FrontMcpResourceTokens,
-  FrontMcpPromptTokens,
-  FrontMcpSkillTokens,
+  isDecoratedJobClass,
+  isDecoratedPromptClass,
+  isDecoratedResourceClass,
+  isDecoratedSkillClass,
+  isDecoratedToolClass,
+  normalizePromptFromEsmExport,
+  normalizeResourceFromEsmExport,
+  normalizeToolFromEsmExport,
+} from '../../app/instances/esm-normalize.utils';
+import {
   FrontMcpJobTokens,
+  FrontMcpPromptTokens,
+  FrontMcpResourceTokens,
+  FrontMcpSkillTokens,
+  FrontMcpToolTokens,
   ToolKind,
 } from '../../common';
-import {
-  isDecoratedToolClass,
-  isDecoratedResourceClass,
-  isDecoratedPromptClass,
-  isDecoratedSkillClass,
-  isDecoratedJobClass,
-  normalizeToolFromEsmExport,
-  normalizeResourceFromEsmExport,
-  normalizePromptFromEsmExport,
-} from '../../app/instances/esm-normalize.utils';
-import { normalizeTool, collectToolMetadata } from '../../tool/tool.utils';
 import { extendedToolMetadata } from '../../common/tokens';
+import { collectToolMetadata, normalizeTool } from '../../tool/tool.utils';
 
 /**
  * Helper: simulate what @Tool decorator does — store metadata using real Symbol tokens.

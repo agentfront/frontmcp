@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
 import { useTheme, type Theme } from '@mui/material/styles';
+import { useMemo } from 'react';
 
 /**
  * Flat theme values extracted from MUI theme for non-MUI libraries.

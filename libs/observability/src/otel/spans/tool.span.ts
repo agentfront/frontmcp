@@ -2,8 +2,9 @@
  * Tool Execution Span — FrontMCP tool invocation instrumentation.
  */
 
-import { type Tracer, type Span, type Context, SpanKind } from '@opentelemetry/api';
-import { FrontMcpAttributes, McpAttributes, EnduserAttributes } from '../otel.types';
+import { SpanKind, type Context, type Span, type Tracer } from '@opentelemetry/api';
+
+import { EnduserAttributes, FrontMcpAttributes, McpAttributes } from '../otel.types';
 import { startSpan } from './span.utils';
 
 export interface ToolSpanOptions {

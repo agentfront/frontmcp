@@ -1,9 +1,10 @@
 // auth/authorization/public.authorization.ts
 
 import { randomUUID } from '@frontmcp/utils';
-import { AuthorizationBase } from './authorization.class';
-import type { AuthorizationCreateCtx, AuthUser, AuthMode } from './authorization.types';
+
 import { TokenNotAvailableError } from '../errors/auth-internal.errors';
+import { AuthorizationBase } from './authorization.class';
+import type { AuthMode, AuthorizationCreateCtx, AuthUser } from './authorization.types';
 
 /**
  * Context for creating a PublicAuthorization

@@ -1,6 +1,7 @@
 import { Reference } from '@frontmcp/sdk';
-import type { RememberStoreInterface } from './providers/remember-store.interface';
+
 import type { RememberAccessor } from './providers/remember-accessor.provider';
+import type { RememberStoreInterface } from './providers/remember-store.interface';
 import type { RememberPluginOptions } from './remember.types';
 
 /**

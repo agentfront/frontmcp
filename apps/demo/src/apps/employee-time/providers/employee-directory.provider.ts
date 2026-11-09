@@ -1,6 +1,7 @@
 import { AsyncProvider, ProviderScope } from '@frontmcp/sdk';
+
+import { employeeSitesSetKey, siteEmployeesSetKey, SITES_SET } from '../utils/keys';
 import EmployeeRedisProvider from './redis.provider';
-import { SITES_SET, siteEmployeesSetKey, employeeSitesSetKey } from '../utils/keys';
 
 export default class EmployeeDirectoryProvider {
   constructor(private readonly redis: EmployeeRedisProvider) {}

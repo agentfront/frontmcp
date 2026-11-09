@@ -9,9 +9,10 @@
  * a cleaner component-wrapping API.
  */
 
-import React, { useState, useCallback } from 'react';
-import type { ReactNode } from 'react';
+import React, { useCallback, useState, type ReactNode } from 'react';
+
 import type { CallToolResult } from '@frontmcp/sdk';
+
 import { useDynamicTool } from '../hooks/useDynamicTool';
 
 /** @deprecated Use `mcpComponent()` instead. */

@@ -2,9 +2,10 @@
  * OpenAPI utility functions tests
  */
 
-import { buildRequest, applyAdditionalHeaders, parseResponse } from '../openapi.utils';
-import { mockFetchSuccess, mockFetchError } from './fixtures';
 import type { McpOpenAPITool } from 'mcp-from-openapi';
+
+import { applyAdditionalHeaders, buildRequest, parseResponse } from '../openapi.utils';
+import { mockFetchError, mockFetchSuccess } from './fixtures';
 
 describe('OpenapiAdapter - Utilities', () => {
   describe('buildRequest', () => {

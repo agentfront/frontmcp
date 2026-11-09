@@ -5,14 +5,15 @@
  */
 
 import React, { useState } from 'react';
-import { Card, Badge, Button } from '@frontmcp/ui/components';
+
+import { Badge, Button, Card } from '@frontmcp/ui/components';
 import {
   McpBridgeProvider,
-  useToolInput,
-  useToolOutput,
-  useTheme,
   useMcpBridgeContext,
   useSendMessage,
+  useTheme,
+  useToolInput,
+  useToolOutput,
 } from '@frontmcp/ui/react';
 
 // Type definitions

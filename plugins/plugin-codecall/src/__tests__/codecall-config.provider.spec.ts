@@ -1,7 +1,8 @@
 // file: libs/plugins/src/codecall/__tests__/codecall-config.provider.spec.ts
 
 import { BaseConfig } from '@frontmcp/sdk';
-import { codeCallPluginOptionsSchema, CodeCallPluginOptions, CodeCallPluginOptionsInput } from '../codecall.types';
+
+import { CodeCallPluginOptions, CodeCallPluginOptionsInput, codeCallPluginOptionsSchema } from '../codecall.types';
 
 // Create a test implementation that extends BaseConfig (without decorator for testing)
 class CodeCallConfigProvider extends BaseConfig<CodeCallPluginOptions> {

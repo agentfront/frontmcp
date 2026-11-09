@@ -28,6 +28,9 @@ export interface SkillSessionStore {
    */
   delete(sessionId: string): Promise<void>;
 
+  /** Whether `sessionId` can be saved: it is kept already, or the store has room for one more session. */
+  hasRoomFor?(sessionId: string): Promise<boolean>;
+
   /**
    * List active sessions (sessions with an active skill).
    */
@@ -70,7 +73,16 @@ export class MemorySkillSessionStore implements SkillSessionStore {
     return cloned;
   }
 
+  constructor(private readonly maxSessions = 10_000) {}
+
+  async hasRoomFor(sessionId: string): Promise<boolean> {
+    return this.sessions.has(sessionId) || this.sessions.size < this.maxSessions;
+  }
+
   async save(session: SkillSessionState): Promise<void> {
+    if (!(await this.hasRoomFor(session.sessionId))) {
+      throw new Error(`The skill session store keeps its maximum of ${this.maxSessions} sessions`);
+    }
     // Clone the session to avoid reference issues
     this.sessions.set(session.sessionId, {
       ...session,

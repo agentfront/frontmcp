@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { CrmApp } from './apps/crm';
 
 const port = parseInt(process.env['PORT'] ?? '3105', 10);

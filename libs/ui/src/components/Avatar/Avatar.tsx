@@ -1,5 +1,5 @@
-import React from 'react';
 import MuiAvatar from '@mui/material/Avatar';
+import React from 'react';
 
 export interface AvatarProps {
   src?: string;

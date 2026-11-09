@@ -1,3 +1,20 @@
+import { AuthFlowError } from '../../errors/auth-internal.errors';
+import {
+  completeCurrentProvider,
+  createFederatedAuthSession,
+  fromSessionRecord,
+  getNextProvider,
+  InMemoryFederatedAuthSessionStore,
+  isSessionComplete,
+  startNextProvider,
+  toSessionRecord,
+  type FederatedAuthSession,
+  type FederatedAuthSessionCreateParams,
+  type ProviderPkce,
+  type ProviderTokens,
+  type ProviderUserInfo,
+} from '../federated-auth.session';
+
 /**
  * Federated Auth Session Tests
  *
@@ -14,25 +31,6 @@ jest.mock('@frontmcp/utils', () => ({
   ...jest.requireActual('@frontmcp/utils'),
   randomUUID: () => mockRandomUUID(),
 }));
-
-import {
-  InMemoryFederatedAuthSessionStore,
-  toSessionRecord,
-  fromSessionRecord,
-  createFederatedAuthSession,
-  isSessionComplete,
-  getNextProvider,
-  completeCurrentProvider,
-  startNextProvider,
-} from '../federated-auth.session';
-import type {
-  FederatedAuthSession,
-  FederatedAuthSessionCreateParams,
-  ProviderTokens,
-  ProviderUserInfo,
-  ProviderPkce,
-} from '../federated-auth.session';
-import { AuthFlowError } from '../../errors/auth-internal.errors';
 
 // ---------------------------------------------------------------------------
 // Helpers

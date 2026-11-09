@@ -1,6 +1,5 @@
 import { GoBackTool } from '../go-back.tool';
-import { setNavigate, clearBridge } from '../router-bridge';
-import type { NavigateFn } from '../router-bridge';
+import { clearBridge, setNavigate, type NavigateFn } from '../router-bridge';
 
 describe('GoBackTool', () => {
   beforeEach(() => {

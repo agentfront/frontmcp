@@ -1,5 +1,5 @@
-import { runQuestionnaire } from '../questionnaire';
 import { ManifestSetupStep } from '../../build/exec/manifest';
+import { runQuestionnaire } from '../questionnaire';
 
 describe('questionnaire', () => {
   describe('runQuestionnaire (silent mode)', () => {

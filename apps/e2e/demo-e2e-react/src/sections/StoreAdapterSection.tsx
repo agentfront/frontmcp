@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useFrontMcp, useCallTool, useListTools } from '@frontmcp/react';
-import type { CallToolResult, ReadResourceResult } from '@frontmcp/react';
+
+import { useCallTool, useFrontMcp, useListTools, type CallToolResult, type ReadResourceResult } from '@frontmcp/react';
 
 export function StoreAdapterSection(): React.ReactElement {
   const { client, status } = useFrontMcp();

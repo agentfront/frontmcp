@@ -1,5 +1,12 @@
-import { setNavigate, getNavigate, setLocation, getLocation, clearBridge } from '../router-bridge';
-import type { NavigateFn, BridgeLocation } from '../router-bridge';
+import {
+  clearBridge,
+  getLocation,
+  getNavigate,
+  setLocation,
+  setNavigate,
+  type BridgeLocation,
+  type NavigateFn,
+} from '../router-bridge';
 
 describe('router-bridge', () => {
   beforeEach(() => {

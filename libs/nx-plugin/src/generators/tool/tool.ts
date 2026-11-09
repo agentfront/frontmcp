@@ -1,7 +1,9 @@
-import { type Tree, formatFiles, generateFiles, type GeneratorCallback } from '@nx/devkit';
 import { join } from 'path';
-import type { ToolGeneratorSchema } from './schema.js';
+
+import { formatFiles, generateFiles, type GeneratorCallback, type Tree } from '@nx/devkit';
+
 import { normalizePrimitiveOptions } from '../../utils/normalize-options.js';
+import type { ToolGeneratorSchema } from './schema.js';
 
 export async function toolGenerator(tree: Tree, schema: ToolGeneratorSchema): Promise<GeneratorCallback | void> {
   const options = normalizePrimitiveOptions(tree, schema, 'tools');

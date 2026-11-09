@@ -1,4 +1,5 @@
 import { LogLevel } from '@frontmcp/sdk';
+
 import { JobsApp } from './apps/jobs';
 
 export const serverConfig = {

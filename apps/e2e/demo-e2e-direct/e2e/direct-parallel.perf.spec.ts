@@ -4,7 +4,7 @@
  * Tests direct SDK operations under parallel load using multiple clients.
  * Reduced to 100 iterations per worker to prevent note accumulation OOM.
  */
-import { perfTest, expect } from '@frontmcp/testing';
+import { expect, perfTest } from '@frontmcp/testing';
 
 perfTest.describe('Direct Parallel Stress Testing', () => {
   perfTest.use({

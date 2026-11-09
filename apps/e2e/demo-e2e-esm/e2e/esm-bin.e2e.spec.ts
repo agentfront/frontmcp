@@ -8,10 +8,11 @@
  *
  * Set DEBUG_E2E=1 for verbose logging.
  */
-import * as path from 'node:path';
 import * as os from 'node:os';
-import { mkdtemp, rm, fileExists } from '@frontmcp/utils';
+import * as path from 'node:path';
+
 import { TestServer } from '@frontmcp/testing';
+import { fileExists, mkdtemp, rm } from '@frontmcp/utils';
 
 const DEBUG = process.env['DEBUG_E2E'] === '1';
 const log = DEBUG ? console.log.bind(console) : () => {};

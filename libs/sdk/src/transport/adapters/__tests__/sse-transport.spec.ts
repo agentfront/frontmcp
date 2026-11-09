@@ -7,8 +7,9 @@
  * - Last-Event-ID header handling
  * - Multi-instance SSE failover scenarios
  */
-import { RecreateableSSEServerTransport } from '../sse-transport';
 import type { ServerResponse } from 'http';
+
+import { RecreateableSSEServerTransport } from '../sse-transport';
 
 // Mock ServerResponse
 function createMockResponse(): ServerResponse {

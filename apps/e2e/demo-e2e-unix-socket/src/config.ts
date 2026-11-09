@@ -10,6 +10,7 @@
  * when only the config is needed (e.g., for socket mode).
  */
 import { LogLevel } from '@frontmcp/sdk';
+
 import { NotesApp } from './apps/notes';
 
 /**

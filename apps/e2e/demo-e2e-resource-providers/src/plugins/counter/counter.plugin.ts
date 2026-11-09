@@ -1,4 +1,4 @@
-import { Plugin, Provider, DynamicPlugin, ProviderScope } from '@frontmcp/sdk';
+import { DynamicPlugin, Plugin, Provider, ProviderScope } from '@frontmcp/sdk';
 
 // ── Provider ────────────────────────────────────────────────────────────────
 

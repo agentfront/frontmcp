@@ -10,7 +10,9 @@
  */
 
 import { useEffect } from 'react';
+
 import type { CallToolResult, ReadResourceResult } from '@frontmcp/sdk';
+
 import type { DynamicRegistry } from '../registry/DynamicRegistry';
 import type { StoreAdapter } from '../types';
 

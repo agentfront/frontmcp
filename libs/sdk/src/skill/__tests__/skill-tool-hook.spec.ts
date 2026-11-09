@@ -44,6 +44,68 @@ describe('SkillToolGuardHook', () => {
     sessionManager = new SkillSessionManager({ defaultPolicyMode: 'strict' }, undefined, store);
   });
 
+  describe("the caller's verified MCP session", () => {
+    let callerSessionId: string | undefined;
+    const callOf = (toolName: string): SkillToolHookContext => ({ state: { tool: { metadata: { name: toolName } } } });
+    const guard = () => new (createSkillToolGuardHook(sessionManager, { verifiedSessionId: () => callerSessionId }))();
+
+    beforeEach(async () => {
+      callerSessionId = undefined;
+      await sessionManager.runWithSession('session-1', async () => {
+        sessionManager.activateSkill('test-skill', mockSkillContent, mockLoadResult);
+      });
+    });
+
+    it('checks a later tool call against the skill its session activated', async () => {
+      callerSessionId = 'session-1';
+
+      await expect(guard().checkSkillToolAuthorization(callOf('allowed_tool'))).resolves.toBeUndefined();
+      await expect(guard().checkSkillToolAuthorization(callOf('unlisted_tool'))).rejects.toBeInstanceOf(
+        ToolNotAllowedError,
+      );
+    });
+
+    it("checks the caller's session, not another skill session the call runs inside", async () => {
+      callerSessionId = 'session-1';
+
+      await sessionManager.runWithSession('session-2', async () => {
+        await expect(guard().checkSkillToolAuthorization(callOf('unlisted_tool'))).rejects.toBeInstanceOf(
+          ToolNotAllowedError,
+        );
+      });
+    });
+
+    it('leaves the tool calls of another session, or of none, unchecked', async () => {
+      callerSessionId = 'session-2';
+      await expect(guard().checkSkillToolAuthorization(callOf('unlisted_tool'))).resolves.toBeUndefined();
+
+      callerSessionId = undefined;
+      await expect(guard().checkSkillToolAuthorization(callOf('unlisted_tool'))).resolves.toBeUndefined();
+    });
+
+    it('keeps checking a session when the store is full, and has no room for another', async () => {
+      store = new MemorySkillSessionStore(1);
+      sessionManager = new SkillSessionManager({ defaultPolicyMode: 'strict' }, undefined, store);
+      await sessionManager.runWithSession('session-1', async () => {
+        sessionManager.activateSkill('test-skill', mockSkillContent, mockLoadResult);
+      });
+      callerSessionId = 'session-1';
+
+      expect(await sessionManager.hasRoomFor('session-2')).toBe(false);
+      await expect(guard().checkSkillToolAuthorization(callOf('unlisted_tool'))).rejects.toBeInstanceOf(
+        ToolNotAllowedError,
+      );
+    });
+
+    it('forgets the skill once the session ends', async () => {
+      callerSessionId = 'session-1';
+
+      await sessionManager.endSession('session-1');
+
+      await expect(guard().checkSkillToolAuthorization(callOf('unlisted_tool'))).resolves.toBeUndefined();
+    });
+  });
+
   describe('tool name extraction', () => {
     it('should extract base name from qualified tool name', async () => {
       // The hook should extract "allowed_tool" from "my-app:allowed_tool"

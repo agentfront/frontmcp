@@ -4,14 +4,14 @@
  * Tests for sync state management and persistence.
  */
 
+import { MemorySyncStateStore } from '../sync/memory-sync-state.store';
 import {
   createEmptySyncState,
-  serializeSyncState,
   deserializeSyncState,
-  SkillSyncState,
+  serializeSyncState,
   SkillSyncEntry,
+  SkillSyncState,
 } from '../sync/sync-state.interface';
-import { MemorySyncStateStore } from '../sync/memory-sync-state.store';
 
 // Helper to create test sync entries
 const createTestEntry = (overrides: Partial<SkillSyncEntry> = {}): SkillSyncEntry => ({

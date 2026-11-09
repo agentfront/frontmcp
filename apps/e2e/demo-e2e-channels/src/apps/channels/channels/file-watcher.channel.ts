@@ -4,8 +4,7 @@
  * In production, you'd use fs.watch — here we use a simulated push for testing.
  */
 
-import { Channel, ChannelContext } from '@frontmcp/sdk';
-import type { ChannelNotification } from '@frontmcp/sdk';
+import { Channel, ChannelContext, type ChannelNotification } from '@frontmcp/sdk';
 
 /** Simulated file events for testing */
 export const fileEventQueue: Array<{ file: string; event: string; content?: string }> = [];

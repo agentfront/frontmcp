@@ -1,5 +1,6 @@
+import { addProjectConfiguration, type Tree } from '@nx/devkit';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { type Tree, addProjectConfiguration } from '@nx/devkit';
+
 import { promptGenerator } from './prompt';
 
 describe('prompt generator', () => {

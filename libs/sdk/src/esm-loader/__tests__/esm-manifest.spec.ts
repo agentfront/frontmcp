@@ -1,15 +1,16 @@
 import 'reflect-metadata';
-import { normalizeEsmExport, frontMcpPackageManifestSchema } from '../esm-manifest';
+
 import {
-  FrontMcpToolTokens,
-  FrontMcpResourceTokens,
-  FrontMcpPromptTokens,
-  FrontMcpSkillTokens,
-  FrontMcpJobTokens,
   FrontMcpAgentTokens,
+  FrontMcpJobTokens,
+  FrontMcpPromptTokens,
+  FrontMcpResourceTokens,
+  FrontMcpSkillTokens,
+  FrontMcpToolTokens,
   FrontMcpWorkflowTokens,
 } from '../../common';
 import { extendedToolMetadata } from '../../common/tokens';
+import { frontMcpPackageManifestSchema, normalizeEsmExport } from '../esm-manifest';
 
 /** Helper: simulate @Tool decorator metadata on a class */
 function simulateTool(cls: { new (...args: unknown[]): unknown }, name: string) {

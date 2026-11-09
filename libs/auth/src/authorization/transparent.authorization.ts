@@ -1,10 +1,11 @@
 // auth/authorization/transparent.authorization.ts
 
 import { sha256Hex } from '@frontmcp/utils';
-import { AuthorizationBase } from './authorization.class';
-import type { AuthorizationCreateCtx, AuthUser, AuthMode } from './authorization.types';
-import type { ProviderSnapshot } from '../session/session.types';
+
 import { TokenNotAvailableError } from '../errors/auth-internal.errors';
+import type { ProviderSnapshot } from '../session/session.types';
+import { AuthorizationBase } from './authorization.class';
+import type { AuthMode, AuthorizationCreateCtx, AuthUser } from './authorization.types';
 
 /**
  * Verified JWT payload from transparent auth provider

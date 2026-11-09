@@ -2,6 +2,10 @@
 
 import * as path from 'path';
 
+import { fileExists, readJSON } from '@frontmcp/utils';
+
+import { resolveEntry } from '../fs';
+
 // Mock @frontmcp/utils
 jest.mock('@frontmcp/utils', () => {
   return {
@@ -9,9 +13,6 @@ jest.mock('@frontmcp/utils', () => {
     readJSON: jest.fn(),
   };
 });
-
-import { resolveEntry } from '../fs';
-import { fileExists, readJSON } from '@frontmcp/utils';
 
 describe('fs utilities', () => {
   const cwd = '/test/project';

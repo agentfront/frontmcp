@@ -19,17 +19,17 @@
  * ```
  */
 
-import { randomUUID, TypedStorage } from '@frontmcp/utils';
-import type { StorageAdapter, NamespacedStorage } from '@frontmcp/utils';
-import type {
-  AuthorizationVault,
-  AuthorizationVaultEntry,
-  AppCredential,
-  VaultConsentRecord,
-  VaultFederatedRecord,
-  PendingIncrementalAuth,
+import { randomUUID, TypedStorage, type NamespacedStorage, type StorageAdapter } from '@frontmcp/utils';
+
+import {
+  authorizationVaultEntrySchema,
+  type AppCredential,
+  type AuthorizationVault,
+  type AuthorizationVaultEntry,
+  type PendingIncrementalAuth,
+  type VaultConsentRecord,
+  type VaultFederatedRecord,
 } from '../authorization-vault';
-import { authorizationVaultEntrySchema } from '../authorization-vault';
 
 /**
  * Options for StorageAuthorizationVault

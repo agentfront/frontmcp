@@ -2,14 +2,14 @@
  * Storage Error Classes Tests
  */
 import {
-  StorageError,
-  StorageConnectionError,
-  StorageOperationError,
-  StorageNotSupportedError,
   StorageConfigError,
-  StorageTTLError,
-  StoragePatternError,
+  StorageConnectionError,
+  StorageError,
   StorageNotConnectedError,
+  StorageNotSupportedError,
+  StorageOperationError,
+  StoragePatternError,
+  StorageTTLError,
 } from '../errors';
 
 describe('Storage Error Classes', () => {
