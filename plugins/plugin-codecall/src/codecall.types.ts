@@ -123,7 +123,7 @@ export const codeCallVmOptionsSchema = z
 
     /**
      * @deprecated Has no effect: scripts never get `console`, and one that uses it is refused before it runs.
-     * Scripts log with `mcpLog(level, message)`.
+     * Scripts log with `mcpLog(level, message)`. A server that sets it logs a warning when it starts.
      */
     allowConsole: z.boolean().optional(),
 

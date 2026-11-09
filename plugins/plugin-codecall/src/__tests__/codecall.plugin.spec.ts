@@ -33,7 +33,13 @@ describe('CodeCallPlugin', () => {
   describe('dynamicProviders', () => {
     it('should return array of providers', () => {
       const providers = CodeCallPlugin.dynamicProviders({});
-      expect(providers).toHaveLength(4);
+      expect(providers.map((p) => p.name)).toEqual([
+        'codecall:config',
+        'codecall:option-warnings',
+        'codecall:enclave',
+        'codecall:audit-logger',
+        'codecall:tool-search',
+      ]);
     });
 
     it('should include codecall:config provider', () => {
