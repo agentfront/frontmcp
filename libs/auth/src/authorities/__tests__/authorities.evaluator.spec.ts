@@ -5,7 +5,7 @@ import {
   evaluateRebac,
   resolveResourceId,
 } from '../authorities.evaluator';
-import type { AuthoritiesEvaluationContext, RelationshipResolver } from '../authorities.types';
+import type { AbacOperator, AuthoritiesEvaluationContext, RelationshipResolver } from '../authorities.types';
 
 function createCtx(overrides: Partial<AuthoritiesEvaluationContext> = {}): AuthoritiesEvaluationContext {
   const noopResolver: RelationshipResolver = { check: async () => false };
@@ -359,6 +359,48 @@ describe('ABAC Evaluator', () => {
         ctx,
       );
       expect(result.granted).toBe(true);
+    });
+
+    it.each<[string, string, unknown]>([
+      ['eq', 'claims.org', 'org-1'],
+      ['neq', 'claims.org', 'org-1'],
+      ['in', 'claims.org', 'org-1'],
+      ['notIn', 'claims.org', 'org-1'],
+      ['gt', 'claims.level', 3],
+      ['gte', 'claims.level', 3],
+      ['lt', 'claims.level', 3],
+      ['lte', 'claims.level', 3],
+      ['contains', 'claims.groups', [undefined]],
+      ['startsWith', 'claims.org', 'org-1'],
+      ['endsWith', 'claims.org', 'org-1'],
+      ['exists', 'claims.missing', undefined],
+      ['matches', 'claims.org', 'org-1'],
+    ])('%s does not match when the input it compares against is missing', (op, path) => {
+      const ctx = createCtx({
+        user: {
+          sub: 'u1',
+          roles: [],
+          permissions: [],
+          claims: { org: 'org-1', level: 3, groups: [undefined] },
+        },
+        input: {},
+      });
+      const result = evaluateAbac(
+        { conditions: [{ path, op: op as AbacOperator, value: { fromInput: 'absent' } }] },
+        ctx,
+      );
+      expect(result.granted).toBe(false);
+    });
+
+    it('neq does not match when the claim it compares against is missing', () => {
+      const ctx = createCtx({
+        user: { sub: 'u1', roles: [], permissions: [], claims: { org: 'org-1' } },
+      });
+      const result = evaluateAbac(
+        { conditions: [{ path: 'claims.org', op: 'neq', value: { fromClaims: 'blocked_org' } }] },
+        ctx,
+      );
+      expect(result.granted).toBe(false);
     });
   });
 });

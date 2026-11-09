@@ -6,7 +6,6 @@
 
 import { isAnonymousSubject, resolveDotPath } from './authorities.context';
 import type {
-  AbacCondition,
   AbacPolicy,
   AuthoritiesEvaluationContext,
   AuthoritiesResult,
@@ -121,14 +120,38 @@ function resolveValue(value: unknown, ctx: AuthoritiesEvaluationContext): unknow
   return value;
 }
 
+/** How a denial names the input field or claim that a missing expected value refers to. */
+function describeMissingValue(value: unknown): string {
+  const reference = (value ?? {}) as Record<string, unknown>;
+  if (typeof reference['fromInput'] === 'string') return `input '${reference['fromInput']}'`;
+  if (typeof reference['fromClaims'] === 'string') return `claim '${reference['fromClaims']}'`;
+  return 'the value';
+}
+
+/** A check whose expected value is missing (e.g. an absent fromInput) denies as unresolved, even under `not`. */
+function unresolvedAttribute(
+  policyPath: string,
+  denialPath: string,
+  path: string,
+  value: unknown,
+  actual: unknown,
+): AuthoritiesResult {
+  return {
+    granted: false,
+    unresolved: true,
+    deniedBy: `${policyPath}: '${path}' could not be checked: ${describeMissingValue(value)} is missing`,
+    denial: { kind: 'attributes', path: denialPath, actual },
+    evaluatedPolicies: [policyPath],
+  };
+}
+
 /**
  * Apply an ABAC operator to compare actual vs expected values.
  */
 function applyOperator(actual: unknown, op: string, expected: unknown): boolean {
   switch (op) {
-    // A missing expected value (e.g. an absent fromInput) never matches, even an absent actual value
     case 'eq':
-      return expected !== undefined && actual === expected;
+      return actual === expected;
     case 'neq':
       return actual !== expected;
     case 'in':
@@ -168,19 +191,6 @@ function applyOperator(actual: unknown, op: string, expected: unknown): boolean 
   }
 }
 
-/**
- * Evaluate a single ABAC condition.
- */
-function evaluateCondition(
-  condition: AbacCondition,
-  envelope: Record<string, unknown>,
-  ctx: AuthoritiesEvaluationContext,
-): boolean {
-  const actual = resolveDotPath(envelope, condition.path);
-  const expected = resolveValue(condition.value, ctx);
-  return applyOperator(actual, condition.op, expected);
-}
-
 const REDACTED_ENV_VALUE = '[redacted]';
 
 /** A value read from `env.*` stays out of a denial: denials reach the client, environment variables may be secrets. */
@@ -193,14 +203,17 @@ function reportableActual(path: string, actual: unknown): unknown {
  */
 export function evaluateAbac(policy: AbacPolicy, ctx: AuthoritiesEvaluationContext): AuthoritiesResult {
   const envelope = buildContextEnvelope(ctx);
+  let unresolved: AuthoritiesResult | undefined;
 
   // Evaluate match (simple equality checks)
   if (policy.match) {
     for (const [path, expectedRaw] of Object.entries(policy.match)) {
       const actual = resolveDotPath(envelope, path);
       const expected = resolveValue(expectedRaw, ctx);
-      if (expected === undefined || actual !== expected) {
-        const reported = reportableActual(path, actual);
+      const reported = reportableActual(path, actual);
+      if (expected === undefined) {
+        unresolved ??= unresolvedAttribute('attributes.match', 'attributes.match', path, expectedRaw, reported);
+      } else if (actual !== expected) {
         return {
           granted: false,
           deniedBy: `attributes.match: '${path}' expected '${String(expected)}' but got '${String(reported)}'`,
@@ -215,20 +228,30 @@ export function evaluateAbac(policy: AbacPolicy, ctx: AuthoritiesEvaluationConte
   if (policy.conditions) {
     for (let i = 0; i < policy.conditions.length; i++) {
       const condition = policy.conditions[i];
-      if (!evaluateCondition(condition, envelope, ctx)) {
-        const expected = resolveValue(condition.value, ctx);
-        const actual = reportableActual(condition.path, resolveDotPath(envelope, condition.path));
+      const denialPath = `attributes.conditions[${i}]`;
+      const actual = resolveDotPath(envelope, condition.path);
+      const expected = resolveValue(condition.value, ctx);
+      const reported = reportableActual(condition.path, actual);
+      if (expected === undefined) {
+        unresolved ??= unresolvedAttribute(
+          'attributes.conditions',
+          denialPath,
+          condition.path,
+          condition.value,
+          reported,
+        );
+      } else if (!applyOperator(actual, condition.op, expected)) {
         return {
           granted: false,
           deniedBy: `attributes.conditions: '${condition.path}' failed '${condition.op}' check against '${String(expected)}'`,
-          denial: { kind: 'attributes', path: `attributes.conditions[${i}]`, expected, actual },
+          denial: { kind: 'attributes', path: denialPath, expected, actual: reported },
           evaluatedPolicies: ['attributes.conditions'],
         };
       }
     }
   }
 
-  return { granted: true, evaluatedPolicies: ['attributes'] };
+  return unresolved ?? { granted: true, evaluatedPolicies: ['attributes'] };
 }
 
 // ============================================
@@ -271,6 +294,7 @@ async function evaluateSingleRebac(policy: RebacPolicy, ctx: AuthoritiesEvaluati
   if (resourceId === undefined) {
     return {
       granted: false,
+      unresolved: true,
       deniedBy: `relationships: could not resolve resourceId for ${policy.resource}`,
       denial: {
         kind: 'relationships',
@@ -309,11 +333,14 @@ export async function evaluateRebac(
   ctx: AuthoritiesEvaluationContext,
 ): Promise<AuthoritiesResult> {
   const policies = Array.isArray(policy) ? policy : [policy];
+  let unresolved: AuthoritiesResult | undefined;
 
   for (const p of policies) {
     const result = await evaluateSingleRebac(p, ctx);
-    if (!result.granted) return result;
+    if (result.granted) continue;
+    if (!result.unresolved) return result;
+    unresolved ??= result;
   }
 
-  return { granted: true, evaluatedPolicies: ['relationships'] };
+  return unresolved ?? { granted: true, evaluatedPolicies: ['relationships'] };
 }
