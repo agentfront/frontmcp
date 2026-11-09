@@ -1,6 +1,6 @@
 /**
- * Job and workflow options the schemas accept and nothing reads, which startup warns about: a workflow's
- * `trigger: 'webhook'` (or `'event'`) and `webhook`.
+ * Job and workflow options the schemas accept and nothing reads: a workflow's `trigger: 'webhook'` (or `'event'`)
+ * and `webhook`, and permission rules for `create` and `update`. Startup warns about each.
  */
 import 'reflect-metadata';
 
@@ -16,7 +16,39 @@ import {
 } from '../../common';
 import { type DirectMcpServer } from '../../direct/direct.types';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
-import { describeIgnoredTrigger } from '../unread-job-options';
+import { describeIgnoredTrigger, describeUncheckedPermissions } from '../unread-job-options';
+
+describe('describeUncheckedPermissions', () => {
+  it('says nothing about rules every operation checks', () => {
+    expect(
+      describeUncheckedPermissions('Job', 'export', [
+        { action: 'execute', roles: ['admin'] },
+        { action: 'read' },
+        { action: 'delete' },
+        { action: 'list' },
+      ]),
+    ).toEqual([]);
+    expect(describeUncheckedPermissions('Job', 'export', undefined)).toEqual([]);
+  });
+
+  it('names the create and update rules of a job, in one message', () => {
+    const messages = describeUncheckedPermissions('Job', 'export', [
+      { action: 'update', roles: ['admin'] },
+      { action: 'execute', roles: ['admin'] },
+      { action: 'create', roles: ['admin'] },
+    ]);
+
+    expect(messages).toEqual([
+      expect.stringMatching(/^Job "export": its permission rules for "create" and "update" are never checked/),
+    ]);
+  });
+
+  it('names the workflow a create rule belongs to', () => {
+    expect(describeUncheckedPermissions('Workflow', 'deploy', [{ action: 'create', roles: ['ci'] }])).toEqual([
+      expect.stringMatching(/^Workflow "deploy": its permission rules for "create" are never checked/),
+    ]);
+  });
+});
 
 describe('describeIgnoredTrigger', () => {
   it('says nothing about a manual workflow', () => {
@@ -54,6 +86,10 @@ class WarningCapture extends LogTransportInterface {
   name: 'export',
   inputSchema: {},
   outputSchema: {},
+  permissions: [
+    { action: 'execute', roles: ['admin'] },
+    { action: 'create', roles: ['admin'] },
+  ],
 })
 class ExportJob extends JobContext {
   async execute() {
@@ -90,9 +126,12 @@ describe('startup', () => {
     await server.dispose();
   });
 
-  it('warns about the webhook trigger, and not about a manual workflow', () => {
+  it('warns about the webhook trigger and the create rule, and nothing else', () => {
     const unread = warnings.filter((message) => message.includes('export'));
 
-    expect(unread).toEqual([expect.stringContaining('Workflow "nightly-export": `trigger: \'webhook\'`')]);
+    expect(unread).toEqual([
+      expect.stringContaining('Job "export": its permission rules for "create" are never checked'),
+      expect.stringContaining('Workflow "nightly-export": `trigger: \'webhook\'`'),
+    ]);
   });
 });
