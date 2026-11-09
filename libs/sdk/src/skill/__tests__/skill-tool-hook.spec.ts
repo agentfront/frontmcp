@@ -83,6 +83,20 @@ describe('SkillToolGuardHook', () => {
       await expect(guard().checkSkillToolAuthorization(callOf('unlisted_tool'))).resolves.toBeUndefined();
     });
 
+    it('keeps checking a session when the store is full, and has no room for another', async () => {
+      store = new MemorySkillSessionStore(1);
+      sessionManager = new SkillSessionManager({ defaultPolicyMode: 'strict' }, undefined, store);
+      await sessionManager.runWithSession('session-1', async () => {
+        sessionManager.activateSkill('test-skill', mockSkillContent, mockLoadResult);
+      });
+      callerSessionId = 'session-1';
+
+      expect(await sessionManager.hasRoomFor('session-2')).toBe(false);
+      await expect(guard().checkSkillToolAuthorization(callOf('unlisted_tool'))).rejects.toBeInstanceOf(
+        ToolNotAllowedError,
+      );
+    });
+
     it('forgets the skill once the session ends', async () => {
       callerSessionId = 'session-1';
 

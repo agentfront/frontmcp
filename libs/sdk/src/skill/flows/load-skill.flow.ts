@@ -195,6 +195,14 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
     };
 
     const sessionId = this.tryGetContext()?.verifiedSessionId;
+    const targetSessionId = sessionId ?? sessionManager.getActiveSession()?.sessionId;
+    if (targetSessionId && !(await sessionManager.hasRoomFor(targetSessionId))) {
+      throw new PublicMcpError(
+        'The server keeps as many skill sessions as it can; activate again once a session has ended (DELETE)',
+        'SKILL_SESSION_LIMIT',
+        503,
+      );
+    }
     if (sessionId && sessionManager.getActiveSession()?.sessionId !== sessionId) {
       await sessionManager.runWithSession(sessionId, activate);
     } else if (sessionManager.getActiveSession()) {

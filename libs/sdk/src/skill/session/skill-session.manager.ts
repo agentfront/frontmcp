@@ -83,6 +83,11 @@ export class SkillSessionManager extends EventEmitter {
     return this.storage.run(state, fn);
   }
 
+  /** Whether skills can be activated for `sessionId`: its skill session is kept already, or the store has room. */
+  async hasRoomFor(sessionId: string): Promise<boolean> {
+    return (await this.store?.hasRoomFor?.(sessionId)) ?? true;
+  }
+
   /** Forget the skill session of an MCP session that ended. */
   async endSession(sessionId: string): Promise<void> {
     await this.store?.delete(sessionId);

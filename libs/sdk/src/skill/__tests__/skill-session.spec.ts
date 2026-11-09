@@ -538,16 +538,18 @@ describe('MemorySkillSessionStore', () => {
     toolCallCount: 0,
   });
 
-  it('drops the oldest session once it holds its maximum, and keeps updating one it holds', async () => {
+  it('refuses a new session once it holds its maximum, and keeps every session it holds', async () => {
     const boundedStore = new MemorySkillSessionStore(2);
     await boundedStore.save(createSession('session-1'));
     await boundedStore.save(createSession('session-2'));
     await boundedStore.save({ ...createSession('session-1'), toolCallCount: 1 });
-    await boundedStore.save(createSession('session-3'));
 
-    expect(await boundedStore.get('session-1')).toBeNull();
+    expect(await boundedStore.hasRoomFor('session-1')).toBe(true);
+    expect(await boundedStore.hasRoomFor('session-3')).toBe(false);
+    await expect(boundedStore.save(createSession('session-3'))).rejects.toThrow('maximum of 2 sessions');
+    expect((await boundedStore.get('session-1'))?.toolCallCount).toBe(1);
     expect(await boundedStore.get('session-2')).not.toBeNull();
-    expect(await boundedStore.get('session-3')).not.toBeNull();
+    expect(await boundedStore.get('session-3')).toBeNull();
   });
 
   it('should save and retrieve session', async () => {
