@@ -112,6 +112,8 @@ If no `claimsMapping` is provided, the engine falls back to (in order):
 - **roles**: `authInfo.user.roles` → `authInfo.extra.authorization.scopes` → `[]`
 - **permissions**: `authInfo.user.permissions` → `[]`
 
+`tenantId` has no fallback: with the mapping, a non-empty string claim becomes `user.tenantId`, which rules match on (`match: { 'user.tenantId': 'acme' }`) and guards read as `ctx.user.tenantId`; without it, `user.tenantId` is `undefined`.
+
 The OAuth-scopes-as-roles fallback means a token with no `roles` claim but with `scope: "admin read"` will be treated as having `roles: ['admin', 'read']`. Configure explicit `claimsMapping.roles` to opt out. For non-standard token shapes, use `claimsResolver` instead (see Common Patterns below).
 
 ### Step 3: Register Named Profiles

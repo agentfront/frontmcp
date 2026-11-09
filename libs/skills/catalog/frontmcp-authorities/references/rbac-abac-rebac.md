@@ -109,12 +109,12 @@ ABAC evaluates conditions against a context envelope containing `user`, `claims`
 
 The evaluation context has four top-level namespaces:
 
-| Prefix     | Content                                                      | Example Path                        |
-| ---------- | ------------------------------------------------------------ | ----------------------------------- |
-| `user.*`   | Resolved user info (`sub`, `roles`, `permissions`, `claims`) | `user.sub`, `user.roles`            |
-| `claims.*` | Raw JWT claims                                               | `claims.org_id`, `claims.email`     |
-| `input.*`  | Tool/prompt input arguments                                  | `input.tenantId`, `input.projectId` |
-| `env.*`    | Runtime environment variables                                | `env.NODE_ENV`, `env.REGION`        |
+| Prefix     | Content                                                                  | Example Path                              |
+| ---------- | ------------------------------------------------------------------------ | ----------------------------------------- |
+| `user.*`   | Resolved user info (`sub`, `roles`, `permissions`, `claims`, `tenantId`) | `user.sub`, `user.roles`, `user.tenantId` |
+| `claims.*` | Raw JWT claims                                                           | `claims.org_id`, `claims.email`           |
+| `input.*`  | Tool/prompt input arguments                                              | `input.tenantId`, `input.projectId`       |
+| `env.*`    | Runtime environment variables                                            | `env.NODE_ENV`, `env.REGION`              |
 
 ### Simple Match
 

@@ -198,6 +198,9 @@ export class AuthoritiesContextBuilder {
 
     // Anonymous callers have no sub, so `user.sub exists` excludes them
     const mappedSub = this.claimsMapping?.userId ? resolveDotPath(rawClaims, this.claimsMapping.userId) : undefined;
+    const mappedTenantId = this.claimsMapping?.tenantId
+      ? resolveDotPath(rawClaims, this.claimsMapping.tenantId)
+      : undefined;
 
     return {
       user: {
@@ -205,6 +208,7 @@ export class AuthoritiesContextBuilder {
         roles,
         permissions,
         claims: rawClaims,
+        tenantId: typeof mappedTenantId === 'string' && mappedTenantId !== '' ? mappedTenantId : undefined,
       },
       input,
       env,
