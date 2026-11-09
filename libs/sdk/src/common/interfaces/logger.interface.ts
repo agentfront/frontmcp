@@ -14,7 +14,8 @@ export interface LogRecord {
 export type LogFn = (msg?: any, ...args: any[]) => void;
 
 export abstract class LogTransportInterface {
-  abstract log(rec: LogRecord): void;
+  /** May return a promise; a rejection is reported once on stderr and never stops the server. */
+  abstract log(rec: LogRecord): void | Promise<void>;
 }
 
 export type LogTransportType<T = any> = Type<T>;
