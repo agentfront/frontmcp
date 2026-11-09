@@ -99,17 +99,23 @@ export default class WellKnownPrmFlow extends FlowBase<typeof name> {
 
     const resource = computeResource(request, scope.entryPath, scope.routeBase);
     const baseUrl = getRequestBaseUrl(request, scope.entryPath);
+    const authOptions = (scope.auth?.options ?? scope.metadata.auth) as
+      | (ResourceScopeOptions & { provider?: string })
+      | undefined;
+    // Transparent mode issues no tokens: the provider is its authorization server (RFC 8414 §3.3).
+    const transparentProvider = authOptions?.mode === 'transparent' ? authOptions.provider : undefined;
     // A server that issues its own tokens names the issuer it names everywhere else for this
     // request (`LocalPrimaryAuth.issuerFor`, #629): its authorization server metadata, the RFC 9207
     // `iss` of its authorization responses and its tokens' `iss` all say the same.
     const authorizationServer =
-      (scope.auth as { issuerFor?: (request: ServerRequest) => string } | undefined)?.issuerFor?.(request) ?? baseUrl;
+      transparentProvider ??
+      (scope.auth as { issuerFor?: (request: ServerRequest) => string } | undefined)?.issuerFor?.(request) ??
+      baseUrl;
     // Advertise the scopes a client can actually be given here, by mode (#262, #629): `allowedScopes`
     // in local and remote mode, `anonymousScopes` in public mode, the static credential's `scopes`,
     // transparent mode's `requiredScopes` and upstream `scopes`.
     // Outside local and remote mode, the scopes entries' `authProviders` declare are advertised too, so
     // clients know to request them.
-    const authOptions = (scope.auth?.options ?? scope.metadata.auth) as ResourceScopeOptions | undefined;
     const granted = resourceScopesFor(authOptions);
     const orchestrated = authOptions?.mode === 'local' || authOptions?.mode === 'remote';
     const hasAuthorizationServer = authOptions?.mode !== 'public' && authOptions?.mode !== 'static';
