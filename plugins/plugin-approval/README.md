@@ -183,7 +183,10 @@ ApprovalPlugin.init({
 | `webhook.challengeTtl`   | `300`              | How long the `ChallengeService`'s challenges last, in seconds.                                                                                                                                                 |
 
 `webhook.url`, `webhook.callbackPath`, `webhook.includeJwt`, the `recheck` options, `enableAudit` and
-`maxDelegationDepth` are accepted and not used: nothing is sent, polled or served.
+`maxDelegationDepth` are deprecated and have no effect: nothing is sent, polled, served or logged, each approval record
+keeps who granted or revoked it, and a delegated grant names one delegator. A server that sets any of them logs
+`ApprovalPlugin ignores ...` when it starts. Up to 1.11.2 nothing said so, and `defaultOptions` listed `enableAudit:
+true` and `maxDelegationDepth: 3`.
 
 In a browser build (`create()` in a web page, WebMCP), `storage: { type: 'redis' }` or `{ type: 'sqlite' }` throws
 `BrowserStoreUnavailableError` from `init()`, naming `storage: { type: 'memory' }`: a page has no TCP socket and no
