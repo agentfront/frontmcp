@@ -1,4 +1,4 @@
-import type { CryptoKey, JSONWebKeySet, JWK, JWTPayload, JWTVerifyResult } from 'jose';
+import type { CryptoKey, JSONWebKeySet, JWK, JWTPayload, JWTVerifyGetKey, JWTVerifyResult } from 'jose';
 
 import { base64urlDecode, sha256Base64url } from '@frontmcp/utils';
 
@@ -39,6 +39,8 @@ function isAsymmetricKty(kty: unknown): kty is AsymmetricKty {
 /** The keys a server signs and verifies its own tokens with: `signKey`, else HS256 with `JWT_SECRET`. */
 export class LocalTokenKeys {
   private importedKey?: Promise<CryptoKey | Uint8Array>;
+  /** The published keys as one JWK set, built once: the set imports each key on its first use and keeps it. */
+  private publicKeySet?: JWTVerifyGetKey;
 
   private constructor(
     readonly alg: string,
@@ -92,7 +94,8 @@ export class LocalTokenKeys {
     const { createLocalJWKSet, jwtVerify } = await loadJose();
     const verifyOptions = { ...options, algorithms: this.algorithms };
     if (this.hmacKey) return jwtVerify(token, this.hmacKey, verifyOptions);
-    return jwtVerify(token, createLocalJWKSet(this.publicJwks), verifyOptions);
+    this.publicKeySet ??= createLocalJWKSet(this.publicJwks);
+    return jwtVerify(token, this.publicKeySet, verifyOptions);
   }
 
   private static asymmetric(signKey: JWK, jwksKeys: JWK[], optionPath: string): LocalTokenKeys {

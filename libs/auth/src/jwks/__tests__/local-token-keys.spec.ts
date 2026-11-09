@@ -1,6 +1,7 @@
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT, type JWK } from 'jose';
 
 import { SigningKeyInvalidError } from '../../errors/auth-internal.errors';
+import * as joseLoader from '../jose.loader';
 import { LocalTokenKeys } from '../local-token-keys';
 
 const SECRET = new TextEncoder().encode('a-jwt-secret-that-is-at-least-32-bytes!');
@@ -69,6 +70,20 @@ describe('LocalTokenKeys', () => {
     const { createLocalJWKSet } = await import('jose');
     await expect(jwtVerify(token, createLocalJWKSet(keys.publicJwks))).resolves.toBeDefined();
     await expect(keys.verify(token, verifyOptions)).resolves.toMatchObject({ protectedHeader: { alg: 'RS256' } });
+  });
+
+  it('builds the JWK set it verifies with once, so each public key is imported once', async () => {
+    const keys = LocalTokenKeys.fromConfig({ signKey: await privateJwk('ES256') }, SECRET, 'auth.local');
+    const token = await sign(keys);
+    const jose = await joseLoader.loadJose();
+    const createLocalJWKSet = jest.fn(jose.createLocalJWKSet);
+    const loadJose = jest.spyOn(joseLoader, 'loadJose').mockResolvedValue({ ...jose, createLocalJWKSet });
+
+    await expect(keys.verify(token, verifyOptions)).resolves.toBeDefined();
+    await expect(keys.verify(token, verifyOptions)).resolves.toBeDefined();
+
+    expect(createLocalJWKSet).toHaveBeenCalledTimes(1);
+    loadJose.mockRestore();
   });
 
   it('names a key without kid by its RFC 7638 thumbprint', async () => {
