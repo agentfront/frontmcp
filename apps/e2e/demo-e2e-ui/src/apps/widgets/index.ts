@@ -14,6 +14,7 @@ import MdxInteractiveTool from './tools/mdx-interactive.tool';
 import ReactChartTool from './tools/react-chart.tool';
 import ReactFormTool from './tools/react-form.tool';
 import ReactWeatherTool from './tools/react-weather.tool';
+import SanitizedSummaryTool from './tools/sanitized-summary.tool';
 import StaticBadgeTool from './tools/static-badge.tool';
 
 @App({
@@ -32,6 +33,7 @@ import StaticBadgeTool from './tools/static-badge.tool';
     ReactWeatherTool,
     LeakyReportTool,
     CustomUriTool,
+    SanitizedSummaryTool,
   ],
   resources: [UiTemplatesResource],
   prompts: [UiShowcasePrompt],

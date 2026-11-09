@@ -46,6 +46,7 @@ export {
   type RenderToolTemplateOptions,
   type RenderToolTemplateResult,
 } from './template-renderer';
+export { describeRenderOptionProblems } from './render-options';
 
 // ============================================
 // Content Detection & Rendering

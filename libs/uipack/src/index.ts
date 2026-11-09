@@ -98,6 +98,7 @@ export {
   trustedHtml,
   isTrustedHtml,
   type TrustedHtml,
+  sanitizeHtml,
   // Custom Shell
   type ShellPlaceholderName,
   type InlineShellSource,

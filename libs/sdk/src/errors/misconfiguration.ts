@@ -42,6 +42,10 @@ export const MISCONFIGURATION_REMEDIES: Record<string, string> = {
   DUPLICATE_PLUGIN_ENTRY:
     'One plugins list names a plugin twice, so the server refuses to start. List it once with all its options, ' +
     'or install the other configuration on another app; the server log names the plugin, the list and both entries.',
+  TOOL_UI_CONFIGURATION:
+    "A tool's `ui` sets a rendering option its template cannot take (for example `contentSecurity` on a " +
+    '`{ file }` widget), so the server refuses to start. Change the template or remove the option; the server ' +
+    'log names the tool and the option.',
   PLUGIN_CONFIGURED_TWICE:
     'A server option (such as `observability`) installs a plugin that the server plugins list names too, so the ' +
     'server refuses to start. Configure the plugin in one place; the server log names the option and the plugin.',
