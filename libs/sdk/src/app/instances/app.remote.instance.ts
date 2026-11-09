@@ -124,9 +124,7 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
     this._adapters = new EmptyAdapterRegistry();
     this._skills = new EmptySkillRegistry();
 
-    this.mcpClient = mcpClientServiceOf(this.scopeProviders.getActiveScope(), {
-      capabilityRefreshInterval: this.metadata.refreshInterval ?? 0,
-    });
+    this.mcpClient = mcpClientServiceOf(this.scopeProviders.getActiveScope());
 
     this.ready = this.initialize();
   }
@@ -148,6 +146,7 @@ export class AppRemoteInstance extends AppEntry<RemoteAppMetadata> {
           transportOptions: this.metadata.transportOptions,
           remoteAuth: this.metadata.remoteAuth,
           namespace: this.metadata.namespace,
+          refreshInterval: this.metadata.refreshInterval ?? 0,
         }),
       );
       this.isConnected = true;

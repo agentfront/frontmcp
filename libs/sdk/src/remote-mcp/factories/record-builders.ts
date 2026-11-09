@@ -54,13 +54,15 @@ export function buildRemoteToolRecord(
 
   const ContextClass = createRemoteToolContextClass(mcpClient, remoteAppId, remoteTool.name);
 
-  // rawInputSchema is set as an internal passthrough field (not part of the public ToolMetadata interface)
+  // rawInputSchema and rawOutputSchema are internal passthrough fields (not part of the public ToolMetadata interface)
   const metadata: ToolMetadata & Record<string, unknown> = {
     name: toolName,
     id: toolName,
+    ...(remoteTool.title !== undefined && { title: remoteTool.title }),
     description: remoteTool.description || `Remote tool: ${remoteTool.name}`,
     inputSchema: {},
     rawInputSchema: remoteTool.inputSchema,
+    rawOutputSchema: remoteTool.outputSchema,
     outputSchema: 'json' as ToolMetadata['outputSchema'],
     annotations: {
       ...remoteTool.annotations,
@@ -98,6 +100,7 @@ export function buildRemoteResourceRecord(
 
   const metadata: ResourceMetadata = {
     name: resourceName,
+    ...(remoteResource.title !== undefined && { title: remoteResource.title }),
     description: remoteResource.description || `Remote resource: ${remoteResource.name}`,
     uri: remoteResource.uri,
     mimeType: remoteResource.mimeType,
@@ -131,6 +134,7 @@ export function buildRemoteResourceTemplateRecord(
 
   const metadata: ResourceTemplateMetadata = {
     name: resourceName,
+    ...(remoteTemplate.title !== undefined && { title: remoteTemplate.title }),
     description: remoteTemplate.description || `Remote resource template: ${remoteTemplate.name}`,
     uriTemplate: remoteTemplate.uriTemplate,
     mimeType: remoteTemplate.mimeType,
@@ -164,6 +168,7 @@ export function buildRemotePromptRecord(
 
   const metadata: PromptMetadata = {
     name: promptName,
+    ...(remotePrompt.title !== undefined && { title: remotePrompt.title }),
     description: remotePrompt.description || `Remote prompt: ${remotePrompt.name}`,
     arguments:
       remotePrompt.arguments?.map((arg) => ({

@@ -35,7 +35,7 @@ interface ScopeWithMcpClient {
   mcpClientService?: McpClientService;
 }
 
-/** The scope's MCP client, created by the first remote app or `.remote()` entry that connects. */
+/** The scope's MCP client, created by the first remote app or `.remote()` entry that connects; each connection sets its own `refreshInterval`. */
 export function mcpClientServiceOf(scope: ScopeWithMcpClient, options?: McpClientServiceOptions): McpClientService {
   if (!scope.mcpClientService) {
     scope.mcpClientService = new McpClientService(scope.logger, options);
@@ -52,6 +52,7 @@ export function buildRemoteConnectRequest(target: {
   transportOptions?: RemoteTransportOptions;
   remoteAuth?: RemoteAuthConfig;
   namespace?: string;
+  refreshInterval?: number;
 }): McpConnectRequest {
   const { transportOptions } = target;
   return {
@@ -69,6 +70,7 @@ export function buildRemoteConnectRequest(target: {
     },
     auth: target.remoteAuth as McpRemoteAuthConfig | undefined,
     namespace: target.namespace,
+    refreshInterval: target.refreshInterval,
   };
 }
 

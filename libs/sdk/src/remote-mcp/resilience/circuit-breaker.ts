@@ -3,6 +3,8 @@
  * @description Circuit breaker pattern for preventing cascading failures in remote MCP operations
  */
 
+import { PublicMcpError } from '../../errors/mcp.error';
+
 export type CircuitState = 'closed' | 'open' | 'half-open';
 
 export interface CircuitBreakerOptions {
@@ -201,15 +203,15 @@ export class CircuitBreaker {
 }
 
 /**
- * Error thrown when circuit is open
+ * Error thrown when circuit is open. It is public (`REMOTE_CIRCUIT_OPEN`, HTTP 503), so the client sees its message.
  */
-export class CircuitOpenError extends Error {
+export class CircuitOpenError extends PublicMcpError {
   readonly appId: string;
   readonly nextAttemptTime?: number;
 
   constructor(appId: string, nextAttemptTime?: number) {
     const waitTime = nextAttemptTime ? Math.ceil((nextAttemptTime - Date.now()) / 1000) : 0;
-    super(`Circuit breaker is open for ${appId}. Retry in ${waitTime}s`);
+    super(`Circuit breaker is open for ${appId}. Retry in ${waitTime}s`, 'REMOTE_CIRCUIT_OPEN', 503);
     this.name = 'CircuitOpenError';
     this.appId = appId;
     this.nextAttemptTime = nextAttemptTime;
