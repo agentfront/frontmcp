@@ -249,6 +249,62 @@ describe('SkilledOpenApiPlugin', () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
+    it('applies the first bundle once the scope is ready, though a timer fires before it (#1169)', async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'plugin-test-'));
+      const bundlePath = path.join(tmpDir, 'bundle.json');
+      const bundleWithSkill = {
+        ...validBundle,
+        skills: [{ id: 's', name: 'S', description: 'd', instructions: 'i', operationIds: [] }],
+      };
+      await fs.writeFile(bundlePath, JSON.stringify(bundleWithSkill), 'utf8');
+
+      const providers = SkilledOpenApiPlugin.dynamicProviders({
+        source: { type: 'static', path: bundlePath },
+        requireSignature: false,
+        dev: true,
+      });
+      const syncProvider = providers.find((p) => (p as { provide: unknown }).provide === BundleSyncService) as {
+        useFactory: (...args: unknown[]) => Promise<BundleSyncService>;
+      };
+      const fakeLogger = {
+        warn: jest.fn(),
+        info: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        verbose: jest.fn(),
+        child: jest.fn().mockReturnThis(),
+      };
+      let scopeReady!: () => void;
+      const fakeScope: Record<string, unknown> = {
+        logger: fakeLogger,
+        registerHealthProbe: jest.fn(),
+        batchListChanges,
+        skills: undefined,
+        ready: new Promise<void>((resolve) => {
+          scopeReady = resolve;
+        }),
+      };
+      const bundleStore = new BundleStore();
+
+      await syncProvider.useFactory(fakeScope, new HiddenOpRegistry(), bundleStore);
+      await new Promise((r) => setTimeout(r, 50));
+      expect(fakeLogger.error).not.toHaveBeenCalled();
+
+      fakeScope['skills'] = {
+        notifyListChanged: jest.fn(),
+        registerSkillContent: jest.fn(async () => ({ id: 's', unregister: async () => {} })),
+        unregisterSkill: jest.fn(async () => false),
+      };
+      scopeReady();
+      const deadline = Date.now() + 1000;
+      while (Date.now() < deadline && !bundleStore.current()) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+
+      expect(bundleStore.current()?.bundleId).toBe('plugin:test');
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
     it('lazy skill-registry proxy throws when scope.skills is missing', async () => {
       const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'plugin-test-'));
       const bundlePath = path.join(tmpDir, 'bundle.json');

@@ -213,7 +213,7 @@ const server = await create({
 - Every visitor can read the page's credentials and bundle, and change what runs: give the page only a credential the visitor may use (their own token, through `passthroughCallerToken` or a resolver), and let the API authorize each request.
 - Vite builds the page as it is. esbuild needs `external: ['node:http', 'node:https', 'path', 'fs/promises']`, and webpack 5 `new webpack.IgnorePlugin({ resourceRegExp: /^(node:)?(dns|http|https|path|fs\/promises)$/, contextRegExp: /mcp-from-openapi/ })`: `mcp-from-openapi`, under the plugin's OpenAPI runtime, imports them inside `try`/`catch`.
 
-Up to 1.11.0 the plugin failed to start in a page (`setImmediate is not defined`), refused every request to a named host, read answers with `Buffer`, and `run_workflow` needed `@enclave-vm/core`; the SDK's browser build imported `@enclave-vm/core`, so webpack failed on its `vm` and `worker_threads` when it was installed.
+Up to 1.11.0 the plugin failed to start in a page (`setImmediate is not defined`), refused every request to a named host, read answers with `Buffer`, and `run_workflow` needed `@enclave-vm/core`; the SDK's browser build imported `@enclave-vm/core`, so webpack failed on its `vm` and `worker_threads` when it was installed. Up to 1.11.2 a Web Worker could apply the first bundle before the server had its skills registry (`scope.skills not available`), and the server never got its skills; the first bundle now waits for the server to be ready, and a later request applies a bundle that failed to apply again.
 
 ## What a Browser Bundle Leaves Out
 
