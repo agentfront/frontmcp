@@ -6,6 +6,7 @@ import {
   AuthoritiesEvaluatorRegistry,
   AuthoritiesProfileRegistry,
 } from '@frontmcp/auth';
+import type { GetPromptResult, ReadResourceResult } from '@frontmcp/protocol';
 
 import {
   createTestFetchServer,
@@ -21,8 +22,6 @@ import {
   ResourceTemplate,
   Tool,
   ToolContext,
-  type GetPromptResult,
-  type ReadResourceResult,
 } from '../../common';
 import { isListedByAuthorities } from '../entry-authorized';
 
