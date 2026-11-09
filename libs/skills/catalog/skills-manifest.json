@@ -2264,7 +2264,7 @@
         },
         {
           "name": "create-workflow",
-          "description": "Connect multiple jobs into managed DAG pipelines with dependencies, conditions, and webhook triggers",
+          "description": "Connect multiple jobs into managed DAG pipelines with dependencies, conditions, and triggers",
           "examples": [
             {
               "name": "basic-deploy-pipeline",

@@ -1,5 +1,4 @@
 import { type JobPermission } from '../common/metadata/job.metadata';
-import { type WorkflowMetadata } from '../common/metadata/workflow.metadata';
 
 /** Permission actions that no operation checks: nothing creates or updates a job, a workflow or a run. */
 const UNCHECKED_PERMISSION_ACTIONS = ['create', 'update'] as const;
@@ -21,18 +20,5 @@ export function describeUncheckedPermissions(
   return [
     `${kind} "${name}": its permission rules for ${actions} are never checked, so they restrict nothing: ` +
       'no operation creates or updates a job, a workflow or a run. Remove them; "execute" decides who starts a run.',
-  ];
-}
-
-/**
- * Describe the trigger option of a workflow that nothing reads, in one message: `trigger: 'event'` listens to no
- * event, so the workflow runs only through `execute_workflow`.
- */
-export function describeIgnoredTrigger(metadata: Pick<WorkflowMetadata, 'name' | 'trigger'>): string[] {
-  const { name, trigger } = metadata;
-  if (trigger !== 'event') return [];
-  return [
-    `Workflow "${name}": \`trigger: 'event'\` listens to no event, so nothing starts the workflow on its own; ` +
-      'it runs only through execute_workflow.',
   ];
 }

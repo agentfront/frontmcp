@@ -1,7 +1,8 @@
 /**
- * E2E: a `trigger: 'webhook'` workflow, served over HTTP by a real server. A request signed with the workflow's secret
- * starts a run with its JSON body as input; an unsigned, badly signed or replayed one gets 401; a workflow whose
- * execute rules don't allow `webhook:<workflow>` answers 403.
+ * E2E: workflow triggers on a real server. A `trigger: 'webhook'` workflow's route starts a run for a request signed
+ * with its secret, with its JSON body as input; an unsigned, badly signed or replayed one gets 401; a workflow whose
+ * execute rules don't allow `webhook:<workflow>` answers 403. A `trigger: 'event'` workflow starts when a tool emits
+ * its event on the scope's event bus, with the payload as input.
  */
 import { expect, test, type McpTestClient } from '@frontmcp/testing';
 import { bytesToHex, hmacSha256, randomBytes } from '@frontmcp/utils';
@@ -101,5 +102,14 @@ test.describe('Workflow triggers', () => {
 
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: 'Forbidden' });
+  });
+
+  test('an event a tool emits starts the workflow that listens to it', async ({ mcp }) => {
+    const result = await mcp.tools.call('sign-up', { email: 'grace@example.com' });
+    expect(result.json()).toEqual({ emitted: true });
+
+    expect(await deliveriesOnceThere(mcp, (delivery) => delivery['email'] === 'grace@example.com')).toEqual({
+      email: 'grace@example.com',
+    });
   });
 });

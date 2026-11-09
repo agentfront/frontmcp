@@ -1,11 +1,11 @@
 ---
 name: create-workflow
-description: Connect multiple jobs into managed DAG pipelines with dependencies, conditions, and webhook triggers
+description: Connect multiple jobs into managed DAG pipelines with dependencies, conditions, and triggers
 ---
 
 # Creating Workflows
 
-Workflows connect multiple jobs into managed execution pipelines with step dependencies, conditions, and triggers. A workflow defines a directed acyclic graph (DAG) of steps where each step runs a named job, and the framework handles ordering, parallelism, error propagation, and trigger management. A workflow runs when something calls `execute_workflow`, or when its trigger fires: a signed webhook request (see [Workflow Triggers](#workflow-triggers)).
+Workflows connect multiple jobs into managed execution pipelines with step dependencies, conditions, and triggers. A workflow defines a directed acyclic graph (DAG) of steps where each step runs a named job, and the framework handles ordering, parallelism, error propagation, and trigger management. A workflow runs when something calls `execute_workflow`, or when its trigger fires: a signed webhook request, or an event the server emits (see [Workflow Triggers](#workflow-triggers)).
 
 ## When to Use This Skill
 
@@ -13,7 +13,7 @@ Workflows connect multiple jobs into managed execution pipelines with step depen
 
 - Orchestrating multiple jobs in a defined order with explicit step dependencies (e.g., build then test then deploy)
 - Building execution pipelines that require conditional branching, parallel fan-out, or diamond dependency patterns
-- Defining webhook-triggered multi-step automation that the framework manages end to end
+- Defining webhook- or event-triggered multi-step automation that the framework manages end to end
 
 ### Recommended
 
@@ -35,17 +35,18 @@ Create a class decorated with `@Workflow`. The decorator requires `name` and `st
 
 ### WorkflowMetadata Fields
 
-| Field            | Type                               | Required    | Default           | Description                                                                                                                                                                                    |
-| ---------------- | ---------------------------------- | ----------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`           | `string`                           | Yes         | --                | Unique workflow name                                                                                                                                                                           |
-| `steps`          | `WorkflowStep[]`                   | Yes (min 1) | --                | Array of step definitions                                                                                                                                                                      |
-| `description`    | `string`                           | No          | --                | Human-readable description                                                                                                                                                                     |
-| `trigger`        | `'manual' \| 'webhook' \| 'event'` | No          | `'manual'`        | What starts a run besides `execute_workflow`: `'webhook'` a signed request to its route (see [Workflow Triggers](#workflow-triggers)); `'event'` still starts nothing, and startup warns       |
-| `webhook`        | `WebhookConfig`                    | No          | --                | The route of a `trigger: 'webhook'` workflow: `secret` is required; set without that trigger, the server refuses to start                                                                      |
-| `timeout`        | `number`                           | No          | `600000` (10 min) | Maximum total workflow execution time in milliseconds                                                                                                                                          |
-| `maxConcurrency` | `number`                           | No          | `5`               | Maximum number of steps running in parallel                                                                                                                                                    |
-| `permissions`    | `JobPermission[]`                  | No          | --                | Array of permission rules. Multiple rules may target the same action; all matching rules must pass. Same shape and semantics as job permissions; **enforced from 1.7.2** (GHSA-58v2-gpcc-jmqv) |
-| `inputSchema`    | Zod raw shape                      | No          | --                | The workflow's input, checked when a run starts (see [Workflow Input](#workflow-input))                                                                                                        |
+| Field            | Type                               | Required    | Default             | Description                                                                                                                                                                                    |
+| ---------------- | ---------------------------------- | ----------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`           | `string`                           | Yes         | --                  | Unique workflow name                                                                                                                                                                           |
+| `steps`          | `WorkflowStep[]`                   | Yes (min 1) | --                  | Array of step definitions                                                                                                                                                                      |
+| `description`    | `string`                           | No          | --                  | Human-readable description                                                                                                                                                                     |
+| `trigger`        | `'manual' \| 'webhook' \| 'event'` | No          | `'manual'`          | What starts a run besides `execute_workflow`: a signed request to its route, or its event (see [Workflow Triggers](#workflow-triggers))                                                        |
+| `webhook`        | `WebhookConfig`                    | No          | --                  | The route of a `trigger: 'webhook'` workflow: `secret` is required; set without that trigger, the server refuses to start                                                                      |
+| `event`          | `string`                           | No          | The workflow's name | The event that starts a `trigger: 'event'` workflow; set without that trigger, the server refuses to start                                                                                     |
+| `timeout`        | `number`                           | No          | `600000` (10 min)   | Maximum total workflow execution time in milliseconds                                                                                                                                          |
+| `maxConcurrency` | `number`                           | No          | `5`                 | Maximum number of steps running in parallel                                                                                                                                                    |
+| `permissions`    | `JobPermission[]`                  | No          | --                  | Array of permission rules. Multiple rules may target the same action; all matching rules must pass. Same shape and semantics as job permissions; **enforced from 1.7.2** (GHSA-58v2-gpcc-jmqv) |
+| `inputSchema`    | Zod raw shape                      | No          | --                  | The workflow's input, checked when a run starts (see [Workflow Input](#workflow-input))                                                                                                        |
 
 ### WorkflowStep Fields
 
@@ -470,6 +471,58 @@ export class GithubDeployWebhook extends HttpRouteContext {
 
 List the route in the app's `routes`, and leave the workflow's `trigger` unset. The route calls `execute_workflow` as an anonymous caller, so the workflow must not set `execute` rules that an anonymous caller fails; the route's signature check is what protects it.
 
+### Event
+
+The workflow starts when the server emits its `event` (default: the workflow's name) on the scope's event bus, the in-process bus `app-event` channel sources listen on too. Your code emits it from a tool, a job, a hook or a provider with `this.scope.channelEventBus?.emit(event, payload)`, and each workflow listening to that event starts a run in the background, with the payload as its input:
+
+```typescript
+@Workflow({
+  name: 'on-user-signup',
+  description: 'Workflow triggered when a new user signs up',
+  trigger: 'event',
+  event: 'user.signup',
+  inputSchema: { userId: z.string(), email: z.string() },
+  permissions: [{ action: 'execute', roles: ['admin', 'event:user.signup'] }],
+  steps: [
+    {
+      id: 'create-profile',
+      jobName: 'create-user-profile',
+      input: (steps, input) => ({ userId: input.userId, template: 'default' }),
+    },
+    {
+      id: 'send-welcome',
+      jobName: 'send-email',
+      dependsOn: ['create-profile'],
+      input: (steps, input) => ({ to: input.email, template: 'welcome' }),
+    },
+    {
+      id: 'setup-defaults',
+      jobName: 'setup-user-defaults',
+      dependsOn: ['create-profile'],
+      input: (steps, input) => ({ userId: input.userId }),
+    },
+  ],
+})
+class OnUserSignup {}
+
+@Tool({ name: 'sign_up', inputSchema: { email: z.string() } })
+class SignUpTool extends ToolContext {
+  async execute({ email }: { email: string }) {
+    const userId = await this.get(Users).create(email);
+    this.scope.channelEventBus?.emit('user.signup', { userId, email });
+    return { userId };
+  }
+}
+```
+
+- **The bus** exists when a workflow has `trigger: 'event'` or `channels.enabled` is set; else `channelEventBus` is `undefined`. It is in-process: an event emitted in one server process starts the workflows of that process, and a detached job runner listens to none.
+- **The payload** is the run's input, checked against the workflow's `inputSchema`. No payload starts the run with `{}`. A payload that isn't an object, or doesn't match the schema, starts no run.
+- **Who the run runs as**: the role `event:<event>`, and nothing else, as a webhook's run runs as `webhook:<workflow>` (see [Who the Run Runs As](#who-the-run-runs-as)). A workflow with `execute` rules must allow it, and so must each step job with rules.
+- **`emit()` doesn't wait** for the run, and nothing it does throws at the emitter: a run that can't start (a denial, bad input) is logged as a warning that names the event, the workflow and the reason.
+- A job of the run that emits the event that started it starts another run.
+
+Up to 1.11.2, `trigger: 'event'` listened to no event: it was ignored.
+
 ## Function Builder
 
 For workflows that do not need a class, use the `workflow()` function builder:
@@ -805,6 +858,7 @@ class CiServer {}
 | Job registration     | Register all referenced jobs in the `jobs` array of `@App`         | Declare `jobName` in steps without registering the job class               | Steps reference jobs by name; unregistered jobs cause runtime lookup failures   |
 | Workflow trigger     | Set `trigger: 'webhook'` and provide `webhook: { path, secret }`   | Set `trigger: 'webhook'` without a `webhook.secret`                        | The server refuses to start a webhook workflow without its secret               |
 | Webhook execute rule | `roles: ['admin', 'webhook:ci-deploy']` in one `execute` rule      | `{ roles: ['admin'] }` and `{ roles: ['webhook:ci-deploy'] }` as two rules | Every matching rule must pass, so two rules allow nobody                        |
+| Emitting an event    | `this.scope.channelEventBus?.emit('user.signup', { userId })`      | `emit('user.signup', userId)` (a string payload)                           | The payload is the run's input, so it must be an object                         |
 
 ## Verification Checklist
 
@@ -822,6 +876,7 @@ class CiServer {}
 - [ ] Conditional steps are correctly skipped or executed based on prior step results
 - [ ] `continueOnError: true` steps allow downstream steps to proceed on failure
 - [ ] A signed request to the webhook's path answers `202` with the run's `runId`, and an unsigned one `401`
+- [ ] Emitting an event-triggered workflow's event starts a run of it
 
 ## Troubleshooting
 
@@ -833,6 +888,7 @@ class CiServer {}
 | Webhook answers `401`                               | The signature doesn't cover the exact body sent, the timestamp is more than 5 minutes off, or the request was sent before | Sign `<timestamp>.<body>` over the bytes you send, with a fresh timestamp for each request; the server's log names the reason |
 | Webhook answers `403`                               | The workflow's `execute` rules don't allow its webhook                                                                    | Add `webhook:<workflow name>` to the roles of its `execute` rule                                                              |
 | Server refuses to start: `needs webhook.secret`     | A `trigger: 'webhook'` workflow without a secret (an unset env var)                                                       | Set the secret, at least 32 characters (`openssl rand -hex 32`), one for each webhook workflow                                |
+| An event starts no run                              | The bus has no listener for that name, or the run can't start                                                             | Check the workflow's `event` (default: its name); the server's log names a denial or bad input                                |
 | Workflow exceeds timeout                            | Total step execution time exceeds the default 600000 ms                                                                   | Increase `timeout` at the workflow level or add per-step `timeout` overrides                                                  |
 | `Invalid input for workflow "<name>"`               | The run's input doesn't match the workflow's `inputSchema`                                                                | Pass `input` that matches it; the error's details name each field that doesn't                                                |
 | A failure-notification step never runs              | The step it watches failed without `continueOnError`, so it was skipped                                                   | Set `continueOnError: true` on the watched step                                                                               |

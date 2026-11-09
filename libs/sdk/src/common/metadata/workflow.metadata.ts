@@ -62,8 +62,8 @@ export interface WorkflowStep {
 
 /**
  * What starts a workflow's runs besides `execute_workflow`, which runs every workflow: `'manual'` nothing else,
- * `'webhook'` a signed HTTP request to its `webhook.path`. `'event'` listens to no event yet, and startup warns
- * about it.
+ * `'webhook'` a signed HTTP request to its `webhook.path`, `'event'` its `event` emitted on the scope's event bus
+ * (`scope.channelEventBus.emit(event, payload)`).
  */
 export type WorkflowTriggerType = 'manual' | 'webhook' | 'event';
 
@@ -127,6 +127,14 @@ export interface WorkflowMetadata extends ExtendFrontMcpWorkflowMetadata {
    * server refuses to start.
    */
   webhook?: WorkflowWebhookConfig;
+
+  /**
+   * The event that starts a `trigger: 'event'` workflow when the scope's event bus emits it
+   * (`this.scope.channelEventBus?.emit(event, payload)`): an object payload is the run's input, and the run's caller is
+   * the role `event:<event>`, which the workflow's `execute` rules must allow when it has any. Default: the
+   * workflow's name. Set without that trigger, the server refuses to start.
+   */
+  event?: string;
 
   /**
    * Maximum total execution time in ms. Default: 600000 (10 min).
@@ -221,6 +229,7 @@ export const frontMcpWorkflowMetadataSchema = z
     steps: z.array(workflowStepSchema).min(1),
     trigger: z.enum(['manual', 'webhook', 'event']).optional().default('manual'),
     webhook: workflowWebhookConfigSchema.optional(),
+    event: z.string().min(1).optional(),
     timeout: z.number().int().min(0).optional().default(600000),
     maxConcurrency: z.number().int().min(1).optional().default(5),
     tags: z.array(z.string().min(1)).optional(),

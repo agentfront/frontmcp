@@ -1,6 +1,6 @@
 /**
- * Job and workflow options the schemas accept and nothing reads: a workflow's `trigger: 'event'`, and permission
- * rules for `create` and `update`. Startup warns about each.
+ * Job and workflow options the schemas accept and nothing reads: permission rules for `create` and `update`. Startup
+ * warns about them.
  */
 import 'reflect-metadata';
 
@@ -16,7 +16,7 @@ import {
 } from '../../common';
 import { type DirectMcpServer } from '../../direct/direct.types';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
-import { describeIgnoredTrigger, describeUncheckedPermissions } from '../unread-job-options';
+import { describeUncheckedPermissions } from '../unread-job-options';
 
 describe('describeUncheckedPermissions', () => {
   it('says nothing about rules every operation checks', () => {
@@ -50,23 +50,6 @@ describe('describeUncheckedPermissions', () => {
   });
 });
 
-describe('describeIgnoredTrigger', () => {
-  it('says nothing about a manual workflow', () => {
-    expect(describeIgnoredTrigger({ name: 'deploy' })).toEqual([]);
-    expect(describeIgnoredTrigger({ name: 'deploy', trigger: 'manual' })).toEqual([]);
-  });
-
-  it('says nothing about a webhook workflow, which is served', () => {
-    expect(describeIgnoredTrigger({ name: 'deploy', trigger: 'webhook' })).toEqual([]);
-  });
-
-  it('says an event trigger listens to no event', () => {
-    expect(describeIgnoredTrigger({ name: 'deploy', trigger: 'event' })).toEqual([
-      expect.stringContaining('Workflow "deploy": `trigger: \'event\'` listens to no event'),
-    ]);
-  });
-});
-
 const warnings: string[] = [];
 
 @LogTransport({ name: 'UnreadOptionsCapture', description: 'Keeps the warnings for assertions' })
@@ -91,17 +74,10 @@ class ExportJob extends JobContext {
   }
 }
 
-@Workflow({
-  name: 'nightly-export',
-  trigger: 'event',
-  steps: [{ id: 'export', jobName: 'export' }],
-})
-class NightlyExportWorkflow {}
-
 @Workflow({ name: 'manual-export', steps: [{ id: 'export', jobName: 'export' }] })
 class ManualExportWorkflow {}
 
-@App({ id: 'exports', name: 'Exports', jobs: [ExportJob], workflows: [NightlyExportWorkflow, ManualExportWorkflow] })
+@App({ id: 'exports', name: 'Exports', jobs: [ExportJob], workflows: [ManualExportWorkflow] })
 class ExportsApp {}
 
 describe('startup', () => {
@@ -119,12 +95,11 @@ describe('startup', () => {
     await server.dispose();
   });
 
-  it('warns about the event trigger and the create rule, and nothing else', () => {
+  it('warns about the create rule, and nothing else', () => {
     const unread = warnings.filter((message) => message.includes('export'));
 
     expect(unread).toEqual([
       expect.stringContaining('Job "export": its permission rules for "create" are never checked'),
-      expect.stringContaining('Workflow "nightly-export": `trigger: \'event\'`'),
     ]);
   });
 });

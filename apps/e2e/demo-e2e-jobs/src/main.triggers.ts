@@ -1,6 +1,6 @@
 /**
- * Jobs server whose workflows start from their triggers: a signed webhook. Each webhook's secret comes from the
- * environment the e2e sets.
+ * Jobs server whose workflows start from their triggers: a signed webhook, or an event a tool emits. Each webhook's
+ * secret comes from the environment the e2e sets.
  */
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
 
