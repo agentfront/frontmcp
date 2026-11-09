@@ -22,7 +22,10 @@ import { DynamicJobRegistrationDisabledError } from '../../errors';
         }),
       )
       .describe('Workflow step definitions'),
-    trigger: z.enum(['manual', 'webhook', 'event']).optional().describe('Trigger type'),
+    trigger: z
+      .enum(['manual', 'webhook', 'event'])
+      .optional()
+      .describe('Trigger type, kept on the workflow but not read: every workflow runs through execute_workflow'),
     tags: z.array(z.string()).optional().describe('Tags for categorization'),
   },
   outputSchema: {

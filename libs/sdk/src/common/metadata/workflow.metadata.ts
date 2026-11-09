@@ -55,8 +55,16 @@ export interface WorkflowStep {
 // Workflow Trigger Types
 // ============================================
 
+/**
+ * @deprecated Not read: a workflow runs only through `execute_workflow`, whatever its trigger. `'webhook'` registers
+ * no HTTP route and `'event'` listens to no event; startup warns about either.
+ */
 export type WorkflowTriggerType = 'manual' | 'webhook' | 'event';
 
+/**
+ * @deprecated Not read: no HTTP route is registered for it, and startup warns about it. To start a workflow from a
+ * webhook, serve an `@HttpRoute` that checks the request's signature and calls `execute_workflow`.
+ */
 export interface WorkflowWebhookConfig {
   /** Custom webhook path. Default: /workflows/webhook/{name} */
   path?: string;
@@ -97,11 +105,15 @@ export interface WorkflowMetadata extends ExtendFrontMcpWorkflowMetadata {
 
   /**
    * Trigger type. Default: 'manual'
+   * @deprecated Not read: a workflow runs only through `execute_workflow`. `'webhook'` registers no HTTP route and
+   * `'event'` listens to no event; startup warns about either.
    */
   trigger?: WorkflowTriggerType;
 
   /**
    * Webhook configuration (when trigger is 'webhook').
+   * @deprecated Not read: no HTTP route is registered for it, and startup warns about it. To start a workflow from a
+   * webhook, serve an `@HttpRoute` that checks the request's signature and calls `execute_workflow`.
    */
   webhook?: WorkflowWebhookConfig;
 

@@ -37,6 +37,7 @@ import GetJobStatusTool from './tools/get-job-status.tool';
 import ListJobsTool from './tools/list-jobs.tool';
 import RegisterJobTool from './tools/register-job.tool';
 import RemoveJobTool from './tools/remove-job.tool';
+import { describeIgnoredTrigger } from './unread-job-options';
 
 export interface JobsConfig {
   enabled: boolean;
@@ -182,6 +183,11 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
   // Register dynamic workflows
   for (const dynWf of dynamicWorkflows) {
     workflowRegistry.registerDynamic(dynWf);
+  }
+
+  // Options the schemas accept and nothing reads: say so once, in the server that serves the entries
+  if (!jobWorker) {
+    for (const message of describeUnreadOptions(workflowRegistry)) logger.warn(message);
   }
 
   // A detached job is refused here, at boot, where its process could not outlive the server
@@ -330,4 +336,9 @@ function completionStatusOf(state: unknown): JobCompletionEvent['status'] | unde
     default:
       return undefined;
   }
+}
+
+/** The startup warnings about the job and workflow options nothing reads. */
+function describeUnreadOptions(workflows: WorkflowRegistryInterface): string[] {
+  return workflows.getWorkflows(true).flatMap((workflow) => describeIgnoredTrigger(workflow.metadata));
 }

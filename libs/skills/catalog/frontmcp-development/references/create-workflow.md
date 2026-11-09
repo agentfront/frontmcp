@@ -1,11 +1,11 @@
 ---
 name: create-workflow
-description: Connect multiple jobs into managed DAG pipelines with dependencies, conditions, and triggers
+description: Connect multiple jobs into managed DAG pipelines with dependencies and conditions, run by execute_workflow or a webhook route
 ---
 
 # Creating Workflows
 
-Workflows connect multiple jobs into managed execution pipelines with step dependencies, conditions, and triggers. A workflow defines a directed acyclic graph (DAG) of steps where each step runs a named job, and the framework handles ordering, parallelism, error propagation, and trigger management.
+Workflows connect multiple jobs into managed execution pipelines with step dependencies and conditions. A workflow defines a directed acyclic graph (DAG) of steps where each step runs a named job, and the framework handles ordering, parallelism and error propagation. A workflow runs when something calls `execute_workflow`: a client, or your own code, such as an `@HttpRoute` that receives a webhook (see [Starting a Workflow](#starting-a-workflow)).
 
 ## When to Use This Skill
 
@@ -13,7 +13,7 @@ Workflows connect multiple jobs into managed execution pipelines with step depen
 
 - Orchestrating multiple jobs in a defined order with explicit step dependencies (e.g., build then test then deploy)
 - Building execution pipelines that require conditional branching, parallel fan-out, or diamond dependency patterns
-- Defining webhook- or event-triggered multi-step automation that the framework manages end to end
+- Multi-step automation that a webhook starts, through an `@HttpRoute` that calls `execute_workflow`
 
 ### Recommended
 
@@ -40,8 +40,8 @@ Create a class decorated with `@Workflow`. The decorator requires `name` and `st
 | `name`           | `string`                           | Yes         | --                | Unique workflow name                                                                                                                                                                           |
 | `steps`          | `WorkflowStep[]`                   | Yes (min 1) | --                | Array of step definitions                                                                                                                                                                      |
 | `description`    | `string`                           | No          | --                | Human-readable description                                                                                                                                                                     |
-| `trigger`        | `'manual' \| 'webhook' \| 'event'` | No          | `'manual'`        | How the workflow is initiated                                                                                                                                                                  |
-| `webhook`        | `WebhookConfig`                    | No          | --                | Webhook configuration (when trigger is `'webhook'`)                                                                                                                                            |
+| `trigger`        | `'manual' \| 'webhook' \| 'event'` | No          | `'manual'`        | **Deprecated, not read**: every workflow runs through `execute_workflow`; `'webhook'` and `'event'` make startup warn (see [Starting a Workflow](#starting-a-workflow))                        |
+| `webhook`        | `WebhookConfig`                    | No          | --                | **Deprecated, not read**: registers no HTTP route, and startup warns                                                                                                                           |
 | `timeout`        | `number`                           | No          | `600000` (10 min) | Maximum total workflow execution time in milliseconds                                                                                                                                          |
 | `maxConcurrency` | `number`                           | No          | `5`               | Maximum number of steps running in parallel                                                                                                                                                    |
 | `permissions`    | `JobPermission[]`                  | No          | --                | Array of permission rules. Multiple rules may target the same action; all matching rules must pass. Same shape and semantics as job permissions; **enforced from 1.7.2** (GHSA-58v2-gpcc-jmqv) |
@@ -294,102 +294,35 @@ By default, a failed step skips every step that depends on it, directly or not, 
 class ResilientPipeline {}
 ```
 
-## Workflow Triggers
+## Starting a Workflow
 
-### Manual (Default)
+A workflow runs when something calls `execute_workflow` (`{ name, input?, background? }`): an MCP client, a tool or route that calls it with `this.callTool()`, or another in-process caller. `trigger` and `webhook` are accepted but not read: `trigger: 'webhook'` and `webhook` register no HTTP route, and `trigger: 'event'` listens to no event, so startup warns about a workflow that sets them. Up to 1.11.2 they were ignored without a warning.
 
-The workflow is started by an explicit API call or MCP request:
-
-```typescript
-@Workflow({
-  name: 'manual-deploy',
-  description: 'Manually triggered deployment',
-  trigger: 'manual',
-  steps: [
-    /* ... */
-  ],
-})
-class ManualDeploy {}
-```
-
-### Webhook
-
-The workflow is triggered by an incoming HTTP request. Configure the webhook path, secret, and allowed HTTP methods.
+To start a workflow from a webhook, serve an `@HttpRoute` (see `create-http-route`) that checks the request's signature over `this.request.bodyBytes`, the body as received, and calls `execute_workflow`:
 
 ```typescript
-@Workflow({
-  name: 'github-deploy',
-  description: 'Deploy on GitHub push events',
-  trigger: 'webhook',
-  webhook: {
-    path: '/webhooks/github-deploy',
-    secret: process.env.WEBHOOK_SECRET,
-    methods: ['POST'],
-  },
-  steps: [
-    {
-      id: 'build',
-      jobName: 'build-project',
-      input: { branch: 'main' },
-    },
-    {
-      id: 'deploy',
-      jobName: 'deploy-to-env',
-      dependsOn: ['build'],
-      input: (steps) => ({
-        artifact: steps.get('build').outputs.artifactUrl,
-        environment: 'production',
-      }),
-    },
-  ],
-})
-class GithubDeploy {}
+import { httpRespond, HttpRoute, HttpRouteContext } from '@frontmcp/sdk';
+import { bytesToHex, hmacSha256, timingSafeEqual } from '@frontmcp/utils';
+
+const encoder = new TextEncoder();
+
+@HttpRoute({ method: 'POST', path: '/webhooks/github-deploy', auth: 'public' })
+export class GithubDeployWebhook extends HttpRouteContext {
+  async handle() {
+    const secret = encoder.encode(process.env.WEBHOOK_SECRET ?? '');
+    const body = this.request.bodyBytes ?? new Uint8Array();
+    const expected = encoder.encode(`sha256=${bytesToHex(hmacSha256(secret, body))}`);
+    const signature = encoder.encode(this.request.headers['x-hub-signature-256'] ?? '');
+    if (signature.length !== expected.length || !timingSafeEqual(signature, expected)) {
+      return httpRespond.unauthorized({ body: { error: 'Bad signature' } });
+    }
+    const run = await this.callTool('execute_workflow', { name: 'github-deploy', background: true });
+    return run.structuredContent; // { runId, state: 'pending' }
+  }
+}
 ```
 
-#### WebhookConfig Fields
-
-| Field     | Type       | Default                           | Description                                    |
-| --------- | ---------- | --------------------------------- | ---------------------------------------------- |
-| `path`    | `string`   | Auto-generated from workflow name | HTTP path for the webhook endpoint             |
-| `secret`  | `string`   | --                                | Shared secret for webhook signature validation |
-| `methods` | `string[]` | `['POST']`                        | Allowed HTTP methods                           |
-
-### Event
-
-The workflow is triggered by an internal event emitted by the application:
-
-```typescript
-@Workflow({
-  name: 'on-user-signup',
-  description: 'Workflow triggered when a new user signs up',
-  trigger: 'event',
-  steps: [
-    {
-      id: 'create-profile',
-      jobName: 'create-user-profile',
-      input: { template: 'default' },
-    },
-    {
-      id: 'send-welcome',
-      jobName: 'send-email',
-      dependsOn: ['create-profile'],
-      input: (steps) => ({
-        to: steps.get('create-profile').outputs.email,
-        template: 'welcome',
-      }),
-    },
-    {
-      id: 'setup-defaults',
-      jobName: 'setup-user-defaults',
-      dependsOn: ['create-profile'],
-      input: (steps) => ({
-        userId: steps.get('create-profile').outputs.userId,
-      }),
-    },
-  ],
-})
-class OnUserSignup {}
-```
+List the route in the app's `routes`. The route's caller is anonymous, so a workflow it starts must not set `execute` permissions that an anonymous caller fails; the signature check is what protects it.
 
 ## Function Builder
 
@@ -602,12 +535,6 @@ class NotifyTeamJob extends JobContext {
 @Workflow({
   name: 'ci-cd-pipeline',
   description: 'Full CI/CD pipeline: checkout, lint, test, build, deploy, notify',
-  trigger: 'webhook',
-  webhook: {
-    path: '/webhooks/ci-cd',
-    secret: process.env.CI_WEBHOOK_SECRET,
-    methods: ['POST'],
-  },
   timeout: 900000, // 15 minutes
   maxConcurrency: 3,
   permissions: [
@@ -719,13 +646,13 @@ class CiServer {}
 
 ## Common Patterns
 
-| Pattern           | Correct                                                            | Incorrect                                                          | Why                                                                             |
-| ----------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| Step dependencies | `dependsOn: ['build', 'test']` (array of step IDs)                 | `dependsOn: 'build'` (plain string)                                | `dependsOn` expects a `string[]`, not a single string                           |
-| Dynamic input     | `input: (steps) => ({ artifact: steps.get('build').outputs.url })` | `input: { artifact: buildResult.url }` (captured closure variable) | Static objects cannot reference previous step outputs; use the callback form    |
-| Conditional steps | `condition: (steps) => steps.get('test').state === 'completed'`    | `condition: (steps) => steps.get('test').outputs` (truthy check)   | Always check `.state` explicitly; outputs can be truthy even on partial failure |
-| Job registration  | Register all referenced jobs in the `jobs` array of `@App`         | Declare `jobName` in steps without registering the job class       | Steps reference jobs by name; unregistered jobs cause runtime lookup failures   |
-| Workflow trigger  | Set `trigger: 'webhook'` and provide `webhook: { path, secret }`   | Set `trigger: 'webhook'` without a `webhook` config object         | Webhook trigger requires the `webhook` configuration block for path and secret  |
+| Pattern           | Correct                                                                | Incorrect                                                          | Why                                                                             |
+| ----------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Step dependencies | `dependsOn: ['build', 'test']` (array of step IDs)                     | `dependsOn: 'build'` (plain string)                                | `dependsOn` expects a `string[]`, not a single string                           |
+| Dynamic input     | `input: (steps) => ({ artifact: steps.get('build').outputs.url })`     | `input: { artifact: buildResult.url }` (captured closure variable) | Static objects cannot reference previous step outputs; use the callback form    |
+| Conditional steps | `condition: (steps) => steps.get('test').state === 'completed'`        | `condition: (steps) => steps.get('test').outputs` (truthy check)   | Always check `.state` explicitly; outputs can be truthy even on partial failure |
+| Job registration  | Register all referenced jobs in the `jobs` array of `@App`             | Declare `jobName` in steps without registering the job class       | Steps reference jobs by name; unregistered jobs cause runtime lookup failures   |
+| Webhook start     | An `@HttpRoute` that checks the signature and calls `execute_workflow` | `trigger: 'webhook'` with a `webhook` config                       | `trigger` and `webhook` register no route; startup warns about them             |
 
 ## Verification Checklist
 
@@ -742,7 +669,7 @@ class CiServer {}
 - [ ] Steps with no dependencies execute in parallel (up to `maxConcurrency`)
 - [ ] Conditional steps are correctly skipped or executed based on prior step results
 - [ ] `continueOnError: true` steps allow downstream steps to proceed on failure
-- [ ] Webhook-triggered workflows respond to incoming HTTP requests
+- [ ] A webhook route that starts the workflow refuses a bad signature and answers a good one with the run's `runId`
 
 ## Troubleshooting
 
@@ -751,17 +678,17 @@ class CiServer {}
 | Step never executes                                 | `dependsOn` references a step ID that does not exist                    | Verify all `dependsOn` entries match actual step `id` values in the workflow                       |
 | Workflow fails at startup with "job not found"      | `jobName` references an unregistered job                                | Add the job class to the `jobs` array in `@App` before registering the workflow                    |
 | Dynamic `input` callback receives undefined outputs | A step it depends on was skipped, or failed with `continueOnError`      | Add a `condition` guard that checks `steps.get(id).state === 'completed'` before accessing outputs |
-| Webhook trigger does not fire                       | Missing or mismatched `webhook.secret`                                  | Ensure `webhook.secret` matches the sender's HMAC secret and `webhook.path` is correct             |
+| Webhook never starts the workflow                   | `trigger: 'webhook'` and `webhook` register no route (startup warns)    | Serve an `@HttpRoute` that checks the signature and calls `execute_workflow`                       |
 | Workflow exceeds timeout                            | Total step execution time exceeds the default 600000 ms                 | Increase `timeout` at the workflow level or add per-step `timeout` overrides                       |
 | A failure-notification step never runs              | The step it watches failed without `continueOnError`, so it was skipped | Set `continueOnError: true` on the watched step                                                    |
 
 ## Examples
 
-| Example                                                                                       | Level        | Description                                                                                                                       |
-| --------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| [`basic-deploy-pipeline`](../examples/create-workflow/basic-deploy-pipeline.md)               | Basic        | A linear workflow that builds, tests, and deploys a service with step dependencies and dynamic input.                             |
-| [`parallel-validation-pipeline`](../examples/create-workflow/parallel-validation-pipeline.md) | Intermediate | A workflow that validates multiple datasets in parallel, then conditionally merges results or notifies on failure.                |
-| [`webhook-triggered-workflow`](../examples/create-workflow/webhook-triggered-workflow.md)     | Advanced     | A CI/CD workflow triggered by a webhook, featuring `continueOnError`, per-step conditions, and the `workflow()` function builder. |
+| Example                                                                                       | Level        | Description                                                                                                                                                  |
+| --------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`basic-deploy-pipeline`](../examples/create-workflow/basic-deploy-pipeline.md)               | Basic        | A linear workflow that builds, tests, and deploys a service with step dependencies and dynamic input.                                                        |
+| [`parallel-validation-pipeline`](../examples/create-workflow/parallel-validation-pipeline.md) | Intermediate | A workflow that validates multiple datasets in parallel, then conditionally merges results or notifies on failure.                                           |
+| [`webhook-triggered-workflow`](../examples/create-workflow/webhook-triggered-workflow.md)     | Advanced     | A CI/CD workflow that an `@HttpRoute` starts from a signed webhook, featuring `continueOnError`, per-step conditions, and the `workflow()` function builder. |
 
 > See all examples in [`examples/create-workflow/`](../examples/create-workflow/)
 
