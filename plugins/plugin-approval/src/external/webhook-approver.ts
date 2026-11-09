@@ -70,6 +70,8 @@ export interface WebhookDependencies {
 }
 
 export class WebhookApprover implements ExternalApprover {
+  readonly via = 'webhook';
+
   constructor(
     private readonly webhook: ResolvedWebhook,
     private readonly dependencies: WebhookDependencies,

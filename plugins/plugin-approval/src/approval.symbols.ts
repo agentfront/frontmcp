@@ -6,6 +6,7 @@
 
 import type { Reference } from '@frontmcp/sdk';
 
+import type { ApprovalAuditSink } from './audit/approval-audit';
 import type { ExternalApprover } from './external/approval-decisions';
 import type { ApprovalService } from './services/approval.service';
 import type { ChallengeService } from './services/challenge.service';
@@ -39,3 +40,8 @@ export const ChallengeServiceToken: Reference<ChallengeService> = Symbol.for(
 export const ExternalApproverToken: Reference<ExternalApprover> = Symbol.for(
   'plugin:approval:external-approver',
 ) as Reference<ExternalApprover>;
+
+/** Token for the audit trail: present with `enableAudit: true`. */
+export const ApprovalAuditToken: Reference<ApprovalAuditSink> = Symbol.for(
+  'plugin:approval:audit',
+) as Reference<ApprovalAuditSink>;

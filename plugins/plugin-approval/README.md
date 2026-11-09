@@ -182,14 +182,56 @@ ApprovalPlugin.init({
 | `mode`                   | `'recheck'`        | `'recheck'` polls `recheck.url` when it is set; `'webhook'` registers a `ChallengeService` and sends requests to `webhook.url` when it is set. Without a URL, neither contacts an external system.             |
 | `recheck`                |                    | See [Recheck mode](#recheck-mode).                                                                                                                                                                             |
 | `webhook`                |                    | See [Webhook mode](#webhook-mode). `webhook.challengeTtl` (default `300`) is how long a challenge lasts, in seconds.                                                                                           |
-
-`enableAudit` and `maxDelegationDepth` are deprecated and have no effect: each approval record keeps who granted or
-revoked it, and a delegated grant names one delegator. A server that sets either logs `ApprovalPlugin ignores ...` when
-it starts.
+| `enableAudit`            | `false`            | Logs an [audit trail](#audit-trail).                                                                                                                                                                           |
+| `maxDelegationDepth`     | `3`                | The deepest [delegation chain](#delegation-chains) a delegated approval may name, 0 to 64.                                                                                                                     |
 
 In a browser build (`create()` in a web page, WebMCP), `storage: { type: 'redis' }` or `{ type: 'sqlite' }` throws
 `BrowserStoreUnavailableError` from `init()`, naming `storage: { type: 'memory' }`: a page has no TCP socket and no
 file. `{ type: 'auto' }` picks memory there.
+
+## Audit trail
+
+With `enableAudit: true`, the plugin logs one `info` line (logger `ApprovalAudit`) per event. The message is
+`<event> <toolId>`, and the first argument holds the fields:
+
+| Event                | When                                                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `approval.requested` | A call had no approval it could use. `state`: `pending`, `expired`, `denied`, or `approved` by the recheck system; `via`: `webhook` or `recheck`. |
+| `approval.granted`   | An approval was recorded: by `this.approval`, the store, a webhook callback or a recheck answer.                                                  |
+| `approval.denied`    | A denial was recorded.                                                                                                                            |
+| `approval.revoked`   | An approval was revoked (`revokedBy`, `reason`), or a session's approvals were cleared (`count`).                                                 |
+| `approval.expired`   | The cleanup deleted an expired approval or denial.                                                                                                |
+
+The fields are the tool, scope, user id, context, grantor or revoker, reason and `expiresAt`. A line never carries a
+session id, a token or a record's `metadata`. A backend that expires keys itself, such as Redis, can delete an expired
+record before the cleanup sees it; `approval.granted` carries its `expiresAt`.
+
+It is off by default: up to 1.11.2 the option did nothing (its documented default was `true`), and turning it on adds
+lines with user ids to your logs. Route them with a log transport.
+
+## Delegation chains
+
+A delegated approval names who authorized whom: `grantedBy.delegationContext`, `{ delegatorId, delegateId, purpose?,
+constraints?, chain? }`. A delegate can delegate further: `chain` lists the delegations above it, the original
+delegator's first, and `extendDelegation()` builds the next one.
+
+```ts
+import { agentGrantor, extendDelegation } from '@frontmcp/plugin-approval';
+
+const toPlanner = { delegatorId: 'user-123', delegateId: 'planner-agent', purpose: 'release' };
+const toDeployer = extendDelegation(toPlanner, 'deploy-agent', { purpose: 'deploy step' });
+// { delegatorId: 'planner-agent', delegateId: 'deploy-agent', purpose: 'deploy step',
+//   chain: [{ delegatorId: 'user-123', delegateId: 'planner-agent', purpose: 'release' }] }
+
+await this.approval.grantSessionApproval('ops:deploy', { grantedBy: agentGrantor('deploy-agent', toDeployer) });
+```
+
+`maxDelegationDepth` (default `3`) bounds the chain, counting the delegation itself: `toPlanner` is 1 deep,
+`toDeployer` 2. A grant whose chain is deeper, broken (a delegator that isn't the previous delegate) or names a party
+twice throws `ApprovalOperationError`, and a stored approval like that doesn't let a call through. Denials are kept
+whatever their chain. `maxDelegationDepth: 1` allows direct delegation only, and `0` no delegated approval.
+`delegationDepth(context)` and `delegationProblem(context, maxDepth)` check a context yourself. Up to 1.11.2 the option
+did nothing.
 
 ## Webhook mode
 

@@ -16,7 +16,9 @@ import {
 } from '@frontmcp/utils';
 
 import { ApprovalOperationError, approvalRecordSchema, normalizeGrantor, normalizeRevoker } from '../approval';
+import { grantorDelegationProblem } from '../approval/delegation';
 import { assertValidTtl } from '../approval/policy';
+import { auditFieldsOf, type ApprovalAuditSink } from '../audit/approval-audit';
 import { ApprovalScope, ApprovalState, type ApprovalContext, type ApprovalRecord } from '../types';
 import type {
   ApprovalQuery,
@@ -88,7 +90,20 @@ export interface ApprovalStorageStoreOptions {
    * @default 60
    */
   cleanupIntervalSeconds?: number;
+
+  /**
+   * The deepest delegation chain a delegated approval may name (`grantedBy.delegationContext`): a grant with a deeper
+   * or broken chain is refused, and a stored one is not returned. Denials are kept whatever their chain.
+   * @default 3
+   */
+  maxDelegationDepth?: number;
+
+  /** Receives an event for each approval or denial recorded, revoked or expired. */
+  audit?: ApprovalAuditSink;
 }
+
+/** The deepest delegation chain a delegated approval may name when `maxDelegationDepth` is not set. */
+export const DEFAULT_MAX_DELEGATION_DEPTH = 3;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ApprovalStorageStore Implementation
@@ -107,8 +122,9 @@ export class ApprovalStorageStore implements ApprovalStore {
   private storage!: NamespacedStorage;
   /** Revoked approvals live beside the live ones, in a namespace no live-approval query scans. */
   private revocationStorage?: NamespacedStorage;
-  private readonly options: Required<Omit<ApprovalStorageStoreOptions, 'storageInstance'>> & {
+  private readonly options: Required<Omit<ApprovalStorageStoreOptions, 'storageInstance' | 'audit'>> & {
     storageInstance?: RootStorage | NamespacedStorage;
+    audit?: ApprovalAuditSink;
   };
   private cleanupInterval?: NodeJS.Timeout;
   private initialized = false;
@@ -120,6 +136,8 @@ export class ApprovalStorageStore implements ApprovalStore {
       storageInstance: options.storageInstance,
       namespace: options.namespace ?? 'approval',
       cleanupIntervalSeconds: options.cleanupIntervalSeconds ?? 60,
+      maxDelegationDepth: options.maxDelegationDepth ?? DEFAULT_MAX_DELEGATION_DEPTH,
+      audit: options.audit,
     };
   }
 
@@ -208,6 +226,14 @@ export class ApprovalStorageStore implements ApprovalStore {
     return approval.expiresAt !== undefined && Date.now() > approval.expiresAt;
   }
 
+  /** An approval whose delegation chain `maxDelegationDepth` refuses: deeper than it allows, or broken. */
+  private isOverDelegated(record: ApprovalRecord): boolean {
+    return (
+      record.state === ApprovalState.APPROVED &&
+      grantorDelegationProblem(record.grantedBy, this.options.maxDelegationDepth) !== undefined
+    );
+  }
+
   /**
    * The keys a caller's approvals of a tool can be stored under: its session, its user, both
    * (time-limited and context grants made through `ApprovalService`), the time-limited keys of its
@@ -247,7 +273,7 @@ export class ApprovalStorageStore implements ApprovalStore {
     const records: ApprovalRecord[] = [];
     for (const key of this.callerKeys(toolId, sessionId, userId, context)) {
       const record = this.parseRecord(await this.storage.get(key));
-      if (record && record.toolId === toolId && !this.isExpired(record)) {
+      if (record && record.toolId === toolId && !this.isExpired(record) && !this.isOverDelegated(record)) {
         records.push(record);
       }
     }
@@ -327,6 +353,9 @@ export class ApprovalStorageStore implements ApprovalStore {
     const now = Date.now();
     const expiresAt = options.ttlMs !== undefined ? now + options.ttlMs : undefined;
     const grantedBy = normalizeGrantor(options.grantedBy);
+    const delegationProblem =
+      state === ApprovalState.APPROVED && grantorDelegationProblem(grantedBy, this.options.maxDelegationDepth);
+    if (delegationProblem) throw new ApprovalOperationError('grant', delegationProblem);
 
     const record: ApprovalRecord = {
       toolId: options.toolId,
@@ -346,6 +375,10 @@ export class ApprovalStorageStore implements ApprovalStore {
     const key = this.recordKey(options);
     const ttlSeconds = options.ttlMs !== undefined ? Math.ceil(options.ttlMs / 1000) : undefined;
     await this.storage.set(key, JSON.stringify(record), { ttlSeconds });
+    this.options.audit?.record({
+      type: state === ApprovalState.DENIED ? 'approval.denied' : 'approval.granted',
+      ...auditFieldsOf(record),
+    });
 
     return record;
   }
@@ -399,6 +432,14 @@ export class ApprovalStorageStore implements ApprovalStore {
       await this.revocations.set(key, JSON.stringify(entry), { ttlSeconds: REVOCATION_RETENTION_SECONDS });
     }
     await this.storage.mdelete(keysToDelete);
+    for (const record of revoked.values()) {
+      this.options.audit?.record({
+        type: 'approval.revoked',
+        ...auditFieldsOf(record),
+        revokedBy,
+        reason: options.reason,
+      });
+    }
     return true;
   }
 
@@ -473,7 +514,9 @@ export class ApprovalStorageStore implements ApprovalStore {
       return 0;
     }
 
-    return await this.storage.mdelete(keys);
+    const count = await this.storage.mdelete(keys);
+    this.options.audit?.record({ type: 'approval.revoked', count, reason: 'session approvals cleared' });
+    return count;
   }
 
   async clearExpiredApprovals(): Promise<number> {
@@ -484,19 +527,21 @@ export class ApprovalStorageStore implements ApprovalStore {
     const values = await this.storage.mget(keys);
 
     const keysToDelete: string[] = [];
+    const expired: ApprovalRecord[] = [];
 
     for (let i = 0; i < keys.length; i++) {
       const approval = this.parseRecord(values[i]);
       if (approval && approval.expiresAt && approval.expiresAt <= now) {
         keysToDelete.push(keys[i]);
+        expired.push(approval);
       }
     }
 
-    if (keysToDelete.length > 0) {
-      return await this.storage.mdelete(keysToDelete);
-    }
+    if (keysToDelete.length === 0) return 0;
 
-    return 0;
+    const deleted = await this.storage.mdelete(keysToDelete);
+    for (const record of expired) this.options.audit?.record({ type: 'approval.expired', ...auditFieldsOf(record) });
+    return deleted;
   }
 
   async getStats(): Promise<{

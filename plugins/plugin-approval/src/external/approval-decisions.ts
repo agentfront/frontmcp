@@ -31,6 +31,8 @@ export type ExternalApprovalOutcome = 'approved' | 'denied' | 'pending';
 
 /** Asks an external approval system about a call the gate would refuse. */
 export interface ExternalApprover {
+  /** How it asks, as the audit trail names it. */
+  readonly via: 'webhook' | 'recheck';
   requestApproval(call: PendingApprovalCall): Promise<ExternalApprovalOutcome>;
 }
 

@@ -6,10 +6,13 @@ import {
   App,
   FrontMcpInstance,
   LogLevel,
+  LogTransport,
+  LogTransportInterface,
   Tool,
   ToolContext,
   type DirectAuthContext,
   type DirectMcpServer,
+  type LogRecord,
 } from '@frontmcp/sdk';
 import { createMemoryStorage, type RootStorage } from '@frontmcp/utils';
 
@@ -46,16 +49,29 @@ class WipeDiskTool extends ToolContext {
   }
 }
 
+const auditRecords: LogRecord[] = [];
+
+@LogTransport({ name: 'RecheckAuditCapture', description: 'Keeps audit lines for assertions' })
+class AuditCapture extends LogTransportInterface {
+  log(record: LogRecord): void {
+    if (record.message.startsWith('approval.')) auditRecords.push(record);
+  }
+}
+
 let receiver: ApprovalReceiver;
 let storage: RootStorage;
 let server: DirectMcpServer;
 
-async function startServer(recheck: Partial<NonNullable<ApprovalPluginOptions['recheck']>> = {}) {
+async function startServer(recheck: Partial<NonNullable<ApprovalPluginOptions['recheck']>> = {}, enableAudit = false) {
   @App({
     id: 'ops',
     name: 'Ops',
     plugins: [
-      ApprovalPlugin.init({ storageInstance: storage, recheck: { url: receiver.url, interval: 100, ...recheck } }),
+      ApprovalPlugin.init({
+        storageInstance: storage,
+        enableAudit,
+        recheck: { url: receiver.url, interval: 100, ...recheck },
+      }),
     ],
     tools: [DeployServiceTool, WipeDiskTool],
   })
@@ -64,7 +80,7 @@ async function startServer(recheck: Partial<NonNullable<ApprovalPluginOptions['r
   server = await FrontMcpInstance.createDirect({
     info: { name: 'approval-recheck', version: '1.0.0' },
     apps: [OpsApp],
-    logging: { level: LogLevel.Off },
+    logging: { level: LogLevel.Info, enableConsole: false, transports: [AuditCapture] },
   });
 }
 
@@ -90,6 +106,7 @@ const pending = json(200, { approved: false, pending: true });
 
 beforeEach(async () => {
   deployed.length = 0;
+  auditRecords.length = 0;
   receiver = await startApprovalReceiver('/status');
   storage = createMemoryStorage();
   await storage.connect();
@@ -277,5 +294,22 @@ describe('ApprovalPlugin recheck mode', () => {
 
     expect(refusalState(await callTool('deploy_service', { service: 'api' }))).toBe('denied');
     expect(receiver.requests).toHaveLength(0);
+  });
+
+  it('names the recheck system in the audit trail', async () => {
+    receiver.answerWith(pending, json(200, { approved: true }));
+    await startServer({ maxAttempts: 1 }, true);
+
+    await callTool('deploy_service', { service: 'api' });
+    await callTool('deploy_service', { service: 'api' });
+
+    expect(auditRecords.map((record) => record.args[0])).toEqual([
+      expect.objectContaining({ type: 'approval.requested', state: 'pending', via: 'recheck' }),
+      expect.objectContaining({
+        type: 'approval.granted',
+        grantedBy: { source: 'api', method: 'api', origin: 'recheck' },
+      }),
+      expect.objectContaining({ type: 'approval.requested', state: 'approved', via: 'recheck' }),
+    ]);
   });
 });

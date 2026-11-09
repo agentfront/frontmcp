@@ -98,6 +98,10 @@ export {
   sessionEndRevoker,
   policyRevoker,
   normalizeRevoker,
+  // Delegation chains
+  delegationDepth,
+  delegationProblem,
+  extendDelegation,
   // Type guards
   isGrantorSource,
   isHumanGrantor,

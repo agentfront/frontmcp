@@ -8,7 +8,7 @@ features:
   - 'Configuring all 5 stable official plugins together in a production server'
   - 'CodeCall in `codecall_only` mode with TF-IDF search and synonym expansion for semantic tool discovery'
   - 'Remember plugin with Redis storage, encryption enabled, and LLM-accessible memory tools'
-  - 'Approval plugin in `webhook` mode: a signed approval request to an external system, whose signed decision comes back on `/approval/callback`'
+  - 'Approval plugin in `webhook` mode: a signed approval request to an external system, whose signed decision comes back on `/approval/callback`, with an audit trail and bounded delegation chains'
   - 'Cache plugin with Redis storage and 24-hour default TTL'
   - 'Feature Flags with LaunchDarkly integration for external flag management'
   - 'Per-tool `approval` metadata with risk level and scope configuration'
@@ -70,6 +70,8 @@ class CoreApp {}
         challengeTtl: 300,
         callbackPath: '/approval/callback',
       },
+      enableAudit: true,
+      maxDelegationDepth: 3,
     }),
 
     CachePlugin.init({
@@ -133,7 +135,7 @@ class DeleteDataTool extends ToolContext {
 - Configuring all 5 stable official plugins together in a production server
 - CodeCall in `codecall_only` mode with TF-IDF search and synonym expansion for semantic tool discovery
 - Remember plugin with Redis storage, encryption enabled, and LLM-accessible memory tools
-- Approval plugin in `webhook` mode: a signed approval request to an external system, whose signed decision comes back on `/approval/callback`
+- Approval plugin in `webhook` mode: a signed approval request to an external system, whose signed decision comes back on `/approval/callback`, with an audit trail and bounded delegation chains
 - Cache plugin with Redis storage and 24-hour default TTL
 - Feature Flags with LaunchDarkly integration for external flag management
 - Per-tool `approval` metadata with risk level and scope configuration
