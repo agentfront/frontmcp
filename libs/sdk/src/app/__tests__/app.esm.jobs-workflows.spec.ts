@@ -13,6 +13,7 @@ import { EsmModuleLoader, type EsmLoadResult } from '../../esm-loader/esm-module
 import { VersionPoller } from '../../esm-loader/version-poller';
 import { VersionResolver } from '../../esm-loader/version-resolver';
 import ExecuteJobFlow from '../../job/flows/execute-job.flow';
+import { jobExecutionManagerOf } from '../../job/job-run-access';
 import type { Scope } from '../../scope/scope.instance';
 
 const GREETING = Symbol('GREETING');
@@ -33,6 +34,12 @@ function reportFlow(name: string, jobName: string) {
   return ReportFlow;
 }
 
+function eventFlow(name: string, event: string, jobName: string) {
+  @Workflow({ name, trigger: 'event', event, steps: [{ id: 'report', jobName }] })
+  class EventFlow {}
+  return EventFlow;
+}
+
 function loaded(manifest: Partial<FrontMcpPackageManifest>, version = '1.0.0'): EsmLoadResult {
   return {
     manifest: { name: '@acme/tools', version, ...manifest },
@@ -48,6 +55,18 @@ const jobNames = (server: DirectMcpServer) =>
   scopeOf(server)
     .jobs?.getJobs(true)
     .map((job) => job.name) ?? [];
+async function endedWorkflowRuns(server: DirectMcpServer, count: number): Promise<string[]> {
+  const manager = jobExecutionManagerOf(scopeOf(server));
+  const deadline = Date.now() + 5_000;
+  for (;;) {
+    const runs = (await manager?.listRuns()) ?? [];
+    const ended = runs.filter((run) => 'workflowName' in run && !['pending', 'running'].includes(run.state));
+    if (ended.length >= count)
+      return ended.map((run) => `${(run as { workflowName: string }).workflowName}:${run.state}`);
+    if (Date.now() > deadline) throw new Error(`only ${ended.length} of ${count} workflow runs ended`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
 const reportOf = async (server: DirectMcpServer, jobName: string) =>
   ((await server.executeJob(jobName, {})).structuredContent as { result?: { report?: string } }).result?.report;
 
@@ -217,6 +236,49 @@ describe('App.esm() jobs and workflows across versions', () => {
         .map((workflow) => workflow.name),
     ).toEqual(['daily']);
     expect((await srv.executeWorkflow('daily', {})).structuredContent).toMatchObject({ state: 'completed' });
+  });
+
+  it("starts a new version's trigger: 'event' workflow on its event, and no longer the old version's", async () => {
+    const { srv, poll } = await startPolling(
+      loaded({
+        jobs: [reportJob('daily-report', () => 'v1')],
+        workflows: [eventFlow('on-old', 'old.event', 'daily-report')],
+      }),
+    );
+    load.mockResolvedValueOnce(
+      loaded(
+        {
+          jobs: [reportJob('daily-report', () => 'v2')],
+          workflows: [eventFlow('on-new', 'new.event', 'daily-report')],
+        },
+        '1.1.0',
+      ),
+    );
+
+    await poll();
+    scopeOf(srv).channelEventBus?.emit('old.event', {});
+    scopeOf(srv).channelEventBus?.emit('new.event', {});
+
+    expect(await endedWorkflowRuns(srv, 1)).toEqual(['on-new:completed']);
+  });
+
+  it("starts the trigger: 'event' workflow that the first jobs of a new version bring", async () => {
+    const { srv, poll } = await startPolling(loaded({ tools: [{ name: 'echo', execute: async () => 'echo' }] }));
+    expect(scopeOf(srv).channelEventBus).toBeUndefined();
+    load.mockResolvedValueOnce(
+      loaded(
+        {
+          jobs: [reportJob('welcome', () => 'welcomed')],
+          workflows: [eventFlow('on-signup', 'user.signup', 'welcome')],
+        },
+        '1.1.0',
+      ),
+    );
+
+    await poll();
+    scopeOf(srv).channelEventBus?.emit('user.signup', {});
+
+    expect(await endedWorkflowRuns(srv, 1)).toEqual(['on-signup:completed']);
   });
 
   it('starts the job system for the first jobs a new version brings', async () => {

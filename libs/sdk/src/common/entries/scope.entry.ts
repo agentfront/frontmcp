@@ -151,8 +151,9 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
   abstract get channelNotifications(): ChannelNotificationService | undefined;
 
   /**
-   * The bus `app-event` channel sources listen on: `this.scope.channelEventBus?.emit('app:error', payload)`.
-   * `undefined` unless `channels.enabled`.
+   * The scope's in-process event bus: `app-event` channel sources and `trigger: 'event'` workflows listen on it.
+   * `this.scope.channelEventBus?.emit('user.signup', payload)`. `undefined` unless `channels.enabled`, or a workflow
+   * with `trigger: 'event'` is registered, at startup or later (an ESM app's new version).
    */
   abstract get channelEventBus(): ChannelEventBus | undefined;
 

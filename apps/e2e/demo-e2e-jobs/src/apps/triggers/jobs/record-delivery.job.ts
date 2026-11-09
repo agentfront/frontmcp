@@ -7,11 +7,11 @@ export const deliveries: Array<Record<string, unknown>> = [];
 @Job({
   name: 'record-delivery',
   description: 'Records the input its workflow run gave it',
-  inputSchema: { ref: z.string().optional(), pusher: z.string().optional() },
+  inputSchema: { ref: z.string().optional(), pusher: z.string().optional(), email: z.string().optional() },
   outputSchema: { recorded: z.number() },
 })
 export class RecordDeliveryJob extends JobContext {
-  async execute(input: { ref?: string; pusher?: string }) {
+  async execute(input: { ref?: string; pusher?: string; email?: string }) {
     deliveries.push(input);
     return { recorded: deliveries.length };
   }

@@ -26,8 +26,8 @@ import { DynamicJobRegistrationDisabledError, InvalidInputError } from '../../er
       .enum(['manual', 'webhook', 'event'])
       .optional()
       .describe(
-        "Trigger type; 'webhook' is refused: a workflow registered at runtime runs through execute_workflow, " +
-          'and a webhook workflow is declared with @Workflow',
+        "Trigger type; 'webhook' and 'event' are refused: a workflow registered at runtime runs through " +
+          'execute_workflow, and a triggered workflow is declared with @Workflow',
       ),
     tags: z.array(z.string()).optional().describe('Tags for categorization'),
   },
@@ -66,11 +66,11 @@ export default class RegisterWorkflowTool extends ToolContext {
       return this.fail(new DynamicJobRegistrationDisabledError('workflow'));
     }
 
-    // A webhook's route and secret are fixed when the server starts
-    if (input.trigger === 'webhook') {
+    // A webhook's route and an event's listener are set up when the server starts
+    if (input.trigger === 'webhook' || input.trigger === 'event') {
       return this.fail(
         new InvalidInputError(
-          "A workflow registered at runtime can't have trigger: 'webhook': declare it with @Workflow and its webhook.secret",
+          `A workflow registered at runtime can't have trigger: '${input.trigger}': declare it with @Workflow`,
         ),
       );
     }

@@ -662,6 +662,7 @@ class SyncDataJob extends JobContext {
 | `steps`              | Array of step definitions (see step fields below)                                         |
 | `trigger?`           | `'manual'` \| `'webhook'` \| `'event'`                                                    |
 | `webhook?`           | `{ path, secret, methods, maxBodyBytes }` — `secret` required when trigger is `'webhook'` |
+| `event?`             | The event that starts a `trigger: 'event'` workflow (default: its name)                   |
 | `timeout?`           | Overall workflow timeout in ms                                                            |
 | `maxConcurrency?`    | Maximum parallel step concurrency (default: 5)                                            |
 | `tags?`              | Categorization tags                                                                       |

@@ -1,13 +1,15 @@
 import { type Token } from '@frontmcp/di';
 import { type SqliteAdapterOptions } from '@frontmcp/utils';
 
+import { ChannelEventBus } from '../channel/sources/app-event.source';
 import {
   completionEventsOf,
   completionOutputText,
   type ScopeCompletionEvents,
 } from '../channel/sources/completion-events';
 import { type JobCompletionEvent } from '../channel/sources/job-completion.source';
-import { type EntryOwnerRef, type RedisOptionsInput } from '../common';
+import { type EntryOwnerRef, type RedisOptionsInput, type ScopeEntry } from '../common';
+import { type WorkflowEntry } from '../common/entries/workflow.entry';
 import { type JobType } from '../common/interfaces/job.interface';
 import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
@@ -19,7 +21,8 @@ import GetWorkflowStatusTool from '../workflow/tools/get-workflow-status.tool';
 import ListWorkflowsTool from '../workflow/tools/list-workflows.tool';
 import RegisterWorkflowTool from '../workflow/tools/register-workflow.tool';
 import RemoveWorkflowTool from '../workflow/tools/remove-workflow.tool';
-import { assertWorkflowTriggers } from '../workflow/trigger/workflow-triggers';
+import { listenToWorkflowEvents } from '../workflow/trigger/workflow-events';
+import { assertWorkflowTriggers, eventWorkflows } from '../workflow/trigger/workflow-triggers';
 import WorkflowRegistry, { type WorkflowRegistryInterface } from '../workflow/workflow.registry';
 import { normalizeWorkflow } from '../workflow/workflow.utils';
 import { DETACHED_FLUSH_MS, JobExecutionManager } from './execution/job-execution.manager';
@@ -40,7 +43,7 @@ import GetJobStatusTool from './tools/get-job-status.tool';
 import ListJobsTool from './tools/list-jobs.tool';
 import RegisterJobTool from './tools/register-job.tool';
 import RemoveJobTool from './tools/remove-job.tool';
-import { describeIgnoredTrigger, describeUncheckedPermissions } from './unread-job-options';
+import { describeUncheckedPermissions } from './unread-job-options';
 
 export interface JobsConfig {
   enabled: boolean;
@@ -142,6 +145,15 @@ export interface JobCapabilitiesResult {
   stateStore: JobStateStore;
   definitionStore: JobDefinitionStore;
   managementTools: any[];
+  /** What starts the `trigger: 'event'` workflows' runs; undefined in a detached runner. */
+  workflowEvents?: WorkflowEventListening;
+}
+
+/** The `trigger: 'event'` workflows listening on the scope's event bus, those registered later included. */
+export interface WorkflowEventListening {
+  /** The bus they listen on; undefined until a workflow has `trigger: 'event'`. */
+  readonly bus: ChannelEventBus | undefined;
+  stop(): void;
 }
 
 /**
@@ -232,6 +244,11 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     await definitionStore.dispose();
   });
   scope.resources.registerDynamicResource(JobRunResource);
+  // `trigger: 'event'` workflows listen on the scope's event bus, which app-event channel sources share
+  const workflowEvents = jobWorker
+    ? undefined
+    : listenToEvents(scope, workflowRegistry, executionManager, jobRegistry, logger);
+  if (workflowEvents) scope.onDispose(() => workflowEvents.stop());
   // Runs a dead runner left in a shared store are settled in the background, once the registries exist
   if (stateStoreType !== 'memory' && !jobWorker) {
     void executionManager
@@ -273,6 +290,7 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     stateStore,
     definitionStore,
     managementTools,
+    workflowEvents,
   };
 }
 
@@ -320,6 +338,48 @@ export function unregistersAppJobEntries(
   return () => {
     jobRegistry.unregisterJobs(jobTokens);
     workflowRegistry.unregisterWorkflows(workflowTokens);
+  };
+}
+
+/**
+ * Start the runs of the `trigger: 'event'` workflows on the scope's event bus, and keep doing so as workflows are
+ * registered and unregistered later (an ESM app's new version). The bus is the scope's when it has one, else one made
+ * for the first such workflow.
+ */
+function listenToEvents(
+  scope: ScopeEntry,
+  workflows: WorkflowRegistryInterface,
+  manager: JobExecutionManager,
+  jobs: JobRegistryInterface,
+  logger: FrontMcpLogger,
+): WorkflowEventListening {
+  let bus: ChannelEventBus | undefined;
+  const listening = new Map<WorkflowEntry, () => void>();
+  const listeners = { manager, jobs, authoritiesContextBuilder: () => scope.authoritiesContextBuilder, logger };
+  const followRegistry = () => {
+    const current = new Set(eventWorkflows(workflows.getWorkflows(true)));
+    for (const [workflow, stopListening] of listening) {
+      if (current.has(workflow)) continue;
+      stopListening();
+      listening.delete(workflow);
+    }
+    for (const workflow of current) {
+      if (listening.has(workflow)) continue;
+      bus ??= scope.channelEventBus ?? new ChannelEventBus(logger);
+      listening.set(workflow, listenToWorkflowEvents([workflow], { ...listeners, bus }));
+    }
+  };
+  followRegistry();
+  const unsubscribe = workflows.subscribe({}, followRegistry);
+  return {
+    get bus() {
+      return bus;
+    },
+    stop: () => {
+      unsubscribe();
+      for (const stopListening of listening.values()) stopListening();
+      listening.clear();
+    },
   };
 }
 
@@ -395,9 +455,6 @@ function describeUnreadOptions(jobs: JobRegistryInterface, workflows: WorkflowRe
     ...jobs.getJobs(true).flatMap((job) => describeUncheckedPermissions('Job', job.name, job.metadata.permissions)),
     ...workflows
       .getWorkflows(true)
-      .flatMap((workflow) => [
-        ...describeIgnoredTrigger(workflow.metadata),
-        ...describeUncheckedPermissions('Workflow', workflow.name, workflow.metadata.permissions),
-      ]),
+      .flatMap((workflow) => describeUncheckedPermissions('Workflow', workflow.name, workflow.metadata.permissions)),
   ];
 }
