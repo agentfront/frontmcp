@@ -4,7 +4,9 @@
 import { type LogTransportType } from '../../../interfaces';
 
 /**
- * Log level enumeration.
+ * Log level enumeration, from the most detailed level to the least: `Verbose`, `Debug`, `Info`, `Warn`, `Error`.
+ * A logger at a level logs that level and every level after it, so `Verbose` logs `debug()` lines too.
+ * The numeric values predate that order and are kept as they are: `Verbose` is 1 and `Debug` 0.
  */
 export enum LogLevel {
   Debug = 0,
