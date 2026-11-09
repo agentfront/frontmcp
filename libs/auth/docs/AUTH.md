@@ -1016,10 +1016,10 @@ type RemoteProviderConfig = {
   clientId?: string; // For orchestrated mode
   clientSecret?: string; // For confidential clients
   scopes?: string[]; // Scopes to request
-  dcrEnabled?: boolean; // Dynamic Client Registration
+  dcrEnabled?: boolean; // Remote mode without clientId: register with the provider (RFC 7591)
   authEndpoint?: string; // Override
   tokenEndpoint?: string; // Override
-  registrationEndpoint?: string; // Override
+  registrationEndpoint?: string; // For dcrEnabled; default: from the provider's metadata
   userInfoEndpoint?: string; // Override
 };
 ```

@@ -134,7 +134,7 @@ HS256 session token. Tools read the upstream token via
 auth: {
   mode: 'remote',
   provider: 'https://auth.example.com',
-  clientId: 'my-client-id', // pre-registered (DCR not yet wired)
+  clientId: 'my-client-id', // pre-registered (or omit it and set providerConfig.dcrEnabled)
   clientSecret: process.env.AUTH_SECRET,
   scopes: ['openid', 'profile', 'email'],
   tokenStorage: { redis: { host: process.env['REDIS_HOST'] ?? 'localhost', port: 6379 } },
@@ -157,9 +157,29 @@ and move to the new token when the client refreshes FrontMCP's own. The IdP
 controls only the upstream tokens' lifetime: FrontMCP's own access token lasts an
 hour and its refresh token 30 days (rotated on each use).
 
-**Deferred (not yet wired):** upstream **Dynamic Client Registration**
-(`providerConfig.dcrEnabled` / `registrationEndpoint`) — a pre-registered
-`clientId` is required.
+**Dynamic client registration** (`providerConfig.dcrEnabled`): without a `clientId`,
+FrontMCP registers itself with the provider (RFC 7591) at startup and signs in
+with that client. It registers at `providerConfig.registrationEndpoint`, or at the
+`registration_endpoint` of the provider's metadata
+(`/.well-known/oauth-authorization-server`, then `/.well-known/openid-configuration`,
+whose `issuer` must be `provider`). The provider must allow open registration (no
+initial access token). The redirect URI it registers is
+`<issuer>/oauth/provider/<id>/callback`, so set `local.issuer` to your public URL.
+With a persistent `tokenStorage` the client is kept there (secret encrypted with
+`JWT_SECRET`) and every instance and restart reuses it; with memory storage the
+server registers again on each start. A refused or failed registration fails
+startup with `UPSTREAM_CLIENT_REGISTRATION_FAILED`. A set `clientId` wins over `dcrEnabled`.
+
+```typescript
+auth: {
+  mode: 'remote',
+  provider: 'https://auth.example.com',
+  scopes: ['openid', 'profile', 'email'],
+  local: { issuer: 'https://mcp.example.com' },
+  tokenStorage: { redis: { host: process.env['REDIS_HOST'] ?? 'localhost', port: 6379 } },
+  providerConfig: { dcrEnabled: true },
+}
+```
 
 **Use when:** Enterprise deployments delegating user authentication to a single
 centralized IdP that may not support DCR, while keeping FrontMCP-issued sessions,

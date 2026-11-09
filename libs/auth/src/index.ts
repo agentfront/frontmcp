@@ -650,6 +650,12 @@ export {
 } from './cimd';
 
 // ============================================
+// Upstream Client Registration Module
+// ============================================
+export { resolveUpstreamClient, UpstreamClientRegistrationError } from './upstream';
+export type { UpstreamClient, UpstreamClientRegistrationOptions } from './upstream';
+
+// ============================================
 // Auth Context Module
 // ============================================
 export { FrontMcpAuthContextImpl, buildAuthContext } from './context';

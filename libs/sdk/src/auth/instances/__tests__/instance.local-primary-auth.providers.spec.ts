@@ -32,7 +32,7 @@ function createProviders() {
 }
 
 function createScope() {
-  return { fullPath: '', onDispose: jest.fn() } as never;
+  return { fullPath: '', onDispose: jest.fn(), metadata: { info: { name: 'Test Server' } } } as never;
 }
 
 async function makeAuth(options: Record<string, unknown>) {
@@ -229,7 +229,7 @@ describe('LocalPrimaryAuth — remote-mode single upstream provider', () => {
     expect(config?.tokenEndpoint).toBe('https://auth.example.com/token');
   });
 
-  it('does not register a provider when clientId is missing (DCR not wired)', async () => {
+  it('does not register a provider when clientId is missing and dcrEnabled is off', async () => {
     const auth = await makeAuth({
       mode: 'remote',
       provider: 'https://auth.example.com',
@@ -237,6 +237,75 @@ describe('LocalPrimaryAuth — remote-mode single upstream provider', () => {
     });
     expect(auth.remoteProviderId).toBe('auth_example_com');
     expect(auth.getProviderConfig('auth_example_com')).toBeUndefined();
+  });
+
+  describe('providerConfig.dcrEnabled', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    function mockRegistration(response: () => Response): jest.SpyInstance {
+      return jest.spyOn(global, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === 'https://auth.example.com/.well-known/oauth-authorization-server') {
+          return new Response(
+            JSON.stringify({
+              issuer: 'https://auth.example.com',
+              registration_endpoint: 'https://auth.example.com/register',
+            }),
+            { status: 200 },
+          );
+        }
+        if (url === 'https://auth.example.com/register') return response();
+        return new Response('not found', { status: 404 });
+      });
+    }
+
+    it('registers with the provider and signs in with the registered client', async () => {
+      const fetchSpy = mockRegistration(
+        () => new Response(JSON.stringify({ client_id: 'dcr-client', client_secret: 'dcr-secret' }), { status: 201 }),
+      );
+
+      const auth = await makeAuth({
+        mode: 'remote',
+        provider: 'https://auth.example.com',
+        providerConfig: { dcrEnabled: true },
+      });
+
+      const config = auth.getProviderConfig('auth_example_com');
+      expect(config?.clientId).toBe('dcr-client');
+      expect(config?.clientSecret).toBe('dcr-secret');
+      const registration = fetchSpy.mock.calls.find(([url]) => String(url) === 'https://auth.example.com/register');
+      expect(JSON.parse(String(registration?.[1]?.body)).redirect_uris).toEqual([config?.callbackUrl]);
+    });
+
+    it('fails startup when the provider refuses the registration', async () => {
+      mockRegistration(() => new Response(JSON.stringify({ error: 'access_denied' }), { status: 403 }));
+
+      const auth = new LocalPrimaryAuth(createScope(), createProviders(), {
+        mode: 'remote',
+        provider: 'https://auth.example.com',
+        providerConfig: { dcrEnabled: true },
+      } as never);
+
+      await expect(auth.ready).rejects.toThrow(
+        'Dynamic client registration with https://auth.example.com failed: https://auth.example.com/register answered 403: access_denied',
+      );
+    });
+
+    it('uses a configured clientId instead of registering', async () => {
+      const fetchSpy = mockRegistration(() => new Response('{}', { status: 500 }));
+
+      const auth = await makeAuth({
+        mode: 'remote',
+        provider: 'https://auth.example.com',
+        clientId: 'manual-client',
+        providerConfig: { dcrEnabled: true },
+      });
+
+      expect(auth.getProviderConfig('auth_example_com')?.clientId).toBe('manual-client');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
   });
 
   it('does not register a remote provider in local mode', async () => {
