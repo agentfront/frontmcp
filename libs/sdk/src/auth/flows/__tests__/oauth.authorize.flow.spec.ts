@@ -1163,6 +1163,35 @@ describe('OAuth Authorize Flow', () => {
       // No __parent__ placeholder leaks into the configured-provider path.
       expect(output.body).not.toContain('__parent__');
     });
+
+    it("requires each app's own provider on the picker under incrementalAuth.allowSkip: false", async () => {
+      const scope = createMockScopeEntry({
+        auth: { mode: 'local', incrementalAuth: { enabled: true, allowSkip: false } } as never,
+        apps: [
+          { id: 'notes', name: 'Notes' },
+          { id: 'tasks', name: 'Tasks', auth: { mode: 'public' } as never },
+        ],
+      });
+      const flow = new OauthAuthorizeFlow(
+        createFlowMetadata(),
+        createOAuthInput(createValidOAuthRequest()),
+        scope,
+        jest.fn(),
+        new Map(),
+      );
+
+      const { output } = await runFlowStages(flow, [
+        'parseInput',
+        'validateInput',
+        'checkIfAuthorized',
+        'prepareAuthorizationRequest',
+        'buildAuthorizeOutput',
+      ]);
+
+      expect(output.kind).toBe('html');
+      expect(output.body).toMatch(/value="tasks"[^>]*checked required>/);
+      expect(output.body).not.toContain('Skip All');
+    });
   });
 
   // ----------------------------------------------------------------
