@@ -1,5 +1,6 @@
 import {
   buildCDNInfoForUIType,
+  buildHtmlResponseText,
   buildToolResponseContent,
   describeRenderOptionProblems,
   isUIRenderFailure,
@@ -15,6 +16,7 @@ import { type UIResourceMeta } from './ui-shared';
 
 export {
   buildCDNInfoForUIType,
+  buildHtmlResponseText,
   buildToolResponseContent,
   describeRenderOptionProblems,
   isUIRenderFailure,

@@ -739,10 +739,24 @@ export interface UITemplateConfig<In = unknown, Out = unknown> {
   // ============================================
 
   /**
-   * Prefix text shown before HTML in dual-payload responses (Claude).
+   * Turns on the "dual payload" for clients that render no widget, and is the text it opens with.
    *
-   * @deprecated Has no effect: FrontMCP sends no dual HTML payload, to Claude or any other client.
-   * Startup logs a warning when it is set.
+   * A `tools/call` from a client FrontMCP detects as `'claude'` (a Claude client that declares no
+   * MCP Apps support, so it renders no widget) gets two text blocks:
+   * 1. the JSON of the result, as without this option;
+   * 2. `{htmlResponsePrefix}:` and the page rendered with this call's data, in an `html` code fence,
+   *    which such a client can show (an Artifact in Claude).
+   *
+   * The page is rendered for the call whatever `servingMode` is, and goes to that caller only. MCP
+   * Apps hosts, ChatGPT and every other client get the result as without this option, and so do
+   * calls a widget or an agent makes. Unset (the default): no client gets the second block. Startup
+   * refuses an empty value or one longer than 500 characters.
+   *
+   * @example
+   * ```typescript
+   * ui: { template: WeatherWidget, htmlResponsePrefix: 'Here is the weather dashboard' }
+   * // Block 2: "Here is the weather dashboard:\n\n```html\n<!DOCTYPE html>…\n```"
+   * ```
    */
   htmlResponsePrefix?: string;
 

@@ -396,6 +396,18 @@
             "Including `output?` for examples where showing the expected result helps an agent understand the tool",
             "Why `examples` are advisory metadata — not emitted in `tools/list`, only consumed by `codecall:describe`"
           ]
+        },
+        {
+          "name": "28-tool-with-ui-served-from-a-url",
+          "description": "Tool widget served from a URL instead of from the `ui://` resource's own HTML: `servingMode: 'direct-url'` serves the page on a route of the server, and `'custom-url'` loads it from a CDN; the `ui://` resource frames that URL.",
+          "level": "advanced",
+          "tags": ["ui", "direct-url", "custom-url", "frame-domains", "serving-mode"],
+          "features": [
+            "Serving the page compiled at startup on a server route with `servingMode: 'direct-url'` and `directPath`",
+            "Loading a page deployed elsewhere with `servingMode: 'custom-url'` and `customWidgetUrl`",
+            "Rendering call data from the bridge (`tool:result`), because the page holds no call data",
+            "Pinning the framed URL with `FRONTMCP_PUBLIC_URL`, and what the host must allow (`frameDomains`)"
+          ]
         }
       ],
       "rules": [

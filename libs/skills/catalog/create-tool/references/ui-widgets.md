@@ -102,7 +102,7 @@ Or use the FileSource form — it sidesteps the issue.
 | `directPath`                                            | `/widgets/{toolName}` | The route a `'direct-url'` widget is served on. See [Serving a widget from a URL](#serving-a-widget-from-a-url).                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `customWidgetUrl`                                       | —                     | The page a `'custom-url'` widget loads, e.g. on a CDN. See [Serving a widget from a URL](#serving-a-widget-from-a-url).                                                                                                                                                                                                                                                                                                                                                                                          |
 | `bundlingMode`                                          | unset                 | `'static'` builds the page once (no call data; the host sends each result), `'dynamic'` renders it per call. Picks the mode where `servingMode` is unset or `'auto'`: `'dynamic'` → `'inline'` on every platform, `'static'` → `'static'` (an inherited `'hybrid'` / `'direct-url'` / `'custom-url'` stays). A tool's own `servingMode` that contradicts it fails startup. Unset: `servingMode` alone decides.                                                                                                   |
-| `htmlResponsePrefix`                                    | —                     | **Deprecated, no effect** (startup warning). There is no dual HTML payload for Claude.                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `htmlResponsePrefix`                                    | unset                 | Turns on the dual payload: a client detected as `'claude'` (a Claude client that declares no MCP Apps support, so it renders no widget) gets a second text block, `{prefix}:` and this call's page in an `html` code fence. See [Clients that render no widget](#clients-that-render-no-widget).                                                                                                                                                                                                                 |
 
 ## Components and hooks
 
@@ -213,6 +213,20 @@ ui: {
 - The page is yours, and it answers the host over the MCP Apps bridge: build it with `buildShell()` from `@frontmcp/uipack/shell` to get FrontMCP's bridge (`window.FrontMcpBridge`, the `tool:result` event), or use `@modelcontextprotocol/ext-apps`. It must allow framing (no `X-Frame-Options: DENY`). Its own scripts and requests follow its own Content-Security-Policy.
 - FrontMCP adds no token or call data to the URL; the page gets each call's result from the host. Startup refuses a URL with a `{…}` placeholder (the old `{token}`), credentials, or a scheme other than `https://` (`http://` only on localhost), and doesn't repeat the URL in the message.
 - Startup also refuses a `'custom-url'` widget without `customWidgetUrl`, including a tool that inherits `'custom-url'` from `@App` / `@FrontMcp({ ui })`, and a `customWidgetUrl` on a widget not served `'custom-url'`.
+
+## Clients that render no widget
+
+A client FrontMCP detects as `'claude'` is a Claude client that declares no MCP Apps support (one that does is `'ext-apps'`), so it renders no widget. Set `ui.htmlResponsePrefix` to send it the page as text, which it can show (an Artifact in Claude):
+
+```typescript
+ui: { template: { file: widgetPath }, htmlResponsePrefix: 'Here is the weather dashboard' }
+```
+
+- Its `tools/call` result has two text blocks: the JSON of the result, as without the option, then `Here is the weather dashboard:` and the page rendered with this call's data in an `html` code fence (longer than any run of backticks in the page).
+- The page is rendered for the call whatever `servingMode` is (`'static'`, `'hybrid'` and the URL modes included) and goes to that caller only.
+- MCP Apps hosts, ChatGPT and every other client get the result as without the option, and so do a widget's own calls and an agent's.
+- The page in the model's context costs tokens (about 38 KB for the default shell); set the option on the tools whose page is worth it.
+- Startup refuses an empty prefix or one longer than 500 characters.
 
 ## CSP origins
 

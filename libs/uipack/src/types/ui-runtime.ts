@@ -147,7 +147,7 @@ export type ResourceMode = 'cdn' | 'inline';
  * - `'dual-payload'`: Return TWO TextContent blocks for Claude Artifacts.
  *   Block 0: Pure JSON stringified data (for programmatic parsing).
  *   Block 1: Markdown-wrapped HTML (```html...```) for visual rendering.
- *   Uses cloudflare CDN for all resources (Claude sandbox restriction).
+ *   The FrontMCP SDK sends it to a `'claude'` client when a tool sets `ui.htmlResponsePrefix`.
  *
  * @example
  * ```typescript
