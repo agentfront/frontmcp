@@ -295,6 +295,7 @@ export {
   WorkflowTimeoutError,
   WorkflowDagValidationError,
   WorkflowJobTimeoutError,
+  WorkflowTriggerConfigError,
 } from './workflow.errors';
 
 // Export ESM loader errors

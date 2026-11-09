@@ -585,6 +585,8 @@
   "WorkflowStepExecutor": "class",
   "WorkflowStepNotFoundError": "class",
   "WorkflowTimeoutError": "class",
+  "WorkflowTriggerConfigError": "class",
+  "WorkflowTriggerPrincipal": "class",
   "ZodAny": "function",
   "ZodArray": "function",
   "ZodBigInt": "function",
@@ -1067,5 +1069,6 @@
   "withTimeout": "function",
   "withUndeclaredKeysAllowed": "function",
   "workflow": "function",
+  "workflowTriggerOf": "function",
   "z": "object"
 }

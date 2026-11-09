@@ -655,34 +655,34 @@ class SyncDataJob extends JobContext {
 
 **Key fields:**
 
-| Field                | Description                                                        |
-| -------------------- | ------------------------------------------------------------------ |
-| `name`               | Workflow name                                                      |
-| `description`        | What this workflow accomplishes                                    |
-| `steps`              | Array of step definitions (see step fields below)                  |
-| `trigger?`           | `'manual'` \| `'webhook'` \| `'event'`                             |
-| `webhook?`           | `{ path, secret, methods }` — required when trigger is `'webhook'` |
-| `timeout?`           | Overall workflow timeout in ms                                     |
-| `maxConcurrency?`    | Maximum parallel step concurrency (default: 5)                     |
-| `tags?`              | Categorization tags                                                |
-| `labels?`            | Key-value labels (e.g., `{ env: 'prod' }`)                         |
-| `hideFromDiscovery?` | Hide from workflow listing                                         |
-| `permissions?`       | Access control: `[{ action: 'execute', roles: ['admin'] }]`        |
-| `inputSchema?`       | Zod schema for workflow input parameters                           |
-| `outputSchema?`      | Zod schema for workflow output                                     |
+| Field                | Description                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------- |
+| `name`               | Workflow name                                                                             |
+| `description`        | What this workflow accomplishes                                                           |
+| `steps`              | Array of step definitions (see step fields below)                                         |
+| `trigger?`           | `'manual'` \| `'webhook'` \| `'event'`                                                    |
+| `webhook?`           | `{ path, secret, methods, maxBodyBytes }` — `secret` required when trigger is `'webhook'` |
+| `timeout?`           | Overall workflow timeout in ms                                                            |
+| `maxConcurrency?`    | Maximum parallel step concurrency (default: 5)                                            |
+| `tags?`              | Categorization tags                                                                       |
+| `labels?`            | Key-value labels (e.g., `{ env: 'prod' }`)                                                |
+| `hideFromDiscovery?` | Hide from workflow listing                                                                |
+| `permissions?`       | Access control: `[{ action: 'execute', roles: ['admin'] }]`                               |
+| `inputSchema?`       | Zod raw shape for the workflow's input, checked when a run starts                         |
+| `outputSchema?`      | Zod schema for workflow output                                                            |
 
 **Step fields:**
 
-| Step Field         | Description                                                     |
-| ------------------ | --------------------------------------------------------------- |
-| `id`               | Unique step identifier                                          |
-| `jobName`          | Name of the `@Job` to execute                                   |
-| `input?`           | Static object or `(steps) => object` function for dynamic input |
-| `dependsOn?`       | Array of step IDs that must complete first                      |
-| `condition?`       | `(steps) => boolean` — skip step if returns false               |
-| `continueOnError?` | Continue workflow if this step fails (default: `false`)         |
-| `timeout?`         | Per-step timeout in ms; aborts the job's `this.signal`          |
-| `retry?`           | Per-step retry config (same shape as `@Job.retry`)              |
+| Step Field         | Description                                                                            |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| `id`               | Unique step identifier                                                                 |
+| `jobName`          | Name of the `@Job` to execute                                                          |
+| `input?`           | Static object, or `(steps, workflowInput) => object`; without it, the workflow's input |
+| `dependsOn?`       | Array of step IDs that must complete first                                             |
+| `condition?`       | `(steps, workflowInput) => boolean` — skip step if returns false                       |
+| `continueOnError?` | Continue workflow if this step fails (default: `false`)                                |
+| `timeout?`         | Per-step timeout in ms; aborts the job's `this.signal`                                 |
+| `retry?`           | Per-step retry config (same shape as `@Job.retry`)                                     |
 
 ```typescript
 import { Workflow } from '@frontmcp/sdk';
@@ -696,7 +696,12 @@ import { Workflow } from '@frontmcp/sdk';
   steps: [
     { id: 'build', jobName: 'build_app', input: { env: 'production' } },
     { id: 'test', jobName: 'run_tests', dependsOn: ['build'] },
-    { id: 'deploy', jobName: 'deploy_app', dependsOn: ['test'], condition: (steps) => steps.test.success },
+    {
+      id: 'deploy',
+      jobName: 'deploy_app',
+      dependsOn: ['test'],
+      condition: (steps) => steps.get('test').state === 'completed',
+    },
   ],
 })
 class DeployPipeline {}

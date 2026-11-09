@@ -246,11 +246,11 @@ The full `@Tool({...})` surface — including the former `create-tool-annotation
 
 ### `create-workflow`
 
-| Example                                                                                      | Level        | Description                                                                                                                       |
-| -------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| [`basic-deploy-pipeline`](./examples/create-workflow/basic-deploy-pipeline.md)               | Basic        | A linear workflow that builds, tests, and deploys a service with step dependencies and dynamic input.                             |
-| [`parallel-validation-pipeline`](./examples/create-workflow/parallel-validation-pipeline.md) | Intermediate | A workflow that validates multiple datasets in parallel, then conditionally merges results or notifies on failure.                |
-| [`webhook-triggered-workflow`](./examples/create-workflow/webhook-triggered-workflow.md)     | Advanced     | A CI/CD workflow triggered by a webhook, featuring `continueOnError`, per-step conditions, and the `workflow()` function builder. |
+| Example                                                                                      | Level        | Description                                                                                                                              |
+| -------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| [`basic-deploy-pipeline`](./examples/create-workflow/basic-deploy-pipeline.md)               | Basic        | A linear workflow that builds, tests, and deploys a service with step dependencies and dynamic input.                                    |
+| [`parallel-validation-pipeline`](./examples/create-workflow/parallel-validation-pipeline.md) | Intermediate | A workflow that validates multiple datasets in parallel, then conditionally merges results or notifies on failure.                       |
+| [`webhook-triggered-workflow`](./examples/create-workflow/webhook-triggered-workflow.md)     | Advanced     | A CI/CD workflow triggered by a signed webhook, featuring `continueOnError`, per-step conditions, and the `workflow()` function builder. |
 
 ### `decorators-guide`
 
