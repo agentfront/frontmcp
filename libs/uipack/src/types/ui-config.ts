@@ -83,9 +83,10 @@ export interface UIContentSecurityPolicy {
  * scheme isn't `http:`, `https:` or `mailto:`. Relative URLs stay, and so do raster
  * `data:image/…` URLs in `<img src>`. Comments are dropped. The flags below relax it.
  *
- * It applies to HTML and Markdown strings and to a template function's result. The page FrontMCP
- * builds around the markup (the bridge, the call's data) is not touched, and a `{ file }` widget,
- * which renders in the page, can't take it: the server refuses to start such a tool.
+ * It applies to HTML, Markdown and MDX strings, to a template function's result, and to a
+ * component rendered on the server with `uiType: 'react'`. The page FrontMCP builds around the
+ * markup (the bridge, the call's data) is not touched, and a `{ file }` widget, which renders in
+ * the page, can't take it: the server refuses to start such a tool.
  *
  * Both OpenAI and Claude render widgets in sandboxed iframes, so script in a widget is contained,
  * but it can still read the widget's data, call tools the widget may call and show a fake UI.

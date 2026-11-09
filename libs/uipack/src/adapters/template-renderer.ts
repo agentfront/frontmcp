@@ -73,13 +73,13 @@ export interface RenderToolTemplateOptions {
   /** Receives the one-time string-result notice. Defaults to `console`. */
   logger?: { warn: (message: string) => void };
   /**
-   * `ui.contentSecurity`: when set, the markup built on the server from the template (an HTML or
-   * Markdown string, a template function's result) is sanitized with {@link sanitizeHtml}. Unset,
-   * the markup is used as written.
+   * `ui.contentSecurity`: when set, the markup built on the server from the template (an HTML,
+   * Markdown or MDX string, a template function's result, a component rendered with
+   * `uiType: 'react'`) is sanitized with {@link sanitizeHtml}. Unset, the markup is used as written.
    */
   contentSecurity?: UIContentSecurity;
   /**
-   * `ui.runtimeOptions.markdown`, for a Markdown template: `gfm` adds GitHub-flavored Markdown
+   * `ui.runtimeOptions.markdown`, for a Markdown or MDX template: `gfm` adds GitHub-flavored Markdown
    * (tables, task lists, strikethrough, links for bare URLs), and `highlightTheme` highlights fenced
    * code that names its language with highlight.js and puts that theme's stylesheet in the page.
    */
