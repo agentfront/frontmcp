@@ -11,6 +11,31 @@ import {
 } from '../../common';
 import { type ConsoleLogTransportInstance } from './instance.console-logger';
 
+const LOG_LEVEL_SEVERITY: Record<LogLevel, number> = {
+  [LogLevel.Verbose]: 0,
+  [LogLevel.Debug]: 1,
+  [LogLevel.Info]: 2,
+  [LogLevel.Warn]: 3,
+  [LogLevel.Error]: 4,
+  [LogLevel.Off]: Number.POSITIVE_INFINITY,
+};
+
+const failedTransports = new WeakSet<LogTransportInterface>();
+
+function reportTransportFailure(transport: LogTransportInterface, error: unknown): void {
+  if (failedTransports.has(transport)) return;
+  failedTransports.add(transport);
+  // Only the message: Node.js 24's util.inspect can throw on Zod errors.
+  console.error(
+    `[Logger] Log transport ${transport.constructor.name} failed, and its later failures are not reported:`,
+    error instanceof Error ? error.message : String(error),
+  );
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return typeof (value as PromiseLike<unknown> | undefined)?.then === 'function';
+}
+
 export type GetTransports = () => {
   consoleTransport?: ConsoleLogTransportInstance;
   transports: LogTransportInterface[];
@@ -45,9 +70,14 @@ export class LoggerInstance extends FrontMcpLogger {
     return new LoggerInstance(this.config, this.getTransports, prefix);
   }
 
+  private isEnabled(level: LogLevel): boolean {
+    if (this.level === LogLevel.Off) return false;
+    return (LOG_LEVEL_SEVERITY[level] ?? level) >= (LOG_LEVEL_SEVERITY[this.level] ?? this.level);
+  }
+
   /** Internal: fan out to transports if level passes a threshold. */
   private emit(level: LogLevel, message: string, args: unknown[]) {
-    if (level < this.level || this.level === LogLevel.Off) return;
+    if (!this.isEnabled(level)) return;
     const rec: LogRecord = {
       level,
       levelName: LogLevelName[level],
@@ -56,15 +86,12 @@ export class LoggerInstance extends FrontMcpLogger {
       timestamp: new Date(),
       prefix: this.prefix,
     };
-    for (const t of this.transports) {
+    for (const transport of this.transports) {
       try {
-        // Fire-and-forget; transports may be async
-        void t.log(rec);
-      } catch (err) {
-        // Never throw from logging
-        // Use safe logging to avoid Node.js 24 util.inspect bug with Zod errors
-
-        console.error('[Logger] Transport error:', err instanceof Error ? err.message : 'Unknown error');
+        const pending = transport.log(rec);
+        if (isPromiseLike(pending)) pending.then(undefined, (error) => reportTransportFailure(transport, error));
+      } catch (error) {
+        reportTransportFailure(transport, error);
       }
     }
   }
@@ -90,7 +117,7 @@ export class LoggerInstance extends FrontMcpLogger {
   }
 
   private _getter(level: LogLevel): LogFn {
-    if (level < this.level || this.level === LogLevel.Off) return () => void 0;
+    if (!this.isEnabled(level)) return () => void 0;
     // Dev shortcut: bind console directly for fast dev output.
     // Only when console is the SOLE transport. When observability adds
     // StructuredLogTransport, transports.length > 1 so we fall through
