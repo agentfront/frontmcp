@@ -339,6 +339,7 @@ export interface CodeCallOptions {
     maxSteps?: number;
     disabledBuiltins?: string[];
     disabledGlobals?: string[];
+    /** @deprecated Has no effect; a server that sets it logs a warning when it starts. */
     allowConsole?: boolean;
 
     /**
@@ -518,7 +519,6 @@ export type CodeCallVmPreset = 'locked_down' | 'secure' | 'balanced' | 'experime
 - Very strict, for sensitive deployments.
 - Short `timeoutMs` (~2000).
 - `allowLoops: false`.
-- `allowConsole: false`.
 - Large `disabledBuiltins` and `disabledGlobals` sets.
 - Analogy: CSP `default-src 'none'`.
 
@@ -527,7 +527,6 @@ export type CodeCallVmPreset = 'locked_down' | 'secure' | 'balanced' | 'experime
 - Default for untrusted LLM code.
 - `timeoutMs` ~3000–4000.
 - `allowLoops: false` (forces linear code).
-- `allowConsole: true` (logs captured).
 - `disabledBuiltins`: at least `['eval', 'Function']`.
 - `disabledGlobals`: block Node & network, timers (`['require', 'process', 'fetch', 'setTimeout', 'setInterval']`).
 
@@ -535,7 +534,6 @@ export type CodeCallVmPreset = 'locked_down' | 'secure' | 'balanced' | 'experime
 
 - More permissive for trusted/internal usage.
 - `allowLoops: true`.
-- `allowConsole: true`.
 - `disabledBuiltins`: `['eval', 'Function']`.
 - `disabledGlobals`: still block Node/network.
 
@@ -543,8 +541,10 @@ export type CodeCallVmPreset = 'locked_down' | 'secure' | 'balanced' | 'experime
 
 - For local dev only.
 - Higher `timeoutMs`.
-- `allowLoops: true`, `allowConsole: true`.
+- `allowLoops: true`.
 - Minimal blocking (still block `eval`, `Function` at minimum).
+
+No preset gives scripts `console`: a script that uses it is refused before it runs, and logs with `mcpLog(level, message)` instead. `vm.allowConsole` has no effect, and a server that sets it logs a warning when it starts.
 
 ### Security pipeline
 
