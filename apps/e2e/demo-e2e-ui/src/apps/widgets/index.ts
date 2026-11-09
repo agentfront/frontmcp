@@ -6,6 +6,7 @@ import { BundledDynamicNoteTool, BundledStaticNoteTool } from './tools/bundled-n
 import CustomUriTool from './tools/custom-uri.tool';
 import CustomUrlForecastTool from './tools/custom-url-forecast.tool';
 import DirectUrlForecastTool from './tools/direct-url-forecast.tool';
+import DualPayloadWeatherTool from './tools/dual-payload-weather.tool';
 import HtmlCardTool from './tools/html-card.tool';
 import HtmlTableTool from './tools/html-table.tool';
 import HybridStatusTool from './tools/hybrid-status.tool';
@@ -47,6 +48,7 @@ import StatusCardTool from './tools/status-card.tool';
     CustomUrlForecastTool,
     BundledStaticNoteTool,
     BundledDynamicNoteTool,
+    DualPayloadWeatherTool,
   ],
   resources: [UiTemplatesResource],
   prompts: [UiShowcasePrompt],

@@ -28,6 +28,7 @@ export {
 // ============================================
 export {
   buildToolResponseContent,
+  buildHtmlResponseText,
   type ToolResponseContent,
   type BuildToolResponseContentOptions,
 } from './response-builder';
