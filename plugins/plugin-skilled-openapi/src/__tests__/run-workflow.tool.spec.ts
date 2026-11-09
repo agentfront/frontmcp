@@ -25,7 +25,7 @@ import { scopeHidingSkills } from './skill-filter-scope.fixture';
 type FakeStats = { duration: number; toolCallCount: number; iterationCount: number };
 type FakeResult = { success: boolean; value?: unknown; error?: { message: string }; stats: FakeStats };
 type FakeCtx = { toolHandler: (actionId: string, input: Record<string, unknown>) => Promise<unknown> };
-type TransformConfig = { transformLoops?: boolean; additionalIdentifiers?: string[] };
+type TransformConfig = { transformCallTool?: boolean; transformLoops?: boolean; additionalIdentifiers?: string[] };
 
 let mockTransformImpl: (code: string, cfg?: TransformConfig) => string;
 let mockExecuteImpl: (code: string, ctx: FakeCtx) => Promise<FakeResult>;
@@ -36,9 +36,15 @@ let mockExecuteImpl: (code: string, ctx: FakeCtx) => Promise<FakeResult>;
 // whole import chain instead of just the tool's lazy sandbox import.
 let mockEnclaveCoreThrows = false;
 
-jest.mock('@enclave-vm/ast', () => ({
-  transformAgentScript: (code: string, cfg?: TransformConfig) => mockTransformImpl(code, cfg),
-}));
+// The check of a script's globals keeps the real transform; the transform to the program is the one these tests replace.
+jest.mock('@enclave-vm/ast', () => {
+  const actual = jest.requireActual('@enclave-vm/ast');
+  return {
+    ...actual,
+    transformAgentScript: (code: string, cfg?: TransformConfig) =>
+      cfg?.transformCallTool === false ? actual.transformAgentScript(code, cfg) : mockTransformImpl(code, cfg),
+  };
+});
 jest.mock('@enclave-vm/core/worker', () => {
   if (mockEnclaveCoreThrows) throw new Error('Cannot find module @enclave-vm/core/worker');
   return {
@@ -211,7 +217,7 @@ describe('run_workflow', () => {
     mockTransformImpl = () => {
       throw new Error('forbidden token');
     };
-    const res = await runOutput(makeRunWorkflowThis(), 'eval("x")');
+    const res = await runOutput(makeRunWorkflowThis(), 'return 1');
     expect(res.success).toBe(false);
     expect(res.error).toBe('AgentScript rejected: forbidden token');
   });
@@ -220,7 +226,7 @@ describe('run_workflow', () => {
     mockTransformImpl = () => {
       throw 'plain string blow-up';
     };
-    const res = await runOutput(makeRunWorkflowThis(), 'bad');
+    const res = await runOutput(makeRunWorkflowThis(), 'return 1');
     expect(res.success).toBe(false);
     expect(res.error).toBe('AgentScript rejected: plain string blow-up');
   });
@@ -338,7 +344,7 @@ describe('run_workflow', () => {
       await ctx.toolHandler('ghost', {});
       return { success: true, stats: { duration: 0, toolCallCount: 0, iterationCount: 0 } };
     };
-    await expect(run(makeRunWorkflowThis(), 'x')).rejects.toThrow(/unknown action "ghost"/);
+    await expect(run(makeRunWorkflowThis(), 'return 1')).rejects.toThrow(/unknown action "ghost"/);
   });
 
   it('callTool bridge throws when the action execution fails', async () => {
@@ -350,7 +356,7 @@ describe('run_workflow', () => {
       await ctx.toolHandler('createInvoice', {});
       return { success: true, stats: { duration: 0, toolCallCount: 1, iterationCount: 1 } };
     };
-    await expect(run(makeRunWorkflowThis({ hiddenOps }), 'x')).rejects.toThrow(/authority denied/);
+    await expect(run(makeRunWorkflowThis({ hiddenOps }), 'return 1')).rejects.toThrow(/authority denied/);
   });
 
   it('callTool bridge defaults missing input to {}', async () => {
@@ -362,7 +368,7 @@ describe('run_workflow', () => {
       await ctx.toolHandler('createInvoice', undefined as unknown as Record<string, unknown>);
       return { success: true, stats: { duration: 0, toolCallCount: 1, iterationCount: 1 } };
     };
-    await run(makeRunWorkflowThis({ hiddenOps }), 'x');
+    await run(makeRunWorkflowThis({ hiddenOps }), 'return 1');
     expect(mockExecuteSkillAction).toHaveBeenCalledWith(expect.objectContaining({ input: {} }));
   });
 
@@ -377,7 +383,7 @@ describe('run_workflow', () => {
       return { success: true, stats: { duration: 0, toolCallCount: 1, iterationCount: 1 } };
     };
 
-    await run(makeRunWorkflowThis({ hiddenOps, auditWriter, authInfo: { user: { sub: 'alice' } } }), 'x');
+    await run(makeRunWorkflowThis({ hiddenOps, auditWriter, authInfo: { user: { sub: 'alice' } } }), 'return 1');
     expect(mockExecuteSkillAction).toHaveBeenCalledWith(
       expect.objectContaining({ deps: expect.objectContaining({ audit: { writer: auditWriter, subject: 'alice' } }) }),
     );
@@ -394,7 +400,7 @@ describe('run_workflow', () => {
       return { success: true, stats: { duration: 0, toolCallCount: 1, iterationCount: 1 } };
     };
 
-    await run(makeRunWorkflowThis({ hiddenOps, auditWriter, omitAuthInfo: true }), 'x');
+    await run(makeRunWorkflowThis({ hiddenOps, auditWriter, omitAuthInfo: true }), 'return 1');
     expect(mockExecuteSkillAction).toHaveBeenCalledWith(
       expect.objectContaining({
         deps: expect.objectContaining({ audit: { writer: auditWriter, subject: 'anonymous' } }),
@@ -410,7 +416,7 @@ describe('run_workflow', () => {
       await ctx.toolHandler('createInvoice', {});
       return { success: true, stats: { duration: 0, toolCallCount: 1, iterationCount: 1 } };
     };
-    await run(makeRunWorkflowThis({ hiddenOps }), 'x');
+    await run(makeRunWorkflowThis({ hiddenOps }), 'return 1');
     const args = mockExecuteSkillAction.mock.calls[0][0] as { deps: { audit?: unknown } };
     expect(args.deps.audit).toBeUndefined();
   });
@@ -445,7 +451,7 @@ describe('run_workflow — what a failed action call gives the script', () => {
       );
       return { success: true, stats };
     };
-    await run(ctx, 'x');
+    await run(ctx, 'return 1');
     return outcome;
   }
 
@@ -605,7 +611,7 @@ describe('run_workflow — the requests of a workflow that has ended', () => {
       return { success: false, error: { message: String(callError) }, stats };
     };
 
-    await run(workflowWithInvoices(request.signal), 'x');
+    await run(workflowWithInvoices(request.signal), 'return 1');
 
     expect(callError).toBe('request aborted: the client cancelled the call');
   });
