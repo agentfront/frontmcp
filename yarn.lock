@@ -3008,6 +3008,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@frontmcp/uipack@workspace:libs/uipack"
   dependencies:
+    entities: "npm:^6.0.0"
     typescript: "npm:^5.9.3"
     zod: "npm:^4.0.0"
   peerDependencies:
