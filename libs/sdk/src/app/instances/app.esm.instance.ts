@@ -6,18 +6,16 @@
  * AppEsmInstance loads the package code locally and executes in-process.
  */
 
+import AgentRegistry from '../../agent/agent.registry';
 import {
   AppEntry,
-  type AdapterEntry,
   type AdapterRegistryInterface,
   type AppRecord,
   type EntryOwnerRef,
   type PackageLoader,
-  type PluginInstance,
   type PluginRegistryInterface,
   type ProviderRegistryInterface,
   type RemoteAppMetadata,
-  type SkillEntry,
 } from '../../common';
 import { InternalMcpError } from '../../errors';
 import { type EsmModuleLoader } from '../../esm-loader';
@@ -29,105 +27,14 @@ import { VersionPoller } from '../../esm-loader/version-poller';
 import PromptRegistry from '../../prompt/prompt.registry';
 import ProviderRegistry from '../../provider/provider.registry';
 import ResourceRegistry from '../../resource/resource.registry';
-import { type SkillRegistryInterface } from '../../skill/skill.registry';
+import SkillRegistry from '../../skill/skill.registry';
 import ToolRegistry from '../../tool/tool.registry';
 import { appIdOf } from '../app.utils';
+import { EmptyAdapterRegistry, EmptyPluginRegistry } from './empty-app-registries';
 import { EsmPackageVersion, type EsmPackageTarget } from './esm-package-version';
 
 /** The kinds of entry a package manifest may export that an ESM app does not load. */
-const UNLOADED_MANIFEST_KINDS = ['skills', 'agents', 'jobs', 'workflows'] as const;
-
-/**
- * Empty plugin registry for ESM apps.
- */
-class EmptyPluginRegistry implements PluginRegistryInterface {
-  getPlugins(): PluginInstance[] {
-    return [];
-  }
-  getPluginNames(): string[] {
-    return [];
-  }
-}
-
-/**
- * Empty adapter registry for ESM apps.
- */
-class EmptyAdapterRegistry implements AdapterRegistryInterface {
-  getAdapters(): AdapterEntry[] {
-    return [];
-  }
-}
-
-/**
- * Empty skill registry for ESM apps.
- */
-class EmptySkillRegistry implements SkillRegistryInterface {
-  readonly owner = { kind: 'app' as const, id: '_esm', ref: EmptySkillRegistry };
-  getSkills(): SkillEntry[] {
-    return [];
-  }
-  getExecutableSkills(): SkillEntry[] {
-    return [];
-  }
-  getKnowledgeOnlySkills(): SkillEntry[] {
-    return [];
-  }
-  findByName(): SkillEntry | undefined {
-    return undefined;
-  }
-  findByQualifiedName(): SkillEntry | undefined {
-    return undefined;
-  }
-  async search(): Promise<[]> {
-    return [];
-  }
-  async loadSkill(): Promise<undefined> {
-    return undefined;
-  }
-  async listSkills() {
-    return { skills: [], total: 0, hasMore: false };
-  }
-  hasAny(): boolean {
-    return false;
-  }
-  async count(): Promise<number> {
-    return 0;
-  }
-  subscribe(): () => void {
-    return () => {};
-  }
-  notifyListChanged(): void {}
-  getCapabilities() {
-    return {};
-  }
-  async validateAllTools() {
-    return {
-      results: [],
-      isValid: true,
-      totalSkills: 0,
-      failedCount: 0,
-      warningCount: 0,
-    };
-  }
-  async syncToExternal() {
-    return null;
-  }
-  setExternalProvider() {
-    return undefined;
-  }
-  getExternalProvider() {
-    return undefined;
-  }
-  hasExternalProvider() {
-    return false;
-  }
-  async registerSkillContent(): Promise<{ id: string; unregister: () => Promise<void> }> {
-    throw new InternalMcpError('registerSkillContent is not supported on ESM apps', 'UNSUPPORTED_OPERATION');
-  }
-  async unregisterSkill(): Promise<boolean> {
-    return false;
-  }
-}
+const UNLOADED_MANIFEST_KINDS = ['jobs', 'workflows'] as const;
 
 // ═══════════════════════════════════════════════════════════════════
 // APP ESM INSTANCE
@@ -167,9 +74,10 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
   private readonly _tools: ToolRegistry;
   private readonly _resources: ResourceRegistry;
   private readonly _prompts: PromptRegistry;
+  private readonly _agents: AgentRegistry;
+  private readonly _skills: SkillRegistry;
   private readonly _plugins: EmptyPluginRegistry;
   private readonly _adapters: EmptyAdapterRegistry;
-  private readonly _skills: EmptySkillRegistry;
 
   constructor(record: AppRecord, scopeProviders: ProviderRegistry) {
     super(record);
@@ -201,9 +109,11 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     this._tools = new ToolRegistry(this.ownProviders, [], this.appOwner, { adopt: false });
     this._resources = new ResourceRegistry(this.ownProviders, [], this.appOwner, { adopt: false });
     this._prompts = new PromptRegistry(this.ownProviders, [], this.appOwner, { adopt: false });
+    // The scope adopts these as a local app's: each loaded version's own registries are adopted into them.
+    this._agents = new AgentRegistry(this.ownProviders, [], this.appOwner);
+    this._skills = new SkillRegistry(this.ownProviders, [], this.appOwner);
     this._plugins = new EmptyPluginRegistry();
     this._adapters = new EmptyAdapterRegistry();
-    this._skills = new EmptySkillRegistry();
 
     this.ready = this.initialize();
   }
@@ -214,7 +124,14 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
 
     try {
       // Wait for registries to be ready
-      await Promise.all([this.ownProviders.ready, this._tools.ready, this._resources.ready, this._prompts.ready]);
+      await Promise.all([
+        this.ownProviders.ready,
+        this._tools.ready,
+        this._resources.ready,
+        this._prompts.ready,
+        this._agents.ready,
+        this._skills.ready,
+      ]);
       this.scopeProviders.getActiveScope().onDispose(() => this.dispose());
 
       // Load the ESM package
@@ -273,8 +190,12 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     return this._prompts;
   }
 
-  override get skills(): SkillRegistryInterface {
+  override get skills(): SkillRegistry {
     return this._skills;
+  }
+
+  get agents(): AgentRegistry {
+    return this._agents;
   }
 
   /**
@@ -334,7 +255,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     const notLoaded = UNLOADED_MANIFEST_KINDS.filter((kind) => (manifest[kind]?.length ?? 0) > 0);
     if (notLoaded.length > 0) {
       logger.warn(
-        `ESM app ${this.id}: App.esm() loads only tools, resources, prompts and providers; ` +
+        `ESM app ${this.id}: App.esm() loads only tools, resources, prompts, agents, skills and providers; ` +
           `the package's ${notLoaded.join(', ')} are not loaded`,
       );
     }
@@ -342,7 +263,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     const next = await EsmPackageVersion.build(manifest, this.packageTarget());
     try {
       if (replacing) await next.providers.runReadyHooks(logger);
-      this.swapEntries(next);
+      await this.swapEntries(next, { replacing });
     } catch (error) {
       await next.discard(logger);
       throw error;
@@ -390,29 +311,43 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     }
   }
 
-  /** Registers `next` in place of the registered entries; if one fails to register, the previous ones are put back. */
-  private swapEntries(next: EsmPackageVersion): void {
-    const previous = this.registered;
-    if (previous) this.unregisterEntries(previous);
-    try {
-      this.registerEntries(next);
-    } catch (error) {
-      this.unregisterEntries(next);
-      if (previous) this.registerEntries(previous);
-      throw error;
-    }
+  /**
+   * Registers `next` in place of the registered entries; if one fails to register, the previous ones are put back.
+   * Clients get one `list_changed` for each list the swap changed. A version that replaces one after startup gets
+   * what startup gives an app: the scope serves its kinds of entry, and checks it as it checks every app.
+   */
+  private async swapEntries(next: EsmPackageVersion, { replacing }: { replacing: boolean }): Promise<void> {
+    const scope = this.scopeProviders.getActiveScope();
+    if (replacing) await scope.serveLateEntries(next.lateEntryKinds());
+    await scope.batchListChanges(async (batch) => {
+      const previous = this.registered;
+      if (previous) this.unregisterEntries(previous);
+      try {
+        await this.registerEntries(next);
+        if (replacing) await scope.checkLateApp(this);
+      } catch (error) {
+        this.unregisterEntries(next);
+        if (previous) await this.registerEntries(previous);
+        batch.listsRestored();
+        throw error;
+      }
+    });
     this.registered = next;
   }
 
-  private registerEntries(entries: EsmPackageVersion): void {
+  private async registerEntries(entries: EsmPackageVersion): Promise<void> {
     for (const tool of entries.tools) this._tools.registerToolInstance(tool);
     for (const resource of entries.resources) this._resources.registerResourceInstance(resource);
     for (const prompt of entries.prompts) this._prompts.registerPromptInstance(prompt);
+    if (entries.agents) this._agents.adoptFromChild(entries.agents, entries.agents.owner);
+    if (entries.skills) await this._skills.adoptFromChild(entries.skills, entries.skills.owner);
   }
 
   private unregisterEntries(entries: EsmPackageVersion): void {
     for (const tool of entries.tools) this._tools.unregisterToolInstance(tool.record.provide);
     for (const resource of entries.resources) this._resources.unregisterResourceInstance(resource.record.provide);
     for (const prompt of entries.prompts) this._prompts.unregisterPromptInstance(prompt.record.provide);
+    if (entries.agents) this._agents.removeChild(entries.agents);
+    if (entries.skills) this._skills.removeChild(entries.skills);
   }
 }

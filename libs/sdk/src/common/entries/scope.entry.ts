@@ -48,6 +48,9 @@ import { BaseEntry } from './base.entry';
 /** The registries of an app loaded after startup. */
 export type LateAppRegistries = Omit<EnforcedMetadataScope, 'hooks'>;
 
+/** The kinds of entry an app may add after startup that the scope serves only once it has one. */
+export type LateEntryKind = 'agents' | 'skills';
+
 export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMetadata> {
   abstract readonly id: string;
   abstract readonly entryPath: string;
@@ -161,6 +164,13 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
    * metadata only a plugin enforces, the hooks' order, and the guard its tools' limits need. Throws what startup would.
    */
   abstract checkLateApp(app: LateAppRegistries): Promise<void>;
+
+  /**
+   * Make the scope serve entries of these kinds that an app adds after startup (an ESM app's new version), as startup
+   * would have, had they been there: the `agents:call-agent` flow for agents; the skill session guard, the skill
+   * methods and the `skill://` resources for skills. A kind the scope serves already is left as it is.
+   */
+  abstract serveLateEntries(kinds: readonly LateEntryKind[]): Promise<void>;
 
   /**
    * Lifecycle callbacks registered by plugins via onServerStarted().
