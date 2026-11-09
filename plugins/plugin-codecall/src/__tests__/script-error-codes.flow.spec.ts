@@ -2,6 +2,9 @@
  * The code a script sees for a tool call the server refused: an input that fails the tool's schema
  * is `VALIDATION`, and a call over a rate limit, quota or concurrency limit is `RATE_LIMITED`, not
  * `EXECUTION`.
+ *
+ * The code comes from the error's type, never its words, and the script gets the message an MCP client
+ * would be told (#1166): a tool failing with `User u9 not found` was reported as `Tool "x" was not found`.
  */
 import 'reflect-metadata';
 
@@ -13,6 +16,7 @@ import {
   createInMemoryServer,
   FrontMcpInstance,
   LogLevel,
+  PublicMcpError,
   QuotaExceededError,
   Tool,
   ToolContext,
@@ -59,6 +63,35 @@ class BuildReportTool extends ToolContext {
   }
 }
 
+@Tool({ name: 'users.find', description: 'Finds a user', inputSchema: {} })
+class FindUserTool extends ToolContext {
+  async execute(): Promise<never> {
+    throw new PublicMcpError('User u9 not found', 'USER_NOT_FOUND', 404);
+  }
+}
+
+@Tool({ name: 'users.import', description: 'Imports users', inputSchema: {} })
+class ImportUsersTool extends ToolContext {
+  async execute(): Promise<never> {
+    throw new PublicMcpError('The validation of row 7 failed: the import timed out at 10:30:00');
+  }
+}
+
+@Tool({ name: 'users.sync', description: 'Syncs users', inputSchema: {} })
+class SyncUsersTool extends ToolContext {
+  async execute(): Promise<never> {
+    throw new Error('sync not found: connection to postgres://admin:secret@db timed out');
+  }
+}
+
+@Tool({ name: 'users.slow', description: 'Answers slowly', inputSchema: {}, timeout: { executeMs: 50 } })
+class SlowUsersTool extends ToolContext {
+  async execute() {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    return { slow: true };
+  }
+}
+
 describe('error codes a script sees', () => {
   let client: Client;
   let closeServer: () => Promise<void>;
@@ -67,7 +100,16 @@ describe('error codes a script sees', () => {
     @App({
       id: 'users',
       name: 'Users',
-      tools: [GetUserTool, ExportUsersTool, ChargeTool, BuildReportTool],
+      tools: [
+        GetUserTool,
+        ExportUsersTool,
+        ChargeTool,
+        BuildReportTool,
+        FindUserTool,
+        ImportUsersTool,
+        SyncUsersTool,
+        SlowUsersTool,
+      ],
       plugins: [CodeCallPlugin.init({ mode: 'codecall_only' })],
     })
     class UsersApp {}
@@ -123,7 +165,7 @@ describe('error codes a script sees', () => {
     expect(outcome.result).toEqual(
       expect.objectContaining({
         code: 'RATE_LIMITED',
-        message: 'Tool "billing.charge" was rate limited',
+        message: 'billing quota exceeded',
         toolName: 'billing.charge',
       }),
     );
@@ -137,6 +179,40 @@ describe('error codes a script sees', () => {
 
     expect(outcome.status).toBe('ok');
     expect(outcome.result).toEqual(expect.arrayContaining(['ok', 'RATE_LIMITED']));
+  });
+
+  async function failedCall(toolName: string): Promise<unknown> {
+    const outcome = await run(`const r = await callTool('${toolName}', {}, { throwOnError: false });\nreturn r.error;`);
+    return outcome.result;
+  }
+
+  it("gives the tool's own message, and reads the code from the error, not its words", async () => {
+    expect(await failedCall('users.find')).toEqual(
+      expect.objectContaining({ code: 'EXECUTION', message: 'User u9 not found', toolName: 'users.find' }),
+    );
+    expect(await failedCall('users.import')).toEqual(
+      expect.objectContaining({
+        code: 'EXECUTION',
+        message: 'The validation of row 7 failed: the import timed out at 10:30:00',
+        toolName: 'users.import',
+      }),
+    );
+  });
+
+  it("keeps an internal error's message from the script", async () => {
+    expect(await failedCall('users.sync')).toEqual(
+      expect.objectContaining({ code: 'EXECUTION', message: 'Tool "users.sync" execution failed' }),
+    );
+  });
+
+  it("is TIMEOUT for a call over the tool's execution timeout", async () => {
+    expect(await failedCall('users.slow')).toEqual(
+      expect.objectContaining({
+        code: 'TIMEOUT',
+        toolName: 'users.slow',
+        message: expect.stringMatching(/timed out after 50ms/),
+      }),
+    );
   });
 
   it('is the tool_error code when the script does not catch the failure', async () => {

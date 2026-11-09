@@ -63,6 +63,22 @@ export function createToolCallError(code: ToolCallErrorCode, toolName: string, r
 }
 
 /**
+ * A ToolCallError carrying the message an MCP client calling the tool would be told, without stack frames or
+ * server paths. Only for an error that is public already; an internal one gets {@link createToolCallError}.
+ */
+export function createPublicToolCallError(
+  code: ToolCallErrorCode,
+  toolName: string,
+  publicMessage: string,
+): ToolCallError {
+  return Object.freeze({
+    code,
+    message: toClientErrorMessage(publicMessage).trim() || getSanitizedMessage(code, toolName),
+    toolName,
+  });
+}
+
+/**
  * Get a safe, generic message for each error code.
  * Internal details are NEVER included.
  */
