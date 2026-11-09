@@ -16,6 +16,9 @@ const CALL_TOOL_PRELUDE = `async function callTool(actionId, input, options) {
   return __safe_callTool(actionId, options == null ? input : { ...input, ${CALL_OPTIONS_KEY}: options });
 }`;
 
+/** The globals a script may use, in every sandbox, as run_workflow's description says. */
+const SCRIPT_GLOBALS = ['callTool', 'Math', 'JSON'];
+
 /** What a script's `await callTool(actionId, input)` runs: the only way the script touches the outside world. */
 export type WorkflowToolHandler = (
   actionId: string,
@@ -54,9 +57,9 @@ export function splitCallOptions(scriptInput: Record<string, unknown> | undefine
 
 async function loadInterpreterSandbox(): Promise<WorkflowSandbox | { unavailable: string }> {
   try {
-    const { transformAgentScript } = await import('@enclave-vm/ast');
+    const ast = await import('@enclave-vm/ast');
     const { InterpreterAdapter } = await import('@enclave-vm/core/worker');
-    return interpreterSandbox(transformAgentScript, InterpreterAdapter);
+    return interpreterSandbox(ast, InterpreterAdapter);
   } catch {
     return unavailableSandbox('@enclave-vm/core');
   }
@@ -78,14 +81,14 @@ function unavailableSandbox(sandboxPackage: string): { unavailable: string } {
   };
 }
 
-function interpreterSandbox(
-  transformAgentScript: typeof EnclaveAst.transformAgentScript,
-  Interpreter: typeof InterpreterAdapter,
-): WorkflowSandbox {
+function interpreterSandbox(ast: typeof EnclaveAst, Interpreter: typeof InterpreterAdapter): WorkflowSandbox {
   return {
-    // No loop rewrite: the interpreter enforces its own step budget, and the loop helpers aren't in its scope.
-    compile: async (script) =>
-      `${CALL_TOOL_PRELUDE}\n${transformAgentScript(script, { transformLoops: false, additionalIdentifiers: ['callTool'] })}`,
+    compile: async (script) => {
+      await checkedProgram(ast, script);
+      // No loop rewrite: the interpreter enforces its own step budget, and the loop helpers aren't in its scope.
+      const program = ast.transformAgentScript(script, { transformLoops: false, additionalIdentifiers: ['callTool'] });
+      return `${CALL_TOOL_PRELUDE}\n${program}`;
+    },
     run: (program, toolHandler) => {
       const adapter = new Interpreter({ maxSteps: MAX_STEPS });
       const context = {
@@ -115,11 +118,35 @@ function browserSandbox(ast: typeof EnclaveAst, Enclave: typeof BrowserEnclave):
   };
 }
 
+/** The script as the program's `__ag_main`, its names as written; throws for one that doesn't parse or uses a global no sandbox has. */
+async function checkedProgram(
+  ast: typeof EnclaveAst,
+  script: string,
+): Promise<NonNullable<EnclaveAst.ValidationResult['ast']>> {
+  const wrapped = ast.transformAgentScript(script, { transformCallTool: false, transformLoops: false });
+  const unknownGlobalRule = new ast.UnknownGlobalRule({ allowedGlobals: SCRIPT_GLOBALS, allowStandardGlobals: false });
+  const validator = new ast.JSAstValidator([unknownGlobalRule]);
+  const { ast: program, parseError, preScanError, issues } = await validator.validate(wrapped);
+  if (!program) throw parseError ?? preScanError ?? new Error('the script could not be parsed');
+  const unknownGlobalIssues = issues.filter((issue) => issue.code === 'UNKNOWN_GLOBAL');
+  const unknownGlobals = new Set(unknownGlobalIssues.map((issue) => issue.data?.['identifier']).filter(isString));
+  if (unknownGlobals.size > 0) throw new Error(unavailableGlobalsMessage([...unknownGlobals]));
+  return program;
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+function unavailableGlobalsMessage(names: string[]): string {
+  const subject = names.map((name) => `\`${name}\``).join(', ');
+  const verb = names.length === 1 ? "isn't" : "aren't";
+  return `${subject} ${verb} available in run_workflow. A script reaches the API only through \`callTool(actionId, input)\`, and can use \`Math\` and \`JSON\`.`;
+}
+
 /** The browser sandbox hands its tool handler the input alone, so each call's options are moved into it, as the prelude does. */
 async function foldCallToolOptions(ast: typeof EnclaveAst, script: string): Promise<string> {
-  const wrapped = ast.transformAgentScript(script, { transformCallTool: false, transformLoops: false });
-  const { ast: program, parseError } = await new ast.JSAstValidator([]).validate(wrapped);
-  if (!program) throw parseError ?? new Error('the script could not be parsed');
+  const program = await checkedProgram(ast, script);
   foldOptionsOfCalls(program);
   return ast.generateCode(program);
 }

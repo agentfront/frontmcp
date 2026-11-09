@@ -420,6 +420,7 @@ frontmcp service uninstall my-server
 | Permission denied on binary  | Missing execute permission                  | Run `chmod +x dist/my-server`                                            |
 | Binary fails on different OS | SEA binaries are platform-specific          | Build on the target OS or use CI matrix builds                           |
 | `run_workflow` exits 1       | The workflow failed (`success: false`)      | Read the error on stderr; it names the API's status and error body       |
+| `fetch` isn't available      | Only `callTool`, `Math` and `JSON` exist    | Reach the API through `callTool(actionId, input)`; the script didn't run |
 | `execute` exits 1            | The action failed, or the user declined it  | Read the error on stderr; `--output json` prints `{ ok, status, data? }` |
 | `execute` exits 1, declined  | No terminal to confirm a destructive action | Run it again with `--yes`                                                |
 | `error: unknown command`     | A mistyped or missing command               | Run `<bin> --help`; on a server with tools, use `<bin> skills ...`       |

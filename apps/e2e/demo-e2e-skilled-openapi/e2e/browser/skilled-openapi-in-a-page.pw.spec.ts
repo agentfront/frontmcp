@@ -128,7 +128,11 @@ test.describe('the Skilled OpenAPI plugin in a web page', () => {
       await callTool(page, 'run_workflow', { script: `return await fetch("${API_ORIGIN}/v1/invoices/7");` }),
     ).toMatchObject({
       isError: true,
-      structuredContent: { success: false, error: expect.stringContaining('Unknown identifier "__safe_fetch"') },
+      structuredContent: {
+        success: false,
+        error:
+          "AgentScript rejected: `fetch` isn't available in run_workflow. A script reaches the API only through `callTool(actionId, input)`, and can use `Math` and `JSON`.",
+      },
     });
     expect(apiRequests).toEqual([]);
   });
