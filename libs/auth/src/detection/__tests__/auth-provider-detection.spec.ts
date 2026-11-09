@@ -445,4 +445,20 @@ describe('auth-provider-detection', () => {
       expect(appIds).toEqual([]);
     });
   });
+
+  describe('incrementalAuth.showAllAppsAtOnce', () => {
+    it('warns that false has no effect', () => {
+      const parent = { mode: 'local', incrementalAuth: { enabled: true, showAllAppsAtOnce: false } } as AuthOptions;
+
+      expect(detectAuthProviders(parent, []).warnings).toEqual([
+        'incrementalAuth.showAllAppsAtOnce: false has no effect: the provider picker shows every app on one page.',
+      ]);
+    });
+
+    it('does not warn for the default', () => {
+      const parent = { mode: 'local', incrementalAuth: { enabled: true, showAllAppsAtOnce: true } } as AuthOptions;
+
+      expect(detectAuthProviders(parent, []).warnings).toEqual([]);
+    });
+  });
 });

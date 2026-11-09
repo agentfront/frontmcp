@@ -62,6 +62,7 @@ import { InternalMcpError } from '../../errors';
 import { initialAuthorizedApps, withoutSkippedApps } from '../authorized-apps.utils';
 import { projectConsentTools } from '../consent-tools.helper';
 import { LocalPrimaryAuth, validateAuthorizationIssuer } from '../instances/instance.local-primary-auth';
+import { requiredProviderIds } from '../required-providers.utils';
 import { parseFormBody } from './form-body.utils';
 import {
   clearedSigninBindingCookie,
@@ -712,14 +713,21 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
     // actually LINKED (not the ones selected, some may have been declined)
     // must meet `federatedAuth.minProviders` (default 1) and include every
     // `requiredProviders` entry, and there must be an identity: the login page's
-    // or the provider's. Never an `anon:` stand-in.
+    // or the provider's. Never an `anon:` stand-in. Under `incrementalAuth.allowSkip:
+    // false` no app provider may be declined either.
     const federatedConfig = (
       localAuth.options as { federatedAuth?: { minProviders?: number; requiredProviders?: string[] } }
     ).federatedAuth;
     const minProviders = federatedConfig?.minProviders ?? 1;
-    const missingRequired = (federatedConfig?.requiredProviders ?? []).filter(
-      (id) => !session.completedProviders.has(id),
+    const declinedRequired = requiredProviderIds(this.scope.auth?.options, this.scope.apps.getApps()).filter((id) =>
+      session.skippedProviders.includes(id),
     );
+    const missingRequired = [
+      ...new Set([
+        ...(federatedConfig?.requiredProviders ?? []).filter((id) => !session.completedProviders.has(id)),
+        ...declinedRequired,
+      ]),
+    ];
     if (selectedProviderIds.length < minProviders || missingRequired.length > 0) {
       this.logger.warn(
         `Federated auth refused: ${selectedProviderIds.length} provider(s) linked (minimum ${minProviders})` +

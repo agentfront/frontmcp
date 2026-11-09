@@ -58,6 +58,7 @@ import { authUiExtraPath, buildAuthUiPage, buildConsentState, type AuthTool, typ
 import { initialAuthorizedApps, withoutSkippedApps } from '../authorized-apps.utils';
 import { projectConsentTools } from '../consent-tools.helper';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
+import { requiredProviderIds } from '../required-providers.utils';
 import { parseFormBody } from './form-body.utils';
 import {
   clearedSigninBindingCookie,
@@ -495,13 +496,11 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       // `auth.providers` are declared, the default minimum is 1 ("no JWT until
       // ≥1 linked"); `federatedAuth.minProviders` raises it. The app-level
       // federation path (no configured providers) keeps the historical ≥1 rule.
-      const federatedConfig = (
-        localAuth.options as { federatedAuth?: { minProviders?: number; requiredProviders?: string[] } }
-      ).federatedAuth;
+      const federatedConfig = (localAuth.options as { federatedAuth?: { minProviders?: number } }).federatedAuth;
       // Default minimum is 1 in both the configured-providers and the legacy
       // app-level federation paths (historical "≥1 selected" behavior).
       const minProviders = federatedConfig?.minProviders ?? 1;
-      const requiredProviders = federatedConfig?.requiredProviders ?? [];
+      const requiredProviders = requiredProviderIds(this.scope.auth?.options, this.scope.apps.getApps());
 
       const selected = selectedProviders ?? [];
 
@@ -530,7 +529,8 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         return;
       }
 
-      // Require every explicitly-required provider to be among the selected set.
+      // Require every required provider (`requiredProviders`, and app providers
+      // under `incrementalAuth.allowSkip: false`) to be among the selected set.
       const missingRequired = requiredProviders.filter((id) => !selected.includes(id));
       if (missingRequired.length > 0) {
         this.logger.warn(`Missing required providers: ${missingRequired.join(', ')}`);

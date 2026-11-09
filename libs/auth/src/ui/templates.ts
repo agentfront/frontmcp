@@ -52,6 +52,8 @@ export interface ProviderCard {
   appIds: string[];
   /** Whether this is the parent/primary provider */
   isPrimary?: boolean;
+  /** Whether the sign-in must link it: rendered checked, and the browser refuses to submit it unchecked */
+  required?: boolean;
 }
 
 /**
@@ -248,8 +250,10 @@ export function buildFederatedLoginPage(params: {
   clientName: string;
   pendingAuthId: string;
   callbackPath: string;
+  /** Whether the user may leave app providers for later (`incrementalAuth.allowSkip`). @default true */
+  allowSkip?: boolean;
 }): string {
-  const { providers, clientName, pendingAuthId, callbackPath } = params;
+  const { providers, clientName, pendingAuthId, callbackPath, allowSkip = true } = params;
 
   const providerCards = providers
     .map((provider) => {
@@ -268,7 +272,9 @@ export function buildFederatedLoginPage(params: {
 
       return `<label class="flex items-start gap-4 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer hover:border-blue-300 transition-colors has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
       <input type="checkbox" name="providers" value="${escapeHtml(provider.providerId)}"
-        class="mt-1 w-5 h-5 rounded border-gray-300" ${provider.isPrimary ? 'checked' : ''}>
+        class="mt-1 w-5 h-5 rounded border-gray-300" ${provider.isPrimary || provider.required ? 'checked' : ''}${
+          provider.required ? ' required' : ''
+        }>
       <div class="flex-1">
         <div class="flex items-center gap-2 mb-1">
           <span class="font-semibold text-gray-900">${escapeHtml(provider.providerName)}</span>
@@ -281,6 +287,19 @@ export function buildFederatedLoginPage(params: {
     </label>`;
     })
     .join('\n');
+
+  const skipAllButton = allowSkip
+    ? `<button type="button"
+          class="flex-1 px-6 py-3 text-gray-700 bg-gray-100 hover:bg-gray-200 font-medium rounded-lg transition-colors"
+          onclick="document.querySelectorAll('input[name=providers]').forEach(cb => cb.checked = false); document.getElementById('federated-form').submit();">
+          Skip All
+        </button>`
+    : '';
+  const skipNote = allowSkip
+    ? `<div class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+      Skipped providers can be authorized later when you try to use their tools (progressive authorization).
+    </div>`
+    : '';
 
   const content = `
     <h1 class="text-3xl font-bold text-gray-900 mb-4">Select Authorization Providers</h1>
@@ -313,21 +332,14 @@ export function buildFederatedLoginPage(params: {
 
       <!-- Buttons -->
       <div class="flex gap-4">
-        <button type="button"
-          class="flex-1 px-6 py-3 text-gray-700 bg-gray-100 hover:bg-gray-200 font-medium rounded-lg transition-colors"
-          onclick="document.querySelectorAll('input[name=providers]').forEach(cb => cb.checked = false); document.getElementById('federated-form').submit();">
-          Skip All
-        </button>
+        ${skipAllButton}
         <button type="submit"
           class="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
           Continue
         </button>
       </div>
     </form>
-
-    <div class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-      Skipped providers can be authorized later when you try to use their tools (progressive authorization).
-    </div>`;
+    ${skipNote}`;
 
   return wideLayout(content, { title: 'Select Providers' });
 }
