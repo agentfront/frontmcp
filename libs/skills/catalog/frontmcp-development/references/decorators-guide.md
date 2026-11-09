@@ -551,7 +551,7 @@ import { Flow, FlowBase, FlowHooksOf, z, type FlowPlan, type FlowRunOptions } fr
 const name = 'approval-flow' as const;
 const inputSchema = z.object({ action: z.string(), target: z.string() });
 const outputSchema = z.object({ approved: z.boolean() });
-const stateSchema = z.object({ approved: z.boolean().default(false) });
+const stateSchema = z.object({ approved: z.boolean() });
 const plan = { pre: ['validate'], execute: ['approve'], finalize: ['finalize'] } as const satisfies FlowPlan<string>;
 
 declare global {
@@ -576,10 +576,15 @@ export default class ApprovalFlow extends FlowBase<typeof name> {
 
   @Stage('finalize')
   async finalize() {
-    this.respond({ approved: this.state.approved ?? false });
+    if (this.state.approved === undefined) return;
+    this.respond({ approved: this.state.approved });
   }
 }
 ```
+
+`finalize` runs after a hook's answer too. A `Will('approve')` hook that answers with `ctx.respond({ approved: true })`
+skips `approve`, so `finalize` answers only when `approve` set `approved`: its `respond()` would replace the hook's
+answer.
 
 `access` is checked before the first stage. An `'authorized'` flow runs only for a caller the server's auth admitted:
 

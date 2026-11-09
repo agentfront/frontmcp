@@ -3,7 +3,7 @@ import { Flow, FlowBase, FlowHooksOf, z, type FlowPlan, type FlowRunOptions } fr
 const name = 'approval-flow' as const;
 const inputSchema = z.object({ action: z.string(), target: z.string() });
 const outputSchema = z.object({ approved: z.boolean() });
-const stateSchema = z.object({ approved: z.boolean().default(false) });
+const stateSchema = z.object({ approved: z.boolean() });
 const plan = { pre: ['validate'], execute: ['approve'], finalize: ['finalize'] } as const satisfies FlowPlan<string>;
 
 declare global {
@@ -28,6 +28,7 @@ export default class ApprovalFlow extends FlowBase<typeof name> {
 
   @Stage('finalize')
   async finalize() {
-    this.respond({ approved: this.state.approved ?? false });
+    if (this.state.approved === undefined) return;
+    this.respond({ approved: this.state.approved });
   }
 }
