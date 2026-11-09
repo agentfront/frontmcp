@@ -245,7 +245,8 @@ describe('Remember Tools', () => {
     it('says what every scope means, and that an anonymous caller is refused', () => {
       const [description] = scopeDescriptions();
 
-      expect(description).toEqual(expect.stringMatching(/session:.*user:.*tool:.*global:.*anonymous caller/s));
+      expect(description).toEqual(expect.stringMatching(/session:.*user:.*global:.*anonymous caller/s));
+      expect(description).not.toMatch(/\btool:/);
     });
 
     it('says that a caller without a session keeps session memory as the signed-in caller', () => {
