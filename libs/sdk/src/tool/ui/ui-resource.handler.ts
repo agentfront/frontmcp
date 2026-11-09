@@ -10,7 +10,7 @@
  * The static widget is registered at server startup for tools with
  * `servingMode: 'static'`. The widget HTML includes the FrontMCP Bridge
  * which reads tool output from the platform context at runtime. A widget
- * served from a URL (`'direct-url'`) gets a page that frames that URL.
+ * served from a URL (`'direct-url'`, `'custom-url'`) gets a page that frames that URL.
  *
  * @example
  * ```typescript
@@ -31,6 +31,7 @@ import { buildUrlWidgetShell, widgetUrlOrigin } from '@frontmcp/uipack/shell';
 import type { AIPlatformType } from '../../notification/notification.service';
 import { getUIResourceMimeType } from './ui-render';
 import { isUIResourceUri, parseWidgetUri, type ToolUIRegistry, type UIResourceMeta } from './ui-shared';
+import type { WidgetUrlSource } from './widget-serving';
 
 /**
  * Result of handling a UI resource request
@@ -201,7 +202,7 @@ export function handleUIResourceRead(
 
     const widgetUrl = registry.getWidgetUrl(widgetParsed.toolName);
     if (widgetUrl) {
-      return readUrlWidgetResource(uri, mimeType, registry, widgetParsed.toolName, widgetUrl.path, serverUrl);
+      return readUrlWidgetResource(uri, mimeType, registry, widgetParsed.toolName, widgetUrl, serverUrl);
     }
 
     // Per-resource `_meta` (CSP / permissions). Claude only honors CSP
@@ -245,18 +246,19 @@ function readUrlWidgetResource(
   mimeType: string,
   registry: ToolUIRegistry,
   toolName: string,
-  path: string,
+  source: WidgetUrlSource,
   serverUrl: string | undefined,
 ): UIResourceHandleResult {
-  if (!serverUrl) {
+  if (source.servingMode === 'direct-url' && !serverUrl) {
     return {
       handled: true,
       error:
-        `The widget of tool "${toolName}" is served from the server's route ${path}, and this read did not come ` +
-        "over HTTP, so its URL is unknown: set FRONTMCP_PUBLIC_URL to the server's public origin.",
+        `The widget of tool "${toolName}" is served from the server's route ${source.path}, and this read did not ` +
+        "come over HTTP, so its URL is unknown: set FRONTMCP_PUBLIC_URL to the server's public origin.",
     };
   }
-  const url = `${serverUrl.replace(/\/+$/, '')}${path}`;
+  const url =
+    source.servingMode === 'custom-url' ? source.url : `${(serverUrl ?? '').replace(/\/+$/, '')}${source.path}`;
   let origin: string;
   try {
     origin = widgetUrlOrigin(url);

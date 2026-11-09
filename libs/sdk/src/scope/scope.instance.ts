@@ -1191,7 +1191,7 @@ export class Scope extends ScopeEntry {
     const [
       { describeIgnoredUiOptions, describeServingModeDefault },
       { StaticWidgetResourceTemplate },
-      { describeWidgetServingProblems, widgetPathOf },
+      { describeWidgetServingProblems, widgetUrlSourceOf },
     ] = await Promise.all([
       import('../tool/ui/ui-option-warnings.js'),
       import('../tool/ui/ui-resource-template.js'),
@@ -1242,10 +1242,14 @@ export class Scope extends ScopeEntry {
     );
     if (servingProblems.length > 0) throw new InvalidToolUiConfigError(servingProblems);
 
+    // A 'custom-url' page is not rendered here, so its resource `_meta` (csp, border, domain) is recorded now
     for (const tool of toolsWithUI) {
-      if (servingModes.get(tool) !== 'direct-url') continue;
-      const path = widgetPathOf(tool.metadata.name, (tool.metadata.ui ?? {}) as Record<string, unknown>);
-      this.toolUIRegistry.registerWidgetUrl(tool.metadata.name, { servingMode: 'direct-url', path });
+      const uiConfig = (tool.metadata.ui ?? {}) as Record<string, unknown>;
+      const source = widgetUrlSourceOf(tool.metadata.name, uiConfig, servingModes.get(tool) ?? 'auto');
+      if (!source) continue;
+      this.toolUIRegistry.registerWidgetUrl(tool.metadata.name, source);
+      if (source.servingMode === 'custom-url')
+        this.toolUIRegistry.updateResourceMetaFromConfig(tool.metadata.name, uiConfig);
     }
 
     // Pre-compile the page of widgets served from `ui://` ('static') or from the server's route ('direct-url')
