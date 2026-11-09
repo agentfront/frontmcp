@@ -3,7 +3,6 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import { RememberScopeNotAllowedError } from '../remember.errors';
 import { RememberAccessorToken, RememberConfigToken } from '../remember.symbols';
-import type { RememberScope } from '../remember.types';
 import { allowedMemoryToolScopes, MEMORY_TOOL_SCOPES, REMEMBER_SCOPE_DESCRIPTION } from './remember-scope.description';
 import { rememberToolNames, type RememberToolNames } from './remember-tool-names';
 
@@ -27,10 +26,7 @@ export const recallOutputSchema = z.object({
   expiresAt: z.number().optional(),
 });
 
-export type RecallInput = {
-  key: string;
-  scope?: RememberScope;
-};
+export type RecallInput = z.infer<z.ZodObject<typeof recallInputSchema>>;
 
 export type RecallOutput = z.infer<typeof recallOutputSchema>;
 
