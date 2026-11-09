@@ -1,4 +1,5 @@
 import type { AuthoritiesContextBuilder } from '@frontmcp/auth';
+import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { FlowControl, type ScopeEntry } from '../common';
 import { type JobEntry } from '../common/entries/job.entry';
@@ -6,11 +7,12 @@ import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { type JobCleanup, type JobInterruptReason, type JobRetryConfig } from '../common/metadata/job.metadata';
 import { FrontMcpContextStorage, type FrontMcpContext } from '../context';
 import {
+  InvalidInputError,
   InvalidOutputError,
-  JobAdmissionTimeoutError,
   JobCancelledError,
   JobInterruptedError,
-  JobNotAuthorizedError,
+  JobTimeoutError,
+  PublicMcpError,
 } from '../errors';
 import { outlasts } from '../provider/provider.lifecycle';
 import { type JobAdmission, type JobAdmissionSlot } from './job-admission';
@@ -131,25 +133,30 @@ export async function runJobAttemptFlow(request: JobAttemptRequest): Promise<Job
   }
 }
 
-/** Failures that end the run whatever attempts are left. */
-const FINAL_FAILURES = [
-  InvalidOutputError,
-  JobNotAuthorizedError,
-  JobCancelledError,
-  JobInterruptedError,
-  JobAdmissionTimeoutError,
-];
+/**
+ * The job's input as its `inputSchema` parses it. Input the schema refuses fails with `InvalidInputError`
+ * (`INVALID_INPUT`, with the issues), which is not retried.
+ */
+export function parseJobInput(job: JobEntry, input: unknown): ReturnType<JobEntry['parseInput']> {
+  try {
+    return job.parseInput(input);
+  } catch (error) {
+    if (error instanceof z.ZodError) throw new InvalidInputError(`Invalid input for job "${job.name}"`, error.issues);
+    throw error;
+  }
+}
 
 /**
  * Whether a failed attempt is followed by another one. A result that failed the job's `outputSchema`
  * is not retried, because the job ran to completion and running it again would repeat its side
- * effects; nor is a denial, a cancel, a shutdown or an admission refusal, which are not transient. A
- * timeout is.
+ * effects; nor is a `PublicMcpError` (bad input, a denial, a cancel, a shutdown, an admission refusal,
+ * or a failure the job chose to report), which another attempt would only repeat. A timeout is.
  */
 export function willRetryJobAttempt(error: unknown, attempt: number, maxAttempts: number): boolean {
   if (attempt >= maxAttempts) return false;
   const cause = error instanceof FlowControl ? ((error as { originalError?: unknown }).originalError ?? error) : error;
-  return !FINAL_FAILURES.some((failure) => cause instanceof failure);
+  if (cause instanceof JobTimeoutError) return true;
+  return !(cause instanceof PublicMcpError || cause instanceof InvalidOutputError);
 }
 
 /** How long a job's `cleanup` may take when it sets no `timeoutMs`. */

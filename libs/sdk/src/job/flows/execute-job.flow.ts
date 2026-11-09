@@ -23,6 +23,7 @@ import { type JobAdmissionSlot } from '../job-admission';
 import {
   EXECUTE_JOB_FLOW,
   interruptReasonOf,
+  parseJobInput,
   runJobCleanup,
   toJobError,
   untilAborted,
@@ -191,10 +192,11 @@ export default class ExecuteJobFlow extends FlowBase<typeof name> {
     }
   }
 
+  /** The input must match the job's `inputSchema`; a mismatch fails the attempt with `INVALID_INPUT`, which is not retried. */
   @Stage('validateInput')
   async validateInput() {
     const { job } = this.state.required;
-    this.state.set('parsedInput', job.parseInput(this.state.input));
+    this.state.set('parsedInput', parseJobInput(job, this.state.input));
   }
 
   /**
