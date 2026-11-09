@@ -271,7 +271,7 @@ const MAX_REPORTED_UNDECLARED_KEY_PATHS = 100;
   plan,
   inputSchema,
   outputSchema,
-  access: 'authorized',
+  access: 'public',
 })
 export default class CallToolFlow extends FlowBase<typeof name> {
   static override readonly tracesHooksInAnswer = true;

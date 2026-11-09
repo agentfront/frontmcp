@@ -41,6 +41,13 @@ describe('flow generator', () => {
     expect(content).toContain('FlowRunOptions<');
   });
 
+  it('should declare who the flow runs for', async () => {
+    await flowGenerator(tree, { name: 'http-request', project: 'my-app', skipFormat: true });
+
+    const content = tree.read('apps/my-app/src/flows/http-request.flow.ts', 'utf-8');
+    expect(content).toContain("access: 'authorized'");
+  });
+
   it('should generate in subdirectory', async () => {
     await flowGenerator(tree, { name: 'http-request', project: 'my-app', directory: 'custom' });
 

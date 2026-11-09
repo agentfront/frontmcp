@@ -23,8 +23,8 @@ export async function jobContextProviders(job: JobEntry, context: FrontMcpContex
 }
 
 /**
- * A context for a run that outlives the request that started it: the same session, auth, trace,
- * metadata and context tokens, a request id of its own, and no transport.
+ * A context for a run that outlives the request that started it: the same session, auth (whether its
+ * caller is authorized included), trace, metadata and context tokens, a request id of its own, and no transport.
  *
  * @param context - The request context of the caller
  * @returns The context the background run uses
@@ -38,6 +38,7 @@ export function detachedRunContext(context: FrontMcpContext): FrontMcpContext {
     metadata: context.metadata,
     config: context.config,
     platformEnv: context.platformEnv,
+    unverifiedRequest: context.unverifiedRequest,
   });
   for (const [token, instance] of context.getContextTokens()) runContext.setContextToken(token, instance);
   return runContext;

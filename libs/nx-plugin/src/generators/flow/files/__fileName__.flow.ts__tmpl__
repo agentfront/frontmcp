@@ -43,6 +43,7 @@ const { Stage } = FlowHooksOf<typeof name>(name);
   plan,
   inputSchema,
   outputSchema,
+  access: 'authorized',
 })
 export default class <%= className %>Flow extends FlowBase<typeof name> {
   @Stage('pre')

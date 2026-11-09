@@ -197,7 +197,7 @@ interface AnonymousSessionOptions {
   plan,
   inputSchema,
   outputSchema: sessionVerifyOutputSchema,
-  access: 'authorized',
+  access: 'public',
 })
 export default class SessionVerifyFlow extends FlowBase<typeof name> {
   logger = this.scopeLogger.child('SessionVerifyFlow');
