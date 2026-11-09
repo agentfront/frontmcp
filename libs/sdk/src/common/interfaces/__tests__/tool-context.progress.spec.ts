@@ -32,7 +32,7 @@ describe('ToolContext.progress() on a session (#1170)', () => {
     const { tool, sendProgressNotification } = toolWithProgressToken(progressToken);
 
     await expect(tool.progress(1, 2, 'first step')).resolves.toBe(true);
-    expect(sendProgressNotification).toHaveBeenCalledWith('session-1', progressToken, 1, 2, 'first step');
+    expect(sendProgressNotification).toHaveBeenCalledWith('session-1', progressToken, 1, 2, 'first step', undefined);
   });
 
   it('sends nothing when the request carries no progress token', async () => {
