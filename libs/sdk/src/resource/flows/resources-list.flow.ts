@@ -22,6 +22,7 @@ import { InvalidInputError, InvalidMethodError } from '../../errors';
 import { SEP_2640_META_NAMESPACE } from '../../skill/sep-2640/sep-2640.constants';
 import { filterServableSkills } from '../../skill/skill-filter.helper';
 import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
+import { isListedByAuthorities } from '../../surface/entry-authorized';
 
 const inputSchema = z.object({
   request: ListResourcesRequestSchema,
@@ -232,9 +233,15 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
         const authorities = metadata['authorities'];
         if (!authorities) return item;
 
-        const evalCtx = ctxBuilder.build(authInfo);
-        const result = await engine.evaluate(authorities as import('@frontmcp/auth').AuthoritiesMetadata, evalCtx);
-        return result.granted ? item : null;
+        const listed = await isListedByAuthorities(
+          engine,
+          ctxBuilder,
+          authorities as import('@frontmcp/auth').AuthoritiesMetadata,
+          authInfo,
+          item.resource.fullName || item.resource.name,
+          this.logger,
+        );
+        return listed ? item : null;
       }),
     );
 

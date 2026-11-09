@@ -860,7 +860,9 @@ The plugin has two fallbacks, kept apart on purpose:
 - `gateDefaultValue` (default `false`) -- what every gate (`tools/call`, `resources/read`, `prompts/get`,
   `completion/complete`, and the list and skill filters) answers for an entry whose ref has no `defaultValue`. A ref's
   own `defaultValue` wins over it. Setting it to `true` makes every such entry available while the flag service is down,
-  so it is an explicit opt-in. A non-boolean value fails startup with `FeatureFlagConfigurationError`.
+  so it is an explicit opt-in. A non-boolean value fails startup with `FeatureFlagConfigurationError`. When the adapter
+  throws while a list (`tools/list`, `resources/list`, `prompts/list`, skills) is filtered, each flag gets this same
+  fallback, a warning is logged, and the rest of the list is served. Up to 1.11.2 the whole list failed with `-32603`.
 - `defaultValue` (default `false`) -- the fallback of `this.featureFlags.isEnabled()` and `resolveRef()` only. Gates
   never read it, so a plugin-wide `defaultValue: true` does not open gated entries.
 

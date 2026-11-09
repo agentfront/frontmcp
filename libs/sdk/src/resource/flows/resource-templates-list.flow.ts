@@ -23,6 +23,7 @@ import { annotationsForClient, callerClientProfile, type ClientNameSources } fro
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError } from '../../errors';
 import { enabledItems, SURFACE_META_KEY, surfaceHash } from '../../surface';
+import { isListedByAuthorities } from '../../surface/entry-authorized';
 
 const inputSchema = z.object({
   request: ListResourceTemplatesRequestSchema,
@@ -226,9 +227,15 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
         const authorities = metadata['authorities'];
         if (!authorities) return item;
 
-        const evalCtx = ctxBuilder.build(authInfo);
-        const result = await engine.evaluate(authorities as import('@frontmcp/auth').AuthoritiesMetadata, evalCtx);
-        return result.granted ? item : null;
+        const listed = await isListedByAuthorities(
+          engine,
+          ctxBuilder,
+          authorities as import('@frontmcp/auth').AuthoritiesMetadata,
+          authInfo,
+          item.template.fullName || item.template.name,
+          this.logger,
+        );
+        return listed ? item : null;
       }),
     );
 
