@@ -32,16 +32,19 @@ import { Workflow } from '@frontmcp/sdk';
       id: 'validate-users',
       jobName: 'validate-dataset',
       input: { dataset: 'users', rules: ['no-nulls', 'email-format'] },
+      continueOnError: true, // notify-failure checks its state
     },
     {
       id: 'validate-orders',
       jobName: 'validate-dataset',
       input: { dataset: 'orders', rules: ['no-nulls', 'positive-amounts'] },
+      continueOnError: true, // notify-failure checks its state
     },
     {
       id: 'validate-products',
       jobName: 'validate-dataset',
       input: { dataset: 'products', rules: ['no-nulls', 'unique-sku'] },
+      continueOnError: true, // notify-failure checks its state
     },
     // This step depends on all three -- runs after all complete
     {

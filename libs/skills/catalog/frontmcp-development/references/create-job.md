@@ -216,7 +216,7 @@ With this configuration (`maxAttempts: 5`), if the job fails:
 
 The backoff is capped at `maxBackoffMs` (60000ms), so no delay exceeds 60 seconds.
 
-> **Default:** when you omit `retry`, the framework uses `maxAttempts: 3`, `backoffMs: 1000`, `backoffMultiplier: 2`, `maxBackoffMs: 60000` -- i.e., the initial run plus two retries (at ~1s and ~2s).
+> **Default:** when you omit `retry`, the job is tried once, and so is a workflow step that runs it (unless the step sets its own `retry`). A `retry` that omits fields uses `maxAttempts: 3`, `backoffMs: 1000`, `backoffMultiplier: 2`, `maxBackoffMs: 60000` -- i.e., the initial run plus two retries (at ~1s and ~2s). Up to 1.11.2 a workflow step whose job had no `retry` was tried 3 times.
 
 ## Progress Tracking
 
