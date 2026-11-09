@@ -29,6 +29,7 @@ import {
   currentRequestLog,
   recordRequestLogAuth,
   recordRequestLogFailure,
+  recordRequestLogOutput,
   startRequestLog,
 } from '../request-log/request-log.hooks';
 import { REQUEST_LOG_COLLECTOR } from '../request-log/request-log.tokens';
@@ -47,11 +48,7 @@ import {
   onAgentWillFind,
   // Agent flow
   onAgentWillParse,
-  onAuthDidDetermineMode,
-  onAuthDidFinalize,
-  onAuthStage,
   // Auth flows
-  onAuthWillStart,
   onEntryDidCheckAuthorities,
   onEntryWillCheckAuthorities,
   onGenericFlowDidFinalize,
@@ -59,10 +56,12 @@ import {
   // Generic flow helpers
   onGenericFlowWillStart,
   onHttpDidAcquireQuota,
+  onHttpDidAuthenticate,
   onHttpDidCheckAuth,
   onHttpDidFinalize,
   onHttpDidRoute,
   onHttpWillAcquireQuota,
+  onHttpWillAuthenticate,
   onHttpWillCheckAuth,
   onHttpWillRoute,
   // HTTP flow
@@ -123,10 +122,6 @@ const CompletionHook = FlowHooksOf('completion:complete' as any);
 const LegacySseHook = FlowHooksOf('handle:legacy-sse' as any);
 const StreamableHttpHook = FlowHooksOf('handle:streamable-http' as any);
 const StatelessHttpHook = FlowHooksOf('handle:stateless-http' as any);
-
-// Auth flow hooks
-const AuthVerifyHook = FlowHooksOf('auth:verify' as any);
-const SessionVerifyHook = FlowHooksOf('session:verify' as any);
 
 // OAuth flow hooks
 const OAuthTokenHook = FlowHooksOf('oauth:token' as any);
@@ -283,13 +278,20 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @HttpHook.Will('checkAuthorization', { priority: -1000 })
   _httpWillAuth(ctx: unknown): void {
-    if (this.tracingEnabled) onHttpWillCheckAuth(ctx);
+    if (!this.tracingEnabled) return;
+    onHttpWillCheckAuth(ctx);
+    onHttpWillAuthenticate(this.tracingOpts, ctx);
   }
 
   @HttpHook.Did('checkAuthorization', { priority: 1000 })
   _httpDidAuth(ctx: unknown): void {
     if (this.tracingEnabled) onHttpDidCheckAuth(ctx);
     if (this.requestLogsEnabled) recordRequestLogAuth(ctx as never);
+  }
+
+  @HttpHook.Finally('checkAuthorization', { priority: 1000 })
+  _httpFinallyAuth(ctx: unknown): void {
+    if (this.tracingEnabled) onHttpDidAuthenticate(ctx);
   }
 
   @HttpHook.Will('router', { priority: -1000 })
@@ -325,7 +327,10 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @ToolHook.Will('findTool', { priority: -1000 })
   _toolWillFind(ctx: unknown): void {
     if (this.tracingEnabled) onToolWillFindTool(ctx);
-    this.annotateRequestLog(ctx, (log, input) => log.setToolName(String(input['name'])));
+    this.annotateRequestLog(ctx, (log, input) => {
+      log.setToolName(String(input['name']));
+      log.setInput(input['arguments']);
+    });
   }
 
   @ToolHook.Will('checkToolAuthorization', { priority: -1000 })
@@ -376,7 +381,9 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @ToolHook.Finally('finalize', { priority: 1000 })
   _toolFinallyFinalize(ctx: unknown): void {
     if (this.tracingEnabled) onToolDidFinalize(ctx);
-    if (this.requestLogsEnabled) recordRequestLogFailure(ctx as never);
+    if (!this.requestLogsEnabled) return;
+    recordRequestLogFailure(ctx as never);
+    recordRequestLogOutput(ctx as never);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -418,7 +425,9 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @ResourceHook.Finally('finalize', { priority: 1000 })
   _resourceFinallyFinalize(ctx: unknown): void {
     if (this.tracingEnabled) onResourceDidFinalize(ctx);
-    if (this.requestLogsEnabled) recordRequestLogFailure(ctx as never);
+    if (!this.requestLogsEnabled) return;
+    recordRequestLogFailure(ctx as never);
+    recordRequestLogOutput(ctx as never);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -434,7 +443,10 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @PromptHook.Will('findPrompt', { priority: -1000 })
   _promptWillFind(ctx: unknown): void {
     if (this.tracingEnabled) onPromptWillFind(ctx);
-    this.annotateRequestLog(ctx, (log, input) => log.setPromptName(String(input['name'])));
+    this.annotateRequestLog(ctx, (log, input) => {
+      log.setPromptName(String(input['name']));
+      log.setInput(input['arguments']);
+    });
   }
 
   @PromptHook.Will('checkEntryAuthorities', { priority: -1000 })
@@ -460,7 +472,9 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @PromptHook.Finally('finalize', { priority: 1000 })
   _promptFinallyFinalize(ctx: unknown): void {
     if (this.tracingEnabled) onPromptDidFinalize(ctx);
-    if (this.requestLogsEnabled) recordRequestLogFailure(ctx as never);
+    if (!this.requestLogsEnabled) return;
+    recordRequestLogFailure(ctx as never);
+    recordRequestLogOutput(ctx as never);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -710,49 +724,6 @@ export default class ObservabilityPlugin extends DynamicPlugin<
   @StatelessHttpHook.Finally('cleanup', { priority: 1000 })
   _slhttpFinallyCleanup(ctx: unknown): void {
     if (this.tracingEnabled) onTransportDidFinalize(ctx);
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Auth: Verify — auth:verify
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  @AuthVerifyHook.Will('parseInput', { priority: -1000 })
-  _authVerifyWill(ctx: unknown): void {
-    if (this.tracingEnabled) onAuthWillStart('auth:verify', this.tracingOpts, ctx);
-  }
-
-  @AuthVerifyHook.Did('determineAuthMode', { priority: 1000 })
-  _authVerifyDidMode(ctx: unknown): void {
-    if (this.tracingEnabled) onAuthDidDetermineMode(ctx);
-  }
-
-  @AuthVerifyHook.Did('verifyToken', { priority: 1000 })
-  _authVerifyDidToken(ctx: unknown): void {
-    if (this.tracingEnabled) onAuthStage('verifyToken', ctx);
-  }
-
-  @AuthVerifyHook.Did('buildAuthorization', { priority: 1000 })
-  _authVerifyDidBuild(ctx: unknown): void {
-    if (this.tracingEnabled) onAuthDidFinalize(ctx);
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Auth: Session Verify — session:verify
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  @SessionVerifyHook.Will('parseInput', { priority: -1000 })
-  _sessionVerifyWill(ctx: unknown): void {
-    if (this.tracingEnabled) onAuthWillStart('session:verify', this.tracingOpts, ctx);
-  }
-
-  @SessionVerifyHook.Did('verifyIfJwt', { priority: 1000 })
-  _sessionVerifyDidJwt(ctx: unknown): void {
-    if (this.tracingEnabled) onAuthStage('verifyIfJwt', ctx);
-  }
-
-  @SessionVerifyHook.Did('buildAuthorizedOutput', { priority: 1000 })
-  _sessionVerifyDidBuild(ctx: unknown): void {
-    if (this.tracingEnabled) onAuthDidFinalize(ctx);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

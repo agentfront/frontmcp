@@ -151,4 +151,4 @@ export type { TestTracer } from './testing';
 
 // ──── Request Logs ────
 export { RequestLogCollector, REQUEST_LOG_COLLECTOR } from './request-log';
-export type { RequestLog, RequestLogEntry, RequestLogCollectorOptions } from './request-log';
+export type { RequestLog, RequestLogEntry, RequestLogCollectorOptions, RequestLogSummary } from './request-log';

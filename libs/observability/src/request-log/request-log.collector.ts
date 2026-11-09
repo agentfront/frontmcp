@@ -1,5 +1,6 @@
 import type { StructuredLogEntry } from '../logging/structured-log.types';
-import type { RequestLog, RequestLogCollectorOptions, RequestLogEntry } from './request-log.types';
+import { summarizeInput, summarizeOutput } from './request-log.summary';
+import type { RequestLog, RequestLogCollectorOptions, RequestLogEntry, RequestLogSummary } from './request-log.types';
 
 /**
  * RequestLogCollector — per-request accumulator for structured log entries.
@@ -11,6 +12,7 @@ export class RequestLogCollector {
   private readonly entries: RequestLogEntry[] = [];
   private readonly hooksTriggered: Set<string> = new Set();
   private readonly maxEntries: number;
+  private readonly includeSummaries: boolean;
   private readonly onComplete?: (log: RequestLog) => void | Promise<void>;
 
   // Request identity (set at construction)
@@ -32,6 +34,8 @@ export class RequestLogCollector {
   private status: RequestLog['status'] = 'ok';
   private statusCode?: number;
   private error?: RequestLog['error'];
+  private inputSummary?: RequestLogSummary;
+  private outputSummary?: RequestLogSummary;
   private finalized = false;
   private finalizedLog?: RequestLog;
 
@@ -50,6 +54,7 @@ export class RequestLogCollector {
     this.scopeId = context.scopeId;
     this.startTime = new Date();
     this.maxEntries = options?.maxEntries ?? 500;
+    this.includeSummaries = options?.includeSummaries === true;
     this.onComplete = options?.onRequestComplete;
   }
 
@@ -121,6 +126,20 @@ export class RequestLogCollector {
    */
   setPromptName(name: string): void {
     this.promptName = name;
+  }
+
+  /**
+   * Summarize the call's arguments, with `includeSummaries`.
+   */
+  setInput(args: unknown): void {
+    if (this.includeSummaries) this.inputSummary = summarizeInput(args);
+  }
+
+  /**
+   * Summarize the call's result, with `includeSummaries`.
+   */
+  setOutput(result: unknown): void {
+    if (this.includeSummaries && result !== undefined) this.outputSummary = summarizeOutput(result);
   }
 
   /**
@@ -205,6 +224,8 @@ export class RequestLogCollector {
       error: this.error,
       hooks_triggered: Array.from(this.hooksTriggered),
       entries: [...this.entries],
+      ...(this.inputSummary && { input_summary: this.inputSummary }),
+      ...(this.outputSummary && { output_summary: this.outputSummary }),
     };
   }
 
