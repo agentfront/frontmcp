@@ -1,19 +1,16 @@
 // file: libs/sdk/src/tool/tool.utils.ts
 import { depsOfClass, depsOfFunc, getMetadata, isClass, type Token, type Type } from '@frontmcp/di';
 import { hasTransform, internalZ as z, ZodBigInt, ZodBoolean, ZodDate, ZodNumber, ZodString } from '@frontmcp/lazy-zod';
-import {
-  type AudioContent,
-  type ContentBlock,
-  type EmbeddedResource,
-  type ImageContent,
-  type ResourceLink,
-  type TextContent,
-} from '@frontmcp/protocol';
+import { type ContentBlock, type TextContent } from '@frontmcp/protocol';
 import { findDroppedKeys } from '@frontmcp/utils';
 
 import {
+  AudioOutputSchema,
   extendedToolMetadata,
   FrontMcpToolTokens,
+  ImageOutputSchema,
+  ResourceLinkOutputSchema,
+  ResourceOutputSchema,
   ToolKind,
   type AgentToolDefinition,
   type OutputParseOptions,
@@ -175,7 +172,7 @@ export function buildParsedToolResult(
     // Parse all items first
     descriptor.forEach((singleDescriptor: any, idx: number) => {
       const value = values[idx];
-      const { blocks, parsedValue, isPrimitive } = parseSingleValue(singleDescriptor, value, options);
+      const { blocks, parsedValue, isPrimitive } = parseSingleValue(singleDescriptor, value, options, String(idx));
       parsedItems.push({ blocks, parsedValue, isPrimitive });
       content.push(...blocks);
     });
@@ -251,85 +248,53 @@ function parseSingleValue(
   descriptor: any,
   value: unknown,
   options: OutputParseOptions,
+  path?: string,
 ): { blocks: ContentBlock[]; parsedValue?: any; isPrimitive: boolean } {
   // Literal primitives + special content types
   if (typeof descriptor === 'string') {
     switch (descriptor) {
       case 'string':
+        if (typeof value !== 'string') throw literalMismatch(descriptor, path);
         return {
           blocks: [makePrimitiveTextContent(value)],
           parsedValue: value,
           isPrimitive: true,
         };
 
-      case 'number': {
-        const numValue = typeof value === 'number' ? value : Number(value);
+      // A non-finite number is left to the `output.allowNonFinite` policy, applied when the call finalizes
+      case 'number':
+        if (typeof value !== 'number') throw literalMismatch(descriptor, path);
         return {
           blocks: [makePrimitiveTextContent(value)],
-          parsedValue: isNaN(numValue) ? null : numValue,
+          parsedValue: value,
           isPrimitive: false,
         };
-      }
 
-      case 'boolean': {
-        const boolValue = typeof value === 'boolean' ? value : Boolean(value);
+      case 'boolean':
+        if (typeof value !== 'boolean') throw literalMismatch(descriptor, path);
         return {
           blocks: [makePrimitiveTextContent(value)],
-          parsedValue: boolValue,
+          parsedValue: value,
           isPrimitive: false,
         };
-      }
 
       case 'date': {
-        let dateValue: Date | null = null;
-        if (value instanceof Date) {
-          dateValue = value;
-        } else if (typeof value === 'string' || typeof value === 'number') {
-          const parsed = new Date(value);
-          if (!isNaN(parsed.getTime())) {
-            dateValue = parsed;
-          }
-        }
-
-        return {
-          blocks: [makePrimitiveTextContent(value)],
-          parsedValue: dateValue
-            ? {
-                iso: dateValue.toISOString(),
-                timeInMilli: dateValue.getTime(),
-              }
-            : null,
-          isPrimitive: false,
-        };
+        const dateValue = toValidDate(value);
+        if (!dateValue) throw literalMismatch(descriptor, path);
+        return makeDateResult(dateValue);
       }
 
       case 'image':
-        return {
-          blocks: toContentArray<ImageContent>('image', value),
-          parsedValue: undefined,
-          isPrimitive: false,
-        };
+        return { blocks: toContentBlocks(ImageOutputSchema, descriptor, value, path), isPrimitive: false };
 
       case 'audio':
-        return {
-          blocks: toContentArray<AudioContent>('audio', value),
-          parsedValue: undefined,
-          isPrimitive: false,
-        };
+        return { blocks: toContentBlocks(AudioOutputSchema, descriptor, value, path), isPrimitive: false };
 
       case 'resource':
-        return {
-          blocks: toContentArray<EmbeddedResource>('resource', value),
-          parsedValue: undefined,
-          isPrimitive: false,
-        };
+        return { blocks: toContentBlocks(ResourceOutputSchema, descriptor, value, path), isPrimitive: false };
 
       case 'resource_link':
-        return {
-          blocks: toContentArray<ResourceLink>('resource_link', value),
-          parsedValue: undefined,
-          isPrimitive: false,
-        };
+        return { blocks: toContentBlocks(ResourceLinkOutputSchema, descriptor, value, path), isPrimitive: false };
 
       default:
         // Unknown literal: just stringify as text
@@ -368,12 +333,7 @@ function parseSingleValue(
   }
 
   if (descriptor instanceof ZodDate) {
-    const dateValue = parseAgainstOutputSchema(descriptor, value) as Date;
-    return {
-      blocks: [makePrimitiveTextContent(value)],
-      parsedValue: { iso: dateValue.toISOString(), timeInMilli: dateValue.getTime() },
-      isPrimitive: false,
-    };
+    return makeDateResult(parseAgainstOutputSchema(descriptor, value) as Date);
   }
 
   // Anything else (Zod object/array/union, ZodRawShape, plain object) → JSON/structured
@@ -527,22 +487,44 @@ function makeJsonTextContent(jsonValue: unknown): TextContent {
   return { type: 'text', text };
 }
 
+/** The INVALID_OUTPUT error for a value that is not what its `outputSchema` literal declares. */
+function literalMismatch(literal: string, path?: string): InvalidOutputError {
+  return new InvalidOutputError({ reason: `output does not match outputSchema '${literal}'`, path });
+}
+
+/** A valid `Date` from a `Date`, or from a string or number it parses from; undefined otherwise. */
+function toValidDate(value: unknown): Date | undefined {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? undefined : value;
+  if (typeof value !== 'string' && typeof value !== 'number') return undefined;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
+/** A date as ISO 8601 text, so it does not depend on the server's time zone, and as `{ iso, timeInMilli }`. */
+function makeDateResult(date: Date): {
+  blocks: ContentBlock[];
+  parsedValue: Record<string, unknown>;
+  isPrimitive: false;
+} {
+  const iso = date.toISOString();
+  return {
+    blocks: [makePrimitiveTextContent(iso)],
+    parsedValue: { iso, timeInMilli: date.getTime() },
+    isPrimitive: false,
+  };
+}
+
 /**
- * Normalize any `value` into an array of content objects with the given MCP `type`.
- * If `value` is already a single content object (with a matching type), it's wrapped.
- * If it's an array, every element is assumed to already be a content object.
+ * The content blocks a media literal declares: one block, or an array of them, each a valid MCP
+ * content block of that type; anything else fails the call with INVALID_OUTPUT.
  */
-function toContentArray<T extends ContentBlock>(expectedType: T['type'], value: unknown): ContentBlock[] {
-  if (Array.isArray(value)) {
-    return value.filter(Boolean).map((v) => v as T);
-  }
-
-  if (value && typeof value === 'object' && (value as Record<string, unknown>)['type'] === expectedType) {
-    return [value as T];
-  }
-
-  // If the value is null/undefined or doesn't match, we just skip it.
-  return [];
+function toContentBlocks(schema: z.ZodType, literal: string, value: unknown, path?: string): ContentBlock[] {
+  const items = Array.isArray(value) ? value : [value];
+  return items.map((item, index) => {
+    const itemPath = Array.isArray(value) ? [path, index].filter((part) => part !== undefined).join('.') : path;
+    if (!schema.safeParse(item).success) throw literalMismatch(literal, itemPath);
+    return item as ContentBlock;
+  });
 }
 
 // ============================================================================

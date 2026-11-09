@@ -1702,9 +1702,15 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     // Apply UI result if available (from applyUI stage)
     if (uiResult) {
       result.content = uiResult.content;
+      // A listed outputSchema describes the parsed structuredContent, which a primitive output's UI result is not
+      const keepsListedStructuredContent = result.structuredContent !== undefined && this.listsOutputSchema(tool);
       // Set structuredContent from UI result (contains raw tool output)
       // Cast to Record<string, unknown> since MCP protocol expects object type
-      if (uiResult.structuredContent !== undefined && uiResult.structuredContent !== null) {
+      if (
+        uiResult.structuredContent !== undefined &&
+        uiResult.structuredContent !== null &&
+        !keepsListedStructuredContent
+      ) {
         result.structuredContent = uiResult.structuredContent as Record<string, unknown>;
       }
       if (uiMeta) {

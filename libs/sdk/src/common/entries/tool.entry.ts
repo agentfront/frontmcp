@@ -55,6 +55,24 @@ type OutputJsonSchemaResolution = { schema: Record<string, unknown> | null; unli
 /** Zod output types that are primitive outputs: they flow through `content` and are never listed. */
 const PRIMITIVE_ZOD_OUTPUT_TYPES = new Set<unknown>(['string', 'number', 'boolean', 'bigint', 'date']);
 
+/**
+ * The JSON Schema of the `structuredContent` a primitive output literal answers with, or null for a
+ * media literal ('image', 'audio', 'resource', 'resource_link'), which answers with content blocks only.
+ */
+function literalOutputJsonSchema(literal: string): Record<string, unknown> | null {
+  if (literal === 'string' || literal === 'number' || literal === 'boolean') {
+    return objectJsonSchema({ content: { type: literal } });
+  }
+  if (literal === 'date') {
+    return objectJsonSchema({ iso: { type: 'string', format: 'date-time' }, timeInMilli: { type: 'integer' } });
+  }
+  return null;
+}
+
+function objectJsonSchema(properties: Record<string, Record<string, unknown>>): Record<string, unknown> {
+  return { type: 'object', properties, required: Object.keys(properties), additionalProperties: false };
+}
+
 /** How zod refers to a schema registered with an id, or to a reused one: `#/$defs/<name>`. */
 const DEFINITION_REF_PREFIX = '#/$defs/';
 
@@ -200,9 +218,11 @@ export abstract class ToolEntry<
    * remote tools); otherwise converts a Zod-shape or Zod `outputSchema` to JSON Schema —
    * symmetric with {@link getInputJsonSchema}. MCP requires a top-level `type: 'object'`, so
    * an object schema is returned as is and a union whose members are all object schemas is
-   * returned typed `object` (`{ type: 'object', anyOf | oneOf }`). Returns `null` for
-   * primitive / media outputs and multi-content arrays, which flow through `content`, and for
-   * any other schema (see {@link getUnlistedOutputSchemaReason}).
+   * returned typed `object` (`{ type: 'object', anyOf | oneOf }`). A primitive literal
+   * (`'string'`, `'number'`, `'boolean'`, `'date'`) returns the object its `structuredContent`
+   * is (`{ content }`, or `{ iso, timeInMilli }` for a date). Returns `null` for media literals,
+   * Zod primitives and multi-content arrays, which flow through `content`, and for any other
+   * schema (see {@link getUnlistedOutputSchemaReason}).
    *
    * @returns JSON Schema object, or null if there is no advertisable output schema.
    */
@@ -235,9 +255,13 @@ export abstract class ToolEntry<
 
     const schema = this.outputSchema as unknown;
 
-    // Primitive / media literals ('string' | 'number' | 'image' | …) and multi-content
-    // arrays (['string', 'image']) have no object outputSchema — they flow via `content`.
-    if (!schema || typeof schema === 'string' || Array.isArray(schema)) {
+    // A primitive literal ('string' | 'number' | 'boolean' | 'date') lists the structuredContent it answers with
+    if (typeof schema === 'string') {
+      return { schema: literalOutputJsonSchema(schema) };
+    }
+
+    // Multi-content arrays (['string', 'image']) have no object outputSchema — they flow via `content`.
+    if (!schema || Array.isArray(schema)) {
       return { schema: null };
     }
 

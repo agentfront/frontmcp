@@ -82,6 +82,8 @@ class NowTool extends ToolContext {
 }
 ```
 
+The value is checked against the literal, as a Zod schema is: `'string'`, `'number'` and `'boolean'` need a value of that type, and `'date'` a valid `Date` (or a string or number one parses from). Anything else (`'five'` for `'number'`) fails the call with `_meta.code: 'INVALID_OUTPUT'`. The answer is the value as text plus `structuredContent: { content: value }`; a date is sent as ISO 8601 text (`2026-11-09T12:30:00.000Z`, whatever the server's time zone) and `structuredContent: { iso, timeInMilli }`. Up to 1.11.2 nothing was checked (`'five'` went out as text with `structuredContent: { content: null }`) and a date's text was `Date.toString()` in the server's time zone.
+
 ## Media literals
 
 Binary content or links to MCP resources:
@@ -91,7 +93,7 @@ Binary content or links to MCP resources:
 class RenderChartTool extends ToolContext {
   async execute(input: ChartInput): Promise<{ type: 'image'; data: string; mimeType: string }> {
     return {
-      type: 'image' as const, // required — without it the content block is dropped
+      type: 'image' as const, // required — without it the call fails with INVALID_OUTPUT
       data: 'iVBORw0KGgoAAAANSU…', // base64
       mimeType: 'image/png',
     };
@@ -99,7 +101,7 @@ class RenderChartTool extends ToolContext {
 }
 ```
 
-Each return object must carry the matching `type` discriminator (`'image'`, `'audio'`, `'resource'`, `'resource_link'`) — without it the content block is silently dropped:
+Each return object (or each item of an array of them) must be a valid MCP content block with the matching `type` discriminator (`'image'`, `'audio'`, `'resource'`, `'resource_link'`); anything else fails the call with `_meta.code: 'INVALID_OUTPUT'` (up to 1.11.2 it was silently dropped, leaving `content: []`):
 
 | Literal           | Return shape                                                                                   |
 | ----------------- | ---------------------------------------------------------------------------------------------- |
@@ -130,7 +132,8 @@ class AnalyzeImageTool extends ToolContext {
 Structured object outputs are converted to JSON Schema and advertised on the tool's `outputSchema` in `tools/list` — symmetric with how `inputSchema` is advertised:
 
 - **Advertised:** a Zod raw shape (`{ field: z.string() }`) or a top-level `z.object({...})` — these serialize to a `type: 'object'` JSON Schema. A `z.union([...])` or `z.discriminatedUnion(...)` whose members are all objects is advertised too, as `{ type: 'object', anyOf: [...] }` (or `oneOf` for a discriminated union), since MCP requires a top-level `type: 'object'`. A member registered with an id (`.meta({ id })`) serializes to a `$ref` into `$defs` and counts as an object too.
-- **Not advertised, by design:** primitives (`'string'` / `'number'` / `'boolean'` / `'date'`, `z.string()`, …), media (`'image'` / `'audio'` / `'resource'` / `'resource_link'`), and multi-content arrays (`['string', 'image']`). These flow through `content` rather than `structuredContent`.
+- **Advertised as their `structuredContent`:** the primitive literals. `'string'`, `'number'` and `'boolean'` are listed as `{ type: 'object', properties: { content: { type } }, required: ['content'] }`, and `'date'` as an object with `iso` (`format: 'date-time'`) and `timeInMilli`. Up to 1.11.2 they weren't listed.
+- **Not advertised, by design:** Zod primitives (`z.string()`, …), media (`'image'` / `'audio'` / `'resource'` / `'resource_link'`), and multi-content arrays (`['string', 'image']`). Media flows through `content` only, with no `structuredContent` for a schema to describe.
 - **Not advertised, with a startup warning:** any other Zod schema — an array (`z.array(...)`), a nullable object, a union with a non-object member, or a schema that has no JSON Schema form (a `z.date()` field). The server logs `Tool "<name>": tools/list leaves out its outputSchema because …` once at startup, naming the tool, unless the tool's `schemaMode` resolves to `'none'`. Wrap the value in a `z.object({...})` to advertise it.
 
 Runtime output validation still applies to every form. If a client reports _"Output schema recommended,"_ declare a structured object `outputSchema` (a raw shape, a `z.object`, or a union of `z.object`s) — that's the form that gets advertised.
