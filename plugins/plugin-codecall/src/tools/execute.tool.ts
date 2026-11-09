@@ -275,8 +275,6 @@ export default class ExecuteTool extends ToolContext {
         }
       },
 
-      console: this.get(CodeCallConfig).get('resolvedVm.allowConsole') ? console : undefined,
-
       mcpLog: (level: 'debug' | 'info' | 'warn' | 'error', message: string, metadata?: Record<string, unknown>) => {
         // Log through FrontMCP logging system if available
         this.logger?.[level](message, metadata);

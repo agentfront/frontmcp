@@ -2,13 +2,14 @@
 
 import {
   Enclave,
+  type ConsoleHandler,
   type CreateEnclaveOptions,
   type ExecutionResult,
   type ReferenceSidecarOptions,
   type ToolHandler,
 } from '@enclave-vm/core';
 
-import { Provider, ProviderScope } from '@frontmcp/sdk';
+import { Provider, ProviderScope, type FrontMcpLogger } from '@frontmcp/sdk';
 
 import type { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import type { CodeCallSidecarOptions } from '../codecall.types';
@@ -17,6 +18,7 @@ import { MAX_ITERATIONS_PER_LOOP, maxToolCallsOf } from '../providers/code-call.
 import { findScriptPolicyIssues } from '../security/script-policy';
 import { toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
 import { withScriptLines } from '../utils/script-lines';
+import { ScriptConsoleLog } from './script-console';
 
 /**
  * Result from enclave execution - maps to existing VmExecutionResult interface
@@ -144,12 +146,21 @@ export class ScriptTooLargeError extends Error {
 export default class EnclaveService {
   private readonly vmOptions: ResolvedCodeCallVmOptions;
   private readonly sidecarOptions: CodeCallSidecarOptions;
+  /** Where scripts' console calls go: set only with an explicit `vm.allowConsole: true`. */
+  private readonly consoleHandler?: ConsoleHandler;
 
-  constructor(config: CodeCallConfig) {
+  /**
+   * @param config - The plugin's resolved options
+   * @param scriptLogger - The logger scripts' console output goes to with `vm.allowConsole: true`
+   */
+  constructor(config: CodeCallConfig, scriptLogger?: FrontMcpLogger) {
     // Use getAll() to avoid deep type instantiation with DottedPath<T>
     const all = config.getAll();
     this.vmOptions = all.resolvedVm;
     this.sidecarOptions = all.sidecar;
+    if (this.vmOptions.allowConsole && scriptLogger) {
+      this.consoleHandler = new ScriptConsoleLog(scriptLogger).write;
+    }
   }
 
   /**
@@ -171,7 +182,10 @@ export default class EnclaveService {
       }
     }
 
-    const policyIssues = await findScriptPolicyIssues(code, this.vmOptions);
+    const policyIssues = await findScriptPolicyIssues(code, {
+      ...this.vmOptions,
+      allowConsole: this.consoleHandler !== undefined,
+    });
     if (policyIssues.length > 0) {
       return {
         success: false,
@@ -245,10 +259,6 @@ export default class EnclaveService {
             },
           }
         : {}),
-      // Note: enclave-vm v2.0.0+ provides its own __safe_console internally with rate limiting
-      // and output size limits. Passing console in globals causes "Cannot redefine property"
-      // errors due to Double VM architecture. Console output from user scripts goes to stdout
-      // via enclave's internal console, not to this logs array. Only mcpLog/mcpNotify are captured.
     };
 
     const { rapidEnumerationThreshold, rapidEnumerationOverrides } = this.vmOptions;
@@ -266,8 +276,10 @@ export default class EnclaveService {
       sidecar,
       // Error stacks name no host file, whatever stage raised them.
       sanitizeStackTraces: true,
-      // Allow functions in globals since we intentionally provide getTool, mcpLog, mcpNotify, and console
+      // Allow functions in globals since we intentionally provide getTool, mcpLog and mcpNotify
       allowFunctionsInGlobals: true,
+      // Scripts get `console` only with it; the sandbox bounds each script's console calls and bytes.
+      consoleHandler: this.consoleHandler,
       globals,
       // Tool namespaces (`acme.getUser()` for a tool named `acme.getUser`) are built by the sandbox
       // itself: a method call is exactly `callTool('acme.getUser', args, options)`, with the

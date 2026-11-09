@@ -78,6 +78,8 @@ export function resolveVmOptions(vmOptions?: CodeCallVmOptions): ResolvedCodeCal
     ...vmOptions,
     disabledBuiltins: vmOptions?.disabledBuiltins ?? base.disabledBuiltins,
     disabledGlobals: vmOptions?.disabledGlobals ?? base.disabledGlobals,
+    // Scripts get console only from an explicit `vm.allowConsole: true`, never from a preset.
+    allowConsole: vmOptions?.allowConsole === true,
   };
 }
 
@@ -110,7 +112,7 @@ function presetDefaults(preset: CodeCallVmPreset): ResolvedCodeCallVmOptions {
         preset,
         timeoutMs: 5000,
         allowLoops: true,
-        allowConsole: true,
+        allowConsole: false,
         maxSteps: 10000,
         disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
         disabledGlobals: ['require', 'process', 'fetch'],
@@ -123,7 +125,7 @@ function presetDefaults(preset: CodeCallVmPreset): ResolvedCodeCallVmOptions {
         preset,
         timeoutMs: 10000,
         allowLoops: true,
-        allowConsole: true,
+        allowConsole: false,
         maxSteps: 20000,
         disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
         disabledGlobals: ['require', 'process'],
@@ -137,7 +139,7 @@ function presetDefaults(preset: CodeCallVmPreset): ResolvedCodeCallVmOptions {
         preset: 'secure',
         timeoutMs: 3500,
         allowLoops: false,
-        allowConsole: true,
+        allowConsole: false,
         maxSteps: 5000,
         disabledBuiltins: ['eval', 'Function', 'AsyncFunction'],
         disabledGlobals: [
