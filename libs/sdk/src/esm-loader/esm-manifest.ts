@@ -4,8 +4,10 @@
  * Defines the contract that npm packages must follow to be loadable by FrontMCP.
  */
 
+import { getMetadata } from '@frontmcp/di';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
+import { collectAppMetadata } from '../app/app.utils';
 import {
   isDecoratedAgentClass,
   isDecoratedJobClass,
@@ -16,6 +18,8 @@ import {
   isDecoratedWorkflowClass,
 } from '../app/instances/esm-normalize.utils';
 import { getDecoratorConfig } from '../common/decorators/front-mcp.decorator';
+import type { AppType } from '../common/interfaces';
+import { FrontMcpLocalAppTokens } from '../common/tokens/app.tokens';
 
 /**
  * The manifest that ESM packages export to declare their MCP primitives.
@@ -95,7 +99,7 @@ export type ManifestPrimitiveKey = (typeof MANIFEST_PRIMITIVE_KEYS)[number];
  *
  * Handles five formats:
  * 1. A plain manifest object with tools/prompts/etc arrays
- * 2. A class decorated with @FrontMcp (detected via reflect-metadata)
+ * 2. A class decorated with @App or @FrontMcp (its entries, and those of a @FrontMcp server's @App classes)
  * 3. A module with named exports (tools, prompts, etc. arrays)
  * 4. A single default export of a decorated primitive class (@Tool, @Resource, etc.)
  * 5. Named exports of individual decorated classes (scanned and grouped by type)
@@ -120,9 +124,13 @@ export function normalizeEsmExport(moduleExport: unknown): FrontMcpPackageManife
       return validateManifest(defaultExport);
     }
 
-    // Case 1b: Default export is a @FrontMcp-decorated class
-    if (isDecoratedClass(defaultExport)) {
-      return extractFromDecoratedClass(defaultExport);
+    // Case 1b: Default export is an @App- or @FrontMcp-decorated class
+    if (isDecoratedAppClass(defaultExport)) {
+      return manifestOfApp(defaultExport);
+    }
+    const serverConfig = getDecoratorConfig(defaultExport);
+    if (serverConfig) {
+      return manifestOfServer(serverConfig);
     }
 
     // Case 1c: Default export is a single decorated primitive class (@Tool, @Resource, etc.)
@@ -170,17 +178,9 @@ function isManifestObject(obj: Record<string, unknown>): boolean {
   return typeof obj['name'] === 'string' && typeof obj['version'] === 'string';
 }
 
-/**
- * Check if a value is a class decorated with @FrontMcp.
- */
-function isDecoratedClass(value: unknown): boolean {
-  if (typeof value !== 'function') return false;
-  try {
-    // Check for FrontMcp decorator metadata
-    return Reflect.getMetadata?.('frontmcp:type', value) === true;
-  } catch {
-    return false;
-  }
+/** Whether a value is a class decorated with @App. */
+function isDecoratedAppClass(value: unknown): value is AppType {
+  return typeof value === 'function' && getMetadata(FrontMcpLocalAppTokens.type, value) === true;
 }
 
 /**
@@ -190,31 +190,26 @@ function hasManifestPrimitives(obj: Record<string, unknown>): boolean {
   return MANIFEST_PRIMITIVE_KEYS.some((key) => Array.isArray(obj[key]));
 }
 
-/**
- * Extract manifest from a @FrontMcp decorated class.
- */
-function extractFromDecoratedClass(cls: unknown): FrontMcpPackageManifest {
-  const config = getDecoratorConfig(cls) as Record<string, unknown> | undefined;
-  if (!config) {
-    throw new Error('Decorated class does not have FrontMcp configuration metadata');
-  }
+/** The manifest of an @App class: its entries, under its name. */
+function manifestOfApp(cls: AppType): FrontMcpPackageManifest {
+  const metadata = collectAppMetadata(cls) as unknown as Record<string, unknown>;
+  return { ...collectNamedExports(metadata), version: '0.0.0' };
+}
 
+/** The manifest of a @FrontMcp server: its own entries and those of its @App classes, under its `info`. */
+function manifestOfServer(config: object): FrontMcpPackageManifest {
+  const server = config as Record<string, unknown>;
+  const info = (server['info'] ?? {}) as Record<string, unknown>;
+  const apps = Array.isArray(server['apps']) ? server['apps'].filter(isDecoratedAppClass).map(manifestOfApp) : [];
+  const parts = [collectNamedExports(server), ...apps];
+  const entriesOf = (key: ManifestPrimitiveKey): unknown[] | undefined => {
+    const entries = parts.flatMap((part) => part[key] ?? []);
+    return entries.length > 0 ? entries : undefined;
+  };
   return {
-    name:
-      config['info'] &&
-      typeof config['info'] === 'object' &&
-      typeof (config['info'] as Record<string, unknown>)['name'] === 'string'
-        ? ((config['info'] as Record<string, unknown>)['name'] as string)
-        : 'unknown',
-    version: '0.0.0',
-    tools: Array.isArray(config['tools']) ? (config['tools'] as unknown[]) : undefined,
-    prompts: Array.isArray(config['prompts']) ? (config['prompts'] as unknown[]) : undefined,
-    resources: Array.isArray(config['resources']) ? (config['resources'] as unknown[]) : undefined,
-    skills: Array.isArray(config['skills']) ? (config['skills'] as unknown[]) : undefined,
-    agents: Array.isArray(config['agents']) ? (config['agents'] as unknown[]) : undefined,
-    jobs: Array.isArray(config['jobs']) ? (config['jobs'] as unknown[]) : undefined,
-    workflows: Array.isArray(config['workflows']) ? (config['workflows'] as unknown[]) : undefined,
-    providers: Array.isArray(config['providers']) ? (config['providers'] as unknown[]) : undefined,
+    name: typeof info['name'] === 'string' ? info['name'] : 'unknown',
+    version: typeof info['version'] === 'string' ? info['version'] : '0.0.0',
+    ...Object.fromEntries(MANIFEST_PRIMITIVE_KEYS.map((key) => [key, entriesOf(key)])),
   };
 }
 
