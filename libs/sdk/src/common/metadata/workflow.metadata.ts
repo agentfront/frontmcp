@@ -61,22 +61,31 @@ export interface WorkflowStep {
 // ============================================
 
 /**
- * @deprecated Not read: a workflow runs only through `execute_workflow`, whatever its trigger. `'webhook'` registers
- * no HTTP route and `'event'` listens to no event; startup warns about either.
+ * What starts a workflow's runs besides `execute_workflow`, which runs every workflow: `'manual'` nothing else,
+ * `'webhook'` a signed HTTP request to its `webhook.path`. `'event'` listens to no event yet, and startup warns
+ * about it.
  */
 export type WorkflowTriggerType = 'manual' | 'webhook' | 'event';
 
 /**
- * @deprecated Not read: no HTTP route is registered for it, and startup warns about it. To start a workflow from a
- * webhook, serve an `@HttpRoute` that checks the request's signature and calls `execute_workflow`.
+ * The HTTP route of a workflow with `trigger: 'webhook'`. Each request must be signed with `secret`: an
+ * `X-FrontMCP-Timestamp` header with the time in Unix seconds, and an `X-FrontMCP-Signature` header with `v1=` and
+ * the hex HMAC-SHA256 of `<timestamp>.<body>`, within 5 minutes of the server's clock and never sent before. A
+ * signed request's JSON body is the run's input, and the route answers `202 { runId, state: 'pending' }`. The run's
+ * caller is the role `webhook:<workflow>`, which the workflow's `execute` rules must allow when it has any.
  */
 export interface WorkflowWebhookConfig {
-  /** Custom webhook path. Default: /workflows/webhook/{name} */
+  /** The route's path, literal segments only. Default: `/workflows/webhook/{name}` */
   path?: string;
-  /** Webhook secret for validation. */
+  /**
+   * The shared secret requests are signed with, at least 32 characters. Required: a webhook workflow without one
+   * refuses to start the server.
+   */
   secret?: string;
-  /** Allowed HTTP methods. Default: ['POST'] */
+  /** The methods the route answers; a GET has no body, so its run's input is `{}`. Default: ['POST'] */
   methods?: ('GET' | 'POST')[];
+  /** The largest body accepted, in bytes; a larger one gets 413. Default: 1048576 (1 MiB) */
+  maxBodyBytes?: number;
 }
 
 // ============================================
@@ -85,7 +94,7 @@ export interface WorkflowWebhookConfig {
 
 /**
  * Declarative metadata describing a Workflow.
- * Workflows connect jobs into managed steps with triggers.
+ * Workflows connect jobs into managed steps, which `execute_workflow` or the workflow's trigger starts.
  */
 export interface WorkflowMetadata extends ExtendFrontMcpWorkflowMetadata {
   /**
@@ -109,16 +118,13 @@ export interface WorkflowMetadata extends ExtendFrontMcpWorkflowMetadata {
   steps: WorkflowStep[];
 
   /**
-   * Trigger type. Default: 'manual'
-   * @deprecated Not read: a workflow runs only through `execute_workflow`. `'webhook'` registers no HTTP route and
-   * `'event'` listens to no event; startup warns about either.
+   * What starts the workflow's runs besides `execute_workflow` (see {@link WorkflowTriggerType}). Default: 'manual'
    */
   trigger?: WorkflowTriggerType;
 
   /**
-   * Webhook configuration (when trigger is 'webhook').
-   * @deprecated Not read: no HTTP route is registered for it, and startup warns about it. To start a workflow from a
-   * webhook, serve an `@HttpRoute` that checks the request's signature and calls `execute_workflow`.
+   * The HTTP route of a `trigger: 'webhook'` workflow, whose `secret` it needs; set without that trigger, the
+   * server refuses to start.
    */
   webhook?: WorkflowWebhookConfig;
 
@@ -204,6 +210,7 @@ const workflowWebhookConfigSchema = z.object({
     .array(z.enum(['GET', 'POST']))
     .optional()
     .default(['POST']),
+  maxBodyBytes: z.number().int().positive().optional(),
 });
 
 export const frontMcpWorkflowMetadataSchema = z

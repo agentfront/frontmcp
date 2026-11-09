@@ -2264,7 +2264,7 @@
         },
         {
           "name": "create-workflow",
-          "description": "Connect multiple jobs into managed DAG pipelines with dependencies and conditions, run by execute_workflow or a webhook route",
+          "description": "Connect multiple jobs into managed DAG pipelines with dependencies, conditions, and webhook triggers",
           "examples": [
             {
               "name": "basic-deploy-pipeline",
@@ -2293,14 +2293,15 @@
             },
             {
               "name": "webhook-triggered-workflow",
-              "description": "A CI/CD workflow that an `@HttpRoute` starts from a signed webhook, featuring `continueOnError`, per-step conditions, and the `workflow()` function builder.",
+              "description": "A CI/CD workflow triggered by a signed webhook, featuring `continueOnError`, per-step conditions, and the `workflow()` function builder.",
               "level": "advanced",
               "tags": ["development", "workflow", "webhook", "triggered"],
               "features": [
-                "An `@HttpRoute` that checks an HMAC signature over the body as received and starts the workflow with `execute_workflow`",
+                "Webhook trigger with `trigger: 'webhook'` and `webhook: { path, secret, methods }`, and a CI step that signs its request",
+                "An `execute` rule that allows the webhook's role, `webhook:<workflow>`, beside the people who may run it",
                 "Using `continueOnError: true` to allow the workflow to proceed past non-critical step failures",
                 "Conditional branching: separate success and failure notification steps based on prior step state",
-                "Workflow-level `read` and `list` permissions, so admins and the CI bot can follow the runs the webhook starts",
+                "An `@HttpRoute` for a sender that signs its own way, such as a GitHub webhook",
                 "The `workflow()` function builder as a lighter alternative to the class pattern"
               ]
             }

@@ -1,6 +1,6 @@
 /**
- * Job and workflow options the schemas accept and nothing reads: a workflow's `trigger: 'webhook'` (or `'event'`)
- * and `webhook`, and permission rules for `create` and `update`. Startup warns about each.
+ * Job and workflow options the schemas accept and nothing reads: a workflow's `trigger: 'event'`, and permission
+ * rules for `create` and `update`. Startup warns about each.
  */
 import 'reflect-metadata';
 
@@ -56,14 +56,8 @@ describe('describeIgnoredTrigger', () => {
     expect(describeIgnoredTrigger({ name: 'deploy', trigger: 'manual' })).toEqual([]);
   });
 
-  it('says a webhook trigger registers no route', () => {
-    expect(describeIgnoredTrigger({ name: 'deploy', trigger: 'webhook', webhook: { path: '/hooks/deploy' } })).toEqual([
-      expect.stringContaining('Workflow "deploy": `trigger: \'webhook\'` and `webhook` register no HTTP route'),
-    ]);
-  });
-
-  it('says a webhook config registers no route without the trigger too', () => {
-    expect(describeIgnoredTrigger({ name: 'deploy', webhook: { path: '/hooks/deploy' } })).toHaveLength(1);
+  it('says nothing about a webhook workflow, which is served', () => {
+    expect(describeIgnoredTrigger({ name: 'deploy', trigger: 'webhook' })).toEqual([]);
   });
 
   it('says an event trigger listens to no event', () => {
@@ -99,8 +93,7 @@ class ExportJob extends JobContext {
 
 @Workflow({
   name: 'nightly-export',
-  trigger: 'webhook',
-  webhook: { path: '/hooks/nightly-export' },
+  trigger: 'event',
   steps: [{ id: 'export', jobName: 'export' }],
 })
 class NightlyExportWorkflow {}
@@ -126,12 +119,12 @@ describe('startup', () => {
     await server.dispose();
   });
 
-  it('warns about the webhook trigger and the create rule, and nothing else', () => {
+  it('warns about the event trigger and the create rule, and nothing else', () => {
     const unread = warnings.filter((message) => message.includes('export'));
 
     expect(unread).toEqual([
       expect.stringContaining('Job "export": its permission rules for "create" are never checked'),
-      expect.stringContaining('Workflow "nightly-export": `trigger: \'webhook\'`'),
+      expect.stringContaining('Workflow "nightly-export": `trigger: \'event\'`'),
     ]);
   });
 });

@@ -212,7 +212,7 @@ Creates a `@Job` class in `apps/my-app/src/jobs/`. Jobs are pure executable unit
 nx g @frontmcp/nx:workflow my-workflow --project=my-app
 ```
 
-Creates a `@Workflow` class in `apps/my-app/src/workflows/`. Workflows connect jobs into managed steps that `execute_workflow` runs.
+Creates a `@Workflow` class in `apps/my-app/src/workflows/`. Workflows connect jobs into managed steps with triggers.
 
 ### Auth Provider
 

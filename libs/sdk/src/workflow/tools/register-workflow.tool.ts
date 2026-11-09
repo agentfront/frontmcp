@@ -2,7 +2,7 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { Tool, ToolContext } from '../../common';
 import { WorkflowKind } from '../../common/records/workflow.record';
-import { DynamicJobRegistrationDisabledError } from '../../errors';
+import { DynamicJobRegistrationDisabledError, InvalidInputError } from '../../errors';
 
 @Tool({
   name: 'register_workflow',
@@ -25,7 +25,10 @@ import { DynamicJobRegistrationDisabledError } from '../../errors';
     trigger: z
       .enum(['manual', 'webhook', 'event'])
       .optional()
-      .describe('Trigger type, kept on the workflow but not read: every workflow runs through execute_workflow'),
+      .describe(
+        "Trigger type; 'webhook' is refused: a workflow registered at runtime runs through execute_workflow, " +
+          'and a webhook workflow is declared with @Workflow',
+      ),
     tags: z.array(z.string()).optional().describe('Tags for categorization'),
   },
   outputSchema: {
@@ -61,6 +64,15 @@ export default class RegisterWorkflowTool extends ToolContext {
     // (GHSA-58v2-gpcc-jmqv).
     if (!this.dynamicRegistrationEnabled()) {
       return this.fail(new DynamicJobRegistrationDisabledError('workflow'));
+    }
+
+    // A webhook's route and secret are fixed when the server starts
+    if (input.trigger === 'webhook') {
+      return this.fail(
+        new InvalidInputError(
+          "A workflow registered at runtime can't have trigger: 'webhook': declare it with @Workflow and its webhook.secret",
+        ),
+      );
     }
 
     const existing = workflowRegistry.findByName(input.name);

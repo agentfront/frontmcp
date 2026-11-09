@@ -99,7 +99,7 @@ import { Workflow } from '@frontmcp/sdk';
       id: 'deploy',
       jobName: 'deploy_app',
       dependsOn: ['test'],
-      condition: (steps) => steps.test.success,
+      condition: (steps) => steps.get('test').state === 'completed',
     },
   ],
 })
