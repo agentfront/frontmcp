@@ -8,7 +8,7 @@
  */
 import 'reflect-metadata';
 
-import { App, FrontMcpInstance, LogLevel, Tool, ToolContext, type DirectMcpServer } from '@frontmcp/sdk';
+import { App, FrontMcpInstance, LogLevel, Tool, ToolContext, z, type DirectMcpServer } from '@frontmcp/sdk';
 
 import CachePlugin from '../cache.plugin';
 
@@ -38,11 +38,25 @@ class GetTaggedWeatherTool extends ToolContext {
   }
 }
 
+@Tool({
+  name: 'get_forecast',
+  description: 'Ends with this.respond()',
+  inputSchema: {},
+  outputSchema: { city: z.string() },
+  cache: true,
+})
+class GetForecastTool extends ToolContext {
+  async execute() {
+    executions += 1;
+    return this.respond({ city: 'Faro' });
+  }
+}
+
 @App({
   id: 'weather',
   name: 'Weather',
   plugins: [CachePlugin.init({ type: 'memory' })],
-  tools: [GetWeatherTool, GetTaggedWeatherTool],
+  tools: [GetWeatherTool, GetTaggedWeatherTool, GetForecastTool],
 })
 class WeatherApp {}
 
@@ -75,6 +89,21 @@ describe('CachePlugin — the result of a cache hit (#647)', () => {
     expect({ content: hit.content, structuredContent: hit.structuredContent }).toEqual({
       content: miss.content,
       structuredContent: miss.structuredContent,
+    });
+  });
+
+  it('answers a hit for a tool that ended with this.respond() as the miss', async () => {
+    const miss = await server.callTool('get_forecast', {}, caller);
+    const hit = await server.callTool('get_forecast', {}, caller);
+
+    expect(executions).toBe(1);
+    expect({ content: hit.content, structuredContent: hit.structuredContent }).toEqual({
+      content: [{ type: 'text', text: JSON.stringify({ city: 'Faro' }) }],
+      structuredContent: { city: 'Faro' },
+    });
+    expect({ content: miss.content, structuredContent: miss.structuredContent }).toEqual({
+      content: hit.content,
+      structuredContent: hit.structuredContent,
     });
   });
 

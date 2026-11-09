@@ -1002,6 +1002,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       context._toolNameInternal = tool.metadata.id ?? tool.metadata.name;
       context._toolInputInternal = input.arguments;
       context._jsonRpcRequestIdInternal = this.state.jsonRpcRequestId;
+      // A hook that answers with `respond(value)` ends the call before validateOutput records the output
+      context._onRespondInternal = (value) => this.state.set('rawOutput', value);
 
       // Wire transport to FrontMcpContext for elicitation support
       // The transport is stored in authInfo.transport by the local adapter
@@ -1244,7 +1246,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       await (timeoutMs ? withTimeout(() => running, timeoutMs, tool.metadata.name) : running);
       this.logger.verbose('execute:done');
     } catch (error) {
-      // FlowControl is a control-flow signal (this.fail / this.respond / this.handled
+      // `this.respond(value)` set the output and ends execute(), which validateOutput and finalize treat as returned
+      if (error instanceof FlowControl && error.type === 'respond') {
+        this.logger.verbose('execute:done (respond)');
+        return;
+      }
+      // FlowControl is a control-flow signal (this.fail / this.handled
       // from inside the tool). Re-throw without wrapping so callers (HTTP /
       // Direct / CLI) can extract the originating error from `originalError`
       // and surface its public message instead of a generic "Unknown error".
@@ -1629,10 +1636,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       return;
     }
 
-    if (rawOutput === undefined) {
-      // No output means execute stage failed - skip finalization
+    if (rawOutput === undefined || this.state.flowError) {
+      // No output, or a failed run (whatever output respond() recorded before the failure): skip finalization
       // The original error will be propagated by the flow framework
-      this.logger.verbose('finalize: skipping (no output - execute stage likely failed)');
+      this.logger.verbose('finalize: skipping (no output, or the call failed)');
       return;
     }
 
