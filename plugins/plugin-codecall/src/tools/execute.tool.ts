@@ -50,6 +50,12 @@ function getErrorCode(error: unknown, clientError: McpError): ToolCallErrorCode 
       return TOOL_CALL_ERROR_CODES.NOT_FOUND;
     case 'EXECUTION_TIMEOUT':
       return TOOL_CALL_ERROR_CODES.TIMEOUT;
+    // A remote FrontMCP tool's limit refusal is a result with its code, without the 429 status
+    case 'RATE_LIMIT_EXCEEDED':
+    case 'QUOTA_EXCEEDED':
+    case 'CONCURRENCY_LIMIT':
+    case 'QUEUE_TIMEOUT':
+      return TOOL_CALL_ERROR_CODES.RATE_LIMITED;
   }
   return clientError.statusCode === 429 ? TOOL_CALL_ERROR_CODES.RATE_LIMITED : TOOL_CALL_ERROR_CODES.EXECUTION;
 }

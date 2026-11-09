@@ -91,6 +91,14 @@ class ArchiveUserTool extends ToolContext {
   }
 }
 
+/** What a remote FrontMCP server answers for a call its limits refused: a result with the code, and no 429. */
+@Tool({ name: 'users.remote', description: 'Answers as a limited remote server', inputSchema: { code: z.string() } })
+class RemoteUsersTool extends ToolContext {
+  async execute({ code }: { code: string }): Promise<CallToolResult> {
+    return { isError: true, content: [{ type: 'text', text: 'Limit reached' }], _meta: { code } };
+  }
+}
+
 @Tool({ name: 'users.slow', description: 'Answers slowly', inputSchema: {}, timeout: { executeMs: 50 } })
 class SlowUsersTool extends ToolContext {
   async execute() {
@@ -116,6 +124,7 @@ describe('error codes a script sees', () => {
         ImportUsersTool,
         SyncUsersTool,
         ArchiveUserTool,
+        RemoteUsersTool,
         SlowUsersTool,
       ],
       plugins: [CodeCallPlugin.init({ mode: 'codecall_only' })],
@@ -212,6 +221,19 @@ describe('error codes a script sees', () => {
       expect.objectContaining({ code: 'EXECUTION', message: 'User u9 not found', toolName: 'users.archive' }),
     );
   });
+
+  it.each(['RATE_LIMIT_EXCEEDED', 'QUOTA_EXCEEDED', 'CONCURRENCY_LIMIT', 'QUEUE_TIMEOUT'])(
+    'is RATE_LIMITED for a remote tool result refused with %s',
+    async (code) => {
+      const outcome = await run(
+        `const r = await callTool('users.remote', { code: '${code}' }, { throwOnError: false });\nreturn r.error;`,
+      );
+
+      expect(outcome.result).toEqual(
+        expect.objectContaining({ code: 'RATE_LIMITED', message: 'Limit reached', toolName: 'users.remote' }),
+      );
+    },
+  );
 
   it("keeps an internal error's message from the script", async () => {
     expect(await failedCall('users.sync')).toEqual(
