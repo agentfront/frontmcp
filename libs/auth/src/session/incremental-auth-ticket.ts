@@ -22,6 +22,8 @@
 
 import { randomUUID, signData, verifyData } from '@frontmcp/utils';
 
+import { openPendingLogin, sealPendingLogin, type PendingLoginState } from './pending-login';
+
 /**
  * The payload signed into an incremental-authorization ticket.
  */
@@ -34,6 +36,8 @@ export interface IncrementalAuthTicketPayload {
   toolId?: string;
   /** Apps the caller already holds a grant for, carried forward. */
   priorAppIds?: string[];
+  /** The subject's email and name, sealed because the ticket travels in URLs and logs. */
+  profile?: string;
   /** Unique ticket id, used to enforce single use. */
   jti: string;
   /** Absolute expiry, epoch milliseconds. */
@@ -43,6 +47,14 @@ export interface IncrementalAuthTicketPayload {
 /** Default incremental-ticket TTL: 5 minutes (long enough for a browser round-trip). */
 export const DEFAULT_INCREMENTAL_TICKET_TTL_MS = 300_000;
 
+function profileKey(secret: string): Uint8Array {
+  return new TextEncoder().encode(secret);
+}
+
+function profileBinding(jti: string): string {
+  return `incremental-ticket:${jti}`;
+}
+
 /**
  * Sign an incremental-authorization ticket (HMAC-SHA256 over the payload).
  *
@@ -51,15 +63,34 @@ export const DEFAULT_INCREMENTAL_TICKET_TTL_MS = 300_000;
  * @returns a compact base64url token string suitable for a URL query param.
  */
 export function signIncrementalAuthTicket(
-  input: { sub: string; appId: string; toolId?: string; priorAppIds?: string[]; ttlMs?: number },
+  input: {
+    sub: string;
+    appId: string;
+    toolId?: string;
+    priorAppIds?: string[];
+    email?: string;
+    name?: string;
+    ttlMs?: number;
+  },
   secret: string,
 ): string {
+  const jti = randomUUID();
+  const hasProfile = input.email !== undefined || input.name !== undefined;
   const payload: IncrementalAuthTicketPayload = {
     sub: input.sub,
     appId: input.appId,
     ...(input.toolId !== undefined ? { toolId: input.toolId } : {}),
     ...(input.priorAppIds !== undefined ? { priorAppIds: input.priorAppIds } : {}),
-    jti: randomUUID(),
+    ...(hasProfile
+      ? {
+          profile: sealPendingLogin(profileKey(secret), profileBinding(jti), {
+            sub: input.sub,
+            email: input.email,
+            name: input.name,
+          }),
+        }
+      : {}),
+    jti,
     exp: Date.now() + (input.ttlMs ?? DEFAULT_INCREMENTAL_TICKET_TTL_MS),
   };
   // signData yields a JSON `{ data, sig, v }`; base64url-encode it so the whole
@@ -102,6 +133,7 @@ export function verifyIncrementalAuthTicket(
   if (typeof payload.jti !== 'string' || payload.jti.length === 0) return null;
   if (!Number.isFinite(payload.exp)) return null;
   if (payload.toolId !== undefined && typeof payload.toolId !== 'string') return null;
+  if (payload.profile !== undefined && typeof payload.profile !== 'string') return null;
   if (
     payload.priorAppIds !== undefined &&
     (!Array.isArray(payload.priorAppIds) || payload.priorAppIds.some((id) => typeof id !== 'string'))
@@ -112,4 +144,17 @@ export function verifyIncrementalAuthTicket(
     return null; // expired
   }
   return payload;
+}
+
+/**
+ * The subject, email and name a verified ticket carries, for the token its grant expansion mints. Undefined when the
+ * ticket carries no profile, or one that doesn't open for its subject.
+ */
+export function openIncrementalAuthTicketProfile(
+  payload: IncrementalAuthTicketPayload,
+  secret: string,
+): PendingLoginState | undefined {
+  if (!payload.profile) return undefined;
+  const login = openPendingLogin(profileKey(secret), profileBinding(payload.jti), payload.profile);
+  return login?.sub === payload.sub ? { sub: login.sub, email: login.email, name: login.name } : undefined;
 }

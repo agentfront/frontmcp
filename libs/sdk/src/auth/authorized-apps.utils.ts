@@ -1,5 +1,5 @@
 // auth/authorized-apps.utils.ts
-import { decodeJwtPayloadSafe } from '@frontmcp/auth';
+import { decodeJwtPayloadSafe, isOrchestratedMode, type AuthOptions } from '@frontmcp/auth';
 
 /**
  * Progressive/Incremental authorization support.
@@ -80,4 +80,53 @@ export function getAuthorizedAppIds(authInfo: AuthorizedAppsAuthInfoLike | undef
 
   if (!list) return undefined;
   return new Set(list);
+}
+
+/** An app as the grant helpers read it. */
+interface GrantApp {
+  id?: string;
+  metadata: { id?: string; name?: string; auth?: unknown };
+}
+
+/** The id `authorized_apps` names an app by: the owner id `checkToolAuthorization` compares. */
+function grantAppId(app: GrantApp): string {
+  return app.id ?? app.metadata.id ?? '';
+}
+
+/** Whether a scope mints `authorized_apps`: an orchestrated scope with an `incrementalAuth` block not turned off. */
+export function isIncrementalAuthEnabled(authOptions: AuthOptions | undefined): boolean {
+  if (!authOptions || !isOrchestratedMode(authOptions)) return false;
+  return authOptions.incrementalAuth !== undefined && authOptions.incrementalAuth.enabled !== false;
+}
+
+/**
+ * The `authorized_apps` grant of a new sign-in: the requested apps the scope has, or all of its apps when none were
+ * requested. Undefined when incremental auth is off, so no claim is minted and apps aren't gated.
+ */
+export function initialAuthorizedApps(
+  authOptions: AuthOptions | undefined,
+  apps: readonly GrantApp[],
+  requestedAppIds: readonly string[] | undefined,
+): string[] | undefined {
+  if (!isIncrementalAuthEnabled(authOptions)) return undefined;
+  const knownAppIds = new Set(apps.map(grantAppId).filter(Boolean));
+  return requestedAppIds ? [...new Set(requestedAppIds)].filter((id) => knownAppIds.has(id)) : [...knownAppIds];
+}
+
+/**
+ * Drops from `grant` the apps whose own auth provider the sign-in skipped. The provider picker lists an app with its
+ * own `auth` under `metadata.id || metadata.name`.
+ */
+export function withoutSkippedApps(
+  grant: readonly string[],
+  apps: readonly GrantApp[],
+  skippedProviderIds: readonly string[] | undefined,
+): string[] {
+  if (!skippedProviderIds || skippedProviderIds.length === 0) return [...grant];
+  const skippedAppIds = new Set(
+    apps
+      .filter((app) => app.metadata.auth && skippedProviderIds.includes(app.metadata.id || app.metadata.name || ''))
+      .map(grantAppId),
+  );
+  return grant.filter((id) => !skippedAppIds.has(id));
 }

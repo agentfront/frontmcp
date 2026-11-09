@@ -1238,6 +1238,36 @@ describe('OAuth Authorize Flow', () => {
       expect(session!.userInfo.sub).toBeUndefined();
       expect(session!.userInfo.email).toBeUndefined();
     });
+
+    it('carries the apps= grant in the federated session when incremental auth is enabled', async () => {
+      const scope = createMockScopeEntry({
+        auth: {
+          mode: 'remote',
+          provider: 'https://idp.example.com',
+          providerConfig: { id: 'upstream' },
+          incrementalAuth: { enabled: true },
+        } as never,
+        apps: [
+          { id: 'notes', name: 'Notes' },
+          { id: 'tasks', name: 'Tasks' },
+        ],
+      });
+      const input = createOAuthInput({ ...createValidOAuthRequest(), apps: 'notes' });
+      const flow = new OauthAuthorizeFlow(createFlowMetadata(), input, scope, jest.fn(), new Map());
+
+      const { output } = await runFlowStages(flow, [
+        'parseInput',
+        'validateInput',
+        'checkIfAuthorized',
+        'prepareAuthorizationRequest',
+        'buildAuthorizeOutput',
+      ]);
+
+      const sessionId = String(new URL(output.location).searchParams.get('state')).split(':')[1];
+      const sessionStore = (scope.auth as unknown as { federatedSessionStore: InMemoryFederatedAuthSessionStore })
+        .federatedSessionStore;
+      expect((await sessionStore.get(sessionId))?.authorizedAppIds).toEqual(['notes']);
+    });
   });
 
   // ============================================
