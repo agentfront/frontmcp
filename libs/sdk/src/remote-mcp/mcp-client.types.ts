@@ -265,7 +265,7 @@ export interface McpHealthCheckOptions {
  * Configuration for the MCP client service
  */
 export interface McpClientServiceOptions {
-  /** Interval for capability refresh in ms (0 = no refresh, default: 0) */
+  /** Interval for capability refresh in ms, for a connection whose request sets no `refreshInterval` (0 = no refresh, default: 0) */
   capabilityRefreshInterval?: number;
   /** Client name reported to remote servers (default: 'frontmcp-gateway') */
   clientName?: string;
@@ -319,6 +319,8 @@ export interface McpConnectRequest {
   auth?: McpRemoteAuthConfig;
   /** Namespace prefix for tool names (default: appId) */
   namespace?: string;
+  /** Interval in ms to re-list the remote's capabilities (0 = never; default: the service's `capabilityRefreshInterval`) */
+  refreshInterval?: number;
 }
 
 /**
