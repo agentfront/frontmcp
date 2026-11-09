@@ -35,15 +35,19 @@ export interface WorkflowStep {
   jobName: string;
   /** Static input or dynamic callback from previous steps. */
   input?: Record<string, unknown> | ((steps: WorkflowStepContext) => Record<string, unknown>);
-  /** Step IDs that must complete before this step. */
+  /**
+   * Step IDs that must complete before this step. A step skipped by its `condition` counts as done; when
+   * one of them fails (without `continueOnError`), or is skipped because a step it depends on failed,
+   * this step is skipped too.
+   */
   dependsOn?: string[];
   /** Condition callback. Skip if returns false. */
   condition?: (steps: WorkflowStepContext) => boolean;
-  /** Continue workflow even if this step fails. Default: false */
+  /** Let the steps that depend on this one run even if it fails. Default: false */
   continueOnError?: boolean;
   /** Per-step timeout override in ms. */
   timeout?: number;
-  /** Per-step retry override. */
+  /** Per-step retry override. Without it the job's `retry` applies; without either, the step is tried once. */
   retry?: JobRetryConfig;
 }
 

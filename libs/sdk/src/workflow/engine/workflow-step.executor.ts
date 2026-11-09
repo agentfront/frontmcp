@@ -55,9 +55,9 @@ export class WorkflowStepExecutor {
       throw new InvalidEntityError('job', step.jobName, `a registered job (referenced by step "${step.id}")`);
     }
 
-    // Determine retry config (step override or job default)
+    // Step override or job default; without either a step is tried once, as `execute_job` runs it
     const retryConfig: JobRetryConfig = step.retry ?? job.metadata.retry ?? {};
-    const maxAttempts = retryConfig.maxAttempts ?? 3;
+    const maxAttempts = retryConfig.maxAttempts ?? 1;
 
     // Determine timeout (step override or job default)
     const timeout = step.timeout ?? job.metadata.timeout ?? this.extra.defaultTimeoutMs ?? 300_000;

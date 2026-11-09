@@ -58,6 +58,7 @@ import { Workflow } from '@frontmcp/sdk';
       id: 'test',
       jobName: 'run-unit-tests',
       dependsOn: ['build'],
+      continueOnError: true, // notify-failure checks its state
       input: (steps) => ({
         workDir: steps.get('build').outputs.workDir,
         coverage: true,
