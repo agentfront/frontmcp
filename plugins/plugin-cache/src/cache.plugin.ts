@@ -283,12 +283,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
       flowCtx.state.set('resultMeta', { ...flowCtx.state.resultMeta, cache: 'hit' });
 
       /**
-       * cache hit, set output to the main flow context
-       */
-      flowCtx.state.set('rawOutput', cached);
-
-      /**
-       * call respond to bypass tool execution
+       * Answer with the cached output in place of the tool: the call finalizes it as a returned value
        */
       toolContext.respond(cached);
     }

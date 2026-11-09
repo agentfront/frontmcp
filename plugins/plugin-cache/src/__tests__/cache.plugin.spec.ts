@@ -513,7 +513,7 @@ describe('CachePlugin', () => {
       expect(mockCacheStore.getValue).toHaveBeenCalled();
     });
 
-    it('should set output when cache hit with plain object', async () => {
+    it('should answer with the cached output when cache hit with plain object', async () => {
       const cachedData = { data: 'cached' };
       mockCacheStore.getValue.mockResolvedValue(cachedData);
       const respondMock = jest.fn();
@@ -536,7 +536,6 @@ describe('CachePlugin', () => {
 
       await plugin.willReadCache(flowCtx);
 
-      expect(flowCtx.state.rawOutput).toEqual({ data: 'cached' });
       expect(respondMock).toHaveBeenCalledWith({ data: 'cached' });
     });
 
@@ -602,7 +601,6 @@ describe('CachePlugin', () => {
 
       await plugin.willReadCache(flowCtx);
 
-      expect(flowCtx.state.rawOutput).toBe('simple string');
       expect(respondMock).toHaveBeenCalledWith('simple string');
     });
 
@@ -629,7 +627,7 @@ describe('CachePlugin', () => {
 
       await plugin.willReadCache(flowCtx);
 
-      expect(flowCtx.state.rawOutput).toEqual([1, 2, 3]);
+      expect(respondMock).toHaveBeenCalledWith([1, 2, 3]);
     });
 
     it('should delete invalid cached data', async () => {
@@ -701,8 +699,8 @@ describe('CachePlugin', () => {
 
       await plugin.willReadCache(flowCtx);
 
-      expect({ rawOutput: flowCtx.state.rawOutput, resultMeta: flowCtx.state.resultMeta }).toEqual({
-        rawOutput: { data: 'cached', _meta: { source: 'api' } },
+      expect({ answer: respondMock.mock.calls[0]?.[0], resultMeta: flowCtx.state.resultMeta }).toEqual({
+        answer: { data: 'cached', _meta: { source: 'api' } },
         resultMeta: { cache: 'hit' },
       });
     });
