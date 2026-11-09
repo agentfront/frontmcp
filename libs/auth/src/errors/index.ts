@@ -9,6 +9,7 @@ export {
   TokenLeakDetectedError,
   JwtSecretRequiredError,
   JwtSecretWeakError,
+  SigningKeyInvalidError,
   SessionSecretRequiredError,
   CredentialProviderAlreadyRegisteredError,
   AuthProvidersNotConfiguredError,

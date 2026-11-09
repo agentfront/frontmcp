@@ -6,7 +6,7 @@
  * When: after obtaining an access token via /oauth/token, to resolve the
  * authenticated user's claims (OIDC userinfo-style).
  *
- * Purpose: verify the Bearer token's HS256 signature + lifetime via the
+ * Purpose: verify the Bearer token's signature + lifetime via the
  * auth instance's {@link LocalPrimaryAuth.verifyGatewayToken} and return the
  * user claims (`sub`, plus `email`/`name`/`picture` when present) as JSON.
  * Returns 401 when the Authorization header is missing or the token fails
@@ -115,8 +115,8 @@ export default class OauthUserInfoFlow extends FlowBase<typeof name> {
       return;
     }
 
-    // Verify the HS256 signature + lifetime using the auth instance's own
-    // secret (the sole holder of the signing key), and that this server issued
+    // Verify the signature + lifetime using the auth instance's own keys
+    // (`signKey`, else JWT_SECRET), and that this server issued
     // it for a request like this one (`iss`, #269).
     const localAuth = this.scope.auth as LocalPrimaryAuth;
     const issuer = (localAuth as Partial<LocalPrimaryAuth>).acceptedIssuersFor?.(this.rawInput.request);

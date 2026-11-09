@@ -12,31 +12,24 @@ describe('JwksService Advanced', () => {
     it('should use same key within rotation period', async () => {
       const service = new JwksService({ rotateDays: 30 });
 
-      const jwks1 = await service.getPublicJwks();
-      const jwks2 = await service.getPublicJwks();
+      const jwks1 = await service.getOrchestratorJwks();
+      const jwks2 = await service.getOrchestratorJwks();
 
       expect(jwks1.keys[0].kid).toBe(jwks2.keys[0].kid);
     });
 
     it('should generate different keys for different service instances', async () => {
-      // Note: Each service instance generates its own key
-      const service1 = new JwksService();
-      const service2 = new JwksService();
+      const jwks1 = await new JwksService().getOrchestratorJwks();
+      const jwks2 = await new JwksService().getOrchestratorJwks();
 
-      const jwks1 = await service1.getPublicJwks();
-      const jwks2 = await service2.getPublicJwks();
-
-      // Different instances have different keys (unless using persistence)
-      // This test verifies key generation works
-      expect(jwks1.keys[0]).toBeDefined();
-      expect(jwks2.keys[0]).toBeDefined();
+      expect(jwks1.keys[0].kid).not.toBe(jwks2.keys[0].kid);
     });
   });
 
   describe('ES256 algorithm', () => {
     it('should generate valid ES256 JWKS', async () => {
       const service = new JwksService({ orchestratorAlg: 'ES256' });
-      const jwks = await service.getPublicJwks();
+      const jwks = await service.getOrchestratorJwks();
 
       expect(jwks.keys[0].kty).toBe('EC');
       expect(jwks.keys[0].alg).toBe('ES256');

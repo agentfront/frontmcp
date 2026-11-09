@@ -128,19 +128,16 @@ test.describe('Orchestrated Auth Backward Compatibility E2E', () => {
   });
 
   test.describe('JWKS Endpoint Compatibility', () => {
-    test('should serve JWKS endpoint for token verification', async ({ server }) => {
+    test('should serve an empty key set while tokens are HS256 with JWT_SECRET', async ({ server }) => {
       const response = await fetch(`${server.info.baseUrl}/.well-known/jwks.json`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
       });
 
-      // JWKS must be available for orchestrated mode
       expect(response.status).toBe(200);
       const jwks = await response.json();
-      expect(jwks.keys).toBeDefined();
-      expect(Array.isArray(jwks.keys)).toBe(true);
-      // Must have at least one signing key
-      expect(jwks.keys.length).toBeGreaterThanOrEqual(1);
+      // An HMAC key is never published; only an asymmetric `auth.local.signKey` puts a key here.
+      expect(jwks).toEqual({ keys: [] });
     });
   });
 
