@@ -392,6 +392,46 @@ describe('ToolSearchService', () => {
     });
   });
 
+  describe('words every tool has, and plurals (#1167)', () => {
+    const indexed = async (tools: ToolEntry<any, any>[]) => {
+      const service = new ToolSearchService({ strategy: 'tfidf' }, createMockScope(tools).scope);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return service;
+    };
+
+    it("finds a server's only tool by the words of its description", async () => {
+      const service = await indexed([createMockTool('mail:send', { description: 'Send an email message' })]);
+
+      const [result] = await service.search('send email');
+
+      expect(result?.toolName).toBe('mail:send');
+      expect(result?.relevanceScore).toBeGreaterThan(0.1);
+    });
+
+    it('finds tools by a word every tool has', async () => {
+      const service = await indexed([
+        createMockTool('crm:find', { description: 'Find a customer by email' }),
+        createMockTool('crm:update', { description: 'Update a customer record' }),
+      ]);
+
+      const results = await service.search('customer');
+
+      expect(results.map((result) => result.toolName).sort()).toEqual(['crm:find', 'crm:update']);
+      expect(results.every((result) => result.relevanceScore > 0.1)).toBe(true);
+    });
+
+    it('matches plural and singular forms', async () => {
+      const service = await indexed([
+        createMockTool('crm:contacts', { description: 'Lists the contact entries of an account' }),
+        createMockTool('billing:invoice', { description: 'Gets one invoice' }),
+      ]);
+
+      expect((await service.search('contacts'))[0]?.toolName).toBe('crm:contacts');
+      expect((await service.search('entry'))[0]?.toolName).toBe('crm:contacts');
+      expect((await service.search('invoices'))[0]?.toolName).toBe('billing:invoice');
+    });
+  });
+
   describe('Utility methods', () => {
     let service: ToolSearchService;
 
