@@ -147,6 +147,11 @@ export const outputPolicySchema = z.object({
     .optional(),
 });
 
+/** Resolve whether non-finite numbers may reach JSON serialization: Tool > App > server > `false`. */
+export function resolveAllowNonFinite(tool?: OutputPolicy, app?: OutputPolicy, server?: OutputPolicy): boolean {
+  return tool?.allowNonFinite ?? app?.allowNonFinite ?? server?.allowNonFinite ?? false;
+}
+
 /** Resolve the effective output-schema mode: Tool > App > server > default. */
 export function resolveOutputSchemaMode(
   tool?: OutputPolicy,

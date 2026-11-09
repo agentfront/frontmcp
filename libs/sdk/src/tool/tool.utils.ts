@@ -451,7 +451,7 @@ function parseDeclaredOutput(schema: z.ZodType, value: unknown): unknown {
     return parseResult.data;
   }
   const { issues } = parseResult.error;
-  // A non-finite number is left to the server's `output.allowNonFinite` policy, applied when the call finalizes:
+  // A non-finite number is left to the `output.allowNonFinite` policy, applied when the call finalizes:
   // parse with finite stand-ins so undeclared fields are still stripped, then put the original numbers back.
   if (issues.every((issue) => isNonFiniteNumberIssue(issue, value))) {
     const withStandIns = issues.reduce(
