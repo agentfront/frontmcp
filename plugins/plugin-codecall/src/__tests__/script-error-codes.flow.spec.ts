@@ -84,6 +84,13 @@ class SyncUsersTool extends ToolContext {
   }
 }
 
+@Tool({ name: 'users.archive', description: 'Archives a user', inputSchema: {} })
+class ArchiveUserTool extends ToolContext {
+  async execute(): Promise<CallToolResult> {
+    return { isError: true, content: [{ type: 'text', text: 'User u9 not found' }] };
+  }
+}
+
 @Tool({ name: 'users.slow', description: 'Answers slowly', inputSchema: {}, timeout: { executeMs: 50 } })
 class SlowUsersTool extends ToolContext {
   async execute() {
@@ -108,6 +115,7 @@ describe('error codes a script sees', () => {
         FindUserTool,
         ImportUsersTool,
         SyncUsersTool,
+        ArchiveUserTool,
         SlowUsersTool,
       ],
       plugins: [CodeCallPlugin.init({ mode: 'codecall_only' })],
@@ -196,6 +204,12 @@ describe('error codes a script sees', () => {
         message: 'The validation of row 7 failed: the import timed out at 10:30:00',
         toolName: 'users.import',
       }),
+    );
+  });
+
+  it('gives the text of an error result the tool returns, as an MCP client sees it', async () => {
+    expect(await failedCall('users.archive')).toEqual(
+      expect.objectContaining({ code: 'EXECUTION', message: 'User u9 not found', toolName: 'users.archive' }),
     );
   });
 

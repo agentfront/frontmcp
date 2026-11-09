@@ -24,6 +24,18 @@ describe('extractResultFromCallToolResult', () => {
       expect(() => extractResultFromCallToolResult(mcpResult)).toThrow('Validation error: email is required');
     });
 
+    it("throws a public error under the result's code, so a script gets its message", () => {
+      const mcpResult: CallToolResult = {
+        content: [{ type: 'text', text: 'Invoice 7 is already paid' }],
+        isError: true,
+        _meta: { code: 'INVOICE_PAID' },
+      };
+
+      expect(() => extractResultFromCallToolResult(mcpResult)).toThrow(
+        expect.objectContaining({ isPublic: true, code: 'INVOICE_PAID', message: 'Invoice 7 is already paid' }),
+      );
+    });
+
     it('should throw generic error when no text content', () => {
       const mcpResult: CallToolResult = {
         content: [{ type: 'image', data: 'base64data', mimeType: 'image/png' }],
