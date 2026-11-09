@@ -9,6 +9,7 @@
  */
 
 import React from 'react';
+
 import type { ComponentNode } from '../types';
 import type { ComponentRegistry } from './ComponentRegistry';
 

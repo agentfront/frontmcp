@@ -1,5 +1,6 @@
+import { dirname, resolve } from 'path';
+
 import { Skill } from '@frontmcp/sdk';
-import { resolve, dirname } from 'path';
 
 const skillDir = resolve(dirname(__filename), 'docs-skill');
 

@@ -1,4 +1,5 @@
 import { App } from '@frontmcp/sdk';
+
 import ParentHelloTool from './tools/parent-hello.tool';
 
 /**

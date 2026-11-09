@@ -3,8 +3,9 @@
  *
  * Tests memory leak detection on repeated skill operations
  */
-import { perfTest, expect } from '@frontmcp/testing';
-import { searchSkills as searchSkillsRaw, loadSkills as loadSkillsRaw } from './helpers/skills-protocol';
+import { expect, perfTest } from '@frontmcp/testing';
+
+import { loadSkills as loadSkillsRaw, searchSkills as searchSkillsRaw } from './helpers/skills-protocol';
 
 perfTest.describe('Skills Leak Detection', () => {
   perfTest.use({

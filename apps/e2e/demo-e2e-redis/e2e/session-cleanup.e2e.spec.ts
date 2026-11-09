@@ -7,7 +7,7 @@
  * - New sessions don't inherit old session state
  * - Multiple DELETE/reconnect cycles don't accumulate stale data
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 /**
  * Send a DELETE request to terminate a session.

@@ -7,13 +7,14 @@
  * @module @frontmcp/utils/key-persistence
  */
 
-import { isNode, isBrowser } from '../runtime';
 import { cryptoProvider } from '#crypto-provider';
+
 import { MemoryStorageAdapter } from '../../storage/adapters/memory';
 import type { StorageAdapter } from '../../storage/types';
+import { base64urlDecode, base64urlEncode, randomBytes } from '../index';
+import { isBrowser, isNode } from '../runtime';
 import { KeyPersistence } from './key-persistence';
 import type { CreateKeyPersistenceOptions } from './types';
-import { randomBytes, base64urlEncode, base64urlDecode } from '../index';
 
 /**
  * Default base directory for filesystem storage.

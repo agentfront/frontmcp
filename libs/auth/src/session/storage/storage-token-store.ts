@@ -18,9 +18,9 @@
  * ```
  */
 
-import { randomUUID, TypedStorage } from '@frontmcp/utils';
-import type { StorageAdapter, NamespacedStorage } from '@frontmcp/utils';
-import type { TokenStore, SecretRecord } from '../token.store';
+import { randomUUID, TypedStorage, type NamespacedStorage, type StorageAdapter } from '@frontmcp/utils';
+
+import type { SecretRecord, TokenStore } from '../token.store';
 import type { EncBlob } from '../token.vault';
 
 /**

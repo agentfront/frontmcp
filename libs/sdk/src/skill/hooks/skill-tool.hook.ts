@@ -28,6 +28,9 @@ export interface SkillToolGuardHookOptions {
    * @default true
    */
   trackToolCalls?: boolean;
+
+  /** The MCP session the server verified for the request being served; its skill session is the one checked. */
+  verifiedSessionId?: () => string | undefined;
 }
 
 /**
@@ -132,7 +135,7 @@ export function createSkillToolGuardHook(
   sessionManager: SkillSessionManager,
   options: SkillToolGuardHookOptions = {},
 ): SkillToolGuardHookClass {
-  const { logger, onApprovalRequired, trackToolCalls = true } = options;
+  const { logger, onApprovalRequired, trackToolCalls = true, verifiedSessionId } = options;
 
   /**
    * Skill tool authorization guard hook.
@@ -167,42 +170,50 @@ export function createSkillToolGuardHook(
         ? rawToolName.substring(rawToolName.lastIndexOf(':') + 1)
         : rawToolName;
 
-      // Get active skill session
-      const session = sessionManager.getActiveSession();
-
-      if (!session) {
-        logger?.verbose('SkillToolGuard: skipping (no active session)');
+      const sessionId = verifiedSessionId?.();
+      if (sessionId && sessionManager.getActiveSession()?.sessionId !== sessionId) {
+        await sessionManager.runWithSession(sessionId, () => authorizeInActiveSession(toolName));
         return;
       }
-
-      if (!session.activeSkillId) {
-        logger?.verbose('SkillToolGuard: skipping (no active skill)');
-        return;
-      }
-
-      logger?.verbose(`SkillToolGuard: checking authorization for tool "${toolName}"`, {
-        skillId: session.activeSkillId,
-        policyMode: session.policyMode,
-      });
-
-      // Check tool authorization
-      const authResult = sessionManager.checkToolAuthorization(toolName);
-
-      // Track tool call if enabled
-      if (trackToolCalls && authResult.allowed) {
-        sessionManager.recordToolCall(toolName);
-      }
-
-      // Handle authorization result based on policy mode
-      await handleAuthorizationResult(
-        authResult,
-        sessionManager,
-        session.policyMode,
-        session.activeSkillId,
-        onApprovalRequired,
-        logger,
-      );
+      await authorizeInActiveSession(toolName);
     }
+  }
+
+  async function authorizeInActiveSession(toolName: string): Promise<void> {
+    const session = sessionManager.getActiveSession();
+
+    if (!session) {
+      logger?.verbose('SkillToolGuard: skipping (no active session)');
+      return;
+    }
+
+    if (!session.activeSkillId) {
+      logger?.verbose('SkillToolGuard: skipping (no active skill)');
+      return;
+    }
+
+    logger?.verbose(`SkillToolGuard: checking authorization for tool "${toolName}"`, {
+      skillId: session.activeSkillId,
+      policyMode: session.policyMode,
+    });
+
+    // Check tool authorization
+    const authResult = sessionManager.checkToolAuthorization(toolName);
+
+    // Track tool call if enabled
+    if (trackToolCalls && authResult.allowed) {
+      sessionManager.recordToolCall(toolName);
+    }
+
+    // Handle authorization result based on policy mode
+    await handleAuthorizationResult(
+      authResult,
+      sessionManager,
+      session.policyMode,
+      session.activeSkillId,
+      onApprovalRequired,
+      logger,
+    );
   }
 
   return SkillToolGuardHookImpl;

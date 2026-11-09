@@ -1,4 +1,5 @@
 import { LogLevel } from '@frontmcp/sdk';
+
 import { ChannelsApp } from './apps/channels';
 
 export const serverConfig = {

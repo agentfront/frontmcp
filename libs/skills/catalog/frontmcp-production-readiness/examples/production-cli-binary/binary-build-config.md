@@ -57,6 +57,7 @@ Shows how to configure a FrontMCP CLI binary with correct package.json `bin` fie
 #!/usr/bin/env node
 // src/cli.ts
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { MyApp } from './my.app';
 
 // Handle --version and --help before server initialization

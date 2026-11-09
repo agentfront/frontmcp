@@ -5,9 +5,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+
 import { c } from '../../core/colors';
-import { ManifestSetupStep } from '../build/exec/manifest';
 import { clack } from '../../shared/prompts';
+import { ManifestSetupStep } from '../build/exec/manifest';
 
 export interface QuestionnaireResult {
   answers: Record<string, string>;

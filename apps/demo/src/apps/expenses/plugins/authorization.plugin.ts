@@ -1,4 +1,4 @@
-import { DynamicPlugin, Plugin, FlowCtxOf, FlowHooksOf } from '@frontmcp/sdk';
+import { DynamicPlugin, FlowCtxOf, FlowHooksOf, Plugin } from '@frontmcp/sdk';
 
 const ListToolsHook = FlowHooksOf('tools:list-tools');
 

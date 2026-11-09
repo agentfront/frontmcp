@@ -12,7 +12,7 @@
  * 5. No server filesystem paths leak into client HTML
  * 6. Component code (Card, Badge) is present in bundled output
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Widget Rendering Pipeline E2E', () => {
   test.use({

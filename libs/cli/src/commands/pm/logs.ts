@@ -1,6 +1,6 @@
+import { followLog, readPidFile, tailLog } from '.';
 import { ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
-import { tailLog, followLog, readPidFile } from '.';
 
 export async function runLogs(opts: ParsedArgs): Promise<void> {
   const name = opts._[1];

@@ -12,7 +12,7 @@
  * Uses MockOAuthServer + TestTokenFactory to create JWT tokens
  * with specific roles/permissions/claims for each test scenario.
  */
-import { TestServer, TestTokenFactory, MockOAuthServer, McpTestClient, expect } from '@frontmcp/testing';
+import { expect, McpTestClient, MockOAuthServer, TestServer, TestTokenFactory } from '@frontmcp/testing';
 
 describe('Authorities E2E', () => {
   let mockOAuth: MockOAuthServer;
@@ -58,7 +58,7 @@ describe('Authorities E2E', () => {
 
   async function connectWithClaims(claims: Record<string, unknown>): Promise<McpTestClient> {
     const token = await tokenFactory.createTestToken({
-      sub: claims['sub'] as string ?? 'test-user',
+      sub: (claims['sub'] as string) ?? 'test-user',
       claims,
     });
     return McpTestClient.create({

@@ -21,6 +21,7 @@ Shows how to ensure no secrets are bundled in browser code, configure CSP header
 ```typescript
 // src/main.ts — Server-side: configure CORS and CSP for browser clients
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { MyApp } from './my.app';
 
 @FrontMcp({

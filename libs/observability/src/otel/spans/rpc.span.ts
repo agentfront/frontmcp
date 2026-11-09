@@ -8,8 +8,9 @@
  * @see https://opentelemetry.io/docs/specs/semconv/rpc/rpc-spans/
  */
 
-import { type Tracer, type Span, type Context, SpanKind } from '@opentelemetry/api';
-import { RpcAttributes, McpAttributes, FrontMcpAttributes } from '../otel.types';
+import { SpanKind, type Context, type Span, type Tracer } from '@opentelemetry/api';
+
+import { FrontMcpAttributes, McpAttributes, RpcAttributes } from '../otel.types';
 import { startSpan } from './span.utils';
 
 export interface RpcSpanOptions {

@@ -7,8 +7,8 @@
 
 import { App } from '@frontmcp/sdk';
 
-import GetWeatherTool from './tools/get-weather.tool';
 import SummaryAgent from './agents/summary.agent';
+import GetWeatherTool from './tools/get-weather.tool';
 
 @App({
   id: 'weather',

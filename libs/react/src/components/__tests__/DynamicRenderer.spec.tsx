@@ -1,8 +1,9 @@
-import React from 'react';
 import { render } from '@testing-library/react';
-import { DynamicRenderer } from '../DynamicRenderer';
-import { ComponentRegistry } from '../ComponentRegistry';
+import React from 'react';
+
 import type { ComponentNode } from '../../types';
+import { ComponentRegistry } from '../ComponentRegistry';
+import { DynamicRenderer } from '../DynamicRenderer';
 
 describe('DynamicRenderer', () => {
   let registry: ComponentRegistry;

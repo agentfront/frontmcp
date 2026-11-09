@@ -63,7 +63,7 @@ class IncidentResponseSkill extends SkillContext {}
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'ops-app',

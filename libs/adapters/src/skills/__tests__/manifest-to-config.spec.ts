@@ -32,7 +32,10 @@ describe('buildFrontMcpConfigFromManifest', () => {
     it('carries title + instructions when present', () => {
       const cfg = buildFrontMcpConfigFromManifest(
         mk({
-          server: { info: { name: 'a', version: '1', title: 'Acme API' }, instructions: 'Be concise.' } as DeployManifest['server'],
+          server: {
+            info: { name: 'a', version: '1', title: 'Acme API' },
+            instructions: 'Be concise.',
+          } as DeployManifest['server'],
           specs: [],
           skills: baseSkills,
         }),
@@ -51,7 +54,9 @@ describe('buildFrontMcpConfigFromManifest', () => {
 
   describe('skills', () => {
     it('maps source and omits optional fields when absent', () => {
-      const cfg = buildFrontMcpConfigFromManifest(mk({ server: baseServer, specs: [], skills: { source: './my-skills/' } as DeployManifest['skills'] }));
+      const cfg = buildFrontMcpConfigFromManifest(
+        mk({ server: baseServer, specs: [], skills: { source: './my-skills/' } as DeployManifest['skills'] }),
+      );
       expect(cfg.skills).toEqual({ source: './my-skills/' });
     });
 
@@ -60,10 +65,18 @@ describe('buildFrontMcpConfigFromManifest', () => {
         mk({
           server: baseServer,
           specs: [],
-          skills: { source: './s/', alwaysLoad: ['intro'], tags: { include: ['prod'], exclude: ['beta'] } } as DeployManifest['skills'],
+          skills: {
+            source: './s/',
+            alwaysLoad: ['intro'],
+            tags: { include: ['prod'], exclude: ['beta'] },
+          } as DeployManifest['skills'],
         }),
       );
-      expect(cfg.skills).toEqual({ source: './s/', alwaysLoad: ['intro'], tags: { include: ['prod'], exclude: ['beta'] } });
+      expect(cfg.skills).toEqual({
+        source: './s/',
+        alwaysLoad: ['intro'],
+        tags: { include: ['prod'], exclude: ['beta'] },
+      });
     });
   });
 
@@ -76,7 +89,11 @@ describe('buildFrontMcpConfigFromManifest', () => {
 
     it('derives id + bindingName from the filename stem for bare string refs', () => {
       const cfg = buildFrontMcpConfigFromManifest(
-        mk({ server: baseServer, specs: ['./specs/petstore.yaml', 'https://api.example.com/v1/openapi.json?ts=9'], skills: baseSkills }),
+        mk({
+          server: baseServer,
+          specs: ['./specs/petstore.yaml', 'https://api.example.com/v1/openapi.json?ts=9'],
+          skills: baseSkills,
+        }),
       );
       expect(cfg.specsDir).toBeUndefined();
       expect(cfg.specs).toEqual([
@@ -103,7 +120,9 @@ describe('buildFrontMcpConfigFromManifest', () => {
     });
 
     it('sanitizes unsafe characters in a derived stem id', () => {
-      const cfg = buildFrontMcpConfigFromManifest(mk({ server: baseServer, specs: ['./My Spec (v2).yaml'], skills: baseSkills }));
+      const cfg = buildFrontMcpConfigFromManifest(
+        mk({ server: baseServer, specs: ['./My Spec (v2).yaml'], skills: baseSkills }),
+      );
       expect(cfg.specs[0].id).toBe('My-Spec--v2-');
       expect(cfg.specs[0].spec).toBe('./My Spec (v2).yaml');
     });
@@ -111,7 +130,9 @@ describe('buildFrontMcpConfigFromManifest', () => {
     it('throws on a derived spec-id collision (would silently clobber a binding)', () => {
       // Two different paths whose filename stems collapse to the same id.
       expect(() =>
-        buildFrontMcpConfigFromManifest(mk({ server: baseServer, specs: ['./a/petstore.yaml', './b/petstore.json'], skills: baseSkills })),
+        buildFrontMcpConfigFromManifest(
+          mk({ server: baseServer, specs: ['./a/petstore.yaml', './b/petstore.json'], skills: baseSkills }),
+        ),
       ).toThrow(/duplicate spec id "petstore"/);
     });
   });

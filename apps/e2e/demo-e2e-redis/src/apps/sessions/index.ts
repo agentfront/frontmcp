@@ -1,8 +1,9 @@
 import { App } from '@frontmcp/sdk';
-import SetSessionDataTool from './tools/set-session-data.tool';
-import GetSessionDataTool from './tools/get-session-data.tool';
-import SessionCurrentResource from './resources/session-current.resource';
+
 import SessionSummaryPrompt from './prompts/session-summary.prompt';
+import SessionCurrentResource from './resources/session-current.resource';
+import GetSessionDataTool from './tools/get-session-data.tool';
+import SetSessionDataTool from './tools/set-session-data.tool';
 
 @App({
   name: 'Sessions',

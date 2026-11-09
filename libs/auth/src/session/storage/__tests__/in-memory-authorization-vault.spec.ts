@@ -6,8 +6,8 @@
  * the underlying StorageAuthorizationVault, and the clear() method.
  */
 
-import { InMemoryAuthorizationVault } from '../in-memory-authorization-vault';
 import type { AppCredential, VaultConsentRecord, VaultFederatedRecord } from '../../authorization-vault';
+import { InMemoryAuthorizationVault } from '../in-memory-authorization-vault';
 
 describe('InMemoryAuthorizationVault', () => {
   // ---------------------------------------------------------------------------

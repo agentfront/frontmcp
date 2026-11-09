@@ -13,12 +13,14 @@
  * all tests pass trivially with a warning.
  */
 
+import { execFileSync } from 'child_process';
 import { realpathSync } from 'fs';
 import * as path from 'path';
-import { execFileSync } from 'child_process';
-import { fileExists, mkdtemp, readFile, stat, rm } from '@frontmcp/utils';
+
+import { fileExists, mkdtemp, readFile, rm, stat } from '@frontmcp/utils';
+
 import { ensureSeaBuild, runSeaCli } from './helpers/exec-cli';
-import { McpJsonRpcClient, httpOverSocket, waitForSocket } from './helpers/mcp-client';
+import { httpOverSocket, McpJsonRpcClient, waitForSocket } from './helpers/mcp-client';
 
 const APP_NAME = 'cli-exec-demo';
 

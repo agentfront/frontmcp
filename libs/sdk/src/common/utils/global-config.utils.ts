@@ -4,9 +4,9 @@
  * Helper functions for plugins to access global configuration from @FrontMcp decorator.
  */
 
+import { GlobalConfigNotFoundError } from '../../errors';
 import type { FrontMcpConfigType } from '../metadata';
 import type { RedisOptions } from '../types';
-import { GlobalConfigNotFoundError } from '../../errors';
 
 /**
  * Extract store configuration from global FrontMcp configuration.

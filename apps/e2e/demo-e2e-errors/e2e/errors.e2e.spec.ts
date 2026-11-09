@@ -7,7 +7,7 @@
  * - InternalMcpError
  * - Custom PublicMcpError
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Error Handling E2E', () => {
   test.use({

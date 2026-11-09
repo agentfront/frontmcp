@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { NotesApp } from './apps/notes';
 
 // Get port from env variable (set by test runner) or default to 3150

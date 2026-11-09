@@ -7,7 +7,7 @@
  * - Function source (inline)
  * - Custom export name
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Component Loader E2E', () => {
   test.use({

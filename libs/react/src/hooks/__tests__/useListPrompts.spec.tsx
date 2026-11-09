@@ -1,12 +1,14 @@
-import React from 'react';
 import { renderHook } from '@testing-library/react';
-import { useListPrompts } from '../useListPrompts';
-import { FrontMcpContext } from '../../provider/FrontMcpContext';
-import { serverRegistry } from '../../registry/ServerRegistry';
-import { ComponentRegistry } from '../../components/ComponentRegistry';
-import { DynamicRegistry } from '../../registry/DynamicRegistry';
-import type { FrontMcpContextValue, PromptInfo } from '../../types';
+import React from 'react';
+
 import type { DirectMcpServer } from '@frontmcp/sdk';
+
+import { ComponentRegistry } from '../../components/ComponentRegistry';
+import { FrontMcpContext } from '../../provider/FrontMcpContext';
+import { DynamicRegistry } from '../../registry/DynamicRegistry';
+import { serverRegistry } from '../../registry/ServerRegistry';
+import type { FrontMcpContextValue, PromptInfo } from '../../types';
+import { useListPrompts } from '../useListPrompts';
 
 // ---------------------------------------------------------------------------
 // Mocks

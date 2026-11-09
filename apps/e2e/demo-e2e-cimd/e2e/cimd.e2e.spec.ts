@@ -7,8 +7,8 @@
  * - Error handling for invalid documents
  * - Caching behavior
  */
-import { test, expect, MockCimdServer } from '@frontmcp/testing';
 import { generatePkceChallenge } from '@frontmcp/auth';
+import { expect, MockCimdServer, test } from '@frontmcp/testing';
 
 // Stable code verifier for tests (43+ chars of A-Za-z0-9-._~)
 const TEST_CODE_VERIFIER = 'test-verifier-12345678901234567890123456789012345';

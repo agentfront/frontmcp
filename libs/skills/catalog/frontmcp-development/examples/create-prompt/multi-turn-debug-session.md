@@ -19,8 +19,8 @@ A prompt that uses alternating user/assistant messages to guide a structured deb
 
 ```typescript
 // src/apps/main/prompts/debug-session.prompt.ts
-import { Prompt, PromptContext } from '@frontmcp/sdk';
 import { GetPromptResult } from '@frontmcp/protocol';
+import { Prompt, PromptContext } from '@frontmcp/sdk';
 
 @Prompt({
   name: 'debug-session',

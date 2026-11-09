@@ -103,6 +103,7 @@ export class ToolTfidfIndex<T> {
       if (idf !== undefined) vector.set(term, (vector.get(term) ?? 0) + idf);
     }
     const norm = Math.sqrt([...vector.values()].reduce((sum, weight) => sum + weight * weight, 0));
+    if (norm === 0) return vector;
     for (const [term, weight] of vector) {
       vector.set(term, weight / norm);
     }

@@ -1,6 +1,7 @@
-import * as path from 'path';
-import * as os from 'os';
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
 import { SqliteKvStore } from '../sqlite-kv.store';
 
 function tmpDbPath(): string {

@@ -5,7 +5,8 @@
  * from the ServerRegistry instead of the provider context.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+
 import type { ToolState, UseCallToolOptions, UseCallToolReturn } from '../types';
 import { useResolvedServer } from './useResolvedServer';
 

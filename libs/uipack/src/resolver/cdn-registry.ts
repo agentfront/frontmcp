@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 
-import type { CDNRegistry, CDNRegistryEntry, CDNProvider } from './types';
+import type { CDNProvider, CDNRegistry, CDNRegistryEntry } from './types';
 
 /**
  * Built-in CDN registry for popular packages.

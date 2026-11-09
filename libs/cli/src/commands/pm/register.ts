@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+
 import { toParsedArgs } from '../../core/bridge';
 
 export function registerPmCommands(program: Command): void {

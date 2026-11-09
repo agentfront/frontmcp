@@ -16,7 +16,7 @@
  * JSON data which the platform uses to populate the pre-rendered widget.
  * Hybrid mode includes component payload in _meta['ui/component'].
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Serving Modes E2E', () => {
   test.use({

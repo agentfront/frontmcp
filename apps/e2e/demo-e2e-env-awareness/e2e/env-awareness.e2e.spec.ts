@@ -7,7 +7,7 @@
  *
  * Test environment: Node.js, standalone deployment, current OS platform.
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Environment Awareness E2E', () => {
   test.use({

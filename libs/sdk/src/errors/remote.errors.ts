@@ -3,7 +3,7 @@
  * @description Error classes for remote MCP server connections and operations
  */
 
-import { PublicMcpError, InternalMcpError, MCP_ERROR_CODES } from './mcp.error';
+import { InternalMcpError, MCP_ERROR_CODES, PublicMcpError } from './mcp.error';
 
 // ═══════════════════════════════════════════════════════════════════
 // CONNECTION ERRORS

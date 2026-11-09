@@ -3,8 +3,9 @@
  * @description MCP-specific test assertions
  */
 
-import type { McpResponse, ToolResultWrapper, ResourceContentWrapper, McpErrorInfo } from '../client';
-import type { Tool, Resource, ResourceTemplate, Prompt, CallToolResult, ReadResourceResult } from '@frontmcp/protocol';
+import type { CallToolResult, Prompt, ReadResourceResult, Resource, ResourceTemplate, Tool } from '@frontmcp/protocol';
+
+import type { McpErrorInfo, McpResponse, ResourceContentWrapper, ToolResultWrapper } from '../client';
 
 // ═══════════════════════════════════════════════════════════════════
 // ASSERTION FUNCTIONS

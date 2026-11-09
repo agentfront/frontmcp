@@ -6,7 +6,7 @@
  * - Data persistence across requests
  * - TTL expiration handling
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Redis Session E2E (Mocked)', () => {
   test.use({

@@ -19,7 +19,7 @@ Enable throttle with just a global rate limit and default timeout.
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({ name: 'my-app' })
 class MyApp {}

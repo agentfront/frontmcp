@@ -1,10 +1,10 @@
 import {
+  concurrencyConfigSchema,
+  guardConfigSchema,
+  ipFilterConfigSchema,
   partitionKeySchema,
   rateLimitConfigSchema,
-  concurrencyConfigSchema,
   timeoutConfigSchema,
-  ipFilterConfigSchema,
-  guardConfigSchema,
 } from '../index';
 
 describe('partitionKeySchema', () => {

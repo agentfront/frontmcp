@@ -85,7 +85,7 @@ class GraphqlApiAdapter extends DynamicAdapter<GraphqlAdapterOptions> {
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({
   name: 'DataApp',

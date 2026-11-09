@@ -2,8 +2,8 @@
  * Registry-related interfaces for dependency injection.
  */
 
-import type { Token } from './base.interface.js';
 import type { ProviderRecord } from '../records/provider.record.js';
+import type { Token } from './base.interface.js';
 
 /**
  * Interface for the DI container.

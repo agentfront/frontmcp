@@ -1,5 +1,7 @@
 import 'reflect-metadata';
+
 import { LogLevel } from '@frontmcp/sdk';
+
 import { CliExecApp } from './apps/cli-exec';
 
 const serverConfig = {

@@ -1,12 +1,14 @@
+import { act, renderHook, waitFor } from '@testing-library/react';
 import React from 'react';
-import { renderHook, act, waitFor } from '@testing-library/react';
-import type { FrontMcpContextValue, ToolInfo } from '../../types';
-import { FrontMcpContext } from '../../provider/FrontMcpContext';
-import { serverRegistry } from '../../registry/ServerRegistry';
+
+import type { DirectClient, DirectMcpServer } from '@frontmcp/sdk';
+
 import { ComponentRegistry } from '../../components/ComponentRegistry';
+import { FrontMcpContext } from '../../provider/FrontMcpContext';
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
+import { serverRegistry } from '../../registry/ServerRegistry';
+import type { FrontMcpContextValue, ToolInfo } from '../../types';
 import { useAITools } from '../useAITools';
-import type { DirectMcpServer, DirectClient } from '@frontmcp/sdk';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 

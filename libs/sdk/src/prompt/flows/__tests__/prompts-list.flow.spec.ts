@@ -1,12 +1,13 @@
 import 'reflect-metadata';
-import PromptsListFlow from '../prompts-list.flow';
-import { FlowControl } from '../../../common/interfaces/flow.interface';
+
 import {
-  createMockPromptRegistry,
-  createMockPromptEntry,
   addPromptToMock,
+  createMockPromptEntry,
+  createMockPromptRegistry,
 } from '../../../__test-utils__/mocks/prompt-registry.mock';
-import { InvalidMethodError, InvalidInputError } from '../../../errors';
+import { FlowControl } from '../../../common/interfaces/flow.interface';
+import { InvalidInputError, InvalidMethodError } from '../../../errors';
+import PromptsListFlow from '../prompts-list.flow';
 
 describe('PromptsListFlow', () => {
   // Create mock dependencies

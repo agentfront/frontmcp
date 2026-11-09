@@ -12,10 +12,9 @@
  *   --e2e-only     Only merge E2E test coverage
  *   --library=X    Only merge coverage for a specific library
  */
-
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, readdirSync, rmSync, copyFileSync } from 'fs';
-import { join, resolve, dirname } from 'path';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from 'fs';
+import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

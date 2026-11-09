@@ -4,7 +4,7 @@
  * Tests remote gateway operations under parallel load using multiple clients.
  * The remote gateway orchestrates local:* and mintlify:* namespaced tools.
  */
-import { perfTest, expect, TestServer } from '@frontmcp/testing';
+import { expect, perfTest, TestServer } from '@frontmcp/testing';
 
 // Preferred port configuration from E2E_PORT_RANGES:
 // - demo-e2e-remote: 50210-50219 (using 50211 for local MCP)

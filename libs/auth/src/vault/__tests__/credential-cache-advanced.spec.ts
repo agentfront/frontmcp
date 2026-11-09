@@ -6,10 +6,10 @@
  * and stats accuracy across complex operation sequences.
  */
 
-import { CredentialCache } from '../credential-cache';
-import type { ResolvedCredential, CredentialScope } from '../auth-providers.types';
-import type { Credential } from '../../session';
 import { assertDefined } from '../../__test-utils__/assertion.helpers';
+import type { Credential } from '../../session';
+import type { CredentialScope, ResolvedCredential } from '../auth-providers.types';
+import { CredentialCache } from '../credential-cache';
 
 /**
  * Helper to create a mock ResolvedCredential for testing.

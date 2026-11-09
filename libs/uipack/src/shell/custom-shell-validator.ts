@@ -8,12 +8,13 @@
  */
 
 import {
-  SHELL_PLACEHOLDERS,
-  SHELL_PLACEHOLDER_NAMES,
-  REQUIRED_PLACEHOLDERS,
   OPTIONAL_PLACEHOLDERS,
+  REQUIRED_PLACEHOLDERS,
+  SHELL_PLACEHOLDER_NAMES,
+  SHELL_PLACEHOLDERS,
+  type ShellPlaceholderName,
+  type ShellTemplateValidation,
 } from './custom-shell-types';
-import type { ShellPlaceholderName, ShellTemplateValidation } from './custom-shell-types';
 
 /**
  * Validate a shell template string for placeholder presence.

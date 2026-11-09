@@ -5,8 +5,16 @@
  * so Playwright can load and test it in a real browser.
  */
 import * as http from 'http';
-import { buildShell, renderComponent } from '@frontmcp/uipack';
-import type { ShellConfig, UIConfig, ImportResolver, ResolvedImport, ResolveContext } from '@frontmcp/uipack';
+
+import {
+  buildShell,
+  renderComponent,
+  type ImportResolver,
+  type ResolveContext,
+  type ResolvedImport,
+  type ShellConfig,
+  type UIConfig,
+} from '@frontmcp/uipack';
 
 let server: http.Server | null = null;
 let serverUrl: string | null = null;

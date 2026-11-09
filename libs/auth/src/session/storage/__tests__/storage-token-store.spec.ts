@@ -5,9 +5,10 @@
  * for token blob storage.
  */
 
-import { MemoryStorageAdapter, createNamespacedStorage } from '@frontmcp/utils';
-import { StorageTokenStore } from '../storage-token-store';
+import { createNamespacedStorage, MemoryStorageAdapter } from '@frontmcp/utils';
+
 import type { EncBlob } from '../../token.vault';
+import { StorageTokenStore } from '../storage-token-store';
 
 describe('StorageTokenStore', () => {
   let adapter: MemoryStorageAdapter;

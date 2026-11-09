@@ -8,9 +8,9 @@
  */
 
 import type { StorageAdapter } from '../../storage/types';
-import { randomBytes, base64urlEncode } from '../index';
-import { validateKeyData, isSecretKeyData, isAsymmetricKeyData } from './schemas';
-import type { AnyKeyData, SecretKeyData, AsymmetricKeyData, KeyPersistenceOptions, CreateSecretOptions } from './types';
+import { base64urlEncode, randomBytes } from '../index';
+import { isAsymmetricKeyData, isSecretKeyData, validateKeyData } from './schemas';
+import type { AnyKeyData, AsymmetricKeyData, CreateSecretOptions, KeyPersistenceOptions, SecretKeyData } from './types';
 
 /**
  * KeyPersistence provides a unified API for storing and retrieving

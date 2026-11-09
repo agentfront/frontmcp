@@ -57,8 +57,9 @@ Use this when you have a single-instance adapter that doesn't need runtime confi
 **Step 1 — Create a class that implements `AdapterInterface`:**
 
 ```typescript
-import { Adapter, AdapterInterface, FrontMcpAdapterResponse, FrontMcpLogger, Tool, ToolContext } from '@frontmcp/sdk';
 import { z } from 'zod';
+
+import { Adapter, AdapterInterface, FrontMcpAdapterResponse, FrontMcpLogger, Tool, ToolContext } from '@frontmcp/sdk';
 ```
 
 **Step 2 — Add the `@Adapter` decorator and declare `options`:**

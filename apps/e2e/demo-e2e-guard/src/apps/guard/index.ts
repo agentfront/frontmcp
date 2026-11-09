@@ -1,11 +1,12 @@
 import { App } from '@frontmcp/sdk';
-import RateLimitedTool from './tools/rate-limited.tool';
+
+import CombinedGuardTool from './tools/combined-guard.tool';
 import ConcurrencyMutexTool from './tools/concurrency-mutex.tool';
 import ConcurrencyQueuedTool from './tools/concurrency-queued.tool';
-import TimeoutTool from './tools/timeout.tool';
-import CombinedGuardTool from './tools/combined-guard.tool';
-import UnguardedTool from './tools/unguarded.tool';
+import RateLimitedTool from './tools/rate-limited.tool';
 import SlowTool from './tools/slow.tool';
+import TimeoutTool from './tools/timeout.tool';
+import UnguardedTool from './tools/unguarded.tool';
 
 @App({
   name: 'guard',

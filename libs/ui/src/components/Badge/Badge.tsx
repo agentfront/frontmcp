@@ -1,5 +1,5 @@
-import React from 'react';
 import Chip, { type ChipProps } from '@mui/material/Chip';
+import React from 'react';
 
 export type BadgeVariant = 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info';
 

@@ -1,5 +1,6 @@
-import { trace, ROOT_CONTEXT, TraceFlags, defaultTextMapGetter, defaultTextMapSetter } from '@opentelemetry/api';
+import { defaultTextMapGetter, defaultTextMapSetter, ROOT_CONTEXT, trace, TraceFlags } from '@opentelemetry/api';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+
 import { FrontMcpPropagator } from '../otel/context-propagator';
 
 describe('FrontMcpPropagator', () => {

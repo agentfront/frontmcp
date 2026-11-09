@@ -1,3 +1,6 @@
+import type { ProviderSnapshot } from '../session.types';
+import { isSoonExpiring, isSoonExpiringProvider, toEpochSeconds, tryJwtExp } from '../token.refresh';
+
 /**
  * Token Refresh Tests
  *
@@ -10,9 +13,6 @@ jest.mock('@frontmcp/utils', () => ({
   ...jest.requireActual('@frontmcp/utils'),
   base64urlDecode: (input: string) => mockBase64urlDecode(input),
 }));
-
-import { toEpochSeconds, isSoonExpiring, isSoonExpiringProvider, tryJwtExp } from '../token.refresh';
-import type { ProviderSnapshot } from '../session.types';
 
 describe('token.refresh', () => {
   beforeEach(() => {

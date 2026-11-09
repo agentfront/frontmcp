@@ -1,8 +1,10 @@
-import { type Tree, formatFiles, generateFiles, type GeneratorCallback } from '@nx/devkit';
 import { join } from 'path';
-import type { PluginGeneratorSchema } from './schema.js';
-import { normalizePrimitiveOptions } from '../../utils/normalize-options.js';
+
+import { formatFiles, generateFiles, type GeneratorCallback, type Tree } from '@nx/devkit';
+
 import { toPropertyName } from '../../utils/names.js';
+import { normalizePrimitiveOptions } from '../../utils/normalize-options.js';
+import type { PluginGeneratorSchema } from './schema.js';
 
 export async function pluginGenerator(tree: Tree, schema: PluginGeneratorSchema): Promise<GeneratorCallback | void> {
   const options = normalizePrimitiveOptions(tree, schema, 'plugins');

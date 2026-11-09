@@ -1,13 +1,13 @@
 import {
-  getEnv,
   getCwd,
-  isProduction,
-  isDevelopment,
+  getEnv,
   getEnvFlag,
   isDebug,
-  setEnv,
+  isDevelopment,
   isEdgeRuntime,
+  isProduction,
   isServerless,
+  setEnv,
   supportsAnsi,
 } from '../node-env';
 

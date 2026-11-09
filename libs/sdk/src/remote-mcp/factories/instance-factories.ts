@@ -8,18 +8,19 @@
  * as local entities.
  */
 
-import type { Tool, Resource, ResourceTemplate, Prompt } from '@frontmcp/protocol';
+import type { Prompt, Resource, ResourceTemplate, Tool } from '@frontmcp/protocol';
+
 import type { EntryOwnerRef } from '../../common';
-import type ProviderRegistry from '../../provider/provider.registry';
-import type { McpClientService } from '../mcp-client.service';
-import { ToolInstance } from '../../tool/tool.instance';
-import { ResourceInstance } from '../../resource/resource.instance';
 import { PromptInstance } from '../../prompt/prompt.instance';
+import type ProviderRegistry from '../../provider/provider.registry';
+import { ResourceInstance } from '../../resource/resource.instance';
+import { ToolInstance } from '../../tool/tool.instance';
+import type { McpClientService } from '../mcp-client.service';
 import {
-  buildRemoteToolRecord,
+  buildRemotePromptRecord,
   buildRemoteResourceRecord,
   buildRemoteResourceTemplateRecord,
-  buildRemotePromptRecord,
+  buildRemoteToolRecord,
 } from './record-builders';
 
 /**

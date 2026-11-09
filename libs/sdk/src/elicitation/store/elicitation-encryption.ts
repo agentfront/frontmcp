@@ -13,15 +13,16 @@
  */
 
 import {
-  hkdfSha256,
-  encryptAesGcm,
-  decryptAesGcm,
-  randomBytes,
-  base64urlEncode,
   base64urlDecode,
+  base64urlEncode,
+  decryptAesGcm,
+  encryptAesGcm,
   getEnv,
+  hkdfSha256,
+  randomBytes,
   type EncBlob,
 } from '@frontmcp/utils';
+
 import { ElicitationSecretRequiredError } from '../../errors/auth-internal.errors';
 
 // ─────────────────────────────────────────────────────────────────────────────

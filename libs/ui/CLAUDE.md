@@ -31,20 +31,17 @@ libs/ui/src/
 
 ```typescript
 // Theme
-import { FrontMcpThemeProvider, createFrontMcpTheme } from '@frontmcp/ui/theme';
-
-// Components
-import { Button, Card, Alert } from '@frontmcp/ui/components';
-import { Button } from '@frontmcp/ui/components/Button';
-
-// Renderer
-import { renderContent, detectContentType } from '@frontmcp/ui/renderer';
-
-// Hooks
-import { useMcpBridge, useCallTool, useToolInput } from '@frontmcp/ui/react';
 
 // Bridge
-import { FrontMcpBridge, createBridge } from '@frontmcp/ui/bridge';
+import { createBridge, FrontMcpBridge } from '@frontmcp/ui/bridge';
+// Components
+import { Alert, Button, Card } from '@frontmcp/ui/components';
+import { Button } from '@frontmcp/ui/components/Button';
+// Hooks
+import { useCallTool, useMcpBridge, useToolInput } from '@frontmcp/ui/react';
+// Renderer
+import { detectContentType, renderContent } from '@frontmcp/ui/renderer';
+import { createFrontMcpTheme, FrontMcpThemeProvider } from '@frontmcp/ui/theme';
 ```
 
 ## Dependencies

@@ -5,6 +5,7 @@
  * For HTTP fallback, it listens on port 3118.
  */
 import { FrontMcp } from '@frontmcp/sdk';
+
 import { serverConfig } from './config.js';
 
 // Validate port - fallback to 3118 if invalid

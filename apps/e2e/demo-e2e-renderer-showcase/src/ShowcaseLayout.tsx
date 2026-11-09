@@ -1,14 +1,16 @@
-import React from 'react';
-import { FrontMcpThemeProvider } from '@frontmcp/ui/theme';
 import AppBar from '@mui/material/AppBar';
+import Box from '@mui/material/Box';
+import IconButton from '@mui/material/IconButton';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
-import IconButton from '@mui/material/IconButton';
-import Box from '@mui/material/Box';
+import React from 'react';
+
+import { FrontMcpThemeProvider } from '@frontmcp/ui/theme';
+
 import { Navigation } from './components/Navigation';
-import { SourcePanel } from './components/SourcePanel';
 import { PreviewPanel } from './components/PreviewPanel';
-import { RENDERER_GROUPS, getGroup } from './fixtures';
+import { SourcePanel } from './components/SourcePanel';
+import { getGroup, RENDERER_GROUPS } from './fixtures';
 
 interface ShowcaseLayoutProps {
   groupId: string;

@@ -1,6 +1,8 @@
 import 'reflect-metadata';
-import { Prompt, PromptContext } from '../../';
+
 import { GetPromptResult } from '@frontmcp/protocol';
+
+import { Prompt, PromptContext } from '../../';
 
 // ════════════════════════════════════════════════════════════════
 // Type-level tests: verified by `nx typecheck sdk`

@@ -1,6 +1,7 @@
 // file: plugins/plugin-dashboard/src/__tests__/dashboard.symbol.spec.ts
 
 import 'reflect-metadata';
+
 import { DashboardConfigToken, GraphDataProviderToken, ParentScopeToken } from '../dashboard.symbol';
 
 describe('Dashboard Symbols', () => {

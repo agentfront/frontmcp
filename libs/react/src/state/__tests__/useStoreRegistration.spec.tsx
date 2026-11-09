@@ -1,7 +1,8 @@
-import { renderHook, act } from '@testing-library/react';
-import { useStoreRegistration } from '../useStoreRegistration';
+import { act, renderHook } from '@testing-library/react';
+
 import { DynamicRegistry } from '../../registry/DynamicRegistry';
 import type { StoreAdapter } from '../../types';
+import { useStoreRegistration } from '../useStoreRegistration';
 
 // ---------------------------------------------------------------------------
 // Helpers

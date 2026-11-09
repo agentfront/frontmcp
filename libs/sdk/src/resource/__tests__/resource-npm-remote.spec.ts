@@ -1,6 +1,9 @@
 import { Resource } from '../../common/decorators/resource.decorator';
-import { ResourceKind } from '../../common/records/resource.record';
-import type { ResourceEsmTargetRecord, ResourceRemoteRecord } from '../../common/records/resource.record';
+import {
+  ResourceKind,
+  type ResourceEsmTargetRecord,
+  type ResourceRemoteRecord,
+} from '../../common/records/resource.record';
 import { normalizeResource, resourceDiscoveryDeps } from '../resource.utils';
 
 describe('Resource.esm()', () => {

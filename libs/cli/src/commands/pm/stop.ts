@@ -1,6 +1,6 @@
+import { ProcessManager } from '.';
 import { ParsedArgs } from '../../core/args';
 import { c } from '../../core/colors';
-import { ProcessManager } from '.';
 
 export async function runStop(opts: ParsedArgs): Promise<void> {
   const name = opts._[1];

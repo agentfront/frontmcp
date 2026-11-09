@@ -1,7 +1,9 @@
-import { type Tree, formatFiles, generateFiles, type GeneratorCallback } from '@nx/devkit';
 import { join } from 'path';
-import type { PromptGeneratorSchema } from './schema.js';
+
+import { formatFiles, generateFiles, type GeneratorCallback, type Tree } from '@nx/devkit';
+
 import { normalizePrimitiveOptions } from '../../utils/normalize-options.js';
+import type { PromptGeneratorSchema } from './schema.js';
 
 export async function promptGenerator(tree: Tree, schema: PromptGeneratorSchema): Promise<GeneratorCallback | void> {
   const options = normalizePrimitiveOptions(tree, schema, 'prompts');

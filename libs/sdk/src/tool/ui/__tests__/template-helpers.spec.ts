@@ -5,7 +5,7 @@
  * These tests ensure helpers handle edge cases like null/undefined values.
  */
 
-import { escapeHtml, formatDate, formatCurrency, uniqueId, jsonEmbed, resetIdCounter } from '../template-helpers';
+import { escapeHtml, formatCurrency, formatDate, jsonEmbed, resetIdCounter, uniqueId } from '../template-helpers';
 
 describe('escapeHtml', () => {
   describe('null and undefined handling', () => {

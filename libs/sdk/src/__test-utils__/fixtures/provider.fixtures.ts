@@ -4,6 +4,7 @@
  */
 
 import 'reflect-metadata';
+
 import { ProviderMetadata, ProviderScope } from '../../common/metadata';
 import { FrontMcpProviderTokens } from '../../common/tokens/provider.tokens';
 

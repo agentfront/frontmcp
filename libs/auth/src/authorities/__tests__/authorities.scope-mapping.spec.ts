@@ -1,6 +1,6 @@
+import type { AuthoritiesScopeMapping } from '../authorities.profiles';
 import { resolveRequiredScopes } from '../authorities.scope-mapping';
 import type { AuthoritiesDenial } from '../authorities.types';
-import type { AuthoritiesScopeMapping } from '../authorities.profiles';
 
 describe('resolveRequiredScopes', () => {
   const mapping: AuthoritiesScopeMapping = {

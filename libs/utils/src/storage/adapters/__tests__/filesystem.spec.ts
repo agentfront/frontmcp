@@ -2,11 +2,12 @@
  * FileSystemStorageAdapter Tests
  */
 
-import { FileSystemStorageAdapter } from '../filesystem';
-import { StorageNotConnectedError } from '../../errors';
-import { rm, mkdtemp } from '../../../fs';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
+
+import { mkdtemp, rm } from '../../../fs';
+import { StorageNotConnectedError } from '../../errors';
+import { FileSystemStorageAdapter } from '../filesystem';
 
 describe('FileSystemStorageAdapter', () => {
   let adapter: FileSystemStorageAdapter;

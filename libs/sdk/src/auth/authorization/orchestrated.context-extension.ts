@@ -8,12 +8,13 @@
  * in orchestrated authentication mode.
  */
 
-import type { ContextExtension } from '../../common/metadata/plugin.metadata';
 import {
+  NullOrchestratedAuthAccessor,
   ORCHESTRATED_AUTH_ACCESSOR,
   type OrchestratedAuthAccessor,
-  NullOrchestratedAuthAccessor,
 } from '@frontmcp/auth';
+
+import type { ContextExtension } from '../../common/metadata/plugin.metadata';
 
 // ============================================
 // Module Augmentation

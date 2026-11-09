@@ -8,7 +8,7 @@
  * - Session isolation between clients
  * - Session persistence across requests
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Transport Session E2E', () => {
   test.use({

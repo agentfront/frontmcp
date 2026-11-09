@@ -19,8 +19,7 @@ Verify that structured log entries include trace context fields for correlation 
 
 ```typescript
 // src/__tests__/log-correlation.spec.ts
-import { StructuredLogTransport, CallbackSink } from '@frontmcp/observability';
-import type { StructuredLogEntry } from '@frontmcp/observability';
+import { CallbackSink, StructuredLogTransport, type StructuredLogEntry } from '@frontmcp/observability';
 
 describe('Log correlation', () => {
   it('should include trace_id and request_id in log entries', () => {

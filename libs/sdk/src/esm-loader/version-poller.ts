@@ -7,8 +7,8 @@
 import type { FrontMcpLogger } from '../common';
 import type { EsmRegistryAuth } from './esm-auth.types';
 import type { ParsedPackageSpecifier } from './package-specifier';
-import { VersionResolver } from './version-resolver';
 import { isNewerVersion, satisfiesRange } from './semver.utils';
+import { VersionResolver } from './version-resolver';
 
 /**
  * Result of checking a single package for updates.

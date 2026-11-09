@@ -6,7 +6,10 @@
  * provider snapshot creation, and authorization ID derivation.
  */
 
+import { sha256Hex } from '@frontmcp/utils';
+
 import { assertDefined } from '../../__test-utils__/assertion.helpers';
+import { TransparentAuthorization, type TransparentAuthorizationCreateCtx } from '../transparent.authorization';
 
 // ---- Mocks ----
 
@@ -24,10 +27,6 @@ jest.mock('../../session/utils/session-crypto.utils', () => ({
 jest.mock('../../machine-id', () => ({
   getMachineId: jest.fn(() => 'machine-id-mock'),
 }));
-
-import { TransparentAuthorization } from '../transparent.authorization';
-import type { TransparentAuthorizationCreateCtx } from '../transparent.authorization';
-import { sha256Hex } from '@frontmcp/utils';
 
 const mockSha256Hex = sha256Hex as jest.MockedFunction<typeof sha256Hex>;
 

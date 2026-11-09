@@ -7,9 +7,9 @@
  * @packageDocumentation
  */
 
-import type { ImportResolver, ResolvedImport, ResolveContext, CDNRegistry, CDNProvider } from './types';
-import { lookupPackage, DEFAULT_CDN_REGISTRY } from './cdn-registry';
+import { DEFAULT_CDN_REGISTRY, lookupPackage } from './cdn-registry';
 import { getPackageName } from './import-parser';
+import type { CDNProvider, CDNRegistry, ImportResolver, ResolveContext, ResolvedImport } from './types';
 
 /**
  * Options for configuring the esm.sh resolver.

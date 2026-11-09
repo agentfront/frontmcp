@@ -11,6 +11,7 @@
  * auto-bootstrap of the HTTP server via the @FrontMcp decorator.
  */
 import { FrontMcpInstance } from '@frontmcp/sdk';
+
 import { serverConfig } from './config.js';
 
 const socketPath = process.env['SOCKET_PATH'];

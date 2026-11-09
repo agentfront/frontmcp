@@ -4,7 +4,8 @@
  * Supports multi-server via `options.server`.
  */
 
-import { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
+
 import type { PromptState } from '../types';
 import { useResolvedServer } from './useResolvedServer';
 

@@ -9,7 +9,7 @@
  * This spec proves the same server with a different NODE_ENV
  * exposes a different set of tools.
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Environment Awareness — NODE_ENV=development', () => {
   test.use({

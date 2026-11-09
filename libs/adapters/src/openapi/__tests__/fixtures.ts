@@ -4,6 +4,7 @@
  */
 
 import type { OpenAPIV3 } from 'openapi-types';
+
 /**
  * Basic OpenAPI spec without security
  */

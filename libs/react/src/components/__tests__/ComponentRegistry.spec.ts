@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { ComponentRegistry } from '../ComponentRegistry';
 
 const MockComponent = (props: Record<string, unknown>) => React.createElement('div', props, 'mock');

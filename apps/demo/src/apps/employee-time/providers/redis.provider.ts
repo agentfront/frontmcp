@@ -1,5 +1,6 @@
-import { AsyncProvider, ProviderScope } from '@frontmcp/sdk';
 import Redis, { Redis as RedisClient } from 'ioredis';
+
+import { AsyncProvider, ProviderScope } from '@frontmcp/sdk';
 
 export interface EmployeeRedisConfig {
   host: string;

@@ -9,7 +9,7 @@
  * behavior in public mode testing. The important assertion is that the
  * method executes without error and returns the correct output shape.
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('ToolContext.notify() Method', () => {
   test.use({

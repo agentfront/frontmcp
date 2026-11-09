@@ -19,7 +19,7 @@ Use unique key prefixes when multiple FrontMCP servers share one Redis instance.
 
 ```typescript
 // src/billing-server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({ name: 'billing-app' })
 class BillingApp {}

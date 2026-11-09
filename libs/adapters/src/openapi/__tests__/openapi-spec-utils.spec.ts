@@ -3,6 +3,7 @@
  */
 
 import type { OpenAPIV3 } from 'openapi-types';
+
 import { forceJwtSecurity, removeSecurityFromOperations } from '../openapi.spec-utils';
 
 describe('OpenAPI Spec Utils', () => {

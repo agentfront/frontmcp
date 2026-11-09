@@ -1,4 +1,4 @@
-import { resolveRegistryToken, getRegistryUrl, DEFAULT_NPM_REGISTRY, esmRegistryAuthSchema } from '../esm-auth.types';
+import { DEFAULT_NPM_REGISTRY, esmRegistryAuthSchema, getRegistryUrl, resolveRegistryToken } from '../esm-auth.types';
 
 describe('resolveRegistryToken', () => {
   const originalEnv = process.env;

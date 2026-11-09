@@ -3,8 +3,9 @@
  */
 
 import 'reflect-metadata';
-import { getMetadata, setMetadata, hasAsyncWith } from '../utils/metadata.utils.js';
+
 import { META_ASYNC_WITH } from '../tokens/di.constants.js';
+import { getMetadata, hasAsyncWith, setMetadata } from '../utils/metadata.utils.js';
 
 describe('metadata utils', () => {
   describe('getMetadata', () => {

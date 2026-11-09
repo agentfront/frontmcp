@@ -6,7 +6,7 @@
  * - CONTEXT scope (per-request) provider behavior
  * - Dependency injection from tools/resources/prompts
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Providers E2E', () => {
   test.use({

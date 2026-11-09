@@ -11,17 +11,17 @@
  */
 
 import type { Token } from '../interfaces/base.interface.js';
-import { RegistryAbstract, type RegistryBuildMapResult, type RegistryKind } from './registry.base.js';
 import type {
-  IndexedEntry,
-  EntryLineage,
-  EntryOwnerRef,
-  LineageSegment,
   ChangeEvent,
   ChangeKind,
-  SubscribeOptions,
+  EntryLineage,
+  EntryOwnerRef,
+  IndexedEntry,
+  LineageSegment,
   RegistryEmitter,
+  SubscribeOptions,
 } from './indexed.types.js';
+import { RegistryAbstract, type RegistryBuildMapResult, type RegistryKind } from './registry.base.js';
 
 /**
  * Abstract base class for registries with indexed lookups.

@@ -1,8 +1,9 @@
-import React from 'react';
-import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import type { FrontMcpThemeProviderProps } from './types';
+import { ThemeProvider } from '@mui/material/styles';
+import React from 'react';
+
 import { createFrontMcpTheme, defaultTheme } from './create-theme';
+import type { FrontMcpThemeProviderProps } from './types';
 
 export function FrontMcpThemeProvider({
   theme: themeConfig,

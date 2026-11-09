@@ -1,7 +1,7 @@
 /**
  * JWKS Utilities Tests
  */
-import { trimSlash, normalizeIssuer, decodeJwtPayloadSafe } from '../jwks.utils';
+import { decodeJwtPayloadSafe, normalizeIssuer, trimSlash } from '../jwks.utils';
 
 describe('trimSlash', () => {
   it('should remove trailing slash from URL', () => {

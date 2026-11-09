@@ -6,8 +6,9 @@
  */
 
 import 'reflect-metadata';
-import { META_ASYNC_WITH, META_ASYNC_WITH_TOKENS } from '../tokens/di.constants.js';
+
 import type { Token } from '../interfaces/base.interface.js';
+import { META_ASYNC_WITH, META_ASYNC_WITH_TOKENS } from '../tokens/di.constants.js';
 
 /**
  * Decorator that marks a class for async initialization.

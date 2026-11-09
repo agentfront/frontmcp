@@ -1,6 +1,7 @@
 import { App } from '@frontmcp/sdk';
-import IsolatedHelloTool from './tools/isolated-hello.tool';
+
 import IsolatedInfoResource from './resources/isolated-info.resource';
+import IsolatedHelloTool from './tools/isolated-hello.tool';
 
 /**
  * Isolated Standalone App

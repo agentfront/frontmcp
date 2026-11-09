@@ -3,7 +3,7 @@
  */
 
 import OpenapiAdapter from '../openapi.adapter';
-import { basicOpenApiSpec, spyOnConsole, createMockLogger } from './fixtures';
+import { basicOpenApiSpec, createMockLogger, spyOnConsole } from './fixtures';
 
 // Mock the OpenAPIToolGenerator
 jest.mock('mcp-from-openapi', () => ({

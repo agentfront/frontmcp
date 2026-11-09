@@ -10,7 +10,7 @@
  * at the unit level in transport.registry.spec.ts and the transport adapter tests.
  * These E2E tests verify the end-to-end session behavior at the MCP protocol level.
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Transport Recreation E2E', () => {
   test.use({

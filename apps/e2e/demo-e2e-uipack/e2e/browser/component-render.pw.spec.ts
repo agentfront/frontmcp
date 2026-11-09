@@ -9,7 +9,8 @@
  * is unavailable — controlled by SKIP_COMPONENT_RENDER_TESTS env var set
  * in global-setup.ts.
  */
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+
 import { serveComponent, stopServer } from './helpers';
 
 const SKIP = process.env['SKIP_COMPONENT_RENDER_TESTS'] === 'true';

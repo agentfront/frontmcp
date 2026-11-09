@@ -624,6 +624,52 @@ describe('AgentExecutionLoop', () => {
       expect(onComplete).toHaveBeenCalledWith(null, expect.any(errorClass));
     });
 
+    it('runs no tool when onToolStart aborts the signal it was given', async () => {
+      const controller = new AbortController();
+      const cancelled = new Error('The call was cancelled');
+      const toolExecutor = jest.fn().mockResolvedValue('found');
+      const loop = new AgentExecutionLoop({
+        adapter: { completion: jest.fn().mockResolvedValue(askForLookups('c1')) },
+        systemInstructions: 'x',
+        tools: [],
+        signal: controller.signal,
+        onToolStart: () => controller.abort(cancelled),
+      });
+
+      const result = await loop.run('Hi', toolExecutor);
+
+      expect(result.error).toBe(cancelled);
+      expect(toolExecutor).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['run', (loop: AgentExecutionLoop) => loop.run('Hi', jest.fn())],
+      [
+        'runStreaming',
+        async (loop: AgentExecutionLoop) => {
+          for await (const _event of loop.runStreaming('Hi', jest.fn()));
+        },
+      ],
+    ])('stops following the signal it was given once %s ends', async (_mode, runOnce) => {
+      const controller = new AbortController();
+      let requestSignal: AbortSignal | undefined;
+      const completion = jest.fn(async (_prompt: unknown, _tools: unknown, options?: AgentCompletionOptions) => {
+        requestSignal = options?.signal;
+        return { content: 'Done', finishReason: 'stop' as const };
+      });
+      const loop = new AgentExecutionLoop({
+        adapter: { completion },
+        systemInstructions: 'x',
+        tools: [],
+        signal: controller.signal,
+      });
+
+      await runOnce(loop);
+      controller.abort(new Error('request ended'));
+
+      expect(requestSignal?.aborted).toBe(false);
+    });
+
     describe('streamed', () => {
       async function drainStream(stream: AsyncGenerator<AgentStreamEvent, AgentExecutionResult>) {
         for (let step = await stream.next(); ; step = await stream.next()) {
@@ -650,6 +696,27 @@ describe('AgentExecutionLoop', () => {
         expect(result.error).toBeInstanceOf(AgentTimeoutError);
         expect(streamCompletion).toHaveBeenCalledTimes(1);
         expect(toolExecutor).not.toHaveBeenCalled();
+      });
+
+      it('starts no tool when the signal aborts while the consumer holds tool_start', async () => {
+        const controller = new AbortController();
+        const cancelled = new Error('The call was cancelled');
+        const toolExecutor = jest.fn().mockResolvedValue('found');
+        const loop = new AgentExecutionLoop({
+          adapter: { completion: jest.fn().mockResolvedValue(askForLookups('c1')) },
+          systemInstructions: 'x',
+          tools: [],
+          signal: controller.signal,
+        });
+        const events: AgentStreamEvent['type'][] = [];
+
+        for await (const event of loop.runStreaming('Hi', toolExecutor)) {
+          events.push(event.type);
+          if (event.type === 'tool_start') controller.abort(cancelled);
+        }
+
+        expect(toolExecutor).not.toHaveBeenCalled();
+        expect(events.slice(-2)).toEqual(['error', 'done']);
       });
 
       it('passes the streamed request a signal that aborts when the timeout fires', async () => {

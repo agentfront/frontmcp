@@ -1,3 +1,10 @@
+import { OrchestratedAuthNotAvailableError } from '../../errors/auth-internal.errors';
+import {
+  NullOrchestratedAuthAccessor,
+  ORCHESTRATED_AUTH_ACCESSOR,
+  OrchestratedAuthAccessorAdapter,
+} from '../orchestrated.accessor';
+
 /**
  * OrchestratedAuthAccessor Tests
  *
@@ -9,13 +16,6 @@ jest.mock('@frontmcp/utils', () => ({
   randomBytes: jest.fn(() => new Uint8Array(8)),
   bytesToHex: jest.fn(() => 'deadbeef01234567'),
 }));
-
-import {
-  NullOrchestratedAuthAccessor,
-  OrchestratedAuthAccessorAdapter,
-  ORCHESTRATED_AUTH_ACCESSOR,
-} from '../orchestrated.accessor';
-import { OrchestratedAuthNotAvailableError } from '../../errors/auth-internal.errors';
 
 // ============================================
 // ORCHESTRATED_AUTH_ACCESSOR Token

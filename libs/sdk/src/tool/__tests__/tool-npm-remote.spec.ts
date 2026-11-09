@@ -1,6 +1,5 @@
 import { Tool } from '../../common/decorators/tool.decorator';
-import { ToolKind } from '../../common/records/tool.record';
-import type { ToolEsmTargetRecord, ToolRemoteRecord } from '../../common/records/tool.record';
+import { ToolKind, type ToolEsmTargetRecord, type ToolRemoteRecord } from '../../common/records/tool.record';
 import { normalizeTool, toolDiscoveryDeps } from '../tool.utils';
 
 describe('Tool.esm()', () => {

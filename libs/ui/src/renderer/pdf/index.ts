@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
-import Typography from '@mui/material/Typography';
-import TextField from '@mui/material/TextField';
 import { styled } from '@mui/material/styles';
-import { createLazyImport, runtimeImportWithFallback, esmShUrl, ESM_SH_BASE } from '../common/lazy-import';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import React, { useCallback, useMemo, useState } from 'react';
+
+import { createLazyImport, ESM_SH_BASE, esmShUrl, runtimeImportWithFallback } from '../common/lazy-import';
 import { useLazyModule } from '../common/use-lazy-module';
 import type { ContentRenderer, RenderOptions } from '../types';
 

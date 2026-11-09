@@ -4,13 +4,13 @@
  * Additional edge case tests for OAuth UI templates.
  */
 import {
-  buildConsentPage,
-  buildIncrementalAuthPage,
-  buildFederatedLoginPage,
-  buildToolConsentPage,
-  buildLoginPage,
-  buildErrorPage,
   AppAuthCard,
+  buildConsentPage,
+  buildErrorPage,
+  buildFederatedLoginPage,
+  buildIncrementalAuthPage,
+  buildLoginPage,
+  buildToolConsentPage,
   ProviderCard,
   ToolCard,
 } from '../templates';

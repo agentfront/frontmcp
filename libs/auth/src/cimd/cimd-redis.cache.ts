@@ -4,11 +4,16 @@
  * Provides a Redis-backed cache for CIMD documents.
  * Uses the RedisStorageAdapter from @frontmcp/utils for Redis operations.
  */
-import { RedisStorageAdapter, type RedisAdapterOptions } from '@frontmcp/utils';
-import { sha256Hex } from '@frontmcp/utils';
-import type { CimdCacheBackend, CimdCacheEntry, CimdCacheTtlConfig } from './cimd.cache';
-import { extractCacheHeaders, parseCacheHeaders } from './cimd.cache';
-import type { ClientMetadataDocument, CimdCacheConfig } from './cimd.types';
+import { RedisStorageAdapter, sha256Hex, type RedisAdapterOptions } from '@frontmcp/utils';
+
+import {
+  extractCacheHeaders,
+  parseCacheHeaders,
+  type CimdCacheBackend,
+  type CimdCacheEntry,
+  type CimdCacheTtlConfig,
+} from './cimd.cache';
+import type { CimdCacheConfig, ClientMetadataDocument } from './cimd.types';
 
 /**
  * Serialized cache entry format for Redis storage.

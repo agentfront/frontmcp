@@ -2,8 +2,8 @@
  * Tests for CacheRedisProvider
  */
 
-import CacheRedisProvider from '../providers/cache-redis.provider';
 import type { RedisCacheOptions } from '../cache.types';
+import CacheRedisProvider from '../providers/cache-redis.provider';
 
 // Mock ioredis
 jest.mock('ioredis', () => {

@@ -4,16 +4,16 @@
  * Additional edge case tests for base layout functionality.
  */
 import {
-  escapeHtml,
-  baseLayout,
-  createLayout,
-  centeredCardLayout,
-  wideLayout,
-  extraWideLayout,
   authLayout,
+  baseLayout,
   CDN,
+  centeredCardLayout,
+  createLayout,
   DEFAULT_THEME,
+  escapeHtml,
+  extraWideLayout,
   ThemeConfig,
+  wideLayout,
 } from '../base-layout';
 
 describe('escapeHtml edge cases', () => {

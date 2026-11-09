@@ -4,7 +4,7 @@
  */
 
 import type { JsonRpcRequest, JsonRpcResponse } from '../transport/transport.interface';
-import type { MockDefinition, MockRegistry, MockHandle } from './interceptor.types';
+import type { MockDefinition, MockHandle, MockRegistry } from './interceptor.types';
 
 /**
  * Internal mock entry with tracking

@@ -6,9 +6,10 @@
  * Returns a JSON tree structure representing the component hierarchy.
  */
 
-import { useCallback } from 'react';
-import type { RefObject } from 'react';
+import { useCallback, type RefObject } from 'react';
+
 import type { ReadResourceResult } from '@frontmcp/sdk';
+
 import { useDynamicResource } from './useDynamicResource';
 
 /** RFC 3986 scheme pattern: ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) "://" */

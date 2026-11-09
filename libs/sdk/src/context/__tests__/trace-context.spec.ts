@@ -2,7 +2,7 @@
  * Unit tests for W3C Trace Context utilities
  */
 
-import { parseTraceContext, generateTraceContext, createChildSpanContext, TraceContext } from '../trace-context';
+import { createChildSpanContext, generateTraceContext, parseTraceContext, TraceContext } from '../trace-context';
 
 describe('parseTraceContext', () => {
   describe('W3C traceparent header parsing', () => {

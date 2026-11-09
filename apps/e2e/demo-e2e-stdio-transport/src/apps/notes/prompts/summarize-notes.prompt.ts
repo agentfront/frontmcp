@@ -1,4 +1,5 @@
-import { Prompt, PromptContext, GetPromptResult } from '@frontmcp/sdk';
+import { GetPromptResult, Prompt, PromptContext } from '@frontmcp/sdk';
+
 import { notesStore } from '../data/notes.store';
 
 @Prompt({

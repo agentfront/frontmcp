@@ -1,4 +1,4 @@
-import { Prompt, PromptContext, GetPromptResult, MCP_ERROR_CODES } from '@frontmcp/sdk';
+import { GetPromptResult, MCP_ERROR_CODES, Prompt, PromptContext } from '@frontmcp/sdk';
 
 @Prompt({
   name: 'error-explanation',

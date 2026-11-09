@@ -1,5 +1,5 @@
-import { Provider, ProviderScope } from '@frontmcp/sdk';
 import type { Token } from '@frontmcp/di';
+import { Provider, ProviderScope } from '@frontmcp/sdk';
 
 export const DATA_STORE_TOKEN: Token<DataStoreService> = Symbol('DataStore');
 

@@ -9,7 +9,9 @@
  * see openapi-security-unit.spec.ts
  */
 import { type McpOpenAPITool } from 'mcp-from-openapi';
+
 import type { FrontMcpContext } from '@frontmcp/sdk';
+
 import { resolveToolSecurity } from '../openapi.security';
 import { buildRequest } from '../openapi.utils';
 

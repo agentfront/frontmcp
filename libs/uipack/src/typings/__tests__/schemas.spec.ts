@@ -5,23 +5,23 @@
  */
 
 import {
-  typeFetchErrorCodeSchema,
-  typeFileSchema,
-  typeFetchResultSchema,
-  typeFetchErrorSchema,
-  typeFetchBatchRequestSchema,
-  typeFetchBatchResultSchema,
+  dtsImportSchema,
+  dtsImportTypeSchema,
+  dtsParseResultSchema,
+  packageResolutionSchema,
+  safeParseBatchRequest,
+  safeParseTypeFetcherOptions,
   typeCacheEntrySchema,
   typeCacheStatsSchema,
-  dtsImportTypeSchema,
-  dtsImportSchema,
-  dtsParseResultSchema,
+  typeFetchBatchRequestSchema,
+  typeFetchBatchResultSchema,
   typeFetcherOptionsSchema,
-  packageResolutionSchema,
+  typeFetchErrorCodeSchema,
+  typeFetchErrorSchema,
+  typeFetchResultSchema,
+  typeFileSchema,
   validateBatchRequest,
-  safeParseBatchRequest,
   validateTypeFetcherOptions,
-  safeParseTypeFetcherOptions,
 } from '../schemas';
 
 // ============================================

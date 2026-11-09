@@ -1,4 +1,5 @@
 import { FrontMcp, LogLevel } from '@frontmcp/sdk';
+
 import { MemoryApp } from './apps/memory';
 
 const port = parseInt(process.env['PORT'] ?? '3116', 10);

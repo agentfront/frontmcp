@@ -1,10 +1,15 @@
 /**
  * CIMD Cache Tests
  */
-import { extractCacheHeaders, parseCacheHeaders, InMemoryCimdCache, createCimdCache } from '../cimd.cache';
-import type { CimdCacheTtlConfig } from '../cimd.cache';
-import type { ClientMetadataDocument } from '../cimd.types';
 import { assertDefined } from '../../__test-utils__/assertion.helpers';
+import {
+  createCimdCache,
+  extractCacheHeaders,
+  InMemoryCimdCache,
+  parseCacheHeaders,
+  type CimdCacheTtlConfig,
+} from '../cimd.cache';
+import type { ClientMetadataDocument } from '../cimd.types';
 
 // ============================================
 // Test Helpers

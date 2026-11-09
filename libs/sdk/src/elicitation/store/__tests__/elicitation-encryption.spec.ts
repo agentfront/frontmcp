@@ -4,20 +4,20 @@
  * Tests for session-based encryption of elicitation store data.
  */
 
+import { ElicitationSecretRequiredError } from '../../../errors/auth-internal.errors';
 import {
-  deriveElicitationKey,
-  encryptElicitationData,
   decryptElicitationData,
-  isEncryptedBlob,
-  serializeElicitationBlob,
+  deriveElicitationKey,
+  deserializeAndDecrypt,
   deserializeElicitationBlob,
   encryptAndSerialize,
-  deserializeAndDecrypt,
-  tryDecryptStoredValue,
+  encryptElicitationData,
   getElicitationSecret,
   isElicitationEncryptionAvailable,
+  isEncryptedBlob,
+  serializeElicitationBlob,
+  tryDecryptStoredValue,
 } from '../elicitation-encryption';
-import { ElicitationSecretRequiredError } from '../../../errors/auth-internal.errors';
 
 describe('elicitation-encryption', () => {
   const testSecret = 'test-server-secret-12345';

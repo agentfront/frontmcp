@@ -1,3 +1,11 @@
+// Default registration
+import { defaultRegistry } from '../core';
+import { createClaudeAdapter } from './claude.adapter';
+import { createExtAppsAdapter } from './ext-apps.adapter';
+import { createGeminiAdapter } from './gemini.adapter';
+import { createGenericAdapter } from './generic.adapter';
+import { createOpenAIAdapter } from './openai.adapter';
+
 /**
  * Platform Adapters Module
  *
@@ -15,14 +23,6 @@ export { ExtAppsAdapter, createExtAppsAdapter, type ExtAppsAdapterConfig } from 
 export { ClaudeAdapter, createClaudeAdapter } from './claude.adapter';
 export { GeminiAdapter, createGeminiAdapter } from './gemini.adapter';
 export { GenericAdapter, createGenericAdapter } from './generic.adapter';
-
-// Default registration
-import { defaultRegistry } from '../core';
-import { createOpenAIAdapter } from './openai.adapter';
-import { createExtAppsAdapter } from './ext-apps.adapter';
-import { createClaudeAdapter } from './claude.adapter';
-import { createGeminiAdapter } from './gemini.adapter';
-import { createGenericAdapter } from './generic.adapter';
 
 /**
  * Register all built-in adapters with the default registry.

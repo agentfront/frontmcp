@@ -6,7 +6,7 @@
  * - Cold start behavior
  * - Environment information
  */
-import { test, expect } from '@frontmcp/testing';
+import { expect, test } from '@frontmcp/testing';
 
 test.describe('Serverless Deployment E2E', () => {
   test.use({

@@ -1,10 +1,12 @@
 // file: libs/cli/src/shared/fs.ts
 // CLI-specific file system utilities
 
-import * as path from 'path';
 import { promises as fsp } from 'fs';
-import { c } from '../core/colors';
+import * as path from 'path';
+
 import { fileExists, readJSON } from '@frontmcp/utils';
+
+import { c } from '../core/colors';
 
 function tryCandidates(base: string): string[] {
   const exts = ['', '.ts', '.tsx', '.js', '.mjs', '.cjs'];

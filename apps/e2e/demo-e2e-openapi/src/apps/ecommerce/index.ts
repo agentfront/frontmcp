@@ -1,7 +1,8 @@
-import { App } from '@frontmcp/sdk';
 import { OpenapiAdapter } from '@frontmcp/adapters';
-import CatalogResource from './resources/catalog.resource';
+import { App } from '@frontmcp/sdk';
+
 import ProductRecommendationPrompt from './prompts/product-recommendation.prompt';
+import CatalogResource from './resources/catalog.resource';
 
 // The OpenAPI URL can be configured via environment variable for testing
 // In tests, a MockAPIServer serves the OpenAPI spec and mock responses

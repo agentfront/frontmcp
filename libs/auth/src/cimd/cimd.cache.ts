@@ -6,7 +6,7 @@
  *
  * Supports both in-memory and Redis backends.
  */
-import type { ClientMetadataDocument, CimdCacheConfig } from './cimd.types';
+import type { CimdCacheConfig, ClientMetadataDocument } from './cimd.types';
 
 /**
  * Cache entry for a CIMD document.

@@ -7,7 +7,8 @@
  * Supports multi-server via `options.server`.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+
 import type { ResourceState } from '../types';
 import { useResolvedServer } from './useResolvedServer';
 

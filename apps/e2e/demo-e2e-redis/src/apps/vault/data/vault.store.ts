@@ -3,8 +3,8 @@
  *
  * Uses MemoryStorageAdapter from @frontmcp/utils
  */
-import { MemoryStorageAdapter } from '@frontmcp/utils';
 import { StorageAuthorizationVault } from '@frontmcp/auth';
+import { MemoryStorageAdapter } from '@frontmcp/utils';
 
 // Singleton instances per session
 const vaultInstances = new Map<string, StorageAuthorizationVault>();

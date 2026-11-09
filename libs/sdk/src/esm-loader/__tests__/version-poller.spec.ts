@@ -1,6 +1,6 @@
+import type { ParsedPackageSpecifier } from '../package-specifier';
 import { VersionPoller } from '../version-poller';
 import { VersionResolver } from '../version-resolver';
-import type { ParsedPackageSpecifier } from '../package-specifier';
 
 // Mock VersionResolver
 jest.mock('../version-resolver');

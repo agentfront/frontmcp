@@ -19,7 +19,7 @@ Configure Redis-backed session storage for production deployments.
 
 ```typescript
 // src/server.ts
-import { FrontMcp, App } from '@frontmcp/sdk';
+import { App, FrontMcp } from '@frontmcp/sdk';
 
 @App({ name: 'my-app' })
 class MyApp {}
