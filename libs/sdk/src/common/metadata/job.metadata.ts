@@ -15,9 +15,16 @@ declare global {
 // Job Permission Model
 // ============================================
 
+/**
+ * What a permission rule gates: `execute` starting a run (`execute_job`, `execute_workflow`, each attempt and
+ * workflow step), `read` another caller's runs, `delete` cancelling another caller's runs or removing a dynamic
+ * entry, `list` seeing the entry in `list_jobs` / `list_workflows`. `create` and `update` are deprecated and checked
+ * by nothing: no operation creates or updates a job, a workflow or a run, and startup warns about such rules.
+ */
 export type JobPermissionAction = 'create' | 'read' | 'update' | 'delete' | 'execute' | 'list';
 
 export interface JobPermission {
+  /** The action the rule gates; `'create'` and `'update'` are deprecated and never checked (see {@link JobPermissionAction}). */
   action: JobPermissionAction;
   roles?: string[];
   scopes?: string[];

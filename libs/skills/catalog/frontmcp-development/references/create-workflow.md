@@ -539,7 +539,6 @@ class NotifyTeamJob extends JobContext {
   maxConcurrency: 3,
   permissions: [
     { action: 'execute', roles: ['admin', 'ci-bot'] },
-    { action: 'create', roles: ['admin', 'ci-bot'] },
     { action: 'read', roles: ['admin', 'ci-bot'] },
     { action: 'list', roles: ['admin', 'ci-bot'] },
   ],

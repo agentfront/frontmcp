@@ -407,7 +407,7 @@ Semantics: no rules for an action means allow (the documented default); once any
 
 ```typescript
 interface JobPermission {
-  action: 'create' | 'read' | 'update' | 'delete' | 'execute' | 'list'; // singular!
+  action: 'create' | 'read' | 'update' | 'delete' | 'execute' | 'list'; // singular! 'create' and 'update' are never checked
   roles?: string[]; // caller must have one of these roles
   scopes?: string[]; // token must include one of these scopes
   custom?: (authInfo: Partial<Record<string, unknown>>) => boolean | Promise<boolean>;
@@ -416,14 +416,16 @@ interface JobPermission {
 
 ### Permission Actions
 
-| Action    | Description                                                                                                     |
-| --------- | --------------------------------------------------------------------------------------------------------------- |
-| `create`  | Submit a new job                                                                                                |
-| `read`    | View another caller's runs (`get_job_status`, `job://runs/{runId}`); the caller who started a run always may    |
-| `update`  | Modify a running job                                                                                            |
-| `delete`  | Cancel another caller's runs (`cancel_job`), or remove a job; the caller who started a run may always cancel it |
-| `execute` | Trigger job execution                                                                                           |
-| `list`    | List jobs matching filters                                                                                      |
+| Action    | Description                                                                                                                                                                |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execute` | Start a run: `execute_job` / `execute_workflow`, each attempt, and each workflow step's job; a caller who fails it doesn't see the entry in `list_jobs` / `list_workflows` |
+| `read`    | View another caller's runs (`get_job_status`, `get_workflow_status`, `job://runs/{runId}`); the caller who started a run always may                                        |
+| `delete`  | Cancel another caller's runs (`cancel_job`), or remove a dynamic job or workflow; the caller who started a run may always cancel it                                        |
+| `list`    | See the entry in `list_jobs` / `list_workflows`                                                                                                                            |
+| `create`  | **Deprecated, never checked**: no operation creates a job or a run under the entry's rules (`execute` starts runs); startup warns                                          |
+| `update`  | **Deprecated, never checked**: no operation updates a job, a workflow or a run; startup warns                                                                              |
+
+Up to 1.11.2, `create` and `update` rules were ignored without a warning, though this table described `create` as "Submit a new job" and `update` as "Modify a running job".
 
 ### Permission Configuration
 
@@ -724,7 +726,6 @@ import { App, FrontMcp, Job, job, JobContext, z } from '@frontmcp/sdk';
   labels: { team: 'data-engineering', priority: 'high' },
   permissions: [
     { action: 'execute', roles: ['admin', 'data-engineer'], scopes: ['jobs:execute', 'data:write'] },
-    { action: 'create', roles: ['admin', 'data-engineer'] },
     { action: 'read', roles: ['admin', 'data-engineer'] },
     { action: 'list', roles: ['admin', 'data-engineer'] },
   ],
