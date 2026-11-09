@@ -519,17 +519,19 @@ frontmcp skills install --all --provider codex  # Install every skill for Codex
 
 ## Docs
 
-| Topic                | Link                                      |
-| -------------------- | ----------------------------------------- |
-| Installation & setup | [Installation][docs-install]              |
-| CLI reference        | [CLI Reference][docs-cli-ref]             |
-| Local development    | [Local Dev Server][docs-dev]              |
-| Build targets        | [Build targets][docs-targets]             |
-| Production builds    | [Production Build][docs-production]       |
-| `frontmcp.config`    | [Config files][docs-config]               |
-| Connecting a client  | [MCP clients][docs-clients]               |
-| Skills               | [Skills commands][docs-skills]            |
-| Custom commands      | [Project commands][docs-project-commands] |
+| Topic                   | Link                                           |
+| ----------------------- | ---------------------------------------------- |
+| Installation & setup    | [Installation][docs-install]                   |
+| CLI reference           | [CLI Reference][docs-cli-ref]                  |
+| Local development       | [Local Dev Server][docs-dev]                   |
+| Build targets           | [Build targets][docs-targets]                  |
+| Production builds       | [Production Build][docs-production]            |
+| `frontmcp.config`       | [Config files][docs-config]                    |
+| Connecting a client     | [MCP clients][docs-clients]                    |
+| Skills                  | [Skills commands][docs-skills]                 |
+| Custom commands         | [Project commands][docs-project-commands]      |
+| Choosing a framework    | [Compared with other frameworks][docs-compare] |
+| Guides and measurements | [Blog][docs-blog]                              |
 
 ## Related Packages
 
@@ -631,3 +633,5 @@ Apache-2.0. See [LICENSE](https://github.com/agentfront/frontmcp/blob/main/LICEN
 [docs-clients]: https://frontmcp.dev/reference/deployment/mcp-clients
 [docs-skills]: https://frontmcp.dev/reference/cli#skills
 [docs-project-commands]: https://frontmcp.dev/reference/cli#project-commands
+[docs-compare]: https://frontmcp.dev/compare
+[docs-blog]: https://frontmcp.dev/blog
