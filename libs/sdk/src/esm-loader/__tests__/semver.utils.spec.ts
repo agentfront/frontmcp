@@ -1,10 +1,10 @@
 import {
-  satisfiesRange,
-  maxSatisfying,
-  isValidRange,
-  isValidVersion,
   compareVersions,
   isNewerVersion,
+  isValidRange,
+  isValidVersion,
+  maxSatisfying,
+  satisfiesRange,
 } from '../semver.utils';
 
 describe('satisfiesRange', () => {
@@ -57,8 +57,13 @@ describe('maxSatisfying', () => {
     expect(maxSatisfying(versions, '^3.0.0')).toBeNull();
   });
 
-  it('should return the latest for non-latest dist-tags', () => {
-    expect(maxSatisfying(versions, 'next')).toBe('2.1.0');
+  it('should return null for a dist-tag, which a version list cannot resolve', () => {
+    expect(maxSatisfying(versions, 'next')).toBeNull();
+    expect(maxSatisfying(versions, 'stabel')).toBeNull();
+  });
+
+  it('should leave prereleases out of latest', () => {
+    expect(maxSatisfying([...versions, '3.0.0-beta.1'], 'latest')).toBe('2.1.0');
   });
 
   it('should return null for empty array', () => {

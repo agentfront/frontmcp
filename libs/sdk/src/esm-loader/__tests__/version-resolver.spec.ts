@@ -201,6 +201,30 @@ describe('VersionResolver', () => {
       );
     });
 
+    it('refuses a word that is not one of the dist-tags, naming it and the dist-tags there are', async () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 200, json: async () => makeRegistryResponse() });
+
+      const resolver = new VersionResolver();
+      const resolving = resolver.resolve(makeSpecifier('stabel'));
+
+      await expect(resolving).rejects.toThrow(EsmVersionResolutionError);
+      await expect(resolving).rejects.toThrow(
+        'Failed to resolve version for "@acme/tools@stabel": "stabel" is not a dist-tag of "@acme/tools" (its dist-tags: latest, next)',
+      );
+    });
+
+    it('resolves latest without a latest dist-tag to the highest version that is not a prerelease', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => makeRegistryResponse({ 'dist-tags': {} }),
+      });
+
+      const result = await new VersionResolver().resolve(makeSpecifier('latest'));
+
+      expect(result.resolvedVersion).toBe('1.2.0');
+    });
+
     it('uses default timeout of 15000ms', () => {
       const resolver = new VersionResolver();
       // Just verify construction works - timeout is internal

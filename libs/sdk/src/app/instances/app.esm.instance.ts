@@ -167,6 +167,7 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
   private poller?: VersionPoller;
   private loadResult?: EsmLoadResult;
   private updateInProgress = false;
+  private registered: EsmAppEntries = { tools: [], resources: [], prompts: [] };
 
   // Standard registries
   private readonly _tools: ToolRegistry;
@@ -303,11 +304,12 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     const logger = this.scopeProviders.getActiveScope().logger;
     logger.info(`Reloading ESM app ${this.id}`);
 
-    this.loadResult = await this.loader.load(this.specifier);
-    await this.registerFromManifest(this.loadResult.manifest);
+    const loadResult = await this.loader.load(this.specifier);
+    await this.registerFromManifest(loadResult.manifest);
+    this.loadResult = loadResult;
 
     if (this.poller) {
-      this.poller.updateCurrentVersion(this.specifier.fullName, this.loadResult.resolvedVersion);
+      this.poller.updateCurrentVersion(this.specifier.fullName, loadResult.resolvedVersion);
     }
   }
 
@@ -323,7 +325,8 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
   // ═══════════════════════════════════════════════════════════════════
 
   /**
-   * Register primitives from a loaded package manifest into standard registries.
+   * Register primitives from a loaded package manifest into standard registries, in place of the ones registered
+   * before. Every entry is built first, so an entry that fails to build leaves the previous ones registered.
    */
   private async registerFromManifest(manifest: FrontMcpPackageManifest): Promise<void> {
     const logger = this.scopeProviders.getActiveScope().logger;
@@ -353,21 +356,18 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
       included('prompts'),
     );
 
-    for (const record of tools) {
-      const instance = new ToolInstance(record, this.scopeProviders, this.appOwner);
-      await instance.ready;
-      this._tools.registerToolInstance(instance);
-    }
-    for (const record of resources) {
-      const instance = new ResourceInstance(record, this.scopeProviders, this.appOwner);
-      await instance.ready;
-      this._resources.registerResourceInstance(instance);
-    }
-    for (const record of prompts) {
-      const instance = new PromptInstance(record, this.scopeProviders, this.appOwner);
-      await instance.ready;
-      this._prompts.registerPromptInstance(instance);
-    }
+    const entries: EsmAppEntries = {
+      tools: await Promise.all(
+        tools.map((record) => readyInstance(new ToolInstance(record, this.scopeProviders, this.appOwner))),
+      ),
+      resources: await Promise.all(
+        resources.map((record) => readyInstance(new ResourceInstance(record, this.scopeProviders, this.appOwner))),
+      ),
+      prompts: await Promise.all(
+        prompts.map((record) => readyInstance(new PromptInstance(record, this.scopeProviders, this.appOwner))),
+      ),
+    };
+    this.swapEntries(entries);
 
     logger.info(
       `ESM app ${this.id} registered: ${tools.length} tools, ${resources.length} resources, ${prompts.length} prompts`,
@@ -381,30 +381,61 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     const logger = this.scopeProviders.getActiveScope().logger;
 
     if (this.updateInProgress) {
-      logger.warn(`Update already in progress for ${this.id}, skipping ${newVersion}`);
-      return;
+      throw new InternalMcpError(`An update of ESM app ${this.id} is already in progress`, 'ESM_UPDATE_IN_PROGRESS');
     }
     this.updateInProgress = true;
 
     logger.info(`Updating ESM app ${this.id}: ${oldVersion} → ${newVersion}`);
 
     try {
-      // Reload the package
-      this.loadResult = await this.loader.load(this.specifier);
-
-      // Replace all registrations with the new manifest's primitives.
-      // replaceAll emits change events, notifying connected MCP clients.
-      this._tools.replaceAll([], this.appOwner);
-      this._resources.replaceAll([], this.appOwner);
-      this._prompts.replaceAll([], this.appOwner);
-
-      await this.registerFromManifest(this.loadResult.manifest);
+      const loadResult = await this.loader.load(this.specifier);
+      await this.registerFromManifest(loadResult.manifest);
+      this.loadResult = loadResult;
 
       logger.info(`ESM app ${this.id} updated to ${newVersion}`);
     } catch (error) {
       logger.error(`Failed to update ESM app ${this.id} to ${newVersion}: ${(error as Error).message}`);
+      throw error;
     } finally {
       this.updateInProgress = false;
     }
   }
+
+  /** Registers `next` in place of the registered entries; if one fails to register, the previous ones are put back. */
+  private swapEntries(next: EsmAppEntries): void {
+    const previous = this.registered;
+    this.unregisterEntries(previous);
+    try {
+      this.registerEntries(next);
+    } catch (error) {
+      this.unregisterEntries(next);
+      this.registerEntries(previous);
+      throw error;
+    }
+    this.registered = next;
+  }
+
+  private registerEntries(entries: EsmAppEntries): void {
+    for (const tool of entries.tools) this._tools.registerToolInstance(tool);
+    for (const resource of entries.resources) this._resources.registerResourceInstance(resource);
+    for (const prompt of entries.prompts) this._prompts.registerPromptInstance(prompt);
+  }
+
+  private unregisterEntries(entries: EsmAppEntries): void {
+    for (const tool of entries.tools) this._tools.unregisterToolInstance(tool.record.provide);
+    for (const resource of entries.resources) this._resources.unregisterResourceInstance(resource.record.provide);
+    for (const prompt of entries.prompts) this._prompts.unregisterPromptInstance(prompt.record.provide);
+  }
+}
+
+/** The entries an ESM app registered from its package. */
+interface EsmAppEntries {
+  tools: ToolInstance[];
+  resources: ResourceInstance[];
+  prompts: PromptInstance[];
+}
+
+async function readyInstance<T extends { ready: Promise<void> }>(instance: T): Promise<T> {
+  await instance.ready;
+  return instance;
 }

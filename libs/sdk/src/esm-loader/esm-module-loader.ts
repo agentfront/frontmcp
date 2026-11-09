@@ -13,7 +13,7 @@ import { importComputed } from '#import-computed';
 
 import { type FrontMcpLogger } from '../common';
 import { EsmCacheError, EsmManifestInvalidError, EsmPackageLoadError } from '../errors/esm.errors';
-import { type EsmRegistryAuth } from './esm-auth.types';
+import { resolveRegistryToken, type EsmRegistryAuth } from './esm-auth.types';
 import { type EsmCacheEntry, type EsmCacheManager } from './esm-cache';
 import { normalizeEsmExport, type FrontMcpPackageManifest } from './esm-manifest';
 import { applyImportMap, buildEsmShUrl, importMapPackages, type ParsedPackageSpecifier } from './package-specifier';
@@ -47,7 +47,7 @@ export interface EsmModuleLoaderOptions {
   timeout?: number;
   /** Logger instance */
   logger?: FrontMcpLogger;
-  /** Custom ESM CDN base URL */
+  /** Custom ESM CDN base URL; bundle downloads from it carry the `registryAuth` token */
   esmBaseUrl?: string;
   /** Import map: the bundle's imports of these specifiers are rewritten to their targets */
   importMap?: Record<string, string>;
@@ -67,6 +67,7 @@ export interface EsmModuleLoaderOptions {
 export class EsmModuleLoader {
   private readonly cache: EsmCacheManager;
   private readonly versionResolver: VersionResolver;
+  private readonly registryAuth?: EsmRegistryAuth;
   private readonly timeout: number;
   private readonly logger?: FrontMcpLogger;
   private readonly esmBaseUrl?: string;
@@ -78,6 +79,7 @@ export class EsmModuleLoader {
     this.logger = options.logger;
     this.esmBaseUrl = options.esmBaseUrl;
     this.importMap = options.importMap ?? {};
+    this.registryAuth = options.registryAuth;
     this.versionResolver = new VersionResolver({
       registryAuth: options.registryAuth,
       timeout: options.timeout,
@@ -213,6 +215,7 @@ export class EsmModuleLoader {
     let response: Response;
     try {
       response = await fetch(url, {
+        headers: this.bundleHeaders(),
         signal: controller.signal,
       });
     } catch (error) {
@@ -258,6 +261,12 @@ export class EsmModuleLoader {
       loadedAt: Date.now(),
       rawModule,
     };
+  }
+
+  /** The token goes with a bundle download from the configured loader `url`, never to the default esm.sh. */
+  private bundleHeaders(): Record<string, string> | undefined {
+    const token = this.esmBaseUrl ? resolveRegistryToken(this.registryAuth) : undefined;
+    return token ? { Authorization: `Bearer ${token}` } : undefined;
   }
 
   /**
