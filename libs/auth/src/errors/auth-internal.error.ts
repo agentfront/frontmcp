@@ -1,9 +1,8 @@
-import { randomBytes, bytesToHex } from '@frontmcp/utils';
+import { bytesToHex, randomBytes } from '@frontmcp/utils';
 
 /**
- * Base class for internal auth errors.
- * Mirrors SDK's InternalMcpError structure but lives in @frontmcp/auth
- * to avoid circular dependencies.
+ * Base class for @frontmcp/auth's errors. Lives here to avoid a circular dependency on the SDK, which answers
+ * a request that fails with one under its `code`, and with its message only when it `isPublic`.
  */
 export abstract class AuthInternalError extends Error {
   /**
@@ -12,9 +11,9 @@ export abstract class AuthInternalError extends Error {
   readonly errorId: string;
 
   /**
-   * Whether this error should expose details to the client.
+   * Whether the client sees the message: true only for an error that names a setting and nothing secret.
    */
-  readonly isPublic = false;
+  readonly isPublic: boolean = false;
 
   /**
    * HTTP status code equivalent.
@@ -38,6 +37,7 @@ export abstract class AuthInternalError extends Error {
    * Get the public-facing error message.
    */
   getPublicMessage(): string {
+    if (this.isPublic) return this.message;
     return `Internal auth error. Please contact support with error ID: ${this.errorId}`;
   }
 
