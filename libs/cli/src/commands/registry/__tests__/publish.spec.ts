@@ -10,7 +10,7 @@ import { SERVER_JSON_SCHEMA_URL } from '../server-json';
 import { setServerStatus } from '../status';
 
 const loadEntryDecoratorInfo = jest.fn();
-jest.mock('../../build/load-entry-config.js', () => ({ loadEntryDecoratorInfo }), { virtual: true });
+jest.mock('../../build/load-entry-config', () => ({ loadEntryDecoratorInfo }));
 jest.mock('dns/promises', () => ({ resolveTxt: jest.fn().mockResolvedValue([['v=spf1 -all']]) }));
 let mockHomeDir = '';
 jest.mock('os', () => ({ ...jest.requireActual('os'), homedir: () => mockHomeDir }));
