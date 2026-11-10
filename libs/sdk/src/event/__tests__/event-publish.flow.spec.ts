@@ -4,6 +4,7 @@ import * as http from 'node:http';
 import { type AddressInfo } from 'node:net';
 
 import { z } from '@frontmcp/lazy-zod';
+import { EVENTS_ERROR_CODES } from '@frontmcp/protocol';
 import { generateStandardWebhookSecret, signingKeyOf, verifyWebhookSignature } from '@frontmcp/utils';
 
 import { createTestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
@@ -17,14 +18,16 @@ import {
   type FlowCtxOf,
   type FrontMcpConfigInput,
 } from '../../common';
-import { EventNotRegisteredError, InvalidEventPublishError } from '../../errors';
+import { EventForbiddenError, EventNotRegisteredError, InvalidEventPublishError, PublicMcpError } from '../../errors';
 import { EventPublishHook } from '../../index';
 import { type Scope } from '../../scope/scope.instance';
+import { isAuthorizeRefusal, subscriberAuthInfo } from '../event-reauthorization';
 import { EVENT_DELIVERY_MAX_BYTES, isInAudience } from '../flows/event-publish.flow';
 import { type EventSubscriptionRecord } from '../subscription/event-subscription.store';
 import { type EventSubscriptions } from '../subscription/event-subscriptions';
 
 const SECRET = generateStandardWebhookSecret();
+const codesOfSep = EVENTS_ERROR_CODES;
 const HOUR_MS = 3_600_000;
 const orderPayload = { orderId: z.string(), status: z.string(), note: z.string().optional() };
 
@@ -57,6 +60,32 @@ const auditLogged = event({
 
 const bulkExported = event({ name: 'bulk.exported', payloadSchema: { blob: z.string() } });
 
+const vaultAuthorize = jest.fn();
+const vaultSeenBy = jest.fn();
+
+/** Guarded twice: the admin profile, then its own `authorize()`. */
+const vaultOpened = event({
+  name: 'vault.opened',
+  inputSchema: { vault: z.string().optional() },
+  payloadSchema: { vaultId: z.string() },
+  authorities: 'admin',
+  authorize(args, subscriber) {
+    vaultSeenBy(this.authInfo);
+    return vaultAuthorize(args, subscriber);
+  },
+  onUnsubscribe,
+});
+
+const noteAuthorize = jest.fn();
+
+/** Guarded by its own `authorize()` only. */
+const noteShared = event({
+  name: 'note.shared',
+  payloadSchema: { noteId: z.string() },
+  authorize: noteAuthorize,
+  onUnsubscribe,
+});
+
 const published = jest.fn();
 
 @Plugin({ name: 'publish-audit' })
@@ -67,7 +96,11 @@ class PublishAuditPlugin {
   }
 }
 
-@App({ id: 'shop', name: 'Shop', events: [orderCreated, OrderShipped, auditLogged, bulkExported] })
+@App({
+  id: 'shop',
+  name: 'Shop',
+  events: [orderCreated, OrderShipped, auditLogged, bulkExported, vaultOpened, noteShared],
+})
 class ShopApp {}
 
 interface Received {
@@ -112,6 +145,25 @@ describe('isInAudience', () => {
 
   it('leaves out an owner without a tenant when the audience names one', () => {
     expect(isInAudience({ tenantId: 'acme' }, owner('bob'))).toBe(false);
+  });
+});
+
+describe('isAuthorizeRefusal', () => {
+  it('takes a public error as a refusal and anything else as a check that could not be made', () => {
+    expect(isAuthorizeRefusal(new EventForbiddenError(codesOfSep, 'vault.opened', 'closed'))).toBe(true);
+    expect(isAuthorizeRefusal(new PublicMcpError('no'))).toBe(true);
+    expect(isAuthorizeRefusal(new Error('ECONNRESET'))).toBe(false);
+    expect(isAuthorizeRefusal('a string')).toBe(false);
+  });
+});
+
+describe('subscriberAuthInfo', () => {
+  it('rebuilds the auth of a stored owner without an issuer it did not have', () => {
+    expect(subscriberAuthInfo(owner('bob', { scopes: ['read'], claims: { roles: ['member'] } }))).toEqual({
+      clientId: 'bob',
+      scopes: ['read'],
+      extra: { user: { roles: ['member'], sub: 'bob' } },
+    });
   });
 });
 
@@ -173,7 +225,15 @@ describe('events:publish', () => {
 
   async function removeAll(): Promise<void> {
     const store = subscriptions().store;
-    for (const eventName of ['order.created', 'order.shipped', 'audit.logged', 'bulk.exported']) {
+    const eventNames = [
+      'order.created',
+      'order.shipped',
+      'audit.logged',
+      'bulk.exported',
+      'vault.opened',
+      'note.shared',
+    ];
+    for (const eventName of eventNames) {
       for (const record of await store.listByEvent(eventName)) await store.delete(record.id);
     }
   }
@@ -540,6 +600,115 @@ describe('events:publish', () => {
 
       await expect(publisher().publish(auditLogged, { action: 'login' })).resolves.toMatchObject({ matched: 1 });
       await deliveries(1);
+    });
+
+    describe("the event's authorize()", () => {
+      const admin = () => owner('ada', { roles: ['admin'], iss: 'https://auth.example.com', claims: { team: 'ops' } });
+
+      it('is called again with the stored arguments and owner, on a context for that owner', async () => {
+        await subscribed({
+          eventName: 'vault.opened',
+          subscriber: admin(),
+          arguments: { vault: 'v-1' },
+          lastAuthorizedAt: longAgo(),
+        });
+
+        await expect(publisher().publish(vaultOpened, { vaultId: 'v-1' })).resolves.toMatchObject({ matched: 1 });
+
+        expect(vaultAuthorize).toHaveBeenCalledWith({ vault: 'v-1' }, admin());
+        expect(vaultSeenBy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            clientId: 'ada',
+            extra: { user: { team: 'ops', sub: 'ada', iss: 'https://auth.example.com' } },
+          }),
+        );
+        await deliveries(1);
+      });
+
+      it('ends the subscription when it refuses, as an authorities denial does', async () => {
+        const refused = await subscribed({
+          eventName: 'vault.opened',
+          subscriber: admin(),
+          lastAuthorizedAt: longAgo(),
+        });
+        vaultAuthorize.mockRejectedValueOnce(new EventForbiddenError(codesOfSep, 'vault.opened', 'vault closed'));
+
+        const result = await publisher().publish(vaultOpened, { vaultId: 'v-2' });
+
+        expect(result.matched).toBe(0);
+        await expect(subscriptions().store.get(refused.id)).resolves.toBeUndefined();
+        expect(onUnsubscribe).toHaveBeenCalledWith({}, expect.objectContaining({ id: refused.id }), 'terminated');
+        const [envelope] = await deliveries(1);
+        expect(envelope.json).toEqual({
+          type: 'terminated',
+          error: { code: -32024, message: 'Forbidden', data: { reason: 'Access revoked' } },
+        });
+      });
+
+      it('keeps the subscription when it fails, delivers nothing this time, and checks it again next time', async () => {
+        const kept = await subscribed({ eventName: 'vault.opened', subscriber: admin(), lastAuthorizedAt: longAgo() });
+        vaultAuthorize.mockRejectedValueOnce(new Error('the upstream timed out'));
+
+        const failed = await publisher().publish(vaultOpened, { vaultId: 'v-3' });
+        const retried = await publisher().publish(vaultOpened, { vaultId: 'v-4' });
+
+        expect(failed.matched).toBe(0);
+        expect(retried.matched).toBe(1);
+        expect(vaultAuthorize).toHaveBeenCalledTimes(2);
+        expect(onUnsubscribe).not.toHaveBeenCalled();
+        await expect(subscriptions().store.get(kept.id)).resolves.toBeDefined();
+        const [delivery] = await deliveries(1);
+        expect(delivery.json['data']).toEqual({ vaultId: 'v-4' });
+      });
+
+      it('is not called within reauthorizeEveryMs of the last check, and is called once it passed', async () => {
+        const recent = await subscribed({
+          eventName: 'vault.opened',
+          subscriber: admin(),
+          lastAuthorizedAt: Date.now() - 1000,
+        });
+
+        await expect(publisher().publish(vaultOpened, { vaultId: 'v-5' })).resolves.toMatchObject({ matched: 1 });
+        expect(vaultAuthorize).not.toHaveBeenCalled();
+        await subscriptions().store.update(recent.id, { lastAuthorizedAt: longAgo() });
+        await publisher().publish(vaultOpened, { vaultId: 'v-6' });
+
+        expect(vaultAuthorize).toHaveBeenCalledTimes(1);
+        await deliveries(2);
+      });
+
+      it('runs after the authorities, and not at all for an owner they refuse', async () => {
+        const allowed = await subscribed({
+          eventName: 'vault.opened',
+          subscriber: admin(),
+          lastAuthorizedAt: longAgo(),
+        });
+        const revoked = await subscribed({
+          eventName: 'vault.opened',
+          subscriber: owner('bob', { roles: ['member'] }),
+          lastAuthorizedAt: longAgo(),
+        });
+
+        await publisher().publish(vaultOpened, { vaultId: 'v-7' });
+
+        expect(vaultAuthorize).toHaveBeenCalledTimes(1);
+        expect(vaultAuthorize).toHaveBeenCalledWith({}, admin());
+        await expect(subscriptions().store.get(allowed.id)).resolves.toBeDefined();
+        await expect(subscriptions().store.get(revoked.id)).resolves.toBeUndefined();
+        const kinds = (await deliveries(2)).map((delivery) => delivery.json['type'] ?? 'event');
+        expect(kinds.sort()).toEqual(['event', 'terminated']);
+      });
+
+      it('is checked again for an event that has no authorities', async () => {
+        const refused = await subscribed({ eventName: 'note.shared', lastAuthorizedAt: longAgo() });
+        noteAuthorize.mockRejectedValueOnce(new PublicMcpError('the note was unshared'));
+
+        await publisher().publish(noteShared, { noteId: 'n-1' });
+
+        expect(noteAuthorize).toHaveBeenCalledTimes(1);
+        await expect(subscriptions().store.get(refused.id)).resolves.toBeUndefined();
+        expect((await deliveries(1))[0].json['type']).toBe('terminated');
+      });
     });
 
     it('neither delivers to nor ends a subscription whose check could not be made', async () => {

@@ -186,6 +186,31 @@ serves no events. `poll` and `push` are not performed yet.
   all, so another event may use its name there. `surface` is checked per request: `surface: ['agent']` hides the event
   from MCP clients.
 
+### Over a subscription's life
+
+A subscription is checked when it is created and again while it lives, not only when the event is listed. When a
+publish reaches a subscription whose last check is older than `subscriptions.reauthorizeEveryMs` (5 minutes), the
+server checks its stored owner (the `subscriber` of the last `events/subscribe`) with its stored arguments:
+
+1. The event's `authorities`, with the arguments as the rule's input.
+2. Then the event's `authorize(args, subscriber)`, on a context created for that owner: `this.authInfo` holds the
+   owner's claims, `sub`, `iss` and scopes, and no token.
+
+The first that does not allow the owner decides:
+
+- **A refusal** ends the subscription: the rule denies, or `authorize()` throws a public error (an
+  `EventForbiddenError`, or any `PublicMcpError`). The subscription is removed, the event's `onUnsubscribe` runs with
+  the reason `'terminated'`, and a SEP-3415 subscription's callback gets a `terminated` envelope with the reason
+  `Access revoked`.
+- **A check that could not be made** keeps the subscription: the rule's evaluation throws, or `authorize()` throws any
+  other error (an upstream that is down, a timeout). The event is not delivered to it this time, the server logs
+  `reauthorize: the access of subscription <id> could not be checked`, and the next publish checks it again.
+
+This is the split `events/subscribe` makes: it passes on what a public error says as the `reason`, and answers any
+other error with `the event refused it`. When subscribing, both refuse, since there is no subscription to keep yet.
+Throw an `EventForbiddenError` (or a `PublicMcpError`) from `authorize()` for "no", and let an upstream failure throw
+as it is.
+
 ## `events/list`
 
 - Events are ordered by name.
@@ -424,11 +449,12 @@ Mistakes of the server author are thrown, not delivered:
 
 1. Suspended subscriptions are left out.
 2. `audience` narrows by owner.
-3. For an event with `authorities`, an owner whose last check is older than `subscriptions.reauthorizeEveryMs`
-   (5 minutes) is checked again, with the stored owner and the subscription's arguments. An owner the rule refuses
-   loses the subscription: it is removed, `onUnsubscribe(args, subscription, 'terminated')` runs, and a SEP-3415
-   subscription's callback gets a `terminated` envelope. When the check itself throws, the event is not delivered to
-   that subscription this time and the subscription is kept.
+3. For an event with `authorities` or `authorize()`, an owner whose last check is older than
+   `subscriptions.reauthorizeEveryMs` (5 minutes) is checked again, the rule first, then `authorize()` (see
+   [Over a subscription's life](#over-a-subscriptions-life)). An owner refused loses the subscription: it is removed,
+   `onUnsubscribe(args, subscription, 'terminated')` runs, and a SEP-3415 subscription's callback gets a `terminated`
+   envelope. When the check could not be made, the event is not delivered to that subscription this time and the
+   subscription is kept.
 4. `match(event, args, subscriber)` decides per subscription. Without it, every subscription receives the event.
 5. `transform(event, args, subscriber)` returns the event as that subscription receives it: an occurrence with
    `eventId`, `name`, `timestamp` and `data`.
@@ -599,7 +625,7 @@ class ShopServer {}
 | `minTtlMs?`           | `number`  | `60000` (1 minute)    | The shortest lifetime granted                                               |
 | `allowNoExpiry?`      | `boolean` | `false`               | Grants `ttlMs: null`. Needs `events.store.redis` or `events.store.sqlite`   |
 | `maxPerPrincipal?`    | `number`  | `100`                 | How many subscriptions one caller may hold                                  |
-| `reauthorizeEveryMs?` | `number`  | `300000` (5 minutes)  | How often a publish checks an owner against the event's `authorities` again |
+| `reauthorizeEveryMs?` | `number`  | `300000` (5 minutes)  | How often a publish checks an owner against `authorities` and `authorize()` |
 | `suspendedTtlMs?`     | `number`  | `604800000` (7 days)  | How long a suspended subscription without expiry is kept                    |
 
 The three lifetimes must satisfy `minTtlMs <= defaultTtlMs <= maxTtlMs` after defaults: a server that lowers
@@ -661,7 +687,7 @@ subscription: `{ sub, iss?, tenantId?, roles, permissions, scopes, claims }`. `t
 
 | Method                                      | Purpose                                                                       |
 | ------------------------------------------- | ----------------------------------------------------------------------------- |
-| `authorize(args, subscriber)`               | Throw to refuse a subscription the event's `authorities` allow                |
+| `authorize(args, subscriber)`               | Throw to refuse a subscription; run again over its life                       |
 | `match(event, args, subscriber)`            | Whether a subscription receives a published event. Without it, every one does |
 | `transform(event, args, subscriber)`        | The event as one subscription receives it                                     |
 | `check(args, cursor)`                       | The events since `cursor`, for an upstream that can replay                    |

@@ -15,6 +15,7 @@ import {
 } from '../../common';
 import { EventNotRegisteredError } from '../../errors';
 import { EVENT_DIALECTS } from '../event-dialect';
+import { hasReauthorization, reauthorizeSubscriber } from '../event-reauthorization';
 import type EventRegistry from '../event.registry';
 import { type EventSubscriptionRecord } from '../subscription/event-subscription.store';
 
@@ -184,13 +185,14 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
     this.state.set('subscriptions', inAudience);
   }
 
-  /** Check an owner whose last check is old against the event's `authorities` again; end a subscription it refuses. */
+  /**
+   * Check an owner whose last check is old against the event's `authorities`, then its `authorize()`, again. A refusal
+   * ends the subscription; a check that could not be made neither delivers nor ends it, and is made again next time.
+   */
   @Stage('reauthorize')
   async reauthorize() {
-    const engine = this.scope.authoritiesEngine;
-    const contextBuilder = this.scope.authoritiesContextBuilder;
-    const authorities = this.state.required.event.getAuthorities();
-    if (!engine || !contextBuilder || !authorities) return;
+    const { event, context } = this.state.required;
+    if (!hasReauthorization(this.scope, event, context.authorize !== undefined)) return;
 
     const { subscriptions } = this.events;
     const { reauthorizeEveryMs } = this.events.config.subscriptions;
@@ -201,18 +203,23 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
         allowed.push(subscription);
         continue;
       }
-      const { subscriber } = subscription;
-      const evaluationContext = contextBuilder.build({}, subscription.arguments);
-      const ownerContext = { ...evaluationContext, user: { ...evaluationContext.user, ...subscriber } };
-      try {
-        const result = await engine.evaluate(authorities, ownerContext);
-        if (result.granted) {
-          await subscriptions?.store.update(subscription.id, { lastAuthorizedAt: now });
-          allowed.push(subscription);
-          continue;
-        }
-      } catch (error) {
-        this.logger.warn(`reauthorize: the authorities of subscription ${subscription.id} could not be checked`, error);
+      const { subscriber, arguments: subscriptionArguments } = subscription;
+      const check = await reauthorizeSubscriber({
+        scope: this.scope,
+        event,
+        subscriber,
+        arguments: subscriptionArguments,
+      });
+      if (check.outcome === 'granted') {
+        await subscriptions?.store.update(subscription.id, { lastAuthorizedAt: now });
+        allowed.push(subscription);
+        continue;
+      }
+      if (check.outcome === 'failed') {
+        this.logger.warn(
+          `reauthorize: the access of subscription ${subscription.id} could not be checked`,
+          check.error,
+        );
         continue;
       }
       const codes = EVENT_DIALECTS[subscription.dialect].errorCodes;
