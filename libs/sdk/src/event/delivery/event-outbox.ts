@@ -157,6 +157,7 @@ export class EventOutbox {
     this.lastSweepAt = now;
     if (!this.options.durable && this.usesTimers) return;
     const keys = await this.options.storage.keys(`${RECORD_PREFIX}*`);
+    const dueAttempts: Promise<void>[] = [];
     for (const key of keys) {
       const id = key.slice(RECORD_PREFIX.length);
       if (this.timers.has(id) || this.inFlight.has(id)) continue;
@@ -165,9 +166,10 @@ export class EventOutbox {
       if (this.usesTimers) {
         this.schedule(id, Math.max(0, claimed.nextAttemptAt - now));
       } else if (claimed.nextAttemptAt <= now) {
-        await this.run(id);
+        dueAttempts.push(this.run(id));
       }
     }
+    await Promise.all(dueAttempts);
   }
 
   /** How many deliveries are stored, waiting for an attempt. */

@@ -390,8 +390,10 @@ class PlaceOrderTool extends ToolContext {
 - The first argument is the `@Event` class, what `event()` returned, or the event's name. With the class or the
   function, `data` has the type of `payloadSchema`.
 - `data` is validated against `payloadSchema` before anything is sent.
-- The result is `{ eventId, matched }`: `matched` is how many subscriptions a delivery was queued for. Deliveries
-  happen after `publish()` returned.
+- The result is `{ eventId, matched }`: `matched` is how many subscriptions a delivery was queued for. In a
+  long-lived process deliveries happen after `publish()` returned. On a serverless, edge or browser runtime the first
+  attempt of each delivery is made before `publish()` resolves (all of them at once, within `delivery.concurrency`),
+  so `publish()` can take as long as the slowest callback, up to `webhook.delivery.timeoutMs`.
 - Outside a context, use `scope.events.publisher`. In a provider, a duty or a worker, inject it with the
   `EVENT_PUBLISHER` token: `this.get(EVENT_PUBLISHER)`.
 - On a server that performs no delivery mode, `publish()` answers `matched: 0`.

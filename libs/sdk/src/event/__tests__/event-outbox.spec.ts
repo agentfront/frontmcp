@@ -499,6 +499,26 @@ describe('EventOutbox', () => {
       await expect(outbox.depth()).resolves.toBe(0);
     });
 
+    it('starts every due retry of a sweep together', async () => {
+      const { outbox, attempt } = await newOutbox();
+      attempt.mockResolvedValueOnce(failed).mockResolvedValueOnce(failed);
+      await outbox.enqueue(delivery({ webhookId: 'msg_a' }));
+      await outbox.enqueue(delivery({ webhookId: 'msg_b' }));
+      const release: Array<() => void> = [];
+      attempt.mockImplementation(
+        () => new Promise<EventDeliveryOutcome>((resolve) => release.push(() => resolve(delivered))),
+      );
+
+      jest.setSystemTime(NOW + OUTBOX_SWEEP_INTERVAL_MS);
+      const sweeping = outbox.sweepIfDue();
+      for (let tick = 0; tick < 5 && release.length < 2; tick++) await jest.advanceTimersByTimeAsync(0);
+
+      expect(release).toHaveLength(2);
+      for (const done of release) done();
+      await sweeping;
+      await expect(outbox.depth()).resolves.toBe(0);
+    });
+
     it('does not run a retry that is not due yet', async () => {
       const slow = { ...settings, backoffMs: 60_000, maxBackoffMs: 60_000 };
       const { outbox, attempt } = await newOutbox({ settings: slow }, [failed]);
