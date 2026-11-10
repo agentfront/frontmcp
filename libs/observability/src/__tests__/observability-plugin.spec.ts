@@ -128,6 +128,9 @@ describe('ObservabilityPlugin', () => {
     it('_eventPublishWill', () => plugin._eventPublishWill(emptyCtx));
     it('_eventPublishDidMatch', () => plugin._eventPublishDidMatch(emptyCtx));
     it('_eventPublishDone', () => plugin._eventPublishDone(emptyCtx));
+    it('_eventPublishHttpWill', () => plugin._eventPublishHttpWill(emptyCtx));
+    it('_eventPublishHttpDidAuthenticate', () => plugin._eventPublishHttpDidAuthenticate(emptyCtx));
+    it('_eventPublishHttpDone', () => plugin._eventPublishHttpDone(emptyCtx));
     it('_eventDeliverWill', () => plugin._eventDeliverWill(emptyCtx));
     it('_eventDeliverDidSend', () => plugin._eventDeliverDidSend(emptyCtx));
     it('_eventDeliverDone', () => plugin._eventDeliverDone(emptyCtx));
@@ -297,6 +300,9 @@ describe('ObservabilityPlugin', () => {
       plugin._eventPublishWill(noop);
       plugin._eventPublishDidMatch(noop);
       plugin._eventPublishDone(noop);
+      plugin._eventPublishHttpWill(noop);
+      plugin._eventPublishHttpDidAuthenticate(noop);
+      plugin._eventPublishHttpDone(noop);
       plugin._eventDeliverWill(noop);
       plugin._eventDeliverDidSend(noop);
       plugin._eventDeliverDone(noop);

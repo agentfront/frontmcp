@@ -5,7 +5,7 @@ import {
   type EventDeliveryMode,
   type EventsExtensionSettings,
 } from '@frontmcp/protocol';
-import { getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
+import { getRuntimeContext, isEntryAvailable, type RootStorage } from '@frontmcp/utils';
 
 import {
   FrontMcpLogger,
@@ -23,6 +23,7 @@ import { type EventMetrics } from './delivery/event-metrics';
 import { type EventOutbox } from './delivery/event-outbox';
 import { EventInstance } from './event.instance';
 import { normalizeEvent } from './event.utils';
+import { type EventPublishEndpoint } from './publish-endpoint/event-publish-endpoint';
 import { type EventSubscriptions } from './subscription/event-subscriptions';
 
 export interface EventRegistryInterface {
@@ -62,6 +63,12 @@ export default class EventRegistry
 
   /** Counts what happens to published events; set once the registry is ready. */
   metrics?: EventMetrics;
+
+  /** The storage of the server's event records, once a part that keeps some opened it. */
+  storage?: RootStorage;
+
+  /** The HTTP publish endpoint, on a server that serves one (`events.publishEndpoint.enabled`). */
+  publishEndpoint?: EventPublishEndpoint;
 
   private readonly eventsByName = new Map<string, EventInstance>();
   private readonly enabledDeliveryModes = new Set<EventDeliveryMode>();

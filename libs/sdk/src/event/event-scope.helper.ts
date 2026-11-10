@@ -24,6 +24,7 @@ import EventPublishFlow from './flows/event-publish.flow';
 import EventSubscribeFlow from './flows/event-subscribe.flow';
 import EventUnsubscribeFlow from './flows/event-unsubscribe.flow';
 import ListEventsFlow from './flows/list-events.flow';
+import { enablePublishEndpoint } from './publish-endpoint/event-publish-endpoint';
 import { EventCallbackVerifier } from './subscription/event-callback-verifier';
 import { createEventSubscriptionStore } from './subscription/event-subscription-store.factory';
 import { EventSubscriptions } from './subscription/event-subscriptions';
@@ -122,6 +123,7 @@ async function enableWebhookDelivery(
   });
   eventRegistry.subscriptions = subscriptions;
   eventRegistry.outbox = outbox;
+  eventRegistry.storage = storage;
   await scope.registryFlows(EventDeliverFlow);
   subscriptions.start();
   outbox.start();
@@ -183,6 +185,16 @@ export async function registerEventCapabilities(
       'Webhook event delivery is off: the server runs in public auth mode, so a subscription would have no owner. ' +
         'Configure an auth mode that signs callers in to serve events.',
     );
+  }
+
+  if (eventsConfig.publishEndpoint.enabled) {
+    await enablePublishEndpoint({
+      scope,
+      eventRegistry,
+      identifiesCallers: canIdentifyCallers(scope),
+      keyPrefix: storeKeyPrefixOf(scope, eventsConfig),
+      logger,
+    });
   }
 
   logger.info(`Event system initialized: ${eventRegistry.getEvents().length} event(s)`);

@@ -169,7 +169,8 @@ describe('events configuration', () => {
     delivery,
     rotationGraceMs: 300_000,
   };
-  const defaults = { compat: 'auto', subscriptions, webhook };
+  const publishEndpoint = { enabled: false, path: '/events/publish' };
+  const defaults = { compat: 'auto', subscriptions, webhook, publishEndpoint };
 
   it('defaults compat to auto, and the subscription and webhook settings', () => {
     expect(eventsConfigSchema.parse({})).toEqual(defaults);

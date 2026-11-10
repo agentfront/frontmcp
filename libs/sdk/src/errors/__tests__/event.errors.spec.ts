@@ -6,6 +6,7 @@ import {
   EventForbiddenError,
   EventNotFoundError,
   EventProtocolError,
+  EventPublishEndpointError,
   EventResourceExhaustedError,
   EventSubscriptionStoreError,
   EventUnsupportedError,
@@ -94,6 +95,14 @@ describe('events protocol errors', () => {
 
     expect(sent.code).toBe(-32012);
     expect(sent.data).toMatchObject({ reason: 'policy denied' });
+  });
+
+  it('report a publish endpoint that cannot be served as an internal error', () => {
+    const error = new EventPublishEndpointError('events.publishEndpoint.path "/mcp" is reserved');
+
+    expect(error).toBeInstanceOf(InternalMcpError);
+    expect(error.code).toBe('EVENT_PUBLISH_ENDPOINT');
+    expect(error.message).toBe('Event publish endpoint: events.publishEndpoint.path "/mcp" is reserved');
   });
 
   it('report a store problem as an internal error', () => {

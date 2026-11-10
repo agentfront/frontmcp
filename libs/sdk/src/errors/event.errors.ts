@@ -110,6 +110,13 @@ export class EventSubscriptionStoreError extends InternalMcpError {
   }
 }
 
+/** The HTTP publish endpoint cannot be served as configured; thrown at startup. */
+export class EventPublishEndpointError extends InternalMcpError {
+  constructor(message: string) {
+    super(`Event publish endpoint: ${message}`, 'EVENT_PUBLISH_ENDPOINT');
+  }
+}
+
 /** Publishing on a server that has no events: none is declared, or `events.enabled` is `false`. */
 export class EventsNotEnabledError extends InternalMcpError {
   /** Says that the server has events turned off or declares none. */

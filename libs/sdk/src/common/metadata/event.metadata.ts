@@ -1,3 +1,4 @@
+import type { AuthoritiesMetadata } from '@frontmcp/auth';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 import { EVENT_DELIVERY_MODES, type EventDeliveryMode } from '@frontmcp/protocol';
 import { entryAvailabilitySchema, type EntryAvailability } from '@frontmcp/utils';
@@ -163,6 +164,24 @@ export interface EventsWebhookOptions {
   rotationGraceMs?: number;
 }
 
+/** The shortest `events.publishEndpoint.secret` accepted. */
+const EVENT_PUBLISH_SECRET_MIN_LENGTH = 32;
+
+/** The HTTP endpoint another service publishes events on, one event per `POST`. */
+export interface EventsPublishEndpointOptions {
+  /** Serve the endpoint. @default false */
+  enabled?: boolean;
+  /** Where it is served, under the scope's route base. @default '/events/publish' */
+  path?: string;
+  /**
+   * The shared secret callers sign each request with, as the callers of a workflow webhook do; at least 32
+   * characters. Without it, a caller presents the bearer credentials of the MCP endpoint.
+   */
+  secret?: string;
+  /** The rule a bearer caller must satisfy, with the request body as its input. Not taken together with `secret`. */
+  authorities?: AuthoritiesMetadata;
+}
+
 /** Server-level events configuration (`@FrontMcp({ events })`). */
 export interface EventsConfigOptions {
   /** `false` turns events off although apps declare them. They are on whenever an app declares one. */
@@ -172,6 +191,7 @@ export interface EventsConfigOptions {
   store?: EventsStoreOptions;
   subscriptions?: EventSubscriptionsOptions;
   webhook?: EventsWebhookOptions;
+  publishEndpoint?: EventsPublishEndpointOptions;
 }
 
 const positiveIntegerSchema = z.number().int().positive();
@@ -229,6 +249,37 @@ const eventsWebhookSchema = z.object({
   rotationGraceMs: positiveIntegerSchema.optional().default(300_000),
 } satisfies RawZodShape<EventsWebhookOptions>);
 
+/** Literal segments only: the endpoint is one path, without parameters, a query or a fragment. */
+const PUBLISH_ENDPOINT_PATH = /^\/[^?#\s*(){}:]*$/;
+
+const eventsPublishEndpointSchema = z
+  .object({
+    enabled: z.boolean().optional().default(false),
+    path: z
+      .string()
+      .regex(PUBLISH_ENDPOINT_PATH, 'events.publishEndpoint.path must start with "/" and hold literal segments only')
+      .optional()
+      .default('/events/publish'),
+    secret: z
+      .string()
+      .min(
+        EVENT_PUBLISH_SECRET_MIN_LENGTH,
+        `events.publishEndpoint.secret must be at least ${EVENT_PUBLISH_SECRET_MIN_LENGTH} characters ` +
+          '(make one with: openssl rand -hex 32)',
+      )
+      .optional(),
+    authorities: z
+      .custom<AuthoritiesMetadata>((rule) => typeof rule === 'string' || (typeof rule === 'object' && rule !== null), {
+        message: 'events.publishEndpoint.authorities must be a profile name, a list of names or a policy',
+      })
+      .optional(),
+  } satisfies RawZodShape<EventsPublishEndpointOptions>)
+  .refine((endpoint) => endpoint.secret === undefined || endpoint.authorities === undefined, {
+    message:
+      'events.publishEndpoint takes secret or authorities, not both: a signed request names no caller for a rule ' +
+      'to check',
+  });
+
 export const eventsConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -238,6 +289,9 @@ export const eventsConfigSchema = z
       .optional()
       .transform((subscriptions) => subscriptions ?? eventSubscriptionsSchema.parse({})),
     webhook: eventsWebhookSchema.optional().transform((webhook) => webhook ?? eventsWebhookSchema.parse({})),
+    publishEndpoint: eventsPublishEndpointSchema
+      .optional()
+      .transform((publishEndpoint) => publishEndpoint ?? eventsPublishEndpointSchema.parse({})),
   } satisfies RawZodShape<EventsConfigOptions>)
   .refine((config) => !config.subscriptions.allowNoExpiry || Boolean(config.store?.redis ?? config.store?.sqlite), {
     message: 'events.subscriptions.allowNoExpiry needs events.store.redis or events.store.sqlite',

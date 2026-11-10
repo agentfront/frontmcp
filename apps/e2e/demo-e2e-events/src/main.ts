@@ -7,6 +7,14 @@ const idpProviderUrl = process.env['IDP_PROVIDER_URL'] || 'https://sample-app.fr
 const expectedAudience = process.env['IDP_EXPECTED_AUDIENCE'] || idpProviderUrl;
 const sqlitePath = process.env['EVENTS_SQLITE_PATH'];
 const backoffMs = parseInt(process.env['EVENTS_BACKOFF_MS'] ?? '100', 10);
+const publishSecret = process.env['EVENTS_PUBLISH_SECRET'];
+const publishAsAdmin = process.env['EVENTS_PUBLISH_BEARER'] === 'admin';
+
+/** The HTTP publish endpoint a test asks for: signed requests, bearer callers with the admin role, or none. */
+function publishEndpoint() {
+  if (publishSecret) return { enabled: true, secret: publishSecret };
+  return publishAsAdmin ? { enabled: true, authorities: 'admin' } : undefined;
+}
 
 @FrontMcp({
   info: { name: 'Demo E2E Events', version: '0.1.0' },
@@ -30,6 +38,7 @@ const backoffMs = parseInt(process.env['EVENTS_BACKOFF_MS'] ?? '100', 10);
     store: sqlitePath ? { sqlite: { path: sqlitePath } } : undefined,
     // The receiver of the tests listens on 127.0.0.1 over http, which only this test option accepts
     webhook: { unsafeAllowLocalCallbacks: true, delivery: { backoffMs } },
+    publishEndpoint: publishEndpoint(),
   },
 })
 export default class Server {}
