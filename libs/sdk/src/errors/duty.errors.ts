@@ -11,6 +11,27 @@ export class DutyNameConflictError extends InternalMcpError {
   }
 }
 
+/** Thrown at startup when a duty's cron expression can't be read. */
+export class InvalidDutyCronError extends InternalMcpError {
+  constructor(dutyName: string, expression: string, reason: string) {
+    super(
+      `Duty "${dutyName}" has a cron expression that can't be read ("${expression}"): ${reason}`,
+      'INVALID_DUTY_CRON',
+    );
+  }
+}
+
+/** Thrown at startup when something with `scope: 'cluster'` has no Redis to keep its one lease for every machine in. */
+export class ClusterScopeNeedsRedisError extends InternalMcpError {
+  constructor(subject: string) {
+    super(
+      `${subject} has scope 'cluster', which keeps one lease for every machine in Redis, and none is configured: ` +
+        "set a top-level redis (@FrontMcp({ redis }) or createContainer({ redis })), or use scope 'machine'",
+      'CLUSTER_SCOPE_NEEDS_REDIS',
+    );
+  }
+}
+
 /** Thrown when another user could write to the folder that holds the duty lease file, or to one above it. */
 export class UnsafeDutyStoreError extends InternalMcpError {
   constructor(directory: string, mode: number, ownerUid?: number) {

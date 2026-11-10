@@ -31,7 +31,7 @@ import {
   type ToolEntry,
   type ToolMetadata,
 } from '../../common';
-import { dutyMetadataOf } from '../../common/metadata/duty.metadata';
+import { dutyMetadataOf } from '../../common/metadata/duty.resolved';
 import { LazyAppConfigurationError, LazyAppLoadError } from '../../errors/lazy-app.errors';
 import { UnenforcedMetadataError } from '../../errors/plugin.errors';
 import { isManifestMode } from '../../front-mcp/manifest-mode.flag';

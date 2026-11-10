@@ -780,19 +780,22 @@ A hook declared on a `@Tool`, `@Resource` or `@Prompt` class runs only for that 
 
 ## 16. @Duty
 
-**Purpose:** Marks a provider class whose `run()` the server calls every `every`, in one process of the machine or
-project: the one that holds the duty's lease. Another process takes it over when the holder dies.
+**Purpose:** Marks a provider class whose `run()` the server calls every `every`, or at the times of a `cron`
+expression, in one process of the machine, the project or the cluster: the one that holds the duty's lease. Another
+process takes it over when the holder dies.
 
 **When to use:** When recurring work must not run in every copy of the server (see `create-duty`).
 
 **Key fields:**
 
-| Field      | Description                                                                               |
-| ---------- | ----------------------------------------------------------------------------------------- |
-| `name?`    | Lease name in the server; defaults to the class name                                      |
-| `every`    | Milliseconds, or a duration: `'500ms'`, `'30s'`, `'5m'`, `'1h'`, `'1d'`                   |
-| `scope`    | `'machine'` (one holder per machine) or `'workspace'` (one per project root)              |
-| `leaseMs?` | How soon another process takes over from a dead holder; default three intervals, 3 s–60 s |
+| Field       | Description                                                                                                                                                 |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name?`     | Lease name in the server; defaults to the class name                                                                                                        |
+| `every`     | Milliseconds, or a duration: `'500ms'`, `'30s'`, `'5m'`, `'1h'`, `'1d'`. One of `every` or `cron`                                                           |
+| `cron`      | A cron expression instead of `every`: `'0 9 * * 1-5'`, or six fields with seconds first                                                                     |
+| `timezone?` | The IANA time zone `cron` is read in; default `'UTC'`                                                                                                       |
+| `scope`     | `'machine'` (one holder per machine), `'workspace'` (one per project root) or `'cluster'` (one among the machines on the server's Redis, which it requires) |
+| `leaseMs?`  | How soon another process takes over from a dead holder; default three intervals, 3 s–60 s, or 60 s with `cron`                                              |
 
 ```typescript
 import { Duty, type DutyRunContext } from '@frontmcp/sdk';
@@ -914,7 +917,7 @@ class OrderCreated extends EventContext {}
 | Exposing data to the LLM    | Use `@Resource` for fixed URIs, `@ResourceTemplate` for parameterized URIs                                                                                                  | Using `@Tool` to return static data that never changes                                                                                        | Resources are the MCP-standard way to expose readable data; tools are for actions with side effects or dynamic computation                                 |
 | Cross-cutting concerns      | Create a `@Plugin` with providers and context extensions                                                                                                                    | Adding logging/caching logic directly inside every tool's `execute()` method                                                                  | Plugins centralize shared behavior, reduce duplication, and can be reused across servers                                                                   |
 | Background processing       | Use `@Job` for work a client starts, with retries and progress                                                                                                              | Using `setTimeout` or manual polling inside a tool                                                                                            | Jobs track attempts and progress, and are visible in server diagnostics                                                                                    |
-| Recurring work              | Use a `@Duty({ every, scope })` provider                                                                                                                                    | `setInterval()` in a provider, which every copy of the server runs                                                                            | A duty runs in one process of the machine or project, and another takes over when it exits                                                                 |
+| Recurring work              | Use a `@Duty({ every, scope })` or `@Duty({ cron, scope })` provider                                                                                                        | `setInterval()` in a provider, which every copy of the server runs                                                                            | A duty runs in one process of the machine, project or cluster, and another takes over when it exits                                                        |
 | Multi-step orchestration    | Use `@Workflow` with ordered steps referencing `@Job` classes                                                                                                               | Chaining multiple tool calls manually from the LLM                                                                                            | Workflows provide built-in ordering, error handling, and rollback semantics                                                                                |
 | Injecting services          | Decorate a service class with `@Provider({ name, scope })` and inject it via `this.get(MyClass)`, or use `AsyncProvider({ provide, useFactory })` for token-based factories | Passing `useFactory`/`useClass` directly to `@Provider` (the schema is strict and rejects them), or importing singletons / using global state | DI providers support testability, lifecycle management, and per-scope isolation                                                                            |
 

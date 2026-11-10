@@ -15,17 +15,28 @@ import {
   FrontMcpLogger,
   isRedisProvider,
   redisOptionsSchema,
+  type DutyCron,
   type DutyInterface,
+  type DutyRunContext,
+  type DutyScope,
+  type FrontMcpConfigType,
   type OnBootstrap,
   type OnReady,
   type OnShutdown,
   type ResolvedDutyMetadata,
 } from '../common';
 import { findProjectRoot } from '../common/types/options/sqlite/resolve';
-import { DutyNameConflictError, UnsafeDutyStoreError } from '../errors/duty.errors';
+import {
+  ClusterScopeNeedsRedisError,
+  DutyNameConflictError,
+  InvalidDutyCronError,
+  UnsafeDutyStoreError,
+} from '../errors/duty.errors';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
+import { isManifestMode } from '../front-mcp/manifest-mode.flag';
 import type ProviderRegistry from '../provider/provider.registry';
 import { findReplaceableDirectory } from '../server/security/replaceable-directory';
+import { loadCronSchedule, type CronSchedule } from './cron-schedule';
 import { DutyRunner } from './duty.runner';
 
 type DutyInstance = DutyInterface & Partial<OnBootstrap & OnReady & OnShutdown>;
@@ -74,15 +85,18 @@ export async function startDuties(providers: ProviderRegistry): Promise<void> {
   }
 }
 
-/** Where the leases live: the server's Redis when it has one, otherwise a SQLite file every process on the machine opens. */
-export function dutyStorageConfig(redis: unknown): StorageConfig {
+/**
+ * Where the leases live: the server's Redis when it has one, otherwise a SQLite file every process on the machine
+ * opens. In Redis a lease is per hostname, except a `'cluster'` duty's, which every machine shares.
+ */
+export function dutyStorageConfig(redis: unknown, scope: DutyScope = 'machine'): StorageConfig {
   const parsed = redis === undefined ? undefined : redisOptionsSchema.safeParse(redis);
   if (parsed?.success && isRedisProvider(parsed.data)) {
     const { host, port, password, db, tls } = parsed.data;
     return {
       type: 'redis',
       redis: { config: { host, port, password, db, tls } },
-      prefix: `frontmcp:duty:${nodeOs().hostname()}:`,
+      prefix: scope === 'cluster' ? 'frontmcp:cluster:duty:' : `frontmcp:duty:${nodeOs().hostname()}:`,
       fallback: 'error',
     };
   }
@@ -95,10 +109,24 @@ export function dutyStorageConfig(redis: unknown): StorageConfig {
   };
 }
 
+/** A duty needs a long-lived process: not a serverless function, the edge or a browser. */
+function isLongLivedProcess(): boolean {
+  const { runtime, deployment } = getRuntimeContext();
+  return deployment !== 'serverless' && runtime !== 'edge' && runtime !== 'browser';
+}
+
+/**
+ * A server starts its duties, unless a build boots it only to read it; a container starts them only when asked to
+ * (`runDuties`), which it states in its config.
+ */
+function startsDuties(config: FrontMcpConfigType): boolean {
+  return !isManifestMode(config) && (config as { runDuties?: boolean }).runDuties !== false;
+}
+
 /** One lease per server name and duty; a workspace duty's is also per project root. */
 function leaseKey({ name, scope }: ResolvedDutyMetadata, serverName: string): string {
   const key = [serverName, name].map(encodeURIComponent).join(':');
-  if (scope === 'machine') return key;
+  if (scope !== 'workspace') return key;
   const cwd = process.cwd();
   return `${key}:${sha256Hex(findProjectRoot(cwd) ?? cwd)}`;
 }
@@ -122,6 +150,7 @@ async function prepareLeaseFile(file: string): Promise<void> {
 export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
   private started?: Promise<StartedDuty | undefined>;
   private claimedKey?: string;
+  private cron?: Promise<CronSchedule>;
 
   constructor(
     private readonly duty: DutyInstance,
@@ -130,6 +159,7 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
   ) {}
 
   async onBootstrap(): Promise<void> {
+    await this.refuseWhatCannotRun();
     await this.duty.onBootstrap?.();
   }
 
@@ -149,30 +179,50 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
     await this.duty.onShutdown?.();
   }
 
+  /**
+   * Fail the startup for what no process could run: a cron expression that can't be read, and a cluster duty where
+   * duties start without a Redis to keep its lease in.
+   */
+  private async refuseWhatCannotRun(): Promise<void> {
+    const { name, cron, scope } = this.metadata;
+    if (cron) await this.cronSchedule(cron);
+    if (scope !== 'cluster' || !isLongLivedProcess()) return;
+    const config = this.providers.get(FrontMcpConfig);
+    if (startsDuties(config) && dutyStorageConfig(config.redis, scope).type !== 'redis') {
+      throw new ClusterScopeNeedsRedisError(`Duty "${name}"`);
+    }
+  }
+
+  /** The duty's cron, read once. */
+  private cronSchedule(cron: DutyCron): Promise<CronSchedule> {
+    this.cron ??= loadCronSchedule(cron).catch((error: Error) => {
+      throw new InvalidDutyCronError(this.metadata.name, cron.expression, error.message);
+    });
+    return this.cron;
+  }
+
   private async startRunner(): Promise<StartedDuty | undefined> {
-    const { name, everyMs, leaseMs } = this.metadata;
+    const { metadata } = this;
+    const { name, leaseMs, scope } = metadata;
     const logger = this.providers.get(FrontMcpLogger);
-    const { runtime, deployment } = getRuntimeContext();
-    if (deployment === 'serverless' || runtime === 'edge' || runtime === 'browser') {
+    if (!isLongLivedProcess()) {
       logger.warn(`Duty "${name}" does not run in a serverless or edge deployment: it needs a long-lived process`);
       return undefined;
     }
     const config = this.providers.get(FrontMcpConfig);
     const serverName = config.info?.name ?? 'frontmcp';
-    const key = leaseKey(this.metadata, serverName);
+    const key = leaseKey(metadata, serverName);
     this.claim(key, serverName);
-    const storageConfig = dutyStorageConfig(config.redis);
+    const storageConfig = dutyStorageConfig(config.redis, scope);
     if (storageConfig.sqlite) await prepareLeaseFile(storageConfig.sqlite.path);
     const storage = await createStorage(storageConfig);
-    const runner = new DutyRunner({
-      name,
-      everyMs,
-      leaseMs,
-      storage,
-      logger,
-      key,
-      run: (context) => this.duty.run(context),
-    });
+    const run = (context: DutyRunContext) => this.duty.run(context);
+    const common = { name, key, leaseMs, storage, logger, run };
+    const runner = new DutyRunner(
+      metadata.cron
+        ? { ...common, cron: await this.cronSchedule(metadata.cron) }
+        : { ...common, everyMs: metadata.everyMs },
+    );
     await runner.start();
     return { runner, storage };
   }

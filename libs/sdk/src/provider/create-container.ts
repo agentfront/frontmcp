@@ -8,11 +8,13 @@ import {
   FrontMcpLogger,
   lifecycleOptionsSchema,
   loggingOptionsSchema,
+  redisOptionsSchema,
   type AppType,
   type LifecycleOptionsInput,
   type LoggingOptionsInput,
   type ProviderType,
   type RawZodShape,
+  type RedisOptionsInput,
 } from '../common';
 import { ProviderNotAvailableError } from '../errors';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
@@ -30,6 +32,8 @@ export interface CreateContainerOptions {
   runDuties?: boolean;
   /** The server's name, as in `@FrontMcp({ info })`: duties share their leases with that server's. Needed with `runDuties`. */
   info?: { name: string };
+  /** The server's Redis, as in `@FrontMcp({ redis })`: duties keep their leases there, and `scope: 'cluster'` needs it. */
+  redis?: RedisOptionsInput;
 }
 
 /** The providers of a server, built without its tools, resources, prompts, flows or transport. */
@@ -50,6 +54,7 @@ const createContainerOptionsSchema = z
     lifecycle: lifecycleOptionsSchema.optional(),
     runDuties: z.boolean({ message: 'runDuties must be true or false' }).optional(),
     info: z.object({ name: z.string().min(1, 'info.name must not be empty') }).optional(),
+    redis: redisOptionsSchema.optional(),
   } satisfies RawZodShape<CreateContainerOptions>)
   .refine((options) => !options.runDuties || options.info !== undefined, {
     message: 'runDuties needs info.name: duties share their leases by server name',
@@ -62,8 +67,9 @@ const createContainerOptionsSchema = z
  */
 export async function createContainer(options: CreateContainerOptions): Promise<FrontMcpContainer> {
   const { providers, apps, logging, lifecycle, runDuties } = createContainerOptionsSchema.parse(options);
+  const config = { ...options, logging, lifecycle, runDuties: runDuties === true };
   const root = new ProviderRegistry(
-    [{ name: 'frontmcp:config', provide: FrontMcpConfig, useValue: { ...options, logging, lifecycle } }],
+    [{ name: 'frontmcp:config', provide: FrontMcpConfig, useValue: config }],
     undefined,
     { shutdownHookTimeoutMs: lifecycle?.shutdownHookTimeoutMs },
   );

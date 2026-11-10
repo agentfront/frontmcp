@@ -57,14 +57,40 @@ describe('@Duty', () => {
     expect(dutyMetadataOf(decorate({ every: '1h', scope: 'machine', leaseMs: 5_000 }))?.leaseMs).toBe(5_000);
   });
 
+  it('reads cron as an alternative to every, in UTC with a 60 s lease by default', () => {
+    expect(dutyMetadataOf(decorate({ cron: ' 0 9 * * 1-5 ', scope: 'machine' }))).toEqual({
+      name: 'SweepDuty',
+      cron: { expression: '0 9 * * 1-5', timezone: 'UTC' },
+      scope: 'machine',
+      leaseMs: 60_000,
+    });
+  });
+
+  it('keeps the time zone and an explicit leaseMs of a cron duty', () => {
+    const metadata = dutyMetadataOf(
+      decorate({ name: 'report', cron: '0 9 * * 1-5', timezone: 'Europe/Berlin', scope: 'workspace', leaseMs: 5_000 }),
+    );
+    expect(metadata).toEqual({
+      name: 'report',
+      cron: { expression: '0 9 * * 1-5', timezone: 'Europe/Berlin' },
+      scope: 'workspace',
+      leaseMs: 5_000,
+    });
+  });
+
+  it.each(['every', 'cron'] as const)("accepts scope: 'cluster' with %s", (cadence) => {
+    const metadata = cadence === 'every' ? { every: '1m' } : { cron: '* * * * *' };
+    expect(dutyMetadataOf(decorate({ ...metadata, scope: 'cluster' }))?.scope).toBe('cluster');
+  });
+
   it.each([
     [{ every: '5x', scope: 'machine' }, 'every', 'every must be milliseconds or a duration such as "30s", "5m", "1h"'],
     [{ every: 0, scope: 'machine' }, 'every', 'every must be greater than 0'],
     [{ every: -5, scope: 'machine' }, 'every', 'every must be greater than 0'],
     [{ every: 1.5, scope: 'machine' }, 'every', 'every must be a whole number of milliseconds'],
     [{ every: '30d', scope: 'machine' }, 'every', 'every must be at most 2147483647 ms (about 24.8 days)'],
-    [{ every: '1m', scope: 'galaxy' }, 'scope', "scope must be 'machine' or 'workspace'"],
-    [{ every: '1m' }, 'scope', "scope must be 'machine' or 'workspace'"],
+    [{ every: '1m', scope: 'galaxy' }, 'scope', "scope must be 'machine', 'workspace' or 'cluster'"],
+    [{ every: '1m' }, 'scope', "scope must be 'machine', 'workspace' or 'cluster'"],
     [
       { every: '1m', scope: 'machine', leaseMs: 500 },
       'leaseMs',
@@ -72,7 +98,27 @@ describe('@Duty', () => {
     ],
     [{ every: '1m', scope: 'machine', leaseMs: 1_000.5 }, 'leaseMs', 'leaseMs must be a whole number of milliseconds'],
     [{ every: '1m', scope: 'machine', name: '' }, 'name', 'name must not be empty'],
-    [{ every: '1m', scope: 'machine', cron: '* * * * *' }, '', 'Unrecognized key: "cron"'],
+    [{ every: '1m', scope: 'machine', cron: '* * * * *' }, 'cron', 'set either every or cron, not both'],
+    [{ scope: 'machine' }, 'every', 'a duty needs every (an interval) or cron (a cron expression)'],
+    [{ cron: '', scope: 'machine' }, 'cron', 'cron must be a cron expression such as "0 9 * * 1-5"'],
+    [{ cron: '   ', scope: 'machine' }, 'cron', 'cron must be a cron expression such as "0 9 * * 1-5"'],
+    [{ cron: 5, scope: 'machine' }, 'cron', 'cron must be a cron expression such as "0 9 * * 1-5"'],
+    [
+      { cron: '0 9 * * *', timezone: 'Mars/Olympus', scope: 'machine' },
+      'timezone',
+      'timezone must be an IANA time zone such as "Europe/Berlin"',
+    ],
+    [
+      { cron: '0 9 * * *', timezone: 60, scope: 'machine' },
+      'timezone',
+      'timezone must be an IANA time zone such as "Europe/Berlin"',
+    ],
+    [
+      { every: '1m', timezone: 'Europe/Berlin', scope: 'machine' },
+      'timezone',
+      'timezone applies to cron; a duty with every has none',
+    ],
+    [{ every: '1m', scope: 'machine', jitter: 5 }, '', 'Unrecognized key: "jitter"'],
   ])('refuses %j with InvalidDecoratorMetadataError on %p', (metadata, field, message) => {
     const error = decorationError(metadata);
     expect(error).toBeInstanceOf(InvalidDecoratorMetadataError);
