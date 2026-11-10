@@ -427,6 +427,24 @@ export {
   verifyOrParseData,
 } from './hmac-signing';
 
+// Re-export Standard Webhooks signing and verification
+export {
+  WEBHOOK_ID_HEADER,
+  WEBHOOK_TIMESTAMP_HEADER,
+  WEBHOOK_SIGNATURE_HEADER,
+  WEBHOOK_SIGNATURE_TOLERANCE_SECONDS,
+  signingKeyOf,
+  isStandardWebhookSecret,
+  generateStandardWebhookSecret,
+  generateWebhookMessageId,
+  signWebhookMessage,
+  webhookSignatureHeaders,
+  verifyWebhookSignature,
+  type WebhookMessage,
+  type SignedWebhookMessage,
+  type WebhookSignatureCheck,
+} from './standard-webhooks';
+
 // Re-export unified key persistence utilities (recommended)
 export {
   // Types

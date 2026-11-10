@@ -44,9 +44,35 @@ export { sanitizeToJson, inferMimeType, findNonFiniteNumber, findDroppedKeys } f
 export { validateBaseUrl, buildSetCookie, parseCookies, getCookie, isLocalhost, isSecureRequest } from './http';
 export type { CookieOptions, SecureDetectionRequest } from './http';
 
-// Network utilities (IP-literal classification for SSRF guards, redirect detection)
-export { classifyIpAddress, expandIpv6, extractEmbeddedIpv4, parseIpv4, isRedirectResponse } from './net';
-export type { IpAddressClassification, IpAddressRange, SpecialPurposeIpRange, RedirectCandidate } from './net';
+// Network utilities (IP-literal classification for SSRF guards, redirect detection, SSRF-hardened outbound requests)
+export {
+  classifyIpAddress,
+  expandIpv6,
+  extractEmbeddedIpv4,
+  isGloballyRoutableIp,
+  parseIpv4,
+  isRedirectResponse,
+  validateOutboundUrl,
+  sendOutboundRequest,
+  outboundFailureCategory,
+  OUTBOUND_TIMEOUT_MS,
+  OUTBOUND_MAX_REQUEST_BYTES,
+} from './net';
+export type {
+  IpAddressClassification,
+  IpAddressRange,
+  SpecialPurposeIpRange,
+  RedirectCandidate,
+  OutboundTargetOptions,
+  OutboundUrlCheck,
+  OutboundUrlProblem,
+  OutboundRequest,
+  OutboundAnswer,
+  OutboundFailure,
+  OutboundFailureReason,
+  OutboundFailureCategory,
+  OutboundResult,
+} from './net';
 
 // File system utilities (Node.js only)
 export {
@@ -147,7 +173,7 @@ export { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJson
 export { brandClass, isBrandedInstance } from './class-brand';
 
 // Serialization utilities
-export { safeStringify } from './serialization';
+export { safeStringify, canonicalJson } from './serialization';
 
 // Crypto utilities (cross-platform: Node.js and browser)
 // Includes: core crypto, encrypted blobs, PKCE (RFC 7636), secret persistence
@@ -229,6 +255,21 @@ export {
   verifyData,
   isSignedData,
   verifyOrParseData,
+  // Standard Webhooks signing and verification
+  WEBHOOK_ID_HEADER,
+  WEBHOOK_TIMESTAMP_HEADER,
+  WEBHOOK_SIGNATURE_HEADER,
+  WEBHOOK_SIGNATURE_TOLERANCE_SECONDS,
+  signingKeyOf,
+  isStandardWebhookSecret,
+  generateStandardWebhookSecret,
+  generateWebhookMessageId,
+  signWebhookMessage,
+  webhookSignatureHeaders,
+  verifyWebhookSignature,
+  type WebhookMessage,
+  type SignedWebhookMessage,
+  type WebhookSignatureCheck,
   // Unified key persistence (recommended)
   type BaseKeyData,
   type SecretKeyData,
