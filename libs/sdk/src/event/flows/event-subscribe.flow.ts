@@ -289,7 +289,9 @@ export default class EventSubscribeFlow extends FlowBase<typeof name> {
   @Stage('upsertSubscription')
   async upsertSubscription() {
     const { url, secret } = this.input.request.params.delivery;
-    const { owner, event, dialect, subscriptionId, argumentsKey, verifiedAt, expiresAt } = this.state.required;
+    const { owner, event, dialect, subscriptionId, argumentsKey, verifiedAt } = this.state.required;
+    // A grant without expiry is null, which the required view would refuse
+    const expiresAt = this.state.get('expiresAt') ?? null;
     const existing = this.state.existing;
     const replay = existing ? await this.currentReplayOf(subscriptionId) : undefined;
     const now = Date.now();

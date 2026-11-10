@@ -307,6 +307,16 @@ describe('events:subscribe', () => {
       await expect(grantedMs({ arguments: { status: 'ttl-none' }, ttlMs: null })).resolves.toBe(24 * HOUR_MS);
     });
 
+    it('is none when the subscriptions grant no expiry, and is stored without one', async () => {
+      const subscriptions = scope.events?.subscriptions as EventSubscriptions;
+      jest.spyOn(subscriptions, 'grantExpiry').mockReturnValue(null);
+
+      const result = await subscribe(scope, { arguments: { status: 'ttl-endless' }, ttlMs: null });
+
+      expect(result.refreshBefore).toBeNull();
+      await expect(subscriptions.store.get(result.id as string)).resolves.toMatchObject({ expiresAt: null });
+    });
+
     it("follows the event's own bounds", async () => {
       await expect(grantedMs({ name: 'short.lived' })).resolves.toBe(120_000);
       await expect(grantedMs({ name: 'short.lived', ttlMs: HOUR_MS })).resolves.toBe(600_000);

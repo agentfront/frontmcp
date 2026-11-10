@@ -131,6 +131,7 @@ async function enableWebhookDelivery(
     allowLocal: webhook.unsafeAllowLocalCallbacks,
     cacheTtlMs: webhook.verification.cacheTtlMs,
     timeoutMs: webhook.verification.timeoutMs,
+    maxAttemptsPerHost: webhook.verification.maxAttemptsPerHost,
   });
   const subscriptions = new EventSubscriptions({
     events: eventRegistry,

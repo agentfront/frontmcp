@@ -25,7 +25,7 @@ const configDefaults = {
     enabled: true,
     allowedCallbacks: [],
     unsafeAllowLocalCallbacks: false,
-    verification: { cacheTtlMs: 3_600_000, timeoutMs: 10_000 },
+    verification: { cacheTtlMs: 3_600_000, timeoutMs: 10_000, maxAttemptsPerHost: 10 },
     delivery: {
       timeoutMs: 10_000,
       maxAttempts: 5,

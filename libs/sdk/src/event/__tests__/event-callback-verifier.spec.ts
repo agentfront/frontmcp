@@ -267,6 +267,19 @@ describe('EventCallbackVerifier', () => {
     await expect(attemptOnPort(9999)).resolves.toEqual({ outcome: 'limited', max: VERIFICATION_ATTEMPTS_PER_HOST });
   });
 
+  it('limits a host to the attempts maxAttemptsPerHost allows instead', async () => {
+    jest.useFakeTimers({ now: 1_800_000_000_000 });
+    const { verifier, sent } = verifierWith(async () => answer(500), { maxAttemptsPerHost: 2 });
+    const attempt = (index: number) => verifier.verify(verification({ principalKey: `principal:user-${index}` }));
+
+    await expect(attempt(1)).resolves.toMatchObject({ outcome: 'failed' });
+    await expect(attempt(2)).resolves.toMatchObject({ outcome: 'failed' });
+    const sentBeforeLimit = sent.mock.calls.length;
+
+    await expect(attempt(3)).resolves.toEqual({ outcome: 'limited', max: 2 });
+    expect(sent).toHaveBeenCalledTimes(sentBeforeLimit);
+  });
+
   it('passes the test option for local callbacks to every request', async () => {
     const { verifier, sent } = verifierWith(echoingReceiver, { allowLocal: true });
 

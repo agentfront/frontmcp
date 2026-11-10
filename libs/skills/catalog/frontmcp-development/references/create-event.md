@@ -1243,14 +1243,15 @@ The three lifetimes must satisfy `minTtlMs <= defaultTtlMs <= maxTtlMs` after de
 
 `events.webhook`:
 
-| Field                        | Type       | Default              | Notes                                                                       |
-| ---------------------------- | ---------- | -------------------- | --------------------------------------------------------------------------- |
-| `enabled?`                   | `boolean`  | `true`               | `false` turns webhook delivery off                                          |
-| `allowedCallbacks?`          | `string[]` | `[]`                 | Callback URL prefixes accepted without a verification request               |
-| `unsafeAllowLocalCallbacks?` | `boolean`  | `false`              | Test-only: also accepts `http:` callbacks and loopback or private addresses |
-| `verification.cacheTtlMs?`   | `number`   | `3600000` (1 hour)   | How long a callback a caller proved stays verified for that caller          |
-| `verification.timeoutMs?`    | `number`   | `10000`              | How long the callback has to answer the verification request                |
-| `rotationGraceMs?`           | `number`   | `300000` (5 minutes) | How long deliveries are also signed with a replaced secret                  |
+| Field                              | Type       | Default              | Notes                                                                              |
+| ---------------------------------- | ---------- | -------------------- | ---------------------------------------------------------------------------------- |
+| `enabled?`                         | `boolean`  | `true`               | `false` turns webhook delivery off                                                 |
+| `allowedCallbacks?`                | `string[]` | `[]`                 | Callback URL prefixes accepted without a verification request                      |
+| `unsafeAllowLocalCallbacks?`       | `boolean`  | `false`              | Test-only: also accepts `http:` callbacks and loopback or private addresses        |
+| `verification.cacheTtlMs?`         | `number`   | `3600000` (1 hour)   | How long a callback a caller proved stays verified for that caller                 |
+| `verification.timeoutMs?`          | `number`   | `10000`              | How long the callback has to answer the verification request                       |
+| `verification.maxAttemptsPerHost?` | `number`   | `10`                 | Verification requests one callback host may receive in a minute, whatever its port |
+| `rotationGraceMs?`                 | `number`   | `300000` (5 minutes) | How long deliveries are also signed with a replaced secret                         |
 
 `events.webhook.delivery`:
 
@@ -1440,6 +1441,8 @@ Each example is a runnable app with a README and a smoke test in the FrontMCP re
 
 - [MCP Events, SEP-3415](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415)
 - [Standard Webhooks](https://www.standardwebhooks.com): the signature scheme of deliveries
+- [Conformance matrix](https://github.com/agentfront/frontmcp/blob/main/apps/e2e/demo-e2e-events/CONFORMANCE.md): each
+  requirement of the SEP-3415 conformance suite, the test that covers it, and the known deviations
 - Related skills: `decorators-guide`, `create-plugin-hooks` (`ListEventsHook`, `EventSubscribeHook`,
   `EventUnsubscribeHook`, `EventPublishHook`, `EventPublishHttpHook`, `EventDeliverHook`, `EventPollHook`,
   `EventStreamHook`), `frontmcp-authorities`, `frontmcp-channels` (`app-event` sources), `create-job`, `create-duty`,
