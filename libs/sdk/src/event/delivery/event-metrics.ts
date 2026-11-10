@@ -1,5 +1,5 @@
-import type { MetricsOptionsInterface } from '../../common/types/options/metrics';
 import { loadCounterFactory } from '../../answer/answer-meter';
+import type { MetricsOptionsInterface } from '../../common/types/options/metrics';
 
 /** The `/metrics` counters of event publishing and delivery, labelled `event`. */
 export const EVENT_COUNTERS = {
@@ -36,7 +36,6 @@ type CounterFactory = (
 export interface EventMetrics {
   count(counter: EventCounter, eventName: string, by?: number): void;
 }
-
 
 /** The event counters of a server: recorded when `/metrics` is on, otherwise ignored. */
 export function createEventMetrics(

@@ -66,6 +66,7 @@ const plan = {
   ],
   execute: ['renewLease', 'readEvents'],
   post: ['buildResult'],
+  finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
 
 declare global {
@@ -183,6 +184,12 @@ export default class EventPollFlow extends FlowBase<typeof name> {
     this.respond(this.state.required.result);
   }
 
+  /** Runs however the poll ended, answered or refused, so a hook on it sees every poll. */
+  @Stage('finalize')
+  async finalize() {
+    this.logger.verbose('finalize');
+  }
+
   /** The most occurrences this poll returns: the request's `maxEvents`, within the server's. */
   private get limit(): number {
     const serverLimit = this.events.config.poll.maxEvents;
@@ -229,6 +236,12 @@ export default class EventPollFlow extends FlowBase<typeof name> {
       limits,
     );
 
+    if (checked.events.length > this.limit) {
+      throw new InvalidEventPublishError(
+        event.name,
+        `check() returned ${checked.events.length} events, more than limits.maxEvents (${this.limit})`,
+      );
+    }
     const events: EventOccurrence[] = [];
     let skippedOldEvents = false;
     for (const item of checked.events) {

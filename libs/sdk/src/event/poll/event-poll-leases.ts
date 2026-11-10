@@ -54,6 +54,8 @@ export function pollLeaseMs(nextPollMs: number): number {
  */
 export class EventPollLeases {
   private readonly leases = new Map<string, PollLease>();
+  /** The leases whose `onSubscribe` is running, so concurrent first polls wait for it instead of calling it again. */
+  private readonly starting = new Map<string, Promise<void>>();
   private readonly logger: FrontMcpLogger;
   private sweepTimer?: ReturnType<typeof setInterval>;
   private lastSweepAt = 0;
@@ -67,10 +69,9 @@ export class EventPollLeases {
     return this.leases.size;
   }
 
-  /** Whether a new lease would exceed what one owner, or the process, may hold. */
+  /** Whether a new lease would exceed what one owner (the anonymous callers count as one), or the process, may hold. */
   isFull(principalKey: string | undefined): boolean {
     if (this.leases.size >= MAX_POLL_LEASES) return true;
-    if (principalKey === undefined) return false;
     let held = 0;
     for (const lease of this.leases.values()) {
       if (lease.principalKey === principalKey) held += 1;
@@ -78,9 +79,9 @@ export class EventPollLeases {
     return held >= this.options.maxPerPrincipal;
   }
 
-  /** Whether the subscription already has a lease. */
+  /** Whether the subscription already has a lease, or is getting one. */
   has(subscriptionId: string): boolean {
-    return this.leases.has(subscriptionId);
+    return this.leases.has(subscriptionId) || this.starting.has(subscriptionId);
   }
 
   /** Renew the lease of a poll, or start it: a new lease calls the event's `onSubscribe` first. */
@@ -93,6 +94,16 @@ export class EventPollLeases {
       lease.expiresAt = now + leaseMs;
       return;
     }
+    const pending = this.starting.get(subscription.id);
+    if (pending) return pending;
+    const start = this.subscribe(request, now).finally(() => this.starting.delete(subscription.id));
+    this.starting.set(subscription.id, start);
+    return start;
+  }
+
+  /** Call the event's `onSubscribe`, then keep the lease. */
+  private async subscribe(request: PollLeaseRequest, now: number): Promise<void> {
+    const { subscription, context, leaseMs } = request;
     await context.onSubscribe?.(request.arguments, subscription);
     this.leases.set(subscription.id, {
       subscription,

@@ -142,7 +142,7 @@ describe('EventPollLeases', () => {
     expect(leases.size).toBe(0);
   });
 
-  it('is full for an owner at maxPerPrincipal, and never for anonymous callers below the process limit', async () => {
+  it('is full for an owner at maxPerPrincipal', async () => {
     const { leases, request } = harness(2);
     await leases.renew(request('sub_1'));
     expect(leases.isFull('principal:ada')).toBe(false);
@@ -153,6 +153,44 @@ describe('EventPollLeases', () => {
     expect(leases.isFull('principal:ada')).toBe(true);
     expect(leases.isFull('principal:bob')).toBe(false);
     expect(leases.isFull(undefined)).toBe(false);
+  });
+
+  it('counts the leases of anonymous callers together against maxPerPrincipal', async () => {
+    const { leases, request } = harness(2);
+    await leases.renew(request('sub_1', { principalKey: undefined }));
+    expect(leases.isFull(undefined)).toBe(false);
+
+    await leases.renew(request('sub_2', { principalKey: undefined }));
+
+    expect(leases.isFull(undefined)).toBe(true);
+    expect(leases.isFull('principal:ada')).toBe(false);
+  });
+
+  it('calls onSubscribe once for two first polls at the same time, and holds one lease', async () => {
+    const { leases, onSubscribe, request } = harness();
+    let finishSubscribe: () => void = () => undefined;
+    onSubscribe.mockImplementationOnce(() => new Promise<void>((resolve) => (finishSubscribe = resolve)));
+
+    const first = leases.renew(request('sub_1'));
+    const second = leases.renew(request('sub_1'));
+    expect(leases.has('sub_1')).toBe(true);
+    finishSubscribe();
+    await Promise.all([first, second]);
+
+    expect(onSubscribe).toHaveBeenCalledTimes(1);
+    expect(leases.size).toBe(1);
+  });
+
+  it('lets a poll start the lease again after onSubscribe failed', async () => {
+    const { leases, onSubscribe, request } = harness();
+    onSubscribe.mockRejectedValueOnce(new Error('upstream down'));
+
+    await expect(leases.renew(request('sub_1'))).rejects.toThrow('upstream down');
+    expect(leases.has('sub_1')).toBe(false);
+    await leases.renew(request('sub_1'));
+
+    expect(onSubscribe).toHaveBeenCalledTimes(2);
+    expect(leases.size).toBe(1);
   });
 
   it('is full for everyone at the process limit', async () => {

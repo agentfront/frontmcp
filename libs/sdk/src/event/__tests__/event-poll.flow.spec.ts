@@ -96,6 +96,12 @@ const brokenCheck = event({
   check: () => ({ events: [{ data: { ticketId: 7 } as never }], cursor: '1' }),
 });
 
+const greedyCheck = event({
+  name: 'greedy.check',
+  payloadSchema: { ticketId: z.string() },
+  check: () => ({ events: [{ data: { ticketId: 'a' } }, { data: { ticketId: 'b' } }], cursor: '2' }),
+});
+
 const allEvents: EventType[] = [
   orderCreated,
   orderShipped,
@@ -104,6 +110,7 @@ const allEvents: EventType[] = [
   agentNote,
   ticketUpdated,
   brokenCheck,
+  greedyCheck,
 ];
 
 interface PollOverrides {
@@ -384,6 +391,16 @@ describe('events:poll', () => {
       expect(result.truncated).toBe(true);
     });
 
+    it('fails when check() returns more events than maxEvents, rather than drop any', async () => {
+      const failure = poll(scope, { name: 'greedy.check', cursor: '0', maxEvents: 1 });
+
+      await expect(failure).rejects.toThrow(InvalidEventPublishError);
+      await expect(failure).rejects.toThrow('check() returned 2 events, more than limits.maxEvents (1)');
+      await expect(poll(scope, { name: 'greedy.check', cursor: '0', maxEvents: 2 })).resolves.toMatchObject({
+        cursor: '2',
+      });
+    });
+
     it('fails when check() returns data that does not match the payload schema', async () => {
       const failure = poll(scope, { name: 'broken.check', cursor: '0' });
 
@@ -544,6 +561,24 @@ describe('events:poll', () => {
   });
 
   describe('hooks', () => {
+    it('runs the finalize stage of a poll that was answered and of one that was refused', async () => {
+      const finalized = jest.fn();
+      @Plugin({ name: 'poll-end' })
+      class PollEndPlugin {
+        @EventPollHook.Finally('finalize')
+        recordEnd(ctx: FlowCtxOf<'events:poll'>) {
+          finalized(ctx.rawInput.request?.params.name);
+        }
+      }
+      const watched = await startScope({ plugins: [PollEndPlugin] }, [orderShipped]);
+
+      await poll(watched, { name: 'order.shipped' });
+      await expect(poll(watched, { name: 'order.refunded' })).rejects.toThrow(EventNotFoundError);
+
+      expect(finalized.mock.calls).toEqual([['order.shipped'], ['order.refunded']]);
+      await watched.dispose();
+    });
+
     it('lets a plugin see what a poll read', async () => {
       const seen = jest.fn();
       @Plugin({ name: 'poll-audit' })

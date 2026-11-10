@@ -78,7 +78,8 @@ that app's tools do. An app that declares events cannot be a lazy app.
 
 ### Step 4: Check what clients see
 
-`events/list` answers one definition per event:
+`events/list` answers one definition per event. On a server whose auth signs callers in, an event is offered by
+poll and by webhook; on a server in public auth mode, by poll only (see [Delivery Modes](#delivery-modes)):
 
 ```json
 {
@@ -86,7 +87,7 @@ that app's tools do. An app that declares events cannot be a lazy app.
     {
       "name": "order.created",
       "description": "Fires when an order is placed",
-      "delivery": ["webhook"],
+      "delivery": ["poll", "webhook"],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -822,8 +823,11 @@ export const ticketUpdated = event({
 - `check(args, null)` returns no events and the current position.
 - Each item is `{ data, eventId?, timestamp? }`. `data` must match `payloadSchema`; an item without an id or a time
   gets `evt_…` and the time of the poll.
-- `limits` is `{ maxEvents, maxAgeMs? }` from the request. An upstream that can bound a read honors it; the server
-  also leaves out items whose `timestamp` is older than `maxAgeMs`.
+- `limits` is `{ maxEvents, maxAgeMs? }` from the request. `check()` must return at most `limits.maxEvents` items,
+  with a cursor after the last one it returned and `hasMore: true` when more are waiting: the server fails a poll
+  whose `check()` returned more, with `InvalidEventPublishError` (`check() returned <n> events, more than
+limits.maxEvents (<max>)`), rather than drop events past the cursor. It also leaves out items whose `timestamp` is
+  older than `maxAgeMs`.
 - The answer may set `truncated`, `hasMore` and `nextPollMs`; they go to the client as they are.
 - `match()`, `transform()` and `audience` do not apply: `check()` gets the arguments and filters itself.
 
@@ -836,7 +840,9 @@ and arguments (anonymous callers share one):
   poll fails and no lease starts.
 - Each poll renews the lease. It lasts five poll intervals, and at least five minutes.
 - `onUnsubscribe(args, subscription, 'expired')` runs when no poll renewed it in time.
-- A caller may hold `subscriptions.maxPerPrincipal` leases; one more is answered `ResourceExhausted`.
+- A caller may hold `subscriptions.maxPerPrincipal` leases; one more is answered `ResourceExhausted`. The anonymous
+  callers of a public server count as one caller, so together they hold at most that many.
+- Two first polls at the same time start one lease: `onSubscribe` runs once, and the second poll waits for it.
 
 Leases are in memory and never stored: after a restart, the next poll runs `onSubscribe` again.
 `publish(event, data, { subscriptionId: subscription.id })` reaches that poll subscription alone.
@@ -844,8 +850,9 @@ Leases are in memory and never stored: after a restart, the next poll runs `onSu
 ### Hooks
 
 `events/poll` runs the hookable `events:poll` flow (`EventPollHook`), with the stages `parseInput`, `resolveDialect`,
-`findEvent`, `resolveReader`, `checkEntryAuthorities`, `validateArguments`, `authorize`, `renewLease`, `readEvents`
-and `buildResult`. With `@frontmcp/observability`, each poll is traced as an `events/poll` span.
+`findEvent`, `resolveReader`, `checkEntryAuthorities`, `validateArguments`, `authorize`, `renewLease`, `readEvents`,
+`buildResult` and `finalize`. `finalize` runs after a success or a failure: attach a hook that must see every poll to
+it with `Finally`. With `@frontmcp/observability`, each poll is traced as an `events/poll` span, ended in `finalize`.
 
 ## Capabilities
 
@@ -1020,7 +1027,7 @@ functions) to get the same `this`.
 - [ ] `initialize` (or `server/discover`) shows `capabilities.events` and the `io.modelcontextprotocol/events` extension
 - [ ] `events/list` shows the event with the expected `delivery`, `inputSchema` and `payloadSchema`
 - [ ] A caller without the event's `authorities` does not see it
-- [ ] The server's `auth.mode` is not `public`, so events are served
+- [ ] `events/list` offers the event by `poll`, and by `webhook` too when the server's `auth.mode` is not `public`
 - [ ] `events/subscribe` answers an `id` and a `refreshBefore`, and the callback received one verification request
 - [ ] Subscribing again with the same arguments answers the same `id`
 - [ ] `events/unsubscribe` answers `{}`, twice in a row

@@ -691,7 +691,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowStage('readEvents', ctx);
   }
 
-  @EventPollHook.Did('buildResult', { priority: 1000 })
+  @EventPollHook.Finally('finalize', { priority: 1000 })
   _eventPollDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
