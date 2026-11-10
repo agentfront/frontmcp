@@ -6,6 +6,7 @@ import {
   ChannelSendHook,
   CompletionHook,
   EventDeliverHook,
+  EventPollHook,
   EventPublishHook,
   EventPublishHttpHook,
   EventSubscribeHook,
@@ -176,6 +177,12 @@ export class EveryExportRejectsAParameterItsCtxDoesNotSatisfy {
   // @ts-expect-error the ctx has no notAField
   @EventPublishHttpHook.Will('authenticate')
   eventPublishHttp(ctx: NotInAnyCtx) {
+    return ctx;
+  }
+
+  // @ts-expect-error the ctx has no notAField
+  @EventPollHook.Will('readEvents')
+  eventPoll(ctx: NotInAnyCtx) {
     return ctx;
   }
 }

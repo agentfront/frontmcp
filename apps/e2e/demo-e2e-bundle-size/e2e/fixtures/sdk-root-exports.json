@@ -144,6 +144,7 @@
   "EventNameConflictError": "class",
   "EventNotFoundError": "class",
   "EventNotRegisteredError": "class",
+  "EventPollHook": "object",
   "EventProtocolError": "class",
   "EventPublishEndpointError": "class",
   "EventPublishHook": "object",

@@ -48,7 +48,17 @@ export interface EventCheckResult<Payload> {
   /** The position after these events, or `null` when the upstream cannot replay. */
   cursor: string | null;
   truncated?: boolean;
+  /** More events are waiting after `cursor`: the client polls again at once. */
+  hasMore?: boolean;
   nextPollMs?: number;
+}
+
+/** What the caller of `check()` asks for; an upstream that can bound a read honors it. */
+export interface EventCheckLimits {
+  /** The most events to return. */
+  maxEvents: number;
+  /** Do not return events older than this many milliseconds. */
+  maxAgeMs?: number;
 }
 
 declare const EVENT_TYPES: unique symbol;
@@ -132,7 +142,7 @@ export abstract class EventContext<In = Record<string, unknown>, Payload = Recor
   ): MaybePromise<EventOccurrenceOf<Payload>>;
 
   /** The events since `cursor`, for an upstream that can replay. A `null` cursor asks for the current position. */
-  check?(args: In, cursor: string | null): MaybePromise<EventCheckResult<Payload>>;
+  check?(args: In, cursor: string | null, limits?: EventCheckLimits): MaybePromise<EventCheckResult<Payload>>;
 
   onSubscribe?(args: In, subscription: EventSubscriptionRef): MaybePromise<void>;
 

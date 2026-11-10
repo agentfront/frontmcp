@@ -156,7 +156,7 @@ describe('events/subscribe and events/unsubscribe', () => {
       expect(capabilities['events']).toEqual({});
       expect(capabilities['extensions']).toMatchObject({ 'io.modelcontextprotocol/events': {} });
       expect(listed.result?.['events']).toEqual([
-        expect.objectContaining({ name: 'order.created', delivery: ['webhook'] }),
+        expect.objectContaining({ name: 'order.created', delivery: ['poll', 'webhook'] }),
       ]);
       await close();
     });
@@ -387,6 +387,7 @@ describe('events/subscribe and events/unsubscribe', () => {
         info: { name: 'events-public-auth', version: '1.0.0' },
         apps: [ShopApp],
         authorities: { profiles: { admin: { roles: { any: ['admin'] } } } },
+        events: { poll: { enabled: false } },
       });
       const scope = scopeOf(publicServer);
 
@@ -407,7 +408,7 @@ describe('events/subscribe and events/unsubscribe', () => {
         apps: [ShopApp],
         auth: { mode: 'transparent', provider: issuer.issuer, providerConfig: { jwks: issuer.jwks } } as never,
         authorities: { profiles: { admin: { roles: { any: ['admin'] } } } },
-        events: { webhook: { enabled: false } },
+        events: { webhook: { enabled: false }, poll: { enabled: false } },
       });
       const scope = scopeOf(disabled);
 

@@ -14,6 +14,11 @@ import { normalizeEvent } from './event.utils';
 
 const EVENT_ID_RANDOM_BYTES = 18;
 
+/** A new event id: `evt_` and 24 random URL-safe characters. */
+export function newEventId(): string {
+  return `evt_${base64urlEncode(randomBytes(EVENT_ID_RANDOM_BYTES))}`;
+}
+
 /** The name of an event given by name, by its `@Event` class or by what `event()` returned. */
 function eventNameOf(event: string | EventReference<unknown>): string {
   return typeof event === 'string' ? event : normalizeEvent(event as EventType).metadata.name;
@@ -54,7 +59,7 @@ export class ScopeEventPublisher implements EventPublisher {
     }
 
     const occurrence = {
-      eventId: options.eventId ?? `evt_${base64urlEncode(randomBytes(EVENT_ID_RANDOM_BYTES))}`,
+      eventId: options.eventId ?? newEventId(),
       name: eventName,
       timestamp: timestampOf(eventName, options.timestamp),
       data: payload,

@@ -46,7 +46,13 @@ export const MCP_HEADERS = {
 } as const;
 
 /** Methods whose `Mcp-Name` header is sourced from `params.name`. */
-export const NAME_FROM_PARAMS_NAME = ['tools/call', 'prompts/get', 'events/subscribe', 'events/unsubscribe'];
+export const NAME_FROM_PARAMS_NAME = [
+  'tools/call',
+  'prompts/get',
+  'events/subscribe',
+  'events/unsubscribe',
+  'events/poll',
+];
 
 /** Methods whose `Mcp-Name` header is sourced from `params.uri`. */
 export const NAME_FROM_PARAMS_URI = ['resources/read'];

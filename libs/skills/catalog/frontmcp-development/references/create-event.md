@@ -11,8 +11,8 @@ occurrences when no user is connected. This is MCP Events, the `io.modelcontextp
 which ChatGPT reads from the top-level `events` capability.
 
 This reference covers declaring events, what `events/list` answers, how a client subscribes by webhook with
-`events/subscribe`, and how the server publishes an event and delivers it. An event is listed once the server performs
-a delivery mode the event allows (see [Delivery Modes](#delivery-modes)).
+`events/subscribe` or reads with `events/poll`, and how the server publishes an event and delivers it. An event is
+listed once the server performs a delivery mode the event allows (see [Delivery Modes](#delivery-modes)).
 
 ## When to Use This Skill
 
@@ -159,19 +159,22 @@ event is offered in the modes the server performs, within the event's own `deliv
 
 | Server performs   | Event's `delivery` | Offered in                     |
 | ----------------- | ------------------ | ------------------------------ |
-| `webhook`         | Not set            | `webhook`                      |
-| `webhook`, `poll` | `['poll']`         | `poll`                         |
-| `webhook`         | `['poll']`         | Not served: no mode is left    |
+| `poll`, `webhook` | Not set            | `poll`, `webhook`              |
+| `poll`, `webhook` | `['poll']`         | `poll`                         |
+| `poll`            | `['webhook']`      | Not served: no mode is left    |
 | None              | Any                | No event is served (see below) |
 
 A server that performs no delivery mode serves no events: it does not advertise the capability, and `events/list`
 answers `-32601` (Method not found), as on a server without events. Declared events are still registered and checked
 at startup.
 
+The server performs `poll` unless `events.poll.enabled` is `false`, on every runtime and in every auth mode (see
+[Polling](#polling)).
+
 The server performs `webhook` when its auth signs callers in (any `auth.mode` other than `public`) and
 `events.webhook.enabled` is not `false`. A subscription belongs to a caller, so in public mode the server logs
 `Webhook event delivery is off: the server runs in public auth mode, so a subscription would have no owner.` and
-serves no events. `poll` and `push` are not performed yet.
+offers its events by poll only. `push` is not performed yet.
 
 ## Who Sees an Event
 
@@ -421,7 +424,8 @@ class PlaceOrderTool extends ToolContext {
   so `publish()` can take as long as the slowest callback, up to `webhook.delivery.timeoutMs`.
 - Outside a context, use `scope.events.publisher`. In a provider, a duty or a worker, inject it with the
   `EVENT_PUBLISHER` token: `this.get(EVENT_PUBLISHER)`.
-- On a server that performs no delivery mode, `publish()` answers `matched: 0`.
+- `matched` counts webhook deliveries. A client that polls is not counted: it reads the occurrence at its next poll.
+  On a server that performs no webhook mode, `publish()` answers `matched: 0`.
 - A service that does not link the SDK publishes with an HTTP request: see
   [Publishing over HTTP](#publishing-over-http).
 
@@ -726,6 +730,123 @@ A pending delivery is a record in the same store as the subscriptions, removed w
 - No secrets and no personal data the subscriber may not see: `transform()` can remove fields per subscriber.
 - A receiver gives the payload to a model: text in it that came from users is untrusted input there.
 
+## Polling
+
+A client that cannot receive webhooks reads an event with `events/poll`. There is no subscribe step: each request names
+the event, its arguments and the cursor the last answer returned.
+
+```json
+{
+  "method": "events/poll",
+  "params": { "name": "order.created", "arguments": { "status": "paid" }, "cursor": null, "maxEvents": 50 }
+}
+```
+
+```json
+{
+  "events": [
+    {
+      "eventId": "evt_Zk3…",
+      "name": "order.created",
+      "timestamp": "2026-10-02T12:00:00.000Z",
+      "data": { "orderId": "o-1", "status": "paid", "total": 42 }
+    }
+  ],
+  "cursor": "5f0c…a1.42",
+  "truncated": false,
+  "hasMore": false,
+  "nextPollMs": 30000
+}
+```
+
+- A `cursor` of `null`, or none, means "from now": the answer has no events and the current position.
+- `maxEvents` caps the events of one answer, within `events.poll.maxEvents` (100). When more are waiting, the answer
+  has `hasMore: true` and a cursor to poll again from at once.
+- `nextPollMs` is `events.poll.nextPollMs` (30 seconds), or what the event's `check()` returned.
+- `maxAgeMs` with a cursor skips what is older, and sets `truncated: true` when it skipped something. It is ignored
+  with a `null` cursor.
+- `truncated: true` means events were skipped. It is never an error: the answer carries a cursor to continue from.
+- Under protocol 2026-07-28 the client sends the event name in the `Mcp-Name` header, and the result has
+  `resultType: "complete"`.
+
+The server performs the poll mode on every runtime and in every auth mode, unless `events.poll.enabled` is `false`.
+
+### Who may poll
+
+The checks of `events/subscribe` apply to every poll, with the same errors and codes: the event exists and is offered
+by poll (`NotFound`, `Unsupported`), the event's `authorities` allow the caller with the arguments as input
+(`Forbidden`), the arguments match `inputSchema` (`-32602`), and `authorize()` does not throw (`Forbidden`). A caller
+who loses access is refused at its next poll.
+
+An anonymous caller may poll on a server in public auth mode. Its `subscriber` has an empty `sub` and no roles, so an
+event with `authorities`, or an occurrence published with an `audience`, is not for it. On a server whose auth signs
+callers in, an anonymous caller is answered `Forbidden`.
+
+### Events that are published
+
+An event without `check()` is read from a buffer of what `publish()` published: the last `events.buffer.maxEvents`
+(10000) occurrences of each event, for `events.buffer.maxAgeMs` (10 minutes). Each poll applies, for its own caller
+and arguments, what a webhook delivery applies: the `audience` of the publish (against the caller), a targeted
+`subscriptionId`, `match()` and `transform()`.
+
+The buffer is in the memory of one process. Its cursor is `<bootId>.<sequence>`:
+
+- After a restart, or on another process, a cursor cannot be placed: the answer has no events, a fresh cursor and
+  `truncated: true`.
+- A cursor older than what the buffer still holds is answered with what is left and `truncated: true`.
+
+Behind a load balancer, each process has its own buffer. Use a `check()` event, or the webhook mode, when that matters.
+
+### Events with `check()`
+
+An event whose upstream can replay declares `check()`. The cursor is then the upstream's own, so a poll survives a
+restart and works on any process:
+
+```typescript
+export const ticketUpdated = event({
+  name: 'ticket.updated',
+  inputSchema: { queue: z.string().optional() },
+  payloadSchema: { ticketId: z.string(), queue: z.string() },
+  async check(args, cursor, limits) {
+    if (cursor === null) return { events: [], cursor: await tickets.currentPosition() };
+    const page = await tickets.changesSince(cursor, { queue: args.queue, limit: limits?.maxEvents });
+    return {
+      events: page.changes.map((change) => ({ data: { ticketId: change.id, queue: change.queue } })),
+      cursor: page.position,
+      hasMore: page.hasMore,
+    };
+  },
+});
+```
+
+- `check(args, null)` returns no events and the current position.
+- Each item is `{ data, eventId?, timestamp? }`. `data` must match `payloadSchema`; an item without an id or a time
+  gets `evt_…` and the time of the poll.
+- `limits` is `{ maxEvents, maxAgeMs? }` from the request. An upstream that can bound a read honors it; the server
+  also leaves out items whose `timestamp` is older than `maxAgeMs`.
+- The answer may set `truncated`, `hasMore` and `nextPollMs`; they go to the client as they are.
+- `match()`, `transform()` and `audience` do not apply: `check()` gets the arguments and filters itself.
+
+### The poll subscription
+
+Poll has no goodbye, so for an event with `onSubscribe` or `onUnsubscribe` the server keeps a lease per caller, event
+and arguments (anonymous callers share one):
+
+- `onSubscribe(args, subscription)` runs at the first poll, with `subscription.mode` `'poll'`. When it throws, the
+  poll fails and no lease starts.
+- Each poll renews the lease. It lasts five poll intervals, and at least five minutes.
+- `onUnsubscribe(args, subscription, 'expired')` runs when no poll renewed it in time.
+- A caller may hold `subscriptions.maxPerPrincipal` leases; one more is answered `ResourceExhausted`.
+
+Leases are in memory and never stored: after a restart, the next poll runs `onSubscribe` again.
+`publish(event, data, { subscriptionId: subscription.id })` reaches that poll subscription alone.
+
+### Hooks
+
+`events/poll` runs the hookable `events:poll` flow (`EventPollHook`), with the stages `parseInput`, `resolveDialect`,
+`findEvent`, `resolveReader`, `checkEntryAuthorities`, `validateArguments`, `authorize`, `renewLease`, `readEvents`
+and `buildResult`. With `@frontmcp/observability`, each poll is traced as an `events/poll` span.
+
 ## Capabilities
 
 A server that serves events advertises them in two places, on every transport (`initialize` over HTTP, SSE and stdio,
@@ -813,6 +934,21 @@ The three lifetimes must satisfy `minTtlMs <= defaultTtlMs <= maxTtlMs` after de
 | `secret?`      | `string`                       | None              | At least 32 characters. Requests are signed with it; without it, callers present a bearer token |
 | `authorities?` | Profile name, names, or policy | None              | The rule a bearer caller must satisfy, with the request body as input. Not with `secret`        |
 
+`events.buffer` (what `events/poll` can still read of published events):
+
+| Field        | Type     | Default               | Notes                                               |
+| ------------ | -------- | --------------------- | --------------------------------------------------- |
+| `maxAgeMs?`  | `number` | `600000` (10 minutes) | How long a published occurrence can still be polled |
+| `maxEvents?` | `number` | `10000`               | How many occurrences are kept for one event         |
+
+`events.poll`:
+
+| Field         | Type      | Default | Notes                                            |
+| ------------- | --------- | ------- | ------------------------------------------------ |
+| `enabled?`    | `boolean` | `true`  | `false` turns `events/poll` off                  |
+| `nextPollMs?` | `number`  | `30000` | The wait between two polls the server recommends |
+| `maxEvents?`  | `number`  | `100`   | The most occurrences one poll returns            |
+
 With `enabled: false`, the server logs `Events are disabled (events.enabled: false), so the 2 event(s) apps declare are
 not served.` and `scope.events` is `undefined`. Otherwise `scope.events` is the `EventRegistry`: `getEvents()`,
 `findByName(name)`, `servesEvents()`.
@@ -840,8 +976,8 @@ options object. A class that extends plain `EventContext` is not checked, and it
 ## Methods of an Event
 
 `EventContext` declares optional methods, which `event()` takes beside its options. Subscriptions call `authorize`,
-`onSubscribe` and `onUnsubscribe`; publishing calls `match` and `transform`; `check` is for the poll mode, which is
-not performed yet. `subscriber` is the owner of the
+`onSubscribe` and `onUnsubscribe`; publishing and polling call `match` and `transform`; polling calls `check`.
+`subscriber` is the owner of the
 subscription: `{ sub, iss?, tenantId?, roles, permissions, scopes, claims }`. `tenantId` is set when
 `authorities.claimsMapping.tenantId` names the claim that holds it.
 
@@ -850,7 +986,7 @@ subscription: `{ sub, iss?, tenantId?, roles, permissions, scopes, claims }`. `t
 | `authorize(args, subscriber)`               | Throw to refuse a subscription; run again over its life                       |
 | `match(event, args, subscriber)`            | Whether a subscription receives a published event. Without it, every one does |
 | `transform(event, args, subscriber)`        | The event as one subscription receives it                                     |
-| `check(args, cursor)`                       | The events since `cursor`, for an upstream that can replay                    |
+| `check(args, cursor, limits?)`              | The events since `cursor`, for an upstream that can replay                    |
 | `onSubscribe(args, subscription)`           | Set up what the subscription needs upstream                                   |
 | `onUnsubscribe(args, subscription, reason)` | Tear it down: `'unsubscribed'`, `'expired'`, `'closed'` or `'terminated'`     |
 
@@ -893,42 +1029,47 @@ functions) to get the same `this`.
 - [ ] A callback that answers `503` twice gets a third attempt with the same `webhook-id`
 - [ ] With `events.publishEndpoint.enabled`, a signed `POST /events/publish` answers `202`, and an unsigned one `401`
 - [ ] The same `eventId` posted twice is delivered once
+- [ ] `events/poll` with a `null` cursor answers no events and a cursor; a poll from that cursor answers what was
+      published since
 
 ## Troubleshooting
 
-| Problem                                            | Cause                                                              | Solution                                                                   |
-| -------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| `events/list` answers `-32601`                     | The server performs no delivery mode, or declares no event         | Enable a delivery mode; list the event in an app's `events`                |
-| The capability is missing from `initialize`        | Same as above                                                      | Same as above                                                              |
-| An event is missing from `events/list`             | `hideFromDiscovery`, `authorities`, `availableWhen`, or `delivery` | Check each: the event's `delivery` must include a mode the server performs |
-| `events items must be annotated with @Event()`     | Something else is in `events`                                      | List `@Event` classes and what `event()` returns                           |
-| `EventNameConflictError`                           | Two events with one name                                           | Rename one, or give the variants `availableWhen`                           |
-| `Authorities configuration required: Event "..."`  | The event declares `authorities` the server does not enforce       | Add `@FrontMcp({ authorities })`, or remove the event's `authorities`      |
-| A type error on the class under `@Event`           | `EventContext<Args, Payload>` differs from the schemas             | Declare the types the schemas describe, or extend plain `EventContext`     |
-| The app cannot be lazy: `it declares events`       | Events are registered at startup                                   | Import the app normally                                                    |
-| `Webhook event delivery is off` at startup         | The server runs in public auth mode                                | Configure an `auth.mode` that signs callers in                             |
-| `events/subscribe` answers `Forbidden`             | An anonymous caller, the event's `authorities`, or `authorize()`   | Read `data.reason`; sign the caller in, or grant the role                  |
-| `events/subscribe` answers `CallbackEndpointError` | The callback did not answer the challenge with `2xx` and the nonce | Echo `challenge` from the verification request; read `data.reason`         |
-| `Invalid delivery.url: it must use https`          | An `http:` callback                                                | Use `https`; in tests only, `events.webhook.unsafeAllowLocalCallbacks`     |
-| `Invalid delivery.secret`                          | The secret is not `whsec_` and 24 to 64 bytes of base64            | Generate one with `generateStandardWebhookSecret()` from `@frontmcp/utils` |
-| `Event subscription store: ... needs a secret`     | `events.store` is set and no secret is                             | Set `MCP_EVENTS_SECRET`                                                    |
-| A subscription is gone after a restart             | Subscriptions are kept in memory by default                        | Set `events.store.sqlite` or `events.store.redis`                          |
-| `publish()` answers `matched: 0`                   | No subscription, `audience`, `match()`, or a suspended one         | Check `events/subscribe` succeeded and what `match()` returns              |
-| `EventNotRegisteredError` on `publish()`           | The event is not in any app's `events`                             | List it, or publish the name that is registered                            |
-| `InvalidEventPublishError` on `publish()`          | `data` does not match `payloadSchema`                              | Send the fields the schema declares                                        |
-| A receiver gets the same event twice               | Delivery is at least once: a retry after a lost `2xx`              | Deduplicate on `webhook-id`                                                |
-| `Event publish endpoint: ... public auth mode`     | `publishEndpoint.enabled` without a `secret` on a public server    | Set `events.publishEndpoint.secret`, or an `auth.mode` that signs in       |
-| `POST /events/publish` answers `401`               | A wrong signature, a clock that is off, or a request sent before   | Sign `<timestamp>.<body>` over the bytes sent; sign a retry again          |
-| `POST /events/publish` answers `404`               | The endpoint is off, the path differs, or the event is unknown     | Set `events.publishEndpoint.enabled`; read the `error` of the answer       |
-| `POST /events/publish` answers `409`               | Another request is publishing the same `eventId` right now         | Retry: the answer is then the first request's                              |
-| `Delivery ... is abandoned` in the log             | The callback failed every attempt in the retry window              | Fix the callback; read the category at the end of the line                 |
-| `Subscription ... is suspended` in the log         | 20 failed deliveries in a row                                      | Fix the callback, then subscribe again to reactivate                       |
-| The signature does not verify at the receiver      | It signs a re-serialized body, or uses another secret              | Verify over the raw body bytes with the secret sent in `events/subscribe`  |
+| Problem                                                  | Cause                                                                                  | Solution                                                                                |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `events/list` answers `-32601`                           | The server performs no delivery mode, or declares no event                             | Enable a delivery mode; list the event in an app's `events`                             |
+| The capability is missing from `initialize`              | Same as above                                                                          | Same as above                                                                           |
+| An event is missing from `events/list`                   | `hideFromDiscovery`, `authorities`, `availableWhen`, or `delivery`                     | Check each: the event's `delivery` must include a mode the server performs              |
+| `events items must be annotated with @Event()`           | Something else is in `events`                                                          | List `@Event` classes and what `event()` returns                                        |
+| `EventNameConflictError`                                 | Two events with one name                                                               | Rename one, or give the variants `availableWhen`                                        |
+| `Authorities configuration required: Event "..."`        | The event declares `authorities` the server does not enforce                           | Add `@FrontMcp({ authorities })`, or remove the event's `authorities`                   |
+| A type error on the class under `@Event`                 | `EventContext<Args, Payload>` differs from the schemas                                 | Declare the types the schemas describe, or extend plain `EventContext`                  |
+| The app cannot be lazy: `it declares events`             | Events are registered at startup                                                       | Import the app normally                                                                 |
+| `Webhook event delivery is off` at startup               | The server runs in public auth mode                                                    | Configure an `auth.mode` that signs callers in                                          |
+| `events/subscribe` answers `Forbidden`                   | An anonymous caller, the event's `authorities`, or `authorize()`                       | Read `data.reason`; sign the caller in, or grant the role                               |
+| `events/subscribe` answers `CallbackEndpointError`       | The callback did not answer the challenge with `2xx` and the nonce                     | Echo `challenge` from the verification request; read `data.reason`                      |
+| `Invalid delivery.url: it must use https`                | An `http:` callback                                                                    | Use `https`; in tests only, `events.webhook.unsafeAllowLocalCallbacks`                  |
+| `Invalid delivery.secret`                                | The secret is not `whsec_` and 24 to 64 bytes of base64                                | Generate one with `generateStandardWebhookSecret()` from `@frontmcp/utils`              |
+| `Event subscription store: ... needs a secret`           | `events.store` is set and no secret is                                                 | Set `MCP_EVENTS_SECRET`                                                                 |
+| A subscription is gone after a restart                   | Subscriptions are kept in memory by default                                            | Set `events.store.sqlite` or `events.store.redis`                                       |
+| `publish()` answers `matched: 0`                         | No subscription, `audience`, `match()`, or a suspended one                             | Check `events/subscribe` succeeded and what `match()` returns                           |
+| `events/poll` answers `truncated: true`                  | The server restarted, another process answered, or the cursor is older than the buffer | Continue from the cursor of the answer; read current state with a tool if a gap matters |
+| A poll misses events behind a load balancer              | Each process buffers what it published                                                 | Declare `check()` on the event, or use the webhook mode                                 |
+| `events/poll` answers `Forbidden` to an anonymous caller | The server's auth signs callers in                                                     | Send a token; only a server in public auth mode lets anonymous callers poll             |
+| `EventNotRegisteredError` on `publish()`                 | The event is not in any app's `events`                                                 | List it, or publish the name that is registered                                         |
+| `InvalidEventPublishError` on `publish()`                | `data` does not match `payloadSchema`                                                  | Send the fields the schema declares                                                     |
+| A receiver gets the same event twice                     | Delivery is at least once: a retry after a lost `2xx`                                  | Deduplicate on `webhook-id`                                                             |
+| `Event publish endpoint: ... public auth mode`           | `publishEndpoint.enabled` without a `secret` on a public server                        | Set `events.publishEndpoint.secret`, or an `auth.mode` that signs in                    |
+| `POST /events/publish` answers `401`                     | A wrong signature, a clock that is off, or a request sent before                       | Sign `<timestamp>.<body>` over the bytes sent; sign a retry again                       |
+| `POST /events/publish` answers `404`                     | The endpoint is off, the path differs, or the event is unknown                         | Set `events.publishEndpoint.enabled`; read the `error` of the answer                    |
+| `POST /events/publish` answers `409`                     | Another request is publishing the same `eventId` right now                             | Retry: the answer is then the first request's                                           |
+| `Delivery ... is abandoned` in the log                   | The callback failed every attempt in the retry window                                  | Fix the callback; read the category at the end of the line                              |
+| `Subscription ... is suspended` in the log               | 20 failed deliveries in a row                                                          | Fix the callback, then subscribe again to reactivate                                    |
+| The signature does not verify at the receiver            | It signs a re-serialized body, or uses another secret                                  | Verify over the raw body bytes with the secret sent in `events/subscribe`               |
 
 ## Reference
 
 - [MCP Events, SEP-3415](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415)
 - [Standard Webhooks](https://www.standardwebhooks.com): the signature scheme of deliveries
 - Related skills: `decorators-guide`, `create-plugin-hooks` (`ListEventsHook`, `EventSubscribeHook`,
-  `EventUnsubscribeHook`, `EventPublishHook`, `EventPublishHttpHook`, `EventDeliverHook`), `frontmcp-authorities`,
-  `frontmcp-channels`, `create-job`, `create-duty`, `create-workflow` (the request signature)
+  `EventUnsubscribeHook`, `EventPublishHook`, `EventPublishHttpHook`, `EventDeliverHook`, `EventPollHook`),
+  `frontmcp-authorities`, `frontmcp-channels`, `create-job`, `create-duty`, `create-workflow` (the request signature)

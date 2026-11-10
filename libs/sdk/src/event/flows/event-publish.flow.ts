@@ -57,7 +57,7 @@ const stateSchema = z.object({
 });
 
 const plan = {
-  pre: ['validate'],
+  pre: ['validate', 'bufferOccurrence'],
   execute: [
     'loadSubscriptions',
     'dropInactive',
@@ -129,6 +129,13 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
     if (!event) throw new EventNotRegisteredError(eventName);
     this.events.metrics?.count('published', eventName);
     this.state.set({ event, context: event.create({}), deliveries: [] });
+  }
+
+  /** Keep the occurrence for `events/poll`, before any filter: each poll applies them for its own caller. */
+  @Stage('bufferOccurrence')
+  async bufferOccurrence() {
+    const { occurrence, audience, subscriptionId } = this.input;
+    this.events.buffer?.append(occurrence, audience, subscriptionId);
   }
 
   /** Load the subscriptions of the event, or the one a targeted publish names. */

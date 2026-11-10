@@ -50,7 +50,27 @@ export type {
   EventOutboxOptions,
   NewEventDelivery,
 } from './delivery/event-outbox';
-export { ScopeEventPublisher } from './event-publisher';
+export { ScopeEventPublisher, newEventId } from './event-publisher';
+export {
+  assertEventAuthorities,
+  assertEventAuthorizes,
+  eventReaderOf,
+  offeredEventOf,
+  parsedEventArguments,
+  readerSubscriptionOf,
+} from './event-gates';
+export type { EventReader } from './event-gates';
+export { EventBuffer } from './poll/event-buffer';
+export type { BufferedEvent, EventBufferOptions, EventBufferRead } from './poll/event-buffer';
+export {
+  EventPollLeases,
+  MAX_POLL_LEASES,
+  POLL_LEASE_INTERVALS,
+  POLL_LEASE_MIN_MS,
+  POLL_LEASE_SWEEP_INTERVAL_MS,
+  pollLeaseMs,
+} from './poll/event-poll-leases';
+export type { EventPollLeasesOptions, PollLeaseRequest } from './poll/event-poll-leases';
 export { SUSPEND_AFTER_FAILURES } from './flows/event-deliver.flow';
 export { EVENT_DELIVERY_MAX_BYTES, isInAudience } from './flows/event-publish.flow';
 export type { EventDeliveryPlan } from './flows/event-publish.flow';

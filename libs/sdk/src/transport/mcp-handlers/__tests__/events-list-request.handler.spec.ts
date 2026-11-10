@@ -31,7 +31,11 @@ const orderShipped = event({ name: 'order.shipped', payloadSchema: { orderId: z.
 @App({ id: 'shop', name: 'Shop', events: [orderShipped, OrderCreated] })
 class ShopApp {}
 
-const serverConfig = { info: { name: 'events-list-handler', version: '1.0.0' }, apps: [ShopApp] };
+const serverConfig = {
+  info: { name: 'events-list-handler', version: '1.0.0' },
+  apps: [ShopApp],
+  events: { poll: { enabled: false } },
+};
 
 type JsonRpcReply = {
   result?: Record<string, unknown>;
@@ -128,6 +132,16 @@ describe('events/list', () => {
       await close();
     });
 
+    it('answers an invalid cursor as invalid params, not as an internal error', async () => {
+      const { client, close } = await openSession(serving);
+
+      const reply = await client.request('events/list', { cursor: 'not-a-cursor' });
+
+      expect(reply.error).toMatchObject({ code: -32602 });
+      expect(reply.error?.message).toContain('Invalid pagination cursor');
+      await close();
+    });
+
     it('answers a request without params', async () => {
       const { client, close } = await openSession(serving);
 
@@ -200,7 +214,8 @@ describe('events/list', () => {
   describe('handler registration', () => {
     const logger = { child: () => logger, verbose: jest.fn() };
 
-    function handlerSchemas(events?: { servesEvents(): boolean }) {
+    function handlerSchemas(served?: { servesEvents(): boolean }) {
+      const events = served && { ...served, performs: () => false };
       const options = {
         serverOptions: { capabilities: {} },
         scope: { logger, events },

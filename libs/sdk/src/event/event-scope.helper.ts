@@ -20,10 +20,13 @@ import { EventOutbox } from './delivery/event-outbox';
 import { ScopeEventPublisher } from './event-publisher';
 import EventRegistry from './event.registry';
 import EventDeliverFlow from './flows/event-deliver.flow';
+import EventPollFlow from './flows/event-poll.flow';
 import EventPublishFlow from './flows/event-publish.flow';
 import EventSubscribeFlow from './flows/event-subscribe.flow';
 import EventUnsubscribeFlow from './flows/event-unsubscribe.flow';
 import ListEventsFlow from './flows/list-events.flow';
+import { EventBuffer } from './poll/event-buffer';
+import { EventPollLeases } from './poll/event-poll-leases';
 import { enablePublishEndpoint } from './publish-endpoint/event-publish-endpoint';
 import { EventCallbackVerifier } from './subscription/event-callback-verifier';
 import { createEventSubscriptionStore } from './subscription/event-subscription-store.factory';
@@ -142,6 +145,22 @@ async function enableWebhookDelivery(
   await scope.registryFlows(EventSubscribeFlow, EventUnsubscribeFlow);
 }
 
+/** Keep published occurrences for `events/poll`, start the poll leases and serve the method. */
+async function enablePollDelivery(
+  scope: ScopeEntry,
+  eventRegistry: EventRegistry,
+  eventsConfig: EventsConfig,
+  logger: FrontMcpLogger,
+): Promise<void> {
+  const pollLeases = new EventPollLeases({ maxPerPrincipal: eventsConfig.subscriptions.maxPerPrincipal, logger });
+  eventRegistry.buffer = new EventBuffer(eventsConfig.buffer);
+  eventRegistry.pollLeases = pollLeases;
+  pollLeases.start();
+  scope.onDispose(() => pollLeases.stop());
+  eventRegistry.enableDeliveryMode('poll');
+  await scope.registryFlows(EventPollFlow);
+}
+
 /** Register the scope's events and their flows. Resolves to `undefined` with `events.enabled: false`. */
 export async function registerEventCapabilities(
   args: RegisterEventCapabilitiesArgs,
@@ -183,9 +202,10 @@ export async function registerEventCapabilities(
   } else if (eventsConfig.webhook.enabled) {
     logger.warn(
       'Webhook event delivery is off: the server runs in public auth mode, so a subscription would have no owner. ' +
-        'Configure an auth mode that signs callers in to serve events.',
+        'Configure an auth mode that signs callers in to deliver events by webhook.',
     );
   }
+  if (eventsConfig.poll.enabled) await enablePollDelivery(scope, eventRegistry, eventsConfig, logger);
 
   if (eventsConfig.publishEndpoint.enabled) {
     await enablePublishEndpoint({
