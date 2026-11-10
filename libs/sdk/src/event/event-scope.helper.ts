@@ -19,6 +19,7 @@ import type ProviderRegistry from '../provider/provider.registry';
 import { createEventMetrics } from './delivery/event-metrics';
 import { EventOutbox } from './delivery/event-outbox';
 import { ScopeEventPublisher } from './event-publisher';
+import { reauthorizeSubscriber } from './event-reauthorization';
 import EventRegistry from './event.registry';
 import EventDeliverFlow from './flows/event-deliver.flow';
 import EventPollFlow from './flows/event-poll.flow';
@@ -34,6 +35,7 @@ import { EventReplays } from './replay/event-replays';
 import { EventStreams } from './stream/event-streams';
 import { EventCallbackVerifier } from './subscription/event-callback-verifier';
 import { createEventSubscriptionStore } from './subscription/event-subscription-store.factory';
+import { accessRevokedError, terminateEventSubscription } from './subscription/event-subscription-termination';
 import { EventSubscriptions } from './subscription/event-subscriptions';
 
 export interface RegisterEventCapabilitiesArgs {
@@ -161,6 +163,18 @@ async function enableWebhookDelivery(
     intervalMs: eventsConfig.poll.nextPollMs,
     maxEvents: eventsConfig.poll.maxEvents,
     maxBodyBytes: EVENT_DELIVERY_MAX_BYTES,
+    reauthorizeEveryMs: eventsConfig.subscriptions.reauthorizeEveryMs,
+    reauthorize: (event, record) =>
+      reauthorizeSubscriber({ scope, event, subscriber: record.subscriber, arguments: record.arguments }),
+    terminate: (record) =>
+      terminateEventSubscription({
+        subscriptions,
+        outbox,
+        metrics: eventRegistry.metrics,
+        logger,
+        subscription: record,
+        error: accessRevokedError(record.dialect),
+      }),
     logger,
   });
   await startReplays(eventRegistry, replays, logger);

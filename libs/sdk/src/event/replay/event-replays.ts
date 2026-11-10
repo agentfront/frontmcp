@@ -11,6 +11,7 @@ import { LeaseHolder, type LeaseStorage } from '../../duty/lease-holder';
 import { type EventOutbox } from '../delivery/event-outbox';
 import { EVENT_DIALECTS } from '../event-dialect';
 import { newEventId } from '../event-publisher';
+import { type EventReauthorization } from '../event-reauthorization';
 import {
   type EventReplayState,
   type EventSubscriptionRecord,
@@ -28,6 +29,12 @@ export interface EventReplaysOptions {
   maxEvents: number;
   /** The largest body of one delivery, in bytes. */
   maxBodyBytes: number;
+  /** How long a check of a subscription's owner holds: `events.subscriptions.reauthorizeEveryMs`. */
+  reauthorizeEveryMs: number;
+  /** Check a subscription's owner again: the event's `authorities`, then its `authorize()`. */
+  reauthorize: (event: EventEntry, record: EventSubscriptionRecord) => Promise<EventReauthorization>;
+  /** End a subscription whose owner was refused, as a publish does. */
+  terminate: (record: EventSubscriptionRecord) => Promise<void>;
   logger: FrontMcpLogger;
 }
 
@@ -143,8 +150,32 @@ export class EventReplays {
     for (const record of subscriptions) {
       if (!record.active || !record.replay) continue;
       if ((this.nextCheckAt.get(record.id) ?? 0) > Date.now()) continue;
+      if (!(await this.isStillAuthorized(event, record))) continue;
       await this.readFor(event, record, record.replay);
     }
+  }
+
+  /**
+   * Whether the owner of a subscription may still be read for: checked again once `reauthorizeEveryMs` passed. A
+   * refusal ends the subscription; a check that could not be made skips it this turn, its cursor where it was.
+   */
+  private async isStillAuthorized(event: EventEntry, record: EventSubscriptionRecord): Promise<boolean> {
+    const now = Date.now();
+    if (now - record.lastAuthorizedAt <= this.options.reauthorizeEveryMs) return true;
+    const check = await this.options
+      .reauthorize(event, record)
+      .catch((error: unknown): EventReauthorization => ({ outcome: 'failed', error }));
+    if (check.outcome === 'granted') {
+      await this.options.store.update(record.id, { lastAuthorizedAt: now });
+      return true;
+    }
+    if (check.outcome === 'failed') {
+      this.logger.warn(`The access of subscription ${record.id} could not be checked`, check.error);
+      return false;
+    }
+    this.nextCheckAt.delete(record.id);
+    await this.options.terminate(record);
+    return false;
   }
 
   /** Read the upstream for one subscription until it has no more, report a gap, and store where it stands. */

@@ -214,6 +214,9 @@ The first that does not allow the owner decides:
   other error (an upstream that is down, a timeout). The event is not delivered to it this time, the server logs
   `reauthorize: the access of subscription <id> could not be checked`, and the next publish checks it again.
 
+The loop that reads an event with `check()` for its webhook subscriptions checks each owner the same way, before it
+calls `check()` for that subscription (see [Events with `check()` over webhook](#events-with-check-over-webhook)).
+
 An open `events/stream` is checked the same way, with the reader as it was when the stream opened and the request's
 arguments, at the first heartbeat after `subscriptions.reauthorizeEveryMs`:
 
@@ -831,6 +834,10 @@ null)` gives the position. With a cursor, the first `check()` replays from it be
   (ChatGPT) gets no envelope: its next refresh answers `truncated: true`, once.
 - **A slow callback** holds the loop back: with 50 batches of unfinished deliveries, `check()` is not called for
   that subscription until some finish.
+- **The owner is checked again** before `check()` is called for a subscription whose last check is older than
+  `subscriptions.reauthorizeEveryMs`, as a publish does (see [Over a subscription's life](#over-a-subscriptions-life)).
+  A refusal ends the subscription, and the loop reads nothing more for it. A check that could not be made skips the
+  subscription for that turn, its cursor where it was, and the next turn checks it again.
 - `match()`, `transform()` and `audience` do not apply, as for a poll: `check()` gets the arguments.
 
 One process runs the loop of an event at a time. It holds a lease in the events store for 30 seconds and renews it;

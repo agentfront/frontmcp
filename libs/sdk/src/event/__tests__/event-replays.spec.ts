@@ -7,6 +7,7 @@ import { type EventReplayState, type EventSubscriptionRecord } from '../subscrip
 
 const NOW = 1_800_000_000_000;
 const INTERVAL_MS = 30_000;
+const REAUTHORIZE_EVERY_MS = 300_000;
 type Checked = EventCheckResult<Record<string, unknown>>;
 
 function subscription(overrides: Partial<EventSubscriptionRecord> = {}): EventSubscriptionRecord {
@@ -57,6 +58,10 @@ async function harness(storage?: NamespacedStorage) {
   });
   const warn = jest.fn();
   const logger = { child: () => ({ warn, info: jest.fn() }) };
+  const reauthorize = jest.fn().mockResolvedValue({ outcome: 'granted' });
+  const terminate = jest.fn(async (record: EventSubscriptionRecord) => {
+    records.delete(record.id);
+  });
   const replays = new EventReplays({
     store: { listByEvent: async () => [...records.values()], update: update as never },
     outbox: { enqueue: enqueue as never, isPending: async (id) => pendingDeliveries.has(id) },
@@ -64,10 +69,25 @@ async function harness(storage?: NamespacedStorage) {
     intervalMs: INTERVAL_MS,
     maxEvents: 100,
     maxBodyBytes: 500,
+    reauthorizeEveryMs: REAUTHORIZE_EVERY_MS,
+    reauthorize,
+    terminate,
     logger: logger as never,
   });
   const acknowledge = (...ids: string[]) => ids.forEach((id) => pendingDeliveries.delete(id));
-  return { replays, event, check, records, enqueue, update, warn, acknowledge, storage: leaseStorage };
+  return {
+    replays,
+    event,
+    check,
+    records,
+    enqueue,
+    update,
+    warn,
+    acknowledge,
+    reauthorize,
+    terminate,
+    storage: leaseStorage,
+  };
 }
 
 function bodyOf(enqueue: jest.Mock, call: number): Record<string, unknown> {
@@ -328,6 +348,72 @@ describe('EventReplays', () => {
 
       expect(warn).toHaveBeenCalledWith('The webhook loop of event "ticket.updated" failed', failure);
       expect(check).toHaveBeenCalledTimes(2);
+      await replays.stop();
+    });
+  });
+
+  describe('checking the owner of a subscription again', () => {
+    const position = { cursor: '1', watermark: '1', pending: [] };
+    const longAgo = NOW - 2 * REAUTHORIZE_EVERY_MS;
+
+    it('is not done within reauthorizeEveryMs of the last check, and is done, and noted, once it passed', async () => {
+      const { replays, event, check, records, reauthorize, update } = await harness();
+      records.set('sub_recent', subscription({ id: 'sub_recent', replay: position }));
+      records.set('sub_stale', subscription({ id: 'sub_stale', replay: position, lastAuthorizedAt: longAgo }));
+      check.mockResolvedValue({ events: [], cursor: '1' });
+
+      await replays.start([event]);
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(reauthorize).toHaveBeenCalledTimes(1);
+      expect(reauthorize).toHaveBeenCalledWith(event, expect.objectContaining({ id: 'sub_stale' }));
+      expect(update).toHaveBeenCalledWith('sub_stale', { lastAuthorizedAt: NOW });
+      expect(check).toHaveBeenCalledTimes(2);
+
+      await jest.advanceTimersByTimeAsync(INTERVAL_MS);
+      expect(reauthorize).toHaveBeenCalledTimes(1);
+      await replays.stop();
+    });
+
+    it('ends a subscription whose owner is refused, and reads nothing more for it', async () => {
+      const { replays, event, check, records, reauthorize, terminate, enqueue } = await harness();
+      const refused = subscription({ replay: position, lastAuthorizedAt: longAgo });
+      records.set(refused.id, refused);
+      reauthorize.mockResolvedValue({ outcome: 'refused', reason: 'vault closed' });
+      check.mockResolvedValue({ events: [{ data: { ticketId: 't-1' } }], cursor: '2' });
+
+      await replays.start([event]);
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(INTERVAL_MS);
+
+      expect(terminate).toHaveBeenCalledTimes(1);
+      expect(terminate).toHaveBeenCalledWith(refused);
+      expect(check).not.toHaveBeenCalled();
+      expect(enqueue).not.toHaveBeenCalled();
+      await replays.stop();
+    });
+
+    it('skips a subscription whose check could not be made, without moving its cursor, and checks it again', async () => {
+      const { replays, event, check, records, reauthorize, terminate, update, warn } = await harness();
+      records.set('sub_0001', subscription({ replay: position, lastAuthorizedAt: longAgo }));
+      const failure = new Error('the upstream timed out');
+      reauthorize.mockResolvedValueOnce({ outcome: 'failed', error: failure }).mockRejectedValueOnce(failure);
+      check.mockResolvedValue({ events: [{ data: { ticketId: 't-1' } }], cursor: '2' });
+
+      await replays.start([event]);
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(INTERVAL_MS);
+
+      expect(check).not.toHaveBeenCalled();
+      expect(terminate).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+      expect(records.get('sub_0001')?.replay).toEqual(position);
+      expect(warn).toHaveBeenCalledWith('The access of subscription sub_0001 could not be checked', failure);
+
+      await jest.advanceTimersByTimeAsync(INTERVAL_MS);
+      expect(reauthorize).toHaveBeenCalledTimes(3);
+      expect(check).toHaveBeenCalledWith({ queue: 'billing' }, '1', { maxEvents: 100 });
+      expect(records.get('sub_0001')?.replay?.cursor).toBe('2');
       await replays.stop();
     });
   });

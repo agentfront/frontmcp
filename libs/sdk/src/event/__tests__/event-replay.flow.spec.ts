@@ -4,12 +4,12 @@ import * as http from 'node:http';
 import { type AddressInfo } from 'node:net';
 
 import { z } from '@frontmcp/lazy-zod';
-import { type SubscribeEventResult } from '@frontmcp/protocol';
+import { EVENTS_ERROR_CODES, type SubscribeEventResult } from '@frontmcp/protocol';
 import { generateStandardWebhookSecret, getRuntimeContext } from '@frontmcp/utils';
 
 import { createTestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { App, event, type FrontMcpConfigInput } from '../../common';
-import { EventUnsupportedError } from '../../errors';
+import { EventForbiddenError, EventUnsupportedError } from '../../errors';
 import { type Scope } from '../../scope/scope.instance';
 
 jest.mock('@frontmcp/utils', () => {
@@ -35,13 +35,25 @@ const ticketUpdated = event({
   },
 });
 const orderShipped = event({ name: 'order.shipped', payloadSchema: { orderId: z.string() } });
+const audits: string[] = [];
+const auditAuthorize = jest.fn();
+/** An event with check() whose own `authorize()` guards it. */
+const auditRecorded = event({
+  name: 'audit.recorded',
+  payloadSchema: { auditId: z.string() },
+  authorize: auditAuthorize,
+  check(_args, cursor) {
+    const position = cursor === null ? audits.length : Number(cursor);
+    return { events: audits.slice(position).map((auditId) => ({ data: { auditId } })), cursor: String(audits.length) };
+  },
+});
 
-@App({ id: 'desk', name: 'Desk', events: [ticketUpdated, orderShipped] })
+@App({ id: 'desk', name: 'Desk', events: [ticketUpdated, orderShipped, auditRecorded] })
 class DeskApp {}
 
 interface Delivery {
   subscriptionId: string;
-  json: { data: { ticketId: string }; cursor: string | null; eventId: string; name: string };
+  json: { data: { ticketId: string }; cursor: string | null; eventId: string; name: string; type?: string };
 }
 
 describe('webhook subscriptions of an event with check()', () => {
@@ -164,6 +176,25 @@ describe('webhook subscriptions of an event with check()', () => {
     await new Promise((resolve) => setTimeout(resolve, 150));
 
     expect(deliveries.filter((delivery) => delivery.subscriptionId === subscribed.id)).toEqual([]);
+  });
+
+  it('ends a subscription whose owner authorize() refuses when checked again, and reads nothing more for it', async () => {
+    const subscribed = await subscribe('audits', {}, 'audit.recorded');
+    const store = scope.events?.subscriptions?.store;
+    await store?.update(subscribed.id, { lastAuthorizedAt: Date.now() - 3_600_000 });
+    auditAuthorize.mockRejectedValue(new EventForbiddenError(EVENTS_ERROR_CODES, 'audit.recorded', 'audits closed'));
+
+    audits.push('a-1');
+    const [envelope] = await deliveredTo(subscribed.id, 1);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    auditAuthorize.mockReset();
+
+    expect(envelope.json).toEqual({
+      type: 'terminated',
+      error: { code: -32024, message: 'Forbidden', data: { reason: 'Access revoked' } },
+    });
+    expect(deliveries.filter((delivery) => delivery.subscriptionId === subscribed.id)).toHaveLength(1);
+    await expect(store?.get(subscribed.id)).resolves.toBeUndefined();
   });
 
   it('keeps cursor null for an event without check()', async () => {

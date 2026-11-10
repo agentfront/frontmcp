@@ -18,6 +18,11 @@ import { EVENT_DIALECTS } from '../event-dialect';
 import { hasReauthorization, reauthorizeSubscriber } from '../event-reauthorization';
 import type EventRegistry from '../event.registry';
 import { type BufferedEvent } from '../poll/event-buffer';
+import {
+  accessRevokedError,
+  terminateEventSubscription,
+  type EventTerminationError,
+} from '../subscription/event-subscription-termination';
 import { type EventSubscriptionRecord } from '../subscription/event-subscription.store';
 
 /** The largest body of one delivery, in bytes. A larger event is not delivered to that subscription. */
@@ -239,12 +244,7 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
         );
         continue;
       }
-      const codes = EVENT_DIALECTS[subscription.dialect].errorCodes;
-      await this.terminate(subscription, {
-        code: codes.forbidden,
-        message: 'Forbidden',
-        data: { reason: 'Access revoked' },
-      });
+      await this.terminate(subscription, accessRevokedError(subscription.dialect));
     }
     this.state.set('subscriptions', allowed);
   }
@@ -339,28 +339,8 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
   }
 
   /** End a subscription the server no longer serves: remove it, tell its event, and tell its callback when the dialect does. */
-  private async terminate(
-    subscription: EventSubscriptionRecord,
-    error: { code: number; message: string; data: Record<string, unknown> },
-  ): Promise<void> {
+  private async terminate(subscription: EventSubscriptionRecord, error: EventTerminationError): Promise<void> {
     const { subscriptions, outbox, metrics } = this.events;
-    const removed = await subscriptions?.store.delete(subscription.id);
-    if (!removed || !subscriptions || !outbox) return;
-    await subscriptions.notifyUnsubscribed(removed, 'terminated');
-    metrics?.count('terminated', removed.eventName);
-    this.logger.warn(
-      `Subscription ${removed.id} to event "${removed.eventName}" is terminated: ${error.message} ` +
-        `(${String(error.data['reason'])})`,
-    );
-    if (!EVENT_DIALECTS[removed.dialect].sendsControlEnvelopes) return;
-    const { url, secret, previousSecret, previousSecretUntil } = removed.delivery;
-    await outbox.enqueue({
-      kind: 'terminated',
-      subscriptionId: removed.id,
-      eventName: removed.eventName,
-      body: JSON.stringify({ type: 'terminated', error }),
-      webhookId: generateWebhookMessageId('terminated'),
-      target: { url, secret, previousSecret, previousSecretUntil },
-    });
+    await terminateEventSubscription({ subscriptions, outbox, metrics, logger: this.logger, subscription, error });
   }
 }
