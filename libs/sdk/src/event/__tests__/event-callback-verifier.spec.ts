@@ -252,6 +252,21 @@ describe('EventCallbackVerifier', () => {
     await expect(attempt(100)).resolves.toMatchObject({ outcome: 'failed' });
   });
 
+  it('counts every port of one host against the same limit', async () => {
+    jest.useFakeTimers({ now: 1_800_000_000_000 });
+    const { verifier } = verifierWith(async () => answer(500));
+    const attemptOnPort = (port: number) =>
+      verifier.verify(
+        verification({ principalKey: `principal:user-${port}`, url: `https://hooks.example.com:${port}/hooks` }),
+      );
+
+    for (let port = 1; port <= VERIFICATION_ATTEMPTS_PER_HOST; port++) {
+      await expect(attemptOnPort(port)).resolves.toMatchObject({ outcome: 'failed' });
+    }
+
+    await expect(attemptOnPort(9999)).resolves.toEqual({ outcome: 'limited', max: VERIFICATION_ATTEMPTS_PER_HOST });
+  });
+
   it('passes the test option for local callbacks to every request', async () => {
     const { verifier, sent } = verifierWith(echoingReceiver, { allowLocal: true });
 

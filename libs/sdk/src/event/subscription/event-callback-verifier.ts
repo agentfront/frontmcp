@@ -153,7 +153,7 @@ export class EventCallbackVerifier {
       return { outcome: 'verified', verifiedAt: earlierProof };
     }
 
-    if (!this.takeAttempt(callback.host, now)) return { outcome: 'limited', max: VERIFICATION_ATTEMPTS_PER_HOST };
+    if (!this.takeAttempt(callback.hostname, now)) return { outcome: 'limited', max: VERIFICATION_ATTEMPTS_PER_HOST };
 
     const failure = (await this.isDeclaredReceiver(callback, now)) ? undefined : await this.challenge(request, now);
     if (failure) return { outcome: 'failed', reason: failure };
