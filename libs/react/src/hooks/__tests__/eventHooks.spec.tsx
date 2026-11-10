@@ -113,6 +113,30 @@ describe('useEventSubscription', () => {
     expect(onError).toHaveBeenCalledTimes(2);
   });
 
+  it('goes back to idle when it is disabled, and when its server loses the client', async () => {
+    const feeds: Array<ReturnType<typeof controllableSubscription>> = [];
+    const subscribe = jest.fn(async () => {
+      const feed = controllableSubscription();
+      feeds.push(feed);
+      return feed.subscription;
+    });
+    registerServer('default', subscribe);
+
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useEventSubscription('order.created', {}, { onEvent: jest.fn(), enabled }),
+      { initialProps: { enabled: true } },
+    );
+    await waitFor(() => expect(result.current.status).toBe('active'));
+    rerender({ enabled: false });
+    await waitFor(() => expect(result.current).toEqual({ status: 'idle' }));
+    rerender({ enabled: true });
+    await waitFor(() => expect(result.current.status).toBe('active'));
+    act(() => serverRegistry.update('default', { client: null }));
+
+    await waitFor(() => expect(result.current).toEqual({ status: 'idle' }));
+    expect(feeds.map((feed) => feed.cancel.mock.calls.length)).toEqual([1, 1]);
+  });
+
   it('says when the server ended the subscription, and holds none while disabled or not connected', async () => {
     const feed = controllableSubscription();
     const subscribe = jest.fn().mockResolvedValue(feed.subscription);

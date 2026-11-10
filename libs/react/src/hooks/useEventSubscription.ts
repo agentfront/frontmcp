@@ -64,7 +64,10 @@ export function useEventSubscription(
   });
 
   useEffect(() => {
-    if (!client || !enabled) return;
+    if (!client || !enabled) {
+      setState((current) => (current.status === 'idle' ? current : { status: 'idle' }));
+      return;
+    }
     let unmounted = false;
     let subscription: EventSubscription | undefined;
 

@@ -223,7 +223,8 @@ function Notes() {
 - `useEventSubscription(name, args, handler | { onEvent, onError, server, delivery, enabled })` subscribes through
   the provider's in-process client once it is connected, by push over the in-memory connection (poll when the event
   offers only that), with no network. It returns `{ status, mode, error }`; `status` is `idle`, `subscribing`,
-  `active`, `ended` or `error`. It unsubscribes on unmount, and again when the name or the arguments change.
+  `active`, `ended` or `error`. It unsubscribes on unmount, and again when the name or the arguments change. While
+  `enabled` is `false` or the server has no connected client it holds no subscription, and `status` is `idle`.
 - `usePublishEvent(serverName?)` returns `server.events.publish` of the provider's server. Without a registered server
   it rejects.
 - `useDomEventSource(target, type, toEvent, { server, onError })` listens on `target` only (an element, a ref to one,
