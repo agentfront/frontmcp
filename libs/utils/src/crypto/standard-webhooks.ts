@@ -40,12 +40,19 @@ export interface SignedWebhookMessage {
 
 export type WebhookSignatureCheck = 'valid' | 'missing' | 'stale' | 'mismatch';
 
-/** The HMAC key of a secret: a `whsec_` secret is base64 after the prefix, any other its UTF-8 bytes. */
-export function signingKeyOf(secret: string): Uint8Array {
+/** The key a secret decodes to: base64 after `whsec_`, otherwise its UTF-8 bytes. */
+function decodedKeyOf(secret: string): Uint8Array {
   if (!secret.startsWith(SECRET_PREFIX)) return encoder.encode(secret);
   const encoded = secret.slice(SECRET_PREFIX.length);
   if (!BASE64_PATTERN.test(encoded)) throw new TypeError('not base64');
   return base64Decode(encoded);
+}
+
+/** The HMAC key of a secret: a `whsec_` secret is base64 after the prefix, any other its UTF-8 bytes; never empty. */
+export function signingKeyOf(secret: string): Uint8Array {
+  const signingKey = decodedKeyOf(secret);
+  if (signingKey.length === 0) throw new TypeError('empty signing key');
+  return signingKey;
 }
 
 /** Whether a secret is `whsec_` followed by base64, padded or not, that decodes to 24 to 64 bytes. */
@@ -73,6 +80,7 @@ export function generateWebhookMessageId(kind?: string): string {
   return `msg_${kind}_${random}`;
 }
 
+/** The base64 HMAC-SHA256 of `<id>.<timestamp>.<body>` under one key. */
 function signatureOf(signingKey: Uint8Array, id: string, timestamp: string, body: string): string {
   return base64Encode(hmacSha256(signingKey, encoder.encode(`${id}.${timestamp}.${body}`)));
 }
@@ -100,6 +108,7 @@ export function webhookSignatureHeaders(
   };
 }
 
+/** Constant-time equality that also holds for signatures of different lengths. */
 function isSameSignature(provided: Uint8Array, expected: Uint8Array): boolean {
   return provided.length === expected.length && timingSafeEqual(provided, expected);
 }

@@ -137,17 +137,20 @@ export async function sendOutboundRequest(request: OutboundRequest): Promise<Out
   }
 }
 
+/** Node's `dns`, `http` and `https`, or nothing on a runtime without them. */
 function loadNodeNetworking(): NodeNetworking | undefined {
   if (!isNode() || isEdgeRuntime()) return undefined;
   return { dns: require('node:dns'), http: require('node:http'), https: require('node:https') };
 }
 
+/** A promise that rejects when the signal aborts, to bound a lookup that cannot be cancelled. */
 function rejectedOnAbort(signal: AbortSignal): Promise<never> {
   return new Promise((_resolve, reject) => {
     signal.addEventListener('abort', () => reject(signal.reason), { once: true });
   });
 }
 
+/** Resolves the host once and returns its addresses only when every one of them may be requested. */
 async function resolveAllowedAddresses(
   node: NodeNetworking,
   exchange: Exchange,
@@ -169,6 +172,7 @@ async function resolveAllowedAddresses(
   return addresses;
 }
 
+/** A `lookup` that answers with the checked addresses only, so the connection cannot go anywhere else. */
 function pinnedLookup(addresses: readonly LookupAddress[]): LookupFunction {
   return (_hostname, options, callback) => {
     if (options.all) {
@@ -180,6 +184,7 @@ function pinnedLookup(addresses: readonly LookupAddress[]): LookupFunction {
   };
 }
 
+/** Sends the request over Node sockets pinned to the checked addresses. */
 async function exchangeOverNode(
   node: NodeNetworking,
   exchange: Exchange,
@@ -204,6 +209,7 @@ async function exchangeOverNode(
   };
 }
 
+/** The chunks of a web stream, cancelling it when the reader stops early. */
 async function* chunksOf(stream: ReadableStream<Uint8Array>): AsyncGenerator<Uint8Array> {
   const reader = stream.getReader();
   try {
@@ -217,6 +223,7 @@ async function* chunksOf(stream: ReadableStream<Uint8Array>): AsyncGenerator<Uin
   }
 }
 
+/** Sends the request through `fetch` where the platform resolves DNS; a redirect is not followed. */
 async function exchangeOverFetch(exchange: Exchange): Promise<Upstream> {
   const { url, method, headers, body, signal } = exchange;
   const response = await fetch(url, { method, headers, body, redirect: 'manual', signal });
@@ -228,6 +235,7 @@ async function exchangeOverFetch(exchange: Exchange): Promise<Upstream> {
   };
 }
 
+/** Reads at most `maxBytes` of the answer and says whether more was there. */
 async function readBody(upstream: Upstream, maxBytes: number): Promise<Pick<OutboundAnswer, 'body' | 'bodyTruncated'>> {
   if (maxBytes <= 0) {
     await upstream.discard();
@@ -249,6 +257,7 @@ async function readBody(upstream: Upstream, maxBytes: number): Promise<Pick<Outb
   return { body: decoder.decode(bytes), bodyTruncated: received > maxBytes };
 }
 
+/** The result of an answered request: status, requested headers and the bounded body. */
 async function answerOf(upstream: Upstream, request: OutboundRequest): Promise<OutboundAnswer> {
   const headers: Record<string, string> = {};
   for (const requestedName of request.responseHeaders ?? []) {
@@ -260,6 +269,7 @@ async function answerOf(upstream: Upstream, request: OutboundRequest): Promise<O
   return { answered: true, status: upstream.status, body, bodyTruncated, headers };
 }
 
+/** The fixed reason of a failed request, from the refusal, the abort or the socket error code. */
 function failureReasonOf(error: unknown, signal: AbortSignal): OutboundFailureReason {
   if (error instanceof OutboundRefusal) return error.reason;
   if (signal.aborted) return 'timeout';

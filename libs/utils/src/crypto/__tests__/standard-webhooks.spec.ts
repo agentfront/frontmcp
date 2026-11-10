@@ -65,6 +65,11 @@ describe('signingKeyOf', () => {
     expect(() => signingKeyOf('whsec_***')).toThrow(new TypeError('not base64'));
     expect(() => signingKeyOf('whsec_')).toThrow(TypeError);
   });
+
+  it('refuses a secret that decodes to an empty key', () => {
+    expect(() => signingKeyOf('whsec_A')).toThrow(new TypeError('empty signing key'));
+    expect(() => signingKeyOf('')).toThrow(new TypeError('empty signing key'));
+  });
 });
 
 describe('isStandardWebhookSecret', () => {

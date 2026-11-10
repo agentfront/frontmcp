@@ -25,6 +25,7 @@ export function isAllowedOutboundAddress(address: string, options: OutboundTarge
   return options.allowLocal === true && (range === 'loopback' || range === 'private');
 }
 
+/** Whether a URL host may be requested: an allowed IP literal, or a name that is neither local nor a metadata service. */
 function isAllowedHostname(hostname: string, options: OutboundTargetOptions): boolean {
   const isIpLiteral = hostname.startsWith('[') || parseIpv4(hostname) !== undefined;
   if (isIpLiteral) return isAllowedOutboundAddress(hostname, options);
