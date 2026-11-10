@@ -57,6 +57,7 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   channels: sdkModule('channel/(?!channel\\.utils)'),
   'distributed transport': sdkModule('ha/|transport/(bus|relay|event-stores)/'),
   duties: sdkModule('duty/'),
+  workers: sdkModule('worker/'),
   elicitation: sdkModule('elicitation/(store|flows)/|elicitation/send-elicitation-result\\.tool'),
   events: sdkModule('event/(?!event\\.utils)'),
   health: sdkModule('health/'),

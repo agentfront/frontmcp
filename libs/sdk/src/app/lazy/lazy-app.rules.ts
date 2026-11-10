@@ -22,6 +22,8 @@ export interface LoadedEntries {
   hooks: readonly HookEntry[];
   /** Its `@Duty` providers. */
   duties: readonly { readonly name: string }[];
+  /** Its `@Worker` providers. */
+  workers: readonly { readonly name: string }[];
 }
 
 /** The flows that run an app's hooks only for its own entries; hooks on any other flow run for every request. */
@@ -102,6 +104,9 @@ export function whyLoadedAppCannotBeLazy(entries: LoadedEntries): string[] {
   if (entries.skills.length > 0) reasons.push(`it has skills (${names(entries.skills)})`);
   if (entries.agents.length > 0) reasons.push(`it has agents (${names(entries.agents)})`);
   if (entries.duties.length > 0) reasons.push(`it has duties (${names(entries.duties)}), which start with the server`);
+  if (entries.workers.length > 0) {
+    reasons.push(`it has workers (${names(entries.workers)}), which start with the server`);
+  }
   for (const hook of entries.hooks) {
     const label = `${hook.metadata.pluginName ?? classNameOf(hook)}.${hook.metadata.method}`;
     if (!ENTRY_CALL_FLOWS.has(hook.metadata.flow)) {

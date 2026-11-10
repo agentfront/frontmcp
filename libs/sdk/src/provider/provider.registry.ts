@@ -17,6 +17,7 @@ import {
 import {
   dutyMetadataOf,
   FrontMcpServer,
+  workerMetadataOf,
   type ProviderEntry,
   type ProviderRegistryInterface,
   type ProviderType,
@@ -346,7 +347,7 @@ export default class ProviderRegistry
   /** Run `onBootstrap()` on the instance just built for `token`, and keep it for the ready and shutdown phases. */
   private async bootstrapBuilt(token: Token): Promise<void> {
     const built = this.instances.get(token);
-    const instance = lifecycleHooksOf((await this.dutyLifecycleOf(built)) ?? built);
+    const instance = lifecycleHooksOf((await this.backgroundLifecycleOf(built)) ?? built);
     if (!instance || this.heldEntries.some((held) => held.instance === instance)) return;
     const entry = { token, instance };
     const shared = this.sharedLifecycles.get(instance);
@@ -358,12 +359,21 @@ export default class ProviderRegistry
     this.heldEntries.push(entry);
   }
 
-  /** A `@Duty` instance's lifecycle, which starts it on `onReady()`; the duty runtime loads only when one is built. */
-  private async dutyLifecycleOf(built: unknown): Promise<object | undefined> {
-    const metadata = dutyMetadataOf(built);
-    if (!metadata || typeof built !== 'object' || built === null) return undefined;
-    const { dutyLifecycleOf } = await import('../duty/duty.lifecycle.js');
-    return dutyLifecycleOf(built, metadata, this);
+  /**
+   * A `@Duty` or `@Worker` instance's lifecycle, which starts it on `onReady()`; their runtimes load only when one is
+   * built.
+   */
+  private async backgroundLifecycleOf(built: unknown): Promise<object | undefined> {
+    if (typeof built !== 'object' || built === null) return undefined;
+    const duty = dutyMetadataOf(built);
+    if (duty) {
+      const { dutyLifecycleOf } = await import('../duty/duty.lifecycle.js');
+      return dutyLifecycleOf(built, duty, this);
+    }
+    const worker = workerMetadataOf(built);
+    if (!worker) return undefined;
+    const { workerLifecycleOf } = await import('../worker/worker.lifecycle.js');
+    return workerLifecycleOf(built, worker, this);
   }
 
   /** Run `onReady()` on the providers built here, then on those of the registries below, in build order; once. */

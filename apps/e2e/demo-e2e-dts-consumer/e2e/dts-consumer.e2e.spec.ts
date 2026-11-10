@@ -45,6 +45,7 @@ const fixtureFiles = [
   'live-surface-must-compile.ts',
   'materialized-resources-must-compile.ts',
   'duties-must-compile.ts',
+  'workers-must-compile.ts',
   'offload-must-compile.ts',
   'http-routes-must-compile.ts',
   'shared-server-must-compile.ts',
@@ -222,6 +223,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types @Duty, its metadata and run context, and createContainer({ runDuties, info })', () => {
     expect(describeEach(inFixtureFile('duties-must-compile.ts'))).toEqual([]);
+  });
+
+  it('types @Worker, its metadata and run context, and createContainer({ runBackground })', () => {
+    expect(describeEach(inFixtureFile('workers-must-compile.ts'))).toEqual([]);
   });
 
   it('types @HttpRoute, HttpRouteContext, SSE routes, HttpRouteHook and http.auth.people', () => {

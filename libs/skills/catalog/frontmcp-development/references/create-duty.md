@@ -31,6 +31,7 @@ takes the duty over once the lease runs out.
 - Each process needs its own copy of the work, such as refreshing an in-memory cache: start a timer in a provider's
   `onReady()` (see `create-provider`)
 - A client triggers the work and needs retries or progress (see `create-job`)
+- The work never ends by itself: a connection to keep open, a queue to consume, files to watch (see `create-worker`)
 - The server runs serverless or on the edge: a duty needs a long-lived process, and is not started there
 
 > **Decision:** Use `@Duty` when work must run on a schedule in one process of the machine (`scope: 'machine'`), of
@@ -96,21 +97,21 @@ class CacheApp {}
 
 ### Step 3 (optional): Run duties from a script
 
-`createContainer()` builds a duty without starting it. To run duties without serving MCP, ask for it. Each duty's own
-`onReady()` runs before its first run, as in a server:
+`createContainer()` builds a duty without starting it. To run duties (and workers) without serving MCP, ask for it.
+Each duty's own `onReady()` runs before its first run, as in a server:
 
 ```typescript
 const container = await createContainer({
   apps: [CacheApp],
-  runDuties: true,
-  info: { name: 'cache-server' }, // required with runDuties: the server's info.name, so they share its leases
+  runBackground: true, // starts the @Duty and @Worker providers; runDuties: true, the older name, does the same
+  info: { name: 'cache-server' }, // required with runBackground: the server's info.name, so they share its leases
   redis: { url: process.env.REDIS_URL }, // the server's redis, when it has one: needed for scope: 'cluster'
 });
 // ...
 await container.dispose(); // stops the duties and releases their leases
 ```
 
-A container without `runDuties` builds a `'cluster'` duty without Redis; one that runs duties refuses it, like a
+A container without `runBackground` builds a `'cluster'` duty without Redis; one that runs duties refuses it, like a
 server.
 
 ## `@Duty` Options
@@ -148,7 +149,7 @@ Two mistakes are found when the server starts, in the duty's `onBootstrap()` pha
 | `ClusterScopeNeedsRedisError` | `CLUSTER_SCOPE_NEEDS_REDIS` | `Duty "<name>" has scope 'cluster', which keeps one lease for every machine in Redis, and none is configured: set a top-level redis (@FrontMcp({ redis }) or createContainer({ redis })), or use scope 'machine'` |
 
 The cluster check runs only where duties start: not in a serverless or edge deployment, not in a container without
-`runDuties`, and not when `frontmcp build` boots the server to read it.
+`runBackground`, and not when `frontmcp build` boots the server to read it.
 
 Two different classes whose duties share a lease in one process (both `name: 'sweep'` in one server, or two plugins'
 `CacheSweeper` classes) would leave one of them never running, so the second one to start fails with
@@ -255,15 +256,15 @@ a deployment runs the duty.
 
 ## Common Patterns
 
-| Pattern              | Correct                                                   | Incorrect                                             | Why                                                                       |
-| -------------------- | --------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
-| Shared periodic work | `@Duty({ every, scope })` in `providers`                  | `setInterval()` in a provider's `onReady()`           | Every copy of the server would run the interval                           |
-| Calendar schedules   | `@Duty({ cron: '0 9 * * 1-5', timezone, scope })`         | `every: '1d'` started at the right hour               | An interval drifts with restarts and ignores weekdays and daylight saving |
-| Several machines     | `scope: 'cluster'` with a top-level `redis`               | `scope: 'machine'` on every pod                       | With Redis a machine lease is per hostname, so every pod would run it     |
-| Long runs            | Check `signal.aborted` between steps                      | Ignore `signal`                                       | A run that lost its lease keeps going until it looks                      |
-| Stable names         | `@Duty({ name: 'prune-cache', ... })` in a minified build | Rely on the class name after minification             | The lease key comes from the name                                         |
-| Scripts              | `createContainer({ runDuties: true, info: { name } })`    | Expect `createContainer()` to start duties on its own | A container never runs duties unless asked, so scripts and workers don't  |
-| `splitByApp` servers | The duty in one `@App`'s `providers`                      | The duty in the top-level `providers`                 | Every app's scope builds a top-level provider: one lease, several copies  |
+| Pattern              | Correct                                                    | Incorrect                                             | Why                                                                                             |
+| -------------------- | ---------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Shared periodic work | `@Duty({ every, scope })` in `providers`                   | `setInterval()` in a provider's `onReady()`           | Every copy of the server would run the interval                                                 |
+| Calendar schedules   | `@Duty({ cron: '0 9 * * 1-5', timezone, scope })`          | `every: '1d'` started at the right hour               | An interval drifts with restarts and ignores weekdays and daylight saving                       |
+| Several machines     | `scope: 'cluster'` with a top-level `redis`                | `scope: 'machine'` on every pod                       | With Redis a machine lease is per hostname, so every pod would run it                           |
+| Long runs            | Check `signal.aborted` between steps                       | Ignore `signal`                                       | A run that lost its lease keeps going until it looks                                            |
+| Stable names         | `@Duty({ name: 'prune-cache', ... })` in a minified build  | Rely on the class name after minification             | The lease key comes from the name                                                               |
+| Scripts              | `createContainer({ runBackground: true, info: { name } })` | Expect `createContainer()` to start duties on its own | A container never runs duties unless asked, so a script that only needs the providers runs none |
+| `splitByApp` servers | The duty in one `@App`'s `providers`                       | The duty in the top-level `providers`                 | Every app's scope builds a top-level provider: one lease, several copies                        |
 
 ## Verification Checklist
 
@@ -284,23 +285,23 @@ a deployment runs the duty.
 
 ## Troubleshooting
 
-| Problem                                   | Cause                                                                     | Solution                                                                         |
-| ----------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| The duty never runs                       | Not in `providers`; a `createContainer()` without `runDuties`; serverless | Register it; pass `runDuties: true`; run it in a long-lived process              |
-| A cron duty did not run at startup        | It waits for its next scheduled time                                      | Nothing to fix; trigger the work another way when it must also run at startup    |
-| `ClusterScopeNeedsRedisError` at startup  | A `'cluster'` duty and no top-level `redis` (or a Vercel KV one)          | Add `redis` to `@FrontMcp()` or `createContainer()`, or use `scope: 'machine'`   |
-| `InvalidDutyCronError` at startup         | The `cron` expression can't be read, has a year field, or never matches   | Fix the expression: 5 fields, or 6 with seconds first                            |
-| A cron duty runs an hour off              | The expression is read in UTC                                             | Set `timezone` to the IANA zone the schedule is meant in                         |
-| `already runs elsewhere` with one server  | Another server on the machine has the same `info.name` and duty name      | Give the server a distinctive `info.name`, or the duty its own `name`            |
-| `failed in onReady()` naming the duty     | The lease store can't be opened                                           | Install `@frontmcp/storage-sqlite`, or check the `redis` connection              |
-| `DutyNameConflictError`                   | Two duty classes with the same `name` in one server                       | Give one of them its own `name`                                                  |
-| `UnsafeDutyStoreError`                    | `FRONTMCP_HOME` (or a folder above it) is writable by others              | Point `FRONTMCP_HOME` at a folder only you can write to, or `chmod 700` it       |
-| It runs in two processes at once          | Different `info.name` or duty `name`, or `'workspace'` in two projects    | Give them the same names; use `'machine'` to share across projects               |
-| A takeover is slow after a crash          | The lease must expire first                                               | Lower `leaseMs` (at least 1000)                                                  |
-| `lost its lease` while the holder is busy | The event loop was blocked longer than the lease                          | Keep runs asynchronous, move CPU-heavy work off the main thread, raise `leaseMs` |
+| Problem                                   | Cause                                                                         | Solution                                                                         |
+| ----------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| The duty never runs                       | Not in `providers`; a `createContainer()` without `runBackground`; serverless | Register it; pass `runBackground: true`; run it in a long-lived process          |
+| A cron duty did not run at startup        | It waits for its next scheduled time                                          | Nothing to fix; trigger the work another way when it must also run at startup    |
+| `ClusterScopeNeedsRedisError` at startup  | A `'cluster'` duty and no top-level `redis` (or a Vercel KV one)              | Add `redis` to `@FrontMcp()` or `createContainer()`, or use `scope: 'machine'`   |
+| `InvalidDutyCronError` at startup         | The `cron` expression can't be read, has a year field, or never matches       | Fix the expression: 5 fields, or 6 with seconds first                            |
+| A cron duty runs an hour off              | The expression is read in UTC                                                 | Set `timezone` to the IANA zone the schedule is meant in                         |
+| `already runs elsewhere` with one server  | Another server on the machine has the same `info.name` and duty name          | Give the server a distinctive `info.name`, or the duty its own `name`            |
+| `failed in onReady()` naming the duty     | The lease store can't be opened                                               | Install `@frontmcp/storage-sqlite`, or check the `redis` connection              |
+| `DutyNameConflictError`                   | Two duty classes with the same `name` in one server                           | Give one of them its own `name`                                                  |
+| `UnsafeDutyStoreError`                    | `FRONTMCP_HOME` (or a folder above it) is writable by others                  | Point `FRONTMCP_HOME` at a folder only you can write to, or `chmod 700` it       |
+| It runs in two processes at once          | Different `info.name` or duty `name`, or `'workspace'` in two projects        | Give them the same names; use `'machine'` to share across projects               |
+| A takeover is slow after a crash          | The lease must expire first                                                   | Lower `leaseMs` (at least 1000)                                                  |
+| `lost its lease` while the holder is busy | The event loop was blocked longer than the lease                              | Keep runs asynchronous, move CPU-heavy work off the main thread, raise `leaseMs` |
 
 ## Reference
 
 - [Providers](https://frontmcp.dev/reference/sdk/provider)
-- Related skills: `create-provider` (lifecycle hooks, `createContainer()`), `create-job`, `decorators-guide`,
-  `setup-sqlite`
+- Related skills: `create-worker` (long-running processes under the same lease), `create-provider` (lifecycle hooks,
+  `createContainer()`), `create-job`, `decorators-guide`, `setup-sqlite`

@@ -33,6 +33,7 @@
     "hook-ordering-must-fail.ts",
     "live-surface-must-compile.ts",
     "duties-must-compile.ts",
+    "workers-must-compile.ts",
     "shared-server-must-compile.ts",
     "durable-jobs-must-compile.ts",
     "memory-stores-must-compile.ts",
