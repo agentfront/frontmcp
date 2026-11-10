@@ -7,4 +7,7 @@ export const orderCreated = event({
   description: 'Fires when an order is placed',
   inputSchema: { status: z.string().optional(), region: z.string().optional() },
   payloadSchema: { orderId: z.string(), status: z.string(), total: z.number() },
+  match(occurrence, args) {
+    return args.status === undefined || args.status === occurrence.data.status;
+  },
 });

@@ -18,12 +18,22 @@ const configDefaults = {
     minTtlMs: 60_000,
     allowNoExpiry: false,
     maxPerPrincipal: 100,
+    reauthorizeEveryMs: 300_000,
+    suspendedTtlMs: 604_800_000,
   },
   webhook: {
     enabled: true,
     allowedCallbacks: [],
     unsafeAllowLocalCallbacks: false,
     verification: { cacheTtlMs: 3_600_000, timeoutMs: 10_000 },
+    delivery: {
+      timeoutMs: 10_000,
+      maxAttempts: 5,
+      retryWindowMs: 900_000,
+      backoffMs: 1_000,
+      maxBackoffMs: 60_000,
+      concurrency: 16,
+    },
     rotationGraceMs: 300_000,
   },
 };

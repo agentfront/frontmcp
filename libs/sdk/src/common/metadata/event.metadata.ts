@@ -122,6 +122,10 @@ export interface EventSubscriptionsOptions {
   allowNoExpiry?: boolean;
   /** How many subscriptions one caller may hold. @default 100 */
   maxPerPrincipal?: number;
+  /** How often a publish checks a subscription's owner against the event's `authorities` again. @default 300_000 */
+  reauthorizeEveryMs?: number;
+  /** How long a suspended subscription without expiry is kept before it is ended. @default 604_800_000 (7 days) */
+  suspendedTtlMs?: number;
 }
 
 export interface EventsWebhookVerificationOptions {
@@ -129,6 +133,21 @@ export interface EventsWebhookVerificationOptions {
   cacheTtlMs?: number;
   /** How long the callback has to answer the verification request. @default 10_000 */
   timeoutMs?: number;
+}
+
+export interface EventsWebhookDeliveryOptions {
+  /** How long a callback has to answer one delivery. @default 10_000 */
+  timeoutMs?: number;
+  /** How many times one delivery is attempted. @default 5 */
+  maxAttempts?: number;
+  /** How long after its first attempt a delivery is still retried. @default 900_000 (15 minutes) */
+  retryWindowMs?: number;
+  /** The wait before the second attempt; it doubles with each attempt. @default 1_000 */
+  backoffMs?: number;
+  /** The longest wait between two attempts. @default 60_000 */
+  maxBackoffMs?: number;
+  /** How many deliveries are in flight at once in one process. @default 16 */
+  concurrency?: number;
 }
 
 export interface EventsWebhookOptions {
@@ -139,6 +158,7 @@ export interface EventsWebhookOptions {
   /** Test-only: also accept `http:` callbacks and loopback or private addresses. @default false */
   unsafeAllowLocalCallbacks?: boolean;
   verification?: EventsWebhookVerificationOptions;
+  delivery?: EventsWebhookDeliveryOptions;
   /** How long deliveries stay signed with the secret a refresh replaced. @default 300_000 (5 minutes) */
   rotationGraceMs?: number;
 }
@@ -171,6 +191,8 @@ const eventSubscriptionsSchema = z
     minTtlMs: positiveIntegerSchema.optional().default(60_000),
     allowNoExpiry: z.boolean().optional().default(false),
     maxPerPrincipal: positiveIntegerSchema.optional().default(100),
+    reauthorizeEveryMs: positiveIntegerSchema.optional().default(300_000),
+    suspendedTtlMs: positiveIntegerSchema.optional().default(604_800_000),
   } satisfies RawZodShape<EventSubscriptionsOptions>)
   .refine((ttl) => ttl.minTtlMs <= ttl.defaultTtlMs && ttl.defaultTtlMs <= ttl.maxTtlMs, {
     message: 'events.subscriptions needs minTtlMs <= defaultTtlMs <= maxTtlMs; set the three together',
@@ -181,6 +203,19 @@ const eventsWebhookVerificationSchema = z.object({
   timeoutMs: positiveIntegerSchema.optional().default(10_000),
 } satisfies RawZodShape<EventsWebhookVerificationOptions>);
 
+const eventsWebhookDeliverySchema = z
+  .object({
+    timeoutMs: positiveIntegerSchema.optional().default(10_000),
+    maxAttempts: positiveIntegerSchema.optional().default(5),
+    retryWindowMs: positiveIntegerSchema.optional().default(900_000),
+    backoffMs: positiveIntegerSchema.optional().default(1_000),
+    maxBackoffMs: positiveIntegerSchema.optional().default(60_000),
+    concurrency: positiveIntegerSchema.optional().default(16),
+  } satisfies RawZodShape<EventsWebhookDeliveryOptions>)
+  .refine((delivery) => delivery.backoffMs <= delivery.maxBackoffMs, {
+    message: 'events.webhook.delivery needs backoffMs <= maxBackoffMs',
+  });
+
 const eventsWebhookSchema = z.object({
   enabled: z.boolean().optional().default(true),
   allowedCallbacks: z.array(z.string().url()).optional().default([]),
@@ -188,6 +223,9 @@ const eventsWebhookSchema = z.object({
   verification: eventsWebhookVerificationSchema
     .optional()
     .transform((verification) => verification ?? eventsWebhookVerificationSchema.parse({})),
+  delivery: eventsWebhookDeliverySchema
+    .optional()
+    .transform((delivery) => delivery ?? eventsWebhookDeliverySchema.parse({})),
   rotationGraceMs: positiveIntegerSchema.optional().default(300_000),
 } satisfies RawZodShape<EventsWebhookOptions>);
 

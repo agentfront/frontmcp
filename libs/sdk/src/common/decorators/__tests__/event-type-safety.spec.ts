@@ -9,6 +9,7 @@ import {
   type EventInputOf,
   type EventOccurrenceOf,
   type EventPayloadOf,
+  type EventPublisher,
   type EventSubscriber,
 } from '../../';
 
@@ -134,6 +135,24 @@ function _testBuilderMethodsFollowTheSchemas() {
   });
 }
 
+// ── publish(): data has the type of the event's payload ──
+
+async function _testPublishTakesThePayloadOfTheEvent(publisher: EventPublisher) {
+  await publisher.publish(TypedOrderEvent, { orderId: 'o-1', total: 10 });
+  await publisher.publish(orderShipped, { orderId: 'o-1', total: 10 });
+  await publisher.publish(UntypedOrderEvent, { anything: true });
+  await publisher.publish('order.created', { anything: true }, { audience: { roles: { any: ['admin'] } } });
+
+  // @ts-expect-error - total is a number
+  await publisher.publish(TypedOrderEvent, { orderId: 'o-1', total: 'ten' });
+
+  // @ts-expect-error - total is required
+  await publisher.publish(orderShipped, { orderId: 'o-1' });
+
+  // @ts-expect-error - a subscription id is a string
+  await publisher.publish('order.created', {}, { subscriptionId: 7 });
+}
+
 describe('@Event and event() type safety', () => {
   it('keeps the valid declarations usable at runtime', () => {
     expect([UntypedOrderEvent, TypedOrderEvent, NoArgsOrderEvent].every((cls) => typeof cls === 'function')).toBe(true);
@@ -149,8 +168,9 @@ describe('@Event and event() type safety', () => {
       _testArgumentsNeedAnInputSchema,
       _testSchemasMustBeObjects,
       _testBuilderMethodsFollowTheSchemas,
+      _testPublishTakesThePayloadOfTheEvent,
     ];
 
-    expect(neverCalled).toHaveLength(6);
+    expect(neverCalled).toHaveLength(7);
   });
 });

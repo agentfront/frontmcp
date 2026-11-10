@@ -176,6 +176,8 @@ describe('EventSubscriptions', () => {
         minTtlMs: MINUTE_MS,
         allowNoExpiry: false,
         maxPerPrincipal: 100,
+        reauthorizeEveryMs: 300_000,
+        suspendedTtlMs: 604_800_000,
       });
     });
   });

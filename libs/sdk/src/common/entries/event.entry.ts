@@ -61,6 +61,11 @@ export abstract class EventEntry extends BaseEntry<EventRecord, EventContext, Ev
     return schema.parse(args) as Record<string, unknown>;
   }
 
+  /** The `data` of an occurrence, validated against `payloadSchema`. */
+  parsePayload(data: unknown): Record<string, unknown> {
+    return toObjectSchema(this.metadata.payloadSchema).parse(data) as Record<string, unknown>;
+  }
+
   /** The declared argument schema, or an empty closed object for an event that takes no arguments. */
   private buildInputJsonSchema(): JsonSchema {
     const { inputSchema } = this.metadata;

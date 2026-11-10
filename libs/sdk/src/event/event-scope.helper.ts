@@ -2,11 +2,25 @@ import { isPublicMode } from '@frontmcp/auth';
 import { type Token } from '@frontmcp/di';
 import { sha256Hex } from '@frontmcp/utils';
 
-import { type EntryOwnerRef, type EventEntry, type EventType, type FrontMcpLogger, type ScopeEntry } from '../common';
+import {
+  ProviderScope,
+  type EntryOwnerRef,
+  type EventEntry,
+  type EventType,
+  type FrontMcpLogger,
+  type ScopeEntry,
+} from '../common';
 import { eventsConfigSchema, type EventsConfig, type EventsConfigOptions } from '../common/metadata/event.metadata';
+import { EVENT_PUBLISHER } from '../common/tokens/event.tokens';
+import { type HealthProbeResult } from '../common/types/options/health';
 import { assertEntryAuthorities, type EntryAuthorities } from '../front-mcp/authorities-rules.check';
 import type ProviderRegistry from '../provider/provider.registry';
+import { createEventMetrics } from './delivery/event-metrics';
+import { EventOutbox } from './delivery/event-outbox';
+import { ScopeEventPublisher } from './event-publisher';
 import EventRegistry from './event.registry';
+import EventDeliverFlow from './flows/event-deliver.flow';
+import EventPublishFlow from './flows/event-publish.flow';
 import EventSubscribeFlow from './flows/event-subscribe.flow';
 import EventUnsubscribeFlow from './flows/event-unsubscribe.flow';
 import ListEventsFlow from './flows/list-events.flow';
@@ -59,7 +73,16 @@ function storeKeyPrefixOf(scope: ScopeEntry, eventsConfig: EventsConfig): string
   return `mcp:events:${sha256Hex(`server:${scope.metadata.info.name}`).slice(0, 16)}:`;
 }
 
-/** Open the subscription store, start the expiry sweep and serve `events/subscribe` and `events/unsubscribe`. */
+/** The readiness of the outbox: healthy with its depth while its storage answers. */
+async function outboxHealth(outbox: EventOutbox): Promise<HealthProbeResult> {
+  try {
+    return { status: 'healthy', details: { pendingDeliveries: await outbox.depth() } };
+  } catch (error) {
+    return { status: 'unhealthy', error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/** Open the subscription store and the outbox, start their sweeps, and serve subscriptions and deliveries. */
 async function enableWebhookDelivery(
   scope: ScopeEntry,
   eventRegistry: EventRegistry,
@@ -67,7 +90,7 @@ async function enableWebhookDelivery(
   logger: FrontMcpLogger,
 ): Promise<void> {
   const { webhook, store: storeConfig } = eventsConfig;
-  const { store, durable } = await createEventSubscriptionStore({
+  const { store, durable, storage, secret } = await createEventSubscriptionStore({
     redis: storeConfig?.redis,
     sqlite: storeConfig?.sqlite,
     keyPrefix: storeKeyPrefixOf(scope, eventsConfig),
@@ -88,9 +111,25 @@ async function enableWebhookDelivery(
     rotationGraceMs: webhook.rotationGraceMs,
     logger,
   });
+  const outbox = new EventOutbox({
+    storage,
+    secret,
+    durable,
+    settings: webhook.delivery,
+    attempt: (delivery) => scope.runFlowForOutput('events:deliver', { delivery }),
+    metrics: eventRegistry.metrics ?? createEventMetrics(undefined),
+    logger,
+  });
   eventRegistry.subscriptions = subscriptions;
+  eventRegistry.outbox = outbox;
+  await scope.registryFlows(EventDeliverFlow);
   subscriptions.start();
-  scope.onDispose(() => subscriptions.close());
+  outbox.start();
+  scope.onDispose(async () => {
+    await outbox.stop();
+    await subscriptions.close();
+  });
+  scope.registerHealthProbe({ name: 'events-outbox', check: () => outboxHealth(outbox) });
 
   if (webhook.unsafeAllowLocalCallbacks) {
     logger.warn(
@@ -121,7 +160,21 @@ export async function registerEventCapabilities(
   await eventRegistry.ready;
   assertEventAuthorities(scope, eventRegistry.getEvents());
 
-  await scope.registryFlows(ListEventsFlow);
+  const publisher = new ScopeEventPublisher(scope, eventRegistry);
+  eventRegistry.publisher = publisher;
+  eventRegistry.metrics = createEventMetrics(scope.metadata.metrics);
+  providers.injectProvider({
+    provide: EVENT_PUBLISHER,
+    value: publisher,
+    metadata: {
+      id: 'frontmcp-event-publisher',
+      name: 'EventPublisher',
+      scope: ProviderScope.GLOBAL,
+      description: 'Publishes the events of the server to their subscribers.',
+    },
+  });
+
+  await scope.registryFlows(ListEventsFlow, EventPublishFlow);
 
   if (eventsConfig.webhook.enabled && canIdentifyCallers(scope)) {
     await enableWebhookDelivery(scope, eventRegistry, eventsConfig, logger);

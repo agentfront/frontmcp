@@ -7,11 +7,20 @@ import {
 } from '@frontmcp/protocol';
 import { getRuntimeContext, isEntryAvailable } from '@frontmcp/utils';
 
-import { FrontMcpLogger, type EntryOwnerRef, type EventEntry, type EventRecord, type EventType } from '../common';
+import {
+  FrontMcpLogger,
+  type EntryOwnerRef,
+  type EventEntry,
+  type EventPublisher,
+  type EventRecord,
+  type EventType,
+} from '../common';
 import { type EventsConfig } from '../common/metadata/event.metadata';
 import { EventNameConflictError } from '../errors';
 import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
+import { type EventMetrics } from './delivery/event-metrics';
+import { type EventOutbox } from './delivery/event-outbox';
 import { EventInstance } from './event.instance';
 import { normalizeEvent } from './event.utils';
 import { type EventSubscriptions } from './subscription/event-subscriptions';
@@ -44,6 +53,15 @@ export default class EventRegistry
 
   /** The stored subscriptions, on a server that delivers by webhook. */
   subscriptions?: EventSubscriptions;
+
+  /** Publishes the server's events; set once the registry is ready. */
+  publisher?: EventPublisher;
+
+  /** The pending deliveries, on a server that delivers by webhook. */
+  outbox?: EventOutbox;
+
+  /** Counts what happens to published events; set once the registry is ready. */
+  metrics?: EventMetrics;
 
   private readonly eventsByName = new Map<string, EventInstance>();
   private readonly enabledDeliveryModes = new Set<EventDeliveryMode>();
