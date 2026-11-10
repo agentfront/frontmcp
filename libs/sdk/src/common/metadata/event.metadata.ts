@@ -134,7 +134,7 @@ export interface EventsWebhookVerificationOptions {
   cacheTtlMs?: number;
   /** How long the callback has to answer the verification request. @default 10_000 */
   timeoutMs?: number;
-  /** Verification requests one callback host may receive in a minute, whatever its port. @default 10 */
+  /** Verification attempts per callback host and minute, whatever its port; each sends up to two requests. @default 10 */
   maxAttemptsPerHost?: number;
 }
 

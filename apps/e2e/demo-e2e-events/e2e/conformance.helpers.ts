@@ -179,7 +179,7 @@ export class ConformanceServer {
 }
 
 /** Read an SSE response in the background, keeping its messages and comment lines. */
-function readStream(response: Response, controller: AbortController): OpenStream {
+export function readStream(response: Response, controller: AbortController): OpenStream {
   const messages: WireMessage[] = [];
   const comments: string[] = [];
   let ended = false;

@@ -4,7 +4,13 @@
  */
 import { expect, type McpTestClient } from '@frontmcp/testing';
 
-import { ConformanceServer, EVENTS_EXTENSION, PROTOCOL_PATHS, type ProtocolPath } from './conformance.helpers';
+import {
+  ConformanceServer,
+  EVENTS_EXTENSION,
+  PROTOCOL_PATHS,
+  readStream,
+  type ProtocolPath,
+} from './conformance.helpers';
 
 interface Descriptor {
   name: string;
@@ -84,20 +90,20 @@ describe('Events conformance: discovery', () => {
   it('acknowledges a listen that asks for event list changes without them, since it did not declare listChanged', async () => {
     const token = await conformance.token('ada');
 
+    const controller = new AbortController();
+
     const response = await conformance.post(
       'subscriptions/listen',
       { notifications: { eventsListChanged: true } },
-      { token },
+      { token, signal: controller.signal },
     );
-    const reader = response.body?.getReader();
-    const { value } = (await reader?.read()) ?? {};
-    await reader?.cancel();
-    const firstFrame = new TextDecoder().decode(value);
-    const acknowledged = JSON.parse(firstFrame.slice(firstFrame.indexOf('data:') + 'data:'.length).trim());
+    const listen = readStream(response, controller);
+    const acknowledged = await listen.waitFor((message) => message.method !== undefined);
+    await listen.close();
 
     expect(response.headers.get('content-type')).toContain('text/event-stream');
     expect(acknowledged).toMatchObject({ method: 'notifications/subscriptions/acknowledged' });
-    expect(acknowledged.params.notifications.eventsListChanged).toBeUndefined();
+    expect((acknowledged.params?.['notifications'] as Record<string, unknown>)['eventsListChanged']).toBeUndefined();
   });
 
   describe('a server without the extension', () => {

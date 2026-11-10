@@ -150,11 +150,14 @@ describe('Events conformance: webhook delivery', () => {
     const created = await subscribe(client, { arguments: { topic } });
     receiver.failNext(10, 503);
 
+    const eventAttempts = () => requestsOf(created.result?.['id']).filter((request) => request.kind === 'event');
+
     await emit(topic);
-    await delay(2000);
+    await waitUntil(() => eventAttempts().length >= 4);
+    await delay(800);
     receiver.failNext(0);
 
-    const attempts = requestsOf(created.result?.['id']).filter((request) => request.kind === 'event');
+    const attempts = eventAttempts();
     expect(attempts).toHaveLength(4);
     expect(new Set(attempts.map((attempt) => attempt.webhookId)).size).toBe(1);
     expect(attempts.every((attempt) => attempt.signatureCheck === 'valid' && attempt.answeredStatus === 503)).toBe(

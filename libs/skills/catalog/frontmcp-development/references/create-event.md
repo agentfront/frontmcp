@@ -1243,15 +1243,15 @@ The three lifetimes must satisfy `minTtlMs <= defaultTtlMs <= maxTtlMs` after de
 
 `events.webhook`:
 
-| Field                              | Type       | Default              | Notes                                                                              |
-| ---------------------------------- | ---------- | -------------------- | ---------------------------------------------------------------------------------- |
-| `enabled?`                         | `boolean`  | `true`               | `false` turns webhook delivery off                                                 |
-| `allowedCallbacks?`                | `string[]` | `[]`                 | Callback URL prefixes accepted without a verification request                      |
-| `unsafeAllowLocalCallbacks?`       | `boolean`  | `false`              | Test-only: also accepts `http:` callbacks and loopback or private addresses        |
-| `verification.cacheTtlMs?`         | `number`   | `3600000` (1 hour)   | How long a callback a caller proved stays verified for that caller                 |
-| `verification.timeoutMs?`          | `number`   | `10000`              | How long the callback has to answer the verification request                       |
-| `verification.maxAttemptsPerHost?` | `number`   | `10`                 | Verification requests one callback host may receive in a minute, whatever its port |
-| `rotationGraceMs?`                 | `number`   | `300000` (5 minutes) | How long deliveries are also signed with a replaced secret                         |
+| Field                              | Type       | Default              | Notes                                                                                                                                       |
+| ---------------------------------- | ---------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled?`                         | `boolean`  | `true`               | `false` turns webhook delivery off                                                                                                          |
+| `allowedCallbacks?`                | `string[]` | `[]`                 | Callback URL prefixes accepted without a verification request                                                                               |
+| `unsafeAllowLocalCallbacks?`       | `boolean`  | `false`              | Test-only: also accepts `http:` callbacks and loopback or private addresses                                                                 |
+| `verification.cacheTtlMs?`         | `number`   | `3600000` (1 hour)   | How long a callback a caller proved stays verified for that caller                                                                          |
+| `verification.timeoutMs?`          | `number`   | `10000`              | How long the callback has to answer the verification request                                                                                |
+| `verification.maxAttemptsPerHost?` | `number`   | `10`                 | Verification attempts one callback host may get in a minute, whatever its port; each sends the well-known request and the challenge at most |
+| `rotationGraceMs?`                 | `number`   | `300000` (5 minutes) | How long deliveries are also signed with a replaced secret                                                                                  |
 
 `events.webhook.delivery`:
 
