@@ -417,14 +417,14 @@ interface JobPermission {
 
 ### Permission Actions
 
-| Action    | Description                                                                                                                                                                                |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `create`  | Submit a new run: `execute_job` / `execute_workflow`, a webhook or an event. Checked once, with `execute`, before the run exists; not for a workflow step, which submits no run of its job |
-| `execute` | Run the job: when a run is submitted, then each attempt, and each workflow step's job                                                                                                      |
-| `read`    | View another caller's runs (`get_job_status`, `get_workflow_status`, `job://runs/{runId}`); the caller who started a run always may                                                        |
-| `update`  | Modify a job or workflow registered at runtime (`update_job`, `update_workflow`, with `jobs.allowDynamicRegistration`); one declared in code can't be updated                              |
-| `delete`  | Cancel another caller's runs (`cancel_job`), or remove a dynamic job or workflow; the caller who started a run may always cancel it                                                        |
-| `list`    | See the entry in `list_jobs` / `list_workflows`, which also leave out an entry the caller may not submit (`create` and `execute`)                                                          |
+| Action    | Description                                                                                                                                                                                            |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `create`  | Submit a new run: `execute_job` / `execute_workflow`, a webhook, an event or a schedule. Checked once, with `execute`, before the run exists; not for a workflow step, which submits no run of its job |
+| `execute` | Run the job: when a run is submitted, then each attempt, and each workflow step's job                                                                                                                  |
+| `read`    | View another caller's runs (`get_job_status`, `get_workflow_status`, `job://runs/{runId}`); the caller who started a run always may                                                                    |
+| `update`  | Modify a job or workflow registered at runtime (`update_job`, `update_workflow`, with `jobs.allowDynamicRegistration`); one declared in code can't be updated                                          |
+| `delete`  | Cancel another caller's runs (`cancel_job`), or remove a dynamic job or workflow; the caller who started a run may always cancel it                                                                    |
+| `list`    | See the entry in `list_jobs` / `list_workflows`, which also leave out an entry the caller may not submit (`create` and `execute`)                                                                      |
 
 `create` and `execute` differ for a job that is also a workflow step: `{ action: 'create', roles: ['admin'] }` lets only admins submit a run of it with `execute_job`, while any workflow that lists it still runs it as a step for its own callers, checked against `execute`. Up to 1.11.2, `create` and `update` rules were ignored, though this table described `create` as "Submit a new job" and `update` as "Modify a running job".
 

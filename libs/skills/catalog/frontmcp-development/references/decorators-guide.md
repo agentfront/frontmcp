@@ -659,22 +659,23 @@ class SyncDataJob extends JobContext {
 
 **Key fields:**
 
-| Field                | Description                                                                               |
-| -------------------- | ----------------------------------------------------------------------------------------- |
-| `name`               | Workflow name                                                                             |
-| `description`        | What this workflow accomplishes                                                           |
-| `steps`              | Array of step definitions (see step fields below)                                         |
-| `trigger?`           | `'manual'` \| `'webhook'` \| `'event'`                                                    |
-| `webhook?`           | `{ path, secret, methods, maxBodyBytes }` — `secret` required when trigger is `'webhook'` |
-| `event?`             | The event that starts a `trigger: 'event'` workflow (default: its name)                   |
-| `timeout?`           | Overall workflow timeout in ms                                                            |
-| `maxConcurrency?`    | Maximum parallel step concurrency (default: 5)                                            |
-| `tags?`              | Categorization tags                                                                       |
-| `labels?`            | Key-value labels (e.g., `{ env: 'prod' }`)                                                |
-| `hideFromDiscovery?` | Hide from workflow listing                                                                |
-| `permissions?`       | Access control: `[{ action: 'execute', roles: ['admin'] }]`                               |
-| `inputSchema?`       | Zod raw shape for the workflow's input, checked when a run starts                         |
-| `outputSchema?`      | Zod schema for workflow output                                                            |
+| Field                | Description                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| `name`               | Workflow name                                                                               |
+| `description`        | What this workflow accomplishes                                                             |
+| `steps`              | Array of step definitions (see step fields below)                                           |
+| `trigger?`           | `'manual'` \| `'webhook'` \| `'event'` \| `'schedule'`                                      |
+| `webhook?`           | `{ path, secret, methods, maxBodyBytes }` — `secret` required when trigger is `'webhook'`   |
+| `event?`             | The event that starts a `trigger: 'event'` workflow (default: its name)                     |
+| `schedule?`          | `{ cron, timezone?, input? }` — when a `trigger: 'schedule'` workflow runs; `cron` required |
+| `timeout?`           | Overall workflow timeout in ms                                                              |
+| `maxConcurrency?`    | Maximum parallel step concurrency (default: 5)                                              |
+| `tags?`              | Categorization tags                                                                         |
+| `labels?`            | Key-value labels (e.g., `{ env: 'prod' }`)                                                  |
+| `hideFromDiscovery?` | Hide from workflow listing                                                                  |
+| `permissions?`       | Access control: `[{ action: 'execute', roles: ['admin'] }]`                                 |
+| `inputSchema?`       | Zod raw shape for the workflow's input, checked when a run starts                           |
+| `outputSchema?`      | Zod schema for workflow output                                                              |
 
 **Step fields:**
 

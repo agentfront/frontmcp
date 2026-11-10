@@ -15,6 +15,7 @@ import { type FrontMcpLogger } from '../common/interfaces/logger.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
 import { type JobRunner } from '../common/metadata/job.metadata';
 import type FlowRegistry from '../flows/flow.registry';
+import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 import type ProviderRegistry from '../provider/provider.registry';
 import ExecuteWorkflowTool from '../workflow/tools/execute-workflow.tool';
 import GetWorkflowStatusTool from '../workflow/tools/get-workflow-status.tool';
@@ -23,6 +24,7 @@ import RegisterWorkflowTool from '../workflow/tools/register-workflow.tool';
 import RemoveWorkflowTool from '../workflow/tools/remove-workflow.tool';
 import UpdateWorkflowTool from '../workflow/tools/update-workflow.tool';
 import { listenToWorkflowEvents } from '../workflow/trigger/workflow-events';
+import { assertWorkflowSchedules, WorkflowSchedules } from '../workflow/trigger/workflow-schedules';
 import { assertWorkflowTriggers, eventWorkflows } from '../workflow/trigger/workflow-triggers';
 import WorkflowRegistry, { type WorkflowRegistryInterface } from '../workflow/workflow.registry';
 import { normalizeWorkflow } from '../workflow/workflow.utils';
@@ -201,10 +203,12 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     workflowRegistry.registerDynamic(dynWf);
   }
 
-  // Refused at boot: a detached job this server can't outlive, or a webhook workflow without a usable secret or path
+  // Refused at boot: a detached job this server can't outlive, a webhook workflow without a usable secret or path, or
+  // a schedule workflow whose cron can't be read
   try {
     assertRunnersAvailable(jobRegistry.getJobs(), jobsConfig.runner);
     assertWorkflowTriggers(workflowRegistry.getWorkflows(true));
+    await assertWorkflowSchedules(workflowRegistry.getWorkflows(true));
   } catch (error) {
     await stateStore.dispose();
     await definitionStore.dispose();
@@ -245,6 +249,7 @@ export async function registerJobCapabilities(args: RegisterJobCapabilitiesArgs)
     ? undefined
     : listenToEvents(scope, workflowRegistry, executionManager, jobRegistry, logger);
   if (workflowEvents) scope.onDispose(() => workflowEvents.stop());
+  if (!jobWorker) await startSchedulesWhenServing(scope, providers, workflowRegistry, executionManager, jobRegistry);
   // Runs a dead runner left in a shared store are settled in the background, once the registries exist
   if (stateStoreType !== 'memory' && !jobWorker) {
     void executionManager
@@ -335,6 +340,34 @@ export function unregistersAppJobEntries(
     jobRegistry.unregisterJobs(jobTokens);
     workflowRegistry.unregisterWorkflows(workflowTokens);
   };
+}
+
+/**
+ * Start the runs of the `trigger: 'schedule'` workflows once the server serves (its providers' `onReady()` phase), or
+ * at once when the job system starts after that, and stop them when the scope is disposed, before the runs' stores.
+ */
+async function startSchedulesWhenServing(
+  scope: ScopeEntry,
+  providers: ProviderRegistry,
+  workflows: WorkflowRegistryInterface,
+  manager: JobExecutionManager,
+  jobs: JobRegistryInterface,
+): Promise<void> {
+  const config = providers.get(FrontMcpConfig);
+  const schedules = new WorkflowSchedules({
+    workflows,
+    manager,
+    jobs,
+    authoritiesContextBuilder: () => scope.authoritiesContextBuilder,
+    logger: scope.logger,
+    serverName: config.info?.name ?? 'frontmcp',
+    redis: config.redis,
+  });
+  scope.onDispose(() => schedules.stop());
+  await providers.addDynamicProviders([
+    { name: 'frontmcp:workflow-schedules', provide: WorkflowSchedules, useValue: schedules },
+  ]);
+  if (providers.readyHooksStarted) await schedules.onReady();
 }
 
 /**

@@ -63,9 +63,9 @@ export interface WorkflowStep {
 /**
  * What starts a workflow's runs besides `execute_workflow`, which runs every workflow: `'manual'` nothing else,
  * `'webhook'` a signed HTTP request to its `webhook.path`, `'event'` its `event` emitted on the scope's event bus
- * (`scope.channelEventBus.emit(event, payload)`).
+ * (`scope.channelEventBus.emit(event, payload)`), `'schedule'` the times of its `schedule.cron`.
  */
-export type WorkflowTriggerType = 'manual' | 'webhook' | 'event';
+export type WorkflowTriggerType = 'manual' | 'webhook' | 'event' | 'schedule';
 
 /**
  * The HTTP route of a workflow with `trigger: 'webhook'`. Each request must be signed with `secret`: an
@@ -86,6 +86,24 @@ export interface WorkflowWebhookConfig {
   methods?: ('GET' | 'POST')[];
   /** The largest body accepted, in bytes; a larger one gets 413. Default: 1048576 (1 MiB) */
   maxBodyBytes?: number;
+}
+
+/**
+ * When a workflow with `trigger: 'schedule'` runs. Each scheduled time starts one background run among all the
+ * processes of the server (all its machines when it has a top-level `redis`, else those of one machine), with `input`
+ * as its input. The run's caller is the role `schedule:<workflow>`, which the workflow's `execute` rules must allow
+ * when it has any.
+ */
+export interface WorkflowScheduleConfig {
+  /**
+   * A cron expression: `minute hour day-of-month month day-of-week` (`'0 9 * * 1-5'`), with seconds as an optional
+   * first field. One that can't be read refuses to start the server.
+   */
+  cron: string;
+  /** The IANA time zone `cron` is read in, such as `'Europe/Berlin'`. Default: 'UTC' */
+  timezone?: string;
+  /** The input of each scheduled run. Default: {} */
+  input?: Record<string, unknown>;
 }
 
 // ============================================
@@ -135,6 +153,12 @@ export interface WorkflowMetadata extends ExtendFrontMcpWorkflowMetadata {
    * workflow's name. Set without that trigger, the server refuses to start.
    */
   event?: string;
+
+  /**
+   * When a `trigger: 'schedule'` workflow runs, which needs its `cron`; set without that trigger, the server refuses
+   * to start.
+   */
+  schedule?: WorkflowScheduleConfig;
 
   /**
    * Maximum total execution time in ms. Default: 600000 (10 min).
@@ -221,15 +245,22 @@ const workflowWebhookConfigSchema = z.object({
   maxBodyBytes: z.number().int().positive().optional(),
 });
 
+const workflowScheduleConfigSchema = z.object({
+  cron: z.string().min(1),
+  timezone: z.string().min(1).optional(),
+  input: z.record(z.string(), z.unknown()).optional(),
+});
+
 export const frontMcpWorkflowMetadataSchema = z
   .object({
     id: z.string().optional(),
     name: z.string().min(1),
     description: z.string().optional(),
     steps: z.array(workflowStepSchema).min(1),
-    trigger: z.enum(['manual', 'webhook', 'event']).optional().default('manual'),
+    trigger: z.enum(['manual', 'webhook', 'event', 'schedule']).optional().default('manual'),
     webhook: workflowWebhookConfigSchema.optional(),
     event: z.string().min(1).optional(),
+    schedule: workflowScheduleConfigSchema.optional(),
     timeout: z.number().int().min(0).optional().default(600000),
     maxConcurrency: z.number().int().min(1).optional().default(5),
     tags: z.array(z.string().min(1)).optional(),

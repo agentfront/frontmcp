@@ -34,6 +34,7 @@
     "live-surface-must-compile.ts",
     "duties-must-compile.ts",
     "workers-must-compile.ts",
+    "workflow-schedule-must-compile.ts",
     "shared-server-must-compile.ts",
     "durable-jobs-must-compile.ts",
     "memory-stores-must-compile.ts",

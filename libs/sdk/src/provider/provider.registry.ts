@@ -376,6 +376,11 @@ export default class ProviderRegistry
     return workerLifecycleOf(built, worker, this);
   }
 
+  /** Whether `runReadyHooks()` was called: it does not run the `onReady()` of a provider added after that. */
+  get readyHooksStarted(): boolean {
+    return this.readyHooksRun !== undefined;
+  }
+
   /** Run `onReady()` on the providers built here, then on those of the registries below, in build order; once. */
   runReadyHooks(logger: LifecycleLogger): Promise<void> {
     this.readyHooksRun ??= this.readyHereAndBelow(logger);

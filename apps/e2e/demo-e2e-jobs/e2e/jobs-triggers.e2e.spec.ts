@@ -2,14 +2,21 @@
  * E2E: workflow triggers on a real server. A `trigger: 'webhook'` workflow's route starts a run for a request signed
  * with its secret, with its JSON body as input; an unsigned, badly signed or replayed one gets 401; a workflow whose
  * execute rules don't allow `webhook:<workflow>` answers 403. A `trigger: 'event'` workflow starts when a tool emits
- * its event on the scope's event bus, with the payload as input.
+ * its event on the scope's event bus, with the payload as input. A `trigger: 'schedule'` workflow starts at each time
+ * of its cron, with its schedule's input.
  */
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
 import { expect, test, type McpTestClient } from '@frontmcp/testing';
 import { bytesToHex, hmacSha256, randomBytes } from '@frontmcp/utils';
 
 const encoder = new TextEncoder();
 const DEPLOY_SECRET = bytesToHex(randomBytes(32));
 const RELEASE_SECRET = bytesToHex(randomBytes(32));
+// The schedule's lease lives in a folder of this run's own, so no other server on the machine holds it
+const LEASE_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'jobs-triggers-'));
 
 /** The headers of a request signed as FrontMCP webhooks are: HMAC-SHA256 over `<timestamp>.<body>`. */
 function signedHeaders(secret: string, body: string): Record<string, string> {
@@ -42,7 +49,11 @@ test.describe('Workflow triggers', () => {
     server: 'apps/e2e/demo-e2e-jobs/src/main.triggers.ts',
     project: 'demo-e2e-jobs',
     publicMode: true,
-    env: { DEPLOY_WEBHOOK_SECRET: DEPLOY_SECRET, RELEASE_WEBHOOK_SECRET: RELEASE_SECRET },
+    env: { DEPLOY_WEBHOOK_SECRET: DEPLOY_SECRET, RELEASE_WEBHOOK_SECRET: RELEASE_SECRET, FRONTMCP_HOME: LEASE_HOME },
+  });
+
+  test.afterAll(() => {
+    fs.rmSync(LEASE_HOME, { recursive: true, force: true });
   });
 
   test('a signed webhook starts a run with its body as input', async ({ mcp, server }) => {
@@ -102,6 +113,25 @@ test.describe('Workflow triggers', () => {
 
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: 'Forbidden' });
+  });
+
+  test('a schedule starts a run at each of its times, with its input, as schedule:<workflow>', async ({ mcp }) => {
+    const scheduled = async () => {
+      const result = await mcp.tools.call('get-deliveries', {});
+      const { deliveries } = result.json<{ deliveries: Array<Record<string, unknown>> }>();
+      return deliveries.filter((delivery) => delivery['ref'] === 'scheduled');
+    };
+
+    expect(await deliveriesOnceThere(mcp, (delivery) => delivery['ref'] === 'scheduled')).toEqual({
+      ref: 'scheduled',
+    });
+    const seenAt = Date.now();
+    const seen = (await scheduled()).length;
+    await new Promise((resolve) => setTimeout(resolve, 2_500));
+    const later = (await scheduled()).length;
+
+    expect(later).toBeGreaterThan(seen);
+    expect(later - seen).toBeLessThanOrEqual(Math.ceil((Date.now() - seenAt) / 1_000) + 1);
   });
 
   test('an event a tool emits starts the workflow that listens to it', async ({ mcp }) => {

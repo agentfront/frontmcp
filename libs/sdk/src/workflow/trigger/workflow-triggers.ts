@@ -1,6 +1,7 @@
 import { type WorkflowEntry } from '../../common/entries/workflow.entry';
 import { isHttpRoutePath } from '../../common/metadata/http-route.metadata';
 import { type WorkflowWebhookConfig } from '../../common/metadata/workflow.metadata';
+import { isIanaTimeZone } from '../../common/utils/time-zone.utils';
 import { WorkflowTriggerConfigError } from '../../errors/workflow.errors';
 
 /** The shortest `webhook.secret` a workflow may have. */
@@ -15,6 +16,13 @@ export interface ResolvedWorkflowWebhook {
   secret: string;
   methods: readonly ('GET' | 'POST')[];
   maxBodyBytes: number;
+}
+
+/** A schedule workflow's schedule, with its defaults filled in. */
+export interface ResolvedWorkflowSchedule {
+  cron: string;
+  timezone: string;
+  input: Record<string, unknown>;
 }
 
 /** The path a webhook workflow's route is served at: `webhook.path`, else `/workflows/webhook/{name}`. */
@@ -32,6 +40,11 @@ export function eventWorkflows(workflows: readonly WorkflowEntry[]): WorkflowEnt
   return workflows.filter((workflow) => workflow.metadata.trigger === 'event');
 }
 
+/** The workflows a schedule starts. */
+export function scheduleWorkflows(workflows: readonly WorkflowEntry[]): WorkflowEntry[] {
+  return workflows.filter((workflow) => workflow.metadata.trigger === 'schedule');
+}
+
 /** The event that starts a `trigger: 'event'` workflow: its `event`, else its name. */
 export function workflowEventName(workflow: WorkflowEntry): string {
   return workflow.metadata.event ?? workflow.name;
@@ -41,7 +54,8 @@ export function workflowEventName(workflow: WorkflowEntry): string {
  * Check the triggers of a scope's workflows when the server starts.
  *
  * @throws WorkflowTriggerConfigError for a webhook workflow without a usable secret, path or methods, for two that
- *   share a secret, and for a `webhook` or an `event` on a workflow whose trigger isn't theirs
+ *   share a secret, for a schedule workflow without a schedule or with an unknown time zone, and for a `webhook`, an
+ *   `event` or a `schedule` on a workflow whose trigger isn't theirs
  */
 export function assertWorkflowTriggers(workflows: readonly WorkflowEntry[]): void {
   const workflowsBySecret = new Map<string, string>();
@@ -69,7 +83,40 @@ export function assertWorkflowTriggers(workflows: readonly WorkflowEntry[]): voi
         "event is set, but trigger is not 'event': set trigger: 'event' to listen to it, or remove event",
       );
     }
+    if (workflow.metadata.trigger === 'schedule') {
+      resolveWorkflowSchedule(workflow);
+    } else if (workflow.metadata.schedule !== undefined) {
+      throw new WorkflowTriggerConfigError(
+        workflow.name,
+        "schedule is set, but trigger is not 'schedule': set trigger: 'schedule' to run it on that schedule, or " +
+          'remove schedule',
+      );
+    }
   }
+}
+
+/**
+ * A schedule workflow's schedule, with its defaults filled in; `loadWorkflowSchedule()` reads its cron expression.
+ *
+ * @throws WorkflowTriggerConfigError when the schedule is missing, or its time zone is not one the runtime knows
+ */
+export function resolveWorkflowSchedule(workflow: WorkflowEntry): ResolvedWorkflowSchedule {
+  const { schedule } = workflow.metadata;
+  if (!schedule) {
+    throw new WorkflowTriggerConfigError(
+      workflow.name,
+      'trigger: \'schedule\' needs schedule.cron, a cron expression such as "0 9 * * 1-5", and the server does not ' +
+        'start without it',
+    );
+  }
+  const timezone = schedule.timezone ?? 'UTC';
+  if (!isIanaTimeZone(timezone)) {
+    throw new WorkflowTriggerConfigError(
+      workflow.name,
+      `schedule.timezone "${timezone}" is not an IANA time zone such as "Europe/Berlin"`,
+    );
+  }
+  return { cron: schedule.cron, timezone, input: schedule.input ?? {} };
 }
 
 /**
