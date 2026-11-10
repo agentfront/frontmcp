@@ -219,6 +219,8 @@ export interface EventsConfigOptions {
   buffer?: EventsBufferOptions;
   poll?: EventsPollOptions;
   push?: EventsPushOptions;
+  /** Also emit each published event on the server's event bus, for workflows and channels that listen. @default true */
+  bridge?: boolean;
 }
 
 const positiveIntegerSchema = z.number().int().positive();
@@ -338,6 +340,7 @@ export const eventsConfigSchema = z
     buffer: eventsBufferSchema.optional().transform((buffer) => buffer ?? eventsBufferSchema.parse({})),
     poll: eventsPollSchema.optional().transform((poll) => poll ?? eventsPollSchema.parse({})),
     push: eventsPushSchema.optional().transform((push) => push ?? eventsPushSchema.parse({})),
+    bridge: z.boolean().optional().default(true),
   } satisfies RawZodShape<EventsConfigOptions>)
   .refine((config) => !config.subscriptions.allowNoExpiry || Boolean(config.store?.redis ?? config.store?.sqlite), {
     message: 'events.subscriptions.allowNoExpiry needs events.store.redis or events.store.sqlite',

@@ -33,3 +33,5 @@ export {
   getSpawnFn,
 } from './fs';
 export type { FileWatcherHandle, SymlinkType } from './fs';
+export { watchFiles, WATCH_FILES_RETRY_MS } from './watch-files';
+export type { FileWatchEvent, FileWatchEventType, WatchFilesOptions } from './watch-files';

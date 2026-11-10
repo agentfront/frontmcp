@@ -105,9 +105,10 @@ export {
   isDirEmpty,
   runCmd,
   watchFile,
+  watchFiles,
   getSpawnFn,
 } from './fs';
-export type { FileWatcherHandle } from './fs';
+export type { FileWatcherHandle, FileWatchEvent, FileWatchEventType, WatchFilesOptions } from './fs';
 
 // Process supervision (Node.js only): process trees, owned children, orphan reaping, parent and path watchers
 export {

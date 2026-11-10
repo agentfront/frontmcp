@@ -157,6 +157,37 @@ Two different classes whose duties share a lease in one process (both `name: 'sw
 process (A and B): give one of them its own name with @Duty({ name })`. The same class built twice (a top-level
 provider of a `splitByApp` server is built once per app) is not a conflict: its copies share one lease.
 
+## Publishing Events
+
+A duty tells the clients subscribed to an event what it found (see `create-event`). It takes the server's publisher in
+its constructor, by the `EventPublisher` class:
+
+```typescript
+import { Duty, EventPublisher, type DutyInterface } from '@frontmcp/sdk';
+
+import { ReportReady } from './report-ready.event';
+import { ReportService } from './report.service';
+
+@Duty({ name: 'weekday-report', cron: '0 9 * * 1-5', timezone: 'Europe/Berlin', scope: 'cluster' })
+export class WeekdayReportDuty implements DutyInterface {
+  constructor(
+    private readonly reports: ReportService,
+    private readonly events: EventPublisher,
+  ) {}
+
+  async run(): Promise<void> {
+    const report = await this.reports.buildDaily();
+    await this.events.publish(ReportReady, { reportId: report.id });
+  }
+}
+```
+
+- Import `EventPublisher` as a value, not with `import type`. Where the build emits no constructor types (`tsx`,
+  esbuild), build the duty with a factory provider that injects the `EVENT_PUBLISHER` token (see `create-worker`).
+- A duty runs in the one process that holds its lease, so each run publishes once among the copies of the server.
+- On a server without events, `publish()` is refused with `EventsNotEnabledError`, and the run is logged as failed.
+  `createContainer()` has no server, so no publisher: a duty that takes one cannot be built there.
+
 ## Cron Schedules
 
 `cron` takes five fields, `minute hour day-of-month month day-of-week`, or six with `second` first:

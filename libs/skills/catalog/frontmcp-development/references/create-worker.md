@@ -173,6 +173,99 @@ The check's `details` hold `state`, `restarts` (how many times `run()` was start
 of the last error it threw); `error` repeats `lastError` when the status is not `healthy`. Only `unhealthy` makes
 `/readyz` answer `not_ready`. A container has no `/readyz`, so its workers add no check.
 
+## Publishing Events
+
+A worker that watches something tells the clients subscribed to an event about it (see `create-event`). It takes the
+server's publisher in its constructor, by the `EventPublisher` class, and publishes from `run()`:
+
+```typescript
+import { EventPublisher, Worker, type WorkerInterface, type WorkerRunContext } from '@frontmcp/sdk';
+
+import { MailReceived } from './mail-received.event';
+import { Mailbox } from './mailbox';
+
+@Worker({ name: 'inbox-watcher', scope: 'cluster' })
+export class InboxWatcher implements WorkerInterface {
+  constructor(
+    private readonly mailbox: Mailbox,
+    private readonly events: EventPublisher,
+  ) {}
+
+  async run({ signal }: WorkerRunContext): Promise<void> {
+    for await (const message of this.mailbox.messages({ signal })) {
+      await this.events.publish(MailReceived, { messageId: message.id, from: message.from });
+    }
+  }
+}
+```
+
+- Import `EventPublisher` as a value, not with `import type`. A type-only import fails startup with
+  `Provider InboxWatcher depends on Object, which is not registered (local or parent).`
+- Where the build emits no constructor types (`tsx`, esbuild), build the worker with a factory provider that injects
+  the `EVENT_PUBLISHER` token. A worker built by a factory is supervised like one registered by its class:
+
+```typescript
+import { AsyncProvider, EVENT_PUBLISHER } from '@frontmcp/sdk';
+
+export const inboxWatcher = AsyncProvider({
+  provide: InboxWatcher,
+  name: 'inbox-watcher',
+  inject: () => [Mailbox, EVENT_PUBLISHER] as const,
+  useFactory: (mailbox, events) => new InboxWatcher(mailbox, events),
+});
+```
+
+- The event must be in the `events` of an app. On a server without events, `publish()` is refused with
+  `EventsNotEnabledError`; the worker's run then fails and is run again after its wait, like any error.
+- `createContainer()` has no server, so no publisher: a worker that takes one cannot be built there.
+- With a leased `scope`, one process publishes. With `scope: 'process'`, every copy of the server publishes its own
+  occurrence of the same thing.
+
+## Watching Files
+
+`watchFiles()` from `@frontmcp/utils` yields what happens to the files of a folder, as an async iterator a worker
+loops over until its `signal` aborts:
+
+```typescript
+import { EventPublisher, Worker, type WorkerInterface, type WorkerRunContext } from '@frontmcp/sdk';
+import { watchFiles } from '@frontmcp/utils';
+
+@Worker({ name: 'drop-folder', scope: 'machine' })
+export class DropFolderWatcher implements WorkerInterface {
+  constructor(private readonly events: EventPublisher) {}
+
+  async run({ signal }: WorkerRunContext): Promise<void> {
+    for await (const { type, path } of watchFiles('./drop', { events: ['add', 'change'], signal })) {
+      await this.events.publish('file.dropped', { path, type });
+    }
+  }
+}
+```
+
+`watchFiles(paths, options?)` takes one path or several, files or directories, relative to the working directory or
+absolute:
+
+| Option        | Type                                | Default   | Notes                                                                        |
+| ------------- | ----------------------------------- | --------- | ---------------------------------------------------------------------------- |
+| `events?`     | `('add' \| 'change' \| 'unlink')[]` | All three | The kinds of event to yield                                                  |
+| `debounceMs?` | `number`                            | `100`     | How long the directory of a path must stay quiet before changes are yielded  |
+| `signal?`     | `AbortSignal`                       | None      | Ends the iteration and closes the watchers when it aborts: pass the worker's |
+
+- Each event is `{ type, path }`, with `path` absolute. `add`: a file appeared. `change`: its size, its modification
+  time or the file itself was replaced. `unlink`: it is gone.
+- A directory is watched for its direct files. Its subdirectories, and what they hold, are left out.
+- A file is watched through its parent directory, so it stays watched when an editor replaces it.
+- A path that does not exist yet is watched from the moment it appears, as a file or as a directory. While its
+  parent directory is missing too, it is looked for every 500 ms.
+- The files that are there when the watch starts are not yielded: a worker that must handle those lists the folder
+  first.
+- Changes are yielded once the watched directory saw no change for `debounceMs`. Several writes to one file in that
+  time are one `change`, and a file created and removed in that time yields nothing. A directory that never goes
+  quiet yields nothing until it does.
+- The iteration ends when `signal` aborts or the loop is left with `break` or `return`. Both close the watchers.
+- Node.js only. On another runtime the first iteration rejects with
+  `watchFiles is not supported in the browser. Requires Node.js.`
+
 ## Where Leases Live
 
 A leased worker uses the store and the mechanism of duties (see `create-duty`, How the Lease Works): acquire, renew
@@ -279,5 +372,6 @@ To run a worker that is always on:
 ## Reference
 
 - [Providers](https://frontmcp.dev/reference/sdk/provider)
-- Related skills: `create-duty` (scheduled work, how the lease works), `create-provider` (lifecycle hooks,
+- Related skills: `create-event` (what clients subscribe to, publishing), `create-duty` (scheduled work, how the lease
+  works), `create-provider` (lifecycle hooks,
   `createContainer()`), `health-readiness-endpoints`, `shared-local-server`, `build-for-cli`, `setup-sqlite`

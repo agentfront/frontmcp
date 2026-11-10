@@ -40,6 +40,7 @@ const configDefaults = {
   buffer: { maxAgeMs: 600_000, maxEvents: 10_000 },
   poll: { enabled: false, nextPollMs: 30_000, maxEvents: 100 },
   push: { enabled: false, heartbeatMs: 25_000 },
+  bridge: true,
 };
 
 @Provider({ name: 'order-book' })

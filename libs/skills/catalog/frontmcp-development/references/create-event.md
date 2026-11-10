@@ -436,8 +436,8 @@ class PlaceOrderTool extends ToolContext {
   long-lived process deliveries happen after `publish()` returned. On a serverless, edge or browser runtime the first
   attempt of each delivery is made before `publish()` resolves (all of them at once, within `delivery.concurrency`),
   so `publish()` can take as long as the slowest callback, up to `webhook.delivery.timeoutMs`.
-- Outside a context, use `scope.events.publisher`. In a provider, a duty or a worker, inject it with the
-  `EVENT_PUBLISHER` token: `this.get(EVENT_PUBLISHER)`.
+- Outside a context, use `scope.events.publisher`. A provider, a duty or a worker takes the publisher in its
+  constructor: see [Publishing from Background Code](#publishing-from-background-code).
 - `matched` counts webhook deliveries. A client that polls is not counted: it reads the occurrence at its next poll.
   On a server that performs no webhook mode, `publish()` answers `matched: 0`.
 - A service that does not link the SDK publishes with an HTTP request: see
@@ -465,7 +465,7 @@ Mistakes of the server author are thrown, not delivered:
 
 `publish()` runs the hookable `events:publish` flow (`EventPublishHook`), with the stages `validate`,
 `loadSubscriptions`, `dropInactive`, `filterByAudience`, `reauthorize`, `match`, `transform`, `enforceBodyLimit`,
-`enqueue` and `buildResult`:
+`enqueue`, `bridgeToBus` (see [Events on the Server's Event Bus](#events-on-the-servers-event-bus)) and `buildResult`:
 
 1. Suspended subscriptions are left out.
 2. `audience` narrows by owner.
@@ -641,6 +641,104 @@ class PublishAuditPlugin {
 
 `ctx.state.caller` is the bearer caller's auth info, and is not set for a signed request. With
 `@frontmcp/observability`, each request is traced as an `events/publish-http` span.
+
+## Publishing from Background Code
+
+A provider, a duty or a worker is built before any request, so it has no `this.events`. It takes the server's
+publisher in its constructor, by the `EventPublisher` class:
+
+```typescript
+import { App, EventPublisher, Worker, type WorkerInterface, type WorkerRunContext } from '@frontmcp/sdk';
+import { watchFiles } from '@frontmcp/utils';
+
+@Worker({ name: 'inbox-watcher', scope: 'machine' })
+export class InboxWatcher implements WorkerInterface {
+  constructor(private readonly events: EventPublisher) {}
+
+  async run({ signal }: WorkerRunContext): Promise<void> {
+    for await (const { path } of watchFiles('./inbox', { events: ['add'], signal })) {
+      await this.events.publish(FileAdded, { path });
+    }
+  }
+}
+
+@App({ name: 'inbox', events: [FileAdded], providers: [InboxWatcher] })
+class InboxApp {}
+```
+
+- The same constructor parameter works in a `@Duty` (see `create-duty`) and in a plain `@Provider` class.
+- Import `EventPublisher` as a value, not with `import type`: the parameter's type is what the server injects.
+- A factory provider injects the publisher by the `EVENT_PUBLISHER` token. Use it where the build emits no
+  constructor types (`tsx`, esbuild), and for a `@Worker` or `@Duty` class as well:
+
+```typescript
+import { AsyncProvider, EVENT_PUBLISHER } from '@frontmcp/sdk';
+
+export const inboxWatcher = AsyncProvider({
+  provide: InboxWatcher,
+  name: 'inbox-watcher',
+  inject: () => [EVENT_PUBLISHER] as const,
+  useFactory: (events) => new InboxWatcher(events),
+});
+```
+
+- Providers are built before the server registers its events, and the publisher they get publishes through the
+  server's own at the time of each call. Publish from `run()`, `onReady()` or later: a publish from a constructor or
+  from `onBootstrap()` is refused with `EventsNotEnabledError`.
+- On a server without events, `publish()` is refused with `EventsNotEnabledError`, as `this.events.publish()` is.
+- `createContainer()` builds providers without a server, so it has no publisher: a provider that takes one fails to
+  build there with `Provider <name> depends on EventPublisher, which is not registered (local or parent).`
+
+## Events on the Server's Event Bus
+
+Each published event is also emitted on the server's in-process event bus (`scope.channelEventBus`), under the
+event's name, with the occurrence as payload: `{ eventId, name, timestamp, data }`. What already listens on that bus
+reacts to an event without subscribing to it:
+
+- A workflow with `trigger: 'event'` and the event's name as `event` starts a run, with the occurrence as its input
+  (see `create-workflow`).
+- A channel with `source: { type: 'app-event', event: '<name>' }` gets the occurrence in `onEvent()`, so a connected
+  Claude Code session is told (see `frontmcp-channels`).
+
+```typescript
+@Workflow({
+  name: 'audit-orders',
+  trigger: 'event',
+  event: 'order.created',
+  inputSchema: {
+    eventId: z.string(),
+    name: z.string(),
+    timestamp: z.string(),
+    data: z.object({ orderId: z.string(), status: z.string(), total: z.number() }),
+  },
+  steps: [{ id: 'audit', jobName: 'audit-order' }],
+})
+class AuditOrdersWorkflow {}
+```
+
+- The event is emitted once for each `publish()`, however many subscriptions receive it, and also when nobody is
+  subscribed. The bus is inside the server: `audience` and `subscriptionId` narrow deliveries, not what is emitted.
+- It is emitted by the `bridgeToBus` stage of `events:publish`, after the deliveries are queued. A publish that
+  fails before that emits nothing.
+- The bus exists when `channels.enabled` is set or a workflow has `trigger: 'event'`. Without it nothing is emitted.
+- The bus is in-process: an event published in one process reaches the workflows and channels of that process.
+- A workflow run that publishes the event that started it starts another run.
+- Code that emits the same name on the bus by itself (`scope.channelEventBus?.emit('order.created', ...)`) reaches the
+  same listeners, with whatever payload it passes.
+- `events.bridge: false` turns the bridge off. A hook skips it for some events with an `@Around` that does not go on:
+
+```typescript
+import { EventPublishHook, Plugin, type FlowCtxOf } from '@frontmcp/sdk';
+
+@Plugin({ name: 'quiet-bridge' })
+class QuietBridgePlugin {
+  @EventPublishHook.Around('bridgeToBus')
+  async keepInternalEventsOffTheBus(ctx: FlowCtxOf<'events:publish'>, next: () => Promise<unknown>) {
+    if (ctx.rawInput.occurrence.name.startsWith('internal.')) return;
+    await next();
+  }
+}
+```
 
 ## Delivery
 
@@ -965,6 +1063,7 @@ class ShopServer {}
 | ---------- | ---------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `enabled?` | `boolean`                          | Not set  | Events are on once an app declares one. `false` turns them off; `true` starts the event registry without any declared event |
 | `compat?`  | `'auto' \| 'sep-3415' \| 'sketch'` | `'auto'` | The dialect subscriptions and deliveries use: SEP-3415, or the design sketch ChatGPT implements. `'auto'` picks per caller  |
+| `bridge?`  | `boolean`                          | `true`   | Also emits each published event on the server's event bus, for `trigger: 'event'` workflows and `app-event` channels        |
 
 `events.store` (where subscriptions are kept; `redis` or `sqlite`, not both):
 
@@ -1125,6 +1224,8 @@ functions) to get the same `this`.
 - [ ] `events/poll` with a `null` cursor answers no events and a cursor; a poll from that cursor answers what was
       published since
 - [ ] `events/stream` sends `notifications/events/active` first, then an `event` for what is published
+- [ ] A worker or a duty that takes `EventPublisher` in its constructor publishes once the server serves
+- [ ] A `trigger: 'event'` workflow named after the event starts when the event is published
 
 ## Troubleshooting
 
@@ -1159,6 +1260,9 @@ functions) to get the same `this`.
 | `POST /events/publish` answers `401`                     | A wrong signature, a clock that is off, or a request sent before                       | Sign `<timestamp>.<body>` over the bytes sent; sign a retry again                       |
 | `POST /events/publish` answers `404`                     | The endpoint is off, the path differs, or the event is unknown                         | Set `events.publishEndpoint.enabled`; read the `error` of the answer                    |
 | `POST /events/publish` answers `409`                     | Another request is publishing the same `eventId` right now                             | Retry: the answer is then the first request's                                           |
+| `depends on EventPublisher, which is not ...`            | A provider that takes the publisher, built by `createContainer()`                      | Build it in a server, or leave the publisher out of that provider                       |
+| `depends on Object, which is not registered`             | `EventPublisher` is imported with `import type`                                        | Import it as a value: `import { EventPublisher } from ...`                              |
+| A `trigger: 'event'` workflow does not start             | `events.bridge: false`, another `event` name, or its input schema                      | Give it the occurrence as `inputSchema`; read the warning in the log                    |
 | `Delivery ... is abandoned` in the log                   | The callback failed every attempt in the retry window                                  | Fix the callback; read the category at the end of the line                              |
 | `Subscription ... is suspended` in the log               | 20 failed deliveries in a row                                                          | Fix the callback, then subscribe again to reactivate                                    |
 | The signature does not verify at the receiver            | It signs a re-serialized body, or uses another secret                                  | Verify over the raw body bytes with the secret sent in `events/subscribe`               |
@@ -1169,5 +1273,5 @@ functions) to get the same `this`.
 - [Standard Webhooks](https://www.standardwebhooks.com): the signature scheme of deliveries
 - Related skills: `decorators-guide`, `create-plugin-hooks` (`ListEventsHook`, `EventSubscribeHook`,
   `EventUnsubscribeHook`, `EventPublishHook`, `EventPublishHttpHook`, `EventDeliverHook`, `EventPollHook`,
-  `EventStreamHook`), `frontmcp-authorities`, `frontmcp-channels`, `create-job`, `create-duty`, `create-workflow`
-  (the request signature)
+  `EventStreamHook`), `frontmcp-authorities`, `frontmcp-channels` (`app-event` sources), `create-job`, `create-duty`,
+  `create-worker` (publishing, `watchFiles`), `create-workflow` (the request signature, `trigger: 'event'`)

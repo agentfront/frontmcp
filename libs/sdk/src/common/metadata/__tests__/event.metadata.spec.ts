@@ -173,7 +173,7 @@ describe('events configuration', () => {
   const buffer = { maxAgeMs: 600_000, maxEvents: 10_000 };
   const poll = { enabled: true, nextPollMs: 30_000, maxEvents: 100 };
   const push = { enabled: true, heartbeatMs: 25_000 };
-  const defaults = { compat: 'auto', subscriptions, webhook, publishEndpoint, buffer, poll, push };
+  const defaults = { compat: 'auto', subscriptions, webhook, publishEndpoint, buffer, poll, push, bridge: true };
 
   it('defaults compat to auto, and the subscription and webhook settings', () => {
     expect(eventsConfigSchema.parse({})).toEqual(defaults);
