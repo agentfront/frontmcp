@@ -86,6 +86,11 @@ export const E2E_PORT_RANGES = {
   // MCP Events E2E tests (50530-50539)
   'demo-e2e-events': { start: 50530, size: 10 },
 
+  // MCP Events reference apps (50540-50569)
+  'demo-e2e-events-appointments': { start: 50540, size: 10 },
+  'demo-e2e-events-daemon': { start: 50550, size: 10 },
+  'demo-e2e-events-mail-triage': { start: 50560, size: 10 },
+
   // Mock servers and utilities (50900-50999)
   'mock-oauth': { start: 50900, size: 10 },
   'mock-api': { start: 50910, size: 10 },
