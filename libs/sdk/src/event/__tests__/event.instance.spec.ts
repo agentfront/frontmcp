@@ -44,11 +44,23 @@ const orderShipped = event({
 const orderArchived = event({ name: 'order.archived', payloadSchema: { orderId: z.string() } });
 const orderCancelled = event({ name: 'order.cancelled', payloadSchema: { orderId: z.string() } });
 
+const noRule = (value: false | null) => value as unknown as undefined;
+const orderRefunded = event({
+  name: 'order.refunded',
+  payloadSchema: { orderId: z.string() },
+  authorities: noRule(false),
+});
+const orderReturned = event({
+  name: 'order.returned',
+  payloadSchema: { orderId: z.string() },
+  authorities: noRule(null),
+});
+
 @App({
   id: 'orders',
   name: 'Orders',
   providers: [OrderPolicy],
-  events: [OrderCreated, orderShipped, orderArchived, orderCancelled],
+  events: [OrderCreated, orderShipped, orderArchived, orderCancelled, orderRefunded, orderReturned],
 })
 class OrdersApp {}
 
@@ -91,6 +103,11 @@ describe('EventInstance', () => {
     expect(created.getAuthorities()).toEqual({ guards: [expect.any(Function)] });
     expect(eventNamed('order.archived').getTags()).toEqual([]);
     expect(eventNamed('order.archived').getAuthorities()).toBeUndefined();
+  });
+
+  it('treats authorities declared as false or null as no rule', () => {
+    expect(eventNamed('order.refunded').getAuthorities()).toBeUndefined();
+    expect(eventNamed('order.returned').getAuthorities()).toBeUndefined();
   });
 
   describe('JSON Schemas', () => {

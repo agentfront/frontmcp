@@ -9,6 +9,7 @@ import { BaseEntry, type EntryOwnerRef } from './base.entry';
 
 type JsonSchema = Record<string, unknown>;
 
+/** The JSON Schema of a zod object or raw shape. */
 function toObjectJsonSchema(schema: EventSchemaType, io: 'input' | 'output'): JsonSchema {
   const isZodSchema = typeof (schema as { safeParse?: unknown }).safeParse === 'function';
   const objectSchema = isZodSchema ? (schema as z.ZodObject) : z.object(schema as z.ZodRawShape);
@@ -25,13 +26,16 @@ export abstract class EventEntry extends BaseEntry<EventRecord, EventContext, Ev
   private inputJsonSchema?: JsonSchema;
   private payloadJsonSchema?: JsonSchema;
 
+  /** The event's tags, empty when it declares none. */
   getTags(): string[] {
     return this.metadata.tags ?? [];
   }
 
-  /** The rule a caller must satisfy to list the event and to subscribe to it, when it declares one. */
+  /** The rule a caller must satisfy to list the event and to subscribe to it; `null` and `false` declare none. */
   getAuthorities(): AuthoritiesMetadata | undefined {
-    return this.metadata.authorities;
+    const declared: unknown = this.metadata.authorities;
+    const isUnguarded = declared === undefined || declared === null || declared === false;
+    return isUnguarded ? undefined : this.metadata.authorities;
   }
 
   /** The JSON Schema of a subscription's arguments, as `events/list` returns it. */
@@ -46,6 +50,7 @@ export abstract class EventEntry extends BaseEntry<EventRecord, EventContext, Ev
     return this.payloadJsonSchema;
   }
 
+  /** The declared argument schema, or an empty closed object for an event that takes no arguments. */
   private buildInputJsonSchema(): JsonSchema {
     const { inputSchema } = this.metadata;
     if (!inputSchema) {

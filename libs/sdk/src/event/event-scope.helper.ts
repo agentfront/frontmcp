@@ -21,6 +21,7 @@ export interface EventCapabilitiesResult {
   eventRegistry: EventRegistry;
 }
 
+/** The events that declare an `authorities` rule, labelled for the startup check. */
 function eventsWithAuthorities(events: readonly EventEntry[]): EntryAuthorities[] {
   const guarded: EntryAuthorities[] = [];
   for (const event of events) {

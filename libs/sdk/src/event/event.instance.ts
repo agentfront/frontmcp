@@ -33,6 +33,7 @@ export class EventInstance extends EventEntry {
 
   protected async initialize(): Promise<void> {}
 
+  /** Builds the context the event's methods run on, for one caller. */
   create(authInfo: Partial<AuthInfo>): EventContext {
     const contextArgs: EventCtorArgs = {
       metadata: this.metadata,

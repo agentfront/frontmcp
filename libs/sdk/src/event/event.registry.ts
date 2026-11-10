@@ -64,6 +64,7 @@ export default class EventRegistry
     this.ready = this.initialize();
   }
 
+  /** Turns the listed events into records keyed by their token. */
   protected override buildMap(list: EventType[]): RegistryBuildMapResult<EventRecord> {
     const tokens = new Set<Token>();
     const defs = new Map<Token, EventRecord>();
@@ -79,6 +80,7 @@ export default class EventRegistry
 
   protected buildGraph(): void {}
 
+  /** Creates an instance per available event and refuses a name declared twice. */
   protected override async initialize(): Promise<void> {
     const runtimeContext = getRuntimeContext();
     for (const [token, record] of this.defs) {
@@ -98,14 +100,17 @@ export default class EventRegistry
     }
   }
 
+  /** Every registered event, whether or not a delivery mode serves it. */
   getEvents(): EventInstance[] {
     return [...this.eventsByName.values()];
   }
 
+  /** The event registered under a name. */
   findByName(name: string): EventInstance | undefined {
     return this.eventsByName.get(name);
   }
 
+  /** Whether any event is registered. */
   hasAny(): boolean {
     return this.eventsByName.size > 0;
   }
@@ -130,10 +135,12 @@ export default class EventRegistry
       .filter(({ delivery }) => delivery.length > 0);
   }
 
+  /** Whether a client can subscribe to at least one event. */
   servesEvents(): boolean {
     return this.getServedEvents().length > 0;
   }
 
+  /** The capability to advertise: both forms once an event is served, nothing otherwise. */
   getCapabilities(): EventCapabilities {
     if (!this.servesEvents()) return {};
     return { events: {}, extensions: { [EVENTS_EXTENSION_ID]: {} } };

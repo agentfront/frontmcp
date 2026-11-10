@@ -57,11 +57,13 @@ const eventNameSchema = z
   .max(EVENT_NAME_MAX_LENGTH, `An event name must be at most ${EVENT_NAME_MAX_LENGTH} characters`)
   .regex(/^[^\s\p{Cc}]+$/u, 'An event name must not contain whitespace or control characters');
 
+/** Whether a schema was given as a `z.object()`. */
 function isZodObject(value: unknown): boolean {
   const schema = value as { type?: unknown; safeParse?: unknown } | null;
   return typeof schema?.safeParse === 'function' && schema.type === 'object';
 }
 
+/** Whether a schema was given as a raw shape of zod fields. */
 function isZodRawShape(value: unknown): boolean {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   return Object.values(value).every(

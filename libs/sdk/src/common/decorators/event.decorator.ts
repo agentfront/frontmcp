@@ -9,6 +9,7 @@ import { FrontMcpEventTokens } from '../tokens';
 
 const FUNCTION_EVENT = 'function-event';
 
+/** Validates what `@Event` or `event()` was given and returns the metadata with its defaults. */
 function parseEventMetadata(providedMetadata: unknown): EventMetadata {
   const result = frontMcpEventMetadataSchema.safeParse(providedMetadata);
   if (result.success) return result.data as EventMetadata;
@@ -16,6 +17,7 @@ function parseEventMetadata(providedMetadata: unknown): EventMetadata {
   throw new InvalidDecoratorMetadataError('Event', issue.path.join('.'), issue.message);
 }
 
+/** The class decorator that records the validated metadata on an `@Event` class. */
 function defineEvent(providedMetadata: EventMetadata): ClassDecorator {
   return (target) => {
     const metadata = parseEventMetadata(providedMetadata);
@@ -111,10 +113,12 @@ function frontMcpEvent<
   return eventFunction as EventFunction<InputOfSchema<InSchema>, SchemaObject<PayloadSchema>>;
 }
 
+/** Whether a value is a class decorated with `@Event`. */
 export function isEventClass(target: unknown): boolean {
   return typeof target === 'function' && Reflect.getMetadata(FrontMcpEventTokens.type, target) === true;
 }
 
+/** Whether a value is what `event()` returned. */
 export function isEventFunction(target: unknown): boolean {
   if (typeof target !== 'function') return false;
   return (target as unknown as Record<symbol, unknown>)[FrontMcpEventTokens.type] === FUNCTION_EVENT;
