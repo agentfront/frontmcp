@@ -599,7 +599,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowStage('filterByAuthorities', ctx);
   }
 
-  @ListEventsHook.Did('parseEvents', { priority: 1000 })
+  @ListEventsHook.Finally('finalize', { priority: 1000 })
   _listEventsDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
@@ -614,7 +614,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowStage('verifyCallback', ctx);
   }
 
-  @EventSubscribeHook.Did('buildResult', { priority: 1000 })
+  @EventSubscribeHook.Finally('finalize', { priority: 1000 })
   _eventSubscribeDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
@@ -624,7 +624,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowWillStart('events/unsubscribe', this.tracingOpts, ctx);
   }
 
-  @EventUnsubscribeHook.Did('buildResult', { priority: 1000 })
+  @EventUnsubscribeHook.Finally('finalize', { priority: 1000 })
   _eventUnsubscribeDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }

@@ -61,6 +61,38 @@ describe('EventCallbackVerifier', () => {
     expect(sent).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['the origin alone', 'https://hooks.example.com', 'https://hooks.example.com/hooks/mcp'],
+    ['a path without a trailing slash', 'https://hooks.example.com/hooks', 'https://hooks.example.com/hooks/mcp'],
+    ['the callback itself', 'https://hooks.example.com/hooks/mcp', 'https://hooks.example.com/hooks/mcp?tenant=acme'],
+  ])('accepts a callback under %s', async (_case, prefix, url) => {
+    const { verifier, sent } = verifierWith(echoingReceiver, { allowedCallbacks: [prefix] });
+
+    await expect(verifier.verify(verification({ url }))).resolves.toMatchObject({ outcome: 'verified' });
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'a host that only starts with the allowed one',
+      'https://hooks.example.com',
+      'https://hooks.example.com.attacker.net/x',
+    ],
+    [
+      'a path that only starts with the allowed one',
+      'https://hooks.example.com/hooks',
+      'https://hooks.example.com/hooks-evil',
+    ],
+    ['another port', 'https://hooks.example.com', 'https://hooks.example.com:8443/hooks/mcp'],
+    ['another scheme', 'https://hooks.example.com', 'http://hooks.example.com/hooks/mcp'],
+    ['a prefix that is not a URL', 'hooks.example.com', 'https://hooks.example.com/hooks/mcp'],
+  ])('does not treat %s as allowed, and verifies it by request', async (_case, prefix, url) => {
+    const { verifier, sent } = verifierWith(echoingReceiver, { allowedCallbacks: [prefix] });
+
+    await expect(verifier.verify(verification({ url }))).resolves.toMatchObject({ outcome: 'verified' });
+    expect(sent).toHaveBeenCalled();
+  });
+
   it('accepts a callback its origin declares in the well-known document, without a challenge', async () => {
     const { verifier, sent } = verifierWith(async () => answer(200, JSON.stringify({ receivers: ['/hooks/'] })));
 

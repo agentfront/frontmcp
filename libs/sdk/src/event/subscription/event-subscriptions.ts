@@ -71,6 +71,7 @@ export class EventSubscriptions {
   private sweepTimer?: ReturnType<typeof setInterval>;
   private lastSweepAt = 0;
 
+  /** Takes the store, the verifier and the lifetime rules of the scope's subscriptions. */
   constructor(private readonly options: EventSubscriptionsOptions) {
     this.store = options.store;
     this.verifier = options.verifier;

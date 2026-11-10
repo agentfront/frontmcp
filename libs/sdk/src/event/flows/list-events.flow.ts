@@ -37,6 +37,7 @@ const plan = {
   pre: ['parseInput'],
   execute: ['findEvents', 'filterByAvailability', 'filterByAuthorities', 'filterByDiscovery'],
   post: ['parseEvents'],
+  finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
 
 declare global {
@@ -145,5 +146,11 @@ export default class ListEventsFlow extends FlowBase<typeof name> {
 
     const nextOffset = offset + EVENTS_LIST_PAGE_SIZE;
     this.respond({ events, ...(nextOffset < sorted.length && { nextCursor: encodeOffsetCursor(nextOffset) }) });
+  }
+
+  /** Runs after a success or a failure, so hooks that must see both attach here. */
+  @Stage('finalize')
+  async finalize() {
+    this.logger.verbose('finalize');
   }
 }

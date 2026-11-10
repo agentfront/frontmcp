@@ -195,7 +195,8 @@ serves no events. `poll` and `push` are not performed yet.
   refused as invalid input. The server does not check that it issued the cursor.
 - Under protocol 2026-07-28 the result has `resultType: "complete"`. It carries no cache hints.
 - The request runs the hookable `events:list` flow, with the stages `parseInput`, `findEvents`,
-  `filterByAvailability`, `filterByAuthorities`, `filterByDiscovery` and `parseEvents`. Hook it with `ListEventsHook`:
+  `filterByAvailability`, `filterByAuthorities`, `filterByDiscovery`, `parseEvents` and `finalize`, which runs after
+  a success or a failure. Hook it with `ListEventsHook`:
 
 ```typescript
 import { ListEventsHook, Plugin, type FlowCtxOf } from '@frontmcp/sdk';
@@ -350,9 +351,10 @@ refuses to start. Vercel KV is refused: it has no atomic compare-and-set.
 Both requests run hookable flows. `events:subscribe` (`EventSubscribeHook`) has the stages `parseInput`,
 `resolveDialect`, `findEvent`, `checkAvailability`, `requireWebhookMode`, `requireSubscriber`,
 `checkEntryAuthorities`, `validateArguments`, `authorize`, `validateDelivery`, `findSubscription`, `enforceLimits`,
-`verifyCallback`, `grantTtl`, `upsertSubscription`, `notifySubscribed` and `buildResult`. `events:unsubscribe`
-(`EventUnsubscribeHook`) has `parseInput`, `resolveDialect`, `requireSubscriber`, `removeSubscription` and
-`buildResult`.
+`verifyCallback`, `grantTtl`, `upsertSubscription`, `notifySubscribed`, `buildResult` and `finalize`.
+`events:unsubscribe` (`EventUnsubscribeHook`) has `parseInput`, `resolveDialect`, `requireSubscriber`,
+`removeSubscription`, `buildResult` and `finalize`. `finalize` runs after a success or a failure: attach a
+`Finally` hook there for work that must see refused requests too.
 
 ```typescript
 import { EventSubscribeHook, Plugin, PublicMcpError, type FlowCtxOf } from '@frontmcp/sdk';

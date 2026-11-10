@@ -25,6 +25,7 @@ const plan = {
   pre: ['parseInput', 'resolveDialect', 'requireSubscriber'],
   execute: ['removeSubscription'],
   post: ['buildResult'],
+  finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
 
 declare global {
@@ -108,6 +109,12 @@ export default class EventUnsubscribeFlow extends FlowBase<typeof name> {
   @Stage('buildResult')
   async buildResult() {
     this.respond({});
+  }
+
+  /** Runs after a success or a failure, so hooks that must see both attach here. */
+  @Stage('finalize')
+  async finalize() {
+    this.logger.verbose('finalize');
   }
 
   /** The arguments as `events/subscribe` stored them: parsed by the event's schema, or as sent when that fails. */

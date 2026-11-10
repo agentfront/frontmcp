@@ -1,3 +1,5 @@
+import { connect } from 'node:net';
+
 import { generateStandardWebhookSecret, signingKeyOf, webhookSignatureHeaders } from '@frontmcp/utils';
 
 import { WebhookReceiver } from '../webhook-receiver';
@@ -185,6 +187,29 @@ describe('WebhookReceiver', () => {
     const { url } = await receiver.start();
 
     await expect(fetch(url, { method: 'PUT', body: '{}' })).resolves.toMatchObject({ status: 405 });
+  });
+
+  it('survives a caller that drops the connection in the middle of the body', async () => {
+    receiver = new WebhookReceiver();
+    const { url, port } = await receiver.start();
+    const unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+
+    await new Promise<void>((resolve) => {
+      const socket = connect(port, '127.0.0.1', () => {
+        socket.write('POST /hooks/mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 1000\r\n\r\n{"partial":');
+        setTimeout(() => {
+          socket.destroy();
+          resolve();
+        }, 20);
+      });
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    process.off('unhandledRejection', unhandled);
+
+    expect(unhandled).not.toHaveBeenCalled();
+    expect(receiver.requests).toHaveLength(0);
+    await expect(post(url, eventBody)).resolves.toMatchObject({ status: 200 });
   });
 
   it('waits for deliveries, and says how many arrived when they do not', async () => {

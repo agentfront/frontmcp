@@ -91,6 +91,16 @@ function isSameText(left: string, right: string): boolean {
   return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
 }
 
+/** Whether a callback is a configured prefix or lies under it: the same origin, and a path that continues at a `/`. */
+function isUnderAllowedPrefix(callback: URL, prefix: string): boolean {
+  if (!URL.canParse(prefix)) return false;
+  const allowed = new URL(prefix);
+  if (allowed.origin !== callback.origin) return false;
+  if (callback.pathname === allowed.pathname) return true;
+  const directory = allowed.pathname.endsWith('/') ? allowed.pathname : `${allowed.pathname}/`;
+  return callback.pathname.startsWith(directory);
+}
+
 /** The path prefixes a receiver's well-known document declares; none for a document that cannot be read. */
 function receiversOf(result: OutboundResult): string[] {
   if (!result.answered || result.status !== 200 || result.bodyTruncated) return [];
@@ -123,6 +133,7 @@ export class EventCallbackVerifier {
   private readonly attemptsByHost = new ExpiringMap<number>();
   private readonly send: (request: OutboundRequest) => Promise<OutboundResult>;
 
+  /** Takes the allowed prefixes, cache lifetime and timeout, and the sender (the hardened request by default). */
   constructor(private readonly options: EventCallbackVerifierOptions) {
     this.send = options.send ?? sendOutboundRequest;
   }
@@ -131,7 +142,8 @@ export class EventCallbackVerifier {
   async verify(request: EventCallbackVerificationRequest): Promise<EventCallbackVerification> {
     const now = Date.now();
     const { allowedCallbacks, cacheTtlMs } = this.options;
-    if (allowedCallbacks.some((prefix) => request.url.startsWith(prefix))) {
+    const callback = new URL(request.url);
+    if (allowedCallbacks.some((prefix) => isUnderAllowedPrefix(callback, prefix))) {
       return { outcome: 'verified', verifiedAt: now };
     }
 
@@ -141,7 +153,6 @@ export class EventCallbackVerifier {
       return { outcome: 'verified', verifiedAt: earlierProof };
     }
 
-    const callback = new URL(request.url);
     if (!this.takeAttempt(callback.host, now)) return { outcome: 'limited', max: VERIFICATION_ATTEMPTS_PER_HOST };
 
     const failure = (await this.isDeclaredReceiver(callback, now)) ? undefined : await this.challenge(request, now);

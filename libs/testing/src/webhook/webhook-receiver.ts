@@ -102,6 +102,7 @@ export class WebhookReceiver {
   private failureStatus = 500;
   private echoesChallenges = true;
 
+  /** Takes the secrets to verify with, the well-known prefixes to declare, and the path and port to listen on. */
   constructor(options: WebhookReceiverOptions = {}) {
     this.options = options;
     this.secrets = [...(options.secrets ?? [])];
@@ -109,7 +110,9 @@ export class WebhookReceiver {
 
   /** Listen on 127.0.0.1 and answer with the callback URL. */
   async start(): Promise<WebhookReceiverInfo> {
-    const server = createServer((request, response) => void this.handle(request, response));
+    const server = createServer((request, response) => {
+      this.handle(request, response).catch(() => response.destroy());
+    });
     await new Promise<void>((resolve) => server.listen(this.options.port ?? 0, '127.0.0.1', resolve));
     const { port } = server.address() as AddressInfo;
     const origin = `http://127.0.0.1:${port}`;

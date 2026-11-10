@@ -64,6 +64,7 @@ const plan = {
     'notifySubscribed',
   ],
   post: ['buildResult'],
+  finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
 
 declare global {
@@ -326,5 +327,11 @@ export default class EventSubscribeFlow extends FlowBase<typeof name> {
       truncated: false,
       ...(this.state.existing && { deliveryStatus: deliveryStatusOf(record) }),
     });
+  }
+
+  /** Runs after a success or a failure, so hooks that must see both attach here. */
+  @Stage('finalize')
+  async finalize() {
+    this.logger.verbose('finalize');
   }
 }

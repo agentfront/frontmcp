@@ -4,6 +4,7 @@ import { InternalMcpError, PublicMcpError } from './mcp.error';
 
 /** Thrown at startup when two events of a server declare the same name: a subscription names its event by it. */
 export class EventNameConflictError extends InternalMcpError {
+  /** Names the event that is declared twice. */
   constructor(eventName: string) {
     super(
       `Event "${eventName}" is declared twice: each event of a server needs its own name. ` +
@@ -36,6 +37,7 @@ export abstract class EventProtocolError extends PublicMcpError {
 
 /** `NotFound`: the server serves no event, or the caller holds no subscription, of that name. */
 export class EventNotFoundError extends EventProtocolError {
+  /** Names the event or subscription that does not exist, with the code of the caller's dialect. */
   constructor(codes: EventErrorCodes, kind: 'event' | 'subscription', name: string) {
     const subject = kind === 'event' ? `Event "${name}" is not served` : `No subscription to "${name}" was found`;
     super(`${subject}. Call events/list for the events this server offers.`, 'EVENT_NOT_FOUND', 404, codes.notFound, {
@@ -47,6 +49,7 @@ export class EventNotFoundError extends EventProtocolError {
 
 /** `Forbidden`: the caller may not subscribe to the event. */
 export class EventForbiddenError extends EventProtocolError {
+  /** Says why the caller may not use the event, with the code of the caller's dialect. */
   constructor(codes: EventErrorCodes, name: string, reason: string) {
     super(`Subscribing to "${name}" is not allowed: ${reason}`, 'EVENT_FORBIDDEN', 403, codes.forbidden, { reason });
   }
@@ -61,6 +64,7 @@ const RESOURCE_LIMIT_MESSAGES = {
 
 /** `ResourceExhausted`: the caller reached a limit, such as its number of subscriptions. */
 export class EventResourceExhaustedError extends EventProtocolError {
+  /** Names the limit that was reached and its ceiling. */
   constructor(codes: EventErrorCodes, limit: 'subscriptions' | 'verifications', max: number) {
     super(RESOURCE_LIMIT_MESSAGES[limit](max), 'EVENT_RESOURCE_EXHAUSTED', 429, codes.resourceExhausted, {
       limit,
@@ -71,6 +75,7 @@ export class EventResourceExhaustedError extends EventProtocolError {
 
 /** `Unsupported`: the request asks for something this server or event does not offer, such as a delivery mode. */
 export class EventUnsupportedError extends EventProtocolError {
+  /** Names the unsupported option, the value asked for and what is supported. */
   constructor(codes: EventErrorCodes, feature: string, value: string, supported: readonly string[]) {
     super(
       `"${value}" is not a supported ${feature}. Supported: ${supported.join(', ') || 'none'}.`,
@@ -84,6 +89,7 @@ export class EventUnsupportedError extends EventProtocolError {
 
 /** `CallbackEndpointError`: the callback did not prove it accepts deliveries. Only the failure category is told. */
 export class EventCallbackEndpointError extends EventProtocolError {
+  /** Carries the fixed category of the callback failure, never the endpoint's answer. */
   constructor(codes: EventErrorCodes, reason: EventDeliveryErrorCategory) {
     super(
       `The callback endpoint could not be verified (${reason}). It must answer the verification request with 2xx ` +
@@ -98,6 +104,7 @@ export class EventCallbackEndpointError extends EventProtocolError {
 
 /** The subscription store cannot be opened as configured, or a record could not be written. */
 export class EventSubscriptionStoreError extends InternalMcpError {
+  /** An internal store failure, with its message. */
   constructor(message: string) {
     super(`Event subscription store: ${message}`, 'EVENT_SUBSCRIPTION_STORE');
   }
