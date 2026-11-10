@@ -12,6 +12,7 @@ import { workflowTriggerOf } from '../../../common';
 import { type WorkflowEntry } from '../../../common/entries/workflow.entry';
 import { type FrontMcpLogger } from '../../../common/interfaces/logger.interface';
 import { type WorkflowMetadata } from '../../../common/metadata/workflow.metadata';
+import { leaseKey } from '../../../duty/lease-store';
 import { InvalidInputError, JobNotAuthorizedError, WorkflowTriggerConfigError } from '../../../errors';
 import { type JobExecutionManager } from '../../../job/execution/job-execution.manager';
 import { type JobRegistryInterface } from '../../../job/job.registry';
@@ -207,7 +208,7 @@ describe('WorkflowSchedules', () => {
       ['sqlite', 'frontmcp:schedule:'],
     ]);
     expect(await store.keys('*')).toEqual(
-      expect.arrayContaining(['reports:digest', expect.stringMatching(/^reports:rollup:[0-9a-f]{64}$/)]),
+      expect.arrayContaining(['reports:digest', leaseKey('rollup', 'workspace', 'reports')]),
     );
   });
 
