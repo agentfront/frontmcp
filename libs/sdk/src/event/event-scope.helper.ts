@@ -180,7 +180,8 @@ async function enableStreamDelivery(
   const streams = new EventStreams({
     buffer,
     maxPerPrincipal: eventsConfig.subscriptions.maxPerPrincipal,
-    storage,
+    // Only redis carries pub/sub between processes; a memory or SQLite store's reaches this process alone
+    storage: eventsConfig.store?.redis ? storage : undefined,
     logger,
   });
   eventRegistry.streams = streams;

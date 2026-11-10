@@ -1,4 +1,4 @@
-import type { EventOccurrence } from '@frontmcp/protocol';
+import { EventOccurrenceSchema, type EventOccurrence } from '@frontmcp/protocol';
 import { randomUUID, type NamespacedStorage } from '@frontmcp/utils';
 
 import { type EventAudience, type FrontMcpLogger } from '../../common';
@@ -29,11 +29,13 @@ export const MAX_OPEN_STREAMS = 10_000;
 
 /** The open `events/stream` requests of a server: what is published reaches each stream of its event. */
 export class EventStreams {
+  /** The streams that receive what is published, by event name. */
   private readonly streams = new Map<string, Set<EventStream>>();
+  /** Every stream counted against the limits, including one still opening. */
+  private readonly held = new Set<EventStream>();
   private readonly nodeId: string;
   private readonly logger: FrontMcpLogger;
   private stopRelay?: () => Promise<void> | void;
-  private openCount = 0;
 
   constructor(private readonly options: EventStreamsOptions) {
     this.nodeId = randomUUID();
@@ -45,9 +47,9 @@ export class EventStreams {
     return this.options.storage?.supportsPubSub() === true;
   }
 
-  /** How many streams are open. */
+  /** How many streams are open or opening. */
   get size(): number {
-    return this.openCount;
+    return this.held.size;
   }
 
   /** Listen for the occurrences other processes publish, when the storage can carry them. */
@@ -66,28 +68,40 @@ export class EventStreams {
     }
   }
 
-  /** Whether one more stream would exceed what one owner, or the process, may hold open. */
+  /** Whether one more stream exceeds what one owner (all anonymous readers are one), or the process, may hold. */
   isFull(principalKey: string | undefined): boolean {
-    if (this.openCount >= MAX_OPEN_STREAMS) return true;
-    if (principalKey === undefined) return false;
-    let held = 0;
-    for (const streams of this.streams.values()) {
-      for (const stream of streams) {
-        if (stream.principalKey === principalKey) held += 1;
-      }
+    if (this.held.size >= MAX_OPEN_STREAMS) return true;
+    let heldByOwner = 0;
+    for (const stream of this.held) {
+      if (stream.principalKey === principalKey) heldByOwner += 1;
     }
-    return held >= this.options.maxPerPrincipal;
+    return heldByOwner >= this.options.maxPerPrincipal;
   }
 
-  /** Keep a stream for as long as it is open. */
+  /** Count a stream against the limits before it opens; false, and nothing counted, when it would exceed one. */
+  reserve(stream: EventStream): boolean {
+    if (this.held.has(stream)) return true;
+    if (this.isFull(stream.principalKey)) return false;
+    this.hold(stream);
+    return true;
+  }
+
+  /** Deliver what is published to a stream, for as long as it is open. */
   add(stream: EventStream): void {
+    this.hold(stream);
+    if (stream.isClosed) return;
     const streams = this.streams.get(stream.eventName) ?? new Set<EventStream>();
     this.streams.set(stream.eventName, streams);
     streams.add(stream);
-    this.openCount += 1;
+  }
+
+  /** Count a stream until it closes. */
+  private hold(stream: EventStream): void {
+    if (this.held.has(stream) || stream.isClosed) return;
+    this.held.add(stream);
     stream.onClose(() => {
-      streams.delete(stream);
-      this.openCount -= 1;
+      this.held.delete(stream);
+      this.streams.get(stream.eventName)?.delete(stream);
     });
   }
 
@@ -114,14 +128,26 @@ export class EventStreams {
 
   /** Take an occurrence another process published: keep it in this process's buffer and deliver it here. */
   private receive(message: string): void {
-    let relayed: RelayedOccurrence;
-    try {
-      relayed = JSON.parse(message) as RelayedOccurrence;
-    } catch {
-      return;
-    }
-    if (relayed.origin === this.nodeId || !relayed.occurrence) return;
+    const relayed = parseRelayed(message);
+    if (!relayed || relayed.origin === this.nodeId) return;
     const buffered = this.options.buffer.append(relayed.occurrence, relayed.audience, relayed.subscriptionId);
     this.deliver(buffered).catch((error: unknown) => this.logger.warn('A relayed event was not delivered', error));
   }
+}
+
+/** A relayed message as an occurrence to deliver; undefined for anything that is not one. */
+function parseRelayed(message: string): RelayedOccurrence | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(message);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return undefined;
+  const { origin, occurrence, audience, subscriptionId } = parsed as Record<string, unknown>;
+  const checked = EventOccurrenceSchema.safeParse(occurrence);
+  if (typeof origin !== 'string' || !checked.success) return undefined;
+  if (subscriptionId !== undefined && typeof subscriptionId !== 'string') return undefined;
+  if (audience !== undefined && (typeof audience !== 'object' || audience === null)) return undefined;
+  return { origin, occurrence: checked.data, audience: audience as EventAudience | undefined, subscriptionId };
 }

@@ -151,8 +151,12 @@ describe('EventStreams', () => {
 
       await storage.publish(EVENT_RELAY_CHANNEL, 'not json');
       await storage.publish(EVENT_RELAY_CHANNEL, JSON.stringify({ origin: 'another-node' }));
+      await storage.publish(EVENT_RELAY_CHANNEL, 'null');
+      const malformed = { origin: 'another-node', occurrence: { name: 'order.created', data: {} } };
+      await storage.publish(EVENT_RELAY_CHANNEL, JSON.stringify(malformed));
       await relayed();
       expect(stream.offer).not.toHaveBeenCalled();
+      expect(buffer.read('order.created', cursor).events).toHaveLength(0);
 
       await streams.stop();
       const relay = { origin: 'another-node', occurrence: occurrence('order.created', 'evt_1') };

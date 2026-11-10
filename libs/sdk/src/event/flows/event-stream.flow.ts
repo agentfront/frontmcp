@@ -63,6 +63,7 @@ const plan = {
   ],
   execute: ['openStream'],
   post: ['buildResult'],
+  finalize: ['finalize'],
 } as const satisfies FlowPlan<string>;
 
 declare global {
@@ -163,10 +164,6 @@ export default class EventStreamFlow extends FlowBase<typeof name> {
     const streams = this.events.streams as EventStreams;
     const { event, context, reader, subscription, authInfo } = this.state.required;
     const { config } = this.events;
-    if (streams.isFull(reader.principalKey)) {
-      throw new EventResourceExhaustedError(this.codes, 'subscriptions', config.subscriptions.maxPerPrincipal);
-    }
-
     const subscriptionArguments = this.state.required.arguments;
     const codes = this.codes;
     const stream = new EventStream({
@@ -196,14 +193,32 @@ export default class EventStreamFlow extends FlowBase<typeof name> {
       logger: this.logger,
     });
 
-    await context.onSubscribe?.(subscriptionArguments, subscription);
+    if (!streams.reserve(stream)) {
+      stream.close();
+      throw new EventResourceExhaustedError(this.codes, 'subscriptions', config.subscriptions.maxPerPrincipal);
+    }
+    try {
+      await context.onSubscribe?.(subscriptionArguments, subscription);
+    } catch (error) {
+      stream.close();
+      throw error;
+    }
     stream.onClose(() => {
-      Promise.resolve(context.onUnsubscribe?.(subscriptionArguments, subscription, 'closed')).catch((error: unknown) =>
-        this.logger.warn(`onUnsubscribe of event "${event.name}" failed for stream ${subscription.id}`, error),
-      );
+      const warn = (error: unknown) =>
+        this.logger.warn(`onUnsubscribe of event "${event.name}" failed for stream ${subscription.id}`, error);
+      try {
+        Promise.resolve(context.onUnsubscribe?.(subscriptionArguments, subscription, 'closed')).catch(warn);
+      } catch (error) {
+        warn(error);
+      }
     });
     streams.add(stream);
-    await stream.open();
+    try {
+      await stream.open();
+    } catch (error) {
+      stream.close();
+      throw error;
+    }
     this.state.set('stream', stream);
     this.logger.verbose(`openStream: stream ${subscription.id} opened for event "${event.name}"`);
   }
@@ -212,5 +227,11 @@ export default class EventStreamFlow extends FlowBase<typeof name> {
   @Stage('buildResult')
   async buildResult() {
     this.respond({ stream: this.state.required.stream });
+  }
+
+  /** Runs however the open ended, answered or refused, so a hook on it sees every stream request. */
+  @Stage('finalize')
+  async finalize() {
+    this.logger.verbose('finalize');
   }
 }

@@ -909,7 +909,10 @@ request. When the server closes the stream, the request is answered with an empt
 
 `onSubscribe(args, subscription)` runs when the stream opens, with `subscription.mode` `'push'`; when it throws, the
 request fails. `onUnsubscribe(args, subscription, 'closed')` runs when the stream ends. A caller may hold
-`subscriptions.maxPerPrincipal` streams open; one more is answered `ResourceExhausted`.
+`subscriptions.maxPerPrincipal` streams open, counted before `onSubscribe` runs, and the anonymous callers of a public
+server count as one caller; one more is answered `ResourceExhausted`. Occurrences reach a stream in the order they
+were published, an occurrence replayed from the cursor is not sent again live, and an event published by name keeps
+the cursor of its `check()`.
 
 The server performs the push mode unless `events.push.enabled` is `false`, except in a serverless deployment, where
 no process lives long enough to hold a stream.
@@ -1110,7 +1113,7 @@ functions) to get the same `this`.
 - [ ] `initialize` (or `server/discover`) shows `capabilities.events` and the `io.modelcontextprotocol/events` extension
 - [ ] `events/list` shows the event with the expected `delivery`, `inputSchema` and `payloadSchema`
 - [ ] A caller without the event's `authorities` does not see it
-- [ ] `events/list` offers the event by `poll`, and by `webhook` too when the server's `auth.mode` is not `public`
+- [ ] `events/list` offers the event by `poll` and `push`, and by `webhook` too when the server's `auth.mode` is not `public`
 - [ ] `events/subscribe` answers an `id` and a `refreshBefore`, and the callback received one verification request
 - [ ] Subscribing again with the same arguments answers the same `id`
 - [ ] `events/unsubscribe` answers `{}`, twice in a row

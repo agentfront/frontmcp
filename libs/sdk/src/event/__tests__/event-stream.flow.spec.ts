@@ -232,6 +232,57 @@ describe('events:stream', () => {
       await limited.dispose();
     });
 
+    it('counts a stream against the limit before its onSubscribe settles, so two opens at once let one through', async () => {
+      const limited = await startScope({ events: { subscriptions: { maxPerPrincipal: 1 } } });
+      let release: () => void = () => undefined;
+      onSubscribe.mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)));
+
+      const first = openStream(limited, { arguments: { status: 'one' } });
+      const second = openStream(limited, { arguments: { status: 'two' } });
+
+      await expect(second).rejects.toThrow(EventResourceExhaustedError);
+      release();
+      (await first).close();
+      await limited.dispose();
+    });
+
+    it('frees the slot of a stream whose onSubscribe or onUnsubscribe throws', async () => {
+      const limited = await startScope({ events: { subscriptions: { maxPerPrincipal: 1 } } });
+      onSubscribe.mockRejectedValueOnce(new Error('provisioning failed'));
+      onUnsubscribe.mockImplementationOnce(() => {
+        throw new Error('cleanup failed');
+      });
+
+      await expect(openStream(limited, { arguments: { status: 'refused' } })).rejects.toThrow('provisioning failed');
+      const closedWithThrow = await openStream(limited, { arguments: { status: 'one' } });
+      closedWithThrow.close();
+      const reopened = await openStream(limited, { arguments: { status: 'two' } });
+
+      expect(limited.events?.streams?.size).toBe(1);
+      reopened.close();
+      await limited.dispose();
+    });
+
+    it('counts the anonymous readers of a public server as one owner', async () => {
+      const limited = await startScope({ events: { subscriptions: { maxPerPrincipal: 1 } } });
+      const anonymous = { surface: 'mcp' };
+      const first = await openStream(limited, { ctx: anonymous });
+
+      await expect(openStream(limited, { ctx: anonymous, arguments: { status: 'two' } })).rejects.toThrow(
+        EventResourceExhaustedError,
+      );
+      first.close();
+      await limited.dispose();
+    });
+
+    it('relays nothing through a store whose pub/sub reaches this process alone', async () => {
+      const signedIn = await startScope({ auth: { mode: 'local' } as never });
+
+      expect(signedIn.events?.storage?.supportsPubSub()).toBe(true);
+      expect(signedIn.events?.streams?.isRelayed).toBe(false);
+      await signedIn.dispose();
+    });
+
     it('refuses an anonymous caller on a server whose auth signs callers in, and lets one stream on a public server', async () => {
       const signedIn = await startScope({ auth: { mode: 'local' } as never });
 
@@ -327,6 +378,25 @@ describe('events:stream', () => {
       expect(stream.isClosed).toBe(true);
       expect(vaultAuthorize).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('runs the finalize stage of a stream that opened and of one that was refused', async () => {
+    const finalized = jest.fn();
+    @Plugin({ name: 'stream-finalize' })
+    class StreamFinalizePlugin {
+      @EventStreamHook.Finally('finalize')
+      record(ctx: FlowCtxOf<'events:stream'>) {
+        finalized(ctx.rawInput.request?.params.name);
+      }
+    }
+    const audited = await startScope({ plugins: [StreamFinalizePlugin] });
+
+    const stream = await openStream(audited);
+    await expect(openStream(audited, { name: 'order.refunded' })).rejects.toThrow(EventNotFoundError);
+
+    expect(finalized.mock.calls).toEqual([['order.created'], ['order.refunded']]);
+    stream.close();
+    await audited.dispose();
   });
 
   it('runs the hooks of a plugin, and closes its streams when the server stops', async () => {

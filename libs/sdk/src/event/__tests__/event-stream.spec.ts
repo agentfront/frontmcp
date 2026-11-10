@@ -174,6 +174,52 @@ describe('EventStream', () => {
       replaying.close();
     });
 
+    it('delivers in the order offered while an earlier match() is still deciding, with cursors that only grow', async () => {
+      const match = jest.fn(async (event: { eventId: string }) => {
+        if (event.eventId === 'evt_slow') await new Promise((resolve) => setTimeout(resolve, 100));
+        return true;
+      });
+      const { stream, buffer, received } = openable({ match } as never);
+      await stream.open();
+
+      const slow = stream.offer(buffer.append(occurrence('evt_slow')));
+      const fast = stream.offer(buffer.append(occurrence('evt_fast')));
+      await settle(100);
+      await Promise.all([slow, fast]);
+
+      const events = received.filter((notification) => notification.method.endsWith('/event'));
+      expect(events.map((notification) => notification.params['eventId'])).toEqual(['evt_slow', 'evt_fast']);
+      expect(events.map((notification) => notification.params['cursor'])).toEqual([
+        buffer.cursorAt(1),
+        buffer.cursorAt(2),
+      ]);
+    });
+
+    it('delivers once, after the replay, an occurrence offered while the stream opens', async () => {
+      const first = openable();
+      const cursor = first.buffer.currentCursor();
+      first.buffer.append(occurrence('evt_1'));
+      const live = first.buffer.append(occurrence('evt_2'));
+      const replaying = new EventStream({
+        ...(first.stream as unknown as { options: EventStreamOptions }).options,
+        cursor,
+        signal: undefined,
+      });
+      const received: EventStreamNotification[] = [];
+      void (async () => {
+        for await (const notification of replaying) received.push(notification);
+      })();
+
+      const offered = replaying.offer(live);
+      await replaying.open();
+      await offered;
+      await settle();
+
+      expect(received.slice(1).map((notification) => notification.params['eventId'])).toEqual(['evt_1', 'evt_2']);
+      expect(received.at(-1)?.params['cursor']).toBe(first.buffer.cursorAt(2));
+      replaying.close();
+    });
+
     it('confirms with truncated when the cursor cannot be placed, or maxAgeMs skipped something', async () => {
       const unplaceable = openable({}, { cursor: 'another-process.4' });
       await unplaceable.stream.open();
@@ -290,6 +336,23 @@ describe('EventStream', () => {
   });
 
   describe('of an event with check()', () => {
+    it('keeps the cursor of check() when an occurrence published by name is offered', async () => {
+      const check = jest.fn().mockResolvedValue({ events: [], cursor: 'upstream-5' });
+      const { stream, buffer, received } = openable({ check });
+      await stream.open();
+
+      await stream.offer(buffer.append(occurrence('evt_published')));
+      await settle(HEARTBEAT_MS);
+
+      expect(received.find((notification) => notification.method.endsWith('/event'))?.params).toMatchObject({
+        eventId: 'evt_published',
+        cursor: 'upstream-5',
+      });
+      expect(received.find((notification) => notification.method.endsWith('/heartbeat'))?.params).toMatchObject({
+        cursor: 'upstream-5',
+      });
+    });
+
     it('asks check() for the position, confirms with it, and asks again at each interval', async () => {
       const check = jest
         .fn()

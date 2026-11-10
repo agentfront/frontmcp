@@ -707,7 +707,7 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowStage('openStream', ctx);
   }
 
-  @EventStreamHook.Did('buildResult', { priority: 1000 })
+  @EventStreamHook.Finally('finalize', { priority: 1000 })
   _eventStreamDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }

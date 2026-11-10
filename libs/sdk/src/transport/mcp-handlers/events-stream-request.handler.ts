@@ -4,7 +4,9 @@ import {
   type StreamEventsRequest,
   type StreamEventsResult,
 } from '@frontmcp/protocol';
+import { awaitOutsideRequest } from '@frontmcp/utils';
 
+import { type EventStreamNotification } from '../../event/stream/event-stream';
 import { toSdkMcpError } from './mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 import { withMcpSurface } from './mcp-surface';
@@ -33,9 +35,13 @@ export default function eventsStreamRequestHandler({
       } catch (error) {
         throw toSdkMcpError(error);
       }
+      const notifications: AsyncIterator<EventStreamNotification> = opened.stream[Symbol.asyncIterator]();
       try {
-        for await (const notification of opened.stream) {
-          await ctx.sendNotification(notification as never);
+        for (;;) {
+          // Waiting for the next notification lets other requests take their turn in a browser without AsyncContext
+          const next = await awaitOutsideRequest(notifications.next());
+          if (next.done) break;
+          await ctx.sendNotification(next.value as never);
         }
       } finally {
         opened.stream.close();

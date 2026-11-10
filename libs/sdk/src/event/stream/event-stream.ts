@@ -75,9 +75,17 @@ export class EventStream implements AsyncIterable<EventStreamNotification> {
   private withheld = false;
   private heartbeatTimer?: ReturnType<typeof setInterval>;
   private checkTimer?: ReturnType<typeof setTimeout>;
+  /** Offers are delivered one after the other, in the order they came; behind the replay while the stream opens. */
+  private delivering: Promise<void>;
+  private releaseDelivery: () => void = () => undefined;
+  /** The buffer sequence of the last occurrence taken: one replayed and offered live too is delivered once. */
+  private lastSequence = 0;
 
   constructor(private readonly options: EventStreamOptions) {
     this.cursor = options.cursor ?? null;
+    this.delivering = options.buffer
+      ? new Promise<void>((resolve) => (this.releaseDelivery = resolve))
+      : Promise.resolve();
     if (options.signal?.aborted) this.close();
     else options.signal?.addEventListener('abort', () => this.close(), { once: true });
   }
@@ -110,22 +118,20 @@ export class EventStream implements AsyncIterable<EventStreamNotification> {
     } else {
       await this.openOnBuffer();
     }
+    this.releaseDelivery();
     if (this.closed) return;
     this.heartbeatTimer = setInterval(() => void this.beat(), heartbeatMs);
     this.heartbeatTimer.unref?.();
   }
 
-  /** Deliver a published occurrence, when it is for this stream's reader and arguments. */
-  async offer(buffered: BufferedEvent): Promise<void> {
-    if (this.closed) return;
-    if (this.accessUnchecked) {
-      this.withheld = true;
-      return;
-    }
-    const occurrence = await this.occurrenceFor(buffered);
-    if (!occurrence) return;
-    this.cursor = this.options.buffer?.cursorAt(buffered.sequence) ?? null;
-    this.pushEvent(occurrence);
+  /** Deliver a published occurrence, when it is for this stream's reader and arguments, after those offered before. */
+  offer(buffered: BufferedEvent): Promise<void> {
+    this.delivering = this.delivering
+      .then(() => this.deliver(buffered))
+      .catch((error: unknown) =>
+        this.options.logger.warn(`An event was not delivered on stream ${this.subscription.id}`, error),
+      );
+    return this.delivering;
   }
 
   /** End the stream on the server's side: the client gets `terminated` with the reason, then the final frame. */
@@ -139,6 +145,7 @@ export class EventStream implements AsyncIterable<EventStreamNotification> {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    this.releaseDelivery();
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     if (this.checkTimer) clearTimeout(this.checkTimer);
     for (const listener of this.closeListeners.splice(0)) listener();
@@ -182,17 +189,35 @@ export class EventStream implements AsyncIterable<EventStreamNotification> {
     }
     if (cursor === undefined || cursor === null) {
       this.cursor = buffer.currentCursor();
+      this.lastSequence = buffer.currentSequence();
       this.pushActive(false);
       return;
     }
     const read = buffer.read(this.eventName, cursor);
     const endCursor = buffer.currentCursor();
+    const endSequence = buffer.currentSequence();
     const floor = maxAgeMs === undefined ? undefined : Date.now() - maxAgeMs;
     const replayed = read.events.filter((buffered) => floor === undefined || buffered.publishedAt >= floor);
     this.cursor = read.events.length === 0 ? endCursor : cursor;
     this.pushActive(read.truncated || replayed.length < read.events.length);
-    for (const buffered of replayed) await this.offer(buffered);
+    for (const buffered of replayed) await this.deliver(buffered);
     this.cursor = endCursor;
+    this.lastSequence = endSequence;
+  }
+
+  /** Deliver one occurrence not taken yet; the cursor moves only on a stream of published events. */
+  private async deliver(buffered: BufferedEvent): Promise<void> {
+    if (this.closed || buffered.sequence <= this.lastSequence) return;
+    if (this.accessUnchecked) {
+      this.withheld = true;
+      return;
+    }
+    this.lastSequence = buffered.sequence;
+    const occurrence = await this.occurrenceFor(buffered);
+    if (!occurrence) return;
+    const { buffer } = this.options;
+    if (buffer) this.cursor = buffer.cursorAt(buffered.sequence);
+    this.pushEvent(occurrence);
   }
 
   /** Start a stream of an event with `check()`: ask it for the position or the backlog, then keep asking. */
