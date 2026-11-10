@@ -19,6 +19,10 @@ const NAME_PARAM_BY_METHOD: Record<string, string> = {
   'tools/call': 'name',
   'prompts/get': 'name',
   'resources/read': 'uri',
+  'events/poll': 'name',
+  'events/stream': 'name',
+  'events/subscribe': 'name',
+  'events/unsubscribe': 'name',
 };
 
 /** Whether a request travels as 2026-07-28: the client speaks it, or the method exists only in it. */

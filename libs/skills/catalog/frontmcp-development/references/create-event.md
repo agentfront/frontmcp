@@ -1082,6 +1082,95 @@ Opening a stream runs the hookable `events:stream` flow (`EventStreamHook`), wit
 `openStream` and `buildResult`. `scope.events.streams` is the server's `EventStreams` (`size`, `isRelayed`). With
 `@frontmcp/observability`, opening a stream is traced as an `events/stream` span.
 
+## Subscribing From a Client
+
+`connect()` gives a `DirectClient` whose `events` property is an `EventsClient`; `McpTestClient` from
+`@frontmcp/testing` has the same `events` property. Code with another transport builds one over it:
+`new EventsClient(transport, options)`, where `transport` sends a request (`request(method, params)`) and, when it
+can hold a stream, opens `events/stream` (`openStream(params, onNotification, signal)`).
+
+```typescript
+const client = await connect(Server, { authToken });
+
+const definitions = await client.events.list(); // every page of events/list
+const subscription = await client.events.subscribe('order.created', { status: 'paid' });
+for await (const occurrence of subscription) {
+  console.log(occurrence.eventId, occurrence.data);
+}
+await subscription.cancel();
+```
+
+`subscribe(name, args, options?)` resolves once the server accepted the subscription and rejects with its refusal
+(`EventRequestError`, with `rpcCode`, `method` and `data`). The subscription is an async iterable of occurrences,
+deduplicated by `eventId`. `cancel()`, or leaving the `for await` loop, ends it. When the server ends it
+(`terminated`, a webhook `terminated` envelope, or a poll that is refused), the iteration throws an
+`EventSubscriptionTerminatedError` that carries the server's `error`.
+
+The delivery mode is the first of these that the event lists and the client can use:
+
+1. **webhook**, when the client was given a `webhook` option;
+2. **push**, when the transport can hold a stream: the in-process connection of `connect()`, and Streamable HTTP;
+3. **poll**.
+
+`options.delivery` forces a mode; one the event does not offer, or the client cannot use, rejects with
+`NoCompatibleDeliveryModeError`. An event `events/list` does not show is tried in that order, and the server answers.
+
+| Mode    | What the client does                                                                                                                                                                                                    |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| poll    | Polls again at once while `hasMore` is `true`, else after `nextPollMs`, never sooner than `pollFloorMs` (1000). A failed poll is retried; a JSON-RPC error with an events code or `-32602` ends the subscription        |
+| push    | Opens one `events/stream`. A stream that ends, or sends nothing for `heartbeatTimeoutMs` (60000), is opened again from the latest cursor after `pollFloorMs`                                                            |
+| webhook | Generates a `whsec_` secret, registers it with the receiver, calls `events/subscribe`, and calls it again once 80% of the time to `refreshBefore` has passed (hourly for `null`). `cancel()` sends `events/unsubscribe` |
+
+Each subscription keeps the latest cursor it was sent (an occurrence's, a heartbeat's, a poll result's, a subscribe
+result's) in `subscription.cursor` and in the cursor store, keyed by the event name and the arguments, and starts
+from the stored one next time. The default store is in memory; pass `cursorStore: { get(key), set(key, cursor) }` to
+keep cursors across runs. `options.cursor` overrides it (`null` is "from now"), and `options.maxAgeMs` bounds the
+replay of the first request. `options.onTruncated(cursor)` is told when the server skipped events (`truncated`, or a
+`gap` envelope); `options.onError(error)` gets `notifications/events/error`. `options.maxEvents` caps each poll.
+
+Options of the client: `connect(config, { events: { webhook, cursorStore, pollFloorMs, heartbeatTimeoutMs } })`, or
+`McpTestClient.create(...).withEvents({ ... })`.
+
+### Receiving webhooks
+
+`createEventWebhookReceiver(options?)` is a framework-neutral receiver. Give it each request with its exact body:
+
+```typescript
+import { connect, createEventWebhookReceiver } from '@frontmcp/sdk';
+
+const receiver = createEventWebhookReceiver();
+app.post('/hooks/mcp', express.text({ type: '*/*' }), async (req, res) => {
+  const { status, body } = await receiver.handle({ headers: req.headers, rawBody: req.body });
+  res.status(status).json(body ?? {});
+});
+
+const client = await connect(Server, {
+  authToken,
+  events: { webhook: { url: 'https://hooks.example.com/hooks/mcp', receiver, ttlMs: 3_600_000 } },
+});
+const subscription = await client.events.subscribe('order.created'); // mode 'webhook'
+```
+
+For each request it:
+
+- selects the secrets by `X-MCP-Subscription-Id`: those registered for that subscription, and `options.secrets`,
+  which sign any subscription;
+- answers `401` when the signature is missing, does not verify, or its `webhook-timestamp` is more than 5 minutes off;
+- answers a `verification` envelope with `200 { challenge }`. On a first subscribe the subscription id is not known
+  yet, so it tries the registered secrets that have none, and binds the id to the one that verifies;
+- answers `503`, which the server retries, for a subscription it holds no secret for;
+- answers a `webhook-id` it already acknowledged for that subscription with `200` and does nothing (the last 10000
+  are remembered);
+- hands an occurrence to `onEvent(occurrence, { subscriptionId, webhookId })`, a `gap` envelope to
+  `onGap(cursor, ...)` and a `terminated` envelope to `onTerminated(error, ...)`, of the subscription's listener or
+  else of the receiver's options, and answers `200` once the callback settled, `500` when it threw, and `400` for a
+  body that is none of these.
+
+`receiver.register({ secret, subscriptionId?, listener? })` registers a secret and returns `bind(id)`,
+`addSecret(secret)` and `release()`; an `EventsClient` does this for each webhook subscription. `receiver.verify(request)`
+checks a signature without acting on it. In tests, `WebhookReceiver` from `@frontmcp/testing` is an HTTP server over
+this receiver: pass `receiver.eventReceiver` as the `webhook.receiver` of a client.
+
 ## Capabilities
 
 A server that serves events advertises them in two places, on every transport (`initialize` over HTTP, SSE and stdio,
@@ -1320,6 +1409,8 @@ functions) to get the same `this`.
 | A webhook subscription to an event with `check()` gets nothing | The runtime is serverless, edge or a browser, or `check()` throws                      | Run a long-lived process; read the log for `check() of event ... failed`                |
 | A delivered body has a `cursor` behind its own item            | The watermark never passes an unacknowledged delivery                                  | Persist it as it is: a resubscribe replays from it, at least once                       |
 | `{ "type": "gap" }` arrives at the callback                    | `check()` reported that its upstream skipped events                                    | Read current state with a tool; persist the `cursor` of the envelope                    |
+| `subscribe()` rejects with `NoCompatibleDeliveryModeError`     | The event offers no mode this client can use                                           | Configure `events.webhook`, use a transport that streams, or force a mode it offers     |
+| Webhook deliveries are answered `503`                          | The receiver holds no secret for that subscription id                                  | Register the secret (an `EventsClient` does), or pass it in `secrets`                   |
 
 ## Examples
 

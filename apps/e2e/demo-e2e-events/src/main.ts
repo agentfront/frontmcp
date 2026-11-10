@@ -44,7 +44,7 @@ const nextPollMs = parseInt(process.env['EVENTS_NEXT_POLL_MS'] ?? '30000', 10);
     publishEndpoint: publishEndpoint(),
     // A test of the heartbeat of a stream shortens it
     push: { heartbeatMs },
-    // A test of webhook delivery for an event with check() shortens the interval check() is called at
+    // Tests of webhook delivery for an event with check() and of a polling client shorten the poll interval
     poll: { nextPollMs },
   },
 })

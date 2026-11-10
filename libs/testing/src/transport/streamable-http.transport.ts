@@ -413,6 +413,46 @@ export class StreamableHttpTransport implements McpTransport {
     return acknowledged;
   }
 
+  /** Send a long-lived request with no timeout, handing its notifications on as they arrive. */
+  async streamRequest(
+    message: JsonRpcRequest,
+    onNotification: NotificationHandler,
+    signal: AbortSignal,
+  ): Promise<JsonRpcResponse | undefined> {
+    this.ensureConnected();
+    const stateless = isStatelessRequest(this.protocolVersion, message.method);
+    const outgoing = stateless ? withRequestMeta(message, this.requestMeta) : message;
+    let response: Response;
+    try {
+      response = await fetch(this.mcpUrl(), {
+        method: 'POST',
+        headers: this.buildHeaders(stateless, outgoing),
+        body: JSON.stringify(outgoing),
+        signal,
+      });
+    } catch (error) {
+      if (isAbortError(error)) return undefined;
+      throw error;
+    }
+    const isEventStream = response.headers.get('content-type')?.includes('text/event-stream') ?? false;
+    if (!response.ok || !isEventStream || !response.body) {
+      const text = await response.text();
+      const parsed = parsedJsonRpc(text);
+      if (response.ok && parsed && 'result' in parsed) return parsed as unknown as JsonRpcResponse;
+      const error = { code: -32000, message: `HTTP ${response.status}: ${response.statusText}`, data: text };
+      return jsonRpcErrorIn(text) ?? { jsonrpc: '2.0', id: message.id ?? null, error };
+    }
+    let finalResponse: JsonRpcResponse | undefined;
+    await this.readEventStream(response.body.getReader(), async (event) => {
+      const parsed = parsedJsonRpc(event.data);
+      if (parsed && 'method' in parsed && parsed['id'] === undefined)
+        onNotification(parsed as unknown as JsonRpcRequest);
+      else if (parsed && ('result' in parsed || 'error' in parsed))
+        finalResponse = parsed as unknown as JsonRpcResponse;
+    });
+    return finalResponse;
+  }
+
   async close(): Promise<void> {
     this.closeNotificationStream();
     this.closeSubscriptionStream();
@@ -1026,6 +1066,16 @@ export class StreamableHttpTransport implements McpTransport {
       },
       sseSessionId,
     };
+  }
+}
+
+/** A JSON-RPC message an SSE event carries, or undefined. */
+function parsedJsonRpc(data: string): Record<string, unknown> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(data);
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
   }
 }
 

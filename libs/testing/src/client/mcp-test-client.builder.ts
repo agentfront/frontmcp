@@ -4,6 +4,7 @@
  */
 
 import type { LoggingLevel } from '@frontmcp/protocol';
+import type { EventsClientOptions } from '@frontmcp/sdk';
 
 import { getPlatformCapabilities, getPlatformClientInfo } from '../platform/platform-client-info';
 import type { TestPlatformType } from '../platform/platform-types';
@@ -187,6 +188,23 @@ export class McpTestClientBuilder {
    */
   withQueryParams(params: Record<string, string>): this {
     this.config.queryParams = { ...this.config.queryParams, ...params };
+    return this;
+  }
+
+  /**
+   * Configure `client.events` (MCP Events): a webhook receiver to subscribe by webhook, a cursor store, the poll floor.
+   *
+   * @example
+   * ```typescript
+   * const receiver = new WebhookReceiver();
+   * const { url } = await receiver.start();
+   * const client = await McpTestClient.create({ baseUrl })
+   *   .withEvents({ webhook: { url, receiver: receiver.eventReceiver } })
+   *   .buildAndConnect();
+   * ```
+   */
+  withEvents(options: EventsClientOptions): this {
+    this.config.events = options;
     return this;
   }
 
