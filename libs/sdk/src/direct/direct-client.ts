@@ -409,6 +409,8 @@ export class DirectClientImpl implements DirectClient {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async close(): Promise<void> {
+    // Subscriptions hold timers and webhook secrets: end them while the connection can still unsubscribe
+    await this.events.close();
     try {
       await this.mcpClient.close();
     } finally {

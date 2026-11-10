@@ -112,6 +112,19 @@ describe('McpTestClient events', () => {
     });
   });
 
+  it('cancels its subscriptions when it disconnects', async () => {
+    const requests = stubFetch();
+    const client = McpTestClient.create({ baseUrl: 'http://localhost:3003', publicMode: true }).build();
+    await client.connect();
+    const subscription = await client.events.subscribe('order.created', {}, { delivery: 'poll' });
+
+    await client.disconnect();
+    const pollsAtDisconnect = requests.filter((request) => request.method === 'events/poll').length;
+
+    await expect(subscription[Symbol.asyncIterator]().next()).resolves.toEqual({ value: undefined, done: true });
+    expect(pollsAtDisconnect).toBe(1);
+  });
+
   it('cancels a stream by closing it under protocol 2026-07-28', async () => {
     const requests = stubFetch();
     const client = McpTestClient.create({ baseUrl: 'http://localhost:3003', publicMode: true })

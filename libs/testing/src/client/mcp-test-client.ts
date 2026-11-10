@@ -338,6 +338,7 @@ export class McpTestClient {
    * Disconnect from the MCP server
    */
   async disconnect(): Promise<void> {
+    await this.eventsClient?.close();
     if (this.transport) {
       await this.transport.close();
       this.transport = null;

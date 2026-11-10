@@ -398,8 +398,10 @@ await subscription.cancel();
 ```
 
 `WebhookReceiver` records every request (`requests`, `verifications()`, `deliveries()`, `waitForDeliveries()`), and
-`failNext(count, status)` fails the next signed deliveries. With `secrets`, or a secret an events client registered,
-it checks signatures through the SDK's `createEventWebhookReceiver`; without any, it checks nothing and answers `200`.
+`failNext(count, status)` answers the next `count` deliveries with `status`; verification challenges are not affected.
+With `secrets`, or a secret an events client registered, it checks signatures through the SDK's
+`createEventWebhookReceiver`, and only a delivery whose signature verifies counts as failed; without any, it checks
+nothing and answers `200`, or the pending `failNext` status for a delivery.
 
 ### Servers that serve MCP somewhere other than `/`
 

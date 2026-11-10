@@ -172,6 +172,21 @@ describe('createEventWebhookReceiver', () => {
     await expect(receiver.handle(signed(body))).resolves.toMatchObject({ status: 400 });
   });
 
+  it('answers a retry that arrives while the first attempt runs with a retryable 503, and runs the listener once', async () => {
+    let release: () => void = () => undefined;
+    const onEvent = jest.fn(() => new Promise<void>((resolve) => (release = resolve)));
+    const receiver = createEventWebhookReceiver({ secrets: [SHARED], onEvent });
+
+    const first = receiver.handle(signed(occurrence));
+    const concurrent = await receiver.handle(signed(occurrence));
+    release();
+    const settled = await first;
+    const later = await receiver.handle(signed(occurrence));
+
+    expect([concurrent.status, settled.status, later.status]).toEqual([503, 200, 200]);
+    expect(onEvent).toHaveBeenCalledTimes(1);
+  });
+
   it('answers 500 when the listener throws, and processes the retry', async () => {
     const onEvent = jest.fn().mockRejectedValueOnce(new Error('disk full'));
     const receiver = createEventWebhookReceiver({ secrets: [SHARED], onEvent });

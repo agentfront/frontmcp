@@ -131,6 +131,20 @@ describe('DirectClient events', () => {
     await expect(poll).rejects.toMatchObject({ rpcCode: -32602 });
   });
 
+  it('cancels its subscriptions when it closes', async () => {
+    const closing = await connect(config, {
+      session: { id: 'closing', user: { sub: 'bob' } },
+      events: { pollFloorMs: 20 },
+    });
+    const polled = await closing.events.subscribe('order.placed', {}, { delivery: 'poll' });
+    const pushed = await closing.events.subscribe('order.placed', {}, { delivery: 'push' });
+
+    await closing.close();
+
+    await expect(polled[Symbol.asyncIterator]().next()).resolves.toEqual({ value: undefined, done: true });
+    await expect(pushed[Symbol.asyncIterator]().next()).resolves.toEqual({ value: undefined, done: true });
+  });
+
   it('exports the terminated error for a subscription the server ends', () => {
     const terminated = new EventSubscriptionTerminatedError('order.placed', { code: -32024, message: 'Forbidden' });
 

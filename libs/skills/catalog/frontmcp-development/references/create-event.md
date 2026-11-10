@@ -1102,9 +1102,15 @@ await subscription.cancel();
 
 `subscribe(name, args, options?)` resolves once the server accepted the subscription and rejects with its refusal
 (`EventRequestError`, with `rpcCode`, `method` and `data`). The subscription is an async iterable of occurrences,
-deduplicated by `eventId`. `cancel()`, or leaving the `for await` loop, ends it. When the server ends it
-(`terminated`, a webhook `terminated` envelope, or a poll that is refused), the iteration throws an
-`EventSubscriptionTerminatedError` that carries the server's `error`.
+deduplicated by `eventId`. `cancel()`, or leaving the `for await` loop, ends it; `client.events.close()` ends every
+subscription of the client, and so do `DirectClient.close()` and `McpTestClient.disconnect()`. When the server ends it
+(`terminated`, a webhook `terminated` envelope, or a refusal of a poll, a reconnection or a refresh), the iteration
+throws an `EventSubscriptionTerminatedError` that carries the server's `error`.
+
+A refusal ends a subscription when it is `-32602`, `NotFound`, `Forbidden` or `Unsupported` (in either dialect).
+`ResourceExhausted`, `CallbackEndpointError` and any other failure are retried: after `pollFloorMs`, doubled after
+each failure in a row, at most 60 seconds (`MAX_RETRY_DELAY_MS`). A subscribe that is refused at once rejects, whatever
+the code.
 
 The delivery mode is the first of these that the event lists and the client can use:
 
@@ -1115,11 +1121,11 @@ The delivery mode is the first of these that the event lists and the client can 
 `options.delivery` forces a mode; one the event does not offer, or the client cannot use, rejects with
 `NoCompatibleDeliveryModeError`. An event `events/list` does not show is tried in that order, and the server answers.
 
-| Mode    | What the client does                                                                                                                                                                                                    |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| poll    | Polls again at once while `hasMore` is `true`, else after `nextPollMs`, never sooner than `pollFloorMs` (1000). A failed poll is retried; a JSON-RPC error with an events code or `-32602` ends the subscription        |
-| push    | Opens one `events/stream`. A stream that ends, or sends nothing for `heartbeatTimeoutMs` (60000), is opened again from the latest cursor after `pollFloorMs`                                                            |
-| webhook | Generates a `whsec_` secret, registers it with the receiver, calls `events/subscribe`, and calls it again once 80% of the time to `refreshBefore` has passed (hourly for `null`). `cancel()` sends `events/unsubscribe` |
+| Mode    | What the client does                                                                                                                                                                                                                                                                                                      |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| poll    | Polls again at once while `hasMore` is `true`, else after `nextPollMs`, never sooner than `pollFloorMs` (1000). A failed poll is retried as above                                                                                                                                                                         |
+| push    | Opens one `events/stream`. A stream that ends, or sends nothing for `heartbeatTimeoutMs` (60000), is opened again from the latest cursor after `pollFloorMs`, and retried as above                                                                                                                                        |
+| webhook | Generates a `whsec_` secret, registers it with the receiver, calls `events/subscribe`, and calls it again once 80% of the time to `refreshBefore` has passed (hourly for `null`, or for a `refreshBefore` that is not a date; never later than the longest timer, about 24.8 days). `cancel()` sends `events/unsubscribe` |
 
 Each subscription keeps the latest cursor it was sent (an occurrence's, a heartbeat's, a poll result's, a subscribe
 result's) in `subscription.cursor` and in the cursor store, keyed by the event name and the arguments, and starts

@@ -6,6 +6,7 @@ import {
   DEFAULT_HEARTBEAT_TIMEOUT_MS,
   DEFAULT_POLL_FLOOR_MS,
   EventsClient,
+  MAX_RETRY_DELAY_MS,
   NO_EXPIRY_REFRESH_MS,
 } from '..';
 import {
@@ -91,7 +92,9 @@ const refused = (code: number) => new EventRequestError('events/poll', code, 're
 
 describe('EventsClient', () => {
   it('polls at most once a second, waits a minute for a heartbeat, and refreshes an unexpiring grant hourly', () => {
-    expect([DEFAULT_POLL_FLOOR_MS, DEFAULT_HEARTBEAT_TIMEOUT_MS, NO_EXPIRY_REFRESH_MS]).toEqual([1000, 60000, 3600000]);
+    expect([DEFAULT_POLL_FLOOR_MS, DEFAULT_HEARTBEAT_TIMEOUT_MS, NO_EXPIRY_REFRESH_MS, MAX_RETRY_DELAY_MS]).toEqual([
+      1000, 60000, 3600000, 60000,
+    ]);
   });
 
   describe('list', () => {
@@ -246,6 +249,66 @@ describe('EventsClient', () => {
       expect(ended).toMatchObject({ error: { code: -32023, data: {} } });
     });
 
+    it('retries ResourceExhausted and CallbackEndpointError in both dialects, waiting longer after each failure', async () => {
+      const codes = [-32025, -32013, -32027, -32015];
+      const pollTimes: number[] = [];
+      const { transport } = transportOf({
+        'events/poll': () => {
+          pollTimes.push(Date.now());
+          if (pollTimes.length === 1) return { events: [], cursor: 'c0', nextPollMs: 0 };
+          const code = codes.shift();
+          if (code !== undefined) throw new EventRequestError('events/poll', code, 'busy');
+          return { events: [occurrenceOf('e1')], cursor: 'c1', nextPollMs: 60000 };
+        },
+      });
+      const client = new EventsClient(transport, { ...FAST, pollFloorMs: 20 });
+      const subscription = await client.subscribe('order.created');
+
+      const [occurrence] = await take(subscription, 1);
+      await subscription.cancel();
+
+      expect(occurrence.eventId).toBe('e1');
+      const gaps = pollTimes.slice(2).map((time, index) => time - pollTimes[index + 1]);
+      expect(gaps[gaps.length - 1]).toBeGreaterThanOrEqual(150);
+    });
+
+    it('keeps the events of a poll whose cursor store throws', async () => {
+      const store = {
+        get: () => undefined,
+        set: () => {
+          throw new Error('disk full');
+        },
+      };
+      const { transport } = transportOf({
+        'events/poll': () => ({ events: [occurrenceOf('e1')], cursor: 'c1', nextPollMs: 60000 }),
+      });
+      const client = new EventsClient(transport, { ...FAST, cursorStore: store });
+
+      const subscription = await client.subscribe('order.created');
+      const [occurrence] = await take(subscription, 1);
+      await subscription.cancel();
+
+      expect(occurrence.eventId).toBe('e1');
+      expect(subscription.cursor).toBe('c1');
+    });
+
+    it('cancels every subscription it holds on close', async () => {
+      const { transport, calls } = transportOf({
+        'events/poll': () => ({ events: [], cursor: 'c', nextPollMs: 0 }),
+      });
+      const client = new EventsClient(transport, FAST);
+      const first = await client.subscribe('order.created', { n: 1 });
+      const second = await client.subscribe('order.created', { n: 2 });
+      await first.cancel();
+
+      await client.close();
+      const pollsAtClose = calls.length;
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      expect(calls.length).toBe(pollsAtClose);
+      await expect(second[Symbol.asyncIterator]().next()).resolves.toEqual({ value: undefined, done: true });
+    });
+
     it('rejects subscribe when the first poll is refused', async () => {
       const { transport } = transportOf({
         'events/poll': () => {
@@ -341,6 +404,26 @@ describe('EventsClient', () => {
       expect(streams[1].params['cursor']).toBe('c0');
       expect(streams[3].params['cursor']).toBe('c5');
       expect(streams[2].signal.aborted).toBe(true);
+      await subscription.cancel();
+    });
+
+    it('keeps reconnecting while the server answers ResourceExhausted', async () => {
+      const { transport } = transportOf({});
+      const streams = withStreams(transport);
+      const client = new EventsClient(transport, FAST);
+
+      const subscribing = client.subscribe('order.created');
+      await until(() => streams.length === 1);
+      streams[0].send('notifications/events/active', { cursor: 'c0' });
+      const subscription = await subscribing;
+      streams[0].end();
+      await until(() => streams.length === 2);
+      streams[1].end(new EventRequestError('events/stream', -32025, 'limit'));
+      await until(() => streams.length === 3);
+      streams[2].send('notifications/events/active', { cursor: 'c1' });
+      streams[2].send('notifications/events/event', occurrenceOf('e1', 'c2'));
+
+      await expect(take(subscription, 1)).resolves.toEqual([occurrenceOf('e1', 'c2')]);
       await subscription.cancel();
     });
 
@@ -482,6 +565,47 @@ describe('EventsClient', () => {
       await subscription.cancel();
 
       expect(calls[1].params).not.toHaveProperty('ttlMs');
+    });
+
+    it('retries a refresh the callback endpoint failed', async () => {
+      let count = 0;
+      const { client } = webhookClient(() => {
+        count += 1;
+        if (count === 2) throw new EventRequestError('events/subscribe', -32027, 'unreachable', { reason: 'timeout' });
+        return { id: 'sub_1', refreshBefore: new Date(Date.now() + 10).toISOString() };
+      });
+
+      const subscription = await client.subscribe('order.created');
+      await until(() => count >= 3);
+      await subscription.cancel();
+
+      expect(count).toBeGreaterThanOrEqual(3);
+    });
+
+    it.each([
+      ['a grant past the longest timer', () => new Date(Date.now() + 60 * 24 * 3600 * 1000).toISOString()],
+      ['a refreshBefore that is not a date', () => 'soon'],
+    ])('does not refresh at once for %s', async (_label, refreshBefore) => {
+      let count = 0;
+      const { client } = webhookClient(() => {
+        count += 1;
+        return { id: 'sub_1', refreshBefore: refreshBefore() };
+      });
+
+      const subscription = await client.subscribe('order.created');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await subscription.cancel();
+
+      expect(count).toBe(1);
+    });
+
+    it('unsubscribes a webhook subscription when the client closes', async () => {
+      const { client, calls } = webhookClient(() => ({ id: 'sub_1', refreshBefore: null }));
+      await client.subscribe('order.created');
+
+      await client.close();
+
+      expect(calls.at(-1)?.method).toBe('events/unsubscribe');
     });
 
     it('ignores a failed unsubscribe', async () => {

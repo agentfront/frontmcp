@@ -127,6 +127,7 @@ export function createEventWebhookReceiver(options: EventWebhookReceiverOptions 
   const sharedKeys = (options.secrets ?? []).map(signingKeyOf);
   const registrations = new Set<RegistrationRecord>();
   const seenWebhookIds = new Set<string>();
+  const inFlight = new Set<string>();
 
   /** The registrations bound to a subscription id. */
   const boundTo = (subscriptionId: string) =>
@@ -215,14 +216,19 @@ export function createEventWebhookReceiver(options: EventWebhookReceiverOptions 
       if (isVerification) return { status: 200, body: { challenge: json['challenge'] }, signature };
       const dedupeKey = `${subscriptionId} ${webhookId}`;
       if (seenWebhookIds.has(dedupeKey)) return { status: 200, signature };
+      // A retry that arrives while the first attempt still runs is answered retryable, so the listener runs once
+      if (inFlight.has(dedupeKey)) return { status: 503, signature };
 
       const listener = bound[0]?.listener ?? options;
+      inFlight.add(dedupeKey);
       try {
         const response = await dispatch(json, listener, { subscriptionId, webhookId });
         if (response.status === 200) remember(dedupeKey);
         return { ...response, signature };
       } catch {
         return { status: 500, signature };
+      } finally {
+        inFlight.delete(dedupeKey);
       }
     },
 

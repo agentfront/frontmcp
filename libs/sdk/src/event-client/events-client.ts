@@ -42,11 +42,22 @@ const REFRESH_AT_SHARE = 0.8;
 /** The event ids one subscription remembers to drop duplicates. */
 const DEDUPE_WINDOW = 1000;
 
-/** Codes that end a subscription: invalid arguments and every events error, in both dialects. */
+/** The longest delay a timer accepts; a longer one fires at once. */
+const MAX_TIMER_MS = 2_147_483_647;
+/** The longest wait between two retries of a failed request. */
+export const MAX_RETRY_DELAY_MS = 60_000;
+
+/**
+ * Codes that end a subscription: invalid arguments, NotFound, Forbidden and Unsupported, in both dialects.
+ * ResourceExhausted and CallbackEndpointError can clear (a limit frees up, a callback comes back), so they are retried.
+ */
 const TERMINAL_CODES = new Set<number>([
   -32602,
-  ...Object.values(EVENTS_ERROR_CODES),
-  ...Object.values(EVENTS_SKETCH_ERROR_CODES),
+  ...[EVENTS_ERROR_CODES, EVENTS_SKETCH_ERROR_CODES].flatMap(({ notFound, forbidden, unsupported }) => [
+    notFound,
+    forbidden,
+    unsupported,
+  ]),
 ]);
 
 /** Whether an error means the server will not serve the subscription, so retrying cannot help. */
@@ -158,6 +169,8 @@ interface SubscriptionSettings {
   mode: EventDeliveryMode;
   cursor: string | null;
   options: EventSubscribeOptions;
+  /** Told once when the subscription stops, cancelled or terminated. */
+  onStopped: (subscription: ClientEventSubscription) => void;
 }
 
 /** One subscription of the client, run in the mode it was given. */
@@ -175,6 +188,7 @@ class ClientEventSubscription implements EventSubscription {
   private secret?: string;
   private refreshTimer?: ReturnType<typeof setTimeout>;
   private firstRequest = true;
+  private failedAttempts = 0;
 
   /** A subscription that does nothing until `start()`. */
   constructor(private readonly settings: SubscriptionSettings) {
@@ -221,6 +235,7 @@ class ClientEventSubscription implements EventSubscription {
 
   /** Stop every loop, stream and timer, and release the webhook secret. */
   private stop(): void {
+    this.settings.onStopped(this);
     this.stopController.abort();
     this.streamController?.abort();
     clearTimeout(this.refreshTimer);
@@ -238,8 +253,19 @@ class ClientEventSubscription implements EventSubscription {
   private advance(cursor: string | null | undefined, truncated?: boolean): void {
     this.cursor = cursor ?? null;
     const key = canonicalJson({ name: this.name, arguments: this.arguments });
-    Promise.resolve(this.settings.cursorStore.set(key, this.cursor)).catch(() => undefined);
+    try {
+      Promise.resolve(this.settings.cursorStore.set(key, this.cursor)).catch(() => undefined);
+    } catch {
+      // A store that throws must not lose what the caller is about to queue
+    }
     if (truncated) this.settings.options.onTruncated?.(this.cursor);
+  }
+
+  /** The wait before the next retry: the poll floor, doubled after each failure in a row, at most a minute. */
+  private retryDelayMs(): number {
+    const delayMs = Math.min(this.settings.pollFloorMs * 2 ** this.failedAttempts, MAX_RETRY_DELAY_MS);
+    this.failedAttempts += 1;
+    return delayMs;
   }
 
   /** The parameters every request of the subscription carries, with the replay bound on the first one only. */
@@ -258,6 +284,7 @@ class ClientEventSubscription implements EventSubscription {
     const result = PollEventsResultSchema.parse(await this.settings.transport.request(EVENTS_METHODS.poll, params));
     this.advance(result.cursor, result.truncated);
     for (const occurrence of result.events) this.queue.push(occurrence);
+    this.failedAttempts = 0;
     if (result.hasMore) return 0;
     return Math.max(result.nextPollMs ?? this.settings.pollFloorMs, this.settings.pollFloorMs);
   }
@@ -272,7 +299,7 @@ class ClientEventSubscription implements EventSubscription {
         waitMs = await this.pollOnce();
       } catch (error) {
         if (isTerminal(error)) return this.terminate(eventErrorOf(error));
-        waitMs = Math.max(waitMs, this.settings.pollFloorMs);
+        waitMs = this.retryDelayMs();
       }
     }
   }
@@ -322,10 +349,11 @@ class ClientEventSubscription implements EventSubscription {
   /** Reopen the stream from the latest cursor, until it is confirmed or the subscription is over. */
   private async reconnect(): Promise<void> {
     while (!this.stopped) {
-      await sleep(this.settings.pollFloorMs, this.stopController.signal);
+      await sleep(this.retryDelayMs(), this.stopController.signal);
       if (this.stopped) return;
       try {
         await this.openStream();
+        this.failedAttempts = 0;
         return;
       } catch (error) {
         if (isTerminal(error)) return this.terminate(eventErrorOf(error));
@@ -393,9 +421,10 @@ class ClientEventSubscription implements EventSubscription {
     this.deliveryStatus = result.deliveryStatus;
     this.advance(result.cursor, result.truncated);
     if (this.stopped) return;
-    const remainingMs = result.refreshBefore === null ? undefined : Date.parse(result.refreshBefore) - Date.now();
-    const delayMs = remainingMs === undefined ? NO_EXPIRY_REFRESH_MS : remainingMs * REFRESH_AT_SHARE;
-    this.scheduleRefresh(Math.max(delayMs, this.settings.pollFloorMs));
+    this.failedAttempts = 0;
+    const remainingMs = result.refreshBefore === null ? Number.NaN : Date.parse(result.refreshBefore) - Date.now();
+    const delayMs = Number.isNaN(remainingMs) ? NO_EXPIRY_REFRESH_MS : remainingMs * REFRESH_AT_SHARE;
+    this.scheduleRefresh(Math.min(Math.max(delayMs, this.settings.pollFloorMs), MAX_TIMER_MS));
   }
 
   /** Refresh after `delayMs`; a failed refresh is retried, a refused one ends the subscription. */
@@ -403,7 +432,7 @@ class ClientEventSubscription implements EventSubscription {
     this.refreshTimer = setTimeout(() => {
       this.refresh().catch((error: unknown) => {
         if (isTerminal(error)) this.terminate(eventErrorOf(error));
-        else if (!this.stopped) this.scheduleRefresh(this.settings.pollFloorMs);
+        else if (!this.stopped) this.scheduleRefresh(this.retryDelayMs());
       });
     }, delayMs);
   }
@@ -417,6 +446,7 @@ class ClientEventSubscription implements EventSubscription {
 export class EventsClient {
   private readonly cursorStore: EventCursorStore;
   private definitions?: Map<string, EventDefinition>;
+  private readonly subscriptions = new Set<ClientEventSubscription>();
 
   /** A client sending its requests through `transport`. */
   constructor(
@@ -457,9 +487,21 @@ export class EventsClient {
       mode,
       cursor: options.cursor !== undefined ? options.cursor : (storedCursor ?? null),
       options,
+      onStopped: (stopped) => this.subscriptions.delete(stopped),
     });
-    await subscription.start();
+    this.subscriptions.add(subscription);
+    try {
+      await subscription.start();
+    } catch (error) {
+      this.subscriptions.delete(subscription);
+      throw error;
+    }
     return subscription;
+  }
+
+  /** Cancel every subscription the client holds, as before its connection closes. */
+  async close(): Promise<void> {
+    await Promise.all([...this.subscriptions].map((subscription) => subscription.cancel()));
   }
 
   /** The delivery mode of a new subscription: the forced one, or the first the event offers and this client can use. */

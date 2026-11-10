@@ -3,6 +3,7 @@ export {
   DEFAULT_HEARTBEAT_TIMEOUT_MS,
   DEFAULT_POLL_FLOOR_MS,
   NO_EXPIRY_REFRESH_MS,
+  MAX_RETRY_DELAY_MS,
 } from './events-client';
 export type {
   EventCursorStore,
