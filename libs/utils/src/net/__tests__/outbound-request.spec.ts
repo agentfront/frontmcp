@@ -615,6 +615,7 @@ describe('sendOutboundRequest without Node networking', () => {
 
       const result = await sendLocal({
         url: `http://localhost:${port}/hook`,
+        allowPlatformDns: true,
         body,
         headers: { 'content-type': 'application/json' },
         maxResponseBytes: 1024,
@@ -651,10 +652,30 @@ describe('sendOutboundRequest without Node networking', () => {
       const opaqueRedirect = { status: 0, type: 'opaqueredirect', headers: new Headers(), body: null };
       jest.spyOn(globalThis, 'fetch').mockResolvedValue(opaqueRedirect as unknown as Response);
 
-      const result = await sendOutboundRequest({ url: 'https://hooks.example.com/hook', maxResponseBytes: 64 });
+      const result = await sendOutboundRequest({
+        url: 'https://hooks.example.com/hook',
+        allowPlatformDns: true,
+        maxResponseBytes: 64,
+      });
 
       expect(result).toEqual({ answered: true, status: 0, body: '', bodyTruncated: false, headers: {} });
       expect(outboundFailureCategory(result)).toBe('http_4xx');
+    });
+
+    it('refuses a hostname it cannot pin to checked addresses, unless allowPlatformDns', async () => {
+      const fetchSpy = jest.spyOn(globalThis, 'fetch');
+
+      const result = await sendOutboundRequest({ url: 'https://hooks.example.com/hook', body: '{}' });
+
+      expect(result).toEqual({ answered: false, reason: 'unpinned_dns' });
+      expect(outboundFailureCategory(result)).toBe('connection_refused');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('sends to an IP address without allowPlatformDns, as no name is resolved', async () => {
+      answer = respondWith(204, '');
+
+      await expect(sendLocal({ body: '{}' })).resolves.toMatchObject({ answered: true, status: 204 });
     });
 
     it('cuts an oversized body at maxResponseBytes and stops reading', async () => {

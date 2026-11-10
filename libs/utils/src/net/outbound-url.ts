@@ -25,10 +25,14 @@ export function isAllowedOutboundAddress(address: string, options: OutboundTarge
   return options.allowLocal === true && (range === 'loopback' || range === 'private');
 }
 
+/** Whether a URL host is an IP address, which needs no DNS resolution. */
+export function isIpLiteralHostname(hostname: string): boolean {
+  return hostname.startsWith('[') || parseIpv4(hostname) !== undefined;
+}
+
 /** Whether a URL host may be requested: an allowed IP literal, or a name that is neither local nor a metadata service. */
 function isAllowedHostname(hostname: string, options: OutboundTargetOptions): boolean {
-  const isIpLiteral = hostname.startsWith('[') || parseIpv4(hostname) !== undefined;
-  if (isIpLiteral) return isAllowedOutboundAddress(hostname, options);
+  if (isIpLiteralHostname(hostname)) return isAllowedOutboundAddress(hostname, options);
 
   const name = hostname.endsWith('.') ? hostname.slice(0, -1) : hostname;
   if (METADATA_HOSTNAMES.has(name)) return false;

@@ -7,7 +7,12 @@ import type { LookupFunction } from 'node:net';
 import { isEdgeRuntime } from '#env';
 
 import { isNode } from '../crypto/runtime';
-import { isAllowedOutboundAddress, validateOutboundUrl, type OutboundTargetOptions } from './outbound-url';
+import {
+  isAllowedOutboundAddress,
+  isIpLiteralHostname,
+  validateOutboundUrl,
+  type OutboundTargetOptions,
+} from './outbound-url';
 
 export const OUTBOUND_TIMEOUT_MS = 10_000;
 export const OUTBOUND_MAX_REQUEST_BYTES = 262_144;
@@ -29,6 +34,8 @@ export interface OutboundRequest extends OutboundTargetOptions {
   maxResponseBytes?: number;
   /** The answer's headers to return, by name. @default none */
   responseHeaders?: readonly string[];
+  /** Where the connection cannot be pinned to checked addresses (browser, edge), send to a hostname anyway. @default false */
+  allowPlatformDns?: boolean;
 }
 
 export interface OutboundAnswer {
@@ -47,6 +54,7 @@ export type OutboundFailureReason =
   | 'invalid_url'
   | 'forbidden_address'
   | 'unresolved_host'
+  | 'unpinned_dns'
   | 'request_too_large'
   | 'connection_refused'
   | 'timeout'
@@ -65,6 +73,7 @@ const FAILURE_CATEGORIES: Record<OutboundFailureReason, OutboundFailureCategory>
   invalid_url: 'connection_refused',
   forbidden_address: 'connection_refused',
   unresolved_host: 'connection_refused',
+  unpinned_dns: 'connection_refused',
   request_too_large: 'http_4xx',
   connection_refused: 'connection_refused',
   timeout: 'timeout',
@@ -112,10 +121,14 @@ export function outboundFailureCategory(result: OutboundResult): OutboundFailure
   return result.status >= 500 ? 'http_5xx' : 'http_4xx';
 }
 
-/** Sends the request; on a runtime without Node's `dns` and `net` (browser, edge) the platform resolves DNS. */
+/** Sends the request; without Node's `dns` and `net` (browser, edge) a hostname is refused unless `allowPlatformDns`. */
 export async function sendOutboundRequest(request: OutboundRequest): Promise<OutboundResult> {
   const check = validateOutboundUrl(request.url, request);
   if (!check.ok) return { answered: false, reason: check.problem === 'host' ? 'forbidden_address' : 'invalid_url' };
+
+  const node = loadNodeNetworking();
+  const needsPlatformDns = !node && !isIpLiteralHostname(check.url.hostname);
+  if (needsPlatformDns && request.allowPlatformDns !== true) return { answered: false, reason: 'unpinned_dns' };
 
   const body = request.body === undefined ? undefined : encoder.encode(request.body);
   if (body && body.byteLength > (request.maxRequestBytes ?? OUTBOUND_MAX_REQUEST_BYTES)) {
@@ -129,7 +142,6 @@ export async function sendOutboundRequest(request: OutboundRequest): Promise<Out
   const method = request.method ?? (body ? 'POST' : 'GET');
   const exchange: Exchange = { url: check.url, method, headers, body, signal };
   try {
-    const node = loadNodeNetworking();
     const upstream = node ? await exchangeOverNode(node, exchange, request) : await exchangeOverFetch(exchange);
     return await answerOf(upstream, request);
   } catch (error) {
