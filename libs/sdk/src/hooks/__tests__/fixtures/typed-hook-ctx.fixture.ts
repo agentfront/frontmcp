@@ -8,6 +8,7 @@ import {
   HttpHook,
   HttpRouteHook,
   JobHook,
+  ListEventsHook,
   ListPromptsHook,
   ListResourcesHook,
   ListResourceTemplatesHook,
@@ -134,6 +135,12 @@ export class EveryExportRejectsAParameterItsCtxDoesNotSatisfy {
   // @ts-expect-error the ctx has no notAField
   @ChannelListHook.Will('listChannels')
   channelList(ctx: NotInAnyCtx) {
+    return ctx;
+  }
+
+  // @ts-expect-error the ctx has no notAField
+  @ListEventsHook.Will('findEvents')
+  listEvents(ctx: NotInAnyCtx) {
     return ctx;
   }
 }

@@ -327,6 +327,7 @@
   "LazyAppConfigurationError": "class",
   "LazyAppLoadError": "class",
   "LazyZodSchema": "class",
+  "ListEventsHook": "object",
   "ListJobsTool": "class",
   "ListPromptsHook": "object",
   "ListResourceTemplatesHook": "object",

@@ -7,6 +7,7 @@ import {
   FRONTMCP_CONTEXT,
   FRONTMCP_LOGGER,
   HttpHook,
+  ListEventsHook,
   ListResourcesHook,
   ListResourceTemplatesHook,
   ListToolsHook,
@@ -175,7 +176,7 @@ const DEFAULT_TRACING: TracingOptions = {
  * - Prompt invocations (parseInput → find → execute → validate → finalize)
  * - Agent calls (parseInput → find → auth → validate → execute → finalize)
  * - Skills (search, load)
- * - List operations (tools, resources, prompts, resource templates)
+ * - List operations (tools, resources, prompts, resource templates, events)
  * - Completions
  * - Session lifecycle (creation, auth verification)
  *
@@ -583,6 +584,21 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @ListPromptsHook.Did('parsePrompts', { priority: 1000 })
   _listPromptsDone(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+  }
+
+  @ListEventsHook.Will('parseInput', { priority: -1000 })
+  _listEventsWill(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowWillStart('events/list', this.tracingOpts, ctx);
+  }
+
+  @ListEventsHook.Did('filterByAuthorities', { priority: 1000 })
+  _listEventsDidFilter(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowStage('filterByAuthorities', ctx);
+  }
+
+  @ListEventsHook.Did('parseEvents', { priority: 1000 })
+  _listEventsDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
 

@@ -20,12 +20,12 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 import { ListToolsRequestSchema, ListToolsResultSchema, type AuthInfo } from '@frontmcp/protocol';
 import type { AdapterPlatformType as AIPlatformType } from '@frontmcp/uipack/adapters';
 import { isUIType, type UIType } from '@frontmcp/uipack/types';
-import { base64Decode, base64Encode } from '@frontmcp/utils';
 
 import { callerClientProfile } from '../../answer';
 import { isPubliclyListed, publicAccessFor } from '../../auth/public-access.utils';
 import { callSurfaceOf, isOfferedOnSurface } from '../../common/availability';
 import { DEFAULT_TOOL_PAGINATION, type ToolPaginationOptions } from '../../common/types/options/pagination';
+import { encodeOffsetCursor, parseOffsetCursor } from '../../common/utils/offset-cursor.utils';
 import { InternalMcpError, InvalidInputError, InvalidMethodError } from '../../errors';
 import { type Scope } from '../../scope/scope.instance';
 import { isSkillsOnlyRequest } from '../../skill/skill-mode.utils';
@@ -145,39 +145,6 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     return toolCount > threshold;
   }
 
-  /**
-   * Parse a cursor string to extract the offset.
-   * Cursor format: Base64-encoded JSON { offset: number }
-   *
-   * @throws InvalidInputError if cursor is malformed or contains invalid offset
-   */
-  private parseCursor(cursor: string): number {
-    try {
-      // Not Node's Buffer: a browser build lists tools through this flow too
-      const decoded = new TextDecoder().decode(base64Decode(cursor));
-      const parsed = JSON.parse(decoded);
-      const offset = parsed?.offset;
-
-      if (typeof offset !== 'number' || offset < 0 || !Number.isInteger(offset)) {
-        throw new InvalidInputError(
-          `Invalid pagination cursor: offset must be a non-negative integer, got ${
-            typeof offset === 'number' ? offset : typeof offset
-          }`,
-        );
-      }
-
-      return offset;
-    } catch (e) {
-      if (e instanceof InvalidInputError) throw e;
-      throw new InvalidInputError(
-        `Invalid pagination cursor format. Expected base64-encoded JSON with 'offset' field.`,
-      );
-    }
-  }
-
-  /**
-   * Encode an offset into a cursor string.
-   */
   /** The UI machinery the listing of a tool with a UI uses, loaded only when one is listed. */
   private async loadToolUIRenderer() {
     await this.scope.toolUI?.load();
@@ -189,10 +156,6 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     const internal = (this.rawInput as { ctx?: { internalCall?: boolean } } | undefined)?.ctx?.internalCall === true;
     const sessionId = internal ? undefined : this.state.authInfo?.sessionId;
     return this.scope.surface?.recordToolList(sessionId, names) ?? surfaceHash(names);
-  }
-
-  private encodeCursor(offset: number): string {
-    return base64Encode(new TextEncoder().encode(JSON.stringify({ offset })));
   }
 
   @Stage('parseInput')
@@ -475,7 +438,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
       if (usePagination) {
         const cursor = this.state.cursor;
-        const offset = cursor ? this.parseCursor(cursor) : 0;
+        const offset = cursor ? parseOffsetCursor(cursor) : 0;
         const pageSize = paginationConfig?.pageSize ?? DEFAULT_TOOL_PAGINATION.pageSize;
 
         // Validate offset is within bounds
@@ -491,7 +454,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         // Generate nextCursor if more tools remain
         const nextOffset = offset + pageSize;
         if (nextOffset < sortedResolved.length) {
-          nextCursor = this.encodeCursor(nextOffset);
+          nextCursor = encodeOffsetCursor(nextOffset);
         }
 
         this.logger.verbose(

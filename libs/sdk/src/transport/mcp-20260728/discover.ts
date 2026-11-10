@@ -8,7 +8,7 @@
  * Clients MAY skip it entirely and negotiate inline via per-request `_meta`,
  * which is why it must be cheap and side-effect free.
  */
-import { type DiscoverResult, type ServerCapabilities20260728 } from '@frontmcp/protocol';
+import { type DiscoverResult, type EventsExtensionSettings, type ServerCapabilities20260728 } from '@frontmcp/protocol';
 
 import { type Scope } from '../../scope';
 import { buildScopedServerOptions } from '../build-scoped-server-options';
@@ -38,6 +38,7 @@ export function buildDiscoverCapabilities(scope: Scope): ServerCapabilities20260
   if (source['prompts']) result.prompts = source['prompts'] as { listChanged?: boolean };
   if (source['resources']) result.resources = source['resources'] as { subscribe?: boolean; listChanged?: boolean };
   if (source['tools']) result.tools = source['tools'] as { listChanged?: boolean };
+  if (source['events']) result.events = source['events'] as EventsExtensionSettings;
 
   return result;
 }

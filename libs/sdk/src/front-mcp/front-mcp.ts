@@ -955,6 +955,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
           ...scope.prompts.getCapabilities(),
           ...scope.agents.getCapabilities(),
           ...channelCapabilities,
+          ...scope.events?.getCapabilities(),
           ...completionsCapability,
           ...computeTaskCapabilities(scope),
           logging: {},
