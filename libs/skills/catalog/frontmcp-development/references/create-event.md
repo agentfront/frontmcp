@@ -600,6 +600,8 @@ signs the retry again.
 - The answers are kept in the events store (`events.store`), so with `redis` or `sqlite` every process of the server
   sees them. In memory they belong to one process.
 - A publish that fails gives its `eventId` back: the retry publishes.
+- When the store cannot keep the answer of a publish that succeeded, the request still answers `202` and the server
+  logs a warning. A repeat within 60 seconds is then answered `409`, and a repeat after that publishes again.
 - While the first request is still publishing, a repeat is answered `409`. A request that never finished (the
   process died) stops blocking its `eventId` after 60 seconds.
 - A request without an `eventId` gets a generated one and is never deduplicated.

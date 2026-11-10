@@ -363,6 +363,16 @@ describe('events:publish-http with a secret', () => {
       expect(retried.body).toEqual({ eventId: 'repeat-4', matched: 0 });
     });
 
+    it('answers 202 for a published event whose answer the store could not keep', async () => {
+      jest.spyOn(endpointOf(server).idempotency, 'complete').mockRejectedValueOnce(new Error('the store is down'));
+
+      const answer = await send(server, signedRequest({ ...order, eventId: 'repeat-5' }));
+
+      expect(answer.status).toBe(202);
+      expect(answer.body).toEqual({ eventId: 'repeat-5', matched: 0 });
+      expect(published).toHaveBeenCalledTimes(1);
+    });
+
     it('does not keep an answer for a request without an eventId', async () => {
       const failing = jest.spyOn(endpointOf(server).idempotency, 'release');
       const scope = server.instance.getScopes()[0] as Scope;

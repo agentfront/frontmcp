@@ -287,13 +287,21 @@ export default class EventPublishHttpFlow extends FlowBase<typeof name> {
     }
   }
 
-  /** Keep the answer of a claimed `eventId`, for a repeat of the request. */
+  /** Keep the answer of a claimed `eventId`, for a repeat; the event is published, so a store failure only logs. */
   @Stage('rememberResult')
   async rememberResult() {
     const { claimedEventId } = this.state;
     if (claimedEventId === undefined) return;
     const { publication, result } = this.state.required;
-    await this.endpoint.idempotency.complete(publication.name, claimedEventId, result);
+    try {
+      await this.endpoint.idempotency.complete(publication.name, claimedEventId, result);
+    } catch (error) {
+      this.logger.warn(
+        `rememberResult: event "${publication.name}" with eventId "${claimedEventId}" was published, ` +
+          'but its answer could not be kept for a repeat',
+        error,
+      );
+    }
   }
 
   /** Answer `202` with the event's id and how many deliveries were queued. */
