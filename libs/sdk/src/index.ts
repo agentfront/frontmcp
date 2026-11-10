@@ -423,6 +423,8 @@ export type {
   EventStream,
   EventStreamNotification,
   EventStreams,
+  EventReplays,
+  EventReplayState,
 } from './event';
 export { EVENTS_EXTENSION_ID } from '@frontmcp/protocol';
 export type { EventDefinition, EventDeliveryMode, EventOccurrence } from '@frontmcp/protocol';

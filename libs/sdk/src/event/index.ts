@@ -26,6 +26,8 @@ export { StorageEventSubscriptionStore } from './subscription/event-subscription
 export type {
   EventSubscriptionChanges,
   EventSubscriptionPatch,
+  EventReplayBatch,
+  EventReplayState,
   EventSubscriptionRecord,
   EventSubscriptionStatus,
   EventSubscriptionStore,
@@ -71,6 +73,8 @@ export {
   pollLeaseMs,
 } from './poll/event-poll-leases';
 export type { EventPollLeasesOptions, PollLeaseRequest } from './poll/event-poll-leases';
+export { EventReplays, MAX_PENDING_BATCHES, REPLAY_LEASE_MS } from './replay/event-replays';
+export type { EventReplaysOptions, EventReplayStep } from './replay/event-replays';
 export { EventStream, MAX_QUEUED_NOTIFICATIONS } from './stream/event-stream';
 export type { EventStreamNotification, EventStreamOptions } from './stream/event-stream';
 export { EVENT_RELAY_CHANNEL, EventStreams, MAX_OPEN_STREAMS } from './stream/event-streams';

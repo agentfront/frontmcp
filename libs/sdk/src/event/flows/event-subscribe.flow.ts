@@ -40,6 +40,8 @@ const stateSchema = z.object({
   verifiedAt: z.number(),
   expiresAt: z.number().nullable(),
   record: z.any() as z.ZodType<EventSubscriptionRecord>,
+  /** Whether a replay skipped events: the cursor of the request was cut, or a gap was found since the last refresh. */
+  truncated: z.boolean().optional(),
 });
 
 const plan = {
@@ -62,6 +64,7 @@ const plan = {
     'grantTtl',
     'upsertSubscription',
     'notifySubscribed',
+    'startReplay',
   ],
   post: ['buildResult'],
   finalize: ['finalize'],
@@ -305,6 +308,7 @@ export default class EventSubscribeFlow extends FlowBase<typeof name> {
       lastAuthorizedAt: now,
       active: true,
       status: reactivatedStatus(existing?.status),
+      ...(existing?.replay && { replay: existing.replay }),
     };
     await this.subscriptions.store.upsert(record);
     this.state.set('record', record);
@@ -324,6 +328,19 @@ export default class EventSubscribeFlow extends FlowBase<typeof name> {
     this.logger.verbose(`notifySubscribed: subscription ${record.id} created for event "${event.name}"`);
   }
 
+  /** For an event with `check()`: read its upstream from the request's cursor, or report where a refresh stands. */
+  @Stage('startReplay')
+  async startReplay() {
+    const { replays } = this.events;
+    const { event, record } = this.state.required;
+    if (!replays?.isReplayable(event)) return;
+    const { cursor = null, maxAgeMs } = this.input.request.params;
+    const step = record.replay
+      ? await replays.refresh(record, record.replay)
+      : await replays.begin(event, record, cursor, maxAgeMs);
+    this.state.set({ record: { ...record, replay: step.replay }, truncated: step.truncated });
+  }
+
   /** Answer with the id, the granted lifetime and, on a refresh, the delivery status. */
   @Stage('buildResult')
   async buildResult() {
@@ -331,8 +348,8 @@ export default class EventSubscribeFlow extends FlowBase<typeof name> {
     this.respond({
       id: record.id,
       refreshBefore: record.expiresAt === null ? null : new Date(record.expiresAt).toISOString(),
-      cursor: null,
-      truncated: false,
+      cursor: record.replay?.watermark ?? null,
+      truncated: this.state.truncated ?? false,
       ...(this.state.existing && { deliveryStatus: deliveryStatusOf(record) }),
     });
   }

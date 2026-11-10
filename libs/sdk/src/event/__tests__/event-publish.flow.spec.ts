@@ -314,7 +314,7 @@ describe('events:publish', () => {
       const release: Array<() => void> = [];
       const enqueue = jest
         .spyOn(outbox, 'enqueue')
-        .mockImplementation(() => new Promise<void>((resolve) => release.push(resolve)));
+        .mockImplementation(() => new Promise<string>((resolve) => release.push(() => resolve('dlv_test'))));
 
       const publishing = publisher().publish(orderCreated, { orderId: 'o-9', status: 'paid' });
       const deadline = Date.now() + 2000;

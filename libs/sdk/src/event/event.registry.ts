@@ -26,6 +26,7 @@ import { normalizeEvent } from './event.utils';
 import { type EventBuffer } from './poll/event-buffer';
 import { type EventPollLeases } from './poll/event-poll-leases';
 import { type EventPublishEndpoint } from './publish-endpoint/event-publish-endpoint';
+import { type EventReplays } from './replay/event-replays';
 import { type EventStreams } from './stream/event-streams';
 import { type EventSubscriptions } from './subscription/event-subscriptions';
 
@@ -81,6 +82,12 @@ export default class EventRegistry
 
   /** The open `events/stream` requests, on a server that performs the push mode. */
   streams?: EventStreams;
+
+  /** The loops that feed the webhook subscriptions of events with `check()`, on a server that delivers by webhook. */
+  replays?: EventReplays;
+
+  /** Events that are not offered by webhook here: their `check()` needs a loop this runtime cannot run. */
+  private readonly withoutWebhook = new Set<string>();
 
   private readonly eventsByName = new Map<string, EventInstance>();
   private readonly enabledDeliveryModes = new Set<EventDeliveryMode>();
@@ -161,6 +168,11 @@ export default class EventRegistry
     this.enabledDeliveryModes.add(mode);
   }
 
+  /** Keep an event off the webhook mode: it is still offered in the other modes the server performs. */
+  withholdWebhookFrom(eventName: string): void {
+    this.withoutWebhook.add(eventName);
+  }
+
   /** Whether this server delivers events in `mode`. */
   performs(mode: EventDeliveryMode): boolean {
     return this.enabledDeliveryModes.has(mode);
@@ -170,7 +182,10 @@ export default class EventRegistry
   deliveryModesOf(event: EventEntry): EventDeliveryMode[] {
     const restriction = event.metadata.delivery;
     return EVENT_DELIVERY_MODES.filter(
-      (mode) => this.enabledDeliveryModes.has(mode) && (!restriction || restriction.includes(mode)),
+      (mode) =>
+        this.enabledDeliveryModes.has(mode) &&
+        (!restriction || restriction.includes(mode)) &&
+        !(mode === 'webhook' && this.withoutWebhook.has(event.name)),
     );
   }
 

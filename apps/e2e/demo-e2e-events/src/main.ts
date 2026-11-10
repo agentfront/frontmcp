@@ -17,6 +17,7 @@ function publishEndpoint() {
 }
 
 const heartbeatMs = parseInt(process.env['EVENTS_HEARTBEAT_MS'] ?? '25000', 10);
+const nextPollMs = parseInt(process.env['EVENTS_NEXT_POLL_MS'] ?? '30000', 10);
 
 @FrontMcp({
   info: { name: 'Demo E2E Events', version: '0.1.0' },
@@ -43,6 +44,8 @@ const heartbeatMs = parseInt(process.env['EVENTS_HEARTBEAT_MS'] ?? '25000', 10);
     publishEndpoint: publishEndpoint(),
     // A test of the heartbeat of a stream shortens it
     push: { heartbeatMs },
+    // A test of webhook delivery for an event with check() shortens the interval check() is called at
+    poll: { nextPollMs },
   },
 })
 export default class Server {}
