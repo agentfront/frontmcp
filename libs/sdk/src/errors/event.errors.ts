@@ -112,6 +112,7 @@ export class EventSubscriptionStoreError extends InternalMcpError {
 
 /** Publishing on a server that has no events: none is declared, or `events.enabled` is `false`. */
 export class EventsNotEnabledError extends InternalMcpError {
+  /** Says that the server has events turned off or declares none. */
   constructor() {
     super(
       "Events are not enabled on this server, so nothing can be published. List the event in an app's `events`, " +

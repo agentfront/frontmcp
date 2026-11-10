@@ -286,16 +286,17 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
     const { outbox } = this.events;
     const { deliveries } = this.state.required;
     if (!outbox) return;
-    for (const { subscription, occurrence, body } of deliveries) {
+    const queued = deliveries.map(({ subscription, occurrence, body }) => {
       const usesEventId = EVENT_DIALECTS[subscription.dialect].webhookId === 'eventId';
-      await outbox.enqueue({
+      return outbox.enqueue({
         kind: 'event',
         subscriptionId: subscription.id,
         eventName: occurrence.name,
         body: body as string,
         webhookId: usesEventId ? occurrence.eventId : generateWebhookMessageId(),
       });
-    }
+    });
+    await Promise.all(queued);
     this.events.metrics?.count('matched', this.input.occurrence.name, deliveries.length);
   }
 

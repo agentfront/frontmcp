@@ -447,6 +447,42 @@ describe('EventOutbox', () => {
       expect(jest.getTimerCount()).toBe(timersBefore);
     });
 
+    it('never has more than `concurrency` attempts in flight, whenever a new one arrives as a slot is freed', async () => {
+      const narrow = { ...settings, concurrency: 2 };
+      const mostInFlight: number[] = [];
+
+      for (let microtasksBeforeNewcomer = 0; microtasksBeforeNewcomer < 40; microtasksBeforeNewcomer++) {
+        const { outbox, attempt } = await newOutbox({ settings: narrow });
+        const finish: Array<(outcome: EventDeliveryOutcome) => void> = [];
+        let finished = 0;
+        let most = 0;
+        attempt.mockImplementation(() => {
+          most = Math.max(most, attempt.mock.calls.length - finished);
+          return new Promise((resolve) => finish.push(resolve));
+        });
+        const finishAttempt = (index: number) => {
+          finished += 1;
+          finish[index](delivered);
+        };
+
+        const queued = [0, 1, 2].map((index) => outbox.enqueue(delivery({ webhookId: `msg_${index}` })));
+        await advance(0);
+        finishAttempt(0);
+        for (let hop = 0; hop < microtasksBeforeNewcomer; hop++) await Promise.resolve();
+        queued.push(outbox.enqueue(delivery({ webhookId: 'msg_newcomer' })));
+        await advance(0);
+
+        for (let index = 1; index < 4; index++) {
+          finishAttempt(index);
+          await advance(0);
+        }
+        await Promise.all(queued);
+        mostInFlight.push(most);
+      }
+
+      expect(Math.max(...mostInFlight)).toBe(2);
+    });
+
     it('leaves a retry to a later sweep, which runs it once it is due', async () => {
       const { outbox, attempt } = await newOutbox({}, [failed]);
 

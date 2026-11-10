@@ -246,6 +246,28 @@ describe('events:publish', () => {
       ).toBe('valid');
     });
 
+    it('hands its deliveries to the outbox together, not one after the other', async () => {
+      await subscribed();
+      await subscribed();
+      const outbox = scope.events?.outbox;
+      if (!outbox) throw new Error('the scope has no outbox');
+      const release: Array<() => void> = [];
+      const enqueue = jest
+        .spyOn(outbox, 'enqueue')
+        .mockImplementation(() => new Promise<void>((resolve) => release.push(resolve)));
+
+      const publishing = publisher().publish(orderCreated, { orderId: 'o-9', status: 'paid' });
+      const deadline = Date.now() + 2000;
+      while (enqueue.mock.calls.length < 2 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+
+      expect(enqueue).toHaveBeenCalledTimes(2);
+      for (const done of release) done();
+      await expect(publishing).resolves.toMatchObject({ matched: 2 });
+      enqueue.mockRestore();
+    });
+
     it('takes the event by name and by its class', async () => {
       await subscribed({ eventName: 'order.shipped' });
 

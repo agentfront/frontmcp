@@ -109,6 +109,7 @@ export class EventOutbox {
   private lastSweepAt = 0;
   private stopped = false;
 
+  /** Takes the storage, the delivery settings and the function that makes one attempt. */
   constructor(private readonly options: EventOutboxOptions) {
     this.ownerId = `${getMachineId()}:${randomUUID()}`;
     this.logger = options.logger.child('EventOutbox');
@@ -220,17 +221,19 @@ export class EventOutbox {
     return attempt;
   }
 
-  /** Wait for a free slot, make the attempt, and free the slot. */
+  /** Take a slot or wait to be handed one, make the attempt, then hand the slot to the next waiter or free it. */
   private async attemptWithinLimit(id: string): Promise<void> {
     if (this.activeAttempts >= this.options.settings.concurrency) {
       await new Promise<void>((resolve) => this.waitingForSlot.push(resolve));
+    } else {
+      this.activeAttempts += 1;
     }
-    this.activeAttempts += 1;
     try {
       await this.attemptOnce(id);
     } finally {
-      this.activeAttempts -= 1;
-      this.waitingForSlot.shift()?.();
+      const nextWaiter = this.waitingForSlot.shift();
+      if (nextWaiter) nextWaiter();
+      else this.activeAttempts -= 1;
     }
   }
 
