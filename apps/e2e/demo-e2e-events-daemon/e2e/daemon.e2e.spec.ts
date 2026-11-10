@@ -62,6 +62,19 @@ describe('Local daemon example', () => {
     }
   }
 
+  /** Writes probe files until the watcher reports one: a file written before it started watching is never reported. */
+  async function waitForWatcher(timeoutMs = 20_000): Promise<void> {
+    const probes = { name: 'file.dropped', arguments: { extension: '.probe' } };
+    const { cursor } = await poll(probes);
+    const deadline = Date.now() + timeoutMs;
+    for (let attempt = 1; Date.now() < deadline; attempt++) {
+      await writeFile(path.join(dropFolder, `ready-${attempt}.probe`), 'probe');
+      const result = await pollUntilEvents(probes, cursor, 500);
+      if (result.events.length > 0) return;
+    }
+    throw new Error(`The drop folder watcher reported no probe file within ${timeoutMs} ms`);
+  }
+
   it('offers both events by poll and push, and not by webhook, on a server in public auth mode', async () => {
     const reply = (await client.raw.request({
       jsonrpc: '2.0',
@@ -79,6 +92,7 @@ describe('Local daemon example', () => {
   });
 
   it('tells a client that polls about a file dropped in the folder, filtered by its arguments', async () => {
+    await waitForWatcher();
     const pdfs = { name: 'file.dropped', arguments: { extension: '.pdf' } };
     const start = await poll(pdfs);
     await writeFile(path.join(dropFolder, 'notes.txt'), 'notes');

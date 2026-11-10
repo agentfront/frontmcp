@@ -136,7 +136,11 @@ describe('Mail triage example', () => {
       subject: 'Hi',
     });
 
-    await rpc(carol, 'events/unsubscribe', { name: 'email.important', delivery: { url: receiver.url } });
+    const unsubscribed = await rpc(carol, 'events/unsubscribe', {
+      name: 'email.important',
+      delivery: { url: receiver.url },
+    });
+    expect(unsubscribed.error).toBeUndefined();
     const after = await carol.tools.call('simulate_incoming_mail', {
       to: 'carol',
       from: 'x@example.com',

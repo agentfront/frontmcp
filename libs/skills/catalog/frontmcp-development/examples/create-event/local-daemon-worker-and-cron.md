@@ -23,6 +23,14 @@ runnable app, with a smoke test, is `apps/e2e/demo-e2e-events-daemon` in the Fro
 ## Code
 
 ```typescript
+// src/apps/daemon/drop-folder.ts
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+export const dropFolder = process.env['DROP_FOLDER'] ?? path.join(os.tmpdir(), 'frontmcp-drop');
+```
+
+```typescript
 // src/apps/daemon/events/file-dropped.event.ts
 import { event, z } from '@frontmcp/sdk';
 
@@ -32,6 +40,17 @@ export const fileDropped = event({
   inputSchema: { extension: z.string().optional().describe('Only files with this extension, such as ".pdf"') },
   payloadSchema: { name: z.string(), change: z.enum(['add', 'change']) },
   match: (occurrence, args) => args.extension === undefined || occurrence.data.name.endsWith(args.extension),
+});
+```
+
+```typescript
+// src/apps/daemon/events/folder-summary.event.ts
+import { event, z } from '@frontmcp/sdk';
+
+export const folderSummary = event({
+  name: 'folder.summary',
+  description: 'How many files the drop folder holds, on a schedule',
+  payloadSchema: { fileCount: z.number().int(), at: z.string() },
 });
 ```
 
@@ -48,6 +67,9 @@ import {
   type WorkerRunContext,
 } from '@frontmcp/sdk';
 import { watchFiles } from '@frontmcp/utils';
+
+import { dropFolder } from '../drop-folder';
+import { fileDropped } from '../events/file-dropped.event';
 
 @Worker({ name: 'drop-folder-watcher', scope: 'machine' })
 class DropFolderWatcher implements WorkerInterface {
@@ -70,6 +92,12 @@ export const dropFolderWatcher = AsyncProvider({
 
 ```typescript
 // src/apps/daemon/sources/folder-summary.duty.ts
+import { AsyncProvider, Duty, EVENT_PUBLISHER, type DutyInterface, type EventPublisher } from '@frontmcp/sdk';
+import { readdir } from '@frontmcp/utils';
+
+import { dropFolder } from '../drop-folder';
+import { folderSummary } from '../events/folder-summary.event';
+
 @Duty({ name: 'folder-summary', cron: '0 9 * * *', scope: 'machine' })
 class FolderSummaryDuty implements DutyInterface {
   constructor(private readonly events: EventPublisher) {}
@@ -79,12 +107,33 @@ class FolderSummaryDuty implements DutyInterface {
     await this.events.publish(folderSummary, { fileCount: files.length, at: new Date().toISOString() });
   }
 }
+
+export const folderSummaryDuty = AsyncProvider({
+  provide: FolderSummaryDuty,
+  name: 'folder-summary-duty',
+  inject: () => [EVENT_PUBLISHER] as const,
+  useFactory: (events) => new FolderSummaryDuty(events),
+});
 ```
 
 ```typescript
-// src/apps/daemon/index.ts and src/main.ts (excerpts)
+// src/apps/daemon/index.ts
+import { App } from '@frontmcp/sdk';
+
+import { fileDropped } from './events/file-dropped.event';
+import { folderSummary } from './events/folder-summary.event';
+import { dropFolderWatcher } from './sources/drop-folder.worker';
+import { folderSummaryDuty } from './sources/folder-summary.duty';
+
 @App({ name: 'daemon', events: [fileDropped, folderSummary], providers: [dropFolderWatcher, folderSummaryDuty] })
 export class DaemonApp {}
+```
+
+```typescript
+// src/main.ts (excerpt)
+import { FrontMcp } from '@frontmcp/sdk';
+
+import { DaemonApp } from './apps/daemon';
 
 @FrontMcp({ info: { name: 'Drop Folder Daemon', version: '0.1.0' }, apps: [DaemonApp], auth: { mode: 'public' } })
 export default class Server {}
