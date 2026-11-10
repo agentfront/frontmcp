@@ -3,7 +3,11 @@ import { createMemoryStorage, type NamespacedStorage } from '@frontmcp/utils';
 import { type EventCheckResult, type EventEntry } from '../../common';
 import { type NewEventDelivery } from '../delivery/event-outbox';
 import { EventReplays, MAX_PENDING_BATCHES, REPLAY_LEASE_MS } from '../replay/event-replays';
-import { type EventReplayState, type EventSubscriptionRecord } from '../subscription/event-subscription.store';
+import {
+  type EventReplayState,
+  type EventSubscriptionPatch,
+  type EventSubscriptionRecord,
+} from '../subscription/event-subscription.store';
 
 const NOW = 1_800_000_000_000;
 const INTERVAL_MS = 30_000;
@@ -51,9 +55,9 @@ async function harness(storage?: NamespacedStorage) {
     pendingDeliveries.add(id);
     return id;
   });
-  const update = jest.fn(async (id: string, patch: { replay?: EventReplayState }) => {
+  const update = jest.fn(async (id: string, patch: EventSubscriptionPatch) => {
     const record = records.get(id);
-    if (record) records.set(id, { ...record, ...patch });
+    if (record) records.set(id, { ...record, ...(typeof patch === 'function' ? patch(record) : patch) });
     return records.get(id);
   });
   const warn = jest.fn();
@@ -415,6 +419,75 @@ describe('EventReplays', () => {
       expect(check).toHaveBeenCalledWith({ queue: 'billing' }, '1', { maxEvents: 100 });
       expect(records.get('sub_0001')?.replay?.cursor).toBe('2');
       await replays.stop();
+    });
+  });
+
+  describe('a refresh', () => {
+    it('stores what it settled while the loop has not moved on', async () => {
+      const { replays, records } = await harness();
+      const replay = { cursor: '4', watermark: '2', pending: [{ cursor: '4', deliveryIds: ['dlv_gone'] }] };
+      records.set('sub_0001', subscription({ replay }));
+
+      await replays.refresh(subscription({ replay }), replay);
+
+      expect(records.get('sub_0001')?.replay).toEqual({ cursor: '4', watermark: '4', pending: [] });
+    });
+
+    it('keeps the position the loop reached meanwhile instead of writing an older one', async () => {
+      const { replays, records } = await harness();
+      const stale = { cursor: '4', watermark: '4', pending: [] };
+      const advanced = { cursor: '9', watermark: '4', pending: [{ cursor: '9', deliveryIds: ['dlv_7'] }] };
+      records.set('sub_0001', subscription({ replay: advanced }));
+
+      const step = await replays.refresh(subscription({ replay: stale }), stale);
+
+      expect(step.replay.watermark).toBe('4');
+      expect(records.get('sub_0001')?.replay).toEqual(advanced);
+    });
+  });
+
+  describe('the turns of a loop', () => {
+    /** The private `schedule()`, as a lease lost and acquired again during a turn calls it. */
+    function scheduleAgain(replays: EventReplays, event: EventEntry): void {
+      (replays as unknown as { schedule(event: EventEntry, delayMs: number): void }).schedule(event, 0);
+    }
+
+    it('run one at a time when the loop is scheduled again while a turn runs', async () => {
+      const { replays, event, check, records } = await harness();
+      records.set('sub_0001', subscription({ replay: { cursor: '1', watermark: '1', pending: [] } }));
+      let finishTurn: (checked: Checked) => void = () => undefined;
+      check.mockImplementationOnce(() => new Promise<Checked>((resolve) => (finishTurn = resolve)));
+      check.mockResolvedValue({ events: [], cursor: '1' });
+      await replays.start([event]);
+      await jest.advanceTimersByTimeAsync(0);
+
+      scheduleAgain(replays, event);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(check).toHaveBeenCalledTimes(1);
+      finishTurn({ events: [], cursor: '1' });
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(INTERVAL_MS);
+
+      expect(check).toHaveBeenCalledTimes(2);
+      await replays.stop();
+    });
+
+    it('schedule no turn once stop() began, even when the turn in flight ends after it', async () => {
+      const { replays, event, check, records } = await harness();
+      records.set('sub_0001', subscription({ replay: { cursor: '1', watermark: '1', pending: [] } }));
+      let finishTurn: (checked: Checked) => void = () => undefined;
+      check.mockImplementationOnce(() => new Promise<Checked>((resolve) => (finishTurn = resolve)));
+      check.mockResolvedValue({ events: [], cursor: '1' });
+      await replays.start([event]);
+      await jest.advanceTimersByTimeAsync(0);
+
+      const stopping = replays.stop();
+      finishTurn({ events: [], cursor: '1' });
+      await jest.advanceTimersByTimeAsync(0);
+      await stopping;
+      await jest.advanceTimersByTimeAsync(3 * INTERVAL_MS);
+
+      expect(check).toHaveBeenCalledTimes(1);
     });
   });
 

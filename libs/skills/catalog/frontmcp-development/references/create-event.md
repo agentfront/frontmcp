@@ -397,7 +397,8 @@ refuses to start. Vercel KV is refused: it has no atomic compare-and-set.
 Both requests run hookable flows. `events:subscribe` (`EventSubscribeHook`) has the stages `parseInput`,
 `resolveDialect`, `findEvent`, `checkAvailability`, `requireWebhookMode`, `requireSubscriber`,
 `checkEntryAuthorities`, `validateArguments`, `authorize`, `validateDelivery`, `findSubscription`, `enforceLimits`,
-`verifyCallback`, `grantTtl`, `upsertSubscription`, `notifySubscribed`, `buildResult` and `finalize`.
+`verifyCallback`, `grantTtl`, `upsertSubscription`, `notifySubscribed`, `startReplay` (for an event with `check()`,
+see [Events with `check()` over webhook](#events-with-check-over-webhook)), `buildResult` and `finalize`.
 `events:unsubscribe` (`EventUnsubscribeHook`) has `parseInput`, `resolveDialect`, `requireSubscriber`,
 `removeSubscription`, `buildResult` and `finalize`. `finalize` runs after a success or a failure: attach a
 `Finally` hook there for work that must see refused requests too.
@@ -828,7 +829,8 @@ null)` gives the position. With a cursor, the first `check()` replays from it be
   position that is safe to persist: every item at or before it was acknowledged, dropped or abandoned. It is never
   ahead of a delivery the callback has not acknowledged, so it can be behind the item that carries it.
 - **A refresh** keeps the server's own position and answers the watermark; the `cursor` of a refresh request is not
-  used while the server still has the subscription.
+  used while the server still has the subscription. When the loop reads the subscription while a refresh verifies its
+  callback, the refresh keeps the position the loop reached, so nothing is delivered twice.
 - **A gap between refreshes** (`check()` answers `truncated`) is told with a signed `{ "type": "gap", "cursor":
 "<watermark>" }` envelope, `webhook-id: msg_gap_…`, to a SEP-3415 subscription. A design-sketch subscription
   (ChatGPT) gets no envelope: its next refresh answers `truncated: true`, once.

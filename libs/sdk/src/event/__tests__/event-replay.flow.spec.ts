@@ -150,6 +150,26 @@ describe('webhook subscriptions of an event with check()', () => {
     expect(await deliveredTo(subscribed.id, 1)).toHaveLength(1);
   });
 
+  it('keeps what the loop delivered while a refresh verified its callback, and delivers it once', async () => {
+    const subscribed = await subscribe('overlap');
+    const verifier = scope.events?.subscriptions?.verifier;
+    if (!verifier) throw new Error('the scope has no callback verifier');
+    jest.spyOn(verifier, 'verify').mockImplementationOnce(async () => {
+      tickets.push('t-overlap');
+      await deliveredTo(subscribed.id, 1);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      return { outcome: 'verified', verifiedAt: Date.now() };
+    });
+
+    await subscribe('overlap');
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const delivered = deliveries.filter((delivery) => delivery.subscriptionId === subscribed.id);
+    expect(delivered.map((delivery) => delivery.json.data.ticketId)).toEqual(['t-overlap']);
+    const stored = await scope.events?.subscriptions?.store.get(subscribed.id);
+    expect(stored?.replay?.cursor).toBe(String(tickets.length));
+  });
+
   it('replays from the cursor of the request for a subscription created with one', async () => {
     const before = tickets.length;
     tickets.push('t-3', 't-4');

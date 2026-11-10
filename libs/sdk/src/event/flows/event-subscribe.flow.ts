@@ -291,6 +291,7 @@ export default class EventSubscribeFlow extends FlowBase<typeof name> {
     const { url, secret } = this.input.request.params.delivery;
     const { owner, event, dialect, subscriptionId, argumentsKey, verifiedAt, expiresAt } = this.state.required;
     const existing = this.state.existing;
+    const replay = existing ? await this.currentReplayOf(subscriptionId) : undefined;
     const now = Date.now();
     const record: EventSubscriptionRecord = {
       id: subscriptionId,
@@ -308,7 +309,7 @@ export default class EventSubscribeFlow extends FlowBase<typeof name> {
       lastAuthorizedAt: now,
       active: true,
       status: reactivatedStatus(existing?.status),
-      ...(existing?.replay && { replay: existing.replay }),
+      ...(replay && { replay }),
     };
     await this.subscriptions.store.upsert(record);
     this.state.set('record', record);
@@ -339,6 +340,12 @@ export default class EventSubscribeFlow extends FlowBase<typeof name> {
       ? await replays.refresh(record, record.replay)
       : await replays.begin(event, record, cursor, maxAgeMs);
     this.state.set({ record: { ...record, replay: step.replay }, truncated: step.truncated });
+  }
+
+  /** Where the loop stands for a stored subscription now: it may have moved on while the callback was verified. */
+  private async currentReplayOf(subscriptionId: string): Promise<EventSubscriptionRecord['replay']> {
+    const stored = await this.subscriptions.store.get(subscriptionId);
+    return stored?.replay;
   }
 
   /** Answer with the id, the granted lifetime and, on a refresh, the delivery status. */

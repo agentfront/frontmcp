@@ -55,6 +55,13 @@ export const MAX_PENDING_BATCHES = 50;
 const MAX_ROUNDS_PER_TICK = 10;
 const encoder = new TextEncoder();
 
+/** Whether two replay states stand at the same position: the same cursor, and the same batches waiting. */
+function isSamePosition(current: EventReplayState | undefined, expected: EventReplayState): boolean {
+  if (!current || current.cursor !== expected.cursor || current.pending.length !== expected.pending.length)
+    return false;
+  return current.pending.every((batch, index) => batch.cursor === expected.pending[index].cursor);
+}
+
 /**
  * Webhook delivery for events with `check()`: one loop per event, held by one process through a lease, reads the
  * upstream for each webhook subscription and queues what it finds as deliveries. It keeps, per subscription, the
@@ -115,26 +122,39 @@ export class EventReplays {
     return step;
   }
 
-  /** The state a refresh answers with: the watermark as deliveries stand now, and a gap not yet told. */
+  /**
+   * The state a refresh answers with: the watermark as deliveries stand now, and a gap not yet told. It is stored only
+   * while the loop has not moved the subscription on meanwhile: the loop's newer position wins.
+   */
   async refresh(record: EventSubscriptionRecord, replay: EventReplayState): Promise<EventReplayStep> {
     const { truncated, ...settled } = await this.settled(replay);
-    await this.options.store.update(record.id, { replay: settled });
+    await this.options.store.update(record.id, (current) =>
+      isSamePosition(current.replay, replay) ? { replay: settled } : {},
+    );
     return { replay: settled, truncated: truncated === true, hasMore: false };
   }
 
-  /** Run the loop of an event after `delayMs`, on a timer that does not keep the process alive. */
+  /** Run the loop of an event after `delayMs`, on a timer that does not keep the process alive; one turn at a time. */
   private schedule(event: EventEntry, delayMs: number): void {
+    if (this.timers.has(event.name) || this.ticks.has(event.name)) return;
     const timer = setTimeout(() => {
+      this.timers.delete(event.name);
       const tick = this.tick(event)
         .catch((error: unknown) => this.logger.warn(`The webhook loop of event "${event.name}" failed`, error))
         .finally(() => {
           this.ticks.delete(event.name);
-          if (this.holders.get(event.name)?.holding) this.schedule(event, this.options.intervalMs);
+          if (this.isRunning(event.name)) this.schedule(event, this.options.intervalMs);
         });
       this.ticks.set(event.name, tick);
     }, delayMs);
     timer.unref?.();
     this.timers.set(event.name, timer);
+  }
+
+  /** Whether this process still runs the loop of an event: it holds the lease, and is not stopping. */
+  private isRunning(eventName: string): boolean {
+    const holder = this.holders.get(eventName);
+    return holder !== undefined && holder.holding && !holder.stopping;
   }
 
   /** Stop the timer of an event's loop. */

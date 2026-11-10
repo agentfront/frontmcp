@@ -10,23 +10,39 @@ interface TicketChange {
 /** A test that restarts the server keeps the upstream in this file, so a cursor means the same after the restart. */
 const ticketsFile = process.env['EVENTS_TICKETS_FILE'];
 const ticketChanges: TicketChange[] = [];
-let isLoaded = false;
+let loading: Promise<TicketChange[]> | undefined;
+let saving: Promise<void> = Promise.resolve();
 
-/** The ticket changes so far, in order: the upstream a client replays from with the cursor `check()` returns. */
-async function allTicketChanges(): Promise<TicketChange[]> {
-  if (isLoaded || !ticketsFile) return ticketChanges;
-  isLoaded = true;
-  const stored = await readFile(ticketsFile).catch(() => '[]');
-  ticketChanges.push(...(JSON.parse(stored) as TicketChange[]));
+/** Read the changes a previous server stored, and put them before any recorded since. */
+async function loadStoredChanges(file: string): Promise<TicketChange[]> {
+  const stored = await readFile(file).catch(() => '[]');
+  ticketChanges.unshift(...(JSON.parse(stored) as TicketChange[]));
   return ticketChanges;
+}
+
+/** The ticket changes so far, in order: every caller waits for the one load of the stored changes. */
+function allTicketChanges(): Promise<TicketChange[]> {
+  if (!ticketsFile) return Promise.resolve(ticketChanges);
+  loading ??= loadStoredChanges(ticketsFile).catch((error: unknown) => {
+    loading = undefined;
+    throw error;
+  });
+  return loading;
 }
 
 /** Record a change of a ticket, and answer how many were recorded. */
 export async function recordTicketChange(change: TicketChange): Promise<number> {
   const changes = await allTicketChanges();
   changes.push(change);
-  if (ticketsFile) await writeFile(ticketsFile, JSON.stringify(changes));
-  return changes.length;
+  const count = changes.length;
+  if (ticketsFile) await saveChanges(ticketsFile);
+  return count;
+}
+
+/** Write the changes after any write in progress, so the last write to finish holds every change. */
+function saveChanges(file: string): Promise<void> {
+  saving = saving.then(() => writeFile(file, JSON.stringify(ticketChanges)));
+  return saving;
 }
 
 /** Fires when a ticket changes. It is read from an upstream that can replay, so its cursor is the upstream's. */
@@ -35,6 +51,7 @@ export const ticketUpdated = event({
   description: 'Fires when a ticket changes',
   inputSchema: { queue: z.string().optional() },
   payloadSchema: { ticketId: z.string(), queue: z.string() },
+  /** The changes after `cursor` in the asked queue, at most `limits.maxEvents`; a `null` cursor gives the position. */
   async check(args, cursor, limits) {
     const changes = await allTicketChanges();
     if (cursor === null) return { events: [], cursor: String(changes.length) };
