@@ -14,6 +14,7 @@
  */
 
 import type { Implementation, LoggingLevel, RequestId } from './types';
+import type { EventsExtensionSettings } from './types-events';
 
 /** The protocol revision this module implements. */
 export const PROTOCOL_2026_07_28 = '2026-07-28' as const;
@@ -153,6 +154,8 @@ export interface ServerCapabilities20260728 {
   prompts?: { listChanged?: boolean };
   resources?: { subscribe?: boolean; listChanged?: boolean };
   tools?: { listChanged?: boolean };
+  /** The events capability as the SEP-3415 design sketch placed it, which ChatGPT reads; `extensions` holds the SEP's. */
+  events?: EventsExtensionSettings;
   /** Optional MCP extensions; keys are prefixed identifiers. */
   extensions?: Record<string, Record<string, unknown>>;
 }
@@ -182,6 +185,8 @@ export interface SubscriptionFilter {
   resourcesListChanged?: boolean;
   /** Replaces the removed `resources/subscribe` RPC. */
   resourceSubscriptions?: string[];
+  /** SEP-3415: receive `notifications/events/list_changed`. */
+  eventsListChanged?: boolean;
 }
 
 export interface SubscriptionsListenParams {

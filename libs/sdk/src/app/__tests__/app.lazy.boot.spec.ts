@@ -4,11 +4,13 @@ import 'reflect-metadata';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { z } from '@frontmcp/lazy-zod';
 import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
 
 import {
   App,
   Duty,
+  event,
   FlowHooksOf,
   Job,
   JobContext,
@@ -276,10 +278,13 @@ class FlaggedTool extends ToolContext {
   }
 }
 
+const invoicePaid = event({ name: 'invoice.paid', payloadSchema: { invoiceId: z.string() } });
+
 describe('an app that cannot be lazy', () => {
   it.each<[string, Partial<LocalAppMetadata>, RegExp]>([
     ['skills', { skills: [RefundsSkill] }, /skills/],
     ['jobs', { jobs: [NightlyJob] }, /jobs/],
+    ['events', { events: [invoicePaid] }, /it declares events/],
     ['its own auth', { auth: { mode: 'public' } }, /auth/],
     ['a standalone scope', { standalone: true }, /standalone/],
     ['an entry with authorities', { tools: [GatedTool] }, /tool "gated".*authorities/],

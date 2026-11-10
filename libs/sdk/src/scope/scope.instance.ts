@@ -37,6 +37,7 @@ import {
   type WidgetServingMode,
 } from '../common';
 import { type ChannelType } from '../common/interfaces/channel.interface';
+import { type EventType } from '../common/interfaces/event.interface';
 import { type JobType } from '../common/interfaces/job.interface';
 import { type WorkflowType } from '../common/interfaces/workflow.interface';
 import { type ChannelsConfigOptions } from '../common/metadata/channel.metadata';
@@ -48,15 +49,12 @@ import { FrontMcpContextProvider, FrontMcpContextStorage } from '../context';
 import { proxyTrustOf } from '../context/metadata.utils';
 import type { ElicitationStore } from '../elicitation';
 import type { PersistentQuestions } from '../elicitation/questions/question-scope.helper';
-import {
-  AuthConfigurationError,
-  FlowExitedWithoutOutputError,
-  InternalMcpError,
-  InvalidToolUiConfigError,
-} from '../errors';
+import { FlowExitedWithoutOutputError, InternalMcpError, InvalidToolUiConfigError } from '../errors';
 import { PluginConfiguredTwiceError, UnenforcedMetadataError } from '../errors/plugin.errors';
+import type EventRegistry from '../event/event.registry';
+import { normalizeEvent } from '../event/event.utils';
 import FlowRegistry from '../flows/flow.registry';
-import { assertAuthoritiesRules } from '../front-mcp/authorities-rules.check';
+import { assertEntryAuthorities } from '../front-mcp/authorities-rules.check';
 import { isEntryServer, isJobWorker } from '../front-mcp/detached-job.flag';
 import { isDirectOnly } from '../front-mcp/direct-only.flag';
 import type { HaManager } from '../ha';
@@ -237,6 +235,9 @@ export class Scope extends ScopeEntry {
   private _channelEventBus?: ChannelEventBus;
   private _workflowEvents?: WorkflowEventListening;
   private _channelTeardown?: () => Promise<void>;
+
+  /** Event system (optional) */
+  private _scopeEvents?: EventRegistry;
 
   /** Health service for liveness and readiness probes (optional) */
   private _healthService?: HealthService;
@@ -1115,6 +1116,21 @@ export class Scope extends ScopeEntry {
       if (!isJobWorker(this.metadata)) await channelResult.connectServices();
     }
 
+    // Events are on once an app declares one, or with `events.enabled: true`; `events.enabled: false` keeps them off
+    const { items: appEvents, providers: eventProviders } = this.appEntryProviders<EventType>('events', normalizeEvent);
+    if (appEvents.length > 0 || this.metadata.events?.enabled === true) {
+      const { registerEventCapabilities } = await import('../event/event-scope.helper.js');
+      const eventsResult = await registerEventCapabilities({
+        providers: this.scopeProviders,
+        owner: scopeRef,
+        eventsList: appEvents,
+        eventProviders,
+        eventsConfig: this.metadata.events,
+        logger: this.logger,
+      });
+      this._scopeEvents = eventsResult?.eventRegistry;
+    }
+
     await this.registerWidgetRoutes(httpServing);
 
     // Initialize health service (after all registries and stores are ready)
@@ -1480,6 +1496,7 @@ export class Scope extends ScopeEntry {
     if (this._scopeJobs) add(this._scopeJobs.getJobs().length, 'job');
     if (this._scopeWorkflows) add(this._scopeWorkflows.getWorkflows().length, 'workflow');
     if (this._scopeChannels) add(this._scopeChannels.size, 'channel');
+    if (this._scopeEvents) add(this._scopeEvents.getEvents().length, 'event');
     return entries.length > 0 ? entries.join(', ') : 'empty';
   }
 
@@ -1587,6 +1604,10 @@ export class Scope extends ScopeEntry {
 
   get channelNotifications(): ChannelNotificationService | undefined {
     return this._channelNotificationService;
+  }
+
+  get events(): EventRegistry | undefined {
+    return this._scopeEvents;
   }
 
   get channelEventBus(): ChannelEventBus | undefined {
@@ -1994,12 +2015,12 @@ export class Scope extends ScopeEntry {
   }
 
   /**
-   * The entries the apps declare under `key` (`jobs`, `channels`), and the provider registry of the
+   * The entries the apps declare under `key` (`jobs`, `channels`, `events`), and the provider registry of the
    * app that declares each one, by its token. They are served by one scope-level registry, and each
    * runs with its app's providers, as the app's tools do.
    */
   private appEntryProviders<T>(
-    key: 'jobs' | 'channels',
+    key: 'jobs' | 'channels' | 'events',
     normalize: (item: T) => { provide: Token },
   ): { items: T[]; providers: Map<Token, ProviderRegistry> } {
     const items: T[] = [];
@@ -2108,26 +2129,11 @@ export class Scope extends ScopeEntry {
    * @internal
    */
   private validateAuthoritiesConfig(): void {
-    const entries = this.collectEntriesWithAuthorities();
-    const engine = this._authoritiesEngine;
-
-    if (!engine || !this._authoritiesContextBuilder) {
-      if (entries.length === 0) return;
-      const names = entries
-        .slice(0, 5)
-        .map((entry) => entry.label)
-        .join(', ');
-      const suffix = entries.length > 5 ? ` and ${entries.length - 5} more` : '';
-      throw new AuthConfigurationError(
-        `Authorities configuration required: ${names}${suffix} declare 'authorities' metadata ` +
-          `but authorities enforcement is not fully configured (engine/context builder missing). ` +
-          `Add 'authorities: { claimsMapping: {...}, profiles: {...} }' ` +
-          `to your @FrontMcp() decorator to enable enforcement, or remove 'authorities' from entry metadata.`,
-        { suggestion: 'Add authorities config to @FrontMcp() or remove authorities from entry metadata' },
-      );
-    }
-
-    assertAuthoritiesRules(engine, entries);
+    assertEntryAuthorities(
+      this._authoritiesEngine,
+      this._authoritiesContextBuilder,
+      this.collectEntriesWithAuthorities(),
+    );
   }
 
   async checkLateApp(app: LateAppRegistries): Promise<void> {

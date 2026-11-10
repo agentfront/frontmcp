@@ -75,7 +75,7 @@ export function whyListedAppCannotBeLazy(listed: ListedApp): string[] {
 /** Why an imported app's own metadata keeps it from being lazy, read before its code initializes; empty when it can. */
 export function whyAppCannotBeLazy(metadata: LocalAppMetadata): string[] {
   const reasons: string[] = [];
-  for (const key of ['jobs', 'workflows', 'channels'] as const) {
+  for (const key of ['jobs', 'workflows', 'channels', 'events'] as const) {
     if (metadata[key]?.length) reasons.push(`it declares ${key}`);
   }
   if (metadata.auth) reasons.push('it declares its own auth');

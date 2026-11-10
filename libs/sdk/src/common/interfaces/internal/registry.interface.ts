@@ -4,6 +4,7 @@ import type AgentRegistryCls from '../../../agent/agent.registry';
 import type AppRegistryCls from '../../../app/app.registry';
 import type { AuthRegistry as AuthRegistryCls } from '../../../auth/auth.registry';
 import type { ChannelRegistryInterface } from '../../../channel/channel.registry';
+import type { EventRegistryInterface } from '../../../event/event.registry';
 // Import concrete registry classes using `import type` to avoid circular deps
 import type HookRegistryCls from '../../../hooks/hook.registry';
 import type { JobRegistryInterface } from '../../../job/job.registry';
@@ -83,7 +84,8 @@ export type AppRegistryKind =
   | 'SkillRegistry'
   | 'JobRegistry'
   | 'WorkflowRegistry'
-  | 'ChannelRegistry';
+  | 'ChannelRegistry'
+  | 'EventRegistry';
 
 export type RegistryKind = GlobalRegistryKind | ScopedRegistryKind | AppRegistryKind;
 
@@ -105,4 +107,5 @@ export type RegistryType = {
   JobRegistry: JobRegistryInterface;
   WorkflowRegistry: WorkflowRegistryInterface;
   ChannelRegistry: ChannelRegistryInterface;
+  EventRegistry: EventRegistryInterface;
 };

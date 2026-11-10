@@ -37,6 +37,7 @@ export * from './skill.interface';
 export * from './job.interface';
 export * from './workflow.interface';
 export * from './channel.interface';
+export * from './event.interface';
 export * from './duty.interface';
 export * from './http-route.interface';
 

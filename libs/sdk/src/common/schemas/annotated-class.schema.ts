@@ -29,6 +29,7 @@ import {
   FrontMcpAgentTokens,
   FrontMcpAuthProviderTokens,
   FrontMcpChannelTokens,
+  FrontMcpEventTokens,
   FrontMcpJobTokens,
   FrontMcpLocalAppTokens,
   FrontMcpLogTransportTokens,
@@ -390,4 +391,13 @@ export const annotatedFrontMcpChannelsSchema = z.custom<AnnotatedClass>(
     return false;
   },
   { message: 'channels items must be annotated with @Channel() or use channel() builder.' },
+);
+
+export const annotatedFrontMcpEventsSchema = z.custom<AnnotatedClass>(
+  (v): v is AnnotatedClass => {
+    if (typeof v !== 'function') return false;
+    if (hasMetadataCompat(FrontMcpEventTokens.type, v)) return true;
+    return (v as unknown as Record<symbol, unknown>)[FrontMcpEventTokens.type] !== undefined;
+  },
+  { message: 'events items must be annotated with @Event() or use event() builder.' },
 );

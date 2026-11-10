@@ -8,6 +8,7 @@ import type {
   AgentType,
   AuthProviderType,
   ChannelType,
+  EventType,
   HttpRouteType,
   JobType,
   PluginType,
@@ -23,6 +24,7 @@ import {
   annotatedFrontMcpAgentsSchema,
   annotatedFrontMcpAuthProvidersSchema,
   annotatedFrontMcpChannelsSchema,
+  annotatedFrontMcpEventsSchema,
   annotatedFrontMcpJobsSchema,
   annotatedFrontMcpPluginsSchema,
   annotatedFrontMcpPromptsSchema,
@@ -147,6 +149,9 @@ export interface LocalAppMetadata {
    */
   channels?: ChannelType[];
 
+  /** Event types clients list with `events/list` and subscribe to. Declaring one turns events on. */
+  events?: EventType[];
+
   /**
    * `@HttpRoute` classes this app serves beside the MCP endpoint: pages, APIs and SSE streams for people, with the
    * app's providers (`this.get()`), the ones its tools get.
@@ -226,6 +231,7 @@ export const frontMcpLocalAppMetadataSchema = z.looseObject({
   jobs: z.array(z.lazy(() => annotatedFrontMcpJobsSchema)).optional(),
   workflows: z.array(z.lazy(() => annotatedFrontMcpWorkflowsSchema)).optional(),
   channels: z.array(z.lazy(() => annotatedFrontMcpChannelsSchema)).optional(),
+  events: z.array(z.lazy(() => annotatedFrontMcpEventsSchema)).optional(),
   routes: z
     .array(
       z.custom<HttpRouteType>((value) => typeof value === 'function', { message: 'routes takes @HttpRoute classes' }),

@@ -43,3 +43,4 @@ export {
   ChannelEventBus,
   ChannelReplyTool,
 } from './channel';
+export { EventInstance, EventRegistry } from './event';

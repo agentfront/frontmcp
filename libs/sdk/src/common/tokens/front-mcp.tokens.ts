@@ -70,6 +70,8 @@ export const FrontMcpTokens: RawMetadataShape<FrontMcpMetadata> = {
   registry: tokenFactory.meta('registry'),
   // channels configuration (Claude Code notifications)
   channels: tokenFactory.meta('channels'),
+  // events configuration (MCP Events extension)
+  events: tokenFactory.meta('events'),
   // authorities configuration (RBAC/ABAC/ReBAC)
   authorities: tokenFactory.meta('authorities'),
   // background tasks configuration (MCP 2025-11-25 tasks spec)

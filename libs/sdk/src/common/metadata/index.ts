@@ -24,6 +24,7 @@ export * from './skill.metadata';
 export * from './job.metadata';
 export * from './workflow.metadata';
 export * from './channel.metadata';
+export * from './event.metadata';
 export * from './app-filter.metadata';
 export * from './remote-primitive.metadata';
 export * from './duty.metadata';
