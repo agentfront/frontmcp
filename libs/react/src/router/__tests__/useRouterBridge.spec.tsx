@@ -1,6 +1,9 @@
-import { renderHook } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 
-import { clearBridge, getLocation, getNavigate } from '../router-bridge';
+import type { DirectMcpServer } from '@frontmcp/sdk';
+
+import { serverRegistry } from '../../registry/ServerRegistry';
+import { clearBridge, getLocation, getNavigate, ROUTE_CHANGED_EVENT } from '../router-bridge';
 // Import after mock is set up
 import { useRouterBridge } from '../useRouterBridge';
 
@@ -77,5 +80,62 @@ describe('useRouterBridge', () => {
 
     nav!('/new-path', { replace: true });
     expect(mockNavigate).toHaveBeenCalledWith('/new-path', { replace: true });
+  });
+
+  describe('routerEvents', () => {
+    const publish = jest.fn();
+
+    beforeEach(() => {
+      serverRegistry.clear();
+      publish.mockReset().mockResolvedValue({ eventId: 'evt_1', matched: 0 });
+      serverRegistry.register('default', { events: { publish } } as unknown as DirectMcpServer);
+      serverRegistry.register('shell', { events: { publish } } as unknown as DirectMcpServer);
+    });
+
+    it('publishes route.changed on each navigation after the first render, not on a re-render', () => {
+      const { rerender } = renderHook(() => useRouterBridge({ routerEvents: true }));
+
+      rerender();
+      mockLocation = { pathname: '/orders', search: '', hash: '#top' };
+      rerender();
+
+      expect(publish).toHaveBeenCalledTimes(1);
+      expect(publish).toHaveBeenCalledWith(
+        'route.changed',
+        { pathname: '/orders', search: '', hash: '#top', previous: '/test?q=1#section' },
+        undefined,
+      );
+    });
+
+    it('publishes under the configured name on the configured server, and warns when that fails', async () => {
+      publish.mockRejectedValueOnce(new Error('not registered')).mockRejectedValue('not registered');
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const { rerender } = renderHook(() =>
+        useRouterBridge({ routerEvents: { eventName: 'page.viewed', server: 'shell' } }),
+      );
+
+      mockLocation = { pathname: '/settings', search: '', hash: '' };
+      rerender();
+      mockLocation = { pathname: '/profile', search: '', hash: '' };
+      rerender();
+      await waitFor(() => expect(warn).toHaveBeenCalledTimes(2));
+
+      expect(publish.mock.calls[0][0]).toBe('page.viewed');
+      expect(warn.mock.calls[0][0]).toContain('"page.viewed": not registered');
+      warn.mockRestore();
+    });
+
+    it('publishes nothing without routerEvents', () => {
+      const { rerender } = renderHook(() => useRouterBridge());
+
+      mockLocation = { pathname: '/elsewhere', search: '', hash: '' };
+      rerender();
+
+      expect(publish).not.toHaveBeenCalled();
+    });
+
+    it('publishes under route.changed by default', () => {
+      expect(ROUTE_CHANGED_EVENT).toBe('route.changed');
+    });
   });
 });

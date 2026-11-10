@@ -116,6 +116,8 @@ info or running tool:
 - A tool must not call its own server through a `DirectClient`/`DirectMcpServer` (it waits for its
   own turn); use `this.scope` flows. A request that waits more than 10s for its turn logs why.
 - Timers and un-awaited promises must not read request context.
+- An open `events/stream` (a push subscription of a `connect()` client) gives up its turn while it waits for
+  events, so the page's other requests run while it is open.
 
 ## Usage with @frontmcp/react
 
@@ -181,6 +183,59 @@ For connecting to a remote MCP server (HTTP), create a server-bound `DirectMcpSe
 - `useDynamicTool` registers a **real server tool** (through `server.registerTool()`), so it runs through the server's flows (plugin hooks, authorities, `availableWhen`) and every client sees it. A name a server tool already has is refused and reported through the provider's `onError` (or `console.warn`) — it no longer shadows the server tool; registering it again (a remount) retries it. The provider's tool listing follows the server's `notifications/tools/list_changed`. On a server with several local apps (`FrontMcpInstance.createDirect({ apps: [...] })`) every dynamic tool must say which app it joins: once per server with `<FrontMcpProvider dynamicToolApps={{ default: 'browser' }}>` (keyed by server name; covers `useDynamicTool`, `mcpComponent`, store actions and `useApiClient`), or per tool with `useDynamicTool({ app })`. A `create()` server has one app, so neither is needed. When two mounted components register the same name, the later definition wins until it unmounts, then the earlier component's `execute` takes over again. Outside the provider, `bindDynamicTools(registry, server, { onError, app })` (exported from `@frontmcp/react`) mirrors a `DynamicRegistry` into a server and returns an unbind function.
 - Page code can add tools to the running server: `const unregister = await server.registerTool({ name, description, inputSchema, execute })`. The tool joins the server's app, so it is listed and run through the server's flows (plugin hooks, authorities, `availableWhen`). Arguments are not validated against `inputSchema` — validate in `execute`. `execute` runs outside the request's turn, so it may call the server back. A taken name rejects with `ToolNameConflictError`; names are 1–64 characters.
 - `registerTool()` checks the definition before adding it: `inputSchema` must be an object schema (`type: 'object'`), and a non-string `title`/`description` or malformed `annotations`/`availableWhen` rejects with `EntryValidationError` instead of breaking `tools/list` for every tool. Registering on a disposed server (or one disposed before the registration completes) rejects with `InternalMcpError`.
+
+### MCP Events in a page
+
+A `create()` server declares events with `eventDefinitions` (the flat config's `events` key is the server's events
+options), and publishes them with `server.events.publish(event, data)`, as a tool does with `this.events.publish`.
+`@frontmcp/react` adds:
+
+```tsx
+import { useRef } from 'react';
+
+import {
+  create,
+  event,
+  FrontMcpProvider,
+  useDomEventSource,
+  useEventSubscription,
+  usePublishEvent,
+  z,
+} from '@frontmcp/react';
+import { createRouteChangedEvent, useRouterBridge } from '@frontmcp/react/router';
+
+const noteAdded = event({ name: 'note.added', payloadSchema: { text: z.string() } });
+const server = await create({
+  info: { name: 'page', version: '1.0.0' },
+  eventDefinitions: [noteAdded, createRouteChangedEvent()],
+});
+
+function Notes() {
+  const publish = usePublishEvent(); // typed: publish(noteAdded, { text })
+  const button = useRef<HTMLButtonElement>(null);
+  useDomEventSource(button, 'click', () => ({ name: 'note.added', data: { text: 'clicked' } }));
+  const { status, mode } = useEventSubscription('note.added', {}, (occurrence) => console.log(occurrence.data));
+  useRouterBridge({ routerEvents: true }); // publishes route.changed on each navigation
+  return <button ref={button}>Add</button>;
+}
+```
+
+- `useEventSubscription(name, args, handler | { onEvent, onError, server, delivery, enabled })` subscribes through
+  the provider's in-process client once it is connected, by push over the in-memory connection (poll when the event
+  offers only that), with no network. It returns `{ status, mode, error }`; `status` is `idle`, `subscribing`,
+  `active`, `ended` or `error`. It unsubscribes on unmount, and again when the name or the arguments change.
+- `usePublishEvent(serverName?)` returns `server.events.publish` of the provider's server. Without a registered server
+  it rejects.
+- `useDomEventSource(target, type, toEvent, { server, onError })` listens on `target` only (an element, a ref to one,
+  or any `EventTarget`) and publishes what `toEvent(domEvent)` returns (`{ name, data, options? }`, or nothing to
+  skip). A failed publish goes to `onError`, or to `console.warn`.
+- `useRouterBridge({ routerEvents })` publishes `route.changed` (`{ pathname, search, hash, previous }`) on each
+  navigation after the first render; `routerEvents: { eventName, server }` changes the name and the server. Declare
+  the event with `createRouteChangedEvent(name?)`. It is off by default.
+- `createRemoteEventForwarder({ url, getToken, fetch? })` POSTs `{ name, data, ...options }` to another FrontMCP
+  server's publish endpoint (`events.publishEndpoint`, bearer mode) with `Authorization: Bearer <getToken()>`, and
+  resolves with its `{ eventId, matched }`. Any other status than 2xx throws `RemoteEventForwardError` with `status`
+  and `body`.
 
 ## Exposing Tools to Browser Agents (WebMCP)
 

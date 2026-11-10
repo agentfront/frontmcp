@@ -5,6 +5,9 @@
  * `useRouterBridge()` populates this on every render/route change.
  */
 
+/** The name `useRouterBridge({ routerEvents: true })` publishes under. */
+export const ROUTE_CHANGED_EVENT = 'route.changed';
+
 export interface BridgeLocation {
   pathname: string;
   search: string;

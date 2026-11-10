@@ -18,6 +18,7 @@ const mockClient = {} as unknown as DirectClient;
 
 const mockServer: DirectMcpServer = {
   ready: Promise.resolve(),
+  events: { publish: jest.fn() } as unknown as DirectMcpServer['events'],
   listTools: jest.fn().mockResolvedValue({ tools: [] }),
   callTool: jest.fn().mockResolvedValue({ content: [] }),
   registerTool: jest.fn().mockResolvedValue(() => undefined),

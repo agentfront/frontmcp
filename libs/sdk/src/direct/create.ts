@@ -65,6 +65,7 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
     auth,
     jobDefinitions,
     workflowDefinitions,
+    eventDefinitions,
     ...serverOptions
   } = config;
   const name = appName ?? config.info.name;
@@ -92,6 +93,7 @@ export function buildConfig(config: CreateConfig): FrontMcpConfigInput {
     skills,
     jobs: jobDefinitions,
     workflows: workflowDefinitions,
+    events: eventDefinitions,
   };
 
   for (const key of Object.keys(appMeta)) {

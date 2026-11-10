@@ -22,3 +22,12 @@ export { useDynamicResource } from './useDynamicResource';
 export type { UseDynamicResourceOptions } from './useDynamicResource';
 export { useComponentTree } from './useComponentTree';
 export type { UseComponentTreeOptions } from './useComponentTree';
+export { useEventSubscription } from './useEventSubscription';
+export type {
+  EventSubscriptionStatus,
+  UseEventSubscriptionOptions,
+  UseEventSubscriptionResult,
+} from './useEventSubscription';
+export { usePublishEvent } from './usePublishEvent';
+export { useDomEventSource } from './useDomEventSource';
+export type { DomEventSourceEvent, UseDomEventSourceOptions } from './useDomEventSource';

@@ -174,5 +174,10 @@ export function createWrappedServer(base: DirectMcpServer, dynamicRegistry: Dyna
     async dispose() {
       return base.dispose();
     },
+
+    /** The server's own event publisher. */
+    get events() {
+      return base.events;
+    },
   };
 }

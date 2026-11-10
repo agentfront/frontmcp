@@ -17,10 +17,10 @@ import {
 } from '@frontmcp/protocol';
 import { randomUUID, runRequestExclusive, sha256Hex } from '@frontmcp/utils';
 
-import { FlowControl } from '../common';
+import { FlowControl, type EventPublisher } from '../common';
 import { type CallSurface } from '../common/availability';
 import { listAllPages } from '../common/utils/list-all-pages.utils';
-import { ErrorHandler, InternalMcpError, toMcpError } from '../errors';
+import { ErrorHandler, EventsNotEnabledError, InternalMcpError, toMcpError } from '../errors';
 import { type Scope } from '../scope/scope.instance';
 import { withMcpSurface } from '../transport/mcp-handlers/mcp-surface';
 import { type ConnectOptions, type DirectClient } from './client.types';
@@ -108,6 +108,11 @@ export class DirectMcpServerImpl implements DirectMcpServer {
     this.defaultWorkerEnv = options?.workerEnv;
     this.defaultSessionId = `direct:${randomUUID()}`;
     this.ready = Promise.resolve(); // Scope is already initialized
+  }
+
+  /** The publisher of this server's events; on a server without events, one that rejects. */
+  get events(): EventPublisher {
+    return this.scope.events?.publisher ?? { publish: () => Promise.reject(new EventsNotEnabledError()) };
   }
 
   /**
