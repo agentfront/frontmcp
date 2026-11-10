@@ -184,6 +184,21 @@ describe('DutyRunner with a cron', () => {
     expect(holder.logger.verbose).toHaveBeenCalledWith('Duty "report" is still running; skipping this run');
   });
 
+  it('runs a scheduled time that came while an earlier check was still waiting on the store', async () => {
+    const readLedger = storage.get.bind(storage);
+    jest.spyOn(storage, 'get').mockImplementationOnce(async (key) => {
+      await delay(40_000);
+      return readLedger(key);
+    });
+    const holder = probe();
+    await start(holder);
+
+    await jest.advanceTimersByTimeAsync(2 * MINUTE);
+
+    expect(holder.runs).toEqual(['09:00:10.000', '09:01:00.000']);
+    expect(holder.logger.verbose).not.toHaveBeenCalledWith('Duty "report" is still running; skipping this run');
+  });
+
   it('waits for a time further away than a timer can hold, in several waits', async () => {
     const inThirtyDays = await loadCronSchedule({ expression: '0 0 10 12 *', timezone: 'UTC' });
     const holder = probe(inThirtyDays, () => undefined, 20 * DAY);

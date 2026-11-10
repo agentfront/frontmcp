@@ -35,6 +35,10 @@ const MAX_TIMER_MS = 2_147_483_647;
 interface RunInFlight {
   controller: AbortController;
   done: Promise<void>;
+  /** Whether the duty's `run()` started; until then the tick is only checking whether a run is due. */
+  running: boolean;
+  /** Whether another tick arrived during that check, so it is made again. */
+  recheck: boolean;
 }
 
 /**
@@ -188,22 +192,39 @@ export class DutyRunner {
     return Math.min(options.cron.nextAfter(now) - now, MAX_TIMER_MS);
   }
 
+  /** Start a run unless one is running; a tick that arrives during an earlier tick's check has it made again. */
   private async tick(): Promise<void> {
-    if (this.inFlight) {
+    if (this.inFlight?.running) {
       this.options.logger.verbose(`Duty "${this.options.name}" is still running; skipping this run`);
       return;
     }
-    const controller = new AbortController();
-    const done = this.runIfHeld(controller.signal);
-    this.inFlight = { controller, done };
-    await done;
+    if (this.inFlight) {
+      this.inFlight.recheck = true;
+      return;
+    }
+    const inFlight: RunInFlight = {
+      controller: new AbortController(),
+      done: Promise.resolve(),
+      running: false,
+      recheck: false,
+    };
+    inFlight.done = this.runIfHeld(inFlight);
+    this.inFlight = inFlight;
+    await inFlight.done;
     this.inFlight = undefined;
   }
 
-  private async runIfHeld(signal: AbortSignal): Promise<void> {
-    if (!(await this.claimRun())) return;
+  /** Run the duty when a run is due, checking again when a tick arrived while the check waited on the store. */
+  private async runIfHeld(inFlight: RunInFlight): Promise<void> {
+    let claimed = await this.claimRun();
+    while (!claimed && inFlight.recheck && this.holding && !this.stopped) {
+      inFlight.recheck = false;
+      claimed = await this.claimRun();
+    }
+    if (!claimed) return;
+    inFlight.running = true;
     try {
-      await this.options.run({ signal });
+      await this.options.run({ signal: inFlight.controller.signal });
     } catch (error) {
       this.options.logger.error(`Duty "${this.options.name}" failed: ${messageOf(error)}`);
     }
