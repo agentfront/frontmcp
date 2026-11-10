@@ -214,6 +214,15 @@ The first that does not allow the owner decides:
   other error (an upstream that is down, a timeout). The event is not delivered to it this time, the server logs
   `reauthorize: the access of subscription <id> could not be checked`, and the next publish checks it again.
 
+An open `events/stream` is checked the same way, with the reader as it was when the stream opened and the request's
+arguments, at the first heartbeat after `subscriptions.reauthorizeEveryMs`:
+
+- A refusal ends it with `notifications/events/terminated` and the reason `Access revoked`.
+- A check that could not be made keeps it open: the server logs `The access of stream <id> could not be checked`, the
+  stream sends heartbeats but no events, and checks again at the next heartbeat. Once a check allows the reader,
+  events flow again, after an `active` with `truncated: true` when published events were held back meanwhile. A
+  stream of an event with `check()` does not call it while its access is unchecked.
+
 This is the split `events/subscribe` makes: it passes on what a public error says as the `reason`, and answers any
 other error with `the event refused it`. When subscribing, both refuse, since there is no subscription to keep yet.
 Throw an `EventForbiddenError` (or a `PublicMcpError`) from `authorize()` for "no", and let an upstream failure throw
@@ -892,9 +901,9 @@ request. When the server closes the stream, the request is answered with an empt
   `event` or a `heartbeat` is the one to open the next stream, or to poll, from.
 - An event with `check()` is read by calling it when the stream opens and then at its `nextPollMs`
   (`events.poll.nextPollMs` when it names none), at once while it answers `hasMore`.
-- A reader whose access the event's `authorities` no longer allow is ended with `terminated` and
+- A reader the event's `authorities` or `authorize()` no longer allow is ended with `terminated` and
   `{ "code": -32024, "message": "Forbidden", "data": { "reason": "Access revoked" } }`. Access is checked again
-  every `subscriptions.reauthorizeEveryMs`.
+  every `subscriptions.reauthorizeEveryMs` (see [Over a subscription's life](#over-a-subscriptions-life)).
 - A client that reads too slowly gets a gap, not memory growth: past 1000 waiting notifications, they are replaced by
   one `active` with `truncated: true`.
 

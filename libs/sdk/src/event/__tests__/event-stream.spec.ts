@@ -11,6 +11,9 @@ const NOW = 1_800_000_000_000;
 const META = { 'io.modelcontextprotocol/subscriptionId': 7 };
 const HEARTBEAT_MS = 25_000;
 const accessRevoked = { code: -32024, message: 'Forbidden', data: { reason: 'Access revoked' } };
+const granted = { outcome: 'granted' };
+const refused = { outcome: 'refused', reason: 'vault closed' };
+const failed = { outcome: 'failed', error: new Error('the upstream timed out') };
 
 function occurrence(id: string, status = 'paid') {
   return { eventId: id, name: 'order.created', timestamp: new Date(NOW).toISOString(), data: { status } };
@@ -21,7 +24,7 @@ interface Harness {
   buffer: EventBuffer;
   received: EventStreamNotification[];
   warn: jest.Mock;
-  isStillAuthorized: jest.Mock;
+  reauthorize: jest.Mock;
   abort: () => void;
 }
 
@@ -29,7 +32,7 @@ function openable(context: Partial<EventContext> = {}, overrides: Partial<EventS
   const buffer = new EventBuffer({ maxAgeMs: 600_000, maxEvents: 100 });
   const controller = new AbortController();
   const warn = jest.fn();
-  const isStillAuthorized = jest.fn().mockResolvedValue(true);
+  const reauthorize = jest.fn().mockResolvedValue(granted);
   const event = {
     name: 'order.created',
     parsePayload: (data: { status?: unknown }) => {
@@ -59,7 +62,7 @@ function openable(context: Partial<EventContext> = {}, overrides: Partial<EventS
     checkIntervalMs: 30_000,
     checkMaxEvents: 100,
     reauthorizeEveryMs: 300_000,
-    isStillAuthorized,
+    reauthorize,
     accessRevoked,
     signal: controller.signal,
     logger: { warn } as never,
@@ -69,7 +72,7 @@ function openable(context: Partial<EventContext> = {}, overrides: Partial<EventS
   void (async () => {
     for await (const notification of stream) received.push(notification);
   })();
-  return { stream, buffer, received, warn, isStillAuthorized, abort: () => controller.abort() };
+  return { stream, buffer, received, warn, reauthorize, abort: () => controller.abort() };
 }
 
 async function settle(ms = 0): Promise<void> {
@@ -224,16 +227,16 @@ describe('EventStream', () => {
       });
     });
 
-    it('checks the access of its reader again once reauthorizeEveryMs passed, and ends when it is lost', async () => {
-      const { stream, received, isStillAuthorized } = openable();
+    it('checks the access of its reader again once reauthorizeEveryMs passed, and ends when it is refused', async () => {
+      const { stream, received, reauthorize } = openable();
       await stream.open();
 
       await settle(300_000);
-      expect(isStillAuthorized).not.toHaveBeenCalled();
+      expect(reauthorize).not.toHaveBeenCalled();
 
-      isStillAuthorized.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+      reauthorize.mockResolvedValueOnce(granted).mockResolvedValueOnce(refused);
       await settle(HEARTBEAT_MS);
-      expect(isStillAuthorized).toHaveBeenCalledTimes(1);
+      expect(reauthorize).toHaveBeenCalledTimes(1);
       expect(stream.isClosed).toBe(false);
 
       await settle(325_000);
@@ -244,14 +247,45 @@ describe('EventStream', () => {
       expect(stream.isClosed).toBe(true);
     });
 
-    it('keeps the stream open when the access check itself fails', async () => {
-      const { stream, isStillAuthorized } = openable();
-      isStillAuthorized.mockRejectedValue(new Error('policy store down'));
+    it('keeps a stream whose check could not be made, holds its events back, and checks again at the next beat', async () => {
+      const { stream, buffer, received, reauthorize, warn } = openable();
+      await stream.open();
+      reauthorize.mockResolvedValueOnce(failed);
+      await settle(300_000 + HEARTBEAT_MS);
+
+      expect(stream.isClosed).toBe(false);
+      expect(warn).toHaveBeenCalledWith('The access of stream sub_stream could not be checked', failed.error);
+      await stream.offer(buffer.append(occurrence('evt_held')));
+      expect(methodsOf(received)).not.toContain('event');
+
+      await settle(HEARTBEAT_MS);
+      expect(reauthorize).toHaveBeenCalledTimes(2);
+      await stream.offer(buffer.append(occurrence('evt_after')));
+      await settle();
+
+      expect(methodsOf(received).slice(-3)).toEqual(['active', 'heartbeat', 'event']);
+      expect(received[received.length - 3].params).toMatchObject({ truncated: true });
+      expect(received[received.length - 1].params).toMatchObject({ eventId: 'evt_after' });
+    });
+
+    it('keeps the stream open when the check rejects, as a check that could not be made', async () => {
+      const { stream, reauthorize } = openable();
+      reauthorize.mockRejectedValue(new Error('policy store down'));
       await stream.open();
 
       await settle(325_000);
 
       expect(stream.isClosed).toBe(false);
+    });
+
+    it('resumes without a gap when nothing was held back', async () => {
+      const { stream, received, reauthorize } = openable();
+      await stream.open();
+      reauthorize.mockResolvedValueOnce(failed);
+      await settle(300_000 + 2 * HEARTBEAT_MS);
+
+      expect(reauthorize).toHaveBeenCalledTimes(2);
+      expect(methodsOf(received).filter((method) => method === 'active')).toHaveLength(1);
     });
   });
 
@@ -278,6 +312,23 @@ describe('EventStream', () => {
         data: { status: 'paid' },
         cursor: '6',
       });
+    });
+
+    it('does not call check() while the access of its reader could not be checked', async () => {
+      const check = jest.fn().mockResolvedValue({ events: [], cursor: '5' });
+      const { stream, reauthorize } = openable({ check }, { heartbeatMs: 310_000 });
+      reauthorize.mockResolvedValueOnce(failed);
+      await stream.open();
+      await settle(310_000);
+      const callsWhenUnchecked = check.mock.calls.length;
+
+      await settle(309_000);
+      expect(check.mock.calls.length).toBe(callsWhenUnchecked);
+
+      await settle(1000);
+      await settle(30_000);
+      expect(reauthorize).toHaveBeenCalledTimes(2);
+      expect(check.mock.calls.length).toBeGreaterThan(callsWhenUnchecked);
     });
 
     it('replays from the cursor of the request with its maxAgeMs, and asks again at once when there is more', async () => {

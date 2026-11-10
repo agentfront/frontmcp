@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
+import { EVENTS_ERROR_CODES } from '@frontmcp/protocol';
 
 import { createTestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { App, event, Plugin, type EventType, type FlowCtxOf, type FrontMcpConfigInput } from '../../common';
@@ -33,7 +34,15 @@ const orderCreated = event({
 });
 const auditLogged = event({ name: 'audit.logged', payloadSchema: { action: z.string() }, authorities: 'admin' });
 const webhookOnly = event({ name: 'webhook.only', payloadSchema: { id: z.string() }, delivery: ['webhook'] });
-const allEvents: EventType[] = [orderCreated, auditLogged, webhookOnly];
+const vaultAuthorize = jest.fn();
+/** Guarded twice: the admin profile, then its own `authorize()`. */
+const vaultOpened = event({
+  name: 'vault.opened',
+  payloadSchema: { vaultId: z.string() },
+  authorities: 'admin',
+  authorize: vaultAuthorize,
+});
+const allEvents: EventType[] = [orderCreated, auditLogged, webhookOnly, vaultOpened];
 
 interface StreamOverrides {
   name?: string;
@@ -249,6 +258,74 @@ describe('events:stream', () => {
     expect(notifications[notifications.length - 1]).toMatchObject({
       method: 'notifications/events/terminated',
       params: { error: { code: -32024, message: 'Forbidden', data: { reason: 'Access revoked' } } },
+    });
+  });
+
+  describe("re-running the event's authorize()", () => {
+    /** Advance past reauthorizeEveryMs and the heartbeat that checks again, then read what the stream queued. */
+    async function afterTheCheck(stream: EventStream, untilClosed: boolean): Promise<EventStreamNotification[]> {
+      await jest.advanceTimersByTimeAsync(325_000);
+      if (!untilClosed) return [];
+      const notifications: EventStreamNotification[] = [];
+      for await (const notification of stream) notifications.push(notification);
+      return notifications;
+    }
+
+    beforeEach(() => {
+      jest.useFakeTimers({ now: Date.now(), doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('is not called again within reauthorizeEveryMs, and is called with the arguments and the reader after it', async () => {
+      await opened({ name: 'vault.opened' });
+      expect(vaultAuthorize).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(299_000);
+      expect(vaultAuthorize).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(26_000);
+      expect(vaultAuthorize).toHaveBeenCalledTimes(2);
+      expect(vaultAuthorize).toHaveBeenLastCalledWith({}, expect.objectContaining({ sub: 'ada', roles: ['admin'] }));
+    });
+
+    it('ends the stream with terminated when it refuses', async () => {
+      const stream = await opened({ name: 'vault.opened' });
+      vaultAuthorize.mockRejectedValueOnce(new EventForbiddenError(EVENTS_ERROR_CODES, 'vault.opened', 'closed'));
+
+      const notifications = await afterTheCheck(stream, true);
+
+      expect(stream.isClosed).toBe(true);
+      expect(notifications[notifications.length - 1]).toMatchObject({
+        method: 'notifications/events/terminated',
+        params: { error: { code: -32024, message: 'Forbidden', data: { reason: 'Access revoked' } } },
+      });
+    });
+
+    it('keeps the stream open when it fails for another reason', async () => {
+      const stream = await opened({ name: 'vault.opened' });
+      vaultAuthorize.mockRejectedValueOnce(new Error('the upstream timed out'));
+
+      await afterTheCheck(stream, false);
+
+      expect(stream.isClosed).toBe(false);
+      expect(vaultAuthorize).toHaveBeenCalledTimes(2);
+    });
+
+    it('runs after the authorities, and not at all once they refuse the reader', async () => {
+      const stream = await opened({ name: 'vault.opened' });
+      await afterTheCheck(stream, false);
+      expect(vaultAuthorize).toHaveBeenCalledTimes(2);
+      const evaluate = jest.spyOn(scope.authoritiesEngine as never, 'evaluate' as never);
+      evaluate.mockResolvedValue({ granted: false, deniedBy: 'role revoked' } as never);
+
+      await afterTheCheck(stream, true);
+      evaluate.mockRestore();
+
+      expect(stream.isClosed).toBe(true);
+      expect(vaultAuthorize).toHaveBeenCalledTimes(2);
     });
   });
 

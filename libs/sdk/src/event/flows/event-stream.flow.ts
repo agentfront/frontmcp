@@ -22,6 +22,7 @@ import {
   readerSubscriptionOf,
   type EventReader,
 } from '../event-gates';
+import { reauthorizeSubscriber } from '../event-reauthorization';
 import type EventRegistry from '../event.registry';
 import { EventStream } from '../stream/event-stream';
 import { type EventStreams } from '../stream/event-streams';
@@ -182,11 +183,14 @@ export default class EventStreamFlow extends FlowBase<typeof name> {
       checkIntervalMs: config.poll.nextPollMs,
       checkMaxEvents: config.poll.maxEvents,
       reauthorizeEveryMs: config.subscriptions.reauthorizeEveryMs,
-      isStillAuthorized: () =>
-        assertEventAuthorities(this.scope, event, authInfo, subscriptionArguments, codes).then(
-          () => true,
-          () => false,
-        ),
+      reauthorize: () =>
+        reauthorizeSubscriber({
+          scope: this.scope,
+          event,
+          subscriber: reader.subscriber,
+          arguments: subscriptionArguments,
+          authInfo,
+        }),
       accessRevoked: { code: codes.forbidden, message: 'Forbidden', data: { reason: 'Access revoked' } },
       signal: this.input.signal,
       logger: this.logger,

@@ -15,6 +15,7 @@ import {
 } from '../../common';
 import { type EventReader } from '../event-gates';
 import { newEventId } from '../event-publisher';
+import { type EventReauthorization } from '../event-reauthorization';
 import { isInAudience } from '../flows/event-publish.flow';
 import { type BufferedEvent, type EventBuffer } from '../poll/event-buffer';
 
@@ -45,8 +46,8 @@ export interface EventStreamOptions {
   checkMaxEvents: number;
   /** How often the reader's access is checked again. */
   reauthorizeEveryMs: number;
-  /** Whether the reader may still read the event. */
-  isStillAuthorized: () => Promise<boolean>;
+  /** Check the reader again: its event's `authorities`, then its `authorize()`. */
+  reauthorize: () => Promise<EventReauthorization>;
   /** The error a stream whose reader lost access ends with. */
   accessRevoked: EventError;
   /** Ends the stream when the client cancels the request or disconnects. */
@@ -68,6 +69,10 @@ export class EventStream implements AsyncIterable<EventStreamNotification> {
   private closed = false;
   private cursor: string | null;
   private lastAuthorizedAt = Date.now();
+  /** The last check of the reader's access could not be made: nothing is delivered until one is. */
+  private accessUnchecked = false;
+  /** Published events were held back while the access was unchecked. */
+  private withheld = false;
   private heartbeatTimer?: ReturnType<typeof setInterval>;
   private checkTimer?: ReturnType<typeof setTimeout>;
 
@@ -113,6 +118,10 @@ export class EventStream implements AsyncIterable<EventStreamNotification> {
   /** Deliver a published occurrence, when it is for this stream's reader and arguments. */
   async offer(buffered: BufferedEvent): Promise<void> {
     if (this.closed) return;
+    if (this.accessUnchecked) {
+      this.withheld = true;
+      return;
+    }
     const occurrence = await this.occurrenceFor(buffered);
     if (!occurrence) return;
     this.cursor = this.options.buffer?.cursorAt(buffered.sequence) ?? null;
@@ -221,6 +230,10 @@ export class EventStream implements AsyncIterable<EventStreamNotification> {
 
   /** One turn of the `check()` loop: deliver what it found, report a gap, and schedule the next turn. */
   private async runCheck(): Promise<void> {
+    if (this.accessUnchecked) {
+      this.scheduleCheck(undefined);
+      return;
+    }
     const checked = await this.check();
     if (checked?.truncated) this.pushActive(true);
     if (checked) this.pushChecked(checked);
@@ -267,14 +280,30 @@ export class EventStream implements AsyncIterable<EventStreamNotification> {
     if (this.closed) return;
     const now = Date.now();
     if (now - this.lastAuthorizedAt > this.options.reauthorizeEveryMs) {
-      this.lastAuthorizedAt = now;
-      const allowed = await this.options.isStillAuthorized().catch(() => true);
-      if (!allowed) {
+      const check = await this.options
+        .reauthorize()
+        .catch((error: unknown): EventReauthorization => ({ outcome: 'failed', error }));
+      if (check.outcome === 'refused') {
         this.terminate(this.options.accessRevoked);
         return;
       }
+      if (check.outcome === 'failed') {
+        this.accessUnchecked = true;
+        this.options.logger.warn(`The access of stream ${this.subscription.id} could not be checked`, check.error);
+      } else {
+        this.lastAuthorizedAt = now;
+        this.resumeAfterCheck();
+      }
     }
     this.push(EVENTS_NOTIFICATIONS.heartbeat, { cursor: this.cursor });
+  }
+
+  /** Deliver again after a check that could not be made; held-back events are reported as a gap from the cursor. */
+  private resumeAfterCheck(): void {
+    if (!this.accessUnchecked) return;
+    this.accessUnchecked = false;
+    if (this.withheld) this.pushActive(true);
+    this.withheld = false;
   }
 
   /** Queue the confirmation of the stream, or of a gap in it, with the cursor delivery continues from. */
