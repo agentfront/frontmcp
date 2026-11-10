@@ -60,8 +60,8 @@ export async function assertWorkflowSchedules(workflows: readonly WorkflowEntry[
 /**
  * Starts a background run of each `trigger: 'schedule'` workflow at its scheduled times, with its `schedule.input`, as
  * the role `schedule:<workflow>`. Each schedule has a lease that one process holds, among the machines that share the
- * server's Redis or, without one, among the processes of this machine: a scheduled time starts one run, and a process
- * that takes the lease over starts one run for the times that passed meanwhile. A run that can't start is logged.
+ * server's Redis or, without one, among the processes of this machine that run from the same project root: a scheduled
+ * time starts one run, and a process that takes the lease over starts one run for the times that passed meanwhile. A run that can't start is logged.
  */
 export class WorkflowSchedules implements OnReady {
   private readonly runners = new Map<WorkflowEntry, DutyRunner>();
@@ -130,7 +130,8 @@ export class WorkflowSchedules implements OnReady {
     const { serverName, redis, logger } = this.options;
     const { input } = resolveWorkflowSchedule(workflow);
     const cron = await loadWorkflowSchedule(workflow);
-    const scope: LeaseScope = leaseStorageConfig(redis, 'schedule', 'cluster').type === 'redis' ? 'cluster' : 'machine';
+    const scope: LeaseScope =
+      leaseStorageConfig(redis, 'schedule', 'cluster').type === 'redis' ? 'cluster' : 'workspace';
     this.storage ??= openLeaseStore(leaseStorageConfig(redis, 'schedule', scope));
     return new DutyRunner({
       name: workflow.name,

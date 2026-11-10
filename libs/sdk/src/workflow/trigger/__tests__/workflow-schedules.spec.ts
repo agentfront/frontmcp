@@ -196,7 +196,7 @@ describe('WorkflowSchedules', () => {
     expect(second.runs.map((run) => run.at)).toEqual(['09:03:45', '09:04:00']);
   });
 
-  it('keeps one lease for every machine in Redis, and one per machine in the SQLite file without it', async () => {
+  it('keeps one lease for every machine in Redis, and one per project root in the SQLite file without it', async () => {
     const clustered = processWith([scheduled('digest')], { url: 'redis://cache.internal:6379' });
     const local = processWith([scheduled('rollup')]);
     await clustered.schedules.onReady();
@@ -206,7 +206,9 @@ describe('WorkflowSchedules', () => {
       ['redis', 'frontmcp:cluster:schedule:'],
       ['sqlite', 'frontmcp:schedule:'],
     ]);
-    expect(await store.keys('*')).toEqual(expect.arrayContaining(['reports:digest', 'reports:rollup']));
+    expect(await store.keys('*')).toEqual(
+      expect.arrayContaining(['reports:digest', expect.stringMatching(/^reports:rollup:[0-9a-f]{64}$/)]),
+    );
   });
 
   it('follows the workflows registered and unregistered later, and opens one lease store for all', async () => {
