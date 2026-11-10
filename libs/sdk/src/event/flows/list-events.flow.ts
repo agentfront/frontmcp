@@ -54,6 +54,7 @@ declare global {
 const name = 'events:list' as const;
 const { Stage } = FlowHooksOf<'events:list'>(name);
 
+/** Orders served events by name, so pages are stable. */
 function compareByName(left: { event: EventEntry }, right: { event: EventEntry }): number {
   if (left.event.name < right.event.name) return -1;
   return left.event.name > right.event.name ? 1 : 0;
@@ -69,6 +70,7 @@ function compareByName(left: { event: EventEntry }, right: { event: EventEntry }
 export default class ListEventsFlow extends FlowBase<typeof name> {
   logger = this.scopeLogger.child('ListEventsFlow');
 
+  /** Reads the cursor and the caller the listing is for. */
   @Stage('parseInput')
   async parseInput() {
     const { request, ctx } = this.input;
@@ -120,6 +122,7 @@ export default class ListEventsFlow extends FlowBase<typeof name> {
     this.state.set('events', discoverable);
   }
 
+  /** Answers one page of definitions, ordered by name, with the cursor of the next page. */
   @Stage('parseEvents')
   async parseEvents() {
     const sorted = [...this.state.required.events].sort(compareByName);

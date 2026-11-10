@@ -87,10 +87,12 @@ that app's tools do. An app that declares events cannot be a lazy app.
       "description": "Fires when an order is placed",
       "delivery": ["webhook"],
       "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": { "status": { "type": "string", "description": "Only orders in this status" } }
       },
       "payloadSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
           "orderId": { "type": "string" },
@@ -105,7 +107,8 @@ that app's tools do. An app that declares events cannot be a lazy app.
 }
 ```
 
-Each schema also names its JSON Schema dialect in `$schema`.
+A schema converted from Zod names its JSON Schema dialect in `$schema`. The input schema of an event that declares no
+`inputSchema` is written by hand and has no `$schema` (see Schemas).
 
 ## `@Event` Options
 
@@ -181,7 +184,9 @@ at startup. Subscriptions and delivery, which turn the modes on, are the other p
 
 - Events are ordered by name.
 - Answers come in pages of 40. A page that is not the last has a `nextCursor`, which the client sends back as `cursor`.
-  A `cursor` of `null`, or none, asks for the first page. A cursor the server did not issue is refused as invalid input.
+  A `cursor` of `null`, or none, asks for the first page. A cursor is base64-encoded JSON with an `offset`: one that
+  does not decode, whose offset is not a non-negative integer, or whose offset is past the end of the caller's list is
+  refused as invalid input. The server does not check that it issued the cursor.
 - Under protocol 2026-07-28 the result has `resultType: "complete"`. It carries no cache hints.
 - The request runs the hookable `events:list` flow, with the stages `parseInput`, `findEvents`,
   `filterByAvailability`, `filterByAuthorities`, `filterByDiscovery` and `parseEvents`. Hook it with `ListEventsHook`:
