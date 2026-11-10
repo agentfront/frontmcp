@@ -1,5 +1,5 @@
 import type { MetricsOptionsInterface } from '../../common/types/options/metrics';
-import { requireOptionalModule } from '../../scope/optional-dependency.util';
+import { loadCounterFactory } from '../../answer/answer-meter';
 
 /** The `/metrics` counters of event publishing and delivery, labelled `event`. */
 export const EVENT_COUNTERS = {
@@ -37,12 +37,6 @@ export interface EventMetrics {
   count(counter: EventCounter, eventName: string, by?: number): void;
 }
 
-/** The counter factory of `@frontmcp/observability`, which `/metrics` reads. */
-function loadCounterFactory(): CounterFactory {
-  return requireOptionalModule<{ createCounter: CounterFactory }>('@frontmcp/observability', () =>
-    require('@frontmcp/observability'),
-  ).createCounter;
-}
 
 /** The event counters of a server: recorded when `/metrics` is on, otherwise ignored. */
 export function createEventMetrics(
