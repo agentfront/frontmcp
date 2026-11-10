@@ -132,11 +132,11 @@ describe('Events subscriptions E2E', () => {
         expect.objectContaining({
           name: 'order.created',
           description: 'Fires when an order is placed',
-          delivery: ['poll', 'webhook'],
+          delivery: ['poll', 'push', 'webhook'],
           inputSchema: expect.objectContaining({ type: 'object' }),
           payloadSchema: expect.objectContaining({ required: ['orderId', 'status', 'total'] }),
         }),
-        expect.objectContaining({ name: 'ticket.updated', delivery: ['poll', 'webhook'] }),
+        expect.objectContaining({ name: 'ticket.updated', delivery: ['poll', 'push', 'webhook'] }),
       ]);
       expect((forAdmin.result?.['events'] as Array<{ name: string }>).map((definition) => definition.name)).toEqual([
         'audit.logged',

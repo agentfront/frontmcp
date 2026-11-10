@@ -16,7 +16,12 @@
  */
 import { isAnonymousSubject } from '@frontmcp/auth';
 import { internalZ as z } from '@frontmcp/lazy-zod';
-import { MCP_20260728_META, type LoggingLevel, type SubscriptionFilter } from '@frontmcp/protocol';
+import {
+  MCP_20260728_META,
+  StreamEventsRequestSchema,
+  type LoggingLevel,
+  type SubscriptionFilter,
+} from '@frontmcp/protocol';
 import { runRequestExclusive } from '@frontmcp/utils';
 
 import {
@@ -42,6 +47,7 @@ import {
   createSubscriptionStream,
   declaresProtocol20260728,
   dispatch20260728,
+  eventStreamFrames,
   isProtocol20260728Request,
   MCP_HEADERS,
   readHeader,
@@ -54,7 +60,7 @@ import { mcpRequestSurface } from '../mcp-handlers/mcp-surface';
 
 export const plan = {
   pre: ['parseInput', 'validate', 'router'],
-  execute: ['handleNotification', 'handleSubscriptions', 'handleMessage'],
+  execute: ['handleNotification', 'handleSubscriptions', 'handleEventStream', 'handleMessage'],
   post: [],
   finalize: ['cleanup'],
 } as const satisfies FlowPlan<string>;
@@ -92,7 +98,7 @@ const requestIdSchema = z.union([z.string(), z.number()]);
 export const stateSchema = z.object({
   /** Negotiated protocol version for this request. */
   version: z.string().optional(),
-  requestType: z.enum(['notification', 'subscriptions', 'message']).optional(),
+  requestType: z.enum(['notification', 'subscriptions', 'eventStream', 'message']).optional(),
   isAnonymous: z.boolean().default(true),
   /** Whether the client declared this revision itself (not served under it by default). */
   clientDeclaredRevision: z.boolean().optional(),
@@ -348,6 +354,10 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       return;
     }
 
+    if (body['method'] === 'events/stream' && this.scope.events?.performs('push')) {
+      this.state.set('requestType', 'eventStream');
+      return;
+    }
     this.state.set('requestType', body['method'] === 'subscriptions/listen' ? 'subscriptions' : 'message');
   }
 
@@ -440,6 +450,83 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       disposition: 'inline',
       headers: {
         // Tell reverse proxies not to buffer, or a quiet subscription looks dead.
+        'X-Accel-Buffering': 'no',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+      },
+    });
+  }
+
+  /**
+   * `events/stream` (MCP Events) owns its HTTP response like `subscriptions/listen`: the `events:stream` flow checks
+   * the request and opens the stream, which is then sent as SSE until the client disconnects or the server ends it.
+   */
+  @Stage('handleEventStream', {
+    filter: ({ state }) => state.required.requestType === 'eventStream',
+  })
+  async handleEventStream() {
+    const { request, response } = this.rawInput;
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const requestId = requestIdSchema.safeParse(body['id']);
+    if (!requestId.success) {
+      this.respond(errorResponse(400, { code: -32602, message: 'events/stream requires a string or number id' }, null));
+      return;
+    }
+    const streamRequest = StreamEventsRequestSchema.safeParse({ method: 'events/stream', params: body['params'] });
+    if (!streamRequest.success) {
+      const problem = streamRequest.error.issues[0]?.message ?? 'not an object';
+      const error = { code: -32602, message: `Invalid events/stream params: ${problem}` };
+      this.respond(errorResponse(400, error, requestId.data));
+      return;
+    }
+
+    const meta = ((body['params'] as { _meta?: Record<string, unknown> } | undefined)?._meta ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const clientInfo = toClientInfo(meta[MCP_20260728_META.clientInfo]);
+    if (clientInfo) {
+      const clientCapabilities = (meta[MCP_20260728_META.clientCapabilities] ?? {}) as ClientCapabilities;
+      const platformDetection = this.scope.metadata.transport?.platformDetection;
+      this.tryGetContext()?.setClientInfo(
+        clientInfo,
+        resolvePlatformType(clientInfo, clientCapabilities, platformDetection),
+      );
+    }
+
+    const auth = request[ServerRequestTokens.auth] as Authorization | undefined;
+    const authInfo = auth
+      ? { ...authInfoFromAuthorization(auth), sessionId: auth.session?.id ?? this.tryGetContext()?.sessionId }
+      : {};
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    (response as unknown as { on?: (event: string, cb: () => void) => void })?.on?.('close', abort);
+    const stdioSignal = this.stdioOrigin?.signal;
+    if (stdioSignal?.aborted) abort();
+    else stdioSignal?.addEventListener('abort', abort, { once: true });
+
+    let opened;
+    try {
+      opened = await this.scope.runFlowForOutput('events:stream', {
+        request: streamRequest.data,
+        ctx: { authInfo, surface: mcpRequestSurface(this.scope) },
+        requestId: requestId.data,
+        signal: controller.signal,
+      });
+    } catch (failure) {
+      const mapped = toJsonRpcError(failure);
+      this.respond(errorResponse(mapped.status, mapped.error, requestId.data));
+      return;
+    }
+
+    this.log.info('handleEventStream: stream opened', { subscriptionId: requestId.data });
+    this.respond({
+      kind: 'sse',
+      status: 200,
+      stream: eventStreamFrames(opened.stream, requestId.data),
+      contentType: 'text/event-stream',
+      disposition: 'inline',
+      headers: {
         'X-Accel-Buffering': 'no',
         'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',

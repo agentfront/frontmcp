@@ -26,6 +26,7 @@ import { normalizeEvent } from './event.utils';
 import { type EventBuffer } from './poll/event-buffer';
 import { type EventPollLeases } from './poll/event-poll-leases';
 import { type EventPublishEndpoint } from './publish-endpoint/event-publish-endpoint';
+import { type EventStreams } from './stream/event-streams';
 import { type EventSubscriptions } from './subscription/event-subscriptions';
 
 export interface EventRegistryInterface {
@@ -77,6 +78,9 @@ export default class EventRegistry
 
   /** The leases of poll subscriptions, on a server that performs the poll mode. */
   pollLeases?: EventPollLeases;
+
+  /** The open `events/stream` requests, on a server that performs the push mode. */
+  streams?: EventStreams;
 
   private readonly eventsByName = new Map<string, EventInstance>();
   private readonly enabledDeliveryModes = new Set<EventDeliveryMode>();

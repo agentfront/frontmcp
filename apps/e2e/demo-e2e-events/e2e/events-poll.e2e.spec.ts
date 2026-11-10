@@ -79,14 +79,14 @@ describe('Events poll E2E', () => {
     return result.events.map((occurrence) => occurrence.data['orderId']);
   }
 
-  it('lists the events as offered by poll and by webhook', async () => {
+  it('lists the events as offered by poll, by push and by webhook', async () => {
     const client = await connectAs('ada');
 
     const listed = await rpc(client, 'events/list', {});
 
     expect(listed.result?.['events']).toEqual([
-      expect.objectContaining({ name: 'order.created', delivery: ['poll', 'webhook'] }),
-      expect.objectContaining({ name: 'ticket.updated', delivery: ['poll', 'webhook'] }),
+      expect.objectContaining({ name: 'order.created', delivery: ['poll', 'push', 'webhook'] }),
+      expect.objectContaining({ name: 'ticket.updated', delivery: ['poll', 'push', 'webhook'] }),
     ]);
   });
 

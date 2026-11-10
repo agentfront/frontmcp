@@ -11,8 +11,9 @@ occurrences when no user is connected. This is MCP Events, the `io.modelcontextp
 which ChatGPT reads from the top-level `events` capability.
 
 This reference covers declaring events, what `events/list` answers, how a client subscribes by webhook with
-`events/subscribe` or reads with `events/poll`, and how the server publishes an event and delivers it. An event is
-listed once the server performs a delivery mode the event allows (see [Delivery Modes](#delivery-modes)).
+`events/subscribe`, reads with `events/poll` or holds a stream with `events/stream`, and how the server publishes an
+event and delivers it. An event is listed once the server performs a delivery mode the event allows (see
+[Delivery Modes](#delivery-modes)).
 
 ## When to Use This Skill
 
@@ -158,12 +159,12 @@ MCP Events has three delivery modes: `webhook` (the server POSTs each event to a
 event is offered in the modes the server performs, within the event's own `delivery` when it sets one
 (`scope.events.deliveryModesOf(entry)`).
 
-| Server performs   | Event's `delivery` | Offered in                     |
-| ----------------- | ------------------ | ------------------------------ |
-| `poll`, `webhook` | Not set            | `poll`, `webhook`              |
-| `poll`, `webhook` | `['poll']`         | `poll`                         |
-| `poll`            | `['webhook']`      | Not served: no mode is left    |
-| None              | Any                | No event is served (see below) |
+| Server performs           | Event's `delivery` | Offered in                     |
+| ------------------------- | ------------------ | ------------------------------ |
+| `poll`, `push`, `webhook` | Not set            | `poll`, `push`, `webhook`      |
+| `poll`, `push`, `webhook` | `['poll']`         | `poll`                         |
+| `poll`, `push`            | `['webhook']`      | Not served: no mode is left    |
+| None                      | Any                | No event is served (see below) |
 
 A server that performs no delivery mode serves no events: it does not advertise the capability, and `events/list`
 answers `-32601` (Method not found), as on a server without events. Declared events are still registered and checked
@@ -175,7 +176,10 @@ The server performs `poll` unless `events.poll.enabled` is `false`, on every run
 The server performs `webhook` when its auth signs callers in (any `auth.mode` other than `public`) and
 `events.webhook.enabled` is not `false`. A subscription belongs to a caller, so in public mode the server logs
 `Webhook event delivery is off: the server runs in public auth mode, so a subscription would have no owner.` and
-offers its events by poll only. `push` is not performed yet.
+offers its events by poll and push only.
+
+The server performs `push` unless `events.push.enabled` is `false`, except in a serverless deployment (see
+[Streaming](#streaming)).
 
 ## Who Sees an Event
 
@@ -854,6 +858,69 @@ Leases are in memory and never stored: after a restart, the next poll runs `onSu
 `buildResult` and `finalize`. `finalize` runs after a success or a failure: attach a hook that must see every poll to
 it with `Finally`. With `@frontmcp/observability`, each poll is traced as an `events/poll` span, ended in `finalize`.
 
+## Streaming
+
+A client that holds a connection gets events as they happen with `events/stream`, the push mode. One request is one
+subscription: it stays open, and the server sends notifications on it until the client cancels or disconnects.
+
+```json
+{ "jsonrpc": "2.0", "id": 1, "method": "events/stream", "params": { "name": "order.created", "cursor": null } }
+```
+
+The notifications of a stream, in order:
+
+| Notification                      | When                                                | `params`                                   |
+| --------------------------------- | --------------------------------------------------- | ------------------------------------------ |
+| `notifications/events/active`     | First, and again when a gap is found                | `{ cursor, truncated }`                    |
+| `notifications/events/event`      | For each occurrence the reader may receive          | The occurrence, with the `cursor` after it |
+| `notifications/events/heartbeat`  | Every `events.push.heartbeatMs` (25 seconds)        | `{ cursor }`                               |
+| `notifications/events/error`      | A `check()` failed; the stream stays open           | `{ error }`                                |
+| `notifications/events/terminated` | The server ends the subscription; the stream closes | `{ error }`                                |
+
+Every notification has `params._meta["io.modelcontextprotocol/subscriptionId"]`, the `id` of the `events/stream`
+request. When the server closes the stream, the request is answered with an empty result that has the same `_meta`.
+
+- **Streamable HTTP, protocol 2026-07-28**: the response of the POST is an SSE stream. The client sends the event
+  name in the `Mcp-Name` header, and ends the stream by closing the connection. The final frame is
+  `{ "id": 1, "result": { "resultType": "complete", "_meta": { ... } } }`.
+- **A session opened with `initialize`, and stdio**: the notifications are sent on the session. The client ends the
+  stream with `notifications/cancelled` for the request's `id`.
+- A refusal is a JSON-RPC error answer, and no stream opens. The checks and the rule for anonymous callers are those
+  of [`events/poll`](#who-may-poll), with `Unsupported` for an event that is not offered by push.
+- A `cursor` replays what the buffer of published events still holds after it (see
+  [Events that are published](#events-that-are-published)); `null`, or none, starts from now. The `cursor` of an
+  `event` or a `heartbeat` is the one to open the next stream, or to poll, from.
+- An event with `check()` is read by calling it when the stream opens and then at its `nextPollMs`
+  (`events.poll.nextPollMs` when it names none), at once while it answers `hasMore`.
+- A reader whose access the event's `authorities` no longer allow is ended with `terminated` and
+  `{ "code": -32024, "message": "Forbidden", "data": { "reason": "Access revoked" } }`. Access is checked again
+  every `subscriptions.reauthorizeEveryMs`.
+- A client that reads too slowly gets a gap, not memory growth: past 1000 waiting notifications, they are replaced by
+  one `active` with `truncated: true`.
+
+`onSubscribe(args, subscription)` runs when the stream opens, with `subscription.mode` `'push'`; when it throws, the
+request fails. `onUnsubscribe(args, subscription, 'closed')` runs when the stream ends. A caller may hold
+`subscriptions.maxPerPrincipal` streams open; one more is answered `ResourceExhausted`.
+
+The server performs the push mode unless `events.push.enabled` is `false`, except in a serverless deployment, where
+no process lives long enough to hold a stream.
+
+### Several processes
+
+A stream is held by one process. An event published on another process reaches it when the events store can relay:
+with `events.store.redis` and an auth mode that signs callers in, each process relays what it publishes to the
+others, which also keep it in their buffer for `events/poll`. Without it, a stream carries what its own process
+publishes, and the server logs at startup:
+`Event streams carry what this process publishes. With several processes, set events.store.redis so an event
+published on one reaches the streams the others hold.`
+
+### Hooks
+
+Opening a stream runs the hookable `events:stream` flow (`EventStreamHook`), with the stages `parseInput`,
+`resolveDialect`, `findEvent`, `resolveReader`, `checkEntryAuthorities`, `validateArguments`, `authorize`,
+`openStream` and `buildResult`. `scope.events.streams` is the server's `EventStreams` (`size`, `isRelayed`). With
+`@frontmcp/observability`, opening a stream is traced as an `events/stream` span.
+
 ## Capabilities
 
 A server that serves events advertises them in two places, on every transport (`initialize` over HTTP, SSE and stdio,
@@ -956,6 +1023,13 @@ The three lifetimes must satisfy `minTtlMs <= defaultTtlMs <= maxTtlMs` after de
 | `nextPollMs?` | `number`  | `30000` | The wait between two polls the server recommends |
 | `maxEvents?`  | `number`  | `100`   | The most occurrences one poll returns            |
 
+`events.push`:
+
+| Field          | Type      | Default | Notes                                                      |
+| -------------- | --------- | ------- | ---------------------------------------------------------- |
+| `enabled?`     | `boolean` | `true`  | `false` turns `events/stream` off                          |
+| `heartbeatMs?` | `number`  | `25000` | How often an open stream sends a heartbeat with its cursor |
+
 With `enabled: false`, the server logs `Events are disabled (events.enabled: false), so the 2 event(s) apps declare are
 not served.` and `scope.events` is `undefined`. Otherwise `scope.events` is the `EventRegistry`: `getEvents()`,
 `findByName(name)`, `servesEvents()`.
@@ -982,9 +1056,9 @@ options object. A class that extends plain `EventContext` is not checked, and it
 
 ## Methods of an Event
 
-`EventContext` declares optional methods, which `event()` takes beside its options. Subscriptions call `authorize`,
-`onSubscribe` and `onUnsubscribe`; publishing and polling call `match` and `transform`; polling calls `check`.
-`subscriber` is the owner of the
+`EventContext` declares optional methods, which `event()` takes beside its options. Every mode calls `authorize`,
+`onSubscribe` and `onUnsubscribe`; publishing, polling and streaming call `match` and `transform`; polling and
+streaming call `check`. `subscriber` is the owner of the
 subscription: `{ sub, iss?, tenantId?, roles, permissions, scopes, claims }`. `tenantId` is set when
 `authorities.claimsMapping.tenantId` names the claim that holds it.
 
@@ -1038,6 +1112,7 @@ functions) to get the same `this`.
 - [ ] The same `eventId` posted twice is delivered once
 - [ ] `events/poll` with a `null` cursor answers no events and a cursor; a poll from that cursor answers what was
       published since
+- [ ] `events/stream` sends `notifications/events/active` first, then an `event` for what is published
 
 ## Troubleshooting
 
@@ -1061,6 +1136,9 @@ functions) to get the same `this`.
 | `publish()` answers `matched: 0`                         | No subscription, `audience`, `match()`, or a suspended one                             | Check `events/subscribe` succeeded and what `match()` returns                           |
 | `events/poll` answers `truncated: true`                  | The server restarted, another process answered, or the cursor is older than the buffer | Continue from the cursor of the answer; read current state with a tool if a gap matters |
 | A poll misses events behind a load balancer              | Each process buffers what it published                                                 | Declare `check()` on the event, or use the webhook mode                                 |
+| A stream misses events published on another process      | Streams carry what their own process publishes                                         | Set `events.store.redis`, with an auth mode that signs callers in                       |
+| `events/stream` answers `-32601`                         | `events.push.enabled` is `false`, or the deployment is serverless                      | Use `events/poll` or the webhook mode there                                             |
+| A stream sends `active` with `truncated: true` again     | The client read too slowly, or `check()` reported a gap                                | Read current state with a tool if a gap matters; continue on the stream                 |
 | `events/poll` answers `Forbidden` to an anonymous caller | The server's auth signs callers in                                                     | Send a token; only a server in public auth mode lets anonymous callers poll             |
 | `EventNotRegisteredError` on `publish()`                 | The event is not in any app's `events`                                                 | List it, or publish the name that is registered                                         |
 | `InvalidEventPublishError` on `publish()`                | `data` does not match `payloadSchema`                                                  | Send the fields the schema declares                                                     |
@@ -1078,5 +1156,6 @@ functions) to get the same `this`.
 - [MCP Events, SEP-3415](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415)
 - [Standard Webhooks](https://www.standardwebhooks.com): the signature scheme of deliveries
 - Related skills: `decorators-guide`, `create-plugin-hooks` (`ListEventsHook`, `EventSubscribeHook`,
-  `EventUnsubscribeHook`, `EventPublishHook`, `EventPublishHttpHook`, `EventDeliverHook`, `EventPollHook`),
-  `frontmcp-authorities`, `frontmcp-channels`, `create-job`, `create-duty`, `create-workflow` (the request signature)
+  `EventUnsubscribeHook`, `EventPublishHook`, `EventPublishHttpHook`, `EventDeliverHook`, `EventPollHook`,
+  `EventStreamHook`), `frontmcp-authorities`, `frontmcp-channels`, `create-job`, `create-duty`, `create-workflow`
+  (the request signature)

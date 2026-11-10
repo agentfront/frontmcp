@@ -157,9 +157,11 @@ export default class EventSubscribeFlow extends FlowBase<typeof name> {
   @Stage('requireWebhookMode')
   async requireWebhookMode() {
     const requestedMode = this.input.request.params.delivery.mode ?? 'webhook';
-    const offeredModes = this.events.deliveryModesOf(this.state.required.event);
-    if (requestedMode !== 'webhook' || !offeredModes.includes('webhook')) {
-      throw new EventUnsupportedError(this.codes, 'deliveryMode', requestedMode, offeredModes);
+    const subscribableModes = this.events
+      .deliveryModesOf(this.state.required.event)
+      .filter((mode) => mode === 'webhook');
+    if (requestedMode !== 'webhook' || subscribableModes.length === 0) {
+      throw new EventUnsupportedError(this.codes, 'deliveryMode', requestedMode, subscribableModes);
     }
   }
 

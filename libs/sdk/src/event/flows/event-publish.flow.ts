@@ -17,6 +17,7 @@ import { EventNotRegisteredError } from '../../errors';
 import { EVENT_DIALECTS } from '../event-dialect';
 import { hasReauthorization, reauthorizeSubscriber } from '../event-reauthorization';
 import type EventRegistry from '../event.registry';
+import { type BufferedEvent } from '../poll/event-buffer';
 import { type EventSubscriptionRecord } from '../subscription/event-subscription.store';
 
 /** The largest body of one delivery, in bytes. A larger event is not delivered to that subscription. */
@@ -54,10 +55,11 @@ const stateSchema = z.object({
   context: z.any() as z.ZodType<EventContext>,
   subscriptions: z.array(z.any() as z.ZodType<EventSubscriptionRecord>),
   deliveries: z.array(z.any() as z.ZodType<EventDeliveryPlan>),
+  buffered: z.any() as z.ZodType<BufferedEvent | undefined>,
 });
 
 const plan = {
-  pre: ['validate', 'bufferOccurrence'],
+  pre: ['validate', 'bufferOccurrence', 'pushToStreams'],
   execute: [
     'loadSubscriptions',
     'dropInactive',
@@ -135,7 +137,14 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
   @Stage('bufferOccurrence')
   async bufferOccurrence() {
     const { occurrence, audience, subscriptionId } = this.input;
-    this.events.buffer?.append(occurrence, audience, subscriptionId);
+    this.state.set('buffered', this.events.buffer?.append(occurrence, audience, subscriptionId));
+  }
+
+  /** Push the occurrence on the open `events/stream` requests of its event: each stream filters for its reader. */
+  @Stage('pushToStreams')
+  async pushToStreams() {
+    const { buffered } = this.state;
+    if (buffered) await this.events.streams?.publish(buffered);
   }
 
   /** Load the subscriptions of the event, or the one a targeted publish names. */

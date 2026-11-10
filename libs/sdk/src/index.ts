@@ -420,6 +420,9 @@ export type {
   EventBuffer,
   EventPollLeases,
   EventReader,
+  EventStream,
+  EventStreamNotification,
+  EventStreams,
 } from './event';
 export { EVENTS_EXTENSION_ID } from '@frontmcp/protocol';
 export type { EventDefinition, EventDeliveryMode, EventOccurrence } from '@frontmcp/protocol';
@@ -620,6 +623,8 @@ export const EventPublishHttpHook = /* @__PURE__ */ FlowHooksOf('events:publish-
 export type { default as EventPublishHttpFlow } from './event/flows/event-publish-http.flow';
 export const EventPollHook = /* @__PURE__ */ FlowHooksOf('events:poll');
 export type { default as EventPollFlow } from './event/flows/event-poll.flow';
+export const EventStreamHook = /* @__PURE__ */ FlowHooksOf('events:stream');
+export type { default as EventStreamFlow } from './event/flows/event-stream.flow';
 
 // Built-in flows no other export reaches. Exporting them puts their `ExtendFlows` entries in the published type graph,
 // so `FlowHooksOf()`, `FlowCtxOf` and `@Flow` accept every flow name FrontMCP runs.

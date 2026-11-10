@@ -16,6 +16,8 @@ function publishEndpoint() {
   return publishAsAdmin ? { enabled: true, authorities: 'admin' } : undefined;
 }
 
+const heartbeatMs = parseInt(process.env['EVENTS_HEARTBEAT_MS'] ?? '25000', 10);
+
 @FrontMcp({
   info: { name: 'Demo E2E Events', version: '0.1.0' },
   apps: [EventsApp],
@@ -39,6 +41,8 @@ function publishEndpoint() {
     // The receiver of the tests listens on 127.0.0.1 over http, which only this test option accepts
     webhook: { unsafeAllowLocalCallbacks: true, delivery: { backoffMs } },
     publishEndpoint: publishEndpoint(),
+    // A test of the heartbeat of a stream shortens it
+    push: { heartbeatMs },
   },
 })
 export default class Server {}

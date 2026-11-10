@@ -85,7 +85,7 @@ describe('events/poll', () => {
       return { client, initialized, close: inMemory.close };
     }
 
-    it('advertises events on a public server, which offers them by poll', async () => {
+    it('advertises events on a public server, which offers them by poll and by push', async () => {
       const { client, initialized, close } = await openSession();
       const capabilities = initialized.result?.['capabilities'] as Record<string, unknown>;
 
@@ -93,7 +93,7 @@ describe('events/poll', () => {
 
       expect(capabilities['events']).toEqual({});
       expect(listed.result?.['events']).toEqual([
-        expect.objectContaining({ name: 'order.shipped', delivery: ['poll'] }),
+        expect.objectContaining({ name: 'order.shipped', delivery: ['poll', 'push'] }),
       ]);
       await close();
     });
@@ -189,7 +189,7 @@ describe('events/poll', () => {
       const disabled = await createTestFetchServer({
         info: { name: 'events-poll-off', version: '1.0.0' },
         apps: [ShopApp],
-        events: { poll: { enabled: false } },
+        events: { poll: { enabled: false }, push: { enabled: false } },
       });
 
       expect(schemasOf(scopeOf(server))).toContain(PollEventsRequestSchema);

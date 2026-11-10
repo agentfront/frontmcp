@@ -9,6 +9,7 @@ import {
   EventPollHook,
   EventPublishHook,
   EventPublishHttpHook,
+  EventStreamHook,
   EventSubscribeHook,
   EventUnsubscribeHook,
   HttpHook,
@@ -183,6 +184,12 @@ export class EveryExportRejectsAParameterItsCtxDoesNotSatisfy {
   // @ts-expect-error the ctx has no notAField
   @EventPollHook.Will('readEvents')
   eventPoll(ctx: NotInAnyCtx) {
+    return ctx;
+  }
+
+  // @ts-expect-error the ctx has no notAField
+  @EventStreamHook.Will('openStream')
+  eventStream(ctx: NotInAnyCtx) {
     return ctx;
   }
 }

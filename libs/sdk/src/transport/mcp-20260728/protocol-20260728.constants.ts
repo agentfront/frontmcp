@@ -52,6 +52,7 @@ export const NAME_FROM_PARAMS_NAME = [
   'events/subscribe',
   'events/unsubscribe',
   'events/poll',
+  'events/stream',
 ];
 
 /** Methods whose `Mcp-Name` header is sourced from `params.uri`. */
