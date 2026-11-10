@@ -120,6 +120,11 @@ describe('ObservabilityPlugin', () => {
     it('_listEventsWill', () => plugin._listEventsWill(emptyCtx));
     it('_listEventsDidFilter', () => plugin._listEventsDidFilter(emptyCtx));
     it('_listEventsDone', () => plugin._listEventsDone(emptyCtx));
+    it('_eventSubscribeWill', () => plugin._eventSubscribeWill(emptyCtx));
+    it('_eventSubscribeDidVerify', () => plugin._eventSubscribeDidVerify(emptyCtx));
+    it('_eventSubscribeDone', () => plugin._eventSubscribeDone(emptyCtx));
+    it('_eventUnsubscribeWill', () => plugin._eventUnsubscribeWill(emptyCtx));
+    it('_eventUnsubscribeDone', () => plugin._eventUnsubscribeDone(emptyCtx));
 
     // Skills hooks
     it('_skillSearchWill', () => plugin._skillSearchWill(emptyCtx));
@@ -278,6 +283,11 @@ describe('ObservabilityPlugin', () => {
       plugin._listEventsWill(noop);
       plugin._listEventsDidFilter(noop);
       plugin._listEventsDone(noop);
+      plugin._eventSubscribeWill(noop);
+      plugin._eventSubscribeDidVerify(noop);
+      plugin._eventSubscribeDone(noop);
+      plugin._eventUnsubscribeWill(noop);
+      plugin._eventUnsubscribeDone(noop);
 
       // Skills
       plugin._skillSearchWill(noop);

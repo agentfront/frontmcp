@@ -14,6 +14,7 @@ import type ProviderRegistry from '../provider/provider.registry';
 import { RegistryAbstract, type RegistryBuildMapResult } from '../regsitry';
 import { EventInstance } from './event.instance';
 import { normalizeEvent } from './event.utils';
+import { type EventSubscriptions } from './subscription/event-subscriptions';
 
 export interface EventRegistryInterface {
   getEvents(): EventEntry[];
@@ -40,6 +41,9 @@ export default class EventRegistry
 
   /** The server's `events` configuration, with its defaults applied. */
   readonly config: EventsConfig;
+
+  /** The stored subscriptions, on a server that delivers by webhook. */
+  subscriptions?: EventSubscriptions;
 
   private readonly eventsByName = new Map<string, EventInstance>();
   private readonly enabledDeliveryModes = new Set<EventDeliveryMode>();

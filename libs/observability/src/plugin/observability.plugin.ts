@@ -3,6 +3,8 @@ import { trace } from '@opentelemetry/api';
 import {
   AgentCallHook,
   DynamicPlugin,
+  EventSubscribeHook,
+  EventUnsubscribeHook,
   FlowHooksOf,
   FRONTMCP_CONTEXT,
   FRONTMCP_LOGGER,
@@ -599,6 +601,31 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @ListEventsHook.Did('parseEvents', { priority: 1000 })
   _listEventsDone(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+  }
+
+  @EventSubscribeHook.Will('parseInput', { priority: -1000 })
+  _eventSubscribeWill(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowWillStart('events/subscribe', this.tracingOpts, ctx);
+  }
+
+  @EventSubscribeHook.Did('verifyCallback', { priority: 1000 })
+  _eventSubscribeDidVerify(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowStage('verifyCallback', ctx);
+  }
+
+  @EventSubscribeHook.Did('buildResult', { priority: 1000 })
+  _eventSubscribeDone(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+  }
+
+  @EventUnsubscribeHook.Will('parseInput', { priority: -1000 })
+  _eventUnsubscribeWill(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowWillStart('events/unsubscribe', this.tracingOpts, ctx);
+  }
+
+  @EventUnsubscribeHook.Did('buildResult', { priority: 1000 })
+  _eventUnsubscribeDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
 

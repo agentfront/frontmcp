@@ -144,10 +144,26 @@ describe('event metadata', () => {
 
 describe('events configuration', () => {
   const server = { info: { name: 'events-config', version: '1.0.0' }, apps: [] };
+  const subscriptions = {
+    defaultTtlMs: 3_600_000,
+    maxTtlMs: 86_400_000,
+    minTtlMs: 60_000,
+    allowNoExpiry: false,
+    maxPerPrincipal: 100,
+  };
+  const webhook = {
+    enabled: true,
+    allowedCallbacks: [],
+    unsafeAllowLocalCallbacks: false,
+    verification: { cacheTtlMs: 3_600_000, timeoutMs: 10_000 },
+    rotationGraceMs: 300_000,
+  };
+  const defaults = { compat: 'auto', subscriptions, webhook };
 
-  it('defaults compat to auto', () => {
-    expect(eventsConfigSchema.parse({})).toEqual({ compat: 'auto' });
+  it('defaults compat to auto, and the subscription and webhook settings', () => {
+    expect(eventsConfigSchema.parse({})).toEqual(defaults);
     expect(eventsConfigSchema.parse({ enabled: false, compat: 'sketch' })).toEqual({
+      ...defaults,
       enabled: false,
       compat: 'sketch',
     });
@@ -161,15 +177,127 @@ describe('events configuration', () => {
 
   it('is part of the @FrontMcp configuration', () => {
     expect(frontMcpMetadataSchema.parse({ ...server, events: { enabled: true } }).events).toEqual({
+      ...defaults,
       enabled: true,
-      compat: 'auto',
     });
     expect(frontMcpMetadataSchema.parse(server).events).toBeUndefined();
     expect(frontMcpMetadataSchema.safeParse({ ...server, events: { compat: 'legacy' } }).success).toBe(false);
   });
 
   it('is kept by the CLI configuration parser', () => {
-    expect(parseFrontMcpConfigLite({ ...server, events: { compat: 'sketch' } }).events).toEqual({ compat: 'sketch' });
+    expect(parseFrontMcpConfigLite({ ...server, events: { compat: 'sketch' } }).events).toEqual({
+      ...defaults,
+      compat: 'sketch',
+    });
     expect(() => parseFrontMcpConfigLite({ ...server, events: { compat: 'legacy' } } as never)).toThrow();
+  });
+
+  it('gives the same settings when its own output is parsed again', () => {
+    const parsed = eventsConfigSchema.parse({ subscriptions: { maxPerPrincipal: 5 }, webhook: { enabled: false } });
+
+    expect(eventsConfigSchema.parse(parsed)).toEqual(parsed);
+  });
+
+  describe('subscriptions', () => {
+    it('keeps the lifetimes and limits a server sets', () => {
+      const parsed = eventsConfigSchema.parse({
+        subscriptions: { defaultTtlMs: 600_000, maxTtlMs: 1_200_000, minTtlMs: 30_000, maxPerPrincipal: 5 },
+      });
+
+      expect(parsed.subscriptions).toEqual({
+        defaultTtlMs: 600_000,
+        maxTtlMs: 1_200_000,
+        minTtlMs: 30_000,
+        allowNoExpiry: false,
+        maxPerPrincipal: 5,
+      });
+    });
+
+    it.each([
+      ['a default above the maximum', { defaultTtlMs: 7_200_000, maxTtlMs: 3_600_000 }],
+      ['a maximum below the built-in default', { maxTtlMs: 600_000 }],
+      ['a minimum above the default', { minTtlMs: 7_200_000 }],
+    ])('refuses %s, naming the three lifetimes', (_label, lifetimes) => {
+      const result = eventsConfigSchema.safeParse({ subscriptions: lifetimes });
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].message).toBe(
+        'events.subscriptions needs minTtlMs <= defaultTtlMs <= maxTtlMs; set the three together',
+      );
+    });
+
+    it.each([
+      ['a zero lifetime', { defaultTtlMs: 0 }],
+      ['a fractional lifetime', { maxTtlMs: 1000.5 }],
+      ['a limit of no subscriptions', { maxPerPrincipal: 0 }],
+    ])('refuses %s', (_label, value) => {
+      expect(eventsConfigSchema.safeParse({ subscriptions: value }).success).toBe(false);
+    });
+
+    it('allows subscriptions without expiry only with a store that outlives the process', () => {
+      const allowNoExpiry = { subscriptions: { allowNoExpiry: true } };
+      const refused = eventsConfigSchema.safeParse(allowNoExpiry);
+
+      expect(refused.success).toBe(false);
+      expect(refused.error?.issues[0].message).toBe(
+        'events.subscriptions.allowNoExpiry needs events.store.redis or events.store.sqlite',
+      );
+      expect(
+        eventsConfigSchema.safeParse({ ...allowNoExpiry, store: { sqlite: { path: 'events.sqlite' } } }).success,
+      ).toBe(true);
+      expect(eventsConfigSchema.safeParse({ ...allowNoExpiry, store: { redis: { host: 'localhost' } } }).success).toBe(
+        true,
+      );
+      expect(eventsConfigSchema.safeParse({ ...allowNoExpiry, store: { keyPrefix: 'app:' } }).success).toBe(false);
+    });
+  });
+
+  describe('store', () => {
+    it('takes a SQLite file with a path, or Redis, and a key prefix', () => {
+      const parsed = eventsConfigSchema.parse({
+        store: { sqlite: { path: 'events.sqlite' }, keyPrefix: 'app:events:' },
+      });
+
+      expect(parsed.store).toMatchObject({ sqlite: { path: 'events.sqlite' }, keyPrefix: 'app:events:' });
+    });
+
+    it('refuses SQLite without a path, an empty key prefix, and both backends at once', () => {
+      expect(eventsConfigSchema.safeParse({ store: { sqlite: {} } }).success).toBe(false);
+      expect(eventsConfigSchema.safeParse({ store: { keyPrefix: '' } }).success).toBe(false);
+
+      const both = eventsConfigSchema.safeParse({
+        store: { sqlite: { path: 'events.sqlite' }, redis: { host: 'localhost' } },
+      });
+      expect(both.success).toBe(false);
+      expect(both.error?.issues[0].message).toBe('events.store takes redis or sqlite, not both');
+    });
+  });
+
+  describe('webhook', () => {
+    it('keeps what a server sets, and defaults the rest', () => {
+      const parsed = eventsConfigSchema.parse({
+        webhook: {
+          enabled: false,
+          allowedCallbacks: ['https://hooks.example.com/mcp/'],
+          unsafeAllowLocalCallbacks: true,
+          verification: { timeoutMs: 2000 },
+          rotationGraceMs: 60_000,
+        },
+      });
+
+      expect(parsed.webhook).toEqual({
+        enabled: false,
+        allowedCallbacks: ['https://hooks.example.com/mcp/'],
+        unsafeAllowLocalCallbacks: true,
+        verification: { cacheTtlMs: 3_600_000, timeoutMs: 2000 },
+        rotationGraceMs: 60_000,
+      });
+    });
+
+    it('refuses an allowed callback that is not a URL, and durations that are not positive', () => {
+      expect(eventsConfigSchema.safeParse({ webhook: { allowedCallbacks: ['/hooks/'] } }).success).toBe(false);
+      expect(eventsConfigSchema.safeParse({ webhook: { rotationGraceMs: 0 } }).success).toBe(false);
+      expect(eventsConfigSchema.safeParse({ webhook: { verification: { cacheTtlMs: -1 } } }).success).toBe(false);
+    });
   });
 });

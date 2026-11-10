@@ -10,6 +10,23 @@ import { registerEventCapabilities } from '../event-scope.helper';
 import EventRegistry from '../event.registry';
 
 const payloadSchema = { id: z.string() };
+const configDefaults = {
+  compat: 'auto',
+  subscriptions: {
+    defaultTtlMs: 3_600_000,
+    maxTtlMs: 86_400_000,
+    minTtlMs: 60_000,
+    allowNoExpiry: false,
+    maxPerPrincipal: 100,
+  },
+  webhook: {
+    enabled: true,
+    allowedCallbacks: [],
+    unsafeAllowLocalCallbacks: false,
+    verification: { cacheTtlMs: 3_600_000, timeoutMs: 10_000 },
+    rotationGraceMs: 300_000,
+  },
+};
 
 @Provider({ name: 'order-book' })
 class OrderBook {}
@@ -80,7 +97,7 @@ describe('EventRegistry', () => {
     });
 
     it('applies the defaults of the events configuration', () => {
-      expect(registryOf(scope).config).toEqual({ compat: 'auto' });
+      expect(registryOf(scope).config).toEqual(configDefaults);
     });
 
     it("runs an event no app's providers are given for with its own providers", async () => {
@@ -89,7 +106,7 @@ describe('EventRegistry', () => {
         scope.providers,
         [standalone],
         registryOf(scope).owner,
-        { compat: 'auto' },
+        registryOf(scope).config,
         new Map(),
       );
       await registry.ready;
@@ -113,7 +130,7 @@ describe('EventRegistry', () => {
 
       expect(registryOf(scope).hasAny()).toBe(false);
       expect(registryOf(scope).getEvents()).toEqual([]);
-      expect(registryOf(scope).config).toEqual({ enabled: true, compat: 'sketch' });
+      expect(registryOf(scope).config).toEqual({ ...configDefaults, enabled: true, compat: 'sketch' });
       expect(registryOf(scope).servesEvents()).toBe(false);
       await scope.dispose();
     });
