@@ -36,6 +36,7 @@ const configDefaults = {
     },
     rotationGraceMs: 300_000,
   },
+  publishEndpoint: { enabled: false, path: '/events/publish' },
 };
 
 @Provider({ name: 'order-book' })

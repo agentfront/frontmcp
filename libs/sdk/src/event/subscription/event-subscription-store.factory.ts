@@ -56,6 +56,23 @@ function storageConfigOf(options: EventSubscriptionStoreOptions): StorageConfig 
   return { type: 'redis', redis: { config: { host, port, password, db, tls } } };
 }
 
+/** Open the storage of one backend under a key prefix. */
+async function openStorage(config: ReturnType<typeof storageConfigOf>, keyPrefix: string): Promise<RootStorage> {
+  try {
+    return await createStorage({ ...config, prefix: keyPrefix, fallback: 'error' });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new EventSubscriptionStoreError(`the ${config.type} store cannot be opened: ${reason}`);
+  }
+}
+
+/** Open the storage `events.store` names without a subscription store on it, for a server that keeps none. */
+export function openEventStorage(
+  options: Pick<EventSubscriptionStoreOptions, 'redis' | 'sqlite' | 'keyPrefix'> = {},
+): Promise<RootStorage> {
+  return openStorage(storageConfigOf(options), options.keyPrefix ?? 'mcp:events:');
+}
+
 /** Open the subscription store: memory by default, `events.store.redis` or `events.store.sqlite` when configured. */
 export async function createEventSubscriptionStore(
   options: EventSubscriptionStoreOptions = {},
@@ -71,13 +88,7 @@ export async function createEventSubscriptionStore(
     );
   }
 
-  let storage: RootStorage;
-  try {
-    storage = await createStorage({ ...config, prefix: keyPrefix, fallback: 'error' });
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new EventSubscriptionStoreError(`the ${config.type} store cannot be opened: ${reason}`);
-  }
+  const storage = await openStorage(config, keyPrefix);
 
   logger?.info('Event subscriptions are stored', { type: config.type, encrypted: secret !== undefined });
   return {

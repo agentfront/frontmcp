@@ -5,6 +5,7 @@ import {
   DynamicPlugin,
   EventDeliverHook,
   EventPublishHook,
+  EventPublishHttpHook,
   EventSubscribeHook,
   EventUnsubscribeHook,
   FlowHooksOf,
@@ -643,6 +644,24 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @EventPublishHook.Did('buildResult', { priority: 1000 })
   _eventPublishDone(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+  }
+
+  /** Starts the span of a request to the HTTP publish endpoint. */
+  @EventPublishHttpHook.Will('checkIpFilter', { priority: -1000 })
+  _eventPublishHttpWill(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowWillStart('events/publish-http', this.tracingOpts, ctx);
+  }
+
+  /** Marks on the span that the endpoint knows its caller. */
+  @EventPublishHttpHook.Did('authenticate', { priority: 1000 })
+  _eventPublishHttpDidAuthenticate(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowStage('authenticate', ctx);
+  }
+
+  /** Ends the span, however the request ended. */
+  @EventPublishHttpHook.Finally('finalize', { priority: 1000 })
+  _eventPublishHttpDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
 

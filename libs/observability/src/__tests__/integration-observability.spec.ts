@@ -362,6 +362,7 @@ describe('Integration: Generic flows (skills, lists, OAuth, elicitation)', () =>
     'events/subscribe',
     'events/unsubscribe',
     'events/publish',
+    'events/publish-http',
     'events/deliver',
     'skills/search',
     'skills/load',

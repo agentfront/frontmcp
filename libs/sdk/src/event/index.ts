@@ -16,7 +16,7 @@ export type {
   EventCallbackVerificationRequest,
   EventCallbackVerifierOptions,
 } from './subscription/event-callback-verifier';
-export { createEventSubscriptionStore } from './subscription/event-subscription-store.factory';
+export { createEventSubscriptionStore, openEventStorage } from './subscription/event-subscription-store.factory';
 export type {
   EventSubscriptionStoreOptions,
   EventSubscriptionStoreResult,
@@ -54,3 +54,12 @@ export { ScopeEventPublisher } from './event-publisher';
 export { SUSPEND_AFTER_FAILURES } from './flows/event-deliver.flow';
 export { EVENT_DELIVERY_MAX_BYTES, isInAudience } from './flows/event-publish.flow';
 export type { EventDeliveryPlan } from './flows/event-publish.flow';
+export { EVENT_PUBLISH_MAX_BODY_BYTES } from './flows/event-publish-http.flow';
+export { enablePublishEndpoint } from './publish-endpoint/event-publish-endpoint';
+export type { EnablePublishEndpointArgs, EventPublishEndpoint } from './publish-endpoint/event-publish-endpoint';
+export {
+  EventPublishIdempotency,
+  PUBLISH_CLAIM_SECONDS,
+  PUBLISH_IDEMPOTENCY_WINDOW_SECONDS,
+} from './publish-endpoint/event-publish-idempotency';
+export type { EventPublishClaim } from './publish-endpoint/event-publish-idempotency';

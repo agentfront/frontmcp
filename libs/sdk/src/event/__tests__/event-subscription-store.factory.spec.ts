@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { createStorage, mkdtemp, rm } from '@frontmcp/utils';
 
 import { EventSubscriptionStoreError } from '../../errors';
-import { createEventSubscriptionStore } from '../subscription/event-subscription-store.factory';
+import { createEventSubscriptionStore, openEventStorage } from '../subscription/event-subscription-store.factory';
 
 jest.mock('@frontmcp/utils', () => {
   const actual = jest.requireActual('@frontmcp/utils');
@@ -101,5 +101,38 @@ describe('createEventSubscriptionStore', () => {
     jest.mocked(createStorage).mockRejectedValueOnce('storage offline');
 
     await expect(createEventSubscriptionStore()).rejects.toThrow('the memory store cannot be opened: storage offline');
+  });
+});
+
+describe('openEventStorage', () => {
+  it('opens memory storage under the default prefix without a store configured', async () => {
+    const storage = await openEventStorage();
+
+    expect(storage.prefix).toBe('mcp:events:');
+    await storage.set('published:1', 'kept');
+    expect(await storage.get('published:1')).toBe('kept');
+    await storage.disconnect();
+  });
+
+  it('opens the SQLite file events.store names, without asking for a secret', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'events-storage-'));
+
+    const storage = await openEventStorage({
+      sqlite: { path: path.join(directory, 'events.sqlite') },
+      keyPrefix: 'spec:',
+    });
+
+    expect(storage.prefix).toBe('spec:');
+    await storage.disconnect();
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it('says so when the store cannot be opened', async () => {
+    jest.mocked(createStorage).mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
+
+    const opening = openEventStorage({ redis: { provider: 'redis', host: 'redis.internal', port: 6379 } as never });
+
+    await expect(opening).rejects.toThrow(EventSubscriptionStoreError);
+    await expect(opening).rejects.toThrow('the redis store cannot be opened: connect ECONNREFUSED');
   });
 });

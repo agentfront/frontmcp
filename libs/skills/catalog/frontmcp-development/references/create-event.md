@@ -422,6 +422,8 @@ class PlaceOrderTool extends ToolContext {
 - Outside a context, use `scope.events.publisher`. In a provider, a duty or a worker, inject it with the
   `EVENT_PUBLISHER` token: `this.get(EVENT_PUBLISHER)`.
 - On a server that performs no delivery mode, `publish()` answers `matched: 0`.
+- A service that does not link the SDK publishes with an HTTP request: see
+  [Publishing over HTTP](#publishing-over-http).
 
 | Option            | Type                                          | Default                         | Notes                                                       |
 | ----------------- | --------------------------------------------- | ------------------------------- | ----------------------------------------------------------- |
@@ -472,6 +474,155 @@ export const orderCreated = event({
   },
 });
 ```
+
+## Publishing over HTTP
+
+Another service (a backend, a queue consumer, a cron container) publishes an event with one `POST`, without linking
+the SDK. The endpoint is off until `events.publishEndpoint.enabled` is `true`:
+
+```typescript
+@FrontMcp({
+  info: { name: 'shop', version: '1.0.0' },
+  apps: [OrdersApp],
+  events: { publishEndpoint: { enabled: true, secret: process.env['EVENTS_PUBLISH_SECRET'] } },
+})
+class ShopServer {}
+```
+
+```bash
+body='{"name":"order.created","data":{"orderId":"o-1","status":"paid","total":42}}'
+timestamp=$(date +%s)
+signature=$(printf '%s.%s' "$timestamp" "$body" | openssl dgst -sha256 -hmac "$EVENTS_PUBLISH_SECRET" -r | cut -d' ' -f1)
+curl -X POST https://mcp.example.com/events/publish \
+  -H 'Content-Type: application/json' \
+  -H "X-FrontMCP-Timestamp: $timestamp" \
+  -H "X-FrontMCP-Signature: v1=$signature" \
+  --data-binary "$body"
+```
+
+The answer is `202` with what `publish()` returns: `{ "eventId": "evt_…", "matched": 1 }`. The request goes through the
+same `EventPublisher.publish()` as `this.events.publish()`, so the `events:publish` flow and its hooks run for it.
+
+| Body field        | Type                                          | Notes                                                              |
+| ----------------- | --------------------------------------------- | ------------------------------------------------------------------ |
+| `name`            | `string`                                      | Required. The name of a registered event                           |
+| `data`            | `object`                                      | Required. Validated against the event's `payloadSchema`            |
+| `eventId?`        | `string`                                      | 1 to 255 visible ASCII characters, no space. See Repeated requests |
+| `timestamp?`      | `string`                                      | A date `new Date()` reads, such as `2026-10-02T12:00:00Z`          |
+| `audience?`       | `{ sub?, tenantId?, roles?: { any?, all? } }` | As the `audience` option of `publish()`                            |
+| `subscriptionId?` | `string`                                      | As the `subscriptionId` option of `publish()`                      |
+
+A key the endpoint does not know is refused with `400`, in the body, in `audience` and in `audience.roles`: a
+misspelled `audience` never turns into a publish to everyone.
+
+The path is `events.publishEndpoint.path` (`/events/publish`), at the root of the server, not under the MCP entry
+path. On a `splitByApp` server each app serves its own endpoint under its route base (`/billing/events/publish`), for
+the events of that app. The endpoint answers `POST` only.
+
+### Who may publish
+
+`events.publishEndpoint.secret` decides which of two ways the endpoint knows its callers:
+
+- **With `secret`** (at least 32 characters): every request is signed with it, exactly as a request to a workflow
+  webhook is (see `create-workflow`). `X-FrontMCP-Timestamp` is the time of signing in Unix seconds.
+  `X-FrontMCP-Signature` is `v1=` and the hex HMAC-SHA256, keyed with the secret, of the timestamp, a `.`, and the
+  body's bytes exactly as sent. The server refuses a timestamp more than 5 minutes from its clock, either way, and a
+  signature it already accepted: to send a request again, sign it again. It remembers accepted signatures in its own
+  process.
+- **Without `secret`**: the caller presents the bearer credentials of the MCP endpoint in the `Authorization` header,
+  which the same `session:verify` flow verifies. An anonymous caller is refused, also on a server whose auth lets
+  anonymous callers in. With `events.publishEndpoint.authorities`, the caller must satisfy that rule too. It is
+  evaluated with the request body as the rule's input, so a rule can read `input.name`.
+
+Without `secret` and without `authorities`, every signed-in caller may publish every event, to any `audience`. The
+server logs a warning at startup: `POST /events/publish lets every signed-in caller publish every event. ...`. Set
+`authorities` unless every signed-in caller is trusted to publish. This rule lets a caller publish only the event its
+token names in the `publishes` claim:
+
+```typescript
+events: {
+  publishEndpoint: {
+    enabled: true,
+    authorities: { attributes: { conditions: [{ path: 'input.name', op: 'eq', value: { fromClaims: 'publishes' } }] } },
+  },
+},
+```
+
+The server refuses to start when the endpoint could not tell who publishes, or cannot listen on its path. The first,
+fifth and sixth of these are an `EventPublishEndpointError` (`EVENT_PUBLISH_ENDPOINT`), the second and third are
+refused when `@FrontMcp` validates its options, and the fourth is an `AuthConfigurationError`:
+
+| Configuration                                                                                          | Message                                                                                              |
+| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `enabled: true`, no `secret`, and `auth.mode` is `public`                                              | `Event publish endpoint: the server runs in public auth mode, so nothing tells who publishes. ...`   |
+| `secret` shorter than 32 characters                                                                    | `events.publishEndpoint.secret must be at least 32 characters (make one with: openssl rand -hex 32)` |
+| `secret` together with `authorities`                                                                   | `events.publishEndpoint takes secret or authorities, not both: a signed request names no caller ...` |
+| `authorities` without `@FrontMcp({ authorities })`                                                     | `Authorities configuration required: events.publishEndpoint declare 'authorities' metadata ...`      |
+| `path` is the MCP endpoint, `/health`, `/metrics`, a health probe, or under `/oauth` or `/.well-known` | `... path "/healthz" is on the reserved FrontMCP path "/healthz": choose another path`               |
+| `path` is one an `@HttpRoute` or an `http.routes` entry answers for `POST`                             | `... path "/hooks" is already served by the route POST /hooks: choose another path`                  |
+
+### What the endpoint answers
+
+The request runs the hookable `events:publish-http` flow (`EventPublishHttpHook`), with the stages `checkIpFilter`,
+`acquireQuota`, `readBody`, `authenticate`, `parseBody`, `checkAuthorities`, `findEvent`, `validatePayload`,
+`claimEventId`, `publish`, `rememberResult`, `buildResponse` and `finalize`. `finalize` runs for every request,
+however it ended. The first check that fails answers:
+
+| Status | Body                                                                                       | When                                                                                         |
+| ------ | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `403`  | The answer of `throttle.ipFilter`                                                          | The caller's address is denied                                                               |
+| `429`  | The answer of `throttle.global`                                                            | The server's global rate limit is used up                                                    |
+| `415`  | `{ error: 'The body must be application/json' }`                                           | The `Content-Type` is not `application/json`                                                 |
+| `413`  | `{ error: 'Payload too large' }`                                                           | The body is over 262144 bytes (256 KiB), what one delivery may carry                         |
+| `401`  | `{ error: 'Unauthorized' }`                                                                | With `secret`: unsigned, malformed, outside the 5 minutes, a wrong signature, or sent before |
+| `401`  | `{ error: 'Unauthorized' }`, and `WWW-Authenticate` when the server has a challenge        | Without `secret`: no token, or one the server cannot verify                                  |
+| `401`  | `{ error: 'Unauthorized', message: 'Publishing needs a signed-in caller' }`                | Without `secret`: an anonymous caller                                                        |
+| `403`  | `{ error: 'Forbidden' }`, and `WWW-Authenticate`                                           | Without `secret`: the token lacks the scopes `auth.requiredScopes` asks for                  |
+| `400`  | `{ error: 'Invalid publish request', issues: [{ path, message }] }`                        | The body is not a JSON object of the fields above                                            |
+| `403`  | `{ error: 'Forbidden' }`                                                                   | `events.publishEndpoint.authorities` refuses the caller                                      |
+| `404`  | `{ error: 'Event "<name>" is not registered' }`                                            | The server has no event of that name                                                         |
+| `422`  | `{ error: 'data does not match the payloadSchema of event "<name>"', issues: [...] }`      | `data` does not match `payloadSchema`                                                        |
+| `409`  | `{ error: 'Event "<name>" with eventId "<id>" is being published; retry for its answer' }` | Another request with the same `eventId` is publishing right now                              |
+| `202`  | `{ eventId, matched }`                                                                     | Published, or already published with this `eventId` (see below)                              |
+
+`issues` name where a problem is (`path`, such as `total` or `audience`) and what it is (`message`). They never
+repeat a value of the request. With a `secret`, every refusal is the same `401`, and the server's log says which
+check refused it: `authenticate: a publish request was refused: expired`. The Node server's JSON parser answers a body
+that is not JSON with its own `400`, before the endpoint runs.
+
+### Repeated requests
+
+A request that names an `eventId` is idempotent for 10 minutes, per event name: a repeat within them is answered `202`
+with the answer of the first request, and nothing is published again. The repeat is checked like any request first
+(its caller, its body, its `data`). A sender that retries after a timeout therefore sends the same `eventId`, and
+signs the retry again.
+
+- The answers are kept in the events store (`events.store`), so with `redis` or `sqlite` every process of the server
+  sees them. In memory they belong to one process.
+- A publish that fails gives its `eventId` back: the retry publishes.
+- When the store cannot keep the answer of a publish that succeeded, the request still answers `202` and the server
+  logs a warning. A repeat within 60 seconds is then answered `409`, and a repeat after that publishes again.
+- While the first request is still publishing, a repeat is answered `409`. A request that never finished (the
+  process died) stops blocking its `eventId` after 60 seconds.
+- A request without an `eventId` gets a generated one and is never deduplicated.
+
+### Hooking the endpoint
+
+```typescript
+import { EventPublishHttpHook, Plugin, type FlowCtxOf } from '@frontmcp/sdk';
+
+@Plugin({ name: 'publish-audit' })
+class PublishAuditPlugin {
+  @EventPublishHttpHook.Did('findEvent')
+  recordPublisher(ctx: FlowCtxOf<'events:publish-http'>) {
+    const { publication, caller } = ctx.state;
+    console.log(`${caller?.user?.sub ?? 'a signed request'} publishes ${publication?.name}`);
+  }
+}
+```
+
+`ctx.state.caller` is the bearer caller's auth info, and is not set for a signed request. With
+`@frontmcp/observability`, each request is traced as an `events/publish-http` span.
 
 ## Delivery
 
@@ -653,6 +804,15 @@ The three lifetimes must satisfy `minTtlMs <= defaultTtlMs <= maxTtlMs` after de
 | `maxBackoffMs?`  | `number` | `60000`               | The longest wait between two attempts                              |
 | `concurrency?`   | `number` | `16`                  | How many deliveries are in flight at once in one process           |
 
+`events.publishEndpoint` (see [Publishing over HTTP](#publishing-over-http)):
+
+| Field          | Type                           | Default           | Notes                                                                                           |
+| -------------- | ------------------------------ | ----------------- | ----------------------------------------------------------------------------------------------- |
+| `enabled?`     | `boolean`                      | `false`           | Serves the endpoint                                                                             |
+| `path?`        | `string`                       | `/events/publish` | Starts with `/`, literal segments only: no `:name` parameter, query or fragment                 |
+| `secret?`      | `string`                       | None              | At least 32 characters. Requests are signed with it; without it, callers present a bearer token |
+| `authorities?` | Profile name, names, or policy | None              | The rule a bearer caller must satisfy, with the request body as input. Not with `secret`        |
+
 With `enabled: false`, the server logs `Events are disabled (events.enabled: false), so the 2 event(s) apps declare are
 not served.` and `scope.events` is `undefined`. Otherwise `scope.events` is the `EventRegistry`: `getEvents()`,
 `findByName(name)`, `servesEvents()`.
@@ -731,6 +891,8 @@ functions) to get the same `this`.
 - [ ] `this.events.publish(...)` answers `matched: 1` for one matching subscription
 - [ ] The callback receives one POST whose `webhook-signature` verifies with the subscription's secret
 - [ ] A callback that answers `503` twice gets a third attempt with the same `webhook-id`
+- [ ] With `events.publishEndpoint.enabled`, a signed `POST /events/publish` answers `202`, and an unsigned one `401`
+- [ ] The same `eventId` posted twice is delivered once
 
 ## Troubleshooting
 
@@ -755,6 +917,10 @@ functions) to get the same `this`.
 | `EventNotRegisteredError` on `publish()`           | The event is not in any app's `events`                             | List it, or publish the name that is registered                            |
 | `InvalidEventPublishError` on `publish()`          | `data` does not match `payloadSchema`                              | Send the fields the schema declares                                        |
 | A receiver gets the same event twice               | Delivery is at least once: a retry after a lost `2xx`              | Deduplicate on `webhook-id`                                                |
+| `Event publish endpoint: ... public auth mode`     | `publishEndpoint.enabled` without a `secret` on a public server    | Set `events.publishEndpoint.secret`, or an `auth.mode` that signs in       |
+| `POST /events/publish` answers `401`               | A wrong signature, a clock that is off, or a request sent before   | Sign `<timestamp>.<body>` over the bytes sent; sign a retry again          |
+| `POST /events/publish` answers `404`               | The endpoint is off, the path differs, or the event is unknown     | Set `events.publishEndpoint.enabled`; read the `error` of the answer       |
+| `POST /events/publish` answers `409`               | Another request is publishing the same `eventId` right now         | Retry: the answer is then the first request's                              |
 | `Delivery ... is abandoned` in the log             | The callback failed every attempt in the retry window              | Fix the callback; read the category at the end of the line                 |
 | `Subscription ... is suspended` in the log         | 20 failed deliveries in a row                                      | Fix the callback, then subscribe again to reactivate                       |
 | The signature does not verify at the receiver      | It signs a re-serialized body, or uses another secret              | Verify over the raw body bytes with the secret sent in `events/subscribe`  |
@@ -764,5 +930,5 @@ functions) to get the same `this`.
 - [MCP Events, SEP-3415](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415)
 - [Standard Webhooks](https://www.standardwebhooks.com): the signature scheme of deliveries
 - Related skills: `decorators-guide`, `create-plugin-hooks` (`ListEventsHook`, `EventSubscribeHook`,
-  `EventUnsubscribeHook`, `EventPublishHook`, `EventDeliverHook`), `frontmcp-authorities`, `frontmcp-channels`,
-  `create-job`, `create-duty`
+  `EventUnsubscribeHook`, `EventPublishHook`, `EventPublishHttpHook`, `EventDeliverHook`), `frontmcp-authorities`,
+  `frontmcp-channels`, `create-job`, `create-duty`, `create-workflow` (the request signature)

@@ -233,6 +233,7 @@ export {
   EventResourceExhaustedError,
   EventUnsupportedError,
   EventCallbackEndpointError,
+  EventPublishEndpointError,
   EventSubscriptionStoreError,
   EventsNotEnabledError,
   EventNotRegisteredError,
