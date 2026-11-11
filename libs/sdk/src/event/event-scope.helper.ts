@@ -83,6 +83,31 @@ function ignoreChannelOption(eventRegistry: EventRegistry, logger: FrontMcpLogge
   );
 }
 
+/**
+ * Say which `app-event` channels listen to a published event: one whose event has the `channel` option tells a Claude
+ * Code session twice, and any other is what that option replaces.
+ */
+function describeEventChannels(scope: ScopeEntry, eventRegistry: EventRegistry, logger: FrontMcpLogger): void {
+  if (!eventRegistry.config.bridge) return;
+  for (const channel of scope.channels?.getChannelInstances() ?? []) {
+    const { source } = channel.metadata;
+    if (source.type !== 'app-event') continue;
+    const event = eventRegistry.findByName(source.event);
+    if (!event) continue;
+    if (eventRegistry.sendsToChannelSessions(event)) {
+      logger.warn(
+        `Channel "${channel.name}" listens to event "${event.name}", which has the channel option: Claude Code ` +
+          'sessions get each occurrence twice, once from the event and once from the channel. Remove the channel.',
+      );
+      continue;
+    }
+    logger.info(
+      `Channel "${channel.name}" listens to event "${event.name}": the channel option of the event replaces this ` +
+        "channel, and checks each session's access.",
+    );
+  }
+}
+
 /** Whether the server's auth names its callers: a subscription needs an owner, which public mode cannot give. */
 function canIdentifyCallers(scope: ScopeEntry): boolean {
   const authOptions = scope.auth?.options;
@@ -285,6 +310,7 @@ export async function registerEventCapabilities(
   await eventRegistry.ready;
   assertEventAuthorities(scope, eventRegistry.getEvents());
   if (args.channelsEnabled === false) ignoreChannelOption(eventRegistry, logger);
+  describeEventChannels(scope, eventRegistry, logger);
 
   const publisher = new ScopeEventPublisher(scope, eventRegistry);
   eventRegistry.publisher = publisher;
