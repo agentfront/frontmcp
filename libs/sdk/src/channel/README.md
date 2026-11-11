@@ -345,9 +345,11 @@ it is published. It does not go through this module's registry or its `channels:
   `availableWhen.surface`, the `audience` of the publish, the event's `authorities` and `authorize()`. An occurrence
   published for a `subscriptionId` goes to no session.
 - `LocalTransportAdapter.ensureAuthInfo()` keeps that caller on every request of an HTTP session, and
-  `createInMemoryServer()` when it is created and on `setAuthInfo()`: the verified user, scopes and claims and the
-  expiry of the token (`sessionCallerOf()`), never the token. The stdio session keeps none and is anonymous. A
-  session whose caller's credentials have expired (`hasExpiredCaller()`) is sent nothing.
+  `createInMemoryServer()` when it is created and on `setAuthInfo()`: the verified user, scopes and claims, and
+  when the credentials expire (`sessionCallerOf()`), never the token. The expiry is the auth info's `expiresAt`, or
+  the user's `exp` claim; nothing is read from the token itself, so an in-memory session expires only when its auth
+  info gives one of the two. The stdio session keeps no caller and is anonymous. A session whose caller's
+  credentials have expired (`hasExpiredCaller()`) is sent nothing.
 - Such an event makes `servesClaudeCodeChannels()` true with no `@Channel` and no `channels: { enabled: true }`.
   `channels: { enabled: false }` turns the option off, with one warning at startup.
 - A `subscriptions/listen` stream of revision 2026-07-28 gets no event this way: such a client opens `events/stream`.
