@@ -71,6 +71,15 @@ describe('leaseKey', () => {
     jest.mocked(findProjectRoot).mockReturnValueOnce(undefined);
     expect(leaseKey('indexer', 'workspace', 'demo')).toBe(`demo:indexer:${sha256Hex(process.cwd())}`);
   });
+
+  it('differs between two project roots, and is the same for the processes of one', () => {
+    jest.mocked(findProjectRoot).mockReturnValue('/srv/shop');
+    const shopKey = leaseKey('rollup', 'workspace', 'reports');
+    expect(leaseKey('rollup', 'workspace', 'reports')).toBe(shopKey);
+
+    jest.mocked(findProjectRoot).mockReturnValue('/srv/blog');
+    expect(leaseKey('rollup', 'workspace', 'reports')).not.toBe(shopKey);
+  });
 });
 
 describe('where duties and workers start', () => {

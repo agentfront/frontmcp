@@ -5,7 +5,7 @@ description: Connect multiple jobs into managed DAG pipelines with dependencies,
 
 # Creating Workflows
 
-Workflows connect multiple jobs into managed execution pipelines with step dependencies, conditions, and triggers. A workflow defines a directed acyclic graph (DAG) of steps where each step runs a named job, and the framework handles ordering, parallelism, error propagation, and trigger management. A workflow runs when something calls `execute_workflow`, or when its trigger fires: a signed webhook request, or an event the server emits (see [Workflow Triggers](#workflow-triggers)).
+Workflows connect multiple jobs into managed execution pipelines with step dependencies, conditions, and triggers. A workflow defines a directed acyclic graph (DAG) of steps where each step runs a named job, and the framework handles ordering, parallelism, error propagation, and trigger management. A workflow runs when something calls `execute_workflow`, or when its trigger fires: a signed webhook request, an event the server emits, or a time of its cron schedule (see [Workflow Triggers](#workflow-triggers)).
 
 ## When to Use This Skill
 
@@ -13,7 +13,7 @@ Workflows connect multiple jobs into managed execution pipelines with step depen
 
 - Orchestrating multiple jobs in a defined order with explicit step dependencies (e.g., build then test then deploy)
 - Building execution pipelines that require conditional branching, parallel fan-out, or diamond dependency patterns
-- Defining webhook- or event-triggered multi-step automation that the framework manages end to end
+- Defining webhook-, event- or schedule-triggered multi-step automation that the framework manages end to end
 
 ### Recommended
 
@@ -35,18 +35,19 @@ Create a class decorated with `@Workflow`. The decorator requires `name` and `st
 
 ### WorkflowMetadata Fields
 
-| Field            | Type                               | Required    | Default             | Description                                                                                                                                                                                    |
-| ---------------- | ---------------------------------- | ----------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`           | `string`                           | Yes         | --                  | Unique workflow name                                                                                                                                                                           |
-| `steps`          | `WorkflowStep[]`                   | Yes (min 1) | --                  | Array of step definitions                                                                                                                                                                      |
-| `description`    | `string`                           | No          | --                  | Human-readable description                                                                                                                                                                     |
-| `trigger`        | `'manual' \| 'webhook' \| 'event'` | No          | `'manual'`          | What starts a run besides `execute_workflow`: a signed request to its route, or its event (see [Workflow Triggers](#workflow-triggers))                                                        |
-| `webhook`        | `WebhookConfig`                    | No          | --                  | The route of a `trigger: 'webhook'` workflow: `secret` is required; set without that trigger, the server refuses to start                                                                      |
-| `event`          | `string`                           | No          | The workflow's name | The event that starts a `trigger: 'event'` workflow; set without that trigger, the server refuses to start                                                                                     |
-| `timeout`        | `number`                           | No          | `600000` (10 min)   | Maximum total workflow execution time in milliseconds                                                                                                                                          |
-| `maxConcurrency` | `number`                           | No          | `5`                 | Maximum number of steps running in parallel                                                                                                                                                    |
-| `permissions`    | `JobPermission[]`                  | No          | --                  | Array of permission rules. Multiple rules may target the same action; all matching rules must pass. Same shape and semantics as job permissions; **enforced from 1.7.2** (GHSA-58v2-gpcc-jmqv) |
-| `inputSchema`    | Zod raw shape                      | No          | --                  | The workflow's input, checked when a run starts (see [Workflow Input](#workflow-input))                                                                                                        |
+| Field            | Type                                             | Required    | Default             | Description                                                                                                                                                                                    |
+| ---------------- | ------------------------------------------------ | ----------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`           | `string`                                         | Yes         | --                  | Unique workflow name                                                                                                                                                                           |
+| `steps`          | `WorkflowStep[]`                                 | Yes (min 1) | --                  | Array of step definitions                                                                                                                                                                      |
+| `description`    | `string`                                         | No          | --                  | Human-readable description                                                                                                                                                                     |
+| `trigger`        | `'manual' \| 'webhook' \| 'event' \| 'schedule'` | No          | `'manual'`          | What starts a run besides `execute_workflow`: a signed request to its route, its event, or the times of its cron (see [Workflow Triggers](#workflow-triggers))                                 |
+| `webhook`        | `WebhookConfig`                                  | No          | --                  | The route of a `trigger: 'webhook'` workflow: `secret` is required; set without that trigger, the server refuses to start                                                                      |
+| `event`          | `string`                                         | No          | The workflow's name | The event that starts a `trigger: 'event'` workflow; set without that trigger, the server refuses to start                                                                                     |
+| `schedule`       | `WorkflowScheduleConfig`                         | No          | --                  | When a `trigger: 'schedule'` workflow runs: `{ cron, timezone?, input? }`; `cron` is required; set without that trigger, the server refuses to start                                           |
+| `timeout`        | `number`                                         | No          | `600000` (10 min)   | Maximum total workflow execution time in milliseconds                                                                                                                                          |
+| `maxConcurrency` | `number`                                         | No          | `5`                 | Maximum number of steps running in parallel                                                                                                                                                    |
+| `permissions`    | `JobPermission[]`                                | No          | --                  | Array of permission rules. Multiple rules may target the same action; all matching rules must pass. Same shape and semantics as job permissions; **enforced from 1.7.2** (GHSA-58v2-gpcc-jmqv) |
+| `inputSchema`    | Zod raw shape                                    | No          | --                  | The workflow's input, checked when a run starts (see [Workflow Input](#workflow-input))                                                                                                        |
 
 ### WorkflowStep Fields
 
@@ -526,6 +527,46 @@ class SignUpTool extends ToolContext {
 
 Up to 1.11.2, `trigger: 'event'` listened to no event: it was ignored.
 
+### Schedule
+
+The workflow starts at each time of its `schedule.cron`, in the background, with `schedule.input` as its input:
+
+```typescript
+@Workflow({
+  name: 'weekday-digest',
+  description: 'Sends the digest every weekday morning',
+  trigger: 'schedule',
+  schedule: { cron: '0 9 * * 1-5', timezone: 'Europe/Berlin', input: { audience: 'team' } },
+  inputSchema: { audience: z.string() },
+  permissions: [{ action: 'execute', roles: ['admin', 'schedule:weekday-digest'] }],
+  steps: [
+    { id: 'collect', jobName: 'collect-updates' },
+    {
+      id: 'send',
+      jobName: 'send-email',
+      dependsOn: ['collect'],
+      input: (steps, input) => ({ to: input.audience, body: steps.get('collect').outputs.summary }),
+    },
+  ],
+})
+class WeekdayDigest {}
+```
+
+| Field      | Type     | Default  | Description                                                                                       |
+| ---------- | -------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `cron`     | `string` | Required | A cron expression: `minute hour day-of-month month day-of-week`, or six fields with seconds first |
+| `timezone` | `string` | `'UTC'`  | The IANA time zone `cron` is read in, such as `'Europe/Berlin'`                                   |
+| `input`    | `object` | `{}`     | The input of each scheduled run, checked against the workflow's `inputSchema`                     |
+
+- **The expression** is the one `@Duty({ cron })` takes (see `create-duty`, Cron Schedules): lists, ranges, steps, month and day names, `@daily`-style nicknames, and the same handling of daylight saving time. One that can't be read refuses to start the server: `Workflow "<name>": schedule.cron "<cron>" can't be read: <reason>`. So does a time zone the runtime doesn't know: `Workflow "<name>": schedule.timezone "<zone>" is not an IANA time zone such as "Europe/Berlin"`. So does `trigger: 'schedule'` without a `schedule`, and a `schedule` on a workflow with another trigger.
+- **One run at a time it comes**, whatever the number of server processes (times missed while no process held the lease are caught up as one run: see Catching up). Each schedule has a lease that one process holds, as a `@Duty` has: among every machine that shares the server's top-level `redis` (key `frontmcp:cluster:schedule:<info.name>:<workflow>`), or, without one, among the processes of the machine that run from the same project root (the nearest `package.json`), in the SQLite file `duties.sqlite` under `FRONTMCP_HOME` (default `~/.frontmcp`; key `frontmcp:schedule:<info.name>:<workflow>:<hash of the project root>`; it needs `@frontmcp/storage-sqlite`). Processes coordinate only through the same lease file: two processes with different `FRONTMCP_HOME` values, or run by different users, each run the schedule. Two servers in different project roots keep separate schedules; two unrelated servers in the same project root share a lease when they also share `info.name` and the workflow name, so give them different names. When the holder exits, another process takes the schedule over at its next check; when it dies, within the 60 s lease plus a third of it.
+- **Catching up**: the workflow doesn't run when the server starts. The store keeps the time the schedule was last taken; a process that gets the lease after a restart or a takeover starts one run if a scheduled time passed since, whatever the number missed, then continues on schedule.
+- **Overlap**: a scheduled time starts its run even while the run of the last one is still going. Pick a cron with gaps longer than a run, or make the jobs safe to run side by side.
+- **Who the run runs as**: the role `schedule:<workflow name>`, and nothing else, as a webhook's run runs as `webhook:<workflow>` (see [Who the Run Runs As](#who-the-run-runs-as)). A workflow with `create` or `execute` rules must allow it, and so must each step job with `execute` rules. A `custom` rule reads it as `authInfo.extra.workflowTrigger` (`{ kind: 'schedule', name, role }`).
+- **A run that can't start** (a denial, an `input` that doesn't match the `inputSchema`) is logged as a warning, `The schedule did not start workflow "<name>": <reason>`, and the next scheduled time tries again. A schedule whose lease store can't be opened logs `The schedule of workflow "<name>" did not start: <cause>`.
+- **Where it runs**: schedules start once the server serves, in a process that stays up (see `create-worker`, Keeping a Worker Alive). They don't start in a serverless or edge deployment (`Scheduled workflows ("<name>") do not run in a serverless or edge deployment: they need a long-lived process`), in a detached job runner, or when `frontmcp build` boots the server to read it.
+- A workflow registered at runtime (`register_workflow`) can't have `trigger: 'schedule'`: declare it with `@Workflow`.
+
 ## Function Builder
 
 For workflows that do not need a class, use the `workflow()` function builder:
@@ -854,15 +895,16 @@ class CiServer {}
 
 ## Common Patterns
 
-| Pattern              | Correct                                                            | Incorrect                                                                  | Why                                                                             |
-| -------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Step dependencies    | `dependsOn: ['build', 'test']` (array of step IDs)                 | `dependsOn: 'build'` (plain string)                                        | `dependsOn` expects a `string[]`, not a single string                           |
-| Dynamic input        | `input: (steps) => ({ artifact: steps.get('build').outputs.url })` | `input: { artifact: buildResult.url }` (captured closure variable)         | Static objects cannot reference previous step outputs; use the callback form    |
-| Conditional steps    | `condition: (steps) => steps.get('test').state === 'completed'`    | `condition: (steps) => steps.get('test').outputs` (truthy check)           | Always check `.state` explicitly; outputs can be truthy even on partial failure |
-| Job registration     | Register all referenced jobs in the `jobs` array of `@App`         | Declare `jobName` in steps without registering the job class               | Steps reference jobs by name; unregistered jobs cause runtime lookup failures   |
-| Workflow trigger     | Set `trigger: 'webhook'` and provide `webhook: { path, secret }`   | Set `trigger: 'webhook'` without a `webhook.secret`                        | The server refuses to start a webhook workflow without its secret               |
-| Webhook execute rule | `roles: ['admin', 'webhook:ci-deploy']` in one `execute` rule      | `{ roles: ['admin'] }` and `{ roles: ['webhook:ci-deploy'] }` as two rules | Every matching rule must pass, so two rules allow nobody                        |
-| Emitting an event    | `this.scope.channelEventBus?.emit('user.signup', { userId })`      | `emit('user.signup', userId)` (a string payload)                           | The payload is the run's input, so it must be an object                         |
+| Pattern              | Correct                                                                                                    | Incorrect                                                                  | Why                                                                                                   |
+| -------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Step dependencies    | `dependsOn: ['build', 'test']` (array of step IDs)                                                         | `dependsOn: 'build'` (plain string)                                        | `dependsOn` expects a `string[]`, not a single string                                                 |
+| Dynamic input        | `input: (steps) => ({ artifact: steps.get('build').outputs.url })`                                         | `input: { artifact: buildResult.url }` (captured closure variable)         | Static objects cannot reference previous step outputs; use the callback form                          |
+| Conditional steps    | `condition: (steps) => steps.get('test').state === 'completed'`                                            | `condition: (steps) => steps.get('test').outputs` (truthy check)           | Always check `.state` explicitly; outputs can be truthy even on partial failure                       |
+| Job registration     | Register all referenced jobs in the `jobs` array of `@App`                                                 | Declare `jobName` in steps without registering the job class               | Steps reference jobs by name; unregistered jobs cause runtime lookup failures                         |
+| Workflow trigger     | Set `trigger: 'webhook'` and provide `webhook: { path, secret }`                                           | Set `trigger: 'webhook'` without a `webhook.secret`                        | The server refuses to start a webhook workflow without its secret                                     |
+| Webhook execute rule | `roles: ['admin', 'webhook:ci-deploy']` in one `execute` rule                                              | `{ roles: ['admin'] }` and `{ roles: ['webhook:ci-deploy'] }` as two rules | Every matching rule must pass, so two rules allow nobody                                              |
+| Emitting an event    | `this.scope.channelEventBus?.emit('user.signup', { userId })`                                              | `emit('user.signup', userId)` (a string payload)                           | The payload is the run's input, so it must be an object                                               |
+| Scheduled workflow   | `trigger: 'schedule'` with `schedule: { cron, timezone }` and `schedule:<workflow>` in its `execute` roles | A `setInterval()` that calls `execute_workflow` in every server process    | A schedule starts one run for each scheduled time among all processes, and catches up after a restart |
 
 ## Verification Checklist
 
@@ -881,21 +923,26 @@ class CiServer {}
 - [ ] `continueOnError: true` steps allow downstream steps to proceed on failure
 - [ ] A signed request to the webhook's path answers `202` with the run's `runId`, and an unsigned one `401`
 - [ ] Emitting an event-triggered workflow's event starts a run of it
+- [ ] A schedule-triggered workflow logs `The schedule of workflow "<name>" runs in this process on cron ...` in one
+      server process, and starts a run at its next scheduled time
 
 ## Troubleshooting
 
-| Problem                                             | Cause                                                                                                                     | Solution                                                                                                                      |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Step never executes                                 | `dependsOn` references a step ID that does not exist                                                                      | Verify all `dependsOn` entries match actual step `id` values in the workflow                                                  |
-| Workflow fails at startup with "job not found"      | `jobName` references an unregistered job                                                                                  | Add the job class to the `jobs` array in `@App` before registering the workflow                                               |
-| Dynamic `input` callback receives undefined outputs | A step it depends on was skipped, or failed with `continueOnError`                                                        | Add a `condition` guard that checks `steps.get(id).state === 'completed'` before accessing outputs                            |
-| Webhook answers `401`                               | The signature doesn't cover the exact body sent, the timestamp is more than 5 minutes off, or the request was sent before | Sign `<timestamp>.<body>` over the bytes you send, with a fresh timestamp for each request; the server's log names the reason |
-| Webhook answers `403`                               | The workflow's `create` or `execute` rules don't allow its webhook                                                        | Add `webhook:<workflow name>` to the roles of those rules                                                                     |
-| Server refuses to start: `needs webhook.secret`     | A `trigger: 'webhook'` workflow without a secret (an unset env var)                                                       | Set the secret, at least 32 characters (`openssl rand -hex 32`), one for each webhook workflow                                |
-| An event starts no run                              | The bus has no listener for that name, or the run can't start                                                             | Check the workflow's `event` (default: its name); the server's log names a denial or bad input                                |
-| Workflow exceeds timeout                            | Total step execution time exceeds the default 600000 ms                                                                   | Increase `timeout` at the workflow level or add per-step `timeout` overrides                                                  |
-| `Invalid input for workflow "<name>"`               | The run's input doesn't match the workflow's `inputSchema`                                                                | Pass `input` that matches it; the error's details name each field that doesn't                                                |
-| A failure-notification step never runs              | The step it watches failed without `continueOnError`, so it was skipped                                                   | Set `continueOnError: true` on the watched step                                                                               |
+| Problem                                                    | Cause                                                                                                                                      | Solution                                                                                                                                                |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Step never executes                                        | `dependsOn` references a step ID that does not exist                                                                                       | Verify all `dependsOn` entries match actual step `id` values in the workflow                                                                            |
+| Workflow fails at startup with "job not found"             | `jobName` references an unregistered job                                                                                                   | Add the job class to the `jobs` array in `@App` before registering the workflow                                                                         |
+| Dynamic `input` callback receives undefined outputs        | A step it depends on was skipped, or failed with `continueOnError`                                                                         | Add a `condition` guard that checks `steps.get(id).state === 'completed'` before accessing outputs                                                      |
+| Webhook answers `401`                                      | The signature doesn't cover the exact body sent, the timestamp is more than 5 minutes off, or the request was sent before                  | Sign `<timestamp>.<body>` over the bytes you send, with a fresh timestamp for each request; the server's log names the reason                           |
+| Webhook answers `403`                                      | The workflow's `create` or `execute` rules don't allow its webhook                                                                         | Add `webhook:<workflow name>` to the roles of those rules                                                                                               |
+| Server refuses to start: `needs webhook.secret`            | A `trigger: 'webhook'` workflow without a secret (an unset env var)                                                                        | Set the secret, at least 32 characters (`openssl rand -hex 32`), one for each webhook workflow                                                          |
+| An event starts no run                                     | The bus has no listener for that name, or the run can't start                                                                              | Check the workflow's `event` (default: its name); the server's log names a denial or bad input                                                          |
+| Server refuses to start: `schedule.cron ... can't be read` | A `trigger: 'schedule'` workflow whose cron is malformed, has a year field, or never matches a date                                        | Fix the expression: 5 fields, or 6 with seconds first                                                                                                   |
+| A schedule starts no run                                   | The workflow's rules don't allow `schedule:<workflow name>`, the input doesn't match the `inputSchema`, or the lease store can't be opened | The server's log names the reason; add the role to the `create` and `execute` rules, or install `@frontmcp/storage-sqlite` (or set a top-level `redis`) |
+| A scheduled workflow runs an hour off                      | The cron is read in UTC                                                                                                                    | Set `schedule.timezone` to the IANA zone the schedule is meant in                                                                                       |
+| Workflow exceeds timeout                                   | Total step execution time exceeds the default 600000 ms                                                                                    | Increase `timeout` at the workflow level or add per-step `timeout` overrides                                                                            |
+| `Invalid input for workflow "<name>"`                      | The run's input doesn't match the workflow's `inputSchema`                                                                                 | Pass `input` that matches it; the error's details name each field that doesn't                                                                          |
+| A failure-notification step never runs                     | The step it watches failed without `continueOnError`, so it was skipped                                                                    | Set `continueOnError: true` on the watched step                                                                                                         |
 
 ## Examples
 

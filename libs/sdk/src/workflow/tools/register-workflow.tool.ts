@@ -1,6 +1,7 @@
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { Tool, ToolContext } from '../../common';
+import { type WorkflowTriggerType } from '../../common/metadata/workflow.metadata';
 import { WorkflowKind } from '../../common/records/workflow.record';
 import { DynamicJobRegistrationDisabledError, InvalidInputError } from '../../errors';
 
@@ -23,11 +24,11 @@ import { DynamicJobRegistrationDisabledError, InvalidInputError } from '../../er
       )
       .describe('Workflow step definitions'),
     trigger: z
-      .enum(['manual', 'webhook', 'event'])
+      .enum(['manual', 'webhook', 'event', 'schedule'])
       .optional()
       .describe(
-        "Trigger type; 'webhook' and 'event' are refused: a workflow registered at runtime runs through " +
-          'execute_workflow, and a triggered workflow is declared with @Workflow',
+        "Trigger type; 'webhook', 'event' and 'schedule' are refused: a workflow registered at runtime runs " +
+          'through execute_workflow, and a triggered workflow is declared with @Workflow',
       ),
     tags: z.array(z.string()).optional().describe('Tags for categorization'),
   },
@@ -49,7 +50,7 @@ export default class RegisterWorkflowTool extends ToolContext {
       continueOnError?: boolean;
       timeout?: number;
     }>;
-    trigger?: 'manual' | 'webhook' | 'event';
+    trigger?: WorkflowTriggerType;
     tags?: string[];
   }) {
     const workflowRegistry = this.scope.workflows;
@@ -66,8 +67,8 @@ export default class RegisterWorkflowTool extends ToolContext {
       return this.fail(new DynamicJobRegistrationDisabledError('workflow'));
     }
 
-    // A webhook's route and an event's listener are set up when the server starts
-    if (input.trigger === 'webhook' || input.trigger === 'event') {
+    // A webhook's route, an event's listener and a schedule's cron are set up for the workflows declared in code
+    if (input.trigger !== undefined && input.trigger !== 'manual') {
       return this.fail(
         new InvalidInputError(
           `A workflow registered at runtime can't have trigger: '${input.trigger}': declare it with @Workflow`,

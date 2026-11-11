@@ -17,8 +17,8 @@ import { UnsafeDutyStoreError } from '../errors/duty.errors';
 import { isManifestMode } from '../front-mcp/manifest-mode.flag';
 import { findReplaceableDirectory } from '../server/security/replaceable-directory';
 
-/** What a lease is for: each kind keeps its leases under a prefix of its own. */
-export type LeaseKind = 'duty' | 'worker';
+/** What a lease is for (a duty, a worker, a workflow's schedule): each kind keeps its leases under a prefix of its own. */
+export type LeaseKind = 'duty' | 'worker' | 'schedule';
 
 /** Among which processes one holds a lease: those of a machine, of a project root, or of every machine on one Redis. */
 export type LeaseScope = 'machine' | 'workspace' | 'cluster';

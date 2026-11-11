@@ -11,6 +11,8 @@ export type DutyLogger = Pick<FrontMcpLogger, 'verbose' | 'info' | 'warn' | 'err
 
 interface DutyRunnerCommonOptions {
   name: string;
+  /** What runs, as logs name it. @default `Duty "<name>"` */
+  label?: string;
   key: string;
   leaseMs: number;
   logger: DutyLogger;
@@ -56,7 +58,7 @@ export class DutyRunner {
 
   constructor(private readonly options: DutyRunnerOptions) {
     const { name, key, leaseMs, storage, logger } = options;
-    this.label = `Duty "${name}"`;
+    this.label = options.label ?? `Duty "${name}"`;
     this.ranKey = `${key}:ran`;
     this.lease = new LeaseHolder({
       label: this.label,

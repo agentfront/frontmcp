@@ -11,6 +11,7 @@ export const FrontMcpWorkflowTokens = {
   trigger: tokenFactory.meta('workflowTrigger'),
   webhook: tokenFactory.meta('workflowWebhook'),
   event: tokenFactory.meta('workflowEvent'),
+  schedule: tokenFactory.meta('workflowSchedule'),
   timeout: tokenFactory.meta('workflowTimeout'),
   maxConcurrency: tokenFactory.meta('workflowMaxConcurrency'),
   tags: tokenFactory.meta('workflowTags'),

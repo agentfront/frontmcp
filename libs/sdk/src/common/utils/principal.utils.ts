@@ -17,18 +17,19 @@ export interface ResolvedPrincipal {
 
 /**
  * Who a workflow run a trigger started runs as: not a signed-in caller, but an identity that permission rules allow by
- * its role, `webhook:<workflow>` for a webhook or `event:<event>` for an event. No token can carry it: it is an object
- * of this class on `authInfo.extra.workflowTrigger`, which only the server puts there.
+ * its role, `webhook:<workflow>` for a webhook, `event:<event>` for an event or `schedule:<workflow>` for a schedule.
+ * No token can carry it: it is an object of this class on `authInfo.extra.workflowTrigger`, which only the server
+ * puts there.
  */
 export class WorkflowTriggerPrincipal {
   constructor(
     /** What started the run. */
-    readonly kind: 'webhook' | 'event',
-    /** The workflow a webhook belongs to, or the event's name. */
+    readonly kind: 'webhook' | 'event' | 'schedule',
+    /** The workflow a webhook or a schedule belongs to, or the event's name. */
     readonly name: string,
   ) {}
 
-  /** The role `execute` rules name to allow it: `webhook:<workflow>` or `event:<event>`. */
+  /** The role `execute` rules name to allow it: `webhook:<workflow>`, `event:<event>` or `schedule:<workflow>`. */
   get role(): string {
     return `${this.kind}:${this.name}`;
   }
@@ -39,7 +40,7 @@ export class WorkflowTriggerPrincipal {
   }
 }
 
-/** The trigger a run's auth names, when a webhook or an event started it. */
+/** The trigger a run's auth names, when a webhook, an event or a schedule started it. */
 export function workflowTriggerOf(
   authInfo: Partial<Record<string, unknown>> | undefined,
 ): WorkflowTriggerPrincipal | undefined {
@@ -83,7 +84,8 @@ function firstPresent(sources: unknown[], convert: (value: unknown) => string[])
  * Scopes are read from AuthInfo directly (the verified token's scope set) and,
  * as a fallback, from a `scope`/`scopes` claim.
  *
- * A run a webhook or an event started resolves to its trigger's role alone (see {@link WorkflowTriggerPrincipal}).
+ * A run a webhook, an event or a schedule started resolves to its trigger's role alone (see
+ * {@link WorkflowTriggerPrincipal}).
  */
 export function resolvePrincipal(
   authInfo: Partial<Record<string, unknown>> | undefined,

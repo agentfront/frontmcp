@@ -46,6 +46,7 @@ const fixtureFiles = [
   'materialized-resources-must-compile.ts',
   'duties-must-compile.ts',
   'workers-must-compile.ts',
+  'workflow-schedule-must-compile.ts',
   'offload-must-compile.ts',
   'http-routes-must-compile.ts',
   'shared-server-must-compile.ts',
@@ -227,6 +228,10 @@ describe('@frontmcp/sdk declarations in a strict consumer project', () => {
 
   it('types @Worker, its metadata and run context, and createContainer({ runBackground })', () => {
     expect(describeEach(inFixtureFile('workers-must-compile.ts'))).toEqual([]);
+  });
+
+  it("types @Workflow({ trigger: 'schedule', schedule }) and its schedule:<workflow> principal", () => {
+    expect(describeEach(inFixtureFile('workflow-schedule-must-compile.ts'))).toEqual([]);
   });
 
   it('types @HttpRoute, HttpRouteContext, SSE routes, HttpRouteHook and http.auth.people', () => {
