@@ -45,6 +45,8 @@ The path is a `POST` route on FrontMCP's HTTP server (`bootstrap()` / `createHan
 
 Subscribes to the in-process `ChannelEventBus`. Your application code emits events, and the channel transforms them into notifications. The bus is the scope's event bus, which `trigger: 'event'` workflows listen on too (see `create-workflow`): one `emit()` reaches both.
 
+Use it for a name your code emits on the bus by hand. For an event the server publishes (`@Event`), use the event's `channel` option (see [Published events as a source](#published-events-as-a-source)).
+
 ```typescript
 @Channel({
   name: 'error-alerts',
@@ -90,6 +92,13 @@ class NewOrdersChannel extends ChannelContext {
 ```
 
 The channel gets every published occurrence of that name, once, whoever is subscribed to the event, except one published with an `audience` or a `subscriptionId`: it is meant for some owners only, and a channel tells every connected session, so it reaches only trusted listeners such as `trigger: 'event'` workflows. `events.bridge: false` keeps published events off the bus. An event that also has the `channel` option is told to a session twice.
+
+The server logs one line at startup for each `app-event` channel whose `event` is a declared event:
+
+- The event has the `channel` option: a warning. `Channel "new-orders" listens to event "order.created", which has the channel option: Claude Code sessions get each occurrence twice, once from the event and once from the channel. Keep one: remove the channel, or the option when the channel does what the option cannot.`
+- The event has no `channel` option: an info line. `Channel "new-orders" listens to event "order.created": the event has no channel option. Setting it can replace this channel, and checks each session's access.`
+
+It logs neither for a name that is not a declared event, or with `events.bridge: false`. Nothing else changes: the channel is still told.
 
 ## Agent Completion Source
 
@@ -181,24 +190,88 @@ class WhatsAppChannel extends ChannelContext {
 
 ## File Watcher Source
 
-Watches file system paths for changes and pushes notifications. Uses `onConnect()` to start the watcher.
+Watches files and directories. For a channel that defines no `onConnect()`, the framework watches the declared `paths` while the channel is connected, and hands each file event to `onEvent()`. The channel needs no watcher of its own.
+
+A channel that defines its own `onConnect()` watches by itself, as before 1.12, when the `paths` and `events` were only a label. Such a channel keeps working unchanged (see [A channel with its own `onConnect()`](#a-channel-with-its-own-onconnect)).
 
 ```typescript
+import { basename } from 'node:path';
+
+import { Channel, ChannelContext, type ChannelFileEvent, type ChannelNotification } from '@frontmcp/sdk';
+
 @Channel({
   name: 'log-watcher',
   source: {
     type: 'file-watcher',
-    paths: ['./logs/app.log', './logs/error.log'],
-    events: ['change', 'create'],
+    paths: ['./logs/app.log', './reports'],
+    events: ['create', 'change'],
   },
 })
 class LogWatcherChannel extends ChannelContext {
-  async onConnect(): Promise<void> {
-    // Start watching files, call pushIncoming() on changes
-  }
   async onEvent(payload: unknown): Promise<ChannelNotification> {
-    const event = payload as { file: string; content: string };
-    return { content: `[${event.file}] ${event.content}`, meta: { file: event.file } };
+    const { event, path } = payload as ChannelFileEvent;
+    const fileName = basename(path);
+    return { content: `${fileName}: ${event}`, meta: { file: fileName, event } };
+  }
+}
+```
+
+| Field     | Type                                               | Default    | Notes                                                               |
+| --------- | -------------------------------------------------- | ---------- | ------------------------------------------------------------------- |
+| `paths`   | `string[]`                                         | Required   | Files or directories, absolute or relative to the working directory |
+| `events?` | `('create' \| 'change' \| 'delete' \| 'rename')[]` | Every kind | The kinds of file event the channel gets                            |
+
+- **Payload.** `onEvent()` gets a `ChannelFileEvent`, `{ event, path }`. `event` is `'create'` (the file appeared), `'change'` (its size, its modification time or the file itself was replaced) or `'delete'` (it is gone). `path` is the absolute path of the file.
+- **Order.** The events of a channel are handed to `onEvent()` one at a time, in the order they happened: the next starts once the one before it ended, so a slow `onEvent()` delays the events after it.
+- **`rename`.** There is no `rename` payload. A renamed file is a `delete` of its old path and a `create` of its new one, so `rename` selects both.
+- **Paths.** A directory is watched for its direct files, not for its subdirectories. A file is watched through its parent directory, so it stays watched when an editor replaces it. A path that does not exist yet is watched from the moment it appears. The files that are there when the watch starts are not reported.
+- **No globs.** A path is watched as written. For `./logs/*.log` the server logs a warning at startup and watches a file of that name: declare `./logs`, or each file.
+- **Debounce.** A change is reported once its directory saw no change for 100 ms. Several writes to one file in that time are one `change`.
+- **Lifetime.** The watch starts when the channel is connected, at startup. It ends when the channel disconnects, at shutdown and at `dispose()`, before `onDisconnect()` runs.
+- **Where it does not run.** In a serverless, edge or browser runtime nothing is watched: the server logs a warning and still connects the channel. CLI mode and a build that boots the server to read it register no channel, so they watch nothing.
+- **Failure.** A watch that fails is logged (`Channel "log-watcher" stopped watching its paths`). The server and its other channels keep running.
+
+The watch is `watchFiles()` from `@frontmcp/utils` (see `create-worker`). To publish file changes as an event that poll, push and webhook clients also get, loop over `watchFiles()` in a `@Worker` and set the event's `channel` option.
+
+### A channel with its own `onConnect()`
+
+The framework watches the declared paths only for a channel that defines no `onConnect()`. When the channel's class, or a class it extends, defines `onConnect()`, the channel is taken to watch by itself:
+
+- `onConnect()` and `onDisconnect()` run, as for a `service` source.
+- The framework watches nothing for it. `onEvent()` gets only what the channel pushes with `pushIncoming()`, in the shape the channel chose.
+- `paths` and `events` are a label the channel may read from `this.metadata.source`. The warnings above (a glob, a runtime that cannot watch) are not logged for it.
+- The server logs one info line at startup: `Channel "log-watcher" defines onConnect(), so it watches by itself: the framework does not watch its declared paths. Remove onConnect() to have the framework watch them.`
+
+So a channel written before 1.12 keeps working unchanged. To move it to the framework's watch, remove its `onConnect()`, its `onDisconnect()` and its watcher, and read `{ event, path }` in `onEvent()`.
+
+A `channel()` function has no connect handler, so the framework always watches its declared paths.
+
+A channel that watches by itself:
+
+```typescript
+import { watch, type FSWatcher } from 'node:fs';
+
+import { Channel, ChannelContext, type ChannelFileWatcherSource, type ChannelNotification } from '@frontmcp/sdk';
+
+@Channel({
+  name: 'legacy-log-watcher',
+  source: { type: 'file-watcher', paths: ['./logs/app.log'] },
+})
+class LegacyLogWatcherChannel extends ChannelContext {
+  private watcher?: FSWatcher;
+
+  async onConnect(): Promise<void> {
+    const [logFile] = (this.metadata.source as ChannelFileWatcherSource).paths;
+    this.watcher = watch(logFile, () => this.pushIncoming({ file: logFile }));
+  }
+
+  async onDisconnect(): Promise<void> {
+    this.watcher?.close();
+  }
+
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    const { file } = payload as { file: string };
+    return { content: `${file} changed`, meta: { file } };
   }
 }
 ```

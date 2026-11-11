@@ -97,7 +97,7 @@ An event with `channel` needs no `@Channel` and no `channels: { enabled: true }`
 | Agent completion notifications     | `references/channel-sources.md`     | Notify when agents finish                      |
 | Job/workflow completion            | `references/channel-sources.md`     | Notify when jobs complete                      |
 | Service connector (WhatsApp, etc.) | `references/channel-sources.md`     | Persistent connection with bidirectional tools |
-| File/log watcher                   | `references/channel-sources.md`     | File system change monitoring                  |
+| File/log watcher                   | `references/channel-sources.md`     | Watch declared files and directories           |
 | Event replay for offline sessions  | `references/channel-sources.md`     | Buffer events for later delivery               |
 | WhatsApp/Telegram chat bridge      | `references/channel-two-way.md`     | Two-way messaging with Claude                  |
 | Slack/Discord integration          | `references/channel-two-way.md`     | Chat platform bridges                          |
@@ -123,6 +123,7 @@ Channels are a Claude Code research preview and may change. `references/channel-
 | Source naming  | `name: 'deploy-alerts'`                    | `name: 'Deploy Alerts!'`                        | Channel names should be kebab-case identifiers                                                                                          |
 | Two-way gating | Check sender identity before emitting      | Trust room/group membership                     | Prevent prompt injection from untrusted group members                                                                                   |
 | Error channels | Use `app-event` source with event bus      | Poll for errors in a loop                       | Event bus is push-based and efficient                                                                                                   |
+| File watching  | `paths` on a `file-watcher` source         | `fs.watch()` in `onConnect()`                   | From 1.12 the framework watches the declared paths of a channel with no `onConnect()`. One with it still watches by itself              |
 | Manual push    | `await scope.channelNotifications?.send()` | `sendToSubscribedSessions()` for a regular push | `send()` runs the hookable `channels:send-notification` flow (defaultMeta, channel meta, hooks); the `sendTo*` methods deliver directly |
 
 ## Verification Checklist
@@ -154,6 +155,7 @@ Channels are a Claude Code research preview and may change. `references/channel-
 - [ ] Webhook endpoints return 200 on success
 - [ ] Event bus subscriptions are cleaned up on scope teardown, and service channels get `onDisconnect()` on shutdown and on `dispose()`
 - [ ] Agent/job completion filters match expected IDs
+- [ ] A `file-watcher` channel the framework watches defines no `onConnect()`, declares files or directories, not globs, and reads `{ event, path }` in `onEvent()`
 
 ## Troubleshooting
 
@@ -167,7 +169,8 @@ Channels are a Claude Code research preview and may change. `references/channel-
 | Duplicate notifications                | Multiple sessions subscribed                                                                             | This is correct behavior -- each session gets its own copy                                                                                                    |
 | Events lost on reconnect               | Channels are in-memory                                                                                   | Channel state resets on server restart; use persistent sources                                                                                                |
 | A `meta` attribute has `_` in its name | From 1.12, a character of a key that Claude Code would drop the key for is sent as `_`                   | Name the key with letters, digits and underscores, such as `chat_id`                                                                                          |
-| A published event arrives twice        | The event has the `channel` option and an `app-event` channel listens to its name                        | Keep one: the `channel` option for a published event                                                                                                          |
+| A published event arrives twice        | The event has the `channel` option and an `app-event` channel listens to its name                        | Keep one: the `channel` option for a published event. The server warns about it at startup                                                                    |
+| A `file-watcher` channel tells nothing | It defines `onConnect()`, a path is a glob, or the runtime is serverless, edge or a browser              | Remove `onConnect()` to have the framework watch; declare the directory, or each file; run a long-lived Node.js process                                       |
 
 ## Examples
 

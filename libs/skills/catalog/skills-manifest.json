@@ -625,10 +625,10 @@
               "level": "intermediate",
               "tags": ["file-watcher", "filesystem", "logs", "monitoring", "real-time"],
               "features": [
-                "File watcher source type with glob patterns",
-                "onConnect lifecycle for starting the watcher",
-                "pushIncoming for streaming file events",
-                "Log file monitoring example"
+                "File watcher source with declared paths and events",
+                "The `{ event, path }` payload of a file event",
+                "State kept on the channel between file events",
+                "No `onConnect()`, so the framework watches the declared paths"
               ]
             },
             {

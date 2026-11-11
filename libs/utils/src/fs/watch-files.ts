@@ -205,7 +205,15 @@ export async function* watchFiles(
   const targets = Array.isArray(paths) ? paths : [paths];
   const watchedPaths = targets.map((path) => new WatchedPath(pathResolve(path), debounceMs, report));
 
-  signal?.addEventListener('abort', wakeUp, { once: true });
+  const closeWatchers = () => {
+    for (const watchedPath of watchedPaths) watchedPath.close();
+  };
+  // Closes at once: a consumer still busy with an event would otherwise keep the watchers open
+  const endOnAbort = () => {
+    closeWatchers();
+    wakeUp();
+  };
+  signal?.addEventListener('abort', endOnAbort, { once: true });
   try {
     await Promise.all(watchedPaths.map((watchedPath) => watchedPath.start()));
     while (!signal?.aborted) {
@@ -219,7 +227,7 @@ export async function* watchFiles(
       });
     }
   } finally {
-    signal?.removeEventListener('abort', wakeUp);
-    for (const watchedPath of watchedPaths) watchedPath.close();
+    signal?.removeEventListener('abort', endOnAbort);
+    closeWatchers();
   }
 }
