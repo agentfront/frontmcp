@@ -8,6 +8,7 @@ import {
   type CronLedgerStorage,
   type CronSchedule,
 } from './cron-schedule';
+import { describeThrown } from './describe-thrown';
 import { LeaseHolder } from './lease-holder';
 
 /** The store operations a duty needs; the SQLite, Redis and memory stores run each one atomically. */
@@ -180,7 +181,7 @@ export class DutyRunner {
     try {
       await this.options.run({ signal: inFlight.controller.signal }, taken.scheduledAt);
     } catch (error) {
-      this.options.logger.error(`${this.label} failed: ${messageOf(error)}`);
+      this.options.logger.error(`${this.label} failed: ${describeThrown(error)}`);
     }
     await this.settle(taken);
   }
@@ -225,8 +226,4 @@ export class DutyRunner {
       this.lease.reportStoreFailure(error);
     }
   }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

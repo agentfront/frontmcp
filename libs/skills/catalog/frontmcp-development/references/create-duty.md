@@ -229,10 +229,12 @@ export class WeekdayReportDuty implements DutyInterface {
   to acquire at the same pace.
 - **Expire.** The store's TTL decides when a lease ends; processes never compare their clocks. A killed or hung holder
   stops renewing, and another process takes the duty over within `leaseMs` plus a third of it.
-- **Give up.** A holder that could not renew for a whole `leaseMs` (Redis unreachable, a locked file, a hung store call)
-  stops holding the duty, aborts the run in flight and contends again: by then the store may have ended its lease. It
-  measures this on a monotonic clock, so unless the system clock jumps (see Clocks) it never trusts its lease longer
-  than the store keeps it.
+- **Give up.** A holder that could not renew for two thirds of `leaseMs` (Redis unreachable, a locked file, a hung store
+  call) stops holding the duty, aborts the run in flight and contends again. The store keeps its lease at least a third
+  of `leaseMs` longer, so the run has that long to end before another process can take over: a run must return
+  promptly once `signal` aborts. A renew that failed is tried again after half the usual wait, so one failure alone
+  does not end the lease. The holder measures this on a monotonic clock, so unless the system clock jumps (see Clocks)
+  it never trusts its lease longer than the store keeps it.
 - **Release.** At shutdown the holder aborts the run in flight and keeps renewing the lease until the run returns, so
   no other process starts meanwhile; then it deletes the key only while it still holds its id. Another process takes
   over at its next check. A run that ignores `signal` holds the shutdown up to `lifecycle.shutdownHookTimeoutMs`.
@@ -276,17 +278,17 @@ a deployment runs the duty.
 
 ## Log Lines
 
-| Level   | Message                                                                                                    |
-| ------- | ---------------------------------------------------------------------------------------------------------- |
-| info    | `Duty "<name>" runs in this process every <ms> ms` (this process took the lease)                           |
-| info    | `Duty "<name>" runs in this process on cron "<cron>" (<timezone>)` (the same, for a cron duty)             |
-| info    | `Duty "<name>" already runs elsewhere (lease "<key>"); this one takes it over if that one stops`           |
-| warn    | `Duty "<name>" lost its lease; another process runs it now`                                                |
-| warn    | `Duty "<name>" could not renew its lease within <leaseMs> ms; it stops here until it gets the lease again` |
-| warn    | `Duty "<name>": the lease store failed: <cause>` (that check or run is skipped and retried)                |
-| error   | `Duty "<name>" failed: <cause>` (the run threw; the lease is kept)                                         |
-| verbose | `Duty "<name>" is still running; skipping this run`                                                        |
-| warn    | `Duty "<name>" does not run in a serverless or edge deployment: it needs a long-lived process`             |
+| Level   | Message                                                                                                                                   |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| info    | `Duty "<name>" runs in this process every <ms> ms` (this process took the lease)                                                          |
+| info    | `Duty "<name>" runs in this process on cron "<cron>" (<timezone>)` (the same, for a cron duty)                                            |
+| info    | `Duty "<name>" already runs elsewhere (lease "<key>"); this one takes it over if that one stops`                                          |
+| warn    | `Duty "<name>" lost its lease; another process runs it now`                                                                               |
+| warn    | `Duty "<name>" could not renew its lease within <ms> ms; it stops here until it gets the lease again` (`<ms>` is two thirds of `leaseMs`) |
+| warn    | `Duty "<name>": the lease store failed: <cause>` (that check or run is skipped and retried)                                               |
+| error   | `Duty "<name>" failed: <cause>` (the run threw; the lease is kept)                                                                        |
+| verbose | `Duty "<name>" is still running; skipping this run`                                                                                       |
+| warn    | `Duty "<name>" does not run in a serverless or edge deployment: it needs a long-lived process`                                            |
 
 ## Common Patterns
 

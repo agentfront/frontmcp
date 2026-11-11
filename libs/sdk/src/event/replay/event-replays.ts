@@ -8,6 +8,7 @@ import {
   type FrontMcpLogger,
 } from '../../common';
 import { LeaseHolder, type LeaseStorage } from '../../duty/lease-holder';
+import { outlasts } from '../../provider/provider.lifecycle';
 import { type EventOutbox } from '../delivery/event-outbox';
 import { EVENT_DIALECTS } from '../event-dialect';
 import { newEventId } from '../event-publisher';
@@ -51,6 +52,8 @@ export interface EventReplayStep {
 
 /** How long one process holds the loop of an event before another may take it over. */
 export const REPLAY_LEASE_MS = 30_000;
+/** How long `stop()` waits for the read in flight of a loop: the default `lifecycle.shutdownHookTimeoutMs`. */
+export const REPLAY_STOP_GRACE_MS = 3_000;
 /** Batches with unfinished deliveries after which `check()` waits for the callback to catch up. */
 export const MAX_PENDING_BATCHES = 50;
 /** How many times in a row one subscription is read while `check()` answers `hasMore`. */
@@ -108,12 +111,16 @@ export class EventReplays {
     }
   }
 
-  /** Stop every loop, wait for the read in flight, and release the leases for another process to take. */
+  /**
+   * Stop every loop, wait for the reads in flight, and release the leases for another process to take. The lease of a
+   * loop whose read did not end within `REPLAY_STOP_GRACE_MS` is left to expire instead.
+   */
   async stop(): Promise<void> {
-    for (const [eventName, holder] of this.holders) {
+    const stopping = [...this.holders].map(([eventName, holder]) => {
       this.unschedule(eventName);
-      await holder.stop(() => this.ticks.get(eventName));
-    }
+      return holder.stop(() => this.turnEnded(eventName));
+    });
+    await Promise.all(stopping);
     this.holders.clear();
   }
 
@@ -157,6 +164,16 @@ export class EventReplays {
     }, delayMs);
     timer.unref?.();
     this.timers.set(event.name, timer);
+  }
+
+  /** Whether the turn in flight of an event's loop, if any, ended within `REPLAY_STOP_GRACE_MS`; logged when not. */
+  private async turnEnded(eventName: string): Promise<boolean> {
+    const turn = this.ticks.get(eventName);
+    if (!(await outlasts(() => turn, REPLAY_STOP_GRACE_MS))) return true;
+    this.logger.warn(
+      `The webhook loop of event "${eventName}" did not end within ${REPLAY_STOP_GRACE_MS} ms; its lease expires by itself`,
+    );
+    return false;
   }
 
   /** Whether this process still runs the loop of an event: it holds the lease, and is not stopping. */

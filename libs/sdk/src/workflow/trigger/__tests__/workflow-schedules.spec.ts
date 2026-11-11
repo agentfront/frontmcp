@@ -443,6 +443,19 @@ describe('WorkflowSchedules', () => {
     await server.schedules.stop();
   });
 
+  it('says why no schedule starts when the lease store fails with a value that has no text', async () => {
+    jest.mocked(createStorage).mockReset().mockRejectedValue(Object.create(null));
+    const server = processWith([scheduled('digest')]);
+    await server.schedules.onReady();
+    await jest.advanceTimersByTimeAsync(2 * MINUTE);
+
+    expect(server.runs).toEqual([]);
+    expect(server.logger.error.mock.calls).toEqual([
+      ['The schedule of workflow "digest" did not start: [object Object]'],
+    ]);
+    await server.schedules.stop();
+  });
+
   describe('a Redis lease store that refuses connections at first', () => {
     const redis = { url: 'redis://cache.internal:6379' };
     const refused = new Error('connect ECONNREFUSED 127.0.0.1:6379');

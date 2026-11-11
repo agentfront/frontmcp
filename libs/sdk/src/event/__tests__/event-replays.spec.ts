@@ -1,8 +1,8 @@
-import { createMemoryStorage, type NamespacedStorage } from '@frontmcp/utils';
+import { createMemoryStorage, sha256Hex, type NamespacedStorage } from '@frontmcp/utils';
 
 import { type EventCheckResult, type EventEntry } from '../../common';
 import { type NewEventDelivery } from '../delivery/event-outbox';
-import { EventReplays, MAX_PENDING_BATCHES, REPLAY_LEASE_MS } from '../replay/event-replays';
+import { EventReplays, MAX_PENDING_BATCHES, REPLAY_LEASE_MS, REPLAY_STOP_GRACE_MS } from '../replay/event-replays';
 import {
   type EventReplayState,
   type EventSubscriptionPatch,
@@ -657,6 +657,61 @@ describe('EventReplays', () => {
       await jest.advanceTimersByTimeAsync(3 * INTERVAL_MS);
 
       expect(check).toHaveBeenCalledTimes(1);
+    });
+
+    it('let stop() end within the grace when check() never answers, the leases left to expire', async () => {
+      const { replays, event, check, records, storage, warn } = await harness();
+      records.set('sub_0001', subscription({ replay: { cursor: '1', watermark: '1', pending: [] } }));
+      check.mockReturnValue(new Promise<Checked>(() => undefined));
+      const otherEvent = { ...event, name: 'ticket.closed' } as EventEntry;
+      const leaseOf = (eventName: string) => storage.get(`replay-lease:${sha256Hex(eventName).slice(0, 32)}`);
+      await replays.start([event, otherEvent]);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(check).toHaveBeenCalledTimes(2);
+
+      let stopped = false;
+      const stopping = replays.stop().then(() => (stopped = true));
+      await jest.advanceTimersByTimeAsync(REPLAY_STOP_GRACE_MS);
+
+      expect(stopped).toBe(true);
+      await stopping;
+      expect(await leaseOf(event.name)).not.toBeNull();
+      expect(await leaseOf(otherEvent.name)).not.toBeNull();
+      expect(warn).toHaveBeenCalledWith(
+        'The webhook loop of event "ticket.updated" did not end within 3000 ms; its lease expires by itself',
+      );
+
+      await jest.advanceTimersByTimeAsync(REPLAY_LEASE_MS);
+      expect(await leaseOf(event.name)).toBeNull();
+      expect(await leaseOf(otherEvent.name)).toBeNull();
+    });
+
+    it('schedule no turn when a check takes the lease while stop() runs', async () => {
+      const storage = createMemoryStorage({ prefix: 'spec:events:', enableSweeper: false });
+      await storage.connect();
+      const { replays, event, check, records } = await harness(storage);
+      records.set('sub_0001', subscription({ replay: { cursor: '1', watermark: '1', pending: [] } }));
+      check.mockResolvedValue({ events: [], cursor: '1' });
+      const key = `replay-lease:${sha256Hex(event.name).slice(0, 32)}`;
+      await storage.set(key, 'another-process', { ttlSeconds: 30 });
+      await replays.start([event]);
+      await storage.delete(key);
+      let openStore: () => void = () => undefined;
+      const set = storage.set.bind(storage);
+      const gatedSet = jest.spyOn(storage, 'set').mockImplementationOnce(async (...args) => {
+        await new Promise<void>((resolve) => (openStore = resolve));
+        return set(...args);
+      });
+      await jest.advanceTimersByTimeAsync(REPLAY_LEASE_MS / 3);
+      expect(gatedSet).toHaveBeenCalled();
+
+      const stopping = replays.stop();
+      openStore();
+      await stopping;
+
+      expect(jest.getTimerCount()).toBe(0);
+      expect(await storage.get(key)).toBeNull();
+      jest.restoreAllMocks();
     });
   });
 

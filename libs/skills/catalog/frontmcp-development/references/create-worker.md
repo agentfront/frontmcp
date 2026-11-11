@@ -147,14 +147,19 @@ Found when the server starts:
   `minDelayMs` the first time, then `factor` times longer each time, up to `maxDelayMs`. A run that lasted longer than
   `maxDelayMs` starts the waits over at `minDelayMs`. With the defaults: 1 s, 2 s, 4 s, ... 60 s.
 - **`restart: false`.** `run()` runs once. When it ends, the worker stays stopped, and a leased one keeps its lease so
-  no other process runs it either.
+  no other process runs it either. A process that loses that lease and gets it back does not run it again; a process
+  that took the lease over meanwhile runs it once.
 - **Errors.** What `run()` throws is logged with the worker's name and never reaches the server: a failing worker does
   not crash it, and does not stop other workers.
 - **Abort.** `signal` is aborted at shutdown, and when this process loses the worker's lease. An error thrown after
-  that is not logged as a failure.
+  that is not logged as a failure. A process that cannot renew the lease aborts `signal` a third of `leaseMs` before
+  the store can give the lease to another process: `run()` must return promptly once `signal` aborts, or it may still
+  run when the next holder starts.
 - **Shutdown.** The server aborts `signal` and waits for `run()` to end, up to `lifecycle.shutdownHookTimeoutMs`
   (3000 ms by default), then moves on. A leased worker keeps renewing its lease while `run()` ends, then releases it,
-  so another process takes over at its next check.
+  so another process takes over at its next check. The worker's own `onShutdown()` runs once `run()` has ended,
+  within that same timeout: a `run()` that uses up the timeout leaves `onShutdown()` to run after the server moved on,
+  or not at all if the process exits first.
 - **One at a time.** A process that gets the lease back while its last run is still ending waits for it before it
   starts the next.
 
@@ -170,7 +175,10 @@ Each worker adds a check named `worker:<name>` to `/readyz` (see `health-readine
 | `stopped`    | `run()` ended and `restart: false` keeps it so                  | `unhealthy` after an error, `healthy` after a return |
 
 The check's `details` hold `state`, `restarts` (how many times `run()` was started again) and `lastError` (the message
-of the last error it threw); `error` repeats `lastError` when the status is not `healthy`. Only `unhealthy` makes
+of the last error it threw, until a run returns); `error` repeats `lastError` when the status is not `healthy`. A
+process that lost the lease of a stopped `restart: false` worker shows `standby`. While a leased worker's lease store
+cannot be opened, the check is `unhealthy` with `error: 'the lease store cannot be opened: <cause>'`; each lease check
+tries to open it again, and the worker runs once it opens and this process gets the lease. Only `unhealthy` makes
 `/readyz` answer `not_ready`. A container has no `/readyz`, so its workers add no check.
 
 ## Publishing Events
@@ -274,7 +282,8 @@ absolute:
 ## Where Leases Live
 
 A leased worker uses the store and the mechanism of duties (see `create-duty`, How the Lease Works): acquire, renew
-every third of `leaseMs`, expire by the store's clock, give up after a whole `leaseMs` without a renewal.
+every third of `leaseMs`, expire by the store's clock, give up two thirds of `leaseMs` after the last renewal, a third
+of `leaseMs` before the store could end the lease.
 
 | Server config                        | Scope                      | Store                                                                    | Key                                                    |
 | ------------------------------------ | -------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------ |
@@ -317,18 +326,18 @@ To run a worker that is always on:
 
 ## Log Lines
 
-| Level | Message                                                                                                      |
-| ----- | ------------------------------------------------------------------------------------------------------------ |
-| info  | `Worker "<name>" runs in this process` (it started here; for a leased worker, this process got the lease)    |
-| info  | `Worker "<name>" already runs elsewhere (lease "<key>"); this one takes it over if that one stops`           |
-| error | `Worker "<name>" failed: <cause>; it runs again in <ms> ms`                                                  |
-| warn  | `Worker "<name>" returned before its signal was aborted; it runs again in <ms> ms`                           |
-| error | `Worker "<name>" failed: <cause>; it does not run again (restart: false)`                                    |
-| warn  | `Worker "<name>" returned before its signal was aborted; it does not run again (restart: false)`             |
-| warn  | `Worker "<name>" lost its lease; another process runs it now`                                                |
-| warn  | `Worker "<name>" could not renew its lease within <leaseMs> ms; it stops here until it gets the lease again` |
-| warn  | `Worker "<name>": the lease store failed: <cause>` (that check is skipped and retried)                       |
-| warn  | `Worker "<name>" does not run in a serverless or edge deployment: it needs a long-lived process`             |
+| Level | Message                                                                                                                                     |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| info  | `Worker "<name>" runs in this process` (it started here; for a leased worker, this process got the lease)                                   |
+| info  | `Worker "<name>" already runs elsewhere (lease "<key>"); this one takes it over if that one stops`                                          |
+| error | `Worker "<name>" failed: <cause>; it runs again in <ms> ms`                                                                                 |
+| warn  | `Worker "<name>" returned before its signal was aborted; it runs again in <ms> ms`                                                          |
+| error | `Worker "<name>" failed: <cause>; it does not run again (restart: false)`                                                                   |
+| warn  | `Worker "<name>" returned before its signal was aborted; it does not run again (restart: false)`                                            |
+| warn  | `Worker "<name>" lost its lease; another process runs it now`                                                                               |
+| warn  | `Worker "<name>" could not renew its lease within <ms> ms; it stops here until it gets the lease again` (`<ms>` is two thirds of `leaseMs`) |
+| warn  | `Worker "<name>": the lease store failed: <cause>` (that check is skipped and retried)                                                      |
+| warn  | `Worker "<name>" does not run in a serverless or edge deployment: it needs a long-lived process`                                            |
 
 ## Common Patterns
 
@@ -372,6 +381,7 @@ To run a worker that is always on:
 | It restarts in a loop                         | `run()` returns right away, or throws on every start                          | Keep `run()` pending until `signal` aborts; read the logged cause; raise `restart.minDelayMs`       |
 | Shutdown takes `shutdownHookTimeoutMs`        | `run()` does not end when `signal` aborts                                     | Pass `signal` on, or return on its `abort` event                                                    |
 | `/readyz` is `not_ready` because of a worker  | A `restart: false` worker ended on an error                                   | Fix the cause and restart the server, or let it restart (remove `restart: false`)                   |
+| `/readyz`: `the lease store cannot be opened` | The SQLite file or Redis can't be reached, or `UnsafeDutyStoreError`          | Fix the store; the worker starts at the next lease check, without a restart                         |
 | Two processes run it for a moment             | The old holder was paused past its lease, or ignores `signal`                 | Return on `signal`; keep the event loop free; raise `leaseMs`                                       |
 
 ## Reference

@@ -5,6 +5,7 @@ import { WorkflowTriggerPrincipal, type OnReady } from '../../common';
 import { type WorkflowEntry } from '../../common/entries/workflow.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { loadCronSchedule, type CronSchedule } from '../../duty/cron-schedule';
+import { describeThrown } from '../../duty/describe-thrown';
 import { DutyRunner } from '../../duty/duty.runner';
 import {
   isLongLivedProcess,
@@ -134,7 +135,9 @@ export class WorkflowSchedules implements OnReady {
         this.runners.set(workflow, runner);
         await runner.start();
       } catch (error) {
-        this.options.logger.error(`The schedule of workflow "${workflow.name}" did not start: ${messageOf(error)}`);
+        this.options.logger.error(
+          `The schedule of workflow "${workflow.name}" did not start: ${describeThrown(error)}`,
+        );
       }
     }
   }
@@ -155,7 +158,7 @@ export class WorkflowSchedules implements OnReady {
       this.storage = undefined;
       if (!this.leaseStoreRetry) {
         for (const workflow of waiting) {
-          logger.error(`The schedule of workflow "${workflow.name}" did not start: ${messageOf(error)}`);
+          logger.error(`The schedule of workflow "${workflow.name}" did not start: ${describeThrown(error)}`);
         }
       }
       if (!this.stopped) {
@@ -218,10 +221,5 @@ function whyNotStarted(error: unknown, role: string): string {
   if (error instanceof JobNotAuthorizedError) {
     return `its create or execute rules don't allow the role "${role}"; add it to their roles`;
   }
-  return error instanceof InvalidInputError ? error.getInternalMessage() : messageOf(error);
-}
-
-/** The message of an error, or the thrown value as text. */
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return error instanceof InvalidInputError ? error.getInternalMessage() : describeThrown(error);
 }

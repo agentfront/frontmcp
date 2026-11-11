@@ -88,27 +88,56 @@ describe('LeaseHolder', () => {
     ]);
   });
 
-  it('gives the lease up once it could not renew it for a whole lease, and takes it again when the store answers', async () => {
+  it('gives the lease up a third of a lease before the store could end it, and takes it again when the store answers', async () => {
     const holder = probe();
     await start(holder);
     await jest.advanceTimersByTimeAsync(500);
 
     const failing = jest.spyOn(storage, 'expireIfEquals').mockRejectedValue('connection lost');
-    await jest.advanceTimersByTimeAsync(LEASE_MS);
-    failing.mockRestore();
+    await jest.advanceTimersByTimeAsync(1_500);
 
     expect(holder.events).toEqual([
       'acquired at 0',
       'warn: Worker "inbox": the lease store failed: connection lost',
       'warn: Worker "inbox": the lease store failed: connection lost',
-      'lost at 3000',
-      'warn: Worker "inbox" could not renew its lease within 3000 ms; it stops here until it gets the lease again',
+      'lost at 2000',
+      'warn: Worker "inbox" could not renew its lease within 2000 ms; it stops here until it gets the lease again',
       'warn: Worker "inbox": the lease store failed: connection lost',
     ]);
+    expect(await storage.get(KEY)).toBe(holder.holder.id);
+
+    await jest.advanceTimersByTimeAsync(1_500);
+    failing.mockRestore();
+    expect(holder.events).toHaveLength(7);
 
     await jest.advanceTimersByTimeAsync(LEASE_MS);
     expect(holder.holder.holding).toBe(true);
     expect(holder.events.at(-1)).toBe('acquired at 4000');
+  });
+
+  it('keeps the lease through one failed renew, which it tries again half a renew period later', async () => {
+    const holder = probe();
+    await start(holder);
+    await jest.advanceTimersByTimeAsync(500);
+
+    jest.spyOn(storage, 'expireIfEquals').mockRejectedValueOnce('connection lost');
+    await jest.advanceTimersByTimeAsync(2 * LEASE_MS);
+
+    expect(holder.holder.holding).toBe(true);
+    expect(holder.events).toEqual(['acquired at 0', 'warn: Worker "inbox": the lease store failed: connection lost']);
+  });
+
+  it('reports a store failure whose value has no string form, and keeps checking', async () => {
+    const holder = probe();
+    jest.spyOn(storage, 'set').mockRejectedValueOnce(Object.create(null));
+
+    await start(holder);
+    await jest.advanceTimersByTimeAsync(LEASE_MS / 3);
+
+    expect(holder.events).toEqual([
+      'warn: Worker "inbox": the lease store failed: [object Object]',
+      'acquired at 1000',
+    ]);
   });
 
   it('keeps renewing the lease on stop() until what ran under it has ended, then releases it', async () => {
@@ -137,6 +166,18 @@ describe('LeaseHolder', () => {
     expect(first.events).toEqual(['acquired at 0']);
   });
 
+  it('stops renewing without releasing the lease when what ran under it did not end', async () => {
+    const holder = probe();
+    await start(holder);
+
+    await holder.holder.stop(() => false);
+
+    expect(holder.holder.holding).toBe(false);
+    expect(await storage.get(KEY)).toBe(holder.holder.id);
+    await jest.advanceTimersByTimeAsync(LEASE_MS);
+    expect(await storage.get(KEY)).toBeNull();
+  });
+
   it('leaves the lease of another process alone when it stops without holding it', async () => {
     const first = probe();
     const second = probe();
@@ -160,6 +201,7 @@ describe('LeaseHolder', () => {
 
     expect(await storage.get(KEY)).toBeNull();
     expect(holder.holder.holding).toBe(false);
+    expect(holder.events).toEqual([]);
     expect(jest.getTimerCount()).toBe(0);
   });
 

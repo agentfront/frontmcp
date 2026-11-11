@@ -122,6 +122,35 @@ describe('WorkerSupervisor', () => {
     await worker.supervisor.stop();
   });
 
+  it('keeps supervising a worker that throws a value with no string form', async () => {
+    const worker = probe(() => {
+      throw Object.create(null);
+    });
+
+    worker.supervisor.start();
+    await jest.advanceTimersByTimeAsync(1_000);
+
+    expect(worker.starts).toEqual([0, 1_000]);
+    expect(worker.supervisor.status()).toEqual({ state: 'restarting', restarts: 2, lastError: '[object Object]' });
+    expect(worker.logger.error).toHaveBeenCalledWith(
+      'Worker "inbox" failed: [object Object]; it runs again in 1000 ms',
+    );
+    await worker.supervisor.stop();
+  });
+
+  it('logs a failure of the supervision itself, and still stops', async () => {
+    const worker = probe(() => undefined, false);
+    worker.logger.warn.mockImplementationOnce(() => {
+      throw new Error('the log sink is closed');
+    });
+
+    worker.supervisor.start();
+    await jest.advanceTimersByTimeAsync(0);
+
+    await expect(worker.supervisor.stop()).resolves.toBeUndefined();
+    expect(worker.logger.error).toHaveBeenCalledWith('Worker "inbox" is no longer supervised: the log sink is closed');
+  });
+
   it('starts the waits over after a run that lasted longer than maxDelayMs', async () => {
     const worker = probe(
       async (_context, attempt) => {
@@ -177,6 +206,34 @@ describe('WorkerSupervisor', () => {
     expect(worker.logger.warn.mock.calls).toEqual([
       ['Worker "inbox" returned before its signal was aborted; it does not run again (restart: false)'],
     ]);
+  });
+
+  it('never runs a restart: false worker again once a run ended, and is on standby while aborted', async () => {
+    const worker = probe(() => fail('no such mailbox'), false);
+    worker.supervisor.start();
+    await jest.advanceTimersByTimeAsync(500);
+
+    worker.supervisor.abort();
+    expect(worker.supervisor.status()).toEqual({ state: 'standby', restarts: 0, lastError: 'no such mailbox' });
+
+    worker.supervisor.start();
+    await jest.advanceTimersByTimeAsync(120_000);
+
+    expect(worker.starts).toEqual([0]);
+    expect(worker.supervisor.status()).toEqual({ state: 'stopped', restarts: 0, lastError: 'no such mailbox' });
+    expect(worker.logger.error).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the last error until a run returns', async () => {
+    const worker = probe((_context, attempt) => (attempt === 1 ? fail('dropped') : undefined));
+
+    worker.supervisor.start();
+    await jest.advanceTimersByTimeAsync(500);
+    expect(worker.supervisor.status()).toEqual({ state: 'restarting', restarts: 1, lastError: 'dropped' });
+
+    await jest.advanceTimersByTimeAsync(1_000);
+    expect(worker.supervisor.status()).toEqual({ state: 'restarting', restarts: 2 });
+    await worker.supervisor.stop();
   });
 
   it('aborts the signal on stop(), waits for the run to end, and does not run it again', async () => {
@@ -279,6 +336,19 @@ describe('WorkerSupervisor', () => {
 
     expect(worker.starts).toEqual([0]);
     expect(worker.supervisor.status().state).toBe('standby');
+  });
+
+  it('never starts again once stop() was called', async () => {
+    const worker = probe(untilAborted);
+    worker.supervisor.start();
+    await jest.advanceTimersByTimeAsync(500);
+
+    await worker.supervisor.stop();
+    worker.supervisor.start();
+    await jest.advanceTimersByTimeAsync(10_000);
+
+    expect(worker.starts).toEqual([0]);
+    expect(worker.supervisor.status()).toEqual({ state: 'standby', restarts: 0 });
   });
 
   it('does nothing on stop() before it was started', async () => {
