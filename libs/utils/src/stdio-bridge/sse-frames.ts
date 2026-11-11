@@ -1,24 +1,31 @@
 import type { JsonRpcFrame } from './stdio-framer';
 import type { BridgeLogger } from './types';
 
+/** The most characters an event may hold before its blank line: a server that never ends one is cut off. */
+const MAX_EVENT_CHARS = 64 * 1024 * 1024;
+
 /**
  * Hand the frame of each event of an SSE body to `deliver`, until the body ends. An event is its `data:` lines up
- * to a blank line, joined by newlines; the event a body ends in is delivered without one.
+ * to a blank line, joined by newlines; the event a body ends in is delivered without one. A body whose pending
+ * event grows past `maxEventChars` is cancelled, and the relay rejects.
  */
 export async function relaySseFrames(
   body: ReadableStream<Uint8Array>,
   deliver: (frame: JsonRpcFrame) => void | Promise<void>,
   log: BridgeLogger,
+  maxEventChars = MAX_EVENT_CHARS,
 ): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   let eventData: string[] = [];
+  let eventChars = 0;
 
   /** Deliver the frame of the event read so far, when it has data. */
   async function deliverEvent(): Promise<void> {
     const json = eventData.join('\n').trim();
     eventData = [];
+    eventChars = 0;
     if (!json) return;
     try {
       await deliver(JSON.parse(json) as JsonRpcFrame);
@@ -39,8 +46,17 @@ export async function relaySseFrames(
       const line = buffer.slice(0, newline).trim();
       buffer = buffer.slice(newline + 1);
       newline = buffer.indexOf('\n');
-      if (line === '') await deliverEvent();
-      else if (line.startsWith('data:')) eventData.push(line.slice(5).trim());
+      if (line === '') {
+        await deliverEvent();
+      } else if (line.startsWith('data:')) {
+        const data = line.slice(5).trim();
+        eventData.push(data);
+        eventChars += data.length + 1;
+      }
+    }
+    if (eventChars + buffer.length > maxEventChars) {
+      await reader.cancel();
+      throw new Error(`an SSE event is larger than ${maxEventChars} characters`);
     }
   }
 }

@@ -65,6 +65,40 @@ describe('relaySseFrames', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['data lines with no blank line', ['data: 1234567890\n', 'data: 1234567890\n', 'data: 1234567890\n']],
+    ['empty data lines', ['data:\n'.repeat(12), 'data:\n'.repeat(12), 'data:\n'.repeat(12)]],
+    ['one line with no end', ['data: 1234567890', '1234567890', '1234567890']],
+  ])('cancels a body whose event grows past the limit, and rejects: %s', async (_, chunks) => {
+    const frames: JsonRpcFrame[] = [];
+    const cancelled = jest.fn();
+    const sent = [`data: ${JSON.stringify(listChanged)}\n\n`, ...chunks];
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = sent.shift();
+        if (chunk === undefined) return;
+        controller.enqueue(new TextEncoder().encode(chunk));
+      },
+      cancel: cancelled,
+    });
+
+    const relayed = relaySseFrames(body, (frame) => void frames.push(frame), recordingLog(), 20);
+
+    await expect(relayed).rejects.toThrow('an SSE event is larger than 20 characters');
+    expect(frames).toEqual([listChanged]);
+    expect(cancelled).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes an event that is as large as the limit while it waits for its blank line', async () => {
+    const frames: JsonRpcFrame[] = [];
+    const data = JSON.stringify(listChanged);
+    const body = bodyOf([`data: ${data}\n`, '\n']);
+
+    await relaySseFrames(body, (frame) => void frames.push(frame), recordingLog(), data.length + 1);
+
+    expect(frames).toEqual([listChanged]);
+  });
+
   it('warns about an event that is not JSON, and delivers the next one', async () => {
     const { frames, log } = await framesOf([`data: not json\n\ndata: ${JSON.stringify(listChanged)}\n\n`]);
 
