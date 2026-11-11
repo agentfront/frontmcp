@@ -43,6 +43,7 @@ export class RemoteEventForwardError extends Error {
 /** A forwarder that POSTs `{ name, data, ...options }` as JSON to `url` with the user's bearer token. */
 export function createRemoteEventForwarder(options: RemoteEventForwarderOptions): RemoteEventForwarder {
   return {
+    /** POST the event with the current token; throws RemoteEventForwardError on a non-2xx answer. */
     async forward(name, data, publishOptions = {}) {
       const token = await options.getToken();
       const response = await (options.fetch ?? globalThis.fetch.bind(globalThis))(options.url, {

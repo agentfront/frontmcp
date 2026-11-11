@@ -25,7 +25,13 @@ import { event, z, type EventSubscriptionRef } from '@frontmcp/sdk';
 
 import { mailUpstream } from '../mail-upstream';
 
-const stopWatching = new Map<string, () => void>();
+interface MailboxWatch {
+  stop: () => void;
+  subscriptions: number;
+}
+
+// One watcher per mailbox, shared by every open subscription of its owner
+const mailboxWatches = new Map<string, MailboxWatch>();
 
 export const emailImportant = event({
   name: 'email.important',
@@ -34,6 +40,11 @@ export const emailImportant = event({
 
   onSubscribe(_args, subscription: EventSubscriptionRef) {
     const owner = subscription.subscriber.sub;
+    const watching = mailboxWatches.get(owner);
+    if (watching) {
+      watching.subscriptions += 1;
+      return;
+    }
     const events = this.events;
     const logger = this.scope.logger;
     const stop = mailUpstream.watch(owner, (mail) => {
@@ -42,12 +53,17 @@ export const emailImportant = event({
         .publish(emailImportant, data, { audience: { sub: owner } })
         .catch((error: unknown) => logger.warn(`Mail ${mail.id} was not published`, error));
     });
-    stopWatching.set(subscription.id, stop);
+    mailboxWatches.set(owner, { stop, subscriptions: 1 });
   },
 
   onUnsubscribe(_args, subscription: EventSubscriptionRef) {
-    stopWatching.get(subscription.id)?.();
-    stopWatching.delete(subscription.id);
+    const owner = subscription.subscriber.sub;
+    const watching = mailboxWatches.get(owner);
+    if (!watching) return;
+    watching.subscriptions -= 1;
+    if (watching.subscriptions > 0) return;
+    watching.stop();
+    mailboxWatches.delete(owner);
   },
 });
 ```

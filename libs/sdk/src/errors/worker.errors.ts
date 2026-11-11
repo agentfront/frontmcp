@@ -2,6 +2,7 @@ import { InternalMcpError } from './mcp.error';
 
 /** Thrown when a worker starts with the lease of a worker of another class in this process: one would never run. */
 export class WorkerNameConflictError extends InternalMcpError {
+  /** Names the worker, its server and the two classes that declare it. */
   constructor(workerName: string, serverName: string, firstClass: string, secondClass: string) {
     super(
       `Worker "${workerName}" of server "${serverName}" is declared by two classes in this process (${firstClass} ` +

@@ -24,6 +24,7 @@ import {
 import { type DirectMcpServer } from '../../../direct/direct.types';
 import { WorkflowTriggerConfigError } from '../../../errors';
 import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
+import { jobExecutionManagerOf } from '../../../job/job-run-access';
 import { type Scope } from '../../../scope/scope.instance';
 
 const sent: Array<Record<string, unknown>> = [];
@@ -180,6 +181,29 @@ describe('scheduled workflows in a server', () => {
       await new Promise((resolve) => setTimeout(resolve, 1_200));
 
       expect(sent.length).toBe(sentWhenWithdrawn);
+    } finally {
+      await server.dispose();
+    }
+  });
+
+  it('start a run under the id a schedule gives it once: the same id again, also at once, starts nothing', async () => {
+    @App({ id: 'weekly', name: 'Weekly', jobs: [SendDigestJob], workflows: [WeeklyDigestWorkflow] })
+    class WeeklyApp {}
+    const server = await FrontMcpInstance.createDirect({ ...CONFIG, apps: [WeeklyApp] });
+    const scope = (server as unknown as { scope: Scope }).scope;
+    try {
+      const manager = jobExecutionManagerOf(scope);
+      const workflow = scope.workflows?.findByName('weekly-digest');
+      const jobs = scope.jobs;
+      if (!manager || !workflow || !jobs) throw new Error('expected the job system to run');
+      const start = (runId: string) => manager.startWorkflowRunOnce(workflow, jobs, runId, { workflowInput: {} });
+
+      expect(await start('schedule-1-abc')).toBe(true);
+      expect(await start('schedule-1-abc')).toBe(false);
+      const atOnce = await Promise.all([start('schedule-2-def'), start('schedule-2-def')]);
+      const runs = await manager.listRuns({ jobId: 'weekly-digest' });
+      expect(atOnce.filter(Boolean)).toHaveLength(1);
+      expect(runs.map((run) => run.runId).sort()).toEqual(['schedule-1-abc', 'schedule-2-def']);
     } finally {
       await server.dispose();
     }

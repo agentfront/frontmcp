@@ -37,6 +37,7 @@ export class EventStreams {
   private readonly logger: FrontMcpLogger;
   private stopRelay?: () => Promise<void> | void;
 
+  /** Takes the buffer, the per-caller limit and the relay storage; draws the id this process relays as. */
   constructor(private readonly options: EventStreamsOptions) {
     this.nodeId = randomUUID();
     this.logger = options.logger.child('EventStreams');

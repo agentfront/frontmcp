@@ -1,6 +1,12 @@
 import { createMemoryStorage, type RootStorage } from '@frontmcp/utils';
 
-import { loadCronSchedule, takeDueRun, type CronSchedule } from '../cron-schedule';
+import {
+  claimDueRun,
+  loadCronSchedule,
+  settleCronClaim,
+  type CronLedgerStorage,
+  type CronSchedule,
+} from '../cron-schedule';
 
 const KEY = 'demo:report:ran';
 
@@ -173,7 +179,12 @@ describe('loadCronSchedule', () => {
   });
 });
 
-describe('takeDueRun', () => {
+/** A take as a duty makes it: done at once, never owed. */
+async function takeDueRun(schedule: CronSchedule, storage: CronLedgerStorage, key: string): Promise<boolean> {
+  return (await claimDueRun(schedule, storage, key)) !== undefined;
+}
+
+describe('claimDueRun, as a duty takes a run', () => {
   const START = at('2026-11-10T08:59:30Z');
   let storage: RootStorage;
   let everyMinute: CronSchedule;
@@ -245,5 +256,82 @@ describe('takeDueRun', () => {
     expect(await takeDueRun(everyMinute, storage, KEY)).toBe(false);
     expect(await storage.get(KEY)).toBe(String(START));
     expect(await storage.ttl(KEY)).toBe(-1);
+  });
+});
+
+describe('claimDueRun, owed until settled', () => {
+  const START = at('2026-11-10T08:59:30Z');
+  const NINE = at('2026-11-10T09:00:00Z');
+  let storage: RootStorage;
+  let everyMinute: CronSchedule;
+
+  beforeEach(async () => {
+    jest.useFakeTimers({ now: START });
+    storage = createMemoryStorage();
+    await storage.connect();
+    everyMinute = await loadCronSchedule({ expression: '* * * * *', timezone: 'UTC' });
+    await claimDueRun(everyMinute, storage, KEY, true);
+  });
+
+  afterEach(async () => {
+    await storage.disconnect();
+    jest.useRealTimers();
+  });
+
+  it('records the scheduled time the run is for until the claim is settled', async () => {
+    jest.setSystemTime(NINE + 5_000);
+
+    const claim = await claimDueRun(everyMinute, storage, KEY, true);
+
+    const recorded = `${NINE + 5_000} ${NINE} ${NINE + 5_000}`;
+    expect(claim).toEqual({ scheduledAt: NINE, takenAt: NINE + 5_000, recorded });
+    expect(await storage.get(KEY)).toBe(recorded);
+    await settleCronClaim(storage, KEY, claim as NonNullable<typeof claim>);
+    expect(await storage.get(KEY)).toBe(String(NINE + 5_000));
+    expect(await claimDueRun(everyMinute, storage, KEY, true)).toBeUndefined();
+  });
+
+  it('gives a claim still owed to one of the processes that check next, for the same run', async () => {
+    jest.setSystemTime(NINE + 1_000);
+    await claimDueRun(everyMinute, storage, KEY, true);
+    jest.setSystemTime(NINE + 70_000);
+
+    const claims = await Promise.all([
+      claimDueRun(everyMinute, storage, KEY, true),
+      claimDueRun(everyMinute, storage, KEY, true),
+    ]);
+    const takenAgain = claims.find((claim) => claim !== undefined);
+
+    expect(claims.filter((claim) => claim !== undefined)).toHaveLength(1);
+    expect(takenAgain).toEqual({
+      scheduledAt: NINE,
+      takenAt: NINE + 1_000,
+      recorded: `${NINE + 1_000} ${NINE} ${NINE + 70_000}`,
+    });
+    await settleCronClaim(storage, KEY, takenAgain as NonNullable<typeof takenAgain>);
+    expect(await storage.get(KEY)).toBe(String(NINE + 1_000));
+    expect(await claimDueRun(everyMinute, storage, KEY, true)).toMatchObject({ scheduledAt: NINE + 60_000 });
+  });
+
+  it('leaves a claim another process took over meanwhile to that process', async () => {
+    jest.setSystemTime(NINE);
+    const first = await claimDueRun(everyMinute, storage, KEY, true);
+    jest.setSystemTime(NINE + 70_000);
+    const takenOver = await claimDueRun(everyMinute, storage, KEY, true);
+
+    await settleCronClaim(storage, KEY, first as NonNullable<typeof first>);
+
+    expect(await storage.get(KEY)).toBe(takenOver?.recorded);
+  });
+
+  it('records the take as done at once without owedUntilSettled, as a duty takes it', async () => {
+    jest.setSystemTime(NINE);
+
+    expect(await claimDueRun(everyMinute, storage, KEY)).toEqual({
+      scheduledAt: NINE,
+      takenAt: NINE,
+      recorded: String(NINE),
+    });
+    expect(await storage.get(KEY)).toBe(String(NINE));
   });
 });

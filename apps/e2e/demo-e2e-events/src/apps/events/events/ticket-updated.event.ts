@@ -39,10 +39,11 @@ export async function recordTicketChange(change: TicketChange): Promise<number> 
   return count;
 }
 
-/** Write the changes after any write in progress, so the last write to finish holds every change. */
+/** Write the changes after the write in progress, whether it failed or not: the last write holds every change. */
 function saveChanges(file: string): Promise<void> {
-  saving = saving.then(() => writeFile(file, JSON.stringify(ticketChanges)));
-  return saving;
+  const write = saving.catch(() => undefined).then(() => writeFile(file, JSON.stringify(ticketChanges)));
+  saving = write;
+  return write;
 }
 
 /** Fires when a ticket changes. It is read from an upstream that can replay, so its cursor is the upstream's. */
@@ -55,12 +56,16 @@ export const ticketUpdated = event({
   async check(args, cursor, limits) {
     const changes = await allTicketChanges();
     if (cursor === null) return { events: [], cursor: String(changes.length) };
-    const position = Number(cursor);
+    const asked = Number(cursor);
+    // A cursor this upstream never gave restarts from the current position, as a gap
+    const truncated = !Number.isInteger(asked) || asked < 0 || asked > changes.length;
+    const position = truncated ? changes.length : asked;
     const batch = changes.slice(position, position + (limits?.maxEvents ?? changes.length));
     const wanted = batch.filter((change) => args.queue === undefined || args.queue === change.queue);
     return {
       events: wanted.map((change) => ({ data: change })),
       cursor: String(position + batch.length),
+      truncated,
       hasMore: position + batch.length < changes.length,
     };
   },

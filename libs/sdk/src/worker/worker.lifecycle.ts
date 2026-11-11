@@ -1,5 +1,3 @@
-import { type RootStorage } from '@frontmcp/utils';
-
 import {
   FrontMcpLogger,
   type HealthProbeResult,
@@ -16,7 +14,6 @@ import {
   LeaseClaims,
   leaseKey,
   leaseStorageConfig,
-  openLeaseStore,
   startsBackgroundWork,
   type LeaseScope,
 } from '../duty/lease-store';
@@ -24,13 +21,14 @@ import { ClusterScopeNeedsRedisError } from '../errors/duty.errors';
 import { WorkerNameConflictError } from '../errors/worker.errors';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 import type ProviderRegistry from '../provider/provider.registry';
+import { LazyLeaseStore } from './lazy-lease-store';
 import { WorkerSupervisor, type WorkerStatus } from './worker.supervisor';
 
 type WorkerInstance = WorkerInterface & Partial<OnBootstrap & OnReady & OnShutdown>;
 
 interface StartedLease {
   holder: LeaseHolder;
-  storage: RootStorage;
+  storage: LazyLeaseStore;
 }
 
 interface StartedWorker {
@@ -63,9 +61,16 @@ export async function startWorkers(providers: ProviderRegistry): Promise<void> {
   }
 }
 
-/** What `/readyz` shows for a worker: unhealthy once it ended on an error for good, degraded between two runs. */
-export function workerHealth(status: WorkerStatus): HealthProbeResult {
+/**
+ * What `/readyz` shows for a worker: unhealthy while its lease store cannot be opened or once it ended on an error for
+ * good, degraded between two runs.
+ */
+export function workerHealth(status: WorkerStatus, leaseStoreFailure?: string): HealthProbeResult {
   const { state, lastError } = status;
+  if (leaseStoreFailure !== undefined) {
+    const error = `the lease store cannot be opened: ${leaseStoreFailure}`;
+    return { status: 'unhealthy', details: { ...status }, error };
+  }
   if (state === 'restarting') return { status: 'degraded', details: { ...status }, error: lastError };
   if (state === 'stopped' && lastError !== undefined) {
     return { status: 'unhealthy', details: { ...status }, error: lastError };
@@ -73,27 +78,32 @@ export function workerHealth(status: WorkerStatus): HealthProbeResult {
   return { status: 'healthy', details: { ...status } };
 }
 
+/** Runs a `@Worker` instance's own lifecycle hooks, and starts and stops its supervised run around them. */
 export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
   private started?: Promise<StartedWorker | undefined>;
   private claimedKey?: string;
 
+  /** Takes the worker instance, its resolved metadata and the providers it was built with. */
   constructor(
     private readonly worker: WorkerInstance,
     private readonly metadata: ResolvedWorkerMetadata,
     private readonly providers: ProviderRegistry,
   ) {}
 
+  /** Refuse a cluster worker without Redis, then run the worker's own `onBootstrap()`. */
   async onBootstrap(): Promise<void> {
     this.refuseClusterWithoutRedis();
     await this.worker.onBootstrap?.();
   }
 
+  /** Run the worker's own `onReady()`, then start it once. */
   async onReady(): Promise<void> {
     await this.worker.onReady?.();
     this.started ??= this.start();
     await this.started;
   }
 
+  /** Stop the run and release its lease and claim, then run the worker's own `onShutdown()`. */
   async onShutdown(): Promise<void> {
     const started = await this.started?.catch(() => undefined);
     if (started) await this.stop(started);
@@ -111,6 +121,7 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
     }
   }
 
+  /** Supervise the run, at once or under a lease per its scope; only in a long-lived process. */
   private async start(): Promise<StartedWorker | undefined> {
     const { name, restart, scope } = this.metadata;
     const logger = this.providers.get(FrontMcpLogger);
@@ -119,26 +130,28 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
       return undefined;
     }
     const supervisor = new WorkerSupervisor({ name, restart, logger, run: (context) => this.worker.run(context) });
-    const lease = scope === 'process' ? undefined : await this.contend(supervisor, scope, logger);
-    if (!lease) {
-      logger.info(`Worker "${name}" runs in this process`);
-      supervisor.start();
-    }
-    return { supervisor, lease, removeHealthProbe: this.registerHealthProbe(supervisor) };
+    if (scope !== 'process') return this.contend(supervisor, scope, logger);
+    logger.info(`Worker "${name}" runs in this process`);
+    supervisor.start();
+    return { supervisor, removeHealthProbe: this.registerHealthProbe(supervisor) };
   }
 
-  /** Contend for the worker's lease: it runs while this process holds it, and its signal aborts when the lease is lost. */
+  /**
+   * Contend for the worker's lease: it runs while this process holds it, and its signal aborts when the lease is lost.
+   * Its health check is in place before the lease store is first opened, which each lease check tries until it opens.
+   */
   private async contend(
     supervisor: WorkerSupervisor,
     scope: LeaseScope,
     logger: FrontMcpLogger,
-  ): Promise<StartedLease> {
+  ): Promise<StartedWorker> {
     const { name, leaseMs } = this.metadata;
     const config = this.providers.get(FrontMcpConfig);
     const serverName = config.info?.name ?? 'frontmcp';
     const key = leaseKey(name, scope, serverName);
     this.claim(key, serverName);
-    const storage = await openLeaseStore(leaseStorageConfig(config.redis, 'worker', scope));
+    const storage = new LazyLeaseStore(leaseStorageConfig(config.redis, 'worker', scope));
+    const removeHealthProbe = this.registerHealthProbe(supervisor, storage);
     const holder = new LeaseHolder({
       label: `Worker "${name}"`,
       key,
@@ -152,7 +165,7 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
       onLost: () => supervisor.abort(),
     });
     await holder.start();
-    return { holder, storage };
+    return { supervisor, lease: { holder, storage }, removeHealthProbe };
   }
 
   /** Abort the run and wait for it, a leased worker still renewing its lease meanwhile, then release the lease. */
@@ -176,6 +189,7 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
     this.claimedKey = key;
   }
 
+  /** Give back this worker's claim on its lease key, if it took one. */
   private releaseClaim(): void {
     const key = this.claimedKey;
     this.claimedKey = undefined;
@@ -183,15 +197,16 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
   }
 
   /** Show the worker in `/readyz` as `worker:<name>`; a container has no health checks to add it to. */
-  private registerHealthProbe(supervisor: WorkerSupervisor): () => void {
+  private registerHealthProbe(supervisor: WorkerSupervisor, storage?: LazyLeaseStore): () => void {
     const scope = this.activeScope();
     if (!scope) return () => undefined;
     return scope.registerHealthProbe({
       name: `worker:${this.metadata.name}`,
-      check: async () => workerHealth(supervisor.status()),
+      check: async () => workerHealth(supervisor.status(), storage?.openFailure),
     });
   }
 
+  /** The scope the providers serve, or undefined where there is none, as in a container. */
   private activeScope(): ScopeEntry | undefined {
     try {
       return this.providers.getActiveScope();

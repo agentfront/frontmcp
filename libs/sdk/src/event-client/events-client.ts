@@ -18,6 +18,7 @@ import { canonicalJson, generateStandardWebhookSecret } from '@frontmcp/utils';
 
 import { listAllPages } from '../common/utils/list-all-pages.utils';
 import {
+  DuplicateEventSubscriptionError,
   EventRequestError,
   EventSubscriptionTerminatedError,
   NoCompatibleDeliveryModeError,
@@ -69,6 +70,16 @@ function isTerminal(error: unknown): error is EventRequestError {
 function eventErrorOf(error: EventRequestError): EventError {
   const data = typeof error.data === 'object' && error.data !== null ? (error.data as Record<string, unknown>) : {};
   return { code: error.rpcCode, message: error.message, data };
+}
+
+/** Whether two subscriptions name the same event with the same arguments, as JSON. */
+function sameArguments(
+  first: Pick<EventSubscription, 'name' | 'arguments'>,
+  second: Pick<EventSubscription, 'name' | 'arguments'>,
+): boolean {
+  const keyOf = ({ name, arguments: args }: Pick<EventSubscription, 'name' | 'arguments'>) =>
+    canonicalJson({ name, arguments: args });
+  return keyOf(first) === keyOf(second);
 }
 
 /** Wait `ms`, or less when `signal` aborts. */
@@ -187,6 +198,9 @@ class ClientEventSubscription implements EventSubscription {
   private registration?: EventWebhookRegistration;
   private secret?: string;
   private refreshTimer?: ReturnType<typeof setTimeout>;
+  private pendingRefresh?: Promise<void>;
+  /** Whether `refreshNow()` asked for a refresh no timer has started yet, which a later schedule must not delay. */
+  private immediateRefreshOwed = false;
   private firstRequest = true;
   private failedAttempts = 0;
 
@@ -227,6 +241,8 @@ class ClientEventSubscription implements EventSubscription {
     this.stop();
     this.queue.end();
     if (this.mode !== 'webhook') return;
+    // An events/subscribe still in flight would otherwise reach the server after the unsubscribe and revive it
+    await this.pendingRefresh?.catch(() => undefined);
     const delivery = { mode: 'webhook', url: this.settings.webhook?.url };
     await this.settings.transport
       .request(EVENTS_METHODS.unsubscribe, { name: this.name, arguments: this.arguments, delivery })
@@ -240,6 +256,20 @@ class ClientEventSubscription implements EventSubscription {
     this.streamController?.abort();
     clearTimeout(this.refreshTimer);
     this.registration?.release();
+  }
+
+  /** End the subscription on this side only: the server's subscription belongs to another one of this client. */
+  discard(): void {
+    if (this.stopped) return;
+    this.stop();
+    this.queue.end();
+  }
+
+  /** Refresh at once, as when another subscription of this client sent its own secret for the same server id. */
+  refreshNow(): void {
+    if (this.stopped) return;
+    this.immediateRefreshOwed = true;
+    this.scheduleRefresh(0);
   }
 
   /** End the subscription because the server ended it. */
@@ -398,7 +428,8 @@ class ClientEventSubscription implements EventSubscription {
       },
     });
     try {
-      await this.refresh();
+      this.pendingRefresh = this.refresh();
+      await this.pendingRefresh;
     } catch (error) {
       this.registration.release();
       throw error;
@@ -427,14 +458,21 @@ class ClientEventSubscription implements EventSubscription {
     this.scheduleRefresh(Math.min(Math.max(delayMs, this.settings.pollFloorMs), MAX_TIMER_MS));
   }
 
-  /** Refresh after `delayMs`; a failed refresh is retried, a refused one ends the subscription. */
+  /** Refresh after `delayMs`, or at once while `refreshNow()` is owed; one timer at a time. */
   private scheduleRefresh(delayMs: number): void {
-    this.refreshTimer = setTimeout(() => {
-      this.refresh().catch((error: unknown) => {
-        if (isTerminal(error)) this.terminate(eventErrorOf(error));
-        else if (!this.stopped) this.scheduleRefresh(this.retryDelayMs());
-      });
-    }, delayMs);
+    clearTimeout(this.refreshTimer);
+    this.refreshTimer = setTimeout(() => this.refreshAfterInFlight(), this.immediateRefreshOwed ? 0 : delayMs);
+  }
+
+  /** Start a refresh once the one in flight is answered; a failed one is retried, a refused one ends the subscription. */
+  private refreshAfterInFlight(): void {
+    this.immediateRefreshOwed = false;
+    const inFlight = this.pendingRefresh?.catch(() => undefined) ?? Promise.resolve();
+    this.pendingRefresh = inFlight.then(() => (this.stopped ? undefined : this.refresh()));
+    this.pendingRefresh.catch((error: unknown) => {
+      if (isTerminal(error)) this.terminate(eventErrorOf(error));
+      else if (!this.stopped) this.scheduleRefresh(this.retryDelayMs());
+    });
   }
 }
 
@@ -489,6 +527,10 @@ export class EventsClient {
       options,
       onStopped: (stopped) => this.subscriptions.delete(stopped),
     });
+    // Checked and reserved with no await in between, so two concurrent calls cannot both pass
+    if (mode === 'webhook' && this.webhookHolderOf((held) => sameArguments(held, subscription))) {
+      throw new DuplicateEventSubscriptionError(name, this.options.webhook?.url ?? '');
+    }
     this.subscriptions.add(subscription);
     try {
       await subscription.start();
@@ -496,7 +538,19 @@ export class EventsClient {
       this.subscriptions.delete(subscription);
       throw error;
     }
+    const holder =
+      mode === 'webhook' && this.webhookHolderOf((held) => held !== subscription && held.id === subscription.id);
+    if (holder) {
+      subscription.discard();
+      holder.refreshNow();
+      throw new DuplicateEventSubscriptionError(name, this.options.webhook?.url ?? '');
+    }
     return subscription;
+  }
+
+  /** The live webhook subscription of this client that `matches`, if any. */
+  private webhookHolderOf(matches: (held: ClientEventSubscription) => boolean): ClientEventSubscription | undefined {
+    return [...this.subscriptions].find((held) => held.mode === 'webhook' && matches(held));
   }
 
   /** Cancel every subscription the client holds, as before its connection closes. */

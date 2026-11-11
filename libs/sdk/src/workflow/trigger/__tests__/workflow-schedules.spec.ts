@@ -6,7 +6,13 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { createMemoryStorage, createStorage, resetRuntimeContext, type RootStorage } from '@frontmcp/utils';
+import {
+  createMemoryStorage,
+  createStorage,
+  resetRuntimeContext,
+  type NamespacedStorage,
+  type RootStorage,
+} from '@frontmcp/utils';
 
 import { workflowTriggerOf } from '../../../common';
 import { type WorkflowEntry } from '../../../common/entries/workflow.entry';
@@ -17,7 +23,12 @@ import { InvalidInputError, JobNotAuthorizedError, WorkflowTriggerConfigError } 
 import { type JobExecutionManager } from '../../../job/execution/job-execution.manager';
 import { type JobRegistryInterface } from '../../../job/job.registry';
 import { type WorkflowRegistryInterface } from '../../workflow.registry';
-import { assertWorkflowSchedules, loadWorkflowSchedule, WorkflowSchedules } from '../workflow-schedules';
+import {
+  assertWorkflowSchedules,
+  loadWorkflowSchedule,
+  scheduledRunId,
+  WorkflowSchedules,
+} from '../workflow-schedules';
 import { assertWorkflowTriggers } from '../workflow-triggers';
 
 jest.mock('@frontmcp/utils', () => {
@@ -69,8 +80,34 @@ interface Process {
   schedules: WorkflowSchedules;
   registry: FakeRegistry;
   runs: Array<{ workflow: string; at: string; input: unknown; role: string | undefined }>;
-  executeWorkflow: jest.Mock;
+  /** The ids of the runs this process started. */
+  runIds: string[];
+  startWorkflowRunOnce: jest.Mock;
   logger: jest.Mocked<Pick<FrontMcpLogger, 'verbose' | 'info' | 'warn' | 'error'>>;
+}
+
+type LeaseStoreOperations = Pick<
+  NamespacedStorage,
+  'get' | 'set' | 'setIfEquals' | 'ttl' | 'expireIfEquals' | 'deleteIfEquals' | 'disconnect'
+>;
+
+/** A view of the lease store whose operations never return once frozen, as a process that died would leave them. */
+function freezable(storage: RootStorage) {
+  let frozen = false;
+  const through =
+    <A extends unknown[], R>(operation: (...args: A) => Promise<R>) =>
+    (...args: A): Promise<R> =>
+      frozen ? new Promise<R>(() => undefined) : operation(...args);
+  const view: LeaseStoreOperations = {
+    get: through((key) => storage.get(key)),
+    set: through((key, value, options) => storage.set(key, value, options)),
+    setIfEquals: through((key, expected, value) => storage.setIfEquals(key, expected, value)),
+    ttl: through((key) => storage.ttl(key)),
+    expireIfEquals: through((key, expected, ttlSeconds) => storage.expireIfEquals(key, expected, ttlSeconds)),
+    deleteIfEquals: through((key, expected) => storage.deleteIfEquals(key, expected)),
+    disconnect: async () => undefined,
+  };
+  return { storage: view as unknown as RootStorage, freeze: () => (frozen = true) };
 }
 
 describe('WorkflowSchedules', () => {
@@ -78,6 +115,8 @@ describe('WorkflowSchedules', () => {
   let previousHome: string | undefined;
   let store: RootStorage;
   let started: WorkflowSchedules[];
+  /** The ids of the runs the job store holds, which every process of a test shares. */
+  let jobStore: Set<string>;
   const jobs = {} as JobRegistryInterface;
   const builder = { build: jest.fn() };
 
@@ -91,6 +130,7 @@ describe('WorkflowSchedules', () => {
     jest.spyOn(store, 'disconnect').mockResolvedValue(undefined);
     jest.mocked(createStorage).mockResolvedValue(store);
     started = [];
+    jobStore = new Set();
   });
 
   afterEach(async () => {
@@ -106,21 +146,25 @@ describe('WorkflowSchedules', () => {
   function processWith(workflows: WorkflowEntry[], redis?: unknown): Process {
     const registry = new FakeRegistry(workflows);
     const runs: Process['runs'] = [];
-    const executeWorkflow = jest.fn(
-      async (workflow: WorkflowEntry, _jobs: unknown, options: Record<string, unknown>) => {
+    const runIds: string[] = [];
+    const startWorkflowRunOnce = jest.fn(
+      async (workflow: WorkflowEntry, _jobs: unknown, runId: string, options: Record<string, unknown>) => {
+        if (jobStore.has(runId)) return false;
+        jobStore.add(runId);
+        runIds.push(runId);
         runs.push({
           workflow: workflow.name,
           at: clock(),
           input: options['workflowInput'],
           role: workflowTriggerOf(options['authInfo'] as Record<string, unknown>)?.role,
         });
-        return { runId: `run-${runs.length}`, state: 'pending' };
+        return true;
       },
     );
     const logger = { verbose: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
     const schedules = new WorkflowSchedules({
       workflows: registry as unknown as WorkflowRegistryInterface,
-      manager: { executeWorkflow } as unknown as JobExecutionManager,
+      manager: { startWorkflowRunOnce } as unknown as JobExecutionManager,
       jobs,
       authoritiesContextBuilder: () => builder as never,
       logger: logger as unknown as FrontMcpLogger,
@@ -128,7 +172,18 @@ describe('WorkflowSchedules', () => {
       redis,
     });
     started.push(schedules);
-    return { schedules, registry, runs, executeWorkflow, logger };
+    return { schedules, registry, runs, runIds, startWorkflowRunOnce, logger };
+  }
+
+  /** The key of a schedule's lease without Redis, and the id of its run for a scheduled time. */
+  function runIdAt(workflow: string, iso: string): string {
+    return scheduledRunId(leaseKey(workflow, 'workspace', 'reports'), new Date(iso).getTime());
+  }
+
+  /** The process dies: its lease store stops answering, so its lease runs out, and it is never stopped. */
+  function dies(process: Process, view: ReturnType<typeof freezable>): void {
+    started.splice(started.indexOf(process.schedules), 1);
+    view.freeze();
   }
 
   it('starts one background run at each scheduled time, as schedule:<workflow>, with the schedule input', async () => {
@@ -141,11 +196,16 @@ describe('WorkflowSchedules', () => {
       { workflow: 'digest', at: '09:00:00', input: { audience: 'team' }, role: 'schedule:digest' },
       { workflow: 'digest', at: '09:01:00', input: { audience: 'team' }, role: 'schedule:digest' },
     ]);
-    expect(server.executeWorkflow).toHaveBeenCalledWith(
+    expect(server.startWorkflowRunOnce).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'digest' }),
       jobs,
-      expect.objectContaining({ background: true, authoritiesContextBuilder: builder }),
+      runIdAt('digest', '2026-11-10T09:00:00Z'),
+      expect.objectContaining({ authoritiesContextBuilder: builder }),
     );
+    expect(server.runIds).toEqual([
+      runIdAt('digest', '2026-11-10T09:00:00Z'),
+      runIdAt('digest', '2026-11-10T09:01:00Z'),
+    ]);
     expect(server.logger.info).toHaveBeenCalledWith(
       'The schedule of workflow "digest" runs in this process on cron "* * * * *" (UTC)',
     );
@@ -195,6 +255,102 @@ describe('WorkflowSchedules', () => {
 
     expect(first.runs.map((run) => run.at)).toEqual(['09:00:00']);
     expect(second.runs.map((run) => run.at)).toEqual(['09:03:45', '09:04:00']);
+  });
+
+  describe('a holder that dies between taking a scheduled time and its run', () => {
+    const daily = () => scheduled('digest', '0 9 * * *');
+    const nineToday = '2026-11-10T09:00:00Z';
+    const nineTomorrow = '2026-11-11T09:00:00Z';
+
+    /** Two processes share the schedule; the first holds its lease, its lease store seen through `view`. */
+    async function holderAndStandby(view: ReturnType<typeof freezable>): Promise<[Process, Process]> {
+      jest.mocked(createStorage).mockResolvedValueOnce(view.storage);
+      const holder = processWith([daily()]);
+      const standby = processWith([daily()]);
+      await holder.schedules.onReady();
+      await standby.schedules.onReady();
+      return [holder, standby];
+    }
+
+    it('leaves the run owed when it died before creating it, and the process that takes over starts it once', async () => {
+      const view = freezable(store);
+      const [holder, standby] = await holderAndStandby(view);
+      holder.startWorkflowRunOnce.mockImplementationOnce(() => {
+        dies(holder, view);
+        return new Promise(() => undefined);
+      });
+
+      await jest.advanceTimersByTimeAsync(15 * MINUTE);
+
+      expect(holder.runIds).toEqual([]);
+      expect(standby.runIds).toEqual([runIdAt('digest', nineToday)]);
+      expect(standby.runs.map((run) => run.at)).toEqual(['09:01:10']);
+      expect(standby.startWorkflowRunOnce).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(24 * 60 * MINUTE);
+      expect(standby.runIds).toEqual([runIdAt('digest', nineToday), runIdAt('digest', nineTomorrow)]);
+    });
+
+    it('starts no second run when it died after creating the run and before recording it', async () => {
+      const view = freezable(store);
+      const [holder, standby] = await holderAndStandby(view);
+      holder.startWorkflowRunOnce.mockImplementationOnce(async (_workflow: WorkflowEntry, _jobs, runId: string) => {
+        jobStore.add(runId);
+        holder.runIds.push(runId);
+        dies(holder, view);
+        return true;
+      });
+
+      await jest.advanceTimersByTimeAsync(15 * MINUTE);
+
+      expect(standby.runIds).toEqual([]);
+      expect([...jobStore]).toEqual([runIdAt('digest', nineToday)]);
+      expect(holder.runIds).toEqual([runIdAt('digest', nineToday)]);
+      expect(standby.startWorkflowRunOnce.mock.calls.map(([, , runId]) => runId)).toEqual([
+        runIdAt('digest', nineToday),
+      ]);
+
+      await jest.advanceTimersByTimeAsync(24 * 60 * MINUTE);
+      expect(standby.runIds).toEqual([runIdAt('digest', nineTomorrow)]);
+    });
+
+    it('finds the run already started when recording it failed, and catches up the time it held up', async () => {
+      const server = processWith([scheduled('digest')]);
+      const setIfEquals = store.setIfEquals.bind(store);
+      let writes = 0;
+      jest.spyOn(store, 'setIfEquals').mockImplementation((key, expected, value) => {
+        writes++;
+        return writes === 2 ? Promise.reject(new Error('database is locked')) : setIfEquals(key, expected, value);
+      });
+      await server.schedules.onReady();
+
+      await jest.advanceTimersByTimeAsync(4 * MINUTE);
+
+      expect(server.logger.warn).toHaveBeenCalledWith(
+        'The schedule of workflow "digest": the lease store failed: database is locked',
+      );
+      expect(server.startWorkflowRunOnce.mock.calls.map(([, , runId]) => runId)).toEqual([
+        runIdAt('digest', '2026-11-10T09:00:00Z'),
+        runIdAt('digest', '2026-11-10T09:00:00Z'),
+        runIdAt('digest', '2026-11-10T09:01:00Z'),
+        runIdAt('digest', '2026-11-10T09:03:00Z'),
+      ]);
+      expect(server.runs.map((run) => run.at)).toEqual(['09:00:00', '09:02:00', '09:03:00']);
+    });
+
+    it('does not start a run again whose start was refused, after a takeover either', async () => {
+      const [holder, standby] = await holderAndStandby(freezable(store));
+      holder.startWorkflowRunOnce.mockRejectedValueOnce(new JobNotAuthorizedError('digest'));
+
+      await jest.advanceTimersByTimeAsync(MINUTE);
+      await holder.schedules.stop();
+      await jest.advanceTimersByTimeAsync(15 * MINUTE);
+
+      expect(holder.startWorkflowRunOnce).toHaveBeenCalledTimes(1);
+      expect(holder.logger.warn).toHaveBeenCalledTimes(1);
+      expect(standby.startWorkflowRunOnce).not.toHaveBeenCalled();
+      expect(jobStore.size).toBe(0);
+    });
   });
 
   it('keeps one lease for every machine in Redis, and one per project root in the SQLite file without it', async () => {
@@ -251,7 +407,7 @@ describe('WorkflowSchedules', () => {
     ['unreachable', 'The schedule did not start workflow "digest": unreachable'],
   ])('logs a run that could not start (%p), and tries again at the next scheduled time', async (failure, warning) => {
     const server = processWith([scheduled('digest')]);
-    server.executeWorkflow.mockRejectedValueOnce(failure);
+    server.startWorkflowRunOnce.mockRejectedValueOnce(failure);
     await server.schedules.onReady();
 
     await jest.advanceTimersByTimeAsync(2 * MINUTE);
@@ -285,6 +441,52 @@ describe('WorkflowSchedules', () => {
       ['The schedule of workflow "rollup" did not start: @frontmcp/storage-sqlite is not installed'],
     ]);
     await server.schedules.stop();
+  });
+
+  it('says why no schedule starts when the lease store fails with a value that has no text', async () => {
+    jest.mocked(createStorage).mockReset().mockRejectedValue(Object.create(null));
+    const server = processWith([scheduled('digest')]);
+    await server.schedules.onReady();
+    await jest.advanceTimersByTimeAsync(2 * MINUTE);
+
+    expect(server.runs).toEqual([]);
+    expect(server.logger.error.mock.calls).toEqual([
+      ['The schedule of workflow "digest" did not start: [object Object]'],
+    ]);
+    await server.schedules.stop();
+  });
+
+  describe('a Redis lease store that refuses connections at first', () => {
+    const redis = { url: 'redis://cache.internal:6379' };
+    const refused = new Error('connect ECONNREFUSED 127.0.0.1:6379');
+
+    it('is opened again until it opens, said once, and the schedules start then', async () => {
+      jest.mocked(createStorage).mockRejectedValueOnce(refused).mockRejectedValueOnce(refused);
+      const server = processWith([scheduled('digest')], redis);
+      await server.schedules.onReady();
+
+      await jest.advanceTimersByTimeAsync(2 * MINUTE);
+
+      expect(createStorage).toHaveBeenCalledTimes(3);
+      expect(server.logger.error.mock.calls).toEqual([
+        ['The schedule of workflow "digest" did not start: connect ECONNREFUSED 127.0.0.1:6379'],
+      ]);
+      expect(server.runs.map((run) => run.at)).toEqual(['09:01:00']);
+    });
+
+    it('is not opened again once the schedules stop', async () => {
+      jest.mocked(createStorage).mockRejectedValueOnce(refused);
+      const server = processWith([scheduled('digest')], redis);
+      await server.schedules.onReady();
+      expect(jest.getTimerCount()).toBe(1);
+
+      await server.schedules.stop();
+      expect(jest.getTimerCount()).toBe(0);
+      await jest.advanceTimersByTimeAsync(2 * MINUTE);
+
+      expect(createStorage).toHaveBeenCalledTimes(1);
+      expect(server.runs).toEqual([]);
+    });
   });
 
   it('starts nothing in a serverless deployment, and says which workflows do not run', async () => {

@@ -13,6 +13,7 @@ export type CronLedgerStorage = Pick<NamespacedStorage, 'get' | 'set' | 'setIfEq
 
 /** The times of a cron expression in its time zone, as epoch milliseconds. */
 export class CronSchedule {
+  /** Takes the expression, its time zone and the croner `Cron` read from them. */
   constructor(
     readonly expression: string,
     readonly timezone: string,
@@ -51,18 +52,65 @@ function readOrExplain<T>(read: () => T): T {
 }
 
 /**
+ * A run taken from a schedule's ledger. `scheduledAt` names it: a process that takes it again (after the one that took
+ * it died before starting its run) gets the same `scheduledAt`.
+ */
+export interface CronClaim {
+  /** The first scheduled time the run is for. */
+  scheduledAt: number;
+  /** When the schedule was taken for it, which the ledger records once the claim is settled. */
+  takenAt: number;
+  /** What the ledger holds for the claim, which `settleCronClaim()` replaces. */
+  recorded: string;
+}
+
+/** The ledger: when the schedule was last taken, and the scheduled time whose run is still owed, if any. */
+interface CronLedger {
+  takenAt: number;
+  owed?: number;
+}
+
+/**
+ * A ledger value: `<takenAt>`, or `<takenAt> <scheduledAt> <claimedAt>` while that scheduled time's run is owed, the
+ * last field telling one claim of it from the next.
+ */
+function readLedger(recorded: string): CronLedger | undefined {
+  const [takenAt, owed] = recorded.split(' ').map(Number);
+  if (!Number.isFinite(takenAt)) return undefined;
+  return owed !== undefined && Number.isFinite(owed) ? { takenAt, owed } : { takenAt };
+}
+
+/**
  * Take the scheduled times that passed since the last take, as one run. The store keeps the time of the last take
  * under `key` and replaces it only while it still holds what this process read, so the processes that share the store
  * take each scheduled time once. The first take ever only records when the schedule was first seen.
+ *
+ * With `owedUntilSettled`, the ledger keeps the scheduled time the run is for until `settleCronClaim()`: a process that
+ * finds it there (the one that took it died before starting the run) takes that same run again, and the times missed
+ * meanwhile come due at its next check.
  */
-export async function takeDueRun(schedule: CronSchedule, storage: CronLedgerStorage, key: string): Promise<boolean> {
+export async function claimDueRun(
+  schedule: CronSchedule,
+  storage: CronLedgerStorage,
+  key: string,
+  owedUntilSettled = false,
+): Promise<CronClaim | undefined> {
   const now = Date.now();
   const recorded = await storage.get(key);
-  const takenUntil = Number(recorded ?? Number.NaN);
-  if (recorded === null || !Number.isFinite(takenUntil)) {
+  const ledger = recorded === null ? undefined : readLedger(recorded);
+  if (recorded === null || ledger === undefined) {
     await storage.set(key, String(now));
-    return false;
+    return undefined;
   }
-  if (schedule.nextAfter(takenUntil) > now) return false;
-  return storage.setIfEquals(key, recorded, String(now));
+  const scheduledAt = ledger.owed ?? schedule.nextAfter(ledger.takenAt);
+  if (ledger.owed === undefined && scheduledAt > now) return undefined;
+  const takenAt = ledger.owed === undefined ? now : ledger.takenAt;
+  const claimed = owedUntilSettled ? `${takenAt} ${scheduledAt} ${now}` : String(takenAt);
+  if (!(await storage.setIfEquals(key, recorded, claimed))) return undefined;
+  return { scheduledAt, takenAt, recorded: claimed };
+}
+
+/** Record that the claimed run started, unless another process took the claim over meanwhile. */
+export async function settleCronClaim(storage: CronLedgerStorage, key: string, claim: CronClaim): Promise<void> {
+  await storage.setIfEquals(key, claim.recorded, String(claim.takenAt));
 }

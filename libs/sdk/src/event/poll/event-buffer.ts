@@ -46,6 +46,7 @@ export class EventBuffer {
   private readonly rings = new Map<string, EventRing>();
   private sequence = 0;
 
+  /** Takes the age and count limits, and draws the boot id that this process's cursors carry. */
   constructor(private readonly options: EventBufferOptions) {
     this.bootId = randomUUID().replace(/-/g, '');
   }

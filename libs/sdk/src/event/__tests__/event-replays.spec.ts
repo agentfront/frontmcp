@@ -1,8 +1,8 @@
-import { createMemoryStorage, type NamespacedStorage } from '@frontmcp/utils';
+import { createMemoryStorage, sha256Hex, type NamespacedStorage } from '@frontmcp/utils';
 
 import { type EventCheckResult, type EventEntry } from '../../common';
 import { type NewEventDelivery } from '../delivery/event-outbox';
-import { EventReplays, MAX_PENDING_BATCHES, REPLAY_LEASE_MS } from '../replay/event-replays';
+import { EventReplays, MAX_PENDING_BATCHES, REPLAY_LEASE_MS, REPLAY_STOP_GRACE_MS } from '../replay/event-replays';
 import {
   type EventReplayState,
   type EventSubscriptionPatch,
@@ -350,8 +350,177 @@ describe('EventReplays', () => {
       await jest.advanceTimersByTimeAsync(0);
       await jest.advanceTimersByTimeAsync(INTERVAL_MS);
 
-      expect(warn).toHaveBeenCalledWith('The webhook loop of event "ticket.updated" failed', failure);
+      expect(warn).toHaveBeenCalledWith(
+        'The webhook loop of event "ticket.updated" failed for subscription sub_0001',
+        failure,
+      );
       expect(check).toHaveBeenCalledTimes(2);
+      await replays.stop();
+    });
+
+    it('logs a turn whose subscriptions could not be listed, and runs the next one', async () => {
+      const { replays, event, check, records, warn } = await harness();
+      records.set('sub_0001', subscription({ replay: { cursor: '1', watermark: '1', pending: [] } }));
+      check.mockResolvedValue({ events: [], cursor: '1' });
+      const failure = new Error('store down');
+      const { store } = (replays as unknown as { options: { store: { listByEvent: () => Promise<unknown> } } }).options;
+      jest.spyOn(store, 'listByEvent').mockRejectedValueOnce(failure);
+
+      await replays.start([event]);
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(INTERVAL_MS);
+
+      expect(warn).toHaveBeenCalledWith('The webhook loop of event "ticket.updated" failed', failure);
+      expect(check).toHaveBeenCalledTimes(1);
+      await replays.stop();
+    });
+
+    it('goes on with the next subscription when one fails', async () => {
+      const { replays, event, check, records, enqueue, warn } = await harness();
+      const position = { cursor: '1', watermark: '1', pending: [] };
+      records.set('sub_broken', subscription({ id: 'sub_broken', replay: position }));
+      records.set('sub_fine', subscription({ id: 'sub_fine', replay: position }));
+      check.mockResolvedValue({ events: [{ data: { ticketId: 't-1' } }], cursor: '2' });
+      const failure = new Error('outbox down');
+      enqueue.mockImplementationOnce(async () => {
+        throw failure;
+      });
+
+      await replays.start([event]);
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(warn).toHaveBeenCalledWith(
+        'The webhook loop of event "ticket.updated" failed for subscription sub_broken',
+        failure,
+      );
+      expect(enqueue.mock.calls.map(([delivery]) => delivery.subscriptionId)).toEqual(['sub_broken', 'sub_fine']);
+      expect(records.get('sub_fine')?.replay?.cursor).toBe('2');
+      await replays.stop();
+    });
+
+    it('keeps what it queued before a failure, and does not queue it again on the next turn', async () => {
+      const { replays, event, check, records, enqueue } = await harness();
+      records.set('sub_0001', subscription({ replay: { cursor: '1', watermark: '1', pending: [] } }));
+      check.mockResolvedValue({
+        events: [{ data: { ticketId: 't-1' } }, { data: { ticketId: 't-2' } }, { data: { ticketId: 't-3' } }],
+        cursor: '4',
+      });
+      let calls = 0;
+      const queue = enqueue.getMockImplementation() as (delivery: NewEventDelivery) => Promise<string>;
+      enqueue.mockImplementation(async (delivery) => {
+        calls += 1;
+        if (calls === 2) throw new Error('outbox down');
+        return queue(delivery);
+      });
+
+      await replays.start([event]);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(records.get('sub_0001')?.replay).toEqual({
+        cursor: '1',
+        watermark: '1',
+        pending: [{ cursor: '1', deliveryIds: ['dlv_1'] }],
+        queuedAtCursor: 1,
+      });
+      await jest.advanceTimersByTimeAsync(INTERVAL_MS);
+
+      const queued = enqueue.mock.calls.map(([delivery]) => JSON.parse(delivery.body).data.ticketId);
+      expect(queued).toEqual(['t-1', 't-2', 't-2', 't-3']);
+      expect(records.get('sub_0001')?.replay).toEqual({
+        cursor: '4',
+        watermark: '1',
+        pending: [
+          { cursor: '1', deliveryIds: ['dlv_1'] },
+          { cursor: '4', deliveryIds: ['dlv_2', 'dlv_3'] },
+        ],
+      });
+      await replays.stop();
+    });
+
+    it('keeps the batch it queued when telling a gap fails, and the gap for the next refresh', async () => {
+      const { replays, event, check, records, enqueue } = await harness();
+      records.set('sub_0001', subscription({ replay: { cursor: '1', watermark: '1', pending: [] } }));
+      check.mockResolvedValue({ events: [{ data: { ticketId: 't-1' } }], cursor: '9', truncated: true });
+      const queue = enqueue.getMockImplementation() as (delivery: NewEventDelivery) => Promise<string>;
+      enqueue.mockImplementation(async (delivery) => {
+        if (delivery.kind === 'gap') throw new Error('outbox down');
+        return queue(delivery);
+      });
+
+      await replays.start([event]);
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(records.get('sub_0001')?.replay).toEqual({
+        cursor: '9',
+        watermark: '1',
+        pending: [{ cursor: '9', deliveryIds: ['dlv_1'] }],
+        truncated: true,
+      });
+      await replays.stop();
+    });
+  });
+
+  describe('a turn while the lease is lost', () => {
+    /** The lease holder of the event's loop. */
+    function holderOf(replays: EventReplays): { holding: boolean; renew(): Promise<boolean> } {
+      const holders = (replays as unknown as { holders: Map<string, { holding: boolean; renew(): Promise<boolean> }> })
+        .holders;
+      const holder = holders.get('ticket.updated');
+      if (!holder) throw new Error('the loop has no lease holder');
+      return holder;
+    }
+
+    it('reads no further subscription and stores nothing once the lease is lost during a read', async () => {
+      const { replays, event, check, records } = await harness();
+      const position = { cursor: '1', watermark: '1', pending: [] };
+      records.set('sub_first', subscription({ id: 'sub_first', replay: position }));
+      records.set('sub_second', subscription({ id: 'sub_second', replay: position }));
+      let finishRead: (checked: Checked) => void = () => undefined;
+      check.mockImplementationOnce(() => new Promise<Checked>((resolve) => (finishRead = resolve)));
+      check.mockResolvedValue({ events: [], cursor: '2' });
+      await replays.start([event]);
+      await jest.advanceTimersByTimeAsync(0);
+
+      jest.spyOn(holderOf(replays), 'holding', 'get').mockReturnValue(false);
+      finishRead({ events: [{ data: { ticketId: 't-1' } }], cursor: '2' });
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(check).toHaveBeenCalledTimes(1);
+      expect(records.get('sub_first')?.replay).toEqual(position);
+      expect(records.get('sub_second')?.replay).toEqual(position);
+      jest.restoreAllMocks();
+      await replays.stop();
+    });
+
+    it('stores nothing when the lease cannot be renewed before the write', async () => {
+      const { replays, event, check, records } = await harness();
+      const position = { cursor: '1', watermark: '1', pending: [] };
+      records.set('sub_0001', subscription({ replay: position }));
+      check.mockResolvedValue({ events: [{ data: { ticketId: 't-1' } }], cursor: '2' });
+      await replays.start([event]);
+      jest.spyOn(holderOf(replays), 'renew').mockResolvedValue(false);
+
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(check).toHaveBeenCalledTimes(1);
+      expect(records.get('sub_0001')?.replay).toEqual(position);
+      jest.restoreAllMocks();
+      await replays.stop();
+    });
+
+    it('does not write over a position another holder stored meanwhile', async () => {
+      const { replays, event, check, records } = await harness();
+      records.set('sub_0001', subscription({ replay: { cursor: '1', watermark: '1', pending: [] } }));
+      let finishRead: (checked: Checked) => void = () => undefined;
+      check.mockImplementationOnce(() => new Promise<Checked>((resolve) => (finishRead = resolve)));
+      await replays.start([event]);
+      await jest.advanceTimersByTimeAsync(0);
+
+      const movedOn = { cursor: '7', watermark: '7', pending: [] };
+      records.set('sub_0001', subscription({ replay: movedOn }));
+      finishRead({ events: [{ data: { ticketId: 't-1' } }], cursor: '2' });
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(records.get('sub_0001')?.replay).toEqual(movedOn);
       await replays.stop();
     });
   });
@@ -488,6 +657,61 @@ describe('EventReplays', () => {
       await jest.advanceTimersByTimeAsync(3 * INTERVAL_MS);
 
       expect(check).toHaveBeenCalledTimes(1);
+    });
+
+    it('let stop() end within the grace when check() never answers, the leases left to expire', async () => {
+      const { replays, event, check, records, storage, warn } = await harness();
+      records.set('sub_0001', subscription({ replay: { cursor: '1', watermark: '1', pending: [] } }));
+      check.mockReturnValue(new Promise<Checked>(() => undefined));
+      const otherEvent = { ...event, name: 'ticket.closed' } as EventEntry;
+      const leaseOf = (eventName: string) => storage.get(`replay-lease:${sha256Hex(eventName).slice(0, 32)}`);
+      await replays.start([event, otherEvent]);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(check).toHaveBeenCalledTimes(2);
+
+      let stopped = false;
+      const stopping = replays.stop().then(() => (stopped = true));
+      await jest.advanceTimersByTimeAsync(REPLAY_STOP_GRACE_MS);
+
+      expect(stopped).toBe(true);
+      await stopping;
+      expect(await leaseOf(event.name)).not.toBeNull();
+      expect(await leaseOf(otherEvent.name)).not.toBeNull();
+      expect(warn).toHaveBeenCalledWith(
+        'The webhook loop of event "ticket.updated" did not end within 3000 ms; its lease expires by itself',
+      );
+
+      await jest.advanceTimersByTimeAsync(REPLAY_LEASE_MS);
+      expect(await leaseOf(event.name)).toBeNull();
+      expect(await leaseOf(otherEvent.name)).toBeNull();
+    });
+
+    it('schedule no turn when a check takes the lease while stop() runs', async () => {
+      const storage = createMemoryStorage({ prefix: 'spec:events:', enableSweeper: false });
+      await storage.connect();
+      const { replays, event, check, records } = await harness(storage);
+      records.set('sub_0001', subscription({ replay: { cursor: '1', watermark: '1', pending: [] } }));
+      check.mockResolvedValue({ events: [], cursor: '1' });
+      const key = `replay-lease:${sha256Hex(event.name).slice(0, 32)}`;
+      await storage.set(key, 'another-process', { ttlSeconds: 30 });
+      await replays.start([event]);
+      await storage.delete(key);
+      let openStore: () => void = () => undefined;
+      const set = storage.set.bind(storage);
+      const gatedSet = jest.spyOn(storage, 'set').mockImplementationOnce(async (...args) => {
+        await new Promise<void>((resolve) => (openStore = resolve));
+        return set(...args);
+      });
+      await jest.advanceTimersByTimeAsync(REPLAY_LEASE_MS / 3);
+      expect(gatedSet).toHaveBeenCalled();
+
+      const stopping = replays.stop();
+      openStore();
+      await stopping;
+
+      expect(jest.getTimerCount()).toBe(0);
+      expect(await storage.get(key)).toBeNull();
+      jest.restoreAllMocks();
     });
   });
 

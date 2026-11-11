@@ -69,6 +69,7 @@ const stateSchema = z.object({
   publication: publishRequestSchema,
   event: z.instanceof(EventEntry),
   claimedEventId: z.string().optional(),
+  claimToken: z.string().optional(),
   result: z.object({ eventId: z.string(), matched: z.number() }),
 });
 
@@ -270,7 +271,7 @@ export default class EventPublishHttpFlow extends FlowBase<typeof name> {
     if (claim.state === 'in-flight') {
       this.refuse(409, `Event "${eventName}" with eventId "${eventId}" is being published; retry for its answer`);
     }
-    this.state.set('claimedEventId', eventId);
+    this.state.set({ claimedEventId: eventId, claimToken: claim.token });
   }
 
   /** Publish through the server's publisher, as `this.events.publish()` does; a failure gives the `eventId` back. */
@@ -281,8 +282,10 @@ export default class EventPublishHttpFlow extends FlowBase<typeof name> {
       const options = { eventId, timestamp, subscriptionId, audience };
       this.state.set('result', await this.publisher.publish(eventName, data, options));
     } catch (error) {
-      const { claimedEventId } = this.state;
-      if (claimedEventId !== undefined) await this.endpoint.idempotency.release(eventName, claimedEventId);
+      const { claimedEventId, claimToken } = this.state;
+      if (claimedEventId !== undefined && claimToken !== undefined) {
+        await this.endpoint.idempotency.release(eventName, claimedEventId, claimToken);
+      }
       throw error;
     }
   }
@@ -290,11 +293,11 @@ export default class EventPublishHttpFlow extends FlowBase<typeof name> {
   /** Keep the answer of a claimed `eventId`, for a repeat; the event is published, so a store failure only logs. */
   @Stage('rememberResult')
   async rememberResult() {
-    const { claimedEventId } = this.state;
-    if (claimedEventId === undefined) return;
+    const { claimedEventId, claimToken } = this.state;
+    if (claimedEventId === undefined || claimToken === undefined) return;
     const { publication, result } = this.state.required;
     try {
-      await this.endpoint.idempotency.complete(publication.name, claimedEventId, result);
+      await this.endpoint.idempotency.complete(publication.name, claimedEventId, claimToken, result);
     } catch (error) {
       this.logger.warn(
         `rememberResult: event "${publication.name}" with eventId "${claimedEventId}" was published, ` +

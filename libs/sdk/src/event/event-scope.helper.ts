@@ -209,6 +209,13 @@ async function enablePollDelivery(
   scope.onDispose(() => pollLeases.stop());
   eventRegistry.enableDeliveryMode('poll');
   await scope.registryFlows(EventPollFlow);
+  const readsBuffer = eventRegistry.getEvents().some((event) => typeof event.create({}).check !== 'function');
+  if (readsBuffer && getRuntimeContext().deployment === 'serverless') {
+    logger.warn(
+      'events/poll reads published events from the memory of the process that published them, which a serverless ' +
+        'function does not keep between calls. Give those events a check(), or deliver them by webhook.',
+    );
+  }
 }
 
 /** Whether this process lives long enough to hold a stream open: a serverless function does not. */

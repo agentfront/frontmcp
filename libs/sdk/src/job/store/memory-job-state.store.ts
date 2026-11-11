@@ -19,6 +19,12 @@ export class MemoryJobStateStore implements JobStateStore {
     this.runs.set(record.runId, { ...record, revision: 1, updatedAt: Date.now() });
   }
 
+  async createRunIfAbsent(record: JobRunRecord | WorkflowRunRecord): Promise<boolean> {
+    if (this.runs.has(record.runId)) return false;
+    this.runs.set(record.runId, { ...record, revision: 1, updatedAt: Date.now() });
+    return true;
+  }
+
   async updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void> {
     const existing = this.runs.get(runId);
     if (!existing) return;

@@ -42,6 +42,8 @@ export interface EventReplayState {
   pending: EventReplayBatch[];
   /** A gap the client has not been told about yet: its next refresh answers `truncated`. */
   truncated?: boolean;
+  /** How many of the items `check()` returns from `cursor` are already queued: a turn that failed part-way. */
+  queuedAtCursor?: number;
 }
 
 export interface EventSubscriptionRecord {
@@ -140,6 +142,7 @@ function idOfIndexKey(indexKey: string): string {
 
 /** Subscriptions in a storage with atomic compare-and-set (memory, Redis, SQLite), indexed by event and by owner. */
 export class StorageEventSubscriptionStore implements EventSubscriptionStore {
+  /** Takes the storage it owns and the secret, if any, that encrypts the records and keys the indexes. */
   constructor(private readonly options: StorageEventSubscriptionStoreOptions) {}
 
   /** Write the record and its index keys, with a storage TTL that outlasts a finite lifetime. */

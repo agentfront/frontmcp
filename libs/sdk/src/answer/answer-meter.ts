@@ -52,6 +52,7 @@ export function measureAnswer(result: CallToolResult): AnswerCost {
   return { bytes, estimatedTokens: Math.ceil(bytes / 4), duplicatedBytes };
 }
 
+/** Load `createCounter` from the optional `@frontmcp/observability` package. */
 export function loadCounterFactory(): CounterFactory {
   return requireOptionalModule<{ createCounter: CounterFactory }>('@frontmcp/observability', () =>
     require('@frontmcp/observability'),

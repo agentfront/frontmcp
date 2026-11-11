@@ -199,6 +199,7 @@ export function createEventWebhookReceiver(options: EventWebhookReceiverOptions 
   };
 
   return {
+    /** Check a delivery's signature, answer a verification, and pass a new delivery to its listener. */
     async handle(request) {
       const subscriptionId = headerOf(request.headers, MCP_SUBSCRIPTION_ID_HEADER) ?? '';
       const webhookId = headerOf(request.headers, WEBHOOK_ID_HEADER) ?? '';
@@ -234,29 +235,36 @@ export function createEventWebhookReceiver(options: EventWebhookReceiverOptions 
 
     verify,
 
+    /** Accept one subscription's deliveries signed with `secret`; returns the registration's handle. */
     register({ secret, subscriptionId, listener }) {
       const record: RegistrationRecord = { subscriptionId, signingKeys: [signingKeyOf(secret)], listener };
       registrations.add(record);
       return {
+        /** The subscription id the secret is bound to; undefined until it is. */
         get subscriptionId() {
           return record.subscriptionId;
         },
+        /** Route the deliveries of `id` to this registration. */
         bind(id) {
           record.subscriptionId = id;
         },
+        /** Accept one more secret, as after a rotation, keeping the earlier ones. */
         addSecret(next) {
           record.signingKeys.push(signingKeyOf(next));
         },
+        /** Stop accepting deliveries for this registration. */
         release() {
           registrations.delete(record);
         },
       };
     },
 
+    /** Accept one more shared secret, which signs the deliveries of any subscription. */
     addSecret(secret) {
       sharedKeys.push(signingKeyOf(secret));
     },
 
+    /** Whether any shared or registered secret can check a delivery yet. */
     hasSecrets() {
       return sharedKeys.length > 0 || registrations.size > 0;
     },

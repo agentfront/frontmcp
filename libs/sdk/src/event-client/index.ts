@@ -28,5 +28,6 @@ export type {
 export {
   EventRequestError,
   EventSubscriptionTerminatedError,
+  DuplicateEventSubscriptionError,
   NoCompatibleDeliveryModeError,
 } from './event-client.errors';

@@ -155,8 +155,9 @@ describe('enablePublishEndpoint', () => {
     };
 
     const first = await started(config);
-    await first.events?.publishEndpoint?.idempotency.claim('order.created', 'evt-1');
-    await first.events?.publishEndpoint?.idempotency.complete('order.created', 'evt-1', {
+    const claim = await first.events?.publishEndpoint?.idempotency.claim('order.created', 'evt-1');
+    const token = claim?.state === 'claimed' ? claim.token : '';
+    await first.events?.publishEndpoint?.idempotency.complete('order.created', 'evt-1', token, {
       eventId: 'evt-1',
       matched: 0,
     });

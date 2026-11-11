@@ -61,6 +61,7 @@ function compareByName(left: { event: EventEntry }, right: { event: EventEntry }
   return left.event.name > right.event.name ? 1 : 0;
 }
 
+/** Answers `events/list`: the discoverable events offered to the caller and their delivery modes, by page. */
 @Flow({
   name,
   plan,

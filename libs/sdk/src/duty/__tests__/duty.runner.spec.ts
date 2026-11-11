@@ -166,6 +166,20 @@ describe('DutyRunner', () => {
     expect(other.runs).toEqual([]);
   });
 
+  it('logs a run that throws a value with no string form, and keeps running', async () => {
+    let calls = 0;
+    const holder = probe(storage, () => {
+      calls++;
+      if (calls === 1) throw Object.create(null);
+    });
+    await start(holder);
+
+    await jest.advanceTimersByTimeAsync(2 * EVERY_MS);
+
+    expect(holder.logger.error).toHaveBeenCalledWith('Duty "sweep" failed: [object Object]');
+    expect(holder.runs).toEqual([0, 1_000, 2_000]);
+  });
+
   it('releases the lease on stop, and the next holder waits out the interval the last run started', async () => {
     const first = probe(storage, () => undefined, 5_000);
     const second = probe(storage, () => undefined, 5_000);
@@ -212,7 +226,7 @@ describe('DutyRunner', () => {
 
     expect(first.runs).toEqual([0]);
     expect(first.logger.warn).toHaveBeenCalledWith(
-      'Duty "sweep" could not renew its lease within 3000 ms; it stops here until it gets the lease again',
+      'Duty "sweep" could not renew its lease within 2000 ms; it stops here until it gets the lease again',
     );
     expect(second.runs).toHaveLength(14);
   });
@@ -294,7 +308,7 @@ describe('DutyRunner', () => {
     expect(holder.runs).toEqual([1_000, 2_000, 3_000]);
   });
 
-  it('aborts the run in flight once it could not renew for a whole lease, before another process can take over', async () => {
+  it('aborts the run in flight once it could not renew, a third of a lease before another process can take over', async () => {
     let abortedAt: number | undefined;
     const unreachable = cuttable(storage);
     const holder = probe(
@@ -308,10 +322,11 @@ describe('DutyRunner', () => {
     unreachable.cut();
     await jest.advanceTimersByTimeAsync(3 * LEASE_MS);
 
-    expect(abortedAt).toBe(LEASE_MS);
+    expect(abortedAt).toBe(LEASE_MS - LEASE_MS / 3);
     expect(other.runs[0]).toBeGreaterThanOrEqual(LEASE_MS);
+    expect(other.runs[0] - (abortedAt ?? Infinity)).toBeGreaterThanOrEqual(LEASE_MS / 3);
     expect(holder.logger.warn).toHaveBeenCalledWith(
-      'Duty "sweep" could not renew its lease within 3000 ms; it stops here until it gets the lease again',
+      'Duty "sweep" could not renew its lease within 2000 ms; it stops here until it gets the lease again',
     );
   });
 

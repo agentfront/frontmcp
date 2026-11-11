@@ -1,4 +1,4 @@
-import { type NamespacedStorage } from '@frontmcp/utils';
+import { randomUUID, type NamespacedStorage } from '@frontmcp/utils';
 
 import {
   type JobExecutionState,
@@ -8,6 +8,9 @@ import {
 } from './job-state.interface';
 
 type RunRecord = JobRunRecord | WorkflowRunRecord;
+
+/** A field only the stored copy of a new run carries, so its creator can tell its own write from another's. */
+const CREATE_CLAIM_FIELD = 'createClaim';
 
 /**
  * A JobStateStore on a `@frontmcp/utils` storage, such as the SQLite storage several processes on one
@@ -25,6 +28,17 @@ export class StorageJobStateStore implements JobStateStore {
     await this.write({ ...record, revision: 1, updatedAt: Date.now() });
   }
 
+  async createRunIfAbsent(record: RunRecord): Promise<boolean> {
+    const stored = JSON.stringify({
+      ...record,
+      revision: 1,
+      updatedAt: Date.now(),
+      [CREATE_CLAIM_FIELD]: randomUUID(),
+    });
+    await this.storage.set(runKey(record.runId), stored, { ttlSeconds: this.ttlSeconds, ifNotExists: true });
+    return (await this.storage.get(runKey(record.runId))) === stored;
+  }
+
   async updateRun(runId: string, updates: Partial<RunRecord>): Promise<void> {
     const existing = await this.getRun(runId);
     if (!existing) return;
@@ -34,7 +48,7 @@ export class StorageJobStateStore implements JobStateStore {
 
   async getRun(runId: string): Promise<RunRecord | null> {
     const raw = await this.storage.get(runKey(runId));
-    return raw ? (JSON.parse(raw) as RunRecord) : null;
+    return raw ? parseRun(raw) : null;
   }
 
   async listRuns(opts?: {
@@ -98,12 +112,18 @@ export class StorageJobStateStore implements JobStateStore {
     const keys = await this.storage.keys('run:*');
     if (keys.length === 0) return [];
     const values = await this.storage.mget(keys);
-    return values.filter((raw): raw is string => raw !== null).map((raw) => JSON.parse(raw) as RunRecord);
+    return values.filter((raw): raw is string => raw !== null).map(parseRun);
   }
 }
 
 function runKey(runId: string): string {
   return `run:${runId}`;
+}
+
+/** A stored run, without the claim its creation left on it. */
+function parseRun(raw: string): RunRecord {
+  const { [CREATE_CLAIM_FIELD]: _createClaim, ...run } = JSON.parse(raw) as RunRecord & { createClaim?: string };
+  return run;
 }
 
 function cancelKey(runId: string): string {

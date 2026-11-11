@@ -94,6 +94,7 @@
   "DidHookOf": "function",
   "DistributedSemaphore": "class",
   "DuplicateAppIdError": "class",
+  "DuplicateEventSubscriptionError": "class",
   "DuplicatePluginEntryError": "class",
   "DuplicatePluginError": "class",
   "Duty": "function",

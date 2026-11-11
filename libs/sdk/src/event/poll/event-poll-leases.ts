@@ -60,6 +60,7 @@ export class EventPollLeases {
   private sweepTimer?: ReturnType<typeof setInterval>;
   private lastSweepAt = 0;
 
+  /** Takes the per-owner lease limit and the logger to report lease ends with. */
   constructor(private readonly options: EventPollLeasesOptions) {
     this.logger = options.logger.child('EventPollLeases');
   }
@@ -86,7 +87,7 @@ export class EventPollLeases {
 
   /** Renew the lease of a poll, or start it: a new lease calls the event's `onSubscribe` first. */
   async renew(request: PollLeaseRequest): Promise<void> {
-    const { subscription, context, leaseMs } = request;
+    const { subscription, leaseMs } = request;
     const now = Date.now();
     this.sweepIfDue(now);
     const lease = this.leases.get(subscription.id);

@@ -75,6 +75,11 @@ async function watching(
   };
 }
 
+/** An error the way `fs` throws it, with its code. */
+function fsError(code: string, message: string): NodeJS.ErrnoException {
+  return Object.assign(new Error(`${code}: ${message}`), { code });
+}
+
 /** Counts the watchers `fs.watch` opens and the ones that were closed. */
 function countWatchers(): { opened: () => number; closed: () => number } {
   const nodeFs = jest.requireActual<typeof import('fs')>('fs');
@@ -167,6 +172,15 @@ describe('watchFiles', () => {
 
       expect(await watch.until(1)).toEqual([{ type: 'add', path: path.join(root, 'top.txt') }]);
       expect(await watch.quiet()).toHaveLength(1);
+    });
+
+    it('leaves out a symlink that loops', async () => {
+      await fs.promises.symlink('loop', path.join(root, 'loop'));
+      watch = await watching(root);
+
+      await fs.promises.writeFile(path.join(root, 'next.txt'), 'next');
+
+      expect(await watch.until(1)).toEqual([{ type: 'add', path: path.join(root, 'next.txt') }]);
     });
 
     it('yields only the kinds of event asked for', async () => {
@@ -344,11 +358,40 @@ describe('watchFiles', () => {
       const file = path.join(root, 'listed.txt');
       await fs.promises.writeFile(file, 'listed');
       watch = await watching(root);
-      jest.spyOn(fs.promises, 'readdir').mockRejectedValueOnce(new Error('ENOENT: no such file or directory'));
+      jest.spyOn(fs.promises, 'readdir').mockRejectedValueOnce(fsError('ENOENT', 'no such file or directory'));
 
       await fs.promises.writeFile(path.join(root, 'trigger.txt'), 'trigger');
 
       expect(await watch.until(1)).toEqual([{ type: 'unlink', path: file }]);
+    });
+
+    it('opens a new watcher when its watcher fails, and ignores an error from a watcher it replaced', async () => {
+      const nodeFs = jest.requireActual<typeof import('fs')>('fs');
+      const openWatcher = nodeFs.watch.bind(nodeFs) as (...args: unknown[]) => fs.FSWatcher;
+      const watchers: fs.FSWatcher[] = [];
+      jest.spyOn(nodeFs, 'watch').mockImplementation(((...args: unknown[]) => {
+        watchers.push(openWatcher(...args));
+        return watchers[watchers.length - 1];
+      }) as never);
+      watch = await watching(root);
+
+      watchers[0].close();
+      watchers[0].emit('error', fsError('EPERM', 'operation not permitted'));
+      await untilTrue(() => watchers.length === 2);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await fs.promises.writeFile(path.join(root, 'a.txt'), 'a');
+      await watch.until(1);
+      const closeNewer = jest.spyOn(watchers[1], 'close');
+      watchers[0].emit('error', fsError('EPERM', 'operation not permitted'));
+      await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS + 100));
+      await fs.promises.writeFile(path.join(root, 'b.txt'), 'b');
+
+      expect(await watch.until(2)).toEqual([
+        { type: 'add', path: path.join(root, 'a.txt') },
+        { type: 'add', path: path.join(root, 'b.txt') },
+      ]);
+      expect(closeNewer).not.toHaveBeenCalled();
+      expect(watchers).toHaveLength(2);
     });
 
     it('looks again when its watcher reports an error', async () => {
@@ -368,6 +411,51 @@ describe('watchFiles', () => {
 
       expect(looked.mock.calls.length).toBeGreaterThan(looksBefore);
       expect(watch.events).toEqual([]);
+    });
+  });
+
+  describe('a directory that cannot be read for a moment', () => {
+    it('keeps its files, and yields only what changed once it can be read again', async () => {
+      const file = path.join(root, 'listed.txt');
+      await fs.promises.writeFile(file, 'listed');
+      watch = await watching(root);
+      jest.spyOn(fs.promises, 'readdir').mockRejectedValueOnce(fsError('EMFILE', 'too many open files'));
+
+      await fs.promises.writeFile(path.join(root, 'trigger.txt'), 'trigger');
+
+      expect(await watch.until(1)).toEqual([{ type: 'add', path: path.join(root, 'trigger.txt') }]);
+      expect(await watch.quiet()).toHaveLength(1);
+    });
+
+    it('keeps a file it cannot read as it was, leaves out a new one, and yields the others', async () => {
+      const locked = path.join(root, 'locked.txt');
+      const sealed = path.join(root, 'sealed.txt');
+      await fs.promises.writeFile(locked, 'locked');
+      const statPath = fs.promises.stat.bind(fs.promises);
+      watch = await watching(root);
+      jest
+        .spyOn(fs.promises, 'stat')
+        .mockImplementation(((target: fs.PathLike) =>
+          target === locked || target === sealed
+            ? Promise.reject(fsError('EACCES', 'permission denied'))
+            : statPath(target)) as never);
+
+      await fs.promises.writeFile(sealed, 'sealed');
+      await fs.promises.writeFile(path.join(root, 'next.txt'), 'next');
+
+      expect(await watch.until(1)).toEqual([{ type: 'add', path: path.join(root, 'next.txt') }]);
+      expect(await watch.quiet()).toHaveLength(1);
+    });
+
+    it('does not yield the files that are there when its first look fails', async () => {
+      await fs.promises.writeFile(path.join(root, 'listed.txt'), 'listed');
+      jest.spyOn(fs.promises, 'readdir').mockRejectedValueOnce(fsError('EMFILE', 'too many open files'));
+      watch = await watching(root);
+
+      await fs.promises.writeFile(path.join(root, 'trigger.txt'), 'trigger');
+
+      expect(await watch.until(1)).toEqual([{ type: 'add', path: path.join(root, 'trigger.txt') }]);
+      expect(await watch.quiet()).toHaveLength(1);
     });
   });
 

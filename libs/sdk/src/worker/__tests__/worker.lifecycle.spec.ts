@@ -202,6 +202,47 @@ describe('workers in createContainer(), over a store the processes share', () =>
     expect(runsOf(worker)[1].signal.aborted).toBe(false);
   });
 
+  it('runs a restart: false worker once, even after it lost the lease and got it back', async () => {
+    @Worker({ name: 'once', scope: 'machine', leaseMs: LEASE_MS, restart: false })
+    class OnceWorker {
+      run({ signal }: WorkerRunContext): void {
+        runs.push({ worker: this, signal });
+      }
+    }
+    const worker = (await container({ providers: [OnceWorker], runBackground: true, info })).get(OnceWorker);
+    await jest.advanceTimersByTimeAsync(500);
+    const holderId = await store.get('worker-spec:once');
+
+    await store.set('worker-spec:once', 'another-process', { ttlSeconds: 3 });
+    await jest.advanceTimersByTimeAsync(3 * LEASE_MS);
+
+    expect(await store.get('worker-spec:once')).toBe(holderId);
+    expect(runsOf(worker)).toHaveLength(1);
+  });
+
+  it('never runs a worker whose lease a check takes while the container shuts down', async () => {
+    await store.set('worker-spec:inbox', 'another-process', { ttlSeconds: 3 });
+    const built = await container({ providers: [MachineWorker], runBackground: true, info });
+    await store.delete('worker-spec:inbox');
+    let openStore: () => void = () => undefined;
+    const set = store.set.bind(store);
+    const gatedSet = jest.spyOn(store, 'set').mockImplementationOnce(async (...args) => {
+      await new Promise<void>((resolve) => (openStore = resolve));
+      return set(...args);
+    });
+    await jest.advanceTimersByTimeAsync(LEASE_MS / 3);
+    expect(gatedSet).toHaveBeenCalled();
+
+    const disposing = dispose(built);
+    await jest.advanceTimersByTimeAsync(0);
+    openStore();
+    await disposing;
+    await jest.advanceTimersByTimeAsync(2 * LEASE_MS);
+
+    expect(runs).toEqual([]);
+    expect(await store.get('worker-spec:inbox')).toBeNull();
+  });
+
   it('keeps the leases of workers apart from those of duties, per hostname, project root or cluster', async () => {
     await container({ providers: [MachineWorker], runBackground: true, info, redis });
     await container({ providers: [WorkspaceWorker], runBackground: true, info, redis });
@@ -427,6 +468,53 @@ describe('workers in a server', () => {
     });
   });
 
+  it('shows a leased worker as unhealthy while its lease store cannot be opened, and runs it once the store opens', async () => {
+    @Worker({ name: 'leased', scope: 'machine', leaseMs: 1_000 })
+    class LeasedWorker {
+      run(context: WorkerRunContext): Promise<void> {
+        return untilAborted(this, context);
+      }
+    }
+    @App({ name: 'Leased', providers: [LeasedWorker] })
+    class LeasedApp {}
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-workers-'));
+    const previousHome = process.env['FRONTMCP_HOME'];
+    process.env['FRONTMCP_HOME'] = home;
+    const store = createMemoryStorage({ enableSweeper: false });
+    await store.connect();
+    let leaseStoreOpens = 0;
+    jest.mocked(createStorage).mockImplementation(async (config) => {
+      if (config?.prefix !== 'frontmcp:worker:') return openRealStorage(config);
+      leaseStoreOpens++;
+      if (leaseStoreOpens === 1) throw new Error('database is locked');
+      return store;
+    });
+    try {
+      const scope = await serve([LeasedApp]);
+      await instance?.emitProvidersReady();
+
+      expect((await scope.healthService?.getReadyz())?.probes?.['worker:leased']).toEqual({
+        status: 'unhealthy',
+        details: { state: 'standby', restarts: 0 },
+        error: 'the lease store cannot be opened: database is locked',
+      });
+
+      await until(() => runs.length === 1);
+      expect((await scope.healthService?.getReadyz())?.probes?.['worker:leased']).toEqual({
+        status: 'healthy',
+        details: { state: 'running', restarts: 0 },
+      });
+      expect(leaseStoreOpens).toBe(2);
+    } finally {
+      await instance?.shutdown();
+      instance = undefined;
+      jest.mocked(createStorage).mockReset().mockImplementation(openRealStorage);
+      if (previousHome === undefined) delete process.env['FRONTMCP_HOME'];
+      else process.env['FRONTMCP_HOME'] = previousHome;
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it('answers not ready once a restart: false worker ended on an error, and takes the check away at shutdown', async () => {
     const scope = await serve([OneShotApp]);
     await instance?.emitProvidersReady();
@@ -463,5 +551,15 @@ describe('workerHealth', () => {
     [{ state: 'stopped', restarts: 0 }, { status: 'healthy' }],
   ] as const)('reports %j as %j, with the status as details', (status, expected) => {
     expect(workerHealth(status)).toEqual({ ...expected, details: status });
+  });
+
+  it('reports a worker whose lease store cannot be opened as unhealthy, whatever its state', () => {
+    const status = { state: 'standby', restarts: 0 } as const;
+
+    expect(workerHealth(status, 'database is locked')).toEqual({
+      status: 'unhealthy',
+      details: status,
+      error: 'the lease store cannot be opened: database is locked',
+    });
   });
 });

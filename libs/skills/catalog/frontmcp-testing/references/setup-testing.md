@@ -385,16 +385,30 @@ over Streamable HTTP, by poll over HTTP+SSE or when asked, and by webhook with a
 ```typescript
 import { McpTestClient, WebhookReceiver } from '@frontmcp/testing';
 
-const receiver = new WebhookReceiver();
-const { url } = await receiver.start(); // 127.0.0.1: the server needs events.webhook.unsafeAllowLocalCallbacks
-const client = await McpTestClient.create({ baseUrl: server.info.baseUrl })
-  .withEvents({ webhook: { url, receiver: receiver.eventReceiver } })
-  .buildAndConnect();
+it('delivers order.created by webhook', async () => {
+  // Webhook delivery needs a signed-in caller, so `server` verifies tokens from `tokenFactory` (a TestTokenFactory
+  // served by a MockOAuthServer; a public server offers no webhook mode). Its callbacks are on 127.0.0.1, which needs
+  // events.webhook.unsafeAllowLocalCallbacks on the server.
+  const token = await tokenFactory.createTestToken({ sub: 'ada' });
+  const receiver = new WebhookReceiver();
+  const { url } = await receiver.start();
+  let client: McpTestClient | undefined;
+  try {
+    client = await McpTestClient.create({ baseUrl: server.info.baseUrl, auth: { token } })
+      .withEvents({ webhook: { url, receiver: receiver.eventReceiver } })
+      .buildAndConnect();
 
-const subscription = await client.events.subscribe('order.created');
-await client.tools.call('place-order', { orderId: 'o-1' });
-const { value } = await subscription[Symbol.asyncIterator]().next();
-await subscription.cancel();
+    const subscription = await client.events.subscribe('order.created', {}, { delivery: 'webhook' });
+    await client.tools.call('place-order', { orderId: 'o-1' });
+    const { value } = await subscription[Symbol.asyncIterator]().next();
+
+    expect(subscription.mode).toBe('webhook');
+    expect(value?.data).toMatchObject({ orderId: 'o-1' });
+  } finally {
+    await client?.disconnect(); // cancels the subscription, which sends events/unsubscribe
+    await receiver.stop();
+  }
+});
 ```
 
 `WebhookReceiver` records every request (`requests`, `verifications()`, `deliveries()`, `waitForDeliveries()`), and

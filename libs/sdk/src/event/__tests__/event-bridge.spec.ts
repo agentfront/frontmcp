@@ -177,6 +177,20 @@ describe('the events bridge', () => {
     expect(runs.map((run) => run.jobName)).toContain('audit-orders');
   });
 
+  it('gives an event published for some owners only to the workflow, not to the channel or another listener', async () => {
+    const { eventId } = await publisherOf(instance).publish(
+      orderCreated,
+      { orderId: 'o-private' },
+      { audience: { sub: 'ada' } },
+    );
+
+    await until(() => auditedByWorkflow.length === 1);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(auditedByWorkflow).toEqual([expect.objectContaining({ eventId })]);
+    expect(heardByChannel).toEqual([]);
+    expect(heardOnBus).toEqual([]);
+  });
+
   it('emits once for a publish, however many subscriptions receive the event', async () => {
     const store = scope.events?.subscriptions?.store;
     if (!store) throw new Error('the scope keeps no subscriptions');

@@ -184,7 +184,7 @@ export interface EventsPublishEndpointOptions {
   authorities?: AuthoritiesMetadata;
 }
 
-/** The recent occurrences kept in memory for `events/poll`, per event. */
+/** The recent occurrences of each event `events/poll` and `events/stream` read, in the memory of the publishing process. */
 export interface EventsBufferOptions {
   /** How long a published occurrence can still be polled. @default 600_000 (10 minutes) */
   maxAgeMs?: number;

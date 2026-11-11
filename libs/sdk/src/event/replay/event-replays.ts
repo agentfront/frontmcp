@@ -8,6 +8,7 @@ import {
   type FrontMcpLogger,
 } from '../../common';
 import { LeaseHolder, type LeaseStorage } from '../../duty/lease-holder';
+import { outlasts } from '../../provider/provider.lifecycle';
 import { type EventOutbox } from '../delivery/event-outbox';
 import { EVENT_DIALECTS } from '../event-dialect';
 import { newEventId } from '../event-publisher';
@@ -45,15 +46,24 @@ export interface EventReplayStep {
   truncated: boolean;
   hasMore: boolean;
   nextPollMs?: number;
+  /** Why queuing stopped part-way; `replay` then keeps what was queued. */
+  failure?: unknown;
 }
 
 /** How long one process holds the loop of an event before another may take it over. */
 export const REPLAY_LEASE_MS = 30_000;
+/** How long `stop()` waits for the read in flight of a loop: the default `lifecycle.shutdownHookTimeoutMs`. */
+export const REPLAY_STOP_GRACE_MS = 3_000;
 /** Batches with unfinished deliveries after which `check()` waits for the callback to catch up. */
 export const MAX_PENDING_BATCHES = 50;
 /** How many times in a row one subscription is read while `check()` answers `hasMore`. */
 const MAX_ROUNDS_PER_TICK = 10;
 const encoder = new TextEncoder();
+
+/** Whether a stored replay state is still where a turn began reading: no other holder moved it on meanwhile. */
+function isSameReadPosition(current: EventReplayState | undefined, expected: EventReplayState): boolean {
+  return current?.cursor === expected.cursor && current.queuedAtCursor === expected.queuedAtCursor;
+}
 
 /** Whether two replay states stand at the same position: the same cursor, and the same batches waiting. */
 function isSamePosition(current: EventReplayState | undefined, expected: EventReplayState): boolean {
@@ -101,12 +111,16 @@ export class EventReplays {
     }
   }
 
-  /** Stop every loop, wait for the read in flight, and release the leases for another process to take. */
+  /**
+   * Stop every loop, wait for the reads in flight, and release the leases for another process to take. The lease of a
+   * loop whose read did not end within `REPLAY_STOP_GRACE_MS` is left to expire instead.
+   */
   async stop(): Promise<void> {
-    for (const [eventName, holder] of this.holders) {
+    const stopping = [...this.holders].map(([eventName, holder]) => {
       this.unschedule(eventName);
-      await holder.stop(() => this.ticks.get(eventName));
-    }
+      return holder.stop(() => this.turnEnded(eventName));
+    });
+    await Promise.all(stopping);
     this.holders.clear();
   }
 
@@ -119,6 +133,7 @@ export class EventReplays {
   ): Promise<EventReplayStep> {
     const step = await this.advance(event, record, { cursor, watermark: cursor, pending: [] }, maxAgeMs);
     await this.options.store.update(record.id, { replay: step.replay });
+    if (step.failure) throw step.failure;
     return step;
   }
 
@@ -151,6 +166,16 @@ export class EventReplays {
     this.timers.set(event.name, timer);
   }
 
+  /** Whether the turn in flight of an event's loop, if any, ended within `REPLAY_STOP_GRACE_MS`; logged when not. */
+  private async turnEnded(eventName: string): Promise<boolean> {
+    const turn = this.ticks.get(eventName);
+    if (!(await outlasts(() => turn, REPLAY_STOP_GRACE_MS))) return true;
+    this.logger.warn(
+      `The webhook loop of event "${eventName}" did not end within ${REPLAY_STOP_GRACE_MS} ms; its lease expires by itself`,
+    );
+    return false;
+  }
+
   /** Whether this process still runs the loop of an event: it holds the lease, and is not stopping. */
   private isRunning(eventName: string): boolean {
     const holder = this.holders.get(eventName);
@@ -164,14 +189,21 @@ export class EventReplays {
     this.timers.delete(eventName);
   }
 
-  /** One turn of an event's loop: read the upstream for each of its webhook subscriptions that is due. */
+  /**
+   * One turn of an event's loop: read the upstream for each of its webhook subscriptions that is due, while this
+   * process still runs the loop. A subscription that fails is logged and the turn goes on with the next one.
+   */
   private async tick(event: EventEntry): Promise<void> {
     const subscriptions = await this.options.store.listByEvent(event.name);
     for (const record of subscriptions) {
+      if (!this.isRunning(event.name)) return;
       if (!record.active || !record.replay) continue;
       if ((this.nextCheckAt.get(record.id) ?? 0) > Date.now()) continue;
-      if (!(await this.isStillAuthorized(event, record))) continue;
-      await this.readFor(event, record, record.replay);
+      try {
+        if (await this.isStillAuthorized(event, record)) await this.readFor(event, record, record.replay);
+      } catch (error) {
+        this.logger.warn(`The webhook loop of event "${event.name}" failed for subscription ${record.id}`, error);
+      }
     }
   }
 
@@ -198,16 +230,42 @@ export class EventReplays {
     return false;
   }
 
-  /** Read the upstream for one subscription until it has no more, report a gap, and store where it stands. */
+  /**
+   * Read the upstream for one subscription until it has no more, report a gap, and store where it stands, also what
+   * was queued before a failure, so the next turn does not queue it again.
+   */
   private async readFor(event: EventEntry, record: EventSubscriptionRecord, from: EventReplayState): Promise<void> {
     let replay = from;
-    for (let round = 0; round < MAX_ROUNDS_PER_TICK; round++) {
-      const step = await this.advance(event, record, replay, undefined);
-      replay = step.truncated ? await this.reportGap(record, step.replay) : step.replay;
-      this.nextCheckAt.set(record.id, Date.now() + (step.nextPollMs ?? this.options.intervalMs));
-      if (!step.hasMore) break;
+    try {
+      for (let round = 0; round < MAX_ROUNDS_PER_TICK && this.isRunning(event.name); round++) {
+        const step = await this.advance(event, record, replay, undefined);
+        replay = step.truncated ? { ...step.replay, truncated: true } : step.replay;
+        if (step.failure) throw step.failure;
+        if (step.truncated) replay = await this.reportGap(record, replay);
+        this.nextCheckAt.set(record.id, Date.now() + (step.nextPollMs ?? this.options.intervalMs));
+        if (!step.hasMore) break;
+      }
+    } finally {
+      if (replay !== from) await this.storeReplay(event.name, record.id, from, replay);
     }
-    await this.options.store.update(record.id, { replay });
+  }
+
+  /**
+   * Store where a subscription stands, only while this process holds the lease of the event's loop (renewed now, so
+   * no other process can take it before the write) and while no other holder moved the subscription on since this
+   * turn read it.
+   */
+  private async storeReplay(
+    eventName: string,
+    subscriptionId: string,
+    from: EventReplayState,
+    replay: EventReplayState,
+  ): Promise<void> {
+    const holder = this.holders.get(eventName);
+    if (!holder?.holding || !(await holder.renew())) return;
+    await this.options.store.update(subscriptionId, (current) =>
+      isSameReadPosition(current.replay, from) ? { replay } : {},
+    );
   }
 
   /** Tell a gap found between refreshes: an envelope for a dialect that has one, else at the next refresh. */
@@ -220,7 +278,8 @@ export class EventReplays {
       body: JSON.stringify({ type: 'gap', cursor: replay.watermark }),
       webhookId: generateWebhookMessageId('gap'),
     });
-    return replay;
+    const { truncated: _told, ...told } = replay;
+    return told;
   }
 
   /** Call `check()` once from the subscription's position and queue what it returned as deliveries. */
@@ -237,24 +296,41 @@ export class EventReplays {
     const checked = await this.check(event, record, settled.cursor, floor === undefined ? undefined : maxAgeMs);
     if (!checked) return { replay: settled, truncated: false, hasMore: false };
 
+    const alreadyQueued = settled.queuedAtCursor ?? 0;
     const deliveryIds: string[] = [];
     let skippedOldEvents = false;
-    for (const item of checked.events) {
+    for (const [index, item] of checked.events.entries()) {
+      if (index < alreadyQueued) continue;
       const timestamp = item.timestamp ?? new Date().toISOString();
       if (floor !== undefined && Date.parse(timestamp) < floor) {
         skippedOldEvents = true;
         continue;
       }
-      const deliveryId = await this.enqueue(event, record, item, timestamp, settled.watermark);
-      if (deliveryId) deliveryIds.push(deliveryId);
+      try {
+        const deliveryId = await this.enqueue(event, record, item, timestamp, settled.watermark);
+        if (deliveryId) deliveryIds.push(deliveryId);
+      } catch (failure) {
+        return { replay: this.partlyQueued(settled, index, deliveryIds), truncated: false, hasMore: false, failure };
+      }
     }
-    const batches = [...settled.pending, { cursor: checked.cursor, deliveryIds }];
+    const { queuedAtCursor: _queued, ...read } = settled;
+    const batches = [...read.pending, { cursor: checked.cursor, deliveryIds }];
     return {
-      replay: await this.settled({ ...settled, cursor: checked.cursor, pending: batches }),
+      replay: await this.settled({ ...read, cursor: checked.cursor, pending: batches }),
       truncated: checked.truncated === true || skippedOldEvents,
       hasMore: checked.hasMore === true,
       nextPollMs: checked.nextPollMs,
     };
+  }
+
+  /**
+   * Where a subscription stands when queuing failed at item `index` of a `check()`: still at its cursor, with what it
+   * queued kept as a batch and counted, so reading from the same cursor again skips it.
+   */
+  private partlyQueued(settled: EventReplayState, index: number, deliveryIds: string[]): EventReplayState {
+    const pending =
+      deliveryIds.length > 0 ? [...settled.pending, { cursor: settled.cursor, deliveryIds }] : settled.pending;
+    return { ...settled, pending, queuedAtCursor: index };
   }
 
   /** The answer of the event's `check()`; undefined, and logged, when it throws: the loop asks again later. */

@@ -5,7 +5,7 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from '@frontmcp/utils';
 
 type TicketModule = typeof import('../src/apps/events/events/ticket-updated.event');
 
@@ -50,6 +50,21 @@ describe('the ticket changes of the e2e app', () => {
     expect(stored.map((change) => change.ticketId)).toEqual(['t-stored', 't-1', 't-2']);
   });
 
+  it('saves the next change after a write that failed', async () => {
+    await writeFile(ticketsFile, '[]');
+    const { recordTicketChange } = freshModule();
+    await recordTicketChange({ ticketId: 't-1', queue: 'billing' });
+    await rm(ticketsFile, { force: true });
+    await mkdir(ticketsFile);
+
+    await expect(recordTicketChange({ ticketId: 't-2', queue: 'billing' })).rejects.toThrow();
+    await rm(ticketsFile, { recursive: true, force: true });
+    await recordTicketChange({ ticketId: 't-3', queue: 'billing' });
+
+    const stored = JSON.parse(await readFile(ticketsFile)) as Array<{ ticketId: string }>;
+    expect(stored.map((change) => change.ticketId)).toEqual(['t-1', 't-2', 't-3']);
+  });
+
   it('loads the stored changes again after a file it could not parse', async () => {
     await writeFile(ticketsFile, 'not json');
     const { recordTicketChange } = freshModule();
@@ -58,5 +73,17 @@ describe('the ticket changes of the e2e app', () => {
     await writeFile(ticketsFile, JSON.stringify([{ ticketId: 't-stored', queue: 'billing' }]));
 
     await expect(recordTicketChange({ ticketId: 't-2', queue: 'billing' })).resolves.toBe(2);
+  });
+
+  it('answers a cursor it never gave with truncated and the current position', async () => {
+    await writeFile(ticketsFile, JSON.stringify([{ ticketId: 't-stored', queue: 'billing' }]));
+    const { ticketUpdated } = freshModule();
+    const check = ticketUpdated().check as NonNullable<ReturnType<typeof ticketUpdated>['check']>;
+
+    const unreadable = await check.call({} as never, {}, 'not-a-position', { maxEvents: 10 });
+    const ahead = await check.call({} as never, {}, '99', { maxEvents: 10 });
+
+    expect(unreadable).toMatchObject({ events: [], cursor: '1', truncated: true, hasMore: false });
+    expect(ahead).toMatchObject({ events: [], cursor: '1', truncated: true });
   });
 });

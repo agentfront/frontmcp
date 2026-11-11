@@ -1,6 +1,6 @@
 import { internalZ as z } from '@frontmcp/lazy-zod';
 import { EventOccurrenceSchema, type EventOccurrence } from '@frontmcp/protocol';
-import { generateWebhookMessageId } from '@frontmcp/utils';
+import { sha256Hex } from '@frontmcp/utils';
 
 import {
   EventEntry,
@@ -91,6 +91,11 @@ declare global {
   }
 }
 
+/** The `webhook-id` of one event on one subscription: a publish the client repeats sends the same one, to deduplicate. */
+export function eventWebhookIdOf(subscriptionId: string, eventId: string): string {
+  return `msg_${sha256Hex(`${subscriptionId}\u0000${eventId}`).slice(0, 32)}`;
+}
+
 const name = 'events:publish' as const;
 const { Stage } = FlowHooksOf<'events:publish'>(name);
 const encoder = new TextEncoder();
@@ -139,10 +144,12 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
     this.state.set({ event, context: event.create({}), deliveries: [] });
   }
 
-  /** Keep the occurrence for `events/poll`, before any filter: each poll applies them for its own caller. */
+  /** Keep the occurrence for `events/poll` and `events/stream`, before any filter; an event neither offers is not kept. */
   @Stage('bufferOccurrence')
   async bufferOccurrence() {
     const { occurrence, audience, subscriptionId } = this.input;
+    const modes = this.events.deliveryModesOf(this.state.required.event);
+    if (!modes.includes('poll') && !modes.includes('push')) return;
     this.state.set('buffered', this.events.buffer?.append(occurrence, audience, subscriptionId));
   }
 
@@ -317,7 +324,7 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
         subscriptionId: subscription.id,
         eventName: occurrence.name,
         body: body as string,
-        webhookId: usesEventId ? occurrence.eventId : generateWebhookMessageId(),
+        webhookId: usesEventId ? occurrence.eventId : eventWebhookIdOf(subscription.id, occurrence.eventId),
       });
     });
     await Promise.all(queued);
@@ -328,8 +335,9 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
   @Stage('bridgeToBus')
   async bridgeToBus() {
     if (!this.events.config.bridge) return;
-    const { occurrence } = this.input;
-    this.scope.channelEventBus?.emit(occurrence.name, occurrence);
+    const { occurrence, audience, subscriptionId } = this.input;
+    const forSomeOwners = audience !== undefined || subscriptionId !== undefined;
+    this.scope.channelEventBus?.emit(occurrence.name, occurrence, { forSomeOwners });
   }
 
   /** Answer with the event's id and how many deliveries were queued. */

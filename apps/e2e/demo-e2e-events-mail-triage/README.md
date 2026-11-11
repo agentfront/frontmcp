@@ -16,8 +16,10 @@ to that user alone. A plugin classifies each message as it is published and drop
 ## What it shows
 
 - **A per-user upstream, set up by the subscription.** `onSubscribe(args, subscription)` watches the mailbox of
-  `subscription.subscriber.sub` and keeps the stop function by `subscription.id`; `onUnsubscribe` stops it, whether
-  the client unsubscribed or the subscription expired. `onSubscribe` runs once per subscription, not on refreshes.
+  `subscription.subscriber.sub`, once for all the open subscriptions of that user, so a second subscription (another
+  callback, or a stream beside a webhook) neither starts a second watcher nor gets each message twice;
+  `onUnsubscribe` stops the watcher when the user's last subscription ends, whether the client unsubscribed or the
+  subscription expired. `onSubscribe` runs once per subscription, not on refreshes.
 - **Mail for its owner only.** The watcher publishes with `audience: { sub: owner }`, so another user's subscription
   to the same event never receives it.
 - **A classifier on `events:publish`.** `MailClassifierPlugin` hooks the `bufferOccurrence` stage of the publish
@@ -38,8 +40,8 @@ IDP_PROVIDER_URL=https://your-idp.example.com npx tsx apps/e2e/demo-e2e-events-m
 The server listens on `PORT` (3180). Replace `mail-upstream.ts` with your provider's push API, and remove the
 `simulate_incoming_mail` tool, which exists for the demo.
 
-Watchers and subscriptions are kept in memory: after a restart, a client's next `events/subscribe` creates the
-subscription again, which starts its watcher again.
+Watchers and subscriptions are kept in memory: after a restart, a client's next `events/subscribe` recreates the
+subscription, which restarts its watcher.
 
 ## Test it
 

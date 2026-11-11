@@ -110,6 +110,12 @@ export interface ExecuteWorkflowOptions extends ExecuteJobOptions {
   workflowInput?: Record<string, unknown>;
 }
 
+/** A workflow run whose caller and input passed their checks, before its record is stored. */
+interface PreparedWorkflowRun {
+  record: WorkflowRunRecord;
+  options: ExecuteWorkflowOptions;
+}
+
 export interface InlineJobResult {
   runId: string;
   result: unknown;
@@ -253,14 +259,60 @@ export class JobExecutionManager {
     jobRegistry: JobRegistryInterface,
     opts: ExecuteWorkflowOptions = {},
   ): Promise<InlineJobResult | BackgroundJobResult> {
+    return this.submitWorkflow(workflow, jobRegistry, randomUUID(), opts);
+  }
+
+  /**
+   * Start a background run of the workflow with the id `runId`, unless the store already holds a run with that id: a
+   * trigger that may start the same run twice (a schedule's takeover after its holder died) gives it the same id.
+   *
+   * @returns Whether it started the run
+   * @throws JobNotAuthorizedError when the caller may not execute the workflow
+   * @throws InvalidInputError when `workflowInput` doesn't match the workflow's `inputSchema`
+   * @internal
+   */
+  async startWorkflowRunOnce(
+    workflow: WorkflowEntry,
+    jobRegistry: JobRegistryInterface,
+    runId: string,
+    opts: Omit<ExecuteWorkflowOptions, 'background'>,
+  ): Promise<boolean> {
+    if (await this.stateStore.getRun(runId)) return false;
+    const run = await this.prepareWorkflowRun(workflow, runId, { ...opts, background: true });
+    if (!(await this.createRunIfAbsent(run.record))) return false;
+    await this.launchWorkflowRun(workflow, jobRegistry, run);
+    return true;
+  }
+
+  private async submitWorkflow(
+    workflow: WorkflowEntry,
+    jobRegistry: JobRegistryInterface,
+    runId: string,
+    opts: ExecuteWorkflowOptions,
+  ): Promise<InlineJobResult | BackgroundJobResult> {
+    const run = await this.prepareWorkflowRun(workflow, runId, opts);
+    await this.stateStore.createRun(run.record);
+    return this.launchWorkflowRun(workflow, jobRegistry, run);
+  }
+
+  /** Store the run unless one with its id exists: atomically where the store offers `createRunIfAbsent`. */
+  private async createRunIfAbsent(record: WorkflowRunRecord): Promise<boolean> {
+    if (this.stateStore.createRunIfAbsent) return this.stateStore.createRunIfAbsent(record);
+    if (await this.stateStore.getRun(record.runId)) return false;
+    await this.stateStore.createRun(record);
+    return true;
+  }
+
+  /** Check the caller and the input, and build the run's record; nothing is stored yet. */
+  private async prepareWorkflowRun(
+    workflow: WorkflowEntry,
+    runId: string,
+    opts: ExecuteWorkflowOptions,
+  ): Promise<PreparedWorkflowRun> {
     await this.assertMaySubmit(workflow.metadata.permissions, workflow.name, opts);
     // Checked before the run exists, so bad input leaves no run behind
     const workflowInput = parseWorkflowInput(workflow, opts.workflowInput);
-    const runOptions = { ...opts, workflowInput };
-
-    const runId = randomUUID();
-
-    const runRecord: WorkflowRunRecord = {
+    const record: WorkflowRunRecord = {
       runId,
       jobId: workflow.metadata.id ?? workflow.name,
       jobName: workflow.name,
@@ -276,10 +328,17 @@ export class JobExecutionManager {
       background: opts.background ?? false,
       stepResults: {},
     };
+    return { record, options: { ...opts, workflowInput } };
+  }
 
-    await this.stateStore.createRun(runRecord);
-
-    if (opts.background) {
+  /** Execute a stored run inline, or start it in the background and answer at once. */
+  private async launchWorkflowRun(
+    workflow: WorkflowEntry,
+    jobRegistry: JobRegistryInterface,
+    { record, options: runOptions }: PreparedWorkflowRun,
+  ): Promise<InlineJobResult | BackgroundJobResult> {
+    const { runId } = record;
+    if (runOptions.background) {
       const runOpts = withBackgroundContext(runOptions, (this.scope ?? workflow.providers.getActiveScope()).id);
       runRequestExclusive(() => this.executeWorkflowBackground(workflow, jobRegistry, runId, runOpts)).catch(
         async (err) => {

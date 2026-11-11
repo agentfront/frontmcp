@@ -1609,6 +1609,7 @@ export class Scope extends ScopeEntry {
     return this._channelNotificationService;
   }
 
+  /** The scope's event registry; undefined while events are off. */
   get events(): EventRegistry | undefined {
     return this._scopeEvents;
   }
