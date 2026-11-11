@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { create, createStore, FrontMcpProvider, type DirectMcpServer, type StoreAdapter } from '@frontmcp/react';
 
 import { DynamicTool } from './sections/DynamicTool';
+import { EventsSection, noteAdded } from './sections/EventsSection';
 import { McpComponentSection } from './sections/McpComponentSection';
 import { McpComponentTable } from './sections/McpComponentTable';
 import { ProviderStatus } from './sections/ProviderStatus';
@@ -12,7 +13,15 @@ import { ToolListing } from './sections/ToolListing';
 import { GreetTool } from './tools/greet.tool';
 import { AddTool } from './tools/math.tool';
 
-type Section = 'provider' | 'tool-calling' | 'tool-listing' | 'dynamic-tool' | 'mcp-component' | 'mcp-table' | 'store';
+type Section =
+  | 'provider'
+  | 'tool-calling'
+  | 'tool-listing'
+  | 'dynamic-tool'
+  | 'mcp-component'
+  | 'mcp-table'
+  | 'store'
+  | 'events';
 
 const SECTIONS: { id: Section; label: string }[] = [
   { id: 'provider', label: 'Provider Status' },
@@ -22,6 +31,7 @@ const SECTIONS: { id: Section; label: string }[] = [
   { id: 'mcp-component', label: 'MCP Component' },
   { id: 'mcp-table', label: 'MCP Table' },
   { id: 'store', label: 'Store Adapter' },
+  { id: 'events', label: 'Events' },
 ];
 
 // Simple in-memory counter store
@@ -73,6 +83,8 @@ function SectionContent({ section }: { section: Section }): React.ReactElement {
       return <McpComponentTable />;
     case 'store':
       return <StoreAdapterSection />;
+    case 'events':
+      return <EventsSection />;
   }
 }
 
@@ -96,6 +108,7 @@ export function App(): React.ReactElement {
     create({
       info: { name: 'e2e-react', version: '1.0.0' },
       tools: [GreetTool, AddTool],
+      eventDefinitions: [noteAdded],
     })
       .then((srv) => {
         if (!cancelled) setServer(srv);

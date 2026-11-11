@@ -68,6 +68,15 @@ describe('createWrappedServer', () => {
     });
   });
 
+  describe('events', () => {
+    it("is the base server's event publisher", () => {
+      const events = { publish: jest.fn() };
+      const withEvents = createWrappedServer(createMockBaseServer({ events }), dynamicRegistry);
+
+      expect(withEvents.events).toBe(events);
+    });
+  });
+
   // ─── tools ──────────────────────────────────────────────────────────────
   // Dynamic tools are registered with the server as real tools (bindDynamicTools), so the wrapper
   // passes tool operations straight through: the server lists and runs them.

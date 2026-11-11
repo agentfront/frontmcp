@@ -9,6 +9,7 @@ import type {
   AdapterType,
   AgentType,
   AuthProviderType,
+  EventType,
   JobType,
   PluginType,
   PromptType,
@@ -107,6 +108,9 @@ export interface CreateConfig extends Omit<ServerConfigInput, CreateOwnedServerO
 
   /** Workflow definitions for the app */
   workflowDefinitions?: WorkflowType[];
+
+  /** MCP Events the app declares (`@Event` classes or `event()`); `events` holds the server's events options */
+  eventDefinitions?: EventType[];
 
   // ── create()-specific fields ─────────────────────────────────────────
 

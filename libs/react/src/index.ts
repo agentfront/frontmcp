@@ -51,6 +51,10 @@ export {
 // Schema builder — the same `z` the SDK uses, so tool/resource schemas need no extra import
 export { z } from '@frontmcp/sdk';
 
+// MCP Events
+export { Event, FrontMcpEvent, event, frontMcpEvent } from '@frontmcp/sdk';
+export type { EventOccurrence, EventDeliveryMode, EventPublishOptions, EventPublishResult } from '@frontmcp/sdk';
+
 // Base context classes
 export { ToolContext, ResourceContext, PromptContext, ExecutionContextBase } from '@frontmcp/sdk';
 
@@ -117,6 +121,9 @@ export {
   useDynamicTool,
   useDynamicResource,
   useComponentTree,
+  useEventSubscription,
+  usePublishEvent,
+  useDomEventSource,
 } from './hooks';
 export type { ResolvedServerEntry, UseGetPromptReturn, UseListResourcesResult, UseStoreResourceReturn } from './hooks';
 export type {
@@ -125,7 +132,16 @@ export type {
   UseDynamicToolJsonSchemaOptions,
   UseDynamicResourceOptions,
   UseComponentTreeOptions,
+  EventSubscriptionStatus,
+  UseEventSubscriptionOptions,
+  UseEventSubscriptionResult,
+  DomEventSourceEvent,
+  UseDomEventSourceOptions,
 } from './hooks';
+
+// MCP Events: forward events to another FrontMCP server's publish endpoint
+export { createRemoteEventForwarder, RemoteEventForwardError } from './events';
+export type { RemoteEventForwarder, RemoteEventForwarderOptions } from './events';
 
 // Components
 export {

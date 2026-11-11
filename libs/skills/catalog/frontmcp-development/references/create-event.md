@@ -1137,6 +1137,13 @@ replay of the first request. `options.onTruncated(cursor)` is told when the serv
 Options of the client: `connect(config, { events: { webhook, cursorStore, pollFloorMs, heartbeatTimeoutMs } })`, or
 `McpTestClient.create(...).withEvents({ ... })`.
 
+### Servers created with `create()`
+
+A `create()` server declares its events with `eventDefinitions: [...]` (its `events` key holds the server's events
+options, as in `@FrontMcp`), and `server.events` is its publisher: `await server.events.publish(orderPlaced, data)`.
+A `connect()` client of an in-page server subscribes by push in the browser build too; `@frontmcp/react` wraps this
+in `useEventSubscription`, `usePublishEvent` and `useDomEventSource` (see `build-for-browser`).
+
 ### Receiving webhooks
 
 `createEventWebhookReceiver(options?)` is a framework-neutral receiver. Give it each request with its exact body:

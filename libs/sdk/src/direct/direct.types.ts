@@ -16,6 +16,7 @@ import type {
 } from '@frontmcp/protocol';
 import type { EntryAvailability } from '@frontmcp/utils';
 
+import type { EventPublisher } from '../common/interfaces/event.interface';
 import type { ToolAnnotations } from '../common/metadata/tool.metadata';
 import type { ConnectOptions, DirectClient } from './client.types';
 
@@ -378,6 +379,12 @@ export interface DirectMcpServer {
    * @returns Connected DirectClient instance
    */
   connect(sessionIdOrOptions?: string | ConnectOptions): Promise<DirectClient>;
+
+  /**
+   * Publish this server's MCP Events, as `this.events` does in a tool: `server.events.publish(orderPlaced, data)`.
+   * Publishing on a server without events rejects with `EventsNotEnabledError`.
+   */
+  readonly events: EventPublisher;
 
   // ─────────────────────────────────────────────────────────────────
   // Lifecycle
