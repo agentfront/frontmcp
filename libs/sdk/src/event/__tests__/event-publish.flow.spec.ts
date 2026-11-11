@@ -396,6 +396,23 @@ describe('events:publish', () => {
       expect(idOf(sep.id)).toMatch(/^msg_[A-Za-z0-9_-]+$/);
       expect(idOf(sep.id)).not.toContain(eventId);
     });
+
+    it('sends the same message id again when the same event is published again, so a receiver drops the repeat', async () => {
+      const first = await subscribed({ eventName: 'order.shipped', dialect: 'sep-3415' });
+      const second = await subscribed({ eventName: 'order.shipped', dialect: 'sep-3415' });
+
+      await publisher().publish(OrderShipped, { orderId: 'o-10' }, { eventId: 'evt_repeated' });
+      await publisher().publish(OrderShipped, { orderId: 'o-10' }, { eventId: 'evt_repeated' });
+
+      const all = await deliveries(4);
+      const idsOf = (subscriptionId: string) =>
+        all
+          .filter((delivery) => delivery.headers['x-mcp-subscription-id'] === subscriptionId)
+          .map((delivery) => delivery.headers['webhook-id']);
+      expect(new Set(idsOf(first.id)).size).toBe(1);
+      expect(idsOf(first.id)).toHaveLength(2);
+      expect(idsOf(first.id)[0]).not.toBe(idsOf(second.id)[0]);
+    });
   });
 
   describe('which subscriptions receive an event', () => {

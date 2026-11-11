@@ -470,7 +470,7 @@ Mistakes of the server author are thrown, not delivered:
 ### Which subscriptions receive it
 
 `publish()` runs the hookable `events:publish` flow (`EventPublishHook`), with the stages `validate`,
-`loadSubscriptions`, `dropInactive`, `filterByAudience`, `reauthorize`, `match`, `transform`, `enforceBodyLimit`,
+`bufferOccurrence` (keeps the occurrence for `events/poll` and `events/stream`), `pushToStreams`, `loadSubscriptions`, `dropInactive`, `filterByAudience`, `reauthorize`, `match`, `transform`, `enforceBodyLimit`,
 `enqueue`, `bridgeToBus` (see [Events on the Server's Event Bus](#events-on-the-servers-event-bus)) and `buildResult`:
 
 1. Suspended subscriptions are left out.
@@ -780,7 +780,8 @@ Each delivery is one POST to the subscription's callback. The body is the occurr
 
 The body is serialized once: the same bytes are signed and sent on every attempt. The `webhook-id` depends on the
 dialect the subscription was created in: a message id of its own (`msg_…`) under SEP-3415, the `eventId` under the
-design sketch (ChatGPT).
+design sketch (ChatGPT). Either way it is the same for one event on one subscription, so an event published again
+with the same `eventId` (a retry of a publish that failed part-way) reaches a receiver that deduplicates only once.
 
 ### What a response means
 
@@ -1096,7 +1097,7 @@ published on one reaches the streams the others hold.`
 
 Opening a stream runs the hookable `events:stream` flow (`EventStreamHook`), with the stages `parseInput`,
 `resolveDialect`, `findEvent`, `resolveReader`, `checkEntryAuthorities`, `validateArguments`, `authorize`,
-`openStream` and `buildResult`. `scope.events.streams` is the server's `EventStreams` (`size`, `isRelayed`). With
+`openStream`, `buildResult` and `finalize`. `scope.events.streams` is the server's `EventStreams` (`size`, `isRelayed`). With
 `@frontmcp/observability`, opening a stream is traced as an `events/stream` span.
 
 ## Subscribing From a Client
@@ -1305,7 +1306,9 @@ The three lifetimes must satisfy `minTtlMs <= defaultTtlMs <= maxTtlMs` after de
 | `secret?`      | `string`                       | None              | At least 32 characters. Requests are signed with it; without it, callers present a bearer token |
 | `authorities?` | Profile name, names, or policy | None              | The rule a bearer caller must satisfy, with the request body as input. Not with `secret`        |
 
-`events.buffer` (what `events/poll` can still read of published events):
+`events.buffer` (what `events/poll` can still read of published events, kept in the memory of the process that
+published them; on a serverless deployment the server warns at startup, see
+[Events that are published](#events-that-are-published)):
 
 | Field        | Type     | Default               | Notes                                               |
 | ------------ | -------- | --------------------- | --------------------------------------------------- |

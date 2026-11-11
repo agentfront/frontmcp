@@ -195,6 +195,15 @@ describe('events:poll', () => {
       expect(fromNothing.cursor).toBe(fromNull.cursor);
     });
 
+    it('keeps no occurrence of an event that neither poll nor push offers', async () => {
+      const buffer = scope.events?.buffer;
+      const before = buffer?.currentSequence();
+
+      await publisherOf(scope).publish(webhookOnly, { id: 'w-1' });
+
+      expect(buffer?.currentSequence()).toBe(before);
+    });
+
     it('answers what was published since the cursor, once', async () => {
       const { cursor } = await poll(scope);
       await placeOrders(scope, ['o-1', 'paid'], ['o-2', 'refunded']);

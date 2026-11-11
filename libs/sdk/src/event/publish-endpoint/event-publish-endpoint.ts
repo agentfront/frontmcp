@@ -93,7 +93,7 @@ export async function enablePublishEndpoint(args: EnablePublishEndpointArgs): Pr
     secret,
     authorities,
     replays: new WorkflowWebhookReplayGuard(),
-    idempotency: new EventPublishIdempotency(storage),
+    idempotency: new EventPublishIdempotency(storage, scope.id),
   };
   await scope.registryFlows(EventPublishHttpFlow);
   logger.info(`Events can be published over HTTP: POST ${path} (${secret ? 'signed requests' : 'bearer callers'})`);

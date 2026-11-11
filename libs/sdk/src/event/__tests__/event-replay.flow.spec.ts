@@ -8,7 +8,7 @@ import { EVENTS_ERROR_CODES, type SubscribeEventResult } from '@frontmcp/protoco
 import { generateStandardWebhookSecret, getRuntimeContext } from '@frontmcp/utils';
 
 import { createTestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
-import { App, event, type FrontMcpConfigInput } from '../../common';
+import { App, event, LogLevel, type FrontMcpConfigInput } from '../../common';
 import { EventForbiddenError, EventUnsupportedError } from '../../errors';
 import { type Scope } from '../../scope/scope.instance';
 
@@ -219,6 +219,18 @@ describe('webhook subscriptions of an event with check()', () => {
 
   it('keeps cursor null for an event without check()', async () => {
     await expect(subscribe('plain', {}, 'order.shipped')).resolves.toMatchObject({ cursor: null, truncated: false });
+  });
+
+  it('warns at startup that a serverless function cannot poll what it published in another call', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    jest.mocked(getRuntimeContext).mockReturnValue({ runtime: 'node', deployment: 'serverless' } as never);
+    const serverless = await startScope({ logging: { level: LogLevel.Warn } });
+    jest.mocked(getRuntimeContext).mockImplementation(jest.requireActual('@frontmcp/utils').getRuntimeContext);
+
+    const warned = warn.mock.calls.map((call) => call.map(String).join(' '));
+    expect(warned).toContainEqual(expect.stringContaining('events/poll reads published events from the memory'));
+    warn.mockRestore();
+    await serverless.dispose();
   });
 
   it('keeps an event with check() off webhook where no loop can run, and says so at startup', async () => {
