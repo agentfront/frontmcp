@@ -170,7 +170,9 @@ describe('events configuration', () => {
     rotationGraceMs: 300_000,
   };
   const publishEndpoint = { enabled: false, path: '/events/publish' };
-  const defaults = { compat: 'auto', subscriptions, webhook, publishEndpoint };
+  const buffer = { maxAgeMs: 600_000, maxEvents: 10_000 };
+  const poll = { enabled: true, nextPollMs: 30_000, maxEvents: 100 };
+  const defaults = { compat: 'auto', subscriptions, webhook, publishEndpoint, buffer, poll };
 
   it('defaults compat to auto, and the subscription and webhook settings', () => {
     expect(eventsConfigSchema.parse({})).toEqual(defaults);
@@ -270,6 +272,25 @@ describe('events configuration', () => {
         true,
       );
       expect(eventsConfigSchema.safeParse({ ...allowNoExpiry, store: { keyPrefix: 'app:' } }).success).toBe(false);
+    });
+  });
+
+  describe('buffer and poll', () => {
+    it('keeps what a server sets, and defaults the rest', () => {
+      const parsed = eventsConfigSchema.parse({
+        buffer: { maxEvents: 500 },
+        poll: { enabled: false, nextPollMs: 5000 },
+      });
+
+      expect(parsed.buffer).toEqual({ maxAgeMs: 600_000, maxEvents: 500 });
+      expect(parsed.poll).toEqual({ enabled: false, nextPollMs: 5000, maxEvents: 100 });
+    });
+
+    it('refuses sizes and intervals that are not positive integers', () => {
+      expect(eventsConfigSchema.safeParse({ buffer: { maxAgeMs: 0 } }).success).toBe(false);
+      expect(eventsConfigSchema.safeParse({ buffer: { maxEvents: 1.5 } }).success).toBe(false);
+      expect(eventsConfigSchema.safeParse({ poll: { nextPollMs: -1 } }).success).toBe(false);
+      expect(eventsConfigSchema.safeParse({ poll: { maxEvents: 0 } }).success).toBe(false);
     });
   });
 

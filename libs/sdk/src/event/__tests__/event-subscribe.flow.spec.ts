@@ -331,14 +331,14 @@ describe('events:subscribe', () => {
       await expect(refusal).rejects.toThrow(EventUnsupportedError);
       await expect(refusal).rejects.toMatchObject({
         jsonRpcCode: -32026,
-        data: { feature: 'deliveryMode', value: 'push', supported: ['webhook'] },
+        data: { feature: 'deliveryMode', value: 'push', supported: ['poll', 'webhook'] },
       });
     });
 
     it('answers an event that is not offered by webhook with Unsupported', async () => {
       await expect(subscribe(scope, { name: 'poll.only' })).rejects.toMatchObject({
         jsonRpcCode: -32026,
-        data: { feature: 'deliveryMode', value: 'webhook', supported: [] },
+        data: { feature: 'deliveryMode', value: 'webhook', supported: ['poll'] },
       });
     });
 

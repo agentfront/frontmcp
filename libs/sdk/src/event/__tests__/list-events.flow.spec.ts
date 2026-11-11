@@ -55,6 +55,7 @@ async function startScope(events: EventType[], extra: Partial<FrontMcpConfigInpu
     info: { name: 'list-events-flow', version: '1.0.0' },
     apps: [ShopApp],
     authorities: { profiles: { admin: { roles: { any: ['admin'] } } } },
+    events: { poll: { enabled: false } },
     ...extra,
   });
   return instance.getScopes()[0] as Scope;

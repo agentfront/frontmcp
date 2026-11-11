@@ -182,6 +182,23 @@ export interface EventsPublishEndpointOptions {
   authorities?: AuthoritiesMetadata;
 }
 
+/** The recent occurrences kept in memory for `events/poll`, per event. */
+export interface EventsBufferOptions {
+  /** How long a published occurrence can still be polled. @default 600_000 (10 minutes) */
+  maxAgeMs?: number;
+  /** How many occurrences are kept for one event. @default 10_000 */
+  maxEvents?: number;
+}
+
+export interface EventsPollOptions {
+  /** `false` turns `events/poll` off. @default true */
+  enabled?: boolean;
+  /** The wait between two polls the server recommends. @default 30_000 */
+  nextPollMs?: number;
+  /** The most occurrences one poll returns, and the cap of a request's `maxEvents`. @default 100 */
+  maxEvents?: number;
+}
+
 /** Server-level events configuration (`@FrontMcp({ events })`). */
 export interface EventsConfigOptions {
   /** `false` turns events off although apps declare them. They are on whenever an app declares one. */
@@ -192,6 +209,8 @@ export interface EventsConfigOptions {
   subscriptions?: EventSubscriptionsOptions;
   webhook?: EventsWebhookOptions;
   publishEndpoint?: EventsPublishEndpointOptions;
+  buffer?: EventsBufferOptions;
+  poll?: EventsPollOptions;
 }
 
 const positiveIntegerSchema = z.number().int().positive();
@@ -280,6 +299,17 @@ const eventsPublishEndpointSchema = z
       'to check',
   });
 
+const eventsBufferSchema = z.object({
+  maxAgeMs: positiveIntegerSchema.optional().default(600_000),
+  maxEvents: positiveIntegerSchema.optional().default(10_000),
+} satisfies RawZodShape<EventsBufferOptions>);
+
+const eventsPollSchema = z.object({
+  enabled: z.boolean().optional().default(true),
+  nextPollMs: positiveIntegerSchema.optional().default(30_000),
+  maxEvents: positiveIntegerSchema.optional().default(100),
+} satisfies RawZodShape<EventsPollOptions>);
+
 export const eventsConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -292,6 +322,8 @@ export const eventsConfigSchema = z
     publishEndpoint: eventsPublishEndpointSchema
       .optional()
       .transform((publishEndpoint) => publishEndpoint ?? eventsPublishEndpointSchema.parse({})),
+    buffer: eventsBufferSchema.optional().transform((buffer) => buffer ?? eventsBufferSchema.parse({})),
+    poll: eventsPollSchema.optional().transform((poll) => poll ?? eventsPollSchema.parse({})),
   } satisfies RawZodShape<EventsConfigOptions>)
   .refine((config) => !config.subscriptions.allowNoExpiry || Boolean(config.store?.redis ?? config.store?.sqlite), {
     message: 'events.subscriptions.allowNoExpiry needs events.store.redis or events.store.sqlite',

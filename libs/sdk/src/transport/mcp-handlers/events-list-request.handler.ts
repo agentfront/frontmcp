@@ -1,5 +1,6 @@
 import { ListEventsRequestSchema, type ListEventsRequest, type ListEventsResult } from '@frontmcp/protocol';
 
+import { toSdkMcpError } from './mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 import { withMcpSurface } from './mcp-surface';
 
@@ -13,7 +14,11 @@ export default function eventsListRequestHandler({
     requestSchema: ListEventsRequestSchema,
     handler: async (request: ListEventsRequest, ctx) => {
       logger.verbose('events/list requested');
-      return scope.runFlowForOutput('events:list', { request, ctx: withMcpSurface(scope, ctx) });
+      try {
+        return await scope.runFlowForOutput('events:list', { request, ctx: withMcpSurface(scope, ctx) });
+      } catch (error) {
+        throw toSdkMcpError(error);
+      }
     },
   };
 }

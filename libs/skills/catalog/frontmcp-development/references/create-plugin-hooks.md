@@ -280,6 +280,7 @@ These are the flow names with pre-built hook decorator exports in `@frontmcp/sdk
 | `events:publish`                    | Publishing an event       | `EventPublishHook`          |
 | `events:publish-http`               | The HTTP publish endpoint | `EventPublishHttpHook`      |
 | `events:deliver`                    | One delivery attempt      | `EventDeliverHook`          |
+| `events:poll`                       | Polling an event          | `EventPollHook`             |
 
 Every other built-in flow is hooked with `FlowHooksOf('<name>')`, and its name typechecks: `session:verify`, `auth:verify`, `handle:mcp-202607280728`, `handle:streamable-http`, `handle:legacy-sse`, `handle:stateless-http`, `http:ip-filter`, `elicitation:request`, `elicitation:result`, `logging:set-level`, `resources:subscribe`, `resources:unsubscribe`, `skills:search`, `skills:load`, `skills:filter`, `well-known.jwks`, `well-known.oauth-protected-resource`, `well-known.oauth-authorization-server` and the `oauth:*` flows. `logging/setLevel`, `resources/subscribe`, `resources/unsubscribe`, `skills/search` and `skills/load` requests run their flows, so hooks on them fire (up to 1.9.2 those requests skipped them, and several of these names were missing from the published `ExtendFlows`, so `FlowHooksOf()` rejected them).
 
@@ -411,6 +412,7 @@ import {
   ChannelSendHook, // FlowHooksOf('channels:send-notification')
   CompletionHook, // FlowHooksOf('completion:complete')
   EventDeliverHook, // FlowHooksOf('events:deliver')
+  EventPollHook, // FlowHooksOf('events:poll')
   EventPublishHook, // FlowHooksOf('events:publish')
   EventPublishHttpHook, // FlowHooksOf('events:publish-http')
   EventSubscribeHook, // FlowHooksOf('events:subscribe')

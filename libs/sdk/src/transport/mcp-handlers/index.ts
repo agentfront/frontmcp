@@ -1,6 +1,7 @@
 import callToolRequestHandler from './call-tool-request.handler';
 import completeRequestHandler from './complete-request.handler';
 import eventsListRequestHandler from './events-list-request.handler';
+import eventsPollRequestHandler from './events-poll-request.handler';
 import eventsSubscribeRequestHandler from './events-subscribe-request.handler';
 import eventsUnsubscribeRequestHandler from './events-unsubscribe-request.handler';
 import getPromptRequestHandler from './get-prompt-request.handler';
@@ -80,6 +81,7 @@ export function createMcpHandlers(options: McpHandlerOptions) {
 
   // `events/list` (MCP Events, SEP-3415) is served once an event is offered in a delivery mode this server performs
   const eventsHandler = options.scope?.events?.servesEvents() ? [eventsListRequestHandler(options)] : [];
+  const eventPollHandler = options.scope?.events?.performs('poll') ? [eventsPollRequestHandler(options)] : [];
   const eventSubscriptionHandlers = options.scope?.events?.subscriptions
     ? [eventsSubscribeRequestHandler(options), eventsUnsubscribeRequestHandler(options)]
     : [];
@@ -110,6 +112,7 @@ export function createMcpHandlers(options: McpHandlerOptions) {
     ...skillsHandler,
     ...eventsHandler,
     ...eventSubscriptionHandlers,
+    ...eventPollHandler,
     ...tasksHandler,
   ];
 }

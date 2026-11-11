@@ -23,6 +23,8 @@ import { type EventMetrics } from './delivery/event-metrics';
 import { type EventOutbox } from './delivery/event-outbox';
 import { EventInstance } from './event.instance';
 import { normalizeEvent } from './event.utils';
+import { type EventBuffer } from './poll/event-buffer';
+import { type EventPollLeases } from './poll/event-poll-leases';
 import { type EventPublishEndpoint } from './publish-endpoint/event-publish-endpoint';
 import { type EventSubscriptions } from './subscription/event-subscriptions';
 
@@ -69,6 +71,12 @@ export default class EventRegistry
 
   /** The HTTP publish endpoint, on a server that serves one (`events.publishEndpoint.enabled`). */
   publishEndpoint?: EventPublishEndpoint;
+
+  /** The recent occurrences `events/poll` reads, on a server that performs the poll mode. */
+  buffer?: EventBuffer;
+
+  /** The leases of poll subscriptions, on a server that performs the poll mode. */
+  pollLeases?: EventPollLeases;
 
   private readonly eventsByName = new Map<string, EventInstance>();
   private readonly enabledDeliveryModes = new Set<EventDeliveryMode>();
@@ -147,6 +155,11 @@ export default class EventRegistry
   /** Record that this server can deliver events in `mode`. The part that implements a mode calls it at startup. */
   enableDeliveryMode(mode: EventDeliveryMode): void {
     this.enabledDeliveryModes.add(mode);
+  }
+
+  /** Whether this server delivers events in `mode`. */
+  performs(mode: EventDeliveryMode): boolean {
+    return this.enabledDeliveryModes.has(mode);
   }
 
   /** The modes an event is offered in: those the server can perform, within the event's own `delivery`. */

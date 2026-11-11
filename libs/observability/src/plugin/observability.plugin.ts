@@ -4,6 +4,7 @@ import {
   AgentCallHook,
   DynamicPlugin,
   EventDeliverHook,
+  EventPollHook,
   EventPublishHook,
   EventPublishHttpHook,
   EventSubscribeHook,
@@ -677,6 +678,21 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @EventDeliverHook.Did('buildResult', { priority: 1000 })
   _eventDeliverDone(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+  }
+
+  @EventPollHook.Will('parseInput', { priority: -1000 })
+  _eventPollWill(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowWillStart('events/poll', this.tracingOpts, ctx);
+  }
+
+  @EventPollHook.Did('readEvents', { priority: 1000 })
+  _eventPollDidRead(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowStage('readEvents', ctx);
+  }
+
+  @EventPollHook.Finally('finalize', { priority: 1000 })
+  _eventPollDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
 
