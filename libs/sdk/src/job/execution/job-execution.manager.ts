@@ -253,12 +253,39 @@ export class JobExecutionManager {
     jobRegistry: JobRegistryInterface,
     opts: ExecuteWorkflowOptions = {},
   ): Promise<InlineJobResult | BackgroundJobResult> {
+    return this.submitWorkflow(workflow, jobRegistry, randomUUID(), opts);
+  }
+
+  /**
+   * Start a background run of the workflow with the id `runId`, unless the store already holds a run with that id: a
+   * trigger that may start the same run twice (a schedule's takeover after its holder died) gives it the same id.
+   *
+   * @returns Whether it started the run
+   * @throws JobNotAuthorizedError when the caller may not execute the workflow
+   * @throws InvalidInputError when `workflowInput` doesn't match the workflow's `inputSchema`
+   * @internal
+   */
+  async startWorkflowRunOnce(
+    workflow: WorkflowEntry,
+    jobRegistry: JobRegistryInterface,
+    runId: string,
+    opts: Omit<ExecuteWorkflowOptions, 'background'>,
+  ): Promise<boolean> {
+    if (await this.stateStore.getRun(runId)) return false;
+    await this.submitWorkflow(workflow, jobRegistry, runId, { ...opts, background: true });
+    return true;
+  }
+
+  private async submitWorkflow(
+    workflow: WorkflowEntry,
+    jobRegistry: JobRegistryInterface,
+    runId: string,
+    opts: ExecuteWorkflowOptions,
+  ): Promise<InlineJobResult | BackgroundJobResult> {
     await this.assertMaySubmit(workflow.metadata.permissions, workflow.name, opts);
     // Checked before the run exists, so bad input leaves no run behind
     const workflowInput = parseWorkflowInput(workflow, opts.workflowInput);
     const runOptions = { ...opts, workflowInput };
-
-    const runId = randomUUID();
 
     const runRecord: WorkflowRunRecord = {
       runId,

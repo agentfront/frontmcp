@@ -36,3 +36,16 @@ export class EventSubscriptionTerminatedError extends PublicMcpError {
     super(`The subscription to "${eventName}" was terminated by the server: ${error.message}`, 'EVENT_TERMINATED', 410);
   }
 }
+
+/** The client already holds a webhook subscription that the server knows by the same id. */
+export class DuplicateEventSubscriptionError extends PublicMcpError {
+  /** Names the event and the callback URL the existing subscription delivers to. */
+  constructor(eventName: string, url: string) {
+    super(
+      `This client already holds a webhook subscription to "${eventName}" with these arguments at ${url}, and the ` +
+        'server keeps one subscription for them. Read the existing subscription, or cancel it first.',
+      'DUPLICATE_EVENT_SUBSCRIPTION',
+      409,
+    );
+  }
+}

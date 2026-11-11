@@ -205,7 +205,7 @@ export class InboxWatcher implements WorkerInterface {
   the `EVENT_PUBLISHER` token. A worker built by a factory is supervised like one registered by its class:
 
 ```typescript
-import { AsyncProvider, EVENT_PUBLISHER } from '@frontmcp/sdk';
+import { App, AsyncProvider, EVENT_PUBLISHER } from '@frontmcp/sdk';
 
 export const inboxWatcher = AsyncProvider({
   provide: InboxWatcher,
@@ -213,7 +213,12 @@ export const inboxWatcher = AsyncProvider({
   inject: () => [Mailbox, EVENT_PUBLISHER] as const,
   useFactory: (mailbox, events) => new InboxWatcher(mailbox, events),
 });
+
+@App({ name: 'mail', events: [MailReceived], providers: [Mailbox, inboxWatcher] })
+class MailApp {}
 ```
+
+- Register the factory in `providers` in place of the class.
 
 - The event must be in the `events` of an app. On a server without events, `publish()` is refused with
   `EventsNotEnabledError`; the worker's run then fails and is run again after its wait, like any error.

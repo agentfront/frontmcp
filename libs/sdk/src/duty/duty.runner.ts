@@ -1,7 +1,13 @@
 import { type NamespacedStorage } from '@frontmcp/utils';
 
 import type { DutyRunContext, FrontMcpLogger } from '../common';
-import { takeDueRun, type CronLedgerStorage, type CronSchedule } from './cron-schedule';
+import {
+  claimDueRun,
+  settleCronClaim,
+  type CronClaim,
+  type CronLedgerStorage,
+  type CronSchedule,
+} from './cron-schedule';
 import { LeaseHolder } from './lease-holder';
 
 /** The store operations a duty needs; the SQLite, Redis and memory stores run each one atomically. */
@@ -16,7 +22,8 @@ interface DutyRunnerCommonOptions {
   key: string;
   leaseMs: number;
   logger: DutyLogger;
-  run(context: DutyRunContext): unknown;
+  /** `scheduledAt` names the run: the cron time it is for, or when an interval's run was taken. */
+  run(context: DutyRunContext, scheduledAt: number): unknown;
 }
 
 interface IntervalDutyRunnerOptions extends DutyRunnerCommonOptions {
@@ -29,11 +36,22 @@ interface CronDutyRunnerOptions extends DutyRunnerCommonOptions {
   cron: CronSchedule;
   everyMs?: undefined;
   storage: DutyLeaseStorage & CronLedgerStorage;
+  /**
+   * Keep each taken run owed in the store until `run()` returns, so a process that takes the lease over after this one
+   * died before then runs it again, with the same `scheduledAt`. Without it a run is taken for good before it starts.
+   */
+  owedUntilRun?: boolean;
 }
 
 export type DutyRunnerOptions = IntervalDutyRunnerOptions | CronDutyRunnerOptions;
 
 const MAX_TIMER_MS = 2_147_483_647;
+
+/** A run this process took: the time that names it, and for a cron the ledger's claim. */
+interface TakenRun {
+  scheduledAt: number;
+  claim?: CronClaim;
+}
 
 interface RunInFlight {
   controller: AbortController;
@@ -150,32 +168,33 @@ export class DutyRunner {
 
   /** Run the duty when a run is due, checking again when a tick arrived while the check waited on the store. */
   private async runIfHeld(inFlight: RunInFlight): Promise<void> {
-    let claimed = await this.claimRun();
-    while (!claimed && inFlight.recheck && this.lease.holding && !this.lease.stopping) {
+    let taken = await this.claimRun();
+    while (!taken && inFlight.recheck && this.lease.holding && !this.lease.stopping) {
       inFlight.recheck = false;
-      claimed = await this.claimRun();
+      taken = await this.claimRun();
     }
-    if (!claimed) return;
+    if (!taken) return;
     inFlight.running = true;
     try {
-      await this.options.run({ signal: inFlight.controller.signal });
+      await this.options.run({ signal: inFlight.controller.signal }, taken.scheduledAt);
     } catch (error) {
       this.options.logger.error(`${this.label} failed: ${messageOf(error)}`);
     }
+    await this.settle(taken);
   }
 
   /** Renew the lease right before a run, so a holder that lost it while paused never runs, and mark the run. */
-  private async claimRun(): Promise<boolean> {
+  private async claimRun(): Promise<TakenRun | undefined> {
     try {
       if (!(await this.lease.renew())) {
         this.lease.lose('lost its lease; another process runs it now');
-        return false;
+        return undefined;
       }
-      if (this.lease.stopping) return false;
+      if (this.lease.stopping) return undefined;
       return await this.markRun();
     } catch (error) {
       this.lease.reportStoreFailure(error);
-      return false;
+      return undefined;
     }
   }
 
@@ -183,12 +202,26 @@ export class DutyRunner {
    * An interval's mark lasts one interval, which tells the next holder how long to wait. A cron's is the time its
    * schedule was last taken, kept without expiry: there is a run only when a scheduled time passed since.
    */
-  private async markRun(): Promise<boolean> {
+  private async markRun(): Promise<TakenRun | undefined> {
     const { options } = this;
-    if (options.cron) return takeDueRun(options.cron, options.storage, this.ranKey);
+    if (options.cron) {
+      const claim = await claimDueRun(options.cron, options.storage, this.ranKey, options.owedUntilRun);
+      return claim && { scheduledAt: claim.scheduledAt, claim };
+    }
     const intervalSeconds = Math.max(1, Math.ceil(options.everyMs / 1_000));
     await options.storage.set(this.ranKey, this.lease.id, { ttlSeconds: intervalSeconds });
-    return true;
+    return { scheduledAt: Date.now() };
+  }
+
+  /** Record that the run of an owed claim started; a claim still owed after a store failure is taken again later. */
+  private async settle({ claim }: TakenRun): Promise<void> {
+    const { options } = this;
+    if (!options.cron || !options.owedUntilRun || !claim) return;
+    try {
+      await settleCronClaim(options.storage, this.ranKey, claim);
+    } catch (error) {
+      this.lease.reportStoreFailure(error);
+    }
   }
 }
 

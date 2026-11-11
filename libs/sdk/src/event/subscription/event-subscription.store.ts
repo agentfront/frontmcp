@@ -42,6 +42,8 @@ export interface EventReplayState {
   pending: EventReplayBatch[];
   /** A gap the client has not been told about yet: its next refresh answers `truncated`. */
   truncated?: boolean;
+  /** How many of the items `check()` returns from `cursor` are already queued: a turn that failed part-way. */
+  queuedAtCursor?: number;
 }
 
 export interface EventSubscriptionRecord {

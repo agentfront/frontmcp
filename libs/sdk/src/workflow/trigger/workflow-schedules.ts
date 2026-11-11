@@ -1,5 +1,5 @@
 import type { AuthoritiesContextBuilder } from '@frontmcp/auth';
-import { type RootStorage } from '@frontmcp/utils';
+import { sha256Hex, type RootStorage } from '@frontmcp/utils';
 
 import { WorkflowTriggerPrincipal, type OnReady } from '../../common';
 import { type WorkflowEntry } from '../../common/entries/workflow.entry';
@@ -61,7 +61,10 @@ export async function assertWorkflowSchedules(workflows: readonly WorkflowEntry[
  * Starts a background run of each `trigger: 'schedule'` workflow at its scheduled times, with its `schedule.input`, as
  * the role `schedule:<workflow>`. Each schedule has a lease that one process holds, among the machines that share the
  * server's Redis or, without one, among the processes of this machine that run from the same project root: a scheduled
- * time starts one run, and a process that takes the lease over starts one run for the times that passed meanwhile. A run that can't start is logged.
+ * time starts one run, and a process that takes the lease over starts one run for the times that passed meanwhile. A
+ * scheduled time stays owed in the lease store until its run exists, and its run has an id of its own, so a process
+ * that takes over from a holder that died in between starts that run, unless the job store already holds it. A run
+ * that can't start is logged, and not tried again.
  */
 export class WorkflowSchedules implements OnReady {
   private readonly runners = new Map<WorkflowEntry, DutyRunner>();
@@ -133,32 +136,39 @@ export class WorkflowSchedules implements OnReady {
     const scope: LeaseScope =
       leaseStorageConfig(redis, 'schedule', 'cluster').type === 'redis' ? 'cluster' : 'workspace';
     this.storage ??= openLeaseStore(leaseStorageConfig(redis, 'schedule', scope));
+    const key = leaseKey(workflow.name, scope, serverName);
     return new DutyRunner({
       name: workflow.name,
       label: `The schedule of workflow "${workflow.name}"`,
-      key: leaseKey(workflow.name, scope, serverName),
+      key,
       cron,
+      owedUntilRun: true,
       leaseMs: SCHEDULE_LEASE_MS,
       storage: await this.storage,
       logger,
-      run: () => this.startRun(workflow, input),
+      run: (_context, scheduledAt) => this.startRun(workflow, input, scheduledRunId(key, scheduledAt)),
     });
   }
 
-  private async startRun(workflow: WorkflowEntry, input: Record<string, unknown>): Promise<void> {
+  private async startRun(workflow: WorkflowEntry, input: Record<string, unknown>, runId: string): Promise<void> {
     const { manager, jobs, authoritiesContextBuilder, logger } = this.options;
     const principal = new WorkflowTriggerPrincipal('schedule', workflow.name);
     try {
-      await manager.executeWorkflow(workflow, jobs, {
-        background: true,
+      const started = await manager.startWorkflowRunOnce(workflow, jobs, runId, {
         authInfo: principal.toAuthInfo(),
         authoritiesContextBuilder: authoritiesContextBuilder(),
         workflowInput: input,
       });
+      if (!started) logger.verbose(`The schedule of workflow "${workflow.name}" already started run ${runId}`);
     } catch (error) {
       logger.warn(`The schedule did not start workflow "${workflow.name}": ${whyNotStarted(error, principal.role)}`);
     }
   }
+}
+
+/** The id of a schedule's run for a scheduled time, the same in every process that shares the schedule's lease. */
+export function scheduledRunId(leaseKey: string, scheduledAt: number): string {
+  return `schedule-${scheduledAt}-${sha256Hex(leaseKey).slice(0, 16)}`;
 }
 
 function whyNotStarted(error: unknown, role: string): string {

@@ -215,6 +215,9 @@ export class WeekdayReportDuty implements DutyInterface {
 - **Once per scheduled time.** The record is replaced only while it still holds what the process read, so two processes
   never both run the same scheduled time, even if both believed they held the lease. A scheduled time that comes while
   the last run is still running is skipped.
+- **At most once.** A scheduled time is taken before its run starts, so a holder that dies after taking it, or
+  during the run, loses that run: the process that takes over runs only the scheduled times after it. A
+  `trigger: 'schedule'` workflow, whose run is a record in the job store, is recovered instead (see `create-workflow`).
 - **The library.** `croner`, a dependency of `@frontmcp/sdk` with none of its own, reads the expression. It loads when
   the first duty with a `cron` is built, so a server without one never loads it.
 

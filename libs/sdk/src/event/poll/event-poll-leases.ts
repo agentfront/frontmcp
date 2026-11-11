@@ -86,7 +86,7 @@ export class EventPollLeases {
 
   /** Renew the lease of a poll, or start it: a new lease calls the event's `onSubscribe` first. */
   async renew(request: PollLeaseRequest): Promise<void> {
-    const { subscription, context, leaseMs } = request;
+    const { subscription, leaseMs } = request;
     const now = Date.now();
     this.sweepIfDue(now);
     const lease = this.leases.get(subscription.id);

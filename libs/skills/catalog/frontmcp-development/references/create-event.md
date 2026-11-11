@@ -654,8 +654,10 @@ A provider, a duty or a worker is built before any request, so it has no `this.e
 publisher in its constructor, by the `EventPublisher` class:
 
 ```typescript
-import { App, EventPublisher, Worker, type WorkerInterface, type WorkerRunContext } from '@frontmcp/sdk';
+import { App, event, EventPublisher, Worker, z, type WorkerInterface, type WorkerRunContext } from '@frontmcp/sdk';
 import { watchFiles } from '@frontmcp/utils';
+
+export const FileAdded = event({ name: 'file.added', payloadSchema: { path: z.string() } });
 
 @Worker({ name: 'inbox-watcher', scope: 'machine' })
 export class InboxWatcher implements WorkerInterface {
@@ -672,13 +674,16 @@ export class InboxWatcher implements WorkerInterface {
 class InboxApp {}
 ```
 
+- `scope: 'machine'` runs the watcher in one process of the machine. Its lease lives in a SQLite file, which needs
+  `@frontmcp/storage-sqlite` installed, or in the server's top-level `redis` when it has one. `scope: 'process'` needs
+  neither, and runs it in every process (see `create-worker`).
 - The same constructor parameter works in a `@Duty` (see `create-duty`) and in a plain `@Provider` class.
 - Import `EventPublisher` as a value, not with `import type`: the parameter's type is what the server injects.
 - A factory provider injects the publisher by the `EVENT_PUBLISHER` token. Use it where the build emits no
   constructor types (`tsx`, esbuild), and for a `@Worker` or `@Duty` class as well:
 
 ```typescript
-import { AsyncProvider, EVENT_PUBLISHER } from '@frontmcp/sdk';
+import { App, AsyncProvider, EVENT_PUBLISHER } from '@frontmcp/sdk';
 
 export const inboxWatcher = AsyncProvider({
   provide: InboxWatcher,
@@ -686,7 +691,13 @@ export const inboxWatcher = AsyncProvider({
   inject: () => [EVENT_PUBLISHER] as const,
   useFactory: (events) => new InboxWatcher(events),
 });
+
+@App({ name: 'inbox', events: [FileAdded], providers: [inboxWatcher] })
+class InboxApp {}
 ```
+
+- Register the factory in `providers` in place of the class: the class registered by itself is built from its
+  constructor types, which such a build does not emit.
 
 - Providers are built before the server registers its events, and the publisher they get publishes through the
   server's own at the time of each call. Publish from `run()`, `onReady()` or later: a publish from a constructor or
@@ -836,6 +847,10 @@ null)` gives the position. With a cursor, the first `check()` replays from it be
   (ChatGPT) gets no envelope: its next refresh answers `truncated: true`, once.
 - **A slow callback** holds the loop back: with 50 batches of unfinished deliveries, `check()` is not called for
   that subscription until some finish.
+- **A failure** (the outbox or the store does not answer) is logged with the subscription's id, and the turn goes on
+  with the next subscription; the failed one is read again next turn. What was queued before the failure is kept:
+  the next turn calls `check()` from the same cursor and skips the items already queued, so it expects `check()` to
+  return the same items in the same order from one cursor, as a replayable upstream does.
 - **The owner is checked again** before `check()` is called for a subscription whose last check is older than
   `subscriptions.reauthorizeEveryMs`, as a publish does (see [Over a subscription's life](#over-a-subscriptions-life)).
   A refusal ends the subscription, and the loop reads nothing more for it. A check that could not be made skips the
@@ -843,7 +858,9 @@ null)` gives the position. With a cursor, the first `check()` replays from it be
 - `match()`, `transform()` and `audience` do not apply, as for a poll: `check()` gets the arguments.
 
 One process runs the loop of an event at a time. It holds a lease in the events store for 30 seconds and renews it;
-when it stops it releases the lease, and when it dies another process takes the loop over once the lease ran out.
+when it stops it releases the lease, and when it dies another process takes the loop over once the lease ran out. A
+process that lost the lease during a turn reads no further subscription, and stores where a subscription stands only
+after it renewed the lease, and only while no other process stored a newer position since the turn read it.
 The position and the watermark are kept on the stored subscription:
 
 - **`events.store.sqlite` or `events.store.redis`**: a restart, or another process, continues from the stored
@@ -1119,7 +1136,17 @@ The delivery mode is the first of these that the event lists and the client can 
 3. **poll**.
 
 `options.delivery` forces a mode; one the event does not offer, or the client cannot use, rejects with
-`NoCompatibleDeliveryModeError`. An event `events/list` does not show is tried in that order, and the server answers.
+`NoCompatibleDeliveryModeError`. For an event `events/list` does not show, the client cannot know its modes: it uses
+the first mode it can (webhook, then push, then poll), and when the server refuses it (`Unsupported`), `subscribe()`
+rejects; the client does not try the next mode. Pass `options.delivery` for such an event.
+
+A webhook subscription is one subscription on the server per caller, callback URL, event and arguments. A client that
+already holds one refuses a second `subscribe()` to the same event and arguments with
+`DuplicateEventSubscriptionError` (`DUPLICATE_EVENT_SUBSCRIPTION`), also when both calls are made at once: iterate the
+existing subscription, or cancel it first. When the server answers a new subscription with the id of one the client
+holds (arguments that differ only in what the server normalizes), the new one is refused the same way, and the one
+held sends its own secret again at once. `cancel()` waits for an `events/subscribe` still in flight before it sends
+`events/unsubscribe`, so the server cannot revive a cancelled subscription.
 
 | Mode    | What the client does                                                                                                                                                                                                                                                                                                      |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1130,7 +1157,12 @@ The delivery mode is the first of these that the event lists and the client can 
 Each subscription keeps the latest cursor it was sent (an occurrence's, a heartbeat's, a poll result's, a subscribe
 result's) in `subscription.cursor` and in the cursor store, keyed by the event name and the arguments, and starts
 from the stored one next time. The default store is in memory; pass `cursorStore: { get(key), set(key, cursor) }` to
-keep cursors across runs. `options.cursor` overrides it (`null` is "from now"), and `options.maxAgeMs` bounds the
+keep cursors across runs. The stored cursor is the latest position the server sent, which is set when an occurrence
+or a poll result arrives, before the application has read it: occurrences received but not yet processed when the
+process stops are not replayed from it (a poll result's occurrences carry no cursor of their own, so the client has no
+position between them to keep). Where losing them matters, record what you processed (its `eventId`, and in push and
+webhook mode its `cursor`) and pass that position as `options.cursor` on restart, and process each occurrence so that
+handling it twice is harmless. `options.cursor` overrides it (`null` is "from now"), and `options.maxAgeMs` bounds the
 replay of the first request. `options.onTruncated(cursor)` is told when the server skipped events (`truncated`, or a
 `gap` envelope); `options.onError(error)` gets `notifications/events/error`. `options.maxEvents` caps each poll.
 

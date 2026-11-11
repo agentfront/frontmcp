@@ -434,6 +434,7 @@ export {
   createEventWebhookReceiver,
   EventRequestError,
   EventSubscriptionTerminatedError,
+  DuplicateEventSubscriptionError,
   NoCompatibleDeliveryModeError,
 } from './event-client';
 export type {

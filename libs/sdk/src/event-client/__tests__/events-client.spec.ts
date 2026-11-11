@@ -10,6 +10,7 @@ import {
   NO_EXPIRY_REFRESH_MS,
 } from '..';
 import {
+  DuplicateEventSubscriptionError,
   EventRequestError,
   EventSubscriptionTerminatedError,
   NoCompatibleDeliveryModeError,
@@ -606,6 +607,100 @@ describe('EventsClient', () => {
       await client.close();
 
       expect(calls.at(-1)?.method).toBe('events/unsubscribe');
+    });
+
+    it('sends events/unsubscribe only after an events/subscribe in flight has been answered', async () => {
+      const order: string[] = [];
+      const answers: Array<() => void> = [];
+      const { client } = webhookClient(
+        () => {
+          order.push('subscribe sent');
+          return new Promise((resolve) =>
+            answers.push(() => {
+              order.push('subscribe answered');
+              resolve({ id: 'sub_1', refreshBefore: new Date(Date.now() + 10).toISOString() });
+            }),
+          );
+        },
+        () => {
+          order.push('unsubscribe sent');
+          return {};
+        },
+      );
+
+      const subscribing = client.subscribe('order.created');
+      await until(() => answers.length === 1);
+      answers[0]();
+      const subscription = await subscribing;
+      await until(() => answers.length === 2);
+      const cancelling = subscription.cancel();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      answers[1]();
+      await cancelling;
+
+      const closing = webhookClient(
+        () => new Promise((resolve) => answers.push(() => resolve({ id: 'sub_2', refreshBefore: null }))),
+      );
+      const firstSubscribe = closing.client.subscribe('order.created');
+      await until(() => answers.length === 3);
+      const closed = closing.client.close();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const unsubscribedEarly = closing.calls.some((call) => call.method === 'events/unsubscribe');
+      answers[2]();
+      await Promise.all([closed, firstSubscribe]);
+
+      expect(order).toEqual([
+        'subscribe sent',
+        'subscribe answered',
+        'subscribe sent',
+        'subscribe answered',
+        'unsubscribe sent',
+      ]);
+      expect(unsubscribedEarly).toBe(false);
+      expect(closing.calls.at(-1)?.method).toBe('events/unsubscribe');
+    });
+
+    it('refuses a second webhook subscription to the same event and arguments, also when both are made at once', async () => {
+      const { client, calls } = webhookClient(() => ({ id: 'sub_1', refreshBefore: null }));
+
+      const results = await Promise.allSettled([
+        client.subscribe('order.created', { a: 1, b: 2 }),
+        client.subscribe('order.created', { b: 2, a: 1 }),
+      ]);
+      const later = await client.subscribe('order.created', { a: 1, b: 2 }).catch((error: unknown) => error);
+      const first = results.find(
+        (result) => result.status === 'fulfilled',
+      ) as PromiseFulfilledResult<EventSubscription>;
+      await first.value.cancel();
+      const afterCancel = await client.subscribe('order.created', { a: 1, b: 2 });
+      await afterCancel.cancel();
+
+      expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+      expect((results.find((result) => result.status === 'rejected') as PromiseRejectedResult).reason).toBeInstanceOf(
+        DuplicateEventSubscriptionError,
+      );
+      expect(later).toBeInstanceOf(DuplicateEventSubscriptionError);
+      expect(calls.filter((call) => call.method === 'events/subscribe')).toHaveLength(2);
+    });
+
+    it('refuses a subscription the server gives the id of one the client holds, and gives the holder its secret back', async () => {
+      const { client, receiver, calls } = webhookClient(() => ({ id: 'sub_1', refreshBefore: null }));
+      const holder = await client.subscribe('order.created', { status: 'paid' });
+      const holderSecret = (calls[1].params['delivery'] as { secret: string }).secret;
+
+      const duplicate = await client
+        .subscribe('order.created', { status: 'paid', note: null })
+        .catch((error: unknown) => error);
+      await until(() => calls.filter((call) => call.method === 'events/subscribe').length === 3);
+      await receiver.handle(delivery(occurrenceOf('e1'), holderSecret, 'msg_1'));
+      const [occurrence] = await take(holder, 1);
+
+      const subscribes = calls.filter((call) => call.method === 'events/subscribe');
+      expect(duplicate).toBeInstanceOf(DuplicateEventSubscriptionError);
+      expect((subscribes[2].params['delivery'] as { secret: string }).secret).toBe(holderSecret);
+      expect(calls.some((call) => call.method === 'events/unsubscribe')).toBe(false);
+      expect(occurrence.eventId).toBe('e1');
+      await holder.cancel();
     });
 
     it('ignores a failed unsubscribe', async () => {
