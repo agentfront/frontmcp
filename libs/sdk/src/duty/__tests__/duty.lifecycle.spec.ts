@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { resetRuntimeContext } from '@frontmcp/utils';
+import { createStorage, resetRuntimeContext } from '@frontmcp/utils';
 
 import { App, Duty, LogLevel, redisOptionsSchema, type OnBootstrap, type OnReady, type OnShutdown } from '../../common';
 import { findProjectRoot } from '../../common/types/options/sqlite/resolve';
@@ -12,12 +12,21 @@ import type { DirectMcpServer } from '../../direct';
 import { DutyNameConflictError, UnsafeDutyStoreError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { createContainer, type FrontMcpContainer } from '../../provider/create-container';
+import type { Scope } from '../../scope/scope.instance';
 import { dutyStorageConfig } from '../duty.lifecycle';
+import { openLeaseStore } from '../lease-store';
 
 jest.mock('../../common/types/options/sqlite/resolve', () => {
   const actual = jest.requireActual('../../common/types/options/sqlite/resolve');
   return { ...actual, findProjectRoot: jest.fn(actual.findProjectRoot) };
 });
+
+jest.mock('@frontmcp/utils', () => {
+  const actual = jest.requireActual('@frontmcp/utils');
+  return { ...actual, createStorage: jest.fn(actual.createStorage) };
+});
+
+const { createStorage: openRealStorage } = jest.requireActual<typeof import('@frontmcp/utils')>('@frontmcp/utils');
 
 const quiet = { level: LogLevel.Off, enableConsole: false };
 const info = { name: 'duty-spec' };
@@ -61,6 +70,7 @@ describe('duties in a server and in createContainer()', () => {
   let home: string;
   let previousHome: string | undefined;
   let open: Array<FrontMcpContainer | DirectMcpServer>;
+  let servers: FrontMcpInstance[];
 
   beforeEach(() => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-duties-'));
@@ -69,11 +79,14 @@ describe('duties in a server and in createContainer()', () => {
     ran.length = 0;
     shutdowns.length = 0;
     open = [];
+    servers = [];
   });
 
   afterEach(async () => {
     jest.restoreAllMocks();
     await Promise.all(open.map((opened) => opened.dispose()));
+    await Promise.all(servers.map((server) => server.shutdown()));
+    jest.mocked(createStorage).mockReset().mockImplementation(openRealStorage);
     if (previousHome === undefined) delete process.env['FRONTMCP_HOME'];
     else process.env['FRONTMCP_HOME'] = previousHome;
     fs.rmSync(home, { recursive: true, force: true });
@@ -83,6 +96,19 @@ describe('duties in a server and in createContainer()', () => {
     const built = await createContainer({ logging: quiet, ...options });
     open.push(built);
     return built;
+  }
+
+  /** Serve `app` with its providers ready, and read the `/readyz` check named `probe`. */
+  async function serve(app: typeof SweeperApp): Promise<(probe: string) => Promise<unknown>> {
+    const server = await FrontMcpInstance.createForGraph({
+      info: { name: 'duty-spec', version: '1.0.0' },
+      apps: [app],
+      logging: quiet,
+    });
+    servers.push(server);
+    await server.emitProvidersReady();
+    const scope = server.getPrimaryScope() as Scope;
+    return async (probe) => (await scope.healthService?.getReadyz())?.probes?.[probe];
   }
 
   it('builds a duty in createContainer() without starting it, and still runs its own onShutdown()', async () => {
@@ -202,6 +228,35 @@ describe('duties in a server and in createContainer()', () => {
     expect(phases[0]).toBe('ready');
   });
 
+  it('shows a duty as unhealthy while its lease store cannot be opened, and runs it once a lease check opens it', async () => {
+    @Duty({ name: 'late-store', every: 100, scope: 'machine', leaseMs: 1_000 })
+    class LateStoreDuty {
+      run(): void {
+        ran.push(this);
+      }
+    }
+    @App({ name: 'LateStore', providers: [LateStoreDuty] })
+    class LateStoreApp {}
+    let leaseStoreOpens = 0;
+    jest.mocked(createStorage).mockImplementation(async (config) => {
+      if (config?.prefix === 'frontmcp:duty:' && ++leaseStoreOpens === 1) throw new Error('database is locked');
+      return openRealStorage(config);
+    });
+
+    const readiness = await serve(LateStoreApp);
+
+    expect(await readiness('duty:late-store')).toEqual({
+      status: 'unhealthy',
+      details: { holdsLease: false },
+      error: 'the lease store cannot be opened: database is locked',
+    });
+    expect(ran).toEqual([]);
+
+    await until(() => ran.length >= 1);
+    expect(await readiness('duty:late-store')).toEqual({ status: 'healthy', details: { holdsLease: true } });
+    expect(leaseStoreOpens).toBe(2);
+  });
+
   it('needs the server name to run duties in a container, since leases are per server name', async () => {
     await expect(createContainer({ providers: [SweepDuty], runDuties: true, logging: quiet })).rejects.toThrow(
       'runDuties needs info.name',
@@ -297,12 +352,19 @@ describe('duties in a server and in createContainer()', () => {
       'is refused in a folder the group or others can write to (mode %o)',
       async (mode) => {
         fs.chmodSync(home, mode);
+        const refusal = `Refusing to keep duty leases under ${home} (mode 0${mode.toString(8)}): the group or others can write to it`;
 
-        const refused = createContainer({ providers: [SweepDuty], runDuties: true, info, logging: quiet });
+        const refused = openLeaseStore(dutyStorageConfig(undefined));
         await expect(refused).rejects.toBeInstanceOf(UnsafeDutyStoreError);
-        await expect(refused).rejects.toThrow(
-          `Refusing to keep duty leases under ${home} (mode 0${mode.toString(8)}): the group or others can write to it`,
-        );
+        await expect(refused).rejects.toThrow(refusal);
+        const readiness = await serve(SweeperApp);
+        await sleep(300);
+
+        expect(await readiness('duty:SweepDuty')).toMatchObject({
+          status: 'unhealthy',
+          error: expect.stringContaining(`the lease store cannot be opened: ${refusal}`),
+        });
+        expect(ran).toEqual([]);
         expect(fs.existsSync(path.join(home, 'duties.sqlite'))).toBe(false);
       },
     );

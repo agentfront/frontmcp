@@ -1,4 +1,4 @@
-import { type RootStorage, type StorageConfig } from '@frontmcp/utils';
+import { type StorageConfig } from '@frontmcp/utils';
 
 import {
   FrontMcpLogger,
@@ -6,6 +6,7 @@ import {
   type DutyInterface,
   type DutyRunContext,
   type DutyScope,
+  type HealthProbeResult,
   type OnBootstrap,
   type OnReady,
   type OnShutdown,
@@ -16,12 +17,13 @@ import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 import type ProviderRegistry from '../provider/provider.registry';
 import { loadCronSchedule, type CronSchedule } from './cron-schedule';
 import { DutyRunner } from './duty.runner';
+import { LazyLeaseStore } from './lazy-lease-store';
 import {
   isLongLivedProcess,
   LeaseClaims,
   leaseKey,
   leaseStorageConfig,
-  openLeaseStore,
+  registerReadinessProbe,
   startsBackgroundWork,
 } from './lease-store';
 
@@ -29,7 +31,8 @@ type DutyInstance = DutyInterface & Partial<OnBootstrap & OnReady & OnShutdown>;
 
 interface StartedDuty {
   runner: DutyRunner;
-  storage: RootStorage;
+  storage: LazyLeaseStore;
+  removeHealthProbe: () => void;
 }
 
 const lifecycles = new WeakMap<object, DutyLifecycle>();
@@ -61,6 +64,13 @@ export function dutyStorageConfig(redis: unknown, scope: DutyScope = 'machine'):
   return leaseStorageConfig(redis, 'duty', scope);
 }
 
+/** What `/readyz` shows for a duty: whether this process holds its lease, unhealthy while its store cannot be opened. */
+export function dutyHealth(holdsLease: boolean, leaseStoreFailure?: string): HealthProbeResult {
+  const details = { holdsLease };
+  if (leaseStoreFailure === undefined) return { status: 'healthy', details };
+  return { status: 'unhealthy', details, error: `the lease store cannot be opened: ${leaseStoreFailure}` };
+}
+
 export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
   private started?: Promise<StartedDuty | undefined>;
   private claimedKey?: string;
@@ -88,6 +98,7 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
     if (started) {
       await started.runner.stop();
       await started.storage.disconnect();
+      started.removeHealthProbe();
     }
     this.releaseClaim();
     await this.duty.onShutdown?.();
@@ -115,6 +126,10 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
     return this.cron;
   }
 
+  /**
+   * Contend for the duty's lease and run it while this process holds it. Its health check is in place before the lease
+   * store is first opened, which each lease check tries until it opens.
+   */
   private async startRunner(): Promise<StartedDuty | undefined> {
     const { metadata } = this;
     const { name, leaseMs, scope } = metadata;
@@ -127,7 +142,7 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
     const serverName = config.info?.name ?? 'frontmcp';
     const key = leaseKey(name, scope, serverName);
     this.claim(key, serverName);
-    const storage = await openLeaseStore(dutyStorageConfig(config.redis, scope));
+    const storage = new LazyLeaseStore(dutyStorageConfig(config.redis, scope));
     const run = (context: DutyRunContext) => this.duty.run(context);
     const common = { name, key, leaseMs, storage, logger, run };
     const runner = new DutyRunner(
@@ -135,8 +150,12 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
         ? { ...common, cron: await this.cronSchedule(metadata.cron) }
         : { ...common, everyMs: metadata.everyMs },
     );
+    const removeHealthProbe = registerReadinessProbe(this.providers, {
+      name: `duty:${name}`,
+      check: async () => dutyHealth(runner.holdsLease, storage.openFailure),
+    });
     await runner.start();
-    return { runner, storage };
+    return { runner, storage, removeHealthProbe };
   }
 
   /** Take `key` for this duty's class in this process: another class with the same key would never run here. */

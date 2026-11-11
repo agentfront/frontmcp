@@ -5,15 +5,16 @@ import {
   type OnReady,
   type OnShutdown,
   type ResolvedWorkerMetadata,
-  type ScopeEntry,
   type WorkerInterface,
 } from '../common';
+import { LazyLeaseStore } from '../duty/lazy-lease-store';
 import { LeaseHolder } from '../duty/lease-holder';
 import {
   isLongLivedProcess,
   LeaseClaims,
   leaseKey,
   leaseStorageConfig,
+  registerReadinessProbe,
   startsBackgroundWork,
   type LeaseScope,
 } from '../duty/lease-store';
@@ -21,7 +22,6 @@ import { ClusterScopeNeedsRedisError } from '../errors/duty.errors';
 import { WorkerNameConflictError } from '../errors/worker.errors';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
 import type ProviderRegistry from '../provider/provider.registry';
-import { LazyLeaseStore } from './lazy-lease-store';
 import { WorkerSupervisor, type WorkerStatus } from './worker.supervisor';
 
 type WorkerInstance = WorkerInterface & Partial<OnBootstrap & OnReady & OnShutdown>;
@@ -198,20 +198,9 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
 
   /** Show the worker in `/readyz` as `worker:<name>`; a container has no health checks to add it to. */
   private registerHealthProbe(supervisor: WorkerSupervisor, storage?: LazyLeaseStore): () => void {
-    const scope = this.activeScope();
-    if (!scope) return () => undefined;
-    return scope.registerHealthProbe({
+    return registerReadinessProbe(this.providers, {
       name: `worker:${this.metadata.name}`,
       check: async () => workerHealth(supervisor.status(), storage?.openFailure),
     });
-  }
-
-  /** The scope the providers serve, or undefined where there is none, as in a container. */
-  private activeScope(): ScopeEntry | undefined {
-    try {
-      return this.providers.getActiveScope();
-    } catch {
-      return undefined;
-    }
   }
 }

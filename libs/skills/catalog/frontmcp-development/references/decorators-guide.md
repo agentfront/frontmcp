@@ -792,7 +792,7 @@ process takes it over when the holder dies.
 
 | Field       | Description                                                                                                                                                 |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name?`     | Lease name in the server; defaults to the class name                                                                                                        |
+| `name?`     | Name in logs, in the `/readyz` check `duty:<name>` and in the lease; defaults to the class name                                                             |
 | `every`     | Milliseconds, or a duration: `'500ms'`, `'30s'`, `'5m'`, `'1h'`, `'1d'`. One of `every` or `cron`                                                           |
 | `cron`      | A cron expression instead of `every`: `'0 9 * * 1-5'`, or six fields with seconds first                                                                     |
 | `timezone?` | The IANA time zone `cron` is read in; default `'UTC'`                                                                                                       |
