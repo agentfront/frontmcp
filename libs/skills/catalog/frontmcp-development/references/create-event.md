@@ -214,6 +214,9 @@ The first that does not allow the owner decides:
   other error (an upstream that is down, a timeout). The event is not delivered to it this time, the server logs
   `reauthorize: the access of subscription <id> could not be checked`, and the next publish checks it again.
 
+The loop that reads an event with `check()` for its webhook subscriptions checks each owner the same way, before it
+calls `check()` for that subscription (see [Events with `check()` over webhook](#events-with-check-over-webhook)).
+
 An open `events/stream` is checked the same way, with the reader as it was when the stream opened and the request's
 arguments, at the first heartbeat after `subscriptions.reauthorizeEveryMs`:
 
@@ -277,7 +280,8 @@ with:
 ```
 
 - `delivery.mode` may be left out; `webhook` is the only mode `events/subscribe` takes.
-- `cursor` and `maxAgeMs` are accepted and ignored: the answer's `cursor` is `null`.
+- For an event without `check()`, `cursor` and `maxAgeMs` are accepted and ignored, and the answer's `cursor` is
+  `null`. For an event with `check()`, see [Events with `check()` over webhook](#events-with-check-over-webhook).
 - Under protocol 2026-07-28 the client sends the event name in the `Mcp-Name` header, and the result has
   `resultType: "complete"`.
 
@@ -393,7 +397,8 @@ refuses to start. Vercel KV is refused: it has no atomic compare-and-set.
 Both requests run hookable flows. `events:subscribe` (`EventSubscribeHook`) has the stages `parseInput`,
 `resolveDialect`, `findEvent`, `checkAvailability`, `requireWebhookMode`, `requireSubscriber`,
 `checkEntryAuthorities`, `validateArguments`, `authorize`, `validateDelivery`, `findSubscription`, `enforceLimits`,
-`verifyCallback`, `grantTtl`, `upsertSubscription`, `notifySubscribed`, `buildResult` and `finalize`.
+`verifyCallback`, `grantTtl`, `upsertSubscription`, `notifySubscribed`, `startReplay` (for an event with `check()`,
+see [Events with `check()` over webhook](#events-with-check-over-webhook)), `buildResult` and `finalize`.
 `events:unsubscribe` (`EventUnsubscribeHook`) has `parseInput`, `resolveDialect`, `requireSubscriber`,
 `removeSubscription`, `buildResult` and `finalize`. `finalize` runs after a success or a failure: attach a
 `Finally` hook there for work that must see refused requests too.
@@ -438,7 +443,8 @@ class PlaceOrderTool extends ToolContext {
   so `publish()` can take as long as the slowest callback, up to `webhook.delivery.timeoutMs`.
 - Outside a context, use `scope.events.publisher`. A provider, a duty or a worker takes the publisher in its
   constructor: see [Publishing from Background Code](#publishing-from-background-code).
-- `matched` counts webhook deliveries. A client that polls is not counted: it reads the occurrence at its next poll.
+- `matched` counts the webhook deliveries queued by this publish. Readers that poll or hold a stream are not counted:
+  a poll reads the occurrence at its next request, and a stream filters it for its own reader.
   On a server that performs no webhook mode, `publish()` answers `matched: 0`.
 - A service that does not link the SDK publishes with an HTTP request: see
   [Publishing over HTTP](#publishing-over-http).
@@ -807,6 +813,51 @@ delivery and with `webhook-id: msg_terminated_…`:
 ```
 
 Subscriptions of the design-sketch dialect get no envelope.
+
+### Events with `check()` over webhook
+
+A webhook subscription to an event with `check()` needs nobody to call `publish()`: the server reads the upstream
+for it. For each such event, one process runs a loop that calls `check(args, cursor, limits)` for every webhook
+subscription of the event, every `events.poll.nextPollMs` (30 seconds) or the `nextPollMs` the event's `check()`
+returned, at once while it answers `hasMore`, and queues each item as a delivery.
+
+- **The cursor of the request.** `events/subscribe` with `cursor: null`, or none, starts from now: `check(args,
+null)` gives the position. With a cursor, the first `check()` replays from it before the answer is sent, bounded by
+  `maxAgeMs` when the request has one. The answer has `truncated: true` when `check()` reported a gap or `maxAgeMs`
+  left items out.
+- **The watermark.** The `cursor` of a subscribe or refresh answer, and the `cursor` in each delivered body, is a
+  position that is safe to persist: every item at or before it was acknowledged, dropped or abandoned. It is never
+  ahead of a delivery the callback has not acknowledged, so it can be behind the item that carries it.
+- **A refresh** keeps the server's own position and answers the watermark; the `cursor` of a refresh request is not
+  used while the server still has the subscription. When the loop reads the subscription while a refresh verifies its
+  callback, the refresh keeps the position the loop reached, so nothing is delivered twice.
+- **A gap between refreshes** (`check()` answers `truncated`) is told with a signed `{ "type": "gap", "cursor":
+"<watermark>" }` envelope, `webhook-id: msg_gap_…`, to a SEP-3415 subscription. A design-sketch subscription
+  (ChatGPT) gets no envelope: its next refresh answers `truncated: true`, once.
+- **A slow callback** holds the loop back: with 50 batches of unfinished deliveries, `check()` is not called for
+  that subscription until some finish.
+- **The owner is checked again** before `check()` is called for a subscription whose last check is older than
+  `subscriptions.reauthorizeEveryMs`, as a publish does (see [Over a subscription's life](#over-a-subscriptions-life)).
+  A refusal ends the subscription, and the loop reads nothing more for it. A check that could not be made skips the
+  subscription for that turn, its cursor where it was, and the next turn checks it again.
+- `match()`, `transform()` and `audience` do not apply, as for a poll: `check()` gets the arguments.
+
+One process runs the loop of an event at a time. It holds a lease in the events store for 30 seconds and renews it;
+when it stops it releases the lease, and when it dies another process takes the loop over once the lease ran out.
+The position and the watermark are kept on the stored subscription:
+
+- **`events.store.sqlite` or `events.store.redis`**: a restart, or another process, continues from the stored
+  position. An item that was acknowledged is not delivered again; an item queued just before a crash can be.
+- **Memory** (the default): a restart forgets the subscription. The client's next `events/subscribe` creates it
+  again and replays from the cursor it sends.
+
+The loop needs a long-lived process. In a serverless deployment, on an edge runtime and in a browser, an event with
+`check()` is not offered by webhook (`events/subscribe` answers `Unsupported`), and the server logs at startup:
+`1 event(s) with check() are not offered by webhook here: delivering them needs a long-lived process, which a
+serverless, edge or browser runtime is not. They are offered by poll.`
+
+`scope.events.replays` is the server's `EventReplays`; a stored subscription has its state in `replay`
+(`{ cursor, watermark, pending }`).
 
 ### Pending deliveries
 
@@ -1229,43 +1280,46 @@ functions) to get the same `this`.
 
 ## Troubleshooting
 
-| Problem                                                  | Cause                                                                                  | Solution                                                                                |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `events/list` answers `-32601`                           | The server performs no delivery mode, or declares no event                             | Enable a delivery mode; list the event in an app's `events`                             |
-| The capability is missing from `initialize`              | Same as above                                                                          | Same as above                                                                           |
-| An event is missing from `events/list`                   | `hideFromDiscovery`, `authorities`, `availableWhen`, or `delivery`                     | Check each: the event's `delivery` must include a mode the server performs              |
-| `events items must be annotated with @Event()`           | Something else is in `events`                                                          | List `@Event` classes and what `event()` returns                                        |
-| `EventNameConflictError`                                 | Two events with one name                                                               | Rename one, or give the variants `availableWhen`                                        |
-| `Authorities configuration required: Event "..."`        | The event declares `authorities` the server does not enforce                           | Add `@FrontMcp({ authorities })`, or remove the event's `authorities`                   |
-| A type error on the class under `@Event`                 | `EventContext<Args, Payload>` differs from the schemas                                 | Declare the types the schemas describe, or extend plain `EventContext`                  |
-| The app cannot be lazy: `it declares events`             | Events are registered at startup                                                       | Import the app normally                                                                 |
-| `Webhook event delivery is off` at startup               | The server runs in public auth mode                                                    | Configure an `auth.mode` that signs callers in                                          |
-| `events/subscribe` answers `Forbidden`                   | An anonymous caller, the event's `authorities`, or `authorize()`                       | Read `data.reason`; sign the caller in, or grant the role                               |
-| `events/subscribe` answers `CallbackEndpointError`       | The callback did not answer the challenge with `2xx` and the nonce                     | Echo `challenge` from the verification request; read `data.reason`                      |
-| `Invalid delivery.url: it must use https`                | An `http:` callback                                                                    | Use `https`; in tests only, `events.webhook.unsafeAllowLocalCallbacks`                  |
-| `Invalid delivery.secret`                                | The secret is not `whsec_` and 24 to 64 bytes of base64                                | Generate one with `generateStandardWebhookSecret()` from `@frontmcp/utils`              |
-| `Event subscription store: ... needs a secret`           | `events.store` is set and no secret is                                                 | Set `MCP_EVENTS_SECRET`                                                                 |
-| A subscription is gone after a restart                   | Subscriptions are kept in memory by default                                            | Set `events.store.sqlite` or `events.store.redis`                                       |
-| `publish()` answers `matched: 0`                         | No subscription, `audience`, `match()`, or a suspended one                             | Check `events/subscribe` succeeded and what `match()` returns                           |
-| `events/poll` answers `truncated: true`                  | The server restarted, another process answered, or the cursor is older than the buffer | Continue from the cursor of the answer; read current state with a tool if a gap matters |
-| A poll misses events behind a load balancer              | Each process buffers what it published                                                 | Declare `check()` on the event, or use the webhook mode                                 |
-| A stream misses events published on another process      | Streams carry what their own process publishes                                         | Set `events.store.redis`, with an auth mode that signs callers in                       |
-| `events/stream` answers `-32601`                         | `events.push.enabled` is `false`, or the deployment is serverless                      | Use `events/poll` or the webhook mode there                                             |
-| A stream sends `active` with `truncated: true` again     | The client read too slowly, or `check()` reported a gap                                | Read current state with a tool if a gap matters; continue on the stream                 |
-| `events/poll` answers `Forbidden` to an anonymous caller | The server's auth signs callers in                                                     | Send a token; only a server in public auth mode lets anonymous callers poll             |
-| `EventNotRegisteredError` on `publish()`                 | The event is not in any app's `events`                                                 | List it, or publish the name that is registered                                         |
-| `InvalidEventPublishError` on `publish()`                | `data` does not match `payloadSchema`                                                  | Send the fields the schema declares                                                     |
-| A receiver gets the same event twice                     | Delivery is at least once: a retry after a lost `2xx`                                  | Deduplicate on `webhook-id`                                                             |
-| `Event publish endpoint: ... public auth mode`           | `publishEndpoint.enabled` without a `secret` on a public server                        | Set `events.publishEndpoint.secret`, or an `auth.mode` that signs in                    |
-| `POST /events/publish` answers `401`                     | A wrong signature, a clock that is off, or a request sent before                       | Sign `<timestamp>.<body>` over the bytes sent; sign a retry again                       |
-| `POST /events/publish` answers `404`                     | The endpoint is off, the path differs, or the event is unknown                         | Set `events.publishEndpoint.enabled`; read the `error` of the answer                    |
-| `POST /events/publish` answers `409`                     | Another request is publishing the same `eventId` right now                             | Retry: the answer is then the first request's                                           |
-| `depends on EventPublisher, which is not ...`            | A provider that takes the publisher, built by `createContainer()`                      | Build it in a server, or leave the publisher out of that provider                       |
-| `depends on Object, which is not registered`             | `EventPublisher` is imported with `import type`                                        | Import it as a value: `import { EventPublisher } from ...`                              |
-| A `trigger: 'event'` workflow does not start             | `events.bridge: false`, another `event` name, or its input schema                      | Give it the occurrence as `inputSchema`; read the warning in the log                    |
-| `Delivery ... is abandoned` in the log                   | The callback failed every attempt in the retry window                                  | Fix the callback; read the category at the end of the line                              |
-| `Subscription ... is suspended` in the log               | 20 failed deliveries in a row                                                          | Fix the callback, then subscribe again to reactivate                                    |
-| The signature does not verify at the receiver            | It signs a re-serialized body, or uses another secret                                  | Verify over the raw body bytes with the secret sent in `events/subscribe`               |
+| Problem                                                        | Cause                                                                                  | Solution                                                                                |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `events/list` answers `-32601`                                 | The server performs no delivery mode, or declares no event                             | Enable a delivery mode; list the event in an app's `events`                             |
+| The capability is missing from `initialize`                    | Same as above                                                                          | Same as above                                                                           |
+| An event is missing from `events/list`                         | `hideFromDiscovery`, `authorities`, `availableWhen`, or `delivery`                     | Check each: the event's `delivery` must include a mode the server performs              |
+| `events items must be annotated with @Event()`                 | Something else is in `events`                                                          | List `@Event` classes and what `event()` returns                                        |
+| `EventNameConflictError`                                       | Two events with one name                                                               | Rename one, or give the variants `availableWhen`                                        |
+| `Authorities configuration required: Event "..."`              | The event declares `authorities` the server does not enforce                           | Add `@FrontMcp({ authorities })`, or remove the event's `authorities`                   |
+| A type error on the class under `@Event`                       | `EventContext<Args, Payload>` differs from the schemas                                 | Declare the types the schemas describe, or extend plain `EventContext`                  |
+| The app cannot be lazy: `it declares events`                   | Events are registered at startup                                                       | Import the app normally                                                                 |
+| `Webhook event delivery is off` at startup                     | The server runs in public auth mode                                                    | Configure an `auth.mode` that signs callers in                                          |
+| `events/subscribe` answers `Forbidden`                         | An anonymous caller, the event's `authorities`, or `authorize()`                       | Read `data.reason`; sign the caller in, or grant the role                               |
+| `events/subscribe` answers `CallbackEndpointError`             | The callback did not answer the challenge with `2xx` and the nonce                     | Echo `challenge` from the verification request; read `data.reason`                      |
+| `Invalid delivery.url: it must use https`                      | An `http:` callback                                                                    | Use `https`; in tests only, `events.webhook.unsafeAllowLocalCallbacks`                  |
+| `Invalid delivery.secret`                                      | The secret is not `whsec_` and 24 to 64 bytes of base64                                | Generate one with `generateStandardWebhookSecret()` from `@frontmcp/utils`              |
+| `Event subscription store: ... needs a secret`                 | `events.store` is set and no secret is                                                 | Set `MCP_EVENTS_SECRET`                                                                 |
+| A subscription is gone after a restart                         | Subscriptions are kept in memory by default                                            | Set `events.store.sqlite` or `events.store.redis`                                       |
+| `publish()` answers `matched: 0`                               | No subscription, `audience`, `match()`, or a suspended one                             | Check `events/subscribe` succeeded and what `match()` returns                           |
+| `events/poll` answers `truncated: true`                        | The server restarted, another process answered, or the cursor is older than the buffer | Continue from the cursor of the answer; read current state with a tool if a gap matters |
+| A poll misses events behind a load balancer                    | Each process buffers what it published                                                 | Declare `check()` on the event, or use the webhook mode                                 |
+| A stream misses events published on another process            | Streams carry what their own process publishes                                         | Set `events.store.redis`, with an auth mode that signs callers in                       |
+| `events/stream` answers `-32601`                               | `events.push.enabled` is `false`, or the deployment is serverless                      | Use `events/poll` or the webhook mode there                                             |
+| A stream sends `active` with `truncated: true` again           | The client read too slowly, or `check()` reported a gap                                | Read current state with a tool if a gap matters; continue on the stream                 |
+| `events/poll` answers `Forbidden` to an anonymous caller       | The server's auth signs callers in                                                     | Send a token; only a server in public auth mode lets anonymous callers poll             |
+| `EventNotRegisteredError` on `publish()`                       | The event is not in any app's `events`                                                 | List it, or publish the name that is registered                                         |
+| `InvalidEventPublishError` on `publish()`                      | `data` does not match `payloadSchema`                                                  | Send the fields the schema declares                                                     |
+| A receiver gets the same event twice                           | Delivery is at least once: a retry after a lost `2xx`                                  | Deduplicate on `webhook-id`                                                             |
+| `Event publish endpoint: ... public auth mode`                 | `publishEndpoint.enabled` without a `secret` on a public server                        | Set `events.publishEndpoint.secret`, or an `auth.mode` that signs in                    |
+| `POST /events/publish` answers `401`                           | A wrong signature, a clock that is off, or a request sent before                       | Sign `<timestamp>.<body>` over the bytes sent; sign a retry again                       |
+| `POST /events/publish` answers `404`                           | The endpoint is off, the path differs, or the event is unknown                         | Set `events.publishEndpoint.enabled`; read the `error` of the answer                    |
+| `POST /events/publish` answers `409`                           | Another request is publishing the same `eventId` right now                             | Retry: the answer is then the first request's                                           |
+| `depends on EventPublisher, which is not ...`                  | A provider that takes the publisher, built by `createContainer()`                      | Build it in a server, or leave the publisher out of that provider                       |
+| `depends on Object, which is not registered`                   | `EventPublisher` is imported with `import type`                                        | Import it as a value: `import { EventPublisher } from ...`                              |
+| A `trigger: 'event'` workflow does not start                   | `events.bridge: false`, another `event` name, or its input schema                      | Give it the occurrence as `inputSchema`; read the warning in the log                    |
+| `Delivery ... is abandoned` in the log                         | The callback failed every attempt in the retry window                                  | Fix the callback; read the category at the end of the line                              |
+| `Subscription ... is suspended` in the log                     | 20 failed deliveries in a row                                                          | Fix the callback, then subscribe again to reactivate                                    |
+| The signature does not verify at the receiver                  | It signs a re-serialized body, or uses another secret                                  | Verify over the raw body bytes with the secret sent in `events/subscribe`               |
+| A webhook subscription to an event with `check()` gets nothing | The runtime is serverless, edge or a browser, or `check()` throws                      | Run a long-lived process; read the log for `check() of event ... failed`                |
+| A delivered body has a `cursor` behind its own item            | The watermark never passes an unacknowledged delivery                                  | Persist it as it is: a resubscribe replays from it, at least once                       |
+| `{ "type": "gap" }` arrives at the callback                    | `check()` reported that its upstream skipped events                                    | Read current state with a tool; persist the `cursor` of the envelope                    |
 
 ## Reference
 

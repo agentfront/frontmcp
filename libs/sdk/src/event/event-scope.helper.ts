@@ -13,15 +13,17 @@ import {
 import { eventsConfigSchema, type EventsConfig, type EventsConfigOptions } from '../common/metadata/event.metadata';
 import { EVENT_PUBLISHER } from '../common/tokens/event.tokens';
 import { type HealthProbeResult } from '../common/types/options/health';
+import { isLongLivedProcess } from '../duty/lease-store';
 import { assertEntryAuthorities, type EntryAuthorities } from '../front-mcp/authorities-rules.check';
 import type ProviderRegistry from '../provider/provider.registry';
 import { createEventMetrics } from './delivery/event-metrics';
 import { EventOutbox } from './delivery/event-outbox';
 import { ScopeEventPublisher } from './event-publisher';
+import { reauthorizeSubscriber } from './event-reauthorization';
 import EventRegistry from './event.registry';
 import EventDeliverFlow from './flows/event-deliver.flow';
 import EventPollFlow from './flows/event-poll.flow';
-import EventPublishFlow from './flows/event-publish.flow';
+import EventPublishFlow, { EVENT_DELIVERY_MAX_BYTES } from './flows/event-publish.flow';
 import EventStreamFlow from './flows/event-stream.flow';
 import EventSubscribeFlow from './flows/event-subscribe.flow';
 import EventUnsubscribeFlow from './flows/event-unsubscribe.flow';
@@ -29,9 +31,11 @@ import ListEventsFlow from './flows/list-events.flow';
 import { EventBuffer } from './poll/event-buffer';
 import { EventPollLeases } from './poll/event-poll-leases';
 import { enablePublishEndpoint } from './publish-endpoint/event-publish-endpoint';
+import { EventReplays } from './replay/event-replays';
 import { EventStreams } from './stream/event-streams';
 import { EventCallbackVerifier } from './subscription/event-callback-verifier';
 import { createEventSubscriptionStore } from './subscription/event-subscription-store.factory';
+import { accessRevokedError, terminateEventSubscription } from './subscription/event-subscription-termination';
 import { EventSubscriptions } from './subscription/event-subscriptions';
 
 export interface RegisterEventCapabilitiesArgs {
@@ -88,6 +92,26 @@ async function outboxHealth(outbox: EventOutbox): Promise<HealthProbeResult> {
   }
 }
 
+/** Run the webhook loops of the events with `check()`, or keep them off webhook where no loop can run. */
+async function startReplays(
+  eventRegistry: EventRegistry,
+  replays: EventReplays,
+  logger: FrontMcpLogger,
+): Promise<void> {
+  const replayable = eventRegistry.getEvents().filter((event) => replays.isReplayable(event));
+  if (replayable.length === 0) return;
+  if (isLongLivedProcess()) {
+    eventRegistry.replays = replays;
+    await replays.start(replayable);
+    return;
+  }
+  for (const event of replayable) eventRegistry.withholdWebhookFrom(event.name);
+  logger.warn(
+    `${replayable.length} event(s) with check() are not offered by webhook here: delivering them needs a ` +
+      'long-lived process, which a serverless, edge or browser runtime is not. They are offered by poll.',
+  );
+}
+
 /** Open the subscription store and the outbox, start their sweeps, and serve subscriptions and deliveries. */
 async function enableWebhookDelivery(
   scope: ScopeEntry,
@@ -132,7 +156,30 @@ async function enableWebhookDelivery(
   await scope.registryFlows(EventDeliverFlow);
   subscriptions.start();
   outbox.start();
+  const replays = new EventReplays({
+    store,
+    outbox,
+    storage,
+    intervalMs: eventsConfig.poll.nextPollMs,
+    maxEvents: eventsConfig.poll.maxEvents,
+    maxBodyBytes: EVENT_DELIVERY_MAX_BYTES,
+    reauthorizeEveryMs: eventsConfig.subscriptions.reauthorizeEveryMs,
+    reauthorize: (event, record) =>
+      reauthorizeSubscriber({ scope, event, subscriber: record.subscriber, arguments: record.arguments }),
+    terminate: (record) =>
+      terminateEventSubscription({
+        subscriptions,
+        outbox,
+        metrics: eventRegistry.metrics,
+        logger,
+        subscription: record,
+        error: accessRevokedError(record.dialect),
+      }),
+    logger,
+  });
+  await startReplays(eventRegistry, replays, logger);
   scope.onDispose(async () => {
+    await replays.stop();
     await outbox.stop();
     await subscriptions.close();
   });

@@ -6,8 +6,8 @@ import { type EventsConfig } from '../../common/metadata/event.metadata';
 import { deserializeAndDecrypt, encryptAndSerialize } from '../../elicitation/store/elicitation-encryption';
 import { type EventMetrics } from './event-metrics';
 
-/** What a delivery carries: an occurrence of an event, or the envelope that tells a callback its subscription ended. */
-export type EventDeliveryKind = 'event' | 'terminated';
+/** What a delivery carries: an occurrence of an event, or an envelope: the subscription ended, or events were skipped. */
+export type EventDeliveryKind = 'event' | 'terminated' | 'gap';
 
 /** The callback and secrets of a delivery whose subscription is no longer stored. */
 export interface EventDeliveryTarget {
@@ -118,8 +118,8 @@ export class EventOutbox {
     this.usesTimers = deployment !== 'serverless' && runtime !== 'edge' && runtime !== 'browser';
   }
 
-  /** Store a delivery and attempt it: on a timer in a long-lived process, before returning elsewhere. */
-  async enqueue(delivery: NewEventDelivery): Promise<void> {
+  /** Store a delivery and attempt it: on a timer in a long-lived process, before returning elsewhere. Gives its id. */
+  async enqueue(delivery: NewEventDelivery): Promise<string> {
     const now = Date.now();
     const record: EventDeliveryRecord = {
       ...delivery,
@@ -136,6 +136,12 @@ export class EventOutbox {
     } else {
       await this.run(record.id);
     }
+    return record.id;
+  }
+
+  /** Whether a delivery is still stored: neither acknowledged, dropped nor abandoned yet. */
+  async isPending(deliveryId: string): Promise<boolean> {
+    return this.options.storage.exists(RECORD_PREFIX + deliveryId);
   }
 
   /** Look for deliveries on a timer, where the process is long-lived and the storage is shared. */

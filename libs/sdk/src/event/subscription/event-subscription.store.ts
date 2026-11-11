@@ -26,6 +26,24 @@ export interface EventSubscriptionStatus {
   suspendedSince?: number;
 }
 
+/** The deliveries one `check()` produced, and the position after them. */
+export interface EventReplayBatch {
+  cursor: string | null;
+  deliveryIds: string[];
+}
+
+/** Where the webhook subscription of an event with `check()` stands in its upstream. */
+export interface EventReplayState {
+  /** The position the next `check()` reads from. */
+  cursor: string | null;
+  /** The position a client may persist: everything at or before it was acknowledged or abandoned. */
+  watermark: string | null;
+  /** The batches whose deliveries are not all done, oldest first. */
+  pending: EventReplayBatch[];
+  /** A gap the client has not been told about yet: its next refresh answers `truncated`. */
+  truncated?: boolean;
+}
+
 export interface EventSubscriptionRecord {
   /** `sub_` and 32 hex characters, derived from the owner, the callback, the event and its arguments. */
   id: string;
@@ -47,11 +65,16 @@ export interface EventSubscriptionRecord {
   /** `false` while delivery is suspended; the next `events/subscribe` sets it again. */
   active: boolean;
   status: EventSubscriptionStatus;
+  /** Set for an event with `check()`: the position of the loop that feeds this subscription. */
+  replay?: EventReplayState;
 }
 
 /** What `update` may change; identity and lifetime change through `upsert` alone. */
 export type EventSubscriptionChanges = Partial<
-  Pick<EventSubscriptionRecord, 'active' | 'status' | 'verifiedAt' | 'lastAuthorizedAt' | 'subscriber' | 'delivery'>
+  Pick<
+    EventSubscriptionRecord,
+    'active' | 'status' | 'verifiedAt' | 'lastAuthorizedAt' | 'subscriber' | 'delivery' | 'replay'
+  >
 >;
 
 export type EventSubscriptionPatch =

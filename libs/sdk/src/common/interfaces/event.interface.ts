@@ -95,7 +95,7 @@ export interface EventPublishOptions {
 
 export interface EventPublishResult {
   eventId: string;
-  /** How many subscriptions a delivery was queued for. */
+  /** How many webhook subscriptions a delivery was queued for. Readers that poll or hold a stream are not counted. */
   matched: number;
 }
 
