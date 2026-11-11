@@ -4,7 +4,7 @@ import { channelMetaOf } from '../channel/channel.utils';
 import { type EventEntry, type ScopeEntry } from '../common';
 import { isOfferedOnSurface } from '../common/availability';
 import { EventForbiddenError } from '../errors';
-import { type RegisteredServer } from '../notification/notification.service';
+import { hasExpiredCaller, type RegisteredServer } from '../notification/notification.service';
 import { mcpRequestSurface } from '../transport/mcp-handlers/mcp-surface';
 import { EVENT_DIALECTS } from './event-dialect';
 import { eventReaderOf, type EventReader } from './event-gates';
@@ -29,17 +29,19 @@ export function eventChannelMessage(event: EventEntry, occurrence: EventOccurren
 }
 
 /**
- * Who a channel capable session reads an event as: the caller its `initialize` request named, or an anonymous one.
- * Undefined when the event is not offered to MCP clients, or the server lets no anonymous caller read events.
+ * Who a channel capable session reads an event as: the caller of its latest request, or an anonymous one. Undefined
+ * when that caller's credentials have expired, the event is not offered to MCP clients, or the server lets no
+ * anonymous caller read events.
  */
 export function channelSessionReader(
   scope: ScopeEntry,
   event: EventEntry,
-  session: Pick<RegisteredServer, 'authInfo'>,
+  session: Pick<RegisteredServer, 'caller'>,
 ): EventReader | undefined {
+  if (hasExpiredCaller(session)) return undefined;
   if (!isOfferedOnSurface(event.metadata.availableWhen, mcpRequestSurface(scope))) return undefined;
   try {
-    return eventReaderOf(scope, session.authInfo ?? {}, event.name, EVENT_DIALECTS['sep-3415'].errorCodes);
+    return eventReaderOf(scope, session.caller ?? {}, event.name, EVENT_DIALECTS['sep-3415'].errorCodes);
   } catch (error) {
     if (error instanceof EventForbiddenError) return undefined;
     throw error;

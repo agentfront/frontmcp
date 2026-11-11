@@ -95,6 +95,7 @@ class DeployFinished extends EventContext {}
 - It needs no `channels: { enabled: true }`. `channels: { enabled: false }` turns it off, with a warning at startup that names the events.
 - Everything on this page applies to such a server: stdio only, the session opts in with the flag, and revision 2026-07-28 is declined over stdio.
 - A session is told only what its caller may see under the event's rules. Over stdio the caller is anonymous, so a server whose auth signs callers in tells the stdio session nothing.
+- A session is checked as the caller of its latest request. Once those credentials have expired it gets nothing, until it makes a request with valid ones.
 
 ## Check It
 

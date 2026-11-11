@@ -86,8 +86,6 @@ export default function initializeRequestHandler({
       if (sessionId) {
         // A server built for one request, as on a Worker, has no registered session to keep client details on
         const hasRegisteredServer = scope.notifications.getRegisteredServer(sessionId) !== undefined;
-        // What is pushed to the session later, such as an event with `channel`, is checked against this caller
-        if (hasRegisteredServer && ctx.authInfo) scope.notifications.setAuthInfo(sessionId, ctx.authInfo);
 
         // Store client capabilities if provided
         if (request.params.capabilities) {

@@ -156,7 +156,7 @@ describe('runStdio with an event that has the channel option', () => {
       params: { name: 'finish_deploy', arguments: { version: '1.4.0' } },
     });
 
-    const called = (await reply(1)) as { result: { structuredContent: { eventId: string } } };
+    const called = (await reply(1)) as unknown as { result: { structuredContent: { eventId: string } } };
     const { eventId } = called.result.structuredContent;
     expect(
       await written((message) => 'method' in message && message.method === 'notifications/claude/channel'),

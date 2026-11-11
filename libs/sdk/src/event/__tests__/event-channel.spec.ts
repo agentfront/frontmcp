@@ -6,6 +6,7 @@ import 'reflect-metadata';
 
 import { z } from '@frontmcp/lazy-zod';
 import { EVENTS_ERROR_CODES, type AuthInfo, type ListEventsResult } from '@frontmcp/protocol';
+import { Client } from '@frontmcp/protocol/client';
 
 import { createTestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { servesClaudeCodeChannels } from '../../channel/channel.utils';
@@ -24,9 +25,11 @@ import {
 } from '../../common';
 import { EventForbiddenError } from '../../errors';
 import { EventPublishHook } from '../../index';
+import { type SessionCaller } from '../../notification/notification.service';
 import { type Scope } from '../../scope/scope.instance';
 import { composeCallerInstructions } from '../../skill/skill-instructions.helper';
 import { buildScopedServerOptions } from '../../transport/build-scoped-server-options';
+import { createInMemoryServer } from '../../transport/in-memory-server';
 import { eventChannelMessage } from '../event-channel';
 
 const CHANNEL_NOTIFICATION = 'notifications/claude/channel';
@@ -149,7 +152,8 @@ async function startScope(config: Partial<FrontMcpConfigInput>): Promise<Scope> 
 interface SessionOptions {
   stdio?: boolean;
   declaresChannels?: boolean;
-  authInfo?: Partial<AuthInfo>;
+  /** The caller of the session's latest request, as its transport keeps it. */
+  caller?: SessionCaller;
 }
 
 /** Registers a session as a transport does, and answers what records the notifications sent to it. */
@@ -157,7 +161,7 @@ function connect(scope: Scope, sessionId: string, options: SessionOptions = {}):
   const notification = jest.fn();
   scope.notifications.registerServer(sessionId, { notification } as never, { stdio: options.stdio });
   if (options.declaresChannels) scope.notifications.setClientCapabilities(sessionId, DECLARES_CHANNELS);
-  if (options.authInfo) scope.notifications.setAuthInfo(sessionId, options.authInfo);
+  if (options.caller) scope.notifications.setCaller(sessionId, options.caller);
   return notification;
 }
 
@@ -184,9 +188,23 @@ function eventOf(scope: Scope, eventName: string): EventEntry {
   return entry;
 }
 
-/** The auth of a signed-in caller, as an `initialize` request carries it. */
-function callerNamed(sub: string, roles: string[] = []): Partial<AuthInfo> {
-  return { user: { sub, roles } } as unknown as Partial<AuthInfo>;
+/** A signed-in caller as a session keeps it; `expiresAt` is when its credentials expire, in epoch seconds. */
+function callerNamed(sub: string, roles: string[] = [], expiresAt?: number): SessionCaller {
+  return { user: { sub, roles } as never, ...(expiresAt !== undefined && { expiresAt }) };
+}
+
+/** A time in epoch seconds, as a JWT `exp`: so many seconds from now, or ago when negative. */
+function secondsFromNow(seconds: number): number {
+  return Math.floor(Date.now() / 1000) + seconds;
+}
+
+/** Waits until a condition holds. */
+async function until(condition: () => boolean): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error('condition not met in time');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
 
 describe('eventChannelMessage', () => {
@@ -371,6 +389,17 @@ describe('events:publish to Claude Code sessions', () => {
       expect(JSON.stringify(listed)).not.toContain('channel');
     });
 
+    it('sends to a public HTTP session, whose anonymous caller has no credentials that expire', async () => {
+      const anonymous: SessionCaller = { clientId: 'anon:1', scopes: [], user: { sub: 'anon:1', iss: 'public' } };
+      const overHttp = connect(scope, 'declared-session', { declaresChannels: true, caller: anonymous });
+      const overStdio = connect(scope, 'stdio-session', { stdio: true });
+
+      await publisherOf(scope).publish(deployFinished, deploy);
+
+      expect(messagesOf(overHttp)).toHaveLength(1);
+      expect(messagesOf(overStdio)).toHaveLength(1);
+    });
+
     it('serves Claude Code channels with no @Channel and no channels config', async () => {
       expect(scope.channels).toBeUndefined();
       expect(servesClaudeCodeChannels(scope)).toBe(true);
@@ -382,8 +411,8 @@ describe('events:publish to Claude Code sessions', () => {
   describe('on a server that signs callers in', () => {
     let scope: Scope;
     const sessionIds = ['ada-session', 'bob-session', 'anonymous-session', 'stdio-session'];
-    const ada: Partial<AuthInfo> = callerNamed('ada', ['admin']);
-    const bob: Partial<AuthInfo> = callerNamed('bob', ['member']);
+    const ada = callerNamed('ada', ['admin']);
+    const bob = callerNamed('bob', ['member']);
 
     beforeAll(async () => {
       scope = await startScope({
@@ -407,8 +436,8 @@ describe('events:publish to Claude Code sessions', () => {
     });
 
     it('sends an occurrence with an audience to the session of that caller only', async () => {
-      const toAda = connect(scope, 'ada-session', { declaresChannels: true, authInfo: ada });
-      const toBob = connect(scope, 'bob-session', { declaresChannels: true, authInfo: bob });
+      const toAda = connect(scope, 'ada-session', { declaresChannels: true, caller: ada });
+      const toBob = connect(scope, 'bob-session', { declaresChannels: true, caller: bob });
 
       const { eventId } = await publisherOf(scope).publish(deployFinished, deploy, { audience: { sub: 'bob' } });
 
@@ -419,8 +448,8 @@ describe('events:publish to Claude Code sessions', () => {
     });
 
     it('sends an occurrence without an audience to every signed-in session', async () => {
-      const toAda = connect(scope, 'ada-session', { declaresChannels: true, authInfo: ada });
-      const toBob = connect(scope, 'bob-session', { declaresChannels: true, authInfo: bob });
+      const toAda = connect(scope, 'ada-session', { declaresChannels: true, caller: ada });
+      const toBob = connect(scope, 'bob-session', { declaresChannels: true, caller: bob });
 
       await publisherOf(scope).publish(deployFinished, deploy);
 
@@ -430,7 +459,7 @@ describe('events:publish to Claude Code sessions', () => {
 
     it('sends nothing to a session whose caller is anonymous, as such a caller may not poll here', async () => {
       const anonymous = connect(scope, 'anonymous-session', { declaresChannels: true });
-      const overStdio = connect(scope, 'stdio-session', { stdio: true, authInfo: { sessionId: 'stdio-session' } });
+      const overStdio = connect(scope, 'stdio-session', { stdio: true });
 
       await publisherOf(scope).publish(deployFinished, deploy);
 
@@ -439,8 +468,8 @@ describe('events:publish to Claude Code sessions', () => {
     });
 
     it("sends an event to the sessions its authorities allow, and not to the others'", async () => {
-      const toAda = connect(scope, 'ada-session', { declaresChannels: true, authInfo: ada });
-      const toBob = connect(scope, 'bob-session', { declaresChannels: true, authInfo: bob });
+      const toAda = connect(scope, 'ada-session', { declaresChannels: true, caller: ada });
+      const toBob = connect(scope, 'bob-session', { declaresChannels: true, caller: bob });
 
       await publisherOf(scope).publish(auditLogged, { action: 'export' });
 
@@ -449,8 +478,8 @@ describe('events:publish to Claude Code sessions', () => {
     });
 
     it('runs authorize() for each session, on a context of its caller, and leaves out one it refuses', async () => {
-      const toAda = connect(scope, 'ada-session', { declaresChannels: true, authInfo: ada });
-      const toBob = connect(scope, 'bob-session', { declaresChannels: true, authInfo: bob });
+      const toAda = connect(scope, 'ada-session', { declaresChannels: true, caller: ada });
+      const toBob = connect(scope, 'bob-session', { declaresChannels: true, caller: bob });
       vaultAuthorize.mockImplementation((_args: unknown, subscriber: EventSubscriber) => {
         if (subscriber.sub === 'bob') throw new EventForbiddenError(EVENTS_ERROR_CODES, 'vault.opened', 'not yours');
       });
@@ -463,9 +492,54 @@ describe('events:publish to Claude Code sessions', () => {
       expect(vaultSeenBy).toHaveBeenCalledWith(ada);
     });
 
+    it('sends nothing to a session whose caller was last seen with credentials that have expired', async () => {
+      const expired = callerNamed('ada', ['admin'], secondsFromNow(-60));
+      const toAda = connect(scope, 'ada-session', { declaresChannels: true, caller: expired });
+      const toBob = connect(scope, 'bob-session', { declaresChannels: true, caller: bob });
+
+      await publisherOf(scope).publish(deployFinished, deploy);
+
+      expect(toAda).not.toHaveBeenCalled();
+      expect(messagesOf(toBob)).toHaveLength(1);
+    });
+
+    it('sends to a session whose credentials expire later', async () => {
+      const valid = callerNamed('ada', ['admin'], secondsFromNow(3600));
+      const toAda = connect(scope, 'ada-session', { declaresChannels: true, caller: valid });
+
+      await publisherOf(scope).publish(deployFinished, deploy);
+
+      expect(messagesOf(toAda)).toHaveLength(1);
+    });
+
+    it('sends again once a later request of the session came with fresh credentials', async () => {
+      const expired = callerNamed('ada', ['admin'], secondsFromNow(-60));
+      const toAda = connect(scope, 'ada-session', { declaresChannels: true, caller: expired });
+      await publisherOf(scope).publish(deployFinished, deploy);
+      expect(toAda).not.toHaveBeenCalled();
+
+      scope.notifications.setCaller('ada-session', callerNamed('ada', ['admin'], secondsFromNow(3600)));
+      const { eventId } = await publisherOf(scope).publish(deployFinished, deploy);
+
+      expect(messagesOf(toAda)).toEqual([
+        expect.objectContaining({ meta: expect.objectContaining({ event_id: eventId }) }),
+      ]);
+    });
+
+    it("stops sending an event once a later request's claims lost the role its authorities need", async () => {
+      const toAda = connect(scope, 'ada-session', { declaresChannels: true, caller: ada });
+      await publisherOf(scope).publish(auditLogged, { action: 'export' });
+      expect(messagesOf(toAda)).toHaveLength(1);
+
+      scope.notifications.setCaller('ada-session', callerNamed('ada', ['member']));
+      await publisherOf(scope).publish(auditLogged, { action: 'delete' });
+
+      expect(messagesOf(toAda)).toHaveLength(1);
+    });
+
     it('leaves out a session whose access could not be checked, and still sends to the others', async () => {
-      const toBob = connect(scope, 'bob-session', { declaresChannels: true, authInfo: bob });
-      const toAda = connect(scope, 'ada-session', { declaresChannels: true, authInfo: ada });
+      const toBob = connect(scope, 'bob-session', { declaresChannels: true, caller: bob });
+      const toAda = connect(scope, 'ada-session', { declaresChannels: true, caller: ada });
       vaultAuthorize.mockImplementation((_args: unknown, subscriber: EventSubscriber) => {
         if (subscriber.sub === 'bob') throw new Error('policy store down');
       });
@@ -474,6 +548,80 @@ describe('events:publish to Claude Code sessions', () => {
 
       expect(toBob).not.toHaveBeenCalled();
       expect(messagesOf(toAda)).toHaveLength(1);
+    });
+  });
+
+  describe('to a session of createInMemoryServer(), on a server that signs callers in', () => {
+    let scope: Scope;
+    const admin: Partial<AuthInfo> = { token: 'bearer-of-ada', user: { sub: 'ada', roles: ['admin'] } as never };
+    const member: Partial<AuthInfo> = { token: 'bearer-of-ada', user: { sub: 'ada', roles: ['member'] } as never };
+    let closeSession: (() => Promise<void>) | undefined;
+
+    beforeAll(async () => {
+      scope = await startScope({
+        apps: [VaultsApp],
+        auth: { mode: 'local' } as never,
+        authorities: { profiles: { admin: { roles: { any: ['admin'] } } } },
+      });
+    });
+
+    afterEach(async () => {
+      await closeSession?.();
+      closeSession = undefined;
+    });
+
+    afterAll(async () => {
+      await scope.dispose();
+    });
+
+    /** Connects a client that declares the channel capability, and keeps the channel notifications it gets. */
+    async function connectClient(authInfo: Partial<AuthInfo>) {
+      const server = await createInMemoryServer(scope, { authInfo, sessionId: 'in-memory-session' });
+      const client = new Client(
+        { name: 'channel-client', version: '1.0.0' },
+        { capabilities: { experimental: { 'claude/channel': {} } } },
+      );
+      const received: unknown[] = [];
+      client.fallbackNotificationHandler = async (notification) => {
+        if (notification.method === CHANNEL_NOTIFICATION) received.push(notification.params);
+      };
+      closeSession = async () => {
+        await client.close();
+        await server.close();
+      };
+      await client.connect(server.clientTransport);
+      return { server, received };
+    }
+
+    it('checks each occurrence against the caller of the latest request, and keeps no token of it', async () => {
+      const { server, received } = await connectClient(admin);
+
+      await publisherOf(scope).publish(auditLogged, { action: 'export' });
+      await until(() => received.length >= 1);
+      server.setAuthInfo(member);
+      await publisherOf(scope).publish(auditLogged, { action: 'delete' });
+      server.setAuthInfo(admin);
+      await publisherOf(scope).publish(auditLogged, { action: 'archive' });
+      await until(() => received.length >= 2);
+
+      const kept = scope.notifications.getRegisteredServer('in-memory-session')?.caller;
+      expect(received).toEqual([
+        expect.objectContaining({ content: '{"action":"export"}' }),
+        expect.objectContaining({ content: '{"action":"archive"}' }),
+      ]);
+      expect(kept).toEqual({ user: { sub: 'ada', roles: ['admin'] } });
+      expect(JSON.stringify(kept)).not.toContain('bearer-of-ada');
+    });
+
+    it('sends nothing while the credentials of the latest request have expired', async () => {
+      const { server, received } = await connectClient({ ...admin, expiresAt: secondsFromNow(-60) });
+
+      await publisherOf(scope).publish(deployFinished, deploy);
+      server.setAuthInfo({ ...admin, expiresAt: secondsFromNow(3600) });
+      const { eventId } = await publisherOf(scope).publish(deployFinished, deploy);
+      await until(() => received.length >= 1);
+
+      expect(received).toEqual([expect.objectContaining({ meta: { event: 'deploy.finished', event_id: eventId } })]);
     });
   });
 

@@ -341,9 +341,13 @@ it is published. It does not go through this module's registry or its `channels:
   `bridgeToBus`. `event/event-channel.ts` builds the message: the payload as JSON or the option's `content`, and
   `event` and `event_id` beside the option's `meta`.
 - It goes to `NotificationService.getChannelCapableSessions()`, with no channel subscription. Each session is checked
-  against the event's own rules, as the caller its `initialize` request named (`RegisteredServer.authInfo`):
+  against the event's own rules, as the caller of its latest request (`RegisteredServer.caller`):
   `availableWhen.surface`, the `audience` of the publish, the event's `authorities` and `authorize()`. An occurrence
   published for a `subscriptionId` goes to no session.
+- `LocalTransportAdapter.ensureAuthInfo()` keeps that caller on every request of an HTTP session, and
+  `createInMemoryServer()` when it is created and on `setAuthInfo()`: the verified user, scopes and claims and the
+  expiry of the token (`sessionCallerOf()`), never the token. The stdio session keeps none and is anonymous. A
+  session whose caller's credentials have expired (`hasExpiredCaller()`) is sent nothing.
 - Such an event makes `servesClaudeCodeChannels()` true with no `@Channel` and no `channels: { enabled: true }`.
   `channels: { enabled: false }` turns the option off, with one warning at startup.
 - A `subscriptions/listen` stream of revision 2026-07-28 gets no event this way: such a client opens `events/stream`.

@@ -42,7 +42,6 @@ describe('initializeRequestHandler', () => {
   // Mock notification service
   const mockNotifications = {
     getRegisteredServer: jest.fn(),
-    setAuthInfo: jest.fn(),
     setClientCapabilities: jest.fn(),
     setClientInfo: jest.fn(),
   };
@@ -414,15 +413,6 @@ describe('initializeRequestHandler', () => {
       });
     });
 
-    it('keeps the caller of the session, whom what is pushed to it later is checked against', async () => {
-      const handler = initializeRequestHandler(handlerOptions);
-      const ctx = createContext();
-
-      await handler.handler(createRequest(), ctx as any);
-
-      expect(mockNotifications.setAuthInfo).toHaveBeenCalledWith('test-session-id-123', ctx.authInfo);
-    });
-
     it('keeps no client details in the notification service for a session with no registered server', async () => {
       mockNotifications.getRegisteredServer.mockReturnValue(undefined);
       const handler = initializeRequestHandler(handlerOptions);
@@ -434,7 +424,6 @@ describe('initializeRequestHandler', () => {
       await handler.handler(request, createContext() as any);
 
       expect(mockNotifications.getRegisteredServer).toHaveBeenCalledWith('test-session-id-123');
-      expect(mockNotifications.setAuthInfo).not.toHaveBeenCalled();
       expect(mockNotifications.setClientCapabilities).not.toHaveBeenCalled();
       expect(mockNotifications.setClientInfo).not.toHaveBeenCalled();
       expect(mockTransportService.updateStoredSessionCapabilities).toHaveBeenCalledWith(

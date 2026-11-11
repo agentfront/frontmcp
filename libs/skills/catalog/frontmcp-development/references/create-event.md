@@ -758,9 +758,14 @@ or { content?, meta? } with functions of the payload`.
 ### Who is told
 
 Each channel capable session whose caller may see the occurrence. The stdio session is channel capable, and so is an
-HTTP session whose client declared `experimental['claude/channel']`. The caller is the one the session's `initialize`
-request named. Over stdio that is an anonymous caller, as for every stdio request. The event's own rules decide, as
-they do for a poll:
+HTTP session whose client declared `experimental['claude/channel']`.
+
+A session is checked as the caller of its latest request, so a change of its claims applies from the next occurrence
+on. A session whose latest request came with a token that has since expired is told nothing, until it makes a request
+with valid credentials. Over stdio the caller is anonymous, as for every stdio request, and has no credentials that
+expire.
+
+The event's own rules decide, as they do for a poll:
 
 - **Anonymous callers** are told on a server in public auth mode only. On a server whose auth signs callers in, an
   anonymous session is told nothing, as it may not poll: that includes the stdio session.
@@ -770,9 +775,9 @@ they do for a poll:
 - **`subscriptionId`**: an occurrence published for one subscription is told to no session, since no session is that
   subscription.
 - **`authorities`, then `authorize(args, subscriber)`**: both run for each session on every publish, with empty
-  arguments, and `this.authInfo` is the session's caller. A session they refuse is not told. When the check could not
-  be made, that session is not told this time, and the server logs `notifyChannelSessions: event "<name>" was not sent
-to session <id>...`.
+  arguments. `this.authInfo` holds the session's caller: its claims, `sub` and scopes, and no token. A session they
+  refuse is not told. When the check could not be made, that session is not told this time, and the server logs
+  `notifyChannelSessions: event "<name>" was not sent to session <id>...`.
 - **`match()` and `transform()` do not run**: a session has no subscription arguments. Shape what a session reads with
   `content` and `meta`.
 

@@ -377,8 +377,9 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Send a channel message to one session, when the event's own rules let its caller see the occurrence: the
-   * `audience`, then the event's `authorities` and `authorize()`, with no subscription arguments.
+   * Send a channel message to one session, when the event's own rules let the caller of its latest request see the
+   * occurrence: the `audience`, then the event's `authorities` and `authorize()`, with no subscription arguments. A
+   * session whose caller's credentials have expired is sent nothing.
    */
   private async notifyChannelSession(session: RegisteredServer, message: EventChannelMessage): Promise<boolean> {
     const { event, context } = this.state.required;
@@ -388,7 +389,7 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
       if (!reader || !isInAudience(audience, reader.subscriber)) return false;
       if (hasReauthorization(this.scope, event, context.authorize !== undefined)) {
         const { subscriber } = reader;
-        const { authInfo } = session;
+        const authInfo = session.caller;
         const access = await reauthorizeSubscriber({ scope: this.scope, event, subscriber, arguments: {}, authInfo });
         if (access.outcome === 'failed') throw access.error;
         if (access.outcome === 'refused') return false;

@@ -323,6 +323,25 @@ export function isChannelCapableSession(session: Pick<RegisteredServer, 'stdio' 
 }
 
 /**
+ * What a session keeps of the caller of its latest request, for what is pushed to it later: who they are, as the
+ * event gates read it, and when their credentials expire (epoch seconds, a JWT `exp`). It never holds the bearer
+ * token, the session payload or the transport.
+ */
+export type SessionCaller = Partial<Pick<AuthInfo, 'clientId' | 'scopes' | 'user' | 'claims' | 'expiresAt'>>;
+
+/** The caller a request's auth info names, as a session keeps it: its identity and its expiry, without its token. */
+export function sessionCallerOf(authInfo: Partial<AuthInfo>): SessionCaller {
+  const { clientId, scopes, user, claims } = authInfo;
+  return { clientId, scopes, user, claims, expiresAt: authInfo.expiresAt ?? user?.exp };
+}
+
+/** Whether a session's caller was last seen with credentials that have since expired. */
+export function hasExpiredCaller(session: Pick<RegisteredServer, 'caller'>): boolean {
+  const expiresAt = session.caller?.expiresAt;
+  return expiresAt !== undefined && expiresAt * 1000 < Date.now();
+}
+
+/**
  * MCP logging level priority (lower number = more verbose).
  * Uses LoggingLevel from MCP SDK for type safety.
  */
@@ -368,8 +387,8 @@ export interface RegisteredServer {
   registeredAt: number;
   /** True for the process's stdio connection: Claude Code, which spawns it, declares no `claude/channel` capability */
   stdio?: boolean;
-  /** The session's caller as its initialize request saw them: an event pushed to the session is checked against it */
-  authInfo?: Partial<AuthInfo>;
+  /** The caller of the session's latest request, without its token: an event pushed to the session is checked against it */
+  caller?: SessionCaller;
   /** Client capabilities from the initialize request */
   clientCapabilities?: ClientCapabilities;
   /** Client info (name/version) from the initialize request */
@@ -1078,15 +1097,16 @@ export class NotificationService {
   }
 
   /**
-   * Keep who a session's caller is, as its initialize request saw them. An event with the `channel` option is sent
-   * to the session only when its own rules let this caller see it.
+   * Keep the caller of a session's latest request (see {@link sessionCallerOf}). An event with the `channel` option
+   * is sent to the session only while these credentials have not expired, and when its own rules let this caller
+   * see it.
    *
    * @returns true if the session was found
    */
-  setAuthInfo(sessionId: string, authInfo: Partial<AuthInfo>): boolean {
+  setCaller(sessionId: string, caller: SessionCaller): boolean {
     const registered = this.servers.get(sessionId);
     if (!registered) return false;
-    registered.authInfo = authInfo;
+    registered.caller = caller;
     return true;
   }
 
