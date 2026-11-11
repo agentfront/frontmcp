@@ -98,6 +98,7 @@ class WatchedPath {
   private looking: Promise<void> = Promise.resolve();
   private closed = false;
 
+  /** Takes the path to watch, how long to wait for changes to settle, and where to report each one. */
   constructor(
     private readonly target: string,
     private readonly debounceMs: number,

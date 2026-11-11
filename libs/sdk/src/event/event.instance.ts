@@ -18,6 +18,7 @@ class FunctionEventContext extends EventContext {}
 export class EventInstance extends EventEntry {
   private readonly entryProviders: ProviderRegistry;
 
+  /** Takes the event's record, its app's providers and its owner, and names it `<owner id>:<event name>`. */
   constructor(record: EventRecord, providers: ProviderRegistry, owner: EntryOwnerRef) {
     super(record);
     this.owner = owner;
@@ -27,6 +28,7 @@ export class EventInstance extends EventEntry {
     this.ready = this.initialize();
   }
 
+  /** The providers of the app that declares the event. */
   get providers(): ProviderRegistry {
     return this.entryProviders;
   }

@@ -30,6 +30,7 @@ function isPending(record: PendingRecord | EventPublishResult): record is Pendin
  * {@link PUBLISH_IDEMPOTENCY_WINDOW_SECONDS}: every process of the server sees them when the storage is shared.
  */
 export class EventPublishIdempotency {
+  /** Takes the events storage the claims and answers are kept in. */
   constructor(private readonly storage: NamespacedStorage) {}
 
   /** Claim an `eventId` of an event for this request, or learn what became of the request that claimed it. */

@@ -73,27 +73,32 @@ export function workerHealth(status: WorkerStatus): HealthProbeResult {
   return { status: 'healthy', details: { ...status } };
 }
 
+/** Runs a `@Worker` instance's own lifecycle hooks, and starts and stops its supervised run around them. */
 export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
   private started?: Promise<StartedWorker | undefined>;
   private claimedKey?: string;
 
+  /** Takes the worker instance, its resolved metadata and the providers it was built with. */
   constructor(
     private readonly worker: WorkerInstance,
     private readonly metadata: ResolvedWorkerMetadata,
     private readonly providers: ProviderRegistry,
   ) {}
 
+  /** Refuse a cluster worker without Redis, then run the worker's own `onBootstrap()`. */
   async onBootstrap(): Promise<void> {
     this.refuseClusterWithoutRedis();
     await this.worker.onBootstrap?.();
   }
 
+  /** Run the worker's own `onReady()`, then start it once. */
   async onReady(): Promise<void> {
     await this.worker.onReady?.();
     this.started ??= this.start();
     await this.started;
   }
 
+  /** Stop the run and release its lease and claim, then run the worker's own `onShutdown()`. */
   async onShutdown(): Promise<void> {
     const started = await this.started?.catch(() => undefined);
     if (started) await this.stop(started);
@@ -111,6 +116,7 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
     }
   }
 
+  /** Supervise the run, at once or under a lease per its scope; only in a long-lived process. */
   private async start(): Promise<StartedWorker | undefined> {
     const { name, restart, scope } = this.metadata;
     const logger = this.providers.get(FrontMcpLogger);
@@ -176,6 +182,7 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
     this.claimedKey = key;
   }
 
+  /** Give back this worker's claim on its lease key, if it took one. */
   private releaseClaim(): void {
     const key = this.claimedKey;
     this.claimedKey = undefined;
@@ -192,6 +199,7 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
     });
   }
 
+  /** The scope the providers serve, or undefined where there is none, as in a container. */
   private activeScope(): ScopeEntry | undefined {
     try {
       return this.providers.getActiveScope();

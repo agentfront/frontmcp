@@ -81,6 +81,7 @@ export class EventStream implements AsyncIterable<EventStreamNotification> {
   /** The buffer sequence of the last occurrence taken: one replayed and offered live too is delivered once. */
   private lastSequence = 0;
 
+  /** Takes the request's options, holds delivery behind a buffer replay, and closes when `signal` aborts. */
   constructor(private readonly options: EventStreamOptions) {
     this.cursor = options.cursor ?? null;
     this.delivering = options.buffer

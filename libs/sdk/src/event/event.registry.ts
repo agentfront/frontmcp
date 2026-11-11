@@ -47,6 +47,7 @@ export interface ServedEvent {
   delivery: EventDeliveryMode[];
 }
 
+/** The events of a scope, and the parts that deliver them: subscriptions, outbox, buffer and streams. */
 export default class EventRegistry
   extends RegistryAbstract<EventInstance, EventRecord, EventType[]>
   implements EventRegistryInterface
@@ -96,6 +97,7 @@ export default class EventRegistry
   /** The provider registry of each event declared on an app (its app's); other events use the registry's. */
   private readonly entryProviders: ReadonlyMap<Token, ProviderRegistry>;
 
+  /** Takes the listed events, the `events` config and each app event's providers, and registers them. */
   constructor(
     providers: ProviderRegistry,
     list: EventType[],

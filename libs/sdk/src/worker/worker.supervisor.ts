@@ -36,6 +36,7 @@ export class WorkerSupervisor {
   private restarts = 0;
   private lastError?: string;
 
+  /** Takes the worker's name, its restart policy, the logger and the `run()` to keep going. */
   constructor(private readonly options: WorkerSupervisorOptions) {}
 
   /** Start the runs; a run still ending after the last `abort()` ends first, so two never overlap. */
@@ -56,11 +57,13 @@ export class WorkerSupervisor {
     await this.ended;
   }
 
+  /** The worker's state, its restart count and the last error it threw, if any. */
   status(): WorkerStatus {
     const { state, restarts, lastError } = this;
     return lastError === undefined ? { state, restarts } : { state, restarts, lastError };
   }
 
+  /** Rerun the worker with a growing wait between runs, until `signal` aborts or restarts are off. */
   private async supervise(signal: AbortSignal): Promise<void> {
     const { restart } = this.options;
     let delayMs = restart ? restart.minDelayMs : 0;
@@ -96,6 +99,7 @@ export class WorkerSupervisor {
     }
   }
 
+  /** Log how a run ended, a failure as an error and a plain return as a warning, and what happens next. */
   private report(failure: string | undefined, next: string): void {
     const { name, logger } = this.options;
     if (failure === undefined) logger.warn(`Worker "${name}" returned before its signal was aborted; ${next}`);

@@ -74,6 +74,7 @@ export class WorkflowSchedules implements OnReady {
   private started = false;
   private stopped = false;
 
+  /** Takes the workflow and job registries, the run manager, and the server name and Redis for leases. */
   constructor(private readonly options: WorkflowSchedulesOptions) {}
 
   /** Start once the server serves, in a long-lived process only, and follow the workflows registered later. */
@@ -109,6 +110,7 @@ export class WorkflowSchedules implements OnReady {
     return this.followed;
   }
 
+  /** Stop the runners of schedule workflows no longer registered, and start one for each new one. */
   private async followRegistry(): Promise<void> {
     const registered = this.stopped ? [] : scheduleWorkflows(this.options.workflows.getWorkflows(true));
     const current = new Set(registered);
@@ -129,6 +131,7 @@ export class WorkflowSchedules implements OnReady {
     }
   }
 
+  /** A cron runner for the workflow's schedule, on a cluster lease with Redis, a workspace one without. */
   private async runnerOf(workflow: WorkflowEntry): Promise<DutyRunner> {
     const { serverName, redis, logger } = this.options;
     const { input } = resolveWorkflowSchedule(workflow);
@@ -150,6 +153,7 @@ export class WorkflowSchedules implements OnReady {
     });
   }
 
+  /** Start the scheduled run with this id as the schedule's role, unless it exists; failures are logged. */
   private async startRun(workflow: WorkflowEntry, input: Record<string, unknown>, runId: string): Promise<void> {
     const { manager, jobs, authoritiesContextBuilder, logger } = this.options;
     const principal = new WorkflowTriggerPrincipal('schedule', workflow.name);
@@ -171,6 +175,7 @@ export function scheduledRunId(leaseKey: string, scheduledAt: number): string {
   return `schedule-${scheduledAt}-${sha256Hex(leaseKey).slice(0, 16)}`;
 }
 
+/** Why a scheduled run did not start, with a fix when the job's rules don't allow the schedule's role. */
 function whyNotStarted(error: unknown, role: string): string {
   if (error instanceof JobNotAuthorizedError) {
     return `its create or execute rules don't allow the role "${role}"; add it to their roles`;
@@ -178,6 +183,7 @@ function whyNotStarted(error: unknown, role: string): string {
   return error instanceof InvalidInputError ? error.getInternalMessage() : messageOf(error);
 }
 
+/** The message of an error, or the thrown value as text. */
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

@@ -19,6 +19,7 @@ export type EventErrorCodes = Readonly<Record<EventsErrorName, number>>;
 
 /** An events error with the JSON-RPC code of the caller's dialect and the `data` the events protocol defines. */
 export abstract class EventProtocolError extends PublicMcpError {
+  /** Takes the public message, the HTTP status, and the JSON-RPC code and `data` the client receives. */
   constructor(
     message: string,
     code: string,
@@ -112,6 +113,7 @@ export class EventSubscriptionStoreError extends InternalMcpError {
 
 /** The HTTP publish endpoint cannot be served as configured; thrown at startup. */
 export class EventPublishEndpointError extends InternalMcpError {
+  /** Says what about the endpoint's configuration is wrong. */
   constructor(message: string) {
     super(`Event publish endpoint: ${message}`, 'EVENT_PUBLISH_ENDPOINT');
   }
@@ -131,6 +133,7 @@ export class EventsNotEnabledError extends InternalMcpError {
 
 /** Publishing an event the server does not have. */
 export class EventNotRegisteredError extends InternalMcpError {
+  /** Names the event that was published but is not registered. */
   constructor(eventName: string) {
     super(
       `Event "${eventName}" is not registered, so it cannot be published. List it in the \`events\` of an app.`,
@@ -141,6 +144,7 @@ export class EventNotRegisteredError extends InternalMcpError {
 
 /** Publishing `data` that does not match the event's `payloadSchema`, or options that cannot be used. */
 export class InvalidEventPublishError extends InternalMcpError {
+  /** Names the event and what is wrong with the data or options it was published with. */
   constructor(eventName: string, problem: string) {
     super(`Event "${eventName}" cannot be published: ${problem}`, 'INVALID_EVENT_PUBLISH');
   }

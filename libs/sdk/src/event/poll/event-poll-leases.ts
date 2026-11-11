@@ -60,6 +60,7 @@ export class EventPollLeases {
   private sweepTimer?: ReturnType<typeof setInterval>;
   private lastSweepAt = 0;
 
+  /** Takes the per-owner lease limit and the logger to report lease ends with. */
   constructor(private readonly options: EventPollLeasesOptions) {
     this.logger = options.logger.child('EventPollLeases');
   }

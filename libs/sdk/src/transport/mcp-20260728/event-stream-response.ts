@@ -27,6 +27,7 @@ export function eventStreamFrames(
     result: { resultType: 'complete', _meta: { [MCP_20260728_META.subscriptionId]: requestId } },
   });
   return {
+    /** Frame each notification, then the final result; returning early ends the source stream too. */
     [Symbol.asyncIterator](): AsyncIterator<Uint8Array> {
       const source = notifications[Symbol.asyncIterator]();
       let finished = false;

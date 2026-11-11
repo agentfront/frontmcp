@@ -594,56 +594,67 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
 
+  /** Start the events/list span. */
   @ListEventsHook.Will('parseInput', { priority: -1000 })
   _listEventsWill(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowWillStart('events/list', this.tracingOpts, ctx);
   }
 
+  /** Record the filterByAuthorities stage on the events/list span. */
   @ListEventsHook.Did('filterByAuthorities', { priority: 1000 })
   _listEventsDidFilter(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowStage('filterByAuthorities', ctx);
   }
 
+  /** End the events/list span, however the listing ended. */
   @ListEventsHook.Finally('finalize', { priority: 1000 })
   _listEventsDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
 
+  /** Start the events/subscribe span. */
   @EventSubscribeHook.Will('parseInput', { priority: -1000 })
   _eventSubscribeWill(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowWillStart('events/subscribe', this.tracingOpts, ctx);
   }
 
+  /** Record the verifyCallback stage on the events/subscribe span. */
   @EventSubscribeHook.Did('verifyCallback', { priority: 1000 })
   _eventSubscribeDidVerify(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowStage('verifyCallback', ctx);
   }
 
+  /** End the events/subscribe span, however the subscribe ended. */
   @EventSubscribeHook.Finally('finalize', { priority: 1000 })
   _eventSubscribeDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
 
+  /** Start the events/unsubscribe span. */
   @EventUnsubscribeHook.Will('parseInput', { priority: -1000 })
   _eventUnsubscribeWill(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowWillStart('events/unsubscribe', this.tracingOpts, ctx);
   }
 
+  /** End the events/unsubscribe span, however the unsubscribe ended. */
   @EventUnsubscribeHook.Finally('finalize', { priority: 1000 })
   _eventUnsubscribeDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
 
+  /** Start the events/publish span. */
   @EventPublishHook.Will('validate', { priority: -1000 })
   _eventPublishWill(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowWillStart('events/publish', this.tracingOpts, ctx);
   }
 
+  /** Record the match stage on the events/publish span. */
   @EventPublishHook.Did('match', { priority: 1000 })
   _eventPublishDidMatch(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowStage('match', ctx);
   }
 
+  /** End the events/publish span once its result is built. */
   @EventPublishHook.Did('buildResult', { priority: 1000 })
   _eventPublishDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
@@ -667,46 +678,55 @@ export default class ObservabilityPlugin extends DynamicPlugin<
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
 
+  /** Start the events/deliver span. */
   @EventDeliverHook.Will('loadSubscription', { priority: -1000 })
   _eventDeliverWill(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowWillStart('events/deliver', this.tracingOpts, ctx);
   }
 
+  /** Record the send stage on the events/deliver span. */
   @EventDeliverHook.Did('send', { priority: 1000 })
   _eventDeliverDidSend(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowStage('send', ctx);
   }
 
+  /** End the events/deliver span once its result is built. */
   @EventDeliverHook.Did('buildResult', { priority: 1000 })
   _eventDeliverDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
 
+  /** Start the events/poll span. */
   @EventPollHook.Will('parseInput', { priority: -1000 })
   _eventPollWill(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowWillStart('events/poll', this.tracingOpts, ctx);
   }
 
+  /** Record the readEvents stage on the events/poll span. */
   @EventPollHook.Did('readEvents', { priority: 1000 })
   _eventPollDidRead(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowStage('readEvents', ctx);
   }
 
+  /** End the events/poll span, however the poll ended. */
   @EventPollHook.Finally('finalize', { priority: 1000 })
   _eventPollDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
 
+  /** Start the events/stream span. */
   @EventStreamHook.Will('parseInput', { priority: -1000 })
   _eventStreamWill(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowWillStart('events/stream', this.tracingOpts, ctx);
   }
 
+  /** Record the openStream stage on the events/stream span. */
   @EventStreamHook.Did('openStream', { priority: 1000 })
   _eventStreamDidOpen(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowStage('openStream', ctx);
   }
 
+  /** End the events/stream span, however the stream ended. */
   @EventStreamHook.Finally('finalize', { priority: 1000 })
   _eventStreamDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);

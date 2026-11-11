@@ -102,11 +102,13 @@ export class DutyRunner {
     });
   }
 
+  /** Cancel the next tick and abort the run in flight. */
   private stopRunning(): void {
     clearTimeout(this.tickTimer);
     this.inFlight?.controller.abort();
   }
 
+  /** Once the lease is acquired, log the cadence and schedule the first tick. */
   private async hold(): Promise<void> {
     const { cron, everyMs, logger } = this.options;
     const cadence = cron ? `on cron "${cron.expression}" (${cron.timezone})` : `every ${everyMs} ms`;

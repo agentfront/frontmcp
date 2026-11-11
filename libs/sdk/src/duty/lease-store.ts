@@ -32,6 +32,7 @@ function nodeOs(): typeof import('os') {
   return require('os');
 }
 
+/** Node's `path`, loaded on first use. */
 function nodePath(): typeof import('path') {
   return require('path');
 }
@@ -120,6 +121,7 @@ export class LeaseClaims {
     return undefined;
   }
 
+  /** Drop one started instance's hold on `key`, freeing the key once none is left. */
   release(key: string): void {
     const claim = this.claims.get(key);
     if (!claim) return;

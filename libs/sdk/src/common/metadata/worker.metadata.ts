@@ -47,6 +47,7 @@ const MAX_TIMER_MS = 2_147_483_647;
 const DEFAULT_LEASE_MS = 15_000;
 const RESTART_FORMAT = 'restart must be false or { minDelayMs, maxDelayMs, factor }';
 
+/** A schema for a whole number of milliseconds a timer can hold, with errors naming `field`. */
 function wholeMilliseconds(field: string) {
   return z
     .number({ message: `${field} must be a number of milliseconds` })

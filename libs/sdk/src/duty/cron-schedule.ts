@@ -13,6 +13,7 @@ export type CronLedgerStorage = Pick<NamespacedStorage, 'get' | 'set' | 'setIfEq
 
 /** The times of a cron expression in its time zone, as epoch milliseconds. */
 export class CronSchedule {
+  /** Takes the expression, its time zone and the croner `Cron` read from them. */
   constructor(
     readonly expression: string,
     readonly timezone: string,

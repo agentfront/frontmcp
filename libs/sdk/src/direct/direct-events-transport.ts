@@ -34,6 +34,7 @@ export function directEventsTransport(
   notifications: NotificationSource,
 ): EventsClientTransport {
   return {
+    /** Send one events request, turning an MCP error into an EventRequestError. */
     async request(method, params) {
       try {
         return await client.request({ method, params }, anyResultSchema);
@@ -42,6 +43,7 @@ export function directEventsTransport(
       }
     },
 
+    /** Hold an events/stream until it ends or `signal` aborts, passing on the notifications of its id. */
     async openStream(params, onNotification, signal) {
       // The protocol client numbers its requests itself; the next number is the id this stream will carry
       const requestId = (client as unknown as { _requestMessageId?: unknown })._requestMessageId;

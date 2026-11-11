@@ -35,11 +35,13 @@ export class LeaseHolder {
   private leaseTimer?: ReturnType<typeof setTimeout>;
   private leaseDeadline?: ReturnType<typeof setTimeout>;
 
+  /** Takes the lease's key, store and length, and draws this holder's random id. */
   constructor(private readonly options: LeaseHolderOptions) {
     this.id = randomUUID();
     this.leaseSeconds = Math.ceil(options.leaseMs / 1_000);
   }
 
+  /** Whether this process holds the lease now. */
   get holding(): boolean {
     return this.held;
   }
@@ -92,11 +94,13 @@ export class LeaseHolder {
     this.options.logger.warn(`${this.options.label} ${reason}`);
   }
 
+  /** Log a warning that the lease store failed, with the error's message. */
   reportStoreFailure(error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
     this.options.logger.warn(`${this.options.label}: the lease store failed: ${message}`);
   }
 
+  /** Renew the lease if held, or contend for it, then schedule the next check a third of the lease later. */
   private async checkLease(): Promise<void> {
     try {
       if (this.held) {
@@ -115,6 +119,7 @@ export class LeaseHolder {
     this.leaseTimer.unref?.();
   }
 
+  /** Write the lease if no one holds it, then renew it to learn whether this holder's id is stored. */
   private async acquire(): Promise<boolean> {
     const { key, storage } = this.options;
     await storage.set(key, this.id, { ttlSeconds: this.leaseSeconds, ifNotExists: true });
@@ -138,6 +143,7 @@ export class LeaseHolder {
     this.leaseDeadline.unref?.();
   }
 
+  /** Log once that another process holds the lease. */
   private reportHeldElsewhere(): void {
     if (this.reportedHeldElsewhere) return;
     this.reportedHeldElsewhere = true;

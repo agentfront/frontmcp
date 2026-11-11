@@ -35,6 +35,7 @@ function timestampOf(eventName: string, timestamp: string | Date | undefined): s
 
 /** Publishes the events of one scope through its `events:publish` flow. */
 export class ScopeEventPublisher implements EventPublisher {
+  /** Takes the scope whose flow publishes and the registry its events are found in. */
   constructor(
     private readonly scope: ScopeEntry,
     private readonly events: EventRegistry,

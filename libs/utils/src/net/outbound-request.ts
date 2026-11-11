@@ -108,7 +108,9 @@ interface Upstream {
   discard(): unknown;
 }
 
+/** Thrown while connecting when the host can't be resolved or resolves to a forbidden address. */
 class OutboundRefusal extends Error {
+  /** Carries the failure reason the request's result reports. */
   constructor(readonly reason: OutboundFailureReason) {
     super(reason);
   }

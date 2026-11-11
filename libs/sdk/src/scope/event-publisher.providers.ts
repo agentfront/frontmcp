@@ -11,6 +11,7 @@ import { EventsNotEnabledError } from '../errors';
 
 /** The publisher providers are built with, before the scope registers its events: it publishes through the scope's own. */
 export class DeferredEventPublisher extends EventPublisher {
+  /** Takes the scope whose event registry it reads at each publish. */
   constructor(private readonly scope: Pick<ScopeEntry, 'events'>) {
     super();
   }

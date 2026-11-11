@@ -126,6 +126,7 @@ export abstract class EventContext<In = Record<string, unknown>, Payload = Recor
 
   readonly metadata: EventMetadata;
 
+  /** Takes the event's metadata and providers, with a logger scoped to the event's name. */
   constructor(args: EventCtorArgs) {
     const { metadata, providers, logger, authInfo, signal } = args;
     super({ providers, logger: logger.child(`event:${metadata.name}`), authInfo, signal });
