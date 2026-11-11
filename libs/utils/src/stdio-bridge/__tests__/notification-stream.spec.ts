@@ -245,17 +245,23 @@ describe('the notification stream of the HTTP upstream', () => {
     ['close()', (client: HttpUpstreamClient) => client.close()],
     ['endSession()', (client: HttpUpstreamClient) => client.endSession()],
     ['leaveSession()', (client: HttpUpstreamClient) => client.leaveSession()],
-  ])('reports no stream lost after %s ended the session, though its opens failed', async (_, end) => {
+  ])('reports no stream lost after %s ended the session during the open that would give it up', async (_, end) => {
     jest.useFakeTimers({ doNotFake: ['setImmediate'] });
-    server.openStream = () => new Response(null, { status: 503 });
+    server.openStream = (stream) => {
+      if (server.streams.length < MAX_FAILED_OPENS) return new Response(null, { status: 503 });
+      return new Promise<Response>((_resolve, reject) => {
+        stream.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      });
+    };
     await upstream.send(initialize);
     await settle();
-    await jest.advanceTimersByTimeAsync(GIVE_UP_AFTER_MS - 1);
+    await jest.advanceTimersByTimeAsync(GIVE_UP_AFTER_MS);
+    expect(server.sent('GET')).toHaveLength(MAX_FAILED_OPENS);
 
     await end(upstream);
     await jest.advanceTimersByTimeAsync(60_000);
 
-    expect(server.sent('GET')).toHaveLength(MAX_FAILED_OPENS - 1);
+    expect(server.sent('GET')).toHaveLength(MAX_FAILED_OPENS);
     expect(onStreamLost).not.toHaveBeenCalled();
     expect(log.warn).not.toHaveBeenCalledWith('notification-stream-lost', expect.anything());
   });
