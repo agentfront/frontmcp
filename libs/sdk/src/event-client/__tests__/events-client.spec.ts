@@ -764,6 +764,21 @@ describe('EventsClient', () => {
       ]);
     });
 
+    it('keeps the refresh a duplicate asks of its holder when the holder refresh in flight is answered first', async () => {
+      const { client, answers, holderSubscribesSent } = heldRefreshClient();
+      const holder = await client.subscribe('order.created', { status: 'paid' });
+      await until(() => answers.length === 1);
+
+      await client.subscribe('order.created', { status: 'paid', note: null }).catch(() => undefined);
+      answers[0]();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const sent = holderSubscribesSent();
+      answers[1]?.();
+      await holder.cancel();
+
+      expect(sent).toBe(3);
+    });
+
     it('unsubscribes a holder only after both its refresh in flight and the one a duplicate asked for', async () => {
       const { client, order, answers } = heldRefreshClient();
       const holder = await client.subscribe('order.created', { status: 'paid' });

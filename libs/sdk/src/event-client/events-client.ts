@@ -199,6 +199,8 @@ class ClientEventSubscription implements EventSubscription {
   private secret?: string;
   private refreshTimer?: ReturnType<typeof setTimeout>;
   private pendingRefresh?: Promise<void>;
+  /** Whether `refreshNow()` asked for a refresh no timer has started yet, which a later schedule must not delay. */
+  private immediateRefreshOwed = false;
   private firstRequest = true;
   private failedAttempts = 0;
 
@@ -266,6 +268,7 @@ class ClientEventSubscription implements EventSubscription {
   /** Refresh at once, as when another subscription of this client sent its own secret for the same server id. */
   refreshNow(): void {
     if (this.stopped) return;
+    this.immediateRefreshOwed = true;
     this.scheduleRefresh(0);
   }
 
@@ -455,17 +458,21 @@ class ClientEventSubscription implements EventSubscription {
     this.scheduleRefresh(Math.min(Math.max(delayMs, this.settings.pollFloorMs), MAX_TIMER_MS));
   }
 
-  /** Refresh after `delayMs`, once a refresh in flight is answered; a failed refresh is retried, a refused one ends it. */
+  /** Refresh after `delayMs`, or at once while `refreshNow()` is owed; one timer at a time. */
   private scheduleRefresh(delayMs: number): void {
     clearTimeout(this.refreshTimer);
-    this.refreshTimer = setTimeout(() => {
-      const inFlight = this.pendingRefresh?.catch(() => undefined) ?? Promise.resolve();
-      this.pendingRefresh = inFlight.then(() => (this.stopped ? undefined : this.refresh()));
-      this.pendingRefresh.catch((error: unknown) => {
-        if (isTerminal(error)) this.terminate(eventErrorOf(error));
-        else if (!this.stopped) this.scheduleRefresh(this.retryDelayMs());
-      });
-    }, delayMs);
+    this.refreshTimer = setTimeout(() => this.refreshAfterInFlight(), this.immediateRefreshOwed ? 0 : delayMs);
+  }
+
+  /** Start a refresh once the one in flight is answered; a failed one is retried, a refused one ends the subscription. */
+  private refreshAfterInFlight(): void {
+    this.immediateRefreshOwed = false;
+    const inFlight = this.pendingRefresh?.catch(() => undefined) ?? Promise.resolve();
+    this.pendingRefresh = inFlight.then(() => (this.stopped ? undefined : this.refresh()));
+    this.pendingRefresh.catch((error: unknown) => {
+      if (isTerminal(error)) this.terminate(eventErrorOf(error));
+      else if (!this.stopped) this.scheduleRefresh(this.retryDelayMs());
+    });
   }
 }
 

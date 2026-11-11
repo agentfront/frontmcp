@@ -6,6 +6,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { createStorage } from '@frontmcp/utils';
+
 import { JobKind, type JobDynamicRecord } from '../../../common/records/job.record';
 import { WorkflowKind, type WorkflowDynamicRecord } from '../../../common/records/workflow.record';
 import { createJobDefinitionStore } from '../job-definition-store.factory';
@@ -13,6 +15,7 @@ import { type JobDefinitionStore } from '../job-definition.interface';
 import { createJobStateStore } from '../job-state-store.factory';
 import { type JobRunRecord, type JobStateStore } from '../job-state.interface';
 import { RedisJobStateStore, type RedisStateStoreLike } from '../redis-job-state.store';
+import { StorageJobStateStore } from '../storage-job-state.store';
 
 let dir: string;
 let dbPath: string;
@@ -204,6 +207,34 @@ describe.each(stateBackends)('%s job state store', (_backend, open) => {
 });
 
 describe('sqlite job state store across processes', () => {
+  it('lets one of two stores on the file create a run, and keeps its claim out of what they read', async () => {
+    const first = (await createJobStateStore({ sqlite: { path: dbPath } })).store;
+    const second = (await createJobStateStore({ sqlite: { path: dbPath } })).store;
+
+    const created = await Promise.all([first.createRunIfAbsent?.(run('r1')), second.createRunIfAbsent?.(run('r1'))]);
+
+    expect(created.filter(Boolean)).toHaveLength(1);
+    expect(await second.getRun('r1')).not.toHaveProperty('createClaim');
+    expect((await first.listRuns())[0]).not.toHaveProperty('createClaim');
+    await first.dispose();
+    await second.dispose();
+  });
+
+  it('leaves a run creatable after a create that failed to write it', async () => {
+    const storage = await createStorage({ type: 'memory', memory: { enableSweeper: false } });
+    const store = new StorageJobStateStore(storage);
+    const set = storage.set.bind(storage);
+    jest.spyOn(storage, 'set').mockImplementationOnce(async () => {
+      throw new Error('disk full');
+    });
+
+    await expect(store.createRunIfAbsent(run('r1'))).rejects.toThrow('disk full');
+    jest.spyOn(storage, 'set').mockImplementation(set);
+
+    expect(await store.createRunIfAbsent(run('r1'))).toBe(true);
+    await store.dispose();
+  });
+
   it('keeps runs and cancel requests for the next store that opens the file', async () => {
     const first = (await createJobStateStore({ sqlite: { path: dbPath } })).store;
     await first.createRun(run('r1'));
