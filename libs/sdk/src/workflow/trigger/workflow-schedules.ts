@@ -23,6 +23,9 @@ import { resolveWorkflowSchedule, scheduleWorkflows } from './workflow-triggers'
 /** How long a schedule's lease outlives a holder that stopped renewing it. */
 const SCHEDULE_LEASE_MS = 60_000;
 
+/** How long to wait before trying again to open a lease store that failed to open: a lease holder's check interval. */
+const LEASE_STORE_RETRY_MS = SCHEDULE_LEASE_MS / 3;
+
 export interface WorkflowSchedulesOptions {
   workflows: WorkflowRegistryInterface;
   manager: JobExecutionManager;
@@ -64,13 +67,15 @@ export async function assertWorkflowSchedules(workflows: readonly WorkflowEntry[
  * time starts one run, and a process that takes the lease over starts one run for the times that passed meanwhile. A
  * scheduled time stays owed in the lease store until its run exists, and its run has an id of its own, so a process
  * that takes over from a holder that died in between starts that run, unless the job store already holds it. A run
- * that can't start is logged, and not tried again.
+ * that can't start is logged, and not tried again. A lease store that can't be opened is logged once, and opened again
+ * until it opens.
  */
 export class WorkflowSchedules implements OnReady {
   private readonly runners = new Map<WorkflowEntry, DutyRunner>();
   private storage?: Promise<RootStorage>;
   private unsubscribe?: () => void;
   private followed: Promise<void> = Promise.resolve();
+  private leaseStoreRetry?: ReturnType<typeof setTimeout>;
   private started = false;
   private stopped = false;
 
@@ -99,6 +104,7 @@ export class WorkflowSchedules implements OnReady {
   /** Stop every schedule and release its lease. */
   async stop(): Promise<void> {
     this.stopped = true;
+    clearTimeout(this.leaseStoreRetry);
     this.unsubscribe?.();
     await this.follow();
     await (await this.storage?.catch(() => undefined))?.disconnect();
@@ -119,10 +125,12 @@ export class WorkflowSchedules implements OnReady {
       this.runners.delete(workflow);
       await runner.stop();
     }
-    for (const workflow of registered) {
-      if (this.runners.has(workflow)) continue;
+    const added = registered.filter((workflow) => !this.runners.has(workflow));
+    const storage = added.length > 0 ? await this.leaseStore(added) : undefined;
+    if (!storage) return;
+    for (const workflow of added) {
       try {
-        const runner = await this.runnerOf(workflow);
+        const runner = await this.runnerOf(workflow, storage);
         this.runners.set(workflow, runner);
         await runner.start();
       } catch (error) {
@@ -131,15 +139,45 @@ export class WorkflowSchedules implements OnReady {
     }
   }
 
-  /** A cron runner for the workflow's schedule, on a cluster lease with Redis, a workspace one without. */
-  private async runnerOf(workflow: WorkflowEntry): Promise<DutyRunner> {
-    const { serverName, redis, logger } = this.options;
+  /**
+   * The lease store, opened once. When it fails to open, the workflows waiting on it are logged once until it opens,
+   * and it is opened again a while later unless the schedules stopped.
+   */
+  private async leaseStore(waiting: readonly WorkflowEntry[]): Promise<RootStorage | undefined> {
+    const { redis, logger } = this.options;
+    this.storage ??= openLeaseStore(leaseStorageConfig(redis, 'schedule', this.leaseScope()));
+    try {
+      const storage = await this.storage;
+      clearTimeout(this.leaseStoreRetry);
+      this.leaseStoreRetry = undefined;
+      return storage;
+    } catch (error) {
+      this.storage = undefined;
+      if (!this.leaseStoreRetry) {
+        for (const workflow of waiting) {
+          logger.error(`The schedule of workflow "${workflow.name}" did not start: ${messageOf(error)}`);
+        }
+      }
+      if (!this.stopped) {
+        clearTimeout(this.leaseStoreRetry);
+        this.leaseStoreRetry = setTimeout(() => void this.follow(), LEASE_STORE_RETRY_MS);
+        this.leaseStoreRetry.unref?.();
+      }
+      return undefined;
+    }
+  }
+
+  /** A cluster lease with Redis, a workspace one without. */
+  private leaseScope(): LeaseScope {
+    return leaseStorageConfig(this.options.redis, 'schedule', 'cluster').type === 'redis' ? 'cluster' : 'workspace';
+  }
+
+  /** A cron runner for the workflow's schedule, on a lease in `storage`. */
+  private async runnerOf(workflow: WorkflowEntry, storage: RootStorage): Promise<DutyRunner> {
+    const { serverName, logger } = this.options;
     const { input } = resolveWorkflowSchedule(workflow);
     const cron = await loadWorkflowSchedule(workflow);
-    const scope: LeaseScope =
-      leaseStorageConfig(redis, 'schedule', 'cluster').type === 'redis' ? 'cluster' : 'workspace';
-    this.storage ??= openLeaseStore(leaseStorageConfig(redis, 'schedule', scope));
-    const key = leaseKey(workflow.name, scope, serverName);
+    const key = leaseKey(workflow.name, this.leaseScope(), serverName);
     return new DutyRunner({
       name: workflow.name,
       label: `The schedule of workflow "${workflow.name}"`,
@@ -147,7 +185,7 @@ export class WorkflowSchedules implements OnReady {
       cron,
       owedUntilRun: true,
       leaseMs: SCHEDULE_LEASE_MS,
-      storage: await this.storage,
+      storage,
       logger,
       run: (_context, scheduledAt) => this.startRun(workflow, input, scheduledRunId(key, scheduledAt)),
     });

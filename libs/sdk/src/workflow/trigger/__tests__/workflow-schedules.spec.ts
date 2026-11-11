@@ -443,6 +443,39 @@ describe('WorkflowSchedules', () => {
     await server.schedules.stop();
   });
 
+  describe('a Redis lease store that refuses connections at first', () => {
+    const redis = { url: 'redis://cache.internal:6379' };
+    const refused = new Error('connect ECONNREFUSED 127.0.0.1:6379');
+
+    it('is opened again until it opens, said once, and the schedules start then', async () => {
+      jest.mocked(createStorage).mockRejectedValueOnce(refused).mockRejectedValueOnce(refused);
+      const server = processWith([scheduled('digest')], redis);
+      await server.schedules.onReady();
+
+      await jest.advanceTimersByTimeAsync(2 * MINUTE);
+
+      expect(createStorage).toHaveBeenCalledTimes(3);
+      expect(server.logger.error.mock.calls).toEqual([
+        ['The schedule of workflow "digest" did not start: connect ECONNREFUSED 127.0.0.1:6379'],
+      ]);
+      expect(server.runs.map((run) => run.at)).toEqual(['09:01:00']);
+    });
+
+    it('is not opened again once the schedules stop', async () => {
+      jest.mocked(createStorage).mockRejectedValueOnce(refused);
+      const server = processWith([scheduled('digest')], redis);
+      await server.schedules.onReady();
+      expect(jest.getTimerCount()).toBe(1);
+
+      await server.schedules.stop();
+      expect(jest.getTimerCount()).toBe(0);
+      await jest.advanceTimersByTimeAsync(2 * MINUTE);
+
+      expect(createStorage).toHaveBeenCalledTimes(1);
+      expect(server.runs).toEqual([]);
+    });
+  });
+
   it('starts nothing in a serverless deployment, and says which workflows do not run', async () => {
     process.env['FRONTMCP_DEPLOYMENT_MODE'] = 'serverless';
     resetRuntimeContext();
