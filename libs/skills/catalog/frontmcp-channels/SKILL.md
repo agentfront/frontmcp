@@ -69,7 +69,9 @@ Build push-based notification channels that stream real-time events into Claude 
 2. Create a channel class or function
 3. Register it in your app
 4. Enable channels in `@FrontMcp` config
-5. Serve it over stdio and test with Claude Code using `--dangerously-load-development-channels server:<name>`
+5. Serve it over stdio and test with Claude Code using `--dangerously-load-development-channels server:<name>`. A
+   stdio server has no HTTP listener, so a `webhook` source gets no route there and this step alone does not test
+   one (see `references/channel-claude-code.md`)
 
 ## Scenario Routing Table
 

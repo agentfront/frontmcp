@@ -90,8 +90,11 @@ no `MCP-Protocol-Version`) falls back to:
 | Node, stdio and everything else        | `'legacy'`     |
 
 Over stdio the option decides only until the connection sends `initialize`:
-after it, a message naming no revision belongs to that session. A stdio server
-with channels enabled declines `2026-07-28` whatever the option says.
+after it, a message naming no revision belongs to that session. `server/discover`
+and `subscriptions/listen` exist only in `2026-07-28`, so they are served on that
+revision even when they name none, also after `initialize`. A stdio server with
+a channel declines `2026-07-28` with `-32022` whatever the option says, those two
+methods included.
 
 Override per server:
 
