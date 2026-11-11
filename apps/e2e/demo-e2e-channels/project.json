@@ -33,6 +33,15 @@
         "cwd": "{workspaceRoot}"
       }
     },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/e2e/demo-e2e-channels"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-channels/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    },
     "test:e2e": {
       "executor": "@nx/jest:jest",
       "outputs": ["{workspaceRoot}/coverage/e2e/demo-e2e-channels"],
