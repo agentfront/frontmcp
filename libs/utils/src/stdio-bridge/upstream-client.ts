@@ -16,10 +16,25 @@
  * A restarted child has no session at all, so the bridge replays the client's
  * MCP handshake against it (`reinitialize`) before draining buffered requests.
  * The client keeps its stdio connection and never learns the server restarted.
+ *
+ * In HTTP mode the bridge also relays the session's standalone notification
+ * stream, which carries what the server sends on its own.
  */
 
 import type { ChildProcess } from 'node:child_process';
 
+import {
+  advertisesChannels,
+  declaringChannels,
+  DISCOVER_HEADERS,
+  discoverRequest,
+  namesProtocol20260728,
+  serverRevisionsOf,
+  unsupportedProtocolVersion,
+  type ServerRevisions,
+} from './claude-code-channels';
+import { createNotificationStream, SESSION_HEADER } from './notification-stream';
+import { relaySseFrames } from './sse-frames';
 import type { JsonRpcFrame } from './stdio-framer';
 import type { BridgeLogger } from './types';
 
@@ -41,14 +56,13 @@ export interface UpstreamClientOptions {
   onFrame: (frame: JsonRpcFrame) => void | Promise<void>;
 }
 
-const SESSION_HEADER = 'mcp-session-id';
 const END_SESSION_TIMEOUT_MS = 2_000;
-let reinitCounter = 0;
+let bridgeRequestCounter = 0;
 
-/** Id for a bridge-originated `initialize`, never colliding with client ids. */
-function nextReinitId(): string {
-  reinitCounter += 1;
-  return `frontmcp-dev-bridge:reinitialize:${reinitCounter}`;
+/** Id for a request the bridge sends for itself (`reinitialize`, `discover`), never colliding with client ids. */
+function nextBridgeId(purpose: string): string {
+  bridgeRequestCounter += 1;
+  return `frontmcp-dev-bridge:${purpose}:${bridgeRequestCounter}`;
 }
 
 function initializedNotification(): JsonRpcFrame {
@@ -72,11 +86,19 @@ export interface HttpUpstreamOptions extends UpstreamClientOptions {
   headers?: Record<string, string>;
   /** Sends the requests instead of the global `fetch`, such as one that reaches a Unix socket. */
   fetch?: typeof fetch;
+  /**
+   * Serve Claude Code channels: declare `experimental['claude/channel']` on the client's `initialize`, and answer
+   * the 2026-07-28 requests of a server that advertises it with `-32022`, since Claude Code delivers channel
+   * events only to a session. Without it, every frame is relayed as it is.
+   */
+  claudeCodeChannels?: boolean;
 }
 
 export interface HttpUpstreamClient extends UpstreamClient {
   /** End the MCP session the server issued (`DELETE` with its id); the next `initialize` starts a new one. */
   endSession(): Promise<void>;
+  /** Forget the session of a server that went away, without telling it: its notification stream is closed. */
+  leaveSession(): void;
 }
 
 export function createHttpUpstream(options: HttpUpstreamOptions): HttpUpstreamClient {
@@ -87,19 +109,39 @@ export function createHttpUpstream(options: HttpUpstreamOptions): HttpUpstreamCl
   const abortControllers = new Set<AbortController>();
   // Issued by the server in the `initialize` response.
   let sessionId: string | undefined;
+  // What a `server/discover` said of the server, asked once a client frame names 2026-07-28.
+  let revisions: ServerRevisions | undefined;
+  // Settles once the server answered the session's notification stream: what a request sets off is not missed.
+  let streamAnswered: Promise<void> = Promise.resolve();
+  const notifications = createNotificationStream({
+    url,
+    headers: options.headers,
+    fetch: options.fetch,
+    log,
+    onFrame,
+  });
 
-  async function post(frame: JsonRpcFrame, deliver: (frame: JsonRpcFrame) => void | Promise<void>): Promise<void> {
+  /** The session id, for every frame but `initialize`, which starts a new session: never send a stale id with it. */
+  function sessionHeaders(frame: JsonRpcFrame): Record<string, string> {
+    return sessionId && frame.method !== 'initialize' ? { [SESSION_HEADER]: sessionId } : {};
+  }
+
+  async function post(
+    frame: JsonRpcFrame,
+    deliver: (frame: JsonRpcFrame) => void | Promise<void>,
+    statelessHeaders?: Record<string, string>,
+  ): Promise<void> {
     const abortController = new AbortController();
     abortControllers.add(abortController);
     const signal = abortController.signal;
     try {
+      if (frame.method !== 'initialize') await streamAnswered;
       const headers: Record<string, string> = {
         ...options.headers,
+        ...(statelessHeaders ?? sessionHeaders(frame)),
         'content-type': 'application/json',
         accept: 'application/json, text/event-stream',
       };
-      // `initialize` starts a new session: never send a stale id with it.
-      if (sessionId && frame.method !== 'initialize') headers[SESSION_HEADER] = sessionId;
 
       const res = await (options.fetch ?? fetch)(url, {
         method: 'POST',
@@ -117,44 +159,26 @@ export function createHttpUpstream(options: HttpUpstreamOptions): HttpUpstreamCl
         throw new Error(`upstream returned ${res.status} for ${frame.method ?? 'request'}`);
       }
 
-      const issued = res.headers.get(SESSION_HEADER);
-      if (issued && frame.method === 'initialize') {
-        sessionId = issued;
+      const startedSession = frame.method === 'initialize' ? res.headers.get(SESSION_HEADER) : null;
+      if (startedSession) {
+        sessionId = startedSession;
         log.info('http-upstream-session');
       }
 
       const contentType = res.headers.get('content-type') ?? '';
       if (contentType.includes('text/event-stream')) {
         // SSE: parse `data: <json>` lines until the stream ends, forward each.
-        const reader = res.body?.getReader();
-        if (!reader) return;
-        const decoder = new TextDecoder();
-        let buffer = '';
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          let nl: number;
-          while ((nl = buffer.indexOf('\n')) >= 0) {
-            const line = buffer.slice(0, nl).trim();
-            buffer = buffer.slice(nl + 1);
-            if (!line.startsWith('data:')) continue;
-            const json = line.slice(5).trim();
-            if (!json) continue;
-            try {
-              const parsed = JSON.parse(json) as JsonRpcFrame;
-              await deliver(parsed);
-            } catch (err) {
-              log.warn('sse-parse-error', { error: (err as Error).message, raw: json.slice(0, 200) });
-            }
-          }
-        }
+        if (res.body) await relaySseFrames(res.body, deliver, log);
       } else if (contentType.includes('application/json')) {
         // Single JSON response.
         const body = (await res.json()) as JsonRpcFrame;
         await deliver(body);
       }
       // Anything else (202 Accepted for a notification) carries no frame.
+      if (startedSession && !signal.aborted) {
+        streamAnswered = notifications.follow(startedSession);
+        await streamAnswered;
+      }
     } catch (err) {
       // AbortError surfaces when close() interrupts an in-flight request
       // during reload; that's expected, so log it at info-not-error. We
@@ -171,23 +195,79 @@ export function createHttpUpstream(options: HttpUpstreamOptions): HttpUpstreamCl
     }
   }
 
+  /** The client's `initialize` as the server gets it: with the channel capability declared, when channels are served. */
+  function toServer(initialize: JsonRpcFrame): JsonRpcFrame {
+    return options.claudeCodeChannels ? declaringChannels(initialize) : initialize;
+  }
+
+  /** Forget what `server/discover` said once an `initialize` result disagrees: the next 2026-07-28 request asks again. */
+  function refreshRevisions(initializeResult: unknown): void {
+    if (revisions && revisions.pushesChannels !== advertisesChannels(initializeResult)) revisions = undefined;
+  }
+
+  /** Ask the server which revisions it speaks and whether it pushes channels; `undefined` when it does not say. */
+  async function discoverRevisions(): Promise<ServerRevisions | undefined> {
+    const request = discoverRequest(nextBridgeId('discover'));
+    let result: unknown;
+    try {
+      await post(
+        request,
+        (frame) => {
+          if (frame.id === request.id) result = frame.result;
+        },
+        DISCOVER_HEADERS,
+      );
+    } catch {
+      return undefined;
+    }
+    return serverRevisionsOf(result);
+  }
+
+  /** Whether a 2026-07-28 frame was declined for a server that pushes channels: a request gets `-32022`, a notification is dropped. */
+  async function declined(frame: JsonRpcFrame): Promise<boolean> {
+    revisions ??= await discoverRevisions();
+    if (!revisions?.pushesChannels) return false;
+    if (frame.id !== undefined && frame.id !== null) {
+      await onFrame(unsupportedProtocolVersion(frame, revisions.supported));
+    }
+    return true;
+  }
+
+  /** Send the client's `initialize`, and relay its result unchanged. */
+  async function sendInitialize(initialize: JsonRpcFrame): Promise<void> {
+    await post(toServer(initialize), async (frame) => {
+      if (frame.id === initialize.id) refreshRevisions(frame.result);
+      await onFrame(frame);
+    });
+  }
+
   return {
-    send: (frame) => post(frame, onFrame),
+    async send(frame) {
+      if (frame.method === 'initialize') return sendInitialize(frame);
+      if (options.claudeCodeChannels && namesProtocol20260728(frame) && (await declined(frame))) return;
+      await post(frame, onFrame);
+    },
     async reinitialize(initialize, initialized) {
-      const id = nextReinitId();
+      const id = nextBridgeId('reinitialize');
       let response: JsonRpcFrame | undefined;
-      await post({ ...initialize, id }, async (frame) => {
+      await post({ ...toServer(initialize), id }, async (frame) => {
         if (frame.id === id) response = frame;
         else await onFrame(frame);
       });
       const result = resultOf(response, 'initialize');
+      refreshRevisions(result);
       if (initialized) await post(initializedNotification(), onFrame);
       return result;
+    },
+    leaveSession() {
+      sessionId = undefined;
+      void notifications.follow(undefined);
     },
     async endSession() {
       const ending = sessionId;
       if (!ending) return;
       sessionId = undefined;
+      void notifications.follow(undefined);
       try {
         const res = await (options.fetch ?? fetch)(url, {
           method: 'DELETE',
@@ -201,6 +281,7 @@ export function createHttpUpstream(options: HttpUpstreamOptions): HttpUpstreamCl
       }
     },
     close: async () => {
+      void notifications.follow(undefined);
       for (const ac of abortControllers) ac.abort();
       abortControllers.clear();
     },
@@ -269,7 +350,7 @@ export function createPipeUpstream(options: PipeUpstreamOptions): UpstreamClient
   return {
     send,
     async reinitialize(initialize, initialized) {
-      const id = nextReinitId();
+      const id = nextBridgeId('reinitialize');
       let timer: NodeJS.Timeout | undefined;
       const response = new Promise<JsonRpcFrame>((resolve, reject) => {
         pending.set(id, resolve);

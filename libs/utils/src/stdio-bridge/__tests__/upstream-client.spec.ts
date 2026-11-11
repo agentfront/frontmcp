@@ -32,7 +32,7 @@ interface Seen {
   sessionId?: string;
 }
 
-/** A minimal streamable-HTTP MCP endpoint that, like the SDK, only knows sessions it issued. */
+/** A minimal streamable-HTTP MCP endpoint that, like the SDK, only knows sessions it issued; it offers no notification stream. */
 async function startServer(options: { sse?: boolean } = {}): Promise<{
   url: string;
   seen: Seen[];
@@ -46,6 +46,11 @@ async function startServer(options: { sse?: boolean } = {}): Promise<{
     req.on('data', (chunk) => (body += chunk));
     req.on('end', () => {
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
+      if (req.method === 'GET') {
+        res.statusCode = 405;
+        res.end();
+        return;
+      }
       if (req.method === 'DELETE') {
         seen.push({ method: 'DELETE', sessionId });
         res.statusCode = sessionId && known.delete(sessionId) ? 200 : 404;
@@ -162,7 +167,7 @@ describe('createHttpUpstream', () => {
     const server = await startServer();
     const sent: Array<Record<string, string>> = [];
     const sendThrough: typeof fetch = (input, init) => {
-      sent.push(init?.headers as Record<string, string>);
+      if (init?.method === 'POST') sent.push(init.headers as Record<string, string>);
       return fetch(input, init);
     };
     try {
@@ -183,7 +188,7 @@ describe('createHttpUpstream', () => {
     }
   });
 
-  it('refuses a redirect on every request it sends its headers with, the session end included', async () => {
+  it('refuses a redirect on every request it sends its headers with, the notification stream and the session end included', async () => {
     const server = await startServer();
     const redirects: Array<RequestRedirect | undefined> = [];
     const sendThrough: typeof fetch = (input, init) => {
@@ -201,7 +206,7 @@ describe('createHttpUpstream', () => {
       await upstream.send(initialize);
       await upstream.endSession();
 
-      expect(redirects).toEqual(['error', 'error']);
+      expect(redirects).toEqual(['error', 'error', 'error']);
     } finally {
       await server.close();
     }
