@@ -377,6 +377,32 @@ test('a token with a bad signature is rejected', async ({ mcp, auth }) => {
 });
 ```
 
+### Testing MCP Events
+
+`client.events` lists event types and subscribes to them (see `create-event`, "Subscribing From a Client"): by push
+over Streamable HTTP, by poll over HTTP+SSE or when asked, and by webhook with a `WebhookReceiver`:
+
+```typescript
+import { McpTestClient, WebhookReceiver } from '@frontmcp/testing';
+
+const receiver = new WebhookReceiver();
+const { url } = await receiver.start(); // 127.0.0.1: the server needs events.webhook.unsafeAllowLocalCallbacks
+const client = await McpTestClient.create({ baseUrl: server.info.baseUrl })
+  .withEvents({ webhook: { url, receiver: receiver.eventReceiver } })
+  .buildAndConnect();
+
+const subscription = await client.events.subscribe('order.created');
+await client.tools.call('place-order', { orderId: 'o-1' });
+const { value } = await subscription[Symbol.asyncIterator]().next();
+await subscription.cancel();
+```
+
+`WebhookReceiver` records every request (`requests`, `verifications()`, `deliveries()`, `waitForDeliveries()`), and
+`failNext(count, status)` answers the next `count` deliveries with `status`; verification challenges are not affected.
+With `secrets`, or a secret an events client registered, it checks signatures through the SDK's
+`createEventWebhookReceiver`, and only a delivery whose signature verifies counts as failed; without any, it checks
+nothing and answers `200`, or the pending `failNext` status for a delivery.
+
 ### Servers that serve MCP somewhere other than `/`
 
 A server configured with `http: { entryPath: '/mcp' }` serves MCP at `/mcp`, and the test client follows it:

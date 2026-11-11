@@ -230,4 +230,42 @@ describe('WebhookReceiver', () => {
 
     expect(receiver.requests).toEqual([]);
   });
+
+  it('fails a signed delivery when told to, and leaves a verification alone', async () => {
+    receiver = new WebhookReceiver({ secrets: [SECRET] });
+    const { url } = await receiver.start();
+    receiver.failNext(1, 503);
+    const verification = JSON.stringify({ type: 'verification', challenge: 'nonce-1' });
+
+    const failed = await post(url, eventBody);
+    const challenged = await post(url, verification, signedHeaders(verification, SECRET, 'msg_verification_2'));
+    const delivered = await post(url, eventBody);
+
+    expect([failed.status, challenged.status, delivered.status]).toEqual([503, 200, 200]);
+    expect(receiver.deliveries().map((delivery) => delivery.signatureCheck)).toEqual(['valid', 'valid']);
+  });
+
+  it('answers a signed challenge with an empty object when told not to echo it', async () => {
+    receiver = new WebhookReceiver({ secrets: [SECRET] });
+    const { url } = await receiver.start();
+    receiver.echoChallenges(false);
+    const verification = JSON.stringify({ type: 'verification', challenge: 'nonce-1' });
+
+    const response = await post(url, verification, signedHeaders(verification));
+
+    await expect(response.json()).resolves.toEqual({});
+  });
+
+  it('checks the deliveries of a secret an events client registered, and asks to retry an unknown subscription', async () => {
+    receiver = new WebhookReceiver();
+    const { url } = await receiver.start();
+    const registration = receiver.eventReceiver.register({ secret: SECRET });
+
+    const unknown = await post(url, eventBody);
+    registration.bind('sub_0001');
+    const known = await post(url, eventBody);
+
+    expect([unknown.status, known.status]).toEqual([503, 200]);
+    expect(receiver.requests.map((request) => request.signatureCheck)).toEqual(['unchecked', 'valid']);
+  });
 });

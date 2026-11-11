@@ -20,6 +20,7 @@ import type {
   ResourceTemplate,
   Tool,
 } from '@frontmcp/protocol';
+import type { EventsClientOptions } from '@frontmcp/sdk';
 
 import type { TestPlatformType } from '../platform/platform-types';
 
@@ -147,6 +148,8 @@ export interface TestClientCapabilities {
 export interface McpTestClientConfig {
   /** Base URL of the MCP server (its root, not the MCP endpoint). */
   baseUrl: string;
+  /** How `client.events` subscribes: a webhook receiver, a cursor store, the poll floor. */
+  events?: EventsClientOptions;
   /**
    * The server's `http.entryPath` — where MCP itself is mounted (`/mcp`, …).
    * Defaults to the server root. Applied to the MCP endpoint only; OAuth and

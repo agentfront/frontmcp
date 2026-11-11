@@ -146,6 +146,16 @@ export interface McpTransport {
    * @returns The notification types the server acknowledged, or undefined when it opened no stream
    */
   listen?(id: string | number, notifications: SubscriptionFilter): Promise<SubscriptionFilter | undefined>;
+
+  /**
+   * Send a long-lived request, such as `events/stream`, without a timeout: hand each notification of its response
+   * stream to `onNotification`, and resolve with its final response, or undefined when `signal` ended it first.
+   */
+  streamRequest?(
+    message: JsonRpcRequest,
+    onNotification: NotificationHandler,
+    signal: AbortSignal,
+  ): Promise<JsonRpcResponse | undefined>;
 }
 
 /**

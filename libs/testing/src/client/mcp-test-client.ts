@@ -13,6 +13,7 @@ import {
   type LoggingLevel,
   type SubscriptionFilter,
 } from '@frontmcp/protocol';
+import { EventRequestError, EventsClient, type EventsClientTransport } from '@frontmcp/sdk';
 import { trimSlashes } from '@frontmcp/utils';
 
 import {
@@ -25,6 +26,7 @@ import {
   type ResponseInterceptor,
 } from '../interceptor';
 import { errorMessage, isInterceptedError } from '../transport/error-utils';
+import { isStatelessRequest } from '../transport/mcp-20260728';
 import { SseTransport } from '../transport/sse.transport';
 import { StreamableHttpTransport } from '../transport/streamable-http.transport';
 import type { JsonRpcRequest, McpTransport } from '../transport/transport.interface';
@@ -146,9 +148,9 @@ function extractEntryPaths(data: unknown): string[] | undefined {
 export class McpTestClient {
   // Platform, capabilities, and queryParams are optional - only set when needed
   private readonly config: Required<
-    Omit<McpTestClientConfig, 'platform' | 'capabilities' | 'queryParams' | 'entryPath'>
+    Omit<McpTestClientConfig, 'platform' | 'capabilities' | 'queryParams' | 'entryPath' | 'events'>
   > &
-    Pick<McpTestClientConfig, 'platform' | 'capabilities' | 'queryParams' | 'entryPath'>;
+    Pick<McpTestClientConfig, 'platform' | 'capabilities' | 'queryParams' | 'entryPath' | 'events'>;
   /** Protocol 2026-07-28: the resources `resources.subscribe()` listens to. */
   private readonly resourceSubscriptions = new Set<string>();
   /** Protocol 2026-07-28: whether the tools were listed since connecting, which mirrors `x-mcp-header` arguments. */
@@ -176,6 +178,7 @@ export class McpTestClient {
 
   // Elicitation handler for server→client elicit requests
   private _elicitationHandler?: ElicitationHandler;
+  private eventsClient?: EventsClient;
 
   // ═══════════════════════════════════════════════════════════════════
   // CONSTRUCTOR & FACTORY
@@ -202,6 +205,7 @@ export class McpTestClient {
       platform: config.platform,
       capabilities: config.capabilities,
       queryParams: config.queryParams,
+      events: config.events,
     };
 
     // If a token is provided, user is authenticated (even in public mode)
@@ -334,6 +338,7 @@ export class McpTestClient {
    * Disconnect from the MCP server
    */
   async disconnect(): Promise<void> {
+    await this.eventsClient?.close();
     if (this.transport) {
       await this.transport.close();
       this.transport = null;
@@ -602,6 +607,58 @@ export class McpTestClient {
       return this.wrapPromptResult(response);
     },
   };
+
+  // ═══════════════════════════════════════════════════════════════════
+  // EVENTS (MCP Events, SEP-3415)
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * `events.list()` lists the event types; `events.subscribe(name, args)` subscribes to one and yields its
+   * occurrences: by webhook when `withEvents({ webhook })` configured a receiver, else by push over Streamable HTTP,
+   * else by poll.
+   */
+  get events(): EventsClient {
+    this.eventsClient ??= new EventsClient(this.eventsTransport(), this.config.events);
+    return this.eventsClient;
+  }
+
+  /** The events client's way to the server: this client's requests, and `events/stream` over Streamable HTTP. */
+  private eventsTransport(): EventsClientTransport {
+    const transport: EventsClientTransport = {
+      request: async (method, params) => {
+        const response = await this.request<unknown>(method, params);
+        if (!response.success) {
+          const { code, message, data } = response.error as McpErrorInfo;
+          throw new EventRequestError(method, code, message, data);
+        }
+        return response.data;
+      },
+    };
+    if (this.config.transport === 'streamable-http') {
+      transport.openStream = (params, onNotification, signal) => this.openEventStream(params, onNotification, signal);
+    }
+    return transport;
+  }
+
+  /** Hold an `events/stream` open; over a session, cancel it with `notifications/cancelled` when it is aborted. */
+  private async openEventStream(
+    params: Record<string, unknown>,
+    onNotification: (notification: { method: string; params?: Record<string, unknown> }) => void,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const transport = this.getConnectedTransport();
+    const id = ++this.requestIdCounter;
+    const message = { jsonrpc: '2.0' as const, id, method: 'events/stream', params };
+    const response = await transport.streamRequest?.(message, onNotification, signal);
+    if (response?.error) {
+      throw new EventRequestError('events/stream', response.error.code, response.error.message, response.error.data);
+    }
+    if (signal.aborted && !isStatelessRequest(this.config.protocolVersion, 'events/stream')) {
+      await transport
+        .notify({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: id } })
+        .catch(() => undefined);
+    }
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // RAW PROTOCOL ACCESS

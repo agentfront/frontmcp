@@ -74,6 +74,10 @@ describe('Direct Client Testing', () => {
 });
 ```
 
+A `DirectClient` also subscribes to MCP Events: `client.events.subscribe(name, args)` uses push over the in-memory
+connection when the event offers it, else poll, and yields the occurrences a tool publishes (see `create-event`,
+"Subscribing From a Client").
+
 ## Examples
 
 | Example                                                                                    | Level        | Description                                                                                                                   |

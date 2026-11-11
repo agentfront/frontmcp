@@ -18,6 +18,7 @@ import type {
   ServerCapabilities,
 } from '@frontmcp/protocol';
 
+import type { EventsClient, EventsClientOptions } from '../event-client';
 import type { DirectWorkerEnv } from './direct.types';
 import type { FormattedToolResult, FormattedTools } from './llm-platform';
 
@@ -485,6 +486,8 @@ export interface ConnectOptions {
    * request's context only — never copied into `process.env`.
    */
   workerEnv?: DirectWorkerEnv;
+  /** How `client.events` subscribes: a webhook receiver, a cursor store, the poll floor. */
+  events?: EventsClientOptions;
 }
 
 /**
@@ -627,6 +630,12 @@ export interface DirectClient {
 
   /** Get the detected LLM platform (based on clientInfo) */
   getDetectedPlatform(): LLMPlatform;
+
+  /**
+   * MCP Events: `events.list()` lists the event types, `events.subscribe(name, args)` subscribes to one and yields
+   * its occurrences, by push over this in-process connection or by poll.
+   */
+  readonly events: EventsClient;
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Lifecycle

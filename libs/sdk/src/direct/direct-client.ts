@@ -26,6 +26,7 @@ import { loadProtocolClient } from '#protocol-client';
 import { listAllPages } from '../common/utils/list-all-pages.utils';
 import { ELICITATION_META_KEY } from '../elicitation/elicitation-meta';
 import { PublicMcpError, ToolCallError } from '../errors';
+import { EventsClient } from '../event-client';
 import type { Scope } from '../scope/scope.instance';
 import {
   SkillsListResultSchema,
@@ -64,6 +65,7 @@ import type {
   WorkflowExecutionResult,
   WorkflowStatusResult,
 } from './client.types';
+import { directEventsTransport } from './direct-events-transport';
 import {
   detectPlatform,
   formatResultForPlatform,
@@ -109,12 +111,16 @@ export class DirectClientImpl implements DirectClient {
   // Releases the scope when this client closes, for clients that share a scope (see `connect()`)
   private releaseScope?: () => Promise<void>;
 
+  /** MCP Events: list event types and subscribe to them over this connection. */
+  readonly events: EventsClient;
+
   private constructor(
     mcpClient: any,
     sessionId: string,
     clientInfo: ClientInfo,
     serverInfo: Implementation,
     capabilities: ServerCapabilities,
+    eventsOptions?: ConnectOptions['events'],
   ) {
     this.mcpClient = mcpClient;
     this.sessionId = sessionId;
@@ -122,6 +128,8 @@ export class DirectClientImpl implements DirectClient {
     this.platform = detectPlatform(clientInfo);
     this.serverInfo = serverInfo;
     this.capabilities = capabilities;
+    const transport = directEventsTransport(mcpClient, (handler) => this.onNotification(handler));
+    this.events = new EventsClient(transport, eventsOptions);
   }
 
   /**
@@ -195,7 +203,14 @@ export class DirectClientImpl implements DirectClient {
         throw new PublicMcpError('Failed to get server capabilities from MCP handshake', 'HANDSHAKE_FAILED', 500);
       }
 
-      const client = new DirectClientImpl(mcpClient, sessionId, clientInfo, serverInfo, serverCapabilities);
+      const client = new DirectClientImpl(
+        mcpClient,
+        sessionId,
+        clientInfo,
+        serverInfo,
+        serverCapabilities,
+        options?.events,
+      );
       client.closeServer = close;
       client.scopeRef = scope;
       client.releaseScope = releaseScope;
@@ -394,6 +409,8 @@ export class DirectClientImpl implements DirectClient {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async close(): Promise<void> {
+    // Subscriptions hold timers and webhook secrets: end them while the connection can still unsubscribe
+    await this.events.close();
     try {
       await this.mcpClient.close();
     } finally {

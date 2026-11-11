@@ -1,6 +1,6 @@
 /**
- * A local webhook receiver for tests of MCP Events: it answers the verification challenge, checks Standard Webhooks
- * signatures, records every request, and can be told to fail.
+ * A local webhook receiver for tests of MCP Events: an HTTP server over the SDK's `createEventWebhookReceiver`, which
+ * checks signatures and answers verification challenges. It records every request and can be told to fail.
  *
  * @example
  * ```typescript
@@ -15,14 +15,18 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
 import { type AddressInfo } from 'net';
 
-import { signingKeyOf, verifyWebhookSignature, type WebhookSignatureCheck } from '@frontmcp/utils';
+import { createEventWebhookReceiver, type EventWebhookReceiver } from '@frontmcp/sdk';
+import type { WebhookSignatureCheck } from '@frontmcp/utils';
 
 const WELL_KNOWN_PATH = '/.well-known/mcp-webhook-receiver.json';
 const SUBSCRIPTION_ID_HEADER = 'x-mcp-subscription-id';
 const POLL_INTERVAL_MS = 20;
 
 export interface WebhookReceiverOptions {
-  /** The secrets deliveries are signed with. A request none of them signed is answered 401. Without any, nothing is checked. */
+  /**
+   * The secrets deliveries of any subscription are signed with. A request none of them signed is answered 401. Without
+   * any, and without a secret an events client registered, nothing is checked.
+   */
   secrets?: string[];
   /** The path prefixes the well-known document declares. Without any, the document is a 404 and the challenge is used. */
   receivers?: string[];
@@ -52,7 +56,7 @@ export interface ReceivedWebhook {
   webhookTimestamp?: string;
   webhookSignature?: string;
   subscriptionId?: string;
-  /** `unchecked` when the receiver has no secret. */
+  /** `unchecked` when the receiver has no secret for the request's subscription. */
   signatureCheck: WebhookSignatureCheck | 'unchecked';
   /** The status the receiver answered with. */
   answeredStatus: number;
@@ -94,7 +98,7 @@ function readBody(request: IncomingMessage): Promise<string> {
 /** An HTTP server on 127.0.0.1 that stands in for the callback of a webhook subscription. */
 export class WebhookReceiver {
   private readonly options: WebhookReceiverOptions;
-  private readonly secrets: string[];
+  private readonly events: EventWebhookReceiver;
   private readonly received: ReceivedWebhook[] = [];
   private server: Server | undefined;
   private info: WebhookReceiverInfo | undefined;
@@ -102,10 +106,15 @@ export class WebhookReceiver {
   private failureStatus = 500;
   private echoesChallenges = true;
 
-  /** Takes the secrets to verify with, the well-known prefixes to declare, and the path and port to listen on. */
+  /** A receiver that is not listening yet. */
   constructor(options: WebhookReceiverOptions = {}) {
     this.options = options;
-    this.secrets = [...(options.secrets ?? [])];
+    this.events = createEventWebhookReceiver({ secrets: options.secrets });
+  }
+
+  /** The SDK receiver behind it, for `withEvents({ webhook: { url, receiver } })` of an events client. */
+  get eventReceiver(): EventWebhookReceiver {
+    return this.events;
   }
 
   /** Listen on 127.0.0.1 and answer with the callback URL. */
@@ -157,7 +166,7 @@ export class WebhookReceiver {
 
   /** Accept deliveries signed with one more secret, as after a rotation. */
   addSecret(secret: string): void {
-    this.secrets.push(secret);
+    this.events.addSecret(secret);
   }
 
   /** Answer the next `count` deliveries with `status` instead of 200. Verification challenges are not affected. */
@@ -200,8 +209,7 @@ export class WebhookReceiver {
     const body = await readBody(request);
     const json = jsonObjectOf(body);
     const kind = kindOf(json);
-    const signatureCheck = this.checkSignature(request, body);
-    const answeredStatus = this.statusFor(kind, signatureCheck);
+    const { status, answer, signatureCheck } = await this.answer(request, body, kind, json);
     this.received.push({
       kind,
       path,
@@ -212,13 +220,33 @@ export class WebhookReceiver {
       webhookSignature: headerOf(request, 'webhook-signature'),
       subscriptionId: headerOf(request, SUBSCRIPTION_ID_HEADER),
       signatureCheck,
-      answeredStatus,
+      answeredStatus: status,
       receivedAt: Date.now(),
     });
+    response.writeHead(status, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(answer));
+  }
 
-    const echoed = kind === 'verification' && this.echoesChallenges ? { challenge: json?.['challenge'] } : {};
-    response.writeHead(answeredStatus, { 'content-type': 'application/json' });
-    response.end(JSON.stringify(answeredStatus === 200 ? echoed : {}));
+  /** The answer to a webhook: unchecked without secrets, a pending failure for a signed delivery, else the SDK's. */
+  private async answer(
+    request: IncomingMessage,
+    body: string,
+    kind: ReceivedWebhookKind,
+    json: Record<string, unknown> | undefined,
+  ): Promise<{ status: number; answer: Record<string, unknown>; signatureCheck: WebhookSignatureCheck | 'unchecked' }> {
+    const challenge = { challenge: json?.['challenge'] };
+    const echoed = kind === 'verification' && this.echoesChallenges ? challenge : {};
+    if (!this.events.hasSecrets()) {
+      const status = kind === 'verification' ? 200 : this.nextDeliveryStatus();
+      return { status, answer: status === 200 ? echoed : {}, signatureCheck: 'unchecked' };
+    }
+    const webhook = { headers: request.headers, rawBody: body };
+    if (kind !== 'verification' && this.failuresLeft > 0 && this.events.verify(webhook) === 'valid') {
+      return { status: this.nextDeliveryStatus(), answer: {}, signatureCheck: 'valid' };
+    }
+    const answered = await this.events.handle(webhook);
+    const answer = kind === 'verification' && answered.status === 200 ? echoed : (answered.body ?? {});
+    return { status: answered.status, answer, signatureCheck: answered.signature ?? 'unchecked' };
   }
 
   /** Serve the well-known document when the receiver declares path prefixes. */
@@ -232,24 +260,9 @@ export class WebhookReceiver {
     response.end(JSON.stringify({ receivers }));
   }
 
-  /** Check the Standard Webhooks signature of a request against the receiver's secrets. */
-  private checkSignature(request: IncomingMessage, body: string): WebhookSignatureCheck | 'unchecked' {
-    if (this.secrets.length === 0) return 'unchecked';
-    return verifyWebhookSignature(
-      {
-        id: headerOf(request, 'webhook-id'),
-        timestamp: headerOf(request, 'webhook-timestamp'),
-        signature: headerOf(request, 'webhook-signature'),
-        body,
-      },
-      this.secrets.map(signingKeyOf),
-    );
-  }
-
-  /** The status a webhook is answered with: 401 for a bad signature, a pending failure for a delivery, else 200. */
-  private statusFor(kind: ReceivedWebhookKind, signatureCheck: WebhookSignatureCheck | 'unchecked'): number {
-    if (signatureCheck !== 'valid' && signatureCheck !== 'unchecked') return 401;
-    if (kind === 'verification' || this.failuresLeft === 0) return 200;
+  /** The status of the next delivery: a pending failure, else 200. */
+  private nextDeliveryStatus(): number {
+    if (this.failuresLeft === 0) return 200;
     this.failuresLeft -= 1;
     return this.failureStatus;
   }

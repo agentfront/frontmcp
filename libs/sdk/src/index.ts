@@ -428,6 +428,31 @@ export type {
 } from './event';
 export { EVENTS_EXTENSION_ID } from '@frontmcp/protocol';
 export type { EventDefinition, EventDeliveryMode, EventOccurrence } from '@frontmcp/protocol';
+// The client side of MCP Events: subscribe as a client, and receive webhook deliveries
+export {
+  EventsClient,
+  createEventWebhookReceiver,
+  EventRequestError,
+  EventSubscriptionTerminatedError,
+  NoCompatibleDeliveryModeError,
+} from './event-client';
+export type {
+  EventCursorStore,
+  EventsClientOptions,
+  EventsClientTransport,
+  EventSubscribeOptions,
+  EventSubscription,
+  EventsStreamNotification,
+  EventsWebhookConfig,
+  EventWebhookDeliveryInfo,
+  EventWebhookListener,
+  EventWebhookReceiver,
+  EventWebhookReceiverOptions,
+  EventWebhookRegistration,
+  EventWebhookRegistrationOptions,
+  EventWebhookRequest,
+  EventWebhookResponse,
+} from './event-client';
 
 // Skill exports - skills are knowledge/workflow packages for multi-step tasks
 export {
