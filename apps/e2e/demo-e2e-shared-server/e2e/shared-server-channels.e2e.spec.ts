@@ -2,7 +2,7 @@
  * E2E: a Claude Code channel reaches the stdio sessions of a shared local server. Each session replays the messages
  * Claude Code 2.1.322 sends a stdio server: a `server/discover` probe on 2026-07-28, then, once that is declined,
  * `initialize` with no `experimental['claude/channel']`. The server pushes a channel event to every session, and a
- * session that moved to a newer server gets the events of that one.
+ * session that sends nothing more moves to the newer server that replaced its own, and gets the events of that one.
  */
 import type { JsonRpcMessage, StdioJsonRpcProcess } from '../../demo-e2e-stdio-transport/e2e/helpers/stdio-json-rpc';
 import { ATTACH_TIMEOUT_MS, callServerPid, running, SharedSessions, waitUntil } from './helpers/shared-sessions';
@@ -10,6 +10,8 @@ import { ATTACH_TIMEOUT_MS, callServerPid, running, SharedSessions, waitUntil } 
 const CHANNEL_NOTIFICATION = 'notifications/claude/channel';
 const LIST_CHANGED = 'notifications/tools/list_changed';
 const EXIT_TIMEOUT_MS = 30_000;
+/** A session gives its notification stream up 7.75 s after its server cut it off, then moves. */
+const QUIET_MOVE_TIMEOUT_MS = 30_000;
 
 const CLIENT_INFO = { name: 'claude-code', title: 'Claude Code', version: '2.1.322' };
 const CLIENT_CAPABILITIES = { roots: { listChanged: true }, elicitation: { form: {}, url: {} } };
@@ -110,7 +112,7 @@ describe('channels in the sessions of a shared local server', () => {
     240_000,
   );
 
-  it('sends a session that moved to a newer server the channel events of that server, and each list change once', async () => {
+  it('moves a quiet session to the newer server that replaced its own, and sends it the channel events of that server', async () => {
     const older = shared.start('unix', { SHARED_APP_VERSION: '1.0.0' });
     await connectAsClaudeCode(older);
     const olderServer = await callServerPid(older, 1);
@@ -123,11 +125,12 @@ describe('channels in the sessions of a shared local server', () => {
     expect(newerServer).not.toBe(olderServer);
     await waitUntil(() => !running(olderServer), EXIT_TIMEOUT_MS, 'the older server to exit');
 
-    expect(await callServerPid(older, 3)).toBe(newerServer);
+    await older.waitFor(({ method }) => method === LIST_CHANGED, QUIET_MOVE_TIMEOUT_MS);
     await announceBuild(newer, 2, '42');
 
     expect(await older.waitFor(isBuildEvent('42'))).toEqual(buildEvent('42', newerServer));
     expect(await newer.waitFor(isBuildEvent('42'))).toEqual(buildEvent('42', newerServer));
+    expect(await callServerPid(older, 3)).toBe(newerServer);
     const olderLines = older.stdoutLines.map((line) => JSON.parse(line) as JsonRpcMessage);
     expect(olderLines.filter(({ method }) => method === LIST_CHANGED)).toHaveLength(1);
     expect(olderLines.filter(({ method }) => method === CHANNEL_NOTIFICATION)).toHaveLength(2);
