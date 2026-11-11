@@ -9,7 +9,6 @@ import { MessagingServiceChannel } from './channels/messaging-service.channel';
 import { ReplayAlertChannel } from './channels/replay-alert.channel';
 import { deployFinished, DeployStarted } from './events/deploy.events';
 import EmitAppEventTool from './tools/emit-app-event.tool';
-import SimulateFileEventTool from './tools/file-watcher-tools.tool';
 import ListReplyLogTool from './tools/list-reply-log.tool';
 import PublishDeployEventTool from './tools/publish-deploy-event.tool';
 import { ClearReplayBufferTool, GetReplayBufferTool } from './tools/replay-tools.tool';
@@ -46,7 +45,6 @@ import SimulateIncomingTool, { ListSentMessagesTool } from './tools/simulate-inc
     ListSentMessagesTool,
     GetReplayBufferTool,
     ClearReplayBufferTool,
-    SimulateFileEventTool,
     RegisterTestSessionTool,
     UnregisterTestSessionTool,
     GetSessionNotificationsTool,
