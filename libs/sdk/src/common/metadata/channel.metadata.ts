@@ -19,6 +19,10 @@ export interface ChannelWebhookSource {
 
 /**
  * App event source — subscribes to in-process events via the ChannelEventBus.
+ *
+ * Use it for a name your code emits on the bus by hand (`scope.channelEventBus.emit()`). For an event the server
+ * publishes (`@Event`), set the event's `channel` option instead: it needs no channel, and each session is told only
+ * what its caller may see. A channel named after a published event still works, and tells every connected session.
  */
 export interface ChannelAppEventSource {
   type: 'app-event';
@@ -73,23 +77,49 @@ export interface ChannelServiceSource {
 }
 
 /**
- * File watcher source — watches file system paths for changes and pushes events.
- * Uses the channel's `onConnect()` to start watching and `onDisconnect()` to stop.
+ * File watcher source — the framework watches `paths` while the channel is connected (with `watchFiles` from
+ * `@frontmcp/utils`) and hands each file event to `onEvent()` as a `ChannelFileEvent`. The watch starts after
+ * `onConnect()` and ends before `onDisconnect()`.
  *
- * @example Watch log files for errors
+ * Nothing is watched in a serverless, edge or browser runtime. A build that boots the server only to read it
+ * registers no channel, so it watches nothing either.
+ *
+ * @example Watch a log folder
  * ```typescript
  * @Channel({
  *   name: 'log-watcher',
- *   source: { type: 'file-watcher', paths: ['./logs/*.log'], events: ['change', 'create'] },
+ *   source: { type: 'file-watcher', paths: ['./logs'], events: ['change', 'create'] },
  * })
+ * class LogWatcherChannel extends ChannelContext {
+ *   async onEvent(payload: unknown): Promise<ChannelNotification> {
+ *     const { event, path } = payload as ChannelFileEvent;
+ *     return { content: `${event}: ${path}` };
+ *   }
+ * }
  * ```
  */
 export interface ChannelFileWatcherSource {
   type: 'file-watcher';
-  /** Glob patterns or specific file paths to watch */
+  /**
+   * Files or directories to watch, absolute or relative to the working directory. A directory is watched for its
+   * direct files. A path that does not exist yet is watched from the moment it appears. Globs are not expanded.
+   */
   paths: string[];
-  /** File system events to watch for */
+  /**
+   * The kinds of file event to hand to the channel. Default: every kind. A renamed file is a `delete` of its old
+   * path and a `create` of its new one, so `rename` selects both.
+   */
   events?: Array<'change' | 'create' | 'delete' | 'rename'>;
+}
+
+/**
+ * What `onEvent()` gets from a `file-watcher` source.
+ */
+export interface ChannelFileEvent {
+  /** What happened to the file: it appeared, its content changed, or it is gone. */
+  event: 'create' | 'change' | 'delete';
+  /** The absolute path of the file. */
+  path: string;
 }
 
 /**

@@ -14,12 +14,14 @@ import {
 import type { ChannelNotification } from '../common/metadata/channel.metadata';
 import type ProviderRegistry from '../provider/provider.registry';
 import type { ChannelNotificationMeta, ChannelNotificationService } from './channel-notification.service';
+import { wireFileWatcherSource } from './sources/file-watcher.source';
 
 /**
  * Concrete implementation of a channel that can receive events and push notifications.
  *
  * For service connector channels (source: { type: 'service' }), maintains a persistent
- * ChannelContext that is connected on init and disconnected on teardown.
+ * ChannelContext that is connected on init and disconnected on teardown. A file-watcher
+ * channel is connected the same way, and its declared paths are watched while it is.
  *
  * **Scope Binding:** The ChannelInstance captures its scope and providers at construction time.
  */
@@ -32,6 +34,8 @@ export class ChannelInstance extends ChannelEntry {
   private _channelNotificationService?: ChannelNotificationService;
   /** Persistent context for service connectors (kept alive for the lifetime of the scope) */
   private _serviceContext?: ChannelContext;
+  /** Ends the watch of a file-watcher source's paths; set while the channel is connected */
+  private _stopFileWatch?: () => void;
   /** Replay buffer for events that arrive when no sessions are connected */
   private _replayBuffer: ChannelNotification[] = [];
   /** Maximum replay buffer size */
@@ -74,6 +78,7 @@ export class ChannelInstance extends ChannelEntry {
   /**
    * Connect the service connector (called after notification service is wired).
    * Creates a persistent context, wires pushIncoming, and calls onConnect().
+   * A file-watcher source then starts watching its declared paths.
    */
   async connectService(): Promise<void> {
     if (!this.isServiceConnector) return;
@@ -91,10 +96,9 @@ export class ChannelInstance extends ChannelEntry {
     try {
       await ctx.onConnect();
       this._serviceContext = ctx;
-      const sourceLabel =
-        this.metadata.source.type === 'service'
-          ? (this.metadata.source as { service: string }).service
-          : this.metadata.source.type;
+      const { source } = this.metadata;
+      if (source.type === 'file-watcher') this._stopFileWatch = wireFileWatcherSource(this, source, logger);
+      const sourceLabel = source.type === 'service' ? source.service : source.type;
       logger.info(`Channel "${this.name}" connected (${sourceLabel})`);
     } catch (err) {
       this._serviceContext = undefined;
@@ -105,9 +109,12 @@ export class ChannelInstance extends ChannelEntry {
 
   /**
    * Disconnect the service connector (called during scope teardown).
+   * The watch of a file-watcher source ends first.
    */
   async disconnectService(): Promise<void> {
     if (!this._serviceContext) return;
+    this._stopFileWatch?.();
+    this._stopFileWatch = undefined;
 
     const logger = this._providers.get(FrontMcpLogger);
     try {
