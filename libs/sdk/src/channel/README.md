@@ -137,6 +137,12 @@ handshake above:
 - It opens the session's standalone notification stream (`GET` with the session id) and relays it, so the channel
   notification, like every other message the server sends on its own, reaches the stdio client.
 
+A shared session that gave its notification stream up follows a server that took its key over
+(`watchForSuccessor()` in `shared/shared-attach.ts`): it reads the key's record every second, and moves once the
+record names another process, of its own transport and `info.name`. So a quiet session gets the channel events of a
+newer server that replaced its own. A server that was stopped is not started again by a quiet session: it is left
+to the session's next request.
+
 A shared session that runs the server in its own process gets no channel event: that server is built per request
 and offers no notification stream.
 

@@ -118,17 +118,17 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
    are the same version; two versions that aren't both semver can't be ordered, and the session then runs the server
    in its own process rather than replacing one it can't compare. A session of an older version attaches to a newer
    server.
-3. **Upgrade.** With `replaceOlder` (the default), a session that finds an older server takes the start lock and asks
-   it to drain: `POST /.well-known/frontmcp-shared-server/drain` with the token and its own version, which the server
-   accepts (`202`) only from a newer version (`409` otherwise, so an older session never downgrades a newer server).
-   The draining server removes its record, answers every new request `503` with `x-frontmcp-shared-server: exiting`,
-   lets the requests in flight finish (up to 5 s), and exits; the session waits until it has let go of its endpoint,
-   starts its own server and attaches. The sessions of the older server send their next request to the new one: they
-   replay the client's `initialize` (its original capabilities, with `experimental['claude/channel']` declared),
-   then send the client `notifications/tools/list_changed` (and the resources and prompts ones the server
-   advertises). A request no server
-   took (refused as `exiting`, the endpoint gone, a `401` from the new server on the socket) is sent again to the next
-   server; one that may have reached the old server before it went away is answered `dev_server_unreachable`. A
+3. **Upgrade.** With `replaceOlder` (the default), a session that finds an older server takes the start lock and asks it
+   to drain: `POST /.well-known/frontmcp-shared-server/drain` with the token and its own version, which the server
+   accepts (`202`) only from a newer version (`409` otherwise, so an older session never downgrades a newer server). The
+   draining server removes its record, answers every new request `503` with `x-frontmcp-shared-server: exiting`, lets
+   the requests in flight finish (up to 5 s), and exits; the session waits until it has let go of its endpoint, starts
+   its own server and attaches. The sessions of the older server move to the new one, at their next request, or by
+   themselves about 8 s after the older server cut their notification stream (see Notifications): they replay the
+   client's `initialize` (its original capabilities, with `experimental['claude/channel']` declared), then send the
+   client `notifications/tools/list_changed` (and the resources and prompts ones the server advertises). A request no
+   server took (refused as `exiting`, the endpoint gone, a `401` from the new server on the socket) is sent again to the
+   next server; one that may have reached the old server before it went away is answered `dev_server_unreachable`. A
    server that goes away while a session replays the `initialize` on it is replaced by the next one the same way.
 4. **Start.** When no server proves its identity, the session takes the key's start lock (a lease in
    `~/.frontmcp/shared/<key>/start-lock.sqlite`, set only when absent, with a 10 s TTL it renews while it waits), checks
@@ -170,7 +170,10 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
    `mcp-session-id`) and writes every message on it to stdout: `list_changed`, log lines, resource updates, a Claude
    Code channel event. It sends its next request once the server answered the stream, or after 2 s. A stream that
    drops is opened again (after 250 ms at first, up to 4 s later, given up after five opens in a row failed); a
-   session that moved to the next server opens a new one there.
+   session that moved to the next server opens a new one there. A session that gave its stream up reads the key's
+   record every second, and moves to the server the record names once that is another process, of the session's
+   transport and `info.name`: a newer server that replaced its own, for one. While it waits it starts no server,
+   and runs none itself.
 10. **Channels.** A server with a channel, or an `@Event` with the `channel` option, reaches Claude Code through
     the session (see `channel-claude-code` in `frontmcp-channels`). The session answers the client's MCP
     `2026-07-28` requests with `-32022` and the server's earlier revisions, so Claude Code falls back to
@@ -240,10 +243,12 @@ next server.
   quiet past `idleTimeoutMs` found the server gone. A `@Worker` or a `@Duty` does not count as activity: the server
   exits idle while they run, once no session is attached. Pass `idleTimeoutMs: false` to `runShared()` for a server
   that must keep one running (see `create-worker`, Keeping a Worker Alive).
-- A session whose server went away (replaced by a newer one, stopped, or its checkout removed) moves to the next
-  server at its next request, with the `initialize` replayed. Until then it gets no notification. Server-side state
-  of that session (subscriptions, session memory) isn't carried over, nor is work the server runs in the background
-  after a call returned.
+- A session whose server went away follows a server that took its key over (see Notifications), about 8 s after
+  its stream was cut. A server that was stopped, or whose checkout was removed, leaves none to follow, and its
+  sessions start none by themselves: such a session moves at its next request, with the `initialize` replayed, and
+  gets no notification until then. A session that follows a server older than its own `info.version` replaces it,
+  or runs the server itself, as it does at a request. Server-side state of that session (subscriptions, session
+  memory) isn't carried over, nor is work the server runs in the background after a call returned.
 - A session that runs the server in its own process (see Fallback) gets no notification stream: that server is
   built per request. Its client gets the answers to its requests, and no `list_changed`, log line or channel event
   the server sends on its own.

@@ -67,12 +67,14 @@ Before 1.12 a FrontMCP channel reached no Claude Code session: the server answer
 - **It declares the capability.** The bridge adds `experimental['claude/channel']` to the `initialize` it forwards, and to the one it replays on a restarted or replaced server. The server subscribes the HTTP session as it does the stdio session. The client's other capabilities, and the `initialize` result, are passed on unchanged.
 - **It relays the session's notification stream.** After `initialize` the bridge opens the session's stream (`GET` with the session id) and writes each message on it to stdout. It sends the session's next request once the server answered the stream, or after 2 s. The stream follows the session: a restarted dev server, or the next shared server, gets a new one. A stream that drops is opened again, after 250 ms at first and up to 4 s later. The bridge gives it up, until the next session, after five opens in a row failed.
 
+A quiet shared session follows its server. When another server takes the key over, such as a newer version that replaces the session's own, the session moves to it about 8 s after its stream was cut, with no request of its client, and gets that server's events. It reads the key's record (`server.json`) every second once it gave the stream up, and moves when the record names another process, of its own transport and `info.name`.
+
 What stays as it was:
 
 - A server without channels is not declined. Its 2026-07-28 requests are forwarded as before.
 - `frontmcp dev --stdio --serve` uses no HTTP server: the dev server speaks stdio itself, as described above.
 - A shared session that runs the server in its own process (the fallback of `runShared()`) declines 2026-07-28 too, but gets no channel event: that server offers no notification stream.
-- A session whose shared server went away moves to the next server at its next request. Until then it gets no channel event.
+- A shared server that was stopped, or whose checkout was removed, is not started again by a quiet session. The session moves at its next request, and gets no channel event until then.
 
 ## What Claude Code Does with a Notification
 
