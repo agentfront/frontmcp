@@ -17,6 +17,7 @@ import { unconfiguredAuthProviders } from '../../auth/vault/unconfigured-auth-pr
 import { ConfigService } from '../../builtin/config/providers/config.service';
 import { FRONTMCP_CONTEXT, type FrontMcpContext } from '../../context';
 import { workerEnvOf } from '../../context/frontmcp-context-storage';
+import { EventsNotEnabledError } from '../../errors/event.errors';
 import { DependencyNotFoundError, RequestContextNotAvailableError } from '../../errors/mcp.error';
 import { ProviderNotAvailableError } from '../../errors/provider.errors';
 import { OffloadService } from '../../offload/offload.service';
@@ -24,9 +25,15 @@ import type { OffloadCallOptions, OffloadFunction, OffloadModuleRef } from '../.
 import { type CallSurface } from '../availability';
 import { type ScopeEntry } from '../entries';
 import { type ToolLookupScope } from '../utils/tool-lookup.utils';
+import { type EventPublisher } from './event.interface';
 import { FlowControl } from './flow.interface';
 import { type ProviderRegistryInterface } from './internal';
 import { type FrontMcpLogger } from './logger.interface';
+
+/** The publisher of a server without events: publishing there is a mistake its author must see. */
+const eventsNotEnabledPublisher: EventPublisher = {
+  publish: () => Promise.reject(new EventsNotEnabledError()),
+};
 
 /**
  * Base constructor arguments for all execution contexts.
@@ -244,6 +251,11 @@ export abstract class ExecutionContextBase<Out = unknown> {
   /** The credentials of the providers `@FrontMcp({ authProvidersVault })` registers, read for the current caller. */
   get authProviders(): AuthProvidersAccessor {
     return this.tryGet(AUTH_PROVIDERS_ACCESSOR) ?? unconfiguredAuthProviders;
+  }
+
+  /** Publishes the server's events to their subscribers: `await this.events.publish(OrderCreated, data)`. */
+  get events(): EventPublisher {
+    return this.scope.events?.publisher ?? eventsNotEnabledPublisher;
   }
 
   /**

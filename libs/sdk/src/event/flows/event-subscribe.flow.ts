@@ -18,7 +18,7 @@ import {
 import { callerPlatformOf, EVENT_DIALECTS, resolveEventDialect } from '../event-dialect';
 import { eventSubscriberOf, type EventSubscriberIdentity } from '../event-subscriber';
 import type EventRegistry from '../event.registry';
-import { type EventSubscriptionRecord } from '../subscription/event-subscription.store';
+import { type EventSubscriptionRecord, type EventSubscriptionStatus } from '../subscription/event-subscription.store';
 import { deliveryStatusOf, type EventSubscriptions } from '../subscription/event-subscriptions';
 
 const inputSchema = z.object({
@@ -88,6 +88,12 @@ const URL_PROBLEMS: Record<OutboundUrlProblem, string> = {
   credentials: 'it must not carry a user name or a password',
   host: 'its host is local, private or a metadata service',
 };
+
+/** The status a refresh keeps: the last delivery and the last failure, without the count that suspended it. */
+function reactivatedStatus(status: EventSubscriptionStatus = {}): EventSubscriptionStatus {
+  const { failures: _failures, suspendedSince: _suspendedSince, ...kept } = status;
+  return kept;
+}
 
 /** `events/subscribe`: create or refresh the caller's webhook subscription to one event. */
 @Flow({
@@ -296,7 +302,7 @@ export default class EventSubscribeFlow extends FlowBase<typeof name> {
       verifiedAt,
       lastAuthorizedAt: now,
       active: true,
-      status: existing?.status ?? {},
+      status: reactivatedStatus(existing?.status),
     };
     await this.subscriptions.store.upsert(record);
     this.state.set('record', record);

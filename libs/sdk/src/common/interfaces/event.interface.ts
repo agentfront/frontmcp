@@ -58,6 +58,49 @@ export interface EventTyping<In, Payload> {
   readonly [EVENT_TYPES]?: { input: In; payload: Payload };
 }
 
+/** An event as `publish()` takes it: its `@Event` class, or what `event()` returned. */
+export type EventReference<Payload = Record<string, unknown>> =
+  | (abstract new (...args: never[]) => EventTyping<unknown, Payload>)
+  | EventTyping<unknown, Payload>;
+
+/** Narrows a published event to the subscriptions of some owners, before `match()` runs. */
+export interface EventAudience {
+  /** The owner's subject, or one of several. */
+  sub?: string | string[];
+  /** The owner's tenant, or one of several. */
+  tenantId?: string | string[];
+  /** The owner has one of `any` and every one of `all`. */
+  roles?: { any?: string[]; all?: string[] };
+}
+
+export interface EventPublishOptions {
+  /** The id of the occurrence. @default `evt_` and a random value */
+  eventId?: string;
+  /** When it happened. @default now */
+  timestamp?: string | Date;
+  /** Deliver to this one subscription only. */
+  subscriptionId?: string;
+  audience?: EventAudience;
+}
+
+export interface EventPublishResult {
+  eventId: string;
+  /** How many subscriptions a delivery was queued for. */
+  matched: number;
+}
+
+/** Publishes occurrences of the server's events: `this.events` in a context, `scope.events.publisher` elsewhere. */
+export interface EventPublisher {
+  /** Publish by name; `data` is checked against the event's `payloadSchema`. */
+  publish(eventName: string, data: Record<string, unknown>, options?: EventPublishOptions): Promise<EventPublishResult>;
+  /** Publish by the `@Event` class or the `event()` function; `data` has the type of its `payloadSchema`. */
+  publish<Payload>(
+    event: EventReference<Payload>,
+    data: Payload,
+    options?: EventPublishOptions,
+  ): Promise<EventPublishResult>;
+}
+
 type MaybePromise<T> = T | Promise<T>;
 
 /** Base class of an `@Event` class. Its methods are optional: without them, every subscription gets each event as published. */

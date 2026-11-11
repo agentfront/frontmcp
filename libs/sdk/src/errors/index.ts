@@ -234,6 +234,9 @@ export {
   EventUnsupportedError,
   EventCallbackEndpointError,
   EventSubscriptionStoreError,
+  EventsNotEnabledError,
+  EventNotRegisteredError,
+  InvalidEventPublishError,
 } from './event.errors';
 export type { EventErrorCodes } from './event.errors';
 

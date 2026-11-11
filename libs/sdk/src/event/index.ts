@@ -39,3 +39,18 @@ export {
   subscriptionRefOf,
 } from './subscription/event-subscriptions';
 export type { EventSubscriptionIdentity, EventSubscriptionsOptions } from './subscription/event-subscriptions';
+export { EVENT_COUNTERS, createEventMetrics } from './delivery/event-metrics';
+export type { EventCounter, EventMetrics } from './delivery/event-metrics';
+export { EventOutbox, OUTBOX_SWEEP_INTERVAL_MS } from './delivery/event-outbox';
+export type {
+  EventDeliveryKind,
+  EventDeliveryOutcome,
+  EventDeliveryRecord,
+  EventDeliveryTarget,
+  EventOutboxOptions,
+  NewEventDelivery,
+} from './delivery/event-outbox';
+export { ScopeEventPublisher } from './event-publisher';
+export { SUSPEND_AFTER_FAILURES } from './flows/event-deliver.flow';
+export { EVENT_DELIVERY_MAX_BYTES, isInAudience } from './flows/event-publish.flow';
+export type { EventDeliveryPlan } from './flows/event-publish.flow';

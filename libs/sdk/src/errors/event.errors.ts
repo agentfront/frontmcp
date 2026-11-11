@@ -109,3 +109,32 @@ export class EventSubscriptionStoreError extends InternalMcpError {
     super(`Event subscription store: ${message}`, 'EVENT_SUBSCRIPTION_STORE');
   }
 }
+
+/** Publishing on a server that has no events: none is declared, or `events.enabled` is `false`. */
+export class EventsNotEnabledError extends InternalMcpError {
+  /** Says that the server has events turned off or declares none. */
+  constructor() {
+    super(
+      "Events are not enabled on this server, so nothing can be published. List the event in an app's `events`, " +
+        'and remove events.enabled: false if it is set.',
+      'EVENTS_NOT_ENABLED',
+    );
+  }
+}
+
+/** Publishing an event the server does not have. */
+export class EventNotRegisteredError extends InternalMcpError {
+  constructor(eventName: string) {
+    super(
+      `Event "${eventName}" is not registered, so it cannot be published. List it in the \`events\` of an app.`,
+      'EVENT_NOT_REGISTERED',
+    );
+  }
+}
+
+/** Publishing `data` that does not match the event's `payloadSchema`, or options that cannot be used. */
+export class InvalidEventPublishError extends InternalMcpError {
+  constructor(eventName: string, problem: string) {
+    super(`Event "${eventName}" cannot be published: ${problem}`, 'INVALID_EVENT_PUBLISH');
+  }
+}

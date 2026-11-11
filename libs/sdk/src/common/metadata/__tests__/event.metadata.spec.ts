@@ -150,12 +150,23 @@ describe('events configuration', () => {
     minTtlMs: 60_000,
     allowNoExpiry: false,
     maxPerPrincipal: 100,
+    reauthorizeEveryMs: 300_000,
+    suspendedTtlMs: 604_800_000,
+  };
+  const delivery = {
+    timeoutMs: 10_000,
+    maxAttempts: 5,
+    retryWindowMs: 900_000,
+    backoffMs: 1_000,
+    maxBackoffMs: 60_000,
+    concurrency: 16,
   };
   const webhook = {
     enabled: true,
     allowedCallbacks: [],
     unsafeAllowLocalCallbacks: false,
     verification: { cacheTtlMs: 3_600_000, timeoutMs: 10_000 },
+    delivery,
     rotationGraceMs: 300_000,
   };
   const defaults = { compat: 'auto', subscriptions, webhook };
@@ -201,7 +212,14 @@ describe('events configuration', () => {
   describe('subscriptions', () => {
     it('keeps the lifetimes and limits a server sets', () => {
       const parsed = eventsConfigSchema.parse({
-        subscriptions: { defaultTtlMs: 600_000, maxTtlMs: 1_200_000, minTtlMs: 30_000, maxPerPrincipal: 5 },
+        subscriptions: {
+          defaultTtlMs: 600_000,
+          maxTtlMs: 1_200_000,
+          minTtlMs: 30_000,
+          maxPerPrincipal: 5,
+          reauthorizeEveryMs: 60_000,
+          suspendedTtlMs: 86_400_000,
+        },
       });
 
       expect(parsed.subscriptions).toEqual({
@@ -210,6 +228,8 @@ describe('events configuration', () => {
         minTtlMs: 30_000,
         allowNoExpiry: false,
         maxPerPrincipal: 5,
+        reauthorizeEveryMs: 60_000,
+        suspendedTtlMs: 86_400_000,
       });
     });
 
@@ -290,8 +310,34 @@ describe('events configuration', () => {
         allowedCallbacks: ['https://hooks.example.com/mcp/'],
         unsafeAllowLocalCallbacks: true,
         verification: { cacheTtlMs: 3_600_000, timeoutMs: 2000 },
+        delivery,
         rotationGraceMs: 60_000,
       });
+    });
+
+    it('keeps the delivery settings a server sets', () => {
+      const parsed = eventsConfigSchema.parse({
+        webhook: { delivery: { timeoutMs: 2000, maxAttempts: 3, backoffMs: 500, concurrency: 4 } },
+      });
+
+      expect(parsed.webhook.delivery).toEqual({
+        timeoutMs: 2000,
+        maxAttempts: 3,
+        retryWindowMs: 900_000,
+        backoffMs: 500,
+        maxBackoffMs: 60_000,
+        concurrency: 4,
+      });
+    });
+
+    it('refuses a first wait longer than the longest wait, and no attempt at all', () => {
+      const backwards = eventsConfigSchema.safeParse({
+        webhook: { delivery: { backoffMs: 5000, maxBackoffMs: 1000 } },
+      });
+
+      expect(backwards.success).toBe(false);
+      expect(backwards.error?.issues[0].message).toBe('events.webhook.delivery needs backoffMs <= maxBackoffMs');
+      expect(eventsConfigSchema.safeParse({ webhook: { delivery: { maxAttempts: 0 } } }).success).toBe(false);
     });
 
     it('refuses an allowed callback that is not a URL, and durations that are not positive', () => {

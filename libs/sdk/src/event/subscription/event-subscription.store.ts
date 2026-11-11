@@ -20,6 +20,10 @@ export interface EventSubscriptionStatus {
   lastDeliveryAt?: number;
   lastError?: EventDeliveryErrorCategory;
   failedSince?: number;
+  /** Failed delivery attempts in a row; a delivery the callback acknowledges ends the count. */
+  failures?: number;
+  /** When delivery was suspended. */
+  suspendedSince?: number;
 }
 
 export interface EventSubscriptionRecord {

@@ -32,6 +32,8 @@ export interface EventSubscriptionStoreResult {
   encrypted: boolean;
   /** The storage the store owns; the outbox keeps its records in it too. */
   storage: RootStorage;
+  /** The secret records are encrypted with, for the outbox to encrypt its own. Never log it. */
+  secret?: string;
 }
 
 /** The secret stored subscriptions are encrypted with, from the environment. */
@@ -84,5 +86,6 @@ export async function createEventSubscriptionStore(
     durable,
     encrypted: secret !== undefined,
     storage,
+    secret,
   };
 }

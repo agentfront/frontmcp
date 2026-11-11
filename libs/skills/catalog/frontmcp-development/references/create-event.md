@@ -10,9 +10,9 @@ added. A client lists the server's event types with `events/list`, subscribes to
 occurrences when no user is connected. This is MCP Events, the `io.modelcontextprotocol/events` extension (SEP-3415),
 which ChatGPT reads from the top-level `events` capability.
 
-This reference covers declaring events, what `events/list` answers, and how a client subscribes by webhook with
-`events/subscribe`. An event is listed once the server performs a delivery mode the event allows (see
-[Delivery Modes](#delivery-modes)).
+This reference covers declaring events, what `events/list` answers, how a client subscribes by webhook with
+`events/subscribe`, and how the server publishes an event and delivers it. An event is listed once the server performs
+a delivery mode the event allows (see [Delivery Modes](#delivery-modes)).
 
 ## When to Use This Skill
 
@@ -185,6 +185,31 @@ serves no events. `poll` and `push` are not performed yet.
 - **`availableWhen`**: an event the process excludes (`runtime`, `platform`, `deployment`, `env`) is not registered at
   all, so another event may use its name there. `surface` is checked per request: `surface: ['agent']` hides the event
   from MCP clients.
+
+### Over a subscription's life
+
+A subscription is checked when it is created and again while it lives, not only when the event is listed. When a
+publish reaches a subscription whose last check is older than `subscriptions.reauthorizeEveryMs` (5 minutes), the
+server checks its stored owner (the `subscriber` of the last `events/subscribe`) with its stored arguments:
+
+1. The event's `authorities`, with the arguments as the rule's input.
+2. Then the event's `authorize(args, subscriber)`, on a context created for that owner: `this.authInfo` holds the
+   owner's claims, `sub`, `iss` and scopes, and no token.
+
+The first that does not allow the owner decides:
+
+- **A refusal** ends the subscription: the rule denies, or `authorize()` throws a public error (an
+  `EventForbiddenError`, or any `PublicMcpError`). The subscription is removed, the event's `onUnsubscribe` runs with
+  the reason `'terminated'`, and a SEP-3415 subscription's callback gets a `terminated` envelope with the reason
+  `Access revoked`.
+- **A check that could not be made** keeps the subscription: the rule's evaluation throws, or `authorize()` throws any
+  other error (an upstream that is down, a timeout). The event is not delivered to it this time, the server logs
+  `reauthorize: the access of subscription <id> could not be checked`, and the next publish checks it again.
+
+This is the split `events/subscribe` makes: it passes on what a public error says as the `reason`, and answers any
+other error with `the event refused it`. When subscribing, both refuse, since there is no subscription to keep yet.
+Throw an `EventForbiddenError` (or a `PublicMcpError`) from `authorize()` for "no", and let an upstream failure throw
+as it is.
 
 ## `events/list`
 
@@ -371,6 +396,185 @@ class CallbackPolicyPlugin {
 
 With `@frontmcp/observability`, the two requests are traced as `events/subscribe` and `events/unsubscribe` spans.
 
+## Publishing
+
+Publish an occurrence from any context (a tool, a job, an agent, a channel, a route) with `this.events`:
+
+```typescript
+import { Tool, ToolContext, z } from '@frontmcp/sdk';
+
+@Tool({ name: 'place_order', inputSchema: { orderId: z.string(), total: z.number() } })
+class PlaceOrderTool extends ToolContext {
+  async execute({ orderId, total }: { orderId: string; total: number }) {
+    const { eventId, matched } = await this.events.publish(OrderCreated, { orderId, status: 'paid', total });
+    return { orderId, eventId, matched };
+  }
+}
+```
+
+- The first argument is the `@Event` class, what `event()` returned, or the event's name. With the class or the
+  function, `data` has the type of `payloadSchema`.
+- `data` is validated against `payloadSchema` before anything is sent.
+- The result is `{ eventId, matched }`: `matched` is how many subscriptions a delivery was queued for. In a
+  long-lived process deliveries happen after `publish()` returned. On a serverless, edge or browser runtime the first
+  attempt of each delivery is made before `publish()` resolves (all of them at once, within `delivery.concurrency`),
+  so `publish()` can take as long as the slowest callback, up to `webhook.delivery.timeoutMs`.
+- Outside a context, use `scope.events.publisher`. In a provider, a duty or a worker, inject it with the
+  `EVENT_PUBLISHER` token: `this.get(EVENT_PUBLISHER)`.
+- On a server that performs no delivery mode, `publish()` answers `matched: 0`.
+
+| Option            | Type                                          | Default                         | Notes                                                       |
+| ----------------- | --------------------------------------------- | ------------------------------- | ----------------------------------------------------------- |
+| `eventId?`        | `string`                                      | `evt_` and 24 random characters | Pass the upstream id to let receivers deduplicate on it     |
+| `timestamp?`      | `string \| Date`                              | Now                             | When it happened. Delivered as ISO 8601 in UTC              |
+| `subscriptionId?` | `string`                                      | Every subscription of the event | Deliver to this one subscription only                       |
+| `audience?`       | `{ sub?, tenantId?, roles?: { any?, all? } }` | Every owner                     | Narrows by the OWNER of each subscription, before `match()` |
+
+`audience.sub` and `audience.tenantId` take one value or several. `roles.any` needs one of the roles, `roles.all`
+every one. They are compared with the owner as stored on the subscription, which each `events/subscribe` replaces.
+
+Mistakes of the server author are thrown, not delivered:
+
+| Error                      | Message                                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------------------- |
+| `EventNotRegisteredError`  | ``Event "<name>" is not registered, so it cannot be published. List it in the `events` of an app.`` |
+| `InvalidEventPublishError` | `Event "<name>" cannot be published: its data does not match payloadSchema: ...`                    |
+| `EventsNotEnabledError`    | `Events are not enabled on this server, so nothing can be published. ...`                           |
+
+### Which subscriptions receive it
+
+`publish()` runs the hookable `events:publish` flow (`EventPublishHook`), with the stages `validate`,
+`loadSubscriptions`, `dropInactive`, `filterByAudience`, `reauthorize`, `match`, `transform`, `enforceBodyLimit`,
+`enqueue` and `buildResult`:
+
+1. Suspended subscriptions are left out.
+2. `audience` narrows by owner.
+3. For an event with `authorities` or `authorize()`, an owner whose last check is older than
+   `subscriptions.reauthorizeEveryMs` (5 minutes) is checked again, the rule first, then `authorize()` (see
+   [Over a subscription's life](#over-a-subscriptions-life)). An owner refused loses the subscription: it is removed,
+   `onUnsubscribe(args, subscription, 'terminated')` runs, and a SEP-3415 subscription's callback gets a `terminated`
+   envelope. When the check could not be made, the event is not delivered to that subscription this time and the
+   subscription is kept.
+4. `match(event, args, subscriber)` decides per subscription. Without it, every subscription receives the event.
+5. `transform(event, args, subscriber)` returns the event as that subscription receives it: an occurrence with
+   `eventId`, `name`, `timestamp` and `data`.
+6. A delivery whose JSON body is over 262144 bytes is dropped for that subscription and logged. It is never truncated.
+
+A `match()` or a `transform()` that throws for one subscription is logged, and that subscription alone is left out.
+
+```typescript
+export const orderCreated = event({
+  name: 'order.created',
+  inputSchema: { status: z.string().optional() },
+  payloadSchema: { orderId: z.string(), status: z.string(), total: z.number() },
+  match(occurrence, args) {
+    return args.status === undefined || args.status === occurrence.data.status;
+  },
+});
+```
+
+## Delivery
+
+Each delivery is one POST to the subscription's callback. The body is the occurrence:
+
+```json
+{
+  "eventId": "evt_Zk3…",
+  "name": "order.created",
+  "timestamp": "2026-10-02T12:00:00.000Z",
+  "data": { "orderId": "o-1", "status": "paid", "total": 42 }
+}
+```
+
+| Header                  | Value                                                                                           |
+| ----------------------- | ----------------------------------------------------------------------------------------------- |
+| `webhook-id`            | The same on every attempt of one delivery (see below)                                           |
+| `webhook-timestamp`     | The Unix time of this attempt, in seconds                                                       |
+| `webhook-signature`     | `v1,<base64>` over `<id>.<timestamp>.<body>`; two, separated by a space, while a secret rotates |
+| `X-MCP-Subscription-Id` | The subscription's `id`                                                                         |
+| `Content-Type`          | `application/json`                                                                              |
+
+The body is serialized once: the same bytes are signed and sent on every attempt. The `webhook-id` depends on the
+dialect the subscription was created in: a message id of its own (`msg_…`) under SEP-3415, the `eventId` under the
+design sketch (ChatGPT).
+
+### What a response means
+
+| Response                                               | What the server does                                   |
+| ------------------------------------------------------ | ------------------------------------------------------ |
+| `2xx`                                                  | The delivery is done. The receiver has taken the event |
+| `410` or `413`                                         | The delivery is dropped. It is never retried           |
+| Any other status, a redirect, a timeout, no connection | The attempt failed. The delivery is retried            |
+
+Delivery is at least once: a receiver can get the same delivery twice, so it deduplicates on `webhook-id`, and a tool
+it calls in response should be safe to call twice. Events can arrive out of order.
+
+### Retries
+
+A delivery is attempted up to `webhook.delivery.maxAttempts` (5) times within `retryWindowMs` (15 minutes) of its
+first attempt. The wait before the next attempt starts at `backoffMs` (1 second), doubles with each attempt up to
+`maxBackoffMs` (60 seconds), and is shortened by a random part of up to half. A delivery that used its attempts or
+its window is abandoned, and logged:
+`Delivery dlv_… of event "order.created" to subscription sub_… is abandoned after 5 attempt(s): http_5xx`.
+
+Each attempt has `timeoutMs` (10 seconds), follows no redirect, and connects only to a public address over `https`.
+At most `concurrency` (16) deliveries are in flight in one process.
+
+### Suspension
+
+After 20 failed attempts in a row, a subscription is suspended: `deliveryStatus.active` is `false`, and its pending
+deliveries wait, looking again every 30 seconds until their retry window ends. The next `events/subscribe` for the
+same subscription reactivates it. An acknowledged delivery ends the count.
+
+A subscription without expiry that stayed suspended for longer than `subscriptions.suspendedTtlMs` (7 days) is ended
+the next time its event is published: `onUnsubscribe(..., 'terminated')` runs, and a SEP-3415 subscription's callback
+gets a `terminated` envelope.
+
+### The `terminated` envelope
+
+A body with a top-level `type` is not an event. When the server ends a SEP-3415 subscription, it sends, signed like a
+delivery and with `webhook-id: msg_terminated_…`:
+
+```json
+{ "type": "terminated", "error": { "code": -32024, "message": "Forbidden", "data": { "reason": "Access revoked" } } }
+```
+
+Subscriptions of the design-sketch dialect get no envelope.
+
+### Pending deliveries
+
+A pending delivery is a record in the same store as the subscriptions, removed when it is done, dropped or abandoned.
+
+- **Memory** (the default): pending deliveries end with the process.
+- **`events.store.sqlite` or `events.store.redis`**: they survive a restart. The process that queued a delivery holds
+  it; when that process stops it releases what it holds, and when it dies another process takes the delivery over
+  once its lease ran out (the attempt's time, plus `timeoutMs`, plus 30 seconds). Every process looks for such
+  deliveries when it starts and every 30 seconds.
+- **Serverless and edge runtimes** start no timers: the first attempt is made before `publish()` returns, and a
+  retry runs during a later `publish()`, at most one look every 30 seconds.
+
+`scope.events.outbox` is the server's `EventOutbox` (`depth()`, `sweep()`).
+
+### Hooks, metrics and health
+
+- One attempt runs the hookable `events:deliver` flow (`EventDeliverHook`): `loadSubscription`, `buildHeaders`,
+  `send`, `classify`, `buildResult`.
+- With `@frontmcp/observability`, publishing and each attempt are traced as `events/publish` and `events/deliver`
+  spans.
+- With `metrics: { enabled: true }`, `/metrics` has these counters, labelled `event`:
+  `frontmcp_events_published_total`, `frontmcp_events_matched_total`, `frontmcp_events_delivered_total`,
+  `frontmcp_events_retried_total`, `frontmcp_events_abandoned_total`, `frontmcp_events_dropped_total`,
+  `frontmcp_events_suspended_total`, `frontmcp_events_terminated_total`.
+- `/readyz` has an `events-outbox` check. Its details show `pendingDeliveries`, and it is unhealthy when the store
+  does not answer.
+
+### What to put in a payload
+
+- The least a receiver needs: ids and a few fields to decide what to do. The receiver reads the rest with a tool,
+  under its own authorization.
+- No secrets and no personal data the subscriber may not see: `transform()` can remove fields per subscriber.
+- A receiver gives the payload to a model: text in it that came from users is untrusted input there.
+
 ## Capabilities
 
 A server that serves events advertises them in two places, on every transport (`initialize` over HTTP, SSE and stdio,
@@ -414,13 +618,15 @@ class ShopServer {}
 
 `events.subscriptions`:
 
-| Field              | Type      | Default               | Notes                                                                     |
-| ------------------ | --------- | --------------------- | ------------------------------------------------------------------------- |
-| `defaultTtlMs?`    | `number`  | `3600000` (1 hour)    | The lifetime of a subscription that asks for none                         |
-| `maxTtlMs?`        | `number`  | `86400000` (24 hours) | The longest lifetime granted                                              |
-| `minTtlMs?`        | `number`  | `60000` (1 minute)    | The shortest lifetime granted                                             |
-| `allowNoExpiry?`   | `boolean` | `false`               | Grants `ttlMs: null`. Needs `events.store.redis` or `events.store.sqlite` |
-| `maxPerPrincipal?` | `number`  | `100`                 | How many subscriptions one caller may hold                                |
+| Field                 | Type      | Default               | Notes                                                                       |
+| --------------------- | --------- | --------------------- | --------------------------------------------------------------------------- |
+| `defaultTtlMs?`       | `number`  | `3600000` (1 hour)    | The lifetime of a subscription that asks for none                           |
+| `maxTtlMs?`           | `number`  | `86400000` (24 hours) | The longest lifetime granted                                                |
+| `minTtlMs?`           | `number`  | `60000` (1 minute)    | The shortest lifetime granted                                               |
+| `allowNoExpiry?`      | `boolean` | `false`               | Grants `ttlMs: null`. Needs `events.store.redis` or `events.store.sqlite`   |
+| `maxPerPrincipal?`    | `number`  | `100`                 | How many subscriptions one caller may hold                                  |
+| `reauthorizeEveryMs?` | `number`  | `300000` (5 minutes)  | How often a publish checks an owner against `authorities` and `authorize()` |
+| `suspendedTtlMs?`     | `number`  | `604800000` (7 days)  | How long a suspended subscription without expiry is kept                    |
 
 The three lifetimes must satisfy `minTtlMs <= defaultTtlMs <= maxTtlMs` after defaults: a server that lowers
 `maxTtlMs` below one hour sets `defaultTtlMs` too.
@@ -434,7 +640,18 @@ The three lifetimes must satisfy `minTtlMs <= defaultTtlMs <= maxTtlMs` after de
 | `unsafeAllowLocalCallbacks?` | `boolean`  | `false`              | Test-only: also accepts `http:` callbacks and loopback or private addresses |
 | `verification.cacheTtlMs?`   | `number`   | `3600000` (1 hour)   | How long a callback a caller proved stays verified for that caller          |
 | `verification.timeoutMs?`    | `number`   | `10000`              | How long the callback has to answer the verification request                |
-| `rotationGraceMs?`           | `number`   | `300000` (5 minutes) | How long a replaced secret stays on the subscription                        |
+| `rotationGraceMs?`           | `number`   | `300000` (5 minutes) | How long deliveries are also signed with a replaced secret                  |
+
+`events.webhook.delivery`:
+
+| Field            | Type     | Default               | Notes                                                              |
+| ---------------- | -------- | --------------------- | ------------------------------------------------------------------ |
+| `timeoutMs?`     | `number` | `10000`               | How long a callback has to answer one delivery                     |
+| `maxAttempts?`   | `number` | `5`                   | How many times one delivery is attempted                           |
+| `retryWindowMs?` | `number` | `900000` (15 minutes) | How long after its first attempt a delivery is still retried       |
+| `backoffMs?`     | `number` | `1000`                | The wait before the second attempt; must not exceed `maxBackoffMs` |
+| `maxBackoffMs?`  | `number` | `60000`               | The longest wait between two attempts                              |
+| `concurrency?`   | `number` | `16`                  | How many deliveries are in flight at once in one process           |
 
 With `enabled: false`, the server logs `Events are disabled (events.enabled: false), so the 2 event(s) apps declare are
 not served.` and `scope.events` is `undefined`. Otherwise `scope.events` is the `EventRegistry`: `getEvents()`,
@@ -463,13 +680,14 @@ options object. A class that extends plain `EventContext` is not checked, and it
 ## Methods of an Event
 
 `EventContext` declares optional methods, which `event()` takes beside its options. Subscriptions call `authorize`,
-`onSubscribe` and `onUnsubscribe`; `match`, `transform` and `check` are for delivery. `subscriber` is the owner of the
+`onSubscribe` and `onUnsubscribe`; publishing calls `match` and `transform`; `check` is for the poll mode, which is
+not performed yet. `subscriber` is the owner of the
 subscription: `{ sub, iss?, tenantId?, roles, permissions, scopes, claims }`. `tenantId` is set when
 `authorities.claimsMapping.tenantId` names the claim that holds it.
 
 | Method                                      | Purpose                                                                       |
 | ------------------------------------------- | ----------------------------------------------------------------------------- |
-| `authorize(args, subscriber)`               | Throw to refuse a subscription the event's `authorities` allow                |
+| `authorize(args, subscriber)`               | Throw to refuse a subscription; run again over its life                       |
 | `match(event, args, subscriber)`            | Whether a subscription receives a published event. Without it, every one does |
 | `transform(event, args, subscriber)`        | The event as one subscription receives it                                     |
 | `check(args, cursor)`                       | The events since `cursor`, for an upstream that can replay                    |
@@ -510,6 +728,9 @@ functions) to get the same `this`.
 - [ ] `events/subscribe` answers an `id` and a `refreshBefore`, and the callback received one verification request
 - [ ] Subscribing again with the same arguments answers the same `id`
 - [ ] `events/unsubscribe` answers `{}`, twice in a row
+- [ ] `this.events.publish(...)` answers `matched: 1` for one matching subscription
+- [ ] The callback receives one POST whose `webhook-signature` verifies with the subscription's secret
+- [ ] A callback that answers `503` twice gets a third attempt with the same `webhook-id`
 
 ## Troubleshooting
 
@@ -530,9 +751,18 @@ functions) to get the same `this`.
 | `Invalid delivery.secret`                          | The secret is not `whsec_` and 24 to 64 bytes of base64            | Generate one with `generateStandardWebhookSecret()` from `@frontmcp/utils` |
 | `Event subscription store: ... needs a secret`     | `events.store` is set and no secret is                             | Set `MCP_EVENTS_SECRET`                                                    |
 | A subscription is gone after a restart             | Subscriptions are kept in memory by default                        | Set `events.store.sqlite` or `events.store.redis`                          |
+| `publish()` answers `matched: 0`                   | No subscription, `audience`, `match()`, or a suspended one         | Check `events/subscribe` succeeded and what `match()` returns              |
+| `EventNotRegisteredError` on `publish()`           | The event is not in any app's `events`                             | List it, or publish the name that is registered                            |
+| `InvalidEventPublishError` on `publish()`          | `data` does not match `payloadSchema`                              | Send the fields the schema declares                                        |
+| A receiver gets the same event twice               | Delivery is at least once: a retry after a lost `2xx`              | Deduplicate on `webhook-id`                                                |
+| `Delivery ... is abandoned` in the log             | The callback failed every attempt in the retry window              | Fix the callback; read the category at the end of the line                 |
+| `Subscription ... is suspended` in the log         | 20 failed deliveries in a row                                      | Fix the callback, then subscribe again to reactivate                       |
+| The signature does not verify at the receiver      | It signs a re-serialized body, or uses another secret              | Verify over the raw body bytes with the secret sent in `events/subscribe`  |
 
 ## Reference
 
 - [MCP Events, SEP-3415](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415)
+- [Standard Webhooks](https://www.standardwebhooks.com): the signature scheme of deliveries
 - Related skills: `decorators-guide`, `create-plugin-hooks` (`ListEventsHook`, `EventSubscribeHook`,
-  `EventUnsubscribeHook`), `frontmcp-authorities`, `frontmcp-channels`, `create-job`, `create-duty`
+  `EventUnsubscribeHook`, `EventPublishHook`, `EventDeliverHook`), `frontmcp-authorities`, `frontmcp-channels`,
+  `create-job`, `create-duty`

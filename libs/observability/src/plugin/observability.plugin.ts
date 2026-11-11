@@ -3,6 +3,8 @@ import { trace } from '@opentelemetry/api';
 import {
   AgentCallHook,
   DynamicPlugin,
+  EventDeliverHook,
+  EventPublishHook,
   EventSubscribeHook,
   EventUnsubscribeHook,
   FlowHooksOf,
@@ -626,6 +628,36 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @EventUnsubscribeHook.Finally('finalize', { priority: 1000 })
   _eventUnsubscribeDone(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+  }
+
+  @EventPublishHook.Will('validate', { priority: -1000 })
+  _eventPublishWill(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowWillStart('events/publish', this.tracingOpts, ctx);
+  }
+
+  @EventPublishHook.Did('match', { priority: 1000 })
+  _eventPublishDidMatch(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowStage('match', ctx);
+  }
+
+  @EventPublishHook.Did('buildResult', { priority: 1000 })
+  _eventPublishDone(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+  }
+
+  @EventDeliverHook.Will('loadSubscription', { priority: -1000 })
+  _eventDeliverWill(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowWillStart('events/deliver', this.tracingOpts, ctx);
+  }
+
+  @EventDeliverHook.Did('send', { priority: 1000 })
+  _eventDeliverDidSend(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowStage('send', ctx);
+  }
+
+  @EventDeliverHook.Did('buildResult', { priority: 1000 })
+  _eventDeliverDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
 
