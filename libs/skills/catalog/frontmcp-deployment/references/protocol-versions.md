@@ -76,6 +76,12 @@ headers, so `_meta` and the method decide):
   client that speaks both eras falls back to `initialize`. Claude Code delivers
   channel events only to a session (see `frontmcp-channels`). Before 1.12 such a
   server served `2026-07-28` over stdio like any other.
+- The stdio bridge of `runShared()` and of `frontmcp dev --stdio` without
+  `--serve` declines `2026-07-28` the same way for a server with channels: it
+  asks the HTTP server with a `server/discover` of its own, and answers the
+  client's `2026-07-28` requests with `-32022`. For a server without channels it
+  forwards them without the mirrored request headers, as before, and the server
+  refuses them with `-32020`.
 
 Up to 1.10.3, stdio served only the `initialize` revisions: `server/discover`
 answered `-32601`, and a `2026-07-28` request was answered as a 2025-era one.
