@@ -59,6 +59,47 @@ describe('ChannelNotificationService.send', () => {
   });
 });
 
+describe('ChannelNotificationService meta keys', () => {
+  const unsafeMeta = { source: 'chat', 'chat-id': '42', 'sender.name': 'ada' };
+  const safeMeta = { source: 'chat', chat_id: '42', sender_name: 'ada' };
+
+  it('sends a key Claude Code would drop with an underscore in its place, to the subscribed sessions', () => {
+    const sink = notifications();
+    const service = new ChannelNotificationService(sink, logger());
+
+    service.sendToSubscribedSessions('hello', unsafeMeta);
+
+    expect(sink.sendCustomNotification).toHaveBeenCalledWith(
+      'notifications/claude/channel',
+      { content: 'hello', meta: safeMeta },
+      expect.any(Function),
+    );
+  });
+
+  it('does the same for a notification sent to one session', () => {
+    const sink = notifications();
+    const service = new ChannelNotificationService(sink, logger());
+
+    service.sendToSession('session-1', 'hello', unsafeMeta);
+
+    expect(sink.sendCustomNotification).toHaveBeenCalledWith(
+      'notifications/claude/channel',
+      { content: 'hello', meta: safeMeta },
+      expect.any(Function),
+    );
+  });
+
+  it('does the same for a listener with no session', () => {
+    const service = new ChannelNotificationService(notifications(), logger());
+    const deliver = jest.fn();
+    service.listen(['chat'], deliver);
+
+    service.sendToSubscribedSessions('hello', unsafeMeta);
+
+    expect(deliver).toHaveBeenCalledWith('hello', safeMeta);
+  });
+});
+
 describe('ChannelNotificationService channel capable sessions', () => {
   const CHANNEL_EVENT = { content: 'disk full', meta: { source: 'alerts' } };
 

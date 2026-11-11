@@ -101,6 +101,46 @@ describe('event metadata', () => {
     });
   });
 
+  describe('channel', () => {
+    const channelProblem = 'channel must be true, or { content?, meta? } with functions of the payload';
+
+    it('is off unless it is set', () => {
+      expect(parse({}).data?.channel).toBeUndefined();
+    });
+
+    it('takes true, and an object of a content and a meta function', () => {
+      const content = (payload: { orderId: string }) => `Order ${payload.orderId}`;
+      const meta = (payload: { orderId: string }) => ({ order_id: payload.orderId });
+
+      expect(parse({ channel: true }).data?.channel).toBe(true);
+      expect(parse({ channel: {} }).data?.channel).toEqual({});
+      expect(parse({ channel: { content } }).data?.channel).toEqual({ content });
+      expect(parse({ channel: { content, meta } }).data?.channel).toEqual({ content, meta });
+    });
+
+    it('keeps the functions it was given', () => {
+      const content = () => 'an order was placed';
+
+      const channel = parse({ channel: { content } }).data?.channel;
+
+      expect(channel).not.toBe(true);
+      expect((channel as { content: unknown }).content).toBe(content);
+    });
+
+    it.each([
+      ['false', false],
+      ['a string', 'json'],
+      ['content that is not a function', { content: 'an order was placed' }],
+      ['meta that is not a function', { meta: { env: 'prod' } }],
+    ])('refuses %s', (_label, channel) => {
+      expect(messagesOf({ channel })).toEqual([channelProblem]);
+    });
+
+    it('refuses a key it does not know', () => {
+      expect(messagesOf({ channel: { format: 'json' } })).toEqual(['Unrecognized key: "format"']);
+    });
+  });
+
   describe('other fields', () => {
     it('defaults hideFromDiscovery to false', () => {
       expect(parse({}).data?.hideFromDiscovery).toBe(false);

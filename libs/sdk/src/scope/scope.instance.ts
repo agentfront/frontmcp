@@ -1127,6 +1127,7 @@ export class Scope extends ScopeEntry {
         eventsList: appEvents,
         eventProviders,
         eventsConfig: this.metadata.events,
+        channelsEnabled: channelsConfig?.enabled,
         logger: this.logger,
       });
       this._scopeEvents = eventsResult?.eventRegistry;

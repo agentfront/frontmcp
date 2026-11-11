@@ -639,5 +639,31 @@ describe('skill-instructions.helper', () => {
       };
       expect(buildChannelInstructions(channels)).toBe('Events arrive as <channel> tags.');
     });
+
+    describe('with events that have the channel option', () => {
+      const events = { getChannelEvents: () => [{ name: 'order.created' }] };
+      const eventHint =
+        'A tag with event and event_id attributes is an event this server published: ' +
+        'event is its name, event_id its id.';
+
+      it('says how a published event arrives, on a server without a channel', () => {
+        expect(buildChannelInstructions(undefined, events)).toBe(`Events arrive as <channel> tags. ${eventHint}`);
+      });
+
+      it('keeps the reply hint of two-way channels before it', () => {
+        const channels = {
+          hasAny: () => true,
+          getChannelInstances: () => [{ twoWay: true }],
+        };
+        expect(buildChannelInstructions(channels, events)).toBe(
+          `Events arrive as <channel> tags. Reply with the channel-reply tool. ${eventHint}`,
+        );
+      });
+
+      it('says nothing about events when none has the option', () => {
+        const noEvents = { getChannelEvents: () => [] };
+        expect(buildChannelInstructions(undefined, noEvents)).toBe('');
+      });
+    });
   });
 });

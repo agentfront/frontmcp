@@ -326,7 +326,7 @@ export const channelNotificationSchema = z.object({
  * Channels configuration at the server level.
  */
 export interface ChannelsConfigOptions {
-  /** Enable the channels system */
+  /** Enable the channels system. `false` also turns off the `channel` option of events. */
   enabled: boolean;
   /** Default metadata appended to all channel notifications */
   defaultMeta?: Record<string, string>;

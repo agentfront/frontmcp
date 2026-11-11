@@ -73,6 +73,42 @@ describe('@Event', () => {
     expect(declare).toThrow('@Event invalid metadata for "payloadSchema"');
   });
 
+  it('keeps the channel option, whose functions take the payload the schema describes', () => {
+    /** Sent to Claude Code sessions as its payload. */
+    @Event({ name: 'order.announced', payloadSchema, channel: true })
+    class OrderAnnounced extends EventContext {}
+
+    /** Sent to Claude Code sessions as a sentence, with the order id as an attribute. */
+    @Event({
+      name: 'order.described',
+      payloadSchema,
+      channel: {
+        content: (payload) => `Order ${payload.orderId} was placed`,
+        meta: (payload) => ({ order_id: payload.orderId }),
+      },
+    })
+    class OrderDescribed extends EventContext {}
+
+    const described = metadataOf(OrderDescribed).channel;
+
+    expect(metadataOf(OrderAnnounced).channel).toBe(true);
+    expect(described).toEqual({ content: expect.any(Function), meta: expect.any(Function) });
+    expect(described === true ? undefined : described?.content?.({ orderId: 'o-1' })).toBe('Order o-1 was placed');
+  });
+
+  it('names channel when the option is not true or an object of functions', () => {
+    const declare = () => {
+      /** Declares the option with a value it does not take. */
+      @Event({ name: 'order.muted', payloadSchema, channel: false as never })
+      class OrderMuted extends EventContext {}
+      return OrderMuted;
+    };
+
+    expect(declare).toThrow(
+      '@Event invalid metadata for "channel": channel must be true, or { content?, meta? } with functions of the payload',
+    );
+  });
+
   it('does not take a class without the decorator for an event', () => {
     class Undecorated extends EventContext {}
 
@@ -105,6 +141,19 @@ describe('event()', () => {
       onSubscribe,
       onUnsubscribe: undefined,
     });
+  });
+
+  it('keeps the channel option in the metadata, typed by the payload schema', () => {
+    const orderPacked = event({
+      name: 'order.packed',
+      payloadSchema,
+      channel: { content: (payload) => `Order ${payload.orderId} is packed` },
+    });
+
+    const metadata = (orderPacked as unknown as Record<symbol, unknown>)[FrontMcpEventTokens.metadata] as EventMetadata;
+
+    expect(metadata.channel).toEqual({ content: expect.any(Function) });
+    expect(orderPacked()).not.toHaveProperty('channel');
   });
 
   it('names the field of invalid metadata', () => {

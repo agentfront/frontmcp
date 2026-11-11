@@ -10,6 +10,7 @@
  */
 import { type ServerCapabilities } from '@frontmcp/protocol';
 
+import { channelCapabilitiesOf } from '../channel/channel.utils';
 import { type Scope } from '../scope/scope.instance';
 import { computeTaskCapabilities } from '../task/task-scope.helper';
 
@@ -56,7 +57,7 @@ export function buildScopedServerOptions(scope: Scope, instructions = ''): Scope
   const resourcesCapabilities = scope.resources.getCapabilities();
   const promptsCapabilities = scope.prompts.getCapabilities();
   const agentsCapabilities = scope.agents.getCapabilities();
-  const channelCapabilities = scope.channels?.getCapabilities() ?? {};
+  const channelCapabilities = channelCapabilitiesOf(scope);
   const eventCapabilities = scope.events?.getCapabilities() ?? {};
   const taskCapabilities = computeTaskCapabilities(scope);
 

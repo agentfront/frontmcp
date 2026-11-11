@@ -9,6 +9,7 @@ import {
 
 import { type SSEServerTransport } from '#sse-transport';
 
+import { channelCapabilitiesOf } from '../../channel/channel.utils';
 import { ServerRequestTokens, type FrontMcpLogger, type ServerResponse } from '../../common';
 import {
   type ElicitationStore,
@@ -200,7 +201,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     const elicitationCapability = this.scope.metadata.elicitation?.enabled ? { elicitation: {} } : {};
 
     // Channel capabilities (experimental extension for Claude Code)
-    const channelCapabilities = this.scope.channels?.getCapabilities() ?? {};
+    const channelCapabilities = channelCapabilitiesOf(this.scope);
 
     // SEP-2640 (Skills Extension) — capability declaration and optional
     // skill-URI hints. `skillsCapabilities` advertises the extension; the

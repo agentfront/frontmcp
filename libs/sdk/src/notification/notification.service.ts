@@ -2,6 +2,7 @@
 
 import {
   ListRootsResultSchema,
+  type AuthInfo,
   type LoggingLevel,
   type McpServer,
   type ProgressNotificationParams,
@@ -367,6 +368,8 @@ export interface RegisteredServer {
   registeredAt: number;
   /** True for the process's stdio connection: Claude Code, which spawns it, declares no `claude/channel` capability */
   stdio?: boolean;
+  /** The session's caller as its initialize request saw them: an event pushed to the session is checked against it */
+  authInfo?: Partial<AuthInfo>;
   /** Client capabilities from the initialize request */
   clientCapabilities?: ClientCapabilities;
   /** Client info (name/version) from the initialize request */
@@ -1075,6 +1078,19 @@ export class NotificationService {
   }
 
   /**
+   * Keep who a session's caller is, as its initialize request saw them. An event with the `channel` option is sent
+   * to the session only when its own rules let this caller see it.
+   *
+   * @returns true if the session was found
+   */
+  setAuthInfo(sessionId: string, authInfo: Partial<AuthInfo>): boolean {
+    const registered = this.servers.get(sessionId);
+    if (!registered) return false;
+    registered.authInfo = authInfo;
+    return true;
+  }
+
+  /**
    * Get client capabilities for a session.
    *
    * @param sessionId - The session to query
@@ -1290,6 +1306,11 @@ export class NotificationService {
     }
 
     this.logger.verbose(`Sent custom notification ${method} to ${sent}/${this.servers.size} session(s)`);
+  }
+
+  /** The sessions that are sent channel notifications: the stdio session, and each whose client declared them. */
+  getChannelCapableSessions(): RegisteredServer[] {
+    return [...this.servers.values()].filter(isChannelCapableSession);
   }
 
   /**

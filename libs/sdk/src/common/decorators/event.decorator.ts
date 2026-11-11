@@ -1,10 +1,13 @@
 import 'reflect-metadata';
 
-import type z from '@frontmcp/lazy-zod';
-
 import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
 import { type EventContext, type EventFunction, type EventHandlers, type EventTyping } from '../interfaces';
-import { frontMcpEventMetadataSchema, type EventMetadata, type EventSchemaType } from '../metadata';
+import {
+  frontMcpEventMetadataSchema,
+  type EventMetadata,
+  type EventSchemaOutput,
+  type EventSchemaType,
+} from '../metadata';
 import { FrontMcpEventTokens } from '../tokens';
 
 const FUNCTION_EVENT = 'function-event';
@@ -26,20 +29,14 @@ function defineEvent(providedMetadata: EventMetadata): ClassDecorator {
   };
 }
 
-type SchemaObject<Schema> = Schema extends z.ZodObject
-  ? z.output<Schema>
-  : Schema extends z.ZodRawShape
-    ? z.output<z.ZodObject<Schema>>
-    : never;
-
-type InputOfSchema<Schema> = [Schema] extends [never] ? Record<string, never> : SchemaObject<Schema>;
+type InputOfSchema<Schema> = [Schema] extends [never] ? Record<string, never> : EventSchemaOutput<Schema>;
 
 type EventClass = abstract new (...args: never[]) => unknown;
 
 /** The subscription arguments of an event: of its `@Event` class, its `event()` function, or its options. */
 export type EventInputOf<T> = T extends { payloadSchema: unknown }
   ? T extends { inputSchema: infer Schema }
-    ? SchemaObject<Schema>
+    ? EventSchemaOutput<Schema>
     : Record<string, never>
   : T extends abstract new (...args: never[]) => EventTyping<infer In, unknown>
     ? In
@@ -49,7 +46,7 @@ export type EventInputOf<T> = T extends { payloadSchema: unknown }
 
 /** The `data` of an event's occurrences: of its `@Event` class, its `event()` function, or its options. */
 export type EventPayloadOf<T> = T extends { payloadSchema: infer Schema }
-  ? SchemaObject<Schema>
+  ? EventSchemaOutput<Schema>
   : T extends abstract new (...args: never[]) => EventTyping<unknown, infer Payload>
     ? Payload
     : T extends EventTyping<unknown, infer Payload>
@@ -87,21 +84,23 @@ type EventDecorator = <
   target: C &
     MustExtendEventContext<C> &
     MustDeclare<'arguments', InputOfSchema<InSchema>, EventInputOf<C>> &
-    MustDeclare<'payload', SchemaObject<PayloadSchema>, EventPayloadOf<C>>,
+    MustDeclare<'payload', EventSchemaOutput<PayloadSchema>, EventPayloadOf<C>>,
 ) => void;
 
 type EventOptions<InSchema extends EventSchemaType, PayloadSchema extends EventSchemaType> = EventMetadata<
   InSchema,
   PayloadSchema
 > &
-  EventHandlers<InputOfSchema<InSchema>, SchemaObject<PayloadSchema>> &
-  ThisType<EventContext<InputOfSchema<InSchema>, SchemaObject<PayloadSchema>>>;
+  EventHandlers<InputOfSchema<InSchema>, EventSchemaOutput<PayloadSchema>> &
+  ThisType<EventContext<InputOfSchema<InSchema>, EventSchemaOutput<PayloadSchema>>>;
 
 /** Function builder for events: the metadata of `@Event`, with the optional methods of `EventContext` beside it. */
 function frontMcpEvent<
   InSchema extends EventSchemaType = never,
   PayloadSchema extends EventSchemaType = EventSchemaType,
->(options: EventOptions<InSchema, PayloadSchema>): EventFunction<InputOfSchema<InSchema>, SchemaObject<PayloadSchema>> {
+>(
+  options: EventOptions<InSchema, PayloadSchema>,
+): EventFunction<InputOfSchema<InSchema>, EventSchemaOutput<PayloadSchema>> {
   const { authorize, match, transform, check, onSubscribe, onUnsubscribe, ...providedMetadata } = options;
   const metadata = parseEventMetadata(providedMetadata);
   const handlers = { authorize, match, transform, check, onSubscribe, onUnsubscribe };
@@ -110,7 +109,7 @@ function frontMcpEvent<
     [FrontMcpEventTokens.type]: FUNCTION_EVENT,
     [FrontMcpEventTokens.metadata]: metadata,
   });
-  return eventFunction as EventFunction<InputOfSchema<InSchema>, SchemaObject<PayloadSchema>>;
+  return eventFunction as EventFunction<InputOfSchema<InSchema>, EventSchemaOutput<PayloadSchema>>;
 }
 
 /** Whether a value is a class decorated with `@Event`. */
