@@ -1,6 +1,6 @@
 {
   "name": "@frontmcp/protocol",
-  "version": "1.12.0",
+  "version": "1.12.0-rc.1",
   "description": "Internal FrontMCP package: the single re-export point for @modelcontextprotocol/sdk types, server, client and transports",
   "author": "AgentFront <info@agentfront.dev>",
   "license": "Apache-2.0",
@@ -29,7 +29,7 @@
     "@modelcontextprotocol/sdk": "1.32.1"
   },
   "peerDependencies": {
-    "@frontmcp/lazy-zod": "1.12.0"
+    "@frontmcp/lazy-zod": "1.12.0-rc.1"
   },
   "imports": {
     "#mcp-streamable-http": {
