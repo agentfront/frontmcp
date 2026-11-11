@@ -39,9 +39,9 @@ graph TB
     CI --> CNS
     CR -->|manages| CI
     CNS -->|sendCustomNotification| NS
-    NS -->|filter: supportsChannels| SS1
-    NS -.->|skipped: no capability| SS2
-    NS -.->|skipped: no capability| SS3
+    NS -->|filter: channel capable| SS1
+    NS -.->|skipped: not channel capable| SS2
+    NS -.->|skipped: not channel capable| SS3
 
     style SS1 fill:#2d8659,color:#fff
     style SS2 fill:#666,color:#fff
@@ -64,7 +64,7 @@ sequenceDiagram
     CTX-->>CH: { content, meta }
     CH->>CNS: sendToAllCapableSessions(content, meta)
     CNS->>NS: sendCustomNotification("notifications/claude/channel", ...)
-    NS->>NS: Filter sessions with claude/channel capability
+    NS->>NS: Filter channel capable sessions
     NS->>CC: JSON-RPC notification
 
     Note over CC: Claude sees:<br/><channel source="deploy" env="prod">Deploy v1.2.3 succeeded</channel>
@@ -89,10 +89,47 @@ sequenceDiagram
 
 ## Capability Handshake
 
+A session gets channel notifications when it is **channel capable**. The rule depends on the transport
+(`isChannelCapableSession()` in `notification.service.ts`).
+
+### Stdio: no declaration, 2026-07-28 declined
+
+Claude Code spawns a channel server over stdio. It never declares `experimental['claude/channel']`: it registers
+a channel from the capability the server advertises and from its own flags. So the stdio session is channel
+capable with no client declaration.
+
+Claude Code delivers channel events only on a session, and it probes a stdio server with `server/discover` on
+revision 2026-07-28 first. A server that serves channels declines that revision over stdio: `server/discover` and
+every other 2026-07-28 request get `-32022` with the earlier revisions in `data.supported`, and 2026-07-28
+notifications are ignored. Claude Code then sends `initialize`. `servesClaudeCodeChannels()` in `channel.utils.ts`
+decides whether a scope serves channels; `StdioRevisionRouter` declines.
+
+```mermaid
+sequenceDiagram
+    participant CC as Claude Code
+    participant Server as FrontMCP Server (stdio)
+
+    CC->>Server: server/discover { _meta: { protocolVersion: "2026-07-28" } }
+    Server-->>CC: error -32022 { supported: ["2025-11-25", ...], requested: "2026-07-28" }
+    CC->>Server: initialize { capabilities: { roots, elicitation } }
+    Server-->>CC: initialize result { capabilities: { experimental: { "claude/channel": {} } }, instructions: "Events arrive as <channel> tags..." }
+    Note over Server: The stdio session is channel capable and is subscribed to the channels
+    Server->>CC: notifications/claude/channel
+```
+
+This covers `runStdio()`, a `--stdio` server and `frontmcp dev --stdio --serve`. `runShared()` and
+`frontmcp dev --stdio` without `--serve` bridge stdio to an HTTP server, so the HTTP rule applies to them.
+
+### HTTP: declaration required
+
+Over HTTP a client declares the capability, and a session that declares nothing gets no channel notification.
+HTTP serves revision 2026-07-28 as before: there, a `subscriptions/listen` request carries the declaration in its
+client capabilities.
+
 ```mermaid
 sequenceDiagram
     participant Client as MCP Client
-    participant Server as FrontMCP Server
+    participant Server as FrontMCP Server (HTTP)
 
     Client->>Server: initialize { capabilities: { experimental: { "claude/channel": {} } } }
     Server-->>Client: initialize result { capabilities: { experimental: { "claude/channel": {} } }, instructions: "Events arrive as <channel> tags..." }
@@ -263,7 +300,7 @@ sequenceDiagram
     participant NS as NotificationService
     participant CNS as ChannelNotificationService
 
-    Note over Init: Session connects with claude/channel capability
+    Note over Init: A channel capable session initializes
     Init->>NS: subscribeAllChannels(sessionId, ['deploy-alerts', 'errors'])
 
     Note over CNS: Event arrives for "deploy-alerts"
@@ -279,12 +316,14 @@ When an event arrives:
 3. The returned `ChannelNotification` is merged with static metadata
 4. `ChannelNotificationService.sendToSubscribedSessions()` is called
 5. `NotificationService.getSubscribersForChannel(channelName)` returns only subscribed sessions
-6. Each subscribed session is also checked for `supportsChannels()` capability
+6. Each subscribed session is also checked with `isChannelCapableSession()`: the stdio session always passes, an
+   HTTP session passes when its client declared `experimental: { 'claude/channel': {} }`
 7. Only subscribed + capable sessions receive the JSON-RPC notification
 
-**Auto-subscription:** When a session initializes with `experimental: { 'claude/channel': {} }`
-capability, it is automatically subscribed to all available channels. This happens in the
-`initialize-request.handler.ts` (HTTP) and `runStdio()` (stdio).
+**Auto-subscription:** When a channel capable session initializes, it is automatically subscribed to the channels
+the hookable `channels:list` flow returns. An HTTP session is channel capable when its `initialize` declares
+`experimental: { 'claude/channel': {} }`; the stdio session needs no declaration. This happens in
+`initialize-request.handler.ts` for both.
 
 **Manual subscription:** For fine-grained control, use `scope.notifications.subscribeChannel(sessionId, channelName)`.
 
