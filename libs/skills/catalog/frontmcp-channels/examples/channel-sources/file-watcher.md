@@ -41,6 +41,8 @@ export class LogWatcherChannel extends ChannelContext {
   async onEvent(payload: unknown): Promise<ChannelNotification> {
     const { event, path } = payload as ChannelFileEvent;
     const fileName = basename(path);
+    // A file created again at the same path is read from its start
+    if (event === 'create') this.charactersRead.delete(path);
     const newText = await this.readNewText(path);
     return {
       content: `[${fileName}] ${newText || event}`,

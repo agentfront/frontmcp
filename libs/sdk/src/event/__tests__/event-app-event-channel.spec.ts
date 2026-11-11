@@ -112,7 +112,8 @@ describe('an app-event channel named after a declared event', () => {
 
     expect(logged('warn')).toEqual([
       'Channel "deploys" listens to event "deploy.finished", which has the channel option: Claude Code sessions get ' +
-        'each occurrence twice, once from the event and once from the channel. Remove the channel.',
+        'each occurrence twice, once from the event and once from the channel. Keep one: remove the channel, or ' +
+        'the option when the channel does what the option cannot.',
     ]);
   });
 
@@ -120,8 +121,8 @@ describe('an app-event channel named after a declared event', () => {
     server = await startShop();
 
     expect(logged('info')).toEqual([
-      'Channel "orders" listens to event "order.created": the channel option of the event replaces this channel, ' +
-        "and checks each session's access.",
+      'Channel "orders" listens to event "order.created": the event has no channel option. Setting it can replace ' +
+        "this channel, and checks each session's access.",
     ]);
   });
 

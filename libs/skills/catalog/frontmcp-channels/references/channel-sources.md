@@ -95,8 +95,8 @@ The channel gets every published occurrence of that name, once, whoever is subsc
 
 The server logs one line at startup for each `app-event` channel whose `event` is a declared event:
 
-- The event has the `channel` option: a warning. `Channel "new-orders" listens to event "order.created", which has the channel option: Claude Code sessions get each occurrence twice, once from the event and once from the channel. Remove the channel.`
-- The event has no `channel` option: an info line. `Channel "new-orders" listens to event "order.created": the channel option of the event replaces this channel, and checks each session's access.`
+- The event has the `channel` option: a warning. `Channel "new-orders" listens to event "order.created", which has the channel option: Claude Code sessions get each occurrence twice, once from the event and once from the channel. Keep one: remove the channel, or the option when the channel does what the option cannot.`
+- The event has no `channel` option: an info line. `Channel "new-orders" listens to event "order.created": the event has no channel option. Setting it can replace this channel, and checks each session's access.`
 
 It logs neither for a name that is not a declared event, or with `events.bridge: false`. Nothing else changes: the channel is still told.
 

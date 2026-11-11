@@ -82,19 +82,25 @@ describe('File watcher channel in a Claude Code stdio session', () => {
     });
   });
 
-  it('tells the session when the file changes', async () => {
-    await appendFile(path.join(watchedFolder, 'report.csv'), '1,42\n');
+  it('tells the session when a file changes', async () => {
+    const changedFile = path.join(watchedFolder, 'changed.csv');
+    await writeFile(changedFile, 'id,total\n');
+    await server.waitFor((message) => tellsAbout(message, 'changed.csv', 'create'));
+    await appendFile(changedFile, '1,42\n');
 
-    const notification = await server.waitFor((message) => tellsAbout(message, 'report.csv', 'change'));
+    const notification = await server.waitFor((message) => tellsAbout(message, 'changed.csv', 'change'));
 
     expect(notification.params).toEqual({
-      content: '[change] report.csv',
-      meta: { file: 'report.csv', event_type: 'change', source: 'file-watcher' },
+      content: '[change] changed.csv',
+      meta: { file: 'changed.csv', event_type: 'change', source: 'file-watcher' },
     });
   });
 
   it('tells nothing about a removed file, an event the channel does not declare', async () => {
-    await rm(path.join(watchedFolder, 'report.csv'));
+    const removedFile = path.join(watchedFolder, 'removed.csv');
+    await writeFile(removedFile, 'id,total\n');
+    await server.waitFor((message) => tellsAbout(message, 'removed.csv', 'create'));
+    await rm(removedFile);
     // Two later files, told in order: a removal would have been told before the second one
     for (const laterFile of ['later-1.txt', 'later-2.txt']) {
       await writeFile(path.join(watchedFolder, laterFile), 'still watching');

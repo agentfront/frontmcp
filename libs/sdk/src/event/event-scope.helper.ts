@@ -97,13 +97,14 @@ function describeEventChannels(scope: ScopeEntry, eventRegistry: EventRegistry, 
     if (eventRegistry.sendsToChannelSessions(event)) {
       logger.warn(
         `Channel "${channel.name}" listens to event "${event.name}", which has the channel option: Claude Code ` +
-          'sessions get each occurrence twice, once from the event and once from the channel. Remove the channel.',
+          'sessions get each occurrence twice, once from the event and once from the channel. Keep one: remove ' +
+          'the channel, or the option when the channel does what the option cannot.',
       );
       continue;
     }
     logger.info(
-      `Channel "${channel.name}" listens to event "${event.name}": the channel option of the event replaces this ` +
-        "channel, and checks each session's access.",
+      `Channel "${channel.name}" listens to event "${event.name}": the event has no channel option. Setting it can ` +
+        "replace this channel, and checks each session's access.",
     );
   }
 }
