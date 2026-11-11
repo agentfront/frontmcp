@@ -28,3 +28,4 @@ export * from './skill.record';
 export * from './job.record';
 export * from './workflow.record';
 export * from './channel.record';
+export * from './event.record';

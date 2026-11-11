@@ -16,3 +16,4 @@ export * from './skill.tokens';
 export * from './job.tokens';
 export * from './workflow.tokens';
 export * from './channel.tokens';
+export * from './event.tokens';

@@ -33,4 +33,8 @@ declare global {
   interface ExtendFrontMcpSkillMetadata {
     authorities?: AuthoritiesMetadata;
   }
+
+  interface ExtendFrontMcpEventMetadata {
+    authorities?: AuthoritiesMetadata;
+  }
 }

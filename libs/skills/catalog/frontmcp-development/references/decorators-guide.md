@@ -25,6 +25,7 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
        +-- @Workflow       (multi-step workflow)
        +-- @Duty           (recurring work in one process, a provider)
        +-- @HttpRoute      (page, API or SSE view for people)
+       +-- @Event          (event type clients subscribe to)
        +-- @Flow           (custom flow)
        +-- @Hook (@Will, @Did, @Stage, @Around, @Finally)
 ```
@@ -89,6 +90,7 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
 | `sqlite?`             | SQLite storage for local deployments (sessions, events)                                                                                                                                                                                                                                                                  |
 | `pubsub?`             | Redis pub/sub for distributed resource subscriptions across multiple instances (single-server deployments use in-memory subscriptions; falls back to `redis` config)                                                                                                                                                     |
 | `jobs?`               | Background jobs/workflows system (`{ enabled, store? }`)                                                                                                                                                                                                                                                                 |
+| `events?`             | MCP Events (`{ enabled?, compat? }`): on once an app declares an `@Event`; `enabled: false` turns them off — see `create-event`                                                                                                                                                                                          |
 | `throttle?`           | Server-level guard config (see note below)                                                                                                                                                                                                                                                                               |
 | `pagination?`         | List operation pagination (`tools/list` endpoint)                                                                                                                                                                                                                                                                        |
 | `offload?`            | Worker-thread pool behind `this.offload()` and `worker: true` resources (Node only): `maxWorkers`, `idleTimeoutMs`, `budgetMs` (30000), `env` (`['NODE_ENV']`) — see `offload-cpu-work`                                                                                                                                  |
@@ -141,6 +143,7 @@ class MyServer {}
 | `standalone?`    | `boolean \| 'includeInParent'` — `true`: isolated scope, excluded. `'includeInParent'`: isolated scope but tools exposed in parent                                                                                                                                                                      |
 | `jobs?`          | Background job definitions                                                                                                                                                                                                                                                                              |
 | `workflows?`     | Multi-step workflow definitions                                                                                                                                                                                                                                                                         |
+| `events?`        | `@Event` classes and `event()` functions clients list with `events/list` and subscribe to                                                                                                                                                                                                               |
 
 ```typescript
 import { App } from '@frontmcp/sdk';
@@ -839,6 +842,45 @@ class BoardPage extends HttpRouteContext {
 
 ---
 
+## 18. @Event
+
+**Purpose:** Declares an event type clients list with `events/list` and subscribe to (MCP Events, SEP-3415). The class
+extends `EventContext`; every method on it is optional.
+
+**When to use:** A client should be told when something happens in your system, without a user asking (see
+`create-event`).
+
+**Key fields:**
+
+| Field                | Description                                                                                    |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
+| `name`               | Unique in the server; 1 to 128 characters, no whitespace or control characters                 |
+| `description?`       | What the event means and when it fires                                                         |
+| `inputSchema?`       | Zod raw shape or `z.object()`: the arguments of a subscription                                 |
+| `payloadSchema`      | Zod raw shape or `z.object()`: the `data` of each occurrence                                   |
+| `delivery?`          | Restricts the event to `'poll'`, `'push'`, `'webhook'`; default every mode the server performs |
+| `authorities?`       | Who may list the event and subscribe to it                                                     |
+| `hideFromDiscovery?` | Leaves the event out of `events/list`                                                          |
+| `availableWhen?`     | Where the event exists (`runtime`, `platform`, `deployment`, `env`, `surface`)                 |
+| `ttl?`               | `{ defaultMs?, maxMs? }`: subscription lifetime bounds for this event                          |
+
+```typescript
+import { Event, EventContext, z } from '@frontmcp/sdk';
+
+@Event({
+  name: 'order.created',
+  description: 'Fires when an order is placed',
+  payloadSchema: { orderId: z.string(), total: z.number() },
+})
+class OrderCreated extends EventContext {}
+
+// Register it on its app: @App({ events: [OrderCreated] })
+```
+
+**Function builder:** `event({ name, payloadSchema, ... })` returns the event without a class.
+
+---
+
 ## Quick Reference Table
 
 | Decorator                            | Extends            | Registered In                   | Purpose                  |
@@ -859,6 +901,7 @@ class BoardPage extends HttpRouteContext {
 | `@Workflow`                          | -                  | `@App.workflows`                | Multi-step orchestration |
 | `@Duty`                              | -                  | `@App.providers`                | Recurring work           |
 | `@HttpRoute`                         | `HttpRouteContext` | `@App.routes`                   | Page or API for people   |
+| `@Event`                             | `EventContext`     | `@App.events`                   | Subscribable event type  |
 | `@Will/@Did/@Stage/@Around/@Finally` | -                  | Plugin, provider or entry class | Flow stage hooks         |
 
 ---

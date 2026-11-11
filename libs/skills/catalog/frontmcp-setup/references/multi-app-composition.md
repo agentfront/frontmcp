@@ -249,7 +249,7 @@ startup. ...` once; production does not start: `App "billing" is lazy, and no fr
 (looked for <path>). ...`, with the remedy to run `frontmcp build` and ship the manifest next to the server's entry,
   or pass `@FrontMcp({ manifest })`. A manifest that does not list the app counts as none. `frontmcp build` imports lazy apps
   to write the manifest.
-- **What a lazy app cannot have**: skills, agents, jobs, workflows, channels, duties (`@Duty` providers start with the
+- **What a lazy app cannot have**: skills, agents, jobs, workflows, channels, events, duties (`@Duty` providers start with the
   server), its own `auth`, `standalone`, app `ui` defaults, widget tools, entries with `authorities`, entries with an
   `enabled` source of their own (give the lazy app the switch instead), and entries with `featureFlag` or `codecall`
   metadata (the feature-flag and CodeCall plugins read them from the lists and CodeCall's policy, where a placeholder

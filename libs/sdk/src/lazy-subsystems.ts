@@ -135,4 +135,5 @@
       'ChannelReplyTool',
     ],
   );
+  defineLazyExports(() => require('./event'), ['EventInstance', 'EventRegistry']);
 }

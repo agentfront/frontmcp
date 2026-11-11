@@ -12,6 +12,7 @@ import type ChannelRegistry from '../../channel/channel.registry';
 import type { ChannelEventBus } from '../../channel/sources/app-event.source';
 import type { PersistentQuestions } from '../../elicitation/questions/question-scope.helper';
 import type { ElicitationStore } from '../../elicitation/store/elicitation.store';
+import type EventRegistry from '../../event/event.registry';
 import type { HaManager } from '../../ha';
 import type HookRegistry from '../../hooks/hook.registry';
 import type { HttpRouteTable } from '../../http-route/http-route.table';
@@ -149,6 +150,9 @@ export abstract class ScopeEntry extends BaseEntry<ScopeRecord, unknown, ScopeMe
 
   /** Sends channel notifications to the sessions subscribed to a channel; `undefined` unless `channels.enabled`. */
   abstract get channelNotifications(): ChannelNotificationService | undefined;
+
+  /** The scope's events; `undefined` with `events.enabled: false`, and unless an app declares one or it is `true`. */
+  abstract get events(): EventRegistry | undefined;
 
   /**
    * The scope's in-process event bus: `app-event` channel sources and `trigger: 'event'` workflows listen on it.

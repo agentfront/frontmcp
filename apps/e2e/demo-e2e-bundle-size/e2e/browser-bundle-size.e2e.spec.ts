@@ -21,11 +21,11 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_312_905 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_320_142 },
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_320_763 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_327_991 },
 ];
 
-const VITE_INITIAL_CHUNK_MAX_BYTES = 772_298;
+const VITE_INITIAL_CHUNK_MAX_BYTES = 777_554;
 
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {
@@ -58,6 +58,7 @@ const FEATURE_MODULES: Record<string, RegExp> = {
   'distributed transport': sdkModule('ha/|transport/(bus|relay|event-stores)/'),
   duties: sdkModule('duty/'),
   elicitation: sdkModule('elicitation/(store|flows)/|elicitation/send-elicitation-result\\.tool'),
+  events: sdkModule('event/(?!event\\.utils)'),
   health: sdkModule('health/'),
   'http routes': sdkModule('http-route/'),
   'http transport': sdkModule(

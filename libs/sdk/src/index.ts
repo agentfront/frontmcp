@@ -396,6 +396,18 @@ export type {
   ChannelCapabilitiesResult,
 } from './channel';
 
+// Event exports - MCP Events (SEP-3415): event types clients list and subscribe to
+export { EventInstance, EventRegistry } from './subsystems';
+export type {
+  EventCapabilities,
+  EventRegistryInterface,
+  ServedEvent,
+  RegisterEventCapabilitiesArgs,
+  EventCapabilitiesResult,
+} from './event';
+export { EVENTS_EXTENSION_ID } from '@frontmcp/protocol';
+export type { EventDefinition, EventDeliveryMode, EventOccurrence } from '@frontmcp/protocol';
+
 // Skill exports - skills are knowledge/workflow packages for multi-step tasks
 export {
   // Registry

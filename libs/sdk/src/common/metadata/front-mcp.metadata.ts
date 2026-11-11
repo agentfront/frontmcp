@@ -66,6 +66,7 @@ import {
 import { legacySessionOptionsSchema } from '../types/options/session/schema';
 import { packageLoaderSchema, type PackageLoader } from './app.metadata';
 import { channelsConfigSchema, type ChannelsConfigInput } from './channel.metadata';
+import { eventsConfigSchema, type EventsConfigOptions } from './event.metadata';
 import { MAX_JOB_TIMER_MS, timerLimitMessage } from './job.metadata';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import type { WidgetServingMode } from './tool-ui.metadata';
@@ -614,6 +615,9 @@ export interface FrontMcpBaseMetadata {
    */
   channels?: ChannelsConfigInput;
 
+  /** MCP Events (SEP-3415): on once an app declares an `@Event`, unless `enabled: false`. */
+  events?: EventsConfigOptions;
+
   /**
    * Authorities configuration for built-in RBAC/ABAC/ReBAC enforcement.
    * Enables the `checkEntryAuthorities` and `filterByAuthorities` flow stages
@@ -820,6 +824,7 @@ export const frontMcpBaseSchema = z.object({
   metrics: metricsOptionsSchema.optional(),
   registry: mcpRegistryOptionsSchema.optional(),
   channels: channelsConfigSchema.optional(),
+  events: eventsConfigSchema.optional(),
   authorities: z
     .object({
       claimsMapping: z.record(z.string(), z.string().optional()).optional(),
@@ -1041,6 +1046,7 @@ const frontMcpLiteSchema = z.object({
   sqlite: frontMcpBaseSchema.shape.sqlite,
   jobs: frontMcpBaseSchema.shape.jobs,
   tasks: frontMcpBaseSchema.shape.tasks,
+  events: frontMcpBaseSchema.shape.events,
   throttle: checkedAsServer('throttle'),
   health: checkedAsServer('health'),
   metrics: checkedAsServer('metrics'),
