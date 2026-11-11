@@ -1,16 +1,17 @@
-/** A server with one machine duty that prints `ran <pid> <ms>` on each run; SIGTERM shuts it down gracefully. */
+/**
+ * A server with one machine duty that prints `ran <pid> <ms>` on each run, every `EVERY_MS` or at the times of `CRON`;
+ * SIGTERM shuts it down gracefully.
+ */
 import 'reflect-metadata';
 
 import { App, Duty, FrontMcpInstance, LogLevel } from '@frontmcp/sdk';
 
 import { report, requiredEnv, runWorker, signal } from './worker-protocol';
 
-@Duty({
-  name: 'tick',
-  every: Number(requiredEnv('EVERY_MS')),
-  scope: 'machine',
-  leaseMs: Number(requiredEnv('LEASE_MS')),
-})
+const cron = process.env['CRON'];
+const cadence = cron ? { cron } : { every: Number(requiredEnv('EVERY_MS')) };
+
+@Duty({ name: 'tick', ...cadence, scope: 'machine', leaseMs: Number(requiredEnv('LEASE_MS')) })
 class TickDuty {
   run(): void {
     signal(`ran ${process.pid} ${Date.now()}`);

@@ -2,14 +2,16 @@ import 'reflect-metadata';
 
 import { InvalidDecoratorMetadataError } from '../../errors/decorator.errors';
 import { type DutyInterface } from '../interfaces/duty.interface';
-import { defineDutyMetadata, dutyMetadataSchema, type DutyMetadata } from '../metadata/duty.metadata';
+import { dutyMetadataSchema, type DutyMetadata } from '../metadata/duty.metadata';
+import { defineDutyMetadata } from '../metadata/duty.resolved';
 import { FrontMcpProviderTokens } from '../tokens';
 
 type DutyClass = abstract new (...args: never[]) => DutyInterface;
 
 /**
- * Marks a provider class as a duty: once the server serves, `run()` is called every `every` in exactly one process
- * of the machine or project (`scope`), the one that holds the duty's lease. Register it in `providers`.
+ * Marks a provider class as a duty: once the server serves, `run()` is called every `every`, or at the times of
+ * `cron`, in exactly one process of the machine, the project or the cluster (`scope`), the one that holds the duty's
+ * lease. Register it in `providers`.
  */
 export function Duty(metadata: DutyMetadata): (target: DutyClass) => void {
   return (target) => {
@@ -21,9 +23,7 @@ export function Duty(metadata: DutyMetadata): (target: DutyClass) => void {
     if (typeof target.prototype?.run !== 'function') {
       throw new InvalidDecoratorMetadataError('Duty', 'run', `${target.name} has no run() method`);
     }
-    const { name = target.name, every: everyMs, scope, leaseMs } = result.data;
-    const defaultLeaseMs = Math.min(Math.max(3 * everyMs, 3_000), 60_000);
     Reflect.defineMetadata(FrontMcpProviderTokens.type, true, target);
-    defineDutyMetadata(target, { name, everyMs, scope, leaseMs: leaseMs ?? defaultLeaseMs });
+    defineDutyMetadata(target, { ...result.data, name: result.data.name ?? target.name });
   };
 }

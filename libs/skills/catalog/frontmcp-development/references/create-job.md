@@ -25,7 +25,8 @@ Jobs are long-running background tasks with built-in retry policies, progress tr
 - The work completes in a few seconds and needs no retry or progress tracking (see `create-tool`)
 - You need to expose read-only data at a URI (see `create-resource`)
 - The task requires autonomous LLM reasoning rather than a deterministic pipeline (see `create-agent`)
-- The work runs on a schedule rather than when a client asks: a job has no schedule (see `create-duty`)
+- The work runs on a schedule (an interval or a cron) rather than when a client asks: a job has no schedule (see
+  `create-duty`)
 
 > **Decision:** Use this skill when you need a long-running background task with retry policies, progress tracking, or permission controls.
 

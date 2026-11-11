@@ -217,7 +217,12 @@ export {
 export { InvalidDecoratorMetadataError, HookTargetNotDefinedError } from './decorator.errors';
 
 // Export duty errors
-export { DutyNameConflictError, UnsafeDutyStoreError } from './duty.errors';
+export {
+  ClusterScopeNeedsRedisError,
+  DutyNameConflictError,
+  InvalidDutyCronError,
+  UnsafeDutyStoreError,
+} from './duty.errors';
 
 // Export event errors
 export { EventNameConflictError } from './event.errors';

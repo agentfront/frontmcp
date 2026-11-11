@@ -1,6 +1,7 @@
 /**
  * E2E: five servers on one machine share a `@Duty`'s lease. One of them runs it each interval; when it is killed,
- * another takes over once the lease runs out, and when it stops gracefully it hands the lease over at once.
+ * another takes over once the lease runs out, and when it stops gracefully it hands the lease over at once. A cron
+ * duty runs each of its scheduled times in one server, once, through a takeover.
  */
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -94,5 +95,28 @@ describe('@Duty across processes', () => {
     expect(afterStop[0].at - terminatedAt).toBeLessThan((LEASE_MS * 2) / 3);
     expect(afterStop[0].at - lastRunOfSecond).toBeGreaterThanOrEqual(EVERY_MS / 2);
     expectOneHolderOncePerInterval(afterStop);
+  });
+
+  it('runs a cron duty once per scheduled second in one of three servers, and once at a takeover', async () => {
+    const leaseMs = 3_000;
+    const workers = Array.from({ length: 3 }, () =>
+      spawnWorker('duty-server.ts', { FRONTMCP_HOME: home, CRON: '* * * * * *', LEASE_MS: String(leaseMs) }),
+    );
+    started = workers;
+    await Promise.all(workers.map((worker) => worker.waitFor('ready')));
+
+    await waitUntil(() => runsOf(workers).length >= 4, 30_000, 'four scheduled runs');
+    const beforeKill = runsOf(workers);
+    expect(new Set(beforeKill.map(({ pid }) => pid)).size).toBe(1);
+
+    const holder = workerOf(workers, beforeKill[0].pid);
+    holder.child.kill('SIGKILL');
+    const survivors = workers.filter((worker) => worker !== holder);
+    await waitUntil(() => runsOf(survivors).length >= 4, leaseMs * 6, 'a takeover after the holder was killed');
+
+    const afterKill = runsOf(survivors);
+    expect(new Set(afterKill.map(({ pid }) => pid)).size).toBe(1);
+    const scheduledSeconds = runsOf(workers).map(({ at }) => Math.floor(at / 1_000));
+    expect(new Set(scheduledSeconds).size).toBe(scheduledSeconds.length);
   });
 });
