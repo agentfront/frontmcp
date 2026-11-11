@@ -9,11 +9,15 @@ import { BaseEntry, type EntryOwnerRef } from './base.entry';
 
 type JsonSchema = Record<string, unknown>;
 
+/** The `z.object()` of a schema declared as a raw shape or as an object. */
+function toObjectSchema(schema: EventSchemaType): z.ZodObject {
+  const isZodSchema = typeof (schema as { safeParse?: unknown }).safeParse === 'function';
+  return isZodSchema ? (schema as z.ZodObject) : z.object(schema as z.ZodRawShape);
+}
+
 /** The JSON Schema of a zod object or raw shape. */
 function toObjectJsonSchema(schema: EventSchemaType, io: 'input' | 'output'): JsonSchema {
-  const isZodSchema = typeof (schema as { safeParse?: unknown }).safeParse === 'function';
-  const objectSchema = isZodSchema ? (schema as z.ZodObject) : z.object(schema as z.ZodRawShape);
-  return toJSONSchema(objectSchema, { io, unrepresentable: 'any' }) as JsonSchema;
+  return toJSONSchema(toObjectSchema(schema), { io, unrepresentable: 'any' }) as JsonSchema;
 }
 
 /** A registered event. Concrete implementation: `EventInstance`. */
@@ -48,6 +52,13 @@ export abstract class EventEntry extends BaseEntry<EventRecord, EventContext, Ev
   getPayloadJsonSchema(): JsonSchema {
     this.payloadJsonSchema ??= toObjectJsonSchema(this.metadata.payloadSchema, 'output');
     return this.payloadJsonSchema;
+  }
+
+  /** The arguments of a subscription, validated against `inputSchema`; an event without one takes none. */
+  parseArguments(args: Record<string, unknown>): Record<string, unknown> {
+    const { inputSchema } = this.metadata;
+    const schema = inputSchema ? toObjectSchema(inputSchema) : z.object({}).strict();
+    return schema.parse(args) as Record<string, unknown>;
   }
 
   /** The declared argument schema, or an empty closed object for an event that takes no arguments. */

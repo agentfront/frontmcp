@@ -104,6 +104,18 @@ export { TestServer } from './server/test-server';
 export type { TestServerOptions, TestServerInfo } from './server/test-server';
 
 // ═══════════════════════════════════════════════════════════════════
+// WEBHOOK RECEIVER (MCP Events)
+// ═══════════════════════════════════════════════════════════════════
+
+export { WebhookReceiver } from './webhook/webhook-receiver';
+export type {
+  WebhookReceiverOptions,
+  WebhookReceiverInfo,
+  ReceivedWebhook,
+  ReceivedWebhookKind,
+} from './webhook/webhook-receiver';
+
+// ═══════════════════════════════════════════════════════════════════
 // CALL REPLAY
 // ═══════════════════════════════════════════════════════════════════
 

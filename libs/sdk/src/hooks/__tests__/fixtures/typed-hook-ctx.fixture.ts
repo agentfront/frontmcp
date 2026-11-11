@@ -5,6 +5,8 @@ import {
   ChannelListHook,
   ChannelSendHook,
   CompletionHook,
+  EventSubscribeHook,
+  EventUnsubscribeHook,
   HttpHook,
   HttpRouteHook,
   JobHook,
@@ -141,6 +143,18 @@ export class EveryExportRejectsAParameterItsCtxDoesNotSatisfy {
   // @ts-expect-error the ctx has no notAField
   @ListEventsHook.Will('findEvents')
   listEvents(ctx: NotInAnyCtx) {
+    return ctx;
+  }
+
+  // @ts-expect-error the ctx has no notAField
+  @EventSubscribeHook.Will('verifyCallback')
+  eventSubscribe(ctx: NotInAnyCtx) {
+    return ctx;
+  }
+
+  // @ts-expect-error the ctx has no notAField
+  @EventUnsubscribeHook.Will('removeSubscription')
+  eventUnsubscribe(ctx: NotInAnyCtx) {
     return ctx;
   }
 }

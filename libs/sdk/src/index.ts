@@ -404,6 +404,13 @@ export type {
   ServedEvent,
   RegisterEventCapabilitiesArgs,
   EventCapabilitiesResult,
+  EventDialect,
+  EventSubscriberIdentity,
+  EventSubscriptionRecord,
+  EventSubscriptionStatus,
+  EventSubscriptionStore,
+  EventSubscriptions,
+  EventWebhookDelivery,
 } from './event';
 export { EVENTS_EXTENSION_ID } from '@frontmcp/protocol';
 export type { EventDefinition, EventDeliveryMode, EventOccurrence } from '@frontmcp/protocol';
@@ -592,6 +599,10 @@ export const ChannelListHook = /* @__PURE__ */ FlowHooksOf('channels:list');
 // Event hooks
 export const ListEventsHook = /* @__PURE__ */ FlowHooksOf('events:list');
 export type { default as ListEventsFlow } from './event/flows/list-events.flow';
+export const EventSubscribeHook = /* @__PURE__ */ FlowHooksOf('events:subscribe');
+export type { default as EventSubscribeFlow } from './event/flows/event-subscribe.flow';
+export const EventUnsubscribeHook = /* @__PURE__ */ FlowHooksOf('events:unsubscribe');
+export type { default as EventUnsubscribeFlow } from './event/flows/event-unsubscribe.flow';
 
 // Built-in flows no other export reaches. Exporting them puts their `ExtendFlows` entries in the published type graph,
 // so `FlowHooksOf()`, `FlowCtxOf` and `@Flow` accept every flow name FrontMCP runs.

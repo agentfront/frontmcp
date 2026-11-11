@@ -1,7 +1,7 @@
 /** `events/list` on a real server (`createFetchHandler()`) is traced like the other list requests. */
 import 'reflect-metadata';
 
-import { diag, DiagLogLevel, trace } from '@opentelemetry/api';
+import { diag, DiagLogLevel, SpanStatusCode, trace } from '@opentelemetry/api';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 
 import { App, event, FrontMcpInstance, LogLevel, Tool, ToolContext, z } from '@frontmcp/sdk';
@@ -68,5 +68,23 @@ describe('events/list telemetry', () => {
     const span = exporter.getFinishedSpans().find((finished) => finished.name === 'events/list');
     expect(span?.attributes['frontmcp.flow.name']).toBe('events/list');
     expect(span?.events.map((stage) => stage.name)).toContain('stage.filterByAuthorities');
+  });
+
+  it('ends the span of a refused events/list with its error', async () => {
+    const handler = await FrontMcpInstance.createFetchHandler({
+      info: { name: 'shop', version: '1.0.0' },
+      apps: [ShopApp],
+      logging: { level: LogLevel.Off },
+      plugins: [ObservabilityPlugin.init({ tracing: {} })],
+    });
+    await handler(request('tools/call', { name: 'enable_webhook_delivery', arguments: {} }));
+    exporter.reset();
+
+    const refused = await (await handler(request('events/list', { cursor: 'not-a-cursor' }))).json();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(refused.error).toBeDefined();
+    const span = exporter.getFinishedSpans().find((finished) => finished.name === 'events/list');
+    expect(span?.status.code).toBe(SpanStatusCode.ERROR);
   });
 });

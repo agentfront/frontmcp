@@ -1,6 +1,8 @@
 import callToolRequestHandler from './call-tool-request.handler';
 import completeRequestHandler from './complete-request.handler';
 import eventsListRequestHandler from './events-list-request.handler';
+import eventsSubscribeRequestHandler from './events-subscribe-request.handler';
+import eventsUnsubscribeRequestHandler from './events-unsubscribe-request.handler';
 import getPromptRequestHandler from './get-prompt-request.handler';
 import initializeRequestHandler from './initialize-request.handler';
 import initializedNotificationHandler from './Initialized-notification.hanlder';
@@ -78,6 +80,9 @@ export function createMcpHandlers(options: McpHandlerOptions) {
 
   // `events/list` (MCP Events, SEP-3415) is served once an event is offered in a delivery mode this server performs
   const eventsHandler = options.scope?.events?.servesEvents() ? [eventsListRequestHandler(options)] : [];
+  const eventSubscriptionHandlers = options.scope?.events?.subscriptions
+    ? [eventsSubscribeRequestHandler(options), eventsUnsubscribeRequestHandler(options)]
+    : [];
 
   // Tasks handlers per MCP 2025-11-25 tasks spec. Only registered when the
   // `tasks` capability is advertised (driven by tool-level `execution.taskSupport`).
@@ -104,6 +109,7 @@ export function createMcpHandlers(options: McpHandlerOptions) {
     ...loggingHandler,
     ...skillsHandler,
     ...eventsHandler,
+    ...eventSubscriptionHandlers,
     ...tasksHandler,
   ];
 }

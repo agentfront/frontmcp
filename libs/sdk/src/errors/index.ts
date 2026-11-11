@@ -225,7 +225,17 @@ export {
 } from './duty.errors';
 
 // Export event errors
-export { EventNameConflictError } from './event.errors';
+export {
+  EventNameConflictError,
+  EventProtocolError,
+  EventNotFoundError,
+  EventForbiddenError,
+  EventResourceExhaustedError,
+  EventUnsupportedError,
+  EventCallbackEndpointError,
+  EventSubscriptionStoreError,
+} from './event.errors';
+export type { EventErrorCodes } from './event.errors';
 
 // Export worker errors
 export { WorkerNameConflictError } from './worker.errors';
