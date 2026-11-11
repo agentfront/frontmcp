@@ -102,7 +102,8 @@ Claude Code delivers channel events only on a session, and it probes a stdio ser
 revision 2026-07-28 first. A server that serves channels declines that revision over stdio: `server/discover` and
 every other 2026-07-28 request get `-32022` with the earlier revisions in `data.supported`, and 2026-07-28
 notifications are ignored. Claude Code then sends `initialize`. `servesClaudeCodeChannels()` in `channel.utils.ts`
-decides whether a scope serves channels; `StdioRevisionRouter` declines.
+decides whether a scope serves channels: it has a channel, or an event with the `channel` option.
+`StdioRevisionRouter` declines.
 
 ```mermaid
 sequenceDiagram
@@ -281,7 +282,8 @@ During `Scope.initialize()` (Batch 3, after NotificationService is ready):
 
 ### 4. Capability Advertisement
 
-The `ChannelRegistry.getCapabilities()` returns:
+`channelCapabilitiesOf(scope)` in `channel.utils.ts` returns, for a scope that serves channels
+(`servesClaudeCodeChannels()`):
 
 ```json
 { "experimental": { "claude/channel": {} } }
@@ -330,6 +332,22 @@ the hookable `channels:list` flow returns. An HTTP session is channel capable wh
 **Unsubscription:** Channel subscriptions are cleaned up automatically when a session disconnects
 (`unregisterServer()` removes all resource and channel subscriptions).
 
+## Events as Channel Notifications
+
+An `@Event` with the `channel` option is sent to channel capable sessions as `notifications/claude/channel` each time
+it is published. It does not go through this module's registry or its `channels:send-notification` flow.
+
+- The `notifyChannelSessions` stage of `events:publish` (`event/flows/event-publish.flow.ts`) sends it, after
+  `bridgeToBus`. `event/event-channel.ts` builds the message: the payload as JSON or the option's `content`, and
+  `event` and `event_id` beside the option's `meta`.
+- It goes to `NotificationService.getChannelCapableSessions()`, with no channel subscription. Each session is checked
+  against the event's own rules, as the caller its `initialize` request named (`RegisteredServer.authInfo`):
+  `availableWhen.surface`, the `audience` of the publish, the event's `authorities` and `authorize()`. An occurrence
+  published for a `subscriptionId` goes to no session.
+- Such an event makes `servesClaudeCodeChannels()` true with no `@Channel` and no `channels: { enabled: true }`.
+  `channels: { enabled: false }` turns the option off, with one warning at startup.
+- A `subscriptions/listen` stream of revision 2026-07-28 gets no event this way: such a client opens `events/stream`.
+
 ## Source Types
 
 | Source             | Trigger                                   | Config                                                    |
@@ -367,6 +385,11 @@ In Claude Code, this renders as:
 Deploy succeeded: v1.2.3
 </channel>
 ```
+
+Claude Code drops a `meta` key that has anything but letters, digits and underscores. `channelMetaOf()` in
+`channel.utils.ts` makes the keys of every notification safe before it is sent: any other character becomes `_`
+(`chat-id` is sent as `chat_id`), an empty key and a missing value are left out, and values are sent as strings.
+`ChannelNotificationService` applies it, and so does an event with the `channel` option.
 
 ## Key Classes
 

@@ -7,6 +7,8 @@ description: Configure different channel source types - webhooks, app events, ag
 
 Every channel has a source that determines how events flow into it. FrontMCP supports seven source types, each optimized for a different integration pattern.
 
+Whatever the source, `onEvent()` may return any `meta` keys. A character of a key that is not a letter, a digit or an underscore is sent as `_` (`chat-id` as `chat_id`), because Claude Code drops such a key (see `channel-claude-code`).
+
 ## Webhook Source
 
 Registers an HTTP POST endpoint. External services (GitHub, CI/CD, monitoring) send payloads to this endpoint.
@@ -69,7 +71,9 @@ scope.channelEventBus?.emit('app:error', {
 
 ### Published events as a source
 
-A server that declares events (see `create-event`) emits each one it publishes on the same bus, under the event's name, so an `app-event` channel named after an event pushes it to the connected Claude Code sessions. The payload is the occurrence, `{ eventId, name, timestamp, data }`:
+To tell Claude Code about an event the server publishes with `this.events.publish()`, set the `channel` option of the `@Event` (see [`create-event`](../../frontmcp-development/references/create-event.md#telling-a-claude-code-session)). It needs no channel class, and each session is told only what its caller may see. Keep the `app-event` source for events your code emits on the bus by hand, as above.
+
+An `app-event` channel named after an event still works. A server that declares events emits each one it publishes on the same bus, under the event's name. The payload is the occurrence, `{ eventId, name, timestamp, data }`:
 
 ```typescript
 @Channel({
@@ -85,7 +89,7 @@ class NewOrdersChannel extends ChannelContext {
 }
 ```
 
-The channel gets every published occurrence of that name, once, whoever is subscribed to the event, except one published with an `audience` or a `subscriptionId`: it is meant for some owners only, and a channel tells every connected session, so it reaches only trusted listeners such as `trigger: 'event'` workflows. `events.bridge: false` keeps published events off the bus.
+The channel gets every published occurrence of that name, once, whoever is subscribed to the event, except one published with an `audience` or a `subscriptionId`: it is meant for some owners only, and a channel tells every connected session, so it reaches only trusted listeners such as `trigger: 'event'` workflows. `events.bridge: false` keeps published events off the bus. An event that also has the `channel` option is told to a session twice.
 
 ## Agent Completion Source
 

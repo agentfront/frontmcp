@@ -53,8 +53,23 @@ Build push-based notification channels that stream real-time events into Claude 
 - You only need standard MCP resource subscriptions (use `@Resource` with `resources/subscribe`)
 - Your client is not Claude Code and does not support `experimental['claude/channel']`
 - You need request-response patterns (use `@Tool` instead)
+- You publish something as an event and want a connected Claude Code session to be told: set the `channel` option of the `@Event` (see `create-event`), not a channel
 
 > **Decision:** Use channels when you need server-initiated push notifications into Claude Code. Use resources when the client pulls data on demand.
+
+## Events or Channels
+
+Both reach a Claude Code session as a `<channel>` tag, on the same notification.
+
+| You have                                                         | Use                                        | Why                                                                                                               |
+| ---------------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Something you publish as an event (`this.events.publish()`)      | `@Event({ channel })` (see `create-event`) | One declaration also serves poll, push and webhook clients, and each session is told only what its caller may see |
+| A conversation: Claude answers with the `channel-reply` tool     | `@Channel` with `twoWay: true`             | An event has no reply path                                                                                        |
+| A connection to a service (WhatsApp, Telegram, Slack)            | `@Channel` with a `service` source         | The channel owns the connection and its tools                                                                     |
+| A raw webhook of another system (GitHub, CI)                     | `@Channel` with a `webhook` source         | It takes any payload on a path; the events publish endpoint takes signed publishes of declared events             |
+| Agent or job completions, or an event your code emits on the bus | `@Channel` with that source                | `app-event` stays for events emitted by hand with `scope.channelEventBus.emit()`                                  |
+
+An event with `channel` needs no `@Channel` and no `channels: { enabled: true }`. `channels: { enabled: false }` turns it off.
 
 ## Prerequisites
 
@@ -97,14 +112,14 @@ Channels are a Claude Code research preview and may change. `references/channel-
 - **The session opts in.** `claude --channels plugin:<name>@<marketplace>` for an approved plugin, or `claude --dangerously-load-development-channels server:<name>` for your own server. The development flag is interactive only: it is ignored with `-p`.
 - **Organizations.** A Team or Enterprise organization needs an Owner to enable channels (`channelsEnabled`, and optionally `allowedChannelPlugins`).
 - **No acknowledgement.** Claude Code never acknowledges a notification, and drops it silently when the server is not registered as a channel.
-- **`meta` keys.** Letters, digits and underscores only. Claude Code drops any other key.
+- **`meta` keys.** Letters, digits and underscores only. Claude Code drops any other key, so FrontMCP sends every other character of a key as `_`: `chat-id` arrives as `chat_id`.
 - **Protocol.** A stdio server with channels enabled speaks the revisions before 2026-07-28 to every stdio client: it declines `server/discover` and every other 2026-07-28 request with `-32022`, and the client falls back to `initialize`. The stdio session needs no `claude/channel` client capability. An HTTP session still does.
 
 ## Common Patterns
 
 | Pattern        | Correct                                    | Incorrect                                       | Why                                                                                                                                     |
 | -------------- | ------------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Meta keys      | `meta: { env: 'prod' }`                    | `meta: { 'my-env': 'prod' }`                    | Meta keys must be valid identifiers (letters, digits, underscores); Claude Code drops any other key silently                            |
+| Meta keys      | `meta: { env: 'prod' }`                    | `meta: { 'my-env': 'prod' }`                    | Claude Code drops a key with another character. From 1.12 a notification's `my-env` is sent as `my_env`                                 |
 | Source naming  | `name: 'deploy-alerts'`                    | `name: 'Deploy Alerts!'`                        | Channel names should be kebab-case identifiers                                                                                          |
 | Two-way gating | Check sender identity before emitting      | Trust room/group membership                     | Prevent prompt injection from untrusted group members                                                                                   |
 | Error channels | Use `app-event` source with event bus      | Poll for errors in a loop                       | Event bus is push-based and efficient                                                                                                   |
@@ -117,7 +132,7 @@ Channels are a Claude Code research preview and may change. `references/channel-
 - [ ] `@FrontMcp({ channels: { enabled: true } })` is set
 - [ ] Channel classes extend `ChannelContext` with `@Channel()` decorator
 - [ ] Channels are listed in `@App({ channels: [...] })`; a channel and the tools in its `tools` resolve its app's providers with `this.get()`, and one whose `availableWhen` the runtime doesn't meet is left out at startup
-- [ ] `onEvent()` returns `{ content: string, meta?: Record<string, string> }`
+- [ ] `onEvent()` returns `{ content: string, meta?: Record<string, string> }`; a `meta` key with another character than a letter, a digit or `_` arrives with `_` in its place
 
 ### Capability
 
@@ -151,6 +166,8 @@ Channels are a Claude Code research preview and may change. `references/channel-
 | A notification never arrives           | A `ChannelSendHook` stopped it, or `ChannelListHook` left the channel out of the session's subscriptions | Check plugins hooking `channels:send-notification` / `channels:list`                                                                                          |
 | Duplicate notifications                | Multiple sessions subscribed                                                                             | This is correct behavior -- each session gets its own copy                                                                                                    |
 | Events lost on reconnect               | Channels are in-memory                                                                                   | Channel state resets on server restart; use persistent sources                                                                                                |
+| A `meta` attribute has `_` in its name | From 1.12, a character of a key that Claude Code would drop the key for is sent as `_`                   | Name the key with letters, digits and underscores, such as `chat_id`                                                                                          |
+| A published event arrives twice        | The event has the `channel` option and an `app-event` channel listens to its name                        | Keep one: the `channel` option for a published event                                                                                                          |
 
 ## Examples
 
@@ -192,4 +209,4 @@ when a server has been configured to host this skill.
 
 - [Claude Code Channels Reference](https://code.claude.com/docs/en/channels-reference)
 - [MCP Specification - Notifications](https://modelcontextprotocol.io/specification/2025-03-26)
-- Related skills: `frontmcp-development`, `frontmcp-testing`, `frontmcp-deployment`
+- Related skills: `frontmcp-development` (`create-event`: the `channel` option of `@Event`), `frontmcp-testing`, `frontmcp-deployment`
