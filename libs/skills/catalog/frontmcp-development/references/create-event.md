@@ -1321,6 +1321,17 @@ functions) to get the same `this`.
 | A delivered body has a `cursor` behind its own item            | The watermark never passes an unacknowledged delivery                                  | Persist it as it is: a resubscribe replays from it, at least once                       |
 | `{ "type": "gap" }` arrives at the callback                    | `check()` reported that its upstream skipped events                                    | Read current state with a tool; persist the `cursor` of the envelope                    |
 
+## Examples
+
+| Example                                                                                    | Level        | Description                                                                                                                                        |
+| ------------------------------------------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`appointments-role-audience`](../examples/create-event/appointments-role-audience.md)     | Intermediate | A booking service that tells the staff of one business about each booking and replies to the customer who booked, with opaque ids in the payloads. |
+| [`local-daemon-worker-and-cron`](../examples/create-event/local-daemon-worker-and-cron.md) | Intermediate | A local daemon whose folder-watching worker and cron duty publish events that local clients poll or stream.                                        |
+| [`mail-triage-per-user-watcher`](../examples/create-event/mail-triage-per-user-watcher.md) | Advanced     | Important mail for its owner only: a watcher per subscriber started in onSubscribe, and a classifier hook on events:publish that drops the rest.   |
+
+Each example is a runnable app with a README and a smoke test in the FrontMCP repository:
+`apps/e2e/demo-e2e-events-appointments`, `apps/e2e/demo-e2e-events-daemon` and `apps/e2e/demo-e2e-events-mail-triage`.
+
 ## Reference
 
 - [MCP Events, SEP-3415](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415)

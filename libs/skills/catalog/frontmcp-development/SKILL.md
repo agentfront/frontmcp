@@ -178,6 +178,14 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 | [`custom-multi-pass-agent`](./examples/create-agent/custom-multi-pass-agent.md)   | Intermediate | An agent that overrides `execute()` to perform multi-pass LLM reasoning with `this.completion()`. |
 | [`nested-agents-with-swarm`](./examples/create-agent/nested-agents-with-swarm.md) | Advanced     | Composing specialized sub-agents and configuring swarm-based handoff between agents.              |
 
+### `create-event`
+
+| Example                                                                                   | Level        | Description                                                                                                                                        |
+| ----------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`appointments-role-audience`](./examples/create-event/appointments-role-audience.md)     | Intermediate | A booking service that tells the staff of one business about each booking and replies to the customer who booked, with opaque ids in the payloads. |
+| [`local-daemon-worker-and-cron`](./examples/create-event/local-daemon-worker-and-cron.md) | Intermediate | A local daemon whose folder-watching worker and cron duty publish events that local clients poll or stream.                                        |
+| [`mail-triage-per-user-watcher`](./examples/create-event/mail-triage-per-user-watcher.md) | Advanced     | Important mail for its owner only: a watcher per subscriber started in onSubscribe, and a classifier hook on events:publish that drops the rest.   |
+
 ### `create-job`
 
 | Example                                                                 | Level        | Description                                                                                                        |

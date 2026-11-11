@@ -1886,7 +1886,44 @@
         {
           "name": "create-event",
           "description": "Declare the event types clients list with events/list and subscribe to (MCP Events, SEP-3415) with @Event or event(), with a name, argument and payload schemas, authorities and delivery modes",
-          "examples": []
+          "examples": [
+            {
+              "name": "appointments-role-audience",
+              "description": "A booking service that tells the staff of one business about each booking and replies to the customer who booked, with opaque ids in the payloads.",
+              "level": "intermediate",
+              "tags": ["development", "event", "audience", "authorities", "webhook"],
+              "features": [
+                "Publishing with `audience: { tenantId, roles: { any } }` so only the staff of one business receive an event",
+                "Publishing with `audience: { sub }` to reach one principal",
+                "Guarding who may subscribe with `authorities` on the event",
+                "Opaque conversation ids in payloads instead of identities"
+              ]
+            },
+            {
+              "name": "local-daemon-worker-and-cron",
+              "description": "A local daemon whose folder-watching worker and cron duty publish events that local clients poll or stream.",
+              "level": "intermediate",
+              "tags": ["development", "event", "worker", "duty", "cron", "watch-files", "poll"],
+              "features": [
+                "Publishing from a `@Worker` that loops over `watchFiles()`",
+                "Publishing from a cron `@Duty`",
+                "Injecting the publisher with the `EVENT_PUBLISHER` token in an `AsyncProvider`",
+                "Filtering a subscription with `match()` and its arguments",
+                "A local server in public auth mode, which offers events by poll and push"
+              ]
+            },
+            {
+              "name": "mail-triage-per-user-watcher",
+              "description": "Important mail for its owner only: a watcher per subscriber started in onSubscribe, and a classifier hook on events:publish that drops the rest.",
+              "level": "advanced",
+              "tags": ["development", "event", "onSubscribe", "plugin", "hooks", "audience"],
+              "features": [
+                "Starting a per-user upstream watcher in `onSubscribe` and stopping it in `onUnsubscribe`",
+                "Publishing from the watcher with `audience: { sub }` so only the mailbox owner receives it",
+                "A plugin hook on `events:publish` that ends the publish for an unimportant message"
+              ]
+            }
+          ]
         },
         {
           "name": "create-worker",

@@ -1,0 +1,39 @@
+{
+  "name": "demo-e2e-events-daemon",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/e2e/demo-e2e-events-daemon/src",
+  "projectType": "application",
+  "tags": ["scope:demo", "type:e2e", "feature:events"],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "dependsOn": [
+        {
+          "projects": ["sdk"],
+          "target": "build"
+        }
+      ],
+      "outputs": ["{workspaceRoot}/coverage/apps/e2e/demo-e2e-events-daemon"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-events-daemon/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    },
+    "test:e2e": {
+      "executor": "@nx/jest:jest",
+      "dependsOn": [
+        {
+          "projects": ["sdk"],
+          "target": "build"
+        }
+      ],
+      "outputs": ["{workspaceRoot}/coverage/e2e/demo-e2e-events-daemon"],
+      "options": {
+        "jestConfig": "apps/e2e/demo-e2e-events-daemon/jest.e2e.config.ts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    }
+  }
+}
