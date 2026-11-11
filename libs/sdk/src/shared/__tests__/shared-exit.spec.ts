@@ -5,12 +5,13 @@
 import 'reflect-metadata';
 
 import * as fs from 'node:fs';
+import * as http from 'node:http';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { createSharedServerNonce, deriveSharedServerKeys } from '@frontmcp/auth';
 
-import { post } from '../../__test-utils__/helpers/shared-session-client';
+import { openStream, post } from '../../__test-utils__/helpers/shared-session-client';
 import { App, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { SHARED_DRAIN_PATH, SHARED_IDENTIFY_PATH, SHARED_STATE_HEADER } from '../shared-endpoint';
@@ -163,9 +164,13 @@ posixOnly('a shared local server exiting on its own', () => {
       expect(drained.status).toBe(202);
       await waitUntil(() => !fs.existsSync(sharedServerFiles('spec').recordFile), 'the record to be removed');
 
-      const refused = await post(record, record.path, session, { jsonrpc: '2.0', id: 3, method: 'tools/list' });
+      const keptAlive = new http.Agent({ keepAlive: true });
+      const listTools = { jsonrpc: '2.0', id: 3, method: 'tools/list' };
+      const refused = await post(record, record.path, session, listTools, keptAlive);
+      keptAlive.destroy();
       expect(refused.status).toBe(503);
       expect(refused.headers[SHARED_STATE_HEADER]).toBe('exiting');
+      expect(refused.headers['connection']).toBe('close');
       const challenge = await post(record, SHARED_IDENTIFY_PATH, {}, { nonce: createSharedServerNonce() });
       expect(challenge.status).toBe(503);
       expect(challenge.headers[SHARED_STATE_HEADER]).toBe('exiting');
@@ -229,6 +234,37 @@ posixOnly('a shared local server exiting on its own', () => {
     }
     expect(exit).not.toHaveBeenCalled();
     await waitUntil(() => exit.mock.calls.length > 0, 'the idle server to exit');
+    servers.pop();
+  });
+
+  it('is not idle while a session holds its notification stream, and is once the session closed it', async () => {
+    const record = await serve('http', { idleTimeoutMs: 400 });
+    const { token } = deriveSharedServerKeys(record.secret);
+    const stream = await openStream(record, record.path, await initialized(record, token));
+    expect(stream.status).toBe(200);
+
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    expect(exit).not.toHaveBeenCalled();
+
+    stream.close();
+    await waitUntil(() => exit.mock.calls.length > 0, 'the idle server to exit');
+    expect(exit).toHaveBeenCalledWith(0);
+    servers.pop();
+  });
+
+  it('cuts off the notification streams its sessions hold when it exits, and does not wait for them', async () => {
+    const record = await serve('http');
+    const { token } = deriveSharedServerKeys(record.secret);
+    const stream = await openStream(record, record.path, await initialized(record, token));
+    const drainedAt = Date.now();
+
+    const drained = await post(record, SHARED_DRAIN_PATH, { authorization: `Bearer ${token}` }, { version: '2.0.0' });
+    expect(drained.status).toBe(202);
+    await stream.closed;
+    await waitUntil(() => exit.mock.calls.length > 0, 'the server to exit');
+
+    expect(exit).toHaveBeenCalledWith(0);
+    expect(Date.now() - drainedAt).toBeLessThan(3_000);
     servers.pop();
   });
 

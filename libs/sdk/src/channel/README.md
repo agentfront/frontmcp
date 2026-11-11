@@ -120,8 +120,31 @@ sequenceDiagram
     Server->>CC: notifications/claude/channel
 ```
 
-This covers `runStdio()`, a `--stdio` server and `frontmcp dev --stdio --serve`. `runShared()` and
-`frontmcp dev --stdio` without `--serve` bridge stdio to an HTTP server, so the HTTP rule applies to them.
+This covers `runStdio()`, a `--stdio` server and `frontmcp dev --stdio --serve`.
+
+### The stdio bridge: the same handshake, towards an HTTP server
+
+`runShared()` and `frontmcp dev --stdio` without `--serve` bridge stdio to an HTTP server
+(`createHttpUpstream()` in `@frontmcp/utils`, with `claudeCodeChannels: true`). The bridge gives Claude Code the
+handshake above:
+
+- At the first 2026-07-28 request it asks the server with a `server/discover` of its own. When the server
+  advertises `experimental['claude/channel']`, it answers that request and every later 2026-07-28 request with
+  `-32022` and the server's earlier revisions, and drops 2026-07-28 notifications. A server without channels gets
+  the requests as before.
+- It adds `experimental['claude/channel']` to the `initialize` it forwards and to the one it replays, so the HTTP
+  rule below is met and the session is subscribed.
+- It opens the session's standalone notification stream (`GET` with the session id) and relays it, so the channel
+  notification, like every other message the server sends on its own, reaches the stdio client.
+
+A shared session that gave its notification stream up follows a server that took its key over
+(`watchForSuccessor()` in `shared/shared-attach.ts`): it reads the key's record every second, and moves once the
+record names another process, of its own transport and `info.name`. So a quiet session gets the channel events of a
+newer server that replaced its own. A server that was stopped is not started again by a quiet session: it is left
+to the session's next request.
+
+A shared session that runs the server in its own process gets no channel event: that server is built per request
+and offers no notification stream.
 
 ### HTTP: declaration required
 
@@ -325,7 +348,10 @@ When an event arrives:
 5. `NotificationService.getSubscribersForChannel(channelName)` returns only subscribed sessions
 6. Each subscribed session is also checked with `isChannelCapableSession()`: the stdio session always passes, an
    HTTP session passes when its client declared `experimental: { 'claude/channel': {} }`
-7. Only subscribed + capable sessions receive the JSON-RPC notification
+7. A session whose latest request came with credentials that have since expired is skipped (`hasExpiredCaller()`),
+   until it makes a request with valid ones. `sendToSession()` answers `false` for it. The stdio session keeps no
+   caller, and credentials with no expiry never expire.
+8. Only subscribed + capable sessions with credentials that still hold receive the JSON-RPC notification
 
 **Auto-subscription:** When a channel capable session initializes, it is automatically subscribed to the channels
 the hookable `channels:list` flow returns. An HTTP session is channel capable when its `initialize` declares

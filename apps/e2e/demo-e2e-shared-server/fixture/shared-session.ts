@@ -1,10 +1,11 @@
 /**
  * A stdio session of a shared local server: it attaches to the server of key `e2e`, starting it when none runs. Its
- * name, version, attach budget, upgrade policy, idle time and checkout come from the environment.
+ * name, version, attach budget, upgrade policy, idle time and checkout come from the environment. The server has a
+ * Claude Code channel, `build-alerts`, which the `announce_build` tool sends an event on.
  */
 import 'reflect-metadata';
 
-import { App, FrontMcpInstance, LogLevel, Tool, ToolContext } from '@frontmcp/sdk';
+import { App, Channel, ChannelContext, FrontMcpInstance, LogLevel, Tool, ToolContext, z } from '@frontmcp/sdk';
 import { appendFile } from '@frontmcp/utils';
 
 const env = process.env;
@@ -19,7 +20,42 @@ class ServerPidTool extends ToolContext {
   }
 }
 
-@App({ id: 'shared', name: 'Shared', tools: [ServerPidTool] })
+const BUILD_FINISHED = 'build:finished';
+
+/** Tells Claude Code sessions that a build finished, and which server process says so. */
+@Channel({
+  name: 'build-alerts',
+  description: 'Builds that finished',
+  source: { type: 'app-event', event: BUILD_FINISHED },
+})
+class BuildAlertChannel extends ChannelContext {
+  /** The notification of one finished build. */
+  async onEvent(payload: unknown) {
+    const { build } = payload as { build: string };
+    return { content: `Build ${build} finished on server ${process.pid}`, meta: { build } };
+  }
+}
+
+/** Emits the app event the `build-alerts` channel listens to. */
+@Tool({
+  name: 'announce_build',
+  description: 'Tell every Claude Code session of this server that a build finished',
+  inputSchema: { build: z.string() },
+})
+class AnnounceBuildTool extends ToolContext {
+  /** Emit the event, and answer the build it names. */
+  async execute(input: { build: string }) {
+    this.scope.channelEventBus?.emit(BUILD_FINISHED, input);
+    return { announced: input.build };
+  }
+}
+
+@App({
+  id: 'shared',
+  name: 'Shared',
+  tools: [ServerPidTool, AnnounceBuildTool],
+  channels: [BuildAlertChannel],
+})
 class SharedApp {}
 
 @App({ id: 'public', name: 'Public', tools: [ServerPidTool], standalone: true, auth: { mode: 'public' } })
@@ -41,6 +77,7 @@ FrontMcpInstance.runShared(
         ]
       : [],
     logging: { level: LogLevel.Verbose },
+    channels: { enabled: true },
   },
   {
     key: 'e2e',

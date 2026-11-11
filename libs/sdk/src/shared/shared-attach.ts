@@ -20,7 +20,13 @@ import {
 } from './ensure-shared-server';
 import type { EmbeddedSharedServer } from './shared-embedded';
 import { SHARED_EXITING, SHARED_STATE_HEADER } from './shared-endpoint';
-import { assertSocketPathFits, prepareSharedDirectory, sharedServerFiles } from './shared-files';
+import {
+  assertSocketPathFits,
+  prepareSharedDirectory,
+  readServerRecord,
+  sharedServerFiles,
+  type SharedServerRecord,
+} from './shared-files';
 import type { ResolvedSharedServerOptions } from './shared-server.options';
 import { openStartLockStorage, SharedStartLock } from './start-lock';
 
@@ -31,6 +37,8 @@ const RELOAD_MARGIN_MS = 30_000;
 const MAX_RESENDS = 3;
 /** Errors of a request that never reached a server: nothing listened where it was sent. */
 const NOT_SENT_CODES = new Set(['ECONNREFUSED', 'ENOENT']);
+/** How often a session that lost its notification stream reads the key's record for a server that took it over. */
+const SUCCESSOR_WATCH_MS = 1_000;
 
 export interface AttachSharedSessionOptions extends ResolvedSharedServerOptions {
   input: Readable;
@@ -50,8 +58,8 @@ export interface SharedSession {
   stop(): Promise<void>;
 }
 
-/** Where a session sends its requests: the key's server, or the one it runs itself. */
-type ServerToReach = Pick<EmbeddedSharedServer, 'url' | 'headers' | 'fetch'>;
+/** Where a session sends its requests: the key's server, with its `pid`, or the one it runs itself, which has none. */
+type ServerToReach = Pick<EmbeddedSharedServer, 'url' | 'headers' | 'fetch'> & { pid?: number };
 
 /** The server a session sent a request to went away; `reached` when the request may have reached it first. */
 export class SharedServerLostError extends InternalMcpError {
@@ -138,7 +146,9 @@ async function connect(options: AttachSharedSessionOptions, logger: BridgeLogger
 /**
  * Bridge a stdio session to the key's server; frames sent before it reached one wait in the buffer. When that server
  * goes away, the session reaches the next one, replays the client's `initialize` and tells it the lists changed;
- * when it can't attach to one, it runs the server in its own process.
+ * when it can't attach to one, it runs the server in its own process. What the server sends on its own reaches the
+ * client over the session's notification stream, a Claude Code channel event included. A session that lost that
+ * stream follows a server that took its key over, without waiting for a request of its client.
  */
 export function attachSharedSession(options: AttachSharedSessionOptions): SharedSession {
   const log = stderrLogger();
@@ -147,6 +157,7 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
   let stopping: Promise<void> | undefined;
   let clientInitialize: JsonRpcFrame | undefined;
   let clientInitialized = false;
+  let successorWatch: NodeJS.Timeout | undefined;
   const resends = new WeakMap<JsonRpcFrame, number>();
   const framer = createStdioFramer({
     input: options.input,
@@ -184,13 +195,50 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
     }
   }
 
-  /** Stop sending to a server that went away, and reach the next one; what it still answers is still relayed. */
+  /** Leave a server that went away, and reach the next one; its answers to the requests in flight are still relayed. */
   function lose(lost: HttpUpstreamClient, error: SharedServerLostError): void {
     if (upstream !== lost || stopping) return;
     upstream = undefined;
+    endSuccessorWatch();
+    lost.leaveSession();
     log.warn('reaching the next shared server', { reason: error.message });
     fsm.onUpstreamLost(error.message);
     reach().catch(fail);
+  }
+
+  /** Stop reading the key's record for a server that took the key over. */
+  function endSuccessorWatch(): void {
+    clearInterval(successorWatch);
+    successorWatch = undefined;
+  }
+
+  /** Watch the key's record once the attached server's stream is lost, to follow a server that took the key over. */
+  function watchForSuccessor(lost: HttpUpstreamClient, lostPid: number | undefined): void {
+    if (lostPid === undefined || upstream !== lost || successorWatch || stopping) return;
+    successorWatch = setInterval(() => void moveToSuccessor(lost, lostPid), SUCCESSOR_WATCH_MS);
+    successorWatch.unref();
+    void moveToSuccessor(lost, lostPid);
+  }
+
+  /** Whether the record names a server to move to: another process, of the session's transport and `info.name`. */
+  function isSuccessor(record: SharedServerRecord | undefined, lostPid: number): boolean {
+    if (!record || record.pid === lostPid) return false;
+    return record.transport === options.transport && record.name === options.name;
+  }
+
+  /** Move to the server the key's record names now, when one took the key over; start none, and embed none. */
+  async function moveToSuccessor(lost: HttpUpstreamClient, lostPid: number): Promise<void> {
+    let record: SharedServerRecord | undefined;
+    try {
+      record = await readServerRecord(sharedServerFiles(options.key));
+    } catch (error) {
+      if (upstream !== lost || stopping) return;
+      endSuccessorWatch();
+      log.warn('no longer watching for the next shared server', { reason: messageOf(error) });
+      return;
+    }
+    if (!isSuccessor(record, lostPid)) return;
+    lose(lost, new SharedServerLostError(false, 'another server took its key over'));
   }
 
   function fail(error: unknown): void {
@@ -203,8 +251,8 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
     if (embedded) return embedded;
     const attachment = await connect(options, log);
     if ('server' in attachment) {
-      const { url, token, fetch: send } = attachment.server;
-      return { url, headers: { authorization: `Bearer ${token}` }, fetch: send };
+      const { url, token, fetch: send, pid } = attachment.server;
+      return { url, headers: { authorization: `Bearer ${token}` }, fetch: send, pid };
     }
     log.warn(`running the shared server "${options.key}" in this process: ${attachment.embedded}`);
     embedded = await options.embed();
@@ -219,12 +267,14 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
         await embedded?.close();
         return;
       }
-      const next = createHttpUpstream({
+      const next: HttpUpstreamClient = createHttpUpstream({
         url: server.url,
         headers: server.headers,
         fetch: towardsServer(server.fetch),
         log,
         onFrame: (frame) => fsm.relayUpstream(frame),
+        claudeCodeChannels: true,
+        onNotificationStreamLost: () => watchForSuccessor(next, server.pid),
       });
       try {
         if (clientInitialize) {
@@ -251,6 +301,7 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
   attached.catch(() => undefined);
 
   async function shutdown(): Promise<void> {
+    endSuccessorWatch();
     await fsm.stop();
     await upstream?.endSession();
     await upstream?.close();

@@ -326,7 +326,7 @@ A worker runs for as long as its server process does. Which run modes keep that 
 | `frontmcp service install <name>`                               | Yes                                                                      | The systemd user unit (Linux) has `Restart=on-failure`; the launchd agent (macOS) starts it at login and does not restart it                                 |
 | `<bin> serve` (a CLI built with `frontmcp build --target cli`)  | Yes, in the foreground                                                   | No                                                                                                                                                           |
 | `<bin> daemon start`                                            | Takes `--idle-timeout <ms>` (300000 by default; `0` disables it)         | No                                                                                                                                                           |
-| The shared local server (`FrontMcpInstance.runShared()`)        | No: it exits after `idleTimeoutMs` without a request (600000 by default) | A session's next request starts a new one                                                                                                                    |
+| The shared local server (`FrontMcpInstance.runShared()`)        | While a session is attached, and `idleTimeoutMs` (600000) after the last | A session's next request starts a new one                                                                                                                    |
 | A stdio server an MCP client starts                             | Only while its client is connected                                       | By the client                                                                                                                                                |
 | Serverless, edge, browser                                       | Not started                                                              | -                                                                                                                                                            |
 
@@ -335,8 +335,9 @@ To run a worker that is always on:
 - Run the server as a long-lived process under something that restarts it: a container with a restart policy, a
   systemd unit, or `frontmcp start <name>` (installed with `frontmcp service install <name>` to start at login).
 - With a built CLI's daemon, start it with `<bin> daemon start --idle-timeout 0`.
-- With the shared local server, pass `idleTimeoutMs: false` to `runShared()`. Idle there means no request: a running
-  worker does not count as activity, so the default stops the server, and its worker, after 10 minutes without one.
+- With the shared local server, pass `idleTimeoutMs: false` to `runShared()`. Idle there means no request and no
+  attached session: a running worker does not count as activity, so the default stops the server, and its worker,
+  10 minutes after the last session left.
 - Do not rely on a stdio server that a client starts: the worker stops when the client disconnects.
 - For one worker among several machines, use `scope: 'cluster'` and run at least two copies: when the holder's
   process ends, another takes the worker over within `leaseMs` plus a third of it.
@@ -392,7 +393,7 @@ To run a worker that is always on:
 | Problem                                       | Cause                                                                         | Solution                                                                                            |
 | --------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | The worker never starts                       | Not in `providers`; a `createContainer()` without `runBackground`; serverless | Register it; pass `runBackground: true`; run it in a long-lived process                             |
-| It stops after a few minutes without requests | The shared local server or a daemon exited idle                               | `idleTimeoutMs: false` for `runShared()`, `--idle-timeout 0` for the daemon, or a long-lived server |
+| It stops after a few minutes without requests | The shared local server (with no session attached) or a daemon exited idle    | `idleTimeoutMs: false` for `runShared()`, `--idle-timeout 0` for the daemon, or a long-lived server |
 | `already runs elsewhere` with one server      | Another server on the machine has the same `info.name` and worker name        | Give the server a distinctive `info.name`, or the worker its own `name`                             |
 | `ClusterScopeNeedsRedisError` at startup      | A `'cluster'` worker and no top-level `redis` (or a Vercel KV one)            | Add `redis` to `@FrontMcp()` or `createContainer()`, or use `scope: 'machine'`                      |
 | It restarts in a loop                         | `run()` returns right away, or throws on every start                          | Keep `run()` pending until `signal` aborts; read the logged cause; raise `restart.minDelayMs`       |

@@ -88,7 +88,7 @@ frontmcp dev --stdio                  # HTTP loopback under the hood
 frontmcp dev --stdio --serve          # stdio-over-pipe (no HTTP listener)
 ```
 
-A `2026-07-28` client needs `--serve`: the HTTP-loopback bridge forwards its messages without the mirrored request headers, so the server refuses them with `-32020`.
+A `2026-07-28` client needs `--serve`: the HTTP-loopback bridge forwards its messages without the mirrored request headers, so the server refuses them with `-32020`. For a server with channels the bridge answers them itself with `-32022` and the server's earlier revisions, so a client that speaks both eras, such as Claude Code, falls back to `initialize`.
 
 Wire the client at the bridge (for a `2026-07-28` client, add `"--serve"` to `args`):
 
@@ -110,6 +110,8 @@ Bridge guarantees:
 - The server reports the port and MCP path it really serves (`__FRONTMCP_BOOTSTRAP_COMPLETE__ {"port":…,"path":…}` on stderr), so values hard-coded in `@FrontMcp({ http })` work.
 - A server on `@FrontMcp({ http: { socketPath } })` needs `--serve`: the HTTP loopback reaches TCP ports only, so the bridge stops a server that reports a socket, says so on stderr, and answers buffered requests with `dev_reload_deadline` carrying that message.
 - The client stays connected across reloads: the bridge uses the `mcp-session-id` the server issues, replays the client's `initialize` handshake on the restarted server, then sends `notifications/tools/list_changed` (and resources/prompts when advertised). Server-side session state starts fresh on each reload.
+- What the server sends on its own reaches the client: after `initialize`, and after each replayed one, the HTTP-loopback bridge opens the session's notification stream (`GET` with the `mcp-session-id`) and writes every message on it to stdout (`list_changed`, log lines, resource updates). With `--serve` the server writes them to the pipe itself.
+- A Claude Code channel works in both modes (see `channel-claude-code` in `frontmcp-channels`): the HTTP-loopback bridge declares `experimental['claude/channel']` on the `initialize` it forwards, and a restarted server's events arrive on the new session's stream.
 - Buffered RPCs during reload drain in FIFO once the new server is ready and initialized. A server that rejects the replayed handshake is a failed reload: it is stopped, and buffered RPCs wait for the next save or answer `dev_reload_deadline`.
 - Reload deadline + buffer overflow surface structured errors (`dev_server_unreachable` / `dev_buffer_full` / `dev_reload_deadline` — codes -32099 / -32098 / -32097) so the client spinner clears instead of hanging.
 - Closing stdin or `SIGINT` / `SIGTERM` stops the server and everything it started.

@@ -36,7 +36,7 @@ A server built with `--target node` serves stdio with its `--stdio` flag. Regist
 
 A stdio server has no HTTP listener, so a `webhook` source gets no route there (see `channel-sources`).
 
-`runShared()` and `frontmcp dev --stdio` without `--serve` pass the stdio connection on to an HTTP server, so the HTTP rule below applies to them: Claude Code gets no channel event through them.
+`runShared()` and `frontmcp dev --stdio` serve a channel too. Without `--serve`, both pass the stdio connection on to an HTTP server through a bridge (see [Through the stdio Bridge](#through-the-stdio-bridge)).
 
 ## Opt the Session In
 
@@ -55,9 +55,26 @@ A stdio server has no HTTP listener, so a `webhook` source gets no route there (
 - **Revision 2026-07-28 is declined.** Claude Code probes a stdio server with `server/discover` on revision 2026-07-28, and delivers no channel event on that revision. A stdio server with channels enabled answers `server/discover`, and every other 2026-07-28 request, with `-32022` and the earlier revisions in `data.supported`. Claude Code then sends `initialize`.
 - **Every stdio client is affected.** A stdio server with channels enabled speaks the revisions before 2026-07-28 to every stdio client, whatever `transport.defaultProtocolVersion` says.
 
-Over HTTP nothing changes. An HTTP session gets channel notifications only when its client declares `experimental['claude/channel']`, and HTTP serves revision 2026-07-28 as before.
+Over HTTP nothing changes. An HTTP session gets channel notifications only when its client declares `experimental['claude/channel']`, and HTTP serves revision 2026-07-28 as before. A session whose latest request came with credentials that have since expired gets none, until it makes a request with valid ones.
 
 Before 1.12 a FrontMCP channel reached no Claude Code session: the server answered the 2026-07-28 probe, and sent channel events only to a session that declared the capability.
+
+## Through the stdio Bridge
+
+`runShared()` and `frontmcp dev --stdio` without `--serve` keep the stdio connection in a bridge, and send each message to an HTTP server: the shared local server, or the dev server the CLI restarts. A channel reaches Claude Code through both. The bridge does three things for it:
+
+- **It declines revision 2026-07-28 for a server with channels.** At the first 2026-07-28 request, the bridge asks the server with a `server/discover` of its own. When the server advertises `experimental['claude/channel']`, the bridge answers that request, and every later 2026-07-28 request, with `-32022` and the server's earlier revisions in `data.supported`. It drops a 2026-07-28 notification. Claude Code then sends `initialize`.
+- **It declares the capability.** The bridge adds `experimental['claude/channel']` to the `initialize` it forwards, and to the one it replays on a restarted or replaced server. The server subscribes the HTTP session as it does the stdio session. The client's other capabilities, and the `initialize` result, are passed on unchanged.
+- **It relays the session's notification stream.** After `initialize` the bridge opens the session's stream (`GET` with the session id) and writes each message on it to stdout. It sends the session's next request once the server answered the stream, or after 2 s. The stream follows the session: a restarted dev server, or the next shared server, gets a new one. A stream that drops is opened again, after 250 ms at first and up to 4 s later. The bridge gives it up, until the next session, after five opens in a row failed, or once the server answers that it no longer knows the session (404).
+
+A quiet shared session follows its server. When another server takes the key over, such as a newer version that replaces the session's own, the session moves to it about 8 s after its stream was cut, with no request of its client, and gets that server's events. It reads the key's record (`server.json`) every second once it gave the stream up, and moves when the record names another process, of its own transport and `info.name`.
+
+What stays as it was:
+
+- A server without channels is not declined. Its 2026-07-28 requests are forwarded as before.
+- `frontmcp dev --stdio --serve` uses no HTTP server: the dev server speaks stdio itself, as described above.
+- A shared session that runs the server in its own process (the fallback of `runShared()`) declines 2026-07-28 too, but gets no channel event: that server offers no notification stream.
+- A shared server that was stopped, or whose checkout was removed, is not started again by a quiet session. The session moves at its next request, and gets no channel event until then.
 
 ## What Claude Code Does with a Notification
 

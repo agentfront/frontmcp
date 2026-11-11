@@ -148,3 +148,71 @@ describe('ChannelNotificationService channel capable sessions', () => {
     expect(notification).toHaveBeenCalledWith({ method: 'notifications/claude/channel', params: CHANNEL_EVENT });
   });
 });
+
+describe('ChannelNotificationService and the credentials of a session', () => {
+  const CHANNEL_EVENT = { content: 'disk full', meta: { source: 'alerts' } };
+  const NOW_SECONDS = Math.floor(Date.now() / 1000);
+
+  /** A channel service over one real HTTP session that declared the capability and is subscribed to `alerts`. */
+  function declaredSession() {
+    const log = logger();
+    const registries = { subscribe: jest.fn() };
+    const scope = { logger: log, resources: registries, tools: registries, prompts: registries };
+    const sessions = new NotificationService(scope as never);
+    const notification = jest.fn();
+    sessions.registerServer('session-1', { notification } as never);
+    sessions.setClientCapabilities('session-1', { experimental: { 'claude/channel': {} } });
+    sessions.subscribeChannel('session-1', 'alerts');
+    return { service: new ChannelNotificationService(sessions, log), sessions, notification };
+  }
+
+  it('sends nothing to a session whose latest request came with credentials that have since expired', () => {
+    const { service, sessions, notification } = declaredSession();
+    sessions.setCaller('session-1', { clientId: 'desk', expiresAt: NOW_SECONDS - 60 });
+
+    service.sendToSubscribedSessions(CHANNEL_EVENT.content, CHANNEL_EVENT.meta);
+    const targeted = service.sendToSession('session-1', CHANNEL_EVENT.content, CHANNEL_EVENT.meta);
+
+    expect(targeted).toBe(false);
+    expect(notification).not.toHaveBeenCalled();
+  });
+
+  it('sends again once the session made a request with credentials that are still valid', () => {
+    const { service, sessions, notification } = declaredSession();
+    sessions.setCaller('session-1', { clientId: 'desk', expiresAt: NOW_SECONDS - 60 });
+    service.sendToSubscribedSessions(CHANNEL_EVENT.content, CHANNEL_EVENT.meta);
+
+    sessions.setCaller('session-1', { clientId: 'desk', expiresAt: NOW_SECONDS + 3600 });
+    service.sendToSubscribedSessions(CHANNEL_EVENT.content, CHANNEL_EVENT.meta);
+    const targeted = service.sendToSession('session-1', CHANNEL_EVENT.content, CHANNEL_EVENT.meta);
+
+    expect(targeted).toBe(true);
+    expect(notification.mock.calls).toEqual([
+      [{ method: 'notifications/claude/channel', params: CHANNEL_EVENT }],
+      [{ method: 'notifications/claude/channel', params: CHANNEL_EVENT }],
+    ]);
+  });
+
+  it.each([
+    ['whose caller has credentials with no expiry', { clientId: 'desk' }],
+    ['that kept no caller', undefined],
+  ])('sends to a session %s', (_, caller) => {
+    const { service, sessions, notification } = declaredSession();
+    if (caller) sessions.setCaller('session-1', caller);
+
+    service.sendToSubscribedSessions(CHANNEL_EVENT.content, CHANNEL_EVENT.meta);
+
+    expect(notification).toHaveBeenCalledWith({ method: 'notifications/claude/channel', params: CHANNEL_EVENT });
+  });
+
+  it('still hands the notification to a listener with no session', () => {
+    const { service, sessions } = declaredSession();
+    sessions.setCaller('session-1', { clientId: 'desk', expiresAt: NOW_SECONDS - 60 });
+    const deliver = jest.fn();
+    service.listen(['alerts'], deliver);
+
+    service.sendToSubscribedSessions(CHANNEL_EVENT.content, CHANNEL_EVENT.meta);
+
+    expect(deliver).toHaveBeenCalledWith(CHANNEL_EVENT.content, CHANNEL_EVENT.meta);
+  });
+});

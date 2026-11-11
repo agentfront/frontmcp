@@ -17,6 +17,8 @@
  *   5. Forward frames in both directions. The client's `initialize` is
  *      remembered; after a restart it is replayed against the new child
  *      before buffered requests drain, so the client never re-connects.
+ *      In HTTP mode the upstream also relays the notification stream of
+ *      each child's session, so a Claude Code channel event reaches the client.
  *   6. SIGINT/SIGTERM → flush buffer with `dev_server_unreachable`,
  *      tear down child + watcher, exit cleanly.
  */
@@ -132,7 +134,12 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
       // or path); fall back to what we told it.
       const url = `http://127.0.0.1:${info.port ?? launch.port}${info.path ?? mcpPathOf(launch.configHttpPath)}`;
       log.info('upstream-url', { url });
-      return createHttpUpstream({ url, log, onFrame: (frame: JsonRpcFrame) => fsm.relayUpstream(frame) });
+      return createHttpUpstream({
+        url,
+        log,
+        onFrame: (frame: JsonRpcFrame) => fsm.relayUpstream(frame),
+        claudeCodeChannels: true,
+      });
     }
     return createPipeUpstream({
       child,
