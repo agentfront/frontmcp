@@ -1,7 +1,8 @@
 /**
  * E2E: the messages Claude Code 2.1.322 sends a channel server it spawned over stdio, replayed from a capture
  * (see scripts/claude-code). It probes with `server/discover` on 2026-07-28, falls back to `initialize` once the
- * probe is declined, and never declares `experimental['claude/channel']`; channel events must reach it anyway.
+ * probe is declined, and never declares `experimental['claude/channel']`; channel events must reach it anyway,
+ * and so must the occurrences of an event with the `channel` option.
  */
 import { join } from 'node:path';
 
@@ -46,6 +47,30 @@ const EMIT_ERROR_EVENT: JsonRpcMessage = {
   },
 };
 
+const DEPLOY = { version: '1.4.0', status: 'succeeded', env: 'prod' };
+
+/** A `tools/call` of `publish-deploy-event` for one of the demo's deploy events. */
+function publishDeployEvent(id: number, eventName: 'deploy.started' | 'deploy.finished'): JsonRpcMessage {
+  return {
+    jsonrpc: '2.0',
+    id,
+    method: 'tools/call',
+    params: { name: 'publish-deploy-event', arguments: { event: eventName, ...DEPLOY } },
+  };
+}
+
+/** The id of the occurrence a `publish-deploy-event` call published. */
+function publishedEventId(reply: JsonRpcMessage): string {
+  const structured = reply.result?.['structuredContent'] as { eventId: string };
+  return structured.eventId;
+}
+
+/** Whether a message is the channel notification of an occurrence of `eventName`. */
+function isChannelEvent(message: JsonRpcMessage, eventName: string): boolean {
+  const meta = message.params?.['meta'] as Record<string, string> | undefined;
+  return message.method === CHANNEL_NOTIFICATION && meta?.['event'] === eventName;
+}
+
 describe('Channels in a Claude Code stdio session', () => {
   let server: StdioJsonRpcProcess;
 
@@ -82,4 +107,46 @@ describe('Channels in a Claude Code stdio session', () => {
     });
     for (const line of server.stdoutLines) expect(JSON.parse(line)).toHaveProperty('jsonrpc', '2.0');
   }, 120_000);
+
+  it('says in its instructions that a tag with event and event_id attributes is a published event', async () => {
+    const initialized = await server.waitFor((message) => message.id === INITIALIZE.id && !!message.result);
+
+    expect(initialized.result?.['instructions']).toContain(
+      'Events arrive as <channel> tags. Reply with the channel-reply tool. ' +
+        'A tag with event and event_id attributes is an event this server published: ' +
+        'event is its name, event_id its id.',
+    );
+  });
+
+  it('sends an occurrence of an event with channel: true as its payload in JSON, with event and event_id', async () => {
+    const eventId = publishedEventId(await server.request(publishDeployEvent(2, 'deploy.started')));
+    expect(eventId).toMatch(/^evt_/);
+
+    const notification = await server.waitFor((message) => isChannelEvent(message, 'deploy.started'));
+
+    expect(notification).toEqual({
+      jsonrpc: '2.0',
+      method: CHANNEL_NOTIFICATION,
+      params: {
+        content: '{"version":"1.4.0","status":"succeeded","env":"prod"}',
+        meta: { event: 'deploy.started', event_id: eventId },
+      },
+    });
+  });
+
+  it('sends the message the content and meta functions of an event shape, with keys Claude Code keeps', async () => {
+    const eventId = publishedEventId(await server.request(publishDeployEvent(3, 'deploy.finished')));
+
+    const notification = await server.waitFor((message) => isChannelEvent(message, 'deploy.finished'));
+
+    expect(notification).toEqual({
+      jsonrpc: '2.0',
+      method: CHANNEL_NOTIFICATION,
+      params: {
+        content: 'Deploy succeeded: 1.4.0',
+        meta: { env: 'prod', deploy_version: '1.4.0', event: 'deploy.finished', event_id: eventId },
+      },
+    });
+    for (const line of server.stdoutLines) expect(JSON.parse(line)).toHaveProperty('jsonrpc', '2.0');
+  });
 });

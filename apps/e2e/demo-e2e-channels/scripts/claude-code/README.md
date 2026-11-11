@@ -44,6 +44,8 @@ claude --dangerously-load-development-channels server:frontmcp-channels --mcp-co
 
 `capture-wrapper.mjs` runs `src/stdio-entrypoint.ts` and writes every line that passes between Claude Code and the server to `capture.log`. With `CAPTURE_EMIT_EVENT=1`, it calls the server's `emit-app-event` tool six seconds after `notifications/initialized`, so the server sends one channel event. Without it, the wrapper only logs.
 
+To check an event with the `channel` option, ask Claude in the session to call `publish-deploy-event`: the occurrence arrives the same way, with `event` and `event_id` in `meta`.
+
 ## What a pass looks like
 
 On screen, and in `screen.log`, the event arrives as a line that starts with the server name:
