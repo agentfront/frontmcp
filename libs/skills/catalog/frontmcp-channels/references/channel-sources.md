@@ -190,7 +190,9 @@ class WhatsAppChannel extends ChannelContext {
 
 ## File Watcher Source
 
-Watches files and directories. While the channel is connected, the framework watches the declared `paths` and hands each file event to `onEvent()`. The channel needs no watcher of its own. Before 1.12 the `paths` and `events` were only a label, and the channel had to watch in `onConnect()` itself.
+Watches files and directories. For a channel that defines no `onConnect()`, the framework watches the declared `paths` while the channel is connected, and hands each file event to `onEvent()`. The channel needs no watcher of its own.
+
+A channel that defines its own `onConnect()` watches by itself, as before 1.12, when the `paths` and `events` were only a label. Such a channel keeps working unchanged (see [A channel with its own `onConnect()`](#a-channel-with-its-own-onconnect)).
 
 ```typescript
 import { basename } from 'node:path';
@@ -224,11 +226,54 @@ class LogWatcherChannel extends ChannelContext {
 - **Paths.** A directory is watched for its direct files, not for its subdirectories. A file is watched through its parent directory, so it stays watched when an editor replaces it. A path that does not exist yet is watched from the moment it appears. The files that are there when the watch starts are not reported.
 - **No globs.** A path is watched as written. For `./logs/*.log` the server logs a warning at startup and watches a file of that name: declare `./logs`, or each file.
 - **Debounce.** A change is reported once its directory saw no change for 100 ms. Several writes to one file in that time are one `change`.
-- **Lifetime.** The watch starts after `onConnect()` and ends before `onDisconnect()`, when the server shuts down or is disposed. Both hooks still run. A channel that still watches its declared paths in `onConnect()` gets each change twice, once from its own `pushIncoming()` and once as a `ChannelFileEvent`: remove its watcher.
+- **Lifetime.** The watch starts when the channel is connected, at startup. It ends when the channel disconnects, at shutdown and at `dispose()`, before `onDisconnect()` runs.
 - **Where it does not run.** In a serverless, edge or browser runtime nothing is watched: the server logs a warning and still connects the channel. CLI mode and a build that boots the server to read it register no channel, so they watch nothing.
 - **Failure.** A watch that fails is logged (`Channel "log-watcher" stopped watching its paths`). The server and its other channels keep running.
 
 The watch is `watchFiles()` from `@frontmcp/utils` (see `create-worker`). To publish file changes as an event that poll, push and webhook clients also get, loop over `watchFiles()` in a `@Worker` and set the event's `channel` option.
+
+### A channel with its own `onConnect()`
+
+The framework watches the declared paths only for a channel that defines no `onConnect()`. When the channel's class, or a class it extends, defines `onConnect()`, the channel is taken to watch by itself:
+
+- `onConnect()` and `onDisconnect()` run, as for a `service` source.
+- The framework watches nothing for it. `onEvent()` gets only what the channel pushes with `pushIncoming()`, in the shape the channel chose.
+- `paths` and `events` are a label the channel may read from `this.metadata.source`. The warnings above (a glob, a runtime that cannot watch) are not logged for it.
+- The server logs one info line at startup: `Channel "log-watcher" defines onConnect(), so it watches by itself: the framework does not watch its declared paths. Remove onConnect() to have the framework watch them.`
+
+So a channel written before 1.12 keeps working unchanged. To move it to the framework's watch, remove its `onConnect()`, its `onDisconnect()` and its watcher, and read `{ event, path }` in `onEvent()`.
+
+A `channel()` function has no connect handler, so the framework always watches its declared paths.
+
+A channel that watches by itself:
+
+```typescript
+import { watch, type FSWatcher } from 'node:fs';
+
+import { Channel, ChannelContext, type ChannelFileWatcherSource, type ChannelNotification } from '@frontmcp/sdk';
+
+@Channel({
+  name: 'legacy-log-watcher',
+  source: { type: 'file-watcher', paths: ['./logs/app.log'] },
+})
+class LegacyLogWatcherChannel extends ChannelContext {
+  private watcher?: FSWatcher;
+
+  async onConnect(): Promise<void> {
+    const [logFile] = (this.metadata.source as ChannelFileWatcherSource).paths;
+    this.watcher = watch(logFile, () => this.pushIncoming({ file: logFile }));
+  }
+
+  async onDisconnect(): Promise<void> {
+    this.watcher?.close();
+  }
+
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    const { file } = payload as { file: string };
+    return { content: `${file} changed`, meta: { file } };
+  }
+}
+```
 
 ## Manual Source
 

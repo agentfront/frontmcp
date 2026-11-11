@@ -8,7 +8,7 @@ features:
   - File watcher source with declared paths and events
   - 'The `{ event, path }` payload of a file event'
   - State kept on the channel between file events
-  - No watcher code in the channel
+  - 'No `onConnect()`, so the framework watches the declared paths'
 ---
 
 # File Watcher Channel
@@ -59,16 +59,19 @@ export class LogWatcherChannel extends ChannelContext {
 }
 ```
 
-The framework watches both paths while the channel is connected, and calls `onEvent()` with `{ event, path }` for each
-file that is created or changed. A connected file-watcher channel keeps one instance, so `charactersRead` lasts from
-one file event to the next.
+The channel defines no `onConnect()`, so the framework watches both paths while the channel is connected, and calls
+`onEvent()` with `{ event, path }` for each file that is created or changed. A connected file-watcher channel keeps one
+instance, so `charactersRead` lasts from one file event to the next.
+
+A channel that defines its own `onConnect()` is not watched by the framework: it watches by itself, as before 1.12
+(see `channel-sources`).
 
 ## What This Demonstrates
 
 - File watcher source with declared paths and events
 - The `{ event, path }` payload of a file event
 - State kept on the channel between file events
-- No watcher code in the channel
+- No `onConnect()`, so the framework watches the declared paths
 
 ## Related
 

@@ -74,8 +74,8 @@ export interface ChannelCapabilitiesResult {
   channelNotificationService: ChannelNotificationService;
   channelEventBus: ChannelEventBus;
   /**
-   * Runs each service channel's `onConnect()`, and starts the watch of each file-watcher channel: call it once the
-   * scope serves the registry and notification service.
+   * Runs each service channel's `onConnect()`, and starts the watch of each file-watcher channel that defines none:
+   * call it once the scope serves the registry and notification service.
    */
   connectServices: () => Promise<void>;
   /** Teardown function: disconnects services and cleans up subscriptions */
@@ -192,7 +192,7 @@ export async function registerChannelCapabilities(
         break;
       case 'service':
       case 'file-watcher':
-        // Connected through connectServices(): onConnect(), then a file watcher watches its declared paths
+        // Connected through connectServices(): onConnect(), and a file watcher without its own is watched
         break;
     }
   }

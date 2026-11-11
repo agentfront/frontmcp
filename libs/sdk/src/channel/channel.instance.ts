@@ -21,7 +21,8 @@ import { wireFileWatcherSource } from './sources/file-watcher.source';
  *
  * For service connector channels (source: { type: 'service' }), maintains a persistent
  * ChannelContext that is connected on init and disconnected on teardown. A file-watcher
- * channel is connected the same way, and its declared paths are watched while it is.
+ * channel is connected the same way, and its declared paths are watched while it is, unless
+ * it defines its own onConnect().
  *
  * **Scope Binding:** The ChannelInstance captures its scope and providers at construction time.
  */
@@ -78,7 +79,7 @@ export class ChannelInstance extends ChannelEntry {
   /**
    * Connect the service connector (called after notification service is wired).
    * Creates a persistent context, wires pushIncoming, and calls onConnect().
-   * A file-watcher source then starts watching its declared paths.
+   * A file-watcher source then starts watching its declared paths, unless the channel connects itself.
    */
   async connectService(): Promise<void> {
     if (!this.isServiceConnector) return;
@@ -97,7 +98,7 @@ export class ChannelInstance extends ChannelEntry {
       await ctx.onConnect();
       this._serviceContext = ctx;
       const { source } = this.metadata;
-      if (source.type === 'file-watcher') this._stopFileWatch = wireFileWatcherSource(this, source, logger);
+      if (source.type === 'file-watcher') this._stopFileWatch = wireFileWatcherSource(this, ctx, source, logger);
       const sourceLabel = source.type === 'service' ? source.service : source.type;
       logger.info(`Channel "${this.name}" connected (${sourceLabel})`);
     } catch (err) {

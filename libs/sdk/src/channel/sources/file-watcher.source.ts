@@ -2,7 +2,7 @@
 
 import { watchFiles, type FileWatchEventType } from '@frontmcp/utils';
 
-import type { FrontMcpLogger } from '../../common';
+import { ChannelContext, type FrontMcpLogger } from '../../common';
 import type { ChannelFileEvent, ChannelFileWatcherSource } from '../../common/metadata/channel.metadata';
 import { isLongLivedProcess } from '../../duty/lease-store';
 import type { ChannelInstance } from '../channel.instance';
@@ -23,6 +23,14 @@ const REPORTED_EVENTS: Record<FileWatchEventType, ChannelFileEvent['event']> = {
   change: 'change',
   unlink: 'delete',
 };
+
+/**
+ * Whether a channel defines its own `onConnect()`, on its class or on a class it extends. Such a channel watches by
+ * itself, as every file-watcher channel did before the framework watched, so its declared paths are left to it.
+ */
+export function connectsItself(context: ChannelContext): boolean {
+  return context.onConnect !== ChannelContext.prototype.onConnect;
+}
 
 /** The `watchFiles` event types a source asks for: every type when it declares no events. */
 function watchedTypesOf(sourceConfig: ChannelFileWatcherSource): FileWatchEventType[] | undefined {
@@ -60,19 +68,28 @@ async function forwardFileEvents(
 
 /**
  * Wires a file-watcher channel source: watches the declared paths and hands each file event to the channel as a
- * `ChannelFileEvent`. Nothing is watched in a serverless, edge or browser runtime. A watch that fails is logged,
- * and the channel stays connected.
+ * `ChannelFileEvent`. A channel that defines its own `onConnect()` watches by itself, and nothing is watched in a
+ * serverless, edge or browser runtime. A watch that fails is logged, and the channel stays connected.
  *
  * @param channel - The channel instance to push notifications to
+ * @param context - The connected context of the channel
  * @param sourceConfig - The file-watcher source configuration
  * @param logger - Logger instance
  * @returns The function that ends the watch
  */
 export function wireFileWatcherSource(
   channel: ChannelInstance,
+  context: ChannelContext,
   sourceConfig: ChannelFileWatcherSource,
   logger: FrontMcpLogger,
 ): () => void {
+  if (connectsItself(context)) {
+    logger.info(
+      `Channel "${channel.name}" defines onConnect(), so it watches by itself: the framework does not watch its ` +
+        'declared paths. Remove onConnect() to have the framework watch them.',
+    );
+    return () => undefined;
+  }
   if (!isLongLivedProcess()) {
     logger.warn(
       `Channel "${channel.name}" does not watch its paths in a serverless, edge or browser runtime: ` +

@@ -282,8 +282,8 @@ During `Scope.initialize()` (Batch 3, after NotificationService is ready):
 3. Sources are wired: agent emitters, job emitters, event bus subscriptions
 4. If any channel is `twoWay`, the `ChannelReplyTool` is auto-registered in `ToolRegistry`
 5. Channel flows are registered in `FlowRegistry`
-6. `connectServices()` runs `onConnect()` on each `service` and `file-watcher` channel, and starts the watch of a
-   `file-watcher` channel's declared paths
+6. `connectServices()` runs `onConnect()` on each `service` and `file-watcher` channel, and starts the watch of the
+   declared paths of each `file-watcher` channel that defines no `onConnect()`
 
 ### 4. Capability Advertisement
 
@@ -380,6 +380,11 @@ it is published. It does not go through this module's registry or its `channels:
 `wireFileWatcherSource()` in `sources/file-watcher.source.ts` watches the declared `paths` with `watchFiles` from
 `@frontmcp/utils`, and hands each file event to `ChannelInstance.handleEvent()`.
 
+- **Which channels.** Only a channel that defines no `onConnect()`. `connectsItself(context)` is true when the
+  context's `onConnect` is not `ChannelContext.prototype.onConnect`: the channel's class, or a class it extends,
+  defines one. Such a channel watches by itself, as every file-watcher channel did before 1.12: `onConnect()` and
+  `onDisconnect()` run, nothing is watched, and one info line says so. A `channel()` function has no connect
+  handler (`FunctionChannelContext` defines only `onEvent()`), so it is always watched.
 - **Lifetime.** `ChannelInstance.connectService()` starts the watch after `onConnect()`.
   `disconnectService()` aborts its signal before `onDisconnect()`, so the watch ends when the channel disconnects, and
   at shutdown and `dispose()`, which disconnect every channel.

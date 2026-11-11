@@ -77,9 +77,12 @@ export interface ChannelServiceSource {
 }
 
 /**
- * File watcher source — the framework watches `paths` while the channel is connected (with `watchFiles` from
- * `@frontmcp/utils`) and hands each file event to `onEvent()` as a `ChannelFileEvent`. The watch starts after
- * `onConnect()` and ends before `onDisconnect()`.
+ * File watcher source — for a channel that defines no `onConnect()`, the framework watches `paths` while the channel
+ * is connected (with `watchFiles` from `@frontmcp/utils`) and hands each file event to `onEvent()` as a
+ * `ChannelFileEvent`.
+ *
+ * A channel that defines its own `onConnect()` watches by itself, as before 1.12: `onConnect()` and `onDisconnect()`
+ * run, the framework watches nothing, and `paths` and `events` are a label for it.
  *
  * Nothing is watched in a serverless, edge or browser runtime. A build that boots the server only to read it
  * registers no channel, so it watches nothing either.

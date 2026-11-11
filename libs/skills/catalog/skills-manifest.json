@@ -628,7 +628,7 @@
                 "File watcher source with declared paths and events",
                 "The `{ event, path }` payload of a file event",
                 "State kept on the channel between file events",
-                "No watcher code in the channel"
+                "No `onConnect()`, so the framework watches the declared paths"
               ]
             },
             {
