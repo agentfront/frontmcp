@@ -1,4 +1,4 @@
-import { classifyIpAddress, expandIpv6, extractEmbeddedIpv4, parseIpv4 } from '../ip-address';
+import { classifyIpAddress, expandIpv6, extractEmbeddedIpv4, isGloballyRoutableIp, parseIpv4 } from '../ip-address';
 
 describe('parseIpv4', () => {
   it.each([
@@ -156,6 +156,106 @@ describe('classifyIpAddress', () => {
     'returns undefined for %p, which is not an IP literal',
     (address) => {
       expect(classifyIpAddress(address)).toBeUndefined();
+    },
+  );
+});
+
+describe('isGloballyRoutableIp', () => {
+  it.each([
+    '8.8.8.8',
+    '1.1.1.1',
+    '100.63.255.255',
+    '192.0.1.255',
+    '192.0.3.0',
+    '198.51.99.255',
+    '198.51.101.0',
+    '203.0.112.255',
+    '203.0.114.0',
+    '2606:4700::1111',
+    '[2606:4700::1111]',
+    '2400:cb00:2048:1::1',
+    '2001:200::1',
+    '2001:db9::1',
+    '100:0:0:2::1',
+    '3fff:1000::1',
+    '5f01::1',
+    '::ffff:8.8.8.8',
+    '[::ffff:808:808]',
+    '2002:808:808::1',
+    '64:ff9b::808:808',
+  ])('accepts %s', (address) => {
+    expect(isGloballyRoutableIp(address)).toBe(true);
+  });
+
+  it.each([
+    ['0.0.0.0', 'unspecified'],
+    ['10.0.0.5', 'RFC 1918'],
+    ['172.16.0.1', 'RFC 1918'],
+    ['192.168.1.1', 'RFC 1918'],
+    ['100.64.0.1', 'carrier-grade NAT'],
+    ['127.0.0.1', 'loopback'],
+    ['169.254.0.1', 'link-local'],
+    ['169.254.169.254', 'cloud metadata'],
+    ['192.0.0.8', 'IETF protocol assignments'],
+    ['198.18.0.1', 'benchmarking'],
+    ['224.0.0.1', 'multicast'],
+    ['240.0.0.1', 'reserved'],
+    ['255.255.255.255', 'broadcast'],
+    ['::', 'unspecified'],
+    ['::1', 'loopback'],
+    ['[::1]', 'loopback'],
+    ['fc00::1', 'unique local'],
+    ['fd12:3456::1', 'unique local'],
+    ['fd00:ec2::254', 'cloud metadata'],
+    ['fe80::1', 'link-local'],
+    ['fe80::1%eth0', 'link-local'],
+    ['fec0::1', 'site-local'],
+    ['ff02::1', 'multicast'],
+    ['64:ff9b:1::a9fe:a9fe', 'local-use NAT64'],
+  ])('refuses %s (%s), which classifyIpAddress does not call public', (address) => {
+    expect(classifyIpAddress(address)?.range).not.toBe('public');
+    expect(isGloballyRoutableIp(address)).toBe(false);
+  });
+
+  it.each([
+    ['192.0.2.1', 'TEST-NET-1'],
+    ['192.0.2.255', 'TEST-NET-1'],
+    ['198.51.100.7', 'TEST-NET-2'],
+    ['203.0.113.10', 'TEST-NET-3'],
+    ['2001:db8::1', 'documentation'],
+    ['[2001:db8:ffff::1]', 'documentation'],
+    ['3fff::1', 'documentation'],
+    ['3fff:fff:ffff::1', 'documentation'],
+    ['100::1', 'discard-only'],
+    ['100:0:0:1::1', 'dummy prefix'],
+    ['2001::1', 'Teredo'],
+    ['2001:2::1', 'benchmarking'],
+    ['2001:1ff:ffff::1', 'IETF protocol assignments'],
+    ['5f00::1', 'segment routing'],
+  ])('refuses %s (%s), which classifyIpAddress calls public', (address) => {
+    expect(classifyIpAddress(address)?.range).toBe('public');
+    expect(isGloballyRoutableIp(address)).toBe(false);
+  });
+
+  it.each([
+    ['::ffff:127.0.0.1', 'loopback'],
+    ['[::ffff:a9fe:a9fe]', 'cloud metadata'],
+    ['::ffff:10.0.0.5', 'RFC 1918'],
+    ['::ffff:0:a9fe:a9fe', 'IPv4-translated metadata'],
+    ['64:ff9b::7f00:1', 'NAT64 loopback'],
+    ['2002:a9fe:a9fe::', '6to4 metadata'],
+    ['::ffff:203.0.113.10', 'documentation'],
+    ['[::ffff:c000:201]', 'documentation'],
+    ['2002:c633:6407::1', '6to4 documentation'],
+    ['64:ff9b::cb00:710a', 'NAT64 documentation'],
+  ])('refuses %s, an IPv6 address that carries %s IPv4', (address) => {
+    expect(isGloballyRoutableIp(address)).toBe(false);
+  });
+
+  it.each(['localhost', 'example.com', '999.0.0.1', '010.0.0.1', '[8.8.8.8]', '[2606:4700::1111', '::g', ''])(
+    'refuses %p, which is not an IP literal',
+    (address) => {
+      expect(isGloballyRoutableIp(address)).toBe(false);
     },
   );
 });

@@ -75,6 +75,28 @@ const IPV6_BLOCKS = compileBlocks<SpecialPurposeIpRange>(
   expandIpv6,
 );
 
+// Not globally reachable per the IANA special-purpose registries, yet public to classifyIpAddress and its callers.
+const UNROUTED_IPV4_BLOCKS = compileBlocks<string>(
+  [
+    ['192.0.2.0/24', 'documentation'],
+    ['198.51.100.0/24', 'documentation'],
+    ['203.0.113.0/24', 'documentation'],
+  ],
+  parseIpv4,
+);
+
+const UNROUTED_IPV6_BLOCKS = compileBlocks<string>(
+  [
+    ['100::/64', 'discard-only'],
+    ['100:0:0:1::/64', 'dummy-prefix'],
+    ['2001::/23', 'ietf-protocol'],
+    ['2001:db8::/32', 'documentation'],
+    ['3fff::/20', 'documentation'],
+    ['5f00::/16', 'segment-routing'],
+  ],
+  expandIpv6,
+);
+
 // Value: index of the first of the two groups that hold the IPv4 address.
 const IPV4_EMBEDDINGS = compileBlocks<number>(
   [
@@ -148,6 +170,20 @@ export function classifyIpAddress(address: string): IpAddressClassification | un
   const embeddedOctets = findEmbeddedIpv4Octets(groups);
   if (!embeddedOctets) return { family: 6, range: 'public' };
   return { ...classifyIpv4(embeddedOctets), family: 6, embeddedIpv4: embeddedOctets.join('.') };
+}
+
+/** Whether an IP literal is globally routable: public for {@link classifyIpAddress} and in no unrouted IANA block. */
+export function isGloballyRoutableIp(address: string): boolean {
+  const classification = classifyIpAddress(address);
+  if (classification?.range !== 'public') return false;
+
+  const isBracketed = address.startsWith('[') && address.endsWith(']');
+  const bareAddress = isBracketed ? address.slice(1, -1) : address;
+  const octets = parseIpv4(classification.embeddedIpv4 ?? bareAddress);
+  if (octets) return !UNROUTED_IPV4_BLOCKS.some((block) => matchesBlock(octets, block, 8));
+
+  const groups = expandIpv6(bareAddress);
+  return groups !== undefined && !UNROUTED_IPV6_BLOCKS.some((block) => matchesBlock(groups, block, 16));
 }
 
 function classifyIpv4(octets: readonly number[]): IpAddressClassification {

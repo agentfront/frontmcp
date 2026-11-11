@@ -42,12 +42,14 @@ await storage.get('ticket:T-1'); // 'open'
 | Naming           | `splitWords`, `toCase`, `shortHash`, `ensureMaxLen`, `idFromString`                                                                                                       |
 | URIs             | `isValidMcpUri`, `extractUriScheme`, `parseUriTemplate`, `matchUriTemplate`, `expandUriTemplate`, `extractTemplateParams` (RFC 3986 URIs, RFC 6570 templates)             |
 | Paths            | `trimSlashes`, `joinPath`, and cross-platform `pathJoin`, `pathResolve`, `basename`, `dirname`, `extname`                                                                 |
-| Content          | `sanitizeToJson`, `inferMimeType`, `safeStringify`                                                                                                                        |
+| Content          | `sanitizeToJson`, `inferMimeType`, `safeStringify`, `canonicalJson`                                                                                                       |
 | HTTP             | `validateBaseUrl`, `buildSetCookie`, `parseCookies`, `getCookie`, `isLocalhost`, `isSecureRequest`                                                                        |
-| Network          | `classifyIpAddress`, `parseIpv4`, `expandIpv6`, `isRedirectResponse`, for SSRF (server-side request forgery) checks                                                       |
+| Network          | `classifyIpAddress`, `isGloballyRoutableIp`, `parseIpv4`, `expandIpv6`, `isRedirectResponse`, for SSRF (server-side request forgery) checks                               |
+| Outbound HTTP    | `validateOutboundUrl`, `sendOutboundRequest`, `outboundFailureCategory`, for a request to a URL that a client chose                                                       |
 | Escaping         | `escapeHtml`, `escapeHtmlAttr`, `escapeJsString`, `safeJsonForScript`                                                                                                     |
 | Crypto           | `sha256`, `sha256Hex`, `hmacSha256`, `hkdfSha256`, `encryptAesGcm`, `decryptAesGcm`, `randomBytes`, `randomUUID`, `timingSafeEqual`, `base64urlEncode`, `base64urlDecode` |
 | PKCE             | `generateCodeVerifier`, `generateCodeChallenge`, `verifyCodeChallenge`, `generatePkcePair` (RFC 7636)                                                                     |
+| Webhooks         | `signWebhookMessage`, `webhookSignatureHeaders`, `verifyWebhookSignature`, `isStandardWebhookSecret`, `generateWebhookMessageId` (Standard Webhooks)                      |
 | Encryption, keys | `encryptValue`, `decryptValue`, `signData`, `verifyData`, `KeyPersistence`, `createKeyPersistence`                                                                        |
 | Storage          | `createStorage`, `createMemoryStorage`, `TypedStorage`, `EncryptedTypedStorage`, and adapters for memory, Redis, Vercel KV, Upstash and the file system                   |
 | File system      | `readFile`, `writeFile`, `mkdir`, `stat`, `fileExists`, `readJSON`, `writeJSON`, `ensureDir`, `isDirEmpty`, `runCmd` and more. Node.js only; `fs` loads on first use.     |
