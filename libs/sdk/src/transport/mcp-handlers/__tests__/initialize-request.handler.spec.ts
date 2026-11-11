@@ -433,6 +433,48 @@ describe('initializeRequestHandler', () => {
     });
   });
 
+  describe('channel subscription', () => {
+    const subscribeAllChannels = jest.fn();
+    const runFlowForOutput = jest.fn().mockResolvedValue({ channels: [{ name: 'alerts' }, { name: 'chat' }] });
+    const channelOptions: McpHandlerOptions = {
+      ...handlerOptions,
+      scope: {
+        ...mockScope,
+        channels: {},
+        runFlowForOutput,
+        notifications: { ...mockNotifications, subscribeAllChannels },
+      } as any,
+    };
+
+    it('subscribes the stdio session, which declares no capability, to the channels channels:list returns', async () => {
+      mockNotifications.getRegisteredServer.mockReturnValue({ stdio: true });
+      const handler = initializeRequestHandler(channelOptions);
+
+      await handler.handler(createRequest({ capabilities: { roots: { listChanged: true } } }), createContext() as any);
+
+      expect(runFlowForOutput).toHaveBeenCalledWith('channels:list', {});
+      expect(subscribeAllChannels).toHaveBeenCalledWith('test-session-id-123', ['alerts', 'chat']);
+    });
+
+    it('subscribes an HTTP session that declares claude/channel', async () => {
+      const handler = initializeRequestHandler(channelOptions);
+      const capabilities = { experimental: { 'claude/channel': {} } };
+
+      await handler.handler(createRequest({ capabilities }), createContext() as any);
+
+      expect(subscribeAllChannels).toHaveBeenCalledWith('test-session-id-123', ['alerts', 'chat']);
+    });
+
+    it('subscribes an HTTP session that declares no capability to nothing', async () => {
+      const handler = initializeRequestHandler(channelOptions);
+
+      await handler.handler(createRequest({ capabilities: { roots: { listChanged: true } } }), createContext() as any);
+
+      expect(runFlowForOutput).not.toHaveBeenCalled();
+      expect(subscribeAllChannels).not.toHaveBeenCalled();
+    });
+  });
+
   // ============================================
   // Capability Persistence to Session Store
   // ============================================

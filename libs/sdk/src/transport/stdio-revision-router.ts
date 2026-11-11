@@ -3,6 +3,8 @@ import {
   isJSONRPCNotification,
   isJSONRPCRequest,
   isJSONRPCResultResponse,
+  MCP_20260728_META,
+  PROTOCOL_2026_07_28,
   type JSONRPCMessage,
   type JSONRPCNotification,
   type JSONRPCRequest,
@@ -10,10 +12,15 @@ import {
   type Transport,
 } from '@frontmcp/protocol';
 
+import { servesClaudeCodeChannels } from '../channel/channel.utils';
 import { ServerRequestTokens, type HttpOutput, type HttpReadableLike, type StdioRequestOrigin } from '../common';
 import { type Scope } from '../scope';
 import { flowErrorToHttpOutput } from './flow-error-output';
-import { isProtocol20260728Request } from './mcp-20260728';
+import {
+  INITIALIZE_PROTOCOL_VERSIONS,
+  isProtocol20260728Request,
+  unsupportedProtocolVersionError,
+} from './mcp-20260728';
 
 type SendOptions = Parameters<Transport['send']>[1];
 type MessageExtra = Parameters<NonNullable<Transport['onmessage']>>[1];
@@ -64,6 +71,12 @@ function cancelledRequestId(message: JSONRPCMessage): RequestId | undefined {
 
 function internalError(id: RequestId): JSONRPCMessage {
   return { jsonrpc: '2.0', id, error: { code: -32603, message: 'Internal error' } };
+}
+
+/** The revision a 2026-07-28 request asks for: the one its `_meta` names, or 2026-07-28 when it names none. */
+function requestedRevision(request: JSONRPCRequest): string {
+  const declared = request.params?._meta?.[MCP_20260728_META.protocolVersion];
+  return typeof declared === 'string' ? declared : PROTOCOL_2026_07_28;
 }
 
 /** Runs MCP 2026-07-28 messages through `handle:mcp-202607280728`, and passes the rest to the session-era server. */
@@ -139,6 +152,10 @@ export class StdioRevisionRouter implements Transport {
     }
 
     if ((isJSONRPCRequest(message) || isJSONRPCNotification(message)) && this.servesModern(message)) {
+      if (servesClaudeCodeChannels(this.options.scope)) {
+        if (isJSONRPCRequest(message)) void this.declineModern(message);
+        return;
+      }
       if (this.era === 'unknown') this.era = 'modern';
       void this.serveModern(message);
       return;
@@ -155,6 +172,19 @@ export class StdioRevisionRouter implements Transport {
       body: message,
       defaultVersion: this.era === 'legacy' ? 'legacy' : configured,
     });
+  }
+
+  /** Answers `-32022` with the revisions `initialize` negotiates: Claude Code delivers channels only to a session. */
+  private async declineModern(request: JSONRPCRequest): Promise<void> {
+    const error = unsupportedProtocolVersionError(requestedRevision(request), INITIALIZE_PROTOCOL_VERSIONS);
+    try {
+      await this.send({ jsonrpc: '2.0', id: request.id, error });
+    } catch (cause) {
+      this.options.scope.logger.child('StdioRevisionRouter').error('failed to decline a 2026-07-28 request', {
+        method: request.method,
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
   }
 
   private abortsModernRequest(requestId: RequestId): boolean {

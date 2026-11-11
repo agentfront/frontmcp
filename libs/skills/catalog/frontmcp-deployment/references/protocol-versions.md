@@ -68,6 +68,13 @@ headers, so `_meta` and the method decide):
 - A connection that opened with a `2026-07-28` message gets no session
   broadcasts (`notifications/tools/list_changed`, channel events) outside a
   `subscriptions/listen` it opened.
+- A server with channels enabled (`channels: { enabled: true }` and at least one
+  channel) declines `2026-07-28` over stdio: `server/discover` and every other
+  request that would be served as `2026-07-28` get `-32022` with the earlier
+  revisions in `data.supported`, a `2026-07-28` notification is ignored, and a
+  client that speaks both eras falls back to `initialize`. Claude Code delivers
+  channel events only to a session (see `frontmcp-channels`). Before 1.12 such a
+  server served `2026-07-28` over stdio like any other.
 
 Up to 1.10.3, stdio served only the `initialize` revisions: `server/discover`
 answered `-32601`, and a `2026-07-28` request was answered as a 2025-era one.
@@ -83,7 +90,11 @@ no `MCP-Protocol-Version`) falls back to:
 | Node, stdio and everything else        | `'legacy'`     |
 
 Over stdio the option decides only until the connection sends `initialize`:
-after it, a message naming no revision belongs to that session.
+after it, a message naming no revision belongs to that session. `server/discover`
+and `subscriptions/listen` exist only in `2026-07-28`, so they are served on that
+revision even when they name none, also after `initialize`. A stdio server with
+a channel declines `2026-07-28` with `-32022` whatever the option says, those two
+methods included.
 
 Override per server:
 

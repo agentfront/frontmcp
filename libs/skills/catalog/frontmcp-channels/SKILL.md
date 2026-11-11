@@ -69,28 +69,42 @@ Build push-based notification channels that stream real-time events into Claude 
 2. Create a channel class or function
 3. Register it in your app
 4. Enable channels in `@FrontMcp` config
-5. Test with Claude Code using `--dangerously-load-development-channels`
+5. Serve it over stdio and test with Claude Code using `--dangerously-load-development-channels server:<name>`. A
+   stdio server has no HTTP listener, so a `webhook` source gets no route there and this step alone does not test
+   one (see `references/channel-claude-code.md`)
 
 ## Scenario Routing Table
 
-| Scenario                           | Reference                       | Description                                    |
-| ---------------------------------- | ------------------------------- | ---------------------------------------------- |
-| Webhook alerts (CI, monitoring)    | `references/channel-sources.md` | Forward HTTP webhooks into Claude              |
-| Application error forwarding       | `references/channel-sources.md` | Push app errors via event bus                  |
-| Agent completion notifications     | `references/channel-sources.md` | Notify when agents finish                      |
-| Job/workflow completion            | `references/channel-sources.md` | Notify when jobs complete                      |
-| Service connector (WhatsApp, etc.) | `references/channel-sources.md` | Persistent connection with bidirectional tools |
-| File/log watcher                   | `references/channel-sources.md` | File system change monitoring                  |
-| Event replay for offline sessions  | `references/channel-sources.md` | Buffer events for later delivery               |
-| WhatsApp/Telegram chat bridge      | `references/channel-two-way.md` | Two-way messaging with Claude                  |
-| Slack/Discord integration          | `references/channel-two-way.md` | Chat platform bridges                          |
-| Permission relay                   | `references/channel-two-way.md` | Remote tool approval via chat                  |
+| Scenario                           | Reference                           | Description                                    |
+| ---------------------------------- | ----------------------------------- | ---------------------------------------------- |
+| Webhook alerts (CI, monitoring)    | `references/channel-sources.md`     | Forward HTTP webhooks into Claude              |
+| Application error forwarding       | `references/channel-sources.md`     | Push app errors via event bus                  |
+| Agent completion notifications     | `references/channel-sources.md`     | Notify when agents finish                      |
+| Job/workflow completion            | `references/channel-sources.md`     | Notify when jobs complete                      |
+| Service connector (WhatsApp, etc.) | `references/channel-sources.md`     | Persistent connection with bidirectional tools |
+| File/log watcher                   | `references/channel-sources.md`     | File system change monitoring                  |
+| Event replay for offline sessions  | `references/channel-sources.md`     | Buffer events for later delivery               |
+| WhatsApp/Telegram chat bridge      | `references/channel-two-way.md`     | Two-way messaging with Claude                  |
+| Slack/Discord integration          | `references/channel-two-way.md`     | Chat platform bridges                          |
+| Permission relay                   | `references/channel-two-way.md`     | Remote tool approval via chat                  |
+| Running a channel in Claude Code   | `references/channel-claude-code.md` | Flags, organization settings, stdio protocol   |
+
+## Using a Channel in Claude Code
+
+Channels are a Claude Code research preview and may change. `references/channel-claude-code.md` has the details.
+
+- **Stdio only.** Claude Code spawns a channel server over stdio. Events arrive only while the session is open.
+- **The session opts in.** `claude --channels plugin:<name>@<marketplace>` for an approved plugin, or `claude --dangerously-load-development-channels server:<name>` for your own server. The development flag is interactive only: it is ignored with `-p`.
+- **Organizations.** A Team or Enterprise organization needs an Owner to enable channels (`channelsEnabled`, and optionally `allowedChannelPlugins`).
+- **No acknowledgement.** Claude Code never acknowledges a notification, and drops it silently when the server is not registered as a channel.
+- **`meta` keys.** Letters, digits and underscores only. Claude Code drops any other key.
+- **Protocol.** A stdio server with channels enabled speaks the revisions before 2026-07-28 to every stdio client: it declines `server/discover` and every other 2026-07-28 request with `-32022`, and the client falls back to `initialize`. The stdio session needs no `claude/channel` client capability. An HTTP session still does.
 
 ## Common Patterns
 
 | Pattern        | Correct                                    | Incorrect                                       | Why                                                                                                                                     |
 | -------------- | ------------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Meta keys      | `meta: { env: 'prod' }`                    | `meta: { 'my-env': 'prod' }`                    | Meta keys must be valid identifiers (letters, digits, underscores)                                                                      |
+| Meta keys      | `meta: { env: 'prod' }`                    | `meta: { 'my-env': 'prod' }`                    | Meta keys must be valid identifiers (letters, digits, underscores); Claude Code drops any other key silently                            |
 | Source naming  | `name: 'deploy-alerts'`                    | `name: 'Deploy Alerts!'`                        | Channel names should be kebab-case identifiers                                                                                          |
 | Two-way gating | Check sender identity before emitting      | Trust room/group membership                     | Prevent prompt injection from untrusted group members                                                                                   |
 | Error channels | Use `app-event` source with event bus      | Poll for errors in a loop                       | Event bus is push-based and efficient                                                                                                   |
@@ -108,8 +122,9 @@ Build push-based notification channels that stream real-time events into Claude 
 ### Capability
 
 - [ ] Server advertises `experimental: { 'claude/channel': {} }` in capabilities
-- [ ] Only sessions with matching capability receive notifications
-- [ ] An MCP 2026-07-28 client (no session) gets them on a `subscriptions/listen` stream whose request's client capabilities include `experimental['claude/channel']`: the global notifications of the channels `channels:list` returns; its `server/discover` advertises `experimental['claude/channel']` and the `<channel>` instructions, as `initialize` does
+- [ ] The stdio session receives notifications with no client declaration; an HTTP session only when its client declares `experimental['claude/channel']`
+- [ ] Over stdio, `server/discover` and every other 2026-07-28 request get `-32022` with the earlier revisions in `data.supported`, and the client falls back to `initialize`
+- [ ] Over HTTP, an MCP 2026-07-28 client (no session) gets them on a `subscriptions/listen` stream whose request's client capabilities include `experimental['claude/channel']`: the global notifications of the channels `channels:list` returns; its `server/discover` advertises `experimental['claude/channel']` and the `<channel>` instructions, as `initialize` does
 - [ ] `instructions` field mentions `<channel>` tags when channels are active
 
 ### Two-Way
@@ -127,14 +142,15 @@ Build push-based notification channels that stream real-time events into Claude 
 
 ## Troubleshooting
 
-| Problem                      | Cause                                                                                                    | Solution                                                             |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| No notifications arrive      | Client doesn't support channels                                                                          | Check client capabilities include `experimental['claude/channel']`   |
-| `channel-reply` tool missing | No two-way channels registered                                                                           | Set `twoWay: true` on at least one channel                           |
-| Webhook returns 500          | `onEvent()` throws                                                                                       | Check channel handler error logs                                     |
-| A notification never arrives | A `ChannelSendHook` stopped it, or `ChannelListHook` left the channel out of the session's subscriptions | Check plugins hooking `channels:send-notification` / `channels:list` |
-| Duplicate notifications      | Multiple sessions subscribed                                                                             | This is correct behavior -- each session gets its own copy           |
-| Events lost on reconnect     | Channels are in-memory                                                                                   | Channel state resets on server restart; use persistent sources       |
+| Problem                                | Cause                                                                                                    | Solution                                                                                                                                                      |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No notifications arrive over HTTP      | The client did not declare the capability                                                                | Check client capabilities include `experimental['claude/channel']`                                                                                            |
+| No notifications arrive in Claude Code | The session did not register the server as a channel, or the server is not on stdio                      | Serve over stdio and start the session with `--channels` or `--dangerously-load-development-channels server:<name>` (see `references/channel-claude-code.md`) |
+| `channel-reply` tool missing           | No two-way channels registered                                                                           | Set `twoWay: true` on at least one channel                                                                                                                    |
+| Webhook returns 500                    | `onEvent()` throws                                                                                       | Check channel handler error logs                                                                                                                              |
+| A notification never arrives           | A `ChannelSendHook` stopped it, or `ChannelListHook` left the channel out of the session's subscriptions | Check plugins hooking `channels:send-notification` / `channels:list`                                                                                          |
+| Duplicate notifications                | Multiple sessions subscribed                                                                             | This is correct behavior -- each session gets its own copy                                                                                                    |
+| Events lost on reconnect               | Channels are in-memory                                                                                   | Channel state resets on server restart; use persistent sources                                                                                                |
 
 ## Examples
 

@@ -1,0 +1,18 @@
+#!/usr/bin/expect -f
+# Starts Claude Code with the demo server as a development channel, confirms the warning, waits for a channel
+# event, and quits. Usage: expect channel-check.exp <mcp config file> <screen log file>
+
+set timeout 30
+set stty_init "columns 300 rows 60"
+lassign $argv config screen
+log_file -noappend $screen
+
+spawn -noecho claude --dangerously-load-development-channels server:frontmcp-channels --mcp-config $config --strict-mcp-config
+expect {
+  -re "WARNING" { sleep 2; send "\r"; exp_continue }
+  timeout {}
+}
+send "\x03"
+sleep 1
+send "\x03"
+expect eof

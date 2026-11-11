@@ -1,7 +1,7 @@
 // file: libs/sdk/src/channel/channel-notification.service.ts
 
 import { type FrontMcpLogger } from '../common';
-import { supportsChannels, type NotificationService } from '../notification/notification.service';
+import { isChannelCapableSession, type NotificationService } from '../notification/notification.service';
 import { CHANNEL_NOTIFICATION_METHOD } from './channel.utils';
 
 /**
@@ -33,7 +33,7 @@ export interface ChannelSendInput {
  * Service responsible for sending channel notifications to subscribed Claude Code sessions.
  *
  * **Session-scoped delivery:** Notifications are ONLY sent to sessions that:
- * 1. Have `experimental: { 'claude/channel': {} }` in client capabilities
+ * 1. Are channel capable: the stdio session, or one whose client declared `experimental: { 'claude/channel': {} }`
  * 2. Are subscribed to the specific channel via `subscribeChannel()`
  *
  * This prevents data leaking between sessions — each session only receives
@@ -92,7 +92,7 @@ export class ChannelNotificationService {
 
     for (const sessionId of subscribers) {
       const registered = this.notificationService.getRegisteredServer(sessionId);
-      if (registered && supportsChannels(registered.clientCapabilities)) {
+      if (registered && isChannelCapableSession(registered)) {
         this.notificationService.sendCustomNotification(
           CHANNEL_NOTIFICATION_METHOD,
           { content, meta },
@@ -142,7 +142,7 @@ export class ChannelNotificationService {
       return false;
     }
 
-    if (!supportsChannels(registered.clientCapabilities)) {
+    if (!isChannelCapableSession(registered)) {
       this.logger.verbose(`Session ${sessionId.slice(0, 20)}... does not support channels, skipping`);
       return false;
     }

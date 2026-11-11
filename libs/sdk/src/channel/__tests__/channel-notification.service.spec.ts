@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 
 import { type FrontMcpLogger } from '../../common';
-import type { NotificationService } from '../../notification/notification.service';
+import { NotificationService } from '../../notification/notification.service';
 import { ChannelNotificationService } from '../channel-notification.service';
 
 function logger(): FrontMcpLogger & { error: jest.Mock } {
@@ -56,5 +56,54 @@ describe('ChannelNotificationService.send', () => {
       { content: 'maintenance', meta: { server: 'desk', level: 'warn', source: 'status' } },
       expect.any(Function),
     );
+  });
+});
+
+describe('ChannelNotificationService channel capable sessions', () => {
+  const CHANNEL_EVENT = { content: 'disk full', meta: { source: 'alerts' } };
+
+  /** A channel service over real sessions: one session, subscribed to `alerts`, connected as `connection` says. */
+  function subscribedSession(connection: { stdio?: boolean }) {
+    const log = logger();
+    const registries = { subscribe: jest.fn() };
+    const scope = { logger: log, resources: registries, tools: registries, prompts: registries };
+    const sessions = new NotificationService(scope as never);
+    const notification = jest.fn();
+    sessions.registerServer('session-1', { notification } as never, connection);
+    sessions.subscribeChannel('session-1', 'alerts');
+    return { service: new ChannelNotificationService(sessions, log), sessions, notification };
+  }
+
+  it('sends to the stdio session, which declares no capability', () => {
+    const { service, notification } = subscribedSession({ stdio: true });
+
+    service.sendToSubscribedSessions(CHANNEL_EVENT.content, CHANNEL_EVENT.meta);
+    const targeted = service.sendToSession('session-1', CHANNEL_EVENT.content, CHANNEL_EVENT.meta);
+
+    expect(targeted).toBe(true);
+    expect(notification.mock.calls).toEqual([
+      [{ method: 'notifications/claude/channel', params: CHANNEL_EVENT }],
+      [{ method: 'notifications/claude/channel', params: CHANNEL_EVENT }],
+    ]);
+  });
+
+  it('sends nothing to an HTTP session that declared no capability', () => {
+    const { service, sessions, notification } = subscribedSession({});
+    sessions.setClientCapabilities('session-1', { roots: { listChanged: true } });
+
+    service.sendToSubscribedSessions(CHANNEL_EVENT.content, CHANNEL_EVENT.meta);
+    const targeted = service.sendToSession('session-1', CHANNEL_EVENT.content, CHANNEL_EVENT.meta);
+
+    expect(targeted).toBe(false);
+    expect(notification).not.toHaveBeenCalled();
+  });
+
+  it('sends to an HTTP session once its client declared claude/channel', () => {
+    const { service, sessions, notification } = subscribedSession({});
+    sessions.setClientCapabilities('session-1', { experimental: { 'claude/channel': {} } });
+
+    service.sendToSubscribedSessions(CHANNEL_EVENT.content, CHANNEL_EVENT.meta);
+
+    expect(notification).toHaveBeenCalledWith({ method: 'notifications/claude/channel', params: CHANNEL_EVENT });
   });
 });

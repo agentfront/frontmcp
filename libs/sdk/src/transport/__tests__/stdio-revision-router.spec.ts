@@ -13,7 +13,18 @@ import {
   type Transport,
 } from '@frontmcp/protocol';
 
-import { App, LogLevel, Resource, ResourceContext, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
+import {
+  App,
+  Channel,
+  ChannelContext,
+  LogLevel,
+  Resource,
+  ResourceContext,
+  Tool,
+  ToolContext,
+  type ChannelNotification,
+  type FrontMcpConfigInput,
+} from '../../common';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
 import { StdioRevisionRouter } from '../stdio-revision-router';
@@ -92,6 +103,19 @@ class TodayNoteResource extends ResourceContext {
   resources: [TodayNoteResource],
 })
 class RouterApp {}
+
+/** A channel, so that its scope serves Claude Code channels. */
+@Channel({ name: 'alerts', source: { type: 'manual' } })
+class AlertsChannel extends ChannelContext {
+  /** Sends the payload as the notification text. */
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    return { content: String(payload) };
+  }
+}
+
+/** The app that declares the channel. */
+@App({ id: 'alerts', name: 'Alerts', channels: [AlertsChannel] })
+class AlertsApp {}
 
 class FakeStdioTransport implements Transport {
   onclose?: () => void;
@@ -677,6 +701,110 @@ describe('StdioRevisionRouter', () => {
       stdio.receive(call);
 
       expect(legacy.mock.calls.map(([message]) => message)).toEqual([initialize, call]);
+    });
+  });
+
+  describe('a scope that serves Claude Code channels', () => {
+    const SESSION_REVISIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
+    const CHANNEL_EVENT = {
+      jsonrpc: '2.0' as const,
+      method: 'notifications/claude/channel',
+      params: { content: 'up' },
+    };
+    let channelScope: Scope;
+
+    beforeAll(async () => {
+      channelScope = await createScope({ apps: [RouterApp, AlertsApp], channels: { enabled: true } });
+    });
+
+    it('declines server/discover with -32022 and the revisions initialize negotiates', async () => {
+      const { stdio, legacy } = await connect(channelScope);
+      const request = modernRequest('server/discover');
+
+      stdio.receive(request);
+      const { result, error } = await stdio.reply(request.id);
+
+      expect(result).toBeUndefined();
+      expect(error).toEqual({
+        code: -32022,
+        message: 'Unsupported protocol version: 2026-07-28',
+        data: { supported: SESSION_REVISIONS, requested: '2026-07-28' },
+      });
+      expect(legacy).not.toHaveBeenCalled();
+    });
+
+    it('declines every other 2026-07-28 request, naming the revision it asked for', async () => {
+      const { stdio, router } = await connect(channelScope);
+      const call = modernRequest('tools/call', { name: 'add', arguments: { a: 1, b: 2 } });
+      const future = modernRequest('tools/list', {}, { [MCP_20260728_META.protocolVersion]: '2027-01-01' });
+      const bare = unversionedRequest('subscriptions/listen');
+
+      for (const request of [call, future, bare]) stdio.receive(request);
+      const errors = await Promise.all([call, future, bare].map(async ({ id }) => (await stdio.reply(id)).error));
+
+      expect(errors.map((error) => error?.code)).toEqual([-32022, -32022, -32022]);
+      expect(errors.map((error) => error?.data?.['requested'])).toEqual(['2026-07-28', '2027-01-01', '2026-07-28']);
+      expect(errors.map((error) => error?.data?.['supported'])).toEqual(Array(3).fill(SESSION_REVISIONS));
+      await expect(router.whenIdle(60_000)).resolves.toBeUndefined();
+    });
+
+    it('ignores a 2026-07-28 notification, which leaves the connection open to session broadcasts', async () => {
+      const { stdio, router, legacy } = await connect(channelScope);
+      const meta = { [MCP_20260728_META.protocolVersion]: PROTOCOL_2026_07_28 };
+
+      stdio.receive({ jsonrpc: '2.0', method: 'notifications/roots/list_changed', params: { _meta: meta } });
+      await settle();
+      await router.send(CHANNEL_EVENT);
+
+      expect(stdio.written).toEqual([CHANNEL_EVENT]);
+      expect(legacy).not.toHaveBeenCalled();
+    });
+
+    it('passes initialize to the session-era server after the refusal, and writes what that server sends', async () => {
+      const { stdio, router, legacy } = await connect(channelScope);
+      const probe = modernRequest('server/discover');
+      const initialize = unversionedRequest('initialize', { protocolVersion: '2025-11-25', capabilities: {} });
+      const initialized = { jsonrpc: '2.0' as const, id: initialize.id, result: {} };
+
+      stdio.receive(probe);
+      const refusal = await stdio.reply(probe.id);
+      stdio.receive(initialize);
+      await router.send(initialized);
+      await router.send(CHANNEL_EVENT);
+
+      expect(refusal.error?.code).toBe(-32022);
+      expect(legacy.mock.calls.map(([message]) => message)).toEqual([initialize]);
+      expect(stdio.written).toEqual([refusal, initialized, CHANNEL_EVENT]);
+    });
+
+    it('serves 2026-07-28 while channels are enabled and no channel is declared', async () => {
+      const { stdio } = await connect(await createScope({ channels: { enabled: true } }));
+      const request = modernRequest('server/discover');
+
+      stdio.receive(request);
+      const { result } = await stdio.reply(request.id);
+
+      expect(result?.['supportedVersions']).toContain('2026-07-28');
+    });
+
+    it('logs a refusal it could not write', async () => {
+      const { stdio } = await connect(channelScope);
+      const logged = jest.fn();
+      const logger = channelScope.logger;
+      const childOf = logger.child.bind(logger);
+      const child = jest
+        .spyOn(logger, 'child')
+        .mockImplementation((name) => (name === 'StdioRevisionRouter' ? ({ error: logged } as never) : childOf(name)));
+      stdio.failWrites = true;
+
+      stdio.receive(modernRequest('server/discover'));
+      await settle();
+      child.mockRestore();
+
+      expect(logged).toHaveBeenCalledWith('failed to decline a 2026-07-28 request', {
+        method: 'server/discover',
+        error: 'stdout closed',
+      });
     });
   });
 

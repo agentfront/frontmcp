@@ -589,6 +589,11 @@
       "priority": 8,
       "references": [
         {
+          "name": "channel-claude-code",
+          "description": "Run a FrontMCP channel in a Claude Code session - the stdio server, the flags and organization settings that register it, and what Claude Code does with a notification",
+          "examples": []
+        },
+        {
           "name": "channel-sources",
           "description": "Configure different channel source types - webhooks, app events, agent/job completion, service connectors, file watchers, and manual push",
           "examples": [

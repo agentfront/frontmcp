@@ -1009,13 +1009,8 @@ export class FrontMcpInstance implements FrontMcpInterface {
       // the JSON-RPC stream.
       startupSucceeded = true;
 
-      // Register server and auto-subscribe stdio session to all channels
-      // (stdio sessions always have channel capability since we advertise it)
-      scope.notifications.registerServer(sessionId, mcpServer);
-      if (scope.channels?.hasAny()) {
-        const channelNames = scope.channels.getChannelInstances().map((ch: { name: string }) => ch.name);
-        scope.notifications.subscribeAllChannels(sessionId, channelNames);
-      }
+      // The stdio session is channel capable with no client declaration; `initialize` subscribes it to the channels.
+      scope.notifications.registerServer(sessionId, mcpServer, { stdio: true });
       await frontMcp.emitProvidersReady();
 
       // The graceful shutdown of the HTTP and socket servers (#712): every scope is shut down, then
