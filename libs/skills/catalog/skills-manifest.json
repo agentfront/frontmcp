@@ -1890,7 +1890,7 @@
         },
         {
           "name": "create-event",
-          "description": "Declare the event types clients list with events/list and subscribe to (MCP Events, SEP-3415) with @Event or event(), with a name, argument and payload schemas, authorities and delivery modes",
+          "description": "Declare the event types clients list with events/list and subscribe to (MCP Events, SEP-3415) with @Event or event(), with a name, argument and payload schemas, authorities and delivery modes, and the channel option that tells connected Claude Code sessions",
           "examples": [
             {
               "name": "appointments-role-audience",

@@ -46,6 +46,8 @@ export interface RegisterEventCapabilitiesArgs {
   eventProviders: ReadonlyMap<Token, ProviderRegistry>;
   /** `@FrontMcp({ events })`. */
   eventsConfig?: EventsConfigOptions;
+  /** `@FrontMcp({ channels: { enabled } })`: `false` turns the `channel` option of events off. */
+  channelsEnabled?: boolean;
   logger: FrontMcpLogger;
 }
 
@@ -68,6 +70,17 @@ function assertEventAuthorities(scope: ScopeEntry, events: readonly EventEntry[]
   const guarded = eventsWithAuthorities(events);
   if (guarded.length === 0) return;
   assertEntryAuthorities(scope.authoritiesEngine, scope.authoritiesContextBuilder, guarded);
+}
+
+/** Turn the `channel` option of events off, and say once which events lose it. */
+function ignoreChannelOption(eventRegistry: EventRegistry, logger: FrontMcpLogger): void {
+  const ignoredEvents = eventRegistry.getChannelEvents().map((event) => `"${event.name}"`);
+  eventRegistry.channelDelivery = false;
+  if (ignoredEvents.length === 0) return;
+  logger.warn(
+    `Channels are disabled (channels.enabled: false), so the channel option of ${ignoredEvents.length} event(s) is ` +
+      `ignored: ${ignoredEvents.join(', ')}. Remove channels.enabled: false to send them to Claude Code sessions.`,
+  );
 }
 
 /** Whether the server's auth names its callers: a subscription needs an owner, which public mode cannot give. */
@@ -271,6 +284,7 @@ export async function registerEventCapabilities(
   const eventRegistry = new EventRegistry(providers, eventsList, owner, eventsConfig, eventProviders);
   await eventRegistry.ready;
   assertEventAuthorities(scope, eventRegistry.getEvents());
+  if (args.channelsEnabled === false) ignoreChannelOption(eventRegistry, logger);
 
   const publisher = new ScopeEventPublisher(scope, eventRegistry);
   eventRegistry.publisher = publisher;

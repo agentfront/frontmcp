@@ -598,6 +598,9 @@ export interface FrontMcpBaseMetadata {
    *
    * Supported sources: webhook, app-event, agent-completion, job-completion, manual.
    *
+   * An `@Event` with the `channel` option is sent to Claude Code sessions without this setting. An explicit
+   * `enabled: false` turns that off too.
+   *
    * @default { enabled: false }
    *
    * @example Enable channels

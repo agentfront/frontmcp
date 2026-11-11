@@ -868,6 +868,7 @@ extends `EventContext`; every method on it is optional.
 | `hideFromDiscovery?` | Leaves the event out of `events/list`                                                          |
 | `availableWhen?`     | Where the event exists (`runtime`, `platform`, `deployment`, `env`, `surface`)                 |
 | `ttl?`               | `{ defaultMs?, maxMs? }`: subscription lifetime bounds for this event                          |
+| `channel?`           | `true` or `{ content?, meta? }`: also sends each occurrence to connected Claude Code sessions  |
 
 ```typescript
 import { Event, EventContext, z } from '@frontmcp/sdk';
@@ -883,6 +884,10 @@ class OrderCreated extends EventContext {}
 ```
 
 **Function builder:** `event({ name, payloadSchema, ... })` returns the event without a class.
+
+**Claude Code:** with `channel`, each published occurrence also reaches the open Claude Code sessions as a `<channel>`
+tag: the payload as JSON, or what `content(payload)` returns, with `event` and `event_id` attributes. It is not a
+delivery mode, and needs no `@Channel` (see `create-event`).
 
 ## 19. @Worker
 

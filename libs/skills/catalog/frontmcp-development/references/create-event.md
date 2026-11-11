@@ -1,6 +1,6 @@
 ---
 name: create-event
-description: Declare the event types clients list with events/list and subscribe to (MCP Events, SEP-3415) with @Event or event(), with a name, argument and payload schemas, authorities and delivery modes
+description: Declare the event types clients list with events/list and subscribe to (MCP Events, SEP-3415) with @Event or event(), with a name, argument and payload schemas, authorities and delivery modes, and the channel option that tells connected Claude Code sessions
 ---
 
 # Events: What Clients Can Subscribe To
@@ -13,7 +13,8 @@ which ChatGPT reads from the top-level `events` capability.
 This reference covers declaring events, what `events/list` answers, how a client subscribes by webhook with
 `events/subscribe`, reads with `events/poll` or holds a stream with `events/stream`, and how the server publishes an
 event and delivers it. An event is listed once the server performs a delivery mode the event allows (see
-[Delivery Modes](#delivery-modes)).
+[Delivery Modes](#delivery-modes)). Claude Code has no client for these requests: an event with the `channel` option
+is also sent to its open sessions (see [Telling a Claude Code Session](#telling-a-claude-code-session)).
 
 ## When to Use This Skill
 
@@ -29,7 +30,8 @@ event and delivers it. An event is listed once the server performs a delivery mo
 
 ### Skip When
 
-- A Claude Code session that is connected now should get a message: use a channel (see `frontmcp-channels`)
+- A Claude Code session should answer back, or you connect a chat service or take a raw webhook: use a channel (see
+  `frontmcp-channels`). To tell a connected Claude Code session about an event, set the event's `channel` option
 - The client starts the work and waits for its result: use a tool, or a job for long work (see `create-job`)
 - The server does recurring work on its own: use a duty (see `create-duty`)
 
@@ -127,6 +129,7 @@ A schema converted from Zod names its JSON Schema dialect in `$schema`. The inpu
 | `hideFromDiscovery?` | `boolean`                       | `false`                        | Leaves the event out of `events/list`. A client that knows the name can still subscribe |
 | `availableWhen?`     | `EntryAvailability`             | Always                         | Where the event exists: `runtime`, `platform`, `deployment`, `env`, `surface`           |
 | `ttl?`               | `{ defaultMs?, maxMs? }`        | The server's                   | Subscription lifetime bounds for this event. `defaultMs` must not exceed `maxMs`        |
+| `channel?`           | `true \| { content?, meta? }`   | Off                            | Also sends each occurrence to connected Claude Code sessions. Not a delivery mode       |
 
 An invalid option throws `InvalidDecoratorMetadataError` (`INVALID_DECORATOR_METADATA`) when the class is decorated or
 `event()` is called, naming the field: `@Event invalid metadata for "name": An event name must not contain whitespace
@@ -471,7 +474,8 @@ Mistakes of the server author are thrown, not delivered:
 
 `publish()` runs the hookable `events:publish` flow (`EventPublishHook`), with the stages `validate`,
 `bufferOccurrence` (keeps the occurrence for `events/poll` and `events/stream`), `pushToStreams`, `loadSubscriptions`, `dropInactive`, `filterByAudience`, `reauthorize`, `match`, `transform`, `enforceBodyLimit`,
-`enqueue`, `bridgeToBus` (see [Events on the Server's Event Bus](#events-on-the-servers-event-bus)) and `buildResult`:
+`enqueue`, `bridgeToBus` (see [Events on the Server's Event Bus](#events-on-the-servers-event-bus)),
+`notifyChannelSessions` (see [Telling a Claude Code Session](#telling-a-claude-code-session)) and `buildResult`:
 
 1. Suspended subscriptions are left out.
 2. `audience` narrows by owner.
@@ -706,6 +710,106 @@ class InboxApp {}
 - `createContainer()` builds providers without a server, so it has no publisher: a provider that takes one fails to
   build there with `Provider <name> depends on EventPublisher, which is not registered (local or parent).`
 
+## Telling a Claude Code Session
+
+Claude Code has no client for `events/list`, `events/poll` or `events/stream`. What it reads while a session is open
+is a channel notification (see `frontmcp-channels`). An event with the `channel` option is also sent that way, each
+time it is published:
+
+```typescript
+import { Event, EventContext, z } from '@frontmcp/sdk';
+
+@Event({
+  name: 'deploy.finished',
+  payloadSchema: { version: z.string(), status: z.string(), env: z.string() },
+  channel: {
+    content: (payload) => `Deploy ${payload.status}: ${payload.version}`,
+    meta: (payload) => ({ env: payload.env }),
+  },
+})
+export class DeployFinished extends EventContext {}
+```
+
+The server sends `notifications/claude/channel`, and Claude reads it as a `<channel>` tag:
+
+```xml
+<channel source="my-server" event="deploy.finished" event_id="evt_Zk3…" env="prod">
+Deploy succeeded: 1.4.0
+</channel>
+```
+
+| Option     | Type                                  | Default             | Notes                                                |
+| ---------- | ------------------------------------- | ------------------- | ---------------------------------------------------- |
+| `content?` | `(payload) => string`                 | The payload as JSON | The text of the tag                                  |
+| `meta?`    | `(payload) => Record<string, string>` | None                | Attributes of the tag, beside `event` and `event_id` |
+
+- `channel: true` sends the payload as JSON (`JSON.stringify(payload)`), with no attribute of your own.
+- Both functions get the payload, typed by `payloadSchema`. `event()` takes the same option.
+- Every message has `event`, the event's name, and `event_id`, the occurrence's `eventId`. A `meta` function cannot
+  replace them. Claude Code sets `source` itself, from the name the server is configured under.
+- Claude Code drops a `meta` key that has anything but letters, digits and underscores. FrontMCP replaces every other
+  character of a key with `_`, so `deploy-version` is sent as `deploy_version`. An empty key, and a value that is
+  `undefined` or `null`, are left out. Every other value is sent as a string.
+- The server's `instructions` tell the model how to read it: `Events arrive as <channel> tags. A tag with event and
+event_id attributes is an event this server published: event is its name, event_id its id.`
+- An invalid option fails when the class is decorated: `@Event invalid metadata for "channel": channel must be true,
+or { content?, meta? } with functions of the payload`.
+
+### Who is told
+
+Each channel capable session whose caller may see the occurrence. The stdio session is channel capable, and so is an
+HTTP session whose client declared `experimental['claude/channel']`.
+
+A session is checked as the caller of its latest request, so a change of its claims applies from the next occurrence
+on. A session whose latest request came with a token that has since expired is told nothing, until it makes a request
+with valid credentials. Over stdio the caller is anonymous, as for every stdio request, and has no credentials that
+expire.
+
+The event's own rules decide, as they do for a poll:
+
+- **Anonymous callers** are told on a server in public auth mode only. On a server whose auth signs callers in, an
+  anonymous session is told nothing, as it may not poll: that includes the stdio session.
+- **`availableWhen.surface`**: an event that is not offered to MCP clients is told to no session.
+- **`audience`**: an occurrence published for some owners is told to the sessions of those owners only. An anonymous
+  caller is none of them.
+- **`subscriptionId`**: an occurrence published for one subscription is told to no session, since no session is that
+  subscription.
+- **`authorities`, then `authorize(args, subscriber)`**: both run for each session on every publish, with empty
+  arguments. `this.authInfo` holds the session's caller: its claims, `sub` and scopes, and no token. A session they
+  refuse is not told. When the check could not be made, that session is not told this time, and the server logs
+  `notifyChannelSessions: event "<name>" was not sent to session <id>...`.
+- **`match()` and `transform()` do not run**: a session has no subscription arguments. Shape what a session reads with
+  `content` and `meta`.
+
+A session that cannot be written to is logged and left out: the publish and the other sessions are not affected. When
+a `content` or a `meta` function throws, the server logs it and tells no session about that occurrence.
+
+### What it is not
+
+- **Not a delivery mode.** `events/list` does not show it, in `delivery` or anywhere else, and poll, push and webhook
+  work as they do without it. An event may have `channel` and be offered in no delivery mode.
+- **Not stored.** Like a channel, it is in-process and needs the session open: a session is told what its own process
+  publishes while it is connected. Poll and webhook reach a client that is not connected now, and another process.
+- **Not acknowledged.** Claude Code never answers a notification, and drops it silently when the session did not
+  register the server as a channel (see
+  [`channel-claude-code`](../../frontmcp-channels/references/channel-claude-code.md)).
+
+### Turning it on and off
+
+- An event with `channel` needs no `channels: { enabled: true }` and no `@Channel`.
+- The server then serves Claude Code channels. It advertises `experimental['claude/channel']`. Over stdio it declines
+  protocol revision 2026-07-28 for every stdio client, whatever `transport.defaultProtocolVersion` says: Claude Code
+  delivers channel events only on a session opened with `initialize` (see
+  [`channel-claude-code`](../../frontmcp-channels/references/channel-claude-code.md)). HTTP is unchanged.
+- `channels: { enabled: false }` turns the option off for every event. The server logs once at startup: `Channels are
+disabled (channels.enabled: false), so the channel option of 2 event(s) is ignored: "deploy.started",
+"deploy.finished". Remove channels.enabled: false to send them to Claude Code sessions.`
+- `events.enabled: false` turns events off, and the option with them.
+- It runs in the `notifyChannelSessions` stage of `events:publish`, after `bridgeToBus`. A hook skips it for some
+  events with an `@Around` that does not go on, as for the bridge.
+- With `metrics: { enabled: true }`, `frontmcp_events_channel_notified_total` counts the notifications sent, labelled
+  `event`.
+
 ## Events on the Server's Event Bus
 
 Each published event is also emitted on the server's in-process event bus (`scope.channelEventBus`), under the
@@ -714,8 +818,14 @@ reacts to an event without subscribing to it:
 
 - A workflow with `trigger: 'event'` and the event's name as `event` starts a run, with the occurrence as its input
   (see `create-workflow`).
-- A channel with `source: { type: 'app-event', event: '<name>' }` gets the occurrence in `onEvent()`, so a connected
-  Claude Code session is told (see `frontmcp-channels`).
+- A channel with `source: { type: 'app-event', event: '<name>' }` gets the occurrence in `onEvent()` (see
+  `frontmcp-channels`).
+
+An `app-event` channel is no longer the way to tell Claude Code about a published event. Set the event's `channel`
+option instead (see [Telling a Claude Code Session](#telling-a-claude-code-session)): it applies the event's own rules
+to each session and needs no channel class, while a channel tells every subscribed session the same. Keep `app-event`
+channels for events your code emits on the bus by hand. An event with `channel` and an `app-event` channel of its name
+tell a session twice.
 
 ```typescript
 @Workflow({
@@ -902,7 +1012,7 @@ A pending delivery is a record in the same store as the subscriptions, removed w
 - With `metrics: { enabled: true }`, `/metrics` has these counters, labelled `event`:
   `frontmcp_events_published_total`, `frontmcp_events_matched_total`, `frontmcp_events_delivered_total`,
   `frontmcp_events_retried_total`, `frontmcp_events_abandoned_total`, `frontmcp_events_dropped_total`,
-  `frontmcp_events_suspended_total`, `frontmcp_events_terminated_total`.
+  `frontmcp_events_suspended_total`, `frontmcp_events_terminated_total`, `frontmcp_events_channel_notified_total`.
 - `/readyz` has an `events-outbox` check. Its details show `pendingDeliveries`, and it is unhealthy when the store
   does not answer.
 
@@ -1236,6 +1346,9 @@ and `server/discover` under 2026-07-28):
 `extensions` is where SEP-3415 puts it. The top-level `events` key is where the design sketch before it put it, and
 where ChatGPT looks.
 
+A server with an event that has the `channel` option also advertises `experimental['claude/channel']` (see
+[Telling a Claude Code Session](#telling-a-claude-code-session)).
+
 ## Server Options
 
 ```typescript
@@ -1360,7 +1473,7 @@ options object. A class that extends plain `EventContext` is not checked, and it
 
 `EventContext` declares optional methods, which `event()` takes beside its options. Every mode calls `authorize`,
 `onSubscribe` and `onUnsubscribe`; publishing, polling and streaming call `match` and `transform`; polling and
-streaming call `check`. `subscriber` is the owner of the
+streaming call `check`. The `channel` option calls `authorize` only. `subscriber` is the owner of the
 subscription: `{ sub, iss?, tenantId?, roles, permissions, scopes, claims }`. `tenantId` is set when
 `authorities.claimsMapping.tenantId` names the claim that holds it.
 
@@ -1386,6 +1499,7 @@ functions) to get the same `this`.
 | Restricted events  | `authorities` on the event                  | Checking the caller in `match()` only            | A caller should not see an event it may not subscribe to        |
 | Internal events    | `hideFromDiscovery: true`                   | Leaving it listed and hoping nobody subscribes   | Listed events are offered to the client's model                 |
 | One name per event | `availableWhen` on two variants of one name | Two events of one name in one runtime            | The second one fails startup                                    |
+| Claude Code        | `channel` on the event                      | An `app-event` channel named after the event     | The option applies the event's rules to each session            |
 
 ## Verification Checklist
 
@@ -1417,6 +1531,8 @@ functions) to get the same `this`.
 - [ ] `events/stream` sends `notifications/events/active` first, then an `event` for what is published
 - [ ] A worker or a duty that takes `EventPublisher` in its constructor publishes once the server serves
 - [ ] A `trigger: 'event'` workflow named after the event starts when the event is published
+- [ ] An event with `channel` shows up in a Claude Code session started with
+      `--dangerously-load-development-channels server:<name>`, and `events/list` shows nothing of the option
 
 ## Troubleshooting
 
@@ -1454,6 +1570,10 @@ functions) to get the same `this`.
 | `depends on EventPublisher, which is not ...`                  | A provider that takes the publisher, built by `createContainer()`                      | Build it in a server, or leave the publisher out of that provider                       |
 | `depends on Object, which is not registered`                   | `EventPublisher` is imported with `import type`                                        | Import it as a value: `import { EventPublisher } from ...`                              |
 | A `trigger: 'event'` workflow does not start                   | `events.bridge: false`, another `event` name, or its input schema                      | Give it the occurrence as `inputSchema`; read the warning in the log                    |
+| An event with `channel` does not show in Claude Code           | The session did not register the server as a channel, or the server is not on stdio    | Serve over stdio, with the channel flag (see `channel-claude-code`)                     |
+| An event with `channel` reaches no session                     | The session's caller may not see it; over stdio the caller is anonymous                | See [Who is told](#who-is-told)                                                         |
+| `the channel option of 2 event(s) is ignored` at startup       | `channels: { enabled: false }`                                                         | Remove it, or remove the `channel` option of those events                               |
+| A `meta` key arrives with `_` in it                            | Claude Code drops a key with anything but letters, digits and underscores              | Name the key that way: `deploy_version`                                                 |
 | `Delivery ... is abandoned` in the log                         | The callback failed every attempt in the retry window                                  | Fix the callback; read the category at the end of the line                              |
 | `Subscription ... is suspended` in the log                     | 20 failed deliveries in a row                                                          | Fix the callback, then subscribe again to reactivate                                    |
 | The signature does not verify at the receiver                  | It signs a re-serialized body, or uses another secret                                  | Verify over the raw body bytes with the secret sent in `events/subscribe`               |
@@ -1482,5 +1602,6 @@ Each example is a runnable app with a README and a smoke test in the FrontMCP re
   requirement of the SEP-3415 conformance suite, the test that covers it, and the known deviations
 - Related skills: `decorators-guide`, `create-plugin-hooks` (`ListEventsHook`, `EventSubscribeHook`,
   `EventUnsubscribeHook`, `EventPublishHook`, `EventPublishHttpHook`, `EventDeliverHook`, `EventPollHook`,
-  `EventStreamHook`), `frontmcp-authorities`, `frontmcp-channels` (`app-event` sources), `create-job`, `create-duty`,
+  `EventStreamHook`), `frontmcp-authorities`, `frontmcp-channels` (`channel-claude-code`, `app-event` sources),
+  `create-job`, `create-duty`,
   `create-worker` (publishing, `watchFiles`), `create-workflow` (the request signature, `trigger: 'event'`)

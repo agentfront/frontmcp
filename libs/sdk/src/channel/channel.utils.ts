@@ -2,6 +2,8 @@
 
 import 'reflect-metadata';
 
+import type { ServerCapabilities } from '@frontmcp/protocol';
+
 import { FrontMcpChannelTokens } from '../common';
 import { isChannelClass, isChannelFunction } from '../common/decorators/channel.decorator';
 import type { ChannelType } from '../common/interfaces/channel.interface';
@@ -14,9 +16,39 @@ import { ChannelKind, type ChannelRecord } from '../common/records/channel.recor
  */
 export const CHANNEL_NOTIFICATION_METHOD = 'notifications/claude/channel';
 
-/** Whether a scope pushes into Claude Code sessions: it has a channel, so it advertises `claude/channel`. */
-export function servesClaudeCodeChannels(scope: { channels?: { hasAny(): boolean } }): boolean {
-  return scope.channels?.hasAny() === true;
+/** What `servesClaudeCodeChannels()` reads of a scope: its channels, and its events with the `channel` option. */
+export interface ClaudeCodeChannelScope {
+  channels?: { hasAny(): boolean };
+  events?: { getChannelEvents(): readonly unknown[] };
+}
+
+/** Whether a scope pushes into Claude Code sessions: it has a channel, or an event with `channel`. */
+export function servesClaudeCodeChannels(scope: ClaudeCodeChannelScope): boolean {
+  const tellsEvents = (scope.events?.getChannelEvents().length ?? 0) > 0;
+  return scope.channels?.hasAny() === true || tellsEvents;
+}
+
+/** The capability a scope that pushes into Claude Code sessions advertises: `experimental['claude/channel']`. */
+export function channelCapabilitiesOf(scope: ClaudeCodeChannelScope): Partial<ServerCapabilities> {
+  if (!servesClaudeCodeChannels(scope)) return {};
+  return { experimental: { 'claude/channel': {} } };
+}
+
+const UNSAFE_META_KEY_CHARACTERS = /[^A-Za-z0-9_]/g;
+
+/**
+ * A notification's `meta` as Claude Code takes it. Claude Code drops a key that has anything but letters, digits
+ * and underscores, so any other character becomes `_`. A key that is empty, and a value that is not there, are left
+ * out. Every other value is sent as a string.
+ */
+export function channelMetaOf(meta: Record<string, unknown>): Record<string, string> {
+  const safeMeta: Record<string, string> = {};
+  for (const [key, value] of Object.entries(meta)) {
+    const safeKey = key.replace(UNSAFE_META_KEY_CHARACTERS, '_');
+    if (safeKey === '' || value === undefined || value === null) continue;
+    safeMeta[safeKey] = String(value);
+  }
+  return safeMeta;
 }
 
 /**

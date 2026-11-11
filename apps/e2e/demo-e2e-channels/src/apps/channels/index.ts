@@ -7,9 +7,11 @@ import { FileWatcherChannel } from './channels/file-watcher.channel';
 import { ManualStatusChannel } from './channels/manual-status.channel';
 import { MessagingServiceChannel } from './channels/messaging-service.channel';
 import { ReplayAlertChannel } from './channels/replay-alert.channel';
+import { deployFinished, DeployStarted } from './events/deploy.events';
 import EmitAppEventTool from './tools/emit-app-event.tool';
 import SimulateFileEventTool from './tools/file-watcher-tools.tool';
 import ListReplyLogTool from './tools/list-reply-log.tool';
+import PublishDeployEventTool from './tools/publish-deploy-event.tool';
 import { ClearReplayBufferTool, GetReplayBufferTool } from './tools/replay-tools.tool';
 import SendChannelNotificationTool from './tools/send-channel-notification.tool';
 import {
@@ -34,8 +36,10 @@ import SimulateIncomingTool, { ListSentMessagesTool } from './tools/simulate-inc
     ReplayAlertChannel,
     FileWatcherChannel,
   ],
+  events: [DeployStarted, deployFinished],
   tools: [
     EmitAppEventTool,
+    PublishDeployEventTool,
     SendChannelNotificationTool,
     ListReplyLogTool,
     SimulateIncomingTool,

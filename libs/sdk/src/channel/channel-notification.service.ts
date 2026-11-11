@@ -2,7 +2,7 @@
 
 import { type FrontMcpLogger } from '../common';
 import { isChannelCapableSession, type NotificationService } from '../notification/notification.service';
-import { CHANNEL_NOTIFICATION_METHOD } from './channel.utils';
+import { CHANNEL_NOTIFICATION_METHOD, channelMetaOf } from './channel.utils';
 
 /**
  * Metadata accompanying a channel notification.
@@ -71,7 +71,7 @@ export class ChannelNotificationService {
    * the specific channel name.
    *
    * @param content - The notification content
-   * @param meta - Metadata (must include `source` for the channel name)
+   * @param meta - Metadata (must include `source` for the channel name); a key Claude Code would drop is made safe
    */
   sendToSubscribedSessions(content: string, meta: ChannelNotificationMeta): void {
     const channelName = meta.source;
@@ -80,8 +80,9 @@ export class ChannelNotificationService {
       return;
     }
 
+    const safeMeta = this.safeMetaOf(meta);
     for (const listener of this.streamListeners) {
-      if (listener.channels.has(channelName)) listener.deliver(content, meta);
+      if (listener.channels.has(channelName)) listener.deliver(content, safeMeta);
     }
 
     const subscribers = this.notificationService.getSubscribersForChannel(channelName);
@@ -95,7 +96,7 @@ export class ChannelNotificationService {
       if (registered && isChannelCapableSession(registered)) {
         this.notificationService.sendCustomNotification(
           CHANNEL_NOTIFICATION_METHOD,
-          { content, meta },
+          { content, meta: safeMeta },
           (session) => session.sessionId === sessionId,
         );
       }
@@ -165,10 +166,15 @@ export class ChannelNotificationService {
 
     this.notificationService.sendCustomNotification(
       CHANNEL_NOTIFICATION_METHOD,
-      { content, meta },
+      { content, meta: this.safeMetaOf(meta) },
       (session) => session.sessionId === sessionId,
     );
     return true;
+  }
+
+  /** The notification's `meta` with the keys Claude Code takes (see `channelMetaOf`); `source` stays the channel name. */
+  private safeMetaOf(meta: ChannelNotificationMeta): ChannelNotificationMeta {
+    return { ...channelMetaOf(meta), source: meta.source };
   }
 
   /**

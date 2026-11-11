@@ -87,6 +87,9 @@ export default class EventRegistry
   /** The loops that feed the webhook subscriptions of events with `check()`, on a server that delivers by webhook. */
   replays?: EventReplays;
 
+  /** Whether events with the `channel` option are sent to Claude Code sessions; `channels.enabled: false` turns it off. */
+  channelDelivery = true;
+
   /** Events that are not offered by webhook here: their `check()` needs a loop this runtime cannot run. */
   private readonly withoutWebhook = new Set<string>();
 
@@ -201,6 +204,16 @@ export default class EventRegistry
   /** Whether a client can subscribe to at least one event. */
   servesEvents(): boolean {
     return this.getServedEvents().length > 0;
+  }
+
+  /** Whether each occurrence of an event is also sent to Claude Code sessions as a channel notification. */
+  sendsToChannelSessions(event: EventEntry): boolean {
+    return this.channelDelivery && event.metadata.channel !== undefined;
+  }
+
+  /** The events whose occurrences are sent to Claude Code sessions as channel notifications. */
+  getChannelEvents(): EventInstance[] {
+    return this.getEvents().filter((event) => this.sendsToChannelSessions(event));
   }
 
   /** The capability to advertise: both forms once an event is served, nothing otherwise. */

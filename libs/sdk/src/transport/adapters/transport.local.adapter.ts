@@ -9,6 +9,7 @@ import {
 
 import { type SSEServerTransport } from '#sse-transport';
 
+import { channelCapabilitiesOf } from '../../channel/channel.utils';
 import { ServerRequestTokens, type FrontMcpLogger, type ServerResponse } from '../../common';
 import {
   type ElicitationStore,
@@ -18,6 +19,7 @@ import {
   type PendingElicit,
 } from '../../elicitation';
 import { ElicitationNotSupportedError, UnauthorizedError } from '../../errors';
+import { sessionCallerOf } from '../../notification/notification.service';
 import { type Scope } from '../../scope';
 import { type AuthenticatedServerRequest, type SdkAuthInfo } from '../../server/server.types';
 import { composeCallerInstructions } from '../../skill/skill-instructions.helper';
@@ -200,7 +202,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
     const elicitationCapability = this.scope.metadata.elicitation?.enabled ? { elicitation: {} } : {};
 
     // Channel capabilities (experimental extension for Claude Code)
-    const channelCapabilities = this.scope.channels?.getCapabilities() ?? {};
+    const channelCapabilities = channelCapabilitiesOf(this.scope);
 
     // SEP-2640 (Skills Extension) — capability declaration and optional
     // skill-URI hints. `skillsCapabilities` advertises the extension; the
@@ -366,6 +368,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       }
     }
 
+    const verifiedScopes: string[] = Array.isArray(scopes) ? scopes : [];
     const authInfo: SdkAuthInfo = {
       token,
       user,
@@ -379,12 +382,15 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       // nested mutation (`authInfo.claims.roles.push('admin')`) on a shared
       // reference would rewrite the request's own verified authorization — which
       // the job/workflow permission guard then reads.
-      scopes: Array.isArray(scopes) ? [...scopes] : [],
+      scopes: [...verifiedScopes],
       ...(claims ? { claims: structuredClone(claims) } : {}),
       clientId: user.sub ?? '',
       transport,
     };
     req.auth = authInfo;
+    // Pushes to the session are checked against this caller: the verified scopes and claims, never the token
+    const verifiedCaller = sessionCallerOf({ clientId: authInfo.clientId, scopes: verifiedScopes, user, claims });
+    this.scope.notifications.setCaller(this.key.sessionId, verifiedCaller);
     return req.auth;
   }
 

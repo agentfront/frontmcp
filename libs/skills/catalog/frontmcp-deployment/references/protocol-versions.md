@@ -69,7 +69,8 @@ headers, so `_meta` and the method decide):
   broadcasts (`notifications/tools/list_changed`, channel events) outside a
   `subscriptions/listen` it opened.
 - A server with channels enabled (`channels: { enabled: true }` and at least one
-  channel) declines `2026-07-28` over stdio: `server/discover` and every other
+  channel, or an `@Event` with the `channel` option) declines `2026-07-28` over
+  stdio: `server/discover` and every other
   request that would be served as `2026-07-28` get `-32022` with the earlier
   revisions in `data.supported`, a `2026-07-28` notification is ignored, and a
   client that speaks both eras falls back to `initialize`. Claude Code delivers

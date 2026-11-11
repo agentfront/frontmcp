@@ -4,6 +4,7 @@ export {
   NotificationService,
   type McpNotificationMethod,
   type RegisteredServer,
+  type SessionCaller,
   type McpLoggingLevel,
   MCP_LOGGING_LEVEL_PRIORITY,
   type Root,

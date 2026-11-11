@@ -17,6 +17,21 @@ export type EventSchemaType = z.ZodRawShape | z.ZodObject;
 
 export const EVENT_NAME_MAX_LENGTH = 128;
 
+/** The object a schema given as a raw shape or as a `z.object()` describes. */
+export type EventSchemaOutput<Schema> = Schema extends z.ZodObject
+  ? z.output<Schema>
+  : Schema extends z.ZodRawShape
+    ? z.output<z.ZodObject<Schema>>
+    : never;
+
+/** How an occurrence is told to Claude Code sessions as a `<channel>` tag. */
+export interface EventChannelOptions<Payload = Record<string, unknown>> {
+  /** The text of the tag. @default the payload as JSON */
+  content?: (payload: Payload) => string;
+  /** Attributes of the tag, beside `event` and `event_id`. A character that is not a letter, digit or `_` becomes `_`. */
+  meta?: (payload: Payload) => Record<string, string>;
+}
+
 export interface EventTtlOptions {
   /** Lifetime granted to a subscription that suggests none. */
   defaultMs?: number;
@@ -52,6 +67,12 @@ export interface EventMetadata<
 
   /** Subscription lifetime bounds for this event, within the server's. */
   ttl?: EventTtlOptions;
+
+  /**
+   * Also send each published occurrence to the connected Claude Code sessions, as a channel notification. `true`
+   * sends the payload as JSON. It is not a delivery mode: `events/list` does not show it.
+   */
+  channel?: true | EventChannelOptions<EventSchemaOutput<PayloadSchema>>;
 }
 
 const eventNameSchema = z
@@ -87,6 +108,20 @@ const eventTtlSchema = z
     message: 'ttl.defaultMs must not exceed ttl.maxMs',
   });
 
+/** A `channel` function, kept as it is: `z.function()` would wrap it. */
+const channelFunctionSchema = z.custom<(payload: never) => unknown>((value) => typeof value === 'function');
+
+const eventChannelSchema = z.union(
+  [
+    z.literal(true),
+    z.strictObject({
+      content: channelFunctionSchema.optional(),
+      meta: channelFunctionSchema.optional(),
+    } satisfies RawZodShape<EventChannelOptions>),
+  ],
+  { error: 'channel must be true, or { content?, meta? } with functions of the payload' },
+);
+
 export const frontMcpEventMetadataSchema = z
   .object({
     name: eventNameSchema,
@@ -98,6 +133,7 @@ export const frontMcpEventMetadataSchema = z
     hideFromDiscovery: z.boolean().optional().default(false),
     availableWhen: entryAvailabilitySchema.optional(),
     ttl: eventTtlSchema.optional(),
+    channel: eventChannelSchema.optional(),
   } satisfies RawZodShape<EventMetadata, ExtendFrontMcpEventMetadata>)
   .passthrough();
 

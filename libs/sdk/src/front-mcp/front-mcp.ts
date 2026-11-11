@@ -1,6 +1,7 @@
 import { StdioServerTransport } from '@frontmcp/protocol';
 import { getEnv, getEnvFlag, getRuntimeContext, isEdgeRuntime, randomUUID } from '@frontmcp/utils';
 
+import { channelCapabilitiesOf } from '../channel/channel.utils';
 import {
   FrontMcpLogger,
   frontMcpMetadataSchema,
@@ -936,7 +937,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
         : {};
 
       // Channel capabilities (experimental extension for Claude Code)
-      const channelCapabilities = scope.channels?.getCapabilities() ?? {};
+      const channelCapabilities = channelCapabilitiesOf(scope);
 
       // Compose `instructions` on every `initialize`, for that caller (see
       // initialize-request.handler.ts): dynamic skill registrations after boot

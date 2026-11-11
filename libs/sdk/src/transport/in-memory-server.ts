@@ -19,6 +19,7 @@ import { randomUUID, runRequestExclusive } from '@frontmcp/utils';
 import { type ElicitOptions, type ElicitResult } from '../elicitation';
 import { ELICITATION_META_KEY } from '../elicitation/elicitation-meta';
 import { ElicitationTimeoutError } from '../errors';
+import { sessionCallerOf } from '../notification/notification.service';
 import { type Scope } from '../scope/scope.instance';
 import { composeCallerInstructions } from '../skill/skill-instructions.helper';
 import { buildScopedServerOptions } from './build-scoped-server-options';
@@ -196,9 +197,10 @@ export async function createInMemoryServer(
     mcpServer.setRequestHandler(handler.requestSchema, wrappedHandler as any);
   }
 
-  // Register server with notification service
+  // Register server with notification service, and the caller its requests run as
 
   scope.notifications.registerServer(sessionId, mcpServer as any);
+  scope.notifications.setCaller(sessionId, sessionCallerOf(currentAuthInfo));
 
   // Connect server to transport
   await mcpServer.connect(serverTransport);
@@ -207,6 +209,7 @@ export async function createInMemoryServer(
     clientTransport,
     setAuthInfo: (authInfo: Partial<AuthInfo>) => {
       currentAuthInfo = authInfo;
+      scope.notifications.setCaller(sessionId, sessionCallerOf(authInfo));
     },
     close: async () => {
       scope.notifications.unregisterServer(sessionId);

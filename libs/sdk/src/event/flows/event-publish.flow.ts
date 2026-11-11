@@ -2,6 +2,7 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 import { EventOccurrenceSchema, type EventOccurrence } from '@frontmcp/protocol';
 import { sha256Hex } from '@frontmcp/utils';
 
+import { CHANNEL_NOTIFICATION_METHOD } from '../../channel/channel.utils';
 import {
   EventEntry,
   Flow,
@@ -14,6 +15,8 @@ import {
   type FlowRunOptions,
 } from '../../common';
 import { EventNotRegisteredError } from '../../errors';
+import { type RegisteredServer } from '../../notification/notification.service';
+import { channelSessionReader, eventChannelMessage, type EventChannelMessage } from '../event-channel';
 import { EVENT_DIALECTS } from '../event-dialect';
 import { hasReauthorization, reauthorizeSubscriber } from '../event-reauthorization';
 import type EventRegistry from '../event.registry';
@@ -75,6 +78,7 @@ const plan = {
     'enforceBodyLimit',
     'enqueue',
     'bridgeToBus',
+    'notifyChannelSessions',
   ],
   post: ['buildResult'],
 } as const satisfies FlowPlan<string>;
@@ -340,10 +344,67 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
     this.scope.channelEventBus?.emit(occurrence.name, occurrence, { forSomeOwners });
   }
 
+  /**
+   * Send an occurrence of an event with `channel` to each Claude Code session whose caller may see it. One published
+   * for a subscription is for no session, and a session that fails is logged and left out alone.
+   */
+  @Stage('notifyChannelSessions')
+  async notifyChannelSessions() {
+    const { event } = this.state.required;
+    const { occurrence, subscriptionId } = this.input;
+    if (subscriptionId !== undefined || !this.events.sendsToChannelSessions(event)) return;
+
+    let message: EventChannelMessage;
+    try {
+      message = eventChannelMessage(event, occurrence);
+    } catch (error) {
+      this.logger.warn(`notifyChannelSessions: the channel option of event "${occurrence.name}" failed`, error);
+      return;
+    }
+    let notified = 0;
+    for (const session of this.scope.notifications.getChannelCapableSessions()) {
+      const wasSent = await this.notifyChannelSession(session, message);
+      if (wasSent) notified += 1;
+    }
+    this.events.metrics?.count('notified', occurrence.name, notified);
+    this.logger.verbose(`notifyChannelSessions: event "${occurrence.name}" was sent to ${notified} session(s)`);
+  }
+
   /** Answer with the event's id and how many deliveries were queued. */
   @Stage('buildResult')
   async buildResult() {
     this.respond({ eventId: this.input.occurrence.eventId, matched: this.state.required.deliveries.length });
+  }
+
+  /**
+   * Send a channel message to one session, when the event's own rules let the caller of its latest request see the
+   * occurrence: the `audience`, then the event's `authorities` and `authorize()`, with no subscription arguments. A
+   * session whose caller's credentials have expired is sent nothing.
+   */
+  private async notifyChannelSession(session: RegisteredServer, message: EventChannelMessage): Promise<boolean> {
+    const { event, context } = this.state.required;
+    const { occurrence, audience } = this.input;
+    try {
+      const reader = channelSessionReader(this.scope, event, session);
+      if (!reader || !isInAudience(audience, reader.subscriber)) return false;
+      if (hasReauthorization(this.scope, event, context.authorize !== undefined)) {
+        const { subscriber } = reader;
+        const authInfo = session.caller;
+        const access = await reauthorizeSubscriber({ scope: this.scope, event, subscriber, arguments: {}, authInfo });
+        if (access.outcome === 'failed') throw access.error;
+        if (access.outcome === 'refused') return false;
+      }
+      const isThisSession = (registered: RegisteredServer) => registered.sessionId === session.sessionId;
+      this.scope.notifications.sendCustomNotification(CHANNEL_NOTIFICATION_METHOD, message, isThisSession);
+      return true;
+    } catch (error) {
+      const sessionLabel = session.sessionId.slice(0, 20);
+      this.logger.warn(
+        `notifyChannelSessions: event "${occurrence.name}" was not sent to session ${sessionLabel}...`,
+        error,
+      );
+      return false;
+    }
   }
 
   /** End a subscription the server no longer serves: remove it, tell its event, and tell its callback when the dialect does. */

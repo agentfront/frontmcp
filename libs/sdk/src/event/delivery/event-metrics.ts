@@ -11,6 +11,7 @@ export const EVENT_COUNTERS = {
   dropped: 'frontmcp_events_dropped_total',
   suspended: 'frontmcp_events_suspended_total',
   terminated: 'frontmcp_events_terminated_total',
+  notified: 'frontmcp_events_channel_notified_total',
 } as const;
 
 export type EventCounter = keyof typeof EVENT_COUNTERS;
@@ -25,6 +26,7 @@ const COUNTER_DESCRIPTIONS: Record<EventCounter, string> = {
     'Deliveries not retried: the callback answered 410 or 413, the body was too large, or the subscription is gone',
   suspended: 'Subscriptions suspended after repeated delivery failures',
   terminated: 'Subscriptions the server ended',
+  notified: 'Channel notifications sent to Claude Code sessions for events with the channel option',
 };
 
 type CounterFactory = (

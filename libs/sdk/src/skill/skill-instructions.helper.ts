@@ -317,18 +317,28 @@ export function composeInitializeInstructions(options: ComposeOptions): string {
 
 /**
  * Build the channel-instructions hint emitted to clients when the scope
- * exposes any channel. Shared by stdio (`front-mcp.ts`) and HTTP
- * (`transport.local.adapter.ts`) so both transports stay in sync.
+ * exposes any channel, or an event with the `channel` option. Shared by stdio
+ * (`front-mcp.ts`) and HTTP (`transport.local.adapter.ts`) so both transports
+ * stay in sync.
  *
- * Returns `''` when no channels are registered.
+ * Returns `''` when the scope sends nothing as a `<channel>` tag.
  */
-export function buildChannelInstructions(channels: ChannelRegistryLike | undefined): string {
-  if (!channels?.hasAny()) return '';
-  const hasTwoWay = channels.getChannelInstances().some((ch) => ch.twoWay);
-  return hasTwoWay
-    ? 'Events arrive as <channel> tags. Reply with the channel-reply tool.'
-    : 'Events arrive as <channel> tags.';
+export function buildChannelInstructions(
+  channels: ChannelRegistryLike | undefined,
+  events?: ChannelEventsLike,
+): string {
+  const hasChannels = channels?.hasAny() === true;
+  const tellsEvents = (events?.getChannelEvents().length ?? 0) > 0;
+  if (!hasChannels && !tellsEvents) return '';
+  const sentences = ['Events arrive as <channel> tags.'];
+  if (channels?.getChannelInstances().some((ch) => ch.twoWay)) sentences.push(CHANNEL_REPLY_HINT);
+  if (tellsEvents) sentences.push(CHANNEL_EVENT_HINT);
+  return sentences.join(' ');
 }
+
+const CHANNEL_REPLY_HINT = 'Reply with the channel-reply tool.';
+const CHANNEL_EVENT_HINT =
+  'A tag with event and event_id attributes is an event this server published: event is its name, event_id its id.';
 
 /**
  * Minimal duck-typed surface for channel-registry consumers used by
@@ -338,6 +348,11 @@ export function buildChannelInstructions(channels: ChannelRegistryLike | undefin
 interface ChannelRegistryLike {
   hasAny(): boolean;
   getChannelInstances(): Array<{ twoWay?: boolean }>;
+}
+
+/** The events a scope sends to Claude Code sessions, as `buildChannelInstructions` reads them. */
+interface ChannelEventsLike {
+  getChannelEvents(): readonly unknown[];
 }
 
 /** The scope surface instruction composition reads. */
@@ -352,6 +367,7 @@ export type InstructionsScope = Pick<
   | 'authoritiesScopeMapping'
 > & {
   readonly channels?: ChannelRegistryLike;
+  readonly events?: ChannelEventsLike;
   /** Where a plugin's {@link SkillCatalogSource} is provided, under `SkillCatalogSourceToken`. */
   readonly providers?: ScopeEntry['providers'];
 };
@@ -395,7 +411,7 @@ export async function composeCallerInstructions(
   const { source, notLoadedReason } = await readySkillCatalog(scope);
   const composeOptions: ComposeOptions = {
     userInstructions: scope.metadata.instructions,
-    channelInstructions: buildChannelInstructions(scope.channels),
+    channelInstructions: buildChannelInstructions(scope.channels, scope.events),
     skillRegistry: scope.skills,
     policy: instructionsPolicyFor(scope, options.clientName),
     mcpResources: skillsConfig?.mcpResources,
