@@ -266,7 +266,6 @@ class ClientEventSubscription implements EventSubscription {
   /** Refresh at once, as when another subscription of this client sent its own secret for the same server id. */
   refreshNow(): void {
     if (this.stopped) return;
-    clearTimeout(this.refreshTimer);
     this.scheduleRefresh(0);
   }
 
@@ -456,10 +455,12 @@ class ClientEventSubscription implements EventSubscription {
     this.scheduleRefresh(Math.min(Math.max(delayMs, this.settings.pollFloorMs), MAX_TIMER_MS));
   }
 
-  /** Refresh after `delayMs`; a failed refresh is retried, a refused one ends the subscription. */
+  /** Refresh after `delayMs`, once a refresh in flight is answered; a failed refresh is retried, a refused one ends it. */
   private scheduleRefresh(delayMs: number): void {
+    clearTimeout(this.refreshTimer);
     this.refreshTimer = setTimeout(() => {
-      this.pendingRefresh = this.refresh();
+      const inFlight = this.pendingRefresh?.catch(() => undefined) ?? Promise.resolve();
+      this.pendingRefresh = inFlight.then(() => (this.stopped ? undefined : this.refresh()));
       this.pendingRefresh.catch((error: unknown) => {
         if (isTerminal(error)) this.terminate(eventErrorOf(error));
         else if (!this.stopped) this.scheduleRefresh(this.retryDelayMs());

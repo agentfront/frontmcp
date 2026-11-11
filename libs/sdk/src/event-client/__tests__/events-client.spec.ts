@@ -703,6 +703,84 @@ describe('EventsClient', () => {
       await holder.cancel();
     });
 
+    /** A client whose holder answers its first subscribe at once and holds every later one until answered. */
+    function heldRefreshClient() {
+      const order: string[] = [];
+      const answers: Array<() => void> = [];
+      let holderSubscribes = 0;
+      const { client, calls } = webhookClient(
+        (params) => {
+          if ('note' in (params['arguments'] as Record<string, unknown>)) return { id: 'sub_1', refreshBefore: null };
+          holderSubscribes += 1;
+          const call = holderSubscribes;
+          order.push(`subscribe ${call} sent`);
+          if (call === 1) return { id: 'sub_1', refreshBefore: new Date(Date.now() + 10).toISOString() };
+          return new Promise((resolve) =>
+            answers.push(() => {
+              order.push(`subscribe ${call} answered`);
+              resolve({ id: 'sub_1', refreshBefore: null });
+            }),
+          );
+        },
+        () => {
+          order.push('unsubscribe sent');
+          return {};
+        },
+      );
+      const holderSubscribesSent = () => holderSubscribes;
+      return { client, calls, order, answers, holderSubscribesSent };
+    }
+
+    it('sends the refresh a duplicate asks of its holder only after the holder refresh in flight is answered', async () => {
+      const { client, calls, order, answers, holderSubscribesSent } = heldRefreshClient();
+      const holder = await client.subscribe('order.created', { status: 'paid' });
+      const holderSecret = (calls[1].params['delivery'] as { secret: string }).secret;
+      await until(() => answers.length === 1);
+
+      const duplicate = await client
+        .subscribe('order.created', { status: 'paid', note: null })
+        .catch((error: unknown) => error);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const sentWhileInFlight = holderSubscribesSent();
+      answers[0]();
+      await until(() => answers.length === 2);
+      answers[1]();
+      await until(() => order.includes('subscribe 3 answered'));
+      await holder.cancel();
+
+      const holderSubscribeCalls = calls.filter(
+        (call) => call.method === 'events/subscribe' && !('note' in (call.params['arguments'] as object)),
+      );
+      expect(duplicate).toBeInstanceOf(DuplicateEventSubscriptionError);
+      expect(sentWhileInFlight).toBe(2);
+      expect((holderSubscribeCalls[2].params['delivery'] as { secret: string }).secret).toBe(holderSecret);
+      expect(order).toEqual([
+        'subscribe 1 sent',
+        'subscribe 2 sent',
+        'subscribe 2 answered',
+        'subscribe 3 sent',
+        'subscribe 3 answered',
+        'unsubscribe sent',
+      ]);
+    });
+
+    it('unsubscribes a holder only after both its refresh in flight and the one a duplicate asked for', async () => {
+      const { client, order, answers } = heldRefreshClient();
+      const holder = await client.subscribe('order.created', { status: 'paid' });
+      await until(() => answers.length === 1);
+      await client.subscribe('order.created', { status: 'paid', note: null }).catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const cancelling = holder.cancel();
+      while (answers.length > 0) {
+        (answers.pop() as () => void)();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      await cancelling;
+
+      expect(order.at(-1)).toBe('unsubscribe sent');
+    });
+
     it('ignores a failed unsubscribe', async () => {
       const { client } = webhookClient(
         () => ({ id: 'sub_1', refreshBefore: null }),
