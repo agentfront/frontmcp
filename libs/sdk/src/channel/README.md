@@ -11,6 +11,7 @@ graph TB
         AE[App Events]
         AC[Agent Completion]
         JC[Job/Workflow Completion]
+        FW[File Changes]
         MN[Manual Push]
     end
 
@@ -33,6 +34,7 @@ graph TB
     AE --> CEB --> CS
     AC --> CS
     JC --> CS
+    FW --> CS
     MN --> CNS
 
     CS --> CI
@@ -215,7 +217,8 @@ channel/
     ├── agent-completion.source.ts     # Subscribes to AgentEmitter
     ├── job-completion.source.ts       # Subscribes to JobEmitter
     ├── webhook.source.ts              # HTTP POST middleware
-    └── app-event.source.ts            # In-process ChannelEventBus
+    ├── app-event.source.ts            # In-process ChannelEventBus
+    └── file-watcher.source.ts         # Watches the declared paths with watchFiles
 ```
 
 ## How It Works
@@ -279,6 +282,8 @@ During `Scope.initialize()` (Batch 3, after NotificationService is ready):
 3. Sources are wired: agent emitters, job emitters, event bus subscriptions
 4. If any channel is `twoWay`, the `ChannelReplyTool` is auto-registered in `ToolRegistry`
 5. Channel flows are registered in `FlowRegistry`
+6. `connectServices()` runs `onConnect()` on each `service` and `file-watcher` channel, and starts the watch of a
+   `file-watcher` channel's declared paths
 
 ### 4. Capability Advertisement
 
@@ -353,17 +358,43 @@ it is published. It does not go through this module's registry or its `channels:
 - Such an event makes `servesClaudeCodeChannels()` true with no `@Channel` and no `channels: { enabled: true }`.
   `channels: { enabled: false }` turns the option off, with one warning at startup.
 - A `subscriptions/listen` stream of revision 2026-07-28 gets no event this way: such a client opens `events/stream`.
+- An `app-event` channel named after a declared event still gets each occurrence from the bus. At startup
+  `describeEventChannels()` in `event/event-scope.helper.ts` logs one line for each: a warning when the event has the
+  `channel` option too (a session gets each occurrence twice), an info line when it has not (the option replaces the
+  channel). It logs nothing with `events.bridge: false`.
 
 ## Source Types
 
-| Source             | Trigger                                   | Config                                                    |
-| ------------------ | ----------------------------------------- | --------------------------------------------------------- |
-| `webhook`          | HTTP POST to configured path              | `{ type: 'webhook', path: '/hooks/deploy' }`              |
-| `app-event`        | In-process event bus emit                 | `{ type: 'app-event', event: 'error' }`                   |
-| `agent-completion` | Agent finishes execution                  | `{ type: 'agent-completion', agentIds?: ['reviewer'] }`   |
-| `job-completion`   | Job/workflow completes                    | `{ type: 'job-completion', jobNames?: ['daily-report'] }` |
-| `service`          | Persistent connection to external service | `{ type: 'service', service: 'whatsapp-business' }`       |
-| `manual`           | Programmatic push                         | `{ type: 'manual' }`                                      |
+| Source             | Trigger                                                     | Config                                                                      |
+| ------------------ | ----------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `webhook`          | HTTP POST to configured path                                | `{ type: 'webhook', path: '/hooks/deploy' }`                                |
+| `app-event`        | In-process event bus emit                                   | `{ type: 'app-event', event: 'error' }`                                     |
+| `agent-completion` | Agent finishes execution                                    | `{ type: 'agent-completion', agentIds?: ['reviewer'] }`                     |
+| `job-completion`   | Job/workflow completes                                      | `{ type: 'job-completion', jobNames?: ['daily-report'] }`                   |
+| `service`          | Persistent connection to external service                   | `{ type: 'service', service: 'whatsapp-business' }`                         |
+| `file-watcher`     | A file of the declared paths is created, changed or removed | `{ type: 'file-watcher', paths: ['./logs'], events: ['create', 'change'] }` |
+| `manual`           | Programmatic push                                           | `{ type: 'manual' }`                                                        |
+
+### File Watcher Source
+
+`wireFileWatcherSource()` in `sources/file-watcher.source.ts` watches the declared `paths` with `watchFiles` from
+`@frontmcp/utils`, and hands each file event to `ChannelInstance.handleEvent()`.
+
+- **Lifetime.** `ChannelInstance.connectService()` starts the watch after `onConnect()`.
+  `disconnectService()` aborts its signal before `onDisconnect()`, so the watch ends when the channel disconnects, and
+  at shutdown and `dispose()`, which disconnect every channel.
+- **Payload.** `onEvent()` gets a `ChannelFileEvent`, `{ event: 'create' | 'change' | 'delete', path }`, with `path`
+  absolute. `watchFiles` yields `add`, `change` and `unlink`: they are renamed to the source's own event names.
+- **Events.** `events` selects the kinds to hand over; none declared means every kind. `rename` selects `create` and
+  `delete`: a renamed file is gone from one path and appears at another.
+- **Paths.** Files or directories, as `watchFiles` takes them. A path is not expanded as a glob: one with `*` is
+  watched as written, with a warning.
+- **Where it does not run.** `isLongLivedProcess()` is false in a serverless, edge or browser runtime: nothing is
+  watched, a warning is logged, and `onConnect()` still runs. CLI mode and `createForManifest()` drop the `channels`
+  config, so they register no channel. A detached job runner connects no channel.
+- **Failure.** A watch that fails is logged, and the channel stays connected.
+- **Browser bundle.** `watchFiles` is imported from `@frontmcp/utils`, which loads `fs` on first use, and this module
+  is under `channel/`, which a bundle loads only when the server enables channels.
 
 ## Wire Protocol
 

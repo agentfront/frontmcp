@@ -5,10 +5,10 @@ level: intermediate
 description: Watch files for changes and notify Claude Code in real-time
 tags: [file-watcher, filesystem, logs, monitoring, real-time]
 features:
-  - File watcher source type with glob patterns
-  - onConnect lifecycle for starting the watcher
-  - pushIncoming for streaming file events
-  - Log file monitoring example
+  - File watcher source with declared paths and events
+  - 'The `{ event, path }` payload of a file event'
+  - State kept on the channel between file events
+  - No watcher code in the channel
 ---
 
 # File Watcher Channel
@@ -19,89 +19,56 @@ Watch files for changes and notify Claude Code in real-time
 
 ```typescript
 // src/apps/monitoring/channels/log-watcher.channel.ts
+import { basename } from 'node:path';
 
-// NOTE: We normally read/write files via `@frontmcp/utils`, but it does not
-// expose a file-watcher helper because watching is platform-specific (inotify
-// on Linux, FSEvents on macOS, ReadDirectoryChangesW on Windows) and not
-// available in browser/edge runtimes. `node:fs` is the right call here; this
-// channel is Node-only by design.
-import { watch } from 'node:fs';
-
-import { Channel, ChannelContext, type ChannelNotification } from '@frontmcp/sdk';
+import { Channel, ChannelContext, type ChannelFileEvent, type ChannelNotification } from '@frontmcp/sdk';
 import { readFile } from '@frontmcp/utils';
+
+const MAX_CHARACTERS = 2000;
 
 @Channel({
   name: 'log-watcher',
-  description: 'Watches application logs and notifies on new errors',
+  description: 'Watches application logs and notifies on new lines',
   source: {
     type: 'file-watcher',
     paths: ['./logs/app.log', './logs/error.log'],
-    events: ['change'],
+    events: ['create', 'change'],
   },
 })
 export class LogWatcherChannel extends ChannelContext {
-  private watchers: ReturnType<typeof watch>[] = [];
-  private lastSize = new Map<string, number>();
-
-  async onConnect(): Promise<void> {
-    const paths = (this.metadata.source as { paths: string[] }).paths;
-
-    for (const filePath of paths) {
-      try {
-        const watcher = watch(filePath, async (eventType) => {
-          if (eventType === 'change') {
-            const newContent = await this.readNewLines(filePath);
-            if (newContent) {
-              this.pushIncoming({ file: filePath, content: newContent });
-            }
-          }
-        });
-        this.watchers.push(watcher);
-        this.logger.info(`Watching: ${filePath}`);
-      } catch (err) {
-        this.logger.warn(`Cannot watch ${filePath}: ${err}`);
-      }
-    }
-  }
-
-  async onDisconnect(): Promise<void> {
-    for (const watcher of this.watchers) {
-      watcher.close();
-    }
-    this.watchers = [];
-    this.lastSize.clear();
-  }
+  private readonly charactersRead = new Map<string, number>();
 
   async onEvent(payload: unknown): Promise<ChannelNotification> {
-    const event = payload as { file: string; content: string };
-    const fileName = event.file.split('/').pop() ?? event.file;
+    const { event, path } = payload as ChannelFileEvent;
+    const fileName = basename(path);
+    const newText = await this.readNewText(path);
     return {
-      content: `[${fileName}] ${event.content}`,
-      meta: { file: fileName },
+      content: `[${fileName}] ${newText || event}`,
+      meta: { file: fileName, event },
     };
   }
 
-  private async readNewLines(filePath: string): Promise<string | null> {
-    try {
-      const content = await readFile(filePath);
-      const prevSize = this.lastSize.get(filePath) ?? 0;
-      if (content.length <= prevSize) return null;
-      const newContent = content.slice(prevSize).trim();
-      this.lastSize.set(filePath, content.length);
-      return newContent || null;
-    } catch {
-      return null;
-    }
+  private async readNewText(path: string): Promise<string> {
+    const content = await readFile(path);
+    const alreadyRead = this.charactersRead.get(path) ?? 0;
+    this.charactersRead.set(path, content.length);
+    // A file that shrank was rotated: everything in it is new
+    const newText = content.length < alreadyRead ? content : content.slice(alreadyRead);
+    return newText.trim().slice(-MAX_CHARACTERS);
   }
 }
 ```
 
+The framework watches both paths while the channel is connected, and calls `onEvent()` with `{ event, path }` for each
+file that is created or changed. A connected file-watcher channel keeps one instance, so `charactersRead` lasts from
+one file event to the next.
+
 ## What This Demonstrates
 
-- File watcher source type with glob patterns
-- onConnect lifecycle for starting the watcher
-- pushIncoming for streaming file events
-- Log file monitoring example
+- File watcher source with declared paths and events
+- The `{ event, path }` payload of a file event
+- State kept on the channel between file events
+- No watcher code in the channel
 
 ## Related
 

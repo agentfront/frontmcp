@@ -825,7 +825,8 @@ An `app-event` channel is no longer the way to tell Claude Code about a publishe
 option instead (see [Telling a Claude Code Session](#telling-a-claude-code-session)): it applies the event's own rules
 to each session and needs no channel class, while a channel tells every subscribed session the same. Keep `app-event`
 channels for events your code emits on the bus by hand. An event with `channel` and an `app-event` channel of its name
-tell a session twice.
+tell a session twice: the server warns about each such channel at startup, and logs at info level for an `app-event`
+channel whose event has no `channel` option (see `channel-sources`).
 
 ```typescript
 @Workflow({
