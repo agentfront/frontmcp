@@ -100,7 +100,7 @@ server.on('error', (error) => {
   record('EXIT', `server did not start: ${error.message}`);
   process.exit(1);
 });
-server.on('exit', (code, signal) => {
+server.on('close', (code, signal) => {
   record('EXIT', signal ? `server ended by ${signal}` : `server exited ${code}`);
   process.exit(signal ? 1 : (code ?? 0));
 });
