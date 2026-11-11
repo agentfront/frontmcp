@@ -134,6 +134,8 @@ export interface EventsWebhookVerificationOptions {
   cacheTtlMs?: number;
   /** How long the callback has to answer the verification request. @default 10_000 */
   timeoutMs?: number;
+  /** Verification attempts per callback host and minute, whatever its port; each sends up to two requests. @default 10 */
+  maxAttemptsPerHost?: number;
 }
 
 export interface EventsWebhookDeliveryOptions {
@@ -250,6 +252,7 @@ const eventSubscriptionsSchema = z
 const eventsWebhookVerificationSchema = z.object({
   cacheTtlMs: positiveIntegerSchema.optional().default(3_600_000),
   timeoutMs: positiveIntegerSchema.optional().default(10_000),
+  maxAttemptsPerHost: positiveIntegerSchema.optional().default(10),
 } satisfies RawZodShape<EventsWebhookVerificationOptions>);
 
 const eventsWebhookDeliverySchema = z

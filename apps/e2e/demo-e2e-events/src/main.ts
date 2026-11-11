@@ -40,7 +40,8 @@ const nextPollMs = parseInt(process.env['EVENTS_NEXT_POLL_MS'] ?? '30000', 10);
     // A test that restarts the server keeps subscriptions and pending deliveries in a SQLite file
     store: sqlitePath ? { sqlite: { path: sqlitePath } } : undefined,
     // The receiver of the tests listens on 127.0.0.1 over http, which only this test option accepts
-    webhook: { unsafeAllowLocalCallbacks: true, delivery: { backoffMs } },
+    // Every receiver of the tests is on 127.0.0.1, one host for the limit of verification attempts
+    webhook: { unsafeAllowLocalCallbacks: true, delivery: { backoffMs }, verification: { maxAttemptsPerHost: 1000 } },
     publishEndpoint: publishEndpoint(),
     // A test of the heartbeat of a stream shortens it
     push: { heartbeatMs },

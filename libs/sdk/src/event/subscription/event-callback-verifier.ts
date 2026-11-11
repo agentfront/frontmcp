@@ -27,6 +27,8 @@ export interface EventCallbackVerifierOptions {
   /** How long a verified `(principal, url)` pair stays verified. */
   cacheTtlMs: number;
   timeoutMs: number;
+  /** `events.webhook.verification.maxAttemptsPerHost`. @default VERIFICATION_ATTEMPTS_PER_HOST */
+  maxAttemptsPerHost?: number;
   /** Sends a request: the hardened fetch, unless a test replaces it. */
   send?: (request: OutboundRequest) => Promise<OutboundResult>;
 }
@@ -45,7 +47,7 @@ export type EventCallbackVerification =
   | { outcome: 'failed'; reason: EventDeliveryErrorCategory }
   | { outcome: 'limited'; max: number };
 
-/** Verification requests one destination host may receive in each window. */
+/** Verification requests one destination host may receive in each window, unless configured. */
 export const VERIFICATION_ATTEMPTS_PER_HOST = 10;
 const VERIFICATION_WINDOW_MS = 60_000;
 const WELL_KNOWN_CACHE_MS = 300_000;
@@ -132,10 +134,12 @@ export class EventCallbackVerifier {
   private readonly receiversByOrigin = new ExpiringMap<string[]>();
   private readonly attemptsByHost = new ExpiringMap<number>();
   private readonly send: (request: OutboundRequest) => Promise<OutboundResult>;
+  private readonly maxAttemptsPerHost: number;
 
-  /** Takes the allowed prefixes, cache lifetime and timeout, and the sender (the hardened request by default). */
+  /** Takes the allowed prefixes, cache lifetime, timeout, attempt limit and sender (the hardened request by default). */
   constructor(private readonly options: EventCallbackVerifierOptions) {
     this.send = options.send ?? sendOutboundRequest;
+    this.maxAttemptsPerHost = options.maxAttemptsPerHost ?? VERIFICATION_ATTEMPTS_PER_HOST;
   }
 
   /** Verify the callback of a subscription, sending at most one well-known request and one challenge. */
@@ -153,7 +157,7 @@ export class EventCallbackVerifier {
       return { outcome: 'verified', verifiedAt: earlierProof };
     }
 
-    if (!this.takeAttempt(callback.hostname, now)) return { outcome: 'limited', max: VERIFICATION_ATTEMPTS_PER_HOST };
+    if (!this.takeAttempt(callback.hostname, now)) return { outcome: 'limited', max: this.maxAttemptsPerHost };
 
     const failure = (await this.isDeclaredReceiver(callback, now)) ? undefined : await this.challenge(request, now);
     if (failure) return { outcome: 'failed', reason: failure };
@@ -169,7 +173,7 @@ export class EventCallbackVerifier {
       this.attemptsByHost.set(host, 1, now + VERIFICATION_WINDOW_MS);
       return true;
     }
-    if (attempts >= VERIFICATION_ATTEMPTS_PER_HOST) return false;
+    if (attempts >= this.maxAttemptsPerHost) return false;
     this.attemptsByHost.set(host, attempts + 1, now + VERIFICATION_WINDOW_MS);
     return true;
   }

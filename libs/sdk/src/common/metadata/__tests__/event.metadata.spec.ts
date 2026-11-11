@@ -165,7 +165,7 @@ describe('events configuration', () => {
     enabled: true,
     allowedCallbacks: [],
     unsafeAllowLocalCallbacks: false,
-    verification: { cacheTtlMs: 3_600_000, timeoutMs: 10_000 },
+    verification: { cacheTtlMs: 3_600_000, timeoutMs: 10_000, maxAttemptsPerHost: 10 },
     delivery,
     rotationGraceMs: 300_000,
   };
@@ -335,7 +335,7 @@ describe('events configuration', () => {
           enabled: false,
           allowedCallbacks: ['https://hooks.example.com/mcp/'],
           unsafeAllowLocalCallbacks: true,
-          verification: { timeoutMs: 2000 },
+          verification: { timeoutMs: 2000, maxAttemptsPerHost: 50 },
           rotationGraceMs: 60_000,
         },
       });
@@ -344,7 +344,7 @@ describe('events configuration', () => {
         enabled: false,
         allowedCallbacks: ['https://hooks.example.com/mcp/'],
         unsafeAllowLocalCallbacks: true,
-        verification: { cacheTtlMs: 3_600_000, timeoutMs: 2000 },
+        verification: { cacheTtlMs: 3_600_000, timeoutMs: 2000, maxAttemptsPerHost: 50 },
         delivery,
         rotationGraceMs: 60_000,
       });
@@ -379,6 +379,9 @@ describe('events configuration', () => {
       expect(eventsConfigSchema.safeParse({ webhook: { allowedCallbacks: ['/hooks/'] } }).success).toBe(false);
       expect(eventsConfigSchema.safeParse({ webhook: { rotationGraceMs: 0 } }).success).toBe(false);
       expect(eventsConfigSchema.safeParse({ webhook: { verification: { cacheTtlMs: -1 } } }).success).toBe(false);
+      for (const maxAttemptsPerHost of [0, 2.5]) {
+        expect(eventsConfigSchema.safeParse({ webhook: { verification: { maxAttemptsPerHost } } }).success).toBe(false);
+      }
     });
   });
 });
