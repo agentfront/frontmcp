@@ -348,7 +348,10 @@ When an event arrives:
 5. `NotificationService.getSubscribersForChannel(channelName)` returns only subscribed sessions
 6. Each subscribed session is also checked with `isChannelCapableSession()`: the stdio session always passes, an
    HTTP session passes when its client declared `experimental: { 'claude/channel': {} }`
-7. Only subscribed + capable sessions receive the JSON-RPC notification
+7. A session whose latest request came with credentials that have since expired is skipped (`hasExpiredCaller()`),
+   until it makes a request with valid ones. `sendToSession()` answers `false` for it. The stdio session keeps no
+   caller, and credentials with no expiry never expire.
+8. Only subscribed + capable sessions with credentials that still hold receive the JSON-RPC notification
 
 **Auto-subscription:** When a channel capable session initializes, it is automatically subscribed to the channels
 the hookable `channels:list` flow returns. An HTTP session is channel capable when its `initialize` declares

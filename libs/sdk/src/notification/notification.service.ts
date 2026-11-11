@@ -1097,9 +1097,9 @@ export class NotificationService {
   }
 
   /**
-   * Keep the caller of a session's latest request (see {@link sessionCallerOf}). An event with the `channel` option
-   * is sent to the session only while these credentials have not expired, and when its own rules let this caller
-   * see it.
+   * Keep the caller of a session's latest request (see {@link sessionCallerOf}). A channel notification, and an event
+   * with the `channel` option, is sent to the session only while these credentials have not expired; the event also
+   * only when its own rules let this caller see it.
    *
    * @returns true if the session was found
    */

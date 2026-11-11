@@ -55,7 +55,7 @@ A stdio server has no HTTP listener, so a `webhook` source gets no route there (
 - **Revision 2026-07-28 is declined.** Claude Code probes a stdio server with `server/discover` on revision 2026-07-28, and delivers no channel event on that revision. A stdio server with channels enabled answers `server/discover`, and every other 2026-07-28 request, with `-32022` and the earlier revisions in `data.supported`. Claude Code then sends `initialize`.
 - **Every stdio client is affected.** A stdio server with channels enabled speaks the revisions before 2026-07-28 to every stdio client, whatever `transport.defaultProtocolVersion` says.
 
-Over HTTP nothing changes. An HTTP session gets channel notifications only when its client declares `experimental['claude/channel']`, and HTTP serves revision 2026-07-28 as before.
+Over HTTP nothing changes. An HTTP session gets channel notifications only when its client declares `experimental['claude/channel']`, and HTTP serves revision 2026-07-28 as before. A session whose latest request came with credentials that have since expired gets none, until it makes a request with valid ones.
 
 Before 1.12 a FrontMCP channel reached no Claude Code session: the server answered the 2026-07-28 probe, and sent channel events only to a session that declared the capability.
 

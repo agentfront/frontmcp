@@ -1,7 +1,11 @@
 // file: libs/sdk/src/channel/channel-notification.service.ts
 
 import { type FrontMcpLogger } from '../common';
-import { isChannelCapableSession, type NotificationService } from '../notification/notification.service';
+import {
+  hasExpiredCaller,
+  isChannelCapableSession,
+  type NotificationService,
+} from '../notification/notification.service';
 import { CHANNEL_NOTIFICATION_METHOD, channelMetaOf } from './channel.utils';
 
 /**
@@ -35,6 +39,7 @@ export interface ChannelSendInput {
  * **Session-scoped delivery:** Notifications are ONLY sent to sessions that:
  * 1. Are channel capable: the stdio session, or one whose client declared `experimental: { 'claude/channel': {} }`
  * 2. Are subscribed to the specific channel via `subscribeChannel()`
+ * 3. Were last seen with credentials that have not expired since (`hasExpiredCaller()`)
  *
  * This prevents data leaking between sessions — each session only receives
  * notifications from channels it has explicitly subscribed to.
@@ -93,7 +98,7 @@ export class ChannelNotificationService {
 
     for (const sessionId of subscribers) {
       const registered = this.notificationService.getRegisteredServer(sessionId);
-      if (registered && isChannelCapableSession(registered)) {
+      if (registered && isChannelCapableSession(registered) && !hasExpiredCaller(registered)) {
         this.notificationService.sendCustomNotification(
           CHANNEL_NOTIFICATION_METHOD,
           { content, meta: safeMeta },
@@ -145,6 +150,11 @@ export class ChannelNotificationService {
 
     if (!isChannelCapableSession(registered)) {
       this.logger.verbose(`Session ${sessionId.slice(0, 20)}... does not support channels, skipping`);
+      return false;
+    }
+
+    if (hasExpiredCaller(registered)) {
+      this.logger.verbose(`Session ${sessionId.slice(0, 20)}... was last seen with expired credentials, skipping`);
       return false;
     }
 
