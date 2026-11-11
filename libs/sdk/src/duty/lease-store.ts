@@ -11,10 +11,17 @@ import {
   type StorageConfig,
 } from '@frontmcp/utils';
 
-import { isRedisProvider, redisOptionsSchema, type FrontMcpConfigType } from '../common';
+import {
+  isRedisProvider,
+  redisOptionsSchema,
+  type FrontMcpConfigType,
+  type HealthProbeDefinition,
+  type ScopeEntry,
+} from '../common';
 import { findProjectRoot } from '../common/types/options/sqlite/resolve';
 import { UnsafeDutyStoreError } from '../errors/duty.errors';
 import { isManifestMode } from '../front-mcp/manifest-mode.flag';
+import type ProviderRegistry from '../provider/provider.registry';
 import { findReplaceableDirectory } from '../server/security/replaceable-directory';
 
 /** What a lease is for (a duty, a worker, a workflow's schedule): each kind keeps its leases under a prefix of its own. */
@@ -49,6 +56,17 @@ export function isLongLivedProcess(): boolean {
  */
 export function startsBackgroundWork(config: FrontMcpConfigType): boolean {
   return !isManifestMode(config) && (config as { runBackground?: boolean }).runBackground !== false;
+}
+
+/** Add `probe` to the `/readyz` of the scope `providers` serve; a container has none, so it adds nothing there. */
+export function registerReadinessProbe(providers: ProviderRegistry, probe: HealthProbeDefinition): () => void {
+  let scope: ScopeEntry;
+  try {
+    scope = providers.getActiveScope();
+  } catch {
+    return () => undefined;
+  }
+  return scope.registerHealthProbe(probe);
 }
 
 /**

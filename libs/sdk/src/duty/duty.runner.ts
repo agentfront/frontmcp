@@ -90,6 +90,11 @@ export class DutyRunner {
     });
   }
 
+  /** Whether this process holds the duty's lease now. */
+  get holdsLease(): boolean {
+    return this.lease.holding;
+  }
+
   /** Contend for the lease once now, then renew or contend again every third of the lease. */
   start(): Promise<void> {
     return this.lease.start();

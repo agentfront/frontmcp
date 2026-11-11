@@ -1,11 +1,12 @@
 import { type RootStorage, type SetOptions, type StorageConfig } from '@frontmcp/utils';
 
-import { describeThrown } from '../duty/describe-thrown';
-import type { LeaseStorage } from '../duty/lease-holder';
-import { openLeaseStore } from '../duty/lease-store';
+import type { CronLedgerStorage } from './cron-schedule';
+import { describeThrown } from './describe-thrown';
+import type { DutyLeaseStorage } from './duty.runner';
+import { openLeaseStore } from './lease-store';
 
 /** A lease store opened at its first use, and again at the next one after an open failed, as the next lease check. */
-export class LazyLeaseStore implements LeaseStorage {
+export class LazyLeaseStore implements DutyLeaseStorage, CronLedgerStorage {
   /** Why the store could not be opened at the last try; undefined once it is open. */
   openFailure?: string;
   private opened?: Promise<RootStorage>;
@@ -13,9 +14,24 @@ export class LazyLeaseStore implements LeaseStorage {
   /** Takes where the store lives. */
   constructor(private readonly config: StorageConfig) {}
 
+  /** Read `key` from the store, once it is open. */
+  async get(key: string): Promise<string | null> {
+    return (await this.open()).get(key);
+  }
+
   /** Write `key` in the store, once it is open. */
   async set(key: string, value: string, options?: SetOptions): Promise<void> {
     await (await this.open()).set(key, value, options);
+  }
+
+  /** Replace `key` while it holds `expectedValue`, once the store is open. */
+  async setIfEquals(key: string, expectedValue: string, value: string): Promise<boolean> {
+    return (await this.open()).setIfEquals(key, expectedValue, value);
+  }
+
+  /** The seconds `key` has left in the store, once it is open. */
+  async ttl(key: string): Promise<number | null> {
+    return (await this.open()).ttl(key);
   }
 
   /** Extend `key` while it holds `expectedValue`, once the store is open. */

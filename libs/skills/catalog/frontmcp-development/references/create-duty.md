@@ -157,6 +157,17 @@ Two different classes whose duties share a lease in one process (both `name: 'sw
 process (A and B): give one of them its own name with @Duty({ name })`. The same class built twice (a top-level
 provider of a `splitByApp` server is built once per app) is not a conflict: its copies share one lease.
 
+When auto-update replaces a version of an `App.esm()` package, the old version's duties stop (the run in flight
+aborted and awaited, the lease released) before the new version's start, so the new class takes the name without a
+`DutyNameConflictError`. The replace waits for a run in flight up to `lifecycle.shutdownHookTimeoutMs` (3000 ms by
+default). A run that has not returned by then fails the replace: the new version is discarded, the old one keeps
+serving, and that duty runs again once the run has returned. Their own `onShutdown()` still runs once, when the server
+shuts down. When the new version fails to start (a provider's `onReady()` throws, or a worker or duty of it cannot
+start, as when two of its classes share a name), it is discarded and the old version's duties run again (see
+`multi-app-composition`). A lease store that cannot be opened does not fail the start: each lease check tries it again
+and `/readyz` shows the duty `unhealthy` meanwhile (see Health), so the new version is swapped in and its duties run
+once the store opens.
+
 ## Publishing Events
 
 A duty tells the clients subscribed to an event what it found (see `create-event`). It takes the server's publisher in
@@ -262,8 +273,10 @@ export class WeekdayReportDuty implements DutyInterface {
 A `'workspace'` duty's key ends with the SHA-256 of the project root. The server and duty names are URI-encoded in the
 key, so a `:` in either never makes two leases one. Next to each lease, `<key>:ran` records the last run: for an
 interval it expires after one interval, for a cron it holds the time the schedule was last taken and does not expire.
-The store never falls back to memory: a missing `@frontmcp/storage-sqlite` or an unreachable Redis is logged as
-`Provider "<Class>" failed in onReady(): <cause>`, and the duty does not run.
+The store never falls back to memory. The duty opens it at its first lease check, so the server starts even when the
+store can't be opened (a missing `@frontmcp/storage-sqlite`, an unreachable Redis, an `UnsafeDutyStoreError`): each
+lease check logs `Duty "<name>": the lease store failed: <cause>` and tries to open it again, and the duty runs once it
+opens and this process gets the lease, without a restart. Meanwhile its `/readyz` check is `unhealthy` (see Health).
 
 The SQLite file and its folder are created owner-only (`0600` and `0700`). A folder that the group or others can write
 to, or that belongs to another user (or one above it, unless it has the sticky bit, like `/tmp`), is refused with
@@ -275,6 +288,18 @@ With Redis, `'machine'` means one hostname. Containers and Kubernetes pods get t
 same `hostname:` (Docker Compose) share one lease, so only one of them runs a `'machine'` duty. `'cluster'` leaves the
 hostname out: every server with the same `info.name` on that Redis (and Redis database) shares the lease, so one pod of
 a deployment runs the duty.
+
+## Health
+
+Each duty adds a check named `duty:<name>` to `/readyz` (see `health-readiness-endpoints`) once the server serves. It is
+`healthy`, with `details: { holdsLease }` (whether this process holds the duty's lease now), except while the lease
+store cannot be opened: then it is `unhealthy` with `error: 'the lease store cannot be opened: <cause>'`, which makes
+`/readyz` answer `not_ready`. A run that fails is logged, not reported here. A container has no `/readyz`, so its
+duties add no check.
+
+`/readyz` lists its checks when `health.includeDetails` is on, which is the default unless `NODE_ENV` is `production`.
+A production server therefore answers `ready` or `not_ready` without `holdsLease` or the lease store's error: set
+`@FrontMcp({ health: { includeDetails: true } })` to see them there.
 
 ## Log Lines
 
@@ -316,25 +341,28 @@ a deployment runs the duty.
 ### Runtime
 
 - [ ] Started several times, the server logs `runs in this process` once
+- [ ] `/readyz` shows `duty:<name>` as `healthy`, with `holdsLease: true` in the holder only (in production, only with
+      `health.includeDetails: true`)
 - [ ] Killing that process makes another log it within `leaseMs` plus a third of it
 - [ ] Long runs return when `signal` is aborted
 
 ## Troubleshooting
 
-| Problem                                   | Cause                                                                         | Solution                                                                         |
-| ----------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| The duty never runs                       | Not in `providers`; a `createContainer()` without `runBackground`; serverless | Register it; pass `runBackground: true`; run it in a long-lived process          |
-| A cron duty did not run at startup        | It waits for its next scheduled time                                          | Nothing to fix; trigger the work another way when it must also run at startup    |
-| `ClusterScopeNeedsRedisError` at startup  | A `'cluster'` duty and no top-level `redis` (or a Vercel KV one)              | Add `redis` to `@FrontMcp()` or `createContainer()`, or use `scope: 'machine'`   |
-| `InvalidDutyCronError` at startup         | The `cron` expression can't be read, has a year field, or never matches       | Fix the expression: 5 fields, or 6 with seconds first                            |
-| A cron duty runs an hour off              | The expression is read in UTC                                                 | Set `timezone` to the IANA zone the schedule is meant in                         |
-| `already runs elsewhere` with one server  | Another server on the machine has the same `info.name` and duty name          | Give the server a distinctive `info.name`, or the duty its own `name`            |
-| `failed in onReady()` naming the duty     | The lease store can't be opened                                               | Install `@frontmcp/storage-sqlite`, or check the `redis` connection              |
-| `DutyNameConflictError`                   | Two duty classes with the same `name` in one server                           | Give one of them its own `name`                                                  |
-| `UnsafeDutyStoreError`                    | `FRONTMCP_HOME` (or a folder above it) is writable by others                  | Point `FRONTMCP_HOME` at a folder only you can write to, or `chmod 700` it       |
-| It runs in two processes at once          | Different `info.name` or duty `name`, or `'workspace'` in two projects        | Give them the same names; use `'machine'` to share across projects               |
-| A takeover is slow after a crash          | The lease must expire first                                                   | Lower `leaseMs` (at least 1000)                                                  |
-| `lost its lease` while the holder is busy | The event loop was blocked longer than the lease                              | Keep runs asynchronous, move CPU-heavy work off the main thread, raise `leaseMs` |
+| Problem                                       | Cause                                                                         | Solution                                                                                      |
+| --------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| The duty never runs                           | Not in `providers`; a `createContainer()` without `runBackground`; serverless | Register it; pass `runBackground: true`; run it in a long-lived process                       |
+| A cron duty did not run at startup            | It waits for its next scheduled time                                          | Nothing to fix; trigger the work another way when it must also run at startup                 |
+| `ClusterScopeNeedsRedisError` at startup      | A `'cluster'` duty and no top-level `redis` (or a Vercel KV one)              | Add `redis` to `@FrontMcp()` or `createContainer()`, or use `scope: 'machine'`                |
+| `InvalidDutyCronError` at startup             | The `cron` expression can't be read, has a year field, or never matches       | Fix the expression: 5 fields, or 6 with seconds first                                         |
+| A cron duty runs an hour off                  | The expression is read in UTC                                                 | Set `timezone` to the IANA zone the schedule is meant in                                      |
+| `already runs elsewhere` with one server      | Another server on the machine has the same `info.name` and duty name          | Give the server a distinctive `info.name`, or the duty its own `name`                         |
+| `/readyz`: `the lease store cannot be opened` | The SQLite file or Redis can't be reached, or `UnsafeDutyStoreError`          | Install `@frontmcp/storage-sqlite`, or fix the store; the duty starts at the next lease check |
+| `/readyz` shows no `duty:<name>` check        | `NODE_ENV` is `production`, where `/readyz` leaves its checks out by default  | Set `health: { includeDetails: true }` to see `holdsLease` and the store's error              |
+| `DutyNameConflictError`                       | Two duty classes with the same `name` in one server                           | Give one of them its own `name`                                                               |
+| `UnsafeDutyStoreError`                        | `FRONTMCP_HOME` (or a folder above it) is writable by others                  | Point `FRONTMCP_HOME` at a folder only you can write to, or `chmod 700` it                    |
+| It runs in two processes at once              | Different `info.name` or duty `name`, or `'workspace'` in two projects        | Give them the same names; use `'machine'` to share across projects                            |
+| A takeover is slow after a crash              | The lease must expire first                                                   | Lower `leaseMs` (at least 1000)                                                               |
+| `lost its lease` while the holder is busy     | The event loop was blocked longer than the lease                              | Keep runs asynchronous, move CPU-heavy work off the main thread, raise `leaseMs`              |
 
 ## Reference
 

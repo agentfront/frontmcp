@@ -5,23 +5,24 @@ import {
   type OnReady,
   type OnShutdown,
   type ResolvedWorkerMetadata,
-  type ScopeEntry,
   type WorkerInterface,
 } from '../common';
+import { LazyLeaseStore } from '../duty/lazy-lease-store';
 import { LeaseHolder } from '../duty/lease-holder';
 import {
   isLongLivedProcess,
   LeaseClaims,
   leaseKey,
   leaseStorageConfig,
+  registerReadinessProbe,
   startsBackgroundWork,
   type LeaseScope,
 } from '../duty/lease-store';
 import { ClusterScopeNeedsRedisError } from '../errors/duty.errors';
 import { WorkerNameConflictError } from '../errors/worker.errors';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
+import type { BackgroundLifecycle } from '../provider/provider.lifecycle';
 import type ProviderRegistry from '../provider/provider.registry';
-import { LazyLeaseStore } from './lazy-lease-store';
 import { WorkerSupervisor, type WorkerStatus } from './worker.supervisor';
 
 type WorkerInstance = WorkerInterface & Partial<OnBootstrap & OnReady & OnShutdown>;
@@ -79,8 +80,14 @@ export function workerHealth(status: WorkerStatus, leaseStoreFailure?: string): 
 }
 
 /** Runs a `@Worker` instance's own lifecycle hooks, and starts and stops its supervised run around them. */
-export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
+export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown, BackgroundLifecycle {
   private started?: Promise<StartedWorker | undefined>;
+  /** Whether `stopBackground()` stopped the run, so `resumeBackground()` starts it again. */
+  private resumable = false;
+  /** Whether `onShutdown()` was called, after which `resumeBackground()` starts nothing. */
+  private shutDown = false;
+  /** The last stop or start again, which the next one waits for. */
+  private lastTurn: Promise<void> = Promise.resolve();
   private claimedKey?: string;
 
   /** Takes the worker instance, its resolved metadata and the providers it was built with. */
@@ -103,12 +110,45 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
     await this.started;
   }
 
+  /** Stop the run and release its lease and claim, without the worker's own hooks. */
+  async stopBackground(): Promise<void> {
+    await this.inTurn(async () => {
+      if (this.started) this.resumable = true;
+      await this.stopStarted();
+    });
+  }
+
+  /** Start again the run `stopBackground()` stopped, once that stop ended. */
+  async resumeBackground(): Promise<void> {
+    await this.inTurn(async () => {
+      if (!this.resumable || this.shutDown) return;
+      this.resumable = false;
+      this.started = this.start();
+      await this.started;
+    });
+  }
+
   /** Stop the run and release its lease and claim, then run the worker's own `onShutdown()`. */
   async onShutdown(): Promise<void> {
-    const started = await this.started?.catch(() => undefined);
+    this.shutDown = true;
+    await this.inTurn(() => this.stopStarted());
+    await this.worker.onShutdown?.();
+  }
+
+  /** Run `step` once the stop or start before it ended, so a run never starts while the last one is still ending. */
+  private inTurn(step: () => Promise<void>): Promise<void> {
+    const turn = this.lastTurn.then(step);
+    this.lastTurn = turn.catch(() => undefined);
+    return turn;
+  }
+
+  /** Stop what the last start started, once, and give back the claim. */
+  private async stopStarted(): Promise<void> {
+    const starting = this.started;
+    this.started = undefined;
+    const started = await starting?.catch(() => undefined);
     if (started) await this.stop(started);
     this.releaseClaim();
-    await this.worker.onShutdown?.();
   }
 
   /** Fail the startup of a cluster worker where workers start without a Redis to keep its lease in. */
@@ -198,20 +238,9 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
 
   /** Show the worker in `/readyz` as `worker:<name>`; a container has no health checks to add it to. */
   private registerHealthProbe(supervisor: WorkerSupervisor, storage?: LazyLeaseStore): () => void {
-    const scope = this.activeScope();
-    if (!scope) return () => undefined;
-    return scope.registerHealthProbe({
+    return registerReadinessProbe(this.providers, {
       name: `worker:${this.metadata.name}`,
       check: async () => workerHealth(supervisor.status(), storage?.openFailure),
     });
-  }
-
-  /** The scope the providers serve, or undefined where there is none, as in a container. */
-  private activeScope(): ScopeEntry | undefined {
-    try {
-      return this.providers.getActiveScope();
-    } catch {
-      return undefined;
-    }
   }
 }
