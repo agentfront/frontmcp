@@ -65,8 +65,19 @@ export class RedisJobStateStore implements JobStateStore {
     const key = this.key(record.runId);
     const data = JSON.stringify({ ...record, revision: 1, updatedAt: Date.now() });
     await this.client.set(key, data, 'EX', this.ttlSeconds);
+    await this.indexRun(record);
+  }
 
-    // Index by jobId and sessionId for queries; an index lives as long as its newest run
+  async createRunIfAbsent(record: JobRunRecord | WorkflowRunRecord): Promise<boolean> {
+    const data = JSON.stringify({ ...record, revision: 1, updatedAt: Date.now() });
+    const stored = await this.client.set(this.key(record.runId), data, 'EX', this.ttlSeconds, 'NX');
+    if (stored !== 'OK') return false;
+    await this.indexRun(record);
+    return true;
+  }
+
+  /** Index the run by jobId and sessionId for queries; an index lives as long as its newest run. */
+  private async indexRun(record: JobRunRecord | WorkflowRunRecord): Promise<void> {
     if (record.jobId) await this.index(this.indexKey('jobId', record.jobId), record.runId);
     if (record.sessionId) await this.index(this.indexKey('sessionId', record.sessionId), record.runId);
   }

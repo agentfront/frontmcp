@@ -84,6 +84,8 @@ export interface WorkflowRunRecord extends JobRunRecord {
 export interface JobStateStore {
   /** Store a new run at revision 1. */
   createRun(record: JobRunRecord | WorkflowRunRecord): Promise<void>;
+  /** Store a new run unless one with its id exists, in one atomic step; resolves to whether it stored it. */
+  createRunIfAbsent?(record: JobRunRecord | WorkflowRunRecord): Promise<boolean>;
   /** Merge `updates` into the run (never its `runId`), bump its revision and stamp `updatedAt`; an unknown run is ignored. */
   updateRun(runId: string, updates: Partial<JobRunRecord | WorkflowRunRecord>): Promise<void>;
   getRun(runId: string): Promise<JobRunRecord | WorkflowRunRecord | null>;

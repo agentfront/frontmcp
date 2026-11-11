@@ -25,6 +25,15 @@ export class StorageJobStateStore implements JobStateStore {
     await this.write({ ...record, revision: 1, updatedAt: Date.now() });
   }
 
+  async createRunIfAbsent(record: RunRecord): Promise<boolean> {
+    const firstCreate = (await this.storage.incr(createKey(record.runId))) === 1;
+    if (!firstCreate) return false;
+    await this.storage.expire(createKey(record.runId), this.ttlSeconds);
+    if (await this.getRun(record.runId)) return false;
+    await this.createRun(record);
+    return true;
+  }
+
   async updateRun(runId: string, updates: Partial<RunRecord>): Promise<void> {
     const existing = await this.getRun(runId);
     if (!existing) return;
@@ -58,7 +67,7 @@ export class StorageJobStateStore implements JobStateStore {
     const stale = (await this.allRuns()).filter((run) => run.startedAt < cutoff);
     if (stale.length > 0) {
       await this.storage.mdelete(
-        stale.flatMap((run) => [runKey(run.runId), cancelKey(run.runId), claimKey(run.runId)]),
+        stale.flatMap((run) => [runKey(run.runId), cancelKey(run.runId), claimKey(run.runId), createKey(run.runId)]),
       );
     }
     return stale.length;
@@ -104,6 +113,10 @@ export class StorageJobStateStore implements JobStateStore {
 
 function runKey(runId: string): string {
   return `run:${runId}`;
+}
+
+function createKey(runId: string): string {
+  return `create:${runId}`;
 }
 
 function cancelKey(runId: string): string {

@@ -188,6 +188,19 @@ describe.each(stateBackends)('%s job state store', (_backend, open) => {
     expect(await store.claimRun?.('r1')).toBe(false);
     expect(await store.claimRun?.('r2')).toBe(true);
   });
+
+  it('creates a run once when two callers create it at once, and never over a stored one', async () => {
+    const created = await Promise.all([
+      store.createRunIfAbsent?.(run('r1')),
+      store.createRunIfAbsent?.(run('r1', { input: { day: 'tuesday' } })),
+    ]);
+    await store.createRun(run('r2'));
+
+    expect(created.filter(Boolean)).toHaveLength(1);
+    expect(await store.createRunIfAbsent?.(run('r2', { state: 'running' }))).toBe(false);
+    expect((await store.getRun('r2'))?.state).toBe('pending');
+    expect(await store.listRuns({ jobId: 'report' })).toHaveLength(2);
+  });
 });
 
 describe('sqlite job state store across processes', () => {

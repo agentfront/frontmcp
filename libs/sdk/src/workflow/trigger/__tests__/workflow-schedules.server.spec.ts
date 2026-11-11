@@ -186,7 +186,7 @@ describe('scheduled workflows in a server', () => {
     }
   });
 
-  it('start a run under the id a schedule gives it once: the same id again starts nothing', async () => {
+  it('start a run under the id a schedule gives it once: the same id again, also at once, starts nothing', async () => {
     @App({ id: 'weekly', name: 'Weekly', jobs: [SendDigestJob], workflows: [WeeklyDigestWorkflow] })
     class WeeklyApp {}
     const server = await FrontMcpInstance.createDirect({ ...CONFIG, apps: [WeeklyApp] });
@@ -196,12 +196,14 @@ describe('scheduled workflows in a server', () => {
       const workflow = scope.workflows?.findByName('weekly-digest');
       const jobs = scope.jobs;
       if (!manager || !workflow || !jobs) throw new Error('expected the job system to run');
-      const start = () => manager.startWorkflowRunOnce(workflow, jobs, 'schedule-1-abc', { workflowInput: {} });
+      const start = (runId: string) => manager.startWorkflowRunOnce(workflow, jobs, runId, { workflowInput: {} });
 
-      expect(await start()).toBe(true);
-      expect(await start()).toBe(false);
+      expect(await start('schedule-1-abc')).toBe(true);
+      expect(await start('schedule-1-abc')).toBe(false);
+      const atOnce = await Promise.all([start('schedule-2-def'), start('schedule-2-def')]);
       const runs = await manager.listRuns({ jobId: 'weekly-digest' });
-      expect(runs.map((run) => run.runId)).toEqual(['schedule-1-abc']);
+      expect(atOnce.filter(Boolean)).toHaveLength(1);
+      expect(runs.map((run) => run.runId).sort()).toEqual(['schedule-1-abc', 'schedule-2-def']);
     } finally {
       await server.dispose();
     }
