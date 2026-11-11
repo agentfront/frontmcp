@@ -1,9 +1,10 @@
-import { randomUUID, type NamespacedStorage } from '@frontmcp/utils';
+import { type NamespacedStorage } from '@frontmcp/utils';
 
 import type { DutyRunContext, FrontMcpLogger } from '../common';
 import { takeDueRun, type CronLedgerStorage, type CronSchedule } from './cron-schedule';
+import { LeaseHolder } from './lease-holder';
 
-/** The store operations a lease needs; the SQLite, Redis and memory stores run each one atomically. */
+/** The store operations a duty needs; the SQLite, Redis and memory stores run each one atomically. */
 export type DutyLeaseStorage = Pick<NamespacedStorage, 'set' | 'ttl' | 'expireIfEquals' | 'deleteIfEquals'>;
 
 export type DutyLogger = Pick<FrontMcpLogger, 'verbose' | 'info' | 'warn' | 'error'>;
@@ -42,116 +43,56 @@ interface RunInFlight {
 }
 
 /**
- * Runs a duty every `everyMs`, or at the times of `cron`, while this process holds its lease, and contends for the
- * lease otherwise. The lease is a key holding this runner's id with a TTL, so it expires by the store's clock when the
- * holder stops renewing it. The holder renews it every third of `leaseMs`, and again before each run, so a holder that
- * wakes after another process took the lease over never runs again.
+ * Runs a duty every `everyMs`, or at the times of `cron`, while this process holds its lease (see `LeaseHolder`). The
+ * holder renews the lease again before each run, so a holder that wakes after another process took the lease over
+ * never runs again.
  */
 export class DutyRunner {
-  private readonly holder: string;
-  private readonly leaseSeconds: number;
+  private readonly label: string;
   private readonly ranKey: string;
-  private holding = false;
-  private stopped = false;
-  private reportedHeldElsewhere = false;
-  private leaseCheck?: Promise<void>;
-  private leaseTimer?: ReturnType<typeof setTimeout>;
-  private leaseDeadline?: ReturnType<typeof setTimeout>;
+  private readonly lease: LeaseHolder;
   private tickTimer?: ReturnType<typeof setTimeout>;
   private inFlight?: RunInFlight;
 
   constructor(private readonly options: DutyRunnerOptions) {
-    this.holder = randomUUID();
-    this.leaseSeconds = Math.ceil(options.leaseMs / 1_000);
-    this.ranKey = `${options.key}:ran`;
+    const { name, key, leaseMs, storage, logger } = options;
+    this.label = `Duty "${name}"`;
+    this.ranKey = `${key}:ran`;
+    this.lease = new LeaseHolder({
+      label: this.label,
+      key,
+      leaseMs,
+      storage,
+      logger,
+      onAcquired: () => this.hold(),
+      onLost: () => this.stopRunning(),
+    });
   }
 
   /** Contend for the lease once now, then renew or contend again every third of the lease. */
-  async start(): Promise<void> {
-    this.leaseCheck = this.checkLease();
-    await this.leaseCheck;
+  start(): Promise<void> {
+    return this.lease.start();
   }
 
   /** Stop contending, abort the run in flight and wait for it while still renewing the lease, then release it. */
-  async stop(): Promise<void> {
-    this.stopped = true;
+  stop(): Promise<void> {
+    return this.lease.stop(async () => {
+      this.stopRunning();
+      await this.inFlight?.done;
+    });
+  }
+
+  private stopRunning(): void {
     clearTimeout(this.tickTimer);
     this.inFlight?.controller.abort();
-    await this.inFlight?.done;
-    clearTimeout(this.leaseTimer);
-    await this.leaseCheck;
-    clearTimeout(this.leaseDeadline);
-    if (!this.holding) return;
-    this.holding = false;
-    try {
-      await this.options.storage.deleteIfEquals(this.options.key, this.holder);
-    } catch (error) {
-      this.options.logger.warn(`Duty "${this.options.name}": the lease store failed: ${messageOf(error)}`);
-    }
-  }
-
-  private async checkLease(): Promise<void> {
-    try {
-      if (this.holding) {
-        if (!(await this.renew())) this.lose('lost its lease; another process runs it now');
-      } else if (!this.stopped) {
-        if (await this.acquire()) await this.hold();
-        else this.reportHeldElsewhere();
-      }
-    } catch (error) {
-      this.options.logger.warn(`Duty "${this.options.name}": the lease store failed: ${messageOf(error)}`);
-    }
-    if (this.stopped && !this.inFlight) return;
-    this.leaseTimer = setTimeout(() => {
-      this.leaseCheck = this.checkLease();
-    }, this.options.leaseMs / 3);
-    this.leaseTimer.unref?.();
-  }
-
-  private async acquire(): Promise<boolean> {
-    await this.options.storage.set(this.options.key, this.holder, { ttlSeconds: this.leaseSeconds, ifNotExists: true });
-    this.holding = await this.renew();
-    return this.holding;
-  }
-
-  /** Extend the lease while it holds this runner's id, and give up holding it by the time the store could end it. */
-  private async renew(): Promise<boolean> {
-    const sentAt = performance.now();
-    const renewed = await this.options.storage.expireIfEquals(this.options.key, this.holder, this.leaseSeconds);
-    if (renewed) this.holdUntil(sentAt + this.options.leaseMs);
-    return renewed;
-  }
-
-  /**
-   * Stop at `deadline` (monotonic) unless a renew succeeds first: the store ends the lease no sooner, so this process
-   * never runs past the point where another one could take the lease over, even while the store can't be reached.
-   */
-  private holdUntil(deadline: number): void {
-    clearTimeout(this.leaseDeadline);
-    this.leaseDeadline = setTimeout(
-      () =>
-        this.lose(
-          `could not renew its lease within ${this.options.leaseMs} ms; it stops here until it gets the lease again`,
-        ),
-      deadline - performance.now(),
-    );
-    this.leaseDeadline.unref?.();
-  }
-
-  private reportHeldElsewhere(): void {
-    if (this.reportedHeldElsewhere) return;
-    this.reportedHeldElsewhere = true;
-    this.options.logger.info(
-      `Duty "${this.options.name}" already runs elsewhere (lease "${this.options.key}"); this one takes it over if that one stops`,
-    );
   }
 
   private async hold(): Promise<void> {
-    const { name, cron, everyMs, logger } = this.options;
+    const { cron, everyMs, logger } = this.options;
     const cadence = cron ? `on cron "${cron.expression}" (${cron.timezone})` : `every ${everyMs} ms`;
-    logger.info(`Duty "${name}" runs in this process ${cadence}`);
+    logger.info(`${this.label} runs in this process ${cadence}`);
     const firstRunDelayMs = await this.firstRunDelayMs();
-    if (this.stopped || !this.holding) return;
+    if (this.lease.stopping || !this.lease.holding) return;
     this.scheduleTick(firstRunDelayMs);
   }
 
@@ -165,15 +106,6 @@ export class DutyRunner {
     const remainingSeconds = await options.storage.ttl(this.ranKey).catch(() => undefined);
     if (remainingSeconds === undefined) return options.everyMs;
     return Math.min(Math.max(0, remainingSeconds ?? 0) * 1_000, options.everyMs);
-  }
-
-  private lose(reason: string): void {
-    if (!this.holding) return;
-    this.holding = false;
-    clearTimeout(this.tickTimer);
-    clearTimeout(this.leaseDeadline);
-    this.inFlight?.controller.abort();
-    this.options.logger.warn(`Duty "${this.options.name}" ${reason}`);
   }
 
   private scheduleTick(delayMs: number): void {
@@ -195,7 +127,7 @@ export class DutyRunner {
   /** Start a run unless one is running; a tick that arrives during an earlier tick's check has it made again. */
   private async tick(): Promise<void> {
     if (this.inFlight?.running) {
-      this.options.logger.verbose(`Duty "${this.options.name}" is still running; skipping this run`);
+      this.options.logger.verbose(`${this.label} is still running; skipping this run`);
       return;
     }
     if (this.inFlight) {
@@ -217,7 +149,7 @@ export class DutyRunner {
   /** Run the duty when a run is due, checking again when a tick arrived while the check waited on the store. */
   private async runIfHeld(inFlight: RunInFlight): Promise<void> {
     let claimed = await this.claimRun();
-    while (!claimed && inFlight.recheck && this.holding && !this.stopped) {
+    while (!claimed && inFlight.recheck && this.lease.holding && !this.lease.stopping) {
       inFlight.recheck = false;
       claimed = await this.claimRun();
     }
@@ -226,21 +158,21 @@ export class DutyRunner {
     try {
       await this.options.run({ signal: inFlight.controller.signal });
     } catch (error) {
-      this.options.logger.error(`Duty "${this.options.name}" failed: ${messageOf(error)}`);
+      this.options.logger.error(`${this.label} failed: ${messageOf(error)}`);
     }
   }
 
   /** Renew the lease right before a run, so a holder that lost it while paused never runs, and mark the run. */
   private async claimRun(): Promise<boolean> {
     try {
-      if (!(await this.renew())) {
-        this.lose('lost its lease; another process runs it now');
+      if (!(await this.lease.renew())) {
+        this.lease.lose('lost its lease; another process runs it now');
         return false;
       }
-      if (this.stopped) return false;
+      if (this.lease.stopping) return false;
       return await this.markRun();
     } catch (error) {
-      this.options.logger.warn(`Duty "${this.options.name}": the lease store failed: ${messageOf(error)}`);
+      this.lease.reportStoreFailure(error);
       return false;
     }
   }
@@ -253,7 +185,7 @@ export class DutyRunner {
     const { options } = this;
     if (options.cron) return takeDueRun(options.cron, options.storage, this.ranKey);
     const intervalSeconds = Math.max(1, Math.ceil(options.everyMs / 1_000));
-    await options.storage.set(this.ranKey, this.holder, { ttlSeconds: intervalSeconds });
+    await options.storage.set(this.ranKey, this.lease.id, { ttlSeconds: intervalSeconds });
     return true;
   }
 }

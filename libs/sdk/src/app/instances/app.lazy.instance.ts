@@ -32,6 +32,7 @@ import {
   type ToolMetadata,
 } from '../../common';
 import { dutyMetadataOf } from '../../common/metadata/duty.resolved';
+import { workerMetadataOf } from '../../common/metadata/worker.resolved';
 import { LazyAppConfigurationError, LazyAppLoadError } from '../../errors/lazy-app.errors';
 import { UnenforcedMetadataError } from '../../errors/plugin.errors';
 import { isManifestMode } from '../../front-mcp/manifest-mode.flag';
@@ -197,7 +198,9 @@ export class AppLazyInstance extends AppEntry<LazyAppRecordMetadata> implements 
   }
 
   private assertCanBeLazy(app: AppLocalInstance, hooksBefore: ReadonlySet<HookEntry>): void {
-    const duties = [...app.providers.getAllSingletons().values()].flatMap((value) => dutyMetadataOf(value) ?? []);
+    const providers = [...app.providers.getAllSingletons().values()];
+    const duties = providers.flatMap((value) => dutyMetadataOf(value) ?? []);
+    const workers = providers.flatMap((value) => workerMetadataOf(value) ?? []);
     const reasons = whyLoadedAppCannotBeLazy({
       tools: app.tools.listAllInstances(),
       resources: app.resources.listAllInstances(),
@@ -206,6 +209,7 @@ export class AppLazyInstance extends AppEntry<LazyAppRecordMetadata> implements 
       agents: app.agents.listAllInstances(),
       hooks: this.hooksRegisteredBy(app, hooksBefore).filter((hook) => hook.metadata.owner),
       duties,
+      workers,
     });
     if (reasons.length > 0) throw cannotBeLazy(this.id, reasons);
   }

@@ -19,6 +19,7 @@ import {
   Skill,
   Tool,
   ToolContext,
+  Worker,
   type FrontMcpConfigInput,
   type LocalAppMetadata,
 } from '../../common';
@@ -266,6 +267,13 @@ class SweepDuty {
   }
 }
 
+@Worker({ scope: 'process' })
+class InboxWatcher {
+  async run() {
+    // starts once the server serves
+  }
+}
+
 const READ_BY_PLUGINS: Record<string, unknown> = {
   featureFlag: 'beta-billing',
   codecall: { enabledInCodeCall: false },
@@ -294,6 +302,7 @@ describe('an app that cannot be lazy', () => {
     ['a hook on a list flow', { plugins: [ListFilterPlugin] }, /hook list-filter\.filter is on tools:list-tools/],
     ['a hook for all apps', { plugins: [SetupGatePlugin] }, /hook setup-gate\.gate applies to all apps/],
     ['a duty', { providers: [SweepDuty] }, /duties \("SweepDuty"\)/],
+    ['a worker', { providers: [InboxWatcher] }, /workers \("InboxWatcher"\), which start with the server/],
     [
       'an entry with metadata a plugin reads from its placeholder',
       { tools: [FlaggedTool] },

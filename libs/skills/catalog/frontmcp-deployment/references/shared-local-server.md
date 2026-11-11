@@ -224,7 +224,9 @@ next server.
   (`BROWSER_ENTRY_POINT_UNAVAILABLE`), and the browser builds leave the server's code out.
 - Idle means no request: a session that stays quiet past `idleTimeoutMs` finds the server gone, and its next request
   starts a new one (with the `initialize` replayed). Server-side state of that session (subscriptions, session memory)
-  isn't carried over, nor is work the server runs in the background after a call returned.
+  isn't carried over, nor is work the server runs in the background after a call returned. A `@Worker` or a `@Duty`
+  does not count as a request either: the server exits idle while they run. Pass `idleTimeoutMs: false` to
+  `runShared()` for a server that must keep one running (see `create-worker`, Keeping a Worker Alive).
 - The version compared is `info.version`: a code change that doesn't bump it is not an upgrade. A session that runs the
   server in its own process stays that way until its client restarts it.
 - The server runs with the environment, working folder and Node flags of the session that started it (an inspector

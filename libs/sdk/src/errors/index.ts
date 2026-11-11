@@ -227,6 +227,9 @@ export {
 // Export event errors
 export { EventNameConflictError } from './event.errors';
 
+// Export worker errors
+export { WorkerNameConflictError } from './worker.errors';
+
 // Export the error a browser startup throws for a store that would open Redis or SQLite
 export { BrowserStoreUnavailableError, type BrowserRefusedStore } from './browser-store.errors';
 

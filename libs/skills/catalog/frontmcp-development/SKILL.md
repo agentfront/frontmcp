@@ -1,13 +1,13 @@
 ---
 name: frontmcp-development
-description: 'Use when building any FrontMCP server component other than a tool (for tools, use create-tool). Covers @Resource static resources and parameterized URI templates; @Prompt reusable prompts (RAG, multi-turn); @Provider singleton dependency-injection providers (database pools, API clients); @Agent autonomous LLM agents (Anthropic, OpenAI) and swarms; @Job background jobs (retry, progress, permissions) and @Workflow DAG pipelines; @Duty recurring work (an interval or a cron schedule) that one process of the machine, project or cluster runs under a lease; @Event event types that clients list and subscribe to (MCP Events); framework adapters and the OpenAPI adapter (turn OpenAPI 3.x specs into MCP tools with auth, polling, transforms); plugins, plugin lifecycle hooks (before / after / around / stage), and the official plugins; instruction-only skills and skills that reference tools; and the hierarchical decorator system from @FrontMcp down to @App. Triggers: create a resource, build a prompt, write a provider, add an agent, job, workflow, duty, event, plugin, adapter, or OpenAPI integration.'
+description: 'Use when building any FrontMCP server component other than a tool (for tools, use create-tool). Covers @Resource static resources and parameterized URI templates; @Prompt reusable prompts (RAG, multi-turn); @Provider singleton dependency-injection providers (database pools, API clients); @Agent autonomous LLM agents (Anthropic, OpenAI) and swarms; @Job background jobs (retry, progress, permissions) and @Workflow DAG pipelines; @Duty recurring work (an interval or a cron schedule) that one process of the machine, project or cluster runs under a lease; @Worker long-running background processes (a connection, a watcher, a queue consumer) that the server supervises and restarts; @Event event types that clients list and subscribe to (MCP Events); framework adapters and the OpenAPI adapter (turn OpenAPI 3.x specs into MCP tools with auth, polling, transforms); plugins, plugin lifecycle hooks (before / after / around / stage), and the official plugins; instruction-only skills and skills that reference tools; and the hierarchical decorator system from @FrontMcp down to @App. Triggers: create a resource, build a prompt, write a provider, add an agent, job, workflow, duty, worker, event, plugin, adapter, or OpenAPI integration.'
 when_to_use: |
   Trigger when creating or editing a non-tool FrontMCP component: a
   *.resource.ts, *.prompt.ts, *.provider.ts, *.agent.ts, *.job.ts,
-  *.workflow.ts, *.duty.ts, *.event.ts, *.plugin.ts, or *.skill.ts file, or adding
-  @Resource, @Prompt, @Provider, @Agent, @Job, @Workflow, @Duty, @Event, a plugin,
+  *.workflow.ts, *.duty.ts, *.worker.ts, *.event.ts, *.plugin.ts, or *.skill.ts file, or adding
+  @Resource, @Prompt, @Provider, @Agent, @Job, @Workflow, @Duty, @Worker, @Event, a plugin,
   an adapter, or an OpenAPI integration. For tools (*.tool.ts) use create-tool instead.
-paths: '**/*.resource.ts, **/*.prompt.ts, **/*.provider.ts, **/*.agent.ts, **/*.job.ts, **/*.workflow.ts, **/*.duty.ts, **/*.event.ts, **/*.plugin.ts, **/*.skill.ts'
+paths: '**/*.resource.ts, **/*.prompt.ts, **/*.provider.ts, **/*.agent.ts, **/*.job.ts, **/*.workflow.ts, **/*.duty.ts, **/*.worker.ts, **/*.event.ts, **/*.plugin.ts, **/*.skill.ts'
 tags: [router, development, tools, resources, prompts, agents, skills, guide]
 category: development
 targets: [all]
@@ -72,6 +72,7 @@ This is a router skill. The "steps" here are how to choose the right reference (
 | Run a background task with progress and retries                                                                                                                                                 | `create-job`                                                   | Job entries with attempt tracking, retry config, timeouts, cancel, cleanup, admission, runners, and progress on `job://runs/{runId}`                                                           |
 | Chain multiple jobs into a sequential pipeline                                                                                                                                                  | `create-workflow`                                              | Workflow entries that compose jobs with data passing                                                                                                                                           |
 | Run recurring work in one process of the machine, project or cluster                                                                                                                            | `create-duty`                                                  | `@Duty({ every \| cron, scope, leaseMs })` providers: an interval or a cron schedule, under a lease one process holds, renewed while held, taken over when the holder dies                     |
+| Keep a connection, a watcher or a queue consumer running for as long as the server does                                                                                                         | `create-worker`                                                | `@Worker({ scope, restart, leaseMs })` providers: a supervised `run()` restarted with backoff, in every process or in one under a lease, with a `/readyz` check                                |
 | Declare an event type clients list and subscribe to (MCP Events)                                                                                                                                | `create-event`                                                 | `@Event` classes and `event()` functions: name, argument and payload schemas, `authorities`, delivery modes                                                                                    |
 | Serve pages, APIs or live SSE views for people beside the MCP endpoint                                                                                                                          | `create-http-route`                                            | `@HttpRoute` classes with the app's providers, people auth (`http.auth.people: 'loopback-token'`), same-origin check, SSE from a `resourceStore()`                                             |
 | Write instruction-only AI guidance (no code execution)                                                                                                                                          | `create-skill`                                                 | Skill entries with markdown instructions from files, strings, or URLs                                                                                                                          |
@@ -94,7 +95,7 @@ This is a router skill. The "steps" here are how to choose the right reference (
 4. **`create-prompt`** — Add reusable conversation templates
 5. **`create-provider`** — Share services across tools and resources via DI (and with `create-http-route` pages)
 6. **`create-agent`** — Build autonomous AI loops (advanced)
-7. **`create-job`** / **`create-workflow`** / **`create-duty`** — Background processing and recurring work (advanced)
+7. **`create-job`** / **`create-workflow`** / **`create-duty`** / **`create-worker`** — Background processing, recurring work and long-running processes (advanced)
 8. **`create-event`** — Event types clients subscribe to (advanced)
 9. **`create-skill`** / **`create-skill-with-tools`** — Author your own skills (meta)
 10. **`official-adapters`** / **`openapi-adapter`** — Integrate external APIs via OpenAPI specs
@@ -118,14 +119,15 @@ This is a router skill. The "steps" here are how to choose the right reference (
 
 ## Common Patterns
 
-| Pattern                 | Correct                                                   | Incorrect                                                | Why                                                                   |
-| ----------------------- | --------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------- |
-| Choosing component type | Tool for actions, Resource for data, Prompt for templates | Using a tool to return static data                       | Each type has protocol-level semantics; misuse confuses AI clients    |
-| Component registration  | Register in `@App` arrays, compose apps in `@FrontMcp`    | Register tools directly in `@FrontMcp` without an `@App` | Apps provide modularity; direct registration bypasses app-level hooks |
-| Shared logic            | Extract to a `@Provider` and inject via DI                | Duplicate code across multiple tools                     | Providers are testable, lifecycle-managed, and scoped                 |
-| Complex orchestration   | Use `@Agent` with inner tools                             | Chain tool calls manually in a single tool               | Agents handle LLM loops, retries, and tool selection automatically    |
-| Background work         | Use `@Job` with retry config                              | Run long tasks inside a tool's `execute()`               | Jobs have progress tracking, attempt awareness, and timeout handling  |
-| Recurring work          | Use a `@Duty` provider                                    | `setInterval()` in every copy of the server              | A duty runs in one process, and another takes over when it exits      |
+| Pattern                 | Correct                                                   | Incorrect                                                | Why                                                                              |
+| ----------------------- | --------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Choosing component type | Tool for actions, Resource for data, Prompt for templates | Using a tool to return static data                       | Each type has protocol-level semantics; misuse confuses AI clients               |
+| Component registration  | Register in `@App` arrays, compose apps in `@FrontMcp`    | Register tools directly in `@FrontMcp` without an `@App` | Apps provide modularity; direct registration bypasses app-level hooks            |
+| Shared logic            | Extract to a `@Provider` and inject via DI                | Duplicate code across multiple tools                     | Providers are testable, lifecycle-managed, and scoped                            |
+| Complex orchestration   | Use `@Agent` with inner tools                             | Chain tool calls manually in a single tool               | Agents handle LLM loops, retries, and tool selection automatically               |
+| Background work         | Use `@Job` with retry config                              | Run long tasks inside a tool's `execute()`               | Jobs have progress tracking, attempt awareness, and timeout handling             |
+| Recurring work          | Use a `@Duty` provider                                    | `setInterval()` in every copy of the server              | A duty runs in one process, and another takes over when it exits                 |
+| Long-running process    | Use a `@Worker` provider                                  | An endless loop started in `onReady()`                   | A worker is restarted when it fails, aborted at shutdown, and shown in `/readyz` |
 
 ## Verification Checklist
 

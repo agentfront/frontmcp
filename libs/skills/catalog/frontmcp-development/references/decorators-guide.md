@@ -24,6 +24,7 @@ FrontMCP uses a hierarchical decorator system. The nesting order is:
        +-- @Job            (long-running job)
        +-- @Workflow       (multi-step workflow)
        +-- @Duty           (recurring work in one process, a provider)
+       +-- @Worker         (long-running background process, a provider)
        +-- @HttpRoute      (page, API or SSE view for people)
        +-- @Event          (event type clients subscribe to)
        +-- @Flow           (custom flow)
@@ -882,6 +883,39 @@ class OrderCreated extends EventContext {}
 
 **Function builder:** `event({ name, payloadSchema, ... })` returns the event without a class.
 
+## 19. @Worker
+
+**Purpose:** Marks a provider class whose `run()` the server starts once it serves and keeps running: it is run again
+after a wait when it returns or throws, and its `signal` aborts at shutdown. With a `scope` other than `'process'`, one
+process holds the worker's lease and runs it, and another takes it over when the holder dies.
+
+**When to use:** When something must stay connected or keep watching for as long as the server runs: a mail connection,
+an upstream socket, a queue consumer, a file watcher (see `create-worker`).
+
+**Key fields:**
+
+| Field      | Description                                                                                                                                   |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name?`    | Name in logs, in the `/readyz` check `worker:<name>` and in the lease; defaults to the class name                                             |
+| `scope`    | `'process'` (every server process, no lease), `'machine'`, `'workspace'` or `'cluster'` (one holder; `'cluster'` requires the server's Redis) |
+| `restart?` | `false` to run once, or `{ minDelayMs?, maxDelayMs?, factor? }`; default waits of 1 s doubling up to 60 s                                     |
+| `leaseMs?` | How soon another process takes over from a dead holder; default 15 s. Not with `scope: 'process'`                                             |
+
+```typescript
+import { Worker, type WorkerRunContext } from '@frontmcp/sdk';
+
+@Worker({ name: 'inbox-watcher', scope: 'cluster' })
+class InboxWatcher {
+  constructor(private readonly mailbox: Mailbox) {}
+
+  async run({ signal }: WorkerRunContext) {
+    await this.mailbox.watch({ signal }); // returns when signal aborts
+  }
+}
+
+// Register it like a provider: @App({ providers: [Mailbox, InboxWatcher] })
+```
+
 ---
 
 ## Quick Reference Table
@@ -903,6 +937,7 @@ class OrderCreated extends EventContext {}
 | `@Job`                               | `JobContext`       | `@App.jobs`                     | Background task          |
 | `@Workflow`                          | -                  | `@App.workflows`                | Multi-step orchestration |
 | `@Duty`                              | -                  | `@App.providers`                | Recurring work           |
+| `@Worker`                            | -                  | `@App.providers`                | Long-running process     |
 | `@HttpRoute`                         | `HttpRouteContext` | `@App.routes`                   | Page or API for people   |
 | `@Event`                             | `EventContext`     | `@App.events`                   | Subscribable event type  |
 | `@Will/@Did/@Stage/@Around/@Finally` | -                  | Plugin, provider or entry class | Flow stage hooks         |
@@ -918,6 +953,7 @@ class OrderCreated extends EventContext {}
 | Cross-cutting concerns      | Create a `@Plugin` with providers and context extensions                                                                                                                    | Adding logging/caching logic directly inside every tool's `execute()` method                                                                  | Plugins centralize shared behavior, reduce duplication, and can be reused across servers                                                                   |
 | Background processing       | Use `@Job` for work a client starts, with retries and progress                                                                                                              | Using `setTimeout` or manual polling inside a tool                                                                                            | Jobs track attempts and progress, and are visible in server diagnostics                                                                                    |
 | Recurring work              | Use a `@Duty({ every, scope })` or `@Duty({ cron, scope })` provider                                                                                                        | `setInterval()` in a provider, which every copy of the server runs                                                                            | A duty runs in one process of the machine, project or cluster, and another takes over when it exits                                                        |
+| Long-running processes      | Use a `@Worker({ scope })` provider whose `run()` ends when `signal` aborts                                                                                                 | An endless loop started in a provider's `onReady()`                                                                                           | A worker is restarted with backoff when it fails, aborted at shutdown, shown in `/readyz`, and can run in one process under a lease                        |
 | Multi-step orchestration    | Use `@Workflow` with ordered steps referencing `@Job` classes                                                                                                               | Chaining multiple tool calls manually from the LLM                                                                                            | Workflows provide built-in ordering, error handling, and rollback semantics                                                                                |
 | Injecting services          | Decorate a service class with `@Provider({ name, scope })` and inject it via `this.get(MyClass)`, or use `AsyncProvider({ provide, useFactory })` for token-based factories | Passing `useFactory`/`useClass` directly to `@Provider` (the schema is strict and rejects them), or importing singletons / using global state | DI providers support testability, lifecycle management, and per-scope isolation                                                                            |
 

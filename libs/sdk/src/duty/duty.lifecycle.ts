@@ -1,43 +1,29 @@
-import {
-  createStorage,
-  getEnv,
-  getRuntimeContext,
-  mkdir,
-  realpath,
-  sha256Hex,
-  stat,
-  writeFile,
-  type RootStorage,
-  type StorageConfig,
-} from '@frontmcp/utils';
+import { type RootStorage, type StorageConfig } from '@frontmcp/utils';
 
 import {
   FrontMcpLogger,
-  isRedisProvider,
-  redisOptionsSchema,
   type DutyCron,
   type DutyInterface,
   type DutyRunContext,
   type DutyScope,
-  type FrontMcpConfigType,
   type OnBootstrap,
   type OnReady,
   type OnShutdown,
   type ResolvedDutyMetadata,
 } from '../common';
-import { findProjectRoot } from '../common/types/options/sqlite/resolve';
-import {
-  ClusterScopeNeedsRedisError,
-  DutyNameConflictError,
-  InvalidDutyCronError,
-  UnsafeDutyStoreError,
-} from '../errors/duty.errors';
+import { ClusterScopeNeedsRedisError, DutyNameConflictError, InvalidDutyCronError } from '../errors/duty.errors';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
-import { isManifestMode } from '../front-mcp/manifest-mode.flag';
 import type ProviderRegistry from '../provider/provider.registry';
-import { findReplaceableDirectory } from '../server/security/replaceable-directory';
 import { loadCronSchedule, type CronSchedule } from './cron-schedule';
 import { DutyRunner } from './duty.runner';
+import {
+  isLongLivedProcess,
+  LeaseClaims,
+  leaseKey,
+  leaseStorageConfig,
+  openLeaseStore,
+  startsBackgroundWork,
+} from './lease-store';
 
 type DutyInstance = DutyInterface & Partial<OnBootstrap & OnReady & OnShutdown>;
 
@@ -47,22 +33,7 @@ interface StartedDuty {
 }
 
 const lifecycles = new WeakMap<object, DutyLifecycle>();
-
-/** The duty class that holds each lease key in this process, and how many of its instances started. */
-const claims = new Map<string, { type: unknown; typeName: string; instances: number }>();
-
-const OWNER_ONLY_DIRECTORY = 0o700;
-const OWNER_ONLY_FILE = 0o600;
-const GROUP_OR_OTHER_WRITE = 0o022;
-
-/** Node's `os` and `path`, loaded on first use: duties are Node-only and a browser bundle must not import them. */
-function nodeOs(): typeof import('os') {
-  return require('os');
-}
-
-function nodePath(): typeof import('path') {
-  return require('path');
-}
+const claims = new LeaseClaims();
 
 /** The lifecycle the provider registry runs for a `@Duty` instance: its own hooks, plus starting and stopping it. */
 export function dutyLifecycleOf(
@@ -85,66 +56,9 @@ export async function startDuties(providers: ProviderRegistry): Promise<void> {
   }
 }
 
-/**
- * Where the leases live: the server's Redis when it has one, otherwise a SQLite file every process on the machine
- * opens. In Redis a lease is per hostname, except a `'cluster'` duty's, which every machine shares.
- */
+/** Where the leases of duties live (see `leaseStorageConfig`). */
 export function dutyStorageConfig(redis: unknown, scope: DutyScope = 'machine'): StorageConfig {
-  const parsed = redis === undefined ? undefined : redisOptionsSchema.safeParse(redis);
-  if (parsed?.success && isRedisProvider(parsed.data)) {
-    const { host, port, password, db, tls } = parsed.data;
-    return {
-      type: 'redis',
-      redis: { config: { host, port, password, db, tls } },
-      prefix: scope === 'cluster' ? 'frontmcp:cluster:duty:' : `frontmcp:duty:${nodeOs().hostname()}:`,
-      fallback: 'error',
-    };
-  }
-  const home = getEnv('FRONTMCP_HOME') || nodePath().join(nodeOs().homedir(), '.frontmcp');
-  return {
-    type: 'sqlite',
-    sqlite: { path: nodePath().join(home, 'duties.sqlite') },
-    prefix: 'frontmcp:duty:',
-    fallback: 'error',
-  };
-}
-
-/** A duty needs a long-lived process: not a serverless function, the edge or a browser. */
-function isLongLivedProcess(): boolean {
-  const { runtime, deployment } = getRuntimeContext();
-  return deployment !== 'serverless' && runtime !== 'edge' && runtime !== 'browser';
-}
-
-/**
- * A server starts its duties, unless a build boots it only to read it; a container starts them only when asked to
- * (`runDuties`), which it states in its config.
- */
-function startsDuties(config: FrontMcpConfigType): boolean {
-  return !isManifestMode(config) && (config as { runDuties?: boolean }).runDuties !== false;
-}
-
-/** One lease per server name and duty; a workspace duty's is also per project root. */
-function leaseKey({ name, scope }: ResolvedDutyMetadata, serverName: string): string {
-  const key = [serverName, name].map(encodeURIComponent).join(':');
-  if (scope !== 'workspace') return key;
-  const cwd = process.cwd();
-  return `${key}:${sha256Hex(findProjectRoot(cwd) ?? cwd)}`;
-}
-
-/** Create the lease file and its folder owner-only, and refuse a folder (or one above it) another user can write to. */
-async function prepareLeaseFile(file: string): Promise<void> {
-  const directory = nodePath().dirname(file);
-  await mkdir(directory, { recursive: true, mode: OWNER_ONLY_DIRECTORY });
-  if (process.platform !== 'win32') {
-    const realDirectory = await realpath(directory);
-    const replaceable =
-      (await findReplaceableDirectory(directory)) ??
-      (realDirectory === directory ? undefined : await findReplaceableDirectory(realDirectory));
-    if (replaceable) throw new UnsafeDutyStoreError(replaceable.directory, replaceable.mode, replaceable.ownerUid);
-    const { mode } = await stat(realDirectory);
-    if (mode & GROUP_OR_OTHER_WRITE) throw new UnsafeDutyStoreError(directory, mode);
-  }
-  await writeFile(file, '', { mode: OWNER_ONLY_FILE, flag: 'a' });
+  return leaseStorageConfig(redis, 'duty', scope);
 }
 
 export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
@@ -188,7 +102,7 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
     if (cron) await this.cronSchedule(cron);
     if (scope !== 'cluster' || !isLongLivedProcess()) return;
     const config = this.providers.get(FrontMcpConfig);
-    if (startsDuties(config) && dutyStorageConfig(config.redis, scope).type !== 'redis') {
+    if (startsBackgroundWork(config) && dutyStorageConfig(config.redis, scope).type !== 'redis') {
       throw new ClusterScopeNeedsRedisError(`Duty "${name}"`);
     }
   }
@@ -211,11 +125,9 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
     }
     const config = this.providers.get(FrontMcpConfig);
     const serverName = config.info?.name ?? 'frontmcp';
-    const key = leaseKey(metadata, serverName);
+    const key = leaseKey(name, scope, serverName);
     this.claim(key, serverName);
-    const storageConfig = dutyStorageConfig(config.redis, scope);
-    if (storageConfig.sqlite) await prepareLeaseFile(storageConfig.sqlite.path);
-    const storage = await createStorage(storageConfig);
+    const storage = await openLeaseStore(dutyStorageConfig(config.redis, scope));
     const run = (context: DutyRunContext) => this.duty.run(context);
     const common = { name, key, leaseMs, storage, logger, run };
     const runner = new DutyRunner(
@@ -230,20 +142,16 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
   /** Take `key` for this duty's class in this process: another class with the same key would never run here. */
   private claim(key: string, serverName: string): void {
     const type = this.duty.constructor;
-    const claim = claims.get(key);
-    if (claim && claim.type !== type) {
-      throw new DutyNameConflictError(this.metadata.name, serverName, claim.typeName, type.name);
+    const otherClass = claims.claim(key, type);
+    if (otherClass !== undefined) {
+      throw new DutyNameConflictError(this.metadata.name, serverName, otherClass, type.name);
     }
-    claims.set(key, { type, typeName: type.name, instances: (claim?.instances ?? 0) + 1 });
     this.claimedKey = key;
   }
 
   private releaseClaim(): void {
     const key = this.claimedKey;
     this.claimedKey = undefined;
-    const claim = key === undefined ? undefined : claims.get(key);
-    if (key === undefined || !claim) return;
-    claim.instances--;
-    if (claim.instances === 0) claims.delete(key);
+    if (key !== undefined) claims.release(key);
   }
 }
