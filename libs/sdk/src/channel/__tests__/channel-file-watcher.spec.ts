@@ -272,6 +272,35 @@ describe('file-watcher source', () => {
       await client.close();
     });
 
+    it('gets one file event at a time: the next onEvent() starts once the one before it ended', async () => {
+      const steps: string[] = [];
+      let endFirstEvent = (): void => undefined;
+
+      /** Takes long over its first file event. */
+      @Channel({ name: 'slow-reader', source: { type: 'file-watcher', paths: ['./logs'] } })
+      class SlowReaderChannel extends ChannelContext {
+        /** Records when it starts and ends, and waits on its first event. */
+        async onEvent(payload: unknown): Promise<ChannelNotification> {
+          const { event } = payload as ChannelFileEvent;
+          steps.push(`${event} started`);
+          if (event === 'change') await new Promise<void>((resolve) => (endFirstEvent = resolve));
+          steps.push(`${event} ended`);
+          return { content: event };
+        }
+      }
+      server = await FrontMcpInstance.createDirect(configWith([SlowReaderChannel]));
+
+      startedWatches[0].report({ type: 'change', path: '/work/logs/app.log' });
+      startedWatches[0].report({ type: 'add', path: '/work/logs/app.log' });
+      await settle();
+      const stepsWhileFirstRuns = [...steps];
+      endFirstEvent();
+      await settle();
+
+      expect(stepsWhileFirstRuns).toEqual(['change started']);
+      expect(steps).toEqual(['change started', 'change ended', 'create started', 'create ended']);
+    });
+
     it('is watched when it is a channel() function, which has no connect handler', async () => {
       server = await FrontMcpInstance.createDirect(configWith([reportsChannel]));
 

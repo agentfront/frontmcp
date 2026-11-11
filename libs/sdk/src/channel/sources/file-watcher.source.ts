@@ -49,7 +49,7 @@ function warnAboutGlobs(channelName: string, paths: string[], logger: FrontMcpLo
   );
 }
 
-/** Hand each file event of the declared paths to the channel, until `signal` aborts. */
+/** Hand each file event of the declared paths to the channel, one at a time and in order, until `signal` aborts. */
 async function forwardFileEvents(
   channel: ChannelInstance,
   sourceConfig: ChannelFileWatcherSource,
@@ -60,9 +60,11 @@ async function forwardFileEvents(
   for await (const { type, path } of watchFiles(sourceConfig.paths, { events, signal })) {
     const fileEvent: ChannelFileEvent = { event: REPORTED_EVENTS[type], path };
     logger.verbose(`File ${fileEvent.event} for channel "${channel.name}": ${path}`);
-    channel.handleEvent(fileEvent).catch((error) => {
+    try {
+      await channel.handleEvent(fileEvent);
+    } catch (error) {
       logger.error(`Failed to handle a file event in channel "${channel.name}"`, { error });
-    });
+    }
   }
 }
 

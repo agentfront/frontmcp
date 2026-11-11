@@ -63,7 +63,8 @@ export class LogWatcherChannel extends ChannelContext {
 
 The channel defines no `onConnect()`, so the framework watches both paths while the channel is connected, and calls
 `onEvent()` with `{ event, path }` for each file that is created or changed. A connected file-watcher channel keeps one
-instance, so `charactersRead` lasts from one file event to the next.
+instance, so `charactersRead` lasts from one file event to the next. The framework hands it one file event at a time,
+in order, so a read never overlaps the one before it.
 
 A channel that defines its own `onConnect()` is not watched by the framework: it watches by itself, as before 1.12
 (see `channel-sources`).

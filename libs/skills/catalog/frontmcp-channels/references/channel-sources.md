@@ -222,6 +222,7 @@ class LogWatcherChannel extends ChannelContext {
 | `events?` | `('create' \| 'change' \| 'delete' \| 'rename')[]` | Every kind | The kinds of file event the channel gets                            |
 
 - **Payload.** `onEvent()` gets a `ChannelFileEvent`, `{ event, path }`. `event` is `'create'` (the file appeared), `'change'` (its size, its modification time or the file itself was replaced) or `'delete'` (it is gone). `path` is the absolute path of the file.
+- **Order.** The events of a channel are handed to `onEvent()` one at a time, in the order they happened: the next starts once the one before it ended, so a slow `onEvent()` delays the events after it.
 - **`rename`.** There is no `rename` payload. A renamed file is a `delete` of its old path and a `create` of its new one, so `rename` selects both.
 - **Paths.** A directory is watched for its direct files, not for its subdirectories. A file is watched through its parent directory, so it stays watched when an editor replaces it. A path that does not exist yet is watched from the moment it appears. The files that are there when the watch starts are not reported.
 - **No globs.** A path is watched as written. For `./logs/*.log` the server logs a warning at startup and watches a file of that name: declare `./logs`, or each file.
