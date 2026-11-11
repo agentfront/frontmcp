@@ -69,6 +69,7 @@ const plan = {
     'transform',
     'enforceBodyLimit',
     'enqueue',
+    'bridgeToBus',
   ],
   post: ['buildResult'],
 } as const satisfies FlowPlan<string>;
@@ -321,6 +322,14 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
     });
     await Promise.all(queued);
     this.events.metrics?.count('matched', this.input.occurrence.name, deliveries.length);
+  }
+
+  /** Emit the occurrence once on the scope's event bus, under its name, for workflows and channels that listen to it. */
+  @Stage('bridgeToBus')
+  async bridgeToBus() {
+    if (!this.events.config.bridge) return;
+    const { occurrence } = this.input;
+    this.scope.channelEventBus?.emit(occurrence.name, occurrence);
   }
 
   /** Answer with the event's id and how many deliveries were queued. */

@@ -67,6 +67,26 @@ scope.channelEventBus?.emit('app:error', {
 });
 ```
 
+### Published events as a source
+
+A server that declares events (see `create-event`) emits each one it publishes on the same bus, under the event's name, so an `app-event` channel named after an event pushes it to the connected Claude Code sessions. The payload is the occurrence, `{ eventId, name, timestamp, data }`:
+
+```typescript
+@Channel({
+  name: 'new-orders',
+  description: 'Orders as they are placed',
+  source: { type: 'app-event', event: 'order.created' },
+})
+class NewOrdersChannel extends ChannelContext {
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    const { data } = payload as { eventId: string; data: { orderId: string; total: number } };
+    return { content: `Order ${data.orderId} was placed (${data.total})`, meta: { orderId: data.orderId } };
+  }
+}
+```
+
+The channel gets every published occurrence of that name, once, whoever is subscribed to the event: the `audience` and `subscriptionId` of a publish narrow its deliveries to subscribers, not what the bus carries. `events.bridge: false` keeps published events off the bus.
+
 ## Agent Completion Source
 
 Automatically pushes when registered agents finish execution. Optionally filter by agent IDs.

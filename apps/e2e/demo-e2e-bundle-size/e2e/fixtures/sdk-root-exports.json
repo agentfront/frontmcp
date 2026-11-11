@@ -149,6 +149,7 @@
   "EventPublishEndpointError": "class",
   "EventPublishHook": "object",
   "EventPublishHttpHook": "object",
+  "EventPublisher": "class",
   "EventRegistry": "class",
   "EventResourceExhaustedError": "class",
   "EventStreamHook": "object",

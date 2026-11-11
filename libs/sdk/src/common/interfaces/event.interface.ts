@@ -99,12 +99,16 @@ export interface EventPublishResult {
   matched: number;
 }
 
-/** Publishes occurrences of the server's events: `this.events` in a context, `scope.events.publisher` elsewhere. */
-export interface EventPublisher {
+/** Publishes the server's events: `this.events` in a context, a constructor parameter of a provider, a duty or a worker. */
+export abstract class EventPublisher {
   /** Publish by name; `data` is checked against the event's `payloadSchema`. */
-  publish(eventName: string, data: Record<string, unknown>, options?: EventPublishOptions): Promise<EventPublishResult>;
+  abstract publish(
+    eventName: string,
+    data: Record<string, unknown>,
+    options?: EventPublishOptions,
+  ): Promise<EventPublishResult>;
   /** Publish by the `@Event` class or the `event()` function; `data` has the type of its `payloadSchema`. */
-  publish<Payload>(
+  abstract publish<Payload>(
     event: EventReference<Payload>,
     data: Payload,
     options?: EventPublishOptions,

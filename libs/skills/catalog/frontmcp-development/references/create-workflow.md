@@ -524,6 +524,7 @@ class SignUpTool extends ToolContext {
 - **Who the run runs as**: the role `event:<event>`, and nothing else, as a webhook's run runs as `webhook:<workflow>` (see [Who the Run Runs As](#who-the-run-runs-as)). A workflow with `create` or `execute` rules must allow it, and so must each step job with `execute` rules.
 - **`emit()` doesn't wait** for the run, and nothing it does throws at the emitter: a run that can't start (a denial, bad input) is logged as a warning that names the event, the workflow and the reason.
 - A job of the run that emits the event that started it starts another run.
+- **Published events** (see `create-event`) arrive on the same bus: a server that declares the event `order.created` emits each occurrence it publishes under that name, with `{ eventId, name, timestamp, data }` as the payload. A workflow with `event: 'order.created'` therefore starts for every publish, from a tool, a worker or the HTTP publish endpoint, with the occurrence as its input: declare those four fields in its `inputSchema`. `events.bridge: false` turns this off.
 
 Up to 1.11.2, `trigger: 'event'` listened to no event: it was ignored.
 

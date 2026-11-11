@@ -104,6 +104,7 @@ import type { TransportService } from '../transport/transport.registry';
 import type WorkflowRegistry from '../workflow/workflow.registry';
 import { guardStorageInBrowser, refuseServerStoresInBrowser, refuseStoresInBrowser } from './browser-stores';
 import { devEventsObservabilityConfig, listsObservabilityPlugin } from './dev-events-observability';
+import { eventPublisherProviders } from './event-publisher.providers';
 import { registerServerEntries } from './server-entries.helper';
 import { reportStartup } from './startup-report.helper';
 
@@ -1539,6 +1540,8 @@ export class Scope extends ScopeEntry {
         provide: OffloadService,
         useValue: new OffloadService(this.metadata.offload, this.logger),
       },
+      // Providers, duties and workers are built before events are registered: they take this publisher
+      ...eventPublisherProviders(this),
     ];
   }
 
