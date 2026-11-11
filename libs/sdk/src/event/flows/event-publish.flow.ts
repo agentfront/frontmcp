@@ -335,8 +335,9 @@ export default class EventPublishFlow extends FlowBase<typeof name> {
   @Stage('bridgeToBus')
   async bridgeToBus() {
     if (!this.events.config.bridge) return;
-    const { occurrence } = this.input;
-    this.scope.channelEventBus?.emit(occurrence.name, occurrence);
+    const { occurrence, audience, subscriptionId } = this.input;
+    const forSomeOwners = audience !== undefined || subscriptionId !== undefined;
+    this.scope.channelEventBus?.emit(occurrence.name, occurrence, { forSomeOwners });
   }
 
   /** Answer with the event's id and how many deliveries were queued. */

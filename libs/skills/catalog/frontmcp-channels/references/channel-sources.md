@@ -85,7 +85,7 @@ class NewOrdersChannel extends ChannelContext {
 }
 ```
 
-The channel gets every published occurrence of that name, once, whoever is subscribed to the event: the `audience` and `subscriptionId` of a publish narrow its deliveries to subscribers, not what the bus carries. `events.bridge: false` keeps published events off the bus.
+The channel gets every published occurrence of that name, once, whoever is subscribed to the event, except one published with an `audience` or a `subscriptionId`: it is meant for some owners only, and a channel tells every connected session, so it reaches only trusted listeners such as `trigger: 'event'` workflows. `events.bridge: false` keeps published events off the bus.
 
 ## Agent Completion Source
 

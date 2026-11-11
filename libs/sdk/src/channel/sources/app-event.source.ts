@@ -5,6 +5,16 @@ import type { ChannelInstance } from '../channel.instance';
 
 type EventHandler = (payload: unknown) => void;
 
+/** How a handler listens: a `trusted` one runs inside the server and also hears events meant for some owners only. */
+export interface ChannelEventHandlerOptions {
+  trusted?: boolean;
+}
+
+/** How an event is emitted: `forSomeOwners` reaches trusted handlers only, never a channel that tells every session. */
+export interface ChannelEventEmitOptions {
+  forSomeOwners?: boolean;
+}
+
 /**
  * In-process event bus for app-event channel sources.
  *
@@ -21,6 +31,7 @@ type EventHandler = (payload: unknown) => void;
  */
 export class ChannelEventBus {
   private readonly handlers = new Map<string, Set<EventHandler>>();
+  private readonly trustedHandlers = new WeakSet<EventHandler>();
   private readonly logger: FrontMcpLogger;
 
   constructor(logger: FrontMcpLogger) {
@@ -34,7 +45,8 @@ export class ChannelEventBus {
    * @param handler - The handler function called with the event payload
    * @returns Unsubscribe function
    */
-  on(event: string, handler: EventHandler): () => void {
+  on(event: string, handler: EventHandler, options: ChannelEventHandlerOptions = {}): () => void {
+    if (options.trusted) this.trustedHandlers.add(handler);
     let handlers = this.handlers.get(event);
     if (!handlers) {
       handlers = new Set();
@@ -57,7 +69,7 @@ export class ChannelEventBus {
    * @param event - The event name
    * @param payload - The event payload
    */
-  emit(event: string, payload: unknown): void {
+  emit(event: string, payload: unknown, options: ChannelEventEmitOptions = {}): void {
     const handlers = this.handlers.get(event);
     if (!handlers || handlers.size === 0) {
       this.logger.verbose(`No handlers for event "${event}"`);
@@ -67,6 +79,7 @@ export class ChannelEventBus {
     this.logger.verbose(`Emitting event "${event}" to ${handlers.size} handler(s)`);
 
     for (const handler of handlers) {
+      if (options.forSomeOwners && !this.trustedHandlers.has(handler)) continue;
       try {
         handler(payload);
       } catch (err) {

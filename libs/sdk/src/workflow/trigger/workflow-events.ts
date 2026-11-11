@@ -27,7 +27,9 @@ export interface WorkflowEventListeners {
 export function listenToWorkflowEvents(workflows: readonly WorkflowEntry[], listeners: WorkflowEventListeners) {
   const stops = eventWorkflows(workflows).map((workflow) => {
     const event = workflowEventName(workflow);
-    return listeners.bus.on(event, (payload) => void startEventRun(workflow, event, payload, listeners));
+    return listeners.bus.on(event, (payload) => void startEventRun(workflow, event, payload, listeners), {
+      trusted: true,
+    });
   });
   return () => stops.forEach((stop) => stop());
 }

@@ -734,7 +734,9 @@ class AuditOrdersWorkflow {}
 ```
 
 - The event is emitted once for each `publish()`, however many subscriptions receive it, and also when nobody is
-  subscribed. The bus is inside the server: `audience` and `subscriptionId` narrow deliveries, not what is emitted.
+  subscribed. An event published with an `audience` or a `subscriptionId` reaches the workflows, which run inside the
+  server, but not the `app-event` channels, which would tell every connected session. A listener of your own hears
+  such an event with `scope.channelEventBus.on(name, handler, { trusted: true })`.
 - It is emitted by the `bridgeToBus` stage of `events:publish`, after the deliveries are queued. A publish that
   fails before that emits nothing.
 - The bus exists when `channels.enabled` is set or a workflow has `trigger: 'event'`. Without it nothing is emitted.
