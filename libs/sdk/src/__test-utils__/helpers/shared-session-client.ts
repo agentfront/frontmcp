@@ -67,12 +67,13 @@ export function pidOf(answer: Frame): unknown {
   return structuredOf(answer)['pid'];
 }
 
-/** POST `body` to a shared server on loopback HTTP, as JSON. */
+/** POST `body` to a shared server on loopback HTTP, as JSON, on a connection of its own unless `agent` keeps one. */
 export function post(
   record: SharedServerRecord,
   urlPath: string,
   headers: Record<string, string>,
   body: unknown,
+  agent: http.Agent | false = false,
 ): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }> {
   return new Promise((resolve, reject) => {
     const request = http.request(
@@ -81,7 +82,7 @@ export function post(
         port: record.port,
         path: urlPath,
         method: 'POST',
-        agent: false,
+        agent,
         headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...headers },
       },
       (response) => {
@@ -92,5 +93,32 @@ export function post(
     );
     request.on('error', reject);
     request.end(JSON.stringify(body));
+  });
+}
+
+/** Open the notification stream of a session of a shared server on loopback HTTP; `closed` settles once it ended. */
+export function openStream(
+  record: SharedServerRecord,
+  urlPath: string,
+  headers: Record<string, string>,
+): Promise<{ status: number; closed: Promise<void>; close(): void }> {
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      {
+        host: '127.0.0.1',
+        port: record.port,
+        path: urlPath,
+        method: 'GET',
+        agent: false,
+        headers: { accept: 'text/event-stream', ...headers },
+      },
+      (response) => {
+        const closed = new Promise<void>((ended) => response.once('close', () => ended()));
+        response.resume();
+        resolve({ status: response.statusCode ?? 0, closed, close: () => response.destroy() });
+      },
+    );
+    request.on('error', reject);
+    request.end();
   });
 }

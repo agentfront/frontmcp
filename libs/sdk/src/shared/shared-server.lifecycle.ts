@@ -7,13 +7,19 @@ const { Will } = FlowHooksOf('http:request');
 export function exitingResponse(): ReturnType<typeof httpRespond.json> {
   return httpRespond.json(
     { error: 'the shared server is exiting' },
-    { status: 503, headers: { 'retry-after': '1', [SHARED_STATE_HEADER]: SHARED_EXITING } },
+    { status: 503, headers: { 'retry-after': '1', connection: 'close', [SHARED_STATE_HEADER]: SHARED_EXITING } },
   );
 }
 
-/** The part of an `http:request` run the lifecycle reads: whether it is authorized, its Node response, and how to answer. */
+/** The Node response of a request: it tells when the request is over, and can be cut off. */
+interface TrackedResponse {
+  once?(event: 'close', listener: () => void): unknown;
+  destroy?(): unknown;
+}
+
+/** The part of an `http:request` run the lifecycle reads: whether it is authorized, its method and Node response, and how to answer. */
 interface HttpRequestRun {
-  readonly rawInput: { response?: { once?(event: 'close', listener: () => void): unknown } };
+  readonly rawInput: { request?: { method?: string }; response?: TrackedResponse };
   readonly state: { get(key: 'verifyResult'): { kind: string } | undefined };
   respond(output: ReturnType<typeof httpRespond.json>): void;
 }
@@ -21,10 +27,12 @@ interface HttpRequestRun {
 /**
  * How long a shared server has gone without a request, and its exit: once asked to exit, it answers every new
  * request 503 with `x-frontmcp-shared-server: exiting`, so its sessions send it to the next server instead. Only a
- * request that carries the token, or an identity challenge, counts as activity.
+ * request that carries the token, or an identity challenge, counts as activity. A notification stream a session
+ * holds open (its `GET`) keeps the server from being idle, and is cut off, not waited for, when the server exits.
  */
 export class SharedServerLifecycle {
   #inFlight = 0;
+  readonly #streams = new Set<TrackedResponse>();
   #lastActivity = Date.now();
   #exitReason: string | undefined;
   readonly #settledWaiters = new Set<() => void>();
@@ -43,6 +51,7 @@ export class SharedServerLifecycle {
     if (this.#exitReason !== undefined) return;
     this.#exitReason = reason;
     this.#resolveExit(reason);
+    for (const stream of this.#streams) stream.destroy?.();
   }
 
   /** Count a session's identity challenge as activity: a session that just found the server is about to use it. */
@@ -50,9 +59,9 @@ export class SharedServerLifecycle {
     this.#lastActivity = Date.now();
   }
 
-  /** How long no request has been in flight, in ms. */
+  /** How long no request has been in flight and no notification stream open, in ms. */
   idleFor(now = Date.now()): number {
-    return this.#inFlight > 0 ? 0 : now - this.#lastActivity;
+    return this.#inFlight > 0 || this.#streams.size > 0 ? 0 : now - this.#lastActivity;
   }
 
   /** Resolves once no request is in flight, or after `timeoutMs`. */
@@ -73,11 +82,24 @@ export class SharedServerLifecycle {
   trackRequest(run: HttpRequestRun): void {
     if (run.state.get('verifyResult')?.kind !== 'authorized') return;
     if (this.isExiting) run.respond(exitingResponse());
+    const { request, response } = run.rawInput;
+    if (request?.method === 'GET' && typeof response?.once === 'function') {
+      this.holdStream(response);
+      return;
+    }
     this.#inFlight++;
     this.#lastActivity = Date.now();
-    const response = run.rawInput.response;
     if (typeof response?.once === 'function') response.once('close', () => this.finishRequest());
     else this.finishRequest();
+  }
+
+  /** Keep a session's notification stream until it closes: it is activity, but no request to wait for at exit. */
+  private holdStream(stream: TrackedResponse): void {
+    this.#streams.add(stream);
+    stream.once?.('close', () => {
+      this.#streams.delete(stream);
+      this.#lastActivity = Date.now();
+    });
   }
 
   private finishRequest(): void {

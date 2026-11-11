@@ -138,7 +138,8 @@ async function connect(options: AttachSharedSessionOptions, logger: BridgeLogger
 /**
  * Bridge a stdio session to the key's server; frames sent before it reached one wait in the buffer. When that server
  * goes away, the session reaches the next one, replays the client's `initialize` and tells it the lists changed;
- * when it can't attach to one, it runs the server in its own process.
+ * when it can't attach to one, it runs the server in its own process. What the server sends on its own reaches the
+ * client over the session's notification stream, a Claude Code channel event included.
  */
 export function attachSharedSession(options: AttachSharedSessionOptions): SharedSession {
   const log = stderrLogger();
@@ -184,10 +185,11 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
     }
   }
 
-  /** Stop sending to a server that went away, and reach the next one; what it still answers is still relayed. */
+  /** Leave a server that went away, and reach the next one; its answers to the requests in flight are still relayed. */
   function lose(lost: HttpUpstreamClient, error: SharedServerLostError): void {
     if (upstream !== lost || stopping) return;
     upstream = undefined;
+    lost.leaveSession();
     log.warn('reaching the next shared server', { reason: error.message });
     fsm.onUpstreamLost(error.message);
     reach().catch(fail);
@@ -225,6 +227,7 @@ export function attachSharedSession(options: AttachSharedSessionOptions): Shared
         fetch: towardsServer(server.fetch),
         log,
         onFrame: (frame) => fsm.relayUpstream(frame),
+        claudeCodeChannels: true,
       });
       try {
         if (clientInitialize) {

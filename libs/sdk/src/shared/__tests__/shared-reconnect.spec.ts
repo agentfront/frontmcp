@@ -169,7 +169,10 @@ posixOnly('a shared session across servers', () => {
             .map(([, init]) => (typeof init?.body === 'string' ? (JSON.parse(init.body) as Frame) : undefined))
             .filter((frame) => frame?.method === 'initialize');
           expect(initializes).toHaveLength(2);
-          expect(initializes[1]?.params).toEqual(initializeWithCapabilities.params);
+          expect(initializes[1]?.params).toEqual({
+            ...initializeWithCapabilities.params,
+            capabilities: { ...clientCapabilities, experimental: { 'claude/channel': {} } },
+          });
           expect(String(initializes[1]?.id)).toMatch(/reinitialize/);
         }
       } finally {
