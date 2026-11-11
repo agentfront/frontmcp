@@ -300,6 +300,23 @@ describe('watchFiles', () => {
       expect(watchers.closed()).toBe(1);
     });
 
+    it('closes its watchers when the signal aborts while the consumer is still busy with an event', async () => {
+      const watchers = countWatchers();
+      const controller = new AbortController();
+      const iterator = watchFiles(root, { debounceMs: DEBOUNCE_MS, signal: controller.signal });
+      const first = iterator.next();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await fs.promises.writeFile(path.join(root, 'busy.txt'), 'x');
+      expect((await first).value).toEqual({ type: 'add', path: path.join(root, 'busy.txt') });
+
+      controller.abort();
+      const closedWhileBusy = watchers.closed();
+
+      expect(closedWhileBusy).toBe(1);
+      expect(await iterator.next()).toEqual({ done: true, value: undefined });
+      expect(watchers.closed()).toBe(1);
+    });
+
     it('yields nothing with a signal that is already aborted', async () => {
       const controller = new AbortController();
       controller.abort();
