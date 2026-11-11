@@ -186,6 +186,9 @@ describe('Mail triage example', () => {
     const none = await dave.tools.call('simulate_incoming_mail', { to: 'dave', from: 'x@example.com', subject: 'Hi' });
 
     expect(both.json<{ watchers: number }>().watchers).toBe(1);
+    expect(receiver.deliveries().map((delivered) => delivered.path)).toEqual(
+      expect.arrayContaining([new URL(receiver.url).pathname, new URL(otherCallback).pathname]),
+    );
     expect(receiver.deliveries()).toHaveLength(2);
     expect(one.json<{ watchers: number }>().watchers).toBe(1);
     expect(none.json<{ watchers: number }>().watchers).toBe(0);
