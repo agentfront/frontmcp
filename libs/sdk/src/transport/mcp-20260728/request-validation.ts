@@ -289,16 +289,21 @@ export function validate20260728Request(options: Validate20260728Options): Valid
   return { ok: true, version: declaredVersion ?? IMPLEMENTED_PROTOCOL_VERSION };
 }
 
+/** The `-32022` error for a request naming `requested`, from a server that speaks the `supported` revisions. */
+export function unsupportedProtocolVersionError(requested: string, supported: readonly string[]): JsonRpcErrorPayload {
+  return {
+    code: MCP_20260728_ERROR_CODES.unsupportedProtocolVersion,
+    message: `Unsupported protocol version: ${requested}`,
+    data: { supported: [...supported], requested },
+  };
+}
+
 function versionSupported(version: string): ValidationFailure | undefined {
   if ((FRONTMCP_SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(version)) return undefined;
   return {
     ok: false,
     status: 400,
-    error: {
-      code: MCP_20260728_ERROR_CODES.unsupportedProtocolVersion,
-      message: `Unsupported protocol version: ${version}`,
-      data: { supported: [...FRONTMCP_SUPPORTED_PROTOCOL_VERSIONS], requested: version },
-    },
+    error: unsupportedProtocolVersionError(version, FRONTMCP_SUPPORTED_PROTOCOL_VERSIONS),
   };
 }
 

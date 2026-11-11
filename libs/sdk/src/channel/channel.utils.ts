@@ -14,6 +14,11 @@ import { ChannelKind, type ChannelRecord } from '../common/records/channel.recor
  */
 export const CHANNEL_NOTIFICATION_METHOD = 'notifications/claude/channel';
 
+/** Whether a scope pushes into Claude Code sessions: it has a channel, so it advertises `claude/channel`. */
+export function servesClaudeCodeChannels(scope: { channels?: { hasAny(): boolean } }): boolean {
+  return scope.channels?.hasAny() === true;
+}
+
 /**
  * Normalize a ChannelType (class, function, or descriptor) into a ChannelRecord.
  *

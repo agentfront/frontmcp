@@ -172,9 +172,10 @@ export default function initializeRequestHandler({
         }
       }
 
-      // Auto-subscribe session to channels if client supports claude/channel capability: to the
-      // channels the hookable `channels:list` flow returns for it.
-      if (sessionId && request.params.capabilities?.experimental?.['claude/channel'] !== undefined) {
+      // Subscribe a session that declares claude/channel, and the stdio session, to the channels `channels:list` returns.
+      const declaresChannels = request.params.capabilities?.experimental?.['claude/channel'] !== undefined;
+      const registered = sessionId ? scope.notifications.getRegisteredServer(sessionId) : undefined;
+      if (sessionId && (declaresChannels || registered?.stdio)) {
         if (scope.channels) {
           const listed = await scope.runFlowForOutput('channels:list', {});
           const channelNames = listed.channels.map((ch) => ch.name);

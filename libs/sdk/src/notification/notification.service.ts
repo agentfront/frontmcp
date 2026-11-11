@@ -316,6 +316,11 @@ export function supportsChannels(capabilities?: ClientCapabilities): boolean {
   return capabilities?.experimental?.['claude/channel'] !== undefined;
 }
 
+/** Whether a session is sent channel notifications: the stdio session always, another once its client declared them. */
+export function isChannelCapableSession(session: Pick<RegisteredServer, 'stdio' | 'clientCapabilities'>): boolean {
+  return session.stdio === true || supportsChannels(session.clientCapabilities);
+}
+
 /**
  * MCP logging level priority (lower number = more verbose).
  * Uses LoggingLevel from MCP SDK for type safety.
@@ -360,6 +365,8 @@ export interface RegisteredServer {
   server: McpServer;
   /** Timestamp when the server was registered */
   registeredAt: number;
+  /** True for the process's stdio connection: Claude Code, which spawns it, declares no `claude/channel` capability */
+  stdio?: boolean;
   /** Client capabilities from the initialize request */
   clientCapabilities?: ClientCapabilities;
   /** Client info (name/version) from the initialize request */
@@ -483,18 +490,17 @@ export class NotificationService {
    *
    * @param sessionId - Unique session identifier
    * @param server - The MCP server instance
+   * @param connection - `stdio: true` for the process's stdio connection
    */
-  registerServer(sessionId: string, server: McpServer): void {
+  registerServer(sessionId: string, server: McpServer, connection: { stdio?: boolean } = {}): void {
     if (this.servers.has(sessionId)) {
       this.logger.warn(`Server already registered for session: ${sessionId.slice(0, 20)}...`);
       return;
     }
 
-    this.servers.set(sessionId, {
-      sessionId,
-      server,
-      registeredAt: Date.now(),
-    });
+    const registered: RegisteredServer = { sessionId, server, registeredAt: Date.now() };
+    if (connection.stdio) registered.stdio = true;
+    this.servers.set(sessionId, registered);
 
     this.logger.verbose(`Registered server for session: ${sessionId.slice(0, 20)}... (total: ${this.servers.size})`);
   }
