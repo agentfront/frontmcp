@@ -10,6 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { PassThrough } from 'node:stream';
 
+import { createSharedServerSecret } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 import { MCP_20260728_META, PROTOCOL_2026_07_28 } from '@frontmcp/protocol';
 import { createHttpUpstream, type JsonRpcFrame } from '@frontmcp/utils';
@@ -40,6 +41,7 @@ import {
 } from '../../transport/mcp-20260728';
 import { attachSharedSession, type AttachSharedSessionOptions, type SharedSession } from '../shared-attach';
 import { runEmbeddedServer } from '../shared-embedded';
+import { readServerRecord, sharedServerFiles, writeServerRecord, type SharedServerRecord } from '../shared-files';
 import { serveShared, type SharedServerHandle } from '../shared-serve';
 import { parseSharedServerOptions } from '../shared-server.options';
 
@@ -47,6 +49,12 @@ const { Will } = FlowHooksOf('http:request');
 const CHANNEL_NOTIFICATION = 'notifications/claude/channel';
 const LIST_CHANGED = 'notifications/tools/list_changed';
 const BUILD_FINISHED = 'build:finished';
+const STREAM_LOST = 'notification-stream-lost';
+const NEXT_SERVER = 'reaching the next shared server';
+/** How long a session that lost its stream takes to read the key's record twice more. */
+const TWO_RECORD_READS_MS = 2_500;
+/** A session gives its stream up 7.75 s after the server cut it off. */
+const QUIET_MOVE_TIMEOUT_MS = 30_000;
 
 /** An app with a channel that says which server sent the event, and the tool that sends one. */
 function channelApp(label: string) {
@@ -190,6 +198,130 @@ posixOnly('channels in a shared session', () => {
     expect(initialized.result?.['capabilities']).toMatchObject({ experimental: { 'claude/channel': {} } });
     client.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
   }
+
+  /** What the session wrote to stderr, line by line. */
+  function stderrLines(): string[] {
+    return stderr.mock.calls.map(([line]) => String(line));
+  }
+
+  /** The key's record, which a server must have written. */
+  async function recordOfKey(): Promise<SharedServerRecord> {
+    const record = await readServerRecord(sharedServerFiles('spec'));
+    if (!record) throw new Error('the shared server wrote no record');
+    return record;
+  }
+
+  /** Start a shared server in this process, recorded under another pid, as the server of another process is. */
+  async function serveAsAnotherProcess(transport: 'unix' | 'http', config: FrontMcpConfigInput): Promise<void> {
+    await serve(transport, config);
+    const record = await recordOfKey();
+    await writeServerRecord(sharedServerFiles('spec'), { ...record, pid: record.pid + 1 });
+  }
+
+  /** Attach a session, connect it as Claude Code, and wait for the channel event of build 41 from its server. */
+  async function attachedAndTold(
+    transport: 'unix' | 'http',
+    overrides: Parameters<typeof attach>[1] = {},
+  ): Promise<ReturnType<typeof clientOf>> {
+    const client = attach(transport, overrides);
+    client.send(DISCOVER_PROBE);
+    await connectAsClaudeCode(client);
+    await client.request(announceBuild(2, '41'));
+    await client.waitFor(({ method }) => method === CHANNEL_NOTIFICATION, 'channel event of the first server');
+    return client;
+  }
+
+  /** Stop the server a session is attached to, and wait until the session gave its notification stream up. */
+  async function stoppedUnderSession(server: SharedServerHandle): Promise<void> {
+    await server.close();
+    servers.splice(servers.indexOf(server), 1);
+    const deadline = Date.now() + QUIET_MOVE_TIMEOUT_MS;
+    while (!stderrLines().some((line) => line.includes(STREAM_LOST))) {
+      if (Date.now() > deadline) throw new Error('the session did not give its notification stream up');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  describe.each(['unix', 'http'] as const)('a quiet session, over %s', (transport) => {
+    it(
+      'moves to the server that took its key over with no request of its client, and gets its channel events',
+      async () => {
+        const first = await serve(transport, configOf('first'));
+        const quiet = await attachedAndTold(transport);
+        const sentBeforeTheLoss = quiet.received.length;
+
+        await first.close();
+        servers.splice(servers.indexOf(first), 1);
+        await serveAsAnotherProcess(transport, configOf('second'));
+        await quiet.waitFor(({ method }) => method === LIST_CHANGED, 'list_changed', QUIET_MOVE_TIMEOUT_MS);
+
+        const other = attach(transport);
+        expect((await other.request(initialize)).result).toBeDefined();
+        await other.request(announceBuild(2, '42'));
+        await quiet.waitFor(({ params }) => params?.['content'] === 'Build 42 finished on second', 'second event');
+
+        expect(quiet.received.slice(sentBeforeTheLoss)).toEqual([
+          { jsonrpc: '2.0', method: LIST_CHANGED },
+          {
+            jsonrpc: '2.0',
+            method: CHANNEL_NOTIFICATION,
+            params: { content: 'Build 42 finished on second', meta: { build: '42', source: 'build-alerts' } },
+          },
+        ]);
+        expect(stderrLines()).toContainEqual(expect.stringContaining('another server took its key over'));
+      },
+      QUIET_MOVE_TIMEOUT_MS,
+    );
+  });
+
+  it(
+    'starts no server and runs none itself while its server is stopped, and moves at its next request',
+    async () => {
+      const first = await serve('unix', configOf('first'));
+      const quiet = await attachedAndTold('unix', { serves: configOf('second') });
+
+      await stoppedUnderSession(first);
+      await new Promise((resolve) => setTimeout(resolve, TWO_RECORD_READS_MS));
+
+      expect(servers).toEqual([]);
+      expect(stderrLines().filter((line) => line.includes(NEXT_SERVER) || line.includes('in this process'))).toEqual(
+        [],
+      );
+      expect(quiet.received.filter(({ method }) => method === LIST_CHANGED)).toEqual([]);
+
+      expect(structuredOf(await quiet.request(announceBuild(3, '42')))).toEqual({ announced: '42' });
+      await quiet.waitFor(({ params }) => params?.['content'] === 'Build 42 finished on second', 'second event');
+      expect(servers).toHaveLength(1);
+    },
+    QUIET_MOVE_TIMEOUT_MS,
+  );
+
+  it.each([
+    ['of the other transport', { transport: 'http' as const, port: 9 }],
+    ['of another info.name', { name: 'another-spec' }],
+    ['of the pid it lost', { pid: process.pid }],
+  ])(
+    'does not move to a server %s that the record of its key names',
+    async (_, taken) => {
+      const first = await serve('unix', configOf('first'));
+      const quiet = await attachedAndTold('unix');
+      const successor = {
+        name: 'channels-spec',
+        transport: 'unix' as const,
+        path: '/',
+        pid: process.pid + 1,
+        secret: createSharedServerSecret(),
+      };
+
+      await stoppedUnderSession(first);
+      await writeServerRecord(sharedServerFiles('spec'), { ...successor, ...taken });
+      await new Promise((resolve) => setTimeout(resolve, TWO_RECORD_READS_MS));
+
+      expect(stderrLines().filter((line) => line.includes(NEXT_SERVER))).toEqual([]);
+      expect(quiet.received.filter(({ method }) => method === LIST_CHANGED)).toEqual([]);
+    },
+    QUIET_MOVE_TIMEOUT_MS,
+  );
 
   describe.each(['unix', 'http'] as const)('over %s', (transport) => {
     it('declines the 2026-07-28 probe, then sends a channel event to the client that declared no capability', async () => {
