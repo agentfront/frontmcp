@@ -49,8 +49,10 @@ import {
   bootstrapProvider,
   DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS,
   lifecycleHooksOf,
+  messageOf,
   readyProviders,
   shutdownProviders,
+  type BackgroundLifecycle,
   type LifecycleEntry,
   type LifecycleLogger,
   type SharedLifecycle,
@@ -139,11 +141,13 @@ export default class ProviderRegistry
   private readonly lifecycleEntries: LifecycleEntry[] = [];
   /** Every GLOBAL instance with a lifecycle hook this registry holds, one another registry also holds included. */
   private readonly heldEntries: LifecycleEntry[] = [];
+  /** The `@Duty` and `@Worker` lifecycles whose ready hooks run here, with the token each was built for. */
+  private readonly backgroundEntries: Array<{ token: Token; lifecycle: BackgroundLifecycle }> = [];
   /** Each instance's shared lifecycle in this tree: the first holder bootstraps and readies it, the last shuts it down. */
   private readonly sharedLifecycles: WeakMap<object, SharedLifecycle>;
   /** How long each shutdown hook may run (`lifecycle.shutdownHookTimeoutMs`), in ms. */
   readonly shutdownHookTimeoutMs: number;
-  private readyHooksRun?: Promise<void>;
+  private readyHooksRun?: Promise<unknown[]>;
   private shutdownHooksRun?: Promise<void>;
 
   constructor(
@@ -347,7 +351,8 @@ export default class ProviderRegistry
   /** Run `onBootstrap()` on the instance just built for `token`, and keep it for the ready and shutdown phases. */
   private async bootstrapBuilt(token: Token): Promise<void> {
     const built = this.instances.get(token);
-    const instance = lifecycleHooksOf((await this.backgroundLifecycleOf(built)) ?? built);
+    const background = await this.backgroundLifecycleOf(built);
+    const instance = lifecycleHooksOf(background ?? built);
     if (!instance || this.heldEntries.some((held) => held.instance === instance)) return;
     const entry = { token, instance };
     const shared = this.sharedLifecycles.get(instance);
@@ -356,6 +361,7 @@ export default class ProviderRegistry
     lifecycle.holders++;
     await lifecycle.bootstrapped;
     if (!shared) this.lifecycleEntries.push(entry);
+    if (!shared && background) this.backgroundEntries.push({ token, lifecycle: background });
     this.heldEntries.push(entry);
   }
 
@@ -363,7 +369,7 @@ export default class ProviderRegistry
    * A `@Duty` or `@Worker` instance's lifecycle, which starts it on `onReady()`; their runtimes load only when one is
    * built.
    */
-  private async backgroundLifecycleOf(built: unknown): Promise<object | undefined> {
+  private async backgroundLifecycleOf(built: unknown): Promise<BackgroundLifecycle | undefined> {
     if (typeof built !== 'object' || built === null) return undefined;
     const duty = dutyMetadataOf(built);
     if (duty) {
@@ -381,8 +387,11 @@ export default class ProviderRegistry
     return this.readyHooksRun !== undefined;
   }
 
-  /** Run `onReady()` on the providers built here, then on those of the registries below, in build order; once. */
-  runReadyHooks(logger: LifecycleLogger): Promise<void> {
+  /**
+   * Run `onReady()` on the providers built here, then on those of the registries below, in build order; once. Resolves
+   * to what the hooks that failed threw.
+   */
+  runReadyHooks(logger: LifecycleLogger): Promise<unknown[]> {
     this.readyHooksRun ??= this.readyHereAndBelow(logger);
     return this.readyHooksRun;
   }
@@ -393,9 +402,24 @@ export default class ProviderRegistry
     return this.shutdownHooksRun;
   }
 
-  private async readyHereAndBelow(logger: LifecycleLogger): Promise<void> {
-    await readyProviders(this.lifecycleEntries, logger);
-    for (const child of [...this.childRegistries]) await child.runReadyHooks(logger);
+  private async readyHereAndBelow(logger: LifecycleLogger): Promise<unknown[]> {
+    const failures = await readyProviders(this.lifecycleEntries, logger);
+    for (const child of [...this.childRegistries]) failures.push(...(await child.runReadyHooks(logger)));
+    return failures;
+  }
+
+  /** Stop the background work of the `@Duty` and `@Worker` providers readied here, without their own hooks. */
+  async stopBackgroundWork(): Promise<void> {
+    for (const { lifecycle } of this.backgroundEntries) await lifecycle.stopBackground();
+  }
+
+  /** Start again the background work `stopBackgroundWork()` stopped, logging the ones that cannot start. */
+  async resumeBackgroundWork(logger: LifecycleLogger): Promise<void> {
+    for (const { token, lifecycle } of this.backgroundEntries) {
+      await lifecycle.resumeBackground().catch((error: unknown) => {
+        logger.error(`Provider "${tokenName(token)}" failed to start again: ${messageOf(error)}`);
+      });
+    }
   }
 
   private async shutdownBelowAndHere(logger: LifecycleLogger): Promise<void> {

@@ -157,6 +157,12 @@ Two different classes whose duties share a lease in one process (both `name: 'sw
 process (A and B): give one of them its own name with @Duty({ name })`. The same class built twice (a top-level
 provider of a `splitByApp` server is built once per app) is not a conflict: its copies share one lease.
 
+When auto-update replaces a version of an `App.esm()` package, the old version's duties stop (the run in flight
+aborted and awaited, the lease released) before the new version's start, so the new class takes the name without a
+`DutyNameConflictError`. Their own `onShutdown()` still runs once, when the server shuts down. When the new version
+fails to start (a provider's `onReady()` throws, or a worker or duty of it cannot start), it is discarded and the old
+version's duties run again (see `multi-app-composition`).
+
 ## Publishing Events
 
 A duty tells the clients subscribed to an event what it found (see `create-event`). It takes the server's publisher in

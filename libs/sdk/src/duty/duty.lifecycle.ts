@@ -14,6 +14,7 @@ import {
 } from '../common';
 import { ClusterScopeNeedsRedisError, DutyNameConflictError, InvalidDutyCronError } from '../errors/duty.errors';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
+import type { BackgroundLifecycle } from '../provider/provider.lifecycle';
 import type ProviderRegistry from '../provider/provider.registry';
 import { loadCronSchedule, type CronSchedule } from './cron-schedule';
 import { DutyRunner } from './duty.runner';
@@ -71,8 +72,10 @@ export function dutyHealth(holdsLease: boolean, leaseStoreFailure?: string): Hea
   return { status: 'unhealthy', details, error: `the lease store cannot be opened: ${leaseStoreFailure}` };
 }
 
-export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
+export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown, BackgroundLifecycle {
   private started?: Promise<StartedDuty | undefined>;
+  /** Whether `stopBackground()` stopped the runs, so `resumeBackground()` starts them again. */
+  private resumable = false;
   private claimedKey?: string;
   private cron?: Promise<CronSchedule>;
 
@@ -93,15 +96,37 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown {
     await this.started;
   }
 
+  /** Stop the runs and release the lease and claim, without the duty's own hooks. */
+  async stopBackground(): Promise<void> {
+    if (this.started) this.resumable = true;
+    await this.stopRunner();
+  }
+
+  /** Start again the runs `stopBackground()` stopped. */
+  async resumeBackground(): Promise<void> {
+    if (!this.resumable) return;
+    this.resumable = false;
+    this.started = this.startRunner();
+    await this.started;
+  }
+
   async onShutdown(): Promise<void> {
-    const started = await this.started?.catch(() => undefined);
+    this.resumable = false;
+    await this.stopRunner();
+    await this.duty.onShutdown?.();
+  }
+
+  /** Stop what the last start started, once, and give back the claim. */
+  private async stopRunner(): Promise<void> {
+    const starting = this.started;
+    this.started = undefined;
+    const started = await starting?.catch(() => undefined);
     if (started) {
       await started.runner.stop();
       await started.storage.disconnect();
       started.removeHealthProbe();
     }
     this.releaseClaim();
-    await this.duty.onShutdown?.();
   }
 
   /**

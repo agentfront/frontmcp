@@ -162,6 +162,12 @@ Found when the server starts:
   or not at all if the process exits first.
 - **One at a time.** A process that gets the lease back while its last run is still ending waits for it before it
   starts the next.
+- **ESM package versions.** When auto-update replaces a version of an `App.esm()` package, the old version's workers
+  are stopped as at shutdown (`signal` aborted, `run()` awaited, the lease released) before the new version's start,
+  so a `'process'` worker never runs twice and the new class takes the name without a `WorkerNameConflictError`. Their
+  own `onShutdown()` still runs once, when the server shuts down. When the new version fails to start (a provider's
+  `onReady()` throws, or a worker or duty of it cannot start), it is discarded and the old version's workers start
+  again (see `multi-app-composition`).
 
 ## Health
 

@@ -21,6 +21,7 @@ import {
 import { ClusterScopeNeedsRedisError } from '../errors/duty.errors';
 import { WorkerNameConflictError } from '../errors/worker.errors';
 import { FrontMcpConfig } from '../front-mcp/front-mcp.tokens';
+import type { BackgroundLifecycle } from '../provider/provider.lifecycle';
 import type ProviderRegistry from '../provider/provider.registry';
 import { WorkerSupervisor, type WorkerStatus } from './worker.supervisor';
 
@@ -79,8 +80,10 @@ export function workerHealth(status: WorkerStatus, leaseStoreFailure?: string): 
 }
 
 /** Runs a `@Worker` instance's own lifecycle hooks, and starts and stops its supervised run around them. */
-export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
+export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown, BackgroundLifecycle {
   private started?: Promise<StartedWorker | undefined>;
+  /** Whether `stopBackground()` stopped the run, so `resumeBackground()` starts it again. */
+  private resumable = false;
   private claimedKey?: string;
 
   /** Takes the worker instance, its resolved metadata and the providers it was built with. */
@@ -103,12 +106,34 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown {
     await this.started;
   }
 
+  /** Stop the run and release its lease and claim, without the worker's own hooks. */
+  async stopBackground(): Promise<void> {
+    if (this.started) this.resumable = true;
+    await this.stopStarted();
+  }
+
+  /** Start again the run `stopBackground()` stopped. */
+  async resumeBackground(): Promise<void> {
+    if (!this.resumable) return;
+    this.resumable = false;
+    this.started = this.start();
+    await this.started;
+  }
+
   /** Stop the run and release its lease and claim, then run the worker's own `onShutdown()`. */
   async onShutdown(): Promise<void> {
-    const started = await this.started?.catch(() => undefined);
+    this.resumable = false;
+    await this.stopStarted();
+    await this.worker.onShutdown?.();
+  }
+
+  /** Stop what the last start started, once, and give back the claim. */
+  private async stopStarted(): Promise<void> {
+    const starting = this.started;
+    this.started = undefined;
+    const started = await starting?.catch(() => undefined);
     if (started) await this.stop(started);
     this.releaseClaim();
-    await this.worker.onShutdown?.();
   }
 
   /** Fail the startup of a cluster worker where workers start without a Redis to keep its lease in. */

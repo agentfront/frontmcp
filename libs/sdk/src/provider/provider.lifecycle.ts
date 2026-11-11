@@ -14,6 +14,14 @@ export interface LifecycleEntry {
   instance: LifecycleHooks;
 }
 
+/** A `@Duty` or `@Worker` provider's background work, which stops and starts again without the provider's own hooks. */
+export interface BackgroundLifecycle {
+  /** Stop the work and release its lease, without `onShutdown()`; it stays stopped until `resumeBackground()`. */
+  stopBackground(): Promise<void>;
+  /** Start again the work `stopBackground()` stopped; do nothing otherwise. */
+  resumeBackground(): Promise<void>;
+}
+
 /** An instance the registries of one tree share: how many hold it, and its single `onBootstrap()` run. */
 export interface SharedLifecycle {
   holders: number;
@@ -37,14 +45,18 @@ export async function bootstrapProvider({ token, instance }: LifecycleEntry): Pr
   }
 }
 
-export async function readyProviders(entries: readonly LifecycleEntry[], logger: LifecycleLogger): Promise<void> {
+/** Run each entry's `onReady()` in order, logging the ones that throw; resolves to what they threw. */
+export async function readyProviders(entries: readonly LifecycleEntry[], logger: LifecycleLogger): Promise<unknown[]> {
+  const failures: unknown[] = [];
   for (const { token, instance } of entries) {
     try {
       await instance.onReady?.();
     } catch (error) {
       logger.error(`Provider "${tokenName(token)}" failed in onReady(): ${messageOf(error)}`);
+      failures.push(error);
     }
   }
+  return failures;
 }
 
 export async function shutdownProviders(
@@ -81,6 +93,7 @@ export async function outlasts(run: () => unknown, timeoutMs: number): Promise<b
   }
 }
 
-function messageOf(error: unknown): string {
+/** The message of a thrown value. */
+export function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
