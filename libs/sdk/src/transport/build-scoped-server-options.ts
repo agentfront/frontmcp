@@ -57,6 +57,7 @@ export function buildScopedServerOptions(scope: Scope, instructions = ''): Scope
   const promptsCapabilities = scope.prompts.getCapabilities();
   const agentsCapabilities = scope.agents.getCapabilities();
   const channelCapabilities = scope.channels?.getCapabilities() ?? {};
+  const eventCapabilities = scope.events?.getCapabilities() ?? {};
   const taskCapabilities = computeTaskCapabilities(scope);
 
   const fragments: Array<Record<string, unknown>> = [
@@ -66,6 +67,7 @@ export function buildScopedServerOptions(scope: Scope, instructions = ''): Scope
     promptsCapabilities,
     agentsCapabilities,
     channelCapabilities,
+    eventCapabilities,
     skillsCapabilities,
     completionsCapability,
     taskCapabilities,
@@ -88,6 +90,7 @@ export function buildScopedServerOptions(scope: Scope, instructions = ''): Scope
     ...resourcesCapabilities,
     ...promptsCapabilities,
     ...agentsCapabilities,
+    ...eventCapabilities,
     ...completionsCapability,
     ...taskCapabilities,
     logging: {},

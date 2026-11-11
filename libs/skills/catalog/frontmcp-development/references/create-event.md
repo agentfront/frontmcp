@@ -10,7 +10,7 @@ added. A client lists the server's event types with `events/list`, subscribes to
 occurrences when no user is connected. This is MCP Events, the `io.modelcontextprotocol/events` extension (SEP-3415),
 which ChatGPT reads from the top-level `events` capability.
 
-This reference covers declaring events. A client can list an event and subscribe to it once the server performs a
+This reference covers declaring events and what `events/list` answers. An event is listed once the server performs a
 delivery mode the event allows (see [Delivery Modes](#delivery-modes)).
 
 ## When to Use This Skill
@@ -75,6 +75,41 @@ class OrdersApp {}
 Declaring an event turns events on. Each event runs with the providers of the app that declares it (`this.get()`), as
 that app's tools do. An app that declares events cannot be a lazy app.
 
+### Step 4: Check what clients see
+
+`events/list` answers one definition per event:
+
+```json
+{
+  "events": [
+    {
+      "name": "order.created",
+      "description": "Fires when an order is placed",
+      "delivery": ["webhook"],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": { "status": { "type": "string", "description": "Only orders in this status" } }
+      },
+      "payloadSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "orderId": { "type": "string" },
+          "status": { "type": "string" },
+          "total": { "type": "number" }
+        },
+        "required": ["orderId", "status", "total"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
+```
+
+A schema converted from Zod names its JSON Schema dialect in `$schema`. The input schema of an event that declares no
+`inputSchema` is written by hand and has no `$schema` (see Schemas).
+
 ## `@Event` Options
 
 | Field                | Type                            | Default                        | Notes                                                                                   |
@@ -128,16 +163,65 @@ event is offered in the modes the server performs, within the event's own `deliv
 | `webhook`         | `['poll']`         | Not served: no mode is left    |
 | None              | Any                | No event is served (see below) |
 
-A server that performs no delivery mode serves no events. Declared events are still registered and checked at
-startup. Subscriptions and delivery, which turn the modes on, are the other parts of this version.
+A server that performs no delivery mode serves no events: it does not advertise the capability, and `events/list`
+answers `-32601` (Method not found), as on a server without events. Declared events are still registered and checked
+at startup. Subscriptions and delivery, which turn the modes on, are the other parts of this version.
 
-## Authorities and Availability
+## Who Sees an Event
 
-- **`authorities`**: who may list the event and subscribe to it. The server refuses to start when an event declares
-  `authorities` and `@FrontMcp({ authorities })` is not set, or when a rule checks nothing:
-  `Authorities configuration required: Event "payroll.run" declare 'authorities' metadata ...`.
+`events/list` answers per caller:
+
+- **`authorities`**: an event the caller's roles, permissions or policy do not allow is left out, as a guarded tool is
+  left out of `tools/list`. An event whose policy throws is left out, and the others are still listed. The server
+  refuses to start when an event declares `authorities` and `@FrontMcp({ authorities })` is not set, or when a rule
+  checks nothing: `Authorities configuration required: Event "payroll.run" declare 'authorities' metadata ...`.
+- **`hideFromDiscovery: true`**: the event is never listed.
 - **`availableWhen`**: an event the process excludes (`runtime`, `platform`, `deployment`, `env`) is not registered at
-  all, so another event may use its name there.
+  all, so another event may use its name there. `surface` is checked per request: `surface: ['agent']` hides the event
+  from MCP clients.
+
+## `events/list`
+
+- Events are ordered by name.
+- Answers come in pages of 40. A page that is not the last has a `nextCursor`, which the client sends back as `cursor`.
+  A `cursor` of `null`, or none, asks for the first page. A cursor is base64-encoded JSON with an `offset`: one that
+  does not decode, whose offset is not a non-negative integer, or whose offset is past the end of the caller's list is
+  refused as invalid input. The server does not check that it issued the cursor.
+- Under protocol 2026-07-28 the result has `resultType: "complete"`. It carries no cache hints.
+- The request runs the hookable `events:list` flow, with the stages `parseInput`, `findEvents`,
+  `filterByAvailability`, `filterByAuthorities`, `filterByDiscovery` and `parseEvents`. Hook it with `ListEventsHook`:
+
+```typescript
+import { ListEventsHook, Plugin, type FlowCtxOf } from '@frontmcp/sdk';
+
+@Plugin({ name: 'beta-events' })
+class BetaEventsPlugin {
+  @ListEventsHook.Did('findEvents')
+  hideBetaEvents(ctx: FlowCtxOf<'events:list'>) {
+    const stable = ctx.state.required.events.filter(({ event }) => !event.getTags().includes('beta'));
+    ctx.state.set('events', stable);
+  }
+}
+```
+
+With `@frontmcp/observability`, each `events/list` request is traced as an `events/list` span.
+
+## Capabilities
+
+A server that serves events advertises them in two places, on every transport (`initialize` over HTTP, SSE and stdio,
+and `server/discover` under 2026-07-28):
+
+```json
+{
+  "capabilities": {
+    "events": {},
+    "extensions": { "io.modelcontextprotocol/events": {} }
+  }
+}
+```
+
+`extensions` is where SEP-3415 puts it. The top-level `events` key is where the design sketch before it put it, and
+where ChatGPT looks.
 
 ## Server Options
 
@@ -220,19 +304,25 @@ functions) to get the same `this`.
 ### Runtime
 
 - [ ] The server starts: no `EventNameConflictError`, no `Authorities configuration required`
-- [ ] `scope.events.findByName(name)` returns the event, with the JSON Schemas you expect
+- [ ] `initialize` (or `server/discover`) shows `capabilities.events` and the `io.modelcontextprotocol/events` extension
+- [ ] `events/list` shows the event with the expected `delivery`, `inputSchema` and `payloadSchema`
+- [ ] A caller without the event's `authorities` does not see it
 
 ## Troubleshooting
 
-| Problem                                           | Cause                                                        | Solution                                                               |
-| ------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| `events items must be annotated with @Event()`    | Something else is in `events`                                | List `@Event` classes and what `event()` returns                       |
-| `EventNameConflictError`                          | Two events with one name                                     | Rename one, or give the variants `availableWhen`                       |
-| `Authorities configuration required: Event "..."` | The event declares `authorities` the server does not enforce | Add `@FrontMcp({ authorities })`, or remove the event's `authorities`  |
-| A type error on the class under `@Event`          | `EventContext<Args, Payload>` differs from the schemas       | Declare the types the schemas describe, or extend plain `EventContext` |
-| The app cannot be lazy: `it declares events`      | Events are registered at startup                             | Import the app normally                                                |
+| Problem                                           | Cause                                                              | Solution                                                                   |
+| ------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `events/list` answers `-32601`                    | The server performs no delivery mode, or declares no event         | Enable a delivery mode; list the event in an app's `events`                |
+| The capability is missing from `initialize`       | Same as above                                                      | Same as above                                                              |
+| An event is missing from `events/list`            | `hideFromDiscovery`, `authorities`, `availableWhen`, or `delivery` | Check each: the event's `delivery` must include a mode the server performs |
+| `events items must be annotated with @Event()`    | Something else is in `events`                                      | List `@Event` classes and what `event()` returns                           |
+| `EventNameConflictError`                          | Two events with one name                                           | Rename one, or give the variants `availableWhen`                           |
+| `Authorities configuration required: Event "..."` | The event declares `authorities` the server does not enforce       | Add `@FrontMcp({ authorities })`, or remove the event's `authorities`      |
+| A type error on the class under `@Event`          | `EventContext<Args, Payload>` differs from the schemas             | Declare the types the schemas describe, or extend plain `EventContext`     |
+| The app cannot be lazy: `it declares events`      | Events are registered at startup                                   | Import the app normally                                                    |
 
 ## Reference
 
 - [MCP Events, SEP-3415](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415)
-- Related skills: `decorators-guide`, `frontmcp-authorities`, `frontmcp-channels`, `create-job`, `create-duty`
+- Related skills: `decorators-guide`, `create-plugin-hooks` (`ListEventsHook`), `frontmcp-authorities`,
+  `frontmcp-channels`, `create-job`, `create-duty`

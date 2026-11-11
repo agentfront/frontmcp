@@ -5,6 +5,7 @@ import { eventsConfigSchema, type EventsConfigOptions } from '../common/metadata
 import { assertEntryAuthorities, type EntryAuthorities } from '../front-mcp/authorities-rules.check';
 import type ProviderRegistry from '../provider/provider.registry';
 import EventRegistry from './event.registry';
+import ListEventsFlow from './flows/list-events.flow';
 
 export interface RegisterEventCapabilitiesArgs {
   providers: ProviderRegistry;
@@ -38,7 +39,7 @@ function assertEventAuthorities(scope: ScopeEntry, events: readonly EventEntry[]
   assertEntryAuthorities(scope.authoritiesEngine, scope.authoritiesContextBuilder, guarded);
 }
 
-/** Register the scope's events. Resolves to `undefined` with `events.enabled: false`. */
+/** Register the scope's events and the `events:list` flow. Resolves to `undefined` with `events.enabled: false`. */
 export async function registerEventCapabilities(
   args: RegisterEventCapabilitiesArgs,
 ): Promise<EventCapabilitiesResult | undefined> {
@@ -57,6 +58,8 @@ export async function registerEventCapabilities(
   const eventRegistry = new EventRegistry(providers, eventsList, owner, eventsConfig, eventProviders);
   await eventRegistry.ready;
   assertEventAuthorities(scope, eventRegistry.getEvents());
+
+  await scope.registryFlows(ListEventsFlow);
 
   logger.info(`Event system initialized: ${eventRegistry.getEvents().length} event(s)`);
   return { eventRegistry };

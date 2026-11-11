@@ -223,6 +223,7 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       this.scope.prompts.getCapabilities(),
       this.scope.agents.getCapabilities(), // Include agent capabilities (agents as tools)
       channelCapabilities, // Channel capabilities (claude/channel extension)
+      this.scope.events?.getCapabilities() ?? {}, // MCP Events: top-level `events` and the SEP-3415 extension
       skillsCapabilities, // SEP-2640 extension declaration
       completionsCapability,
       computeTaskCapabilities(this.scope),

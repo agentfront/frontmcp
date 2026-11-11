@@ -589,6 +589,10 @@ export const JobHook = /* @__PURE__ */ FlowHooksOf('jobs:execute-job');
 export const ChannelSendHook = /* @__PURE__ */ FlowHooksOf('channels:send-notification');
 export const ChannelListHook = /* @__PURE__ */ FlowHooksOf('channels:list');
 
+// Event hooks
+export const ListEventsHook = /* @__PURE__ */ FlowHooksOf('events:list');
+export type { default as ListEventsFlow } from './event/flows/list-events.flow';
+
 // Built-in flows no other export reaches. Exporting them puts their `ExtendFlows` entries in the published type graph,
 // so `FlowHooksOf()`, `FlowCtxOf` and `@Flow` accept every flow name FrontMCP runs.
 export type { default as AuthVerifyFlow } from './auth/flows/auth.verify.flow';

@@ -117,6 +117,9 @@ describe('ObservabilityPlugin', () => {
     it('_listTemplatesDone', () => plugin._listTemplatesDone(emptyCtx));
     it('_listPromptsWill', () => plugin._listPromptsWill(emptyCtx));
     it('_listPromptsDone', () => plugin._listPromptsDone(emptyCtx));
+    it('_listEventsWill', () => plugin._listEventsWill(emptyCtx));
+    it('_listEventsDidFilter', () => plugin._listEventsDidFilter(emptyCtx));
+    it('_listEventsDone', () => plugin._listEventsDone(emptyCtx));
 
     // Skills hooks
     it('_skillSearchWill', () => plugin._skillSearchWill(emptyCtx));
@@ -272,6 +275,9 @@ describe('ObservabilityPlugin', () => {
       plugin._listTemplatesDone(noop);
       plugin._listPromptsWill(noop);
       plugin._listPromptsDone(noop);
+      plugin._listEventsWill(noop);
+      plugin._listEventsDidFilter(noop);
+      plugin._listEventsDone(noop);
 
       // Skills
       plugin._skillSearchWill(noop);

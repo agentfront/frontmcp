@@ -358,6 +358,7 @@ describe('Integration: Generic flows (skills, lists, OAuth, elicitation)', () =>
     'tools/list',
     'resources/list',
     'prompts/list',
+    'events/list',
     'skills/search',
     'skills/load',
     'oauth/token',

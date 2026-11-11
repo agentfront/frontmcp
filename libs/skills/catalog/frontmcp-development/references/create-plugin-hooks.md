@@ -274,6 +274,7 @@ These are the flow names with pre-built hook decorator exports in `@frontmcp/sdk
 | `jobs:execute-job`                  | One attempt of a job      | `JobHook`                   |
 | `channels:send-notification`        | Channel notification send | `ChannelSendHook`           |
 | `channels:list`                     | Channel listing           | `ChannelListHook`           |
+| `events:list`                       | Event listing             | `ListEventsHook`            |
 
 Every other built-in flow is hooked with `FlowHooksOf('<name>')`, and its name typechecks: `session:verify`, `auth:verify`, `handle:mcp-202607280728`, `handle:streamable-http`, `handle:legacy-sse`, `handle:stateless-http`, `http:ip-filter`, `elicitation:request`, `elicitation:result`, `logging:set-level`, `resources:subscribe`, `resources:unsubscribe`, `skills:search`, `skills:load`, `skills:filter`, `well-known.jwks`, `well-known.oauth-protected-resource`, `well-known.oauth-authorization-server` and the `oauth:*` flows. `logging/setLevel`, `resources/subscribe`, `resources/unsubscribe`, `skills/search` and `skills/load` requests run their flows, so hooks on them fire (up to 1.9.2 those requests skipped them, and several of these names were missing from the published `ExtendFlows`, so `FlowHooksOf()` rejected them).
 
@@ -406,6 +407,7 @@ import {
   CompletionHook, // FlowHooksOf('completion:complete')
   HttpHook, // FlowHooksOf('http:request')
   JobHook, // FlowHooksOf('jobs:execute-job')
+  ListEventsHook, // FlowHooksOf('events:list')
   ListPromptsHook, // FlowHooksOf('prompts:list-prompts')
   ListResourcesHook, // FlowHooksOf('resources:list-resources')
   ListResourceTemplatesHook, // FlowHooksOf('resources:list-resource-templates')
