@@ -66,6 +66,11 @@ export class EventBuffer {
     return this.cursorAt(this.sequence);
   }
 
+  /** The sequence of the last occurrence appended, of any event; 0 before the first. */
+  currentSequence(): number {
+    return this.sequence;
+  }
+
   /** The cursor of a position: a read from it gives the occurrences after that position. */
   cursorAt(sequence: number): string {
     return `${this.bootId}${CURSOR_SEPARATOR}${sequence}`;

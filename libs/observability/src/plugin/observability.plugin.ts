@@ -7,6 +7,7 @@ import {
   EventPollHook,
   EventPublishHook,
   EventPublishHttpHook,
+  EventStreamHook,
   EventSubscribeHook,
   EventUnsubscribeHook,
   FlowHooksOf,
@@ -693,6 +694,21 @@ export default class ObservabilityPlugin extends DynamicPlugin<
 
   @EventPollHook.Finally('finalize', { priority: 1000 })
   _eventPollDone(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
+  }
+
+  @EventStreamHook.Will('parseInput', { priority: -1000 })
+  _eventStreamWill(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowWillStart('events/stream', this.tracingOpts, ctx);
+  }
+
+  @EventStreamHook.Did('openStream', { priority: 1000 })
+  _eventStreamDidOpen(ctx: unknown): void {
+    if (this.tracingEnabled) onGenericFlowStage('openStream', ctx);
+  }
+
+  @EventStreamHook.Finally('finalize', { priority: 1000 })
+  _eventStreamDone(ctx: unknown): void {
     if (this.tracingEnabled) onGenericFlowDidFinalize(ctx);
   }
 

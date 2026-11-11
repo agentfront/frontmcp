@@ -172,7 +172,8 @@ describe('events configuration', () => {
   const publishEndpoint = { enabled: false, path: '/events/publish' };
   const buffer = { maxAgeMs: 600_000, maxEvents: 10_000 };
   const poll = { enabled: true, nextPollMs: 30_000, maxEvents: 100 };
-  const defaults = { compat: 'auto', subscriptions, webhook, publishEndpoint, buffer, poll };
+  const push = { enabled: true, heartbeatMs: 25_000 };
+  const defaults = { compat: 'auto', subscriptions, webhook, publishEndpoint, buffer, poll, push };
 
   it('defaults compat to auto, and the subscription and webhook settings', () => {
     expect(eventsConfigSchema.parse({})).toEqual(defaults);
@@ -284,6 +285,18 @@ describe('events configuration', () => {
 
       expect(parsed.buffer).toEqual({ maxAgeMs: 600_000, maxEvents: 500 });
       expect(parsed.poll).toEqual({ enabled: false, nextPollMs: 5000, maxEvents: 100 });
+    });
+
+    it('keeps the push settings a server sets, and refuses a heartbeat that is not a positive integer', () => {
+      expect(eventsConfigSchema.parse({ push: { heartbeatMs: 5000 } }).push).toEqual({
+        enabled: true,
+        heartbeatMs: 5000,
+      });
+      expect(eventsConfigSchema.parse({ push: { enabled: false } }).push).toEqual({
+        enabled: false,
+        heartbeatMs: 25_000,
+      });
+      expect(eventsConfigSchema.safeParse({ push: { heartbeatMs: 0 } }).success).toBe(false);
     });
 
     it('refuses sizes and intervals that are not positive integers', () => {

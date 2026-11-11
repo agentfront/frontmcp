@@ -1,6 +1,6 @@
 import { isPublicMode } from '@frontmcp/auth';
 import { type Token } from '@frontmcp/di';
-import { sha256Hex } from '@frontmcp/utils';
+import { getRuntimeContext, sha256Hex, type NamespacedStorage } from '@frontmcp/utils';
 
 import {
   ProviderScope,
@@ -22,12 +22,14 @@ import EventRegistry from './event.registry';
 import EventDeliverFlow from './flows/event-deliver.flow';
 import EventPollFlow from './flows/event-poll.flow';
 import EventPublishFlow from './flows/event-publish.flow';
+import EventStreamFlow from './flows/event-stream.flow';
 import EventSubscribeFlow from './flows/event-subscribe.flow';
 import EventUnsubscribeFlow from './flows/event-unsubscribe.flow';
 import ListEventsFlow from './flows/list-events.flow';
 import { EventBuffer } from './poll/event-buffer';
 import { EventPollLeases } from './poll/event-poll-leases';
 import { enablePublishEndpoint } from './publish-endpoint/event-publish-endpoint';
+import { EventStreams } from './stream/event-streams';
 import { EventCallbackVerifier } from './subscription/event-callback-verifier';
 import { createEventSubscriptionStore } from './subscription/event-subscription-store.factory';
 import { EventSubscriptions } from './subscription/event-subscriptions';
@@ -92,7 +94,7 @@ async function enableWebhookDelivery(
   eventRegistry: EventRegistry,
   eventsConfig: EventsConfig,
   logger: FrontMcpLogger,
-): Promise<void> {
+): Promise<NamespacedStorage> {
   const { webhook, store: storeConfig } = eventsConfig;
   const { store, durable, storage, secret } = await createEventSubscriptionStore({
     redis: storeConfig?.redis,
@@ -143,6 +145,7 @@ async function enableWebhookDelivery(
   }
   eventRegistry.enableDeliveryMode('webhook');
   await scope.registryFlows(EventSubscribeFlow, EventUnsubscribeFlow);
+  return storage;
 }
 
 /** Keep published occurrences for `events/poll`, start the poll leases and serve the method. */
@@ -153,12 +156,45 @@ async function enablePollDelivery(
   logger: FrontMcpLogger,
 ): Promise<void> {
   const pollLeases = new EventPollLeases({ maxPerPrincipal: eventsConfig.subscriptions.maxPerPrincipal, logger });
-  eventRegistry.buffer = new EventBuffer(eventsConfig.buffer);
   eventRegistry.pollLeases = pollLeases;
   pollLeases.start();
   scope.onDispose(() => pollLeases.stop());
   eventRegistry.enableDeliveryMode('poll');
   await scope.registryFlows(EventPollFlow);
+}
+
+/** Whether this process lives long enough to hold a stream open: a serverless function does not. */
+function canHoldStreams(): boolean {
+  return getRuntimeContext().deployment !== 'serverless';
+}
+
+/** Keep the open `events/stream` requests, relay occurrences between processes when the storage can, and serve the method. */
+async function enableStreamDelivery(
+  scope: ScopeEntry,
+  eventRegistry: EventRegistry,
+  buffer: EventBuffer,
+  eventsConfig: EventsConfig,
+  storage: NamespacedStorage | undefined,
+  logger: FrontMcpLogger,
+): Promise<void> {
+  const streams = new EventStreams({
+    buffer,
+    maxPerPrincipal: eventsConfig.subscriptions.maxPerPrincipal,
+    // Only redis carries pub/sub between processes; a memory or SQLite store's reaches this process alone
+    storage: eventsConfig.store?.redis ? storage : undefined,
+    logger,
+  });
+  eventRegistry.streams = streams;
+  await streams.start();
+  scope.onDispose(() => streams.stop());
+  if (!streams.isRelayed) {
+    logger.info(
+      'Event streams carry what this process publishes. With several processes, set events.store.redis so an event ' +
+        'published on one reaches the streams the others hold.',
+    );
+  }
+  eventRegistry.enableDeliveryMode('push');
+  await scope.registryFlows(EventStreamFlow);
 }
 
 /** Register the scope's events and their flows. Resolves to `undefined` with `events.enabled: false`. */
@@ -197,15 +233,20 @@ export async function registerEventCapabilities(
 
   await scope.registryFlows(ListEventsFlow, EventPublishFlow);
 
+  let storage: NamespacedStorage | undefined;
   if (eventsConfig.webhook.enabled && canIdentifyCallers(scope)) {
-    await enableWebhookDelivery(scope, eventRegistry, eventsConfig, logger);
+    storage = await enableWebhookDelivery(scope, eventRegistry, eventsConfig, logger);
   } else if (eventsConfig.webhook.enabled) {
     logger.warn(
       'Webhook event delivery is off: the server runs in public auth mode, so a subscription would have no owner. ' +
         'Configure an auth mode that signs callers in to deliver events by webhook.',
     );
   }
+  const pushes = eventsConfig.push.enabled && canHoldStreams();
+  const buffer = eventsConfig.poll.enabled || pushes ? new EventBuffer(eventsConfig.buffer) : undefined;
+  eventRegistry.buffer = buffer;
   if (eventsConfig.poll.enabled) await enablePollDelivery(scope, eventRegistry, eventsConfig, logger);
+  if (buffer && pushes) await enableStreamDelivery(scope, eventRegistry, buffer, eventsConfig, storage, logger);
 
   if (eventsConfig.publishEndpoint.enabled) {
     await enablePublishEndpoint({

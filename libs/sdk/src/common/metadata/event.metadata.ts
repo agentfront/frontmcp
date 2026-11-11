@@ -199,6 +199,13 @@ export interface EventsPollOptions {
   maxEvents?: number;
 }
 
+export interface EventsPushOptions {
+  /** `false` turns `events/stream` off. @default true */
+  enabled?: boolean;
+  /** How often an open stream sends a heartbeat with its cursor. @default 25_000 */
+  heartbeatMs?: number;
+}
+
 /** Server-level events configuration (`@FrontMcp({ events })`). */
 export interface EventsConfigOptions {
   /** `false` turns events off although apps declare them. They are on whenever an app declares one. */
@@ -211,6 +218,7 @@ export interface EventsConfigOptions {
   publishEndpoint?: EventsPublishEndpointOptions;
   buffer?: EventsBufferOptions;
   poll?: EventsPollOptions;
+  push?: EventsPushOptions;
 }
 
 const positiveIntegerSchema = z.number().int().positive();
@@ -310,6 +318,11 @@ const eventsPollSchema = z.object({
   maxEvents: positiveIntegerSchema.optional().default(100),
 } satisfies RawZodShape<EventsPollOptions>);
 
+const eventsPushSchema = z.object({
+  enabled: z.boolean().optional().default(true),
+  heartbeatMs: positiveIntegerSchema.optional().default(25_000),
+} satisfies RawZodShape<EventsPushOptions>);
+
 export const eventsConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -324,6 +337,7 @@ export const eventsConfigSchema = z
       .transform((publishEndpoint) => publishEndpoint ?? eventsPublishEndpointSchema.parse({})),
     buffer: eventsBufferSchema.optional().transform((buffer) => buffer ?? eventsBufferSchema.parse({})),
     poll: eventsPollSchema.optional().transform((poll) => poll ?? eventsPollSchema.parse({})),
+    push: eventsPushSchema.optional().transform((push) => push ?? eventsPushSchema.parse({})),
   } satisfies RawZodShape<EventsConfigOptions>)
   .refine((config) => !config.subscriptions.allowNoExpiry || Boolean(config.store?.redis ?? config.store?.sqlite), {
     message: 'events.subscriptions.allowNoExpiry needs events.store.redis or events.store.sqlite',

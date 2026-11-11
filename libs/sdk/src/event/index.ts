@@ -71,6 +71,10 @@ export {
   pollLeaseMs,
 } from './poll/event-poll-leases';
 export type { EventPollLeasesOptions, PollLeaseRequest } from './poll/event-poll-leases';
+export { EventStream, MAX_QUEUED_NOTIFICATIONS } from './stream/event-stream';
+export type { EventStreamNotification, EventStreamOptions } from './stream/event-stream';
+export { EVENT_RELAY_CHANNEL, EventStreams, MAX_OPEN_STREAMS } from './stream/event-streams';
+export type { EventStreamsOptions } from './stream/event-streams';
 export { SUSPEND_AFTER_FAILURES } from './flows/event-deliver.flow';
 export { EVENT_DELIVERY_MAX_BYTES, isInAudience } from './flows/event-publish.flow';
 export type { EventDeliveryPlan } from './flows/event-publish.flow';

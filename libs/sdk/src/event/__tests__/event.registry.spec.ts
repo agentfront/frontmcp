@@ -39,6 +39,7 @@ const configDefaults = {
   publishEndpoint: { enabled: false, path: '/events/publish' },
   buffer: { maxAgeMs: 600_000, maxEvents: 10_000 },
   poll: { enabled: false, nextPollMs: 30_000, maxEvents: 100 },
+  push: { enabled: false, heartbeatMs: 25_000 },
 };
 
 @Provider({ name: 'order-book' })
@@ -66,7 +67,7 @@ async function startScope(config: Partial<FrontMcpConfigInput>): Promise<Scope> 
     info: { name: 'event-registry', version: '1.0.0' },
     apps: [],
     ...config,
-    events: { poll: { enabled: false }, ...config.events },
+    events: { poll: { enabled: false }, push: { enabled: false }, ...config.events },
   });
   return instance.getScopes()[0] as Scope;
 }

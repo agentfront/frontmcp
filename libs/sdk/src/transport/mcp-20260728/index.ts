@@ -16,6 +16,7 @@ export * from './result-decorator';
 export * from './discover';
 export * from './mrtr';
 export * from './subscriptions';
+export * from './event-stream-response';
 export * from './tasks-extension';
 export * from './dispatcher';
 export * from './client';

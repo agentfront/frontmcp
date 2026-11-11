@@ -137,6 +137,9 @@ describe('ObservabilityPlugin', () => {
     it('_eventPollWill', () => plugin._eventPollWill(emptyCtx));
     it('_eventPollDidRead', () => plugin._eventPollDidRead(emptyCtx));
     it('_eventPollDone', () => plugin._eventPollDone(emptyCtx));
+    it('_eventStreamWill', () => plugin._eventStreamWill(emptyCtx));
+    it('_eventStreamDidOpen', () => plugin._eventStreamDidOpen(emptyCtx));
+    it('_eventStreamDone', () => plugin._eventStreamDone(emptyCtx));
 
     // Skills hooks
     it('_skillSearchWill', () => plugin._skillSearchWill(emptyCtx));
@@ -312,6 +315,9 @@ describe('ObservabilityPlugin', () => {
       plugin._eventPollWill(noop);
       plugin._eventPollDidRead(noop);
       plugin._eventPollDone(noop);
+      plugin._eventStreamWill(noop);
+      plugin._eventStreamDidOpen(noop);
+      plugin._eventStreamDone(noop);
 
       // Skills
       plugin._skillSearchWill(noop);

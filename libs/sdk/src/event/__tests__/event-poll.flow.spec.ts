@@ -600,8 +600,19 @@ describe('events:poll', () => {
   });
 
   describe('with events.poll.enabled: false', () => {
-    it('performs no poll mode and keeps no buffer', async () => {
-      const disabled = await startScope({ events: { poll: { enabled: false } } }, [orderShipped]);
+    it('keeps the buffer for the streams of the push mode', async () => {
+      const pushOnly = await startScope({ events: { poll: { enabled: false } } }, [orderShipped]);
+
+      expect(pushOnly.events?.performs('poll')).toBe(false);
+      expect(pushOnly.events?.performs('push')).toBe(true);
+      expect(pushOnly.events?.buffer).toBeDefined();
+      await pushOnly.dispose();
+    });
+
+    it('performs no poll mode and, without the push mode, keeps no buffer', async () => {
+      const disabled = await startScope({ events: { poll: { enabled: false }, push: { enabled: false } } }, [
+        orderShipped,
+      ]);
 
       expect(disabled.events?.performs('poll')).toBe(false);
       expect(disabled.events?.buffer).toBeUndefined();

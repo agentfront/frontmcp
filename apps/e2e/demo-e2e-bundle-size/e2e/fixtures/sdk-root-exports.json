@@ -151,6 +151,7 @@
   "EventPublishHttpHook": "object",
   "EventRegistry": "class",
   "EventResourceExhaustedError": "class",
+  "EventStreamHook": "object",
   "EventSubscribeHook": "object",
   "EventSubscriptionStoreError": "class",
   "EventUnsubscribeHook": "object",

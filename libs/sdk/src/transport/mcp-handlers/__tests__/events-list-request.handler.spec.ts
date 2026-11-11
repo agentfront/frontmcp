@@ -34,7 +34,7 @@ class ShopApp {}
 const serverConfig = {
   info: { name: 'events-list-handler', version: '1.0.0' },
   apps: [ShopApp],
-  events: { poll: { enabled: false } },
+  events: { poll: { enabled: false }, push: { enabled: false } },
 };
 
 type JsonRpcReply = {

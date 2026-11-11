@@ -62,7 +62,7 @@ const serverConfig = {
   info: { name: 'events-capability-parity', version: '1.0.0' },
   apps: [ShopApp],
   logging: { level: LogLevel.Off, enableConsole: false },
-  events: { poll: { enabled: false } },
+  events: { poll: { enabled: false }, push: { enabled: false } },
 };
 
 function lastRecordedCapabilities(): Capabilities {
