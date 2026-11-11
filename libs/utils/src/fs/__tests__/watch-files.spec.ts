@@ -305,7 +305,7 @@ describe('watchFiles', () => {
       const controller = new AbortController();
       const iterator = watchFiles(root, { debounceMs: DEBOUNCE_MS, signal: controller.signal });
       const first = iterator.next();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await untilTrue(() => watchers.opened() === 1);
       await fs.promises.writeFile(path.join(root, 'busy.txt'), 'x');
       expect((await first).value).toEqual({ type: 'add', path: path.join(root, 'busy.txt') });
 
