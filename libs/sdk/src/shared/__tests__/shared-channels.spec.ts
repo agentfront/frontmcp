@@ -323,6 +323,26 @@ posixOnly('channels in a shared session', () => {
     QUIET_MOVE_TIMEOUT_MS,
   );
 
+  it(
+    'stops reading the record of its key, and says so once, when another user could read it',
+    async () => {
+      const first = await serve('unix', configOf('first'));
+      await attachedAndTold('unix');
+      const record = await recordOfKey();
+
+      await stoppedUnderSession(first);
+      await writeServerRecord(sharedServerFiles('spec'), { ...record, pid: record.pid + 1 });
+      fs.chmodSync(sharedServerFiles('spec').recordFile, 0o644);
+      await new Promise((resolve) => setTimeout(resolve, TWO_RECORD_READS_MS));
+
+      expect(stderrLines().filter((line) => line.includes('no longer watching for the next shared server'))).toEqual([
+        expect.stringContaining('the group or others can read it'),
+      ]);
+      expect(stderrLines().filter((line) => line.includes(NEXT_SERVER))).toEqual([]);
+    },
+    QUIET_MOVE_TIMEOUT_MS,
+  );
+
   describe.each(['unix', 'http'] as const)('over %s', (transport) => {
     it('declines the 2026-07-28 probe, then sends a channel event to the client that declared no capability', async () => {
       await serve(transport, configOf('first'));
