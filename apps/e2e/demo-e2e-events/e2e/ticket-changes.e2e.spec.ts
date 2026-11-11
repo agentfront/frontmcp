@@ -74,4 +74,16 @@ describe('the ticket changes of the e2e app', () => {
 
     await expect(recordTicketChange({ ticketId: 't-2', queue: 'billing' })).resolves.toBe(2);
   });
+
+  it('answers a cursor it never gave with truncated and the current position', async () => {
+    await writeFile(ticketsFile, JSON.stringify([{ ticketId: 't-stored', queue: 'billing' }]));
+    const { ticketUpdated } = freshModule();
+    const check = ticketUpdated().check as NonNullable<ReturnType<typeof ticketUpdated>['check']>;
+
+    const unreadable = await check.call({} as never, {}, 'not-a-position', { maxEvents: 10 });
+    const ahead = await check.call({} as never, {}, '99', { maxEvents: 10 });
+
+    expect(unreadable).toMatchObject({ events: [], cursor: '1', truncated: true, hasMore: false });
+    expect(ahead).toMatchObject({ events: [], cursor: '1', truncated: true });
+  });
 });

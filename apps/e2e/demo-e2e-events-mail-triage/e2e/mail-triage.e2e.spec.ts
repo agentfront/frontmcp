@@ -84,7 +84,7 @@ describe('Mail triage example', () => {
 
   /** The deliveries of a subscription, once `count` arrived in all and a moment passed for any extra one. */
   async function deliveredTo(subscriptionId: unknown, count: number): Promise<ReceivedWebhook[]> {
-    await receiver.waitForDeliveries(count, 10_000).catch(() => undefined);
+    await receiver.waitForDeliveries(count, 10_000);
     await new Promise((resolve) => setTimeout(resolve, 300));
     return receiver.deliveries().filter((delivery) => delivery.subscriptionId === subscriptionId);
   }
@@ -100,6 +100,10 @@ describe('Mail triage example', () => {
       name: 'email.important',
       delivery: { url: receiver.url, secret },
     });
+    for (const subscribed of [aliceSubscription, bobSubscription]) {
+      expect(subscribed.error).toBeUndefined();
+      expect(subscribed.result?.['id']).toEqual(expect.any(String));
+    }
 
     const watched = await alice.tools.call('simulate_incoming_mail', {
       to: 'alice',
@@ -129,7 +133,11 @@ describe('Mail triage example', () => {
 
   it('stops watching a mailbox when its subscription ends', async () => {
     const carol = await connectAs('carol');
-    await rpc(carol, 'events/subscribe', { name: 'email.important', delivery: { url: receiver.url, secret } });
+    const subscribed = await rpc(carol, 'events/subscribe', {
+      name: 'email.important',
+      delivery: { url: receiver.url, secret },
+    });
+    expect(subscribed.error).toBeUndefined();
     const before = await carol.tools.call('simulate_incoming_mail', {
       to: 'carol',
       from: 'x@example.com',
@@ -149,5 +157,37 @@ describe('Mail triage example', () => {
 
     expect(before.json<{ watchers: number }>().watchers).toBe(1);
     expect(after.json<{ watchers: number }>().watchers).toBe(0);
+  });
+
+  it('watches a mailbox once for every subscription of its owner, until the last one ends', async () => {
+    const dave = await connectAs('dave');
+    const otherCallback = `${new URL(receiver.url).origin}/hooks/second`;
+    const first = await rpc(dave, 'events/subscribe', {
+      name: 'email.important',
+      delivery: { url: receiver.url, secret },
+    });
+    const second = await rpc(dave, 'events/subscribe', {
+      name: 'email.important',
+      delivery: { url: otherCallback, secret },
+    });
+    expect([first.error, second.error]).toEqual([undefined, undefined]);
+    receiver.clear();
+
+    const both = await dave.tools.call('simulate_incoming_mail', {
+      to: 'dave',
+      from: 'x@example.com',
+      subject: 'Urgent',
+    });
+    await receiver.waitForDeliveries(2, 10_000);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await rpc(dave, 'events/unsubscribe', { name: 'email.important', delivery: { url: receiver.url } });
+    const one = await dave.tools.call('simulate_incoming_mail', { to: 'dave', from: 'x@example.com', subject: 'Hi' });
+    await rpc(dave, 'events/unsubscribe', { name: 'email.important', delivery: { url: otherCallback } });
+    const none = await dave.tools.call('simulate_incoming_mail', { to: 'dave', from: 'x@example.com', subject: 'Hi' });
+
+    expect(both.json<{ watchers: number }>().watchers).toBe(1);
+    expect(receiver.deliveries()).toHaveLength(2);
+    expect(one.json<{ watchers: number }>().watchers).toBe(1);
+    expect(none.json<{ watchers: number }>().watchers).toBe(0);
   });
 });
