@@ -169,8 +169,8 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
 9. **Notifications.** After `initialize` the session opens its notification stream on the server (`GET` with the
    `mcp-session-id`) and writes every message on it to stdout: `list_changed`, log lines, resource updates, a Claude
    Code channel event. It sends its next request once the server answered the stream, or after 2 s. A stream that
-   drops is opened again (after 250 ms at first, up to 4 s later, given up after five opens in a row failed); a
-   session that moved to the next server opens a new one there. A session that gave its stream up reads the key's
+   drops is opened again (after 250 ms at first, up to 4 s later, given up after five opens in a row failed, or
+   once the server no longer knows the session); a session that moved to the next server opens a new one there. A session that gave its stream up reads the key's
    record every second, and moves to the server the record names once that is another process, of the session's
    transport and `info.name`: a newer server that replaced its own, for one. While it waits it starts no server,
    and runs none itself.

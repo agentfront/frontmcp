@@ -100,6 +100,31 @@ describe('the notification stream of the HTTP upstream', () => {
     expect(server.sent('POST')[1].headers['mcp-session-id']).toBe('session-1');
   });
 
+  it('holds the frame the client sends on getting the initialize result until the server answered the stream', async () => {
+    let answerStream: () => void = () => undefined;
+    const holdOpen = server.openStream;
+    server.openStream = (stream) => new Promise((resolve) => (answerStream = () => resolve(holdOpen(stream))));
+    let listed: Promise<void> | undefined;
+    const eager: HttpUpstreamClient = createHttpUpstream({
+      url: 'http://localhost/mcp',
+      fetch: server.fetch,
+      log,
+      onFrame: (frame) => {
+        if (frame.id === initialize.id) listed = eager.send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+      },
+    });
+
+    const initialized = eager.send(initialize);
+    await settle();
+    expect(listed).toBeDefined();
+    expect(server.postedFrames().map((frame) => frame.method)).toEqual(['initialize']);
+
+    answerStream();
+    await Promise.all([initialized, listed]);
+    expect(server.postedFrames().map((frame) => frame.method)).toEqual(['initialize', 'tools/list']);
+    await eager.close();
+  });
+
   it('sends the next request after 2 s when the server does not answer the stream', async () => {
     jest.useFakeTimers({ doNotFake: ['setImmediate'] });
     server.openStream = () => new Promise<Response>(() => undefined);
@@ -227,6 +252,23 @@ describe('the notification stream of the HTTP upstream', () => {
     expect(onStreamLost).toHaveBeenCalledTimes(1);
   });
 
+  it('gives the stream up, and says so once, when the server no longer knows a session it streamed to', async () => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    await upstream.send(initialize);
+    await settle();
+    server.openStream = () => new Response(null, { status: 404 });
+
+    server.streams[0].end();
+    await settle();
+    await jest.advanceTimersByTimeAsync(FIRST_REOPEN_DELAY_MS);
+    await settle();
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    expect(server.sent('GET')).toHaveLength(2);
+    expect(log.warn.mock.calls).toEqual([['notification-stream-lost', { status: 404 }]]);
+    expect(onStreamLost).toHaveBeenCalledTimes(1);
+  });
+
   it('reports a stream lost only once it gave it up, not at an open that failed before', async () => {
     jest.useFakeTimers({ doNotFake: ['setImmediate'] });
     server.openStream = () => new Response(null, { status: 503 });
@@ -283,12 +325,34 @@ describe('the notification stream of the HTTP upstream', () => {
     expect(frames).toContainEqual(channelEvent('the next session'));
   });
 
-  it('never opens a stream for a session that close() ended while initialize was answered', async () => {
-    const closing = createHttpUpstream({
+  it('keeps no stream for a session that close() ended while the initialize result was relayed', async () => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    const closing: HttpUpstreamClient = createHttpUpstream({
       url: 'http://localhost/mcp',
       fetch: server.fetch,
       log,
       onFrame: () => closing.close(),
+    });
+
+    await closing.send(initialize);
+    await settle();
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    expect(server.streams).toHaveLength(1);
+    expect(server.streams[0].signal?.aborted).toBe(true);
+  });
+
+  it('opens no stream for a session whose initialize close() interrupted', async () => {
+    const answerPost = server.fetch;
+    const closing: HttpUpstreamClient = createHttpUpstream({
+      url: 'http://localhost/mcp',
+      fetch: async (input, init) => {
+        const response = await answerPost(input, init);
+        await closing.close();
+        return response;
+      },
+      log,
+      onFrame: (frame) => void frames.push(frame),
     });
 
     await closing.send(initialize);

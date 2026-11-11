@@ -9,8 +9,10 @@ import type { BridgeLogger } from './types';
 
 export const SESSION_HEADER = 'mcp-session-id';
 
-/** Statuses of a server that offers no stream, or no longer knows the session. */
-const NO_STREAM_STATUSES = [404, 405];
+/** The status of a server that offers no stream. */
+const NO_STREAM_STATUS = 405;
+/** The status of a server that does not know the session, or no longer does. */
+const UNKNOWN_SESSION_STATUS = 404;
 /** How long `follow()` waits for the server to answer the stream's first `GET`. */
 const OPEN_WAIT_MS = 2_000;
 const FIRST_REOPEN_DELAY_MS = 250;
@@ -25,7 +27,10 @@ export interface NotificationStreamOptions {
   log: BridgeLogger;
   /** Called for every frame the server sends on the stream. */
   onFrame: (frame: JsonRpcFrame) => void | Promise<void>;
-  /** Called once when the stream of a live session is given up: it could not be opened five times in a row. */
+  /**
+   * Called once when the stream of a live session is given up: it could not be opened five times in a row, or the
+   * server no longer knows a session it streamed to.
+   */
   onLost?: () => void;
 }
 
@@ -56,11 +61,14 @@ export function createNotificationStream(options: NotificationStreamOptions): No
   const { url, log, onFrame } = options;
   let following: AbortController | undefined;
 
-  /** `GET` the session's stream: its body when the server streams, else whether the `GET` failed or it offers none. */
+  /**
+   * `GET` the session's stream: its body when the server streams, else whether the `GET` failed, the server offers
+   * no stream, or it does not know the session.
+   */
   async function open(
     sessionId: string,
     signal: AbortSignal,
-  ): Promise<ReadableStream<Uint8Array> | 'failed' | 'unavailable'> {
+  ): Promise<ReadableStream<Uint8Array> | 'failed' | 'unavailable' | 'unknown-session'> {
     try {
       const response = await (options.fetch ?? fetch)(url, {
         method: 'GET',
@@ -71,10 +79,12 @@ export function createNotificationStream(options: NotificationStreamOptions): No
       const streams = (response.headers.get('content-type') ?? '').includes('text/event-stream');
       if (response.ok && streams && response.body) return response.body;
       await response.body?.cancel();
-      const offersNone = response.ok || NO_STREAM_STATUSES.includes(response.status);
+      const unknownSession = response.status === UNKNOWN_SESSION_STATUS;
+      const offersNone = unknownSession || response.ok || response.status === NO_STREAM_STATUS;
       log.debug(offersNone ? 'notification-stream-unavailable' : 'notification-stream-failed', {
         status: response.status,
       });
+      if (unknownSession) return 'unknown-session';
       return offersNone ? 'unavailable' : 'failed';
     } catch (err) {
       if (!signal.aborted) log.debug('notification-stream-failed', { error: (err as Error).message });
@@ -100,23 +110,34 @@ export function createNotificationStream(options: NotificationStreamOptions): No
     return relayed;
   }
 
+  /** Give the stream of a live session up, and say so once. */
+  function giveUp(reason: Record<string, unknown>): void {
+    log.warn('notification-stream-lost', reason);
+    options.onLost?.();
+  }
+
   /** Relay the stream until its session ends, the server offers none, or it can't be opened any more. */
   async function relayUntilEnded(sessionId: string, signal: AbortSignal, onAnswered: () => void): Promise<void> {
     let failedOpens = 0;
+    let streamed = false;
     let delayMs = FIRST_REOPEN_DELAY_MS;
     while (!signal.aborted) {
       const opened = await open(sessionId, signal);
       onAnswered();
       if (signal.aborted || opened === 'unavailable') return;
+      if (opened === 'unknown-session') {
+        if (streamed) giveUp({ status: UNKNOWN_SESSION_STATUS });
+        return;
+      }
       if (opened === 'failed') {
         failedOpens += 1;
         if (failedOpens === MAX_FAILED_OPENS) {
-          log.warn('notification-stream-lost', { attempts: failedOpens });
-          options.onLost?.();
+          giveUp({ attempts: failedOpens });
           return;
         }
       } else {
         failedOpens = 0;
+        streamed = true;
         if (await relay(opened, signal)) delayMs = FIRST_REOPEN_DELAY_MS;
       }
       await pause(delayMs, signal);

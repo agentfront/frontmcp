@@ -167,6 +167,9 @@ export function createHttpUpstream(options: HttpUpstreamOptions): HttpUpstreamCl
         sessionId = startedSession;
         log.info('http-upstream-session');
       }
+      // Followed before the result is relayed: the frame the client sends next waits for the stream's answer.
+      const streamOfSession = startedSession && !signal.aborted ? notifications.follow(startedSession) : undefined;
+      if (streamOfSession) streamAnswered = streamOfSession;
 
       const contentType = res.headers.get('content-type') ?? '';
       if (contentType.includes('text/event-stream')) {
@@ -178,10 +181,7 @@ export function createHttpUpstream(options: HttpUpstreamOptions): HttpUpstreamCl
         await deliver(body);
       }
       // Anything else (202 Accepted for a notification) carries no frame.
-      if (startedSession && !signal.aborted) {
-        streamAnswered = notifications.follow(startedSession);
-        await streamAnswered;
-      }
+      await streamOfSession;
     } catch (err) {
       // AbortError surfaces when close() interrupts an in-flight request
       // during reload; that's expected, so log it at info-not-error. We
