@@ -145,11 +145,14 @@ describe('App.esm() workers and duties across versions', () => {
   });
 
   /** Serve the package's 1.0.0 with auto-update on, once its workers run and its duty ran. */
-  async function startPolling(): Promise<{ srv: DirectMcpServer; poll: () => Promise<void> }> {
+  async function startPolling(
+    shutdownHookTimeoutMs?: number,
+  ): Promise<{ srv: DirectMcpServer; poll: () => Promise<void> }> {
     const { FrontMcpInstance } = await import('../../front-mcp/front-mcp');
     server = await FrontMcpInstance.createDirect({
       info: { name: 'esm-gateway', version: '1.0.0' },
       apps: [App.esm('@acme/tools@^1.0.0', { namespace: 'acme', autoUpdate: { enabled: true } })],
+      lifecycle: { shutdownHookTimeoutMs },
     });
     const started = poller;
     if (!started) throw new Error('the version poller did not start');
@@ -208,6 +211,43 @@ describe('App.esm() workers and duties across versions', () => {
       'process 1.0.0',
       'process 1.1.0',
     ]);
+  });
+
+  it('fails a replace whose served worker does not stop in time, and runs that worker again once its run returned', async () => {
+    const deafRuns: Array<{ alongside: number; end: () => void }> = [];
+    let deafRunning = 0;
+    @Worker({ name: 'deaf', scope: 'process' })
+    class DeafWorker {
+      run(): Promise<void> {
+        return new Promise((resolve) => {
+          const end = (): void => {
+            deafRunning--;
+            resolve();
+          };
+          deafRuns.push({ alongside: deafRunning, end });
+          deafRunning++;
+        });
+      }
+    }
+    load.mockReset().mockResolvedValueOnce(versionOf('1.0.0', [DeafWorker]));
+    const { srv, poll } = await startPolling(200);
+    load.mockResolvedValueOnce(versionOf('1.1.0'));
+
+    await poll();
+    await until(() => liveRuns('process').length === 1 && liveRuns('leased').length === 1);
+
+    expect(textOf(await srv.callTool('acme:version', {}))).toBe('1.0.0');
+    expect(runsOf('process')).toEqual([
+      { who: 'process 1.0.0', aborted: true, alongside: [] },
+      { who: 'process 1.0.0', aborted: false, alongside: [] },
+    ]);
+    expect(deafRuns).toHaveLength(1);
+
+    deafRuns[0].end();
+    await until(() => deafRuns.length === 2);
+    deafRuns[1].end();
+
+    expect(deafRuns.map((run) => run.alongside)).toEqual([0, 0]);
   });
 
   describe('when the new version fails to start', () => {

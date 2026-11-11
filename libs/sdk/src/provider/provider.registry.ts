@@ -30,6 +30,7 @@ import { FrontMcpContext, validateSessionId } from '../context/frontmcp-context'
 import { FRONTMCP_CONTEXT } from '../context/frontmcp-context.provider';
 import {
   DependencyCycleError,
+  InternalMcpError,
   InvalidDependencyScopeError,
   PluginDependencyError,
   ProviderConstructionError,
@@ -50,6 +51,7 @@ import {
   DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS,
   lifecycleHooksOf,
   messageOf,
+  outlasts,
   readyProviders,
   shutdownProviders,
   type BackgroundLifecycle,
@@ -408,15 +410,22 @@ export default class ProviderRegistry
     return failures;
   }
 
-  /** Stop the background work of the `@Duty` and `@Worker` providers readied here, without their own hooks. */
-  async stopBackgroundWork(): Promise<void> {
-    for (const { lifecycle } of this.backgroundEntries) await lifecycle.stopBackground();
+  /** Stop the `@Duty` and `@Worker` work readied here, without their hooks; throws at the first stop to time out. */
+  async stopBackgroundWork(logger: LifecycleLogger): Promise<void> {
+    const timeoutMs = this.shutdownHookTimeoutMs;
+    for (const { token, lifecycle } of this.backgroundEntries) {
+      const stillStopping = await outlasts(() => lifecycle.stopBackground(), timeoutMs);
+      if (!stillStopping) continue;
+      const message = `Provider "${tokenName(token)}" did not stop its background work within ${timeoutMs} ms`;
+      logger.warn(message);
+      throw new InternalMcpError(message, 'BACKGROUND_STOP_TIMEOUT');
+    }
   }
 
-  /** Start again the background work `stopBackgroundWork()` stopped, logging the ones that cannot start. */
-  async resumeBackgroundWork(logger: LifecycleLogger): Promise<void> {
+  /** Start again what `stopBackgroundWork()` stopped, each once its stop ended, unawaited; logs the failures. */
+  resumeBackgroundWork(logger: LifecycleLogger): void {
     for (const { token, lifecycle } of this.backgroundEntries) {
-      await lifecycle.resumeBackground().catch((error: unknown) => {
+      void lifecycle.resumeBackground().catch((error: unknown) => {
         logger.error(`Provider "${tokenName(token)}" failed to start again: ${messageOf(error)}`);
       });
     }

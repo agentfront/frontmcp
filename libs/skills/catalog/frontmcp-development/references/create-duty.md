@@ -159,9 +159,14 @@ provider of a `splitByApp` server is built once per app) is not a conflict: its 
 
 When auto-update replaces a version of an `App.esm()` package, the old version's duties stop (the run in flight
 aborted and awaited, the lease released) before the new version's start, so the new class takes the name without a
-`DutyNameConflictError`. Their own `onShutdown()` still runs once, when the server shuts down. When the new version
-fails to start (a provider's `onReady()` throws, or a worker or duty of it cannot start), it is discarded and the old
-version's duties run again (see `multi-app-composition`).
+`DutyNameConflictError`. The replace waits for a run in flight up to `lifecycle.shutdownHookTimeoutMs` (3000 ms by
+default). A run that has not returned by then fails the replace: the new version is discarded, the old one keeps
+serving, and that duty runs again once the run has returned. Their own `onShutdown()` still runs once, when the server
+shuts down. When the new version fails to start (a provider's `onReady()` throws, or a worker or duty of it cannot
+start, as when two of its classes share a name), it is discarded and the old version's duties run again (see
+`multi-app-composition`). A lease store that cannot be opened does not fail the start: each lease check tries it again
+and `/readyz` shows the duty `unhealthy` meanwhile (see Health), so the new version is swapped in and its duties run
+once the store opens.
 
 ## Publishing Events
 
@@ -292,6 +297,10 @@ store cannot be opened: then it is `unhealthy` with `error: 'the lease store can
 `/readyz` answer `not_ready`. A run that fails is logged, not reported here. A container has no `/readyz`, so its
 duties add no check.
 
+`/readyz` lists its checks when `health.includeDetails` is on, which is the default unless `NODE_ENV` is `production`.
+A production server therefore answers `ready` or `not_ready` without `holdsLease` or the lease store's error: set
+`@FrontMcp({ health: { includeDetails: true } })` to see them there.
+
 ## Log Lines
 
 | Level   | Message                                                                                                                                   |
@@ -332,7 +341,8 @@ duties add no check.
 ### Runtime
 
 - [ ] Started several times, the server logs `runs in this process` once
-- [ ] `/readyz` shows `duty:<name>` as `healthy`, with `holdsLease: true` in the holder only
+- [ ] `/readyz` shows `duty:<name>` as `healthy`, with `holdsLease: true` in the holder only (in production, only with
+      `health.includeDetails: true`)
 - [ ] Killing that process makes another log it within `leaseMs` plus a third of it
 - [ ] Long runs return when `signal` is aborted
 
@@ -347,6 +357,7 @@ duties add no check.
 | A cron duty runs an hour off                  | The expression is read in UTC                                                 | Set `timezone` to the IANA zone the schedule is meant in                                      |
 | `already runs elsewhere` with one server      | Another server on the machine has the same `info.name` and duty name          | Give the server a distinctive `info.name`, or the duty its own `name`                         |
 | `/readyz`: `the lease store cannot be opened` | The SQLite file or Redis can't be reached, or `UnsafeDutyStoreError`          | Install `@frontmcp/storage-sqlite`, or fix the store; the duty starts at the next lease check |
+| `/readyz` shows no `duty:<name>` check        | `NODE_ENV` is `production`, where `/readyz` leaves its checks out by default  | Set `health: { includeDetails: true }` to see `holdsLease` and the store's error              |
 | `DutyNameConflictError`                       | Two duty classes with the same `name` in one server                           | Give one of them its own `name`                                                               |
 | `UnsafeDutyStoreError`                        | `FRONTMCP_HOME` (or a folder above it) is writable by others                  | Point `FRONTMCP_HOME` at a folder only you can write to, or `chmod 700` it                    |
 | It runs in two processes at once              | Different `info.name` or duty `name`, or `'workspace'` in two projects        | Give them the same names; use `'machine'` to share across projects                            |

@@ -18,7 +18,7 @@ export interface LifecycleEntry {
 export interface BackgroundLifecycle {
   /** Stop the work and release its lease, without `onShutdown()`; it stays stopped until `resumeBackground()`. */
   stopBackground(): Promise<void>;
-  /** Start again the work `stopBackground()` stopped; do nothing otherwise. */
+  /** Start again the work `stopBackground()` stopped, once that stop ended; do nothing otherwise. */
   resumeBackground(): Promise<void>;
 }
 

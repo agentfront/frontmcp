@@ -76,6 +76,10 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown, Backgrou
   private started?: Promise<StartedDuty | undefined>;
   /** Whether `stopBackground()` stopped the runs, so `resumeBackground()` starts them again. */
   private resumable = false;
+  /** Whether `onShutdown()` was called, after which `resumeBackground()` starts nothing. */
+  private shutDown = false;
+  /** The last stop or start again, which the next one waits for. */
+  private lastTurn: Promise<void> = Promise.resolve();
   private claimedKey?: string;
   private cron?: Promise<CronSchedule>;
 
@@ -98,22 +102,33 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown, Backgrou
 
   /** Stop the runs and release the lease and claim, without the duty's own hooks. */
   async stopBackground(): Promise<void> {
-    if (this.started) this.resumable = true;
-    await this.stopRunner();
+    await this.inTurn(async () => {
+      if (this.started) this.resumable = true;
+      await this.stopRunner();
+    });
   }
 
-  /** Start again the runs `stopBackground()` stopped. */
+  /** Start again the runs `stopBackground()` stopped, once that stop ended. */
   async resumeBackground(): Promise<void> {
-    if (!this.resumable) return;
-    this.resumable = false;
-    this.started = this.startRunner();
-    await this.started;
+    await this.inTurn(async () => {
+      if (!this.resumable || this.shutDown) return;
+      this.resumable = false;
+      this.started = this.startRunner();
+      await this.started;
+    });
   }
 
   async onShutdown(): Promise<void> {
-    this.resumable = false;
-    await this.stopRunner();
+    this.shutDown = true;
+    await this.inTurn(() => this.stopRunner());
     await this.duty.onShutdown?.();
+  }
+
+  /** Run `step` once the stop or start before it ended, so a run never starts while the last one is still ending. */
+  private inTurn(step: () => Promise<void>): Promise<void> {
+    const turn = this.lastTurn.then(step);
+    this.lastTurn = turn.catch(() => undefined);
+    return turn;
   }
 
   /** Stop what the last start started, once, and give back the claim. */

@@ -84,6 +84,10 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown, Backgr
   private started?: Promise<StartedWorker | undefined>;
   /** Whether `stopBackground()` stopped the run, so `resumeBackground()` starts it again. */
   private resumable = false;
+  /** Whether `onShutdown()` was called, after which `resumeBackground()` starts nothing. */
+  private shutDown = false;
+  /** The last stop or start again, which the next one waits for. */
+  private lastTurn: Promise<void> = Promise.resolve();
   private claimedKey?: string;
 
   /** Takes the worker instance, its resolved metadata and the providers it was built with. */
@@ -108,23 +112,34 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown, Backgr
 
   /** Stop the run and release its lease and claim, without the worker's own hooks. */
   async stopBackground(): Promise<void> {
-    if (this.started) this.resumable = true;
-    await this.stopStarted();
+    await this.inTurn(async () => {
+      if (this.started) this.resumable = true;
+      await this.stopStarted();
+    });
   }
 
-  /** Start again the run `stopBackground()` stopped. */
+  /** Start again the run `stopBackground()` stopped, once that stop ended. */
   async resumeBackground(): Promise<void> {
-    if (!this.resumable) return;
-    this.resumable = false;
-    this.started = this.start();
-    await this.started;
+    await this.inTurn(async () => {
+      if (!this.resumable || this.shutDown) return;
+      this.resumable = false;
+      this.started = this.start();
+      await this.started;
+    });
   }
 
   /** Stop the run and release its lease and claim, then run the worker's own `onShutdown()`. */
   async onShutdown(): Promise<void> {
-    this.resumable = false;
-    await this.stopStarted();
+    this.shutDown = true;
+    await this.inTurn(() => this.stopStarted());
     await this.worker.onShutdown?.();
+  }
+
+  /** Run `step` once the stop or start before it ended, so a run never starts while the last one is still ending. */
+  private inTurn(step: () => Promise<void>): Promise<void> {
+    const turn = this.lastTurn.then(step);
+    this.lastTurn = turn.catch(() => undefined);
+    return turn;
   }
 
   /** Stop what the last start started, once, and give back the claim. */

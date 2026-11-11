@@ -243,9 +243,9 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
    * Register the entries of a loaded package manifest in place of the ones registered before. Every entry is built
    * first, on the version's own providers, so an entry that fails to build leaves the previous version serving. A
    * version that replaces a served one stops the served version's workers and duties, then has its providers'
-   * `onReady()` run before it is swapped in; when one fails, it is discarded and the served version's workers and
-   * duties start again. The replaced version's providers stay up, for the calls still running on its entries, until
-   * the server shuts down.
+   * `onReady()` run before it is swapped in; when a stop outlasts the shutdown hook timeout or an `onReady()` fails,
+   * it is discarded and the served version's workers and duties start again, each once its own stop ended. The
+   * replaced version's providers stay up, for the calls still running on its entries, until the server shuts down.
    */
   private async registerFromManifest(
     manifest: FrontMcpPackageManifest,
@@ -256,14 +256,14 @@ export class AppEsmInstance extends AppEntry<RemoteAppMetadata> {
     const served = replacing ? this.registered : undefined;
     try {
       if (replacing) {
-        await served?.providers.stopBackgroundWork();
+        await served?.providers.stopBackgroundWork(logger);
         const readyFailures = await next.providers.runReadyHooks(logger);
         if (readyFailures.length > 0) throw readyFailures[0];
       }
       await this.swapEntries(next, { replacing });
     } catch (error) {
       await next.discard(logger);
-      await served?.providers.resumeBackgroundWork(logger);
+      served?.providers.resumeBackgroundWork(logger);
       throw error;
     }
     if (replacing) this.replacedVersionCount++;

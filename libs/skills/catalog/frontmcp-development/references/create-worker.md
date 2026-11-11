@@ -163,11 +163,18 @@ Found when the server starts:
 - **One at a time.** A process that gets the lease back while its last run is still ending waits for it before it
   starts the next.
 - **ESM package versions.** When auto-update replaces a version of an `App.esm()` package, the old version's workers
-  are stopped as at shutdown (`signal` aborted, `run()` awaited, the lease released) before the new version's start,
-  so a `'process'` worker never runs twice and the new class takes the name without a `WorkerNameConflictError`. Their
-  own `onShutdown()` still runs once, when the server shuts down. When the new version fails to start (a provider's
-  `onReady()` throws, or a worker or duty of it cannot start), it is discarded and the old version's workers start
-  again (see `multi-app-composition`).
+  stop before the new version's start (`signal` aborted, `run()` awaited, the lease released), so a `'process'` worker
+  never runs twice and the new class takes the name without a `WorkerNameConflictError`. The replace waits for each
+  `run()` up to `lifecycle.shutdownHookTimeoutMs` (3000 ms by default). Unlike a shutdown, it does not move on after
+  that: a `run()` that has not ended by then fails the replace, logged as
+  `Provider "<Class>" did not stop its background work within <ms> ms`. The new version is discarded, the old one
+  keeps serving, and that worker starts again once its `run()` has ended, so two runs of it never overlap. The next
+  version check tries the replace again. Their own `onShutdown()` still runs once, when the server shuts down. When
+  the new version fails to start (a provider's `onReady()` throws, or a worker or duty of it cannot start, as when two
+  of its classes share a name), it is discarded and the old version's workers start again (see
+  `multi-app-composition`). A lease store that cannot be opened does not fail the start: each lease check tries it
+  again and `/readyz` shows the worker `unhealthy` meanwhile (see Health), so the new version is swapped in and its
+  leased workers run once the store opens.
 
 ## Health
 
@@ -186,6 +193,10 @@ process that lost the lease of a stopped `restart: false` worker shows `standby`
 cannot be opened, the check is `unhealthy` with `error: 'the lease store cannot be opened: <cause>'`; each lease check
 tries to open it again, and the worker runs once it opens and this process gets the lease. Only `unhealthy` makes
 `/readyz` answer `not_ready`. A container has no `/readyz`, so its workers add no check.
+
+`/readyz` lists its checks when `health.includeDetails` is on, which is the default unless `NODE_ENV` is `production`.
+A production server therefore answers `ready` or `not_ready` without them: set
+`@FrontMcp({ health: { includeDetails: true } })` to see each worker's `state` and `error` there.
 
 ## Publishing Events
 
