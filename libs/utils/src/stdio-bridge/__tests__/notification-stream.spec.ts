@@ -11,6 +11,8 @@ const TOKEN = 'Bearer shared-server-token';
 const OPEN_WAIT_MS = 2_000;
 const FIRST_REOPEN_DELAY_MS = 250;
 const MAX_FAILED_OPENS = 5;
+/** The waits before the second to the fifth open of a stream that fails from the start: 250, 500, 1000 and 2000 ms. */
+const GIVE_UP_AFTER_MS = 3_750;
 
 const initialize: JsonRpcFrame = {
   jsonrpc: '2.0',
@@ -28,18 +30,21 @@ describe('the notification stream of the HTTP upstream', () => {
   let server: FakeMcpServer;
   let log: ReturnType<typeof recordingLog>;
   let frames: JsonRpcFrame[];
+  let onStreamLost: jest.Mock;
   let upstream: HttpUpstreamClient;
 
   beforeEach(() => {
     server = new FakeMcpServer();
     log = recordingLog();
     frames = [];
+    onStreamLost = jest.fn();
     upstream = createHttpUpstream({
       url: 'http://localhost/mcp',
       headers: { authorization: TOKEN },
       fetch: server.fetch,
       log,
       onFrame: (frame) => void frames.push(frame),
+      onNotificationStreamLost: onStreamLost,
     });
   });
 
@@ -199,6 +204,7 @@ describe('the notification stream of the HTTP upstream', () => {
     expect(log.debug.mock.calls.map(([message]) => message)).toEqual(['notification-stream-unavailable']);
     expect(log.warn).not.toHaveBeenCalled();
     expect(log.error).not.toHaveBeenCalled();
+    expect(onStreamLost).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -218,6 +224,40 @@ describe('the notification stream of the HTTP upstream', () => {
     expect(server.sent('GET')).toHaveLength(MAX_FAILED_OPENS);
     expect(log.debug).toHaveBeenCalledWith('notification-stream-failed', logged);
     expect(log.warn.mock.calls).toEqual([['notification-stream-lost', { attempts: MAX_FAILED_OPENS }]]);
+    expect(onStreamLost).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a stream lost only once it gave it up, not at an open that failed before', async () => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    server.openStream = () => new Response(null, { status: 503 });
+    await upstream.send(initialize);
+    await settle();
+
+    await jest.advanceTimersByTimeAsync(GIVE_UP_AFTER_MS - 1);
+    expect(server.sent('GET')).toHaveLength(MAX_FAILED_OPENS - 1);
+    expect(onStreamLost).not.toHaveBeenCalled();
+
+    await jest.advanceTimersByTimeAsync(1);
+    expect(onStreamLost).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['close()', (client: HttpUpstreamClient) => client.close()],
+    ['endSession()', (client: HttpUpstreamClient) => client.endSession()],
+    ['leaveSession()', (client: HttpUpstreamClient) => client.leaveSession()],
+  ])('reports no stream lost after %s ended the session, though its opens failed', async (_, end) => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    server.openStream = () => new Response(null, { status: 503 });
+    await upstream.send(initialize);
+    await settle();
+    await jest.advanceTimersByTimeAsync(GIVE_UP_AFTER_MS - 1);
+
+    await end(upstream);
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    expect(server.sent('GET')).toHaveLength(MAX_FAILED_OPENS - 1);
+    expect(onStreamLost).not.toHaveBeenCalled();
+    expect(log.warn).not.toHaveBeenCalledWith('notification-stream-lost', expect.anything());
   });
 
   it('opens it again for the next session after it gave it up', async () => {

@@ -92,6 +92,8 @@ export interface HttpUpstreamOptions extends UpstreamClientOptions {
    * events only to a session. Without it, every frame is relayed as it is.
    */
   claudeCodeChannels?: boolean;
+  /** Called once when the session's notification stream is given up, as a server that went away makes it. */
+  onNotificationStreamLost?: () => void;
 }
 
 export interface HttpUpstreamClient extends UpstreamClient {
@@ -119,6 +121,7 @@ export function createHttpUpstream(options: HttpUpstreamOptions): HttpUpstreamCl
     fetch: options.fetch,
     log,
     onFrame,
+    onLost: options.onNotificationStreamLost,
   });
 
   /** The session id, for every frame but `initialize`, which starts a new session: never send a stale id with it. */

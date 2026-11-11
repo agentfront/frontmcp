@@ -25,6 +25,8 @@ export interface NotificationStreamOptions {
   log: BridgeLogger;
   /** Called for every frame the server sends on the stream. */
   onFrame: (frame: JsonRpcFrame) => void | Promise<void>;
+  /** Called once when the stream of a live session is given up: it could not be opened five times in a row. */
+  onLost?: () => void;
 }
 
 export interface NotificationStream {
@@ -110,6 +112,7 @@ export function createNotificationStream(options: NotificationStreamOptions): No
         failedOpens += 1;
         if (failedOpens === MAX_FAILED_OPENS) {
           log.warn('notification-stream-lost', { attempts: failedOpens });
+          options.onLost?.();
           return;
         }
       } else {
