@@ -255,6 +255,12 @@ describe('Pattern Matching Utilities', () => {
       expect(escapeGlob('a*b?c\\d')).toBe('a\\*b\\?c\\\\d');
     });
 
+    it('should escape square brackets, which Redis reads as a character class', () => {
+      expect(escapeGlob('a[b]c')).toBe('a\\[b\\]c');
+      expect(matchesPattern('a[b]c', escapeGlob('a[b]c'))).toBe(true);
+      expect(matchesPattern('abc', escapeGlob('a[b]c'))).toBe(false);
+    });
+
     it('should not modify strings without special characters', () => {
       expect(escapeGlob('user:123:profile')).toBe('user:123:profile');
     });

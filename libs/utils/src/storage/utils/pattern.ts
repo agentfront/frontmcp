@@ -218,8 +218,8 @@ export function validatePattern(pattern: string): { valid: boolean; error?: stri
 
 /**
  * Escape a string for use as a literal in a glob pattern.
- * Escapes `*`, `?` and backslash. Every matcher in this module, and Redis `SCAN MATCH`, reads the result as the
- * literal string.
+ * Escapes `*`, `?`, `[`, `]` and backslash (Redis `SCAN MATCH` reads `[` as the start of a character class). Every
+ * matcher in this module, and Redis `SCAN MATCH`, reads the result as the literal string.
  *
  * @param literal - String to escape
  * @returns Escaped string safe for use in patterns
@@ -232,5 +232,5 @@ export function validatePattern(pattern: string): { valid: boolean; error?: stri
  * ```
  */
 export function escapeGlob(literal: string): string {
-  return literal.replace(/[*?\\]/g, '\\$&');
+  return literal.replace(/[*?[\]\\]/g, '\\$&');
 }
