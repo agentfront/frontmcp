@@ -10,7 +10,7 @@ export { SqliteStorageAdapter } from './sqlite-storage.adapter';
 export { openDatabase, withBusyRetry, isBusyError } from './open-database';
 export { acquireConnection, SqliteConnection } from './sqlite-connection';
 export type { OpenDatabaseOptions, BusyRetryOptions } from './open-database';
-export { useSqliteDriver } from './sqlite-driver';
+export { useSqliteDriver, currentSqliteDriver } from './sqlite-driver';
 export type { SqliteDriver, SqliteDatabase, SqliteStatement } from './sqlite-driver';
 export { durableObjectSqlite } from './durable-object-sqlite';
 export type { DurableObjectStorageLike } from './durable-object-sqlite';

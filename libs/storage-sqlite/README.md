@@ -133,7 +133,7 @@ export class HelpDeskServer extends DurableObject {
 - **Every `path` is the same database**, the Durable Object's one. The option only names it, and no file or folder is created.
 - **Writes run in `ctx.storage.transactionSync()`**, and `walMode` and `busyTimeoutMs` do nothing: a Durable Object has one connection and refuses both pragmas.
 
-`useSqliteDriver()` takes any function from a path to a database with the part of `better-sqlite3`'s `Database` the stores call (the `SqliteDriver` and `SqliteDatabase` types), and `useSqliteDriver(undefined)` goes back to `better-sqlite3`.
+`useSqliteDriver()` takes any function from a path to a database with the part of `better-sqlite3`'s `Database` the stores call (the `SqliteDriver` and `SqliteDatabase` types), and `useSqliteDriver(undefined)` goes back to `better-sqlite3`. `currentSqliteDriver()` returns the driver that is set, if any; on an edge runtime the SDK opens a `sqlite` store only when one is.
 
 ## Docs
 
