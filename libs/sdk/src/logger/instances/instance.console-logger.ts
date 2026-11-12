@@ -1,4 +1,4 @@
-import { supportsAnsi } from '@frontmcp/utils';
+import { escapeControlCharacters, supportsAnsi } from '@frontmcp/utils';
 
 import { LogLevel, LogTransport, LogTransportInterface, type LogFn, type LogRecord } from '../../common';
 
@@ -6,6 +6,25 @@ type LogLevelMeta = {
   label: string;
   ansi: string; // ANSI for TTY (kept for completeness)
 };
+
+/** What every line of a console record after the first starts with, so it cannot pass for the start of a record. */
+const CONTINUATION_INDENT = '  ';
+
+/**
+ * Text as a console record prints it: its line breaks kept, every line after the first indented, and every other
+ * control character as a visible escape, so it can neither start what looks like another record nor rewrite the terminal.
+ */
+function formatConsoleText(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => escapeControlCharacters(line))
+    .join(`\n${CONTINUATION_INDENT}`);
+}
+
+/** A logged value as the console prints it: a string formatted like the message, anything else left to the console. */
+function formatConsoleArgument(value: unknown): unknown {
+  return typeof value === 'string' ? formatConsoleText(value) : value;
+}
 
 @LogTransport({
   name: 'ConsoleLogger',
@@ -26,7 +45,7 @@ export class ConsoleLogTransportInstance extends LogTransportInterface {
     [LogLevel.Error]: { label: 'ERROR', ansi: '\x1b[31m' }, // red
   };
 
-  /** Returns a *bound native console function* with the prefix (ANSI only) */
+  /** Returns a console function with the prefix (ANSI only) that prints string values as `formatConsoleText` does */
   bind(level: LogLevel, loggerPrefix?: string): LogFn {
     const method = this.pickMethod(level);
     const meta = this.levelTags[level] ?? this.levelTags[LogLevel.Info];
@@ -43,7 +62,8 @@ export class ConsoleLogTransportInstance extends LogTransportInterface {
     const levelPart = useAnsi ? `${BOLD}${meta.ansi}${meta.label}${RESET}` : meta.label;
 
     const fmt = [timePart, scopePart, levelPart, '%s'].filter(Boolean).join(' ');
-    return method.bind(console, fmt);
+    const write = method.bind(console, fmt);
+    return (...values: unknown[]) => write(...values.map(formatConsoleArgument));
   }
 
   private pickMethod(level: LogLevel): LogFn {
