@@ -30,4 +30,17 @@ describe('ErrorHandler.handle', () => {
     expect(logger.error).not.toHaveBeenCalled();
     expect(response.content[0].text).toBe('Ticket T-1 is already closed');
   });
+
+  it('logs an error message that holds a line break on one line', () => {
+    const logger = createLogger();
+    const handler = new ErrorHandler({ logger, isDevelopment: false });
+
+    handler.handle(new PublicMcpError('remote said no\n[12:00:00.000] ERROR forged', 'REMOTE', 502));
+    handler.handle(new Error('lookup failed\r\nINFO forged'));
+    handler.logError(new Error('plain\nINFO forged'));
+
+    expect(logger.warn.mock.calls[0][0]).toBe('Public error: remote said no\\n[12:00:00.000] ERROR forged');
+    expect(logger.error.mock.calls[0][0]).toContain('lookup failed\\r\\nINFO forged');
+    expect(logger.error.mock.calls[1][0]).toBe('Unexpected error: plain\\nINFO forged');
+  });
 });
