@@ -69,6 +69,27 @@ describe('checkHttpProof', () => {
     await expect(checkHttpProof('acme.com', PUBLIC_KEY)).resolves.toContain('larger than 4096 bytes');
   });
 
+  it('stops reading a long body once it passes what the Registry reads, and reads no body of a non-200 answer', async () => {
+    let chunksRead = 0;
+    const endless = () =>
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          chunksRead++;
+          if (chunksRead > 1000) controller.close();
+          else controller.enqueue(new Uint8Array(1024).fill(32));
+        },
+      });
+
+    fetchMock.mockResolvedValue(new Response(endless()));
+    await expect(checkHttpProof('acme.com', PUBLIC_KEY)).resolves.toContain('larger than 4096 bytes');
+    expect(chunksRead).toBeLessThan(10);
+
+    chunksRead = 0;
+    fetchMock.mockResolvedValue(new Response(endless(), { status: 404 }));
+    await expect(checkHttpProof('acme.com', PUBLIC_KEY)).resolves.toContain('answered 404');
+    expect(chunksRead).toBeLessThan(2);
+  });
+
   it('turns a network failure into a RegistryError', async () => {
     fetchMock.mockRejectedValue(new TypeError('fetch failed', { cause: new Error('getaddrinfo ENOTFOUND acme.com') }));
     await expect(checkHttpProof('acme.com', PUBLIC_KEY)).rejects.toThrow(
