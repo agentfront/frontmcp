@@ -80,3 +80,38 @@ describe('the default subject hash', () => {
     expect(JSON.stringify(warnings)).toMatch(/subjectHashSecret/);
   });
 });
+
+describe('a denial message that names the caller', () => {
+  const denial = "relationships: user 'nour-4821' is not 'owner' of invoice:inv-1";
+
+  async function recordedDenial(subjectMode: 'plain' | 'hash' | 'omit') {
+    const store = new MemoryAuditStore();
+    const writer = new SkillAuditWriter(
+      store,
+      new Hs256AuditSigner('signer-secret-a', 'audit-2026'),
+      silentLogger,
+      undefined,
+      {
+        subjectMode,
+      },
+    );
+    await writer.writeAuthorityFail(writeContext('nour-4821'), { reason: denial });
+    const [record] = await store.read();
+    if (!record) throw new Error('no record was written');
+    return record;
+  }
+
+  it.each(['hash', 'omit'] as const)(
+    'records the subject in it as subjectMode %s records the subject',
+    async (mode) => {
+      const record = await recordedDenial(mode);
+
+      expect(record.errorMessage).not.toContain('nour-4821');
+      expect(record.errorMessage).toBe(denial.replace('nour-4821', record.subject));
+    },
+  );
+
+  it('keeps it as it is with subjectMode plain', async () => {
+    expect((await recordedDenial('plain')).errorMessage).toBe(denial);
+  });
+});

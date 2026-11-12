@@ -1,6 +1,7 @@
 // file: libs/plugins/src/codecall/tools/execute.tool.ts
 
 import { getCallSurface, toMcpError, Tool, ToolContext, type McpError, type ToolEntry } from '@frontmcp/sdk';
+import { escapeControlCharacters } from '@frontmcp/utils';
 
 import type { CodeCallToolDescription, CodeCallVmEnvironment } from '../codecall.symbol';
 import {
@@ -23,6 +24,7 @@ import {
   toCodeCallPolicyTool,
   type CodeCallToolAccess,
 } from '../security';
+import { toolsWithheldByAuthorities } from '../security/codecall-discovery-authorities';
 import { AuditLoggerService } from '../services/audit-logger.service';
 import EnclaveService from '../services/enclave.service';
 import { buildToolNamespaces, extractResultFromCallToolResult, toPlainJson } from '../utils';
@@ -116,6 +118,8 @@ export default class ExecuteTool extends ToolContext {
 
     // Set up the VM environment with tool integration
     const allowedToolSet = allowedTools ? new Set(allowedTools) : null;
+    // `getTool` answers synchronously, so the tools the caller's authorities withhold are judged now.
+    const withheld = await toolsWithheldByAuthorities(this.scope, this.authInfo);
 
     const environment: CodeCallVmEnvironment = {
       callTool: async <TInput, TResult>(
@@ -263,6 +267,10 @@ export default class ExecuteTool extends ToolContext {
 
           // Describe the entry the policy judged, resolved as `callTool` would resolve it.
           const tool = introspectionAccess.entry;
+          if (withheld.has(tool.fullName)) {
+            audit?.logSecurityAccessDenied(executionId, name, "withheld by the tool's authorities");
+            return undefined;
+          }
 
           return toPlainJson<CodeCallToolDescription>({
             name: tool.name,
@@ -276,8 +284,8 @@ export default class ExecuteTool extends ToolContext {
       },
 
       mcpLog: (level: 'debug' | 'info' | 'warn' | 'error', message: string, metadata?: Record<string, unknown>) => {
-        // Log through FrontMCP logging system if available
-        this.logger?.[level](message, metadata);
+        // A script's message stays on one line of the server's log.
+        this.logger?.[level](escapeControlCharacters(String(message)), metadata);
       },
 
       mcpNotify: (event: string, payload: Record<string, unknown>) => {

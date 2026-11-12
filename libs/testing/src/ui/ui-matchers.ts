@@ -32,6 +32,7 @@ import {
   getToolCallMetaPrefixes,
   type TestPlatformType,
 } from '../platform/platform-types';
+import { hasCssClass } from './ui-assertions';
 
 // Type-only reference: Metadata keys used below align with UIMetadata from @frontmcp/ui/adapters
 // This is an optional peer dependency, so we don't import it directly
@@ -241,10 +242,7 @@ const toHaveCssClass: MatcherFunction<[className: string]> = function (received,
     };
   }
 
-  // Match class="... className ..." or className="... className ..."
-  // Escape regex metacharacters to prevent user input from breaking the regex
-  const classRegex = new RegExp(`class(?:Name)?\\s*=\\s*["'][^"']*\\b${escapeRegex(className)}\\b[^"']*["']`, 'i');
-  const pass = classRegex.test(html);
+  const pass = hasCssClass(html, className);
 
   return {
     pass,

@@ -44,6 +44,20 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+const CLASS_ATTRIBUTE_PATTERN = /class(?:Name)?\s*=\s*["']([^"']*)["']/gi;
+
+/**
+ * Whether a class or className attribute in the HTML holds the class name as a whole word.
+ * Reads each attribute value once, so the time grows with the length of the HTML.
+ */
+export function hasCssClass(html: string, className: string): boolean {
+  const classWord = new RegExp(`\\b${escapeRegex(className)}\\b`, 'i');
+  for (const attribute of html.matchAll(CLASS_ATTRIBUTE_PATTERN)) {
+    if (classWord.test(attribute[1])) return true;
+  }
+  return false;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // UI ASSERTIONS
 // ═══════════════════════════════════════════════════════════════════
@@ -181,9 +195,7 @@ export const UIAssertions = {
    * @throws Error if the class is not found
    */
   assertHasCssClass(html: string, className: string): void {
-    // Escape regex metacharacters to prevent user input from breaking the regex
-    const classRegex = new RegExp(`class(?:Name)?\\s*=\\s*["'][^"']*\\b${escapeRegex(className)}\\b[^"']*["']`, 'i');
-    if (!classRegex.test(html)) {
+    if (!hasCssClass(html, className)) {
       throw new Error(`Expected HTML to have CSS class "${className}"`);
     }
   },

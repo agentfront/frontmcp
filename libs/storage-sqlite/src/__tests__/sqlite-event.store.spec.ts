@@ -297,3 +297,43 @@ describe('SqliteEventStore', () => {
     });
   });
 });
+
+describe('SqliteEventStore with encryption', () => {
+  const secret = 'event-store-secret-for-tests';
+  let dbPath: string;
+
+  beforeEach(() => {
+    dbPath = tmpDbPath();
+  });
+
+  afterEach(() => cleanup(dbPath));
+
+  it('stores messages encrypted and replays them decrypted', async () => {
+    const store = new SqliteEventStore({ path: dbPath, encryption: { secret }, ttlCleanupIntervalMs: 0 });
+    const first = await store.storeEvent('stream-1', { text: 'first message' });
+    await store.storeEvent('stream-1', { text: 'second message' });
+
+    const stored = store.getDatabase().prepare('SELECT message FROM events').all() as { message: string }[];
+    expect(stored).toHaveLength(2);
+    for (const row of stored) expect(row.message).not.toContain('message');
+
+    const replayed: unknown[] = [];
+    await store.replayEventsAfter(first, { send: async (_id, message) => void replayed.push(message) });
+    expect(replayed).toEqual([{ text: 'second message' }]);
+    store.close();
+  });
+
+  it('leaves out of the replay a message stored before the secret was set', async () => {
+    const plain = new SqliteEventStore({ path: dbPath, ttlCleanupIntervalMs: 0 });
+    const first = await plain.storeEvent('stream-1', { text: 'first' });
+    await plain.storeEvent('stream-1', { text: 'stored in plain text' });
+    plain.close();
+
+    const store = new SqliteEventStore({ path: dbPath, encryption: { secret }, ttlCleanupIntervalMs: 0 });
+    await store.storeEvent('stream-1', { text: 'stored encrypted' });
+    const replayed: unknown[] = [];
+    await store.replayEventsAfter(first, { send: async (_id, message) => void replayed.push(message) });
+    expect(replayed).toEqual([{ text: 'stored encrypted' }]);
+    store.close();
+  });
+});

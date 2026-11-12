@@ -87,7 +87,7 @@ export class TransportServiceNotAvailableError extends InternalMcpError {
  */
 export class SessionClaimConflictError extends InternalMcpError {
   constructor(sessionId: string) {
-    super(`Session ${sessionId} claimed by another pod`, 'SESSION_CLAIM_CONFLICT');
+    super(`Session ${sessionId.slice(0, 20)} claimed by another pod`, 'SESSION_CLAIM_CONFLICT');
   }
 }
 

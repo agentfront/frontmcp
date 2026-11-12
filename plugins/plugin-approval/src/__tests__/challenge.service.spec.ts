@@ -365,7 +365,9 @@ describe('ChallengeService', () => {
         expiresAt: Date.now() + 300000,
         webhookSent: false,
       };
-      mockStorage.get.mockResolvedValue(JSON.stringify(validRecord));
+      mockStorage.get
+        .mockResolvedValueOnce(JSON.stringify(validRecord))
+        .mockResolvedValueOnce(JSON.stringify({ ...validRecord, webhookSent: true }));
 
       const result = await service.markWebhookSent('valid-challenge');
 
@@ -373,7 +375,7 @@ describe('ChallengeService', () => {
       expect(mockStorage.set).toHaveBeenCalledWith(
         'valid-challenge',
         expect.stringContaining('"webhookSent":true'),
-        expect.any(Object),
+        expect.objectContaining({ ifExists: true }),
       );
     });
   });

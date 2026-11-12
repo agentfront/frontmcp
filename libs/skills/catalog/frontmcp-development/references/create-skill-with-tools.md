@@ -174,7 +174,7 @@ class StrictWorkflowSkill extends SkillContext {}
 
 In `'strict'` mode the server refuses to start, with `SkillValidationError: Skill '<name>' failed tool validation: missing tools [...]`. Set `@FrontMcp({ skillsConfig: { failOnInvalidSkills: false } })` to start anyway and log such skills as errors. Up to 1.8.7 it started anyway, silently.
 
-When a caller loads the skill (`skills/load`, the `skills:load` flow, `GET /skills/{id}`, `/llm_full.txt`), a referenced tool that `availableWhen.surface` doesn't offer that caller (an agent-only tool, for an MCP client) is reported as missing, without its input schema, just as `tools/list` leaves it out. The same skill loaded by an agent lists it as available.
+When a caller loads the skill (`skills/load`, the `skills:load` flow, `GET /skills/{id}`, `/llm_full.txt`), a referenced tool that `availableWhen.surface` doesn't offer that caller (an agent-only tool, for an MCP client) is reported as missing, without its input schema, just as `tools/list` leaves it out. The same skill loaded by an agent lists it as available. `skills/load` (and the `skills:load` flow) also reports as missing, without its input schema, a tool its `authorities` leave out of the caller's `tools/list`, or one `publicAccess` does not list for an anonymous caller; `GET /skills/{id}` and `/llm_full.txt` don't apply these two checks. Up to 1.12.0, `skills/load` listed such a tool as available.
 
 `skills/load` sends what its `format` asks:
 

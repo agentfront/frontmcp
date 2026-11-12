@@ -355,6 +355,64 @@ describe('StorageElicitationStore', () => {
     });
   });
 
+  describe('results reach only the session that asked', () => {
+    it('an answer in one session does not resolve another session waiting on the same elicitation ID', async () => {
+      const asking: ElicitResult<unknown>[] = [];
+      const other: ElicitResult<unknown>[] = [];
+      const unsubscribeAsking = await store.subscribeResult('elicit-1', (result) => asking.push(result), 'session-a');
+      const unsubscribeOther = await store.subscribeResult('elicit-1', (result) => other.push(result), 'session-b');
+
+      await store.publishResult('elicit-1', 'session-a', { status: 'accept', content: { answer: 'from a' } });
+
+      expect(asking).toEqual([{ status: 'accept', content: { answer: 'from a' } }]);
+      expect(other).toEqual([]);
+      await unsubscribeAsking();
+      await unsubscribeOther();
+    });
+
+    it('a fallback result in one session does not reach another session waiting on the same elicitation ID', async () => {
+      const asking: FallbackExecutionResult[] = [];
+      const other: FallbackExecutionResult[] = [];
+      const unsubscribeAsking = await store.subscribeFallbackResult('elicit-1', (result) => asking.push(result), 'a');
+      const unsubscribeOther = await store.subscribeFallbackResult('elicit-1', (result) => other.push(result), 'b');
+
+      await store.publishFallbackResult('elicit-1', 'a', { success: true, result: { data: 'for a' } });
+
+      expect(asking).toEqual([{ success: true, result: { data: 'for a' } }]);
+      expect(other).toEqual([]);
+      await unsubscribeAsking();
+      await unsubscribeOther();
+    });
+
+    it('a session ID containing the separator does not share a route with another session', async () => {
+      const other: ElicitResult<unknown>[] = [];
+      const unsubscribe = await store.subscribeResult('b:elicit-1', (result) => other.push(result), 'a');
+
+      await store.publishResult('elicit-1', 'a:b', { status: 'accept', content: { answer: 'from a:b' } });
+
+      expect(other).toEqual([]);
+      await unsubscribe();
+    });
+
+    it('without pub/sub, an answer still reaches only the session that asked', async () => {
+      jest.spyOn(storage, 'supportsPubSub').mockReturnValue(false);
+      const asking: ElicitResult<unknown>[] = [];
+      const other: ElicitResult<unknown>[] = [];
+      await store.subscribeResult('elicit-1', (result) => asking.push(result), 'session-a');
+      await store.subscribeResult('elicit-1', (result) => other.push(result), 'session-b');
+
+      await store.publishResult('elicit-1', 'session-a', { status: 'cancel' });
+
+      expect(asking).toEqual([{ status: 'cancel' }]);
+      expect(other).toEqual([]);
+    });
+
+    it('subscribing without the session ID of the elicitation is refused', async () => {
+      await expect(store.subscribeResult('elicit-1', () => undefined)).rejects.toThrow(/session ID/);
+      await expect(store.subscribeFallbackResult('elicit-1', () => undefined)).rejects.toThrow(/session ID/);
+    });
+  });
+
   describe('destroy', () => {
     it('should clean up all subscriptions', async () => {
       const elicitId1 = 'elicit-destroy-1';

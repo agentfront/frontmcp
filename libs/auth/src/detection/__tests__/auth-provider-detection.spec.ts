@@ -227,6 +227,49 @@ describe('auth-provider-detection', () => {
       );
     });
 
+    it.each([
+      ['a transparent server', transparentAuth('https://idp.example.com/realms/a')],
+      ['a remote server', remoteAuth('https://idp.example.com/realms/a')],
+    ])('refuses an app whose identity provider shares the host of %s but is another issuer', (_label, parent) => {
+      const apps = [{ id: 'billing', name: 'Billing', auth: transparentAuth('https://idp.example.com/realms/b') }];
+
+      const result = detectAuthProviders(parent, apps);
+
+      expect(result.validationErrors).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining(
+            'App "billing" names the identity provider https://idp.example.com/realms/b and the server names ' +
+              'https://idp.example.com/realms/a, but both get the provider id "idp_example_com"',
+          ),
+        ]),
+      );
+    });
+
+    it('refuses two apps with one explicit provider id for two issuers', () => {
+      const apps = [
+        { id: 'one', name: 'One', auth: transparentAuth('https://idp.example.com/a', { id: 'idp' }) },
+        { id: 'two', name: 'Two', auth: transparentAuth('https://idp.example.com/b', { id: 'idp' }) },
+      ];
+
+      const result = detectAuthProviders(localAuth(), apps);
+
+      expect(result.validationErrors).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('App "two" names the identity provider https://idp.example.com/b and app "one"'),
+        ]),
+      );
+    });
+
+    it('accepts one issuer spelled with and without a trailing slash', () => {
+      const parent = transparentAuth('https://IDP.example.com/realms/a/');
+      const apps = [{ id: 'billing', name: 'Billing', auth: transparentAuth('https://idp.example.com/realms/a') }];
+
+      const result = detectAuthProviders(parent, apps);
+
+      expect(result.validationErrors).toEqual([]);
+      expect(result.requiresOrchestration).toBe(false);
+    });
+
     it('refuses a protected app on the shared endpoint of a public server, which would not enforce it (#766)', () => {
       const parent = publicAuth();
       const apps = [{ id: 'app1', name: 'App1', auth: transparentAuth('https://auth.child.com') }];

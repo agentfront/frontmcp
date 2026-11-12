@@ -171,6 +171,51 @@ describe('ExtAppsAdapter', () => {
     });
   });
 
+  describe('messages from a window other than the host frame', () => {
+    const toolResult = (structuredContent: Record<string, unknown>) => ({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/tool-result',
+      params: { content: [], structuredContent },
+    });
+
+    it('neither pin their origin nor change the tool result', () => {
+      const sibling = document.createElement('iframe');
+      document.body.appendChild(sibling);
+
+      // @ts-expect-error - accessing private method for testing
+      adapter._handleMessage({
+        data: toolResult({ injected: true }),
+        origin: 'https://other.example',
+        source: sibling.contentWindow,
+      } as MessageEvent);
+      // @ts-expect-error - accessing private method for testing
+      adapter._handleMessage({
+        data: toolResult({ temp: 18 }),
+        origin: 'https://host.example',
+        source: window.parent,
+      } as MessageEvent);
+      sibling.remove();
+
+      expect(adapter.getStructuredContent()).toEqual({ temp: 18 });
+    });
+
+    it('from a configured origin are still ignored', () => {
+      const configured = new ExtAppsAdapter({ options: { trustedOrigins: ['https://host.example'] } });
+      const sibling = document.createElement('iframe');
+      document.body.appendChild(sibling);
+
+      // @ts-expect-error - accessing private method for testing
+      configured._handleMessage({
+        data: toolResult({ injected: true }),
+        origin: 'https://host.example',
+        source: sibling.contentWindow,
+      } as MessageEvent);
+      sibling.remove();
+
+      expect(configured.getStructuredContent()).toBeNull();
+    });
+  });
+
   describe('extended ext-apps methods', () => {
     let adapterWithConfig: ExtAppsAdapter;
 
@@ -269,7 +314,7 @@ describe('ExtAppsAdapter', () => {
           .find((message) => message.method === method);
         const data = { jsonrpc: '2.0', id: request?.id, result };
         // @ts-expect-error - accessing private method for testing
-        adapterWithConfig._handleMessage({ data, origin: HOST_ORIGIN } as MessageEvent);
+        adapterWithConfig._handleMessage({ data, origin: HOST_ORIGIN, source: window.parent } as MessageEvent);
       }
 
       beforeEach(() => {
@@ -411,7 +456,7 @@ describe('ExtAppsAdapter', () => {
 
         function receive(origin: string): void {
           // @ts-expect-error - accessing private method for testing
-          adapterWithConfig._handleMessage({ data: teardownRequest, origin } as MessageEvent);
+          adapterWithConfig._handleMessage({ data: teardownRequest, origin, source: window.parent } as MessageEvent);
         }
 
         it('fires bridge:teardown, then answers the host with an empty result', () => {

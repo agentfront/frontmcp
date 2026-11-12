@@ -5,6 +5,7 @@ import 'reflect-metadata';
 
 import { createMemoryStorage, StorageNotSupportedError, type RootStorage } from '@frontmcp/utils';
 
+import { ApprovalConfigurationError } from '../approval';
 import { ApprovalStorageStore } from '../stores/approval-storage.store';
 import { ApprovalScope, ApprovalState } from '../types';
 
@@ -75,14 +76,16 @@ describe('ApprovalStorageStore.consumeApproval()', () => {
     await expect(store.getApprovals(TOOL_ID, SESSION_ID)).resolves.toEqual([denial]);
   });
 
-  it('deletes the approval outright on a backend without compare-and-delete', async () => {
+  it('refuses to use up an approval on a backend without compare-and-delete, naming the storages that can', async () => {
     const record = await store.grantApproval({ toolId: TOOL_ID, scope: ApprovalScope.SESSION, sessionId: SESSION_ID });
     jest
       .spyOn(storage.root, 'deleteIfEquals')
       .mockRejectedValue(new StorageNotSupportedError('deleteIfEquals', 'cloudflare-kv'));
 
-    await expect(store.consumeApproval(record, SESSION_ID)).resolves.toBe(true);
-    await expect(store.getApprovals(TOOL_ID, SESSION_ID)).resolves.toEqual([]);
+    const consumed = store.consumeApproval(record, SESSION_ID);
+    await expect(consumed).rejects.toBeInstanceOf(ApprovalConfigurationError);
+    await expect(consumed).rejects.toThrow("type 'memory', 'redis', 'upstash', 'vercel-kv' or 'sqlite'");
+    await expect(store.getApprovals(TOOL_ID, SESSION_ID)).resolves.toEqual([record]);
   });
 
   it('reports a storage failure instead of deleting the approval', async () => {

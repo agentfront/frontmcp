@@ -54,6 +54,34 @@ class TemplateTwin extends ResourceContext<{ id: string }> {
   }
 }
 
+@Resource({ name: 'same', uri: 'same://one', worker: true })
+class FirstSame extends ResourceContext {
+  async execute() {
+    return 'first';
+  }
+}
+
+@Resource({ name: 'same', uri: 'same://one', worker: true })
+class SecondSame extends ResourceContext {
+  async execute() {
+    return 'second';
+  }
+}
+
+@Resource({ name: 'split', uri: 'a://b#c://d', worker: true })
+class SplitName extends ResourceContext {
+  async execute() {
+    return 'split name';
+  }
+}
+
+@Resource({ name: 'split#a://b', uri: 'c://d', worker: true })
+class SplitUri extends ResourceContext {
+  async execute() {
+    return 'split uri';
+  }
+}
+
 const HandlerResource = resource({ name: 'handler-report', uri: 'report://handler', worker: true })((uri, params) => ({
   contents: [{ uri, text: JSON.stringify(params) }],
 }));
@@ -70,12 +98,12 @@ describe('worker: true resources', () => {
     expect(workerResourceSourceOf(ReadsInWorker)).toEqual({
       file: __filename,
       name: 'reads-in-worker',
-      key: `${__filename}#reads-in-worker#report://reads`,
+      key: workerResourceKey(__filename, 'reads-in-worker', 'report://reads'),
     });
     expect(workerResourceSourceOf(RespondsInWorker)).toEqual({
       file: __filename,
       name: 'responds-in-worker',
-      key: `${__filename}#responds-in-worker#report://users/{id}`,
+      key: workerResourceKey(__filename, 'responds-in-worker', 'report://users/{id}'),
     });
     expect(workerResourceSourceOf(StaysInline)).toBeUndefined();
     expect(workerResourceSourceOf('not a function')).toBeUndefined();
@@ -115,6 +143,23 @@ describe('worker: true resources', () => {
     await expect(reader(TemplateTwin)?.read('twin://7', { id: '7' }, jest.fn())).resolves.toBe('template');
   });
 
+  it('keeps apart two worker resources whose name and URI only differ in where a # falls', async () => {
+    const reader = (target: unknown) => workerResourceReaders().get(workerResourceSourceOf(target)?.key ?? '');
+
+    await expect(reader(SplitName)?.read('a://b#c://d', {}, jest.fn())).resolves.toBe('split name');
+    await expect(reader(SplitUri)?.read('c://d', {}, jest.fn())).resolves.toBe('split uri');
+  });
+
+  it('refuses to read either of two worker resources of one module with the same name and URI', async () => {
+    const reader = (target: unknown) => workerResourceReaders().get(workerResourceSourceOf(target)?.key ?? '');
+
+    for (const target of [FirstSame, SecondSame]) {
+      await expect(reader(target)?.read('same://one', {}, jest.fn())).rejects.toThrow(
+        /declares more than one worker resource named "same" for "same:\/\/one".*give each its own name/,
+      );
+    }
+  });
+
   it('reads a function-style resource through its handler', async () => {
     await expect(
       readerOf('handler-report', 'report://handler').read('report://handler', { a: '1' }, jest.fn()),
@@ -128,7 +173,7 @@ describe('worker: true resources', () => {
     registerWorkerResourceHandler(handler, { name: 'nowhere', uri: 'report://nowhere' }, undefined);
 
     expect(workerResourceSourceOf(handler)).toMatchObject({ file: undefined, name: 'nowhere' });
-    expect([...workerResourceReaders().keys()].some((key) => key.includes('#nowhere#'))).toBe(false);
+    expect([...workerResourceReaders().keys()].some((key) => key.includes('"nowhere"'))).toBe(false);
   });
 
   it('refuses to read in a worker a resource whose module is unknown', () => {

@@ -10,6 +10,7 @@
 
 import type {
   AdapterCapabilities,
+  AdapterConfig,
   BridgeConfig,
   BridgeEventPayloads,
   BridgeEventType,
@@ -28,6 +29,23 @@ const DEFAULT_CONFIG: BridgeConfig = {
   debug: false,
   initTimeout: 5000,
 };
+
+/**
+ * Return the ext-apps adapter config limited to the bridge's trusted origins: its own list can narrow them, not widen them.
+ */
+function limitToTrustedOrigins(adapterConfig: AdapterConfig | undefined, trustedOrigins: string[]): AdapterConfig {
+  const ownOrigins = adapterConfig?.options?.['trustedOrigins'];
+  const origins =
+    Array.isArray(ownOrigins) && ownOrigins.length > 0
+      ? ownOrigins.filter((origin) => trustedOrigins.includes(origin))
+      : trustedOrigins;
+  if (origins.length === 0) {
+    throw new Error(
+      'The bridge trustedOrigins and adapterConfigs["ext-apps"].options.trustedOrigins have no origin in common. List the host origin in both, or set only one of them.',
+    );
+  }
+  return { ...adapterConfig, options: { ...adapterConfig?.options, trustedOrigins: origins } };
+}
 
 /**
  * FrontMcpBridge - Unified multi-platform bridge for MCP tool widgets.
@@ -89,6 +107,14 @@ export class FrontMcpBridge implements FrontMcpBridgeInterface {
       for (const [id, adapterConfig] of Object.entries(this._config.adapterConfigs)) {
         this._registry.configure(id, adapterConfig);
       }
+    }
+
+    if (this._config.trustedOrigins?.length) {
+      const extAppsConfig = limitToTrustedOrigins(
+        this._config.adapterConfigs?.['ext-apps'],
+        this._config.trustedOrigins,
+      );
+      this._registry.configure('ext-apps', extAppsConfig);
     }
   }
 

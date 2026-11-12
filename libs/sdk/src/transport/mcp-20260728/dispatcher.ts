@@ -17,6 +17,7 @@ import {
 } from '@frontmcp/protocol';
 import { sha256Hex } from '@frontmcp/utils';
 
+import { issuerSubjectKey, resolveIssuer } from '../../common/utils/issuer-subject.utils';
 import { type FrontMcpContext } from '../../context';
 import { InputRequiredSignal, MissingClientCapabilityError } from '../../errors';
 import { type Scope } from '../../scope';
@@ -113,7 +114,9 @@ export function resolvePrincipal(authInfo: Record<string, unknown> | undefined):
  * anonymous bootstrap token per request, which is a fine binding for a
  * short-lived `requestState` but must NOT be mistaken for an identity that can
  * own a durable task. Anonymous callers resolve to `'anonymous'` so task
- * creation is refused rather than pooled across unrelated users.
+ * creation is refused rather than pooled across unrelated users. A signed-in
+ * caller is its token's issuer and subject together (see {@link issuerSubjectKey}),
+ * so two issuers' users with the same subject own separate tasks.
  */
 export function resolveTaskPrincipal(authInfo: Record<string, unknown> | undefined, isAnonymous = false): string {
   // A public-mode server mints an anonymous session — complete with a synthetic
@@ -123,7 +126,8 @@ export function resolveTaskPrincipal(authInfo: Record<string, unknown> | undefin
   if (isAnonymous) return 'anonymous';
 
   const clientId = authInfo?.['clientId'];
-  return typeof clientId === 'string' && clientId.length > 0 ? clientId : 'anonymous';
+  if (typeof clientId !== 'string' || clientId.length === 0) return 'anonymous';
+  return issuerSubjectKey(resolveIssuer(authInfo), clientId);
 }
 
 type TaskDecision = { kind: 'skip' } | { kind: 'create'; owner: string } | { kind: 'refuse'; reason: string };

@@ -171,7 +171,7 @@ export function generateOptionCode(opt: CommanderOption): string {
   // because .choices() is a method on Option, not on Command
   if (opt.choices) {
     const parts: string[] = [];
-    parts.push(`.addOption(new Option('${opt.flags}', '${escapeStr(opt.description)}')`);
+    parts.push(`.addOption(new Option(${JSON.stringify(opt.flags)}, ${JSON.stringify(opt.description)})`);
 
     if (opt.coercion === 'parseInt') {
       parts.push(`.argParser((v) => parseInt(v, 10))`);
@@ -194,11 +194,8 @@ export function generateOptionCode(opt: CommanderOption): string {
 
   const parts: string[] = [];
 
-  if (opt.required) {
-    parts.push(`.requiredOption('${opt.flags}', '${escapeStr(opt.description)}'`);
-  } else {
-    parts.push(`.option('${opt.flags}', '${escapeStr(opt.description)}'`);
-  }
+  const optionArgs = `${JSON.stringify(opt.flags)}, ${JSON.stringify(opt.description)}`;
+  parts.push(opt.required ? `.requiredOption(${optionArgs}` : `.option(${optionArgs}`);
 
   if (opt.coercion === 'parseInt') {
     parts.push(`, (v) => parseInt(v, 10)`);
@@ -213,8 +210,4 @@ export function generateOptionCode(opt: CommanderOption): string {
   parts.push(')');
 
   return parts.join('');
-}
-
-function escapeStr(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }

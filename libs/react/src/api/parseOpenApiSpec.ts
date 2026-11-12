@@ -41,6 +41,8 @@ export function parseOpenApiSpec(spec: Record<string, unknown>): ApiOperation[] 
 
   const operations: ApiOperation[] = [];
   const usedIds = new Set<string>();
+  // The next suffix to try for each repeated id, so the search never starts over.
+  const nextSuffixes = new Map<string, number>();
 
   for (const [path, pathItem] of Object.entries(paths)) {
     if (!pathItem || typeof pathItem !== 'object') continue;
@@ -55,8 +57,9 @@ export function parseOpenApiSpec(spec: Record<string, unknown>): ApiOperation[] 
 
       // De-duplicate operationIds
       if (usedIds.has(operationId)) {
-        let suffix = 1;
+        let suffix = nextSuffixes.get(operationId) ?? 1;
         while (usedIds.has(`${operationId}_${suffix}`)) suffix++;
+        nextSuffixes.set(operationId, suffix + 1);
         operationId = `${operationId}_${suffix}`;
       }
       usedIds.add(operationId);

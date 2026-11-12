@@ -5,9 +5,10 @@
 import * as os from 'os';
 import * as path from 'path';
 
-import { fileExists, mkdtemp, rm, writeFile } from '../../fs';
+import { fileExists, mkdtemp, rm, stat, writeFile } from '../../fs';
 import { FileSystemStorageAdapter } from '../adapters/filesystem';
 import { StorageNotConnectedError, StorageOperationError } from '../errors';
+import { escapeGlob } from '../utils/pattern';
 
 describe('FileSystemStorageAdapter', () => {
   let adapter: FileSystemStorageAdapter;
@@ -52,6 +53,15 @@ describe('FileSystemStorageAdapter', () => {
     it('should throw when operating while disconnected', async () => {
       await adapter.disconnect();
       await expect(adapter.get('key')).rejects.toThrow(StorageNotConnectedError);
+    });
+
+    (process.platform === 'win32' ? it.skip : it)('creates its directory with dirMode', async () => {
+      const dir = path.join(testDir, 'private', 'keys');
+      const privateAdapter = new FileSystemStorageAdapter({ baseDir: dir });
+      await privateAdapter.connect();
+
+      expect((await stat(dir)).mode & 0o777).toBe(0o700);
+      await privateAdapter.disconnect();
     });
   });
 
@@ -220,6 +230,20 @@ describe('FileSystemStorageAdapter', () => {
       expect(keys.sort()).toEqual(['user:1', 'user:2']);
     });
 
+    it('should answer a pattern with many wildcards on a long key', async () => {
+      // As a regular expression, this pattern on this key backtracks for longer than any test run.
+      const longKey = 'a'.repeat(200);
+      await adapter.set(longKey, 'long');
+      expect(await adapter.keys('*a'.repeat(20) + 'b')).toEqual([]);
+      expect(await adapter.keys('*a'.repeat(20))).toEqual([longKey]);
+    });
+
+    it('should read an escaped wildcard as the literal character', async () => {
+      await adapter.set('id:a*b', 'literal');
+      await adapter.set('id:axb', 'other');
+      expect(await adapter.keys(`id:${escapeGlob('a*b')}`)).toEqual(['id:a*b']);
+    });
+
     it('should not list expired keys', async () => {
       await adapter.set('active', 'value');
       await adapter.set('expired', 'value', { ttlSeconds: 1 });
@@ -274,6 +298,17 @@ describe('FileSystemStorageAdapter', () => {
 
       const ttl = await adapter.ttl('counter');
       expect(ttl).toBeGreaterThan(0);
+    });
+
+    it('counts every increment when increments and expiry updates run at the same time', async () => {
+      const counted = await Promise.all(
+        Array.from({ length: 10 }, (_, index) =>
+          index % 2 === 0 ? adapter.incr('counter') : adapter.expire('counter', 60).then(() => adapter.incr('counter')),
+        ),
+      );
+
+      expect(counted.sort((left, right) => left - right)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      expect(await adapter.get('counter')).toBe('10');
     });
   });
 

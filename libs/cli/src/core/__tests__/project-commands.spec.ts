@@ -3,8 +3,9 @@ import * as path from 'path';
 
 import { Command } from 'commander';
 
-import { mkdtemp, rm, writeFile } from '@frontmcp/utils';
+import { fileExists, mkdir, mkdtemp, rm, writeFile } from '@frontmcp/utils';
 
+import { createProgram } from '../program';
 import {
   dispatchToEntry,
   isCommandHidden,
@@ -308,5 +309,55 @@ describe('registerProjectCommands', () => {
     expect(signalErr.signal).toBe('SIGTERM');
     expect(signalErr.message).toMatch(/kill/);
     expect(signalErr.message).toMatch(/SIGTERM/);
+  });
+});
+
+describe('project commands of the config the command line selects', () => {
+  let tmp: string;
+  let marker: string;
+  let chosen: string;
+
+  beforeEach(async () => {
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'fmcp-selected-'));
+    marker = path.join(tmp, 'working-directory-config-ran');
+    await writeFile(
+      path.join(tmp, 'frontmcp.config.js'),
+      `require('fs').writeFileSync(${JSON.stringify(marker)}, ''); module.exports = { name: 'here', deployments: [{ target: 'node' }] };`,
+    );
+    chosen = path.join(tmp, 'chosen', 'frontmcp.config.json');
+    await mkdir(path.dirname(chosen), { recursive: true });
+    await writeFile(
+      chosen,
+      JSON.stringify({
+        name: 'chosen',
+        deployments: [{ target: 'node' }],
+        cli: { commands: { deploy: { entry: './deploy.ts' } } },
+      }),
+    );
+  });
+
+  afterEach(async () => {
+    delete process.env['FRONTMCP_CONFIG'];
+    await rm(tmp, { recursive: true, force: true });
+  });
+
+  it.each([
+    ['--config <path> before the verb', () => ['--config', chosen, 'build']],
+    ['--config=<path> after the verb', () => ['build', `--config=${chosen}`]],
+    ['-c <path>', () => ['build', '-c', chosen]],
+  ])('come from the file %s names, and the working directory config never runs', async (_form, args) => {
+    const program = await createProgram(tmp, ['node', 'frontmcp', ...args()]);
+
+    expect(program.commands.some((cmd) => cmd.name() === 'deploy')).toBe(true);
+    expect(await fileExists(marker)).toBe(false);
+  });
+
+  it('come from the file FRONTMCP_CONFIG names when no --config is given', async () => {
+    process.env['FRONTMCP_CONFIG'] = chosen;
+
+    const program = await createProgram(tmp, ['node', 'frontmcp', 'build']);
+
+    expect(program.commands.some((cmd) => cmd.name() === 'deploy')).toBe(true);
+    expect(await fileExists(marker)).toBe(false);
   });
 });

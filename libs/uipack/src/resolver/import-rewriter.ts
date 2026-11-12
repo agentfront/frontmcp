@@ -72,8 +72,9 @@ export function rewriteImports(source: string, options: ResolverOptions = {}): R
 
   for (const [specifier, cdnUrl] of specifierMap) {
     const escaped = escapeRegExp(specifier);
-    const singleQuotePattern = new RegExp(`((?:import|export)\\s+(?:[^'"]*\\s+)?from\\s+)'${escaped}'`, 'g');
-    const doubleQuotePattern = new RegExp(`((?:import|export)\\s+(?:[^'"]*\\s+)?from\\s+)"${escaped}"`, 'g');
+    // One whitespace character on each side of the clause: `\s+` there could split the same whitespace every way
+    const singleQuotePattern = new RegExp(`((?:import|export)\\s(?:[^'"]*\\s)?from\\s+)'${escaped}'`, 'g');
+    const doubleQuotePattern = new RegExp(`((?:import|export)\\s(?:[^'"]*\\s)?from\\s+)"${escaped}"`, 'g');
     const dynamicSinglePattern = new RegExp(`(import\\s*\\(\\s*)'${escaped}'`, 'g');
     const dynamicDoublePattern = new RegExp(`(import\\s*\\(\\s*)"${escaped}"`, 'g');
     const sideEffectSinglePattern = new RegExp(`(import\\s+)'${escaped}'`, 'g');

@@ -376,6 +376,20 @@ describe('AuthorizationBase', () => {
       const auth = createAuth();
       expect(auth.isAppAuthorized('slack')).toBe(false);
     });
+
+    it.each(['constructor', 'toString', 'hasOwnProperty', '__proto__'])(
+      'does not authorize a tool, prompt or app named %s that no grant lists',
+      (name) => {
+        const auth = createAuth({
+          authorizedTools: { search: { executionPath: ['app1', 'search'] } },
+          authorizedPrompts: { greeting: { executionPath: ['app1', 'greeting'] } },
+          authorizedApps: { slack: { id: 'slack', toolIds: ['send'] } },
+        });
+        expect(auth.canAccessTool(name)).toBe(false);
+        expect(auth.canAccessPrompt(name)).toBe(false);
+        expect(auth.isAppAuthorized(name)).toBe(false);
+      },
+    );
   });
 
   // ========================================

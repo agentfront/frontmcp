@@ -165,6 +165,8 @@ An anonymous caller (public mode, `allowAnonymous`, or an `anon:` session) has n
 
 Every condition needs a `value` the operator can use: `exists` takes `true` or `false`, `in`/`notIn` a non-empty list, `gt`/`gte`/`lt`/`lte` a number, and `startsWith`/`endsWith`/`matches` a string; a `{ fromInput }` / `{ fromClaims }` reference works for all but `exists`. A condition without one (for example `{ path: 'user.sub', op: 'exists' }`, which would admit every caller without a `sub`) fails startup with `Invalid authorities rule`, and the engine denies it.
 
+A `matches` pattern runs only when it is at most 256 characters, a valid regular expression, and free of nested or overlapping repetition (such as `(a+)+`). A literal pattern that breaks one of these rules fails startup with `Invalid authorities rule`; one taken from `fromInput` or `fromClaims` makes the check deny as unresolved, under `not` too. A value longer than 10,000 characters is not matched either: that check also denies as unresolved.
+
 ### Dynamic Value References
 
 Instead of hardcoding values, reference runtime data from tool input or JWT claims.
@@ -253,7 +255,7 @@ type ResourceIdRef = string | { fromInput: string } | { fromClaims: string };
 
 ### Implementing a Relationship Resolver
 
-The resolver is passed via the `authorities.relationshipResolver` config in `@FrontMcp()`. It must implement the `RelationshipResolver` interface.
+The resolver is passed via the `authorities.relationshipResolver` config in `@FrontMcp()`. It must implement the `RelationshipResolver` interface. A server whose rules or profiles check `relationships` without a `relationshipResolver` fails startup with `Relationship resolver required`, since those checks could never pass.
 
 ```typescript
 import type { RelationshipResolver, AuthoritiesEvaluationContext } from '@frontmcp/auth';

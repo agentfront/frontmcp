@@ -63,9 +63,14 @@ export class PublicAuthorization extends AuthorizationBase {
    */
   readonly issuer?: string;
 
-  private constructor(ctx: AuthorizationCreateCtx & { issuer?: string }) {
+  readonly #allTools: boolean;
+  readonly #allPrompts: boolean;
+
+  private constructor(ctx: AuthorizationCreateCtx & { issuer?: string; allTools: boolean; allPrompts: boolean }) {
     super(ctx);
     this.issuer = ctx.issuer;
+    this.#allTools = ctx.allTools;
+    this.#allPrompts = ctx.allPrompts;
   }
 
   /**
@@ -137,6 +142,8 @@ export class PublicAuthorization extends AuthorizationBase {
       scopes,
       expiresAt,
       issuer,
+      allTools: allowedTools === 'all',
+      allPrompts: allowedPrompts === 'all',
       authorizedTools: allowedTools === 'all' ? undefined : authorizedTools,
       authorizedToolIds: allowedTools === 'all' ? undefined : authorizedToolIds,
       authorizedPrompts: allowedPrompts === 'all' ? undefined : authorizedPrompts,
@@ -157,24 +164,23 @@ export class PublicAuthorization extends AuthorizationBase {
   }
 
   /**
-   * Check if all tools are allowed (public access)
+   * Check if all tools are allowed (`allowedTools: 'all'`); an empty list allows none
    */
   get allowsAllTools(): boolean {
-    return this.authorizedToolIds.length === 0 && Object.keys(this.authorizedTools).length === 0;
+    return this.#allTools;
   }
 
   /**
-   * Check if all prompts are allowed (public access)
+   * Check if all prompts are allowed (`allowedPrompts: 'all'`); an empty list allows none
    */
   get allowsAllPrompts(): boolean {
-    return this.authorizedPromptIds.length === 0 && Object.keys(this.authorizedPrompts).length === 0;
+    return this.#allPrompts;
   }
 
   /**
    * Override canAccessTool to support 'all' mode
    */
   override canAccessTool(toolId: string): boolean {
-    // If no specific tools defined, all are allowed
     if (this.allowsAllTools) {
       return true;
     }
@@ -185,7 +191,6 @@ export class PublicAuthorization extends AuthorizationBase {
    * Override canAccessPrompt to support 'all' mode
    */
   override canAccessPrompt(promptId: string): boolean {
-    // If no specific prompts defined, all are allowed
     if (this.allowsAllPrompts) {
       return true;
     }

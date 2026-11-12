@@ -134,8 +134,8 @@ export class VersionResolver {
       }
     }
 
-    // Handle other dist-tags (e.g., 'next', 'beta')
-    if (data['dist-tags']?.[specifier.range]) {
+    // Handle other dist-tags (e.g., 'next', 'beta'); a version or a range is never read as a tag name
+    if (isDistTag(specifier.range) && data['dist-tags']?.[specifier.range]) {
       const tagVersion = data['dist-tags'][specifier.range];
       if (isValidVersion(tagVersion)) {
         return {

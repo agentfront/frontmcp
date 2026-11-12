@@ -6,6 +6,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { escapeControlCharacters } from '@frontmcp/utils';
+
 import { c } from '../../core/colors';
 import { clack } from '../../shared/prompts';
 import { ManifestSetupStep } from '../build/exec/manifest';
@@ -69,9 +71,20 @@ function runSilent(steps: ManifestSetupStep[]): QuestionnaireResult {
   const answers: Record<string, string> = {};
   const stepMap = new Map(steps.map((s, i) => [s.id, i]));
   let currentIndex = 0;
+  const visited = new Set<string>();
 
   while (currentIndex < steps.length) {
     const step = steps[currentIndex];
+
+    // Every answer here is its step's default, so coming back to a step with no new answer since repeats forever.
+    const position = `${currentIndex}:${Object.keys(answers).length}`;
+    if (visited.has(position)) {
+      throw new Error(
+        `The setup steps route back to step "${escapeControlCharacters(step.id)}" in a loop, so --yes cannot finish. ` +
+          'Run the install without --yes, or ask the package author to fix the "next" routing of its setup steps.',
+      );
+    }
+    visited.add(position);
 
     if (step.showWhen && !evaluateShowWhen(step.showWhen, answers)) {
       currentIndex++;
@@ -165,22 +178,23 @@ async function promptText(step: ManifestSetupStep, defaultValue: string | undefi
   const schema = step.jsonSchema;
   const isOptional = schema.default !== undefined || (schema as Record<string, unknown>).nullable === true;
 
-  const result = await p.text({
-    message: step.prompt,
-    placeholder: step.description || (step.sensitive && defaultValue ? '****' : undefined),
-    defaultValue,
-    validate: (val) => {
-      const trimmed = val.trim();
-      if (!trimmed && !defaultValue && !isOptional) {
-        return 'This field is required.';
-      }
-      if (trimmed) {
-        const error = validateAgainstSchema(trimmed, step.jsonSchema);
-        if (error) return error;
-      }
-      return undefined;
-    },
-  });
+  const validate = (val: string): string | undefined => {
+    const trimmed = val.trim();
+    if (!trimmed && !defaultValue && !isOptional) {
+      return 'This field is required.';
+    }
+    if (trimmed) {
+      const error = validateAgainstSchema(trimmed, step.jsonSchema);
+      if (error) return error;
+    }
+    return undefined;
+  };
+  const result = step.sensitive
+    ? await p.password({
+        message: step.description ? `${step.prompt}\n${c('gray', step.description)}` : step.prompt,
+        validate,
+      })
+    : await p.text({ message: step.prompt, placeholder: step.description, defaultValue, validate });
 
   if (p.isCancel(result)) {
     p.cancel('Cancelled.');
@@ -281,24 +295,36 @@ function answersToEnv(answers: Record<string, string>, steps: ManifestSetupStep[
 
     if (step.group && step.group !== currentGroup) {
       currentGroup = step.group;
-      lines.push(`\n# ${currentGroup}`);
+      lines.push(`\n# ${escapeControlCharacters(currentGroup)}`);
     }
 
-    const envName = step.env;
-    // Quote values that contain special characters
-    const needsQuotes = /[\s#"'\\]/.test(value) || value.includes('=');
-    const quotedValue = needsQuotes ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : value;
-
-    lines.push(`${envName}=${quotedValue}`);
+    if (!ENV_NAME.test(step.env)) {
+      throw new Error(
+        `Setup step "${escapeControlCharacters(step.id)}" saves its answer as "${escapeControlCharacters(step.env)}", ` +
+          'which is not an environment variable name. Ask the package author for a name of letters, digits and underscores.',
+      );
+    }
+    lines.push(`${step.env}=${envFileValue(value)}`);
   }
 
   return lines.join('\n') + '\n';
 }
 
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const PLAIN_ENV_VALUE = /^[\w./:@%+,-]*$/;
+
+/** The value as the runner's `source` reads it literally; `frontmcp start` reads it the same unless it mixes `'` with `"`, `$` or a backtick. */
+function envFileValue(value: string): string {
+  if (PLAIN_ENV_VALUE.test(value)) return value;
+  if (!value.includes("'")) return `'${value}'`;
+  return `"${value.replace(/[\\"$`]/g, '\\$&')}"`;
+}
+
 /**
- * Write .env file for an installed app.
+ * Write .env file for an installed app, readable by its owner only.
  */
 export function writeEnvFile(appDir: string, content: string): void {
   const envPath = path.join(appDir, '.env');
-  fs.writeFileSync(envPath, content, 'utf-8');
+  if (fs.existsSync(envPath)) fs.chmodSync(envPath, 0o600);
+  fs.writeFileSync(envPath, content, { encoding: 'utf-8', mode: 0o600 });
 }

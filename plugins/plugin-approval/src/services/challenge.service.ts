@@ -249,7 +249,8 @@ export class ChallengeService {
   }
 
   /**
-   * Mark a challenge as having been sent to webhook.
+   * Mark a challenge as having been sent to webhook. A challenge a callback already used stays used: this returns
+   * `false` and writes nothing, as it does on a backend without conditional writes.
    */
   async markWebhookSent(codeChallenge: string): Promise<boolean> {
     this.ensureInitialized();
@@ -268,8 +269,14 @@ export class ChallengeService {
     }
 
     const ttlSeconds = Math.ceil(remainingMs / 1000);
-    await this.storage.set(codeChallenge, JSON.stringify(record), { ttlSeconds });
-    return true;
+    const updatedJson = JSON.stringify(record);
+    try {
+      await this.storage.set(codeChallenge, updatedJson, { ttlSeconds, ifExists: true });
+    } catch (error) {
+      if (!(error instanceof StorageNotSupportedError)) throw error;
+      return false;
+    }
+    return (await this.storage.get(codeChallenge)) === updatedJson;
   }
 
   /**

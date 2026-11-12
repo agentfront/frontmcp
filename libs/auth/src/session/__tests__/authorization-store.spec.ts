@@ -176,9 +176,26 @@ describe('InMemoryAuthorizationStore', () => {
       expect(retrieved.used).toBe(true);
     });
 
-    it('should silently ignore markCodeUsed for unknown code', async () => {
-      // Should not throw
-      await store.markCodeUsed('nonexistent');
+    it('should refuse to mark an unknown code used', async () => {
+      await expect(store.markCodeUsed('nonexistent')).rejects.toThrow('already redeemed');
+    });
+
+    it('should let only one of two concurrent token requests mark a code used', async () => {
+      const record = makeCodeRecord(store);
+      await store.storeAuthorizationCode(record);
+
+      const results = await Promise.allSettled([store.markCodeUsed(record.code), store.markCodeUsed(record.code)]);
+
+      expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+    });
+
+    it('should record the refresh token issued from a code marked used', async () => {
+      const record = makeCodeRecord(store);
+      await store.storeAuthorizationCode(record);
+      await store.markCodeUsed(record.code);
+      await store.markCodeUsed(record.code, 'issued-refresh-token');
+
+      expect((await store.getAuthorizationCode(record.code))?.issuedRefreshToken).toBe('issued-refresh-token');
     });
 
     it('should delete a code record', async () => {
@@ -283,6 +300,32 @@ describe('InMemoryAuthorizationStore', () => {
       const newRetrieved = await store.getRefreshToken(newRecord.token);
       assertDefined(newRetrieved);
       expect(newRetrieved.previousToken).toBe(oldRecord.token);
+    });
+
+    it('should let only one of two concurrent rotations of a refresh token succeed', async () => {
+      const oldRecord = makeRefreshTokenRecord(store);
+      await store.storeRefreshToken(oldRecord);
+      const firstSuccessor = makeRefreshTokenRecord(store);
+      const secondSuccessor = makeRefreshTokenRecord(store);
+
+      const results = await Promise.allSettled([
+        store.rotateRefreshToken(oldRecord.token, firstSuccessor),
+        store.rotateRefreshToken(oldRecord.token, secondSuccessor),
+      ]);
+      const liveSuccessors = [
+        await store.getRefreshToken(firstSuccessor.token),
+        await store.getRefreshToken(secondSuccessor.token),
+      ].filter((record) => record !== null);
+
+      expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+      expect(liveSuccessors).toHaveLength(1);
+    });
+
+    it('should refuse to rotate an unknown refresh token', async () => {
+      const newRecord = makeRefreshTokenRecord(store);
+
+      await expect(store.rotateRefreshToken('nonexistent', newRecord)).rejects.toThrow('already rotated');
+      expect(await store.getRefreshToken(newRecord.token)).toBeNull();
     });
   });
 
@@ -447,6 +490,7 @@ describe('RedisAuthorizationStore', () => {
     get: jest.Mock;
     set: jest.Mock;
     del: jest.Mock;
+    eval: jest.Mock;
   };
   let store: RedisAuthorizationStore;
 
@@ -455,8 +499,74 @@ describe('RedisAuthorizationStore', () => {
       get: jest.fn(),
       set: jest.fn().mockResolvedValue('OK'),
       del: jest.fn().mockResolvedValue(1),
+      eval: jest.fn().mockResolvedValue(1),
     };
     store = new RedisAuthorizationStore(mockRedis, 'test:');
+  });
+
+  /** A Redis stand-in whose `eval` runs the compare-and-delete script against a map. */
+  function fakeRedis() {
+    const values = new Map<string, string>();
+    return {
+      get: async (key: string) => values.get(key) ?? null,
+      set: async (key: string, value: string) => {
+        values.set(key, value);
+        return 'OK';
+      },
+      del: async (key: string) => Number(values.delete(key)),
+      eval: async (_script: string, _keyCount: number, key: string, expected: string) =>
+        values.get(key) === expected ? Number(values.delete(key)) : 0,
+    };
+  }
+
+  describe('concurrent redemptions', () => {
+    it('should let only one of two concurrent token requests mark a code used', async () => {
+      const redisStore = new RedisAuthorizationStore(fakeRedis());
+      const record = redisStore.createCodeRecord({
+        clientId: 'client-1',
+        redirectUri: 'https://example.com/cb',
+        scopes: [],
+        pkce: { challenge: 'abc', method: 'S256' },
+        userSub: 'user-1',
+      });
+      await redisStore.storeAuthorizationCode(record);
+
+      const results = await Promise.allSettled([
+        redisStore.markCodeUsed(record.code),
+        redisStore.markCodeUsed(record.code),
+      ]);
+
+      expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+      expect((await redisStore.getAuthorizationCode(record.code))?.used).toBe(true);
+    });
+
+    it('should let only one of two concurrent rotations of a refresh token succeed', async () => {
+      const redisStore = new RedisAuthorizationStore(fakeRedis());
+      const oldRecord = redisStore.createRefreshTokenRecord({ clientId: 'client-1', userSub: 'user-1', scopes: [] });
+      await redisStore.storeRefreshToken(oldRecord);
+      const firstSuccessor = redisStore.createRefreshTokenRecord({
+        clientId: 'client-1',
+        userSub: 'user-1',
+        scopes: [],
+      });
+      const secondSuccessor = redisStore.createRefreshTokenRecord({
+        clientId: 'client-1',
+        userSub: 'user-1',
+        scopes: [],
+      });
+
+      const results = await Promise.allSettled([
+        redisStore.rotateRefreshToken(oldRecord.token, firstSuccessor),
+        redisStore.rotateRefreshToken(oldRecord.token, secondSuccessor),
+      ]);
+      const liveSuccessors = [
+        await redisStore.getRefreshToken(firstSuccessor.token),
+        await redisStore.getRefreshToken(secondSuccessor.token),
+      ].filter((record) => record !== null);
+
+      expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+      expect(liveSuccessors).toHaveLength(1);
+    });
   });
 
   describe('key format', () => {
@@ -560,9 +670,9 @@ describe('RedisAuthorizationStore', () => {
       expect(storedJson.used).toBe(true);
     });
 
-    it('should do nothing if code not found', async () => {
+    it('should refuse a code that is not found', async () => {
       mockRedis.get.mockResolvedValue(null);
-      await store.markCodeUsed('nonexistent');
+      await expect(store.markCodeUsed('nonexistent')).rejects.toThrow('already redeemed');
       expect(mockRedis.set).not.toHaveBeenCalled();
     });
   });

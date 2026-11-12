@@ -13,6 +13,7 @@ import { trimSlashes, trimTrailing } from '@frontmcp/utils';
 import type { ClientInfo, ElicitationCreateRequest, ElicitationHandler } from '../client/mcp-test-client.types';
 import type { InterceptorChain } from '../interceptor';
 import { errorMessage, isAbortError, markInterceptedError } from './error-utils';
+import { SseEventSplitter } from './sse-event-splitter';
 import type {
   JsonRpcRequest,
   JsonRpcResponse,
@@ -287,6 +288,12 @@ export class SseTransport implements McpTransport {
     try {
       const data = await endpoint;
       const messageUrl = new URL(data, url);
+      if (messageUrl.origin !== new URL(url).origin) {
+        throw new Error(
+          `SSE server at ${url} named a message endpoint on another origin (${messageUrl.origin}); ` +
+            `the legacy SSE transport only posts to the origin it connected to.`,
+        );
+      }
       this.messageEndpoint = messageUrl.toString();
       this.sessionId = messageUrl.searchParams.get('sessionId') ?? undefined;
     } finally {
@@ -301,13 +308,11 @@ export class SseTransport implements McpTransport {
     onEndpointError: (error: Error) => void,
   ): Promise<void> {
     const decoder = new TextDecoder();
-    let buffer = '';
+    const splitter = new SseEventSplitter();
     let endpointSeen = false;
     try {
       for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-        const { completeEvents, remainder } = splitSSEEvents(buffer + decoder.decode(chunk.value, { stream: true }));
-        buffer = remainder;
-        for (const text of completeEvents) {
+        for (const text of splitter.push(decoder.decode(chunk.value, { stream: true }))) {
           const event = parseSSEEvent(text);
           if (!event) continue;
           if (event.type === 'endpoint') {
@@ -526,15 +531,6 @@ export class SseTransport implements McpTransport {
       console.log(`[SSE] ${message}`, data ?? '');
     }
   }
-}
-
-/** Splits complete SSE events off the buffer, accepting CRLF, CR and LF line endings, even split across chunks. */
-function splitSSEEvents(buffer: string): { completeEvents: string[]; remainder: string } {
-  const endsWithCarriageReturn = buffer.endsWith('\r');
-  const normalized = (endsWithCarriageReturn ? buffer.slice(0, -1) : buffer).replace(/\r\n?/g, '\n');
-  const completeEvents = normalized.split('\n\n');
-  const remainder = completeEvents.pop() ?? '';
-  return { completeEvents, remainder: endsWithCarriageReturn ? `${remainder}\r` : remainder };
 }
 
 /** Parse one SSE event block; `undefined` for comments / keep-alives without data. */

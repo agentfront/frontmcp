@@ -150,6 +150,14 @@ describe('PublicAuthorization', () => {
       });
     });
 
+    it('allows no tool and no prompt when the allowed lists are empty', () => {
+      const auth = PublicAuthorization.create({ allowedTools: [], allowedPrompts: [] });
+      expect(auth.allowsAllTools).toBe(false);
+      expect(auth.allowsAllPrompts).toBe(false);
+      expect(auth.canAccessTool('search')).toBe(false);
+      expect(auth.canAccessPrompt('greeting')).toBe(false);
+    });
+
     it('should handle allowedTools="all" as default behavior', () => {
       const auth = PublicAuthorization.create({ allowedTools: 'all' });
       expect(auth.allowsAllTools).toBe(true);

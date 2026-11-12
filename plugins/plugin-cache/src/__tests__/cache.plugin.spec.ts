@@ -194,6 +194,30 @@ describe('CachePlugin', () => {
         expect(result).toBeInstanceOf(CacheRedisProvider);
       });
 
+      it("should connect a Redis global store with the server's TLS setting and key prefix", () => {
+        const Redis = require('ioredis');
+        const provider = CachePlugin.dynamicProviders({ type: 'global-store' })[0] as FactoryProvider;
+        Redis.mockClear();
+
+        provider.useFactory({
+          redis: {
+            provider: 'redis',
+            host: 'redis.example.com',
+            port: 6380,
+            password: 'secret',
+            tls: true,
+            keyPrefix: 'billing:',
+          },
+        });
+        provider.useFactory({ redis: { provider: 'redis', host: 'redis.example.com', tls: false, keyPrefix: 'mcp:' } });
+
+        expect(Redis).toHaveBeenNthCalledWith(
+          1,
+          expect.objectContaining({ host: 'redis.example.com', password: 'secret', tls: {}, keyPrefix: 'billing:' }),
+        );
+        expect(Redis).toHaveBeenNthCalledWith(2, expect.objectContaining({ tls: undefined, keyPrefix: 'mcp:' }));
+      });
+
       it('should create Redis provider for legacy config without provider field', () => {
         const providers = CachePlugin.dynamicProviders({ type: 'global-store' });
         const provider = providers[0] as FactoryProvider;

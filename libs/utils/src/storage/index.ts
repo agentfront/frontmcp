@@ -99,7 +99,7 @@ export type {
 } from './adapters';
 
 // Utilities (for advanced use)
-export { globToRegex, matchesPattern, validatePattern, escapeGlob } from './utils/pattern';
+export { createGlobMatcher, globToRegex, matchesPattern, validatePattern, escapeGlob } from './utils/pattern';
 export {
   MAX_TTL_SECONDS,
   validateTTL,

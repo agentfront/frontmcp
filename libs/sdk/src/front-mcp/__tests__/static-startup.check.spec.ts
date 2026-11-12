@@ -216,10 +216,6 @@ const ACCEPTED: Array<[string, FrontMcpConfigInput]> = [
     server({ apps: [app('billing', { tools: [tool('refund_invoice', APPROVAL)] })], plugins: [OwnAppApprovalPlugin] }),
   ],
   [
-    'an approval tool inside an agent whose own plugin declares approval without a hook',
-    server({ apps: [app('desk', { agents: [refundDeskAgent({ plugins: [HooklessApprovalPlugin] })] })] }),
-  ],
-  [
     'an approval tool inside an agent whose own plugin enforces approval',
     server({ apps: [app('desk', { agents: [refundDeskAgent({ plugins: [AnyAppApprovalPlugin] })] })] }),
   ],
@@ -404,6 +400,17 @@ describe('assertStaticStartupConfig', () => {
 
     expect(full).toBeInstanceOf(E);
     expect(fast).toBeInstanceOf(E);
+  });
+
+  it("leaves to the full checks an agent's plugin that declares approval without a hook", async () => {
+    const config = server({
+      apps: [app('desk', { agents: [refundDeskAgent({ plugins: [HooklessApprovalPlugin] })] })],
+    });
+
+    const full = await rejectionOf(FrontMcpInstance.createDirect(config));
+
+    expect(full).toBeInstanceOf(UnenforcedMetadataError);
+    expect(errorOf(() => assertStaticStartupConfig(config))).toBeUndefined();
   });
 
   it('reads the hooks of a plugin compiled with TC39 decorators without taking them from the build', () => {

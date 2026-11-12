@@ -147,6 +147,16 @@ describe('DcrClientRegistry', () => {
       expect(registry.isRedirectUriAllowed('https://a.example.com.evil.com/cb')).toBe(false);
     });
 
+    it('refuses a redirect_uri with a backslash, space or control character under a host wildcard', () => {
+      const registry = new DcrClientRegistry({
+        allowedRedirectUris: ['https://*.example.com/cb'],
+      });
+      expect(registry.isRedirectUriAllowed('https://evil.com\\.example.com/cb')).toBe(false);
+      expect(registry.isRedirectUriAllowed('https://a.example.com\\@evil.com/cb')).toBe(false);
+      expect(registry.isRedirectUriAllowed('https://a.example.com/cb\t')).toBe(false);
+      expect(registry.isRedirectUriAllowed('https://a.example.com/cb')).toBe(true);
+    });
+
     it('does not let a port wildcard cross into the host or path', () => {
       const registry = new DcrClientRegistry({
         allowedRedirectUris: ['http://localhost:*/callback'],

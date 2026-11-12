@@ -8,6 +8,7 @@ import { mkdtemp, pathJoin, realpath, rm, writeFile } from '@frontmcp/utils';
 import { LogLevel, Resource, ResourceContext, ResourceTemplate, Tool, ToolContext } from '../../common';
 import { create } from '../../direct/create';
 import { OffloadAbortedError, OffloadBudgetExceededError } from '../../errors/offload.errors';
+import { workerResourceKey } from '../offload-worker.globals';
 import { OffloadService } from '../offload.service';
 
 const WORK_MODULE = `
@@ -129,7 +130,7 @@ describe('this.offload() and worker: true in a server', () => {
         {
           kind: 'resource',
           file: __filename,
-          key: `${__filename}#report#report://worker`,
+          key: workerResourceKey(__filename, 'report', 'report://worker'),
           name: 'report',
           uri: 'report://worker',
           params: {},
@@ -141,7 +142,7 @@ describe('this.offload() and worker: true in a server', () => {
         {
           kind: 'resource',
           file: __filename,
-          key: `${__filename}#user-report#report://users/{id}`,
+          key: workerResourceKey(__filename, 'user-report', 'report://users/{id}'),
           name: 'user-report',
           uri: 'report://users/7',
           params: { id: '7' },

@@ -127,17 +127,29 @@ const lockedPorts = new Set<number>();
 const LOCK_MAX_AGE_MS = 10 * 60 * 1000;
 
 interface FsLike {
-  mkdirSync(path: string, options: { recursive: boolean }): void;
   writeFileSync(path: string, data: string, options: { flag: string }): void;
   readFileSync(path: string, encoding: 'utf8'): string;
   unlinkSync(path: string): void;
 }
 
+/**
+ * This user's lock file directory, created with owner-only access. Undefined (no lock files) when another
+ * user owns it or can open it, so their files can neither hold nor block this user's ports.
+ */
 function lockDir(): string | undefined {
   try {
+    const fs = require('node:fs');
     const os = require('node:os');
     const path = require('node:path');
-    return path.join(os.tmpdir(), 'frontmcp-testing-ports');
+    const uid = typeof process.getuid === 'function' ? process.getuid() : undefined;
+    const dir: string = path.join(
+      os.tmpdir(),
+      uid === undefined ? 'frontmcp-testing-ports' : `frontmcp-testing-ports-${uid}`,
+    );
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    if (uid === undefined) return dir;
+    const stats = fs.lstatSync(dir);
+    return stats.isDirectory() && stats.uid === uid && (stats.mode & 0o077) === 0 ? dir : undefined;
   } catch {
     return undefined;
   }
@@ -164,7 +176,6 @@ function acquirePortLock(port: number): boolean {
     fs = require('node:fs');
     const dir = lockDir();
     if (!dir) return true;
-    fs.mkdirSync(dir, { recursive: true });
     file = require('node:path').join(dir, `${port}.lock`);
   } catch {
     return true;

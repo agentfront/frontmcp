@@ -48,7 +48,7 @@ export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthoriza
 
   private isAdmin(authInfo: any): boolean {
     const user = authInfo?.user as any;
-    if (!user) return !!this.opts.demoAllowAllIfNoClaims;
+    if (!user) return false;
     if (user.isAdmin === true) return true;
     const roles: string[] = Array.isArray(user?.roles) ? user.roles : [];
     return roles.includes('admin') || roles.includes('owner') || roles.includes('superadmin');
@@ -71,13 +71,15 @@ export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthoriza
       return;
     }
 
-    if (!siteId || typeof siteId !== 'string' || siteId.length === 0) {
-      throw new Error(`Missing required ${siteField} for site-scoped operation`);
-    }
-
     const allowed = this.getAllowedSites(ctx.authInfo);
-    if (allowed !== 'ALL' && !allowed.includes(siteId)) {
-      throw new Error(`Not authorized for site ${siteId}`);
+    const readsEverySite = siteId === undefined && allowed === 'ALL';
+    if (!readsEverySite) {
+      if (!siteId || typeof siteId !== 'string' || siteId.length === 0) {
+        throw new Error(`Missing required ${siteField}: pass a site this caller is allowed to use`);
+      }
+      if (allowed !== 'ALL' && !allowed.includes(siteId)) {
+        throw new Error(`Not authorized for site ${siteId}`);
+      }
     }
 
     if (adminRequired && !this.isAdmin(ctx.authInfo)) {

@@ -37,7 +37,13 @@ import {
   type CimdSecurityConfig,
   type ClientMetadataDocument,
 } from './cimd.types';
-import { assertHostNotSsrf, hasOnlyLocalhostRedirectUris, isCimdClientId, validateClientIdUrl } from './cimd.validator';
+import {
+  assertHostNotSsrf,
+  blocksPrivateAddressesFor,
+  hasOnlyLocalhostRedirectUris,
+  isCimdClientId,
+  validateClientIdUrl,
+} from './cimd.validator';
 
 /** How many `jwks_uri` key sets are kept in memory; the oldest goes first. */
 const MAX_CACHED_KEY_SETS = 500;
@@ -389,10 +395,11 @@ export class CimdService {
         // host cannot reach cloud-metadata / private addresses via a
         // DNS record or a 3xx to an internal target. `validateClientIdUrl`
         // (literal-IP checks) already ran for the initial URL and each redirect
-        // target; this adds the resolved-address check. Skipped for localhost
-        // testing (allowInsecureForTesting) and when blockPrivateIPs is off.
-        if (this.securityConfig.blockPrivateIPs && !this.securityConfig.allowInsecureForTesting) {
-          await assertHostNotSsrf(new URL(currentUrl).hostname, url);
+        // target; this adds the resolved-address check. Skipped for a localhost
+        // host under allowInsecureForTesting, and when blockPrivateIPs is off.
+        const hostname = new URL(currentUrl).hostname;
+        if (blocksPrivateAddressesFor(hostname, this.securityConfig)) {
+          await assertHostNotSsrf(hostname, url);
         }
 
         const headers: Record<string, string> = {

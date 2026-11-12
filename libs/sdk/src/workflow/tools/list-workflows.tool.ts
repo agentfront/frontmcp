@@ -59,12 +59,11 @@ export default class ListWorkflowsTool extends ToolContext {
     };
   }
 
-  private async maySee(workflow: WorkflowEntry): Promise<boolean> {
-    const permissions = workflow.metadata.permissions;
-    const builder = this.scope.authoritiesContextBuilder;
-    for (const action of ['list', 'create', 'execute'] as const) {
-      if (!(await JobPermissionGuard.check(permissions, action, this.authInfo, builder))) return false;
-    }
-    return true;
+  private maySee(workflow: WorkflowEntry): Promise<boolean> {
+    return JobPermissionGuard.maySee(
+      workflow.metadata.permissions,
+      this.authInfo,
+      this.scope.authoritiesContextBuilder,
+    );
   }
 }

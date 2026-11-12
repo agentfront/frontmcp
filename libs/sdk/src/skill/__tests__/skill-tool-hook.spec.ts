@@ -168,6 +168,22 @@ describe('SkillToolGuardHook', () => {
       });
     });
 
+    it('checks the id a tool is called by, not a display name that another tool on the allowlist has', async () => {
+      const hook = new (createSkillToolGuardHook(sessionManager, {}))();
+
+      await sessionManager.runWithSession('session-1', async () => {
+        sessionManager.activateSkill('test-skill', mockSkillContent, mockLoadResult);
+
+        const resolvedTool = { name: 'drop_tables', metadata: { id: 'drop_tables', name: 'allowed_tool' } };
+        await expect(
+          hook.checkSkillToolAuthorization({ state: { tool: resolvedTool, input: { name: 'drop_tables' } } }),
+        ).rejects.toBeInstanceOf(ToolNotAllowedError);
+
+        const listedById = { name: 'allowed_tool', metadata: { id: 'allowed_tool', name: 'Allowed Tool' } };
+        await expect(hook.checkSkillToolAuthorization({ state: { tool: listedById } })).resolves.toBeUndefined();
+      });
+    });
+
     it('should fall back to input.name when metadata.name missing', async () => {
       const HookClass = createSkillToolGuardHook(sessionManager, {});
       const hook = new HookClass();
@@ -226,6 +242,50 @@ describe('SkillToolGuardHook', () => {
         // Should extract base name from fullName
         await expect(hook.checkSkillToolAuthorization(ctx)).resolves.not.toThrow();
       });
+    });
+  });
+
+  describe('strictAllowlist', () => {
+    it('refuses a tool outside the allowlist in permissive mode, and an approval does not let it through', async () => {
+      const permissive = new SkillSessionManager({ defaultPolicyMode: 'permissive' }, undefined, store);
+      const guard = new (createSkillToolGuardHook(permissive, { verifiedSessionId: () => 'session-strict' }))();
+      const call = (name: string) => ({ state: { tool: { metadata: { name } } } });
+
+      await permissive.runWithSession('session-strict', async () => {
+        permissive.activateSkill('test-skill', mockSkillContent, mockLoadResult, {
+          policyMode: 'permissive',
+          strictAllowlist: true,
+        });
+        permissive.approveToolForSession('unlisted_tool');
+      });
+
+      await expect(guard.checkSkillToolAuthorization(call('unlisted_tool'))).rejects.toBeInstanceOf(
+        ToolNotAllowedError,
+      );
+      await expect(guard.checkSkillToolAuthorization(call('allowed_tool'))).resolves.toBeUndefined();
+    });
+  });
+
+  describe('requireExplicitActivation', () => {
+    it('refuses a tool call in a session that has no active skill', async () => {
+      const requiring = new SkillSessionManager({ requireExplicitActivation: true }, undefined, store);
+      const guard = new (createSkillToolGuardHook(requiring, { verifiedSessionId: () => 'session-new' }))();
+      const call = { state: { tool: { metadata: { name: 'allowed_tool' } } } };
+
+      await expect(guard.checkSkillToolAuthorization(call)).rejects.toBeInstanceOf(ToolNotAllowedError);
+
+      await requiring.runWithSession('session-new', async () => {
+        requiring.activateSkill('test-skill', mockSkillContent, mockLoadResult);
+      });
+      await expect(guard.checkSkillToolAuthorization(call)).resolves.toBeUndefined();
+    });
+
+    it('still allows a call with no active skill when activation is not required', async () => {
+      const guard = new (createSkillToolGuardHook(sessionManager, { verifiedSessionId: () => 'session-new' }))();
+
+      await expect(
+        guard.checkSkillToolAuthorization({ state: { tool: { metadata: { name: 'any_tool' } } } }),
+      ).resolves.toBeUndefined();
     });
   });
 

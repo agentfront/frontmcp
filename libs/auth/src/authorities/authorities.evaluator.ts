@@ -4,7 +4,9 @@
  * Pure functions for evaluating RBAC, ABAC, and ReBAC policies.
  */
 
-import { isAnonymousSubject, resolveDotPath } from './authorities.context';
+import { isPatternSafe } from '@frontmcp/utils';
+
+import { isAnonymousSubject, noopRelationshipResolver, resolveDotPath } from './authorities.context';
 import type {
   AbacPolicy,
   AuthoritiesEvaluationContext,
@@ -145,6 +147,22 @@ function unresolvedAttribute(
   };
 }
 
+const MAX_PATTERN_LENGTH = 256;
+const MAX_MATCHED_LENGTH = 10_000;
+
+/** Why a `matches` check cannot run on these values in bounded time, or undefined when it can. */
+export function unmatchableReason(actual: unknown, pattern: unknown): string | undefined {
+  if (typeof pattern !== 'string') return undefined;
+  if (pattern.length > MAX_PATTERN_LENGTH) return `the pattern is longer than ${MAX_PATTERN_LENGTH} characters`;
+  if (!isPatternSafe(pattern)) {
+    return 'the pattern is not a valid regular expression, or its matching time can grow very fast with the value';
+  }
+  if (typeof actual === 'string' && actual.length > MAX_MATCHED_LENGTH) {
+    return `the value is longer than ${MAX_MATCHED_LENGTH} characters`;
+  }
+  return undefined;
+}
+
 /**
  * Apply an ABAC operator to compare actual vs expected values.
  */
@@ -177,15 +195,7 @@ function applyOperator(actual: unknown, op: string, expected: unknown): boolean 
     case 'exists':
       return expected ? actual !== undefined && actual !== null : actual === undefined || actual === null;
     case 'matches':
-      if (typeof actual !== 'string' || typeof expected !== 'string') return false;
-      // ReDoS mitigation: limit pattern size and reject dangerous constructs
-      if (expected.length > 256) return false;
-      if (/(\+\+|\*\*|\{\d+,\d*\}\{)/.test(expected)) return false;
-      try {
-        return new RegExp(expected).test(actual);
-      } catch {
-        return false;
-      }
+      return typeof actual === 'string' && typeof expected === 'string' && new RegExp(expected).test(actual);
     default:
       return false;
   }
@@ -232,6 +242,7 @@ export function evaluateAbac(policy: AbacPolicy, ctx: AuthoritiesEvaluationConte
       const actual = resolveDotPath(envelope, condition.path);
       const expected = resolveValue(condition.value, ctx);
       const reported = reportableActual(condition.path, actual);
+      const unmatchable = condition.op === 'matches' ? unmatchableReason(actual, expected) : undefined;
       if (expected === undefined) {
         unresolved ??= unresolvedAttribute(
           'attributes.conditions',
@@ -240,6 +251,14 @@ export function evaluateAbac(policy: AbacPolicy, ctx: AuthoritiesEvaluationConte
           condition.value,
           reported,
         );
+      } else if (unmatchable !== undefined) {
+        unresolved ??= {
+          granted: false,
+          unresolved: true,
+          deniedBy: `attributes.conditions: '${condition.path}' could not be checked: ${unmatchable}`,
+          denial: { kind: 'attributes', path: denialPath, actual: reported },
+          evaluatedPolicies: ['attributes.conditions'],
+        };
       } else if (!applyOperator(actual, condition.op, expected)) {
         return {
           granted: false,
@@ -287,6 +306,17 @@ async function evaluateSingleRebac(policy: RebacPolicy, ctx: AuthoritiesEvaluati
       granted: false,
       deniedBy: `relationships: an anonymous caller cannot be '${policy.type}' of ${policy.resource}`,
       denial: { kind: 'relationships', path: 'user.sub', expected: 'a signed-in caller', actual: undefined },
+      evaluatedPolicies: ['relationships'],
+    };
+  }
+  if (ctx.relationships === noopRelationshipResolver) {
+    return {
+      granted: false,
+      unresolved: true,
+      deniedBy:
+        `relationships: '${policy.type}' of ${policy.resource} could not be checked: ` +
+        'no relationship resolver is configured (set authorities.relationshipResolver)',
+      denial: { kind: 'relationships', path: 'relationships', expected: `${policy.type}:${policy.resource}` },
       evaluatedPolicies: ['relationships'],
     };
   }

@@ -108,6 +108,12 @@ export interface SkillSessionState {
   toolCallCount: number;
 
   /**
+   * Set when a skill is activated with `strictAllowlist`: a tool outside the allowlist is refused,
+   * whatever the policy mode, and an approval does not let it through.
+   */
+  strictAllowlist?: boolean;
+
+  /**
    * Optional metadata for tracking/analytics.
    */
   metadata?: Record<string, unknown>;
@@ -347,6 +353,7 @@ export interface SerializedSkillSessionState {
   approvedTools: string[];
   deniedTools: string[];
   toolCallCount: number;
+  strictAllowlist?: boolean;
   metadata?: Record<string, unknown>;
 }
 
@@ -377,6 +384,7 @@ export function serializeSessionState(state: SkillSessionState): SerializedSkill
     approvedTools: Array.from(state.approvedTools),
     deniedTools: Array.from(state.deniedTools),
     toolCallCount: state.toolCallCount,
+    strictAllowlist: state.strictAllowlist,
     metadata: state.metadata,
   };
 }
@@ -408,6 +416,7 @@ export function deserializeSessionState(data: SerializedSkillSessionState): Skil
     approvedTools: new Set(data.approvedTools),
     deniedTools: new Set(data.deniedTools),
     toolCallCount: data.toolCallCount,
+    strictAllowlist: data.strictAllowlist,
     metadata: data.metadata,
   };
 }

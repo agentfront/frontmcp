@@ -3,17 +3,17 @@ import { Tool, ToolContext } from '@frontmcp/sdk';
 
 import EmployeeDirectoryProvider from '../providers/employee-directory.provider';
 import EmployeeRedisProvider from '../providers/redis.provider';
-import { hoursKey, sessionsKey, openKey as siteOpenKey } from '../utils/keys';
+import { openKey as siteOpenKey } from '../utils/keys';
 import { splitSessionByDay, toMs } from '../utils/time';
 
 @Tool({
   name: 'admin-add-exit',
   description: 'Admin: add an exit (end) for an employee at a specific time (must have an open session) at a site',
+  site: { siteScoped: true, adminRequired: true },
   inputSchema: {
-    admin: z.boolean().refine((v) => v === true, 'Admin privileges required'),
     employeeId: z.string().min(1),
     siteId: z.string().min(1),
-    at: z.union([z.number(), z.string()]),
+    at: z.union([z.number().int(), z.string()]),
   },
   outputSchema: z.object({
     employeeId: z.string(),
@@ -22,7 +22,7 @@ import { splitSessionByDay, toMs } from '../utils/time';
   }),
 })
 export default class AdminAddExitTool extends ToolContext {
-  async execute(input: { admin: boolean; employeeId: string; siteId: string; at: number | string }) {
+  async execute(input: { employeeId: string; siteId: string; at: number | string }) {
     const redis = this.get(EmployeeRedisProvider);
     const dir = this.get(EmployeeDirectoryProvider);
     const { employeeId, siteId } = input;
@@ -41,17 +41,11 @@ export default class AdminAddExitTool extends ToolContext {
     await dir.addEmployeeToSite(employeeId, siteId);
 
     const segments = splitSessionByDay(start, end);
-    let total = 0;
-    for (const seg of segments) {
-      total += seg.durationMs;
-      await redis.incrBy(hoursKey(siteId, employeeId, seg.day), seg.durationMs);
-      await redis.lpush(
-        sessionsKey(siteId, employeeId, seg.day),
-        JSON.stringify({ start: seg.start, end: seg.end, durationMs: seg.durationMs }),
-      );
+    const closed = await redis.closeSession(siteId, employeeId, openStartStr, segments);
+    if (!closed) {
+      throw new Error(`The open session of employee ${employeeId} at site ${siteId} was closed by another request`);
     }
-
-    await redis.del(openKey);
+    const total = segments.reduce((sum, seg) => sum + seg.durationMs, 0);
 
     return { employeeId, endedAt: end, durationMs: total };
   }

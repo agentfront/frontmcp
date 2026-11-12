@@ -251,6 +251,18 @@ describe('RememberMemoryProvider', () => {
       expect(keys).toHaveLength(0);
     });
 
+    it('takes a backslash-escaped wildcard literally, as Redis does', async () => {
+      await provider.setValue('user:a*b:name', 'Starred');
+
+      await expect(provider.keys(String.raw`user:a\*b:*`)).resolves.toEqual(['user:a*b:name']);
+    });
+
+    it('finds no key for a pattern of many wildcards that the key almost matches', async () => {
+      await provider.setValue('a'.repeat(200), 'long');
+
+      await expect(provider.keys('*a*a*a*a*a*a*a*a*a*a*a*a*b')).resolves.toEqual([]);
+    });
+
     it('handles special regex characters in pattern', async () => {
       await provider.setValue('file.txt', 'content');
 

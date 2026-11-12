@@ -1,5 +1,7 @@
 import { resolveTxt } from 'dns/promises';
 
+import { readTextWithLimit, ResponseTooLargeError } from '@frontmcp/utils';
+
 import { fetchWithTimeout } from './api';
 import { parseProofRecord, type ProofRecord } from './keys';
 
@@ -15,7 +17,7 @@ export async function checkHttpProof(domain: string, expectedPublicKey: string):
   const response = await fetchWithTimeout(url, { redirect: 'manual' }, async (answer) => ({
     status: answer.status,
     location: answer.headers.get('location'),
-    text: await answer.text(),
+    text: answer.status === 200 ? await readProofText(answer) : '',
   }));
   if (response.status >= 300 && response.status < 400) {
     return (
@@ -29,10 +31,20 @@ export async function checkHttpProof(domain: string, expectedPublicKey: string):
       `Set MCP_REGISTRY_PUBLIC_KEY=${expectedPublicKey} on the server and redeploy.`
     );
   }
-  if (Buffer.byteLength(response.text) > MAX_PROOF_BYTES) {
+  if (response.text === undefined) {
     return `${url} is larger than ${MAX_PROOF_BYTES} bytes, more than the Registry reads.`;
   }
   return recordProblem(url, parseProofRecord(response.text.trim()), expectedPublicKey);
+}
+
+/** The proof's text, read only up to the size the Registry reads; undefined when it is larger. */
+async function readProofText(answer: Response): Promise<string | undefined> {
+  try {
+    return await readTextWithLimit(answer, MAX_PROOF_BYTES);
+  } catch (error) {
+    if (error instanceof ResponseTooLargeError) return undefined;
+    throw error;
+  }
 }
 
 export async function checkDnsProof(domain: string, expectedPublicKey: string): Promise<string | undefined> {

@@ -6,6 +6,7 @@ import { CallToolRequestSchema, CallToolResultSchema, type AuthInfo } from '@fro
 import type { ToolResponseContent } from '@frontmcp/uipack/adapters';
 import {
   awaitOutsideRequest,
+  escapeControlCharacters,
   findNonFiniteNumber,
   getRuntimeContext,
   isDebug,
@@ -24,9 +25,10 @@ import {
 } from '../../answer';
 import { assertAppLoaded, loadAppOfPlaceholder } from '../../app/lazy/lazy-placeholders';
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
-import { getAuthorizedAppIds } from '../../auth/authorized-apps.utils';
+import { getAuthorizedAppIds, incrementalTicketAudience } from '../../auth/authorized-apps.utils';
 import { getConsentedToolIds, isToolConsented } from '../../auth/consent.utils';
 import { enforcePublicAccess, publicAccessFor } from '../../auth/public-access.utils';
+import { AUTHORITIES_NOT_CONFIGURED } from '../../builtin/authorities/authorities-not-configured';
 import {
   acquireConcurrencySlots,
   buildPartitionContext,
@@ -93,7 +95,7 @@ import { generateTaskId } from '../../task/helpers/task-id';
 import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
 import { linkedAbortController } from '../../utils/abort.utils';
-import { hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
+import { appOwnerIdOf, hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
 import { toolOutputPolicies } from '../tool-output-policy';
 import { toolServingMode } from '../ui/serving-mode-default';
 import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
@@ -372,7 +374,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     if (!this.isClientCall()) return;
     if (!isSkillsOnlyRequest(this.state.authInfo, this.tryGetContext())) return;
     const { name } = this.state.required.input;
-    this.logger.verbose(`checkSkillsOnlyMode: refusing tool "${name}" in skills-only mode`);
+    this.logger.verbose(`checkSkillsOnlyMode: refusing tool "${escapeControlCharacters(name)}" in skills-only mode`);
     throw new ToolNotFoundError(name);
   }
 
@@ -403,8 +405,15 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     if (!surface || !sessionId || callerCtx?.taskId || !this.isClientCall() || !surface.isStale(sessionId)) return;
     const { name } = this.state.required.input;
     const tool = resolvedTools.peek(this.rawInput, name) ?? lookupTool(this.scope, name);
-    if (tool && (await isEntryEnabled(tool.metadata.enabled, this.tryGetContext(), this.logger))) return;
-    this.logger.verbose(`checkSurface: "${name}" is not in the tool list that replaced this session's`);
+    // A tool the client could not call (internal, or not offered on its surface) is answered as one that does not exist
+    const callable =
+      tool !== undefined &&
+      resolveToolVisibility(tool.metadata) !== 'internal' &&
+      isOfferedOnSurface(tool.metadata.availableWhen, callSurfaceOf(this.input.ctx));
+    if (callable && (await isEntryEnabled(tool.metadata.enabled, this.tryGetContext(), this.logger))) return;
+    this.logger.verbose(
+      `checkSurface: "${escapeControlCharacters(name)}" is not in the tool list that replaced this session's`,
+    );
     surface.refreshSession(sessionId);
     throw new StaleToolListError(name);
   }
@@ -456,7 +465,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         );
         throw error;
       }
-      this.logger.warn(`findTool: tool "${name}" not found`);
+      this.logger.warn(`findTool: tool "${escapeControlCharacters(name)}" not found`);
       throw new ToolNotFoundError(name);
     }
 
@@ -784,7 +793,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
 
     // A server-level tool (`@FrontMcp({ tools })`) belongs to no app to authorize
-    const appId = isServerEntryOwner(tool?.owner) ? undefined : tool?.owner?.id;
+    const appId = !tool || isServerEntryOwner(tool.owner) ? undefined : this.grantingAppIdOf(tool);
     if (!appId) {
       this.logger.verbose('checkToolAuthorization:skip (no app owner)');
       return;
@@ -847,6 +856,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
 
     this.logger.verbose('checkToolAuthorization:done');
+  }
+
+  /** The app whose grant a tool needs: a plugin's or adapter's tool needs its app's, and none outside every app. */
+  private grantingAppIdOf(tool: CallToolEntry): string | undefined {
+    const { owner } = tool;
+    if (owner?.kind !== 'plugin' && owner?.kind !== 'adapter') return owner?.id;
+    return appOwnerIdOf(this.scope.tools.lineageOf(tool as ToolEntry) ?? [], owner);
   }
 
   /**
@@ -912,6 +928,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         sub,
         appId,
         toolId,
+        audience: incrementalTicketAudience(this.scope),
         ...(priorAppIds && priorAppIds.size > 0 ? { priorAppIds: [...priorAppIds] } : {}),
         ...(typeof user.email === 'string' ? { email: user.email } : {}),
         ...(typeof user.name === 'string' ? { name: user.name } : {}),
@@ -923,18 +940,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   /**
    * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in tool metadata.
    * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
-   * Skips silently if no authorities engine is configured or no authorities on the tool.
+   * Skips a tool without authorities, and refuses one whose authorities no engine is configured to check.
    */
   @Stage('checkEntryAuthorities')
   async checkEntryAuthorities() {
     this.logger.verbose('checkEntryAuthorities:start');
-    const engine = this.scope.authoritiesEngine;
-    const ctxBuilder = this.scope.authoritiesContextBuilder;
-    if (!engine || !ctxBuilder) {
-      this.logger.verbose('checkEntryAuthorities:skip (no engine configured)');
-      return;
-    }
-
     const tool = this.state.tool;
     if (!tool) return;
 
@@ -943,6 +953,16 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     if (!authorities) {
       this.logger.verbose('checkEntryAuthorities:skip (no authorities on tool)');
       return;
+    }
+
+    const engine = this.scope.authoritiesEngine;
+    const ctxBuilder = this.scope.authoritiesContextBuilder;
+    if (!engine || !ctxBuilder) {
+      throw new AuthorityDeniedError({
+        entryType: 'Tool',
+        entryName: tool.fullName || tool.name,
+        deniedBy: AUTHORITIES_NOT_CONFIGURED,
+      });
     }
 
     const authInfo = this.state.authInfo ?? {};
@@ -1066,7 +1086,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
    *  - all declared providers are `required: false`, or
    *  - NO credential accessor is configured in the running scope (public mode,
    *    no auth, vault disabled), or
-   *  - the call is trusted internal dispatch / a background task re-dispatch.
+   *  - the call is trusted internal dispatch.
+   * A task-augmented call is answered before this stage runs, so the task's background run is gated instead.
    *
    * Hookable: developers may use Will/Did/Around on 'checkToolCredentials'.
    */
@@ -1075,12 +1096,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('checkToolCredentials:start');
     const { tool } = this.state.required;
 
-    // Trusted internal dispatch (tool/agent invoking another tool, or the task
-    // re-dispatch) is exempt — the entry tool already passed its own gate and
-    // inner composition is an implementation detail. Mirrors the consent/
+    // Trusted internal dispatch (tool/agent invoking another tool) is exempt — the entry tool already
+    // passed its own gate and inner composition is an implementation detail. Mirrors the consent/
     // internal-visibility bypass in findTool/checkToolAuthorization.
-    const ctxObj = this.input.ctx as { internalCall?: boolean; taskId?: string } | undefined;
-    if (ctxObj?.internalCall || ctxObj?.taskId) {
+    const ctxObj = this.input.ctx as { internalCall?: boolean } | undefined;
+    if (ctxObj?.internalCall) {
       this.logger.verbose('checkToolCredentials:skip (internal call)');
       return;
     }

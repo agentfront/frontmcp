@@ -45,6 +45,8 @@ export interface JobRunRecord {
    * runId (GHSA-58v2-gpcc-jmqv).
    */
   ownerSub?: string;
+  /** Issuer of the token `ownerSub` came from; a run written by 1.12.0 has none, as a token without an issuer. */
+  ownerIss?: string;
   state: JobExecutionState;
   input: unknown;
   result?: unknown;

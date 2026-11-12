@@ -109,6 +109,24 @@ describe('ConsoleSink format', () => {
     }
   });
 
+  it('keeps a value with line breaks or escape codes on one line', () => {
+    withTty(false, () => {
+      new ConsoleSink().write(
+        makeEntry({
+          request_id: 'r\n1',
+          prefix: 'app\nINFO',
+          message: 'call\r\nINFO forged',
+          attributes: { bodyMethod: 'tools/call\n[00:00:00.000] INFO forged', ['k\ney']: 'v' },
+          error: { type: 'Error\n', message: 'bad\u001b[31m' },
+        }),
+      );
+    });
+    const out = String(infoSpy.mock.calls[0]?.[0] ?? '');
+
+    expect(out).not.toMatch(/[\r\n\u001b]/);
+    expect(out).toContain('bodyMethod=tools/call\\n[00:00:00.000] INFO forged');
+  });
+
   it('renders elapsed_ms segment', () => {
     withTty(false, () => {
       new ConsoleSink().write(makeEntry({ elapsed_ms: 12 }));

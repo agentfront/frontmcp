@@ -1,5 +1,8 @@
+import { type AuthoritiesContextBuilder } from '@frontmcp/auth';
+
 import { type ScopeEntry } from '../common';
 import { type JobPermission } from '../common/metadata/job.metadata';
+import { resolveIssuer } from '../common/utils/issuer-subject.utils';
 import { resolvePrincipal } from '../common/utils/principal.utils';
 import type { JobExecutionManager } from './execution/job-execution.manager';
 import { JobPermissionGuard } from './job-permission.guard';
@@ -15,11 +18,23 @@ export function jobExecutionManagerOf(scope: ScopeEntry): JobExecutionManager | 
   return (scope as unknown as { _jobExecutionManager?: JobExecutionManager })._jobExecutionManager;
 }
 
+/** The owner of a run the caller starts: their subject and their token's issuer; none for an anonymous caller. */
+export function runOwnerOf(
+  authInfo: Partial<Record<string, unknown>> | undefined,
+  builder: AuthoritiesContextBuilder | undefined,
+): Pick<JobRunRecord, 'ownerSub' | 'ownerIss'> {
+  const sub = resolvePrincipal(authInfo, builder).sub;
+  if (!sub) return {};
+  const iss = resolveIssuer(authInfo);
+  return iss ? { ownerSub: sub, ownerIss: iss } : { ownerSub: sub };
+}
+
 /**
  * Whether the caller may read (`'read'`) or cancel (`'delete'`) a run. The caller who started it may: a
- * match on the owning subject, or on the session for a run without one (anonymous and public servers).
- * Anyone else may only when the job or workflow declares `permissions` for that action and the caller
- * passes them, so a job with no such rule keeps its runs private (GHSA-58v2-gpcc-jmqv).
+ * match on the owning issuer and subject, or on the session for a run without one (anonymous and public
+ * servers). Anyone else may only when the job or workflow declares `permissions` for that action and the
+ * caller passes them, so a job with no such rule keeps its runs private (GHSA-58v2-gpcc-jmqv). A run another
+ * scope started is not reachable here, even when the scopes share a store.
  */
 export async function mayAccessRun(
   scope: ScopeEntry,
@@ -27,9 +42,11 @@ export async function mayAccessRun(
   action: 'read' | 'delete',
   authInfo: Partial<Record<string, unknown>>,
 ): Promise<boolean> {
+  if (record.scopeId !== undefined && record.scopeId !== scope.id) return false;
   const builder = scope.authoritiesContextBuilder;
   if (record.ownerSub) {
-    if (record.ownerSub === resolvePrincipal(authInfo, builder).sub) return true;
+    const caller = runOwnerOf(authInfo, builder);
+    if (record.ownerSub === caller.ownerSub && record.ownerIss === caller.ownerIss) return true;
   } else if (record.sessionId && record.sessionId === authInfo['sessionId']) {
     return true;
   }

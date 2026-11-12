@@ -382,6 +382,28 @@ describe('OpenapiAdapter - Edge Cases', () => {
       const result = await parseResponse(response, { maxResponseSize: 1000 });
       expect(result.data).toBe(text);
     });
+
+    it('stops reading a streamed body as soon as it passes the limit', async () => {
+      let pulled = 0;
+      let cancelled = false;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulled++;
+          controller.enqueue(new Uint8Array(1024).fill(120));
+          if (pulled === 100) controller.close();
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      const response = new Response(body, { headers: { 'content-type': 'text/plain' } });
+
+      await expect(parseResponse(response, { maxResponseSize: 2048 })).rejects.toThrow(
+        /Response size.*exceeds maximum/,
+      );
+      expect(cancelled).toBe(true);
+      expect(pulled).toBeLessThan(10);
+    });
   });
 
   describe('parseResponse - Content-Type Case Sensitivity', () => {

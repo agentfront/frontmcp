@@ -95,6 +95,34 @@ describe('web-fetch handler: security headers', () => {
   });
 });
 
+describe('web-fetch handler: an explicitly empty allowedOrigins', () => {
+  let instance: FrontMcpInstance;
+  let handler: WebFetchHandler;
+
+  beforeAll(async () => {
+    ({ instance, handler } = await build({
+      http: { entryPath: '/mcp', security: { dnsRebindingProtection: { allowedOrigins: [] } } },
+    }));
+  });
+  afterAll(async () => instance?.shutdown());
+
+  it('refuses a request with any Origin, and serves one with none', async () => {
+    const withOrigin = new Request('https://worker.example.com/mcp', {
+      method: 'POST',
+      headers: { ...MCP_HEADERS, origin: 'https://evil.example' },
+      body: JSON.stringify(INITIALIZE),
+    });
+
+    const refused = await handler(withOrigin);
+    const served = await handler(post(JSON.stringify(INITIALIZE)));
+
+    expect(refused.status).toBe(403);
+    expect(served.status).toBe(200);
+    await refused.body?.cancel();
+    await served.body?.cancel();
+  });
+});
+
 describe('web-fetch handler: http.bodyLimit', () => {
   let instance: FrontMcpInstance;
   let handler: WebFetchHandler;

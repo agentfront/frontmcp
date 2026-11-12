@@ -12,6 +12,7 @@ import { randomUUID } from '@frontmcp/utils';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
 import { ElicitationStoreNotInitializedError, InvalidInputError } from '../../errors';
+import { sessionIdHash } from '../../logger/session-id-hash';
 import { DEFAULT_ELICIT_TTL, type ElicitMode } from '../elicitation.types';
 import { type PendingElicitRecord } from '../store';
 
@@ -128,7 +129,7 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
       url,
     });
 
-    this.logger.verbose('parseInput:done', { sessionId: input.sessionId, mode });
+    this.logger.verbose('parseInput:done', { sessionIdHash: sessionIdHash(input.sessionId), mode });
   }
 
   @Stage('validateRequest')
@@ -183,7 +184,7 @@ export default class ElicitationRequestFlow extends FlowBase<typeof name> {
     await store.setPending(pendingRecord);
     this.state.set('pendingRecord', pendingRecord);
 
-    this.logger.verbose('storePendingRecord:done', { elicitId, sessionId });
+    this.logger.verbose('storePendingRecord:done', { elicitId, sessionIdHash: sessionIdHash(sessionId) });
   }
 
   @Stage('buildRequestParams')

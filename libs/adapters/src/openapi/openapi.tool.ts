@@ -2,7 +2,7 @@ import { type McpOpenAPITool } from 'mcp-from-openapi';
 
 import { z, type JSONSchema } from '@frontmcp/lazy-zod';
 import { InvalidInputError, tool, type FrontMcpLogger } from '@frontmcp/sdk';
-import { isRedirectResponse } from '@frontmcp/utils';
+import { isPatternSafe, isRedirectResponse } from '@frontmcp/utils';
 
 import { validateFrontMcpExtension, type ValidatedFrontMcpExtension } from './openapi.frontmcp-schema';
 import { assertRequestHasCredential, resolveToolSecurity } from './openapi.security';
@@ -341,14 +341,14 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
         const timeoutError = new Error(`Request timeout after ${requestTimeout}ms for tool '${openapiTool.name}'`);
         logger.error(`[${openapiTool.name}] API request timeout`, {
           timeout: requestTimeout,
-          url,
+          url: urlWithoutQuery(url),
           method: openapiTool.metadata.method.toUpperCase(),
         });
         throw timeoutError;
       }
       // Log all other API request errors
       logger.error(`[${openapiTool.name}] API request failed`, {
-        url,
+        url: urlWithoutQuery(url),
         method: openapiTool.metadata.method.toUpperCase(),
         error: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : err,
       });
@@ -357,6 +357,14 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
       clearTimeout(timeoutId);
     }
   });
+}
+
+/** The request URL without its query string and fragment, which can carry a credential, for logs. */
+function urlWithoutQuery(url: string): string {
+  const queryStart = url.indexOf('?');
+  const fragmentStart = url.indexOf('#');
+  const cutPoints = [queryStart, fragmentStart].filter((index) => index !== -1);
+  return cutPoints.length === 0 ? url : url.slice(0, Math.min(...cutPoints));
 }
 
 /** Default timeout for transform injection: 5 seconds */
@@ -469,9 +477,10 @@ const SUBSCHEMA_MAP_KEYWORDS = ['properties', 'patternProperties', 'dependentSch
 /**
  * The schema a call's arguments are checked against. It is the input schema, relaxed where a
  * strict check would refuse calls the API takes: `format` is an annotation in draft 2020-12, an
- * open `oneOf` matches more than one branch for most objects, and a credential argument
+ * open `oneOf` matches more than one branch for most objects, a credential argument
  * (`securitySchemesInInput`) may be left to the server, which `assertRequestHasCredential` checks
- * on the built request.
+ * on the built request, and a `pattern` whose matching time can grow out of proportion to the
+ * value is left to the API.
  */
 function toArgumentJsonSchema(openapiTool: McpOpenAPITool): JsonSchema {
   const argumentSchema = relaxSchema(openapiTool.inputSchema) as Record<string, unknown>;
@@ -491,6 +500,14 @@ function relaxSchema(schema: unknown): unknown {
 
   const relaxed: Record<string, unknown> = { ...(schema as Record<string, unknown>) };
   delete relaxed['format'];
+  if (typeof relaxed['pattern'] === 'string' && !isPatternSafe(relaxed['pattern'])) delete relaxed['pattern'];
+  const propertyPatterns = relaxed['patternProperties'];
+  if (typeof propertyPatterns === 'object' && propertyPatterns !== null) {
+    if (Object.keys(propertyPatterns).some((propertyPattern) => !isPatternSafe(propertyPattern))) {
+      delete relaxed['patternProperties'];
+      delete relaxed['additionalProperties'];
+    }
+  }
   for (const keyword of SUBSCHEMA_KEYWORDS) {
     if (keyword in relaxed) relaxed[keyword] = relaxSchema(relaxed[keyword]);
   }

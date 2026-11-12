@@ -11,6 +11,12 @@ const IMPORT_PATH = '@frontmcp/ui-shells';
 
 export async function uiShellGenerator(tree: Tree, schema: UiShellGeneratorSchema): Promise<GeneratorCallback | void> {
   const { className, fileName } = names(schema.name);
+  if (!/^[a-z][a-z0-9-]*$/.test(fileName)) {
+    throw new Error(
+      `The shell name "${schema.name}" becomes the folder and import path "${fileName}", which must start with a ` +
+        'letter and have only letters, digits and dashes. Use a kebab-case name such as admin-dashboard.',
+    );
+  }
 
   const installTask = ensureUiPackage(tree, { packageRoot: PACKAGE_ROOT, projectName: 'ui-shells', kind: 'shell' });
 

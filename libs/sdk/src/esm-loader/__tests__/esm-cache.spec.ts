@@ -233,6 +233,17 @@ describe('EsmCacheManager', () => {
       expect(result.bundleContent).toBe('code');
     });
 
+    it('does not return an entry whose metadata names a bundle outside its own folder', async () => {
+      await cache.put('@acme/tools', '1.0.0', 'code', 'https://esm.sh/x');
+      const { sha256Hex } = jest.requireMock('@frontmcp/utils') as { sha256Hex: (s: string) => string };
+      const metaPath = path.join(cacheDir, sha256Hex('@acme/tools@1.0.0'), 'meta.json');
+      const elsewhere = path.join(os.tmpdir(), 'elsewhere', 'bundle.mjs');
+      store.set(elsewhere, 'export default {};');
+      store.set(metaPath, JSON.stringify({ ...JSON.parse(store.get(metaPath) ?? '{}'), bundlePath: elsewhere }));
+
+      expect(await new EsmCacheManager({ cacheDir, maxAgeMs: 60_000 }).get('@acme/tools', '1.0.0')).toBeUndefined();
+    });
+
     it('returns undefined when meta.json is empty/null', async () => {
       const { sha256Hex } = jest.requireMock('@frontmcp/utils') as { sha256Hex: (s: string) => string };
       const hash = sha256Hex('@acme/tools@1.0.0');
@@ -391,6 +402,27 @@ module.exports = {
     it('uses default cache dir and max age', () => {
       const defaultCache = new EsmCacheManager();
       expect(defaultCache).toBeInstanceOf(EsmCacheManager);
+    });
+
+    it('keeps bundles in memory only, never in a shared temp folder, without a project or a home directory', () => {
+      const cwd = jest.spyOn(process, 'cwd').mockReturnValue(path.join(os.tmpdir(), 'no-project-here'));
+      try {
+        jest.isolateModules(() => {
+          jest.doMock('node:os', () => ({
+            ...jest.requireActual('node:os'),
+            homedir: () => {
+              throw new Error('no home directory');
+            },
+          }));
+          const { EsmCacheManager: IsolatedCacheManager } = jest.requireActual('../esm-cache') as {
+            EsmCacheManager: typeof EsmCacheManager;
+          };
+          expect((new IsolatedCacheManager() as unknown as { cacheDir: string }).cacheDir).toBe('');
+        });
+      } finally {
+        cwd.mockRestore();
+        jest.dontMock('node:os');
+      }
     });
   });
 });

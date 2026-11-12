@@ -6,7 +6,9 @@ import path from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const scriptPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fix-unused-imports.mjs');
+const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
+const scriptPath = path.join(scriptsDir, 'fix-unused-imports.mjs');
+const repoRoot = path.dirname(scriptsDir);
 const tempDirs = [];
 
 after(async () => {
@@ -94,4 +96,23 @@ test('an explicit base branch wins', async () => {
   git(clone, ['switch', '-c', 'fix/thing', 'origin/release/1.9.x']);
 
   assert.match(run(clone, ['main']).stdout, /^Comparing against: main$/m);
+});
+
+test('a changed file named like an ESLint option is linted as a file, not read as an option', async () => {
+  const clone = await cloneWithReleaseLine();
+  git(clone, ['switch', '-c', 'feat/thing', 'origin/main']);
+  await fs.symlink(path.join(repoRoot, 'node_modules'), path.join(clone, 'node_modules'));
+  const otherConfig =
+    "import { writeFileSync } from 'node:fs';\nwriteFileSync('OTHER_CONFIG_LOADED', '');\nexport default [];\n";
+  await fs.writeFile(path.join(clone, 'other.mjs'), otherConfig);
+  await fs.writeFile(path.join(clone, '--config=other.mjs'), 'export {};\n');
+  await fs.writeFile(path.join(clone, 'changed.ts'), "import { unused } from 'node:fs';\nexport const value = 1;\n");
+  git(clone, ['add', '--', 'other.mjs', '--config=other.mjs', 'changed.ts']);
+  git(clone, ['commit', '-m', 'option-like file name']);
+
+  const out = run(clone, ['origin/main']);
+
+  assert.equal(out.code, 0);
+  await assert.rejects(fs.access(path.join(clone, 'OTHER_CONFIG_LOADED')));
+  assert.equal(await fs.readFile(path.join(clone, 'changed.ts'), 'utf8'), 'export const value = 1;\n');
 });

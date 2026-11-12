@@ -43,7 +43,7 @@ export class BundlePushJwtVerifier {
   ) {
     this.jwks = jwks ?? new JwksService({});
     this.providerRef = {
-      id: 'skilled-openapi-cloud-push',
+      id: `skilled-openapi-cloud-push:${encodeURIComponent(options.expectedIssuer)}:${encodeURIComponent(options.jwksUri)}`,
       issuerUrl: options.expectedIssuer,
       jwksUri: options.jwksUri,
     };

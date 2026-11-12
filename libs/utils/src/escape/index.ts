@@ -1,1 +1,8 @@
-export { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJsonForScript } from './escape';
+export {
+  escapeHtml,
+  escapeHtmlAttr,
+  escapeJsString,
+  escapeScriptClose,
+  safeJsonForScript,
+  escapeControlCharacters,
+} from './escape';

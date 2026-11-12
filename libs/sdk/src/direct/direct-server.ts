@@ -124,6 +124,7 @@ export class DirectMcpServerImpl implements DirectMcpServer {
     authInfo?: Partial<AuthInfo>;
     metadata?: DirectRequestMetadata;
     platformEnv?: DirectWorkerEnv;
+    ownRequest: true;
     surface: CallSurface;
   } {
     const authInfo = buildAuthInfo(options?.authContext, this.defaultSessionId);
@@ -134,6 +135,8 @@ export class DirectMcpServerImpl implements DirectMcpServer {
       authInfo,
       metadata: options?.metadata,
       ...(platformEnv !== undefined ? { platformEnv } : {}),
+      // Its own request with its own caller, also when made while another request runs
+      ownRequest: true,
     });
   }
 

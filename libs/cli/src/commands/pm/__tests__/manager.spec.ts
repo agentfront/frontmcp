@@ -55,6 +55,14 @@ describe('ProcessManager.restart (#642)', () => {
     expect(info.name).toBe('svc');
   });
 
+  it('restarts the requested process under its own name, whatever name its record holds', async () => {
+    readPidFile.mockReturnValue({ ...pidData, name: '../../elsewhere' });
+
+    await new ProcessManager().restart('svc');
+
+    expect(supervisorCtor).toHaveBeenCalledWith(expect.objectContaining({ name: 'svc' }));
+  });
+
   it('fails for an unknown process', async () => {
     readPidFile.mockReturnValue(null);
     await expect(new ProcessManager().restart('nope')).rejects.toThrow('Cannot restart');

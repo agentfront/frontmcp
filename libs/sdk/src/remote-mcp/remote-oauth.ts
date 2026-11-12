@@ -8,6 +8,7 @@ export interface RemoteOAuthClientCredentials {
   clientSecret: string;
   scope?: string;
   tokenUrl?: string;
+  issuer?: string;
 }
 
 /** A token is renewed this long before it expires, so a request never carries one that expires on the way. */
@@ -26,8 +27,9 @@ interface TokenEndpoint {
 
 /**
  * Access tokens for one remote, from the OAuth 2.0 client credentials grant. The token endpoint is `tokenUrl`, else the
- * one the remote's authorization server publishes: found through the remote's protected resource metadata (RFC 9728),
- * else at the remote's own origin (RFC 8414). Each token request names the remote as its `resource` (RFC 8707).
+ * one `issuer` publishes (RFC 8414), else the one of the authorization server the remote's protected resource metadata
+ * names (RFC 9728), or of the remote's origin, when that server and its token endpoint are on the remote's origin.
+ * Each token request names the remote as its `resource` (RFC 8707), a URL on the remote's origin.
  */
 export class RemoteOAuthTokenSource {
   private endpoint?: Promise<TokenEndpoint>;
@@ -78,7 +80,7 @@ export class RemoteOAuthTokenSource {
       headers['authorization'] = `Basic ${base64Encode(new TextEncoder().encode(pair))}`;
     }
 
-    const response = await fetch(endpoint.url, { method: 'POST', headers, body: body.toString() });
+    const response = await fetch(endpoint.url, { method: 'POST', headers, body: body.toString(), redirect: 'error' });
     const answer = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     if (!response.ok || typeof answer['access_token'] !== 'string') {
       const reason = typeof answer['error'] === 'string' ? `: ${answer['error']}` : '';
@@ -95,10 +97,24 @@ export class RemoteOAuthTokenSource {
     const remote = new URL(this.remoteUrl);
     const resourceMetadata = await firstJson(wellKnownUrls(remote, 'oauth-protected-resource'));
     const resource = typeof resourceMetadata?.['resource'] === 'string' ? resourceMetadata['resource'] : this.remoteUrl;
+    if (!isOnOrigin(resource, remote.origin)) {
+      throw new RemoteAuthError(
+        this.appId,
+        `the remote's protected resource metadata names the resource ${resource}, which is not on ${remote.origin}, so no token is asked for it`,
+      );
+    }
     if (this.credentials.tokenUrl) return { url: this.credentials.tokenUrl, resource, postsSecret: false };
 
     const servers = resourceMetadata?.['authorization_servers'];
-    const issuer = new URL(Array.isArray(servers) && typeof servers[0] === 'string' ? servers[0] : remote.origin);
+    const named = Array.isArray(servers) && typeof servers[0] === 'string' ? servers[0] : remote.origin;
+    const configuredIssuer = this.credentials.issuer;
+    if (!configuredIssuer && !isOnOrigin(named, remote.origin)) {
+      throw new RemoteAuthError(
+        this.appId,
+        `the remote names the authorization server ${named}, which is not on ${remote.origin}, so the client secret is not sent there; set remoteAuth.issuer (or remoteAuth.tokenUrl) to the server your client credentials are for`,
+      );
+    }
+    const issuer = new URL(configuredIssuer ?? named);
     const serverMetadata = await firstJson([
       ...wellKnownUrls(issuer, 'oauth-authorization-server'),
       ...wellKnownUrls(issuer, 'openid-configuration'),
@@ -108,10 +124,25 @@ export class RemoteOAuthTokenSource {
     if (typeof tokenUrl !== 'string') {
       throw new RemoteAuthError(this.appId, `no token endpoint found for ${issuer.href}; set remoteAuth.tokenUrl`);
     }
+    if (!configuredIssuer && !isOnOrigin(tokenUrl, remote.origin)) {
+      throw new RemoteAuthError(
+        this.appId,
+        `the authorization server of ${remote.origin} publishes the token endpoint ${tokenUrl}, which is not on that origin, so the client secret is not sent there; set remoteAuth.issuer (or remoteAuth.tokenUrl) to the server your client credentials are for`,
+      );
+    }
     const methods = serverMetadata?.['token_endpoint_auth_methods_supported'];
     const postsSecret =
       Array.isArray(methods) && !methods.includes('client_secret_basic') && methods.includes('client_secret_post');
     return { url: tokenUrl, resource, postsSecret };
+  }
+}
+
+/** True when `value` is a URL on `origin`. */
+function isOnOrigin(value: string, origin: string): boolean {
+  try {
+    return new URL(value).origin === origin;
+  } catch {
+    return false;
   }
 }
 

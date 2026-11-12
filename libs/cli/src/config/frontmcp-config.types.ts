@@ -434,7 +434,7 @@ export interface TransportConfig {
     port?: number;
     /** Mount path (e.g., '/mcp'). */
     path?: string;
-    /** Bind address. */
+    /** Host in the `clients.<name>.url` that `eject-mcp-config` derives (default `127.0.0.1`); not the address the server listens on (`security.bindAddress` or `FRONTMCP_BIND_ADDRESS`). */
     host?: string;
   };
   /** Stdio transport defaults — used by `inspector` to spawn the server. */

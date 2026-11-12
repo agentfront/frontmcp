@@ -14,7 +14,7 @@
  * accessor resolves `namespace` from the request scope before calling in.
  */
 
-import { type SetOptions, type StorageAdapter } from '@frontmcp/utils';
+import { base64urlEncode, randomBytes, type SetOptions, type StorageAdapter } from '@frontmcp/utils';
 
 import { noopAuthLogger, type AuthLogger } from '../common/auth-logger.interface';
 import { type SecureStoreBackend } from './secure-store';
@@ -36,10 +36,9 @@ export interface EncryptedStorageSecureStoreBackendOptions {
   /** Connected storage adapter backing the store (memory / sqlite / redis). */
   storage: StorageAdapter;
   /**
-   * Master pepper for key derivation. Defense-in-depth: even with the stored
-   * ciphertext an attacker still needs this pepper to derive the AES key. When
-   * omitted, an empty pepper is used (the caller — LocalPrimaryAuth — passes the
-   * server JWT/VAULT secret).
+   * Master pepper for key derivation: without it, the stored ciphertext cannot be decrypted. When omitted or
+   * blank, a random pepper is generated for this instance, so another instance or a restart cannot read its
+   * values; pass one (LocalPrimaryAuth passes the server JWT/VAULT secret) for a storage that outlives the process.
    */
   pepper?: string;
   /** Key prefix for all stored keys. @default 'mcp:secret:' */
@@ -73,7 +72,7 @@ export class EncryptedStorageSecureStoreBackend implements SecureStoreBackend {
     this.keyPrefix = options.keyPrefix ?? DEFAULT_KEY_PREFIX;
     this.logger = options.logger ?? noopAuthLogger;
     this.encryption = new VaultEncryption({
-      pepper: options.pepper,
+      pepper: options.pepper?.trim() ? options.pepper : base64urlEncode(randomBytes(32)),
       hkdfInfo: 'frontmcp-secure-store-v1',
     });
   }

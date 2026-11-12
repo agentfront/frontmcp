@@ -57,7 +57,12 @@ import { oauthBasePath } from '../../flows/flow.http-path';
 import { authUiExtraPath, buildAuthUiPage, buildConsentState, type AuthTool, type AuthUiRegistry } from '../auth-ui';
 import { initialAuthorizedApps, withoutSkippedApps } from '../authorized-apps.utils';
 import { projectConsentTools } from '../consent-tools.helper';
-import { answerFederatedStep, FEDERATED_STEP_FIELD, renderFederatedStep } from '../federated-steps';
+import {
+  answerFederatedStep,
+  FEDERATED_STEP_FIELD,
+  getConfiguredProviders,
+  renderFederatedStep,
+} from '../federated-steps';
 import { type LocalPrimaryAuth } from '../instances/instance.local-primary-auth';
 import { requiredProviderIds } from '../required-providers.utils';
 import { parseFormBody } from './form-body.utils';
@@ -588,10 +593,10 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
     // Federated logins mint in the provider-callback flow AFTER all providers
     // are linked; consent for federated is shown there (or routed back here with
-    // a selection). So the callback only runs the consent gate for the
-    // non-federated, non-incremental local login path.
+    // a selection). An incremental authorization always mints here, so the
+    // callback runs the consent gate for it and for the non-federated local login.
     const effectiveFederated = isFederated || !!pendingAuth.federatedLogin;
-    const consentGateApplies = consentEnabled && !effectiveFederated && !isIncremental;
+    const consentGateApplies = consentEnabled && (isIncremental || !effectiveFederated);
 
     // `rememberConsent` (default true): reuse a prior per-(user, client) tool
     // selection so a returning user is not re-prompted unless a NEW tool appeared.
@@ -844,11 +849,38 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       return;
     }
 
+    const localAuth = this.scope.auth as LocalPrimaryAuth;
+
+    // `__parent__` is this server's own sign-in, already done; the others sign in upstream.
+    const upstreamProviders = selectedProviders.filter((id) => id !== '__parent__');
+    const unconfigured = upstreamProviders.filter((id) => !localAuth.getProviderConfig(id));
+    if (
+      unconfigured.length === upstreamProviders.length &&
+      getConfiguredProviders(this.scope.metadata.auth).length === 0
+    ) {
+      // The app-level picker: no provider here signs in upstream, the selection only sets the app grant.
+      this.logger.info('No selected provider signs in upstream here; continuing with this server sign-in');
+      this.state.set({ isFederated: false, selectedProviders: undefined, skippedProviders: undefined });
+      return;
+    }
+    if (unconfigured.length > 0) {
+      this.logger.warn(`Federated auth refused: no upstream sign-in is configured for ${unconfigured.join(', ')}`);
+      this.respond(
+        this.htmlPage(
+          this.renderErrorPage(
+            'invalid_request',
+            `Provider(s) ${unconfigured.join(', ')} cannot be linked on this server. Choose other providers.`,
+          ),
+          400,
+        ),
+      );
+      return;
+    }
+
     // For federated auth, we need to create a session and start the provider chain
     // instead of immediately creating an authorization code
-    this.logger.info(`Starting federated auth with ${selectedProviders.length} providers`);
+    this.logger.info(`Starting federated auth with ${upstreamProviders.length} providers`);
 
-    const localAuth = this.scope.auth as LocalPrimaryAuth;
     const sessionStore = localAuth.federatedSessionStore;
 
     if (
@@ -886,7 +918,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
         challenge: codeChallenge,
         method: 'S256',
       },
-      providerIds: selectedProviders,
+      providerIds: upstreamProviders,
       // The provider callback checks the same browser binding.
       signinBinding: this.state.signinBinding,
       authorizedAppIds,
@@ -897,7 +929,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     this.logger.info(`Created federated session: ${federatedSession.id}`);
 
     // Get first provider and start OAuth flow
-    const firstProviderId = selectedProviders[0];
+    const firstProviderId = upstreamProviders[0];
 
     // Generate PKCE for the provider
     const verifier = generateCodeVerifier();
@@ -918,19 +950,6 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
     await sessionStore.update(federatedSession);
 
     // Build redirect URL to first provider
-    const providerConfig = localAuth.getProviderConfig(firstProviderId);
-    if (!providerConfig) {
-      // Provider not configured yet - clean up session and fall back to normal auth
-      this.logger.warn(`Provider ${firstProviderId} not configured, falling back to normal auth`);
-      await sessionStore.delete(federatedSession.id);
-      this.state.set({
-        isFederated: false,
-        selectedProviders: undefined,
-        skippedProviders: undefined,
-      });
-      return;
-    }
-
     const redirectUrl = await localAuth.buildProviderAuthorizeUrl(firstProviderId, {
       state: providerState,
       codeChallenge: pkce.challenge,

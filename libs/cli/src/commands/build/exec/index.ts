@@ -139,6 +139,7 @@ export async function buildExec(
   await ensureDir(outDir);
   // Slack covers coarse filesystem mtime granularity.
   const buildStartedAt = Date.now() - 2000;
+  const entriesBeforeBuild = new Set(fs.readdirSync(outDir));
 
   const tsconfigPath = path.join(cwd, 'tsconfig.json');
   const hasTsconfig = await fileExists(tsconfigPath);
@@ -474,10 +475,10 @@ export async function buildExec(
 
   let cleaned = cleanIntermediateFiles(outDir, keepFiles, buildStartedAt);
   if (emittedEntryDir !== outDir) {
-    // tsc mirrored a common root above the entry (shared workspace code):
-    // those folders only held the intermediate output that was just bundled.
+    // tsc mirrored a common root above the entry (shared workspace code): the folders
+    // this build created only held the intermediate output that was just bundled.
     for (const entryName of fs.readdirSync(outDir)) {
-      if (keepFiles.has(entryName)) continue;
+      if (keepFiles.has(entryName) || entriesBeforeBuild.has(entryName)) continue;
       const dirPath = path.join(outDir, entryName);
       if (fs.statSync(dirPath).isDirectory()) {
         fs.rmSync(dirPath, { recursive: true, force: true });

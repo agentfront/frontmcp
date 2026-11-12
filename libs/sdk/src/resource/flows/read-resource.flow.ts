@@ -3,11 +3,12 @@
 import { AuthorityDeniedError, resolveRequiredScopes } from '@frontmcp/auth';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 import { ReadResourceRequestSchema, ReadResourceResultSchema, type AuthInfo } from '@frontmcp/protocol';
-import { randomBytes } from '@frontmcp/utils';
+import { escapeControlCharacters, randomBytes } from '@frontmcp/utils';
 
 import { fitResourceAnswer } from '../../answer';
 import { assertAppLoaded, loadAppOfPlaceholder } from '../../app/lazy/lazy-placeholders';
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
+import { AUTHORITIES_NOT_CONFIGURED } from '../../builtin/authorities/authorities-not-configured';
 import {
   Flow,
   FlowBase,
@@ -220,7 +221,9 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
         try {
           await app.ensureCapabilitiesLoaded();
         } catch (error) {
-          this.logger.warn(`Failed to load capabilities for remote app ${app.id}: ${(error as Error).message}`);
+          this.logger.warn(
+            `Failed to load capabilities for remote app ${app.id}: ${escapeControlCharacters((error as Error).message)}`,
+          );
         }
       }
     });
@@ -234,11 +237,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     this.logger.verbose('findResource:start');
 
     const { uri } = this.state.required.input;
-    this.logger.verbose(`findResource: looking for resource with URI "${uri}"`);
+    // The caller's URI, kept on one line wherever it is logged
+    const loggedUri = escapeControlCharacters(uri);
+    this.logger.verbose(`findResource: looking for resource with URI "${loggedUri}"`);
 
     // Check for UI resource URIs (ui://...) first
     if (isUIResourceUri(uri)) {
-      this.logger.verbose(`findResource: detected UI resource URI "${uri}"`);
+      this.logger.verbose(`findResource: detected UI resource URI "${loggedUri}"`);
 
       // Get platform type: first check sessionIdPayload (detected from user-agent),
       // then fall back to notification service (detected from MCP clientInfo)
@@ -261,14 +266,14 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
 
       if (uiResult.handled) {
         if (uiResult.error) {
-          this.logger.warn(`findResource: UI resource error - ${uiResult.error}`);
+          this.logger.warn(`findResource: UI resource error - ${escapeControlCharacters(uiResult.error)}`);
           throw new ResourceNotFoundError(uri);
         }
 
         // Store the UI resource result and mark as UI resource
         this.state.set('isUIResource', true);
         this.state.set('uiResourceResult', uiResult.result);
-        this.logger.verbose(`findResource: UI resource "${uri}" resolved from cache`);
+        this.logger.verbose(`findResource: UI resource "${loggedUri}" resolved from cache`);
         this.logger.verbose('findResource:done');
         return;
       }
@@ -279,7 +284,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     const match = resolvedResources.take(this.rawInput, uri) ?? this.scope.resources.findResourceForUri(uri);
 
     if (!match) {
-      this.logger.warn(`findResource: resource for URI "${uri}" not found`);
+      this.logger.warn(`findResource: resource for URI "${loggedUri}" not found`);
       throw new ResourceNotFoundError(uri);
     }
 
@@ -289,11 +294,11 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     const callSurface = callSurfaceOf(this.input.ctx);
     const availability = availabilityForCall(availableWhen, callSurface);
     if (availability === 'not-offered') {
-      this.logger.warn(`findResource: resource for URI "${uri}" is not offered on surface "${callSurface}"`);
+      this.logger.warn(`findResource: resource for URI "${loggedUri}" is not offered on surface "${callSurface}"`);
       throw new ResourceNotFoundError(uri);
     }
     if (availability === 'unavailable') {
-      this.logger.warn(`findResource: resource for URI "${uri}" is unavailable in this environment`);
+      this.logger.warn(`findResource: resource for URI "${loggedUri}" is unavailable in this environment`);
       throw entryUnavailableError(
         match.instance.isTemplate ? 'ResourceTemplate' : 'Resource',
         uri,
@@ -307,7 +312,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       this.state.set('resourceOwnerId', match.instance.owner.id);
     }
 
-    this.logger = this.logger.child(`ReadResourceFlow(${uri})`);
+    this.logger = this.logger.child(`ReadResourceFlow(${loggedUri})`);
     this.state.set('resource', match.instance);
     this.state.set('params', match.params);
     this.logger.verbose(
@@ -336,14 +341,11 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
   /**
    * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in resource metadata.
    * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
+   * Skips a resource without authorities, and refuses one whose authorities no engine is configured to check.
    */
   @Stage('checkEntryAuthorities')
   async checkEntryAuthorities() {
     this.logger.verbose('checkEntryAuthorities:start');
-    const engine = this.scope.authoritiesEngine;
-    const ctxBuilder = this.scope.authoritiesContextBuilder;
-    if (!engine || !ctxBuilder) return;
-
     const resource = this.state.resource;
     if (!resource) return;
 
@@ -352,6 +354,16 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     if (!authorities) {
       this.logger.verbose('checkEntryAuthorities:skip (no authorities)');
       return;
+    }
+
+    const engine = this.scope.authoritiesEngine;
+    const ctxBuilder = this.scope.authoritiesContextBuilder;
+    if (!engine || !ctxBuilder) {
+      throw new AuthorityDeniedError({
+        entryType: 'Resource',
+        entryName: resource.fullName || resource.name,
+        deniedBy: AUTHORITIES_NOT_CONFIGURED,
+      });
     }
 
     const authInfo = (this.state.authInfo ?? {}) as Record<string, unknown>;

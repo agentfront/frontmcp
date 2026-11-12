@@ -219,6 +219,25 @@ describe('unknown client ids are refused by default (#261)', () => {
     expect(response.status).toBe(200);
   });
 
+  it.each([
+    ['minProviders', { minProviders: 1 }],
+    ['requiredProviders', { requiredProviders: ['github'] }],
+  ])(
+    'refuses to sign in when federatedAuth.%s asks for providers and none is configured',
+    async (_label, federated) => {
+      const server = await serverWith(localAuth({ federatedAuth: federated }));
+
+      const response = await httpGet(
+        server.handler,
+        authorizePath({ client_id: REGISTERED_CLIENT, redirect_uri: REGISTERED_REDIRECT, state: 'x' }),
+        HOST,
+      );
+
+      expect(response.headers.get('location')).toBeNull();
+      expect(await response.text()).toContain('this server requires linked providers but none is configured');
+    },
+  );
+
   it('lets unknown clients in only with an explicit requireRegisteredClients: false', async () => {
     const server = await serverWith({ mode: 'local', requireRegisteredClients: false } as AuthConfig);
 
@@ -386,6 +405,24 @@ describe('the server honors the metadata a client declared (RFC 7591, client ID 
     const response = await authorizeCimd(server);
 
     expect(response.status).toBe(200);
+  });
+
+  it('does not show the address a CIMD client_id host resolves to on the error page', async () => {
+    jest.spyOn(dns.promises, 'lookup').mockResolvedValue([{ address: '10.20.30.40', family: 4 }] as never);
+    const fetchSpy = jest.spyOn(globalThis, 'fetch');
+    const server = await serverWith(localAuth());
+
+    const response = await httpGet(
+      server.handler,
+      authorizePath({ client_id: CIMD_CLIENT, redirect_uri: 'http://127.0.0.1:33418/callback', state: 's' }),
+      HOST,
+    );
+    const html = await response.text();
+
+    expect(response.status).toBe(400);
+    expect(html).toContain('Client ID URL is not allowed by security policy');
+    expect(html).not.toContain('10.20.30.40');
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('serves the sign-in page to a CIMD client whose fetched document leaves out the optional fields', async () => {

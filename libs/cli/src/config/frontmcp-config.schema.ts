@@ -537,7 +537,12 @@ export const transportHttpSchema = z
   .object({
     port: z.number().int().min(0).max(65535).optional().describe('HTTP port.'),
     path: z.string().optional().describe('MCP mount path.'),
-    host: z.string().optional().describe('Bind host.'),
+    host: z
+      .string()
+      .optional()
+      .describe(
+        'Host in the clients.<name>.url that eject-mcp-config derives (default 127.0.0.1). Not the address the server listens on: set that with @FrontMcp({ security: { bindAddress } }) or FRONTMCP_BIND_ADDRESS.',
+      ),
   })
   .strict();
 

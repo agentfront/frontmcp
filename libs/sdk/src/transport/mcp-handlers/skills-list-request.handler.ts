@@ -76,11 +76,13 @@ export default function skillsListRequestHandler({
       // page after the fact let hidden skills take page slots, and its `total` counted the hidden
       // skills on every other page.
       const matching = await listAllMatching(skillRegistry, { tags, sortBy, sortOrder, includeHidden });
+      // A skill with `visibility: 'http'` is discovered over HTTP only, as skills/search treats it
+      const listedOverMcp = matching.filter((metadata) => metadata.visibility !== 'http');
       const authInfo = (ctx?.authInfo ?? {}) as Record<string, unknown>;
       const visible = await filterDiscoverableSkillResults(
         scope,
         skillRegistry,
-        matching.map((metadata) => ({ metadata })),
+        listedOverMcp.map((metadata) => ({ metadata })),
         { authInfo, ctx: withMcpSurface(scope, ctx) },
       );
 

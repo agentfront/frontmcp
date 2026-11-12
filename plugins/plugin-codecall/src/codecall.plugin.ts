@@ -27,7 +27,7 @@ import {
   type CodeCallToolMetadata,
 } from './codecall.types';
 import CodeCallConfig from './providers/code-call.config';
-import { isInProcessDispatch } from './security';
+import { codeCallAppIdOf, isInProcessDispatch } from './security';
 import { ToolSearchService } from './services';
 import { AuditLoggerService, type AuditEvent } from './services/audit-logger.service';
 import EnclaveService from './services/enclave.service';
@@ -243,12 +243,15 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
     return this.getCodeCallMetadata(tool)?.visibleInListTools === true;
   }
 
-  /** Whether the tool's app is one `appIds` puts under `codecall_only`; every app is, without `appIds`. */
+  /**
+   * Whether the tool's app, found anywhere in its lineage (an app's adapter or plugin owns the tools it
+   * provides), is one `appIds` puts under `codecall_only`; every app is, without `appIds`.
+   */
   private managesApp(tool: ToolEntry<any, any, any, any>): boolean {
     const managedAppIds = this.options.appIds;
     if (this.options.mode !== 'codecall_only' || !managedAppIds || managedAppIds.length === 0) return true;
-    const toolOwnerAppId = tool.owner?.kind === 'app' ? tool.owner.id : undefined;
-    return toolOwnerAppId !== undefined && managedAppIds.includes(toolOwnerAppId);
+    const toolAppId = codeCallAppIdOf(this.tryGetScope(), tool);
+    return toolAppId !== undefined && managedAppIds.includes(toolAppId);
   }
 
   /** Whether this instance's direct-call gate runs for the tool, so the listing hides only what that gate refuses. */

@@ -10,6 +10,7 @@ import { eachDayRange, endOfMonthMs, endOfWeekMs, formatDay, startOfMonthMs, sta
 @Tool({
   name: 'get-employee-details',
   description: 'Get employee presence details: open status and today/week/month totals (optionally per site)',
+  site: { siteScoped: true },
   inputSchema: { employeeId: z.string().min(1), siteId: z.string().min(1).optional() },
   outputSchema: z.object({
     employeeId: z.string(),

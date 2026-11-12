@@ -12,7 +12,7 @@
 // These tests lock in the post-fix shape so a future refactor can't silently
 // drop `.tsx` support or the unit-test patterns.
 
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
@@ -24,6 +24,7 @@ import {
   findUserJestConfig,
   generateJestConfig,
   resolveSwcJestTransformer,
+  writeGeneratedJestConfig,
 } from '../test';
 
 type JestConfig = {
@@ -434,5 +435,26 @@ describe('resolveSwcJestTransformer (issue #680)', () => {
     expect(transformer).toBe('/abs/@swc/jest/index.js');
     // External helpers would need `@swc/helpers` resolvable from every test file
     expect((options as { jsc: { externalHelpers: boolean } }).jsc.externalHelpers).toBe(false);
+  });
+});
+
+describe('writeGeneratedJestConfig', () => {
+  it('writes the config into a new folder of the temp directory that only this user can open, and removes it', async () => {
+    const first = await writeGeneratedJestConfig({ rootDir: '/project' });
+    const second = await writeGeneratedJestConfig({ rootDir: '/project' });
+    try {
+      const folder = path.dirname(first.configPath);
+      expect(path.dirname(folder)).toBe(path.resolve(tmpdir()));
+      expect(path.dirname(second.configPath)).not.toBe(folder);
+      if (process.platform !== 'win32') expect((await stat(folder)).mode & 0o777).toBe(0o700);
+      expect(JSON.parse(await readFile(first.configPath, 'utf-8'))).toEqual({ rootDir: '/project' });
+
+      await first.remove();
+
+      await expect(stat(folder)).rejects.toThrow(/ENOENT/);
+    } finally {
+      await first.remove();
+      await second.remove();
+    }
   });
 });

@@ -20,8 +20,11 @@ const QUOTED_PATH_RE = /(['"`])((?:~?\/|[A-Za-z]:[\\/]|\\\\)[^\s'"`\\/][^'"`\n]*
  */
 const URL_RE = /\b[A-Za-z][A-Za-z0-9+.-]{1,31}:\/\/(?:[^\s'"`<>,;]|[,;](?!~?\/|[A-Za-z]:[\\/]|\\\\))*/g;
 
-/** A URL query value that is an absolute path (`?file=/srv/app/x`), up to the next `&` or `#`. */
-const QUERY_PATH_VALUE_RE = /([?&][^=&#]*=)(?:~?\/|[A-Za-z]:[\\/]|\\\\)[^&#]*/g;
+/**
+ * A URL query value that is an absolute path (`?file=/srv/app/x`), up to the next `&` or `#`. The name stops at a
+ * `?`, so a run of them is scanned once, not once from each.
+ */
+const QUERY_PATH_VALUE_RE = /([?&][^=&#?]*=)(?:~?\/|[A-Za-z]:[\\/]|\\\\)[^&#]*/g;
 
 const POSIX_SEGMENT = String.raw`[^\s/\\'"\x60<>|,;:()\[\]{}]+`;
 const WINDOWS_SEGMENT = String.raw`[^\s/\\'"\x60<>|,;:*?]+`;

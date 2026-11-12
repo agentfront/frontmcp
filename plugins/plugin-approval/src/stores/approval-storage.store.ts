@@ -15,7 +15,13 @@ import {
   type StorageConfig,
 } from '@frontmcp/utils';
 
-import { ApprovalOperationError, approvalRecordSchema, normalizeGrantor, normalizeRevoker } from '../approval';
+import {
+  ApprovalConfigurationError,
+  ApprovalOperationError,
+  approvalRecordSchema,
+  normalizeGrantor,
+  normalizeRevoker,
+} from '../approval';
 import { grantorDelegationProblem } from '../approval/delegation';
 import { assertValidTtl } from '../approval/policy';
 import { auditFieldsOf, type ApprovalAuditSink } from '../audit/approval-audit';
@@ -56,8 +62,38 @@ function isSameRecord(a: ApprovalRecord, b: ApprovalRecord): boolean {
 /** How long a revocation stays readable through `getRevocations()`. */
 const REVOCATION_RETENTION_SECONDS = 24 * 60 * 60;
 
-/** Suffix of the key of a time-limited approval granted to a session alone or a user alone. */
+/** Why an `alwaysPrompt` tool's approval cannot be used up on a backend without compare-and-delete. */
+const SINGLE_USE_STORAGE_MESSAGE =
+  "ApprovalPlugin: an alwaysPrompt tool's approval can be used up by exactly one call only on a storage that deletes " +
+  "a key only while it holds a given value, and this storage cannot. Set the plugin's storage to type 'memory', " +
+  "'redis', 'upstash', 'vercel-kv' or 'sqlite'.";
+
+/** Suffix of the key of a time-limited approval granted without a context. */
 const TIME_LIMITED_KEY_SEGMENT = `scope:${ApprovalScope.TIME_LIMITED}`;
+
+/** The session, user and context a key is built for, and whether it holds a time-limited approval. */
+interface KeyOwner {
+  sessionId?: string;
+  userId?: string;
+  context?: ApprovalContext;
+  timeLimited?: boolean;
+}
+
+/** A key and the owner a record read from it must name. */
+interface OwnedKey {
+  key: string;
+  owner: KeyOwner;
+}
+
+/** An id as a key stores it: `%` and `:` percent-encoded, so no id can end its part of the key early. */
+function encodeKeyPart(part: string): string {
+  return part.replace(/%/g, '%25').replace(/:/g, '%3A');
+}
+
+/** An id as keys stored it up to 1.12.0, unencoded. */
+function legacyKeyPart(part: string): string {
+  return part;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuration
@@ -182,30 +218,40 @@ export class ApprovalStorageStore implements ApprovalStore {
     }
   }
 
-  private buildKey(toolId: string, sessionId?: string, userId?: string, context?: ApprovalContext): string {
+  /**
+   * The key of `owner`'s record of a tool. Ids are encoded, so an id holding `:` cannot spell another
+   * owner's key; an id with neither `:` nor `%` is stored as it always was.
+   */
+  private buildKey(toolId: string, owner: KeyOwner, encode = encodeKeyPart): string {
     const parts = [toolId];
-    if (sessionId) parts.push(`session:${sessionId}`);
-    if (userId) parts.push(`user:${userId}`);
-    if (context) parts.push(`ctx:${context.type}:${context.identifier}`);
+    if (owner.sessionId) parts.push(`session:${encode(owner.sessionId)}`);
+    if (owner.userId) parts.push(`user:${encode(owner.userId)}`);
+    if (owner.context) parts.push(`ctx:${encode(owner.context.type)}:${encode(owner.context.identifier)}`);
+    if (owner.timeLimited) parts.push(TIME_LIMITED_KEY_SEGMENT);
     return parts.join(':');
   }
 
   /**
-   * The key of a time-limited approval granted to a session alone or a user alone. Kept apart from
-   * that session's or user's own key, so a time-limited grant never replaces the session or user
-   * approval, or a denial recorded there. (With both a session and a user, `buildKey` is already distinct.)
+   * The key a new record is stored under. A time-limited approval without a context has a key of its
+   * own, so it never replaces the session or user record, or a denial recorded there.
    */
-  private timeLimitedKey(toolId: string, sessionId?: string, userId?: string): string {
-    return `${this.buildKey(toolId, sessionId, userId)}:${TIME_LIMITED_KEY_SEGMENT}`;
-  }
-
-  /** The key a new record is stored under. */
   private recordKey(options: GrantApprovalOptions): string {
     const { toolId, scope, sessionId, userId, context } = options;
-    if (scope === ApprovalScope.TIME_LIMITED && !context && !(sessionId && userId)) {
-      return this.timeLimitedKey(toolId, sessionId, userId);
-    }
-    return this.buildKey(toolId, sessionId, userId, context);
+    return this.buildKey(toolId, {
+      sessionId,
+      userId,
+      context,
+      timeLimited: scope === ApprovalScope.TIME_LIMITED && !context,
+    });
+  }
+
+  /** Whether `record` names exactly the session, user and context of `owner`, the owner of the key it was read from. */
+  private isOwnedBy(record: ApprovalRecord, owner: KeyOwner): boolean {
+    const { sessionId, userId, context } = record;
+    return (
+      this.buildKey(record.toolId, { sessionId, userId, context }) ===
+      this.buildKey(record.toolId, { sessionId: owner.sessionId, userId: owner.userId, context: owner.context })
+    );
   }
 
   private parseRecord(value: string | null): ApprovalRecord | undefined {
@@ -235,32 +281,48 @@ export class ApprovalStorageStore implements ApprovalStore {
   }
 
   /**
-   * The keys a caller's approvals of a tool can be stored under: its session, its user, both
-   * (time-limited and context grants made through `ApprovalService`), the time-limited keys of its
-   * session and its user, and, for a call in a server-established context, that context (granted
-   * to the session and the user, or to the session before it had a user, the way a session approval
-   * stays in force once the caller's user is known). Records written by 1.8.2 sit under the same
-   * keys (a time-limited grant without a user under the session key), so they are still read.
+   * The owners of the records that apply to a caller: its session, its user, both (an external
+   * denial, and time-limited and context grants made through `ApprovalService`), the time-limited
+   * records of each, and, for a call in a server-established context, that context (granted to the
+   * session and the user, or to the session before it had a user, the way a session approval stays
+   * in force once the caller's user is known).
    */
-  private callerKeys(toolId: string, sessionId: string, userId?: string, context?: ApprovalContext): string[] {
-    const keys = [this.buildKey(toolId, sessionId), this.timeLimitedKey(toolId, sessionId)];
+  private callerOwners(sessionId: string, userId?: string, context?: ApprovalContext): KeyOwner[] {
+    const owners: KeyOwner[] = [{ sessionId }, { sessionId, timeLimited: true }];
     if (userId) {
-      keys.push(
-        this.buildKey(toolId, undefined, userId),
-        this.timeLimitedKey(toolId, undefined, userId),
-        this.buildKey(toolId, sessionId, userId),
+      owners.push(
+        { userId },
+        { userId, timeLimited: true },
+        { sessionId, userId },
+        { sessionId, userId, timeLimited: true },
       );
     }
     if (context) {
-      keys.push(this.buildKey(toolId, sessionId, undefined, context));
-      if (userId) keys.push(this.buildKey(toolId, sessionId, userId, context));
+      owners.push({ sessionId, context });
+      if (userId) owners.push({ sessionId, userId, context });
     }
-    return [...new Set(keys)];
+    return owners;
+  }
+
+  /**
+   * The keys a caller's records of a tool can be stored under, each with the owner a record read
+   * from it must name. Keys written up to 1.12.0, with unencoded ids, are read too, as are records
+   * written by 1.8.2 (a time-limited grant without a user under the session key).
+   */
+  private callerKeys(toolId: string, sessionId: string, userId?: string, context?: ApprovalContext): OwnedKey[] {
+    const owners = new Map<string, KeyOwner>();
+    for (const owner of this.callerOwners(sessionId, userId, context)) {
+      for (const key of [this.buildKey(toolId, owner), this.buildKey(toolId, owner, legacyKeyPart)]) {
+        if (!owners.has(key)) owners.set(key, owner);
+      }
+    }
+    return [...owners].map(([key, owner]) => ({ key, owner }));
   }
 
   /**
    * Every unexpired record that applies to this caller: session, user, time-limited and, when
-   * `context` is given, context-specific approvals and denials.
+   * `context` is given, context-specific approvals and denials. A record that names another
+   * session, user or context than the key it was read from is ignored.
    */
   async getApprovals(
     toolId: string,
@@ -271,9 +333,15 @@ export class ApprovalStorageStore implements ApprovalStore {
     this.ensureInitialized();
 
     const records: ApprovalRecord[] = [];
-    for (const key of this.callerKeys(toolId, sessionId, userId, context)) {
+    for (const { key, owner } of this.callerKeys(toolId, sessionId, userId, context)) {
       const record = this.parseRecord(await this.storage.get(key));
-      if (record && record.toolId === toolId && !this.isExpired(record) && !this.isOverDelegated(record)) {
+      if (
+        record &&
+        record.toolId === toolId &&
+        this.isOwnedBy(record, owner) &&
+        !this.isExpired(record) &&
+        !this.isOverDelegated(record)
+      ) {
         records.push(record);
       }
     }
@@ -398,12 +466,11 @@ export class ApprovalStorageStore implements ApprovalStore {
 
     const keys = await this.storage.keys(`${escapePattern(toolId)}:*`);
     const values = await this.storage.mget(keys);
-    const keysToDelete: string[] = [];
-    const revoked = new Map<string, ApprovalRecord>();
+    const revocable = new Map<string, { record: ApprovalRecord; value: string }>();
     for (let i = 0; i < keys.length; i++) {
-      const record = this.parseRecord(values[i]);
-      if (!record || record.toolId !== toolId || record.state === ApprovalState.DENIED) continue;
-      const matches = keysToDelete.length;
+      const value = values[i];
+      const record = this.parseRecord(value);
+      if (value === null || !record || record.toolId !== toolId || record.state === ApprovalState.DENIED) continue;
       if (context) {
         const sameSession = sessionId !== undefined && record.sessionId === sessionId;
         if (
@@ -413,26 +480,22 @@ export class ApprovalStorageStore implements ApprovalStore {
           // A context approval granted to the session before it had a user applies to that user too.
           (!userId || record.userId === userId || (sameSession && record.userId === undefined))
         ) {
-          keysToDelete.push(keys[i]);
+          revocable.set(keys[i], { record, value });
         }
       } else if ((sessionId && record.sessionId === sessionId) || (userId && record.userId === userId)) {
-        keysToDelete.push(keys[i]);
+        revocable.set(keys[i], { record, value });
       }
-      if (keysToDelete.length > matches) revoked.set(keys[i], record);
-    }
-
-    if (keysToDelete.length === 0) {
-      return false;
     }
 
     const revokedAt = Date.now();
     const revokedBy = normalizeRevoker(options.revokedBy);
-    for (const [key, record] of revoked) {
+    let revokedAny = false;
+    for (const [key, { record, value }] of revocable) {
+      // A record written to the key since it was read, a denial say, is kept.
+      if (!(await this.deleteIfUnchanged(key, value))) continue;
+      revokedAny = true;
       const entry: ApprovalRecord = { ...record, revokedAt, revokedBy, revocationReason: options.reason };
       await this.revocations.set(key, JSON.stringify(entry), { ttlSeconds: REVOCATION_RETENTION_SECONDS });
-    }
-    await this.storage.mdelete(keysToDelete);
-    for (const record of revoked.values()) {
       this.options.audit?.record({
         type: 'approval.revoked',
         ...auditFieldsOf(record),
@@ -440,13 +503,14 @@ export class ApprovalStorageStore implements ApprovalStore {
         reason: options.reason,
       });
     }
-    return true;
+    return revokedAny;
   }
 
   /**
    * Deletes the key that holds `record`, if it still does, and reports whether this call deleted
    * it. Two calls racing for one approval both find it, but only one deletes it, and a denial or
-   * approval written to the key after it was read is kept.
+   * approval written to the key after it was read is kept. A backend without compare-and-delete
+   * cannot promise that, so it throws `ApprovalConfigurationError`.
    */
   async consumeApproval(
     record: ApprovalRecord,
@@ -456,22 +520,36 @@ export class ApprovalStorageStore implements ApprovalStore {
   ): Promise<boolean> {
     this.ensureInitialized();
 
-    for (const key of this.callerKeys(record.toolId, sessionId, userId, context)) {
+    for (const { key, owner } of this.callerKeys(record.toolId, sessionId, userId, context)) {
       const storedValue = await this.storage.get(key);
       const stored = this.parseRecord(storedValue);
-      if (storedValue !== null && stored && isSameRecord(stored, record)) {
-        return this.deleteIfUnchanged(key, storedValue);
+      if (storedValue !== null && stored && this.isOwnedBy(stored, owner) && isSameRecord(stored, record)) {
+        return this.deleteOnce(key, storedValue);
       }
     }
     return false;
   }
 
-  /** Deletes `key` only while it still holds `storedValue`, in one step where the backend allows. */
+  /** Deletes `key` only while it holds `storedValue`, in one step; a backend that cannot do that is refused. */
+  private async deleteOnce(key: string, storedValue: string): Promise<boolean> {
+    try {
+      return await this.storage.deleteIfEquals(key, storedValue);
+    } catch (error) {
+      if (!(error instanceof StorageNotSupportedError)) throw error;
+      throw new ApprovalConfigurationError(SINGLE_USE_STORAGE_MESSAGE);
+    }
+  }
+
+  /**
+   * Deletes `key` only while it still holds `storedValue`: in one step where the backend allows,
+   * otherwise by reading it again just before deleting it.
+   */
   private async deleteIfUnchanged(key: string, storedValue: string): Promise<boolean> {
     try {
       return await this.storage.deleteIfEquals(key, storedValue);
     } catch (error) {
       if (!(error instanceof StorageNotSupportedError)) throw error;
+      if ((await this.storage.get(key)) !== storedValue) return false;
       return this.storage.delete(key);
     }
   }
@@ -485,9 +563,9 @@ export class ApprovalStorageStore implements ApprovalStore {
     this.ensureInitialized();
 
     const records: ApprovalRecord[] = [];
-    for (const key of this.callerKeys(toolId, sessionId, userId, context)) {
+    for (const { key, owner } of this.callerKeys(toolId, sessionId, userId, context)) {
       const record = this.parseRecord(await this.revocations.get(key));
-      if (record && record.toolId === toolId) records.push(record);
+      if (record && record.toolId === toolId && this.isOwnedBy(record, owner)) records.push(record);
     }
     return records.sort((a, b) => (a.revokedAt ?? 0) - (b.revokedAt ?? 0));
   }
@@ -501,20 +579,31 @@ export class ApprovalStorageStore implements ApprovalStore {
     this.ensureInitialized();
 
     // Escape sessionId to prevent glob metacharacters from matching unintended keys, and match the
-    // id exactly: `session:${id}` at the end of the key or followed by `:`, never a longer id.
-    const escapedSessionId = escapePattern(sessionId);
-    const keys = [
-      ...new Set([
-        ...(await this.storage.keys(`*:session:${escapedSessionId}`)),
-        ...(await this.storage.keys(`*:session:${escapedSessionId}:*`)),
-      ]),
-    ];
-
-    if (keys.length === 0) {
+    // id exactly: `session:${id}` at the end of the key or followed by `:`, never a longer id. Keys
+    // written up to 1.12.0 hold the id unencoded.
+    const patterns = new Set<string>();
+    for (const storedSessionId of [encodeKeyPart(sessionId), legacyKeyPart(sessionId)]) {
+      const escapedSessionId = escapePattern(storedSessionId);
+      patterns.add(`*:session:${escapedSessionId}`);
+      patterns.add(`*:session:${escapedSessionId}:*`);
+    }
+    const keys = new Set<string>();
+    for (const pattern of patterns) {
+      for (const key of await this.storage.keys(pattern)) keys.add(key);
+    }
+    if (keys.size === 0) {
       return 0;
     }
 
-    const count = await this.storage.mdelete(keys);
+    // A 1.12.0 key of session `a` with user `b` is also the key of session `a:user:b`.
+    const candidates = [...keys];
+    const values = await this.storage.mget(candidates);
+    let count = 0;
+    for (let index = 0; index < candidates.length; index++) {
+      const value = values[index];
+      if (value === null || this.parseRecord(value)?.sessionId !== sessionId) continue;
+      if (await this.deleteIfUnchanged(candidates[index], value)) count++;
+    }
     this.options.audit?.record({ type: 'approval.revoked', count, reason: 'session approvals cleared' });
     return count;
   }
@@ -526,21 +615,16 @@ export class ApprovalStorageStore implements ApprovalStore {
     const keys = await this.storage.keys('*');
     const values = await this.storage.mget(keys);
 
-    const keysToDelete: string[] = [];
-    const expired: ApprovalRecord[] = [];
-
+    let deleted = 0;
     for (let i = 0; i < keys.length; i++) {
-      const approval = this.parseRecord(values[i]);
-      if (approval && approval.expiresAt && approval.expiresAt <= now) {
-        keysToDelete.push(keys[i]);
-        expired.push(approval);
-      }
+      const value = values[i];
+      const approval = this.parseRecord(value);
+      if (value === null || !approval?.expiresAt || approval.expiresAt > now) continue;
+      // A record written to the key since it was read is kept.
+      if (!(await this.deleteIfUnchanged(keys[i], value))) continue;
+      deleted++;
+      this.options.audit?.record({ type: 'approval.expired', ...auditFieldsOf(approval) });
     }
-
-    if (keysToDelete.length === 0) return 0;
-
-    const deleted = await this.storage.mdelete(keysToDelete);
-    for (const record of expired) this.options.audit?.record({ type: 'approval.expired', ...auditFieldsOf(record) });
     return deleted;
   }
 

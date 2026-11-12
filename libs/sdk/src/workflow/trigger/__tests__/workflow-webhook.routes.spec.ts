@@ -492,3 +492,39 @@ describe('register_workflow', () => {
     }
   });
 });
+
+describe('two webhook workflows with one name', () => {
+  it('starts a run only for a request signed with the secret of the workflow the name resolves to', async () => {
+    const steps = [{ id: 'record', jobName: 'record' }];
+    @Workflow({
+      name: 'twin',
+      trigger: 'webhook',
+      webhook: { secret: secretOf('twin-a'), path: '/hooks/twin-a' },
+      steps,
+    })
+    class TwinA {}
+    @Workflow({
+      name: 'twin',
+      trigger: 'webhook',
+      webhook: { secret: secretOf('twin-b'), path: '/hooks/twin-b' },
+      steps,
+    })
+    class TwinB {}
+    @App({ id: 'twins', name: 'Twins', jobs: [RecordJob], workflows: [TwinA, TwinB] })
+    class TwinsApp {}
+    const { handler, instance } = await createTestFetchServer({
+      info: { name: 'twins', version: '1.0.0' },
+      apps: [TwinsApp],
+      logging: { level: LogLevel.Off },
+    });
+    try {
+      const signedForA = await handler(signedRequest('/hooks/twin-a', '{}'));
+      const signedForB = await handler(signedRequest('/hooks/twin-b', '{}'));
+
+      expect(signedForA.status).toBe(401);
+      expect(signedForB.status).toBe(202);
+    } finally {
+      await instance.shutdown();
+    }
+  });
+});

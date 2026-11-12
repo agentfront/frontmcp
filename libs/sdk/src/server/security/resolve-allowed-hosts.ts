@@ -9,6 +9,9 @@
 
 import type { CorsOptions } from '../../common/types/options/http/interfaces';
 
+/** An IPv4 loopback address (127.0.0.0/8) as `URL` writes it, never a DNS name such as `127.example.com`. */
+const IPV4_LOOPBACK = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+
 /** Loopback spellings a local client may use, in `Host`-header form. */
 const LOOPBACK_NAMES = ['localhost', '127.0.0.1', '[::1]'];
 
@@ -29,17 +32,17 @@ export interface DeriveAllowedHostsInput {
  * Canonicalize an IP literal or hostname.
  *
  * IPv6 has many spellings of one address — `::1`, `0:0:0:0:0:0:0:1` and
- * `0000:...:0001` are the same loopback — so a textual compare misses most of
- * them. `URL` canonicalizes them; a hostname passes through lowercased.
+ * `0000:...:0001` are the same loopback — and so has IPv4 (`127.1`), so a
+ * textual compare misses most of them. `URL` canonicalizes them; a hostname
+ * comes out lowercased.
  */
 function canonicalizeAddress(address: string): string {
   const bare = address
     .trim()
     .toLowerCase()
     .replace(/^\[|\]$/g, '');
-  if (!bare.includes(':')) return bare;
   try {
-    return new URL(`http://[${bare}]`).hostname.replace(/^\[|\]$/g, '');
+    return new URL(bare.includes(':') ? `http://[${bare}]` : `http://${bare}`).hostname.replace(/^\[|\]$/g, '');
   } catch {
     return bare;
   }
@@ -58,7 +61,7 @@ export function isLoopbackAddress(address: string | undefined): boolean {
   return (
     normalized === '::1' ||
     normalized === 'localhost' ||
-    normalized.startsWith('127.') ||
+    IPV4_LOOPBACK.test(normalized) ||
     // IPv4-mapped IPv6 loopback, which `URL` renders as `::ffff:7f00:1`.
     normalized === '::ffff:7f00:1' ||
     normalized.startsWith('::ffff:127.')

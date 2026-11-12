@@ -5,6 +5,7 @@ import { ExecutionTimeoutError, withTimeout, type SemaphoreTicket } from '@front
 import { internalZ as z } from '@frontmcp/lazy-zod';
 import { CallToolRequestSchema, CallToolResultSchema, type AuthInfo } from '@frontmcp/protocol';
 
+import { AUTHORITIES_NOT_CONFIGURED } from '../../builtin/authorities/authorities-not-configured';
 import { completionEventsOf, completionOutputText } from '../../channel/sources/completion-events';
 import {
   acquireConcurrencySlots,
@@ -295,7 +296,7 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
   /**
    * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in agent metadata.
    * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
-   * Skips silently if no authorities engine is configured or no authorities on the agent.
+   * Skips an agent without authorities, and refuses one whose authorities no engine is configured to check.
    */
   @Stage('checkEntryAuthorities')
   async checkEntryAuthorities() {
@@ -304,13 +305,6 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
       this.logger.verbose('checkEntryAuthorities:skip (checked by the invoke tool flow)');
       return;
     }
-    const engine = this.scope.authoritiesEngine;
-    const ctxBuilder = this.scope.authoritiesContextBuilder;
-    if (!engine || !ctxBuilder) {
-      this.logger.verbose('checkEntryAuthorities:skip (no engine configured)');
-      return;
-    }
-
     const agent = this.state.agent;
     if (!agent) return;
 
@@ -319,6 +313,16 @@ export default class CallAgentFlow extends FlowBase<typeof name> {
     if (!authorities) {
       this.logger.verbose('checkEntryAuthorities:skip (no authorities on agent)');
       return;
+    }
+
+    const engine = this.scope.authoritiesEngine;
+    const ctxBuilder = this.scope.authoritiesContextBuilder;
+    if (!engine || !ctxBuilder) {
+      throw new AuthorityDeniedError({
+        entryType: 'Agent',
+        entryName: agent.fullName || agent.name,
+        deniedBy: AUTHORITIES_NOT_CONFIGURED,
+      });
     }
 
     const authInfo = this.state.authInfo ?? {};

@@ -9,15 +9,18 @@ export const WORKFLOW_WEBHOOK_TIMESTAMP_HEADER = 'x-frontmcp-timestamp';
 /** How far a request's timestamp may be from the server's clock, either way, in seconds. */
 export const WORKFLOW_WEBHOOK_TOLERANCE_SECONDS = 300;
 
-/** The most signatures a server remembers at once; past it, the oldest is forgotten first. */
+/** The most signatures a workflow's webhook remembers at once; past it, new requests are refused until some expire. */
 const MAX_REMEMBERED_SIGNATURES = 10_000;
 
 const SIGNATURE_PATTERN = /^v1=([0-9a-f]{64})$/i;
 const TIMESTAMP_PATTERN = /^\d{1,12}$/;
 const encoder = new TextEncoder();
 
-/** Why a webhook request was refused: each one answers the same 401, and only the server's log names it. */
-export type WorkflowWebhookRefusal = 'unsigned' | 'malformed' | 'expired' | 'bad signature' | 'replayed';
+/**
+ * Why a webhook request was refused: each one answers the same 401, and only the server's log names it, but for
+ * `too many`, which answers 429.
+ */
+export type WorkflowWebhookRefusal = 'unsigned' | 'malformed' | 'expired' | 'bad signature' | 'replayed' | 'too many';
 
 /**
  * The signature of a webhook request: `v1=` and the lowercase hex HMAC-SHA256, keyed with the workflow's
@@ -37,22 +40,19 @@ export function signWorkflowWebhook(secret: string, timestamp: string, body: Uin
 
 /**
  * The signatures accepted within the tolerance, so each signed request starts one run: the same request sent again
- * is refused. It remembers them in this process only.
+ * is refused. It remembers them in this process only, and never forgets one before its timestamp leaves the tolerance.
  */
 export class WorkflowWebhookReplayGuard {
   /** Each signature accepted, with when its timestamp leaves the tolerance, in Unix seconds. */
   private readonly accepted = new Map<string, number>();
 
-  /** Remember `signature`; false when it was accepted before. */
-  claim(signature: string, timestamp: number, nowSeconds: number): boolean {
+  /** Remember `signature`: `replayed` when it was accepted before, `too many` when it remembers as many as it can. */
+  claim(signature: string, timestamp: number, nowSeconds: number): 'replayed' | 'too many' | undefined {
     this.forgetExpired(nowSeconds);
-    if (this.accepted.has(signature)) return false;
-    if (this.accepted.size >= MAX_REMEMBERED_SIGNATURES) {
-      const [oldest] = this.accepted.keys();
-      this.accepted.delete(oldest);
-    }
+    if (this.accepted.has(signature)) return 'replayed';
+    if (this.accepted.size >= MAX_REMEMBERED_SIGNATURES) return 'too many';
     this.accepted.set(signature, timestamp + WORKFLOW_WEBHOOK_TOLERANCE_SECONDS);
-    return true;
+    return undefined;
   }
 
   private forgetExpired(nowSeconds: number): void {
@@ -89,7 +89,7 @@ export function verifyWorkflowWebhook(
   if (Math.abs(nowSeconds - timestamp) > WORKFLOW_WEBHOOK_TOLERANCE_SECONDS) return 'expired';
   const expected = encoder.encode(signWorkflowWebhook(secret, timestampHeader, request.body).slice('v1='.length));
   if (!timingSafeEqual(encoder.encode(signature), expected)) return 'bad signature';
-  return replays.claim(signature, timestamp, nowSeconds) ? undefined : 'replayed';
+  return replays.claim(signature, timestamp, nowSeconds);
 }
 
 function firstHeader(value: string | string[] | undefined): string | undefined {

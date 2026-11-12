@@ -100,6 +100,15 @@ export function isIncrementalAuthEnabled(authOptions: AuthOptions | undefined): 
 }
 
 /**
+ * The audience of an incremental-authorization ticket: the issuer and path of the scope it is minted for, so a
+ * ticket from another server or endpoint that shares the signing secret is refused.
+ */
+export function incrementalTicketAudience(scope: { fullPath: string; auth?: unknown }): string {
+  const issuer = (scope.auth as { issuer?: unknown } | undefined)?.issuer;
+  return JSON.stringify([typeof issuer === 'string' ? issuer : '', scope.fullPath]);
+}
+
+/**
  * The `authorized_apps` grant of a new sign-in: the requested apps the scope has, or all of its apps when none were
  * requested. Undefined when incremental auth is off, so no claim is minted and apps aren't gated.
  */

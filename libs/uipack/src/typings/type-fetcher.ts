@@ -257,8 +257,19 @@ export class TypeFetcher {
           return;
         }
 
-        // Check cache first
         const version = versionOverrides[packageName] ?? 'latest';
+        if (!isRequestablePackage(packageName, getSubpathFromSpecifier(specifier), version)) {
+          errors.push({
+            specifier,
+            code: 'INVALID_SPECIFIER',
+            message:
+              `"${specifier}" at version "${version}" is not an npm package name, subpath and version that ` +
+              'name the same package in a CDN URL. Use a subpath without "." or ".." segments and a version, range or tag.',
+          });
+          return;
+        }
+
+        // Check cache first
         const cacheKey = `${TYPE_CACHE_PREFIX}${packageName}@${version}`;
 
         if (!skipCache) {
@@ -404,6 +415,7 @@ export class TypeFetcher {
   private async resolvePackage(specifier: string, version: string, timeout: number): Promise<PackageResolution | null> {
     const packageName = getPackageFromSpecifier(specifier);
     const subpath = getSubpathFromSpecifier(specifier);
+    if (!isRequestablePackage(packageName, subpath, version)) return null;
 
     // Build the URL with version
     const versionSuffix = version === 'latest' ? '' : `@${version}`;
@@ -540,9 +552,12 @@ export class TypeFetcher {
   }
 
   /**
-   * Fetch with timeout support.
+   * Fetch with timeout support, from the origin of `cdnBaseUrl` only: a URL that a declaration file
+   * or a redirect points elsewhere is refused.
    */
   private async fetchWithTimeout(url: string, timeout: number, method: 'GET' | 'HEAD'): Promise<Response> {
+    const cdnOrigin = new URL(this.cdnBaseUrl).origin;
+    assertSameOrigin(url, cdnOrigin);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -554,6 +569,7 @@ export class TypeFetcher {
           Accept: 'application/typescript, text/plain, */*',
         },
       });
+      if (response.url) assertSameOrigin(response.url, cdnOrigin);
       return response;
     } finally {
       clearTimeout(timeoutId);
@@ -640,6 +656,29 @@ function isBuiltinModule(name: string): boolean {
   ]);
 
   return builtins.has(name);
+}
+
+const PACKAGE_NAME = /^(?:@[a-z0-9-][\w.-]*\/)?[a-z0-9-][\w.-]*$/i;
+const SUBPATH_SEGMENT = /^[\w-][\w.-]*$/;
+const VERSION = /^[\w.^~*<>=+-]+$/;
+
+/**
+ * Whether a package name, subpath and version make a CDN URL that names that package: no `.` or `..`
+ * segment, and none of the characters (`%`, `\`, `?`, `#`) that change what a URL points to.
+ */
+function isRequestablePackage(packageName: string, subpath: string | undefined, version: string): boolean {
+  return (
+    PACKAGE_NAME.test(packageName) &&
+    (subpath === undefined || subpath.split('/').every((segment) => SUBPATH_SEGMENT.test(segment))) &&
+    VERSION.test(version)
+  );
+}
+
+/** Throws unless `url` is on `origin`, the origin of the CDN that declarations are fetched from. */
+function assertSameOrigin(url: string, origin: string): void {
+  if (new URL(url).origin !== origin) {
+    throw new Error(`${url} is outside ${origin}, the origin of cdnBaseUrl, so it is not fetched.`);
+  }
 }
 
 /**

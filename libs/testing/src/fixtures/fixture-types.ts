@@ -44,8 +44,9 @@ export interface TestConfig {
     type?: 'local' | 'remote';
   };
   /**
-   * Enable public mode for the test client.
-   * When true, no Authorization header is sent and anonymous token is not requested.
+   * Enable public mode for the test client: it does not request an anonymous token.
+   * An Authorization header is still sent for a token given explicitly (`server.createClient({ token })`);
+   * without one, requests carry no Authorization header.
    * Use this for testing servers configured with `auth: { mode: 'public' }`.
    */
   publicMode?: boolean;

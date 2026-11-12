@@ -221,7 +221,8 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Filter prompts by entry-level authorities.
+   * Filter prompts by entry-level authorities, leaving out every prompt with authorities while no engine is
+   * configured to check them.
    * Hookable: developers can use Will/Did/Around on 'filterByAuthorities'.
    */
   @Stage('filterByAuthorities')
@@ -229,7 +230,6 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
     this.logger.verbose('filterByAuthorities:start');
     const engine = this.scope.authoritiesEngine;
     const ctxBuilder = this.scope.authoritiesContextBuilder;
-    if (!engine || !ctxBuilder) return;
 
     const prompts = this.state.required.prompts;
     const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
@@ -241,6 +241,7 @@ export default class PromptsListFlow extends FlowBase<typeof name> {
         const metadata = prompt?.['metadata'] as Record<string, unknown> | undefined;
         const authorities = metadata?.['authorities'];
         if (!authorities) return item;
+        if (!engine || !ctxBuilder) return null;
 
         const listed = await isListedByAuthorities(
           engine,

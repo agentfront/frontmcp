@@ -81,19 +81,20 @@ async function startWebhookRun(
   const body = (hasBody && request.bodyBytes) || new Uint8Array();
   if (body.length > webhook.maxBodyBytes) return problem(413, 'Payload too large');
 
-  const refusal = verifyWorkflowWebhook({ headers: request.headers, body }, webhook.secret, replays);
+  const manager = jobExecutionManagerOf(scope);
+  const workflow = scope.workflows?.findByName(workflowName);
+  const jobs = scope.jobs;
+  const current = currentWebhookOf(workflow);
+  if (!manager || !workflow || !jobs || !current) return problem(503, 'Workflows are not available');
+
+  const refusal = verifyWorkflowWebhook({ headers: request.headers, body }, current.secret, replays);
   if (refusal) {
     logger.warn(`Webhook of workflow "${workflowName}" refused a request: ${refusal}`);
-    return httpRespond.unauthorized();
+    return refusal === 'too many' ? problem(429, 'Too many requests; retry later') : httpRespond.unauthorized();
   }
 
   const input = jsonObjectOf(body);
   if (!input) return problem(400, 'The body must be a JSON object');
-
-  const manager = jobExecutionManagerOf(scope);
-  const workflow = scope.workflows?.findByName(workflowName);
-  const jobs = scope.jobs;
-  if (!manager || !workflow || !jobs) return problem(503, 'Workflows are not available');
 
   const principal = new WorkflowTriggerPrincipal('webhook', workflowName);
   try {
@@ -116,6 +117,16 @@ async function startWebhookRun(
       return httpRespond.json({ error: error.message, issues: error.validationErrors }, { status: 400 });
     }
     throw error;
+  }
+}
+
+/** The webhook of the workflow a request would start, so the secret that signs it is that workflow's own. */
+function currentWebhookOf(workflow: WorkflowEntry | undefined): ResolvedWorkflowWebhook | undefined {
+  if (workflow?.metadata.trigger !== 'webhook') return undefined;
+  try {
+    return resolveWorkflowWebhook(workflow);
+  } catch {
+    return undefined;
   }
 }
 

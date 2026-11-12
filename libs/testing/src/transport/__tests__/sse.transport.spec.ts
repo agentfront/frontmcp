@@ -35,6 +35,8 @@ interface FakeServerOptions {
   postStatus?: number;
   /** Close the stream before sending the endpoint event */
   noEndpoint?: boolean;
+  /** The data of the endpoint event (default `/message?sessionId=sse-session-1`) */
+  endpoint?: string;
 }
 
 function headersOf(init: RequestInit | undefined): Record<string, string> {
@@ -98,7 +100,7 @@ function stubSseServer(options: FakeServerOptions = {}): FakeServer {
           }
           // Split across chunks and CRLF line endings: the parser must cope with both
           controller.enqueue(encoder.encode(': keep-alive\r\n\r\nevent: endpoint\r\n'));
-          controller.enqueue(encoder.encode('data: /message?sessionId=sse-session-1\r\n\r\n'));
+          controller.enqueue(encoder.encode(`data: ${options.endpoint ?? '/message?sessionId=sse-session-1'}\r\n\r\n`));
         },
       });
       init.signal?.addEventListener('abort', () => {
@@ -267,6 +269,25 @@ describe('SseTransport (legacy HTTP+SSE)', () => {
     const response = await pending;
     expect(response.error).toEqual(expect.objectContaining({ message: 'SSE stream closed by the server' }));
     expect(transport.isConnected()).toBe(false);
+  });
+
+  it('refuses a message endpoint on another origin and posts nothing there', async () => {
+    const server = stubSseServer({ endpoint: 'http://other.example/message?sessionId=sse-session-1' });
+    const transport = new SseTransport({ baseUrl: BASE_URL, auth: { token: 'secret' } });
+    await expect(transport.connect()).rejects.toThrow(
+      'named a message endpoint on another origin (http://other.example)',
+    );
+    expect(server.posts).toHaveLength(0);
+    expect(transport.isConnected()).toBe(false);
+  });
+
+  it('accepts an absolute message endpoint on its own origin', async () => {
+    const server = stubSseServer({ endpoint: `${BASE_URL}/message?sessionId=sse-session-1` });
+    const transport = new SseTransport({ baseUrl: BASE_URL, publicMode: true });
+    await transport.connect();
+    await transport.request({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+    expect(server.posts[0].url).toBe(`${BASE_URL}/message?sessionId=sse-session-1`);
+    await transport.close();
   });
 
   it('explains a server without the legacy SSE endpoint', async () => {

@@ -218,6 +218,16 @@ describe('registerWebMcpTools', () => {
     expect(modelContext.registerCalls.filter((name) => name === 'shop.checkout')).toHaveLength(1);
   });
 
+  it('refuses a call made through a listed tool the loaded server offers to fewer origins', async () => {
+    await registerFromList({}, { exposedTo: ['https://parent.example'] });
+
+    await expect(modelContext.execute('shop.checkout')).rejects.toThrow(
+      'Tool "shop.checkout" is no longer offered to every origin it was listed for: call it again',
+    );
+    expect(modelContext.options('shop.checkout')?.exposedTo).toBeUndefined();
+    expect(await modelContext.execute('shop.checkout')).toEqual({ value: 'ordered' });
+  });
+
   it('unregisters a listed tool the loaded server no longer has, and rejects a call to it', async () => {
     await registerFromList({ tools: [SearchProductsTool] });
     const staleCheckout = modelContext.tool('shop.checkout');

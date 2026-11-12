@@ -161,6 +161,15 @@ function splitRedirectUri(
   return { scheme, userinfo, host, port, rest };
 }
 
+/** Whether a URI holds a backslash (which browsers read as `/` in http and https URLs), a space or a control character. */
+function hasAmbiguousCharacter(uri: string): boolean {
+  for (let index = 0; index < uri.length; index++) {
+    const code = uri.charCodeAt(index);
+    if (code <= 0x20 || code === 0x5c || code === 0x7f) return true;
+  }
+  return false;
+}
+
 /**
  * Match a `redirect_uri` against an allowlist glob COMPONENT-BY-COMPONENT so a
  * `*` cannot cross a URI delimiter (`/`, `@`, `?`, `#`, or the host/port `:`).
@@ -176,6 +185,7 @@ function splitRedirectUri(
 function globMatchRedirectUri(pattern: string, input: string): boolean {
   const p = splitRedirectUri(pattern);
   if (!p) return globMatch(pattern, input); // non-hierarchical pattern (e.g. a lone `*`)
+  if (hasAmbiguousCharacter(input)) return false;
   const u = splitRedirectUri(input);
   if (!u) return false; // a hierarchical pattern requires a hierarchical redirect_uri
   return (

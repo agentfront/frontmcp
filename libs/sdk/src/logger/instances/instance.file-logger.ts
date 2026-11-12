@@ -1,3 +1,5 @@
+import { escapeControlCharacters } from '@frontmcp/utils';
+
 import { LogLevel, LogTransport, LogTransportInterface, type LogRecord } from '../../common';
 
 // `fs`, `os` and `path` are lazy-`require`d (not statically imported) so this module doesn't pull
@@ -51,7 +53,8 @@ const DEFAULT_LOGS_MAX = 25;
  * **Log location:** `~/.frontmcp/logs/{appName}-{ISO-timestamp}.log`
  * (configurable via `FRONTMCP_LOG_DIR` or `FRONTMCP_HOME`).
  *
- * **Format:** Plain text, no ANSI colors, one record per line:
+ * **Format:** Plain text, no ANSI colors, one record per line (line breaks and other control characters in a
+ * message are written as visible escapes):
  * ```
  * [2026-04-06T12:34:56.789Z] INFO [FrontMcp.MultiAppScope] Scope ready — 3 apps
  * ```
@@ -118,8 +121,8 @@ export class FileLogTransportInstance extends LogTransportInterface {
 
     const ts = rec.timestamp.toISOString();
     const level = LOG_LEVEL_LABELS[rec.level] ?? 'INFO';
-    const prefix = rec.prefix ? ` [${rec.prefix}]` : '';
-    const message = stripAnsi(String(rec.message));
+    const prefix = rec.prefix ? ` [${escapeControlCharacters(rec.prefix)}]` : '';
+    const message = escapeControlCharacters(stripAnsi(String(rec.message)));
     const line = `[${ts}] ${level}${prefix} ${message}\n`;
 
     try {

@@ -235,6 +235,68 @@ describe('Skills MCP Handlers', () => {
       expect(result.summary.allToolsAvailable).toBe(true);
     });
 
+    it('returns a skill asked for more than once a single time', async () => {
+      const loaded = {
+        skill: { id: 'skill-1', name: 'Test Skill', description: 'd', instructions: 'Do the thing', tools: [] },
+        availableTools: [],
+        missingTools: [],
+        isComplete: true,
+      };
+      mockSkillRegistry.loadSkill.mockResolvedValueOnce(loaded).mockResolvedValueOnce(loaded);
+
+      const handler = skillsLoadRequestHandler(createHandlerOptions());
+      const request = {
+        method: 'skills/load' as const,
+        params: { skillIds: ['skill-1', 'skill-1', 'Test Skill', 'skill-1'] },
+      };
+      const result = await handler.handler(request, createContext() as any);
+
+      expect(mockSkillRegistry.loadSkill).toHaveBeenCalledTimes(2);
+      expect(result.skills).toHaveLength(1);
+      expect(result.summary.totalSkills).toBe(1);
+    });
+
+    it('reports a tool the caller cannot list as missing, without its schema', async () => {
+      mockSkillRegistry.loadSkill.mockResolvedValueOnce({
+        skill: {
+          id: 'skill-1',
+          name: 'Test Skill',
+          description: 'd',
+          instructions: 'Do the thing',
+          tools: [{ name: 'open_tool' }, { name: 'admin_tool' }],
+        },
+        availableTools: ['open_tool', 'admin_tool'],
+        missingTools: [],
+        isComplete: true,
+      });
+      const toolEntry = (name: string, authorities?: unknown) => ({
+        name,
+        fullName: `app:${name}`,
+        metadata: { name, authorities },
+        getInputJsonSchema: () => ({ type: 'object', properties: { secretField: { type: 'string' } } }),
+      });
+      mockToolRegistry.getTools.mockReturnValue([
+        toolEntry('open_tool'),
+        toolEntry('admin_tool', { roles: ['admin'] }),
+      ]);
+      const scope = {
+        ...createMockScope(),
+        authoritiesEngine: { evaluate: jest.fn(async () => ({ granted: false })) },
+        authoritiesContextBuilder: { build: (authInfo: unknown) => authInfo },
+      };
+
+      const handler = skillsLoadRequestHandler({ serverOptions: {} as any, scope: scope as any });
+      const request = { method: 'skills/load' as const, params: { skillIds: ['skill-1'] } };
+      const result = await handler.handler(request, createContext() as any);
+      mockToolRegistry.getTools.mockReturnValue([]);
+
+      const [skill] = result.skills;
+      expect(skill.availableTools).toEqual(['open_tool']);
+      expect(skill.missingTools).toEqual(['admin_tool']);
+      expect(skill.tools.find((tool) => tool.name === 'admin_tool')).toEqual({ name: 'admin_tool', available: false });
+      expect(skill.tools.find((tool) => tool.name === 'open_tool')?.inputSchema).toBeDefined();
+    });
+
     it('should handle missing skills with warnings', async () => {
       mockSkillRegistry.loadSkill.mockResolvedValueOnce(undefined);
 
@@ -367,6 +429,24 @@ describe('Skills MCP Handlers', () => {
       expect(result.skills[1].id).toBe('skill-2');
       expect(result.total).toBe(2);
       expect(result.hasMore).toBe(false);
+    });
+
+    it('leaves out a skill visible over HTTP only, from the page and the total', async () => {
+      mockSkillRegistry.listSkills.mockResolvedValueOnce({
+        skills: [
+          { id: 'skill-1', name: 'Skill One', description: 'Both surfaces' },
+          { id: 'http-only', name: 'HTTP Only', description: 'HTTP endpoints only', visibility: 'http' },
+          { id: 'mcp-only', name: 'MCP Only', description: 'MCP only', visibility: 'mcp' },
+        ],
+        total: 3,
+        hasMore: false,
+      });
+
+      const handler = skillsListRequestHandler(createHandlerOptions());
+      const result = await handler.handler({ method: 'skills/list' as const, params: {} }, createContext() as any);
+
+      expect(result.skills.map((skill) => skill.id)).toEqual(['skill-1', 'mcp-only']);
+      expect(result.total).toBe(2);
     });
 
     it('should pass list options to registry', async () => {

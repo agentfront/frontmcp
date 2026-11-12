@@ -50,6 +50,34 @@ const HandlerJob = job({
   return { tripled: n * 3 };
 });
 
+@Job({ name: 'twin_job', id: 'twin-a', inputSchema: {}, outputSchema: { from: z.string() } })
+class TwinA extends JobContext {
+  async execute() {
+    return { from: 'a' };
+  }
+}
+
+@Job({ name: 'twin_job', id: 'twin-b', inputSchema: {}, outputSchema: { from: z.string() } })
+class TwinB extends JobContext {
+  async execute() {
+    return { from: 'b' };
+  }
+}
+
+@Job({ name: 'clash_job', inputSchema: {}, outputSchema: { from: z.string() } })
+class ClashFirst extends JobContext {
+  async execute() {
+    return { from: 'first' };
+  }
+}
+
+@Job({ name: 'clash_job', inputSchema: {}, outputSchema: { from: z.string() } })
+class ClashSecond extends JobContext {
+  async execute() {
+    return { from: 'second' };
+  }
+}
+
 @App({ id: 'workers', name: 'Workers', jobs: [CrunchJob, PlainJob, HandlerJob] })
 class WorkersApp {}
 
@@ -90,6 +118,23 @@ describe('a worker job, as its worker thread runs it', () => {
       output: { tripled: 6 },
       logs: [expect.stringMatching(/\] tripling$/)],
     });
+  });
+});
+
+describe('two jobs of one module that share a name, as a worker thread runs them', () => {
+  const runnerFor = (target: unknown) => workerJobRunners().get(workerJobSourceOf(target)?.key ?? '');
+
+  it('runs each one of two jobs with their own ids', async () => {
+    await expect(runnerFor(TwinA)?.run({}, 1, jest.fn(), jest.fn())).resolves.toMatchObject({ output: { from: 'a' } });
+    await expect(runnerFor(TwinB)?.run({}, 1, jest.fn(), jest.fn())).resolves.toMatchObject({ output: { from: 'b' } });
+  });
+
+  it('refuses to run either of two jobs with no id, rather than the one declared last', async () => {
+    for (const target of [ClashFirst, ClashSecond]) {
+      await expect(runnerFor(target)?.run({}, 1, jest.fn(), jest.fn())).rejects.toThrow(
+        /declares more than one job named "clash_job", so a worker cannot tell which one to run: give each job its own id/,
+      );
+    }
   });
 });
 

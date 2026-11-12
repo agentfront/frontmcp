@@ -1,3 +1,5 @@
+import { escapeControlCharacters } from '@frontmcp/utils';
+
 import type { LogSink } from '../log-sink.interface';
 import type { StructuredLogEntry } from '../structured-log.types';
 
@@ -24,8 +26,8 @@ function formatEntry(entry: StructuredLogEntry): string {
   const useAnsi = typeof process !== 'undefined' && !!process.stdout?.isTTY;
   const ts = entry.timestamp.slice(11, 23); // HH:MM:SS.mmm
   const level = entry.level.toUpperCase().padEnd(7);
-  const traceShort = entry.trace_id ? entry.trace_id.slice(0, 8) : '';
-  const reqShort = entry.request_id ? entry.request_id.slice(0, 8) : '';
+  const traceShort = entry.trace_id ? escapeControlCharacters(entry.trace_id.slice(0, 8)) : '';
+  const reqShort = entry.request_id ? escapeControlCharacters(entry.request_id.slice(0, 8)) : '';
 
   const parts: string[] = [];
   const DIM = useAnsi ? '\x1b[2m' : '';
@@ -38,18 +40,21 @@ function formatEntry(entry: StructuredLogEntry): string {
   if (traceShort || reqShort) {
     parts.push(`${DIM}[${traceShort}${reqShort ? ':' + reqShort : ''}]${RESET}`);
   }
-  if (entry.prefix) parts.push(`${DIM}[${entry.prefix}]${RESET}`);
-  parts.push(entry.message);
+  if (entry.prefix) parts.push(`${DIM}[${escapeControlCharacters(entry.prefix)}]${RESET}`);
+  parts.push(escapeControlCharacters(entry.message));
 
   if (entry.attributes && Object.keys(entry.attributes).length > 0) {
     const attrs = Object.entries(entry.attributes)
-      .map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`)
+      .map(
+        ([k, v]) =>
+          `${escapeControlCharacters(k)}=${typeof v === 'string' ? escapeControlCharacters(v) : JSON.stringify(v)}`,
+      )
       .join(' ');
     parts.push(`${DIM}{ ${attrs} }${RESET}`);
   }
 
   if (entry.error) {
-    parts.push(`[${entry.error.type}: ${entry.error.message}]`);
+    parts.push(`[${escapeControlCharacters(entry.error.type)}: ${escapeControlCharacters(entry.error.message)}]`);
   }
 
   if (entry.elapsed_ms !== undefined) {

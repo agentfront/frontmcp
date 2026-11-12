@@ -190,6 +190,50 @@ describe('RedisSessionStore', () => {
       expect(result).toBeNull();
     });
 
+    it('should refuse and delete an unsigned session when signing is enabled', async () => {
+      const signingStore = new RedisSessionStore({
+        host: 'localhost',
+        security: { enableSigning: true, signingSecret: 'test-signing-secret-with-enough-length' },
+      });
+      mockRedisClient.getex.mockResolvedValue(JSON.stringify(createValidStoredSession()));
+
+      const result = await signingStore.get('test-session-id');
+
+      expect(result).toBeNull();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(mockStorageAdapter.delete).toHaveBeenCalledWith('test-session-id');
+    });
+
+    it('should read back a session it signed when signing is enabled', async () => {
+      const security = { enableSigning: true, signingSecret: 'test-signing-secret-with-enough-length' };
+      const signingStore = new RedisSessionStore({ host: 'localhost', security });
+      const storedSession = createValidStoredSession();
+      await signingStore.set('test-session-id', storedSession);
+      mockRedisClient.getex.mockResolvedValue(mockStorageAdapter.set.mock.calls[0][1]);
+
+      const result = await signingStore.get('test-session-id');
+
+      expect(result?.session.id).toBe(storedSession.session.id);
+    });
+
+    it.each([
+      [120_000, null],
+      [1_000, 'kept'],
+    ])(
+      'should apply security.maxLifetimeMs to a session created %pms ago that has no maxLifetimeAt',
+      async (ageMs, expected) => {
+        const lifetimeStore = new RedisSessionStore({ host: 'localhost', security: { maxLifetimeMs: 60_000 } });
+        const storedSession = createValidStoredSession();
+        storedSession.createdAt = Date.now() - ageMs;
+        mockRedisClient.getex.mockResolvedValue(JSON.stringify(storedSession));
+
+        const result = await lifetimeStore.get('test-session-id');
+
+        expect(result === null ? null : 'kept').toBe(expected);
+        expect(mockStorageAdapter.delete).toHaveBeenCalledTimes(expected === null ? 1 : 0);
+      },
+    );
+
     it('should delete and return null for logically expired session', async () => {
       const storedSession = createValidStoredSession();
       storedSession.session.expiresAt = Date.now() - 1000; // Expired 1 second ago

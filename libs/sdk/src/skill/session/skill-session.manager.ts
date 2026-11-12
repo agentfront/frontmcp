@@ -5,6 +5,7 @@ import { AsyncLocalStorage, EventEmitter } from '@frontmcp/utils';
 import type { FrontMcpLogger } from '../../common';
 import type { SkillContent } from '../../common/interfaces';
 import { SkillSessionError } from '../../errors';
+import { sessionIdHash } from '../../logger/session-id-hash';
 import type { SkillLoadResult } from '../skill-storage.interface';
 import type { SkillSessionStore } from './skill-session-store.interface';
 import {
@@ -192,6 +193,8 @@ export class SkillSessionManager extends EventEmitter {
       session.policyMode = this.options.defaultPolicyMode;
     }
 
+    if (policy?.strictAllowlist) session.strictAllowlist = true;
+
     // Set startedAt for first skill activation
     if (session.startedAt === 0) {
       session.startedAt = now;
@@ -215,7 +218,7 @@ export class SkillSessionManager extends EventEmitter {
     });
 
     this.logger?.debug(`Skill session activated: ${skillId}`, {
-      sessionId: session.sessionId,
+      sessionIdHash: sessionIdHash(session.sessionId),
       skillToolsAdded: toolNames,
       totalAllowedTools: session.allowedTools.size,
       activeSkillCount: session.activeSkills.size,
@@ -284,7 +287,7 @@ export class SkillSessionManager extends EventEmitter {
       });
 
       this.logger?.debug(`Skill deactivated: ${skillId}`, {
-        sessionId: session.sessionId,
+        sessionIdHash: sessionIdHash(session.sessionId),
         remainingSkills: session.activeSkills.size,
       });
 
@@ -328,7 +331,7 @@ export class SkillSessionManager extends EventEmitter {
       }
 
       this.logger?.debug(`All skills deactivated`, {
-        sessionId: session.sessionId,
+        sessionIdHash: sessionIdHash(session.sessionId),
         deactivatedSkills: skillIds,
         duration,
         toolCallCount: session.toolCallCount,
@@ -355,6 +358,7 @@ export class SkillSessionManager extends EventEmitter {
     session.approvedTools.clear();
     session.deniedTools.clear();
     session.toolCallCount = 0;
+    delete session.strictAllowlist;
   }
 
   /**
@@ -367,30 +371,8 @@ export class SkillSessionManager extends EventEmitter {
   checkToolAuthorization(toolName: string): ToolAuthorizationResult {
     const session = this.getActiveSession();
 
-    // No session context - default allow (unless requireExplicitActivation)
-    if (!session) {
-      if (this.options.requireExplicitActivation) {
-        return {
-          allowed: false,
-          reason: 'no_active_skill',
-          toolName,
-          context: { message: 'Skill must be explicitly activated' },
-        };
-      }
-      return {
-        allowed: true,
-        reason: 'no_active_skill',
-        toolName,
-      };
-    }
-
-    // No active skill - default allow
-    if (session.activeSkills.size === 0) {
-      return {
-        allowed: true,
-        reason: 'no_active_skill',
-        toolName,
-      };
+    if (!session || session.activeSkills.size === 0) {
+      return this.withoutActiveSkill(toolName);
     }
 
     // Get all active skill info for inclusion in results
@@ -424,12 +406,7 @@ export class SkillSessionManager extends EventEmitter {
       const elapsed = Date.now() - session.startedAt;
       if (elapsed > this.options.maxSessionDuration) {
         this.deactivateSkill();
-        return {
-          allowed: true,
-          reason: 'no_active_skill',
-          toolName,
-          context: { message: 'Session expired' },
-        };
+        return this.withoutActiveSkill(toolName, 'Session expired');
       }
     }
 
@@ -449,6 +426,10 @@ export class SkillSessionManager extends EventEmitter {
         reason: 'skill_allowlist',
         ...baseResult,
       };
+    }
+
+    if (session.strictAllowlist) {
+      return { allowed: false, reason: 'not_in_allowlist', ...baseResult };
     }
 
     // Check if tool was dynamically approved
@@ -481,7 +462,7 @@ export class SkillSessionManager extends EventEmitter {
       default:
         // Log warning but allow
         this.logger?.warn(`Tool '${toolName}' not in skill allowlist but allowed (permissive mode)`, {
-          sessionId: session.sessionId,
+          sessionIdHash: sessionIdHash(session.sessionId),
           activeSkillIds,
         });
         return {
@@ -491,6 +472,19 @@ export class SkillSessionManager extends EventEmitter {
           context: { warning: 'Tool not in allowlist but allowed in permissive mode' },
         };
     }
+  }
+
+  /** The answer for a tool call made while no skill is active: refused when `requireExplicitActivation` is set. */
+  private withoutActiveSkill(toolName: string, message?: string): ToolAuthorizationResult {
+    if (this.options.requireExplicitActivation) {
+      return {
+        allowed: false,
+        reason: 'no_active_skill',
+        toolName,
+        context: { message: 'Skill must be explicitly activated' },
+      };
+    }
+    return { allowed: true, reason: 'no_active_skill', toolName, ...(message && { context: { message } }) };
   }
 
   /**
@@ -532,7 +526,7 @@ export class SkillSessionManager extends EventEmitter {
     });
 
     this.logger?.info(`Tool dynamically approved: ${toolName}`, {
-      sessionId: session.sessionId,
+      sessionIdHash: sessionIdHash(session.sessionId),
       skillId: session.activeSkillId,
     });
 
@@ -560,7 +554,7 @@ export class SkillSessionManager extends EventEmitter {
     });
 
     this.logger?.info(`Tool denied: ${toolName}`, {
-      sessionId: session.sessionId,
+      sessionIdHash: sessionIdHash(session.sessionId),
       skillId: session.activeSkillId,
     });
 
@@ -613,7 +607,7 @@ export class SkillSessionManager extends EventEmitter {
     this.persistSession(session);
 
     this.logger?.debug(`Skill session policy mode changed to: ${mode}`, {
-      sessionId: session.sessionId,
+      sessionIdHash: sessionIdHash(session.sessionId),
       skillId: session.activeSkillId,
     });
   }
@@ -634,7 +628,10 @@ export class SkillSessionManager extends EventEmitter {
       try {
         await this.store.save(session);
       } catch (error) {
-        this.logger?.error('Failed to persist skill session', { error, sessionId: session.sessionId });
+        this.logger?.error('Failed to persist skill session', {
+          error,
+          sessionIdHash: sessionIdHash(session.sessionId),
+        });
       }
     }
   }
