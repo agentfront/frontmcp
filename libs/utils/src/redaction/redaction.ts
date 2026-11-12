@@ -5,6 +5,8 @@
  */
 
 const REDACTED = '[REDACTED]';
+/** What stands in for an object or list below the depth limit, whose fields were not checked. */
+const TRUNCATED = '[TRUNCATED]';
 
 /** The fields a redaction hides: field names, matched case-insensitively, or a test on each key. */
 export type RedactedFields = readonly string[] | ((key: string) => boolean);
@@ -22,7 +24,7 @@ interface WalkOptions {
  *
  * @param obj - Object to redact fields from
  * @param fields - Field names to redact (case-insensitive), or a test on each key
- * @param maxDepth - Maximum recursion depth (default: 5)
+ * @param maxDepth - Maximum recursion depth (default: 5); an object or list below it becomes '[TRUNCATED]'
  * @returns New object with sensitive fields replaced by '[REDACTED]'
  */
 export function redactFields(
@@ -51,14 +53,14 @@ function sensitiveKeyTest(fields: RedactedFields): (key: string) => boolean {
 
 function redactValue(value: unknown, depth: number, options: WalkOptions): unknown {
   if (typeof value === 'string') return options.jsonText ? redactJsonText(value, depth, options) : value;
-  if (Array.isArray(value)) return value.map((item) => redactValue(item, depth, options));
+  const isList = Array.isArray(value);
+  if ((isList || isPlainObject(value)) && depth >= options.maxDepth) return TRUNCATED;
+  if (isList) return value.map((item) => redactValue(item, depth + 1, options));
   if (isPlainObject(value)) return redactRecord(value, depth, options);
   return value;
 }
 
 function redactRecord(obj: Record<string, unknown>, depth: number, options: WalkOptions): Record<string, unknown> {
-  if (depth >= options.maxDepth) return obj;
-
   const result: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(obj)) {

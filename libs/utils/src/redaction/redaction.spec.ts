@@ -51,6 +51,19 @@ describe('redactFields', () => {
     });
   });
 
+  it('should replace an object below the depth limit, whose fields were not checked', () => {
+    const obj = { l1: { l2: { l3: { l4: { l5: { password: 'secret' } } } } } };
+    const result = redactFields(obj, ['password']);
+    expect(result).toEqual({ l1: { l2: { l3: { l4: { l5: '[TRUNCATED]' } } } } });
+  });
+
+  it('should stop at a list that holds itself', () => {
+    const list: unknown[] = [{ password: 'secret' }];
+    list.push(list);
+    const result = redactFields({ list }, ['password']);
+    expect(JSON.stringify(result)).not.toContain('secret');
+  });
+
   it('should handle arrays with non-object items', () => {
     const obj = { tags: ['a', 'b', 'c'], password: 'secret' };
     const result = redactFields(obj, ['password']);
@@ -68,15 +81,9 @@ describe('redactFields', () => {
         },
       },
     };
-    // With maxDepth=1, only top-level is processed
+    // With maxDepth=1, only top-level is processed; what lies below is not passed on unchecked
     const result = redactFields(obj, ['secret'], 1);
-    expect(result).toEqual({
-      level1: {
-        level2: {
-          secret: 'deep', // Not redacted — beyond maxDepth
-        },
-      },
-    });
+    expect(result).toEqual({ level1: '[TRUNCATED]' });
   });
 
   it('should handle Date values without treating them as objects', () => {
