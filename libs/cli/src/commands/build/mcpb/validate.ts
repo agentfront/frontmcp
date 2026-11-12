@@ -352,6 +352,9 @@ interface RawArchive {
 
 const BINARY_ENTRY = /^bin\/[^/]+\/[^/]+$/;
 
+/** Most bytes `manifest.json` and the `server/*.js` files may expand to together; they are held in memory to check. */
+const MAX_BUFFERED_ENTRY_BYTES = 256 * 1024 * 1024;
+
 function readArchive(archivePath: string): Promise<RawArchive> {
   const yauzl = require('yauzl') as typeof import('yauzl');
   // yauzl's ZipFile doesn't expose the archive byte size, so measure it
@@ -368,6 +371,7 @@ function readArchive(archivePath: string): Promise<RawArchive> {
       let manifestRaw: string | undefined;
       const serverFiles: Record<string, string> = {};
       const binaryRequires: Record<string, string[]> = {};
+      let bufferedBytes = 0;
       let settled = false;
       const settle = (fn: () => void): void => {
         if (settled) return;
@@ -402,6 +406,18 @@ function readArchive(archivePath: string): Promise<RawArchive> {
             stream.on('error', (e: Error) => settle(() => reject(e)));
           });
         } else if (isManifest || isServerScript) {
+          bufferedBytes += entry.uncompressedSize;
+          if (bufferedBytes > MAX_BUFFERED_ENTRY_BYTES) {
+            const limitMb = MAX_BUFFERED_ENTRY_BYTES / 1024 / 1024;
+            settle(() =>
+              reject(
+                new Error(
+                  `manifest.json and the server/*.js files expand to more than ${limitMb} MB (at ${entry.fileName}), more than validate reads into memory. An archive built by \`frontmcp build --target mcpb\` stays far below that`,
+                ),
+              ),
+            );
+            return;
+          }
           zip.openReadStream(entry, (streamErr: Error | null, stream: NodeJS.ReadableStream | undefined) => {
             if (streamErr || !stream) {
               settle(() => reject(streamErr || new Error(`Failed to open ${entry.fileName}`)));
