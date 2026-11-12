@@ -369,6 +369,24 @@ describe('Skills MCP Handlers', () => {
       expect(result.hasMore).toBe(false);
     });
 
+    it('leaves out a skill visible over HTTP only, from the page and the total', async () => {
+      mockSkillRegistry.listSkills.mockResolvedValueOnce({
+        skills: [
+          { id: 'skill-1', name: 'Skill One', description: 'Both surfaces' },
+          { id: 'http-only', name: 'HTTP Only', description: 'HTTP endpoints only', visibility: 'http' },
+          { id: 'mcp-only', name: 'MCP Only', description: 'MCP only', visibility: 'mcp' },
+        ],
+        total: 3,
+        hasMore: false,
+      });
+
+      const handler = skillsListRequestHandler(createHandlerOptions());
+      const result = await handler.handler({ method: 'skills/list' as const, params: {} }, createContext() as any);
+
+      expect(result.skills.map((skill) => skill.id)).toEqual(['skill-1', 'mcp-only']);
+      expect(result.total).toBe(2);
+    });
+
     it('should pass list options to registry', async () => {
       mockSkillRegistry.listSkills.mockResolvedValueOnce({
         skills: [],
