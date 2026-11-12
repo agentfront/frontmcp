@@ -116,6 +116,26 @@ describe('runReplay', () => {
     expect(process.exitCode).toBe(1);
   });
 
+  it('prints the names, errors and paths of the recording on one line each', async () => {
+    const { kit } = fakeKit([
+      {
+        line: 1,
+        method: 'tools/call',
+        name: 'search\nReplayed 0 calls',
+        error: { code: -32000, message: 'failed\r\u001b[2Kall good' },
+        changes: [{ path: 'content.0\nok', recorded: 1, replayed: 2 }],
+      },
+    ]);
+    kit.formatReplayReport = (report) =>
+      (report.differences as Array<{ name: string; error: { code: number; message: string }; changes: Array<{ path: string }> }>)
+        .map((call) => `${call.name} ${call.error.code}: ${call.error.message} ${call.changes[0].path}`)
+        .join('\n');
+
+    await runReplay(args({ replay: 'calls.jsonl' }), kit);
+
+    expect(output.at(-1)).toBe('search\\nReplayed 0 calls -32000: failed\\r\\u001b[2Kall good content.0\\nok');
+  });
+
   it('stops the server when the replay fails', async () => {
     const { kit } = fakeKit([]);
     kit.replaySession = async () => {
