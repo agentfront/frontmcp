@@ -454,12 +454,11 @@ export class ApprovalStorageStore implements ApprovalStore {
 
     const keys = await this.storage.keys(`${escapePattern(toolId)}:*`);
     const values = await this.storage.mget(keys);
-    const keysToDelete: string[] = [];
-    const revoked = new Map<string, ApprovalRecord>();
+    const revocable = new Map<string, { record: ApprovalRecord; value: string }>();
     for (let i = 0; i < keys.length; i++) {
-      const record = this.parseRecord(values[i]);
-      if (!record || record.toolId !== toolId || record.state === ApprovalState.DENIED) continue;
-      const matches = keysToDelete.length;
+      const value = values[i];
+      const record = this.parseRecord(value);
+      if (value === null || !record || record.toolId !== toolId || record.state === ApprovalState.DENIED) continue;
       if (context) {
         const sameSession = sessionId !== undefined && record.sessionId === sessionId;
         if (
@@ -469,26 +468,22 @@ export class ApprovalStorageStore implements ApprovalStore {
           // A context approval granted to the session before it had a user applies to that user too.
           (!userId || record.userId === userId || (sameSession && record.userId === undefined))
         ) {
-          keysToDelete.push(keys[i]);
+          revocable.set(keys[i], { record, value });
         }
       } else if ((sessionId && record.sessionId === sessionId) || (userId && record.userId === userId)) {
-        keysToDelete.push(keys[i]);
+        revocable.set(keys[i], { record, value });
       }
-      if (keysToDelete.length > matches) revoked.set(keys[i], record);
-    }
-
-    if (keysToDelete.length === 0) {
-      return false;
     }
 
     const revokedAt = Date.now();
     const revokedBy = normalizeRevoker(options.revokedBy);
-    for (const [key, record] of revoked) {
+    let revokedAny = false;
+    for (const [key, { record, value }] of revocable) {
+      // A record written to the key since it was read, a denial say, is kept.
+      if (!(await this.deleteIfUnchanged(key, value))) continue;
+      revokedAny = true;
       const entry: ApprovalRecord = { ...record, revokedAt, revokedBy, revocationReason: options.reason };
       await this.revocations.set(key, JSON.stringify(entry), { ttlSeconds: REVOCATION_RETENTION_SECONDS });
-    }
-    await this.storage.mdelete(keysToDelete);
-    for (const record of revoked.values()) {
       this.options.audit?.record({
         type: 'approval.revoked',
         ...auditFieldsOf(record),
@@ -496,7 +491,7 @@ export class ApprovalStorageStore implements ApprovalStore {
         reason: options.reason,
       });
     }
-    return true;
+    return revokedAny;
   }
 
   /**
@@ -522,12 +517,16 @@ export class ApprovalStorageStore implements ApprovalStore {
     return false;
   }
 
-  /** Deletes `key` only while it still holds `storedValue`, in one step where the backend allows. */
+  /**
+   * Deletes `key` only while it still holds `storedValue`: in one step where the backend allows,
+   * otherwise by reading it again just before deleting it.
+   */
   private async deleteIfUnchanged(key: string, storedValue: string): Promise<boolean> {
     try {
       return await this.storage.deleteIfEquals(key, storedValue);
     } catch (error) {
       if (!(error instanceof StorageNotSupportedError)) throw error;
+      if ((await this.storage.get(key)) !== storedValue) return false;
       return this.storage.delete(key);
     }
   }
@@ -585,21 +584,16 @@ export class ApprovalStorageStore implements ApprovalStore {
     const keys = await this.storage.keys('*');
     const values = await this.storage.mget(keys);
 
-    const keysToDelete: string[] = [];
-    const expired: ApprovalRecord[] = [];
-
+    let deleted = 0;
     for (let i = 0; i < keys.length; i++) {
-      const approval = this.parseRecord(values[i]);
-      if (approval && approval.expiresAt && approval.expiresAt <= now) {
-        keysToDelete.push(keys[i]);
-        expired.push(approval);
-      }
+      const value = values[i];
+      const approval = this.parseRecord(value);
+      if (value === null || !approval?.expiresAt || approval.expiresAt > now) continue;
+      // A record written to the key since it was read is kept.
+      if (!(await this.deleteIfUnchanged(keys[i], value))) continue;
+      deleted++;
+      this.options.audit?.record({ type: 'approval.expired', ...auditFieldsOf(approval) });
     }
-
-    if (keysToDelete.length === 0) return 0;
-
-    const deleted = await this.storage.mdelete(keysToDelete);
-    for (const record of expired) this.options.audit?.record({ type: 'approval.expired', ...auditFieldsOf(record) });
     return deleted;
   }
 

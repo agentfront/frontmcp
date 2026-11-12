@@ -49,6 +49,7 @@ describe('ApprovalStorageStore', () => {
     keys: jest.Mock;
     mget: jest.Mock;
     mdelete: jest.Mock;
+    deleteIfEquals: jest.Mock;
     prefix: string;
     root: { disconnect: jest.Mock; set: jest.Mock; get: jest.Mock };
   };
@@ -65,6 +66,7 @@ describe('ApprovalStorageStore', () => {
       keys: jest.fn().mockResolvedValue([]),
       mget: jest.fn().mockResolvedValue([]),
       mdelete: jest.fn().mockResolvedValue(0),
+      deleteIfEquals: jest.fn().mockResolvedValue(true),
       prefix: 'approval:',
       root: { disconnect: jest.fn(), set: jest.fn(), get: jest.fn() },
     };
@@ -566,6 +568,8 @@ describe('ApprovalStorageStore', () => {
       );
     });
 
+    const deletedKeys = () => mockStorage.deleteIfEquals.mock.calls.map(([key]) => key);
+
     const stored = (record: Partial<ApprovalRecord>) =>
       JSON.stringify({
         toolId: 'tool-1',
@@ -587,7 +591,7 @@ describe('ApprovalStorageStore', () => {
 
       expect(result).toBe(true);
       expect(mockStorage.keys).toHaveBeenCalledWith('tool-1:*');
-      expect(mockStorage.mdelete).toHaveBeenCalledWith(['tool-1:session:session-1']);
+      expect(deletedKeys()).toEqual(['tool-1:session:session-1']);
     });
 
     it('should revoke every approval of the tool stored for the session or the user', async () => {
@@ -621,7 +625,7 @@ describe('ApprovalStorageStore', () => {
       const result = await store.revokeApproval({ toolId: 'tool-1', sessionId: 'session-1', userId: 'user-1' });
 
       expect(result).toBe(true);
-      expect(mockStorage.mdelete).toHaveBeenCalledWith([
+      expect(deletedKeys()).toEqual([
         'tool-1:session:session-1',
         'tool-1:user:user-1',
         'tool-1:session:session-1:user:user-1',
@@ -656,7 +660,7 @@ describe('ApprovalStorageStore', () => {
       });
 
       expect(result).toBe(true);
-      expect(mockStorage.mdelete).toHaveBeenCalledWith(['tool-1:session:session-1:ctx:repo:acme']);
+      expect(deletedKeys()).toEqual(['tool-1:session:session-1:ctx:repo:acme']);
     });
 
     it('should keep denials and records of other tools', async () => {
@@ -670,7 +674,7 @@ describe('ApprovalStorageStore', () => {
       const result = await store.revokeApproval({ toolId: 'tool-1', sessionId: 'session-1' });
 
       expect(result).toBe(false);
-      expect(mockStorage.mdelete).not.toHaveBeenCalled();
+      expect(mockStorage.deleteIfEquals).not.toHaveBeenCalled();
     });
 
     it('should return false without a session, user or context', async () => {
@@ -871,11 +875,14 @@ describe('ApprovalStorageStore', () => {
       };
       mockStorage.keys.mockResolvedValue(['tool-1:session:session-1']);
       mockStorage.mget.mockResolvedValue([JSON.stringify(expiredRecord)]);
-      mockStorage.mdelete.mockResolvedValue(1);
 
       const count = await store.clearExpiredApprovals();
 
       expect(count).toBe(1);
+      expect(mockStorage.deleteIfEquals).toHaveBeenCalledWith(
+        'tool-1:session:session-1',
+        JSON.stringify(expiredRecord),
+      );
     });
 
     it('should not delete non-expired approvals', async () => {
@@ -894,7 +901,7 @@ describe('ApprovalStorageStore', () => {
       const count = await store.clearExpiredApprovals();
 
       expect(count).toBe(0);
-      expect(mockStorage.mdelete).not.toHaveBeenCalled();
+      expect(mockStorage.deleteIfEquals).not.toHaveBeenCalled();
     });
   });
 
