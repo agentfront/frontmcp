@@ -110,4 +110,17 @@ describe('ApprovalStorageStore keys', () => {
     await expect(store.clearSessionApprovals('stateless-user:alice')).resolves.toBe(2);
     await expect(store.getApprovals(TOOL_ID, 'stateless-user:alice', 'alice')).resolves.toEqual([]);
   });
+
+  it('clearing session s1 keeps a record stored up to 1.12.0 for session "s1:user:u1" under the same key', async () => {
+    const OTHER_TOOL_ID = 'accounts:export';
+    await storeRaw(`${TOOL_ID}:session:s1:user:u1`, { sessionId: 's1:user:u1', state: ApprovalState.DENIED });
+    await storeRaw(`${OTHER_TOOL_ID}:session:s1:user:u1`, { toolId: OTHER_TOOL_ID, sessionId: 's1', userId: 'u1' });
+
+    await expect(store.clearSessionApprovals('s1')).resolves.toBe(1);
+
+    await expect(store.getApprovals(TOOL_ID, 's1:user:u1')).resolves.toEqual([
+      expect.objectContaining({ sessionId: 's1:user:u1', state: ApprovalState.DENIED }),
+    ]);
+    await expect(store.getApprovals(OTHER_TOOL_ID, 's1', 'u1')).resolves.toEqual([]);
+  });
 });

@@ -814,13 +814,24 @@ describe('ApprovalStorageStore', () => {
     });
 
     it('should delete session approvals', async () => {
+      const grantedAt = Date.now();
+      const recordOf = (toolId: string) =>
+        JSON.stringify({
+          toolId,
+          scope: ApprovalScope.SESSION,
+          state: ApprovalState.APPROVED,
+          sessionId: 'session-1',
+          grantedAt,
+          grantedBy: { source: 'user' },
+        });
       mockStorage.keys.mockResolvedValue(['tool-1:session:session-1', 'tool-2:session:session-1']);
-      mockStorage.mdelete.mockResolvedValue(2);
+      mockStorage.mget.mockResolvedValue([recordOf('tool-1'), recordOf('tool-2')]);
 
       const count = await store.clearSessionApprovals('session-1');
 
       expect(count).toBe(2);
-      expect(mockStorage.mdelete).toHaveBeenCalledWith(['tool-1:session:session-1', 'tool-2:session:session-1']);
+      expect(mockStorage.deleteIfEquals).toHaveBeenCalledWith('tool-1:session:session-1', recordOf('tool-1'));
+      expect(mockStorage.deleteIfEquals).toHaveBeenCalledWith('tool-2:session:session-1', recordOf('tool-2'));
     });
 
     it('should return 0 if no keys found', async () => {

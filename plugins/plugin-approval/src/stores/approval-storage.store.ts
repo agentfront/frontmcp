@@ -595,7 +595,15 @@ export class ApprovalStorageStore implements ApprovalStore {
       return 0;
     }
 
-    const count = await this.storage.mdelete([...keys]);
+    // A 1.12.0 key of session `a` with user `b` is also the key of session `a:user:b`.
+    const candidates = [...keys];
+    const values = await this.storage.mget(candidates);
+    let count = 0;
+    for (let index = 0; index < candidates.length; index++) {
+      const value = values[index];
+      if (value === null || this.parseRecord(value)?.sessionId !== sessionId) continue;
+      if (await this.deleteIfUnchanged(candidates[index], value)) count++;
+    }
     this.options.audit?.record({ type: 'approval.revoked', count, reason: 'session approvals cleared' });
     return count;
   }
