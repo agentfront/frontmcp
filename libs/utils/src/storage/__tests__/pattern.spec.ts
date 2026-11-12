@@ -2,7 +2,7 @@
  * Pattern Matching Utilities Tests
  */
 import { StoragePatternError } from '../errors';
-import { escapeGlob, globToRegex, matchesPattern, validatePattern } from '../utils/pattern';
+import { createGlobMatcher, escapeGlob, globToRegex, matchesPattern, validatePattern } from '../utils/pattern';
 
 describe('Pattern Matching Utilities', () => {
   describe('globToRegex', () => {
@@ -110,9 +110,17 @@ describe('Pattern Matching Utilities', () => {
         expect(regex.test('^start$end')).toBe(true);
       });
 
-      it('should handle backslashes', () => {
-        const regex = globToRegex('path\\file');
-        expect(regex.test('path\\file')).toBe(true);
+      it('should read a backslash as making the next character literal', () => {
+        // The pattern `path\\file` (an escaped backslash) matches the key `path\file`.
+        expect(globToRegex('path\\\\file').test('path\\file')).toBe(true);
+        // `\f` in a pattern is a literal `f`, as in Redis SCAN MATCH.
+        expect(globToRegex('path\\file').test('pathfile')).toBe(true);
+        expect(globToRegex('a\\*b').test('a*b')).toBe(true);
+        expect(globToRegex('a\\*b').test('axxb')).toBe(false);
+      });
+
+      it('should keep a trailing lone backslash literal', () => {
+        expect(globToRegex('end\\').test('end\\')).toBe(true);
       });
     });
 
@@ -150,6 +158,63 @@ describe('Pattern Matching Utilities', () => {
     it('should return false for non-matching keys', () => {
       expect(matchesPattern('other:key', 'user:*')).toBe(false);
       expect(matchesPattern('session:ab', 'session:???')).toBe(false);
+    });
+
+    it('should match keys that contain line breaks', () => {
+      expect(matchesPattern('user:a\nb:profile', 'user:*:profile')).toBe(true);
+      expect(matchesPattern('x\ny', 'x?y')).toBe(true);
+    });
+  });
+
+  describe('createGlobMatcher', () => {
+    const cases: Array<[pattern: string, key: string, expected: boolean]> = [
+      ['', '', true],
+      ['', 'anything', true],
+      ['*', '', true],
+      ['*', 'a:b:c', true],
+      ['user:*', 'user:', true],
+      ['user:*', 'other:1', false],
+      ['*:profile', 'user:1:profile', true],
+      ['*:profile', 'profile', false],
+      ['user:*:profile', 'user::profile', true],
+      ['user:*:profile', 'user:profile', false],
+      ['user:*****:profile', 'user:x:profile', true],
+      ['session:???', 'session:abc', true],
+      ['session:???', 'session:ab', false],
+      ['session:???', 'session:abcd', false],
+      ['a*b*c', 'aXbYc', true],
+      ['a*b*c', 'aXbY', false],
+      ['*a*', 'bab', true],
+      ['*?', '', false],
+      ['*?', 'x', true],
+      ['a.b', 'a.b', true],
+      ['a.b', 'axb', false],
+    ];
+
+    it.each(cases)('matches %j against %j as %s', (pattern, key, expected) => {
+      expect(createGlobMatcher(pattern)(key)).toBe(expected);
+      expect(globToRegex(pattern).test(key)).toBe(expected);
+    });
+
+    it('should treat escapeGlob output as the literal string', () => {
+      const literal = 'us*er?\\id';
+      const isLiteral = createGlobMatcher(`key:${escapeGlob(literal)}:*`);
+      expect(isLiteral('key:us*er?\\id:1')).toBe(true);
+      expect(isLiteral('key:usXXerY\\id:1')).toBe(false);
+      expect(isLiteral('key:us*er?Xid:1')).toBe(false);
+    });
+
+    it('should not count escaped wildcards toward the wildcard limit', () => {
+      expect(() => createGlobMatcher('\\*'.repeat(30))).not.toThrow();
+      expect(() => createGlobMatcher('*a'.repeat(21))).toThrow('too many wildcards');
+    });
+
+    it('should answer a pattern that a backtracking regular expression could not', () => {
+      // As a regular expression, this pattern on this key backtracks for longer than any test run.
+      const pattern = '*a'.repeat(20) + 'b';
+      const key = 'a'.repeat(5000);
+      expect(createGlobMatcher(pattern)(key)).toBe(false);
+      expect(createGlobMatcher(pattern)(key + 'b')).toBe(true);
     });
   });
 
@@ -194,17 +259,13 @@ describe('Pattern Matching Utilities', () => {
       expect(escapeGlob('user:123:profile')).toBe('user:123:profile');
     });
 
-    it('should produce escaped string representation', () => {
-      // Note: escapeGlob produces escape sequences, but globToRegex currently
-      // doesn't interpret them. This is a known limitation - the escapeGlob
-      // function is primarily for documentation/logging purposes or for use
-      // with backends that support escape sequences (like Redis SCAN).
+    it('should produce a pattern that matches only the literal string', () => {
+      // Redis SCAN MATCH reads these escapes too, so the same pattern works on every backend.
       const id = 'user*123?';
       const escaped = escapeGlob(id);
-      // The escaped string contains backslashes
       expect(escaped).toBe('user\\*123\\?');
-      // It can be used in string comparisons
-      expect(escaped.includes('\\')).toBe(true);
+      expect(matchesPattern(id, escaped)).toBe(true);
+      expect(matchesPattern('userX123Y', escaped)).toBe(false);
     });
   });
 });

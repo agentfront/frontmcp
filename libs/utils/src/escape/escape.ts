@@ -157,3 +157,52 @@ export function safeJsonForScript(value: unknown): string {
     return '{"error":"Value could not be serialized"}';
   }
 }
+
+/**
+ * Whether a UTF-16 code unit can end or rewrite a line of text output: C0 controls other than tab, DEL, C1 controls,
+ * and the Unicode line and paragraph separators.
+ */
+function isControlCharacter(code: number): boolean {
+  return (code <= 0x1f && code !== 0x09) || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029;
+}
+
+const NAMED_CONTROL_ESCAPES: Readonly<Record<string, string>> = {
+  '\n': '\\n',
+  '\r': '\\r',
+  '\b': '\\b',
+  '\f': '\\f',
+  '\v': '\\v',
+};
+
+/**
+ * Escape control characters so that a value always stays on one line of text output.
+ *
+ * Use it on values that come from callers (names, URIs, identifiers, messages from a remote peer) before they go into
+ * a log line or a terminal: a raw line break would let the value forge a separate log record, and an escape character
+ * could rewrite the terminal. Line feed, carriage return, backspace, form feed and vertical tab become a backslash
+ * and `n`, `r`, `b`, `f` or `v`; other C0 and C1 controls, DEL, U+2028 and U+2029 become a backslash, `u` and four hex
+ * digits. Tabs and every other character are kept.
+ *
+ * @param value - Value to escape (converted to a string first; null and undefined become an empty string)
+ * @returns The value with every control character replaced by a visible escape
+ *
+ * @example
+ * ```typescript
+ * escapeControlCharacters('tool\nINFO forged entry'); // 'tool\\nINFO forged entry'
+ * escapeControlCharacters('\u001b[31mred');            // '\\u001b[31mred'
+ * ```
+ */
+export function escapeControlCharacters(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const text = typeof value === 'string' ? value : String(value);
+  let escaped = '';
+  let copiedUpTo = 0;
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    if (!isControlCharacter(code)) continue;
+    escaped += text.slice(copiedUpTo, index);
+    escaped += NAMED_CONTROL_ESCAPES[text[index]] ?? `\\u${code.toString(16).padStart(4, '0')}`;
+    copiedUpTo = index + 1;
+  }
+  return copiedUpTo === 0 ? text : escaped + text.slice(copiedUpTo);
+}
