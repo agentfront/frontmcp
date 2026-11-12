@@ -12,6 +12,9 @@ import { detectContentType } from './content-detector';
 
 const CHART_JS_CDN = 'https://esm.sh/chart.js@4/auto';
 const MERMAID_CDN = 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+// A PDF page is drawn on at most 16M pixels, as in PDF.js's viewer, and a document on at most 128M
+const PDF_MAX_PAGE_PIXELS = 2 ** 24;
+const PDF_MAX_TOTAL_PIXELS = 2 ** 27;
 
 /**
  * Build HTML for a Chart.js chart.
@@ -81,9 +84,19 @@ for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
 
 const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
 const container = document.getElementById('pdf-container');
+let pixelsLeft = ${PDF_MAX_TOTAL_PIXELS};
 for (let i = 1; i <= pdf.numPages; i++) {
   const page = await pdf.getPage(i);
-  const viewport = page.getViewport({ scale: 1.5 });
+  const unscaled = page.getViewport({ scale: 1 });
+  const scale = Math.min(1.5, Math.sqrt(${PDF_MAX_PAGE_PIXELS} / (unscaled.width * unscaled.height)));
+  const viewport = page.getViewport({ scale });
+  pixelsLeft -= Math.ceil(viewport.width) * Math.ceil(viewport.height);
+  if (pixelsLeft < 0) {
+    const note = document.createElement('p');
+    note.textContent = 'Pages ' + i + ' to ' + pdf.numPages + ' are not shown: the document is too large to draw.';
+    container.appendChild(note);
+    break;
+  }
   const canvas = document.createElement('canvas');
   canvas.width = viewport.width;
   canvas.height = viewport.height;
