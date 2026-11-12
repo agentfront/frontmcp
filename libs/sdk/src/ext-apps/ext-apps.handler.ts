@@ -146,7 +146,7 @@ export class ExtAppsMessageHandler {
   async handleRequest(request: ExtAppsJsonRpcRequest): Promise<ExtAppsJsonRpcResponse> {
     const { id, method, params } = request;
 
-    this.logger.verbose(`handleRequest: method=${method}, id=${id}`);
+    this.logger.verbose(`handleRequest: method=${escapeControlCharacters(method)}, id=${escapeControlCharacters(id)}`);
 
     try {
       const result = await this.routeMethod(method, params);
@@ -162,7 +162,7 @@ export class ExtAppsMessageHandler {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorCode = this.getErrorCode(error);
 
-      this.logger.warn(`handleRequest: method=${method} failed: ${errorMessage}`);
+      this.logger.warn(`handleRequest: method=${escapeControlCharacters(method)} failed: ${escapeControlCharacters(errorMessage)}`);
 
       return {
         jsonrpc: '2.0',
@@ -189,7 +189,7 @@ export class ExtAppsMessageHandler {
     const { method, params } = notification;
 
     if (method !== 'notifications/message' && method !== 'ui/notifications/request-teardown') {
-      this.logger.verbose(`handleNotification: ignoring method=${method}`);
+      this.logger.verbose(`handleNotification: ignoring method=${escapeControlCharacters(method)}`);
       return;
     }
 
@@ -203,7 +203,7 @@ export class ExtAppsMessageHandler {
       await this.routeMethod(method, params);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`handleNotification: method=${method} failed: ${errorMessage}`);
+      this.logger.warn(`handleNotification: method=${escapeControlCharacters(method)} failed: ${escapeControlCharacters(errorMessage)}`);
     }
   }
 
@@ -274,7 +274,7 @@ export class ExtAppsMessageHandler {
     const { appInfo, protocolVersion } = params;
 
     this.logger.verbose(
-      `handleInitialize: app=${appInfo?.name || 'unknown'} v${appInfo?.version || 'unknown'}, protocol=${protocolVersion}`,
+      `handleInitialize: app=${escapeControlCharacters(appInfo?.name || 'unknown')} v${escapeControlCharacters(appInfo?.version || 'unknown')}, protocol=${escapeControlCharacters(protocolVersion)}`,
     );
 
     // Return host capabilities and protocol acknowledgment
@@ -298,7 +298,7 @@ export class ExtAppsMessageHandler {
       throw new ExtAppsInvalidParamsError('Tool name is required');
     }
 
-    this.logger.verbose(`handleCallServerTool: tool=${name}`);
+    this.logger.verbose(`handleCallServerTool: tool=${escapeControlCharacters(name)}`);
 
     return this.context.callTool(name, args);
   }
@@ -378,7 +378,7 @@ export class ExtAppsMessageHandler {
       );
     }
 
-    this.logger.verbose(`handleOpenLink: url=${url}`);
+    this.logger.verbose(`handleOpenLink: url=${escapeControlCharacters(url)}`);
 
     await this.context.openLink(url);
   }
@@ -403,7 +403,7 @@ export class ExtAppsMessageHandler {
       throw new ExtAppsNotSupportedError('Display mode change not supported by host');
     }
 
-    this.logger.verbose(`handleSetDisplayMode: mode=${mode}`);
+    this.logger.verbose(`handleSetDisplayMode: mode=${escapeControlCharacters(mode)}`);
 
     await this.context.setDisplayMode(mode);
     return { mode };
@@ -420,7 +420,7 @@ export class ExtAppsMessageHandler {
 
     const { reason } = params;
 
-    this.logger.verbose(`handleClose: reason=${reason || 'none'}`);
+    this.logger.verbose(`handleClose: reason=${escapeControlCharacters(reason || 'none')}`);
 
     await this.context.close(reason);
   }
@@ -521,7 +521,7 @@ export class ExtAppsMessageHandler {
       throw new ExtAppsInvalidParamsError('Tool input schema must be a non-null object');
     }
 
-    this.logger.verbose(`handleRegisterTool: name=${name}`);
+    this.logger.verbose(`handleRegisterTool: name=${escapeControlCharacters(name)}`);
 
     await this.context.registerTool(name, description, inputSchema);
   }
@@ -543,7 +543,7 @@ export class ExtAppsMessageHandler {
       throw new ExtAppsInvalidParamsError('Tool name is required');
     }
 
-    this.logger.verbose(`handleUnregisterTool: name=${name}`);
+    this.logger.verbose(`handleUnregisterTool: name=${escapeControlCharacters(name)}`);
 
     await this.context.unregisterTool(name);
   }

@@ -43,4 +43,20 @@ describe('a widget log message', () => {
     expect(logger.info).toHaveBeenCalledWith('ok\\n[ERROR] forged line', undefined);
     expect(logger.warn).toHaveBeenCalledWith('ok\\r\\n[ERROR] another', undefined);
   });
+
+  it('keeps the method a widget names on one log line when its request or notification fails', async () => {
+    const handler = handlerWith();
+
+    await handler.handleRequest(request('ui/nope\n[ERROR] forged', {}));
+    await handler.handleNotification({
+      jsonrpc: '2.0',
+      method: 'notifications/message',
+      params: { level: 'not\nreal', data: 'x' },
+    });
+
+    const warnings = logger.warn.mock.calls.map(([line]) => String(line));
+    expect(warnings).toHaveLength(2);
+    for (const line of warnings) expect(line).not.toMatch(/[\r\n]/);
+    expect(warnings[0]).toContain('method=ui/nope\\n[ERROR] forged failed');
+  });
 });
