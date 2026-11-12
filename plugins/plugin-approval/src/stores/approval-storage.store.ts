@@ -15,7 +15,13 @@ import {
   type StorageConfig,
 } from '@frontmcp/utils';
 
-import { ApprovalOperationError, approvalRecordSchema, normalizeGrantor, normalizeRevoker } from '../approval';
+import {
+  ApprovalConfigurationError,
+  ApprovalOperationError,
+  approvalRecordSchema,
+  normalizeGrantor,
+  normalizeRevoker,
+} from '../approval';
 import { grantorDelegationProblem } from '../approval/delegation';
 import { assertValidTtl } from '../approval/policy';
 import { auditFieldsOf, type ApprovalAuditSink } from '../audit/approval-audit';
@@ -55,6 +61,12 @@ function isSameRecord(a: ApprovalRecord, b: ApprovalRecord): boolean {
 
 /** How long a revocation stays readable through `getRevocations()`. */
 const REVOCATION_RETENTION_SECONDS = 24 * 60 * 60;
+
+/** Why an `alwaysPrompt` tool's approval cannot be used up on a backend without compare-and-delete. */
+const SINGLE_USE_STORAGE_MESSAGE =
+  "ApprovalPlugin: an alwaysPrompt tool's approval can be used up by exactly one call only on a storage that deletes " +
+  "a key only while it holds a given value, and this storage cannot. Set the plugin's storage to type 'memory', " +
+  "'redis', 'upstash', 'vercel-kv' or 'sqlite'.";
 
 /** Suffix of the key of a time-limited approval granted without a context. */
 const TIME_LIMITED_KEY_SEGMENT = `scope:${ApprovalScope.TIME_LIMITED}`;
@@ -497,7 +509,8 @@ export class ApprovalStorageStore implements ApprovalStore {
   /**
    * Deletes the key that holds `record`, if it still does, and reports whether this call deleted
    * it. Two calls racing for one approval both find it, but only one deletes it, and a denial or
-   * approval written to the key after it was read is kept.
+   * approval written to the key after it was read is kept. A backend without compare-and-delete
+   * cannot promise that, so it throws `ApprovalConfigurationError`.
    */
   async consumeApproval(
     record: ApprovalRecord,
@@ -511,10 +524,20 @@ export class ApprovalStorageStore implements ApprovalStore {
       const storedValue = await this.storage.get(key);
       const stored = this.parseRecord(storedValue);
       if (storedValue !== null && stored && this.isOwnedBy(stored, owner) && isSameRecord(stored, record)) {
-        return this.deleteIfUnchanged(key, storedValue);
+        return this.deleteOnce(key, storedValue);
       }
     }
     return false;
+  }
+
+  /** Deletes `key` only while it holds `storedValue`, in one step; a backend that cannot do that is refused. */
+  private async deleteOnce(key: string, storedValue: string): Promise<boolean> {
+    try {
+      return await this.storage.deleteIfEquals(key, storedValue);
+    } catch (error) {
+      if (!(error instanceof StorageNotSupportedError)) throw error;
+      throw new ApprovalConfigurationError(SINGLE_USE_STORAGE_MESSAGE);
+    }
   }
 
   /**
