@@ -30,8 +30,9 @@ class ShopApp {}
 
 const published = jest.fn();
 const authenticated = jest.fn();
+const finished = jest.fn();
 
-/** Records what reaches `events:publish` and who the endpoint authenticated. */
+/** Records what reaches `events:publish`, who the endpoint authenticated, and the failure each request ended with. */
 @Plugin({ name: 'publish-audit' })
 class PublishAuditPlugin {
   @EventPublishHook.Did('validate')
@@ -42,6 +43,11 @@ class PublishAuditPlugin {
   @EventPublishHttpHook.Did('authenticate')
   recordCaller(ctx: FlowCtxOf<'events:publish-http'>) {
     authenticated(ctx.state.caller?.user?.sub);
+  }
+
+  @EventPublishHttpHook.Finally('finalize')
+  recordFailure(ctx: FlowCtxOf<'events:publish-http'>) {
+    finished(ctx.error);
   }
 }
 
@@ -297,6 +303,33 @@ describe('events:publish-http with a secret', () => {
       expect(JSON.stringify(answer.body)).not.toContain('a-lot');
       expect(published).not.toHaveBeenCalled();
     });
+  });
+
+  it.each([
+    ['a bad signature', () => signedRequest(order, { secret: 'another-secret-that-is-32-chars-long' }), 401],
+    ['a stale timestamp', () => signedRequest(order, { timestamp: '1700000000' }), 401],
+    ['an invalid body', () => signedRequest({ name: 'order.created' }), 400],
+    ['an unknown event', () => signedRequest({ name: 'order.cancelled', data: {} }), 404],
+  ])('keeps a refusal for %s as the failure of the run, with its status', async (_label, request, status) => {
+    const answer = await send(server, request());
+
+    expect(answer.status).toBe(status);
+    expect(finished).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'EVENT_PUBLISH_REFUSED',
+        statusCode: status,
+        message: `HTTP ${status}: ${answer.body['error']}`,
+      }),
+    );
+  });
+
+  it('ends a published request, and a repeated eventId, without a failure', async () => {
+    const request = { ...order, eventId: 'no-failure-1' };
+
+    await send(server, signedRequest(request));
+    await send(server, signedRequest(request));
+
+    expect(finished.mock.calls).toEqual([[undefined], [undefined]]);
   });
 
   it('answers 500 when the payload schema fails for another reason than the data', async () => {
