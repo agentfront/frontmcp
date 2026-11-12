@@ -605,6 +605,7 @@ var ExtAppsAdapter = {
     });
   },
   handleMessage: function(context, event) {
+    if (event.source !== window.parent) return;
     if (!this.isOriginTrusted(event.origin)) return;
     var data = event.data;
     if (!data || typeof data !== 'object' || data.jsonrpc !== '2.0') return;

@@ -112,7 +112,7 @@ describe('bridge requests to an MCP Apps host', () => {
   describe('ui/resource-teardown', () => {
     function teardownRequest(origin: string): void {
       const data = { jsonrpc: '2.0', id: 900, method: 'ui/resource-teardown', params: {} };
-      frame?.win.dispatchEvent(new frame.win.MessageEvent('message', { data, origin }));
+      frame?.win.dispatchEvent(new frame.win.MessageEvent('message', { data, origin, source: window }));
     }
 
     function teardownAnswers(): unknown[][] {

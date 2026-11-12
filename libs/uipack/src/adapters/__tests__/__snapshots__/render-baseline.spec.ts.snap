@@ -16,8 +16,8 @@ exports[`pages of widgets without rendering options feeds esbuild the same widge
 console.log("bundled widget");
 </script>
 ",
-    "digest": "4501ec93",
-    "length": 38664,
+    "digest": "7cb7a578",
+    "length": 38708,
   },
   "platform": "browser",
   "stdin": "export default function Widget({ output }) {
@@ -81,8 +81,8 @@ exports[`pages of widgets without rendering options feeds esbuild the same widge
 console.log("bundled widget");
 </script>
 ",
-    "digest": "4501ec93",
-    "length": 38664,
+    "digest": "7cb7a578",
+    "length": 38708,
   },
   "platform": "browser",
   "stdin": "export default function Widget({ output }) {
@@ -145,8 +145,8 @@ exports[`pages of widgets without rendering options renders a JSON result as bef
   ]
 }</pre>
 ",
-  "digest": "d609c006",
-  "length": 38632,
+  "digest": "d5990a85",
+  "length": 38676,
 }
 `;
 
@@ -157,8 +157,8 @@ exports[`pages of widgets without rendering options renders a Markdown string as
 <p>Today is <strong>sunny</strong>, see <a href="https://example.com" rel="noopener noreferrer">the forecast</a> and <code>code</code>.</p>
 <ul><li>one</li><li>two</li></ul>
 ",
-  "digest": "7bf5142e",
-  "length": 38769,
+  "digest": "101a2c43",
+  "length": 38813,
 }
 `;
 
@@ -169,8 +169,8 @@ exports[`pages of widgets without rendering options renders a Markdown string wi
 <p>~~old~~ www.example.com</p>
 <ul><li>[x] done</li></ul>
 ",
-  "digest": "f2f44eae",
-  "length": 38673,
+  "digest": "87ee17c3",
+  "length": 38717,
 }
 `;
 
@@ -180,8 +180,8 @@ exports[`pages of widgets without rendering options renders a Markdown string wi
 <pre><code>const x = 1 &lt; 2;
 </code></pre>
 ",
-  "digest": "4423bba0",
-  "length": 38623,
+  "digest": "473b704d",
+  "length": 38667,
 }
 `;
 
@@ -190,8 +190,8 @@ exports[`pages of widgets without rendering options renders a capitalized HTML b
   "body": "
 &lt;div&gt;card&lt;/div&gt;
 ",
-  "digest": "334c0032",
-  "length": 38606,
+  "digest": "2c57d1f1",
+  "length": 38650,
 }
 `;
 
@@ -200,8 +200,8 @@ exports[`pages of widgets without rendering options renders a component referenc
   "body": "
 <pre>null</pre>
 ",
-  "digest": "2ba5f9b1",
-  "length": 38594,
+  "digest": "fed8178e",
+  "length": 38638,
 }
 `;
 
@@ -210,8 +210,8 @@ exports[`pages of widgets without rendering options renders a plain string resul
   "body": "
 &lt;em&gt;markup&lt;/em&gt;
 ",
-  "digest": "97ad6c14",
-  "length": 38606,
+  "digest": "d17983f3",
+  "length": 38650,
 }
 `;
 
@@ -220,8 +220,8 @@ exports[`pages of widgets without rendering options renders a plain string resul
   "body": "
 <em>markup</em>
 ",
-  "digest": "781b5b86",
-  "length": 38594,
+  "digest": "372045f5",
+  "length": 38638,
 }
 `;
 
@@ -230,8 +230,8 @@ exports[`pages of widgets without rendering options renders a template function 
   "body": "
 <h2>Oslo</h2><p onclick="x()">&lt;b&gt;warm&lt;/b&gt;</p><a href="javascript:void(0)">x</a>
 ",
-  "digest": "174be67e",
-  "length": 38670,
+  "digest": "7e3a7f41",
+  "length": 38714,
 }
 `;
 
@@ -240,8 +240,8 @@ exports[`pages of widgets without rendering options renders an HTML string as be
   "body": "
 <div class="card"><h2>Weather</h2><button onclick="go()">Go</button><script>init()</script></div>
 ",
-  "digest": "f151449a",
-  "length": 38676,
+  "digest": "71feafdd",
+  "length": 38720,
 }
 `;
 
@@ -250,7 +250,7 @@ exports[`pages of widgets without rendering options renders trusted markup with 
   "body": "
 <div onmouseover="hover()"><script>document.title = "x"</script></div>
 ",
-  "digest": "9f3b71e1",
-  "length": 38649,
+  "digest": "776176b8",
+  "length": 38693,
 }
 `;
