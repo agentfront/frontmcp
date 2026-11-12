@@ -71,9 +71,20 @@ function runSilent(steps: ManifestSetupStep[]): QuestionnaireResult {
   const answers: Record<string, string> = {};
   const stepMap = new Map(steps.map((s, i) => [s.id, i]));
   let currentIndex = 0;
+  const visited = new Set<string>();
 
   while (currentIndex < steps.length) {
     const step = steps[currentIndex];
+
+    // Every answer here is its step's default, so coming back to a step with no new answer since repeats forever.
+    const position = `${currentIndex}:${Object.keys(answers).length}`;
+    if (visited.has(position)) {
+      throw new Error(
+        `The setup steps route back to step "${escapeControlCharacters(step.id)}" in a loop, so --yes cannot finish. ` +
+          'Run the install without --yes, or ask the package author to fix the "next" routing of its setup steps.',
+      );
+    }
+    visited.add(position);
 
     if (step.showWhen && !evaluateShowWhen(step.showWhen, answers)) {
       currentIndex++;

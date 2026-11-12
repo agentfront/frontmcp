@@ -100,6 +100,27 @@ describe('questionnaire', () => {
       expect(result.answers.port).toBe('3001');
     });
 
+    it('stops with an error when the routing loops', async () => {
+      const steps: ManifestSetupStep[] = [
+        { id: 'first', prompt: 'First', jsonSchema: { type: 'string', default: 'a' }, env: 'FIRST', next: 'second' },
+        { id: 'second', prompt: 'Second', jsonSchema: { type: 'string', default: 'b' }, env: 'SECOND', next: 'first' },
+      ];
+
+      await expect(runQuestionnaire(steps, { silent: true })).rejects.toThrow('route back to step "first" in a loop');
+    });
+
+    it('finishes when routing returns to a step that a new answer now shows', async () => {
+      const steps: ManifestSetupStep[] = [
+        { id: 'region', prompt: 'Region', jsonSchema: { type: 'string', default: 'eu' }, env: 'REGION', showWhen: { mode: 'cloud' }, next: 'port' },
+        { id: 'mode', prompt: 'Mode', jsonSchema: { type: 'string', default: 'cloud' }, env: 'MODE', next: 'region' },
+        { id: 'port', prompt: 'Port', jsonSchema: { type: 'number', default: 3001 }, env: 'PORT' },
+      ];
+
+      const result = await runQuestionnaire(steps, { silent: true });
+
+      expect(result.answers).toEqual({ mode: 'cloud', region: 'eu', port: '3001' });
+    });
+
     it('should generate env content', async () => {
       const steps: ManifestSetupStep[] = [
         {
