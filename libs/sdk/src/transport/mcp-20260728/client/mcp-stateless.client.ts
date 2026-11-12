@@ -497,19 +497,29 @@ export class McpStatelessClient {
     return final ?? {};
   }
 
-  /** Drain an SSE body, handing each decoded JSON message to `onMessage`. */
+  /**
+   * Drain an SSE body, handing each decoded JSON message to `onMessage`. An unfinished frame is kept as its chunks,
+   * and only a new chunk (with the three characters before it) is searched for the blank line that ends a frame.
+   */
   private async pumpSse(
     body: ReadableStream<Uint8Array>,
     onMessage: (message: Record<string, unknown>) => void,
   ): Promise<void> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    let pending: string[] = [];
+    let tail = '';
 
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      const text = decoder.decode(value, { stream: true });
+      if (!/\r?\n\r?\n/.test(tail + text)) {
+        pending.push(text);
+        tail = (tail + text).slice(-3);
+        continue;
+      }
+      let buffer = pending.join('') + text;
 
       let separator: number;
       while ((separator = buffer.search(/\r?\n\r?\n/)) !== -1) {
@@ -530,6 +540,8 @@ export class McpStatelessClient {
           // comments and keep-alives legitimately carry no JSON.
         }
       }
+      pending = [buffer];
+      tail = buffer.slice(-3);
     }
   }
 
