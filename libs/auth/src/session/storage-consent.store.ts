@@ -40,7 +40,10 @@ export class StorageConsentStore implements ConsentStore {
   }
 
   async get(userSub: string, clientId: string): Promise<RememberedConsentRecord | null> {
-    return this.storage.get(this.key(userSub, clientId));
+    const record = await this.storage.get(this.key(userSub, clientId));
+    // A record stored under the earlier, unescaped key may belong to another (user, client) pair.
+    if (!record || record.userSub !== userSub || record.clientId !== clientId) return null;
+    return record;
   }
 
   async set(record: RememberedConsentRecord): Promise<void> {
