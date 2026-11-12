@@ -12,7 +12,18 @@
  */
 import 'reflect-metadata';
 
-import { App, LogLevel, ProviderScope, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
+import { z } from '@frontmcp/lazy-zod';
+
+import {
+  App,
+  DynamicPlugin,
+  LogLevel,
+  Plugin,
+  ProviderScope,
+  Tool,
+  ToolContext,
+  type FrontMcpConfigInput,
+} from '../../common';
 import { createDeferredServerBuild } from '../../transport/web-fetch-handler';
 import { FrontMcpInstance } from '../front-mcp';
 
@@ -47,6 +58,21 @@ class RemoteClient {}
   ],
 })
 class DeskApp {}
+
+interface LedgerOptions {
+  currency: string;
+}
+
+/** Validates its options where it is constructed, as the published plugins do. */
+@Plugin({ name: 'ledger' })
+class LedgerPlugin extends DynamicPlugin<LedgerOptions> {
+  readonly options: LedgerOptions;
+
+  constructor(options: LedgerOptions) {
+    super();
+    this.options = z.object({ currency: z.string() }).parse(options);
+  }
+}
 
 const config: FrontMcpConfigInput = {
   info: { name: 'fetch-build-failure', version: '1.0.0' },
@@ -145,6 +171,22 @@ describe('createFetchHandler() on an edge isolate: a server that fails to build'
     });
     const startLog = consoleError.mock.calls.find(([message]) => String(message).includes('failed to start'));
     expect(String(startLog?.[0])).toMatch(/Invalid configuration: info\.name: .+/);
+  });
+
+  it('answers 500 server_misconfigured with CONFIG_INVALID for options a plugin refuses', async () => {
+    const refusedOptions = { currency: 42 } as unknown as LedgerOptions;
+    const handler = await createOnEdge({
+      ...config,
+      plugins: [LedgerPlugin.init({ useFactory: () => refusedOptions })],
+    });
+
+    const { status, body } = await answer(await handler(initialize()));
+
+    expect({ status, error: body['error'], code: body['code'] }).toEqual({
+      status: 500,
+      error: 'server_misconfigured',
+      code: 'CONFIG_INVALID',
+    });
   });
 });
 

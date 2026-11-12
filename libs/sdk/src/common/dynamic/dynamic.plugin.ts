@@ -2,6 +2,7 @@
 import { type Reference } from '@frontmcp/di';
 import { brandClass, isBrandedInstance } from '@frontmcp/utils';
 
+import { markConfigValidationError } from '../../errors/misconfiguration';
 import { MethodNotImplementedError } from '../../errors/transport.errors';
 import { type PluginType, type ProviderType, type ToolType } from '../interfaces';
 import { type RedisOptionsInput } from '../types/options/redis';
@@ -152,17 +153,22 @@ export abstract class DynamicPlugin<TOptions extends object, TInput extends obje
       };
     }
 
-    const dyn = collectDynamicProviders(this, typedOptions);
-    const mergedProviders = dedupePluginProviders([...(dyn ?? []), ...extraProviders]);
-    const dynamicTools = collectDynamicTools(this, typedOptions);
-    const instance = new this(options);
-    initOptionsByInstance.set(instance, options);
-    return {
-      ...(pluginMetadataFromOptions(typedOptions, dynamicTools) as typeof typedOptions),
-      provide: this,
-      useValue: instance,
-      providers: mergedProviders,
-    };
+    try {
+      const dyn = collectDynamicProviders(this, typedOptions);
+      const mergedProviders = dedupePluginProviders([...(dyn ?? []), ...extraProviders]);
+      const dynamicTools = collectDynamicTools(this, typedOptions);
+      const instance = new this(options);
+      initOptionsByInstance.set(instance, options);
+      return {
+        ...(pluginMetadataFromOptions(typedOptions, dynamicTools) as typeof typedOptions),
+        provide: this,
+        useValue: instance,
+        providers: mergedProviders,
+      };
+    } catch (error) {
+      // Options the plugin's schema refuses are an invalid server configuration (CONFIG_INVALID).
+      throw markConfigValidationError(error);
+    }
   }
 }
 

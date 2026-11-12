@@ -51,9 +51,25 @@ export const MISCONFIGURATION_REMEDIES: Record<string, string> = {
     'server refuses to start. Configure the plugin in one place; the server log names the option and the plugin.',
 };
 
+/** Set on a validation error raised where the server's own configuration is parsed; every copy of the SDK reads it. */
+const CONFIG_VALIDATION_ERROR = Symbol.for('@frontmcp/sdk:config-validation-error');
+
 /**
- * Recognize an error that carries one of the codes above, however deeply it is
- * wrapped. The message is never echoed — only the fixed code and remedy are.
+ * Mark an error thrown where the server's own configuration is parsed (its options, a plugin's) when a
+ * validation error is in its cause chain, and return it. Only a marked error is CONFIG_INVALID: a
+ * `ZodError` thrown while a request runs is that request's failure.
+ */
+export function markConfigValidationError(error: unknown): unknown {
+  if (describeConfigIssues(error) !== undefined && Object.isExtensible(error)) {
+    Object.defineProperty(error, CONFIG_VALIDATION_ERROR, { value: true });
+  }
+  return error;
+}
+
+/**
+ * Recognize an error that carries one of the codes above, or that {@link markConfigValidationError}
+ * marked (CONFIG_INVALID), however deeply it is wrapped. The message is never echoed — only the fixed
+ * code and remedy are.
  */
 export function findMisconfiguration(error: unknown): { code: string; remedy: string } | undefined {
   let current: unknown = error;
@@ -63,7 +79,9 @@ export function findMisconfiguration(error: unknown): { code: string; remedy: st
       return { code, remedy: MISCONFIGURATION_REMEDIES[code] };
     }
     // The config itself failed validation (the server's schema, not the request's).
-    if (current.name === 'ZodError') return { code: 'CONFIG_INVALID', remedy: CONFIG_INVALID_REMEDY };
+    if ((current as { [CONFIG_VALIDATION_ERROR]?: unknown })[CONFIG_VALIDATION_ERROR] === true) {
+      return { code: 'CONFIG_INVALID', remedy: CONFIG_INVALID_REMEDY };
+    }
     current = (current as { cause?: unknown }).cause;
   }
   return undefined;

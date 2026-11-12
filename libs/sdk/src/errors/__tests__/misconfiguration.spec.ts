@@ -1,3 +1,6 @@
+import { z } from '@frontmcp/lazy-zod';
+
+import { DynamicPlugin, Plugin } from '../../common';
 import {
   DuplicatePluginEntryError,
   DuplicatePluginError,
@@ -9,6 +12,7 @@ import {
 import {
   describeConfigIssues,
   findMisconfiguration,
+  markConfigValidationError,
   MISCONFIGURATION_REMEDIES,
   misconfigurationBody,
 } from '../misconfiguration';
@@ -59,10 +63,48 @@ describe('misconfiguration classification (#646)', () => {
     expect(found?.remedy).toContain('Configure the plugin in one place');
   });
 
-  it('maps a ZodError to CONFIG_INVALID', () => {
+  it('maps a ZodError marked where the configuration is parsed to CONFIG_INVALID, wrapped or not', () => {
     const err = new Error('bad config');
     err.name = 'ZodError';
+    const wrapped = new Error('plugin options refused', { cause: err });
+
+    expect(markConfigValidationError(err)).toBe(err);
     expect(findMisconfiguration(err)?.code).toBe('CONFIG_INVALID');
+    expect(findMisconfiguration(markConfigValidationError(wrapped))?.code).toBe('CONFIG_INVALID');
+  });
+
+  it('recognizes options a plugin refuses in init()', () => {
+    @Plugin({ name: 'ledger' })
+    class LedgerPlugin extends DynamicPlugin<{ currency: string }> {
+      constructor(options: { currency: string }) {
+        super();
+        z.object({ currency: z.string() }).parse(options);
+      }
+    }
+    let refusal: unknown;
+    try {
+      LedgerPlugin.init({ currency: 42 as unknown as string });
+    } catch (error) {
+      refusal = error;
+    }
+
+    expect(findMisconfiguration(refusal)?.code).toBe('CONFIG_INVALID');
+  });
+
+  it('does not take a ZodError nothing marked for a misconfiguration: a request raised it', () => {
+    const err = new Error('bad request body');
+    err.name = 'ZodError';
+
+    expect(findMisconfiguration(err)).toBeUndefined();
+    expect(findMisconfiguration(new Error('flow failed', { cause: err }))).toBeUndefined();
+  });
+
+  it('marks only an error with a validation error in its cause chain', () => {
+    const frozen = Object.freeze(Object.assign(new Error('bad config'), { name: 'ZodError' }));
+
+    expect(findMisconfiguration(markConfigValidationError(new Error('connect ECONNREFUSED')))).toBeUndefined();
+    expect(markConfigValidationError('not an error')).toBe('not an error');
+    expect(findMisconfiguration(markConfigValidationError(frozen))).toBeUndefined();
   });
 
   it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])(
