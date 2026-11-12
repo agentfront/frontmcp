@@ -25,7 +25,7 @@ import {
 } from '../../answer';
 import { assertAppLoaded, loadAppOfPlaceholder } from '../../app/lazy/lazy-placeholders';
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
-import { getAuthorizedAppIds } from '../../auth/authorized-apps.utils';
+import { getAuthorizedAppIds, incrementalTicketAudience } from '../../auth/authorized-apps.utils';
 import { getConsentedToolIds, isToolConsented } from '../../auth/consent.utils';
 import { enforcePublicAccess, publicAccessFor } from '../../auth/public-access.utils';
 import { AUTHORITIES_NOT_CONFIGURED } from '../../builtin/authorities/authorities-not-configured';
@@ -928,6 +928,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         sub,
         appId,
         toolId,
+        audience: incrementalTicketAudience(this.scope),
         ...(priorAppIds && priorAppIds.size > 0 ? { priorAppIds: [...priorAppIds] } : {}),
         ...(typeof user.email === 'string' ? { email: user.email } : {}),
         ...(typeof user.name === 'string' ? { name: user.name } : {}),
