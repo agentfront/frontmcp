@@ -1084,7 +1084,10 @@
           "properties": {
             "port": { "description": "HTTP port.", "type": "integer", "minimum": 0, "maximum": 65535 },
             "path": { "description": "MCP mount path.", "type": "string" },
-            "host": { "description": "Bind host.", "type": "string" }
+            "host": {
+              "description": "Host in the clients.<name>.url that eject-mcp-config derives (default 127.0.0.1). Not the address the server listens on: set that with @FrontMcp({ security: { bindAddress } }) or FRONTMCP_BIND_ADDRESS.",
+              "type": "string"
+            }
           },
           "additionalProperties": false
         },
