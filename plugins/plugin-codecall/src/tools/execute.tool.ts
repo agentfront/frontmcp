@@ -1,6 +1,7 @@
 // file: libs/plugins/src/codecall/tools/execute.tool.ts
 
 import { getCallSurface, toMcpError, Tool, ToolContext, type McpError, type ToolEntry } from '@frontmcp/sdk';
+import { escapeControlCharacters } from '@frontmcp/utils';
 
 import type { CodeCallToolDescription, CodeCallVmEnvironment } from '../codecall.symbol';
 import {
@@ -276,8 +277,8 @@ export default class ExecuteTool extends ToolContext {
       },
 
       mcpLog: (level: 'debug' | 'info' | 'warn' | 'error', message: string, metadata?: Record<string, unknown>) => {
-        // Log through FrontMCP logging system if available
-        this.logger?.[level](message, metadata);
+        // A script's message stays on one line of the server's log.
+        this.logger?.[level](escapeControlCharacters(String(message)), metadata);
       },
 
       mcpNotify: (event: string, payload: Record<string, unknown>) => {

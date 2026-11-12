@@ -938,6 +938,23 @@ describe('ExecuteTool', () => {
       expect(typeof capturedEnv.mcpLog).toBe('function');
     });
 
+    it("keeps a script's mcpLog message on one line of the server log", async () => {
+      const { tool, mockEnclave } = createExecuteTool();
+      const logger = { info: jest.fn() };
+      tool.logger = logger;
+      mockEnclave.execute.mockImplementation(async (_script: string, env: any) => {
+        env.mcpLog('info', 'done\n[ERROR] forged entry\r\n', { step: 1 });
+        return { success: true, result: null, logs: [], timedOut: false };
+      });
+
+      await tool.execute({ script: 'mcpLog("info", "done");' });
+
+      const [message, metadata] = logger.info.mock.calls[0];
+      expect(message).not.toMatch(/[\r\n]/);
+      expect(message).toContain('forged entry');
+      expect(metadata).toEqual({ step: 1 });
+    });
+
     it('should provide mcpNotify function', async () => {
       const { tool, mockEnclave } = createExecuteTool();
 

@@ -55,6 +55,7 @@
     "@enclave-vm/ast": "^2.19.1",
     "@enclave-vm/core": "^2.19.1",
     "@frontmcp/protocol": "1.12.0",
+    "@frontmcp/utils": "1.12.0",
     "acorn": "^8.15.0",
     "vectoriadb": "^2.3.4"
   },
