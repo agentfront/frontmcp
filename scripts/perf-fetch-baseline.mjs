@@ -124,13 +124,18 @@ function parseBaseline(body) {
   const content = body.substring(startIdx + BASELINE_START_MARKER.length, endIdx);
 
   // Extract JSON from markdown code block
-  const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
-  if (!jsonMatch) {
+  const fenceStart = content.indexOf('```json');
+  if (fenceStart === -1) {
+    return null;
+  }
+  const jsonStart = fenceStart + '```json'.length;
+  const fenceEnd = content.indexOf('```', jsonStart);
+  if (fenceEnd === -1) {
     return null;
   }
 
   try {
-    return JSON.parse(jsonMatch[1]);
+    return JSON.parse(content.slice(jsonStart, fenceEnd).trim());
   } catch {
     console.error('Failed to parse baseline JSON');
     return null;

@@ -46,6 +46,28 @@ async function runWithRelease(tagName, release) {
   return { dir, code: res.status, stdout: res.stdout, ghArgs };
 }
 
+const START = '<!-- PERF_BASELINE_START -->';
+const END = '<!-- PERF_BASELINE_END -->';
+
+test('writes the baseline found in the release body', async () => {
+  const baseline = { release: 'v1.0.0', tests: { first: { memory: 1 } } };
+  const body = `Notes\n${START}\n\`\`\`json\n${JSON.stringify(baseline)}\n\`\`\`\n${END}\n`;
+
+  const { dir, code } = await runWithRelease('v1.0.0', { body });
+
+  assert.equal(code, 0);
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dir, 'perf-results/baseline.json'), 'utf8')), baseline);
+});
+
+test('answers at once for a JSON fence that is never closed, with a long run of whitespace', async () => {
+  const body = `${START}\n\`\`\`json${' '.repeat(20000)}\n${END}`;
+
+  const { code, stdout } = await runWithRelease('v1.0.0', { body });
+
+  assert.equal(code, 0);
+  assert.match(stdout, /No valid baseline found/);
+});
+
 test('a release tag with shell syntax reaches gh as one encoded argument and runs nothing', async () => {
   const { dir, code, ghArgs } = await runWithRelease('v1.0.0$(touch${IFS}TAG_RAN)', { body: '' });
 
