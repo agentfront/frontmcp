@@ -282,6 +282,17 @@ export async function lookupStreamableHttpTransport(params: {
   return { kind: 'session-not-initialized', recreationError };
 }
 
+/** The first 20 characters of a session id: enough to tell sessions apart in the log, too few to reuse the id. */
+function sessionIdForLog(sessionId: unknown): string | undefined {
+  return typeof sessionId === 'string' ? sessionId.slice(0, 20) : undefined;
+}
+
+/** An error's message for the log, with the session id in it cut to {@link sessionIdForLog}. */
+function errorMessageForLog(error: unknown, sessionId: string | undefined): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return sessionId ? message.replaceAll(sessionId, `${sessionIdForLog(sessionId)}...`) : message;
+}
+
 const name = 'handle:streamable-http' as const;
 const { Stage } = FlowHooksOf(name);
 
@@ -547,7 +558,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       } catch (error) {
         logger.warn('onElicitResult: failed to recreate transport from stored session', {
           sessionId: session.id?.slice(0, 20),
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessageForLog(error, session.id),
         });
       }
     }
@@ -603,10 +614,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       if (transportLookup.recreationError) {
         logger.warn('Failed to recreate transport from stored session', {
           sessionId: session.id?.slice(0, 20),
-          error:
-            transportLookup.recreationError instanceof Error
-              ? transportLookup.recreationError.message
-              : String(transportLookup.recreationError),
+          error: errorMessageForLog(transportLookup.recreationError, session.id),
         });
       }
 
@@ -617,7 +625,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
           tokenHash: token.slice(0, 8),
           method: body?.['method'],
           requestId: body?.['id'],
-          mcpSessionId: request.headers?.['mcp-session-id'],
+          mcpSessionId: sessionIdForLog(request.headers?.['mcp-session-id']),
         });
         this.respond(httpRespond.sessionExpired('session expired'));
       } else {
@@ -627,7 +635,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
           tokenHash: token.slice(0, 8),
           method: body?.['method'],
           requestId: body?.['id'],
-          mcpSessionId: request.headers?.['mcp-session-id'],
+          mcpSessionId: sessionIdForLog(request.headers?.['mcp-session-id']),
           userAgent: (request.headers?.['user-agent'] as string | undefined)?.slice(0, 50),
         });
         this.respond(httpRespond.sessionNotFound('session not initialized'));
@@ -693,7 +701,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
         // Log and fall through to 404 logic - transport remains undefined
         logger.warn('Failed to recreate transport from stored session for SSE listener', {
           sessionId: session.id?.slice(0, 20),
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessageForLog(error, session.id),
         });
       }
     }
@@ -774,7 +782,7 @@ export default class HandleStreamableHttpFlow extends FlowBase<typeof name> {
       } catch (error) {
         logger.warn('onExtApps: failed to recreate transport from stored session', {
           sessionId: session.id?.slice(0, 20),
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessageForLog(error, session.id),
         });
       }
     }
