@@ -9,6 +9,8 @@ import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import React, { useMemo } from 'react';
 
+import { sanitizeHtml } from '@frontmcp/uipack/shell';
+
 import { createLazyImport, esmShUrl, runtimeImportWithFallback } from '../common/lazy-import';
 import { useLazyModule } from '../common/use-lazy-module';
 import type { ContentRenderer, RenderOptions } from '../types';
@@ -49,6 +51,26 @@ const lazyRehypeRaw = createLazyImport<{ default: unknown }>('rehype-raw', async
   const mod = await runtimeImportWithFallback('rehype-raw', esmShUrl('rehype-raw@7'));
   return mod as { default: unknown };
 });
+
+interface HastNode {
+  type: string;
+  value?: string;
+  children?: HastNode[];
+}
+
+// The size cap of the sanitizer protects servers; this document is already in the viewer's page
+const RAW_HTML_POLICY = { maxMarkupLength: Number.MAX_SAFE_INTEGER };
+
+/** A rehype plugin that sanitizes the raw HTML of the document with the widget markup sanitizer before rehype-raw parses it. */
+function rehypeSanitizeRawHtml(): (tree: HastNode) => void {
+  return (tree) => {
+    const pending: HastNode[] = [tree];
+    for (let node = pending.pop(); node; node = pending.pop()) {
+      if (node.type === 'raw') node.value = sanitizeHtml(node.value ?? '', RAW_HTML_POLICY);
+      for (const child of node.children ?? []) pending.push(child);
+    }
+  };
+}
 
 // ============================================
 // Styled Components
@@ -119,7 +141,7 @@ const Blockquote = styled('blockquote', {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function createMuiComponents(): Record<string, unknown> {
-  return {
+  const components: Record<string, (props: any) => React.ReactElement> = {
     h1: (props: any) => React.createElement(Typography, { ...props, variant: 'h4', gutterBottom: true }),
     h2: (props: any) => React.createElement(Typography, { ...props, variant: 'h5', gutterBottom: true }),
     h3: (props: any) => React.createElement(Typography, { ...props, variant: 'h6', gutterBottom: true }),
@@ -142,6 +164,13 @@ function createMuiComponents(): Record<string, unknown> {
     th: (props: any) => React.createElement(TableCell, { ...props, sx: { fontWeight: 600 } }),
     td: (props: any) => React.createElement(TableCell, props),
   };
+  // A `component` or `as` attribute in the document's HTML would choose the element MUI renders
+  return Object.fromEntries(
+    Object.entries(components).map(([tag, render]) => [
+      tag,
+      ({ component: _component, as: _as, ...props }: any) => render(props),
+    ]),
+  );
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -170,7 +199,7 @@ function MarkdownView({ content, className }: MarkdownViewProps): React.ReactEle
 
     if (remarkGfmMod) remarkPlugins.push(remarkGfmMod.default);
     if (rehypeHighlightMod) rehypePlugins.push(rehypeHighlightMod.default);
-    if (rehypeRawMod) rehypePlugins.push(rehypeRawMod.default);
+    if (rehypeRawMod) rehypePlugins.push(rehypeSanitizeRawHtml, rehypeRawMod.default);
 
     return React.createElement(
       MarkdownRoot,
