@@ -98,6 +98,28 @@ describe('buildSkillsSection', () => {
     expect(section).toContain('# Skills and Tools');
   });
 
+  it('summarizes each description to its first sentence as before, on one line or several', () => {
+    const descriptions = ['Reads files. Then writes them.', 'Ends with a period. ', 'First. Second.\nThird', 'One line\nTwo. Three', 'No sentence'];
+    const section = buildSkillsSection(
+      '1.0.0',
+      descriptions.map((description, index) => ({ name: `skill-${index}`, description })),
+    );
+
+    expect(section).toContain('- **skill-0** — Reads files\n');
+    expect(section).toContain('- **skill-1** — Ends with a period. \n');
+    expect(section).toContain('- **skill-2** — First. Second.\nThird\n');
+    expect(section).toContain('- **skill-3** — One line\nTwo\n');
+    expect(section).toContain('- **skill-4** — No sentence\n');
+  });
+
+  it('summarizes a long description of many sentences on lines before its last', () => {
+    const description = `${'Step. '.repeat(100_000)}\nend`;
+
+    const section = buildSkillsSection('1.0.0', [{ name: 'long', description }]);
+
+    expect(section).toContain(`- **long** — ${'Step. '.repeat(14)}Ste...\n`);
+  });
+
   it('should handle empty skills list', () => {
     const section = buildSkillsSection('1.0.0', []);
 
