@@ -13,7 +13,7 @@ import { toMs } from '../utils/time';
   inputSchema: {
     employeeId: z.string().min(1),
     siteId: z.string().min(1),
-    at: z.union([z.number(), z.string()]),
+    at: z.union([z.number().int(), z.string()]),
   },
   outputSchema: z.object({
     employeeId: z.string(),
