@@ -111,7 +111,7 @@ export async function createInMemoryServer(
   scope: Scope,
   options?: CreateInMemoryServerOptions,
 ): Promise<InMemoryServerResult> {
-  const { createMcpHandlers } = await import('./mcp-handlers/index.js');
+  const { createMcpHandlers, registerMcpHandler } = await import('./mcp-handlers/index.js');
 
   const sessionId = options?.sessionId ?? `in-memory:${randomUUID()}`;
 
@@ -194,7 +194,7 @@ export async function createInMemoryServer(
       return runRequestExclusive(() => originalHandler(request, enrichedCtx));
     };
 
-    mcpServer.setRequestHandler(handler.requestSchema, wrappedHandler as any);
+    registerMcpHandler(mcpServer, handler.requestSchema, wrappedHandler);
   }
 
   // Register server with notification service, and the caller its requests run as

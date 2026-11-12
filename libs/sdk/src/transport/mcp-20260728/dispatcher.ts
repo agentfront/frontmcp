@@ -22,7 +22,7 @@ import { InputRequiredSignal, MissingClientCapabilityError } from '../../errors'
 import { type Scope } from '../../scope';
 import { type TaskRecord } from '../../task/task.types';
 import { buildScopedServerOptions } from '../build-scoped-server-options';
-import { createMcpHandlers } from '../mcp-handlers';
+import { createMcpHandlers, methodOfSchema } from '../mcp-handlers';
 import { toSdkMcpError } from '../mcp-handlers/mcp-error.utils';
 import { type McpHandler, type McpHandlerOptions } from '../mcp-handlers/mcp-handlers.types';
 import { buildDiscoverResult } from './discover';
@@ -217,15 +217,6 @@ async function resumeTask(params: {
     cleanedRequestParams: record.request.params,
     ctx: { authInfo },
   });
-}
-
-/** Read the JSON-RPC method literal a handler's request schema is bound to. */
-function methodOfSchema(schema: unknown): string | undefined {
-  const shape = (schema as { shape?: Record<string, unknown> } | undefined)?.shape;
-  const method = shape?.['method'] as { value?: unknown; _def?: { values?: unknown[] } } | undefined;
-  if (typeof method?.value === 'string') return method.value;
-  const values = method?._def?.values;
-  return Array.isArray(values) && typeof values[0] === 'string' ? values[0] : undefined;
 }
 
 /** `inputResponses` arrives only on 2026-07-28 requests, so no upstream request schema checks it. */

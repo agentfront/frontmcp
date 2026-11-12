@@ -24,7 +24,7 @@ import { type Scope } from '../../scope';
 import { type AuthenticatedServerRequest, type SdkAuthInfo } from '../../server/server.types';
 import { composeCallerInstructions } from '../../skill/skill-instructions.helper';
 import { computeTaskCapabilities } from '../../task/task-scope.helper';
-import { createMcpHandlers } from '../mcp-handlers';
+import { createMcpHandlers, registerMcpHandler } from '../mcp-handlers';
 import { createMcpServer } from '../mcp-server.factory';
 import { type TransportKey, type TransportType } from '../transport.types';
 import { type RecreateableSSEServerTransport } from './sse-transport';
@@ -260,8 +260,9 @@ export abstract class LocalTransportAdapter<T extends SupportedTransport> {
       composeInstructions,
     });
 
+    const notificationContext = { authInfo: { sessionId: this.key.sessionId } };
     for (const handler of handlers) {
-      this.server.setRequestHandler(handler.requestSchema, handler.handler as any);
+      registerMcpHandler(this.server, handler.requestSchema, handler.handler, notificationContext);
     }
 
     // Register server with notification service for server→client notifications

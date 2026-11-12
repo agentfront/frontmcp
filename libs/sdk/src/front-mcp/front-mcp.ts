@@ -929,7 +929,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       const scope = primaryScope as Scope;
 
       // Import the MCP handlers creator
-      const { createMcpHandlers } = await import('../transport/mcp-handlers/index.js');
+      const { createMcpHandlers, registerMcpHandler } = await import('../transport/mcp-handlers/index.js');
 
       // Check for remote apps
       const hasRemoteApps = scope.apps?.getApps().some((app) => app.isRemote) ?? false;
@@ -999,10 +999,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
           return originalHandler(request as any, enrichedCtx as any);
         };
-        // Cast required: MCP SDK's handler type expects specific context shape,
-        // but our wrapped handlers preserve all context properties via pass-through
-
-        mcpServer.setRequestHandler(handler.requestSchema, wrappedHandler as any);
+        registerMcpHandler(mcpServer, handler.requestSchema, wrappedHandler);
       }
 
       // Create stdio transport and connect
