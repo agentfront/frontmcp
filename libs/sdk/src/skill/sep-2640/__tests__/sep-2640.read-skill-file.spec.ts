@@ -1,11 +1,11 @@
 /**
  * Which files `skill://<skill>/<file>` serves: a skill directory's own files, and a skill declared in
- * code only the resource directories it declares.
+ * code only the resource directories it declares. A link never serves a file outside them.
  */
 
 import 'reflect-metadata';
 
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -22,13 +22,14 @@ const providers = {
 const owner: EntryOwnerRef = { kind: 'app', id: 'app', ref: Symbol('app') };
 
 /** A temporary folder with a file outside any skill, and a skill directory next to it. */
-async function makeWorkspace(): Promise<{ root: string; skillDir: string }> {
+async function makeWorkspace(): Promise<{ root: string; skillDir: string; outsideFile: string }> {
   const root = await mkdtemp(join(tmpdir(), 'skill-file-'));
   const skillDir = join(root, 'my-skill');
   await mkdir(join(root, 'outside'), { recursive: true });
-  await writeFile(join(root, 'outside', 'secret.md'), '# Outside\n\nnot part of any skill');
+  const outsideFile = join(root, 'outside', 'secret.md');
+  await writeFile(outsideFile, '# Outside\n\nnot part of any skill');
   await mkdir(skillDir, { recursive: true });
-  return { root, skillDir };
+  return { root, skillDir, outsideFile };
 }
 
 /** A skill directory's instance, loaded the way `skillDir()` loads it. */
@@ -58,6 +59,55 @@ describe('readSkillFileByPath', () => {
       await expect(readSkillFileByPath(instance, 'assets/note.txt')).resolves.toMatchObject({ content: 'asset' });
       await expect(readSkillFileByPath(instance, 'README.txt')).resolves.toMatchObject({ content: 'readme' });
     });
+
+    it('serves a link that stays inside the skill directory', async () => {
+      const { skillDir } = await makeWorkspace();
+      await mkdir(join(skillDir, 'assets'));
+      await writeFile(join(skillDir, 'assets', 'note.txt'), 'asset');
+      await symlink(join(skillDir, 'assets', 'note.txt'), join(skillDir, 'alias.txt'));
+      const instance = await directorySkill(skillDir);
+
+      await expect(readSkillFileByPath(instance, 'alias.txt')).resolves.toMatchObject({ content: 'asset' });
+    });
+
+    it('does not serve a top-level link to a file outside the skill directory', async () => {
+      const { skillDir, outsideFile } = await makeWorkspace();
+      await symlink(outsideFile, join(skillDir, 'notes.txt'));
+      const instance = await directorySkill(skillDir);
+
+      await expect(readSkillFileByPath(instance, 'notes.txt')).rejects.toBeInstanceOf(ResourceNotFoundError);
+    });
+
+    it('does not serve a link in a resource directory to a file outside the skill directory', async () => {
+      const { skillDir, outsideFile } = await makeWorkspace();
+      await mkdir(join(skillDir, 'assets'));
+      await symlink(outsideFile, join(skillDir, 'assets', 'logo.txt'));
+      const instance = await directorySkill(skillDir);
+
+      await expect(readSkillFileByPath(instance, 'assets/logo.txt')).rejects.toBeInstanceOf(ResourceNotFoundError);
+    });
+
+    it('does not serve a reference that links to a file outside the skill directory', async () => {
+      const { skillDir, outsideFile } = await makeWorkspace();
+      await mkdir(join(skillDir, 'references'));
+      await writeFile(join(skillDir, 'references', 'guide.md'), '# Guide\n\ninside');
+      await symlink(outsideFile, join(skillDir, 'references', 'secret.md'));
+      const instance = await directorySkill(skillDir);
+
+      await expect(readSkillFileByPath(instance, 'references/guide.md')).resolves.toMatchObject({
+        content: '# Guide\n\ninside',
+      });
+      await expect(readSkillFileByPath(instance, 'references/secret.md')).rejects.toBeInstanceOf(
+        ResourceNotFoundError,
+      );
+    });
+
+    it('does not serve a resource directory its SKILL.md names outside the skill directory', async () => {
+      const { root, skillDir } = await makeWorkspace();
+      const instance = await directorySkill(skillDir, `resources:\n  assets: ${join(root, 'outside')}\n`);
+
+      await expect(readSkillFileByPath(instance, 'assets/secret.md')).rejects.toBeInstanceOf(ResourceNotFoundError);
+    });
   });
 
   describe('a skill declared in code', () => {
@@ -73,15 +123,17 @@ describe('readSkillFileByPath', () => {
       await expect(readSkillFileByPath(instance, 'assets/note.txt')).rejects.toBeInstanceOf(ResourceNotFoundError);
     });
 
-    it('serves the files of a resource directory it declares', async () => {
-      const { root } = await makeWorkspace();
+    it('serves the files of a resource directory it declares, but no link out of it', async () => {
+      const { root, outsideFile } = await makeWorkspace();
       await mkdir(join(root, 'my-assets'));
       await writeFile(join(root, 'my-assets', 'note.txt'), 'declared asset');
+      await symlink(outsideFile, join(root, 'my-assets', 'linked.md'));
       const instance = declaredSkill(root, { assets: './my-assets' });
 
       await expect(readSkillFileByPath(instance, 'assets/note.txt')).resolves.toMatchObject({
         content: 'declared asset',
       });
+      await expect(readSkillFileByPath(instance, 'assets/linked.md')).rejects.toBeInstanceOf(ResourceNotFoundError);
     });
   });
 });
