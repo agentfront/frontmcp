@@ -16,6 +16,26 @@ function events(count: number) {
 
 describe('answer budget', () => {
   describe('fitJsonToBudget', () => {
+    it('measures each part of a deeply nested value once, not again at every level above it', () => {
+      let nested: Record<string, unknown> = { leaf: 'x'.repeat(20_000) };
+      for (let depth = 0; depth < 500; depth++) nested = { level: nested };
+      const stringify = JSON.stringify;
+      let measured = 0;
+      const spy = jest.spyOn(JSON, 'stringify').mockImplementation((...args: Parameters<typeof JSON.stringify>) => {
+        const text = stringify(...args);
+        measured += text?.length ?? 0;
+        return text;
+      });
+      try {
+        const fitted = fitJsonToBudget(nested, 10_000);
+        expect(stringify(fitted.value).length).toBeLessThanOrEqual(10_000);
+      } finally {
+        spy.mockRestore();
+      }
+      // Measuring every level's subtree would serialize the 20 KB string 500 times (over 10 MB)
+      expect(measured).toBeLessThan(1_000_000);
+    });
+
     it('returns a value within the budget untouched', () => {
       const value = { items: events(3), total: 3 };
       const fitted = fitJsonToBudget(value, 50_000);
