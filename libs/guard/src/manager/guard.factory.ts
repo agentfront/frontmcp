@@ -8,7 +8,7 @@
 import { createMemoryStorage, createStorage, isProduction, type RootStorage } from '@frontmcp/utils';
 
 import { DistributedSemaphore } from '../concurrency/semaphore';
-import { GuardStorageUnavailableError } from '../errors';
+import { GuardError, GuardStorageUnavailableError } from '../errors';
 import { GuardManager } from './guard.manager';
 import type { CreateGuardManagerArgs } from './types';
 
@@ -36,6 +36,15 @@ function withoutTrailingColons(prefix: string): string {
 export async function createGuardManager(args: CreateGuardManagerArgs): Promise<GuardManager> {
   const { config, logger } = args;
   const keyPrefix = config.keyPrefix ?? 'mcp:guard:';
+
+  if ((config.storage?.memory?.maxEntries ?? 0) > 0) {
+    throw new GuardError(
+      'throttle.storage.memory.maxEntries lets the store evict entries, which frees concurrency slots still in use ' +
+        'and resets rate-limit counters. Remove maxEntries: guard entries expire on their own.',
+      'GUARD_STORAGE_EVICTS',
+      500,
+    );
+  }
 
   let storage: RootStorage;
 
