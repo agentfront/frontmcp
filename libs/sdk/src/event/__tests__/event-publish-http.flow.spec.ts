@@ -327,7 +327,7 @@ describe('events:publish-http with a secret', () => {
     const request = { ...order, eventId: 'no-failure-1' };
 
     await send(server, signedRequest(request));
-    await send(server, signedRequest(request));
+    await send(server, signedRequest({ ...request, data: { orderId: 'o-2', total: 7 } }));
 
     expect(finished.mock.calls).toEqual([[undefined], [undefined]]);
   });

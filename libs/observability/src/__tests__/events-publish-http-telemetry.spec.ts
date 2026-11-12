@@ -93,7 +93,7 @@ describe('events/publish-http telemetry', () => {
 
   it('ends the span of an accepted publish, and of a repeated eventId, with OK', async () => {
     const accepted = await publish(publishRequest({ ...order, eventId: 'repeat-1' }));
-    const repeated = await publish(publishRequest({ ...order, eventId: 'repeat-1' }));
+    const repeated = await publish(publishRequest({ ...order, data: { orderId: 'o-2' }, eventId: 'repeat-1' }));
 
     expect(accepted.status).toBe(202);
     expect(accepted.span?.status.code).toBe(SpanStatusCode.OK);
