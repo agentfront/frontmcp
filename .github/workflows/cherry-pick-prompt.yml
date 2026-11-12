@@ -403,7 +403,7 @@ jobs:
 
           # Push and create PR
           git push origin cherry-pick-pr-$ORIGINAL_PR
-          gh pr create --base $DEFAULT_BRANCH --title "Cherry-pick: $PR_TITLE"
+          gh pr create --base $DEFAULT_BRANCH --title "Cherry-pick: \$(gh pr view $ORIGINAL_PR --json title --jq .title)"
           \`\`\`
 
           ### Decision Required
