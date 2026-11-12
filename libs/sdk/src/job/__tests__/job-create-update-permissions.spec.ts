@@ -176,9 +176,29 @@ describe('create and update permission rules', () => {
       await expect(server.callTool('update_job', { name: 'open', script: 'return {};' })).rejects.toThrow(
         new InvalidInputError('Job "open" is declared in code and cannot be updated'),
       );
-      await expect(server.callTool('update_workflow', { name: 'ci-only', steps })).rejects.toThrow(
-        new InvalidInputError('Workflow "ci-only" is declared in code and cannot be updated'),
+      await expect(server.callTool('update_workflow', { name: 'uses-step-only', steps })).rejects.toThrow(
+        new InvalidInputError('Workflow "uses-step-only" is declared in code and cannot be updated'),
       );
+    });
+
+    it('answers for an entry declared in code that the caller cannot list as if it were unknown', async () => {
+      const authContext = member;
+      const unknownJob = new JobNotAuthorizedError('no-such-job').message;
+
+      for (const [tool, name] of [
+        ['update_job', 'step-only'],
+        ['remove_job', 'step-only'],
+        ['update_workflow', 'ci-only'],
+        ['remove_workflow', 'ci-only'],
+      ] as const) {
+        const input = tool.startsWith('update') ? { name, script: 'return {};', steps } : { name };
+        await expect(server.callTool(tool, input, { authContext })).rejects.toThrow(
+          new JobNotAuthorizedError(name).message,
+        );
+        await expect(server.callTool(tool, { ...input, name: 'no-such-job' }, { authContext })).rejects.toThrow(
+          unknownJob,
+        );
+      }
     });
 
     it("refuses a caller the entry's update rules deny as if the entry were unknown", async () => {

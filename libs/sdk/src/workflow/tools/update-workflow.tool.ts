@@ -68,6 +68,9 @@ export default class UpdateWorkflowTool extends ToolContext {
       return this.fail(new JobNotAuthorizedError(input.name));
     }
     if (!workflow.isDynamic()) {
+      if (!(await JobPermissionGuard.maySee(workflow.metadata.permissions, this.authInfo, builder))) {
+        return this.fail(new JobNotAuthorizedError(input.name));
+      }
       return this.fail(new InvalidInputError(`Workflow "${input.name}" is declared in code and cannot be updated`));
     }
 
