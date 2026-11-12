@@ -15,7 +15,18 @@ interface TokenRequest {
   body: URLSearchParams;
 }
 
-function fakeRemoteWithAuthServer(options: { expiresIn?: number; tokenStatus?: number } = {}) {
+interface FakeOptions {
+  expiresIn?: number;
+  tokenStatus?: number;
+  /** The authorization server the remote's protected resource metadata names. */
+  namedServer?: string;
+  /** The resource the remote's protected resource metadata names. */
+  resource?: string;
+  /** The token endpoint the authorization servers publish, instead of their own `/token`. */
+  tokenEndpoint?: string;
+}
+
+function fakeRemoteWithAuthServer(options: FakeOptions = {}) {
   const tokenRequests: TokenRequest[] = [];
   const mcpAuthorizations: Array<string | null> = [];
   const accepted = new Set<string>();
@@ -25,12 +36,15 @@ function fakeRemoteWithAuthServer(options: { expiresIn?: number; tokenStatus?: n
       new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
     if (url.href === 'http://remote.test/.well-known/oauth-protected-resource/mcp') {
-      return json({ resource: 'http://remote.test/mcp', authorization_servers: ['http://auth.test'] });
+      return json({
+        resource: options.resource ?? 'http://remote.test/mcp',
+        authorization_servers: [options.namedServer ?? 'http://auth.test'],
+      });
     }
-    if (url.href === 'http://auth.test/.well-known/oauth-authorization-server') {
-      return json({ issuer: 'http://auth.test', token_endpoint: 'http://auth.test/token' });
+    if (url.pathname === '/.well-known/oauth-authorization-server') {
+      return json({ issuer: url.origin, token_endpoint: options.tokenEndpoint ?? `${url.origin}/token` });
     }
-    if (url.href === 'http://auth.test/token' || url.href === 'http://tokens.test/issue') {
+    if (url.pathname === '/token' || url.href === 'http://tokens.test/issue') {
       const headers = new Headers(init?.headers);
       tokenRequests.push({
         authorization: headers.get('authorization'),
@@ -64,7 +78,14 @@ function fakeRemoteWithAuthServer(options: { expiresIn?: number; tokenStatus?: n
   return { fetchMock, tokenRequests, mcpAuthorizations, revoke: (token: string) => accepted.delete(token) };
 }
 
-const credentials = { mode: 'oauth', clientId: 'help-desk', clientSecret: 's3cret', scope: 'status:read' } as const;
+const credentials = {
+  mode: 'oauth',
+  clientId: 'help-desk',
+  clientSecret: 's3cret',
+  scope: 'status:read',
+  issuer: 'http://auth.test',
+} as const;
+const { issuer: _issuer, ...withoutIssuer } = credentials;
 
 function connectRequest(auth: McpRemoteAuthConfig): McpConnectRequest {
   return {
@@ -134,6 +155,60 @@ describe("McpClientService — remoteAuth: { mode: 'oauth' }", () => {
     const asked = fetchMock.mock.calls.map(([input]) => String(input));
     expect(asked).toContain('http://tokens.test/issue');
     expect(asked).not.toContain('http://auth.test/token');
+  });
+
+  it("uses the remote's own authorization server when it is on the remote's origin, with no issuer set", async () => {
+    const { tokenRequests, fetchMock } = fakeRemoteWithAuthServer({ namedServer: 'http://remote.test' });
+
+    await service.connect(connectRequest(withoutIssuer));
+
+    expect(tokenRequests).toHaveLength(1);
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain('http://remote.test/token');
+  });
+
+  it('sends the client secret to the issuer it is given, not to the server the remote names', async () => {
+    const { tokenRequests, fetchMock } = fakeRemoteWithAuthServer({ namedServer: 'http://elsewhere.test' });
+
+    await service.connect(connectRequest(credentials));
+
+    expect(tokenRequests).toHaveLength(1);
+    const asked = fetchMock.mock.calls.map(([input]) => new URL(String(input)).host);
+    expect(asked).toContain('auth.test');
+    expect(asked).not.toContain('elsewhere.test');
+  });
+
+  it("sends nothing to an authorization server the remote names on another origin, with no issuer set", async () => {
+    const { tokenRequests, fetchMock } = fakeRemoteWithAuthServer();
+
+    const connecting = service.connect(connectRequest(withoutIssuer));
+
+    await expect(connecting).rejects.toMatchObject({ originalError: expect.any(RemoteAuthError) });
+    await expect(connecting).rejects.toThrow(
+      /names the authorization server http:\/\/auth\.test, which is not on http:\/\/remote\.test.*set remoteAuth\.issuer/,
+    );
+    expect(tokenRequests).toHaveLength(0);
+    expect(fetchMock.mock.calls.map(([input]) => new URL(String(input)).host)).not.toContain('auth.test');
+  });
+
+  it("sends nothing to a token endpoint off the remote's origin that the remote's own server publishes", async () => {
+    const { tokenRequests } = fakeRemoteWithAuthServer({
+      namedServer: 'http://remote.test',
+      tokenEndpoint: 'http://elsewhere.test/token',
+    });
+
+    const connecting = service.connect(connectRequest(withoutIssuer));
+
+    await expect(connecting).rejects.toThrow(/publishes the token endpoint http:\/\/elsewhere\.test\/token/);
+    expect(tokenRequests).toHaveLength(0);
+  });
+
+  it("asks no token for a resource the remote names on another origin", async () => {
+    const { tokenRequests } = fakeRemoteWithAuthServer({ resource: 'http://payroll.test/api' });
+
+    const connecting = service.connect(connectRequest(credentials));
+
+    await expect(connecting).rejects.toThrow(/names the resource http:\/\/payroll\.test\/api, which is not on/);
+    expect(tokenRequests).toHaveLength(0);
   });
 
   it('does not start when the authorization server refuses the client', async () => {

@@ -826,10 +826,10 @@ export class McpClientService {
       return;
     }
     if (this.oauthSources.has(appId)) return;
-    const { clientId, clientSecret, scope, tokenUrl } = auth;
+    const { clientId, clientSecret, scope, tokenUrl, issuer } = auth;
     this.oauthSources.set(
       appId,
-      new RemoteOAuthTokenSource(appId, request.url, { clientId, clientSecret, scope, tokenUrl }),
+      new RemoteOAuthTokenSource(appId, request.url, { clientId, clientSecret, scope, tokenUrl, issuer }),
     );
   }
 
