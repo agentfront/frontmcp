@@ -1,6 +1,6 @@
 // file: libs/sdk/src/common/utils/forward-headers.utils.ts
 
-import { globToRegex } from '@frontmcp/utils';
+import { createGlobMatcher } from '@frontmcp/utils';
 
 /** Hop-by-hop headers (RFC 9110 section 7.6.1, plus the `keep-alive` and `proxy-connection` of older proxies). */
 const HOP_BY_HOP_HEADERS = [
@@ -38,7 +38,7 @@ const REFUSED_HEADERS = [
   ...CLIENT_ADDRESS_HEADERS,
 ];
 
-/** Longer header names are never kept: a glob with several `*` backtracks on a long name a client picks. */
+/** Longer header names are never kept. */
 const MAX_HEADER_NAME_LENGTH = 256;
 
 /** A header name, or a glob of one (`*` any characters, `?` one). */
@@ -55,8 +55,8 @@ export function refusedHeadersMatchedBy(glob: string): string[] {
   const lowerGlob = glob.toLowerCase();
   const literalStart = lowerGlob.split(/[*?]/)[0];
   const families = REFUSED_PREFIXES.filter((prefix) => literalStart.startsWith(prefix)).map((prefix) => `${prefix}*`);
-  const matcher = globToRegex(lowerGlob);
-  return [...families, ...REFUSED_HEADERS.filter((name) => matcher.test(name))];
+  const matches = createGlobMatcher(lowerGlob);
+  return [...families, ...REFUSED_HEADERS.filter((name) => matches(name))];
 }
 
 /**
@@ -65,10 +65,10 @@ export function refusedHeadersMatchedBy(glob: string): string[] {
  */
 export function createHeaderForwarder(globs: readonly string[] | undefined): ((name: string) => boolean) | undefined {
   if (!globs || globs.length === 0) return undefined;
-  const matchers = globs.map((glob) => globToRegex(glob.toLowerCase()));
+  const matchers = globs.map((glob) => createGlobMatcher(glob.toLowerCase()));
   return (name) => {
     if (name.length > MAX_HEADER_NAME_LENGTH) return false;
     const lowerName = name.toLowerCase();
-    return !isRefusedForwardHeader(lowerName) && matchers.some((matcher) => matcher.test(lowerName));
+    return !isRefusedForwardHeader(lowerName) && matchers.some((matches) => matches(lowerName));
   };
 }
