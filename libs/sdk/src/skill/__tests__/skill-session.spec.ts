@@ -699,6 +699,33 @@ describe('Session Serialization', () => {
     expect(deserialized.activeSkills.get('skill-1')?.name).toBe('Skill 1');
   });
 
+  it('requireExplicitActivation refuses tools in a session with no active skill', async () => {
+    const requiring = new SkillSessionManager({ requireExplicitActivation: true });
+    const content: SkillContent = {
+      id: 's',
+      name: 'S',
+      description: 'd',
+      instructions: 'i',
+      tools: [{ name: 'tool_a' }],
+    };
+    const loadResult: SkillLoadResult = {
+      skill: content,
+      availableTools: ['tool_a'],
+      missingTools: [],
+      isComplete: true,
+    };
+
+    await requiring.runWithSession('session-1', async () => {
+      expect(requiring.checkToolAuthorization('tool_a')).toEqual(
+        expect.objectContaining({ allowed: false, reason: 'no_active_skill' }),
+      );
+      requiring.activateSkill('s', content, loadResult);
+      expect(requiring.checkToolAuthorization('tool_a').allowed).toBe(true);
+      requiring.deactivateSkill();
+      expect(requiring.checkToolAuthorization('tool_a').allowed).toBe(false);
+    });
+  });
+
   it('logs activation and deactivation without the session ID', async () => {
     const debug = jest.fn();
     const warn = jest.fn();

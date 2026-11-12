@@ -245,6 +245,29 @@ describe('SkillToolGuardHook', () => {
     });
   });
 
+  describe('requireExplicitActivation', () => {
+    it('refuses a tool call in a session that has no active skill', async () => {
+      const requiring = new SkillSessionManager({ requireExplicitActivation: true }, undefined, store);
+      const guard = new (createSkillToolGuardHook(requiring, { verifiedSessionId: () => 'session-new' }))();
+      const call = { state: { tool: { metadata: { name: 'allowed_tool' } } } };
+
+      await expect(guard.checkSkillToolAuthorization(call)).rejects.toBeInstanceOf(ToolNotAllowedError);
+
+      await requiring.runWithSession('session-new', async () => {
+        requiring.activateSkill('test-skill', mockSkillContent, mockLoadResult);
+      });
+      await expect(guard.checkSkillToolAuthorization(call)).resolves.toBeUndefined();
+    });
+
+    it('still allows a call with no active skill when activation is not required', async () => {
+      const guard = new (createSkillToolGuardHook(sessionManager, { verifiedSessionId: () => 'session-new' }))();
+
+      await expect(
+        guard.checkSkillToolAuthorization({ state: { tool: { metadata: { name: 'any_tool' } } } }),
+      ).resolves.toBeUndefined();
+    });
+  });
+
   describe('authorization flow', () => {
     it('should skip when no tool name in context', async () => {
       const HookClass = createSkillToolGuardHook(sessionManager, {});

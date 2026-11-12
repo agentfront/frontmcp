@@ -368,30 +368,8 @@ export class SkillSessionManager extends EventEmitter {
   checkToolAuthorization(toolName: string): ToolAuthorizationResult {
     const session = this.getActiveSession();
 
-    // No session context - default allow (unless requireExplicitActivation)
-    if (!session) {
-      if (this.options.requireExplicitActivation) {
-        return {
-          allowed: false,
-          reason: 'no_active_skill',
-          toolName,
-          context: { message: 'Skill must be explicitly activated' },
-        };
-      }
-      return {
-        allowed: true,
-        reason: 'no_active_skill',
-        toolName,
-      };
-    }
-
-    // No active skill - default allow
-    if (session.activeSkills.size === 0) {
-      return {
-        allowed: true,
-        reason: 'no_active_skill',
-        toolName,
-      };
+    if (!session || session.activeSkills.size === 0) {
+      return this.withoutActiveSkill(toolName);
     }
 
     // Get all active skill info for inclusion in results
@@ -425,12 +403,7 @@ export class SkillSessionManager extends EventEmitter {
       const elapsed = Date.now() - session.startedAt;
       if (elapsed > this.options.maxSessionDuration) {
         this.deactivateSkill();
-        return {
-          allowed: true,
-          reason: 'no_active_skill',
-          toolName,
-          context: { message: 'Session expired' },
-        };
+        return this.withoutActiveSkill(toolName, 'Session expired');
       }
     }
 
@@ -492,6 +465,19 @@ export class SkillSessionManager extends EventEmitter {
           context: { warning: 'Tool not in allowlist but allowed in permissive mode' },
         };
     }
+  }
+
+  /** The answer for a tool call made while no skill is active: refused when `requireExplicitActivation` is set. */
+  private withoutActiveSkill(toolName: string, message?: string): ToolAuthorizationResult {
+    if (this.options.requireExplicitActivation) {
+      return {
+        allowed: false,
+        reason: 'no_active_skill',
+        toolName,
+        context: { message: 'Skill must be explicitly activated' },
+      };
+    }
+    return { allowed: true, reason: 'no_active_skill', toolName, ...(message && { context: { message } }) };
   }
 
   /**

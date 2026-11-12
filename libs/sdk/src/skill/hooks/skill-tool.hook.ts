@@ -71,6 +71,7 @@ async function handleAuthorizationResult(
 
   // Tool not allowed - handle based on policy mode
   const allowlist = sessionManager.getToolAllowlist();
+  if (authResult.reason === 'no_active_skill') throw new ToolNotAllowedError(authResult, allowlist);
 
   switch (policyMode) {
     case 'strict':
@@ -182,12 +183,10 @@ export function createSkillToolGuardHook(
   async function authorizeInActiveSession(toolName: string): Promise<void> {
     const session = sessionManager.getActiveSession();
 
-    if (!session) {
-      logger?.verbose('SkillToolGuard: skipping (no active session)');
-      return;
-    }
-
-    if (!session.activeSkillId) {
+    if (!session?.activeSkillId) {
+      // Allowed unless the session manager requires a skill to be activated first
+      const authResult = sessionManager.checkToolAuthorization(toolName);
+      if (!authResult.allowed) throw new ToolNotAllowedError(authResult);
       logger?.verbose('SkillToolGuard: skipping (no active skill)');
       return;
     }
