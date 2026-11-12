@@ -41,6 +41,19 @@ function shouldSkipProjectCommandLoad(argv: string[]): boolean {
   return args.every((a) => metadataFlags.has(a));
 }
 
+/** The config file `-c` / `--config` names (the last one, as commander keeps it), else `FRONTMCP_CONFIG`. */
+function selectedConfigPath(argv: string[]): string | undefined {
+  const args = argv.slice(2);
+  let selected: string | undefined;
+  for (let index = 0; index < args.length && args[index] !== '--'; index++) {
+    const arg = args[index];
+    if (arg === '--config' || arg === '-c') selected = args[++index];
+    else if (arg.startsWith('--config=')) selected = arg.slice('--config='.length);
+    else if (/^-c[^-]/.test(arg)) selected = arg.slice(2);
+  }
+  return selected ?? process.env['FRONTMCP_CONFIG'];
+}
+
 export async function createProgram(cwd: string = process.cwd(), argv: string[] = process.argv): Promise<Command> {
   const program = new Command();
 
@@ -69,7 +82,7 @@ export async function createProgram(cwd: string = process.cwd(), argv: string[] 
   registerInboxCommands(program);
 
   if (!shouldSkipProjectCommandLoad(argv)) {
-    await registerProjectCommands(program, cwd);
+    await registerProjectCommands(program, cwd, selectedConfigPath(argv));
   }
 
   customizeHelp(program);
