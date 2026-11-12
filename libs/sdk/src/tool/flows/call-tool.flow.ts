@@ -27,6 +27,7 @@ import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { getAuthorizedAppIds } from '../../auth/authorized-apps.utils';
 import { getConsentedToolIds, isToolConsented } from '../../auth/consent.utils';
 import { enforcePublicAccess, publicAccessFor } from '../../auth/public-access.utils';
+import { AUTHORITIES_NOT_CONFIGURED } from '../../builtin/authorities/authorities-not-configured';
 import {
   acquireConcurrencySlots,
   buildPartitionContext,
@@ -923,18 +924,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   /**
    * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in tool metadata.
    * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
-   * Skips silently if no authorities engine is configured or no authorities on the tool.
+   * Skips a tool without authorities, and refuses one whose authorities no engine is configured to check.
    */
   @Stage('checkEntryAuthorities')
   async checkEntryAuthorities() {
     this.logger.verbose('checkEntryAuthorities:start');
-    const engine = this.scope.authoritiesEngine;
-    const ctxBuilder = this.scope.authoritiesContextBuilder;
-    if (!engine || !ctxBuilder) {
-      this.logger.verbose('checkEntryAuthorities:skip (no engine configured)');
-      return;
-    }
-
     const tool = this.state.tool;
     if (!tool) return;
 
@@ -943,6 +937,16 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     if (!authorities) {
       this.logger.verbose('checkEntryAuthorities:skip (no authorities on tool)');
       return;
+    }
+
+    const engine = this.scope.authoritiesEngine;
+    const ctxBuilder = this.scope.authoritiesContextBuilder;
+    if (!engine || !ctxBuilder) {
+      throw new AuthorityDeniedError({
+        entryType: 'Tool',
+        entryName: tool.fullName || tool.name,
+        deniedBy: AUTHORITIES_NOT_CONFIGURED,
+      });
     }
 
     const authInfo = this.state.authInfo ?? {};
