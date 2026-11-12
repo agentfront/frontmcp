@@ -679,6 +679,17 @@ describe('MockOAuthServer', () => {
       expect(location).toContain('localhost:8080/callback');
     });
 
+    it.each([
+      'http://localhost:1@other.example/callback',
+      'http://localhost:@other.example/callback',
+      'http://localhost:user:pass@other.example/callback',
+      'http://localhost:80.other.example/callback',
+    ])('rejects %s, whose host is not the pattern host', (redirectUri) => {
+      const check = (server as unknown as { isValidRedirectUri(uri: string): boolean }).isValidRedirectUri;
+      expect(check.call(server, redirectUri)).toBe(false);
+      expect(check.call(server, 'http://localhost:8080/callback')).toBe(true);
+    });
+
     it('should reject redirect URI not matching pattern', async () => {
       const authorizeUrl = new URL(`${server.info.baseUrl}/oauth/authorize`);
       authorizeUrl.searchParams.set('client_id', 'wildcard-client');
