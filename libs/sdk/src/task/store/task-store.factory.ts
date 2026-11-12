@@ -14,6 +14,7 @@ import { createMemoryStorage, createStorage, getEnv, type RootStorage, type Stor
 
 import { isVercelKvProvider, type FrontMcpLogger, type RedisOptionsInput } from '../../common';
 import { normalizeRedisOptions } from '../../common/types/options/redis/schema';
+import { requireOptionalModule } from '../../scope/optional-dependency.util';
 import { StorageTaskStore } from './storage-task.store';
 import { isExplicitStorage } from './task-backend.utils';
 import { type TaskStore } from './task.store';
@@ -100,7 +101,10 @@ export async function createTaskStore(options: TaskStoreOptions = {}): Promise<T
   if (sqlite) {
     // Lazy-require so we don't bundle @frontmcp/storage-sqlite (and better-sqlite3)
     // for users that never enable the SQLite backend.
-    const { SqliteTaskStore } = require('@frontmcp/storage-sqlite') as typeof import('@frontmcp/storage-sqlite');
+    const { SqliteTaskStore } = requireOptionalModule(
+      '@frontmcp/storage-sqlite',
+      () => require('@frontmcp/storage-sqlite') as typeof import('@frontmcp/storage-sqlite'),
+    );
     const store = new SqliteTaskStore({
       path: sqlite.path,
       encryption: sqlite.encryption,

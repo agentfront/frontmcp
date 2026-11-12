@@ -15,6 +15,7 @@ import { createMemoryStorage, createStorage, getEnv, type RootStorage, type Stor
 import { isVercelKvProvider, type FrontMcpLogger, type RedisOptionsInput, type SqliteOptionsInput } from '../../common';
 import { normalizeRedisOptions } from '../../common/types/options/redis/schema';
 import { ElicitationNotSupportedError } from '../../errors/elicitation.error';
+import { requireOptionalModule } from '../../scope/optional-dependency.util';
 import { isElicitationEncryptionAvailable } from './elicitation-encryption';
 import { type ElicitationStore } from './elicitation.store';
 import { EncryptedElicitationStore } from './encrypted-elicitation.store';
@@ -502,7 +503,9 @@ export function createSqliteElicitationStore(
 
   // Lazy require to avoid bundling @frontmcp/storage-sqlite when not used
 
-  const { SqliteElicitationStore } = require('@frontmcp/storage-sqlite');
+  const { SqliteElicitationStore } = requireOptionalModule('@frontmcp/storage-sqlite', () =>
+    require('@frontmcp/storage-sqlite'),
+  );
 
   logger?.info('[ElicitationStoreFactory] Creating SQLite elicitation store', {
     path: sqliteConfig.path,

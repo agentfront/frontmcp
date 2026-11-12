@@ -24,6 +24,7 @@ import {
   type VercelKvProviderOptions,
 } from '../../common';
 import { VercelKvAsyncInitRequiredError } from '../../errors/sdk.errors';
+import { requireOptionalModule } from '../../scope/optional-dependency.util';
 
 /**
  * Discriminated input for `createSessionStore`. A SQLite-backed session
@@ -207,7 +208,9 @@ export function createSqliteSessionStore(
 ): SessionStore {
   // Lazy require to avoid bundling @frontmcp/storage-sqlite when not used
 
-  const { SqliteSessionStore } = require('@frontmcp/storage-sqlite');
+  const { SqliteSessionStore } = requireOptionalModule('@frontmcp/storage-sqlite', () =>
+    require('@frontmcp/storage-sqlite'),
+  );
 
   logger?.info('[SessionStoreFactory] Creating SQLite session store', { path: options.path });
 

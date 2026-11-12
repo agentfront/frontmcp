@@ -11,6 +11,7 @@ import type { EventStore } from '@frontmcp/protocol';
 
 import type { FrontMcpLogger, RedisOptionsInput, SqliteOptionsInput } from '../../common';
 import { PublicMcpError } from '../../errors';
+import { requireOptionalModule } from '../../scope/optional-dependency.util';
 import { MemoryEventStore } from './memory.event-store';
 import { RedisEventStore } from './redis.event-store';
 
@@ -132,7 +133,10 @@ export function createEventStore(config: EventStoreConfig | undefined, logger?: 
     }
 
     // Lazy-load SQLite EventStore
-    const { SqliteEventStore } = require('@frontmcp/storage-sqlite') as typeof import('@frontmcp/storage-sqlite');
+    const { SqliteEventStore } = requireOptionalModule(
+      '@frontmcp/storage-sqlite',
+      () => require('@frontmcp/storage-sqlite') as typeof import('@frontmcp/storage-sqlite'),
+    );
 
     logger?.info('[EventStoreFactory] Creating SQLite EventStore for resumability', {
       maxEvents,
