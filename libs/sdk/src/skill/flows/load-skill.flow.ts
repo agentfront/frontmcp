@@ -125,8 +125,10 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
     const { notLoadedReason } = await readySkillCatalog(this.scope);
     const loadResults: LoadResultWithActivation[] = [];
     const resolveEntry = createSkillEntryResolver(skillRegistry);
+    // A skill asked for twice, by the same ID or by its ID and its name, is loaded and returned once
+    const seenSkills = new Set<string>();
 
-    for (const skillId of skillIds) {
+    for (const skillId of new Set(skillIds)) {
       const result = await skillRegistry.loadSkill(skillId);
 
       if (!result) {
@@ -134,6 +136,8 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
         warnings.push(`Skill "${skillId}" not found`);
         continue;
       }
+      if (seenSkills.has(result.skill.id)) continue;
+      seenSkills.add(result.skill.id);
 
       // Deny direct load of an authority-gated skill the caller can't access
       // (throws AuthorityDeniedError, MCP code -32003 — same as a denied tool).

@@ -235,6 +235,27 @@ describe('Skills MCP Handlers', () => {
       expect(result.summary.allToolsAvailable).toBe(true);
     });
 
+    it('returns a skill asked for more than once a single time', async () => {
+      const loaded = {
+        skill: { id: 'skill-1', name: 'Test Skill', description: 'd', instructions: 'Do the thing', tools: [] },
+        availableTools: [],
+        missingTools: [],
+        isComplete: true,
+      };
+      mockSkillRegistry.loadSkill.mockResolvedValueOnce(loaded).mockResolvedValueOnce(loaded);
+
+      const handler = skillsLoadRequestHandler(createHandlerOptions());
+      const request = {
+        method: 'skills/load' as const,
+        params: { skillIds: ['skill-1', 'skill-1', 'Test Skill', 'skill-1'] },
+      };
+      const result = await handler.handler(request, createContext() as any);
+
+      expect(mockSkillRegistry.loadSkill).toHaveBeenCalledTimes(2);
+      expect(result.skills).toHaveLength(1);
+      expect(result.summary.totalSkills).toBe(1);
+    });
+
     it('should handle missing skills with warnings', async () => {
       mockSkillRegistry.loadSkill.mockResolvedValueOnce(undefined);
 
