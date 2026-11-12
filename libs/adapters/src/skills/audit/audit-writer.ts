@@ -374,7 +374,7 @@ export class SkillAuditWriter {
       ...(status !== undefined ? { status } : {}),
       ...(phase === 'http-call-success' ? { outputHash: this.safeHash(output) } : {}),
       ...(phase === 'http-call-failure' || phase === 'authority-check-fail'
-        ? { errorMessage: this.formatError(error) }
+        ? { errorMessage: this.formatError(error, ctx.subject) }
         : {}),
       ...(ctx.confirmation ? { confirmation: ctx.confirmation } : {}),
     };
@@ -449,8 +449,14 @@ export class SkillAuditWriter {
     }
   }
 
+  /** Replace the caller's subject in a message the way `subjectMode` records the subject itself. */
+  private protectSubjectIn(message: string, subject: string): string {
+    if (this.subjectMode === 'plain' || !subject || subject === 'anonymous') return message;
+    return message.split(subject).join(this.applySubjectMode(subject));
+  }
+
   /** Truncate + sanitize an error to fit in the record. */
-  private formatError(error: unknown): string {
+  private formatError(error: unknown, subject: string): string {
     let raw: string;
     if (error instanceof Error) {
       raw = error.message;
@@ -465,6 +471,7 @@ export class SkillAuditWriter {
         raw = String(error);
       }
     }
+    raw = this.protectSubjectIn(raw, subject);
     if (raw.length > SKILL_AUDIT_ERROR_MESSAGE_MAX) {
       return raw.slice(0, SKILL_AUDIT_ERROR_MESSAGE_MAX) + '...';
     }
