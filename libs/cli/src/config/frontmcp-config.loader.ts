@@ -14,6 +14,7 @@ import {
   pathResolve,
   pathToFileURL,
   readFile,
+  stat,
 } from '@frontmcp/utils';
 
 import { frontmcpConfigSchema, type FrontMcpConfigParsed } from './frontmcp-config.schema';
@@ -72,10 +73,13 @@ export async function loadFrontMcpConfigFromFile(configPath: string): Promise<Fr
  * `loadFrontMcpConfig(dir)`), or `undefined` if nothing was found.
  */
 export async function findConfigDir(startDir: string, maxLevels = 10): Promise<string | undefined> {
-  let current = pathResolve(startDir);
+  const start = pathResolve(startDir);
+  let current = start;
   for (let i = 0; i <= maxLevels; i++) {
     for (const filename of CONFIG_FILENAMES) {
-      if (await fileExists(pathJoin(current, filename))) {
+      const configPath = pathJoin(current, filename);
+      if (await fileExists(configPath)) {
+        if (current !== start) await assertOwnConfigFile(configPath, start);
         return current;
       }
     }
@@ -84,6 +88,18 @@ export async function findConfigDir(startDir: string, maxLevels = 10): Promise<s
     current = parent;
   }
   return undefined;
+}
+
+/** A config found in a parent folder runs as code, so it must belong to this user or root, not to whoever can write a shared parent such as /tmp. */
+async function assertOwnConfigFile(configPath: string, startDir: string): Promise<void> {
+  const currentUid = process.getuid?.();
+  if (currentUid === undefined) return;
+  const { uid: owner } = await stat(configPath);
+  if (owner === currentUid || owner === 0) return;
+  throw new Error(
+    `Found ${configPath} in a parent folder of ${startDir}, but another user (uid ${owner}) owns it, so it was not loaded. ` +
+      `Pass --config ${configPath} to use it anyway, or add a frontmcp.config file to your project.`,
+  );
 }
 
 /**
