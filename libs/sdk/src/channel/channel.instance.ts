@@ -37,7 +37,7 @@ export class ChannelInstance extends ChannelEntry {
   private _serviceContext?: ChannelContext;
   /** Ends the watch of a file-watcher source's paths; set while the channel is connected */
   private _stopFileWatch?: () => void;
-  /** Replay buffer for events that arrive when no sessions are connected */
+  /** The channel's latest global notifications, kept for `replayBufferedEvents()` when replay is enabled */
   private _replayBuffer: ChannelNotification[] = [];
   /** Maximum replay buffer size */
   private readonly _maxReplayEvents: number;
@@ -220,8 +220,9 @@ export class ChannelInstance extends ChannelEntry {
   }
 
   /**
-   * Replay buffered events to a specific session.
-   * Called when a new Claude Code session connects and the channel has buffered events.
+   * Send the buffered notifications to one session, each with `replayed: 'true'` in its meta.
+   * Nothing in the SDK calls it when a session connects: call it yourself, such as from a tool the session calls.
+   * Each call sends the whole buffer again.
    *
    * @param sessionId - The session to replay events to
    * @returns Number of events replayed

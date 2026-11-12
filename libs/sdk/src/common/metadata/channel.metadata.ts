@@ -213,8 +213,8 @@ export interface ChannelMetadata extends ExtendFrontMcpChannelMetadata {
 
   /**
    * Event replay configuration.
-   * When enabled, events are buffered so they can be replayed when Claude Code connects.
-   * Use this for channels where events should not be lost if Claude is not connected.
+   * When enabled, the channel keeps its latest global notifications in a buffer. The SDK does not send the buffer
+   * to a session that connects: send it with `ChannelInstance.replayBufferedEvents(sessionId)`, such as from a tool.
    *
    * The buffer is in-memory by default. For persistence across restarts, provide an
    * external store via `onConnect()`.
