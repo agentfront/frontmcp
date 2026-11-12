@@ -11,6 +11,7 @@ import { expiresAtToTTL, TypedStorage, type NamespacedStorage, type Unsubscribe 
 
 import type { FrontMcpLogger } from '../../common';
 import { ElicitationSubscriptionError } from '../../errors';
+import { sessionIdHash } from '../../logger/session-id-hash';
 import type {
   ElicitResult,
   FallbackExecutionResult,
@@ -118,7 +119,7 @@ export class StorageElicitationStore implements ElicitationStore {
     const ttlSeconds = expiresAtToTTL(expiresAt);
     if (ttlSeconds <= 0) {
       this.logger?.warn('[StorageElicitationStore] Record already expired, not storing', {
-        sessionId,
+        sessionIdHash: sessionIdHash(sessionId),
         elicitId: record.elicitId,
       });
       return;
@@ -127,7 +128,7 @@ export class StorageElicitationStore implements ElicitationStore {
     await this.pending.set(sessionId, record, { ttlSeconds });
 
     this.logger?.debug('[StorageElicitationStore] Stored pending elicitation', {
-      sessionId,
+      sessionIdHash: sessionIdHash(sessionId),
       elicitId: record.elicitId,
       ttlSeconds,
     });
@@ -157,7 +158,9 @@ export class StorageElicitationStore implements ElicitationStore {
    */
   async deletePending(sessionId: string): Promise<void> {
     await this.pending.delete(sessionId);
-    this.logger?.debug('[StorageElicitationStore] Deleted pending elicitation', { sessionId });
+    this.logger?.debug('[StorageElicitationStore] Deleted pending elicitation', {
+      sessionIdHash: sessionIdHash(sessionId),
+    });
   }
 
   // ============================================
@@ -184,7 +187,11 @@ export class StorageElicitationStore implements ElicitationStore {
     callbacks.add(callback as ElicitResultCallback);
 
     // Subscribe to pub/sub channel if not already subscribed and no pending subscription
-    if (!this.activeSubscriptions.has(route) && !this.pendingSubscriptions.has(route) && this.storage.supportsPubSub()) {
+    if (
+      !this.activeSubscriptions.has(route) &&
+      !this.pendingSubscriptions.has(route) &&
+      this.storage.supportsPubSub()
+    ) {
       const channel = RESULT_CHANNEL_PREFIX + route;
 
       // Create a pending subscription promise to guard against concurrent calls
@@ -330,7 +337,11 @@ export class StorageElicitationStore implements ElicitationStore {
     // Clean up the pending record
     await this.deletePending(sessionId);
 
-    this.logger?.debug('[StorageElicitationStore] Published result', { elicitId, sessionId, status: result.status });
+    this.logger?.debug('[StorageElicitationStore] Published result', {
+      elicitId,
+      sessionIdHash: sessionIdHash(sessionId),
+      status: result.status,
+    });
   }
 
   // ============================================
@@ -588,7 +599,7 @@ export class StorageElicitationStore implements ElicitationStore {
 
     this.logger?.debug('[StorageElicitationStore] Published fallback result', {
       elicitId,
-      sessionId,
+      sessionIdHash: sessionIdHash(sessionId),
       success: result.success,
     });
   }

@@ -5,6 +5,7 @@ import { AsyncLocalStorage, EventEmitter } from '@frontmcp/utils';
 import type { FrontMcpLogger } from '../../common';
 import type { SkillContent } from '../../common/interfaces';
 import { SkillSessionError } from '../../errors';
+import { sessionIdHash } from '../../logger/session-id-hash';
 import type { SkillLoadResult } from '../skill-storage.interface';
 import type { SkillSessionStore } from './skill-session-store.interface';
 import {
@@ -215,7 +216,7 @@ export class SkillSessionManager extends EventEmitter {
     });
 
     this.logger?.debug(`Skill session activated: ${skillId}`, {
-      sessionId: session.sessionId,
+      sessionIdHash: sessionIdHash(session.sessionId),
       skillToolsAdded: toolNames,
       totalAllowedTools: session.allowedTools.size,
       activeSkillCount: session.activeSkills.size,
@@ -284,7 +285,7 @@ export class SkillSessionManager extends EventEmitter {
       });
 
       this.logger?.debug(`Skill deactivated: ${skillId}`, {
-        sessionId: session.sessionId,
+        sessionIdHash: sessionIdHash(session.sessionId),
         remainingSkills: session.activeSkills.size,
       });
 
@@ -328,7 +329,7 @@ export class SkillSessionManager extends EventEmitter {
       }
 
       this.logger?.debug(`All skills deactivated`, {
-        sessionId: session.sessionId,
+        sessionIdHash: sessionIdHash(session.sessionId),
         deactivatedSkills: skillIds,
         duration,
         toolCallCount: session.toolCallCount,
@@ -481,7 +482,7 @@ export class SkillSessionManager extends EventEmitter {
       default:
         // Log warning but allow
         this.logger?.warn(`Tool '${toolName}' not in skill allowlist but allowed (permissive mode)`, {
-          sessionId: session.sessionId,
+          sessionIdHash: sessionIdHash(session.sessionId),
           activeSkillIds,
         });
         return {
@@ -532,7 +533,7 @@ export class SkillSessionManager extends EventEmitter {
     });
 
     this.logger?.info(`Tool dynamically approved: ${toolName}`, {
-      sessionId: session.sessionId,
+      sessionIdHash: sessionIdHash(session.sessionId),
       skillId: session.activeSkillId,
     });
 
@@ -560,7 +561,7 @@ export class SkillSessionManager extends EventEmitter {
     });
 
     this.logger?.info(`Tool denied: ${toolName}`, {
-      sessionId: session.sessionId,
+      sessionIdHash: sessionIdHash(session.sessionId),
       skillId: session.activeSkillId,
     });
 
@@ -613,7 +614,7 @@ export class SkillSessionManager extends EventEmitter {
     this.persistSession(session);
 
     this.logger?.debug(`Skill session policy mode changed to: ${mode}`, {
-      sessionId: session.sessionId,
+      sessionIdHash: sessionIdHash(session.sessionId),
       skillId: session.activeSkillId,
     });
   }
@@ -634,7 +635,10 @@ export class SkillSessionManager extends EventEmitter {
       try {
         await this.store.save(session);
       } catch (error) {
-        this.logger?.error('Failed to persist skill session', { error, sessionId: session.sessionId });
+        this.logger?.error('Failed to persist skill session', {
+          error,
+          sessionIdHash: sessionIdHash(session.sessionId),
+        });
       }
     }
   }

@@ -11,6 +11,7 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from '../../common';
 import { ElicitationStoreNotInitializedError, InvalidInputError } from '../../errors';
+import { sessionIdHash } from '../../logger/session-id-hash';
 import type { ElicitResult, ElicitStatus } from '../elicitation.types';
 import { validateElicitationContent } from '../helpers';
 import type { PendingElicitRecord } from '../store';
@@ -100,7 +101,7 @@ export default class ElicitationResultFlow extends FlowBase<typeof name> {
     });
 
     this.logger.verbose('parseInput:done', {
-      sessionId: input.sessionId,
+      sessionIdHash: sessionIdHash(input.sessionId),
       action: input.result.action,
     });
   }
@@ -119,10 +120,10 @@ export default class ElicitationResultFlow extends FlowBase<typeof name> {
     this.state.set('pendingRecord', pendingRecord ?? undefined);
 
     if (!pendingRecord) {
-      this.logger.verbose('lookupPending:notFound', { sessionId });
+      this.logger.verbose('lookupPending:notFound', { sessionIdHash: sessionIdHash(sessionId) });
     } else {
       this.logger.verbose('lookupPending:found', {
-        sessionId,
+        sessionIdHash: sessionIdHash(sessionId),
         elicitId: pendingRecord.elicitId,
       });
     }
@@ -163,7 +164,7 @@ export default class ElicitationResultFlow extends FlowBase<typeof name> {
 
     if (!validationResult.success) {
       this.logger.warn('validateContent:failed', {
-        sessionId: pendingRecord.sessionId,
+        sessionIdHash: sessionIdHash(pendingRecord.sessionId),
         elicitId: pendingRecord.elicitId,
         errors: validationResult.errors,
       });
