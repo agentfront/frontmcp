@@ -111,13 +111,14 @@ export default class FlowRegistry extends RegistryAbstract<FlowInstance<FlowName
     const mcpCtx = (input as any)?.ctx;
 
     // Direct calls carry their headers as `ctx.metadata` (#709) and their platform bindings as
-    // `ctx.platformEnv` (#706); such a call is its own request
+    // `ctx.platformEnv` (#706); such a call is its own request, as is any marked `ownRequest`
     const inProcessMetadata: InProcessRequestMetadata | undefined = mcpCtx?.metadata;
     const inProcessPlatformEnv: unknown = mcpCtx?.platformEnv;
+    const ownRequest = mcpCtx?.ownRequest === true || Boolean(inProcessMetadata) || inProcessPlatformEnv !== undefined;
 
     // Check if we're already in a context (e.g., HTTP middleware flow)
     const existingContext = contextStorage.getStore();
-    if (existingContext && !inProcessMetadata && inProcessPlatformEnv === undefined) {
+    if (existingContext && !ownRequest) {
       // Already in context, run directly
       return flow.run(input, deps ?? new Map()) as Promise<FlowOutputOf<Name> | undefined>;
     }
