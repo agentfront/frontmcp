@@ -166,14 +166,13 @@ export class SqliteStorageAdapter extends BaseStorageAdapter {
 
   async keys(pattern = '*'): Promise<string[]> {
     this.ensureConnected();
-    // Translate glob (`*`/`?`) to SQL LIKE (`%`/`_`). `*` => `%`, `?` => `_`.
-    // Existing LIKE metacharacters are escaped as `\%`/`\_`; SqliteKvStore's
-    // LIKE query declares `ESCAPE '\'` so these are matched literally.
+    // Translate glob (`*`/`?`) to SqliteKvStore's LIKE syntax (`%`/`_`). `*` => `%`, `?` => `_`.
+    // Existing LIKE metacharacters and backslashes are escaped with `\`, so they are matched literally.
     if (pattern === '*' || pattern === undefined) {
       return this.connection.read(() => this.kv.keys());
     }
     const like = pattern
-      .replace(/[%_]/g, (c) => `\\${c}`)
+      .replace(/[%_\\]/g, (c) => `\\${c}`)
       .replace(/\*/g, '%')
       .replace(/\?/g, '_');
     return this.connection.read(() => this.kv.keys(like));

@@ -1,3 +1,5 @@
+import type { McpServer } from '@frontmcp/protocol';
+
 import callToolRequestHandler from './call-tool-request.handler';
 import completeRequestHandler from './complete-request.handler';
 import eventsListRequestHandler from './events-list-request.handler';
@@ -13,7 +15,7 @@ import listResourceTemplatesRequestHandler from './list-resource-templates-reque
 import listResourcesRequestHandler from './list-resources-request.handler';
 import listToolsRequestHandler from './list-tools-request.handler';
 import loggingSetLevelRequestHandler from './logging-set-level-request.handler';
-import { type McpHandlerOptions } from './mcp-handlers.types';
+import { type McpHandler, type McpHandlerOptions } from './mcp-handlers.types';
 import readResourceRequestHandler from './read-resource-request.handler';
 import rootsListChangedNotificationHandler from './roots-list-changed-notification.handler';
 import skillsListRequestHandler from './skills-list-request.handler';
@@ -25,6 +27,34 @@ import tasksGetRequestHandler from './tasks-get-request.handler';
 import tasksListRequestHandler from './tasks-list-request.handler';
 import tasksResultRequestHandler from './tasks-result-request.handler';
 import unsubscribeRequestHandler from './unsubscribe-request.handler';
+
+/** Read the JSON-RPC method literal a handler's request schema is bound to. */
+export function methodOfSchema(schema: unknown): string | undefined {
+  const shape = (schema as { shape?: Record<string, unknown> } | undefined)?.shape;
+  const method = shape?.['method'] as { value?: unknown; _def?: { values?: unknown[] } } | undefined;
+  if (typeof method?.value === 'string') return method.value;
+  const values = method?._def?.values;
+  return Array.isArray(values) && typeof values[0] === 'string' ? values[0] : undefined;
+}
+
+/**
+ * Register a handler on a session's protocol server. The server calls a handler of a client notification only when it
+ * was set with `setNotificationHandler`, and passes it no request context: it gets `notificationContext` instead.
+ */
+export function registerMcpHandler(
+  server: Pick<McpServer, 'setRequestHandler' | 'setNotificationHandler'>,
+  schema: McpHandler['requestSchema'],
+  handle: (message: never, context: never) => unknown,
+  notificationContext: object = {},
+): void {
+  if (!methodOfSchema(schema)?.startsWith('notifications/')) {
+    server.setRequestHandler(schema as never, handle as never);
+    return;
+  }
+  server.setNotificationHandler(schema as never, async (notification) => {
+    await handle(notification as never, notificationContext as never);
+  });
+}
 
 export function createMcpHandlers(options: McpHandlerOptions) {
   // List handlers are ALWAYS registered, independent of capability advertisement.

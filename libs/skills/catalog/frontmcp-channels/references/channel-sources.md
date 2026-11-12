@@ -39,7 +39,7 @@ class CIAlertChannel extends ChannelContext {
 }
 ```
 
-The path is a `POST` route on FrontMCP's HTTP server (`bootstrap()` / `createHandler()`), guarded like a custom `http.routes` entry: `throttle.ipFilter` runs first, the path may not be a FrontMCP path (MCP endpoint, `/oauth/*`, `/.well-known/*`, `/health`, `/metrics`), and one channel per path (either mistake fails startup). The route does not authenticate the sender: verify signatures (e.g. `X-Hub-Signature-256`) in `onEvent()`. `createDirect()`, stdio and `createFetchHandler()` serve no webhook route; `create()`, `createDirect()` and `connect()` log a warning for a webhook source.
+The path is a `POST` route on FrontMCP's HTTP server (`bootstrap()` / `createHandler()`), guarded like a custom `http.routes` entry: `throttle.ipFilter` runs first, the path may not be a FrontMCP path (MCP endpoint, `/oauth/*`, `/.well-known/*`, `/health`, `/metrics`), and one channel per path (either mistake fails startup). The route does not authenticate the sender: verify signatures (e.g. `X-Hub-Signature-256`) in `onEvent()`. `createFetchHandler()` serves the route too. `createDirect()` and stdio serve no webhook route; `create()`, `createDirect()` and `connect()` log a warning for a webhook source.
 
 ## App Event Source
 
@@ -295,7 +295,7 @@ await scope.channelNotifications?.send('status-updates', 'Server maintenance sta
 
 ## Replay Buffer
 
-Enable event buffering so events are preserved when Claude Code is not connected:
+Keep the latest notifications of a channel in a buffer, to send to a session later:
 
 ```typescript
 @Channel({
@@ -308,7 +308,7 @@ class CIAlertChannel extends ChannelContext {
 }
 ```
 
-Buffered events are replayed when a new session connects, with `replayed: "true"` in meta.
+The SDK does not send the buffer to a session that connects. Send it with `ChannelInstance.replayBufferedEvents(sessionId)`, for example from a tool the session calls (see the `replay-buffer` example). Each notification arrives with `replayed: "true"` in meta, and each call sends the whole buffer again.
 
 ## Examples
 
@@ -320,6 +320,6 @@ Buffered events are replayed when a new session connects, with `replayed: "true"
 | [`job-completion`](../examples/channel-sources/job-completion.md)       | Intermediate | Notify Claude Code when background jobs and workflows complete                                                                   |
 | [`service-connector`](../examples/channel-sources/service-connector.md) | Advanced     | Build a persistent service connector that lets Claude send and receive messages through WhatsApp, Telegram, or any messaging API |
 | [`file-watcher`](../examples/channel-sources/file-watcher.md)           | Intermediate | Watch files for changes and notify Claude Code in real-time                                                                      |
-| [`replay-buffer`](../examples/channel-sources/replay-buffer.md)         | Advanced     | Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline.                      |
+| [`replay-buffer`](../examples/channel-sources/replay-buffer.md)         | Advanced     | Buffer channel events and send them to a session on demand, for events that occurred before it connected.                        |
 
 > See all examples in [`examples/channel-sources/`](../examples/channel-sources/)

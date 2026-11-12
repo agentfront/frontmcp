@@ -9,6 +9,7 @@ import type Database from 'better-sqlite3';
 
 import { withBusyRetry } from './open-database';
 import { acquireConnection, type SqliteConnection } from './sqlite-connection';
+import type { SqliteDatabase, SqliteStatement } from './sqlite-driver';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 /**
@@ -38,13 +39,13 @@ export interface SqliteEventStoreOptions extends SqliteStorageOptions {
 
 /** Bundled prepared statements - all-or-nothing initialization. */
 interface PreparedStatements {
-  insert: Database.Statement;
-  getAfter: Database.Statement;
-  getStreamId: Database.Statement;
-  count: Database.Statement;
-  evictOldest: Database.Statement;
-  evictExpired: Database.Statement;
-  getLastId: Database.Statement;
+  insert: SqliteStatement;
+  getAfter: SqliteStatement;
+  getStreamId: SqliteStatement;
+  count: SqliteStatement;
+  evictOldest: SqliteStatement;
+  evictExpired: SqliteStatement;
+  getLastId: SqliteStatement;
 }
 
 /**
@@ -62,7 +63,7 @@ interface PreparedStatements {
  */
 export class SqliteEventStore implements EventStoreInterface {
   private readonly connection: SqliteConnection;
-  private readonly db: Database.Database;
+  private readonly db: SqliteDatabase;
   private maxEvents: number;
   private ttlMs: number;
   private counters = new Map<string, number>();
@@ -233,9 +234,11 @@ export class SqliteEventStore implements EventStoreInterface {
 
   /**
    * Get the underlying database instance.
+   * With a driver set by `useSqliteDriver()` it is the driver's database, which has the members of
+   * `SqliteDatabase` only.
    */
   getDatabase(): Database.Database {
-    return this.db;
+    return this.db as Database.Database;
   }
 
   /**

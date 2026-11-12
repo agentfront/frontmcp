@@ -18,7 +18,7 @@ export interface WorkerRestartOptions {
 }
 
 export interface WorkerMetadata {
-  /** The worker's name in logs, in its health check and in its lease. @default the class name */
+  /** The worker's name in logs, in its health check and in its lease: one class per server. @default the class name */
   name?: string;
   scope: WorkerScope;
   /** `false` runs `run()` once and never again. @default restarts with the default waits */

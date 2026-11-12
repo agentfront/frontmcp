@@ -4,7 +4,18 @@ import { z } from '@frontmcp/lazy-zod';
 import { EVENTS_ERROR_CODES } from '@frontmcp/protocol';
 
 import { createTestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
-import { App, event, Plugin, type EventType, type FlowCtxOf, type FrontMcpConfigInput } from '../../common';
+import {
+  App,
+  event,
+  LogLevel,
+  LogTransport,
+  LogTransportInterface,
+  Plugin,
+  type EventType,
+  type FlowCtxOf,
+  type FrontMcpConfigInput,
+  type LogRecord,
+} from '../../common';
 import {
   EventForbiddenError,
   EventNotFoundError,
@@ -43,6 +54,19 @@ const vaultOpened = event({
   authorize: vaultAuthorize,
 });
 const allEvents: EventType[] = [orderCreated, auditLogged, webhookOnly, vaultOpened];
+
+const logLines: string[] = [];
+
+/** Keeps what the server logs. */
+@LogTransport({ name: 'EventStreamCapture', description: 'Captures log lines' })
+class CaptureLogTransport extends LogTransportInterface {
+  /** Keeps the message of one log record. */
+  log(record: LogRecord): void {
+    logLines.push(record.message);
+  }
+}
+
+const capturedLogging = { level: LogLevel.Info, enableConsole: false, transports: [CaptureLogTransport] };
 
 interface StreamOverrides {
   name?: string;
@@ -227,6 +251,8 @@ describe('events:stream', () => {
       const refusal = openStream(limited, { arguments: { status: 'two' } });
 
       await expect(refusal).rejects.toThrow(EventResourceExhaustedError);
+      await expect(refusal).rejects.toMatchObject({ jsonRpcCode: -32025, data: { limit: 'streams', max: 1 } });
+      await expect(refusal).rejects.toThrow('open event streams per caller is reached. Close one, then retry.');
       await expect(openStream(limited, { ctx: asBob })).resolves.toBeDefined();
       first.close();
       await limited.dispose();
@@ -281,6 +307,48 @@ describe('events:stream', () => {
       expect(signedIn.events?.storage?.supportsPubSub()).toBe(true);
       expect(signedIn.events?.streams?.isRelayed).toBe(false);
       await signedIn.dispose();
+    });
+
+    describe('says at startup that streams carry what their own process publishes', () => {
+      const redis = { host: 'cache.internal' };
+      const signsCallersIn = { mode: 'local' } as never;
+      const carried = 'Event streams carry what this process publishes.';
+      const unrelayed =
+        `${carried} events.store.redis is set, but it relays events between processes only with webhook delivery, ` +
+        'which is off: ';
+      const relayed = '. Then an event published on one process reaches the streams the others hold.';
+
+      it.each([
+        [
+          'to set events.store.redis, without it',
+          {},
+          `${carried} With several processes, set events.store.redis so an event published on one reaches the ` +
+            'streams the others hold.',
+        ],
+        [
+          'why events.store.redis relays nothing in public auth mode',
+          { events: { store: { redis } } },
+          `${unrelayed}the server runs in public auth mode, so configure an auth mode that signs callers in${relayed}`,
+        ],
+        [
+          'why events.store.redis relays nothing with webhook delivery off',
+          { auth: signsCallersIn, events: { store: { redis }, webhook: { enabled: false } } },
+          `${unrelayed}events.webhook.enabled is false, so remove that setting${relayed}`,
+        ],
+        [
+          'both reasons events.store.redis relays nothing',
+          { events: { store: { redis }, webhook: { enabled: false } } },
+          `${unrelayed}events.webhook.enabled is false, so remove that setting; the server runs in public auth ` +
+            `mode, so configure an auth mode that signs callers in${relayed}`,
+        ],
+      ])('%s', async (_label, extra: Partial<FrontMcpConfigInput>, line) => {
+        logLines.length = 0;
+
+        const started = await startScope({ ...extra, logging: capturedLogging });
+
+        expect(logLines.filter((logged) => logged.startsWith(carried))).toEqual([line]);
+        await started.dispose();
+      });
     });
 
     it('refuses an anonymous caller on a server whose auth signs callers in, and lets one stream on a public server', async () => {

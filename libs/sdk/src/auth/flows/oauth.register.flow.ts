@@ -14,6 +14,9 @@
  *   - `dcr.initialAccessToken` → require `Authorization: Bearer <token>` (401)
  *   - `dcr.allowedClientIds` → registration is refused: a minted id is never on it (400)
  *   - `dcr.allowedRedirectUris` → reject unlisted redirect_uris (400)
+ * Client metadata that fails validation is answered as RFC 7591 §3.2.2 says, once the caller is
+ * allowed to register: 400 `invalid_redirect_uri` for a redirect URI that is not a URL, 400
+ * `invalid_client_metadata` for anything else (`redirect_uris` missing or empty, an unknown value).
  * Registered clients are stored on the per-instance {@link DcrClientRegistry}
  * (LocalPrimaryAuth), so the authorize/token flows can validate them.
  */
@@ -32,7 +35,7 @@
  */
 
 import { isLoopbackRedirectUri, type RegisteredClient } from '@frontmcp/auth';
-import { internalZ as z } from '@frontmcp/lazy-zod';
+import { internalZ as z, type ZodError } from '@frontmcp/lazy-zod';
 import { base64urlEncode, randomBytes, randomUUID } from '@frontmcp/utils';
 
 import {
@@ -108,6 +111,16 @@ declare global {
 const name = 'oauth:register' as const;
 const Stage = StageHookOf(name);
 
+/** The RFC 7591 §3.2.2 error for client metadata that failed validation, naming each field and its problem. */
+function registrationValidationError(error: ZodError): { error: string; error_description: string } {
+  const redirectUriRefused = error.issues.some((issue) => issue.path[0] === 'redirect_uris' && issue.path.length > 1);
+  const problems = error.issues.map((issue) => `${issue.path.join('.') || 'body'}: ${issue.message}`);
+  return {
+    error: redirectUriRefused ? 'invalid_redirect_uri' : 'invalid_client_metadata',
+    error_description: problems.join('; '),
+  };
+}
+
 /** Read the `Authorization: Bearer <token>` header, if present. */
 function extractBearer(headers: Record<string, string> | undefined): string | undefined {
   const raw = headers?.['authorization'] ?? headers?.['Authorization'];
@@ -131,6 +144,8 @@ function extractBearer(headers: Record<string, string> | undefined): string | un
 })
 export default class OauthRegisterFlow extends FlowBase<typeof name> {
   private registered?: RegisteredClient;
+  /** Why the request's client metadata failed validation; answered once the caller is allowed to register. */
+  private invalidMetadata?: ZodError;
 
   /** The local AS primary auth, which owns the DCR client registry (#462). */
   private get localAuth(): LocalPrimaryAuth {
@@ -155,11 +170,9 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
     const dcrEnabled = this.localAuth.isDcrEnabled?.() ?? true;
 
     const { request } = this.rawInput;
-    const parsed = registrationRequestSchema.parse(request.body || {});
-    this.state.set({
-      body: parsed,
-      dcrEnabled,
-    });
+    const parsed = registrationRequestSchema.safeParse(request.body || {});
+    this.invalidMetadata = parsed.error;
+    this.state.set(parsed.success ? { body: parsed.data, dcrEnabled } : { dcrEnabled });
   }
 
   @Stage('validateInput')
@@ -197,6 +210,11 @@ export default class OauthRegisterFlow extends FlowBase<typeof name> {
         );
         return;
       }
+    }
+
+    if (this.invalidMetadata) {
+      this.respond(httpRespond.json(registrationValidationError(this.invalidMetadata), { status: 400 }));
+      return;
     }
 
     const { redirect_uris, token_endpoint_auth_method, grant_types, response_types } = this.state.required.body;

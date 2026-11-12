@@ -288,6 +288,28 @@ describe('duties in a server and in createContainer()', () => {
     await until(() => ran.includes(first) || ran.includes(again));
   });
 
+  it('refuses a second duty class with the name of another in its server, whatever their scopes', async () => {
+    @Duty({ name: 'twin', every: 100, scope: 'machine' })
+    class MachineTwin {
+      run(): void {
+        ran.push(this);
+      }
+    }
+    @Duty({ name: 'twin', every: 100, scope: 'workspace' })
+    class WorkspaceTwin {
+      run(): void {
+        ran.push(this);
+      }
+    }
+
+    const conflict = container({ providers: [MachineTwin, WorkspaceTwin], runDuties: true, info });
+
+    await expect(conflict).rejects.toBeInstanceOf(DutyNameConflictError);
+    await expect(conflict).rejects.toThrow(
+      'Duty "twin" of server "duty-spec" is declared by two classes in this process (MachineTwin and WorkspaceTwin)',
+    );
+  });
+
   it('keeps the leases of names that contain colons apart', async () => {
     @Duty({ name: 'c', every: 100, scope: 'machine' })
     class NamedC {

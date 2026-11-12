@@ -2,7 +2,7 @@
 name: replay-buffer
 reference: channel-sources
 level: advanced
-description: Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline.
+description: Buffer channel events and send them to a session on demand, for events that occurred before it connected.
 tags:
   - replay
   - buffer
@@ -18,7 +18,7 @@ features:
 
 # Replay Buffer Pattern
 
-Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline.
+Buffer channel events and send them to a session on demand, for events that occurred before it connected.
 
 ## Basic Replay (In-Memory)
 
@@ -168,7 +168,7 @@ class AlertsApp {}
 ## How Replay Works
 
 1. Events arrive via any source -> `onEvent()` transforms them -> notification pushed to live sessions.
-2. If `replay.enabled`, each pushed notification is also stored in the channel's ring buffer (FIFO, capped at `maxEvents`).
+2. If `replay.enabled`, each notification pushed to every session is also stored in the channel's ring buffer (FIFO, capped at `maxEvents`). A notification sent to one session (with a `targetSessionId`, such as an agent or job completion) is not stored.
 3. Replay is **user-triggered**: call `ChannelInstance.replayBufferedEvents(sessionId)` yourself — typically from a tool (see `ReplayCIAlertsTool` above) or from a custom session lifecycle hook in your app.
 4. Each buffered notification is sent to the target session with `replayed: "true"` injected into its meta.
 5. The persistent-store pattern shown above is independent of the in-memory buffer: you replay from Redis on `onConnect()` (which fires once when the channel boots), while the in-memory ring buffer is what `replayBufferedEvents` reads from when invoked.

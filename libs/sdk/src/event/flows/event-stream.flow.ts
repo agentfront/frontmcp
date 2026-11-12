@@ -195,7 +195,7 @@ export default class EventStreamFlow extends FlowBase<typeof name> {
 
     if (!streams.reserve(stream)) {
       stream.close();
-      throw new EventResourceExhaustedError(this.codes, 'subscriptions', config.subscriptions.maxPerPrincipal);
+      throw new EventResourceExhaustedError(this.codes, 'streams', config.subscriptions.maxPerPrincipal);
     }
     try {
       await context.onSubscribe?.(subscriptionArguments, subscription);

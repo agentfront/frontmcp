@@ -9,6 +9,7 @@ import {
   withBusyRetry,
   type OpenDatabaseOptions,
 } from './open-database';
+import { currentSqliteDriver, type SqliteDatabase, type SqliteDriver } from './sqlite-driver';
 
 const MIN_BACKOFF_MS = 2;
 const MAX_BACKOFF_MS = 50;
@@ -24,10 +25,16 @@ class SharedDatabase {
   private lastProgressAt = 0;
 
   constructor(
-    readonly db: Database.Database,
+    readonly db: SqliteDatabase,
     private busyTimeoutMs: number,
     private readonly cacheKey?: string,
+    private readonly driver?: SqliteDriver,
   ) {}
+
+  /** Whether a store may be handed this connection: `driver`, the current one, opened it, and it is still open. */
+  isUsableWith(driver: SqliteDriver | undefined): boolean {
+    return this.driver === driver && this.db.open;
+  }
 
   retain(options: OpenDatabaseOptions): void {
     if (options.walMode && this.db.pragma('journal_mode', { simple: true }) !== 'wal') {
@@ -91,8 +98,12 @@ export class SqliteConnection {
 
   constructor(private readonly shared: SharedDatabase) {}
 
+  /**
+   * The shared database. With a driver set by `useSqliteDriver()` it is the driver's database, which has the
+   * members of `SqliteDatabase` only.
+   */
   get db(): Database.Database {
-    return this.shared.db;
+    return this.shared.db as Database.Database;
   }
 
   /** Run `operation` in a `BEGIN IMMEDIATE` transaction, after this process's earlier queued operations. */
@@ -119,17 +130,21 @@ export class SqliteConnection {
   }
 }
 
-/** The connection to `path`, shared by resolved path; a later store can switch it to WAL or lengthen its busy timeout. */
+/**
+ * The connection to `path`, shared by resolved path; a later store can switch it to WAL or lengthen its busy timeout.
+ * A connection that another driver opened (see `useSqliteDriver()`) is not shared: the path is opened again.
+ */
 export function acquireConnection(
   path: string,
   storeName: string,
   options: OpenDatabaseOptions = {},
 ): SqliteConnection {
   const cacheKey = PRIVATE_PATHS.has(path) ? undefined : pathResolve(path);
+  const driver = currentSqliteDriver();
   let shared = cacheKey ? sharedByPath.get(cacheKey) : undefined;
-  if (!shared?.db.open) {
+  if (!shared?.isUsableWith(driver)) {
     const busyTimeoutMs = options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS;
-    shared = new SharedDatabase(openDatabase(path, storeName, options), busyTimeoutMs, cacheKey);
+    shared = new SharedDatabase(openDatabase(path, storeName, options), busyTimeoutMs, cacheKey, driver);
     if (cacheKey) sharedByPath.set(cacheKey, shared);
   }
   shared.retain(options);

@@ -6,6 +6,8 @@
  */
 import 'reflect-metadata';
 
+import { DcrClientRegistry } from '@frontmcp/auth';
+
 import { createTestFetchServer, type TestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { decodeJwtPayload, disposeServers, postForm } from '../../__test-utils__/helpers/oauth-flow.helpers';
 import { App, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
@@ -144,8 +146,11 @@ describe('token-bearing responses are never cached', () => {
 
   it('sends no-store when a registration fails unexpectedly', async () => {
     const server = await serverWith({ mode: 'local', dcr: { enabled: true } } as AuthConfig);
+    jest.spyOn(DcrClientRegistry.prototype, 'register').mockImplementationOnce(() => {
+      throw new Error('store unavailable');
+    });
 
-    const response = await postJson(server, '/oauth/register', { redirect_uris: 'not-a-list' });
+    const response = await postJson(server, '/oauth/register', { redirect_uris: ['http://127.0.0.1:33418/callback'] });
 
     expect(response.status).toBe(500);
     expectNoStore(response);

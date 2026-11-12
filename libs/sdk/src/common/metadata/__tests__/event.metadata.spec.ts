@@ -1,5 +1,6 @@
 import { z } from '@frontmcp/lazy-zod';
 
+import { describeConfigIssues } from '../../../errors';
 import { EVENT_NAME_MAX_LENGTH, eventsConfigSchema, frontMcpEventMetadataSchema } from '../event.metadata';
 import { frontMcpMetadataSchema, parseFrontMcpConfigLite } from '../front-mcp.metadata';
 
@@ -245,6 +246,40 @@ describe('events configuration', () => {
       compat: 'sketch',
     });
     expect(() => parseFrontMcpConfigLite({ ...server, events: { compat: 'legacy' } } as never)).toThrow();
+  });
+
+  it.each([
+    ['events', { subscriptons: { maxPerPrincipal: 3 } }, 'events: Unrecognized key: "subscriptons"'],
+    ['events.store', { store: { keyPrefx: 'shop:' } }, 'events.store: Unrecognized key: "keyPrefx"'],
+    [
+      'events.subscriptions',
+      { subscriptions: { maxPerPrincpal: 3 } },
+      'events.subscriptions: Unrecognized key: "maxPerPrincpal"',
+    ],
+    ['events.webhook', { webhook: { enable: false } }, 'events.webhook: Unrecognized key: "enable"'],
+    [
+      'events.webhook.verification',
+      { webhook: { verification: { timeout: 5_000 } } },
+      'events.webhook.verification: Unrecognized key: "timeout"',
+    ],
+    [
+      'events.webhook.delivery',
+      { webhook: { delivery: { attempts: 3 } } },
+      'events.webhook.delivery: Unrecognized key: "attempts"',
+    ],
+    [
+      'events.publishEndpoint',
+      { publishEndpoint: { enable: true } },
+      'events.publishEndpoint: Unrecognized key: "enable"',
+    ],
+    ['events.buffer', { buffer: { maxAge: 60_000 } }, 'events.buffer: Unrecognized key: "maxAge"'],
+    ['events.poll', { poll: { nextPoll: 5_000 } }, 'events.poll: Unrecognized key: "nextPoll"'],
+    ['events.push', { push: { heartbeat: 5_000 } }, 'events.push: Unrecognized key: "heartbeat"'],
+  ])('refuses a key %s does not know, with where it is and its name', (_level, events, issue) => {
+    const refused = frontMcpMetadataSchema.safeParse({ ...server, events });
+
+    expect(describeConfigIssues(refused.error)).toBe(issue);
+    expect(() => parseFrontMcpConfigLite({ ...server, events } as never)).toThrow('Unrecognized key');
   });
 
   it('gives the same settings when its own output is parsed again', () => {

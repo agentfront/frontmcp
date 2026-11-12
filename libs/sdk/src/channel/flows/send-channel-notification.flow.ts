@@ -6,11 +6,13 @@ import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions } from 
 import { InvalidInputError } from '../../errors';
 import type { ChannelNotificationMeta } from '../channel-notification.service';
 import type { ChannelInstance } from '../channel.instance';
+import { channelMetaValuesOf } from '../channel.utils';
 
 const inputSchema = z.object({
   channelName: z.string().min(1),
   content: z.string().min(1),
-  meta: z.record(z.string(), z.string()).optional(),
+  /** Values of any type: `parseInput` turns them into strings (see `channelMetaValuesOf`). */
+  meta: z.record(z.string(), z.unknown()).optional(),
   /** Deliver to this session only (session-scoped events such as agent and job completions). */
   targetSessionId: z.string().min(1).optional(),
 });
@@ -78,7 +80,7 @@ export default class SendChannelNotificationFlow extends FlowBase<typeof name> {
     this.state.set({
       channelName: data.channelName,
       content: data.content,
-      meta: data.meta,
+      meta: data.meta && channelMetaValuesOf(data.meta),
       targetSessionId: data.targetSessionId,
     });
     this.logger.verbose('parseInput:done');

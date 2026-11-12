@@ -58,15 +58,19 @@ export class EventForbiddenError extends EventProtocolError {
 
 const RESOURCE_LIMIT_MESSAGES = {
   subscriptions: (max: number) =>
-    `The limit of ${max} subscriptions per caller is reached. Remove one with events/unsubscribe, then retry.`,
+    `The limit of ${max} webhook subscriptions per caller is reached. Remove one with events/unsubscribe, then retry.`,
+  pollLeases: (max: number) =>
+    `The limit of ${max} poll leases per caller is reached. A lease ends when its subscription is not polled for ` +
+    'its lease time: stop polling one, then retry.',
+  streams: (max: number) => `The limit of ${max} open event streams per caller is reached. Close one, then retry.`,
   verifications: (max: number) =>
     `The callback host was sent ${max} verification requests in the last minute. Retry in a minute.`,
 } as const;
 
-/** `ResourceExhausted`: the caller reached a limit, such as its number of subscriptions. */
+/** `ResourceExhausted`: the caller reached a limit: webhook subscriptions, poll leases, streams or verifications. */
 export class EventResourceExhaustedError extends EventProtocolError {
   /** Names the limit that was reached and its ceiling. */
-  constructor(codes: EventErrorCodes, limit: 'subscriptions' | 'verifications', max: number) {
+  constructor(codes: EventErrorCodes, limit: keyof typeof RESOURCE_LIMIT_MESSAGES, max: number) {
     super(RESOURCE_LIMIT_MESSAGES[limit](max), 'EVENT_RESOURCE_EXHAUSTED', 429, codes.resourceExhausted, {
       limit,
       max,

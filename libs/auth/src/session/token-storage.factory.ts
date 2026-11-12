@@ -12,10 +12,11 @@
  * - The SQLite knowledge lives here, in the auth layer, via a lazy
  *   `require('@frontmcp/storage-sqlite')` — mirroring how the SDK's
  *   `session-store.factory.ts` lazy-loads the SQLite session store. This keeps
- *   `ioredis`/`better-sqlite3` out of bundles that don't use them.
+ *   `ioredis`/`better-sqlite3` out of bundles that don't use them. A bundle that
+ *   contains the package hands it over with `registerOptionalModule()` instead.
  */
 
-import { MemoryStorageAdapter, RedisStorageAdapter, type StorageAdapter } from '@frontmcp/utils';
+import { MemoryStorageAdapter, RedisStorageAdapter, requireOptionalModule, type StorageAdapter } from '@frontmcp/utils';
 
 import { type TokenStorageConfig, type TokenStorageSqliteConfig } from '../options/interfaces';
 import { type RedisConfig } from './transport-session.types';
@@ -62,7 +63,10 @@ export async function createTokenStorageAdapter(config: TokenStorageConfig | und
 
   // sqlite — lazy require to avoid bundling better-sqlite3 when unused.
   if (isSqliteTokenStorage(config)) {
-    const { SqliteStorageAdapter } = require('@frontmcp/storage-sqlite') as typeof import('@frontmcp/storage-sqlite');
+    const { SqliteStorageAdapter } = requireOptionalModule(
+      '@frontmcp/storage-sqlite',
+      () => require('@frontmcp/storage-sqlite') as typeof import('@frontmcp/storage-sqlite'),
+    );
     const adapter: StorageAdapter = new SqliteStorageAdapter({
       path: config.sqlite.path,
       encryption: config.sqlite.encryption,
