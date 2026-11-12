@@ -60,10 +60,10 @@ function globalMap<T>(key: symbol): Map<string, T> {
 
 /** A worker resource by its module, name and URI (or URI template), so two of one module that share a name differ. */
 export function workerResourceKey(file: string, name: string, uri: string): string {
-  return `${file}#${name}#${uri}`;
+  return JSON.stringify([file, name, uri]);
 }
 
-/** A worker job by its module and name. */
-export function workerJobKey(file: string, name: string): string {
-  return `${file}#${name}`;
+/** A worker job by its module, name and id (when it sets one), so two of one module that share a name differ. */
+export function workerJobKey(file: string, name: string, id?: string): string {
+  return JSON.stringify([file, name, id ?? null]);
 }

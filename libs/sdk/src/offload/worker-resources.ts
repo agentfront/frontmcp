@@ -51,11 +51,17 @@ function register(
   const readerKey = workerResourceKey(file ?? '', metadata.name, declaredUri);
   sources.set(key, { file, name: metadata.name, key: readerKey });
   if (!file) return;
+  const readers = workerResourceReaders();
+  if (readers.has(readerKey)) {
+    const message = `${file} declares more than one worker resource named "${metadata.name}" for "${declaredUri}", so a worker cannot tell which one to read: give each its own name`;
+    readers.set(readerKey, { read: () => Promise.reject(new Error(message)) });
+    return;
+  }
   const reader: WorkerResourceReader = {
     read: async (uri, params, log) => {
       const { readWorkerResource } = await import('./worker-resource.reader.js');
       return readWorkerResource(target, metadata, uri, params, log);
     },
   };
-  workerResourceReaders().set(readerKey, reader);
+  readers.set(readerKey, reader);
 }
