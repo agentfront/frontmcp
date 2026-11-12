@@ -6,6 +6,7 @@ import 'reflect-metadata';
 
 import { App, LogLevel, Tool, ToolContext } from '../../../common';
 import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
+import type { Scope } from '../../../scope/scope.instance';
 
 @Tool({ name: 'always_on', inputSchema: {} })
 class AlwaysOnTool extends ToolContext {
@@ -30,7 +31,7 @@ async function codeOfStaleCall(name: string): Promise<unknown> {
     apps: [DeskApp],
     logging: { level: LogLevel.Off },
   });
-  const [scope] = instance.getScopes();
+  const [scope] = instance.getScopes() as Scope[];
   try {
     scope.notifications.registerServer('session-1', {} as Parameters<typeof scope.notifications.registerServer>[1]);
     const ctx = { authInfo: { sessionId: 'session-1' } };
