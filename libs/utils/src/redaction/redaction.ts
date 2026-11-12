@@ -68,14 +68,14 @@ function redactRecord(obj: Record<string, unknown>, depth: number, options: Walk
   return result;
 }
 
-/** A credential after `Bearer` or `Basic`: 8 or more token characters, with a digit or a symbol among them. */
-const AUTH_SCHEME_CREDENTIAL = /\b(Bearer|Basic)([ \t]+)(?=[\w.~+/-]*[\d.~+/_-])[\w.~+/-]{8,}=*/gi;
+/** A credential after `Bearer` or `Basic`: 8 or more token characters with a digit or a symbol, or 20 or more letters. */
+const AUTH_SCHEME_CREDENTIAL = /\b(Bearer|Basic)([ \t]+)(?:(?=[\w.~+/-]*[\d.~+/_-])[\w.~+/-]{8,}|[A-Za-z]{20,})=*/gi;
 const JWT = /(?<![\w-])eyJ[\w-]+(?:\.[\w-]*){2,4}/g;
 const URL_CREDENTIALS = /(?<![a-z\d+.-])([a-z][a-z\d+.-]*:\/\/)[^\s/?#@]+@/gi;
 /** `name=` or `name:`, at the start, in a URL query or fragment, or after a space, quote, comma or brace. */
 const VALUE_NAME = /(?:^|[?&#;,{("'\s])(["']?)([A-Za-z_][\w.-]*)\1[ \t]*[:=][ \t]*/g;
-/** The value after a name: quoted, or up to a space, quote or separator. */
-const NAMED_VALUE = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|[^\s"'&#;?,)}]+/y;
+/** The value after a name: quoted, or up to a space, quote or separator, with the credential after a `Bearer` or `Basic`. */
+const NAMED_VALUE = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|(?:(?:Bearer|Basic)[ \t]+)?[^\s"'&#;?,)}]+/iy;
 
 function redactNamedValues(text: string, isSensitive: (key: string) => boolean): string {
   let redacted = '';

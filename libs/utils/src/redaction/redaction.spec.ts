@@ -199,4 +199,21 @@ describe('redactJson', () => {
     const text = 'Bearer authentication needs a token:\nask the admin';
     expect(redactJson(text, ['token'])).toBe(text);
   });
+
+  it('should redact a bearer credential made only of letters', () => {
+    const body = { message: 'token rejected: Bearer QfVbTkPzWmXnLrHsJdGcYaEuKoBiNtSv' };
+    expect(redactJson(body, ['authorization'])).toEqual({ message: 'token rejected: Bearer [REDACTED]' });
+  });
+
+  it('should redact the scheme and the credential of a header line under a redacted name', () => {
+    const text = 'request was:\nAuthorization: Bearer ywzqkvnhtrbmxp\nAccept: application/json';
+    expect(redactJson(text, ['authorization'])).toBe(
+      'request was:\nAuthorization: [REDACTED]\nAccept: application/json',
+    );
+  });
+
+  it('should keep prose where a scheme is followed by an ordinary word', () => {
+    const text = 'Basic authentication is disabled here, send Bearer authorization instead';
+    expect(redactJson(text, ['authorization'])).toBe(text);
+  });
 });
