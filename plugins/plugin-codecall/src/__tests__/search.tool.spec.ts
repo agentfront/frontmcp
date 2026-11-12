@@ -40,6 +40,7 @@ const mockSearchService = {
   hasTool: jest.fn(),
   search: jest.fn(),
   getTotalCount: jest.fn(),
+  getAllToolNames: jest.fn(),
 };
 
 jest.mock('../services', () => ({
@@ -58,6 +59,34 @@ describe('SearchTool', () => {
     // Default mock implementations
     mockSearchService.hasTool.mockReturnValue(true);
     mockSearchService.getTotalCount.mockReturnValue(100);
+  });
+
+  describe('Authorities', () => {
+    it('leaves out the tools their authorities withhold from the caller, and counts them as missing', async () => {
+      tool.scope = {
+        tools: {
+          getTools: () => [
+            { name: 'admin:purge', fullName: 'admin:purge', metadata: { authorities: { allow: false } } },
+            { name: 'users:list', fullName: 'users:list', metadata: {} },
+          ],
+        },
+        authoritiesEngine: { evaluate: async (authorities: { allow: boolean }) => ({ granted: authorities.allow }) },
+        authoritiesContextBuilder: { build: (authInfo: unknown) => authInfo },
+      };
+      mockSearchService.search.mockResolvedValue([]);
+      mockSearchService.getAllToolNames.mockReturnValue(['admin:purge', 'users:list']);
+
+      const result: SearchToolOutput = await tool.execute({ queries: ['purge'], excludeToolNames: ['admin:purge'] });
+
+      expect(mockSearchService.search).toHaveBeenCalledWith(
+        'purge',
+        expect.objectContaining({ excludeToolNames: expect.arrayContaining(['admin:purge']) }),
+      );
+      expect(result.warnings).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'excluded_tool_not_found' })]),
+      );
+      expect(result.totalAvailableTools).toBe(1);
+    });
   });
 
   describe('Multi-Query Search', () => {

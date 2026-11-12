@@ -606,6 +606,33 @@ describe('ExecuteTool', () => {
   });
 
   describe('getTool Environment Function', () => {
+    it("does not describe a tool its authorities withhold from the script's caller", async () => {
+      const mockTools = [
+        {
+          name: 'admin:purge',
+          fullName: 'admin:purge',
+          metadata: { description: 'Purge everything', authorities: { allow: false } },
+          getInputJsonSchema: () => ({ type: 'object' }),
+        },
+      ];
+      const { tool, mockEnclave } = createExecuteTool({ tools: mockTools });
+      Object.assign(tool.scope, {
+        authoritiesEngine: { evaluate: async (authorities: { allow: boolean }) => ({ granted: authorities.allow }) },
+        authoritiesContextBuilder: { build: (authInfo: unknown) => authInfo },
+      });
+      mockEnclave.execute.mockImplementation(async (_script: string, env: any) => ({
+        success: true,
+        result: env.getTool('admin:purge') ?? null,
+        logs: [],
+        timedOut: false,
+      }));
+
+      const result = await tool.execute({ script: 'return getTool("admin:purge");' });
+
+      expect(result.status).toBe('ok');
+      expect(result.result).toBeNull();
+    });
+
     it('should find tool by name', async () => {
       const inputJsonSchema = { type: 'object', properties: { limit: { type: 'number' } } };
       const outputJsonSchema = { type: 'object', properties: { users: { type: 'array' } } };

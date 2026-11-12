@@ -1,6 +1,7 @@
 // file: libs/plugins/src/codecall/tools/search.tool.ts
 import { getCallSurface, Tool, ToolContext } from '@frontmcp/sdk';
 
+import { toolsWithheldByAuthorities } from '../security/codecall-discovery-authorities';
 import { ToolSearchService } from '../services';
 import { AuditLoggerService } from '../services/audit-logger.service';
 import {
@@ -53,11 +54,12 @@ export default class SearchTool extends ToolContext {
     // Search what the caller of this tool could reach: a tool its surface isn't offered on is
     // reported like one that isn't indexed at all.
     const surface = getCallSurface();
+    // A tool whose authorities withhold it from the caller is reported like one that isn't indexed, as in tools/list.
+    const withheld = await toolsWithheldByAuthorities(this.scope, this.authInfo);
+    const isReachable = (toolName: string) => searchService.hasTool(toolName, surface) && !withheld.has(toolName);
 
     // Check for excluded tools that don't exist in the index
-    const nonExistentExcludedTools = excludeToolNames.filter(
-      (toolName: string) => !searchService.hasTool(toolName, surface),
-    );
+    const nonExistentExcludedTools = excludeToolNames.filter((toolName: string) => !isReachable(toolName));
 
     if (nonExistentExcludedTools.length > 0) {
       warnings.push({
@@ -76,7 +78,7 @@ export default class SearchTool extends ToolContext {
       const searchResults = await searchService.search(query, {
         topK,
         appIds,
-        excludeToolNames,
+        excludeToolNames: [...excludeToolNames, ...withheld],
         surface,
       });
 
@@ -140,7 +142,10 @@ export default class SearchTool extends ToolContext {
     return {
       tools,
       warnings,
-      totalAvailableTools: searchService.getTotalCount(surface),
+      totalAvailableTools:
+        withheld.size === 0
+          ? searchService.getTotalCount(surface)
+          : searchService.getAllToolNames().filter(isReachable).length,
     };
   }
 }

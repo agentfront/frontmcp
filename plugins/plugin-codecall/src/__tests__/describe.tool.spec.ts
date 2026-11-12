@@ -96,6 +96,22 @@ describe('DescribeTool', () => {
   });
 
   describe('Tool Lookup', () => {
+    it('reports a tool its authorities withhold from the caller as not found, as tools/list leaves it out', async () => {
+      const tool = createDescribeTool([
+        createMockTool({ name: 'admin:purge', metadata: { authorities: { allow: false } } }),
+        createMockTool({ name: 'users:list', metadata: { authorities: { allow: true } } }),
+      ]);
+      tool.scope.authoritiesEngine = {
+        evaluate: async (authorities: { allow: boolean }) => ({ granted: authorities.allow }),
+      };
+      tool.scope.authoritiesContextBuilder = { build: (authInfo: unknown) => authInfo };
+
+      const result = await tool.execute({ toolNames: ['admin:purge', 'users:list'] });
+
+      expect(result.tools.map((described: { name: string }) => described.name)).toEqual(['users:list']);
+      expect(result.notFound).toEqual(['admin:purge']);
+    });
+
     it('should find tool by exact name', async () => {
       const mockTools = [
         createMockTool({
