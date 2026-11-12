@@ -33,7 +33,7 @@ FrontMCP's HA module lets any pod receive any request of an MCP session, using R
 - Redis 6+ accessible from all pods
 - `@frontmcp/sdk` and `@frontmcp/cli` installed
 - `FRONTMCP_DEPLOYMENT_MODE=distributed` environment variable
-- The same `MCP_SESSION_SECRET` on every pod (session ids are encrypted with it; a pod with another secret answers other pods' sessions with `404`)
+- The same `MCP_SESSION_SECRET` on every pod (session ids are encrypted with it; a pod with another secret answers other pods' sessions with `404`). A distributed deployment needs it outside production too: without it, creating a session fails with `SESSION_SECRET_REQUIRED` (up to 1.12.0 it fell back to a key derived from the machine id)
 
 ## Step 1: Configure @FrontMcp Decorator
 

@@ -45,7 +45,7 @@ describe('Authenticated Server', () => {
   });
 
   it('rejects unauthenticated requests', async () => {
-    // withPublicMode() = no Authorization header, no anonymous-token request.
+    // withPublicMode() = no anonymous-token request; with no token given, no Authorization header.
     const client = await McpTestClient.create({ baseUrl: server.info.baseUrl })
       .withTransport('streamable-http')
       .withPublicMode()

@@ -20,6 +20,8 @@ An `auth.extras[name]` handler adds a side endpoint the page POSTs to mid-flow (
 the authorization). Each accepted submission is appended to a per-`(pending-auth, extra)`
 accumulator the framework keeps; the response carries the full accumulator back so the page
 refreshes via `useAddedItems` without a reload. CSRF is verified server-side on every POST.
+An extra holds at most 100 items per pending authorization: a submission that would go past that
+is refused with `This list holds at most 100 items.` and the items already accepted are kept.
 
 ## Code
 

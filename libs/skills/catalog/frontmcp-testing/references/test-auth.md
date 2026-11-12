@@ -38,7 +38,7 @@ describe('Authenticated Server', () => {
   it('rejects unauthenticated requests', async () => {
     const client = await McpTestClient.create({ baseUrl: server.info.baseUrl })
       .withTransport('streamable-http')
-      .withPublicMode() // do not request an anonymous token; send no Authorization header
+      .withPublicMode() // do not request an anonymous token; with no token given, send no Authorization header
       .buildAndConnect();
 
     const result = await client.tools.call('protected_tool', {});
