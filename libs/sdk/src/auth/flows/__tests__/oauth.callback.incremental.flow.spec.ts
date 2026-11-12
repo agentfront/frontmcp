@@ -56,6 +56,7 @@ async function seedIncrementalPending(
     priorAuthorizedAppIds?: string[];
     ticketProfile?: { email?: string; name?: string };
     federatedProviderIds?: string[];
+    consentToolIds?: string[];
   },
 ): Promise<string> {
   const store = scope.auth.authorizationStore;
@@ -75,6 +76,9 @@ async function seedIncrementalPending(
     priorAuthorizedAppIds: opts.priorAuthorizedAppIds,
     federatedLogin: opts.federatedProviderIds
       ? { providerIds: opts.federatedProviderIds, selectedProviderIds: undefined, skippedProviderIds: undefined }
+      : undefined,
+    consent: opts.consentToolIds
+      ? { enabled: true, availableToolIds: opts.consentToolIds, selectedToolIds: undefined, consentCompleted: false }
       : undefined,
   });
   if (opts.ticketProfile) {
@@ -428,5 +432,55 @@ describe('OAuth Callback Flow — authorized_apps of a sign-in through the provi
 
     expect(output?.kind).toBe('redirect');
     expect(store.mock.calls[0]?.[0].authorizedAppIds).toEqual(['notes']);
+  });
+});
+
+describe('OAuth Callback Flow — tool consent on an incremental authorization', () => {
+  const TOOL_IDS = ['notes:create', 'notes:list', 'tasks:add'];
+
+  function consentScope() {
+    return createMockScopeEntry({
+      auth: { mode: 'local', incrementalAuth: { enabled: true }, consent: { enabled: true } } as any,
+      apps: APPS,
+      tools: TOOL_IDS.map((id) => ({ id, name: id })),
+    });
+  }
+
+  it.each([
+    ['a local sign-in', undefined],
+    ['a sign-in through the provider picker', ['__parent__', 'tasks']],
+  ])('keeps the tools the user chose on %s, instead of every offered tool', async (_label, federatedProviderIds) => {
+    const scope = consentScope();
+    await (scope.auth as any).consentStore.set({
+      userSub: 'user-1',
+      clientId: 'local-client',
+      selectedToolIds: ['notes:create'],
+      seenToolIds: TOOL_IDS,
+      updatedAt: Date.now(),
+    });
+    const pendingAuthId = await seedIncrementalPending(scope, {
+      targetAppId: 'tasks',
+      priorAuthorizedAppIds: ['notes'],
+      federatedProviderIds,
+      consentToolIds: TOOL_IDS,
+    });
+
+    const { state } = await runFlowStages(makeCallback(scope, pendingAuthId), ['parseInput', 'validatePendingAuth']);
+
+    expect(state.selectedTools).toEqual(['notes:create']);
+  });
+
+  it('asks which tools to enable when no earlier choice is remembered', async () => {
+    const scope = consentScope();
+    const pendingAuthId = await seedIncrementalPending(scope, { targetAppId: 'tasks', consentToolIds: TOOL_IDS });
+
+    const { output, state } = await runFlowStages(makeCallback(scope, pendingAuthId), [
+      'parseInput',
+      'validatePendingAuth',
+    ]);
+
+    expect(output?.kind).toBe('html');
+    expect(String(output?.body)).toContain('Select Tools to Enable');
+    expect(state.selectedTools).toBeUndefined();
   });
 });

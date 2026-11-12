@@ -588,10 +588,10 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
     // Federated logins mint in the provider-callback flow AFTER all providers
     // are linked; consent for federated is shown there (or routed back here with
-    // a selection). So the callback only runs the consent gate for the
-    // non-federated, non-incremental local login path.
+    // a selection). An incremental authorization always mints here, so the
+    // callback runs the consent gate for it and for the non-federated local login.
     const effectiveFederated = isFederated || !!pendingAuth.federatedLogin;
-    const consentGateApplies = consentEnabled && !effectiveFederated && !isIncremental;
+    const consentGateApplies = consentEnabled && (isIncremental || !effectiveFederated);
 
     // `rememberConsent` (default true): reuse a prior per-(user, client) tool
     // selection so a returning user is not re-prompted unless a NEW tool appeared.
