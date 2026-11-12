@@ -143,6 +143,24 @@ describe('identifySharedServer', () => {
     }
   });
 
+  it('stops reading an answer once it passes the size of a proof, whatever length it stated', async () => {
+    let chunksRead = 0;
+    const expanding = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        chunksRead++;
+        controller.enqueue(new Uint8Array(1_024).fill(0x20));
+        if (chunksRead === 64) controller.close();
+      },
+    });
+    const endpoint = {
+      ...httpEndpoint(1),
+      fetch: async () => new Response(expanding, { headers: { 'content-length': '100' } }),
+    };
+
+    await expect(identifySharedServer(endpoint, proofKey)).resolves.toEqual({ outcome: 'refused' });
+    expect(chunksRead).toBeLessThanOrEqual(3);
+  });
+
   it('reports an endpoint nothing listens on as unreachable', async () => {
     stub = await startIdentityStub({ secret, behavior: 'prove' });
     const { port } = stub;
