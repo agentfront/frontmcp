@@ -80,6 +80,14 @@ class MutedChannel extends ChannelContext {
   }
 }
 
+/** Sends its payload as the notification's `meta`, whatever the types of its values. */
+@Channel({ name: 'orders', source: { type: 'app-event', event: 'order' } })
+class OrdersChannel extends ChannelContext {
+  async onEvent(payload: unknown): Promise<ChannelNotification> {
+    return { content: 'order paid', meta: payload as Record<string, string> };
+  }
+}
+
 @Tool({ name: 'raise', inputSchema: { event: z.string(), text: z.string() } })
 class RaiseTool extends ToolContext {
   async execute(input: { event: string; text: string }) {
@@ -113,7 +121,7 @@ class ChannelPolicyPlugin {
   name: 'Desk',
   plugins: [ChannelPolicyPlugin],
   tools: [RaiseTool],
-  channels: [ChatChannel, PresenceChannel, AlertsChannel, MutedChannel],
+  channels: [ChatChannel, PresenceChannel, AlertsChannel, MutedChannel, OrdersChannel],
 })
 class DeskApp {}
 
@@ -191,6 +199,19 @@ describe('channels', () => {
     expect(sends).toEqual([{ channel: 'alerts', content: 'manual push' }]);
     expect(received).toEqual([
       { content: 'manual push', meta: { server: 'desk', room: 'default', level: 'warn', source: 'alerts' } },
+    ]);
+  });
+
+  it('sends a meta value that is not a string as one, an object as JSON, and leaves out one that is not there', async () => {
+    const mixedMeta = { attempt: 3, urgent: true, order: { id: 'o-1' }, 'chat-id': 42, owner: undefined, team: null };
+    const sentMeta = { attempt: '3', urgent: 'true', order: '{"id":"o-1"}', chat_id: '42' };
+
+    await channelOf(server, 'orders').handleEvent(mixedMeta);
+    await scopeOf(server).channelNotifications?.send('alerts', 'manual push', mixedMeta as never);
+
+    expect(received).toEqual([
+      { content: 'order paid', meta: { server: 'desk', room: 'default', ...sentMeta, source: 'orders' } },
+      { content: 'manual push', meta: { server: 'desk', room: 'default', ...sentMeta, source: 'alerts' } },
     ]);
   });
 

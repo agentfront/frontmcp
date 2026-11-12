@@ -148,7 +148,10 @@ export type ChannelSourceConfig =
 export interface ChannelNotification {
   /** The notification content (appears inside <channel> tags in Claude) */
   content: string;
-  /** Optional metadata key-value pairs (become XML attributes on the <channel> tag) */
+  /**
+   * Optional metadata key-value pairs (become XML attributes on the <channel> tag). A value that is `undefined` or
+   * `null` is left out, an object is sent as its JSON, and any other value as a string.
+   */
   meta?: Record<string, string>;
 }
 

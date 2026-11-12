@@ -456,8 +456,10 @@ Deploy succeeded: v1.2.3
 
 Claude Code drops a `meta` key that has anything but letters, digits and underscores. `channelMetaOf()` in
 `channel.utils.ts` makes the keys of every notification safe before it is sent: any other character becomes `_`
-(`chat-id` is sent as `chat_id`), an empty key and a missing value are left out, and values are sent as strings.
-`ChannelNotificationService` applies it, and so does an event with the `channel` option.
+(`chat-id` is sent as `chat_id`), an empty key and a missing value are left out, and values are sent as strings, an
+object as its JSON. `ChannelNotificationService` applies it, and so does an event with the `channel` option. The
+`channels:send-notification` flow turns the values into strings first, so a number or an object in what `onEvent()`
+returns is sent, not refused.
 
 ## Key Classes
 

@@ -31,11 +31,15 @@ describe('channelMetaOf', () => {
     expect(channelMetaOf({ '': 'nameless', env: 'prod' })).toEqual({ env: 'prod' });
   });
 
-  it('sends every value as a string, and leaves out one that is not there', () => {
-    expect(channelMetaOf({ attempt: 3, urgent: true, note: '', owner: undefined, team: null })).toEqual({
+  it('sends every value as a string, an object as JSON, and leaves out one that is not there', () => {
+    const meta = { attempt: 3, urgent: true, note: '', order: { id: 'o-1' }, tags: ['a', 'b'], owner: undefined };
+
+    expect(channelMetaOf({ ...meta, team: null })).toEqual({
       attempt: '3',
       urgent: 'true',
       note: '',
+      order: '{"id":"o-1"}',
+      tags: '["a","b"]',
     });
   });
 });
