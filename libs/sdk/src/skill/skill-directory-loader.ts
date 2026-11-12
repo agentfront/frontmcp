@@ -9,7 +9,17 @@
  * @module skill/skill-directory-loader
  */
 
-import { basename, fileExists, isAbsolute, pathJoin, pathResolve, readdir, readFile, stat } from '@frontmcp/utils';
+import {
+  basename,
+  fileExists,
+  isAbsolute,
+  pathJoin,
+  pathResolve,
+  readdir,
+  readFile,
+  realpath,
+  stat,
+} from '@frontmcp/utils';
 
 import { type FrontMcpLogger } from '../common';
 import { skillMetadataSchema, type SkillMetadata, type SkillResources } from '../common/metadata/skill.metadata';
@@ -91,11 +101,16 @@ export async function findNestedSkillMd(
   maxDepth: number = Number.POSITIVE_INFINITY,
 ): Promise<string[]> {
   const found: string[] = [];
+  const visited = new Set<string>();
 
   async function walk(current: string, depth: number, relPath: string): Promise<void> {
     if (depth > maxDepth) return;
     let entries: string[];
     try {
+      // Each directory is walked once, however many links lead to it
+      const realDir = await realpath(current);
+      if (visited.has(realDir)) return;
+      visited.add(realDir);
       entries = await readdir(current);
     } catch (err: unknown) {
       // Missing directory is fine (race with removal); any other error
