@@ -97,8 +97,49 @@ describe('StorageAuthorizationStore', () => {
       expect(retrieved?.used).toBe(true);
     });
 
-    it('markCodeUsed is a no-op for an unknown code', async () => {
-      await expect(store.markCodeUsed('nope')).resolves.toBeUndefined();
+    it('refuses to mark an unknown code used', async () => {
+      await expect(store.markCodeUsed('nope')).rejects.toThrow('already redeemed');
+    });
+
+    it('lets only one of two concurrent token requests mark a code used', async () => {
+      const record = makeCodeRecord();
+      await store.storeAuthorizationCode(record);
+
+      const results = await Promise.allSettled([store.markCodeUsed(record.code), store.markCodeUsed(record.code)]);
+
+      expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+    });
+
+    it('refuses to mark a code used twice', async () => {
+      const record = makeCodeRecord();
+      await store.storeAuthorizationCode(record);
+      await store.markCodeUsed(record.code);
+
+      await expect(store.markCodeUsed(record.code)).rejects.toThrow('already redeemed');
+    });
+
+    it('records the refresh token issued from a code marked used, and keeps the time to live', async () => {
+      const record = makeCodeRecord();
+      await store.storeAuthorizationCode(record);
+      await store.markCodeUsed(record.code);
+      await store.markCodeUsed(record.code, 'issued-refresh-token');
+
+      expect(await store.getAuthorizationCode(record.code)).toMatchObject({
+        used: true,
+        issuedRefreshToken: 'issued-refresh-token',
+      });
+      expect(await adapter.ttl(`oauth:code:${record.code}`)).toBeGreaterThan(0);
+    });
+
+    it('refuses to redeem a code on an adapter that cannot compare and delete in one step', async () => {
+      const record = makeCodeRecord();
+      await store.storeAuthorizationCode(record);
+      Object.assign(adapter, { deleteIfEquals: undefined });
+
+      await expect(store.markCodeUsed(record.code)).rejects.toThrow(
+        'Use the memory, Redis, Upstash, Vercel KV or SQLite',
+      );
+      expect((await store.getAuthorizationCode(record.code))?.used).toBe(false);
     });
 
     it('deletes a code record', async () => {
@@ -185,6 +226,35 @@ describe('StorageAuthorizationStore', () => {
       expect(await store.getRefreshToken(oldRecord.token)).toBeNull();
       const rotated = await store.getRefreshToken(newRecord.token);
       expect(rotated?.previousToken).toBe(oldRecord.token);
+    });
+
+    it('lets only one of two concurrent rotations of a refresh token succeed', async () => {
+      const oldRecord = makeRefreshRecord();
+      await store.storeRefreshToken(oldRecord);
+      const firstSuccessor = makeRefreshRecord();
+      const secondSuccessor = makeRefreshRecord();
+
+      const results = await Promise.allSettled([
+        store.rotateRefreshToken(oldRecord.token, firstSuccessor),
+        store.rotateRefreshToken(oldRecord.token, secondSuccessor),
+      ]);
+      const liveSuccessors = [
+        await store.getRefreshToken(firstSuccessor.token),
+        await store.getRefreshToken(secondSuccessor.token),
+      ].filter((record) => record !== null);
+
+      expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+      expect(liveSuccessors).toHaveLength(1);
+    });
+
+    it('refuses to rotate a revoked refresh token', async () => {
+      const oldRecord = makeRefreshRecord();
+      await store.storeRefreshToken(oldRecord);
+      await store.revokeRefreshToken(oldRecord.token);
+      const newRecord = makeRefreshRecord();
+
+      await expect(store.rotateRefreshToken(oldRecord.token, newRecord)).rejects.toThrow('already rotated');
+      expect(await store.getRefreshToken(newRecord.token)).toBeNull();
     });
   });
 
