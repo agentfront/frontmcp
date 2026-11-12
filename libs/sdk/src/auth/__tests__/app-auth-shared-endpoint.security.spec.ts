@@ -82,4 +82,21 @@ describe('the suggestion on a refused auth configuration', () => {
     expect(suggestion).toContain('splitByApp: true');
     expect(suggestion).toContain('incrementalAuth');
   });
+
+  it('points an app whose identity provider shares the server host but is another issuer at providerConfig.id', async () => {
+    @App({
+      name: 'billing',
+      auth: { mode: 'transparent', provider: 'https://idp.example.com/realms/billing' },
+      tools: [ListInvoicesTool],
+    })
+    class BillingApp {}
+
+    const suggestion = await suggestionFor({
+      info: { name: 'gw', version: '1.0.0' },
+      auth: { mode: 'transparent', provider: 'https://idp.example.com/realms/main' },
+      apps: [BillingApp],
+    });
+
+    expect(suggestion).toContain('providerConfig: { id:');
+  });
 });

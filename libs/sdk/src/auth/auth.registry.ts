@@ -206,6 +206,9 @@ export class AuthRegistry extends RegistryAbstract<AuthProviderEntry, AuthProvid
         `   App.remote(url, { remoteAuth: { mode: 'static', credentials: { type: 'bearer', value: '...' } } })`
       );
     }
+    if (error.includes('both get the provider id')) {
+      return `Give each identity provider an id of its own:\n   auth: { mode: 'transparent', provider: '...', providerConfig: { id: 'tenant-a' } }`;
+    }
     if (error.startsWith('App-level auth is not enforced')) {
       return (
         `1. Serve the app on its own endpoint: @App({ standalone: true }) or @FrontMcp({ splitByApp: true })\n` +
