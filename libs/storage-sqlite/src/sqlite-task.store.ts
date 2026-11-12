@@ -26,6 +26,8 @@
 
 import { EventEmitter } from 'node:events';
 
+import type Database from 'better-sqlite3';
+
 import { getHostname } from '@frontmcp/utils';
 
 import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
@@ -403,8 +405,12 @@ export class SqliteTaskStore implements TaskStoreInterface {
     }
   }
 
-  getDatabase(): SqliteDatabase {
-    return this.db;
+  /**
+   * The underlying database. With a driver set by `useSqliteDriver()` it is the driver's database, which has the
+   * members of `SqliteDatabase` only.
+   */
+  getDatabase(): Database.Database {
+    return this.db as Database.Database;
   }
 
   private insertWithinLimit(record: TaskRecord, maxActive: number): boolean {

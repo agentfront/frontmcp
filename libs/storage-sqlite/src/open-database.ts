@@ -12,6 +12,8 @@
  * 2. **ESM-safe native module load.** See {@link loadBetterSqlite3}.
  */
 
+import type Database from 'better-sqlite3';
+
 import { dirname, ensureDirSync } from '@frontmcp/utils';
 
 import { loadBetterSqlite3 } from './better-sqlite3-loader';
@@ -94,10 +96,11 @@ function builtInDriver(path: string, storeName: string): SqliteDriver {
  * @param path - Filesystem path to the `.sqlite` file, or `:memory:`.
  * @param storeName - Name used in error messages (e.g. `'SqliteKvStore'`).
  * @param options - `busyTimeoutMs` (set before anything else touches the file) and `walMode`.
- * @returns An open database: a better-sqlite3 `Database`, or the one the driver opened.
+ * @returns An open better-sqlite3 `Database` instance. With a driver set by `useSqliteDriver()` it is the
+ *   driver's database, which has the members of `SqliteDatabase` only.
  * @throws Error wrapping the underlying failure with the store name and path.
  */
-export function openDatabase(path: string, storeName: string, options: OpenDatabaseOptions = {}): SqliteDatabase {
+export function openDatabase(path: string, storeName: string, options: OpenDatabaseOptions = {}): Database.Database {
   const open = currentSqliteDriver() ?? builtInDriver(path, storeName);
 
   let db: SqliteDatabase;
@@ -118,5 +121,5 @@ export function openDatabase(path: string, storeName: string, options: OpenDatab
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`${storeName}: failed to configure database at "${path}": ${message}`, { cause: err });
   }
-  return db;
+  return db as Database.Database;
 }

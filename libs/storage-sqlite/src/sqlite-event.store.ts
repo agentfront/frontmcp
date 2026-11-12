@@ -5,6 +5,8 @@
  * Stores events in SQLite with TTL-based expiration and max event limits.
  */
 
+import type Database from 'better-sqlite3';
+
 import { withBusyRetry } from './open-database';
 import { acquireConnection, type SqliteConnection } from './sqlite-connection';
 import type { SqliteDatabase, SqliteStatement } from './sqlite-driver';
@@ -232,9 +234,11 @@ export class SqliteEventStore implements EventStoreInterface {
 
   /**
    * Get the underlying database instance.
+   * With a driver set by `useSqliteDriver()` it is the driver's database, which has the members of
+   * `SqliteDatabase` only.
    */
-  getDatabase(): SqliteDatabase {
-    return this.db;
+  getDatabase(): Database.Database {
+    return this.db as Database.Database;
   }
 
   /**

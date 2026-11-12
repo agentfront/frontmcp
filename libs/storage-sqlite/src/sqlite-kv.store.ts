@@ -5,6 +5,8 @@
  * Supports TTL expiration, optional encryption, and WAL mode.
  */
 
+import type Database from 'better-sqlite3';
+
 import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
 import { withBusyRetry } from './open-database';
 import { acquireConnection, type SqliteConnection } from './sqlite-connection';
@@ -335,9 +337,11 @@ export class SqliteKvStore {
   /**
    * Get the underlying database instance (for advanced use cases / testing).
    * Other stores on the same file share it, so do not close it directly.
+   * With a driver set by `useSqliteDriver()` it is the driver's database, which has the members of
+   * `SqliteDatabase` only.
    */
-  getDatabase(): SqliteDatabase {
-    return this.db;
+  getDatabase(): Database.Database {
+    return this.db as Database.Database;
   }
 
   /** The connection this store shares with the other stores on its file, with its queue of operations. */

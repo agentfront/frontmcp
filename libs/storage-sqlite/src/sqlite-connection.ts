@@ -1,3 +1,5 @@
+import type Database from 'better-sqlite3';
+
 import { pathResolve } from '@frontmcp/utils';
 
 import {
@@ -96,8 +98,12 @@ export class SqliteConnection {
 
   constructor(private readonly shared: SharedDatabase) {}
 
-  get db(): SqliteDatabase {
-    return this.shared.db;
+  /**
+   * The shared database. With a driver set by `useSqliteDriver()` it is the driver's database, which has the
+   * members of `SqliteDatabase` only.
+   */
+  get db(): Database.Database {
+    return this.shared.db as Database.Database;
   }
 
   /** Run `operation` in a `BEGIN IMMEDIATE` transaction, after this process's earlier queued operations. */
