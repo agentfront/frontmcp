@@ -9,8 +9,8 @@ import { splitSessionByDay, toMs } from '../utils/time';
 @Tool({
   name: 'admin-add-exit',
   description: 'Admin: add an exit (end) for an employee at a specific time (must have an open session) at a site',
+  site: { siteScoped: true, adminRequired: true },
   inputSchema: {
-    admin: z.boolean().refine((v) => v === true, 'Admin privileges required'),
     employeeId: z.string().min(1),
     siteId: z.string().min(1),
     at: z.union([z.number(), z.string()]),
@@ -22,7 +22,7 @@ import { splitSessionByDay, toMs } from '../utils/time';
   }),
 })
 export default class AdminAddExitTool extends ToolContext {
-  async execute(input: { admin: boolean; employeeId: string; siteId: string; at: number | string }) {
+  async execute(input: { employeeId: string; siteId: string; at: number | string }) {
     const redis = this.get(EmployeeRedisProvider);
     const dir = this.get(EmployeeDirectoryProvider);
     const { employeeId, siteId } = input;
