@@ -26,6 +26,7 @@ const outputSchema = { parse: (v: unknown) => v } as any;
 
 function makeFlow(opts: {
   tool: { name: string; fullName: string; owner?: { id: string; kind?: string; ref?: unknown } };
+  lineage?: Array<{ kind: string; id: string }>;
   authInfo?: Record<string, unknown>;
   apps?: Array<{ id: string; name: string; auth?: { mode: string } }>;
   incrementalAuth?: { enabled?: boolean; skippedAppBehavior?: 'anonymous' | 'require-auth' };
@@ -33,6 +34,7 @@ function makeFlow(opts: {
   const auth: any = { mode: 'local' };
   if (opts.incrementalAuth) auth.incrementalAuth = opts.incrementalAuth;
   const scope = createMockScopeEntry({ auth, apps: opts.apps });
+  (scope.tools as unknown as { lineageOf: () => unknown }).lineageOf = () => opts.lineage;
   const metadata = {
     name: 'tools:call-tool',
     plan: { pre: ['checkToolAuthorization'], execute: [], finalize: [] },
@@ -186,6 +188,51 @@ describe('call-tool app-level authorization (progressive/incremental)', () => {
       authInfo: { extra: { user: { sub: 'u1', authorized_apps: ['notes'] } } },
     });
     await expect(flow.checkToolAuthorization()).rejects.toBeInstanceOf(AuthorizationRequiredError);
+  });
+
+  it("gates a tool a plugin contributes to an app by that app's grant, not by the plugin's name", async () => {
+    const pluginTool = { name: 'sync', fullName: 'tasks:sync', owner: { id: 'notes', kind: 'plugin' } };
+    const lineage = [
+      { kind: 'scope', id: 'root' },
+      { kind: 'app', id: 'tasks' },
+      { kind: 'plugin', id: 'notes' },
+    ];
+    const grantedNotes = { extra: { user: { sub: 'u1', authorized_apps: ['notes'] } } };
+    const grantedTasks = { extra: { user: { sub: 'u1', authorized_apps: ['tasks'] } } };
+    const flow = (authInfo: Record<string, unknown>) =>
+      makeFlow({ tool: pluginTool, lineage, apps: APPS, incrementalAuth: { enabled: true }, authInfo });
+
+    await expect(flow(grantedNotes).checkToolAuthorization()).rejects.toBeInstanceOf(AuthorizationRequiredError);
+    await expect(flow(grantedTasks).checkToolAuthorization()).resolves.toBeUndefined();
+  });
+
+  it("gates an adapter's tool by the grant of the app it is installed on", async () => {
+    const adapterTool = { name: 'list', fullName: 'tasks:list', owner: { id: 'notes', kind: 'adapter' } };
+    const flow = makeFlow({
+      tool: adapterTool,
+      lineage: [
+        { kind: 'app', id: 'tasks' },
+        { kind: 'adapter', id: 'notes' },
+      ],
+      apps: APPS,
+      incrementalAuth: { enabled: true },
+      authInfo: { extra: { user: { sub: 'u1', authorized_apps: ['notes'] } } },
+    });
+    await expect(flow.checkToolAuthorization()).rejects.toBeInstanceOf(AuthorizationRequiredError);
+  });
+
+  it('allows a tool a server-level plugin contributes, which belongs to no app, as a server-level tool', async () => {
+    const flow = makeFlow({
+      tool: { name: 'remember', fullName: 'remember', owner: { id: 'notes', kind: 'plugin' } },
+      lineage: [
+        { kind: 'scope', id: 'root' },
+        { kind: 'plugin', id: 'notes' },
+      ],
+      apps: APPS,
+      incrementalAuth: { enabled: true },
+      authInfo: { extra: { user: { sub: 'u1', authorized_apps: ['tasks'] } } },
+    });
+    await expect(flow.checkToolAuthorization()).resolves.toBeUndefined();
   });
 
   it('allows ALL tools when the token carries NO authorized_apps claim (default preserved)', async () => {

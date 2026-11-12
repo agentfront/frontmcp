@@ -94,7 +94,7 @@ import { generateTaskId } from '../../task/helpers/task-id';
 import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
 import { linkedAbortController } from '../../utils/abort.utils';
-import { hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
+import { appOwnerIdOf, hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
 import { toolOutputPolicies } from '../tool-output-policy';
 import { toolServingMode } from '../ui/serving-mode-default';
 import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
@@ -785,7 +785,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
 
     // A server-level tool (`@FrontMcp({ tools })`) belongs to no app to authorize
-    const appId = isServerEntryOwner(tool?.owner) ? undefined : tool?.owner?.id;
+    const appId = !tool || isServerEntryOwner(tool.owner) ? undefined : this.grantingAppIdOf(tool);
     if (!appId) {
       this.logger.verbose('checkToolAuthorization:skip (no app owner)');
       return;
@@ -848,6 +848,13 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     }
 
     this.logger.verbose('checkToolAuthorization:done');
+  }
+
+  /** The app whose grant a tool needs: a plugin's or adapter's tool needs its app's, and none outside every app. */
+  private grantingAppIdOf(tool: CallToolEntry): string | undefined {
+    const { owner } = tool;
+    if (owner?.kind !== 'plugin' && owner?.kind !== 'adapter') return owner?.id;
+    return appOwnerIdOf(this.scope.tools.lineageOf(tool as ToolEntry) ?? [], owner);
   }
 
   /**
