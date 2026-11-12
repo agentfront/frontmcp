@@ -165,10 +165,11 @@ function isTextMimeType(mimeType: string): boolean {
  *      body inline; we serve from there first. This satisfies SEP-2640's
  *      "skills MUST function correctly without a local filesystem"
  *      requirement.
- *   2. **Filesystem under the skill's base directory** — for file-backed
- *      skills with declared `resources.{references,examples,scripts,assets}`
- *      directories or top-level files like `LICENSE`. Path-traversal is
- *      blocked via prefix check + explicit `.` / `..` segment rejection.
+ *   2. **Filesystem** — the declared `resources.{references,examples,scripts,assets}`
+ *      directories, and for a skill directory (loaded from a `SKILL.md`) also its
+ *      other files, like `LICENSE`. A skill declared in code does not publish the
+ *      folder of its module. Path-traversal is blocked via prefix check + explicit
+ *      `.` / `..` segment rejection.
  *
  * Returns either a text or blob result depending on the MIME type, so
  * binary assets (images, archives) are not corrupted by UTF-8 decoding.
@@ -234,6 +235,9 @@ export async function readSkillFileByPath(instance: SkillInstance, filePath: str
     throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
   }
 
+  // A skill declared in code serves only the resource directories it declares, never its module's folder
+  const publishedDir = instance.getPublishedDir();
+
   // Try the resource subdirectories first
   const resources = instance.getResources();
   const candidateDirs: Array<[string, string | undefined]> = [
@@ -253,7 +257,10 @@ export async function readSkillFileByPath(instance: SkillInstance, filePath: str
       ? isAbsolute(configured)
         ? configured
         : pathResolve(baseDir, configured)
-      : joinPath(baseDir, subdir);
+      : publishedDir
+        ? joinPath(publishedDir, subdir)
+        : undefined;
+    if (!dir) break;
     candidatePath = pathResolve(dir, ...segments.slice(1));
     if (!isInside(candidatePath, dir)) {
       throw new PublicMcpError(`Invalid file path "${filePath}".`, 'INVALID_PARAMS', 400);
@@ -262,9 +269,12 @@ export async function readSkillFileByPath(instance: SkillInstance, filePath: str
   }
 
   if (!candidatePath) {
-    // Top-level file (e.g. LICENSE, README) — must stay inside the skill dir
-    candidatePath = pathResolve(baseDir, ...segments);
-    if (!isInside(candidatePath, baseDir)) {
+    // Top-level file (e.g. LICENSE, README) — only a skill directory has them, and it must stay inside it
+    if (!publishedDir) {
+      throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
+    }
+    candidatePath = pathResolve(publishedDir, ...segments);
+    if (!isInside(candidatePath, publishedDir)) {
       throw new PublicMcpError(`Invalid file path "${filePath}".`, 'INVALID_PARAMS', 400);
     }
   }
