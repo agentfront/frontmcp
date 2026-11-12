@@ -137,6 +137,8 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
                   port: storeConfig.port ?? 6379,
                   password: storeConfig.password,
                   db: storeConfig.db,
+                  tls: storeConfig.tls ? {} : undefined,
+                  keyPrefix: storeConfig.keyPrefix,
                 },
                 defaultTTL: globalOptions.defaultTTL,
               });
