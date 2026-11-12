@@ -168,6 +168,22 @@ describe('SkillToolGuardHook', () => {
       });
     });
 
+    it('checks the id a tool is called by, not a display name that another tool on the allowlist has', async () => {
+      const hook = new (createSkillToolGuardHook(sessionManager, {}))();
+
+      await sessionManager.runWithSession('session-1', async () => {
+        sessionManager.activateSkill('test-skill', mockSkillContent, mockLoadResult);
+
+        const resolvedTool = { name: 'drop_tables', metadata: { id: 'drop_tables', name: 'allowed_tool' } };
+        await expect(
+          hook.checkSkillToolAuthorization({ state: { tool: resolvedTool, input: { name: 'drop_tables' } } }),
+        ).rejects.toBeInstanceOf(ToolNotAllowedError);
+
+        const listedById = { name: 'allowed_tool', metadata: { id: 'allowed_tool', name: 'Allowed Tool' } };
+        await expect(hook.checkSkillToolAuthorization({ state: { tool: listedById } })).resolves.toBeUndefined();
+      });
+    });
+
     it('should fall back to input.name when metadata.name missing', async () => {
       const HookClass = createSkillToolGuardHook(sessionManager, {});
       const hook = new HookClass();

@@ -39,7 +39,7 @@ export interface SkillToolGuardHookOptions {
  */
 export interface SkillToolHookContext {
   state: {
-    tool?: { metadata: { name: string }; fullName?: string };
+    tool?: { name?: string; metadata: { name: string; id?: string }; fullName?: string };
     input?: { name: string };
   };
 }
@@ -153,11 +153,11 @@ export function createSkillToolGuardHook(
      */
     @Will('checkToolAuthorization', { priority: -1000 })
     async checkSkillToolAuthorization(ctx: SkillToolHookContext): Promise<void> {
-      // Get the tool name from state (set by findTool stage)
-      // IMPORTANT: Use base name (metadata.name) not fullName, because allowlists
-      // are built from unqualified tool names. fullName includes owner prefix
-      // (e.g., "my-app:tool-name") which won't match the allowlist.
-      const rawToolName = ctx.state.tool?.metadata?.name || ctx.state.input?.name || ctx.state.tool?.fullName;
+      // The name the resolved tool is registered and called under (its `id`, else its `name`), as
+      // allowlists hold it; not fullName, whose owner prefix ("my-app:tool-name") no allowlist holds.
+      const { tool } = ctx.state;
+      const rawToolName =
+        tool?.name || tool?.metadata?.id || tool?.metadata?.name || ctx.state.input?.name || tool?.fullName;
 
       if (!rawToolName) {
         logger?.verbose('SkillToolGuard: skipping (no tool name in context)');
