@@ -1,6 +1,7 @@
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+
+import { fileExistsSync, mkdtemp, rm } from '@frontmcp/utils';
 
 import { loadBetterSqlite3 } from '../better-sqlite3-loader';
 import { openDatabase } from '../open-database';
@@ -22,15 +23,15 @@ describe('useSqliteDriver', () => {
   let dir: string;
   let dbPath: string;
 
-  beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-driver-'));
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(os.tmpdir(), 'sqlite-driver-'));
     dbPath = path.join(dir, 'missing', 'folder', 'db.sqlite');
     jest.mocked(loadBetterSqlite3).mockClear();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     useSqliteDriver(undefined);
-    fs.rmSync(dir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
   });
 
   it('opens the database with the driver, without better-sqlite3 and without creating a folder', () => {
@@ -43,7 +44,7 @@ describe('useSqliteDriver', () => {
     expect(opened).toBe(database);
     expect(driver).toHaveBeenCalledWith(dbPath);
     expect(loadBetterSqlite3).not.toHaveBeenCalled();
-    expect(fs.existsSync(path.dirname(dbPath))).toBe(false);
+    expect(fileExistsSync(path.dirname(dbPath))).toBe(false);
     opened.close();
   });
 
@@ -55,7 +56,7 @@ describe('useSqliteDriver', () => {
 
     expect(store.get('k')).toBe('v');
     expect(loadBetterSqlite3).not.toHaveBeenCalled();
-    expect(fs.existsSync(path.dirname(dbPath))).toBe(false);
+    expect(fileExistsSync(path.dirname(dbPath))).toBe(false);
     store.close();
   });
 
@@ -76,7 +77,7 @@ describe('useSqliteDriver', () => {
     const opened = openDatabase(dbPath, 'TestStore');
 
     expect(loadBetterSqlite3).toHaveBeenCalled();
-    expect(fs.existsSync(dbPath)).toBe(true);
+    expect(fileExistsSync(dbPath)).toBe(true);
     opened.close();
   });
 
