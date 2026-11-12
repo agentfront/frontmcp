@@ -1,3 +1,4 @@
+import { AuthoritiesContextBuilder } from '../authorities.context';
 import { AuthoritiesEngine } from '../authorities.engine';
 import { evaluateAbac } from '../authorities.evaluator';
 import { AuthoritiesEvaluatorRegistry, AuthoritiesProfileRegistry } from '../authorities.registry';
@@ -296,5 +297,57 @@ describe('conditions without references, or whose references resolve', () => {
 
     expect(result.granted).toBe(true);
     expect(result.unresolved).toBeUndefined();
+  });
+});
+
+describe('a check the server is not configured to run', () => {
+  const blockedFromOrg: AuthoritiesPolicyMetadata = {
+    relationships: { type: 'blocked', resource: 'org', resourceId: 'org-1' },
+  };
+  const signedIn = { user: { sub: 'user-1' } };
+
+  it('denies not around a relationship when no relationship resolver is configured', async () => {
+    const ctx = new AuthoritiesContextBuilder().build(signedIn);
+
+    const result = await evaluate({ not: blockedFromOrg }, ctx);
+
+    expect(result.granted).toBe(false);
+    expect(result.unresolved).toBe(true);
+    expect(result.deniedBy).toContain('no relationship resolver is configured (set authorities.relationshipResolver)');
+  });
+
+  it('grants not around a relationship the configured resolver does not find', async () => {
+    const ctx = new AuthoritiesContextBuilder({ relationshipResolver: { check: async () => false } }).build(signedIn);
+
+    const result = await evaluate({ not: blockedFromOrg }, ctx);
+
+    expect(result.granted).toBe(true);
+  });
+
+  it('denies not around a custom evaluator that is not registered', async () => {
+    const result = await evaluate({ not: { custom: { blocklist: {} } } });
+
+    expect(result.granted).toBe(false);
+    expect(result.unresolved).toBe(true);
+    expect(result.deniedBy).toBe("custom evaluator 'blocklist' is not registered (add it to authorities.evaluators)");
+  });
+
+  it('reports a custom evaluator that is not registered, at any depth, when the server starts', () => {
+    const allowlist: AuthoritiesEvaluator = {
+      name: 'allowlist',
+      evaluate: async () => ({ granted: true, evaluatedPolicies: [] }),
+    };
+    const engine = engineWith(
+      { notBlocked: { anyOf: [isAdmin, { not: { custom: { blocklist: {} } } }] } },
+      { allowlist },
+    );
+
+    expect(
+      engine.findRuleProblems({ allOf: [{ custom: { allowlist: {} } }, { not: { custom: { blocklist: {} } } }] }),
+    ).toEqual(['names an unknown custom evaluator "blocklist" (register it in authorities.evaluators)']);
+    expect(engine.findRuleProblems({ custom: { allowlist: {} } })).toEqual([]);
+    expect(engine.findProfileProblems()).toEqual([
+      'profile "notBlocked": names an unknown custom evaluator "blocklist" (register it in authorities.evaluators)',
+    ]);
   });
 });

@@ -4,7 +4,7 @@
  * Pure functions for evaluating RBAC, ABAC, and ReBAC policies.
  */
 
-import { isAnonymousSubject, resolveDotPath } from './authorities.context';
+import { isAnonymousSubject, noopRelationshipResolver, resolveDotPath } from './authorities.context';
 import type {
   AbacPolicy,
   AuthoritiesEvaluationContext,
@@ -287,6 +287,17 @@ async function evaluateSingleRebac(policy: RebacPolicy, ctx: AuthoritiesEvaluati
       granted: false,
       deniedBy: `relationships: an anonymous caller cannot be '${policy.type}' of ${policy.resource}`,
       denial: { kind: 'relationships', path: 'user.sub', expected: 'a signed-in caller', actual: undefined },
+      evaluatedPolicies: ['relationships'],
+    };
+  }
+  if (ctx.relationships === noopRelationshipResolver) {
+    return {
+      granted: false,
+      unresolved: true,
+      deniedBy:
+        `relationships: '${policy.type}' of ${policy.resource} could not be checked: ` +
+        'no relationship resolver is configured (set authorities.relationshipResolver)',
+      denial: { kind: 'relationships', path: 'relationships', expected: `${policy.type}:${policy.resource}` },
       evaluatedPolicies: ['relationships'],
     };
   }
