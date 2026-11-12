@@ -563,7 +563,7 @@ describe('events:poll', () => {
 
       await expect(refusal).rejects.toThrow(EventResourceExhaustedError);
       await expect(refusal).rejects.toMatchObject({ jsonRpcCode: -32025, data: { limit: 'pollLeases', max: 1 } });
-      await expect(refusal).rejects.toThrow('A lease ends 5 minutes after the last events/poll of its subscription');
+      await expect(refusal).rejects.toThrow('A lease ends when its subscription is not polled for its lease time');
       await expect(poll(limited, { ctx: asAda, arguments: { status: 'one' } })).resolves.toBeDefined();
       await expect(poll(limited, { ctx: asBob, arguments: { status: 'two' } })).resolves.toBeDefined();
       await limited.dispose();

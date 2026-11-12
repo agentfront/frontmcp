@@ -210,7 +210,7 @@ export default class EventPollFlow extends FlowBase<typeof name> {
     if (!context.onSubscribe && !context.onUnsubscribe) return;
     if (!leases.has(subscription.id) && leases.isFull(reader.principalKey)) {
       const { maxPerPrincipal } = this.events.config.subscriptions;
-      throw new EventResourceExhaustedError(this.codes, 'pollLeases', maxPerPrincipal, pollLeaseMs(nextPollMs));
+      throw new EventResourceExhaustedError(this.codes, 'pollLeases', maxPerPrincipal);
     }
     await leases.renew({
       subscription,
