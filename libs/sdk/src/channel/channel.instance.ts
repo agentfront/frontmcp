@@ -225,7 +225,8 @@ export class ChannelInstance extends ChannelEntry {
    * Each call sends the whole buffer again.
    *
    * @param sessionId - The session to replay events to
-   * @returns Number of events replayed
+   * @returns How many the session was sent: none when it is not connected, cannot take the channel, or its
+   *   credentials have expired
    */
   replayBufferedEvents(sessionId: string): number {
     if (!this.replayEnabled || this._replayBuffer.length === 0 || !this._channelNotificationService) {
@@ -235,8 +236,7 @@ export class ChannelInstance extends ChannelEntry {
     let count = 0;
     for (const notification of this._replayBuffer) {
       const replayMeta = { ...notification.meta, replayed: 'true' };
-      this._channelNotificationService.sendToSession(sessionId, notification.content, replayMeta);
-      count++;
+      if (this._channelNotificationService.sendToSession(sessionId, notification.content, replayMeta)) count++;
     }
 
     return count;

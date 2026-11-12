@@ -240,6 +240,24 @@ describe('channels', () => {
     expect(alerts.replayBuffer[0].meta).toEqual({ server: 'desk', room: 'default', source: 'alerts' });
   });
 
+  it('counts the buffered notifications a replay sent, and none of those it refused', async () => {
+    const alerts = channelOf(server, 'alerts');
+    alerts.clearReplayBuffer();
+    await alerts.pushNotification('first');
+    await alerts.pushNotification('second');
+    received.length = 0;
+
+    const refused = alerts.replayBufferedEvents('a-session-that-is-not-connected');
+    const sent = alerts.replayBufferedEvents(client.getSessionId());
+    await settle();
+
+    expect([refused, sent]).toEqual([0, 2]);
+    expect(received.map(({ content, meta }) => [content, meta['replayed']])).toEqual([
+      ['first', 'true'],
+      ['second', 'true'],
+    ]);
+  });
+
   it('lets a hook stop a notification', async () => {
     await client.callTool('raise', { event: 'alert', text: 'classified report' });
     await settle();
