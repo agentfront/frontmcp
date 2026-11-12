@@ -133,7 +133,7 @@ Channels are a Claude Code research preview and may change. `references/channel-
 - [ ] `@FrontMcp({ channels: { enabled: true } })` is set
 - [ ] Channel classes extend `ChannelContext` with `@Channel()` decorator
 - [ ] Channels are listed in `@App({ channels: [...] })`; a channel and the tools in its `tools` resolve its app's providers with `this.get()`, and one whose `availableWhen` the runtime doesn't meet is left out at startup
-- [ ] `onEvent()` returns `{ content: string, meta?: Record<string, string> }`; a `meta` key with another character than a letter, a digit or `_` arrives with `_` in its place
+- [ ] `onEvent()` returns `{ content: string, meta?: Record<string, unknown> }`; a `meta` value is sent as a string, and a `meta` key with another character than a letter, a digit or `_` arrives with `_` in its place
 
 ### Capability
 

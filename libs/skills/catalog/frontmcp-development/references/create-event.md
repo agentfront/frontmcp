@@ -1142,8 +1142,8 @@ and arguments (anonymous callers share one):
 - Each poll renews the lease. It lasts five poll intervals, and at least five minutes.
 - `onUnsubscribe(args, subscription, 'expired')` runs when no poll renewed it in time.
 - A caller may hold `subscriptions.maxPerPrincipal` leases; one more is answered `ResourceExhausted` with
-  `data.limit: 'pollLeases'` (`'subscriptions'` up to 1.12.0) and a message that says when a lease ends:
-  `events/unsubscribe` frees nothing here. The anonymous callers of a public server count as one caller, so together
+  `data.limit: 'pollLeases'` (`'subscriptions'` up to 1.12.0) and a message that says to stop polling one: a lease
+  ends when its subscription is not polled for its lease time, and `events/unsubscribe` frees nothing here. The anonymous callers of a public server count as one caller, so together
   they hold at most that many.
 - Two first polls at the same time start one lease: `onSubscribe` runs once, and the second poll waits for it.
 
