@@ -225,7 +225,7 @@ export class ExpressHostAdapter extends HostServerAdapter {
 
     // An EXPLICIT allow-list applies to every deployment shape — this process
     // did not have to guess it.
-    if (explicitHosts?.length || allowedOrigins?.length) {
+    if (explicitHosts?.length || allowedOrigins !== undefined) {
       this.hostValidation = createHostValidationMiddleware({
         enabled: true,
         allowedHosts: explicitHosts?.length ? explicitHosts : undefined,

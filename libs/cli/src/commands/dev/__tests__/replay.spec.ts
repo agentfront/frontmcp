@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -60,7 +61,7 @@ describe('runReplay', () => {
 
     expect(started).toEqual([
       {
-        command: `npx tsx ${JSON.stringify(path.join(project, 'src', 'main.ts'))}`,
+        command: `npx tsx '${path.join(project, 'src', 'main.ts')}'`,
         cwd: project,
         port: 0,
         env: expect.any(Object),
@@ -86,9 +87,26 @@ describe('runReplay', () => {
     await runReplay({ _: ['test'], replay: 'calls.jsonl', config: 'frontmcp.config.json' }, kit);
 
     expect(started).toEqual([
-      expect.objectContaining({ command: `npx tsx ${JSON.stringify(path.join(project, 'src', 'server.ts'))}` }),
+      expect.objectContaining({ command: `npx tsx '${path.join(project, 'src', 'server.ts')}'` }),
     ]);
   });
+
+  (process.platform === 'win32' ? it.skip : it)(
+    'hands the shell the entry path as one literal word, whatever characters the folders hold',
+    async () => {
+      const oddProject = path.join(project, "it's $(printf ran) `printf ran` $HOME");
+      await mkdir(path.join(oddProject, 'src'), { recursive: true });
+      await writeFile(path.join(oddProject, 'src', 'main.ts'), 'export default class Server {}\n');
+      jest.spyOn(process, 'cwd').mockReturnValue(oddProject);
+      const { kit, started } = fakeKit([]);
+
+      await runReplay(args({}), kit);
+
+      const entryWord = (started[0] as { command: string }).command.slice('npx tsx '.length);
+      const shellSees = execFileSync('/bin/sh', ['-c', `printf %s ${entryWord}`], { encoding: 'utf-8' });
+      expect(shellSees).toBe(path.join(oddProject, 'src', 'main.ts'));
+    },
+  );
 
   it('exits with code 1 when a call differs', async () => {
     const { kit } = fakeKit([{ line: 1 }]);
@@ -96,6 +114,32 @@ describe('runReplay', () => {
     await runReplay(args({ replay: 'calls.jsonl' }), kit);
 
     expect(process.exitCode).toBe(1);
+  });
+
+  it('prints the names, errors and paths of the recording on one line each', async () => {
+    const { kit } = fakeKit([
+      {
+        line: 1,
+        method: 'tools/call',
+        name: 'search\nReplayed 0 calls',
+        error: { code: -32000, message: 'failed\r\u001b[2Kall good' },
+        changes: [{ path: 'content.0\nok', recorded: 1, replayed: 2 }],
+      },
+    ]);
+    kit.formatReplayReport = (report) =>
+      (
+        report.differences as Array<{
+          name: string;
+          error: { code: number; message: string };
+          changes: Array<{ path: string }>;
+        }>
+      )
+        .map((call) => `${call.name} ${call.error.code}: ${call.error.message} ${call.changes[0].path}`)
+        .join('\n');
+
+    await runReplay(args({ replay: 'calls.jsonl' }), kit);
+
+    expect(output.at(-1)).toBe('search\\nReplayed 0 calls -32000: failed\\r\\u001b[2Kall good content.0\\nok');
   });
 
   it('stops the server when the replay fails', async () => {

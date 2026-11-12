@@ -1003,7 +1003,7 @@ export class MockOAuthServer {
       // Wildcard pattern (e.g., http://localhost:*/callback)
       // Uses safe string-based matching (O(n) complexity) instead of regex
       if (pattern.includes('*')) {
-        if (this.matchWildcardPattern(pattern, redirectUri)) {
+        if (this.matchWildcardPattern(pattern, redirectUri) && !hasUserInfo(redirectUri)) {
           return true;
         }
       }
@@ -1199,5 +1199,15 @@ export class MockOAuthServer {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+}
+
+/** True when a URL does not parse or carries a user name or password. */
+function hasUserInfo(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.username !== '' || parsed.password !== '';
+  } catch {
+    return true;
   }
 }

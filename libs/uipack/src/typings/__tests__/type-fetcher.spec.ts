@@ -228,6 +228,34 @@ import React from 'react';`;
 
       expect(combined).toContain('// Source: https://esm.sh/test.d.ts');
     });
+
+    it('marks each file once, even when an earlier file URL begins with its URL', () => {
+      const contents = new Map([
+        ['https://esm.sh/pkg/index.d.ts?raw', 'declare const a: number;'],
+        ['https://esm.sh/pkg/index.d.ts', 'declare const b: string;\ndeclare const c: string;'],
+      ]);
+
+      const markers = combineDtsContents(contents).match(/^\/\/ Source: .*$/gm);
+
+      expect(markers).toEqual([
+        '// Source: https://esm.sh/pkg/index.d.ts?raw',
+        '// Source: https://esm.sh/pkg/index.d.ts',
+      ]);
+    });
+
+    it('combines two files of 50,000 declarations each, with one marker per file', () => {
+      const file = (name: string) =>
+        Array.from({ length: 50_000 }, (_, index) => `declare const ${name}${index}: number;`).join('\n');
+      const contents = new Map([
+        ['https://esm.sh/a.d.ts', file('a')],
+        ['https://esm.sh/b.d.ts', file('b')],
+      ]);
+
+      const combined = combineDtsContents(contents);
+
+      expect(combined.match(/^\/\/ Source: /gm)).toHaveLength(2);
+      expect(combined.split('\n')).toHaveLength(100_003);
+    });
   });
 });
 
@@ -774,6 +802,42 @@ describe('TypeFetcher', () => {
       expect(result.networkRequests).toBe(0);
     });
   });
+
+  describe('fetches from the cdnBaseUrl origin only', () => {
+    const typesHeader = new Headers({ 'X-TypeScript-Types': '/zod@3.23.8/index.d.ts' });
+    const respond = (body: string, url = '') =>
+      ({ ok: true, status: 200, statusText: 'OK', url, headers: typesHeader, text: async () => body }) as Response;
+
+    it('does not follow a reference or import in a declaration file to another host', async () => {
+      const declaration = [
+        '/// <reference path="https://internal.example/secret.d.ts" />',
+        "import type { Other } from '//internal.example/other';",
+        'export declare const z: unknown;',
+      ].join('\n');
+      const mockFetch = jest.fn(async (url: string) =>
+        respond(url.startsWith('https://esm.sh/') ? declaration : 'internal data'),
+      );
+      const fetcher = new TypeFetcher({ fetch: mockFetch as typeof fetch }, new MemoryTypeCache());
+
+      const result = await fetcher.fetchBatch({ imports: ['import { z } from "zod"'] });
+
+      const requestedUrls = mockFetch.mock.calls.map(([url]) => url);
+      expect(requestedUrls).toEqual(['https://esm.sh/zod', 'https://esm.sh/zod@3.23.8/index.d.ts']);
+      expect(result.results[0].files.map((file) => file.content)).toEqual([declaration]);
+    });
+
+    it('does not read a response that a redirect took to another host', async () => {
+      const mockFetch = jest.fn(async (url: string) =>
+        url === 'https://esm.sh/zod' ? respond('') : respond('internal data', 'https://internal.example/x.d.ts'),
+      );
+      const fetcher = new TypeFetcher({ fetch: mockFetch as typeof fetch }, new MemoryTypeCache());
+
+      const result = await fetcher.fetchBatch({ imports: ['import { z } from "zod"'] });
+
+      expect(result.results).toHaveLength(0);
+      expect(result.errors[0].message).toContain('outside https://esm.sh');
+    });
+  });
 });
 
 // ============================================
@@ -883,6 +947,26 @@ describe('TypeFetcher Allowlist', () => {
       expect(result.errors[0].code).toBe('PACKAGE_NOT_ALLOWED');
       expect(result.errors[0].message).toContain('lodash');
       expect(result.errors[0].message).toContain('not in the allowlist');
+    });
+
+    it('refuses an allowed package whose subpath or version would name another package in the URL', async () => {
+      const mockFetch = jest.fn();
+      const fetcher = new TypeFetcher({ fetch: mockFetch }, new MemoryTypeCache());
+
+      const result = await fetcher.fetchBatch({
+        imports: [
+          'import a from "react/../../other-package"',
+          'import b from "@frontmcp/../other-package"',
+          'import c from "zod/%2e%2e/other-package"',
+          'import d from "zod/..\\other-package"',
+          'import e from "react-dom"',
+        ],
+        versionOverrides: { 'react-dom': '18.2.0/../../other-package' },
+      });
+
+      expect(result.errors).toHaveLength(5);
+      expect(result.errors.every((error) => error.code === 'INVALID_SPECIFIER')).toBe(true);
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it('should allow packages in default allowlist (with mocked fetch)', async () => {

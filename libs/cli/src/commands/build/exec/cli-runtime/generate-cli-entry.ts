@@ -474,7 +474,7 @@ function generateArgMapping(tool: ExtractedTool): string {
     if (propType === 'object') {
       return `if (rawOpts[${JSON.stringify(camel)}] !== undefined) {
         try { args[${JSON.stringify(propName)}] = JSON.parse(rawOpts[${JSON.stringify(camel)}]); }
-        catch (_jsonErr) { console.error('Invalid JSON for --${kebab}'); process.exitCode = 1; return; }
+        catch (_jsonErr) { console.error(${JSON.stringify(`Invalid JSON for --${kebab}`)}); process.exitCode = 1; return; }
       }`;
     }
 
@@ -501,7 +501,7 @@ function generateJobArgMapping(inputSchema: Record<string, unknown>): string {
     if (propType === 'object') {
       return `if (rawOpts[${JSON.stringify(camel)}] !== undefined) {
         try { input[${JSON.stringify(propName)}] = JSON.parse(rawOpts[${JSON.stringify(camel)}]); }
-        catch (_jsonErr) { console.error('Invalid JSON for --${kebab}'); process.exitCode = 1; return; }
+        catch (_jsonErr) { console.error(${JSON.stringify(`Invalid JSON for --${kebab}`)}); process.exitCode = 1; return; }
       }`;
     }
 
@@ -569,11 +569,11 @@ function toTemplateParamOptions(uriTemplate: string): TemplateParamOption[] {
 
 // Reserved `{+name}` params were once exposed as `--+name`; that flag stays accepted but hidden.
 function templateOptionLines(param: TemplateParamOption): string {
-  const description = `'Template parameter: ${param.name}'`;
-  if (!param.reserved) return `  .requiredOption('--${param.flag} <value>', ${description})`;
+  const optionArgs = `${JSON.stringify(`--${param.flag} <value>`)}, ${JSON.stringify(`Template parameter: ${param.name}`)}`;
+  if (!param.reserved) return `  .requiredOption(${optionArgs})`;
   return [
-    `  .option('--${param.flag} <value>', ${description})`,
-    `  .addOption(new Option('--+${param.flag} <value>').hideHelp())`,
+    `  .option(${optionArgs})`,
+    `  .addOption(new Option(${JSON.stringify(`--+${param.flag} <value>`)}).hideHelp())`,
   ].join('\n');
 }
 
@@ -683,11 +683,8 @@ function generatePromptCommands(prompts: ExtractedPrompt[]): string {
     const cmdName = camelToKebab(prompt.name).replace(/_/g, '-');
     const argOptions = (prompt.arguments || [])
       .map((a) => {
-        const flag = `--${camelToKebab(a.name)} <value>`;
-        const desc = a.description || '';
-        return a.required
-          ? `  .requiredOption('${flag}', '${escapeStr(desc)}')`
-          : `  .option('${flag}', '${escapeStr(desc)}')`;
+        const optionArgs = `${JSON.stringify(`--${camelToKebab(a.name)} <value>`)}, ${JSON.stringify(a.description || '')}`;
+        return a.required ? `  .requiredOption(${optionArgs})` : `  .option(${optionArgs})`;
       })
       .join('\n');
 
@@ -2236,8 +2233,4 @@ export { extractTemplateParams };
 
 function kebabToCamel(str: string): string {
   return str.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-}
-
-function escapeStr(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }

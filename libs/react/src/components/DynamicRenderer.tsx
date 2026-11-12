@@ -33,11 +33,10 @@ function renderNode(
 
   const childElements = renderChildren(node.children, registry, fallback);
 
-  return React.createElement(
-    Component as React.ElementType,
-    { ...node.props, key: `dynamic-${index}` },
-    ...childElements,
-  );
+  const props: Record<string, unknown> = { ...node.props, key: `dynamic-${index}` };
+  delete props['dangerouslySetInnerHTML'];
+
+  return React.createElement(Component as React.ElementType, props, ...childElements);
 }
 
 function renderChildren(

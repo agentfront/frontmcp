@@ -3,7 +3,8 @@
  *
  * Reads raw MCP tools from the ServerRegistry, formats them via
  * `formatToolsForPlatform()`, and provides a `callTool` handler that
- * executes via `server.callTool()` + `formatResultForPlatform()`.
+ * executes through the connected client that listed them (`client.callTool()`,
+ * with its identity and session) + `formatResultForPlatform()`.
  *
  * Supports multi-server via `options.server`.
  */
@@ -22,7 +23,7 @@ interface AIToolsOptions {
 export function useAITools<P extends LLMPlatform>(platform: P, options?: AIToolsOptions): UseAIToolsResult<P> {
   const { entry } = useResolvedServer(options?.server);
 
-  const server = entry?.server ?? null;
+  const client = entry?.client ?? null;
   const toolInfos = entry?.tools ?? [];
   const status = entry?.status ?? 'idle';
 
@@ -61,19 +62,19 @@ export function useAITools<P extends LLMPlatform>(platform: P, options?: AITools
 
   const callTool = useCallback(
     async (name: string, args?: Record<string, unknown>): Promise<FormattedToolResult> => {
-      if (!server) {
-        throw new Error('FrontMCP server not available');
+      if (status !== 'connected' || !client) {
+        throw new Error('FrontMCP not connected');
       }
       try {
-        const rawResult = await server.callTool(name, args);
-        return formatResultForPlatform(rawResult, platform);
+        const rawResult = await client.callTool(name, args);
+        return formatResultForPlatform(rawResult as Parameters<typeof formatResultForPlatform>[0], platform);
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         throw error;
       }
     },
-    [server, platform],
+    [client, status, platform],
   );
 
   return { tools: formattedTools, callTool, loading, error };

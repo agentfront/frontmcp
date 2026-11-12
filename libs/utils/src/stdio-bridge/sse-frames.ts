@@ -18,6 +18,8 @@ export async function relaySseFrames(
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  // How much of `buffer` holds no newline, so a chunk is searched once rather than with every chunk after it
+  let searchedUpTo = 0;
   let eventData: string[] = [];
   let eventChars = 0;
 
@@ -41,7 +43,7 @@ export async function relaySseFrames(
       return;
     }
     buffer += decoder.decode(value, { stream: true });
-    let newline = buffer.indexOf('\n');
+    let newline = buffer.indexOf('\n', searchedUpTo);
     while (newline >= 0) {
       const line = buffer.slice(0, newline).trim();
       buffer = buffer.slice(newline + 1);
@@ -54,6 +56,7 @@ export async function relaySseFrames(
         eventChars += data.length + 1;
       }
     }
+    searchedUpTo = buffer.length;
     if (eventChars + buffer.length > maxEventChars) {
       await reader.cancel();
       throw new Error(`an SSE event is larger than ${maxEventChars} characters`);

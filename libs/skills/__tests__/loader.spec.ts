@@ -2,6 +2,8 @@
  * Skills catalog loader tests.
  */
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import {
@@ -40,6 +42,44 @@ describe('loader', () => {
       expect(manifest).toBeDefined();
       expect(manifest.version).toBe(1);
       expect(Array.isArray(manifest.skills)).toBe(true);
+    });
+
+    describe('reads the manifest file as data and never runs code from the catalog', () => {
+      const ranMarker = '__frontmcpSkillsManifestCodeRan';
+
+      afterEach(() => {
+        delete (globalThis as Record<string, unknown>)[ranMarker];
+      });
+
+      it('when skills-manifest.json is a folder with an index.js', () => {
+        const catalogDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-catalog-'));
+        fs.mkdirSync(path.join(catalogDir, 'skills-manifest.json'));
+        fs.writeFileSync(
+          path.join(catalogDir, 'skills-manifest.json', 'index.js'),
+          `globalThis.${ranMarker} = true; module.exports = { version: 1, skills: [] };`,
+        );
+
+        expect(() => loadManifest(catalogDir)).toThrow();
+        expect((globalThis as Record<string, unknown>)[ranMarker]).toBeUndefined();
+      });
+
+      it('when only skills-manifest.json.js exists', () => {
+        const catalogDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-catalog-'));
+        fs.writeFileSync(
+          path.join(catalogDir, 'skills-manifest.json.js'),
+          `globalThis.${ranMarker} = true; module.exports = { version: 1, skills: [] };`,
+        );
+
+        expect(() => loadManifest(catalogDir)).toThrow();
+        expect((globalThis as Record<string, unknown>)[ranMarker]).toBeUndefined();
+      });
+
+      it('loads a manifest file in another catalog folder', () => {
+        const catalogDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-catalog-'));
+        fs.writeFileSync(path.join(catalogDir, 'skills-manifest.json'), '{ "version": 1, "skills": [] }');
+
+        expect(loadManifest(catalogDir)).toEqual({ version: 1, skills: [] });
+      });
     });
   });
 

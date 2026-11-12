@@ -1,3 +1,5 @@
+import { resetRuntimeContext } from '@frontmcp/utils';
+
 import { SessionSecretRequiredError } from '../../../errors/auth-internal.errors';
 import { decryptSessionJson, encryptJson, getKey, resetCachedKey, safeDecrypt } from '../session-crypto.utils';
 
@@ -85,6 +87,29 @@ describe('session-crypto.utils', () => {
       process.env['MCP_SESSION_SECRET'] = 'secret-b';
       const keyB = getKey();
       expect(Buffer.from(keyA).equals(Buffer.from(keyB))).toBe(false);
+    });
+
+    it('should throw SessionSecretRequiredError in a distributed deployment without secret', () => {
+      process.env['FRONTMCP_DEPLOYMENT_MODE'] = 'distributed';
+      resetRuntimeContext();
+      mockGetMachineId.mockClear();
+      try {
+        expect(() => getKey()).toThrow(SessionSecretRequiredError);
+        expect(mockGetMachineId).not.toHaveBeenCalled();
+      } finally {
+        resetRuntimeContext();
+      }
+    });
+
+    it('should use MCP_SESSION_SECRET in a distributed deployment', () => {
+      process.env['FRONTMCP_DEPLOYMENT_MODE'] = 'distributed';
+      process.env['MCP_SESSION_SECRET'] = 'distributed-secret';
+      resetRuntimeContext();
+      try {
+        expect(getKey()).toHaveLength(32);
+      } finally {
+        resetRuntimeContext();
+      }
     });
 
     it('should warn when falling back to machine ID', () => {

@@ -1,4 +1,5 @@
 import { createSharedServerNonce, verifySharedServerIdentity } from '@frontmcp/auth';
+import { readTextWithLimit } from '@frontmcp/utils';
 
 import { SharedServerIdentityError } from '../errors/shared-server.errors';
 import { unixSocketFetch } from './unix-socket-fetch';
@@ -32,14 +33,21 @@ export function httpEndpoint(port: number): SharedEndpoint {
   return { id: baseUrl, baseUrl, fetch: (input, init) => fetch(input, init) };
 }
 
-/** The answer's JSON, unless it does not say its length or is longer than a proof: it must not fill the memory. */
+/**
+ * The answer's JSON, unless it does not say its length or is longer than a proof, before or after decompression: it
+ * must not fill the memory.
+ */
 async function readAnswer(response: Response): Promise<unknown> {
   const length = Number(response.headers.get('content-length') ?? Number.NaN);
   if (!(length <= MAX_ANSWER_BYTES)) {
     await response.body?.cancel();
     return undefined;
   }
-  return response.json().catch(() => undefined);
+  try {
+    return JSON.parse(await readTextWithLimit(response, MAX_ANSWER_BYTES));
+  } catch {
+    return undefined;
+  }
 }
 
 /**

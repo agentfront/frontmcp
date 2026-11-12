@@ -637,9 +637,11 @@ authInfo.extra.approvalContext = { type: 'project', identifier: resolvedProjectI
 5. Otherwise refused with state `pending` (or `expired`).
 
 Releases up to 1.8.7 refused every call of an `alwaysPrompt` tool, approved or not. The built-in store
-uses up an approval with the storage's atomic `deleteIfEquals()` (memory, Redis, Upstash, Vercel KV), so
-a denial or new approval recorded in the meantime is kept; a backend without it (Cloudflare KV, the
-filesystem, SQLite) has the approval deleted directly. A custom `ApprovalStore` should implement
+uses up an approval with the storage's atomic `deleteIfEquals()` (memory, Redis, Upstash, Vercel KV, SQLite),
+so a denial or new approval recorded in the meantime is kept. On a backend without it (Cloudflare KV, or a
+`storageInstance` on IndexedDB, localStorage or files), using up an `alwaysPrompt` approval throws
+`ApprovalConfigurationError`, naming the storage types that can, and the approval is left in place; up to
+1.12.0 it was deleted directly there. A custom `ApprovalStore` should implement
 `consumeApproval()` (delete exactly that record, and only while it is still stored, in one step; resolve
 `true` only for the call that deleted it); without it the gate revokes the caller's approvals of the tool
 instead.
@@ -772,7 +774,7 @@ response to everyone else.
 
 The identity is the subject your auth layer puts in `authInfo.extra` (`sub` / `userId`), then
 the client id, then the session. For a request the SDK verified, the client id is the token's
-`sub`. An anonymous subject or client id (`anon:<id>`, which the SDK makes up for one session or
+`sub`, and a subject or client id is paired with the issuer (`iss`) of the verified token, when it names one. An anonymous subject or client id (`anon:<id>`, which the SDK makes up for one session or
 for each request without one) counts as none. Only a session the server verified
 (`FrontMcpContext.verifiedSessionId`) is an identity: the session id the stateless HTTP transport
 gives every request, the fresh per-request id of a request without `mcp-session-id`, and an
@@ -916,8 +918,9 @@ CachePlugin.init({ type: 'memory', bypassHeader: 'x-frontmcp-no-cache' }); // cl
 
 ### Cache Key
 
-The cache key is a SHA-256 digest of the tool name, the serialized input arguments, and -- by default -- the caller's
-identity. Two calls share an entry only when all three match.
+The cache key is a SHA-256 digest of the tool name, the serialized input arguments, the surface the call arrived on
+(`mcp`, `agent`, `webmcp`, ...), and -- by default -- the caller's identity. Two calls share an entry only when all of
+them match; a call without a surface keeps the key it had. Up to 1.12.0 the surface was not part of the key.
 
 Set `keyByIdentity: false` to drop identity from the key, and only for output that is identical for every caller. See
 "Cache keys include the caller's identity" above.

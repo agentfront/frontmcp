@@ -3,13 +3,13 @@ import { Tool, ToolContext, type ScopeEntry } from '@frontmcp/sdk';
 
 import { assertDashboardToolAccess } from '../auth/dashboard-access';
 import { ParentScopeToken } from '../dashboard.symbol';
-import { safeRegex } from '../shared/safe-regex';
+import { containsText } from '../shared/name-filter';
 
 /**
  * Input schema for the list-tools tool.
  */
 export const listToolsInputSchema = {
-  filter: z.string().optional().describe('Filter tools by name pattern (regex supported)'),
+  filter: z.string().optional().describe('Only tools whose name contains this text, ignoring case'),
   includePlugins: z.boolean().default(true).describe('Include tools from plugins'),
   includeSchemas: z.boolean().default(false).describe('Include input/output schemas in the response'),
 };
@@ -71,13 +71,9 @@ export default class ListToolsTool extends ToolContext {
       // Tools registry may not be available
     }
 
-    // Apply filter if provided (with ReDoS protection)
     if (input.filter) {
-      const pattern = safeRegex(input.filter);
-      if (pattern) {
-        allTools = allTools.filter((t) => pattern.test(t.name) || pattern.test(t.fullName));
-      }
-      // If pattern is invalid, skip filtering and return all tools
+      const matches = containsText(input.filter);
+      allTools = allTools.filter((t) => matches(t.name) || matches(t.fullName));
     }
 
     // Map to output format

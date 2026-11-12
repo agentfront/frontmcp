@@ -115,7 +115,7 @@ auth: {
 }
 ```
 
-See `configure-auth.md` → "Multi-provider orchestration" for the full provider schema and the `this.orchestration` tool API.
+`federatedAuth.minProviders` or `requiredProviders` with no provider to link (no `providers` and no app with its own `auth`) makes `/oauth/authorize` show an error page instead of signing the user in. See `configure-auth.md` → "Multi-provider orchestration" for the full provider schema and the `this.orchestration` tool API.
 
 **Use when:** Standalone servers with full auth control, development with local OAuth, orchestrating several upstream OAuth providers behind one MCP server.
 

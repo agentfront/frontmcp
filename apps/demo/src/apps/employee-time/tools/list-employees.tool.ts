@@ -6,6 +6,7 @@ import EmployeeDirectoryProvider from '../providers/employee-directory.provider'
 @Tool({
   name: 'list-employees',
   description: 'List employees, optionally filtered by site, with pagination',
+  site: { siteScoped: true },
   inputSchema: {
     siteId: z.string().min(1).optional(),
     search: z.string().optional(),

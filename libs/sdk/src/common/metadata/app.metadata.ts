@@ -355,9 +355,11 @@ export type RemoteAuthConfig =
        * sends it as `Authorization: Bearer <token>` with every request to the remote, connecting included. It gets a
        * new one before the token expires, and when the remote answers 401 (the request is then sent once more).
        *
-       * The token endpoint is `tokenUrl`, else the one the remote's authorization server publishes: found through the
-       * remote's protected resource metadata (RFC 9728), else at the remote's origin (RFC 8414). The token request
-       * names the remote as its `resource` (RFC 8707). A token that can't be had fails with `RemoteAuthError`.
+       * The token endpoint is `tokenUrl`, else the one `issuer` publishes (RFC 8414). Without either, it is the one the
+       * remote's authorization server publishes, found through the remote's protected resource metadata (RFC 9728) or
+       * at the remote's origin, and only when that server and its token endpoint are on the remote's origin: the client
+       * secret is never sent to a server the remote names elsewhere. The token request names the remote as its
+       * `resource` (RFC 8707). A token that can't be had fails with `RemoteAuthError`.
        *
        * Without `clientId` and `clientSecret`, no credentials are sent, and the server logs a warning.
        */
@@ -370,6 +372,11 @@ export type RemoteAuthConfig =
       scope?: string;
       /** Token endpoint URL; default: the one the remote's authorization server publishes */
       tokenUrl?: string;
+      /**
+       * The authorization server your client credentials are for (its issuer URL); its published token endpoint is
+       * used. Needed when the remote's authorization server is not on the remote's own origin and `tokenUrl` is not set.
+       */
+      issuer?: string;
     };
 
 /**
@@ -568,6 +575,7 @@ const remoteAuthConfigSchema = z.discriminatedUnion('mode', [
       clientSecret: z.string().min(1).optional(),
       scope: z.string().optional(),
       tokenUrl: z.string().url().optional(),
+      issuer: z.string().url().optional(),
     })
     .refine((auth) => (auth.clientId === undefined) === (auth.clientSecret === undefined), {
       message: 'remoteAuth oauth needs both clientId and clientSecret, or neither',

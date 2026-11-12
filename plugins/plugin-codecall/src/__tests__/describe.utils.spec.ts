@@ -1480,6 +1480,20 @@ describe('constrained schemas (#647)', () => {
       expect(args.query.length).toBeGreaterThanOrEqual(15);
     });
 
+    it('pads an example string to at most 256 characters, whatever minLength the schema asks for', () => {
+      const schema = {
+        type: 'object' as const,
+        properties: {
+          query: { type: 'string' as const, minLength: 1_000_000_000 },
+          note: { type: 'string' as const, minLength: 300 },
+        },
+        required: ['note'],
+      };
+      const [args] = callsOf(generateSearchExample('docs:search', schema).code) as { query: string }[];
+      expect(args.query).toHaveLength(256);
+      expect(generateBasicExample('docs:search', schema).code.length).toBeLessThan(1_000);
+    });
+
     it('omits an optional query that a pattern or a format constrains', () => {
       const pattern = {
         type: 'object' as const,

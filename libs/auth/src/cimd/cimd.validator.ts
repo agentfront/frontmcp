@@ -58,6 +58,12 @@ function isLocalhostHost(hostname: string): boolean {
   return lower === 'localhost' || lower === '127.0.0.1' || lower === '[::1]' || lower.endsWith('.localhost');
 }
 
+/** Whether private addresses are refused for this host: with blockPrivateIPs, for every host but a localhost one under allowInsecureForTesting. */
+export function blocksPrivateAddressesFor(hostname: string, securityConfig?: Partial<CimdSecurityConfig>): boolean {
+  if (!(securityConfig?.blockPrivateIPs ?? true)) return false;
+  return !(securityConfig?.allowInsecureForTesting && isLocalhostHost(hostname));
+}
+
 /**
  * Validate a client_id URL for CIMD usage.
  *
@@ -101,7 +107,6 @@ export function validateClientIdUrl(clientId: string, securityConfig?: Partial<C
 
   // Security checks
   const config = {
-    blockPrivateIPs: securityConfig?.blockPrivateIPs ?? true,
     allowedDomains: securityConfig?.allowedDomains,
     blockedDomains: securityConfig?.blockedDomains,
   };
@@ -120,7 +125,7 @@ export function validateClientIdUrl(clientId: string, securityConfig?: Partial<C
   }
 
   // SSRF protection: block private/internal IPs (but allow localhost when testing)
-  if (config.blockPrivateIPs && !allowInsecure) {
+  if (blocksPrivateAddressesFor(url.hostname, securityConfig)) {
     const ssrfCheck = checkSsrfProtection(url.hostname);
     if (!ssrfCheck.allowed) {
       throw new CimdSecurityError(clientId, ssrfCheck.reason);

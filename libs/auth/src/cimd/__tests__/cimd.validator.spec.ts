@@ -225,6 +225,18 @@ describe('cimd.validator', () => {
         expect(url.hostname).toBe('localhost');
       });
 
+      it('still refuses a private address that is not localhost when allowInsecureForTesting is true', () => {
+        expect(() =>
+          validateClientIdUrl('https://169.254.169.254/client', {
+            allowInsecureForTesting: true,
+            blockPrivateIPs: true,
+          }),
+        ).toThrow(CimdSecurityError);
+        expect(() => validateClientIdUrl('https://10.0.0.5/client', { allowInsecureForTesting: true })).toThrow(
+          CimdSecurityError,
+        );
+      });
+
       it('should still require path component when allowInsecureForTesting is true', () => {
         expect(() => validateClientIdUrl('http://localhost/', { allowInsecureForTesting: true })).toThrow(
           InvalidClientIdUrlError,

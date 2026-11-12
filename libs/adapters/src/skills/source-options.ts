@@ -45,6 +45,13 @@ const pushReplayStorageSchema = z
         message: 'cannot be "memory": each replica would then accept the same push',
       });
     }
+    if (storage.type === 'sqlite' && storage.sqlite?.path === ':memory:') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['sqlite', 'path'],
+        message: 'cannot be ":memory:": each process would then accept the same push; give the path of a database file',
+      });
+    }
   });
 
 export const staticSourceSchema = z.object({

@@ -3,6 +3,7 @@
  */
 import { MemoryStorageAdapter } from '../adapters/memory';
 import { StorageNotConnectedError, StorageOperationError } from '../errors';
+import { escapeGlob } from '../utils/pattern';
 
 describe('MemoryStorageAdapter', () => {
   let adapter: MemoryStorageAdapter;
@@ -300,6 +301,20 @@ describe('MemoryStorageAdapter', () => {
         expect(keys).toContain('user:1:settings');
       });
 
+      it('should answer a pattern with many wildcards on a long key', async () => {
+        // As a regular expression, this pattern on this key backtracks for longer than any test run.
+        const longKey = 'a'.repeat(5000);
+        await adapter.set(longKey, 'long');
+        expect(await adapter.keys('*a'.repeat(20) + 'b')).toEqual([]);
+        expect(await adapter.keys('*a'.repeat(20))).toEqual([longKey]);
+      });
+
+      it('should read an escaped wildcard as the literal character', async () => {
+        await adapter.set('id:a*b', 'literal');
+        await adapter.set('id:axb', 'other');
+        expect(await adapter.keys(`id:${escapeGlob('a*b')}`)).toEqual(['id:a*b']);
+      });
+
       it('should exclude expired keys', async () => {
         await adapter.set('temp', 'data', { ttlSeconds: 1 });
         await new Promise((resolve) => setTimeout(resolve, 1100));
@@ -467,6 +482,34 @@ describe('MemoryStorageAdapter', () => {
       expect(await lruAdapter.get('key2')).toBeNull();
       expect(await lruAdapter.get('key3')).toBe('value3');
       expect(await lruAdapter.get('key4')).toBe('value4');
+
+      await lruAdapter.disconnect();
+    });
+
+    it('should evict an entry whose key is the empty string', async () => {
+      const lruAdapter = new MemoryStorageAdapter({ maxEntries: 1, enableSweeper: false });
+      await lruAdapter.connect();
+
+      await lruAdapter.set('', 'empty');
+      await lruAdapter.set('key1', 'value1'); // Should evict ''
+
+      expect(await lruAdapter.get('')).toBeNull();
+      expect(await lruAdapter.get('key1')).toBe('value1');
+
+      await lruAdapter.disconnect();
+    });
+
+    it('should keep new counters within maxEntries', async () => {
+      const lruAdapter = new MemoryStorageAdapter({ maxEntries: 2, enableSweeper: false });
+      await lruAdapter.connect();
+
+      await lruAdapter.incr('count1');
+      await lruAdapter.incr('count2');
+      await lruAdapter.incr('count3'); // Should evict count1
+
+      expect(lruAdapter.getStats().size).toBe(2);
+      expect(await lruAdapter.get('count1')).toBeNull();
+      expect(await lruAdapter.get('count3')).toBe('1');
 
       await lruAdapter.disconnect();
     });

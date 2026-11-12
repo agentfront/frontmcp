@@ -4,7 +4,7 @@
  * The gate that refuses a client's direct `tools/call` of a tool CodeCall hides (#678), and how it
  * tells an in-process dispatch from a client's call.
  */
-import { getRunningTool, ToolNotFoundError, type FlowCtxOf } from '@frontmcp/sdk';
+import { getRunningTool, ScopeEntry, ToolNotFoundError, type FlowCtxOf } from '@frontmcp/sdk';
 
 import CodeCallPlugin from '../codecall.plugin';
 import { asCodeCallDispatch, isInProcessDispatch } from '../security';
@@ -129,6 +129,20 @@ describe('CodeCallPlugin.refuseDirectCallOfHiddenTool', () => {
     const hidden = { ...hiddenTool, metadata: { visibility: 'hidden' } };
 
     await expect(plugin.refuseDirectCallOfHiddenTool(flowCtxFor(hidden, {}))).resolves.toBeUndefined();
+  });
+
+  it('refuses a hidden tool that an adapter of an app in appIds provides', async () => {
+    const plugin = new CodeCallPlugin({ mode: 'codecall_only', appIds: ['crm'] });
+    const logger = { verbose: jest.fn(), child: () => logger };
+    const scope = { tools: { lineageOf: () => [{ kind: 'app', id: 'crm' }] } };
+    jest
+      .spyOn(plugin, 'get')
+      .mockImplementation(((token: unknown) => (token === ScopeEntry ? scope : logger)) as never);
+    const adapterTool = { ...hiddenTool, owner: { kind: 'adapter', id: 'crm-openapi' } };
+
+    await expect(plugin.refuseDirectCallOfHiddenTool(flowCtxFor(adapterTool, {}))).rejects.toBeInstanceOf(
+      ToolNotFoundError,
+    );
   });
 
   it("never refuses the server's own system tools", async () => {

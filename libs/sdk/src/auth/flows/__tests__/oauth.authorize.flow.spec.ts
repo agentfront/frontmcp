@@ -991,8 +991,15 @@ describe('OAuth Authorize Flow', () => {
   // ============================================
 
   describe('Flow Execution - Incremental Authorization', () => {
+    /** A local-mode scope that authorizes its Slack app incrementally. */
+    const incrementalScope = () =>
+      createMockScopeEntry({
+        auth: { mode: 'local', incrementalAuth: { enabled: true } } as never,
+        apps: [{ id: 'slack', name: 'Slack' }],
+      });
+
     it('should detect incremental auth mode from query params', async () => {
-      const scope = flowScenarios.incrementalAuth('slack');
+      const scope = incrementalScope();
       const metadata = createFlowMetadata();
       const params = createIncrementalAuthRequest('slack', 'slack:send_message', 'session-123');
       const input = createOAuthInput(params);
@@ -1009,7 +1016,7 @@ describe('OAuth Authorize Flow', () => {
     });
 
     it('should render incremental auth page for single app', async () => {
-      const scope = flowScenarios.incrementalAuth('slack');
+      const scope = incrementalScope();
       const metadata = createFlowMetadata();
       const params = createIncrementalAuthRequest('slack', 'slack:send_message');
       const input = createOAuthInput(params);

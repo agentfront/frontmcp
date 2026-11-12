@@ -7,6 +7,7 @@
 
 import type Database from 'better-sqlite3';
 
+import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
 import { withBusyRetry } from './open-database';
 import { acquireConnection, type SqliteConnection } from './sqlite-connection';
 import type { SqliteDatabase, SqliteStatement } from './sqlite-driver';
@@ -69,6 +70,8 @@ export class SqliteEventStore implements EventStoreInterface {
   private counters = new Map<string, number>();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private stmts: PreparedStatements | null = null;
+  /** AES-256-GCM key derived from `options.encryption.secret`, applied to each stored message. */
+  private readonly encryptionKey: Uint8Array | null = null;
 
   constructor(options: SqliteEventStoreOptions) {
     this.connection = acquireConnection(options.path, 'SqliteEventStore', {
@@ -79,6 +82,9 @@ export class SqliteEventStore implements EventStoreInterface {
 
     this.maxEvents = options.maxEvents ?? 10000;
     this.ttlMs = options.ttlMs ?? 300000;
+    if (options.encryption?.secret) {
+      this.encryptionKey = deriveEncryptionKey(options.encryption.secret);
+    }
 
     try {
       withBusyRetry(() => this.initSchema());
@@ -170,7 +176,8 @@ export class SqliteEventStore implements EventStoreInterface {
     const id = `${streamId}:${counter}`;
     const now = Date.now();
 
-    stmts.insert.run(id, streamId, JSON.stringify(message), now);
+    const json = JSON.stringify(message);
+    stmts.insert.run(id, streamId, this.encryptionKey ? encryptValue(this.encryptionKey, json) : json, now);
 
     // Evict oldest if over max
     const countRow = stmts.count.get() as { count: number };
@@ -209,10 +216,24 @@ export class SqliteEventStore implements EventStoreInterface {
     }[];
 
     for (const row of rows) {
-      await send(row.id, JSON.parse(row.message));
+      const message = this.readMessage(row.message);
+      if (message !== undefined) await send(row.id, message);
     }
 
     return streamId;
+  }
+
+  /**
+   * A stored message, decrypted when a secret is set. A message that does not decrypt (stored before
+   * the secret was set, or with another secret) is undefined, and left out of the replay.
+   */
+  private readMessage(stored: string): unknown {
+    if (!this.encryptionKey) return JSON.parse(stored);
+    try {
+      return JSON.parse(decryptValue(this.encryptionKey, stored));
+    } catch {
+      return undefined;
+    }
   }
 
   private evictExpired(): void {

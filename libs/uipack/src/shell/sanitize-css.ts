@@ -6,7 +6,8 @@
  */
 
 // `\` and 1-6 hex digits with one optional whitespace, or `\` and any other character but a newline
-const CSS_ESCAPE = /\\(?:([0-9a-fA-F]{1,6})[ \t\n\r\f]?|([^\n\r\f0-9a-fA-F]))/g;
+const CSS_ESCAPE = /\\(?:([0-9a-fA-F]{1,6})(?:\r\n|[ \t\n\r\f])?|([^\n\r\f0-9a-fA-F]))/g;
+const CSS_ESCAPE_AT = new RegExp(CSS_ESCAPE.source, 'y');
 const CSS_COMMENT = /\/\*[\s\S]*?(?:\*\/|$)/g;
 
 /** CSS text with its escapes read as the characters they stand for. */
@@ -74,8 +75,9 @@ function isIdentCharacter(character: string): boolean {
 function identEnd(css: string, start: number): number {
   let index = start;
   while (index < css.length) {
-    if (css[index] === '\\' && css[index + 1] !== undefined && css[index + 1] !== '\n') {
-      index += 2;
+    CSS_ESCAPE_AT.lastIndex = index;
+    if (CSS_ESCAPE_AT.test(css)) {
+      index = CSS_ESCAPE_AT.lastIndex;
     } else if (isIdentCharacter(css[index])) {
       index++;
     } else {

@@ -52,10 +52,10 @@ function toStringArray(value: unknown): string[] {
 }
 
 /**
- * No-op relationship resolver that always denies.
- * Used when no resolver is configured.
+ * The resolver of a context built without `relationshipResolver`. Its `check` answers false, and the
+ * engine reports a relationship rule checked against it as unresolved, so a `not` around it never grants.
  */
-const noopRelationshipResolver: RelationshipResolver = {
+export const noopRelationshipResolver: RelationshipResolver = {
   async check(): Promise<boolean> {
     return false;
   },
@@ -134,6 +134,11 @@ export class AuthoritiesContextBuilder {
     this.claimsMapping = options.claimsMapping;
     this.claimsResolver = options.claimsResolver;
     this.relationshipResolver = options.relationshipResolver ?? noopRelationshipResolver;
+  }
+
+  /** Whether a relationship resolver was configured; without one every relationship check denies as unresolved. */
+  get hasRelationshipResolver(): boolean {
+    return this.relationshipResolver !== noopRelationshipResolver;
   }
 
   /**

@@ -31,6 +31,10 @@ describe('isSameOriginRequest', () => {
       { host: 'localhost:3000', origin: 'http://localhost:3000', 'sec-fetch-site': 'cross-site' },
     ],
     ['a loopback Origin on a routable host', { host: 'app.example.com', origin: 'http://localhost' }],
+    [
+      'a DNS name that starts with 127.',
+      { host: '127.0.0.1:3000', origin: 'http://127.evil.example:3000', 'sec-fetch-site': 'cross-site' },
+    ],
     ['a sibling subdomain', { host: 'example.com', origin: 'https://app.example.com' }],
     [
       'the http page of an https host',

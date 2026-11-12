@@ -29,6 +29,7 @@ import {
   httpOutputSchema,
   httpRespond,
   intentSchema,
+  isStaticMode,
   normalizeEntryPrefix,
   normalizeScopeBase,
   partitionsByIdentity,
@@ -187,7 +188,19 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
     });
 
     // Log sanitized headers for debugging connection issues: credentials redacted, session ids truncated
-    this.logger.debug(`[${this.requestId}] HEADERS`, { headers: headersForLog(headers) });
+    this.logger.debug(`[${this.requestId}] HEADERS`, { headers: this.loggableHeaders(headers) });
+  }
+
+  /** The request headers as the debug log shows them; the static-auth credential header is redacted whatever its name. */
+  private loggableHeaders(headers: Record<string, unknown>): Record<string, unknown> {
+    const authOptions = this.scope.auth?.options;
+    const credentialHeader = authOptions && isStaticMode(authOptions) ? authOptions.header.toLowerCase() : undefined;
+    return Object.fromEntries(
+      Object.entries(headersForLog(headers)).map(([headerName, value]) => [
+        headerName,
+        headerName.toLowerCase() === credentialHeader ? '[REDACTED]' : value,
+      ]),
+    );
   }
 
   @Stage('checkIpFilter')
@@ -1007,7 +1020,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         return;
       }
 
-      this.logger.info(`[${this.requestId}] DELETE session: ${sessionId}`);
+      this.logger.info(`[${this.requestId}] DELETE session: ${sessionId.slice(0, 20)}...`);
 
       // Terminate the session - this unregisters the server AND adds to terminated set.
       // This prevents future non-initialize requests with this session ID from being accepted.
@@ -1030,7 +1043,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         await transportService.deleteStoredSession(sessionId);
       }
 
-      this.logger.info(`[${this.requestId}] Session terminated: ${sessionId}`);
+      this.logger.info(`[${this.requestId}] Session terminated: ${sessionId.slice(0, 20)}...`);
       this.respond(httpRespond.noContent());
     } catch (error) {
       // FlowControl is expected control flow, not an error

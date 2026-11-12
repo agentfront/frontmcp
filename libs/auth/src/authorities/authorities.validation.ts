@@ -7,6 +7,7 @@
  * engine can deny them when they are evaluated anyway.
  */
 
+import { unmatchableReason } from './authorities.evaluator';
 import type { AbacOperator, AuthoritiesPolicyMetadata } from './authorities.types';
 
 const ABAC_OPERATORS: ReadonlySet<AbacOperator> = new Set<AbacOperator>([
@@ -122,7 +123,8 @@ function checkConditionValue(op: AbacOperator, condition: Record<string, unknown
   const expected = OPERATOR_VALUES[op];
   if (expected && !expected.accepts(value)) return [`${path} must be ${expected.needs} for "${op}"`];
   if (Array.isArray(value) && value.length === 0 && (op === 'in' || op === 'notIn')) return [`${path} is empty`];
-  return [];
+  const unmatchable = op === 'matches' ? unmatchableReason(undefined, value) : undefined;
+  return unmatchable === undefined ? [] : [`${path} cannot be used: ${unmatchable}`];
 }
 
 /** An ABAC policy: a non-empty `match` and/or a non-empty `conditions` list of well-formed conditions. */

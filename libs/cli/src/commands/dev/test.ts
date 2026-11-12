@@ -2,7 +2,7 @@ import { type ChildProcess } from 'child_process';
 import * as os from 'os';
 import * as path from 'path';
 
-import { fileExists, unlink, writeFile } from '@frontmcp/utils';
+import { fileExists, mkdtemp, rm, writeFile } from '@frontmcp/utils';
 
 import { resolveConfig, type TestConfig } from '../../config';
 import { type ParsedArgs } from '../../core/args';
@@ -275,6 +275,16 @@ export function buildTestChildEnv(params: {
  *   frontmcp test --no-env           # Skip .env loading for a hermetic run
  *   frontmcp test --replay calls.jsonl  # Replay a call recording against the project server
  */
+/** Write the generated Jest config into a new folder of the temp directory that only this user can open; `remove` deletes it. */
+export async function writeGeneratedJestConfig(
+  config: object,
+): Promise<{ configPath: string; remove: () => Promise<void> }> {
+  const configDir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-jest-config-'));
+  const configPath = path.join(configDir, 'jest.config.json');
+  await writeFile(configPath, JSON.stringify(config, null, 2));
+  return { configPath, remove: () => rm(configDir, { recursive: true, force: true }) };
+}
+
 export async function runTest(opts: ParsedArgs): Promise<void> {
   const { replay } = opts;
   if (replay !== undefined) {
@@ -344,6 +354,7 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
   // Build Jest arguments. With a user config, we delegate; otherwise we
   // write our generated config to a temp file and point Jest at it.
   let configPath: string | undefined;
+  let removeGeneratedConfig: (() => Promise<void>) | undefined;
   if (!userConfig) {
     const transformer = resolveSwcJestTransformer(cwd);
     if (!transformer) {
@@ -354,9 +365,7 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
       process.exit(1);
     }
     const config = generateJestConfig(cwd, mergedOpts, testDefaults, transformer);
-    const tempDir = os.tmpdir();
-    configPath = path.join(tempDir, `frontmcp-jest-config-${Date.now()}.json`);
-    await writeFile(configPath, JSON.stringify(config, null, 2));
+    ({ configPath, remove: removeGeneratedConfig } = await writeGeneratedJestConfig(config));
   }
 
   // Explicit narrowing avoids the non-null assertion on userConfig. By
@@ -418,9 +427,9 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
       // ignore
     }
     // Clean up temp config file (only when we generated one — never the user's).
-    if (configPath) {
+    if (removeGeneratedConfig) {
       try {
-        await unlink(configPath);
+        await removeGeneratedConfig();
       } catch {
         // ignore
       }
@@ -449,9 +458,9 @@ export async function runTest(opts: ParsedArgs): Promise<void> {
     });
   } finally {
     // Clean up temp config file (only when we generated one — never the user's).
-    if (configPath) {
+    if (removeGeneratedConfig) {
       try {
-        await unlink(configPath);
+        await removeGeneratedConfig();
       } catch {
         // ignore
       }

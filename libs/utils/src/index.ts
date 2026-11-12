@@ -41,8 +41,18 @@ export {
 export { sanitizeToJson, inferMimeType, findNonFiniteNumber, findDroppedKeys } from './content';
 
 // HTTP utilities
-export { validateBaseUrl, buildSetCookie, parseCookies, getCookie, isLocalhost, isSecureRequest } from './http';
-export type { CookieOptions, SecureDetectionRequest } from './http';
+export {
+  validateBaseUrl,
+  buildSetCookie,
+  parseCookies,
+  getCookie,
+  isLocalhost,
+  isSecureRequest,
+  readBodyWithLimit,
+  readTextWithLimit,
+  ResponseTooLargeError,
+} from './http';
+export type { CookieOptions, SecureDetectionRequest, LimitedBodySource } from './http';
 
 // Network utilities (IP-literal classification for SSRF guards, redirect detection, SSRF-hardened outbound requests)
 export {
@@ -167,8 +177,15 @@ export type {
 export { redactFields, redactJson } from './redaction';
 export type { RedactedFields } from './redaction';
 
-// Escape utilities (HTML, JS, XSS prevention)
-export { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJsonForScript } from './escape';
+// Escape utilities (HTML, JS, XSS prevention, control characters in text output)
+export {
+  escapeHtml,
+  escapeHtmlAttr,
+  escapeJsString,
+  escapeScriptClose,
+  safeJsonForScript,
+  escapeControlCharacters,
+} from './escape';
 
 // Class identity across two copies of a package in one process (`instanceof` by brand)
 export { brandClass, isBrandedInstance } from './class-brand';
@@ -414,6 +431,7 @@ export {
   type StoredEncryptedBlob,
   type ClientKeyBinding,
   // Utilities
+  createGlobMatcher,
   globToRegex,
   matchesPattern,
   validatePattern,

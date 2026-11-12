@@ -8,7 +8,7 @@
  * display name only.
  */
 
-import { isAbsolute, joinPath, pathResolve, readFileBuffer } from '@frontmcp/utils';
+import { isAbsolute, joinPath, pathResolve, readFileBuffer, realpath } from '@frontmcp/utils';
 
 import type { ScopeEntry, SkillEntry } from '../../common';
 import type { SkillLoadResult } from '../../common/entries/skill.entry';
@@ -115,6 +115,10 @@ export async function findAndLoadSkillByPath(
   if (!loadResult) {
     throw new PublicMcpError(`Failed to load skill at "${skillPath}".`, 'INTERNAL_ERROR', 500);
   }
+  // The content goes with the registration the caller is checked against: one replaced meanwhile is not served
+  if (findSkillByPath(scope, skillPath) !== entry) {
+    throw new ResourceNotFoundError(`skill://${skillPath}/SKILL.md`);
+  }
 
   return { loadResult, instance: entry as SkillInstance };
 }
@@ -165,10 +169,11 @@ function isTextMimeType(mimeType: string): boolean {
  *      body inline; we serve from there first. This satisfies SEP-2640's
  *      "skills MUST function correctly without a local filesystem"
  *      requirement.
- *   2. **Filesystem under the skill's base directory** — for file-backed
- *      skills with declared `resources.{references,examples,scripts,assets}`
- *      directories or top-level files like `LICENSE`. Path-traversal is
- *      blocked via prefix check + explicit `.` / `..` segment rejection.
+ *   2. **Filesystem** — the declared `resources.{references,examples,scripts,assets}`
+ *      directories, and for a skill directory (loaded from a `SKILL.md`) also its
+ *      other files, like `LICENSE`. A skill declared in code does not publish the
+ *      folder of its module. Path-traversal is blocked via prefix check + explicit
+ *      `.` / `..` segment rejection.
  *
  * Returns either a text or blob result depending on the MIME type, so
  * binary assets (images, archives) are not corrupted by UTF-8 decoding.
@@ -234,6 +239,9 @@ export async function readSkillFileByPath(instance: SkillInstance, filePath: str
     throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
   }
 
+  // A skill declared in code serves only the resource directories it declares, never its module's folder
+  const publishedDir = instance.getPublishedDir();
+
   // Try the resource subdirectories first
   const resources = instance.getResources();
   const candidateDirs: Array<[string, string | undefined]> = [
@@ -244,6 +252,7 @@ export async function readSkillFileByPath(instance: SkillInstance, filePath: str
   ];
 
   let candidatePath: string | undefined;
+  let candidateDir: string | undefined;
 
   for (const [subdir, configured] of candidateDirs) {
     if (segments[0] !== subdir) continue;
@@ -253,8 +262,12 @@ export async function readSkillFileByPath(instance: SkillInstance, filePath: str
       ? isAbsolute(configured)
         ? configured
         : pathResolve(baseDir, configured)
-      : joinPath(baseDir, subdir);
+      : publishedDir
+        ? joinPath(publishedDir, subdir)
+        : undefined;
+    if (!dir) break;
     candidatePath = pathResolve(dir, ...segments.slice(1));
+    candidateDir = dir;
     if (!isInside(candidatePath, dir)) {
       throw new PublicMcpError(`Invalid file path "${filePath}".`, 'INVALID_PARAMS', 400);
     }
@@ -262,22 +275,27 @@ export async function readSkillFileByPath(instance: SkillInstance, filePath: str
   }
 
   if (!candidatePath) {
-    // Top-level file (e.g. LICENSE, README) — must stay inside the skill dir
-    candidatePath = pathResolve(baseDir, ...segments);
-    if (!isInside(candidatePath, baseDir)) {
+    // Top-level file (e.g. LICENSE, README) — only a skill directory has them, and it must stay inside it
+    if (!publishedDir) {
+      throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
+    }
+    candidatePath = pathResolve(publishedDir, ...segments);
+    if (!isInside(candidatePath, publishedDir)) {
       throw new PublicMcpError(`Invalid file path "${filePath}".`, 'INVALID_PARAMS', 400);
     }
   }
 
   const mimeType = guessMimeType(filePath);
+  // A link must not lead out of the skill directory, or out of the declared directory of a skill declared in code
+  const containingDir = publishedDir ?? candidateDir;
 
   // Read raw bytes first; decode as UTF-8 only for text-shaped MIME
   // types. Binary assets (PNG, JPEG, archives, etc.) are returned as
   // base64 so consumers can rebuild the original bytes via
   // Buffer.from(blob, 'base64').
-  let buffer: Buffer | Uint8Array;
+  let buffer: Buffer | Uint8Array | undefined;
   try {
-    buffer = await readFileBuffer(candidatePath);
+    buffer = containingDir ? await readFileInside(candidatePath, containingDir) : undefined;
   } catch (err) {
     // Only "file/dir absent" → 404. Permission errors, EISDIR, I/O
     // failures, etc. surface as 5xx via the framework error handler;
@@ -286,6 +304,9 @@ export async function readSkillFileByPath(instance: SkillInstance, filePath: str
       throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
     }
     throw err;
+  }
+  if (buffer === undefined) {
+    throw new ResourceNotFoundError(`skill://${instance.getSkillPath()}/${filePath}`);
   }
 
   if (!isTextMimeType(mimeType)) {
@@ -364,11 +385,14 @@ async function tryResolvedSubFile(
     }
 
     const absolutePath = (entry as { path?: string }).path;
-    const resolvedPath = resolveEntryPath(instance, kind, absolutePath, filename);
-    if (!resolvedPath) continue;
+    const entryFile = resolveEntryPath(instance, kind, absolutePath, filename);
+    if (!entryFile) continue;
 
     try {
-      const buf = await readFileBuffer(resolvedPath);
+      const buf = entryFile.root
+        ? await readFileInside(entryFile.filePath, entryFile.root)
+        : await readFileBuffer(entryFile.filePath);
+      if (buf === undefined) continue;
       const text = (Buffer.isBuffer(buf) ? buf : Buffer.from(buf)).toString('utf-8');
       return parseSkillMdFrontmatter(text).body;
     } catch (err) {
@@ -388,7 +412,8 @@ async function tryResolvedSubFile(
 
 /**
  * Build the absolute disk path for a resolved-entry filename, mirroring
- * the directory resolution in `readSkillFileByPath`.
+ * the directory resolution in `readSkillFileByPath`, with the directory a
+ * link in it must not lead out of (none for a path the skill's content names).
  *
  * Skills registered via `@Skill` (kind `CLASS_TOKEN`) often have no
  * `baseDir`, but their `resources.<kind>` is supplied as an absolute
@@ -399,11 +424,11 @@ function resolveEntryPath(
   kind: 'references' | 'examples',
   absolutePath: string | undefined,
   filename: string | undefined,
-): string | undefined {
+): { filePath: string; root?: string } | undefined {
   // Use `isAbsolute` (Node `path.isAbsolute`) so Windows drive-letter
   // (`C:\foo`) and UNC paths (`\\server\share`) are recognised as absolute
   // — `startsWith('/')` is POSIX-only.
-  if (absolutePath && isAbsolute(absolutePath)) return absolutePath;
+  if (absolutePath && isAbsolute(absolutePath)) return { filePath: absolutePath };
   if (!filename) return undefined;
   const baseDir = instance.getBaseDir();
   const configured = instance.getResources()?.[kind];
@@ -421,7 +446,16 @@ function resolveEntryPath(
   // same `isInside` check here.
   const resolved = pathResolve(dir, filename);
   if (!isInside(resolved, dir)) return undefined;
-  return resolved;
+  return { filePath: resolved, root: instance.getPublishedDir() ?? dir };
+}
+
+/**
+ * Read `filePath` when its real location, links followed, is inside the real location of `root`;
+ * undefined when a link leads outside it.
+ */
+async function readFileInside(filePath: string, root: string): Promise<Buffer | undefined> {
+  const [realFile, realRoot] = await Promise.all([realpath(filePath), realpath(root)]);
+  return isInside(realFile, realRoot) ? readFileBuffer(realFile) : undefined;
 }
 
 /**

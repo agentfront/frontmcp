@@ -31,6 +31,32 @@ describe('NavigateTool', () => {
     });
   });
 
+  it.each([
+    ['another origin', '//elsewhere.example/login'],
+    ['an absolute URL of another origin', 'https://elsewhere.example/'],
+    ['a backslash', String.raw`/\elsewhere.example`],
+    ['a relative backslash', String.raw`\elsewhere.example`],
+    ['a tab', '\t/elsewhere.example'],
+    ['a scheme', 'javascript:void(0)'],
+  ])('does not navigate to a path with %s', async (_label, path) => {
+    const mockNav: NavigateFn = jest.fn();
+    setNavigate(mockNav);
+
+    const result = await NavigateTool.execute({ path });
+
+    expect(mockNav).not.toHaveBeenCalled();
+    expect(result.content[0].text).toContain('Not navigated to');
+  });
+
+  it('navigates to a relative path, with a query and a fragment', async () => {
+    const mockNav: NavigateFn = jest.fn();
+    setNavigate(mockNav);
+
+    await NavigateTool.execute({ path: '../settings?tab=profile#name' });
+
+    expect(mockNav).toHaveBeenCalledWith('../settings?tab=profile#name', { replace: undefined });
+  });
+
   it('returns error message when bridge not connected', async () => {
     // Bridge is cleared in beforeEach, so navigate is null
     const result = await NavigateTool.execute({ path: '/settings' });

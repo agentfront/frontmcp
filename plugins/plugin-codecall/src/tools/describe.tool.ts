@@ -4,6 +4,7 @@ import { getCallSurface, InvalidInputError, Tool, ToolContext, type ToolEntry } 
 
 import CodeCallConfig from '../providers/code-call.config';
 import { checkCodeCallToolAccess, isBlockedSelfReference } from '../security';
+import { toolsWithheldByAuthorities } from '../security/codecall-discovery-authorities';
 import { AuditLoggerService } from '../services/audit-logger.service';
 import { generateSmartExample } from '../utils';
 import {
@@ -47,8 +48,9 @@ export default class DescribeTool extends ToolContext {
     const maxDefinitions = config.get('maxDefinitions');
     const tools: DescribeToolOutput['tools'] = [];
     const notFound: string[] = [];
-    // Describe what the caller of this tool could reach, for that call's surface.
+    // Describe what the caller of this tool could reach, for that call's surface and its authorities.
     const surface = getCallSurface();
+    const withheld = await toolsWithheldByAuthorities(this.scope, this.authInfo);
 
     for (const toolName of toolNames) {
       // Security: Don't allow describing CodeCall tools themselves
@@ -67,6 +69,11 @@ export default class DescribeTool extends ToolContext {
         continue;
       }
       const tool = access.entry;
+      if (withheld.has(tool.fullName)) {
+        audit?.logSecurityAccessDenied(executionId, toolName, "withheld by the tool's authorities");
+        notFound.push(toolName);
+        continue;
+      }
       if (tools.length >= maxDefinitions) {
         throw new InvalidInputError(
           `codecall:describe describes at most ${maxDefinitions} tools per call; describe the rest in another call`,

@@ -42,6 +42,12 @@ export default class RemoveJobTool extends ToolContext {
     }
 
     if (!job.isDynamic()) {
+      const visible = await JobPermissionGuard.maySee(
+        job.metadata.permissions,
+        this.authInfo,
+        this.scope.authoritiesContextBuilder,
+      );
+      if (!visible) return this.fail(new JobNotAuthorizedError(input.name));
       return this.fail(new Error(`Job "${input.name}" is not a dynamic job and cannot be removed`));
     }
 

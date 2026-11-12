@@ -1,3 +1,4 @@
+import { symlinkSync } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -515,6 +516,68 @@ describe('plugin-emitter (issue #411)', () => {
 
       expect(await fileExists(sentinel)).toBe(true);
       expect(await readFile(sentinel)).toBe('should-not-be-deleted');
+    });
+  });
+
+  describe('symbolic links inside the plugin folder', () => {
+    const baseOpts = {
+      version: '1.0.0',
+      description: 'd',
+      mcpArgs: ['serve', '--stdio'],
+      envHints: [],
+      cliVersion: '0.5.0',
+    };
+
+    it('leaves the files behind a linked skills folder in place on uninstall', async () => {
+      const destRoot = path.join(tmp, 'plugins');
+      await emitClaudePlugin({
+        ...baseOpts,
+        destRoot,
+        name: 'linked',
+        mcpCommand: 'linked',
+        skills: [{ name: 'managed', description: 'managed skill', instructionContent: 'body' }],
+        commands: [],
+      });
+      const pluginDir = path.join(destRoot, 'linked');
+      const elsewhere = path.join(tmp, 'elsewhere');
+      await mkdir(path.join(elsewhere, 'managed'), { recursive: true });
+      await writeFile(path.join(elsewhere, 'managed', 'SKILL.md'), 'not the plugin');
+      await rm(path.join(pluginDir, 'skills'), { recursive: true, force: true });
+      symlinkSync(elsewhere, path.join(pluginDir, 'skills'));
+
+      await removeClaudePlugin({ destRoot, name: 'linked' });
+
+      expect(await readFile(path.join(elsewhere, 'managed', 'SKILL.md'))).toBe('not the plugin');
+    });
+
+    it('refuses to write a command through a linked commands folder', async () => {
+      const destRoot = path.join(tmp, 'plugins');
+      const pluginDir = path.join(destRoot, 'linked');
+      const elsewhere = path.join(tmp, 'elsewhere');
+      await mkdir(elsewhere, { recursive: true });
+      await mkdir(pluginDir, { recursive: true });
+      await writeFile(path.join(elsewhere, 'one.md'), 'not the plugin');
+      symlinkSync(elsewhere, path.join(pluginDir, 'commands'));
+
+      await expect(
+        emitClaudePlugin({ ...baseOpts, destRoot, name: 'linked', mcpCommand: 'linked', skills: [], commands: [{ name: 'one' }] }),
+      ).rejects.toThrow(/is a symbolic link/);
+      expect(await readFile(path.join(elsewhere, 'one.md'))).toBe('not the plugin');
+    });
+
+    it('leaves a Codex skill behind a linked folder in place on reinstall', async () => {
+      const destRoot = path.join(tmp, 'codex-skills');
+      const skill = { name: 'old-skill', description: 'old', instructionContent: 'body' };
+      await emitCodexSkills({ ...baseOpts, destRoot, name: 'linked', skills: [skill] });
+      const elsewhere = path.join(tmp, 'elsewhere');
+      await mkdir(elsewhere, { recursive: true });
+      await writeFile(path.join(elsewhere, 'SKILL.md'), 'not the plugin');
+      await rm(path.join(destRoot, 'linked', 'old-skill'), { recursive: true, force: true });
+      symlinkSync(elsewhere, path.join(destRoot, 'linked', 'old-skill'));
+
+      await emitCodexSkills({ ...baseOpts, destRoot, name: 'linked', skills: [] });
+
+      expect(await readFile(path.join(elsewhere, 'SKILL.md'))).toBe('not the plugin');
     });
   });
 

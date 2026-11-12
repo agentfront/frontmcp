@@ -277,9 +277,9 @@ describe('generated CLI smoke tests', () => {
         }),
       }));
 
-      expect(source).toContain("'--user-name <value>'");
-      expect(source).toContain("'--max-results <number>'");
-      expect(source).toContain("'--include-archived'");
+      expect(source).toContain('"--user-name <value>"');
+      expect(source).toContain('"--max-results <number>"');
+      expect(source).toContain('"--include-archived"');
     });
 
     it('should include .requiredOption() for required parameters', () => {
@@ -348,6 +348,31 @@ describe('generated CLI smoke tests', () => {
       expect(stdout).toMatch(/Tools:\n\s+greet\s+Greet someone/);
       expect(stderr).toBe('');
       expect(exitCode).toBe(0);
+    });
+  });
+
+  describe('names listed by the server', () => {
+    const quotedName = "x',process.env.frontmcp_listed_name_ran='1','";
+    const schemas: Array<[string, Partial<ExtractedSchema>]> = [
+      ['a resource template placeholder', { resourceTemplates: [{ uriTemplate: `res://{${quotedName}}`, name: 'listed' }] }],
+      [
+        'a tool input property',
+        { tools: [{ name: 'listed', description: '', inputSchema: { type: 'object', properties: { [quotedName]: { type: 'string' } } } }] },
+      ],
+      ['a prompt argument', { prompts: [{ name: 'listed', arguments: [{ name: quotedName, required: true }] }] }],
+    ];
+
+    afterEach(() => {
+      delete process.env['frontmcp_listed_name_ran'];
+    });
+
+    it.each(schemas)('stay text in the generated CLI when %s holds a quote', async (_label, schema) => {
+      const source = generateCliEntry(makeOptions({ schema: makeSchema(schema) }));
+
+      const { exitCode } = await runGeneratedCli(source, []);
+
+      expect(exitCode).toBe(0);
+      expect(process.env['frontmcp_listed_name_ran']).toBeUndefined();
     });
   });
 
@@ -474,7 +499,7 @@ describe('generated CLI smoke tests', () => {
 
     it('should generate variadic flag for array parameters', () => {
       const source = generateCliEntry(makeOptions({ schema: fullSchema }));
-      expect(source).toContain("'--tags <items...>'");
+      expect(source).toContain('"--tags <items...>"');
     });
 
     it('should include parseInt coercion for integer fields', () => {

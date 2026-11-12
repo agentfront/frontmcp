@@ -7,6 +7,7 @@ import {
   type FrontMcpContext,
   type FrontMcpLogger,
 } from '@frontmcp/sdk';
+import { escapeGlob } from '@frontmcp/utils';
 
 import { deserializeAndDecrypt, encryptAndSerialize, getKeySourceForScope } from '../remember.crypto';
 import { RememberIdentityError } from '../remember.errors';
@@ -211,7 +212,11 @@ export class RememberAccessor {
   async list(options: RememberListOptions = {}): Promise<string[]> {
     const scope = options.scope ?? 'session';
     const scopePrefix = this.buildScopePrefix(scope);
-    const storageKeys = await this.store.keys(scopePrefix + (options.pattern ?? '*'));
+    // An id may hold `*`, which encoding keeps: the ids are matched literally, and the prefix checked again.
+    const literalPrefix = this.keyPrefix + escapeGlob(scopePrefix.slice(this.keyPrefix.length));
+    const storageKeys = (await this.store.keys(literalPrefix + (options.pattern ?? '*'))).filter((storageKey) =>
+      storageKey.startsWith(scopePrefix),
+    );
     const entries = await Promise.all(storageKeys.map((storageKey) => this.readEntry(storageKey, scope)));
 
     return storageKeys

@@ -174,7 +174,7 @@ export class EncryptedElicitationStore implements ElicitationStore {
       callback(rawResult as ElicitResult<T>);
     };
 
-    return this.store.subscribeResult(elicitId, decryptingCallback);
+    return this.store.subscribeResult(elicitId, decryptingCallback, sessionId);
   }
 
   /**

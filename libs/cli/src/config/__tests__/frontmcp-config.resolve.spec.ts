@@ -101,6 +101,36 @@ describe('resolveConfig (issue #400)', () => {
       expect(result.config?.name).toBe('demo');
       expect(result.configDir).toBe(root);
     });
+
+    describe('a config another user owns', () => {
+      const ownUid = process.getuid?.();
+      const asAnotherUser = ownUid === undefined || ownUid === 0 ? it.skip : it;
+
+      afterEach(() => jest.restoreAllMocks());
+
+      asAnotherUser('is not loaded from a parent folder, with a message naming it and --config', async () => {
+        const root = await makeTempProject(
+          'frontmcp.config.js',
+          'module.exports = { name: "planted", deployments: [{ target: "node" }] };',
+        );
+        const nestedCwd = path.join(root, 'project');
+        await mkdir(nestedCwd, { recursive: true });
+        jest.spyOn(process, 'getuid').mockReturnValue((ownUid as number) + 1);
+
+        await expect(resolveConfig({ cwd: nestedCwd, mode: 'dev' })).rejects.toThrow(
+          `Pass --config ${path.join(root, 'frontmcp.config.js')} to use it anyway`,
+        );
+      });
+
+      asAnotherUser('is loaded from the folder the command runs in', async () => {
+        const root = await makeTempProject('frontmcp.config.json', MINIMAL_CONFIG_JSON);
+        jest.spyOn(process, 'getuid').mockReturnValue((ownUid as number) + 1);
+
+        const result = await resolveConfig({ cwd: root, mode: 'dev' });
+
+        expect(result.config?.name).toBe('demo');
+      });
+    });
   });
 
   describe('env overlay composition', () => {

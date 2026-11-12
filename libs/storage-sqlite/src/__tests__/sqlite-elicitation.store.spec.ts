@@ -77,9 +77,13 @@ describe('SqliteElicitationStore', () => {
   describe('pub/sub via EventEmitter', () => {
     it('should publish and subscribe to results', async () => {
       const resultPromise = new Promise<unknown>((resolve) => {
-        store.subscribeResult('elicit-1', (result) => {
-          resolve(result);
-        });
+        void store.subscribeResult(
+          'elicit-1',
+          (result) => {
+            resolve(result);
+          },
+          'session-1',
+        );
       });
 
       await store.publishResult('elicit-1', 'session-1', {
@@ -96,9 +100,13 @@ describe('SqliteElicitationStore', () => {
 
     it('should support unsubscribe', async () => {
       let callCount = 0;
-      const unsubscribe = await store.subscribeResult('elicit-2', () => {
-        callCount++;
-      });
+      const unsubscribe = await store.subscribeResult(
+        'elicit-2',
+        () => {
+          callCount++;
+        },
+        'session-1',
+      );
 
       await store.publishResult('elicit-2', 'session-1', { status: 'accept' });
       expect(callCount).toBe(1);
@@ -165,15 +173,59 @@ describe('SqliteElicitationStore', () => {
   describe('fallback pub/sub', () => {
     it('should publish and subscribe to fallback results', async () => {
       const resultPromise = new Promise<unknown>((resolve) => {
-        store.subscribeFallbackResult('fb-3', (result) => {
-          resolve(result);
-        });
+        void store.subscribeFallbackResult(
+          'fb-3',
+          (result) => {
+            resolve(result);
+          },
+          'session-1',
+        );
       });
 
       await store.publishFallbackResult('fb-3', 'session-1', { toolResult: 'success' });
 
       const result = await resultPromise;
       expect(result).toEqual({ toolResult: 'success' });
+    });
+  });
+
+  describe('results reach only the session that asked', () => {
+    it('an answer in one session does not resolve another session waiting on the same elicitation ID', async () => {
+      const asking: unknown[] = [];
+      const other: unknown[] = [];
+      await store.subscribeResult('elicit-1', (result) => asking.push(result), 'session-a');
+      await store.subscribeResult('elicit-1', (result) => other.push(result), 'session-b');
+
+      await store.publishResult('elicit-1', 'session-a', { status: 'accept', content: { answer: 'from a' } });
+
+      expect(asking).toEqual([{ status: 'accept', content: { answer: 'from a' } }]);
+      expect(other).toEqual([]);
+    });
+
+    it('a fallback result in one session does not reach another session waiting on the same elicitation ID', async () => {
+      const asking: unknown[] = [];
+      const other: unknown[] = [];
+      await store.subscribeFallbackResult('fb-1', (result) => asking.push(result), 'session-a');
+      await store.subscribeFallbackResult('fb-1', (result) => other.push(result), 'session-b');
+
+      await store.publishFallbackResult('fb-1', 'session-a', { success: true });
+
+      expect(asking).toEqual([{ success: true }]);
+      expect(other).toEqual([]);
+    });
+
+    it('a session ID containing the separator does not share a route with another session', async () => {
+      const other: unknown[] = [];
+      await store.subscribeResult('b:elicit-1', (result) => other.push(result), 'a');
+
+      await store.publishResult('elicit-1', 'a:b', { status: 'accept' });
+
+      expect(other).toEqual([]);
+    });
+
+    it('subscribing without the session ID of the elicitation is refused', async () => {
+      await expect(store.subscribeResult('elicit-1', () => undefined)).rejects.toThrow(/session ID/);
+      await expect(store.subscribeFallbackResult('fb-1', () => undefined)).rejects.toThrow(/session ID/);
     });
   });
 

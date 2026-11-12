@@ -62,6 +62,8 @@ export interface McpStatelessClientOptions {
    * protocol, which would then never fall back.
    */
   requestTimeoutMs?: number;
+  /** The longest a task handle is polled, whatever `ttlMs` it states; omit to follow its `ttlMs`. */
+  maxTaskWaitMs?: number;
   /** Injected for tests. */
   fetchImpl?: typeof fetch;
 }
@@ -94,6 +96,9 @@ interface JsonRpcResponse {
 }
 
 const DEFAULT_CLIENT_INFO: Implementation = { name: 'frontmcp-20260728-client', version: '1.0.0' };
+
+/** The shortest wait between two `tasks/get` polls, whatever `pollIntervalMs` a task handle states. */
+const MIN_POLL_INTERVAL_MS = 100;
 
 export class McpStatelessClient {
   private nextId = 1;
@@ -259,16 +264,22 @@ export class McpStatelessClient {
    * Poll a task handle to a terminal state, answering mid-flight input requests.
    *
    * Honours the server's `pollIntervalMs` hint rather than picking our own
-   * cadence — the server knows how long its work takes.
+   * cadence — the server knows how long its work takes — down to 100 ms, and
+   * stops at `maxTaskWaitMs` when it is set.
    */
   private async awaitTask(task: Record<string, unknown>): Promise<Record<string, unknown>> {
     const taskId = String(task['taskId']);
-    const interval = typeof task['pollIntervalMs'] === 'number' ? (task['pollIntervalMs'] as number) : 250;
+    const hinted = task['pollIntervalMs'];
+    const interval = Math.max(
+      MIN_POLL_INTERVAL_MS,
+      typeof hinted === 'number' && Number.isFinite(hinted) ? hinted : 250,
+    );
     // `ttlMs: null` means "unlimited" per the tasks extension; only a numeric
     // TTL bounds the poll loop. Anything else falls back to a finite default so
     // a malformed handle cannot spin forever.
     const rawTtl = task['ttlMs'];
-    const ttl = rawTtl === null ? Number.POSITIVE_INFINITY : typeof rawTtl === 'number' ? rawTtl : 60_000;
+    const remoteTtl = rawTtl === null ? Number.POSITIVE_INFINITY : typeof rawTtl === 'number' ? rawTtl : 60_000;
+    const ttl = Math.min(remoteTtl, this.options.maxTaskWaitMs ?? Number.POSITIVE_INFINITY);
     const deadline = ttl === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : Date.now() + ttl;
 
     let current = task;
@@ -486,19 +497,29 @@ export class McpStatelessClient {
     return final ?? {};
   }
 
-  /** Drain an SSE body, handing each decoded JSON message to `onMessage`. */
+  /**
+   * Drain an SSE body, handing each decoded JSON message to `onMessage`. An unfinished frame is kept as its chunks,
+   * and only a new chunk (with the three characters before it) is searched for the blank line that ends a frame.
+   */
   private async pumpSse(
     body: ReadableStream<Uint8Array>,
     onMessage: (message: Record<string, unknown>) => void,
   ): Promise<void> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    let pending: string[] = [];
+    let tail = '';
 
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      const text = decoder.decode(value, { stream: true });
+      if (!/\r?\n\r?\n/.test(tail + text)) {
+        pending.push(text);
+        tail = (tail + text).slice(-3);
+        continue;
+      }
+      let buffer = pending.join('') + text;
 
       let separator: number;
       while ((separator = buffer.search(/\r?\n\r?\n/)) !== -1) {
@@ -519,6 +540,8 @@ export class McpStatelessClient {
           // comments and keep-alives legitimately carry no JSON.
         }
       }
+      pending = [buffer];
+      tail = buffer.slice(-3);
     }
   }
 

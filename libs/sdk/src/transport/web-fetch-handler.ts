@@ -243,7 +243,7 @@ function buildWebFetchHandler(
   // outcome the Express host reaches for a routable bind.
   const rebinding = httpConfig?.security?.dnsRebindingProtection;
   const hostValidation =
-    rebinding?.enabled === false || (!rebinding?.allowedHosts?.length && !rebinding?.allowedOrigins?.length)
+    rebinding?.enabled === false || (!rebinding?.allowedHosts?.length && rebinding?.allowedOrigins === undefined)
       ? undefined
       : compileHostValidation({
           allowedHosts: rebinding.allowedHosts,

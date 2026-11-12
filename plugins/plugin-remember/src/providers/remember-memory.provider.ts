@@ -1,4 +1,5 @@
 import { Provider, ProviderScope } from '@frontmcp/sdk';
+import { createGlobMatcher } from '@frontmcp/utils';
 
 import type { RememberStoreInterface } from './remember-store.interface';
 
@@ -132,12 +133,12 @@ export default class RememberMemoryProvider implements RememberStoreInterface {
   }
 
   /**
-   * List keys matching a glob-style pattern.
-   * Supports * and ? wildcards.
+   * List keys matching a glob-style pattern: `*` and `?` wildcards, and a backslash makes the next
+   * character literal, as in Redis. Matching never backtracks.
    */
   async keys(pattern?: string): Promise<string[]> {
     const result: string[] = [];
-    const regex = pattern ? this.patternToRegex(pattern) : null;
+    const matches = pattern ? createGlobMatcher(pattern) : null;
 
     // Collect expired keys first to avoid modifying map during iteration
     const expiredKeys: string[] = [];
@@ -158,7 +159,7 @@ export default class RememberMemoryProvider implements RememberStoreInterface {
       }
 
       // Apply pattern filter
-      if (regex && !regex.test(key)) {
+      if (matches && !matches(key)) {
         continue;
       }
 
@@ -198,36 +199,5 @@ export default class RememberMemoryProvider implements RememberStoreInterface {
         this.memory.delete(key);
       }
     }
-  }
-
-  // ReDoS protection constants
-  // Pattern length allows for long prefixes (e.g., remember:session:{uuid}:user:*)
-  private static readonly MAX_PATTERN_LENGTH = 500;
-  private static readonly MAX_WILDCARDS = 20;
-
-  /**
-   * Convert a glob-style pattern to a RegExp.
-   * * matches any sequence of characters
-   * ? matches any single character
-   *
-   * Includes ReDoS protection: validates pattern length and wildcard count.
-   */
-  private patternToRegex(pattern: string): RegExp {
-    // ReDoS protection: limit pattern length
-    if (pattern.length > RememberMemoryProvider.MAX_PATTERN_LENGTH) {
-      throw new Error(`Pattern too long: ${pattern.length} chars (max ${RememberMemoryProvider.MAX_PATTERN_LENGTH})`);
-    }
-
-    // ReDoS protection: count wildcards
-    const wildcardCount = (pattern.match(/[*?]/g) || []).length;
-    if (wildcardCount > RememberMemoryProvider.MAX_WILDCARDS) {
-      throw new Error(`Too many wildcards in pattern: ${wildcardCount} (max ${RememberMemoryProvider.MAX_WILDCARDS})`);
-    }
-
-    const escaped = pattern
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special chars
-      .replace(/\*/g, '.*') // * -> .*
-      .replace(/\?/g, '.'); // ? -> .
-    return new RegExp(`^${escaped}$`);
   }
 }

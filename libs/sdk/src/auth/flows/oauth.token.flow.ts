@@ -590,20 +590,31 @@ export default class OauthTokenFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * The request's client assertion, and what its `aud` may name (RFC 7523 §3): this token endpoint, as the
-   * authorization server metadata advertises it, or the issuer.
+   * The request's client assertion, and what its `aud` may name (RFC 7523 §3): the issuer, the token endpoint on
+   * the issuer's origin, and the token endpoint as the authorization server metadata advertises it for this
+   * request when the request's Host is the issuer's host. A Host naming another server never sets the audience.
    */
   private clientAssertion(
     body: { client_assertion_type?: string; client_assertion?: string },
     localAuth: LocalPrimaryAuth,
   ): ClientAssertionInput {
     const { request } = this.rawInput;
-    const tokenEndpoint = `${getRequestBaseUrl(request, oauthBasePath(this.scope))}/oauth/token`;
-    return {
-      type: body.client_assertion_type,
-      assertion: body.client_assertion,
-      audiences: [tokenEndpoint, localAuth.issuerFor(request)],
-    };
+    const issuer = localAuth.issuerFor(request);
+    const tokenPath = `${oauthBasePath(this.scope)}/oauth/token`;
+    const requestEndpoint = `${getRequestBaseUrl(request)}${tokenPath}`;
+    const issuerUrl = parseUrl(issuer);
+    const audiences = issuerUrl ? [`${issuerUrl.origin}${tokenPath}`, issuer] : [issuer];
+    if (issuerUrl && parseUrl(requestEndpoint)?.host === issuerUrl.host) audiences.push(requestEndpoint);
+    return { type: body.client_assertion_type, assertion: body.client_assertion, audiences };
+  }
+}
+
+/** A URL, or undefined when the value is not one. */
+function parseUrl(value: string): URL | undefined {
+  try {
+    return new URL(value);
+  } catch {
+    return undefined;
   }
 }
 

@@ -2,6 +2,21 @@ import Redis, { Redis as RedisClient } from 'ioredis';
 
 import { AsyncProvider, ProviderScope } from '@frontmcp/sdk';
 
+import { hoursKey, openKey, sessionsKey } from '../utils/keys';
+import { type SessionSegment } from '../utils/time';
+
+const CLOSE_SESSION_SCRIPT = `
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return 0
+end
+for index = 2, #KEYS, 2 do
+  redis.call('INCRBY', KEYS[index], ARGV[index])
+  redis.call('LPUSH', KEYS[index + 1], ARGV[index + 1])
+end
+redis.call('DEL', KEYS[1])
+return 1
+`;
+
 export interface EmployeeRedisConfig {
   host: string;
   port: number;
@@ -85,6 +100,26 @@ export default class EmployeeRedisProvider {
 
   async lrange(key: string, start: number, stop: number): Promise<string[]> {
     return this.client.lrange(key, start, stop);
+  }
+
+  /**
+   * Add a session's day segments to the totals and history and delete its open record in one step, only while
+   * the open record still holds `openStart`, so of two concurrent exits only one is recorded.
+   */
+  async closeSession(
+    siteId: string,
+    employeeId: string,
+    openStart: string,
+    segments: SessionSegment[],
+  ): Promise<boolean> {
+    const keys = [openKey(siteId, employeeId)];
+    const args = [openStart];
+    for (const seg of segments) {
+      keys.push(hoursKey(siteId, employeeId, seg.day), sessionsKey(siteId, employeeId, seg.day));
+      args.push(String(seg.durationMs), JSON.stringify({ start: seg.start, end: seg.end, durationMs: seg.durationMs }));
+    }
+    const closed = await this.client.eval(CLOSE_SESSION_SCRIPT, keys.length, ...keys, ...args);
+    return closed === 1;
   }
 }
 

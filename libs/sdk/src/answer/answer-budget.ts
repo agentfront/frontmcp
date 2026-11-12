@@ -37,6 +37,8 @@ interface Fitted<T> {
 interface FitContext {
   lists: BudgetListPolicy;
   omitted: BudgetOmission[];
+  /** The JSON size of each object and list measured, so a part is measured once whatever its depth. */
+  sizes: WeakMap<object, number>;
 }
 
 const NOTED_OMISSIONS = 5;
@@ -50,6 +52,40 @@ function utf8Bytes(text: string): number {
 
 function jsonBytes(value: unknown): number {
   return utf8Bytes(JSON.stringify(value) ?? '');
+}
+
+/** Whether JSON.stringify leaves a value out of an object (and writes `null` for it in a list). */
+function isLeftOut(value: unknown): boolean {
+  return value === undefined || typeof value === 'function' || typeof value === 'symbol';
+}
+
+/** Whether JSON.stringify writes a value from its own keys or items, with no `toJSON` of its own. */
+function isPlainContainer(value: object): boolean {
+  if (typeof (value as { toJSON?: unknown }).toJSON === 'function') return false;
+  const prototype = Object.getPrototypeOf(value);
+  return Array.isArray(value) || prototype === Object.prototype || prototype === null;
+}
+
+/** `jsonBytes(value)`, from the sizes of its parts: each object and list is measured once per fit. */
+function sizeOf(value: unknown, sizes: WeakMap<object, number>): number {
+  if (typeof value !== 'object' || value === null || !isPlainContainer(value)) return jsonBytes(value);
+  const known = sizes.get(value);
+  if (known !== undefined) return known;
+  let size = 2;
+  if (Array.isArray(value)) {
+    for (const item of value) size += isLeftOut(item) ? 4 : sizeOf(item, sizes);
+    size += Math.max(value.length - 1, 0);
+  } else {
+    let written = 0;
+    for (const [key, item] of Object.entries(value)) {
+      if (isLeftOut(item)) continue;
+      size += jsonBytes(key) + 1 + sizeOf(item, sizes);
+      written++;
+    }
+    size += Math.max(written - 1, 0);
+  }
+  sizes.set(value, size);
+  return size;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -96,7 +132,7 @@ function fitString(text: string, allowance: number, path: string, context: FitCo
 /** Keeps whole items from the end `context.lists` names, as many as fit, in their order. */
 function fitList(items: unknown[], allowance: number, path: string, context: FitContext): unknown[] {
   if (items.length === 0) return items;
-  const sizes = items.map(jsonBytes);
+  const sizes = items.map((item) => sizeOf(item, context.sizes));
   const indexes = items.map((_, index) => index);
   const preferred = context.lists === 'keep-newest' ? indexes.reverse() : indexes;
   const kept: number[] = [];
@@ -125,7 +161,7 @@ function fitRecord(
   context: FitContext,
 ): Record<string, unknown> {
   const entries = Object.entries(record);
-  const sizes = entries.map(([, value]) => jsonBytes(value));
+  const sizes = entries.map(([, value]) => sizeOf(value, context.sizes));
   const largestFirst = entries.map((_, index) => index).sort((left, right) => sizes[right] - sizes[left]);
   const fitted = { ...record };
   let total = size;
@@ -140,7 +176,7 @@ function fitRecord(
       context,
     );
     if (shrunk === value) continue;
-    total -= sizes[index] - jsonBytes(shrunk);
+    total -= sizes[index] - sizeOf(shrunk, context.sizes);
     fitted[key] = shrunk;
   }
   return fitted;
@@ -156,8 +192,8 @@ export function fitJsonToBudget(
   maxBytes: number,
   lists: BudgetListPolicy = 'keep-newest',
 ): Fitted<unknown> {
-  const context: FitContext = { lists, omitted: [] };
-  const size = jsonBytes(value);
+  const context: FitContext = { lists, omitted: [], sizes: new WeakMap() };
+  const size = sizeOf(value, context.sizes);
   if (size <= maxBytes) return { value, omitted: [] };
   return { value: fitNode(value, size, maxBytes, '$', context), omitted: context.omitted };
 }

@@ -1,7 +1,7 @@
 // file: libs/sdk/src/answer/client-profile.ts
 
 import type { CallToolResult } from '@frontmcp/protocol';
-import { globToRegex } from '@frontmcp/utils';
+import { createGlobMatcher } from '@frontmcp/utils';
 
 import type { ResourceMetadata } from '../common/metadata/resource.metadata';
 import type {
@@ -28,13 +28,15 @@ const SHORT_STRING = 40;
 /** Longer names match no profile: a glob with several `*` backtracks on a long name a client picks. */
 const MAX_CLIENT_NAME_LENGTH = 256;
 
-const compiledProfiles = new WeakMap<ClientProfilesOptionsInterface, Array<[RegExp, ClientProfile]>>();
+type ClientNameMatcher = (name: string) => boolean;
 
-function compile(clients: ClientProfilesOptionsInterface): Array<[RegExp, ClientProfile]> {
+const compiledProfiles = new WeakMap<ClientProfilesOptionsInterface, Array<[ClientNameMatcher, ClientProfile]>>();
+
+function compile(clients: ClientProfilesOptionsInterface): Array<[ClientNameMatcher, ClientProfile]> {
   const known = compiledProfiles.get(clients);
   if (known) return known;
-  const compiled = Object.entries(clients).map(([glob, profile]): [RegExp, ClientProfile] => [
-    globToRegex(glob.toLowerCase()),
+  const compiled = Object.entries(clients).map(([glob, profile]): [ClientNameMatcher, ClientProfile] => [
+    createGlobMatcher(glob.toLowerCase()),
     profile,
   ]);
   compiledProfiles.set(clients, compiled);
@@ -51,7 +53,7 @@ export function resolveClientProfile(
 ): ClientProfile | undefined {
   if (!clients || clientName === undefined || clientName.length > MAX_CLIENT_NAME_LENGTH) return undefined;
   const lowerName = clientName.toLowerCase();
-  return compile(clients).find(([matcher]) => matcher.test(lowerName))?.[1];
+  return compile(clients).find(([matches]) => matches(lowerName))?.[1];
 }
 
 /** The `clientInfo.name` the caller sent: with this request, else at the session's `initialize`. */

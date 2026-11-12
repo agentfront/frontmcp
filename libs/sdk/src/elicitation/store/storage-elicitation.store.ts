@@ -10,6 +10,8 @@
 import { expiresAtToTTL, TypedStorage, type NamespacedStorage, type Unsubscribe } from '@frontmcp/utils';
 
 import type { FrontMcpLogger } from '../../common';
+import { ElicitationSubscriptionError } from '../../errors';
+import { sessionIdHash } from '../../logger/session-id-hash';
 import type {
   ElicitResult,
   FallbackExecutionResult,
@@ -34,6 +36,26 @@ const RESULT_CHANNEL_PREFIX = 'result:';
 const FALLBACK_RESULT_CHANNEL_PREFIX = 'fallback-result:';
 
 /**
+ * The route of a result: its session, with `%` and `:` escaped so the first `:` ends it, then its elicitation.
+ */
+function elicitationResultRoute(sessionId: string, elicitId: string): string {
+  return `${sessionId.replace(/%/g, '%25').replace(/:/g, '%3A')}:${elicitId}`;
+}
+
+/**
+ * The session a result subscription waits in: without it, a result could only be routed by elicitation ID.
+ */
+function requireSubscriberSession(elicitId: string, sessionId: string | undefined): string {
+  if (!sessionId) {
+    throw new ElicitationSubscriptionError(
+      elicitId,
+      new Error('a result subscription needs the session ID the elicitation belongs to; pass it as the third argument'),
+    );
+  }
+  return sessionId;
+}
+
+/**
  * Elicitation store using @frontmcp/utils storage abstractions.
  *
  * Features:
@@ -46,7 +68,7 @@ const FALLBACK_RESULT_CHANNEL_PREFIX = 'fallback-result:';
  * - `pending:{sessionId}` - Pending elicitation records
  * - `fallback:{elicitId}` - Fallback context for re-invocation
  * - `resolved:{elicitId}` - Pre-resolved results for fallback flow
- * - Pub/sub channel: `result:{elicitId}` - Result routing
+ * - Pub/sub channel: `result:{sessionId}:{elicitId}` - Result routing, within the session that asked
  */
 export class StorageElicitationStore implements ElicitationStore {
   private readonly storage: NamespacedStorage;
@@ -55,19 +77,19 @@ export class StorageElicitationStore implements ElicitationStore {
   private readonly resolved: TypedStorage<ResolvedElicitResult>;
   private readonly logger?: FrontMcpLogger;
 
-  /** Local callback registry for pub/sub (maps elicitId -> callbacks) */
+  /** Local callback registry for pub/sub (maps route -> callbacks) */
   private readonly localCallbacks = new Map<string, Set<ElicitResultCallback>>();
 
-  /** Active subscriptions (maps elicitId -> unsubscribe function) */
+  /** Active subscriptions (maps route -> unsubscribe function) */
   private readonly activeSubscriptions = new Map<string, Unsubscribe>();
 
   /** Pending subscriptions guard to prevent duplicate concurrent subscribe calls */
   private readonly pendingSubscriptions = new Map<string, Promise<Unsubscribe>>();
 
-  /** Local callback registry for fallback results (maps elicitId -> callbacks) */
+  /** Local callback registry for fallback results (maps route -> callbacks) */
   private readonly fallbackResultCallbacks = new Map<string, Set<FallbackResultCallback>>();
 
-  /** Active fallback subscriptions (maps elicitId -> unsubscribe function) */
+  /** Active fallback subscriptions (maps route -> unsubscribe function) */
   private readonly activeFallbackSubscriptions = new Map<string, Unsubscribe>();
 
   /** Pending fallback subscriptions guard */
@@ -97,7 +119,7 @@ export class StorageElicitationStore implements ElicitationStore {
     const ttlSeconds = expiresAtToTTL(expiresAt);
     if (ttlSeconds <= 0) {
       this.logger?.warn('[StorageElicitationStore] Record already expired, not storing', {
-        sessionId,
+        sessionIdHash: sessionIdHash(sessionId),
         elicitId: record.elicitId,
       });
       return;
@@ -106,7 +128,7 @@ export class StorageElicitationStore implements ElicitationStore {
     await this.pending.set(sessionId, record, { ttlSeconds });
 
     this.logger?.debug('[StorageElicitationStore] Stored pending elicitation', {
-      sessionId,
+      sessionIdHash: sessionIdHash(sessionId),
       elicitId: record.elicitId,
       ttlSeconds,
     });
@@ -136,7 +158,9 @@ export class StorageElicitationStore implements ElicitationStore {
    */
   async deletePending(sessionId: string): Promise<void> {
     await this.pending.delete(sessionId);
-    this.logger?.debug('[StorageElicitationStore] Deleted pending elicitation', { sessionId });
+    this.logger?.debug('[StorageElicitationStore] Deleted pending elicitation', {
+      sessionIdHash: sessionIdHash(sessionId),
+    });
   }
 
   // ============================================
@@ -144,36 +168,38 @@ export class StorageElicitationStore implements ElicitationStore {
   // ============================================
 
   /**
-   * Subscribe to elicitation results for a specific elicit ID.
+   * Subscribe to elicitation results for a specific elicit ID within the session that asked.
    * Uses in-flight subscription guard to prevent duplicate concurrent subscriptions.
    */
   async subscribeResult<T = unknown>(
     elicitId: string,
     callback: ElicitResultCallback<T>,
-    _sessionId?: string,
+    sessionId?: string,
   ): Promise<ElicitUnsubscribe> {
+    const route = elicitationResultRoute(requireSubscriberSession(elicitId, sessionId), elicitId);
+
     // Add to local callback registry
-    let callbacks = this.localCallbacks.get(elicitId);
+    let callbacks = this.localCallbacks.get(route);
     if (!callbacks) {
       callbacks = new Set();
-      this.localCallbacks.set(elicitId, callbacks);
+      this.localCallbacks.set(route, callbacks);
     }
     callbacks.add(callback as ElicitResultCallback);
 
     // Subscribe to pub/sub channel if not already subscribed and no pending subscription
     if (
-      !this.activeSubscriptions.has(elicitId) &&
-      !this.pendingSubscriptions.has(elicitId) &&
+      !this.activeSubscriptions.has(route) &&
+      !this.pendingSubscriptions.has(route) &&
       this.storage.supportsPubSub()
     ) {
-      const channel = RESULT_CHANNEL_PREFIX + elicitId;
+      const channel = RESULT_CHANNEL_PREFIX + route;
 
       // Create a pending subscription promise to guard against concurrent calls
       const subscribePromise = this.storage
         .subscribe(channel, (message) => {
           try {
             const result = JSON.parse(message) as ElicitResult<unknown>;
-            const cbs = this.localCallbacks.get(elicitId);
+            const cbs = this.localCallbacks.get(route);
             if (cbs) {
               for (const cb of cbs) {
                 try {
@@ -195,13 +221,13 @@ export class StorageElicitationStore implements ElicitationStore {
         })
         .then((unsubscribe) => {
           // Move from pending to active
-          this.pendingSubscriptions.delete(elicitId);
-          this.activeSubscriptions.set(elicitId, unsubscribe);
+          this.pendingSubscriptions.delete(route);
+          this.activeSubscriptions.set(route, unsubscribe);
           return unsubscribe;
         })
         .catch((err) => {
           // Clean up pending entry on error
-          this.pendingSubscriptions.delete(elicitId);
+          this.pendingSubscriptions.delete(route);
           this.logger?.error('[StorageElicitationStore] Failed to subscribe', {
             elicitId,
             error: err instanceof Error ? err.message : String(err),
@@ -209,7 +235,7 @@ export class StorageElicitationStore implements ElicitationStore {
           throw err;
         });
 
-      this.pendingSubscriptions.set(elicitId, subscribePromise);
+      this.pendingSubscriptions.set(route, subscribePromise);
 
       // Wait for subscription to complete
       try {
@@ -218,19 +244,19 @@ export class StorageElicitationStore implements ElicitationStore {
         // Remove callback on subscription failure and rethrow
         callbacks.delete(callback as ElicitResultCallback);
         if (callbacks.size === 0) {
-          this.localCallbacks.delete(elicitId);
+          this.localCallbacks.delete(route);
         }
         throw error;
       }
-    } else if (this.pendingSubscriptions.has(elicitId)) {
+    } else if (this.pendingSubscriptions.has(route)) {
       // If there's a pending subscription, wait for it to complete
       try {
-        await this.pendingSubscriptions.get(elicitId);
+        await this.pendingSubscriptions.get(route);
       } catch (error) {
         // Remove callback on pending subscription failure and rethrow
         callbacks.delete(callback as ElicitResultCallback);
         if (callbacks.size === 0) {
-          this.localCallbacks.delete(elicitId);
+          this.localCallbacks.delete(route);
         }
         throw error;
       }
@@ -240,22 +266,22 @@ export class StorageElicitationStore implements ElicitationStore {
     return async () => {
       callbacks.delete(callback as ElicitResultCallback);
 
-      // If no more callbacks for this elicitId, unsubscribe from channel
+      // If no more callbacks for this route, unsubscribe from channel
       if (callbacks.size === 0) {
-        this.localCallbacks.delete(elicitId);
+        this.localCallbacks.delete(route);
 
         // Wait for any pending subscription to complete before cleaning up
-        if (this.pendingSubscriptions.has(elicitId)) {
+        if (this.pendingSubscriptions.has(route)) {
           try {
-            await this.pendingSubscriptions.get(elicitId);
+            await this.pendingSubscriptions.get(route);
           } catch {
             // Ignore errors during cleanup
           }
         }
 
-        const unsubscribe = this.activeSubscriptions.get(elicitId);
+        const unsubscribe = this.activeSubscriptions.get(route);
         if (unsubscribe) {
-          this.activeSubscriptions.delete(elicitId);
+          this.activeSubscriptions.delete(route);
           try {
             await unsubscribe();
           } catch (err) {
@@ -270,7 +296,7 @@ export class StorageElicitationStore implements ElicitationStore {
   }
 
   /**
-   * Publish an elicitation result.
+   * Publish an elicitation result to the subscribers in the session that asked.
    *
    * When pub/sub is supported, we rely entirely on the pub/sub mechanism
    * to deliver messages (even locally). This avoids double-invocation for
@@ -279,9 +305,10 @@ export class StorageElicitationStore implements ElicitationStore {
    * When pub/sub is not supported, we invoke local callbacks directly.
    */
   async publishResult<T = unknown>(elicitId: string, sessionId: string, result: ElicitResult<T>): Promise<void> {
+    const route = elicitationResultRoute(sessionId, elicitId);
     if (this.storage.supportsPubSub()) {
       // Publish to channel - pub/sub handles both local and remote delivery
-      const channel = RESULT_CHANNEL_PREFIX + elicitId;
+      const channel = RESULT_CHANNEL_PREFIX + route;
       try {
         await this.storage.publish(channel, JSON.stringify(result));
       } catch (err) {
@@ -292,7 +319,7 @@ export class StorageElicitationStore implements ElicitationStore {
       }
     } else {
       // No pub/sub - invoke local callbacks directly
-      const callbacks = this.localCallbacks.get(elicitId);
+      const callbacks = this.localCallbacks.get(route);
       if (callbacks) {
         for (const cb of callbacks) {
           try {
@@ -310,7 +337,11 @@ export class StorageElicitationStore implements ElicitationStore {
     // Clean up the pending record
     await this.deletePending(sessionId);
 
-    this.logger?.debug('[StorageElicitationStore] Published result', { elicitId, sessionId, status: result.status });
+    this.logger?.debug('[StorageElicitationStore] Published result', {
+      elicitId,
+      sessionIdHash: sessionIdHash(sessionId),
+      status: result.status,
+    });
   }
 
   // ============================================
@@ -400,36 +431,38 @@ export class StorageElicitationStore implements ElicitationStore {
   // ============================================
 
   /**
-   * Subscribe to fallback execution results for a specific elicit ID.
+   * Subscribe to fallback execution results for a specific elicit ID within the session that asked.
    * Uses in-flight subscription guard to prevent duplicate concurrent subscriptions.
    */
   async subscribeFallbackResult(
     elicitId: string,
     callback: FallbackResultCallback,
-    _sessionId?: string,
+    sessionId?: string,
   ): Promise<ElicitUnsubscribe> {
+    const route = elicitationResultRoute(requireSubscriberSession(elicitId, sessionId), elicitId);
+
     // Add to local callback registry
-    let callbacks = this.fallbackResultCallbacks.get(elicitId);
+    let callbacks = this.fallbackResultCallbacks.get(route);
     if (!callbacks) {
       callbacks = new Set();
-      this.fallbackResultCallbacks.set(elicitId, callbacks);
+      this.fallbackResultCallbacks.set(route, callbacks);
     }
     callbacks.add(callback);
 
     // Subscribe to pub/sub channel if not already subscribed and no pending subscription
     if (
-      !this.activeFallbackSubscriptions.has(elicitId) &&
-      !this.pendingFallbackSubscriptions.has(elicitId) &&
+      !this.activeFallbackSubscriptions.has(route) &&
+      !this.pendingFallbackSubscriptions.has(route) &&
       this.storage.supportsPubSub()
     ) {
-      const channel = FALLBACK_RESULT_CHANNEL_PREFIX + elicitId;
+      const channel = FALLBACK_RESULT_CHANNEL_PREFIX + route;
 
       // Create a pending subscription promise to guard against concurrent calls
       const subscribePromise = this.storage
         .subscribe(channel, (message) => {
           try {
             const result = JSON.parse(message) as FallbackExecutionResult;
-            const cbs = this.fallbackResultCallbacks.get(elicitId);
+            const cbs = this.fallbackResultCallbacks.get(route);
             if (cbs) {
               for (const cb of cbs) {
                 try {
@@ -451,13 +484,13 @@ export class StorageElicitationStore implements ElicitationStore {
         })
         .then((unsubscribe) => {
           // Move from pending to active
-          this.pendingFallbackSubscriptions.delete(elicitId);
-          this.activeFallbackSubscriptions.set(elicitId, unsubscribe);
+          this.pendingFallbackSubscriptions.delete(route);
+          this.activeFallbackSubscriptions.set(route, unsubscribe);
           return unsubscribe;
         })
         .catch((err) => {
           // Clean up pending entry on error
-          this.pendingFallbackSubscriptions.delete(elicitId);
+          this.pendingFallbackSubscriptions.delete(route);
           this.logger?.error('[StorageElicitationStore] Failed to subscribe to fallback result', {
             elicitId,
             error: err instanceof Error ? err.message : String(err),
@@ -465,7 +498,7 @@ export class StorageElicitationStore implements ElicitationStore {
           throw err;
         });
 
-      this.pendingFallbackSubscriptions.set(elicitId, subscribePromise);
+      this.pendingFallbackSubscriptions.set(route, subscribePromise);
 
       // Wait for subscription to complete
       try {
@@ -474,19 +507,19 @@ export class StorageElicitationStore implements ElicitationStore {
         // Remove callback on subscription failure and rethrow
         callbacks.delete(callback);
         if (callbacks.size === 0) {
-          this.fallbackResultCallbacks.delete(elicitId);
+          this.fallbackResultCallbacks.delete(route);
         }
         throw error;
       }
-    } else if (this.pendingFallbackSubscriptions.has(elicitId)) {
+    } else if (this.pendingFallbackSubscriptions.has(route)) {
       // If there's a pending subscription, wait for it to complete
       try {
-        await this.pendingFallbackSubscriptions.get(elicitId);
+        await this.pendingFallbackSubscriptions.get(route);
       } catch (error) {
         // Remove callback on pending subscription failure and rethrow
         callbacks.delete(callback);
         if (callbacks.size === 0) {
-          this.fallbackResultCallbacks.delete(elicitId);
+          this.fallbackResultCallbacks.delete(route);
         }
         throw error;
       }
@@ -496,22 +529,22 @@ export class StorageElicitationStore implements ElicitationStore {
     return async () => {
       callbacks.delete(callback);
 
-      // If no more callbacks for this elicitId, unsubscribe from channel
+      // If no more callbacks for this route, unsubscribe from channel
       if (callbacks.size === 0) {
-        this.fallbackResultCallbacks.delete(elicitId);
+        this.fallbackResultCallbacks.delete(route);
 
         // Wait for any pending subscription to complete before cleaning up
-        if (this.pendingFallbackSubscriptions.has(elicitId)) {
+        if (this.pendingFallbackSubscriptions.has(route)) {
           try {
-            await this.pendingFallbackSubscriptions.get(elicitId);
+            await this.pendingFallbackSubscriptions.get(route);
           } catch {
             // Ignore errors during cleanup
           }
         }
 
-        const unsubscribe = this.activeFallbackSubscriptions.get(elicitId);
+        const unsubscribe = this.activeFallbackSubscriptions.get(route);
         if (unsubscribe) {
-          this.activeFallbackSubscriptions.delete(elicitId);
+          this.activeFallbackSubscriptions.delete(route);
           try {
             await unsubscribe();
           } catch (err) {
@@ -526,7 +559,7 @@ export class StorageElicitationStore implements ElicitationStore {
   }
 
   /**
-   * Publish a fallback execution result.
+   * Publish a fallback execution result to the subscribers in the session that asked.
    *
    * When pub/sub is supported, we rely entirely on the pub/sub mechanism
    * to deliver messages (even locally). This avoids double-invocation for
@@ -535,9 +568,10 @@ export class StorageElicitationStore implements ElicitationStore {
    * When pub/sub is not supported, we invoke local callbacks directly.
    */
   async publishFallbackResult(elicitId: string, sessionId: string, result: FallbackExecutionResult): Promise<void> {
+    const route = elicitationResultRoute(sessionId, elicitId);
     if (this.storage.supportsPubSub()) {
       // Publish to channel - pub/sub handles both local and remote delivery
-      const channel = FALLBACK_RESULT_CHANNEL_PREFIX + elicitId;
+      const channel = FALLBACK_RESULT_CHANNEL_PREFIX + route;
       try {
         await this.storage.publish(channel, JSON.stringify(result));
       } catch (err) {
@@ -548,7 +582,7 @@ export class StorageElicitationStore implements ElicitationStore {
       }
     } else {
       // No pub/sub - invoke local callbacks directly
-      const callbacks = this.fallbackResultCallbacks.get(elicitId);
+      const callbacks = this.fallbackResultCallbacks.get(route);
       if (callbacks) {
         for (const cb of callbacks) {
           try {
@@ -565,7 +599,7 @@ export class StorageElicitationStore implements ElicitationStore {
 
     this.logger?.debug('[StorageElicitationStore] Published fallback result', {
       elicitId,
-      sessionId,
+      sessionIdHash: sessionIdHash(sessionId),
       success: result.success,
     });
   }
@@ -579,48 +613,44 @@ export class StorageElicitationStore implements ElicitationStore {
    */
   async destroy(): Promise<void> {
     // Wait for any pending subscriptions to complete
-    for (const [elicitId, pendingPromise] of this.pendingSubscriptions) {
+    for (const pendingPromise of this.pendingSubscriptions.values()) {
       try {
         await pendingPromise;
       } catch (err) {
         this.logger?.debug('[StorageElicitationStore] Pending subscription failed during destroy', {
-          elicitId,
           error: err instanceof Error ? err.message : String(err),
         });
       }
     }
 
     // Unsubscribe from all active subscriptions
-    for (const [elicitId, unsubscribe] of this.activeSubscriptions) {
+    for (const unsubscribe of this.activeSubscriptions.values()) {
       try {
         await unsubscribe();
       } catch (err) {
         this.logger?.error('[StorageElicitationStore] Failed to unsubscribe during destroy', {
-          elicitId,
           error: err instanceof Error ? err.message : String(err),
         });
       }
     }
 
     // Wait for any pending fallback subscriptions to complete
-    for (const [elicitId, pendingPromise] of this.pendingFallbackSubscriptions) {
+    for (const pendingPromise of this.pendingFallbackSubscriptions.values()) {
       try {
         await pendingPromise;
       } catch (err) {
         this.logger?.debug('[StorageElicitationStore] Pending fallback subscription failed during destroy', {
-          elicitId,
           error: err instanceof Error ? err.message : String(err),
         });
       }
     }
 
     // Unsubscribe from all active fallback subscriptions
-    for (const [elicitId, unsubscribe] of this.activeFallbackSubscriptions) {
+    for (const unsubscribe of this.activeFallbackSubscriptions.values()) {
       try {
         await unsubscribe();
       } catch (err) {
         this.logger?.error('[StorageElicitationStore] Failed to unsubscribe fallback during destroy', {
-          elicitId,
           error: err instanceof Error ? err.message : String(err),
         });
       }

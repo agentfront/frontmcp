@@ -172,6 +172,15 @@ describe('LoopbackTokenAuth', () => {
       expect(auth.exchangeCode(code, 'locked-client')).toEqual({ ok: false, reason: 'locked' });
     });
 
+    it('track at most 1024 clients, however many fail within lockoutMs', () => {
+      for (let client = 0; client < 3000; client++) auth.exchangeCode('wrong', `client-${client}`);
+
+      expect((auth as unknown as { failures: Map<string, unknown> }).failures.size).toBeLessThanOrEqual(1024);
+      for (let attempt = 0; attempt < 4; attempt++) auth.exchangeCode('wrong', 'client-2999');
+      const { code } = auth.createCode();
+      expect(auth.exchangeCode(code, 'client-2999')).toEqual({ ok: false, reason: 'locked' });
+    });
+
     it('are forgotten once lockoutMs passes without another', () => {
       for (let attempt = 0; attempt < 4; attempt++) auth.exchangeCode('wrong', 'client-a');
 

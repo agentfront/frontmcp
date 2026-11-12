@@ -7,7 +7,7 @@
  * - **Browser**: fetch → in-memory cache → evaluate via Function constructor
  */
 
-import { sha256Hex } from '@frontmcp/utils';
+import { isNode, sha256Hex } from '@frontmcp/utils';
 
 import { importComputed } from '#import-computed';
 
@@ -24,6 +24,9 @@ import {
   type ParsedPackageSpecifier,
 } from './package-specifier';
 import { VersionResolver } from './version-resolver';
+
+/** Where this process writes the ESM bundles it imports from source text (Node.js), made on first use. */
+let moduleDirectory: string | undefined;
 
 /**
  * Result of loading an ESM package.
@@ -324,8 +327,8 @@ export class EsmModuleLoader {
    * Import ESM content via Blob URL (browser) or temp file (Node.js).
    */
   private async importEsmBundle(bundleContent: string): Promise<unknown> {
-    // Browser: Blob + URL.createObjectURL + dynamic import
-    if (typeof Blob !== 'undefined' && typeof URL?.createObjectURL === 'function') {
+    // Browser: Blob + URL.createObjectURL + dynamic import (Node has both, but cannot import a blob: URL)
+    if (!isNode() && typeof Blob !== 'undefined' && typeof URL?.createObjectURL === 'function') {
       const blob = new Blob([bundleContent], { type: 'text/javascript' });
       const url = URL.createObjectURL(blob);
       try {
@@ -348,14 +351,14 @@ export class EsmModuleLoader {
     //
     // This branch is only the fallback for when the version-keyed disk cache
     // artifact is unavailable; the primary path imports that file directly.
-    const { ensureDir, fileExists, sha256Hex, writeFile } = await import('@frontmcp/utils');
+    const { fileExists, mkdtemp, sha256Hex, writeFile } = await import('@frontmcp/utils');
     const nodePath = require('node:path') as typeof import('node:path');
     const nodeOs = require('node:os') as typeof import('node:os');
     const { pathToFileURL } = require('node:url') as typeof import('node:url');
 
-    const dir = nodePath.join(nodeOs.tmpdir(), 'frontmcp-esm-modules');
-    await ensureDir(dir);
-    const tempPath = nodePath.join(dir, `${sha256Hex(bundleContent)}.mjs`);
+    // This process's own owner-only folder, named so that no other user of the machine can guess or fill it
+    moduleDirectory ??= await mkdtemp(nodePath.join(nodeOs.tmpdir(), 'frontmcp-esm-modules-'));
+    const tempPath = nodePath.join(moduleDirectory, `${sha256Hex(bundleContent)}.mjs`);
     if (!(await fileExists(tempPath))) {
       await writeFile(tempPath, bundleContent);
     }

@@ -149,4 +149,20 @@ describe('DynamicRenderer', () => {
     expect(parent.children).toHaveLength(1);
     expect(parent.children[0].textContent).toBe('only child');
   });
+
+  it('does not insert raw HTML from a node prop into the page', () => {
+    const SpreadingCard = (props: Record<string, unknown>) => React.createElement('section', props);
+    registry.register('component://Card', SpreadingCard);
+    const tree: ComponentNode = {
+      type: 'unregistered',
+      props: { 'data-testid': 'outer', dangerouslySetInnerHTML: { __html: '<img src="x" data-raw="outer">' } },
+      children: [{ type: 'Card', props: { dangerouslySetInnerHTML: { __html: '<img src="x" data-raw="card">' } } }],
+    };
+
+    const { container, getByTestId } = render(<DynamicRenderer tree={tree} registry={registry} />);
+
+    expect(getByTestId('outer').tagName).toBe('DIV');
+    expect(container.querySelector('section')).not.toBeNull();
+    expect(container.querySelector('[data-raw]')).toBeNull();
+  });
 });

@@ -9,6 +9,8 @@
 import { internalZ as z } from '@frontmcp/lazy-zod';
 import { randomUUID, sha256Base64url } from '@frontmcp/utils';
 
+import { AuthFlowError } from '../errors/auth-internal.errors';
+
 /**
  * PKCE challenge data
  */
@@ -478,6 +480,37 @@ export function buildRefreshTokenRecord(params: CreateRefreshTokenRecordParams):
   };
 }
 
+/** Whether an authorization code record can still be redeemed: present, unused and unexpired. */
+export function isRedeemableCode(
+  record: AuthorizationCodeRecord | null | undefined,
+): record is AuthorizationCodeRecord {
+  return !!record && !record.used && Date.now() <= record.expiresAt;
+}
+
+/** Whether a refresh token record can still be rotated: present, not revoked and unexpired. */
+export function isRotatableRefreshToken(record: RefreshTokenRecord | null | undefined): record is RefreshTokenRecord {
+  return !!record && !record.revoked && Date.now() <= record.expiresAt;
+}
+
+/** The error a store throws when a token request redeems a code that another request already redeemed. */
+export function authorizationCodeRedeemedError(): AuthFlowError {
+  return new AuthFlowError(
+    'This authorization code was already redeemed by another token request, or it expired. Start a new authorization to get a new code.',
+    'AUTHORIZATION_CODE_REDEEMED',
+  );
+}
+
+/** The error a store throws when a token request rotates a refresh token that was already rotated or revoked. */
+export function refreshTokenRedeemedError(): AuthFlowError {
+  return new AuthFlowError(
+    'This refresh token was already rotated by another token request, or it was revoked or expired. Sign in again to get a new refresh token.',
+    'REFRESH_TOKEN_REDEEMED',
+  );
+}
+
+/** Redis Lua script: delete KEYS[1] only while it holds ARGV[1], returning 1 or 0. */
+const COMPARE_AND_DELETE_SCRIPT = `if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0`;
+
 /**
  * Authorization Store Interface
  */
@@ -485,6 +518,11 @@ export interface AuthorizationStore {
   // Authorization code operations
   storeAuthorizationCode(record: AuthorizationCodeRecord): Promise<void>;
   getAuthorizationCode(code: string): Promise<AuthorizationCodeRecord | null>;
+  /**
+   * Without `issuedRefreshToken`, claims the code: marks it used, and throws when it is missing, expired or
+   * already used, so of two concurrent redemptions only one succeeds. With it, records the refresh token minted
+   * from a code this request already claimed.
+   */
   markCodeUsed(code: string, issuedRefreshToken?: string): Promise<void>;
   deleteAuthorizationCode(code: string): Promise<void>;
 
@@ -497,6 +535,10 @@ export interface AuthorizationStore {
   storeRefreshToken(record: RefreshTokenRecord): Promise<void>;
   getRefreshToken(token: string): Promise<RefreshTokenRecord | null>;
   revokeRefreshToken(token: string): Promise<void>;
+  /**
+   * Revokes `oldToken` and stores `newRecord` in its place. Throws when `oldToken` is missing, expired or already
+   * revoked, so of two concurrent rotations of one token only one succeeds.
+   */
   rotateRefreshToken(oldToken: string, newRecord: RefreshTokenRecord): Promise<void>;
 
   // Record builders (pure; backend-agnostic) — part of the interface so callers
@@ -567,6 +609,7 @@ export class InMemoryAuthorizationStore implements AuthorizationStore {
 
   async markCodeUsed(code: string, issuedRefreshToken?: string): Promise<void> {
     const record = this.codes.get(code);
+    if (issuedRefreshToken === undefined && !isRedeemableCode(record)) throw authorizationCodeRedeemedError();
     if (record) {
       record.used = true;
       if (issuedRefreshToken) record.issuedRefreshToken = issuedRefreshToken;
@@ -622,8 +665,9 @@ export class InMemoryAuthorizationStore implements AuthorizationStore {
   }
 
   async rotateRefreshToken(oldToken: string, newRecord: RefreshTokenRecord): Promise<void> {
-    // Revoke old token
-    await this.revokeRefreshToken(oldToken);
+    const record = this.refreshTokens.get(oldToken);
+    if (!isRotatableRefreshToken(record)) throw refreshTokenRedeemedError();
+    record.revoked = true;
 
     // Store new token with reference to old
     newRecord.previousToken = oldToken;
@@ -725,6 +769,14 @@ export class RedisAuthorizationStore implements AuthorizationStore {
   }
 
   async markCodeUsed(code: string, issuedRefreshToken?: string): Promise<void> {
+    if (issuedRefreshToken === undefined) {
+      const claimed = await this.claim<AuthorizationCodeRecord>('code', code, isRedeemableCode, (record) => ({
+        ...record,
+        used: true,
+      }));
+      if (!claimed) throw authorizationCodeRedeemedError();
+      return;
+    }
     const record = await this.getAuthorizationCode(code);
     if (record) {
       record.used = true;
@@ -776,12 +828,37 @@ export class RedisAuthorizationStore implements AuthorizationStore {
   }
 
   async rotateRefreshToken(oldToken: string, newRecord: RefreshTokenRecord): Promise<void> {
-    await this.revokeRefreshToken(oldToken);
+    const claimed = await this.claim<RefreshTokenRecord>('refresh', oldToken, isRotatableRefreshToken, (record) => ({
+      ...record,
+      revoked: true,
+    }));
+    if (!claimed) throw refreshTokenRedeemedError();
     newRecord.previousToken = oldToken;
     await this.storeRefreshToken(newRecord);
   }
 
   async cleanup(): Promise<void> {
     // Redis handles cleanup via TTL, nothing to do here
+  }
+
+  /**
+   * Replace the record under `type:id` with `update(record)` while `isLive(record)`. The compare-and-delete lets
+   * one request win: false when the record is missing or not live, or another request changed it first.
+   */
+  private async claim<T extends { expiresAt: number }>(
+    type: 'code' | 'refresh',
+    id: string,
+    isLive: (record: T) => boolean,
+    update: (record: T) => T,
+  ): Promise<boolean> {
+    const key = this.key(type, id);
+    const raw: string | null = await this.redis.get(key);
+    if (!raw) return false;
+    const record = JSON.parse(raw) as T;
+    if (!isLive(record)) return false;
+    if ((await this.redis.eval(COMPARE_AND_DELETE_SCRIPT, 1, key, raw)) !== 1) return false;
+    const ttl = Math.ceil((record.expiresAt - Date.now()) / 1000);
+    await this.redis.set(key, JSON.stringify(update(record)), 'EX', Math.max(ttl, 1));
+    return true;
   }
 }

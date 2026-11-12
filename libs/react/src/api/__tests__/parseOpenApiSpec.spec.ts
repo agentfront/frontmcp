@@ -822,6 +822,34 @@ describe('parseOpenApiSpec', () => {
       expect(ops.map((o) => o.operationId)).toEqual(['op', 'op_1', 'op_2']);
     });
 
+    it('skips a suffix another operation already uses as its own id', () => {
+      const spec = {
+        paths: {
+          '/a': { get: { operationId: 'op' } },
+          '/b': { get: { operationId: 'op_1' } },
+          '/c': { get: { operationId: 'op' } },
+          '/d': { get: { operationId: 'op' } },
+        },
+      };
+
+      expect(parseOpenApiSpec(spec).map((o) => o.operationId)).toEqual(['op', 'op_1', 'op_2', 'op_3']);
+    });
+
+    it('does not search again through the suffixes already given to a repeated operationId', () => {
+      const count = 2_000;
+      const paths: Record<string, unknown> = {};
+      for (let index = 0; index < count; index++) paths[`/item/${index}`] = { get: { operationId: 'list' } };
+      const lookups = jest.spyOn(Set.prototype, 'has');
+
+      const ids = parseOpenApiSpec({ paths }).map((o) => o.operationId);
+      const lookupCount = lookups.mock.calls.length;
+      lookups.mockRestore();
+
+      expect(ids[count - 1]).toBe(`list_${count - 1}`);
+      expect(new Set(ids).size).toBe(count);
+      expect(lookupCount).toBeLessThan(count * 10);
+    });
+
     it('does not de-duplicate unique operationIds', () => {
       const spec = {
         paths: {

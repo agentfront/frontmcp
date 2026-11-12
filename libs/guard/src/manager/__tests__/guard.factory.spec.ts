@@ -70,6 +70,16 @@ describe('createGuardManager', () => {
     ).rejects.toBeInstanceOf(GuardStorageUnsupportedError);
   });
 
+  it('refuses a memory store that evicts entries, which would free slots still in use', async () => {
+    const error = await createGuardManager({
+      config: { enabled: true, storage: { type: 'memory', memory: { maxEntries: 1000 } } },
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(GuardError);
+    expect((error as Error).message).toContain('throttle.storage.memory.maxEntries');
+    expect(mockCreateStorage).not.toHaveBeenCalled();
+  });
+
   it('starts without probing the storage when no global or default concurrency is configured', async () => {
     const storage = mockNamespace();
     storage.deleteIfEquals.mockRejectedValueOnce(new StorageNotSupportedError('deleteIfEquals', 'cloudflare-kv'));

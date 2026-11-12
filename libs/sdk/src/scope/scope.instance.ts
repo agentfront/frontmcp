@@ -6,6 +6,7 @@ import { createRedisClient, getEnvFlag, getMachineId, getRuntimeContext, isEdgeR
 
 import AdapterRegistry from '../adapter/adapter.registry';
 import AgentRegistry from '../agent/agent.registry';
+import type { AgentScope } from '../agent/agent.scope';
 import AppRegistry from '../app/app.registry';
 import type { AuthUiRegistry } from '../auth/auth-ui';
 import { AuthRegistry, type PrimaryAuthFactory } from '../auth/auth.registry';
@@ -54,7 +55,7 @@ import { PluginConfiguredTwiceError, UnenforcedMetadataError } from '../errors/p
 import type EventRegistry from '../event/event.registry';
 import { normalizeEvent } from '../event/event.utils';
 import FlowRegistry from '../flows/flow.registry';
-import { assertEntryAuthorities } from '../front-mcp/authorities-rules.check';
+import { assertEntryAuthorities, type EntryAuthorities } from '../front-mcp/authorities-rules.check';
 import { isEntryServer, isJobWorker } from '../front-mcp/detached-job.flag';
 import { isDirectOnly } from '../front-mcp/direct-only.flag';
 import type { HaManager } from '../ha';
@@ -126,6 +127,44 @@ function keptUntilFailure(start: Promise<void>, forget: () => void): Promise<voi
 interface ServedAppJobs {
   entries: AppJobEntries;
   unregister?: () => void;
+}
+
+/** The registries whose entries declare `authorities`: a scope's or an app's, or an agent's private scope's (no skills). */
+type AuthoritiesRegistries = Omit<LateAppRegistries, 'skills'> & Partial<Pick<LateAppRegistries, 'skills'>>;
+
+/**
+ * The entries of these registries that declare `authorities`, hidden ones included, labelled for startup errors:
+ * tools, resources and resource templates, prompts, skills, and agents with the entries of each agent's private
+ * scope (its tools, resources, prompts and nested agents, at any depth), which run for the caller the agent runs for.
+ */
+function entriesWithAuthorities(registries: AuthoritiesRegistries, agentPath = ''): EntryAuthorities[] {
+  const entries: EntryAuthorities[] = [];
+  const add = (kind: string, name: string, metadata: unknown) => {
+    const authorities = (metadata as Record<string, unknown> | undefined)?.['authorities'];
+    if (authorities !== undefined && authorities !== null && authorities !== false) {
+      entries.push({ label: `${kind} "${agentPath}${name}"`, authorities });
+    }
+  };
+
+  for (const tool of registries.tools.getTools(true)) add('Tool', tool.name, tool.metadata);
+  for (const resource of registries.resources.getResources(true)) add('Resource', resource.name, resource.metadata);
+  for (const template of registries.resources.getResourceTemplates()) {
+    add('Resource template', template.name, template.metadata);
+  }
+  for (const prompt of registries.prompts.getPrompts(true)) add('Prompt', prompt.name, prompt.metadata);
+  for (const agent of registries.agents.getAgents(true)) {
+    add('Agent', agent.name, agent.metadata);
+    const agentScope = (agent as { getAgentScope?: () => AgentScope | null }).getAgentScope?.();
+    if (!agentScope) {
+      for (const metadata of agentToolMetadata(agent)) add('Tool', `${agent.name}:${metadata.name}`, metadata);
+      continue;
+    }
+    const { tools, resources, prompts, agents } = agentScope;
+    entries.push(...entriesWithAuthorities({ tools, resources, prompts, agents }, `${agentPath}${agent.name}:`));
+  }
+  // Hidden skills included: a hidden skill with authorities is still enforced on direct load/read.
+  for (const skill of registries.skills?.getSkills(true) ?? []) add('Skill', skill.name, skill.metadata);
+  return entries;
 }
 
 export class Scope extends ScopeEntry {
@@ -1113,6 +1152,9 @@ export class Scope extends ScopeEntry {
       this._channelTeardown = channelResult.teardown;
       // `dispose()` (what `create()` returns calls it) disconnects service channels, as `shutdown()` does.
       this.onDispose(() => this.teardownChannels());
+      // The tools channels contribute join after the startup checks above, so they are checked here
+      this.validateAuthoritiesConfig();
+      this.validateEnforcedMetadata();
       // A detached job runner runs one run: the server that started it already listens to the services
       if (!isJobWorker(this.metadata)) await channelResult.connectServices();
     }
@@ -2088,42 +2130,18 @@ export class Scope extends ScopeEntry {
 
   /**
    * Every entry that declares `authorities`, labelled for startup errors: tools, resources and
-   * resource templates, prompts, agents and the tools of each agent, and skills, hidden ones included.
+   * resource templates, prompts, agents and the entries of each agent's private scope, and skills,
+   * hidden ones included.
    * @internal
    */
-  private collectEntriesWithAuthorities(): Array<{ label: string; authorities: unknown }> {
-    const entries: Array<{ label: string; authorities: unknown }> = [];
-    const add = (label: string, metadata: unknown) => {
-      const authorities = (metadata as Record<string, unknown> | undefined)?.['authorities'];
-      if (authorities !== undefined && authorities !== null && authorities !== false) {
-        entries.push({ label, authorities });
-      }
-    };
-
-    for (const tool of this.scopeTools.getTools(true)) {
-      add(`Tool "${tool.name}"`, tool.metadata);
-    }
-    for (const resource of this.scopeResources.getResources(true)) {
-      add(`Resource "${resource.name}"`, resource.metadata);
-    }
-    for (const template of this.scopeResources.getResourceTemplates()) {
-      add(`Resource template "${template.name}"`, template.metadata);
-    }
-    for (const prompt of this.scopePrompts.getPrompts(true)) {
-      add(`Prompt "${prompt.name}"`, prompt.metadata);
-    }
-    for (const agent of this.scopeAgents.getAgents(true)) {
-      add(`Agent "${agent.name}"`, agent.metadata);
-      // An agent's own tools are called for the caller the agent runs for, through the same flow.
-      for (const metadata of agentToolMetadata(agent)) {
-        add(`Tool "${agent.name}:${metadata.name}"`, metadata);
-      }
-    }
-    // Hidden skills included: a hidden skill with authorities is still enforced on direct load/read.
-    for (const skill of this.scopeSkills.getSkills(true)) {
-      add(`Skill "${skill.name}"`, skill.metadata);
-    }
-    return entries;
+  private collectEntriesWithAuthorities(): EntryAuthorities[] {
+    return entriesWithAuthorities({
+      tools: this.scopeTools,
+      resources: this.scopeResources,
+      prompts: this.scopePrompts,
+      agents: this.scopeAgents,
+      skills: this.scopeSkills,
+    });
   }
 
   /**
@@ -2143,6 +2161,7 @@ export class Scope extends ScopeEntry {
 
   async checkLateApp(app: LateAppRegistries): Promise<void> {
     const { tools, resources, prompts, agents, skills } = app;
+    assertEntryAuthorities(this._authoritiesEngine, this._authoritiesContextBuilder, entriesWithAuthorities(app));
     const problems = findUnenforcedMetadata({ hooks: this.scopeHooks, tools, resources, prompts, agents, skills });
     if (problems.length > 0) throw new UnenforcedMetadataError(problems);
     checkHookOrder(hookRunsOf(this.scopeHooks), (message) => this.logger.warn(message));

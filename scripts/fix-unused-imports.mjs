@@ -187,7 +187,7 @@ export default [
     // Use execFileSync with array arguments to prevent shell injection
     // ESLint exits with code 1 if it finds (and fixes) issues, which is expected
     try {
-      execFileSync('npx', ['eslint', '--config', tempConfigPath, '--fix', ...files], { stdio: 'inherit' });
+      execFileSync('npx', ['eslint', '--config', tempConfigPath, '--fix', '--', ...files], { stdio: 'inherit' });
       console.log('Done! Unused imports removed.');
     } catch (error) {
       // ESLint exit code 1 = linting errors remain after --fix (some issues couldn't be auto-fixed)

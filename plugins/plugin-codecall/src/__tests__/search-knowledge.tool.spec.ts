@@ -84,6 +84,24 @@ describe('SearchKnowledgeTool', () => {
     expect(result.totalKnowledgeSkills).toBe(1);
   });
 
+  it('leaves out a skill its authorities withhold from the caller', async () => {
+    mockRegistry.getKnowledgeOnlySkills.mockReturnValue([
+      { ...entry('refund-policy', true), metadata: { authorities: { allow: false } } },
+    ]);
+    mockRegistry.search.mockResolvedValueOnce([
+      { metadata: knowledgeMeta(), score: 0.78, availableTools: [], missingTools: [], source: 'local' as const },
+    ]);
+    Object.assign(tool.scope, {
+      authoritiesEngine: { evaluate: async (authorities: { allow: boolean }) => ({ granted: authorities.allow }) },
+      authoritiesContextBuilder: { build: (authInfo: unknown) => authInfo },
+    });
+
+    const result = await tool.execute({ queries: ['refund eligibility'] });
+
+    expect(result.knowledge).toEqual([]);
+    expect(result.totalKnowledgeSkills).toBe(0);
+  });
+
   it('filters out executable skills returned by the underlying search', async () => {
     mockRegistry.getKnowledgeOnlySkills.mockReturnValue([entry('refund-policy', true)]);
     mockRegistry.search.mockResolvedValueOnce([

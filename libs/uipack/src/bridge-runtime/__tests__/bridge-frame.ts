@@ -194,7 +194,7 @@ export function createBridgeFrame(options: BridgeFrameOptions = {}): BridgeFrame
   }
 
   function dispatchFromHost(data: JsonRpcMessage): void {
-    win.dispatchEvent(new win.MessageEvent('message', { data, origin: HOST_ORIGIN }));
+    win.dispatchEvent(new win.MessageEvent('message', { data, origin: HOST_ORIGIN, source: window }));
   }
 
   win.__mcpAppsEnabled = true;

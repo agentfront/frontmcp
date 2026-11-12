@@ -7,8 +7,8 @@
  *     MCP code -32003) and allows an authorized one.
  *   - filterSkillsByAuthorities hides skills the caller can't discover.
  *   - Skills WITHOUT `authorities` are never gated.
- *   - When no authorities engine is configured everything is a no-op (defaults
- *     preserved).
+ *   - When no authorities engine is configured, a skill with `authorities` is
+ *     refused and left out of discovery.
  */
 
 import 'reflect-metadata';
@@ -139,11 +139,18 @@ describe('skill authorities enforcement', () => {
       await expect(assertSkillAuthorized(scope, publicSkill, VIEWER_AUTH)).resolves.toBeUndefined();
     });
 
-    it('is a no-op when no authorities engine is configured (default preserved)', async () => {
+    it('refuses a skill that declares authorities while no engine is configured to check them', async () => {
       const registry = await buildRegistry();
       const adminSkill = registry.findByName('admin-skill')!;
-      // Even an unauthorized caller is allowed through when enforcement is off.
-      await expect(assertSkillAuthorized(NO_ENGINE_SCOPE, adminSkill, VIEWER_AUTH)).resolves.toBeUndefined();
+      const publicSkill = registry.findByName('public-skill')!;
+
+      const check = assertSkillAuthorized(NO_ENGINE_SCOPE, adminSkill, VIEWER_AUTH);
+
+      await expect(check).rejects.toBeInstanceOf(AuthorityDeniedError);
+      await expect(check).rejects.toThrow(
+        `Access denied to Skill "test-app:admin-skill": no authorities engine is configured (add 'authorities' to @FrontMcp())`,
+      );
+      await expect(assertSkillAuthorized(NO_ENGINE_SCOPE, publicSkill, VIEWER_AUTH)).resolves.toBeUndefined();
     });
   });
 
@@ -185,12 +192,12 @@ describe('skill authorities enforcement', () => {
       );
     });
 
-    it('returns all skills unchanged when no engine is configured (default preserved)', async () => {
+    it('leaves out the skills that declare authorities while no engine is configured to check them', async () => {
       const registry = await buildRegistry();
       const all = registry.getSkills(true);
 
       const visible = await filterSkillsByAuthorities(NO_ENGINE_SCOPE, all, VIEWER_AUTH);
-      expect(visible.map((s) => s.name).sort()).toEqual(all.map((s) => s.name).sort());
+      expect(visible.map((s) => s.name)).toEqual(['public-skill']);
     });
   });
 });

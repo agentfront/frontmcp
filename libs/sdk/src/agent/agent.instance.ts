@@ -674,6 +674,11 @@ export class AgentInstance<
     return this.agentTools;
   }
 
+  /** The agent's private scope (its tools, resources, prompts, nested agents and hooks), or null when it has none. */
+  getAgentScope(): AgentScope | null {
+    return this.agentScope;
+  }
+
   /**
    * Whether a tool this agent runs in its private scope (one of its own, or a nested agent's
    * `invoke_<agent>` tool) declares `rateLimit` or `concurrency`, at any depth of nested agents. The

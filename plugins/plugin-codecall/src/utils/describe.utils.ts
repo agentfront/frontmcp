@@ -236,8 +236,12 @@ function generateSampleParams(schema?: JsonSchema): Record<string, unknown> | nu
   return Object.keys(params).length > 0 ? params : null;
 }
 
+/** The longest a generated example string is padded to, whatever `minLength` a schema asks for. */
+const MAX_PADDED_EXAMPLE_LENGTH = 256;
+
 /**
- * A string cut or padded to the schema's `minLength` / `maxLength`.
+ * A string cut or padded to the schema's `minLength` / `maxLength`, padded to at most
+ * {@link MAX_PADDED_EXAMPLE_LENGTH} characters.
  */
 function fitString(schema: JsonSchema, value: string): string {
   let fitted = value;
@@ -245,7 +249,7 @@ function fitString(schema: JsonSchema, value: string): string {
     fitted = fitted.slice(0, Math.max(0, schema.maxLength));
   }
   if (schema.minLength !== undefined && fitted.length < schema.minLength) {
-    fitted = fitted.padEnd(schema.minLength, 'x');
+    fitted = fitted.padEnd(Math.min(schema.minLength, MAX_PADDED_EXAMPLE_LENGTH), 'x');
   }
   return fitted;
 }

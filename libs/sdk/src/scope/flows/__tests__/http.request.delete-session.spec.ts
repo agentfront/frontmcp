@@ -12,12 +12,16 @@ import HttpRequestFlow from '../http.request.flow';
 
 type TransportServiceStub = { destroyTransporter: jest.Mock; deleteStoredSession: jest.Mock };
 
-function createStage(authorization: { token: string } | undefined, transportService: TransportServiceStub) {
+function createStage(
+  authorization: { token: string } | undefined,
+  transportService: TransportServiceStub,
+  sessionId = 'sess-1',
+) {
   const stage = Object.create(HttpRequestFlow.prototype) as HttpRequestFlow & Record<string, unknown>;
   const request = {
     method: 'DELETE',
-    headers: { 'mcp-session-id': 'sess-1' },
-    [ServerRequestTokens.sessionId]: 'sess-1',
+    headers: { 'mcp-session-id': sessionId },
+    [ServerRequestTokens.sessionId]: sessionId,
     [ServerRequestTokens.auth]: authorization,
   };
   const response = { setHeader: jest.fn() };
@@ -79,6 +83,17 @@ describe('http:request handleDeleteSession', () => {
     const { stage } = createStage({ token: '' }, transportService);
 
     await expect(runStage(stage, 'handleDeleteSession')).rejects.toThrow('Redis down');
+  });
+
+  it('logs only the start of the session id it ends, so the log does not hold a usable id', async () => {
+    const sessionId = 'Q2hhbmdlTWVJdk9ubHk.dGFnLXRhZy10YWctdGFn.Y2lwaGVydGV4dC10aGF0LWlzLWxvbmc';
+    const { stage } = createStage({ token: '' }, transportServiceStub(), sessionId);
+
+    await runStage(stage, 'handleDeleteSession');
+
+    const logged = JSON.stringify((stage['logger'] as unknown as { info: jest.Mock }).info.mock.calls);
+    expect(logged).toContain(`${sessionId.slice(0, 20)}...`);
+    expect(logged).not.toContain(sessionId);
   });
 
   it('touches no transport when the request carries no verified authorization', async () => {

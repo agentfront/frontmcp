@@ -373,7 +373,7 @@ export class ExtAppsAdapter extends BaseAdapter {
    * Handle incoming postMessage events.
    */
   private _handleMessage(event: MessageEvent): void {
-    // Validate origin
+    if (event.source !== window.parent) return;
     if (!this._isOriginTrusted(event.origin)) {
       return;
     }

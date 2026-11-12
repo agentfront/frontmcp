@@ -181,6 +181,8 @@ export type McpRemoteAuthConfig =
       scope?: string;
       /** Token endpoint; default: the one the remote's authorization server publishes */
       tokenUrl?: string;
+      /** The authorization server the client credentials are for, whose published token endpoint is used */
+      issuer?: string;
     };
 
 /**

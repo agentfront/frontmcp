@@ -381,8 +381,20 @@ describe('generateOptionCode', () => {
     };
 
     const code = generateOptionCode(opt);
-    expect(code).toContain(".requiredOption('--name <value>'");
-    expect(code).toContain("User\\'s name");
+    expect(code).toContain('.requiredOption("--name <value>"');
+    expect(code).toContain(`"User's name"`);
+  });
+
+  it('keeps a flag or description with quotes and line breaks as one string literal', () => {
+    const opt: CommanderOption = {
+      flags: "--x',process.exit(9),' <value>",
+      description: "first line\nsecond ' line",
+      required: false,
+      variadic: false,
+    };
+
+    const code = generateOptionCode(opt);
+    expect(code).toBe(`.option(${JSON.stringify(opt.flags)}, ${JSON.stringify(opt.description)})`);
   });
 
   it('should generate optional option code', () => {
@@ -395,7 +407,7 @@ describe('generateOptionCode', () => {
     };
 
     const code = generateOptionCode(opt);
-    expect(code).toContain(".option('--verbose'");
+    expect(code).toContain('.option("--verbose"');
     expect(code).toContain(', false)');
   });
 

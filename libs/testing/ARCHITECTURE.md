@@ -135,7 +135,7 @@ async function cleanupSharedResources(): Promise<void>;
 
 #### Scoped configuration
 
-> The snippets above and below show the original single-config design. `test.use()` is now scoped to the enclosing `describe`: configs are merged from the outer block inwards, each distinct config owns its server, and the block that configured a server stops it in its `afterAll`. Ports come from `server/port-registry.ts`, which combines a bound socket with a lock file in `os.tmpdir()/frontmcp-testing-ports` so parallel Jest workers cannot claim the same port (`port: 0` means any free port). `server.restart()` reconnects the `mcp` client and clients created by `server.createClient()`.
+> The snippets above and below show the original single-config design. `test.use()` is now scoped to the enclosing `describe`: configs are merged from the outer block inwards, each distinct config owns its server, and the block that configured a server stops it in its `afterAll`. Ports come from `server/port-registry.ts`, which combines a bound socket with a lock file in `os.tmpdir()/frontmcp-testing-ports-<uid>` (a directory only that user can open; `frontmcp-testing-ports` on Windows) so parallel Jest workers cannot claim the same port (`port: 0` means any free port). `server.restart()` reconnects the `mcp` client and clients created by `server.createClient()`.
 
 #### The `test.use()` Mechanism
 

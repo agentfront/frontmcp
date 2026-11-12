@@ -107,6 +107,9 @@ interface FlowRequestContext {
   metadata?: {
     customHeaders?: Record<string, string>;
   };
+  config?: {
+    autoInjectTracingHeaders?: boolean;
+  };
 }
 
 /** Minimal interface for flow context objects passed to hooks. */
@@ -795,6 +798,7 @@ export function wrapContextFetch(options: TracingOptions, flowCtx: any): void {
 
   const originalFetch = toolCtx.fetch.bind(toolCtx);
   const parentOTelCtx: OTelContext | undefined = flowCtx.state?.[SPAN_CTX_KEY];
+  const injectsTracingHeaders = extractContext(flowCtx)?.config?.autoInjectTracingHeaders !== false;
 
   toolCtx.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const fetchSpan =
@@ -808,7 +812,9 @@ export function wrapContextFetch(options: TracingOptions, flowCtx: any): void {
     // The service called joins the trace as a child of the span that called it
     const callingSpan: Span | undefined = fetchSpan ?? flowCtx.state?.[EXEC_SPAN_KEY] ?? flowCtx.state?.[SPAN_KEY];
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
-    if (callingSpan && !headers.has('traceparent')) headers.set('traceparent', traceparentOf(callingSpan));
+    if (injectsTracingHeaders && callingSpan && !headers.has('traceparent')) {
+      headers.set('traceparent', traceparentOf(callingSpan));
+    }
 
     try {
       const response: Response = await originalFetch(input, { ...init, headers });

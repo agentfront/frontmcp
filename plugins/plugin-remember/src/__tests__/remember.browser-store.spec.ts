@@ -125,6 +125,14 @@ describe('RememberPlugin on Node', () => {
     expect(globalStoreFactory().useFactory({ redis })).toBeInstanceOf(RememberRedisProvider);
   });
 
+  it("connects a global-store over TLS when the server's redis asks for it", () => {
+    globalStoreFactory().useFactory({ redis: { ...redis, password: 'secret', tls: true } });
+    globalStoreFactory().useFactory({ redis: { ...redis, tls: false } });
+
+    expect(redisClient).toHaveBeenNthCalledWith(1, expect.objectContaining({ password: 'secret', tls: {} }));
+    expect(redisClient).toHaveBeenNthCalledWith(2, expect.objectContaining({ tls: undefined }));
+  });
+
   it('connects a redis store when the server starts, not when init() runs', async () => {
     const config = { host: '127.0.0.1', port: 6379 };
     RememberPlugin.init({ type: 'redis', config });

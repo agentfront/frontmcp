@@ -11,12 +11,14 @@ import {
   isRedirectResponse,
   pathResolve,
   readFile,
+  readTextWithLimit,
   sha256Base64url,
   writeFile,
 } from '@frontmcp/utils';
 
 import type { ResolvedBundle } from '../bundle/bundle.types';
 import { OverlayParseError, parseOverlay } from '../bundle/overlay-parser';
+import { CANONICAL_MAX_LENGTH } from '../security/bundle-signature';
 import { createStorageReplayNonceStore, type ReplayNonceStore } from '../security/replay-nonce-store';
 import { WebhookReplayGuard, type ReplayRejectCode } from '../security/webhook-replay-guard';
 import type { SaasSourceOptions } from '../source-options';
@@ -36,6 +38,8 @@ const USER_AGENT = 'frontmcp-skilled-openapi';
 /** How long the push path reuses the issuer's signing keys, so unauthenticated pushes can't each fetch the JWKS. */
 const PUSH_SIGNING_KEYS_TTL_MS = 60_000;
 const MAX_LISTED_ISSUES = 3;
+/** The largest body a pull reads: a bundle past the most `canonicalize` writes could be neither verified nor compared. */
+const MAX_PULL_BODY_BYTES = CANONICAL_MAX_LENGTH;
 
 /**
  * The pinned pull token failed verification against `jwksUrl`, `expectedIssuer`
@@ -433,7 +437,7 @@ export class SaasPullSource implements SkillBundleSource, BundlePushReceiver {
       if (isRedirectResponse(res)) {
         throw new Error(`pull endpoint returned a redirect (${res.status}); not followed to protect the bearer token`);
       }
-      const body = await res.text();
+      const body = await readTextWithLimit(res, MAX_PULL_BODY_BYTES);
       return { status: res.status, body };
     } finally {
       clearTimeout(timer);

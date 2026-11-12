@@ -29,8 +29,7 @@ const LEGACY_SKILLS_MARKER = '# Skills and Tools';
  * Takes the first sentence or truncates at ~80 chars.
  */
 function summarizeDescription(description: string): string {
-  // Take text before the first period that ends a sentence
-  const firstSentence = description.replace(/\. .+$/, '');
+  const firstSentence = withoutLaterSentences(description);
   // Remove the "Use when you want to" / "Use when you need to" prefix
   const cleaned = firstSentence
     .replace(/^Use when you (?:want|need) to\s+/i, '')
@@ -40,6 +39,16 @@ function summarizeDescription(description: string): string {
     return cleaned.slice(0, 87) + '...';
   }
   return cleaned;
+}
+
+const LINE_TERMINATORS = ['\n', '\r', '\u2028', '\u2029'];
+
+/** The text before the first `. ` of the last line that has text after it, in one pass over `description`. */
+function withoutLaterSentences(description: string): string {
+  const lastLineStart = Math.max(...LINE_TERMINATORS.map((terminator) => description.lastIndexOf(terminator))) + 1;
+  const sentenceEnd = description.indexOf('. ', lastLineStart);
+  if (sentenceEnd === -1 || sentenceEnd + 2 >= description.length) return description;
+  return description.slice(0, sentenceEnd);
 }
 
 /**

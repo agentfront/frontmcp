@@ -215,7 +215,7 @@ test.describe('limits (E3)', () => {
       ].join('\n'),
     );
 
-    expect(result).toMatchObject({ success: false, error: 'Tool call limit exceeded (25)' });
+    expect(result).toMatchObject({ success: false, error: expect.stringMatching(/tool call limit exceeded \(25\)/i) });
     expect(environment.billingApi.requests).toHaveLength(25);
   });
 

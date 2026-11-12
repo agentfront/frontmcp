@@ -10,7 +10,7 @@ import type { SkillActivationResult, SkillPolicyMode } from '../session/skill-se
 import { assertSkillAuthorized } from '../skill-authorities.helper';
 import { readySkillCatalog } from '../skill-catalog-source';
 import { createSkillEntryResolver } from '../skill-entry.resolver';
-import { isSkillServable, skillToolsForCaller } from '../skill-filter.helper';
+import { isSkillServable, skillToolsForCaller, skillToolsListedFor } from '../skill-filter.helper';
 import { formatSkillForLLMWithSchemas } from '../skill-http.utils';
 import type { SkillLoadResult } from '../skill-storage.interface';
 import { formatSkillForLLM } from '../skill.utils';
@@ -125,8 +125,10 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
     const { notLoadedReason } = await readySkillCatalog(this.scope);
     const loadResults: LoadResultWithActivation[] = [];
     const resolveEntry = createSkillEntryResolver(skillRegistry);
+    // A skill asked for twice, by the same ID or by its ID and its name, is loaded and returned once
+    const seenSkills = new Set<string>();
 
-    for (const skillId of skillIds) {
+    for (const skillId of new Set(skillIds)) {
       const result = await skillRegistry.loadSkill(skillId);
 
       if (!result) {
@@ -134,6 +136,8 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
         warnings.push(`Skill "${skillId}" not found`);
         continue;
       }
+      if (seenSkills.has(result.skill.id)) continue;
+      seenSkills.add(result.skill.id);
 
       // Deny direct load of an authority-gated skill the caller can't access
       // (throws AuthorityDeniedError, MCP code -32003 — same as a denied tool).
@@ -147,9 +151,13 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
         await assertSkillAuthorized(this.scope, entry, authInfo);
       }
 
-      // Only the tools the caller can reach count as available (and have schemas): an agent-only
-      // tool is missing to an MCP client, as `tools/list` and `tools/call` treat it.
-      const loadResult = skillToolsForCaller(result, this.scope.tools, ctx);
+      // Only the tools the caller can reach count as available (and have schemas): an agent-only tool,
+      // or one its authorities leave out of the caller's `tools/list`, is missing to that caller.
+      const loadResult = await skillToolsListedFor(
+        this.scope,
+        skillToolsForCaller(result, this.scope.tools, ctx),
+        authInfo,
+      );
       if (loadResult.warning) warnings.push(loadResult.warning);
       loadResults.push({ loadResult });
     }

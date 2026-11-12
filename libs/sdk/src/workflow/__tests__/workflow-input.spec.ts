@@ -105,6 +105,13 @@ describe('workflow input', () => {
     expect(record?.input).toEqual({ name: 'Ada', excited: false });
   });
 
+  it('records the scope that started the run, which reads of the run are limited to', async () => {
+    const run = await runWorkflow('free', { name: 'Ada' });
+
+    const record = await manager().getStatus(run.runId);
+    expect(record?.scopeId).toBe(scope.id);
+  });
+
   it('refuses input that does not match the inputSchema with INVALID_INPUT, before the run exists', async () => {
     const runsBefore = (await scopeRuns()).length;
 

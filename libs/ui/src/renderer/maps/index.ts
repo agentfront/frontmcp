@@ -5,6 +5,8 @@ import { styled } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import React, { useEffect } from 'react';
 
+import { sanitizeHtml } from '@frontmcp/uipack/shell';
+
 import { injectStylesheet } from '../common/inject-stylesheet';
 import { createLazyImport, esmShUrl, runtimeImportWithFallback } from '../common/lazy-import';
 import { useLazyModule } from '../common/use-lazy-module';
@@ -127,7 +129,13 @@ function parseMapConfig(content: string): MapConfig {
     };
   }
 
-  return parsed as MapConfig;
+  const config = parsed as MapConfig;
+  const tileLayer = config.tileLayer;
+  // Leaflet writes the attribution into the page as markup
+  if (tileLayer?.attribution !== undefined) {
+    return { ...config, tileLayer: { ...tileLayer, attribution: sanitizeHtml(String(tileLayer.attribution)) } };
+  }
+  return config;
 }
 
 // ============================================

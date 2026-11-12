@@ -70,6 +70,24 @@ describe('copySkillAssets', () => {
     expect(manifest.math.instructions).toBe('_skills/math--instructions.md');
   });
 
+  it('keeps a skill whose name holds path separators inside _skills/', () => {
+    const outDir = path.join(tmpDir, 'out');
+    const refDir = path.join(srcDir, 'references');
+    fs.mkdirSync(refDir, { recursive: true });
+    fs.writeFileSync(path.join(refDir, 'r.md'), 'ref');
+
+    copySkillAssets(outDir, [
+      { skillName: '../../escaped', instructionContent: '# body', resourceDirs: { references: refDir } },
+    ]);
+
+    expect(fs.readdirSync(tmpDir)).toEqual(['out']);
+    expect(fs.readdirSync(path.join(outDir, '_skills')).sort()).toEqual([
+      '..%2F..%2Fescaped--instructions.md',
+      '..%2F..%2Fescaped--references',
+      'manifest.json',
+    ]);
+  });
+
   it('skips missing instruction files without throwing', () => {
     const result = copySkillAssets(tmpDir, [
       { skillName: 'ghost', instructionFile: '/does/not/exist.md' },

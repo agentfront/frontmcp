@@ -14,9 +14,9 @@ import { openPendingLogin, signIncrementalAuthTicket } from '@frontmcp/auth';
 import { z } from '@frontmcp/lazy-zod';
 
 import {
+  createMockScopeEntry,
   createOAuthInput,
   createValidOAuthRequest,
-  flowScenarios,
   MOCK_SIGNING_SECRET,
   runFlowStages,
 } from '../../../__test-utils__';
@@ -27,6 +27,7 @@ import {
   HttpTextSchema,
   type FlowMetadata,
 } from '../../../common';
+import { incrementalTicketAudience } from '../../authorized-apps.utils';
 import type { LocalPrimaryAuth } from '../../instances/instance.local-primary-auth';
 import OauthAuthorizeFlow from '../oauth.authorize.flow';
 
@@ -47,8 +48,16 @@ function authorizeMetadata(): FlowMetadata<'oauth:authorize'> {
 
 const STAGES = ['parseInput', 'validateInput', 'checkIfAuthorized', 'prepareAuthorizationRequest'] as const;
 
+/** A local-mode scope with a Slack app, which it authorizes incrementally when `incrementalAuth` is enabled. */
+function slackScope(incrementalAuthEnabled = true) {
+  return createMockScopeEntry({
+    auth: { mode: 'local', ...(incrementalAuthEnabled ? { incrementalAuth: { enabled: true } } : {}) } as never,
+    apps: [{ id: 'slack', name: 'Slack' }],
+  });
+}
+
 describe('OAuth Authorize Flow — replayed incremental ticket', () => {
-  async function authorizeWith(scope: ReturnType<typeof flowScenarios.incrementalAuth>, ticket: string) {
+  async function authorizeWith(scope: ReturnType<typeof slackScope>, ticket: string) {
     const params = { ...createValidOAuthRequest(), mode: 'incremental', app: 'slack', ticket };
     const flow = new OauthAuthorizeFlow(authorizeMetadata(), createOAuthInput(params), scope, jest.fn(), new Map());
     await runFlowStages(flow, [...STAGES]);
@@ -57,7 +66,7 @@ describe('OAuth Authorize Flow — replayed incremental ticket', () => {
   }
 
   it('drops the ticket-supplied prior grants, not just the target app', async () => {
-    const scope = flowScenarios.incrementalAuth('slack');
+    const scope = slackScope();
     const ticket = signIncrementalAuthTicket(
       { sub: 'user-1', appId: 'slack', priorAppIds: ['github'] },
       MOCK_SIGNING_SECRET,
@@ -80,7 +89,7 @@ describe('OAuth Authorize Flow — replayed incremental ticket', () => {
 
 describe('OAuth Authorize Flow — the profile an incremental ticket carries', () => {
   it("keeps the subject's email and name, sealed, on the pending authorization", async () => {
-    const scope = flowScenarios.incrementalAuth('slack');
+    const scope = slackScope();
     const ticket = signIncrementalAuthTicket(
       { sub: 'user-1', appId: 'slack', email: 'ada@example.com', name: 'Ada Lovelace' },
       MOCK_SIGNING_SECRET,
@@ -100,5 +109,58 @@ describe('OAuth Authorize Flow — the profile an incremental ticket carries', (
       email: 'ada@example.com',
       name: 'Ada Lovelace',
     });
+  });
+});
+
+describe('OAuth Authorize Flow — a ticket this endpoint does not authorize', () => {
+  async function pendingFor(scope: ReturnType<typeof slackScope>, ticket: string) {
+    const params = { ...createValidOAuthRequest(), mode: 'incremental', app: 'slack', ticket };
+    const flow = new OauthAuthorizeFlow(authorizeMetadata(), createOAuthInput(params), scope, jest.fn(), new Map());
+    await runFlowStages(flow, [...STAGES]);
+    return (scope.auth as LocalPrimaryAuth).authorizationStore.getPendingAuthorization(
+      flow.state.snapshot()['pendingAuthId'] as string,
+    );
+  }
+
+  it('runs an ordinary login where incremental authorization is not enabled', async () => {
+    const ticket = signIncrementalAuthTicket({ sub: 'user-1', appId: 'slack' }, MOCK_SIGNING_SECRET);
+
+    const pending = await pendingFor(slackScope(false), ticket);
+
+    expect(pending?.isIncremental).toBe(false);
+    expect(pending?.incrementalSub).toBeUndefined();
+  });
+
+  it('runs an ordinary login for a ticket naming an app this endpoint does not serve', async () => {
+    const ticket = signIncrementalAuthTicket({ sub: 'user-1', appId: 'billing' }, MOCK_SIGNING_SECRET);
+
+    const pending = await pendingFor(slackScope(), ticket);
+
+    expect(pending?.isIncremental).toBe(false);
+    expect(pending?.incrementalSub).toBeUndefined();
+  });
+
+  it('runs an ordinary login for a ticket minted for another endpoint', async () => {
+    const ticket = signIncrementalAuthTicket(
+      { sub: 'user-1', appId: 'slack', audience: JSON.stringify(['https://other.example.com', '/other']) },
+      MOCK_SIGNING_SECRET,
+    );
+
+    const pending = await pendingFor(slackScope(), ticket);
+
+    expect(pending?.isIncremental).toBe(false);
+  });
+
+  it('expands the grant for a ticket minted for this endpoint', async () => {
+    const scope = slackScope();
+    const ticket = signIncrementalAuthTicket(
+      { sub: 'user-1', appId: 'slack', audience: incrementalTicketAudience(scope) },
+      MOCK_SIGNING_SECRET,
+    );
+
+    const pending = await pendingFor(scope, ticket);
+
+    expect(pending?.isIncremental).toBe(true);
+    expect(pending?.incrementalSub).toBe('user-1');
   });
 });

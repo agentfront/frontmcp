@@ -13,15 +13,25 @@ import type { Scope } from '../scope/scope.instance';
 import type { ConnectOptions, DirectClient, LLMConnectOptions } from './client.types';
 import { PLATFORM_CLIENT_INFO } from './llm-platform';
 
-// Cache for initialized servers (singleton per parsed config)
+// Cache for initialized servers (singleton per parsed config and mode, so a manifest or CLI boot is never served as a full one)
 // Using let to allow reassignment in clearScopeCache()
-let instanceCache = new WeakMap<object, Promise<FrontMcpInstance>>();
+let instanceCaches = new Map<InstanceMode, WeakMap<object, Promise<FrontMcpInstance>>>();
 
 /** How many connected clients share each cached server. */
 const instanceClients = new WeakMap<Promise<FrontMcpInstance>, number>();
 
 /** `'manifest'` boots a server only to read its entries: see `FrontMcpInstance.createForManifest()`. */
 type InstanceMode = 'full' | 'cli' | 'manifest';
+
+/** The cache of the servers booted in `mode`. */
+function instanceCacheOf(mode: InstanceMode): WeakMap<object, Promise<FrontMcpInstance>> {
+  let cache = instanceCaches.get(mode);
+  if (!cache) {
+    cache = new WeakMap();
+    instanceCaches.set(mode, cache);
+  }
+  return cache;
+}
 
 /**
  * Get or create the server for the given config.
@@ -32,7 +42,7 @@ type InstanceMode = 'full' | 'cli' | 'manifest';
  */
 function getInstance(
   config: FrontMcpConfigInput,
-  mode?: InstanceMode,
+  mode: InstanceMode = 'full',
 ): { cacheKey: object; instancePromise: Promise<FrontMcpInstance> } {
   // Handle @FrontMcp-decorated class (e.g., from schema-extractor loading a bundle).
   // `getDecoratorConfig` returns the parsed metadata via the SDK's stable accessor.
@@ -46,6 +56,7 @@ function getInstance(
   // Create a unique cache key based on config
   // Since config is passed by reference, same config object = same server
   const cacheKey = resolvedConfig as object;
+  const instanceCache = instanceCacheOf(mode);
 
   let instancePromise = instanceCache.get(cacheKey);
   if (!instancePromise) {
@@ -78,9 +89,10 @@ function getInstance(
  */
 export function joinInstance(
   config: FrontMcpConfigInput,
-  mode?: InstanceMode,
+  mode: InstanceMode = 'full',
 ): { instancePromise: Promise<FrontMcpInstance>; release: () => Promise<void> } {
   const { cacheKey, instancePromise } = getInstance(config, mode);
+  const instanceCache = instanceCacheOf(mode);
   instanceClients.set(instancePromise, (instanceClients.get(instancePromise) ?? 0) + 1);
   const release = async () => {
     const remaining = (instanceClients.get(instancePromise) ?? 1) - 1;
@@ -340,9 +352,9 @@ export async function connectVercelAI(config: FrontMcpConfigInput, options?: LLM
 
 /**
  * Clear the scope cache (for testing).
- * Creates a new WeakMap instance to clear all cached entries.
+ * Creates new caches to clear all cached entries.
  * @internal
  */
 export function clearScopeCache(): void {
-  instanceCache = new WeakMap<object, Promise<FrontMcpInstance>>();
+  instanceCaches = new Map<InstanceMode, WeakMap<object, Promise<FrontMcpInstance>>>();
 }

@@ -299,6 +299,36 @@ describe('AgentRegistry', () => {
       expect(visibleToSelective.map((a) => a.id)).not.toContain('blocked-agent');
     });
 
+    it('sees no peer with an empty visibleAgents whitelist', async () => {
+      @Agent({
+        id: 'isolated-agent',
+        name: 'isolated-agent',
+        inputSchema: {},
+        swarm: { canSeeOtherAgents: true, visibleAgents: [] },
+        llm: { adapter: mockLlmAdapter },
+      })
+      class IsolatedAgent extends AgentContext {
+        override async execute(_input: Record<string, never>) {
+          return {};
+        }
+      }
+
+      @Agent({ id: 'peer-agent', name: 'peer-agent', inputSchema: {}, llm: { adapter: mockLlmAdapter } })
+      class PeerAgent extends AgentContext {
+        override async execute(_input: Record<string, never>) {
+          return {};
+        }
+      }
+
+      const providers = await createProviderRegistryWithScope();
+      const owner = { kind: 'app' as const, id: 'test-app', ref: Symbol('test') };
+
+      const registry = new AgentRegistry(providers, [IsolatedAgent, PeerAgent], owner);
+      await registry.ready;
+
+      expect(registry.getVisibleAgentsFor('isolated-agent')).toEqual([]);
+    });
+
     it('should return empty array for agent that cannot see others', async () => {
       @Agent({
         id: 'isolated-agent',

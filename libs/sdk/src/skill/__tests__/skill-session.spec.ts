@@ -699,6 +699,66 @@ describe('Session Serialization', () => {
     expect(deserialized.activeSkills.get('skill-1')?.name).toBe('Skill 1');
   });
 
+  it('keeps strictAllowlist through serialization', () => {
+    const state = { ...createEmptySessionState('session-1'), strictAllowlist: true };
+    expect(deserializeSessionState(serializeSessionState(state)).strictAllowlist).toBe(true);
+    expect(
+      deserializeSessionState(serializeSessionState(createEmptySessionState('s'))).strictAllowlist,
+    ).toBeUndefined();
+  });
+
+  it('requireExplicitActivation refuses tools in a session with no active skill', async () => {
+    const requiring = new SkillSessionManager({ requireExplicitActivation: true });
+    const content: SkillContent = {
+      id: 's',
+      name: 'S',
+      description: 'd',
+      instructions: 'i',
+      tools: [{ name: 'tool_a' }],
+    };
+    const loadResult: SkillLoadResult = {
+      skill: content,
+      availableTools: ['tool_a'],
+      missingTools: [],
+      isComplete: true,
+    };
+
+    await requiring.runWithSession('session-1', async () => {
+      expect(requiring.checkToolAuthorization('tool_a')).toEqual(
+        expect.objectContaining({ allowed: false, reason: 'no_active_skill' }),
+      );
+      requiring.activateSkill('s', content, loadResult);
+      expect(requiring.checkToolAuthorization('tool_a').allowed).toBe(true);
+      requiring.deactivateSkill();
+      expect(requiring.checkToolAuthorization('tool_a').allowed).toBe(false);
+    });
+  });
+
+  it('logs activation and deactivation without the session ID', async () => {
+    const debug = jest.fn();
+    const warn = jest.fn();
+    const logger = { debug, warn, info: jest.fn(), error: jest.fn(), verbose: jest.fn() };
+    const sessionId = 'session-that-resumes-a-transport';
+    const logged = new SkillSessionManager(
+      { defaultPolicyMode: 'permissive' },
+      logger as unknown as ConstructorParameters<typeof SkillSessionManager>[1],
+    );
+    const content: SkillContent = { id: 's', name: 'S', description: 'd', instructions: 'i', tools: [{ name: 'a' }] };
+    const loadResult: SkillLoadResult = { skill: content, availableTools: ['a'], missingTools: [], isComplete: true };
+
+    await logged.runWithSession(sessionId, async () => {
+      logged.activateSkill('s', content, loadResult);
+      logged.checkToolAuthorization('unlisted');
+      logged.deactivateSkill('s');
+      logged.activateSkill('s', content, loadResult);
+      logged.deactivateSkill();
+    });
+
+    expect(debug).toHaveBeenCalledTimes(4);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify([debug.mock.calls, warn.mock.calls])).not.toContain(sessionId);
+  });
+
   it('should create empty session state', () => {
     const state = createEmptySessionState('session-1', { defaultPolicyMode: 'strict' });
 

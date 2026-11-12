@@ -19,6 +19,7 @@ import {
   type ResourceTemplateRecord,
   type ScopeEntry,
 } from '../common';
+import { FrontMcpContextStorage } from '../context/frontmcp-context-storage';
 import { InvalidRegistryKindError } from '../errors';
 import { InvalidHookFlowError } from '../errors/mcp.error';
 import { describeUnreachableEntryClassHooks, unreachableHooksMessage } from '../hooks/entry-class-hooks';
@@ -171,7 +172,8 @@ export class ResourceInstance<
       params: {} as Record<string, string>,
       providers,
       logger,
-      authInfo: {},
+      // The caller of the completion request, from the request context the flow runs in
+      authInfo: requestAuthInfoOf(scope),
     };
 
     const instance = new (cls as unknown as new (args: ResourceCtorArgs) => ResourceContext)(resourceCtorArgs);
@@ -311,5 +313,14 @@ class FunctionResourceContext<
 
   execute(uri: string, params: Params): Promise<Out> {
     return this.record.provide(uri, params, this);
+  }
+}
+
+/** The auth info of the request running now, or none outside a request. */
+function requestAuthInfoOf(scope: { providers: Pick<ProviderRegistry, 'get'> }): ResourceCtorArgs['authInfo'] {
+  try {
+    return scope.providers.get(FrontMcpContextStorage).getStore()?.authInfo ?? {};
+  } catch {
+    return {};
   }
 }

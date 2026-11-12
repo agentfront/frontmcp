@@ -73,7 +73,9 @@ export class RedisCimdCache implements CimdCacheBackend {
     const redisOptions: RedisAdapterOptions = {};
 
     if (config.redis.url) {
+      const { port, password, db, tls } = config.redis;
       redisOptions.url = config.redis.url;
+      redisOptions.config = { port, password, db, tls };
     } else if (config.redis.host) {
       redisOptions.config = {
         host: config.redis.host,

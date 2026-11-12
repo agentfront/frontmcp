@@ -140,6 +140,39 @@ describe('URI Template Utils', () => {
 
       expect(params).toBeNull();
     });
+
+    it.each([
+      ['{a}{b}', 'xyz'],
+      ['{a}-{b}', 'one-two-three'],
+      ['{+a}-{+b}', 'one-two/three-four'],
+      ['{a}{+b}', 'ab/cd'],
+      ['{+a}{b}', 'ab/cd'],
+      ['x{a}x{b}x', 'xaxxbxx'],
+      ['{a}.{b}.{c}', 'a.b.c.d.e'],
+      ['{+a}/{b}', 'p/q/r'],
+      ['{+a}', 'line\nbreak'],
+      ['{a}', 'line\nbreak'],
+      ['{+a}/{+b}', '/x'],
+      ['users/{id}', 'users/'],
+      ['{a}{b}{c}', 'ab'],
+      ['pre{+a}', 'pre'],
+      ['a.b{c}', 'aXbc'],
+      ['{x}-{x}', 'one-two'],
+    ])('captures what the regular expression of %s captures in %s', (template, uri) => {
+      const { pattern, paramNames } = parseUriTemplate(template);
+      const match = uri.match(pattern);
+      const expected = match ? Object.fromEntries(paramNames.map((name, index) => [name, match[index + 1]])) : null;
+
+      expect(matchUriTemplate(template, uri)).toEqual(expected);
+    });
+
+    it('answers a template whose placeholders can split a URI many ways', () => {
+      const template = Array.from({ length: 30 }, (_, index) => `{p${index}}`).join('-') + '!';
+      const uri = Array.from({ length: 200 }, () => 'a').join('-');
+
+      expect(matchUriTemplate(template, uri)).toBeNull();
+      expect(matchUriTemplate(template, `${uri}!`)).not.toBeNull();
+    });
   });
 
   describe('expandUriTemplate', () => {

@@ -29,6 +29,23 @@ describe('client profiles', () => {
       expect(resolveClientProfile({ 'codex*': { structured: 'text' } }, 'cursor')).toBeUndefined();
     });
 
+    it('matches a glob with many wildcards without a regular expression, in time bounded by the name and glob', () => {
+      const test = jest.spyOn(RegExp.prototype, 'test');
+      const exec = jest.spyOn(RegExp.prototype, 'exec');
+      try {
+        const glob = '*a*a*a*a*a*a*a*a*a*a*a*a*b';
+        expect(resolveClientProfile({ [glob]: { structured: 'text' } }, 'a'.repeat(255))).toBeUndefined();
+        expect(resolveClientProfile({ [glob]: { structured: 'text' } }, `${'a'.repeat(254)}b`)).toEqual({
+          structured: 'text',
+        });
+        expect(test).not.toHaveBeenCalled();
+        expect(exec).not.toHaveBeenCalled();
+      } finally {
+        test.mockRestore();
+        exec.mockRestore();
+      }
+    });
+
     it('matches no profile for a client name over 256 characters, so a long name cannot stall the glob', () => {
       expect(resolveClientProfile({ '*a*b*': { structured: 'text' } }, `${'a'.repeat(256)}b`)).toBeUndefined();
       expect(resolveClientProfile({ '*a*b*': { structured: 'text' } }, `${'a'.repeat(255)}b`)).toEqual({

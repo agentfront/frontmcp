@@ -413,7 +413,7 @@ export class MockCimdServer {
         'Cache-Control': 'max-age=3600',
       });
       res.end(JSON.stringify(client.document));
-      this.log(`Served client metadata: ${client.document.client_name}`);
+      this.log(`Served client metadata at ${url}`);
       return;
     }
 

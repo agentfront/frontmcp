@@ -42,6 +42,18 @@ export interface ParsedUriTemplate {
  * // { pattern: /^skill:\/\/(.+?)\/SKILL\.md$/, paramNames: ["skillPath"] }
  */
 export function parseUriTemplate(template: string): ParsedUriTemplate {
+  const parts = templateParts(template);
+  return {
+    pattern: new RegExp(`^${parts.map(regexSourceOf).join('')}$`),
+    paramNames: paramNamesOf(parts),
+  };
+}
+
+/** A template's literal text, or a placeholder: `{name}` takes a value without `/`, `{+name}` any value. */
+type TemplatePart = { kind: 'literal'; text: string } | { kind: 'param'; name: string; reserved: boolean };
+
+/** Split a template into its literal text and placeholders, in order; it starts and ends with literal text. */
+function templateParts(template: string): TemplatePart[] {
   if (template.length > 1000) {
     throw new Error('URI template too long (max 1000 characters)');
   }
@@ -51,34 +63,126 @@ export function parseUriTemplate(template: string): ParsedUriTemplate {
     throw new Error('URI template has too many parameters (max 50)');
   }
 
-  const paramNames: string[] = [];
-
-  // Walk the template, alternating literal segments and {param} / {+param}
-  // placeholders. Literal segments get regex-escaped; placeholders become
-  // a capture group whose shape depends on the operator. Doing both passes
-  // in a single walk avoids escaping the `+` inside `{+name}`.
+  const parts: TemplatePart[] = [];
   const placeholder = /\{([^{}]+)\}/g;
-  let regexStr = '';
   let lastIndex = 0;
   for (let m = placeholder.exec(template); m !== null; m = placeholder.exec(template)) {
-    regexStr += escapeRegex(template.slice(lastIndex, m.index));
+    parts.push({ kind: 'literal', text: template.slice(lastIndex, m.index) });
     const raw = m[1];
     const reserved = raw.startsWith('+');
-    paramNames.push(reserved ? raw.slice(1) : raw);
-    regexStr += reserved ? '(.+?)' : '([^/]+)';
+    parts.push({ kind: 'param', name: reserved ? raw.slice(1) : raw, reserved });
     lastIndex = m.index + m[0].length;
   }
-  regexStr += escapeRegex(template.slice(lastIndex));
+  parts.push({ kind: 'literal', text: template.slice(lastIndex) });
+  return parts;
+}
 
-  return {
-    pattern: new RegExp(`^${regexStr}$`),
-    paramNames,
-  };
+/** The regular expression of one part: its text, escaped, or a capture of the placeholder's value. */
+function regexSourceOf(part: TemplatePart): string {
+  if (part.kind === 'literal') return escapeRegex(part.text);
+  return part.reserved ? '(.+?)' : '([^/]+)';
+}
+
+/** The names of the placeholders, in order. */
+function paramNamesOf(parts: TemplatePart[]): string[] {
+  return parts.flatMap((part) => (part.kind === 'param' ? [part.name] : []));
 }
 
 function escapeRegex(literal: string): string {
   return literal.replace(/[.*+?^${}()|[\]\\]/g, (c) => `\\${c}`);
 }
+
+/**
+ * The values a URI gives a template's placeholders, the ones its regular expression captures: `{name}` the longest
+ * value that lets the rest match, `{+name}` the shortest. Without backtracking, the time is at most the URI's length
+ * times the template's, where the regular expression's can grow as the URI's length to the power of the number of
+ * placeholders. Returns null when the URI does not match.
+ */
+function matchTemplateParts(parts: TemplatePart[], uri: string): string[] | null {
+  // fitsFrom[index] holds the positions from which parts index.. match the rest of the URI
+  const fitsFrom: PositionSet[] = new Array(parts.length + 1);
+  fitsFrom[parts.length] = new PositionSet(uri.length);
+  fitsFrom[parts.length].add(uri.length);
+  for (let index = parts.length - 1; index >= 0; index--) {
+    fitsFrom[index] = positionsWherePartFits(parts[index], uri, fitsFrom[index + 1]);
+    // Only the positions after a placeholder are read again below
+    if (parts[index].kind !== 'param') fitsFrom[index + 1] = EMPTY_POSITIONS;
+  }
+  if (!fitsFrom[0].has(0)) return null;
+
+  const values: string[] = [];
+  let position = 0;
+  parts.forEach((part, index) => {
+    if (part.kind === 'literal') {
+      position += part.text.length;
+      return;
+    }
+    const valueEnd = firstPositionNotHeld(part, uri, position);
+    const rest = fitsFrom[index + 1];
+    let end = part.reserved ? position + 1 : valueEnd;
+    while (!rest.has(end)) end += part.reserved ? 1 : -1;
+    values.push(uri.slice(position, end));
+    position = end;
+  });
+  return values;
+}
+
+/** The positions from which `part` and then the parts after it, which match from `rest`, match the URI. */
+function positionsWherePartFits(part: TemplatePart, uri: string, rest: PositionSet): PositionSet {
+  const fits = new PositionSet(uri.length);
+  if (part.kind === 'literal') {
+    for (let position = 0; position + part.text.length <= uri.length; position++) {
+      if (rest.has(position + part.text.length) && uri.startsWith(part.text, position)) fits.add(position);
+    }
+    return fits;
+  }
+  let valueEnd = uri.length;
+  let nearestRest = Infinity;
+  for (let position = uri.length - 1; position >= 0; position--) {
+    if (rest.has(position + 1)) nearestRest = position + 1;
+    if (!canHold(part, uri.charCodeAt(position))) valueEnd = position;
+    if (nearestRest <= valueEnd) fits.add(position);
+  }
+  return fits;
+}
+
+/** The first position at or after `position` whose character the placeholder's value cannot hold. */
+function firstPositionNotHeld(part: TemplatePart, uri: string, position: number): number {
+  let end = position;
+  while (end < uri.length && canHold(part, uri.charCodeAt(end))) end++;
+  return end;
+}
+
+/** `{name}` holds anything but `/`, as `[^/]` does; `{+name}` anything but a line end, as `.` does. */
+function canHold(part: TemplatePart, charCode: number): boolean {
+  if (part.kind !== 'param') return false;
+  if (!part.reserved) return charCode !== SLASH;
+  return !LINE_TERMINATORS.has(charCode);
+}
+
+const SLASH = 0x2f;
+const LINE_TERMINATORS = new Set([0x0a, 0x0d, 0x2028, 0x2029]);
+
+/** A set of positions in a string of a given length, one bit each. */
+class PositionSet {
+  private readonly bits: Uint8Array;
+
+  constructor(length: number) {
+    this.bits = new Uint8Array((length >> 3) + 1);
+  }
+
+  /** Add `position`. */
+  add(position: number): void {
+    this.bits[position >> 3] |= 1 << (position & 7);
+  }
+
+  /** Whether `position` was added. */
+  has(position: number): boolean {
+    return position >= 0 && ((this.bits[position >> 3] ?? 0) & (1 << (position & 7))) !== 0;
+  }
+}
+
+const EMPTY_POSITIONS = new PositionSet(0);
 
 /**
  * Match a URI against a URI template and extract parameters.
@@ -99,14 +203,14 @@ function escapeRegex(literal: string): string {
  * // null (no match)
  */
 export function matchUriTemplate(template: string, uri: string): Record<string, string> | null {
-  const { pattern, paramNames } = parseUriTemplate(template);
-  const match = uri.match(pattern);
+  const parts = templateParts(template);
+  const values = matchTemplateParts(parts, uri);
 
-  if (!match) return null;
+  if (!values) return null;
 
   const params: Record<string, string> = {};
-  paramNames.forEach((name, index) => {
-    params[name] = decodeURIComponent(match[index + 1]);
+  paramNamesOf(parts).forEach((name, index) => {
+    params[name] = decodeURIComponent(values[index]);
   });
 
   return params;

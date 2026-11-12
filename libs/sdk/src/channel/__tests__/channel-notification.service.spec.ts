@@ -100,6 +100,25 @@ describe('ChannelNotificationService meta keys', () => {
   });
 });
 
+describe('ChannelNotificationService broadcast', () => {
+  it('reaches every subscribed session in one pass over the registered sessions', () => {
+    const capable = { clientCapabilities: { experimental: { 'claude/channel': {} } } };
+    const sink = {
+      getSubscribersForChannel: jest.fn(() => ['session-1', 'session-2', 'session-3']),
+      getRegisteredServer: jest.fn((sessionId: string) => (sessionId === 'session-3' ? undefined : capable)),
+      sendCustomNotification: jest.fn(),
+    } as unknown as NotificationService & { sendCustomNotification: jest.Mock };
+    const service = new ChannelNotificationService(sink, logger());
+
+    service.sendToSubscribedSessions('deploy done', { source: 'ci' });
+
+    expect(sink.sendCustomNotification).toHaveBeenCalledTimes(1);
+    const admits = sink.sendCustomNotification.mock.calls[0][2] as (session: { sessionId: string }) => boolean;
+    const admitted = ['session-1', 'session-2', 'session-3', 'other'].filter((sessionId) => admits({ sessionId }));
+    expect(admitted).toEqual(['session-1', 'session-2']);
+  });
+});
+
 describe('ChannelNotificationService channel capable sessions', () => {
   const CHANNEL_EVENT = { content: 'disk full', meta: { source: 'alerts' } };
 

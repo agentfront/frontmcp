@@ -1,5 +1,5 @@
 // errors/error-handler.ts
-import { isProduction } from '@frontmcp/utils';
+import { escapeControlCharacters, isProduction } from '@frontmcp/utils';
 
 import { FlowControl } from '../common/interfaces/flow.interface';
 import { McpError, toMcpError } from './mcp.error';
@@ -73,14 +73,15 @@ export class ErrorHandler {
       stack: this.isDevelopment ? error.stack : undefined,
     };
 
+    // An error's message can carry a caller's or a remote server's text: it stays on one line of the log
     if (error instanceof McpError) {
       if (error.isPublic) {
-        this.logger.warn(`Public error: ${error.getInternalMessage()}`, meta);
+        this.logger.warn(`Public error: ${escapeControlCharacters(error.getInternalMessage())}`, meta);
       } else {
-        this.logger.error(`Internal error: ${error.getInternalMessage()}`, meta);
+        this.logger.error(`Internal error: ${escapeControlCharacters(error.getInternalMessage())}`, meta);
       }
     } else {
-      this.logger.error(`Unexpected error: ${error.message || String(error)}`, meta);
+      this.logger.error(`Unexpected error: ${escapeControlCharacters(error.message || String(error))}`, meta);
     }
   }
 

@@ -65,12 +65,7 @@ export default class ListJobsTool extends ToolContext {
    * a run of it (`create` and `execute`). Checking those too keeps the listing
    * honest: showing a job the caller can never run is the disclosure this closes.
    */
-  private async maySee(job: JobEntry): Promise<boolean> {
-    const permissions = job.metadata.permissions;
-    const builder = this.scope.authoritiesContextBuilder;
-    for (const action of ['list', 'create', 'execute'] as const) {
-      if (!(await JobPermissionGuard.check(permissions, action, this.authInfo, builder))) return false;
-    }
-    return true;
+  private maySee(job: JobEntry): Promise<boolean> {
+    return JobPermissionGuard.maySee(job.metadata.permissions, this.authInfo, this.scope.authoritiesContextBuilder);
   }
 }

@@ -113,10 +113,11 @@ describe('useAITools', () => {
     expect(mockFormatToolsForPlatform).not.toHaveBeenCalled();
   });
 
-  it('callTool calls server.callTool and formats result', async () => {
+  it('callTool runs through the connected client that listed the tools, not the server, and formats result', async () => {
     const rawResult = { content: [{ type: 'text', text: 'ok' }] };
     const formattedResult = 'ok';
     const mockCallTool = jest.fn().mockResolvedValue(rawResult);
+    const mockServerCallTool = jest.fn();
     mockFormatResultForPlatform.mockReturnValue(formattedResult);
     mockFormatToolsForPlatform.mockReturnValue([]);
 
@@ -126,7 +127,8 @@ describe('useAITools', () => {
       wrapper: makeWrapper({
         tools,
         status: 'connected',
-        server: { callTool: mockCallTool } as never as DirectMcpServer,
+        server: { callTool: mockServerCallTool } as never as DirectMcpServer,
+        client: { callTool: mockCallTool } as never as DirectClient,
       }),
     });
 
@@ -140,11 +142,12 @@ describe('useAITools', () => {
     });
 
     expect(mockCallTool).toHaveBeenCalledWith('my_tool', { input: 'hello' });
+    expect(mockServerCallTool).not.toHaveBeenCalled();
     expect(mockFormatResultForPlatform).toHaveBeenCalledWith(rawResult, 'openai');
     expect(callResult).toBe(formattedResult);
   });
 
-  it('callTool throws when server unavailable', async () => {
+  it('callTool throws when not connected', async () => {
     const tools: ToolInfo[] = [{ name: 'tool1', inputSchema: { type: 'object' } }];
     mockFormatToolsForPlatform.mockReturnValue([]);
 
@@ -166,7 +169,7 @@ describe('useAITools', () => {
 
     const { result } = renderHook(() => useAITools('openai'), { wrapper });
 
-    await expect(result.current.callTool('tool1', {})).rejects.toThrow('FrontMCP server not available');
+    await expect(result.current.callTool('tool1', {})).rejects.toThrow('FrontMCP not connected');
   });
 
   it('handles formatting error', async () => {
@@ -214,10 +217,11 @@ describe('useAITools', () => {
     mockFormatResultForPlatform.mockReturnValue('result');
 
     // Register the named server in the real registry
-    serverRegistry.register('analytics', { callTool: mockServerCallTool } as never as DirectMcpServer);
+    serverRegistry.register('analytics', {} as DirectMcpServer);
     serverRegistry.update('analytics', {
       tools: serverTools,
       status: 'connected',
+      client: { callTool: mockServerCallTool } as never as DirectClient,
     });
 
     // Provider context points to 'default' which is idle
@@ -263,7 +267,7 @@ describe('useAITools', () => {
       wrapper: makeWrapper({
         tools,
         status: 'connected',
-        server: { callTool: mockCallTool } as never as DirectMcpServer,
+        client: { callTool: mockCallTool } as never as DirectClient,
       }),
     });
 
@@ -288,7 +292,7 @@ describe('useAITools', () => {
       wrapper: makeWrapper({
         tools,
         status: 'connected',
-        server: { callTool: mockCallTool } as never as DirectMcpServer,
+        client: { callTool: mockCallTool } as never as DirectClient,
       }),
     });
 

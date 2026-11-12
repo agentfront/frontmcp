@@ -200,6 +200,14 @@ export class SkillInstance extends SkillEntry {
     return undefined;
   }
 
+  /**
+   * The directory whose files `skill://` serves as a whole: a skill directory's own. A skill declared in code has
+   * none, since its base directory is only where its relative paths resolve; it serves the resource directories it declares.
+   */
+  getPublishedDir(): string | undefined {
+    return this.record.kind === SkillKind.FILE ? dirname(this.record.filePath) || undefined : undefined;
+  }
+
   override async load(): Promise<SkillContent> {
     if (this.cachedContent !== undefined) {
       return this.cachedContent;

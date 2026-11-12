@@ -121,6 +121,20 @@ describe('per-entry .remote() loading', () => {
     expect(new Set(requests.map((request) => request.appId)).size).toBe(2);
   });
 
+  it('connects separately for entries of one URL with other auth mappers, and once for one mapper', async () => {
+    const credentials = { type: 'bearer' as const, value: 'mapped' };
+    const mappedA = { mode: 'mapped' as const, mapper: () => credentials };
+    const mappedB = { mode: 'mapped' as const, mapper: () => credentials };
+    await start({
+      tools: [Tool.remote(URL, 'echo', { remoteAuth: mappedA }), Tool.remote(URL, 'add', { remoteAuth: mappedB })],
+      prompts: [Prompt.remote(URL, 'greeting', { remoteAuth: mappedA })],
+    });
+
+    const requests = connect.mock.calls.map(([request]) => request);
+    expect(requests.map((request) => request.auth)).toEqual([mappedA, mappedB]);
+    expect(new Set(requests.map((request) => request.appId)).size).toBe(2);
+  });
+
   it('applies options.metadata over the remote metadata and still calls the remote tool', async () => {
     const srv = await start({
       tools: [Tool.remote(URL, 'echo', { metadata: { name: 'remote_echo', description: 'Echo, remotely' } })],

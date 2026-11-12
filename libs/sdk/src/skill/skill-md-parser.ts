@@ -20,6 +20,7 @@ import type {
   SkillResources,
   SkillToolRef,
 } from '../common/metadata/skill.metadata';
+import { InvalidSkillError } from '../errors/sdk.errors';
 
 /**
  * Result of parsing SKILL.md frontmatter.
@@ -149,7 +150,7 @@ export function skillMdFrontmatterToMetadata(
     const specMeta: Record<string, string> = {};
     for (const [key, val] of Object.entries(meta)) {
       if (typeof val === 'string') specMeta[key] = val;
-      else specMeta[key] = JSON.stringify(val);
+      else specMeta[key] = metadataJson(result.name, key, val);
     }
     result.specMetadata = specMeta;
   }
@@ -269,7 +270,7 @@ export function skillMdFrontmatterToMetadata(
   for (const [key, val] of Object.entries(frontmatter)) {
     if (!knownKeys.has(key) && val !== undefined) {
       if (!result.specMetadata) result.specMetadata = {};
-      result.specMetadata[key] = typeof val === 'string' ? val : JSON.stringify(val);
+      result.specMetadata[key] = typeof val === 'string' ? val : metadataJson(result.name, key, val);
     }
   }
 
@@ -279,6 +280,24 @@ export function skillMdFrontmatterToMetadata(
   }
 
   return result;
+}
+
+/** The most characters a frontmatter value may take as JSON; a YAML alias counts each time it repeats a value. */
+const MAX_METADATA_JSON_LENGTH = 1_000_000;
+
+/** `value` as JSON, refused before it is built when YAML aliases repeat it past {@link MAX_METADATA_JSON_LENGTH}. */
+function metadataJson(skillName: string | undefined, key: string, value: unknown): string {
+  let length = 0;
+  return JSON.stringify(value, (name: string, item: unknown) => {
+    length += name.length + (typeof item === 'string' ? item.length : 8);
+    if (length > MAX_METADATA_JSON_LENGTH) {
+      throw new InvalidSkillError(
+        skillName ?? 'SKILL.md',
+        `frontmatter field "${key}" is over ${MAX_METADATA_JSON_LENGTH} characters as JSON (YAML aliases count each repeat); make it smaller`,
+      );
+    }
+    return item;
+  });
 }
 
 /**

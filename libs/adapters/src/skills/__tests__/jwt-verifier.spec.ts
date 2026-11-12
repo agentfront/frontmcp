@@ -1,4 +1,6 @@
-import type { JwksService } from '@frontmcp/auth';
+import { exportJWK, generateKeyPair, SignJWT, type CryptoKey, type JWK } from 'jose';
+
+import { JwksService } from '@frontmcp/auth';
 
 import { BundlePushJwtVerifier } from '../security/jwt-verifier';
 
@@ -192,5 +194,52 @@ describe('BundlePushJwtVerifier', () => {
     const r = await v.verify('t');
     expect(r.ok).toBe(false);
     expect(r.reason).toMatch(/required scope/);
+  });
+});
+
+describe('BundlePushJwtVerifier with one shared JwksService', () => {
+  const issuerA = { expectedIssuer: 'https://issuer-a.localhost', jwksUri: 'https://issuer-a.localhost/jwks' };
+  const issuerB = { expectedIssuer: 'https://issuer-b.localhost', jwksUri: 'https://issuer-b.localhost/jwks' };
+  const claims = { aud: 'acme:prod', resource: 'https://customer.example/mcp', roles: ['frontmcp:cloud:push'] };
+  let keyA: { privateKey: CryptoKey; jwk: JWK };
+  let keyB: { privateKey: CryptoKey; jwk: JWK };
+  let mockFetch: jest.SpyInstance;
+
+  async function makeKey(kid: string): Promise<{ privateKey: CryptoKey; jwk: JWK }> {
+    const { publicKey, privateKey } = await generateKeyPair('ES256');
+    return { privateKey, jwk: { ...(await exportJWK(publicKey)), kid, alg: 'ES256', use: 'sig' } };
+  }
+
+  function sign(privateKey: CryptoKey, issuer: string): Promise<string> {
+    return new SignJWT(claims)
+      .setProtectedHeader({ alg: 'ES256', kid: 'push-key' })
+      .setIssuer(issuer)
+      .setExpirationTime('10m')
+      .sign(privateKey);
+  }
+
+  beforeAll(async () => {
+    keyA = await makeKey('push-key');
+    keyB = await makeKey('push-key');
+  });
+
+  beforeEach(() => {
+    mockFetch = jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      if (String(input) === issuerA.jwksUri) return Response.json({ keys: [keyA.jwk] });
+      if (String(input) === issuerB.jwksUri) return Response.json({ keys: [keyB.jwk] });
+      return new Response('not found', { status: 404 });
+    });
+  });
+
+  afterEach(() => mockFetch.mockRestore());
+
+  it("verifies each issuer's token with that issuer's keys only", async () => {
+    const shared = new JwksService();
+    const verifierA = new BundlePushJwtVerifier({ ...baseOpts, ...issuerA }, fakeLogger, shared);
+    const verifierB = new BundlePushJwtVerifier({ ...baseOpts, ...issuerB }, fakeLogger, shared);
+
+    expect((await verifierA.verify(await sign(keyA.privateKey, issuerA.expectedIssuer))).ok).toBe(true);
+    expect((await verifierB.verify(await sign(keyA.privateKey, issuerB.expectedIssuer))).ok).toBe(false);
+    expect((await verifierB.verify(await sign(keyB.privateKey, issuerB.expectedIssuer))).ok).toBe(true);
   });
 });

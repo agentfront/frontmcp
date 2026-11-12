@@ -109,6 +109,23 @@ describe('CredentialsAccessorImpl', () => {
     });
   });
 
+  it('requireConnect logs a credential key with a line break on one line', async () => {
+    const debug = jest.fn();
+    const accessor = new CredentialsAccessorImpl({
+      vault,
+      resolveSub: () => 'user-1',
+      signingSecret: SIGNING_SECRET,
+      basePath: BASE_PATH,
+      logger: { debug, info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+    });
+
+    await accessor.requireConnect({ key: 'acme\n[ERROR] forged line' });
+
+    expect(debug).toHaveBeenCalledTimes(1);
+    expect(debug.mock.calls[0][0]).not.toContain('\n');
+    expect(debug.mock.calls[0][0]).toContain('acme\\n[ERROR] forged line');
+  });
+
   it('requireConnect for a signed-in caller sets no signInRequired', async () => {
     const res = await makeAccessor('user-1').requireConnect({ key: 'acme' });
     expect(res.connected).toBe(false);

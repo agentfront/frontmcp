@@ -188,6 +188,8 @@ export async function createInMemoryServer(
         },
         // The flow registry puts these in the request context it creates for the call (#706)
         ...(options?.workerEnv !== undefined ? { platformEnv: options.workerEnv } : {}),
+        // Its own request with its own caller, also when the client calls while another request runs
+        ownRequest: true,
       };
       // One request at a time in a browser build without AsyncContext, so overlapping requests
       // never read each other's request context (a no-op on Node).

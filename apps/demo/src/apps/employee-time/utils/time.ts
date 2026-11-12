@@ -76,8 +76,13 @@ export function eachDayRange(startMs: number, endMs: number): string[] {
 
 export type SessionSegment = { day: string; start: number; end: number; durationMs: number };
 
+const MAX_SESSION_DAYS = 366;
+
 export function splitSessionByDay(start: number, end: number): SessionSegment[] {
   if (end < start) throw new Error('end must be >= start');
+  if (end - start > MAX_SESSION_DAYS * 24 * 60 * 60 * 1000) {
+    throw new Error(`A work session can last at most ${MAX_SESSION_DAYS} days; check its entry and exit times`);
+  }
   const segments: SessionSegment[] = [];
   let curStart = start;
   while (curStart <= end) {

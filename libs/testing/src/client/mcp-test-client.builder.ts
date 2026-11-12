@@ -88,8 +88,9 @@ export class McpTestClientBuilder {
   }
 
   /**
-   * Enable public mode - skip authentication entirely.
-   * When true, no Authorization header is sent and anonymous token is not requested.
+   * Enable public mode: the client does not request an anonymous token.
+   * An Authorization header is still sent for a token given explicitly (`withToken()`, `withAuth()`,
+   * `withHeaders()`); without one, requests carry no Authorization header.
    * Use this for testing public/unauthenticated endpoints in CI/CD pipelines.
    */
   withPublicMode(enabled = true): this {

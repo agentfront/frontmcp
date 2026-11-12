@@ -294,8 +294,9 @@ export interface SecurityOptions {
     /** Allowed Host header values (e.g., ['localhost:3001', 'api.example.com']) */
     allowedHosts?: string[];
     /**
-     * Allowed Origin header values (e.g., ['https://app.example.com']). A request with no Origin is always allowed.
-     * Unset on a loopback bind: the server's own origins, its issuer and the `cors.origin` list.
+     * Allowed Origin header values (e.g., ['https://app.example.com']). A request with no Origin is always allowed,
+     * and an empty list allows no Origin. Unset on a loopback bind: the server's own origins, its issuer and the
+     * `cors.origin` list.
      */
     allowedOrigins?: string[];
   };

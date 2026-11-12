@@ -7,7 +7,7 @@
  *
  * Key design decisions:
  * - Pending records are keyed by sessionId (only one elicit per session allowed)
- * - Pub/sub channels are keyed by elicitId (for result routing)
+ * - Pub/sub channels are keyed by sessionId and elicitId (a result reaches only the session that asked)
  * - This separation allows form mode (lookup by session) and URL mode (direct elicitId)
  */
 
@@ -64,7 +64,7 @@ export type ElicitUnsubscribe = () => Promise<void>;
  * this enables routing elicitation responses to the correct node via Redis pub/sub.
  *
  * Storage is keyed by sessionId (only one pending elicit per session).
- * Pub/sub is keyed by elicitId (for cross-node result routing).
+ * Pub/sub is keyed by sessionId and elicitId (for cross-node result routing).
  *
  * @example
  * ```typescript
@@ -81,7 +81,7 @@ export type ElicitUnsubscribe = () => Promise<void>;
  * // Subscribe to results by elicitId (on the node that sent the elicit)
  * const unsubscribe = await store.subscribeResult('elicit-123', (result) => {
  *   console.log('Got result:', result);
- * });
+ * }, 'session-abc');
  *
  * // On any node: lookup by sessionId, then publish result by elicitId
  * const pending = await store.getPending('session-abc');
@@ -121,8 +121,8 @@ export interface ElicitationStore {
    * In distributed mode, this creates a Redis pub/sub subscription.
    *
    * @param elicitId - The elicitation ID to subscribe to
-   * @param callback - Called when a result is published for this elicit ID
-   * @param sessionId - Optional session ID for encrypted stores (required for decryption)
+   * @param callback - Called when a result is published for this elicit ID in this session
+   * @param sessionId - The session the elicitation belongs to; required (a subscription without it is refused)
    * @returns Unsubscribe function to clean up the subscription
    */
   subscribeResult<T = unknown>(
@@ -217,11 +217,11 @@ export interface ElicitationStore {
   /**
    * Subscribe to fallback execution results for a specific elicit ID.
    * In distributed mode, this creates a Redis pub/sub subscription
-   * for the channel `fallback-result:{elicitId}`.
+   * for the channel `fallback-result:{sessionId}:{elicitId}`.
    *
    * @param elicitId - The elicitation ID to subscribe to
-   * @param callback - Called when a fallback result is published for this elicit ID
-   * @param sessionId - Optional session ID for encrypted stores (required for decryption)
+   * @param callback - Called when a fallback result is published for this elicit ID in this session
+   * @param sessionId - The session the elicitation belongs to; required (a subscription without it is refused)
    * @returns Unsubscribe function to clean up the subscription
    */
   subscribeFallbackResult(
