@@ -1,4 +1,4 @@
-import { type Redis as RedisClient } from 'ioredis';
+import { type Redis as RedisClient, type RedisOptions } from 'ioredis';
 
 import { z } from '@frontmcp/lazy-zod';
 
@@ -183,6 +183,8 @@ export interface RedisRememberPluginOptions extends BaseRememberPluginOptions {
     port: number;
     password?: string;
     db?: number;
+    /** TLS options for the connection; `{}` connects over TLS with the default certificate checks. */
+    tls?: RedisOptions['tls'];
   };
 }
 
