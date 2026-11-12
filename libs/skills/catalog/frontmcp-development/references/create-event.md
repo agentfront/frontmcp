@@ -391,7 +391,8 @@ when no such subscription exists, so a client can repeat it. An anonymous caller
 In memory by default: they end with the process. With `events.store.sqlite: { path }` or `events.store.redis` they
 are kept, and shared by every process of the server. A kept store holds webhook secrets, so it needs a secret to
 encrypt them with: `MCP_EVENTS_SECRET`, else `MCP_SESSION_SECRET`, else `MCP_SERVER_SECRET`. Without one the server
-refuses to start. Vercel KV is refused: it has no atomic compare-and-set.
+refuses to start. Vercel KV is refused: it has no atomic compare-and-set. On Cloudflare Workers `events.store.sqlite`
+runs in a Durable Object, on the object's own SQLite database (see `setup-sqlite`).
 
 `scope.events.subscriptions` is the server's `EventSubscriptions`, with its `store` (`get`, `listByEvent`,
 `countByPrincipal`, `update`, `delete`).
@@ -652,6 +653,12 @@ class PublishAuditPlugin {
 
 `ctx.state.caller` is the bearer caller's auth info, and is not set for a signed request. With
 `@frontmcp/observability`, each request is traced as an `events/publish-http` span.
+
+A request the flow refuses (a bad signature, a stale timestamp, an invalid body, an unknown event) is the failure of
+its run: the span ends with ERROR and the message `HTTP <status>: <error>`, and a hook that runs after it, such as
+`@EventPublishHttpHook.Finally('finalize')`, reads it as `ctx.error` (code `EVENT_PUBLISH_REFUSED`, `statusCode` the
+status). A published request, and a repeated `eventId` answered from its record, end without one. Up to 1.12.0 a
+refusal ended its span OK. The `403` of `throttle.ipFilter` and the `429` of the server's rate limit still do.
 
 ## Publishing from Background Code
 
@@ -1134,8 +1141,10 @@ and arguments (anonymous callers share one):
   poll fails and no lease starts.
 - Each poll renews the lease. It lasts five poll intervals, and at least five minutes.
 - `onUnsubscribe(args, subscription, 'expired')` runs when no poll renewed it in time.
-- A caller may hold `subscriptions.maxPerPrincipal` leases; one more is answered `ResourceExhausted`. The anonymous
-  callers of a public server count as one caller, so together they hold at most that many.
+- A caller may hold `subscriptions.maxPerPrincipal` leases; one more is answered `ResourceExhausted` with
+  `data.limit: 'pollLeases'` (`'subscriptions'` up to 1.12.0) and a message that says when a lease ends:
+  `events/unsubscribe` frees nothing here. The anonymous callers of a public server count as one caller, so together
+  they hold at most that many.
 - Two first polls at the same time start one lease: `onSubscribe` runs once, and the second poll waits for it.
 
 Leases are in memory and never stored: after a restart, the next poll runs `onSubscribe` again.
@@ -1191,7 +1200,8 @@ request. When the server closes the stream, the request is answered with an empt
 `onSubscribe(args, subscription)` runs when the stream opens, with `subscription.mode` `'push'`; when it throws, the
 request fails. `onUnsubscribe(args, subscription, 'closed')` runs when the stream ends. A caller may hold
 `subscriptions.maxPerPrincipal` streams open, counted before `onSubscribe` runs, and the anonymous callers of a public
-server count as one caller; one more is answered `ResourceExhausted`. Occurrences reach a stream in the order they
+server count as one caller; one more is answered `ResourceExhausted` with `data.limit: 'streams'` (`'subscriptions'`
+up to 1.12.0): close a stream, then retry. Occurrences reach a stream in the order they
 were published, an occurrence replayed from the cursor is not sent again live, and an event published by name keeps
 the cursor of its `check()`.
 
@@ -1206,6 +1216,8 @@ others, which also keep it in their buffer for `events/poll`. Without it, a stre
 publishes, and the server logs at startup:
 `Event streams carry what this process publishes. With several processes, set events.store.redis so an event
 published on one reaches the streams the others hold.`
+With `events.store.redis` set and webhook delivery off (public auth mode, or `events.webhook.enabled: false`), the
+store relays nothing either, and the line names which of the two it is and what to change.
 
 ### Hooks
 
@@ -1362,6 +1374,11 @@ A server with an event that has the `channel` option also advertises `experiment
 class ShopServer {}
 ```
 
+A key `events` does not know, at any level, fails the start with its place and name
+(`events.subscriptions: Unrecognized key: "maxPerPrincpal"`); up to 1.12.0 it was dropped and the default applied.
+`events.store.redis` and `events.store.sqlite` take the server's Redis and SQLite options, which are not checked for
+unknown keys.
+
 | Field      | Type                               | Default  | Notes                                                                                                                       |
 | ---------- | ---------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `enabled?` | `boolean`                          | Not set  | Events are on once an app declares one. `false` turns them off; `true` starts the event registry without any declared event |
@@ -1384,7 +1401,7 @@ class ShopServer {}
 | `maxTtlMs?`           | `number`  | `86400000` (24 hours) | The longest lifetime granted                                                |
 | `minTtlMs?`           | `number`  | `60000` (1 minute)    | The shortest lifetime granted                                               |
 | `allowNoExpiry?`      | `boolean` | `false`               | Grants `ttlMs: null`. Needs `events.store.redis` or `events.store.sqlite`   |
-| `maxPerPrincipal?`    | `number`  | `100`                 | How many subscriptions one caller may hold                                  |
+| `maxPerPrincipal?`    | `number`  | `100`                 | One caller's limit of webhook subscriptions, of poll leases and of streams  |
 | `reauthorizeEveryMs?` | `number`  | `300000` (5 minutes)  | How often a publish checks an owner against `authorities` and `authorize()` |
 | `suspendedTtlMs?`     | `number`  | `604800000` (7 days)  | How long a suspended subscription without expiry is kept                    |
 

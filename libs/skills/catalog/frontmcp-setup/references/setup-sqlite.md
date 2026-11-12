@@ -22,11 +22,11 @@ description: Configure SQLite for local deployments, shared by the processes on 
 
 ### Skip When
 
-- Deploying to serverless (Vercel, Lambda, Cloudflare) where there is no persistent local filesystem -- use `setup-redis` instead
+- Deploying to serverless (Vercel, Lambda) where there is no persistent local filesystem -- use `setup-redis` instead. On Cloudflare Workers the stores run in a Durable Object: see [In a Cloudflare Durable Object](#in-a-cloudflare-durable-object)
 - Running server instances on more than one machine (behind a load balancer) -- use `setup-redis` instead
 - You need pub/sub for resource subscriptions or real-time event distribution -- use `setup-redis` instead
 
-> **Decision:** Use SQLite for storage on one machine, including several processes sharing a file; switch to `setup-redis` for several machines or serverless deployments.
+> **Decision:** Use SQLite for storage on one machine, including several processes sharing a file; switch to `setup-redis` for several machines or serverless deployments. In a Cloudflare Durable Object the stores run on the object's own SQLite database.
 
 ## Step 1 -- Install the Native Dependency
 
@@ -238,7 +238,7 @@ WAL needs a local filesystem: never put a WAL database on NFS, SMB or another ne
 
 Any number of processes on one machine can open the same file. SQLite lets one process write at a time; FrontMCP keeps that cheap:
 
-- **One connection per file per process.** The stores a process opens on one file (sessions, tasks, elicitation, events, job runs, and your own SQLite storage) share a single connection, so a process never waits on its own lock.
+- **One connection per file per process.** The stores a process opens on one file (sessions, tasks, elicitation, events, job runs, and your own SQLite storage) share a single connection, so a process never waits on its own lock. With a driver set by `useSqliteDriver()`, a connection is shared only among the stores that driver opened.
 - **Short, atomic writes.** Each write is one short `BEGIN IMMEDIATE` transaction. A conditional set (`ifNotExists`/`ifExists`), `incr`, `deleteIfEquals`, `expireIfEquals` and `setIfEquals` (compare-and-set) read and write in that one transaction, so counters stay exact and an NX lock has one holder across processes.
 - **Hearing the other processes.** SQLite has no pub/sub: `createChangeFeed(storage)` from `@frontmcp/utils` checks `PRAGMA data_version` (`storage.root.dataVersion()`) every `pollIntervalMs` (250) and reads its topics' counters only when another process wrote the file. Materialized resources (`resourceStore()` on SQLite, see `create-resource`) use it to send `notifications/resources/updated` when another process writes.
 - **Waiting without blocking.** Operations through `createStorage({ type: 'sqlite' })`, `sqliteStorageProvider()` or `SqliteStorageAdapter` run one at a time per process and wait for another process's lock on a timer, so the event loop keeps running; `disconnect()` lets the operations already called finish first. The periodic sweeps of expired keys and events wait the same way. The built-in session, task, elicitation and event stores' own reads and writes still wait synchronously, for at most `busyTimeoutMs`.
@@ -429,6 +429,47 @@ Inspect the database contents (after at least one session is created):
 sqlite3 ~/.frontmcp/data/sessions.sqlite ".tables"
 sqlite3 ~/.frontmcp/data/sessions.sqlite "SELECT key FROM kv LIMIT 5;"
 ```
+
+## In a Cloudflare Durable Object
+
+A Durable Object with SQLite storage has its own database, and the stores run on it without `better-sqlite3`, a native module that does not load on Workers. Up to 1.12.0 they could not. Import `@frontmcp/storage-sqlite` in the Worker, hand it to the SDK, and set the driver in the Durable Object's constructor, before the server is created:
+
+```typescript
+import { DurableObject } from 'cloudflare:workers';
+
+import { FrontMcpInstance, registerOptionalModule } from '@frontmcp/sdk';
+import * as storageSqlite from '@frontmcp/storage-sqlite';
+
+registerOptionalModule('@frontmcp/storage-sqlite', storageSqlite);
+
+export class HelpDeskServer extends DurableObject {
+  private readonly handler: ReturnType<typeof FrontMcpInstance.createFetchHandler>;
+
+  constructor(ctx: DurableObjectState, env: unknown) {
+    super(ctx, env);
+    storageSqlite.useSqliteDriver(storageSqlite.durableObjectSqlite(ctx.storage));
+    this.handler = FrontMcpInstance.createFetchHandler({
+      info: { name: 'help-desk', version: '1.0.0' },
+      apps: [HelpDeskApp],
+      events: { store: { sqlite: { path: 'help-desk.sqlite' } } },
+    });
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    return (await this.handler)(request, this.ctx, this.env);
+  }
+}
+```
+
+- **`registerOptionalModule()`** gives the SDK the package from the Worker's bundle: on Workers `require()` cannot reach a bundled module.
+- **`useSqliteDriver(durableObjectSqlite(ctx.storage))`** makes every store open the Durable Object's database. `createFetchHandler()` builds the server on its first request, so the constructor is early enough. Each instance of the Durable Object sets its own driver, and a store never gets a connection that an earlier instance opened: after an eviction, the next instance starts in the same isolate with its own storage.
+- **One instance per isolate.** The driver is set for the whole isolate, so use it in a Durable Object class that has one instance (one id, as `idFromName('main')`). Instances with different ids can share an isolate, and each server opens its stores on its first request: the storage set last then opens every instance's stores, Cloudflare refuses the I/O (`Cannot perform I/O on behalf of a different Durable Object`), and the other instances' servers do not start.
+- **Every `path` is the same database**, the Durable Object's one. The option only names it, and no file or folder is created.
+- **Writes run in `ctx.storage.transactionSync()`**, and `walMode` and `busyTimeoutMs` do nothing: a Durable Object has one connection and refuses both pragmas.
+- **Which stores.** Every store that takes a `sqlite` option: sessions, `auth.tokenStorage`, `events.store`, tasks, elicitation, and your own `createStorage({ type: 'sqlite' })`. On an edge runtime the task and elicitation stores open `sqlite` only when a driver is set, and refuse it otherwise. Persistent questions (`elicitation.persistent`) need their own `persistent.storage` of type `sqlite` there: one that would inherit the server's top-level `sqlite` is still refused.
+- **`frontmcp build --target cloudflare`** generates a stateless Worker without a Durable Object, so it sets none of this up: write the Worker entry and the Durable Object class yourself.
+
+`useSqliteDriver()` takes any function from a path to a database with the part of `better-sqlite3`'s `Database` the stores call (the `SqliteDriver` and `SqliteDatabase` types), and `useSqliteDriver(undefined)` goes back to `better-sqlite3`.
 
 ## Migrating from SQLite to Redis
 

@@ -149,7 +149,7 @@ Keep label values bounded (status codes, enum members, tool names) — unbounded
 - [ ] `metrics: { enabled: true }` is set in `@FrontMcp({ ... })`
 - [ ] For internet-exposed deployments, `auth: 'token'` + `tokenEnv` are set AND the env var is exported in the deployment
 - [ ] `metrics.path` does NOT start with `/mcp`, `/sse`, or `/messages`
-- [ ] If using `include[]`, every category name is from the enum (`process` | `tools` | `resources` | `http` | `storage` | `skills` | `auth` | `sessions`). FrontMCP counts the `skills` counters and the `tools` answer-cost counters itself (no request, error or duration counters), so `http` and the rest match the counters you create with their prefixes (`frontmcp_http_`, …)
+- [ ] If using `include[]`, every category name is from the enum (`process` | `tools` | `resources` | `http` | `storage` | `skills` | `auth` | `sessions` | `events`). FrontMCP counts the `skills` counters, the `tools` answer-cost counters and the `events` counters (`frontmcp_events_*`; up to 1.12.0 no category covered them, so `include` dropped them) itself (no request, error or duration counters), so `http` and the rest match the counters you create with their prefixes (`frontmcp_http_`, …)
 
 ### Runtime
 

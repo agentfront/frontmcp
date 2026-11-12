@@ -2,7 +2,7 @@
 name: replay-buffer
 reference: channel-sources
 level: advanced
-description: Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline.
+description: Buffer channel events and send them to a session on demand, for events that occurred before it connected.
 tags:
   - replay
   - buffer
@@ -18,7 +18,7 @@ features:
 
 # Replay Buffer Pattern
 
-Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline.
+Buffer channel events and send them to a session on demand, for events that occurred before it connected.
 
 ## Basic Replay (In-Memory)
 
