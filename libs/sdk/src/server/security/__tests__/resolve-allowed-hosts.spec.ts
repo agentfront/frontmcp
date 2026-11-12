@@ -37,8 +37,15 @@ describe('isLoopbackAddress', () => {
     expect(isLoopbackAddress(addr)).toBe(true);
   });
 
-  it.each(['0.0.0.0', '::', '10.0.0.4', '192.168.1.10', undefined])('treats %s as not loopback', (addr) => {
-    expect(isLoopbackAddress(addr)).toBe(false);
+  it.each(['0.0.0.0', '::', '10.0.0.4', '192.168.1.10', '127.evil.example', '127.0.0.1.evil.example', undefined])(
+    'treats %s as not loopback',
+    (addr) => {
+      expect(isLoopbackAddress(addr)).toBe(false);
+    },
+  );
+
+  it('treats a shortened IPv4 loopback spelling as loopback', () => {
+    expect(isLoopbackAddress('127.1')).toBe(true);
   });
 });
 
