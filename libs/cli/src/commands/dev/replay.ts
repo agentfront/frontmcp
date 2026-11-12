@@ -29,6 +29,11 @@ export interface ReplayKit {
 
 type Resolve = (id: string, options: { paths: string[] }) => string;
 
+/** One word of the command line `TestServer` runs through a shell; under `sh` nothing in it expands. */
+function shellWord(value: string): string {
+  return process.platform === 'win32' ? JSON.stringify(value) : `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 /** The project's own `@frontmcp/testing`, so the replay runs the client and test server the project's specs use. */
 export function loadReplayKit(cwd: string, resolve: Resolve = require.resolve): ReplayKit {
   let modulePath: string;
@@ -56,7 +61,7 @@ export async function runReplay(opts: ParsedArgs & { replay: string }, kit?: Rep
 
   console.log(`${c('cyan', '[test]')} replaying ${path.relative(cwd, file)} against ${path.relative(cwd, entry)}`);
   const server = await replayKit.TestServer.start({
-    command: `npx tsx ${JSON.stringify(entry)}`,
+    command: `npx tsx ${shellWord(entry)}`,
     cwd,
     port: 0,
     env: buildTestChildEnv({ effectiveEnv: resolved.effectiveEnv, baseEnv: process.env }),
