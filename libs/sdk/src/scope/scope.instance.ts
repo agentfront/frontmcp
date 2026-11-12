@@ -1152,6 +1152,9 @@ export class Scope extends ScopeEntry {
       this._channelTeardown = channelResult.teardown;
       // `dispose()` (what `create()` returns calls it) disconnects service channels, as `shutdown()` does.
       this.onDispose(() => this.teardownChannels());
+      // The tools channels contribute join after the startup checks above, so they are checked here
+      this.validateAuthoritiesConfig();
+      this.validateEnforcedMetadata();
       // A detached job runner runs one run: the server that started it already listens to the services
       if (!isJobWorker(this.metadata)) await channelResult.connectServices();
     }
