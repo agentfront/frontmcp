@@ -287,6 +287,12 @@ export class SseTransport implements McpTransport {
     try {
       const data = await endpoint;
       const messageUrl = new URL(data, url);
+      if (messageUrl.origin !== new URL(url).origin) {
+        throw new Error(
+          `SSE server at ${url} named a message endpoint on another origin (${messageUrl.origin}); ` +
+            `the legacy SSE transport only posts to the origin it connected to.`,
+        );
+      }
       this.messageEndpoint = messageUrl.toString();
       this.sessionId = messageUrl.searchParams.get('sessionId') ?? undefined;
     } finally {
