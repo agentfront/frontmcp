@@ -482,6 +482,12 @@ describe('events:subscribe', () => {
   });
 
   describe('limits', () => {
+    it('does not start with a misspelled events key, where it started with the default limit', async () => {
+      const misspelled = { events: { subscriptons: { maxPerPrincipal: 2 } } } as never;
+
+      await expect(startScope([orderCreated], misspelled)).rejects.toThrow(/Unrecognized key: .*subscriptons/);
+    });
+
     it('refuses a new subscription past maxPerPrincipal, and still refreshes an existing one', async () => {
       const limited = await startScope([orderCreated], { events: { subscriptions: { maxPerPrincipal: 2 } } });
       verifyAs(limited);
