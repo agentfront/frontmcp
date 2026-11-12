@@ -94,6 +94,18 @@ describe('toClientErrorMessage', () => {
     expect(Date.now() - started).toBeLessThan(1_000);
   });
 
+  it('keeps a URL whose query is a long run of question marks', () => {
+    const message = 'https://x.example.com/' + '?'.repeat(100_000);
+
+    expect(toClientErrorMessage(message)).toBe(message);
+  });
+
+  it('redacts a path query value after a name that a question mark precedes', () => {
+    expect(toClientErrorMessage('see https://x.example.com/?a?file=/srv/app/x#top')).toBe(
+      'see https://x.example.com/?a?file=[path]#top',
+    );
+  });
+
   it('returns an empty string for no message', () => {
     expect(toClientErrorMessage(undefined)).toBe('');
     expect(toClientErrorMessage('')).toBe('');
