@@ -27,30 +27,57 @@ interface KvPreparedStatements {
 
 /** One character of a LIKE pattern, with the `\` before it when there is one. */
 const LIKE_TOKEN = /\\?./gsu;
-const REGEXP_SYNTAX = /[\\^$.*+?()[\]{}|]/g;
+const ANY_CHARACTERS = Symbol('%');
+const ONE_CHARACTER = Symbol('_');
+/** A `\` that ends the pattern matches nothing, as in SQLite. */
+const NO_CHARACTER = Symbol('\\');
 const LAST_CODE_POINT = 0x10ffff;
 const FIRST_SURROGATE = 0xd800;
 const FIRST_AFTER_SURROGATES = 0xe000;
 
-/** One LIKE token as a regular expression, and the character it stands for unless it is a wildcard. */
-function parseLikeToken(token: string): { source: string; literal?: string } {
-  if (token === '%') return { source: '.*' };
-  if (token === '_') return { source: '.' };
-  // A `\` that ends the pattern matches nothing, as in SQLite.
-  if (token === '\\') return { source: '(?!)' };
-  const literal = token.replace(/^\\/, '');
-  return { source: literal.replace(REGEXP_SYNTAX, '\\$&'), literal };
+/** A wildcard of a LIKE pattern, or the character a literal stands for. */
+type LikeToken = string | typeof ANY_CHARACTERS | typeof ONE_CHARACTER | typeof NO_CHARACTER;
+
+/** One token of a LIKE pattern: a wildcard, or the character it matches. */
+function parseLikeToken(token: string): LikeToken {
+  if (token === '%') return ANY_CHARACTERS;
+  if (token === '_') return ONE_CHARACTER;
+  if (token === '\\') return NO_CHARACTER;
+  return token.replace(/^\\/, '');
 }
 
-/** A LIKE pattern (`%`, `_`, `\` before a literal character) as the text every match starts with, and a test of a key. */
-function parseLikePattern(pattern: string): { prefix: string; matcher: RegExp } {
+/** A LIKE pattern (`%`, `_`, `\` before a literal character) as the text every match starts with, and its tokens. */
+function parseLikePattern(pattern: string): { prefix: string; tokens: LikeToken[] } {
   const tokens = (pattern.match(LIKE_TOKEN) ?? []).map(parseLikeToken);
-  const prefixLength = tokens.findIndex((token) => token.literal === undefined);
+  const prefixLength = tokens.findIndex((token) => typeof token !== 'string');
   const prefixTokens = prefixLength === -1 ? tokens : tokens.slice(0, prefixLength);
-  return {
-    prefix: prefixTokens.map((token) => token.literal).join(''),
-    matcher: new RegExp(`^${tokens.map((token) => token.source).join('')}$`, 'su'),
-  };
+  return { prefix: prefixTokens.join(''), tokens };
+}
+
+/** Whether `key` matches the tokens: a walk that returns to the last `%` on a mismatch, so key length times pattern length at worst. */
+function matchesLikeTokens(tokens: LikeToken[], key: string): boolean {
+  const characters = Array.from(key);
+  let tokenIndex = 0;
+  let characterIndex = 0;
+  let lastAnyIndex = -1;
+  let charactersLastAnyTook = 0;
+  while (characterIndex < characters.length) {
+    const token = tokens[tokenIndex];
+    if (token === ANY_CHARACTERS) {
+      lastAnyIndex = tokenIndex++;
+      charactersLastAnyTook = characterIndex;
+    } else if (token === ONE_CHARACTER || token === characters[characterIndex]) {
+      tokenIndex++;
+      characterIndex++;
+    } else if (lastAnyIndex === -1) {
+      return false;
+    } else {
+      tokenIndex = lastAnyIndex + 1;
+      characterIndex = ++charactersLastAnyTook;
+    }
+  }
+  while (tokens[tokenIndex] === ANY_CHARACTERS) tokenIndex++;
+  return tokenIndex === tokens.length;
 }
 
 /** The first string that sorts after every key starting with `prefix` (SQLite sorts UTF-8 text by code point), if any. */
@@ -245,10 +272,10 @@ export class SqliteKvStore {
     const now = Date.now();
     if (!pattern) return (stmts.keys.all(now) as { key: string }[]).map((r) => r.key);
 
-    const { prefix, matcher } = parseLikePattern(pattern);
+    const { prefix, tokens } = parseLikePattern(pattern);
     const upperBound = upperBoundOf(prefix);
     const rows = upperBound === undefined ? stmts.keys.all(now) : stmts.keysInRange.all(prefix, upperBound, now);
-    return (rows as { key: string }[]).map((r) => r.key).filter((key) => matcher.test(key));
+    return (rows as { key: string }[]).map((r) => r.key).filter((key) => matchesLikeTokens(tokens, key));
   }
 
   /**

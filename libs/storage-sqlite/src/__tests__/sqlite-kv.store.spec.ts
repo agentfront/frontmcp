@@ -204,6 +204,15 @@ describe('SqliteKvStore', () => {
         'a\\',
         'a%\\',
         'missing%',
+        '%%',
+        '%_',
+        '_%_',
+        '%s%:%2',
+        's%n%:_',
+        '%a%b',
+        'a%b%',
+        '%:%:%',
+        'session:%2_',
       ];
 
       for (const pattern of patterns) {

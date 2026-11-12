@@ -153,6 +153,19 @@ describe('SqliteStorageAdapter', () => {
       expect((await adapter.keys(`${prefix}*`)).sort()).toEqual([`${prefix}sub_1`, `${prefix}sub_2`]);
     });
 
+    it('answers at once for many wildcards in a row and a long key that does not match', async () => {
+      const longKey = 'a'.repeat(5000);
+      await adapter.mset([{ key: longKey }, { key: `${longKey}z` }].map(withValue));
+      const startedAt = Date.now();
+
+      const matched = await adapter.keys(`${'*'.repeat(16)}z`);
+      const unmatched = await adapter.keys(`${'*a'.repeat(16)}y`);
+
+      expect(matched).toEqual([`${longKey}z`]);
+      expect(unmatched).toEqual([]);
+      expect(Date.now() - startedAt).toBeLessThan(1000);
+    });
+
     it('keeps letter case, as the other storage adapters do', async () => {
       await adapter.mset([{ key: 'session:1' }, { key: 'Session:1' }].map(withValue));
 
