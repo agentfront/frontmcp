@@ -918,6 +918,7 @@ export class McpClientService {
       headers,
       fetchImpl: remoteFetch,
       requestTimeoutMs,
+      maxTaskWaitMs: requestTimeoutMs,
     });
     await adapter.connect();
 
