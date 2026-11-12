@@ -74,7 +74,17 @@ describe('canonicalize', () => {
     expect(canonicalize('x')).toBe('"x"');
     expect(canonicalize(42)).toBe('42');
   });
+  it('refuses a value whose repeated parts write out longer than its limit', () => {
+    expect(() => canonicalize(sharedTwiceAtEachLevel(40))).toThrow(/longer than \d+ characters when canonicalized/);
+  });
 });
+
+/** An object that holds the level below it twice, as YAML aliases build: 2^levels leaves once written out. */
+function sharedTwiceAtEachLevel(levels: number): unknown {
+  let shared: unknown = 'leaf '.repeat(200_000);
+  for (let level = 0; level < levels; level++) shared = { left: shared, right: shared };
+  return shared;
+}
 
 describe('bundleDigest', () => {
   it('does not include integrity in the digest', () => {
@@ -127,6 +137,16 @@ describe('verifyBundleSignature — RS256', () => {
     const result = verifyBundleSignature(bundle, [{ keyId: 'key1', alg: 'EdDSA', publicKeyPem: keyPem }]);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toMatch(/alg=/);
+  });
+
+  it('rejects a bundle whose repeated parts write out longer than the canonical limit', () => {
+    const bundle = makeBundle();
+    const { keyPem, integrity } = signBundleRsa(bundle);
+    const expanded = { ...bundle, operations: { op: sharedTwiceAtEachLevel(40) }, integrity } as ResolvedBundle;
+
+    const result = verifyBundleSignature(expanded, [{ keyId: 'key1', alg: 'RS256', publicKeyPem: keyPem }]);
+
+    expect(result).toEqual({ ok: false, reason: expect.stringMatching(/^bundle could not be canonicalized/) });
   });
 
   it('rejects bundles missing integrity envelope', () => {

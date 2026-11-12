@@ -53,19 +53,61 @@ function classifyReason(reason: string): string {
 }
 
 /**
+ * The longest text `canonicalize` writes. A value parsed from YAML can repeat one object through aliases, and
+ * each repeat is written out in full, so a small document can stand for text far longer than itself.
+ */
+const CANONICAL_MAX_LENGTH = 32 * 1024 * 1024;
+
+/**
  * Stable JSON canonicalization for signing: sorted object keys, no whitespace.
  * Matches RFC 8785 (JCS) for our subset (no floats with weird precision).
+ * Throws when the text would pass {@link CANONICAL_MAX_LENGTH} characters.
  */
 export function canonicalize(value: unknown): string {
   if (value === null || typeof value !== 'object') {
     return JSON.stringify(value);
   }
+  const parts: string[] = [];
+  writeCanonical(value, parts, { remaining: CANONICAL_MAX_LENGTH }, false);
+  return parts.join('');
+}
+
+/** Append the canonical text of `value` to `parts`; a missing value reads `undefined` in an object, nothing in an array. */
+function writeCanonical(value: unknown, parts: string[], budget: { remaining: number }, inObject: boolean): void {
+  if (value === null || typeof value !== 'object') {
+    append(parts, JSON.stringify(value) ?? (inObject ? 'undefined' : ''), budget);
+    return;
+  }
   if (Array.isArray(value)) {
-    return `[${value.map((v) => canonicalize(v)).join(',')}]`;
+    append(parts, '[', budget);
+    for (let index = 0; index < value.length; index++) {
+      if (index > 0) append(parts, ',', budget);
+      writeCanonical(value[index], parts, budget, false);
+    }
+    append(parts, ']', budget);
+    return;
   }
   const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalize(obj[k])}`).join(',')}}`;
+  append(parts, '{', budget);
+  Object.keys(obj)
+    .sort()
+    .forEach((key, index) => {
+      append(parts, `${index > 0 ? ',' : ''}${JSON.stringify(key)}:`, budget);
+      writeCanonical(obj[key], parts, budget, true);
+    });
+  append(parts, '}', budget);
+}
+
+/** Add `text` to `parts`, and throw once the texts added pass what `budget` allows. */
+function append(parts: string[], text: string, budget: { remaining: number }): void {
+  budget.remaining -= text.length;
+  if (budget.remaining < 0) {
+    throw new Error(
+      `value is longer than ${CANONICAL_MAX_LENGTH} characters when canonicalized; ` +
+        'a value that repeats through YAML aliases is written out once per repeat, so send one with fewer repeats',
+    );
+  }
+  parts.push(text);
 }
 
 /** sha256 hex digest of the canonical bytes of an object (minus integrity). */
@@ -133,7 +175,12 @@ export function verifyBundleSignature(
   }
   const { alg, keyId, signature, digest } = bundle.integrity;
 
-  const expectedDigest = bundleDigest(bundle);
+  let expectedDigest: string;
+  try {
+    expectedDigest = bundleDigest(bundle);
+  } catch (e) {
+    return fail(`bundle could not be canonicalized: ${(e as Error).message}`);
+  }
   if (digest.toLowerCase() !== expectedDigest.toLowerCase()) {
     return fail(`digest mismatch (envelope=${digest.slice(0, 12)}.. computed=${expectedDigest.slice(0, 12)}..)`);
   }
