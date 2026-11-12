@@ -405,7 +405,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     if (!surface || !sessionId || callerCtx?.taskId || !this.isClientCall() || !surface.isStale(sessionId)) return;
     const { name } = this.state.required.input;
     const tool = resolvedTools.peek(this.rawInput, name) ?? lookupTool(this.scope, name);
-    if (tool && (await isEntryEnabled(tool.metadata.enabled, this.tryGetContext(), this.logger))) return;
+    // A tool the client could not call (internal, or not offered on its surface) is answered as one that does not exist
+    const callable =
+      tool !== undefined &&
+      resolveToolVisibility(tool.metadata) !== 'internal' &&
+      isOfferedOnSurface(tool.metadata.availableWhen, callSurfaceOf(this.input.ctx));
+    if (callable && (await isEntryEnabled(tool.metadata.enabled, this.tryGetContext(), this.logger))) return;
     this.logger.verbose(
       `checkSurface: "${escapeControlCharacters(name)}" is not in the tool list that replaced this session's`,
     );
