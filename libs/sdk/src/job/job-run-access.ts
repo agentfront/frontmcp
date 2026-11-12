@@ -33,7 +33,8 @@ export function runOwnerOf(
  * Whether the caller may read (`'read'`) or cancel (`'delete'`) a run. The caller who started it may: a
  * match on the owning issuer and subject, or on the session for a run without one (anonymous and public
  * servers). Anyone else may only when the job or workflow declares `permissions` for that action and the
- * caller passes them, so a job with no such rule keeps its runs private (GHSA-58v2-gpcc-jmqv).
+ * caller passes them, so a job with no such rule keeps its runs private (GHSA-58v2-gpcc-jmqv). A run another
+ * scope started is not reachable here, even when the scopes share a store.
  */
 export async function mayAccessRun(
   scope: ScopeEntry,
@@ -41,6 +42,7 @@ export async function mayAccessRun(
   action: 'read' | 'delete',
   authInfo: Partial<Record<string, unknown>>,
 ): Promise<boolean> {
+  if (record.scopeId !== undefined && record.scopeId !== scope.id) return false;
   const builder = scope.authoritiesContextBuilder;
   if (record.ownerSub) {
     const caller = runOwnerOf(authInfo, builder);

@@ -326,6 +326,7 @@ export class JobExecutionManager {
       logs: [],
       background: opts.background ?? false,
       stepResults: {},
+      scopeId: this.scope?.id,
     };
     return { record, options: { ...opts, workflowInput } };
   }
