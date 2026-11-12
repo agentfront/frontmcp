@@ -51,6 +51,16 @@ function customEvaluatorNames(rule: unknown, seen = new Set<unknown>()): string[
   ];
 }
 
+/** Whether a rule checks relationships, in itself or in its `allOf`, `anyOf` and `not`. */
+function checksRelationships(rule: unknown, seen = new Set<unknown>()): boolean {
+  if (typeof rule !== 'object' || rule === null || Array.isArray(rule) || seen.has(rule)) return false;
+  seen.add(rule);
+  const { relationships, allOf, anyOf, not } = rule as AuthoritiesPolicyMetadata;
+  if (relationships !== undefined) return true;
+  const nested = [...(Array.isArray(allOf) ? allOf : []), ...(Array.isArray(anyOf) ? anyOf : []), not];
+  return nested.some((inner) => checksRelationships(inner, seen));
+}
+
 /** AND in order: a plain denial stops; an unresolved one is reported only if nothing after it denies. */
 async function evaluateEvery<T>(
   items: T[],
@@ -114,6 +124,18 @@ export class AuthoritiesEngine {
       if (problems.length > 0) return problems;
       return this.unknownEvaluatorProblems(policy).map((problem) => `profile "${name}": ${problem}`);
     });
+  }
+
+  /** The registered profiles whose rule checks relationships, at any depth. */
+  profilesCheckingRelationships(): string[] {
+    return Object.entries(this.profiles.getAll())
+      .filter(([, policy]) => checksRelationships(policy))
+      .map(([name]) => name);
+  }
+
+  /** Whether an entry's rule object checks relationships, at any depth (a profile it names is not looked into). */
+  ruleChecksRelationships(authorities: unknown): boolean {
+    return checksRelationships(authorities);
   }
 
   /** A problem for each custom evaluator a rule names, at any depth, that is not registered. */

@@ -136,6 +136,11 @@ export class AuthoritiesContextBuilder {
     this.relationshipResolver = options.relationshipResolver ?? noopRelationshipResolver;
   }
 
+  /** Whether a relationship resolver was configured; without one every relationship check denies as unresolved. */
+  get hasRelationshipResolver(): boolean {
+    return this.relationshipResolver !== noopRelationshipResolver;
+  }
+
   /**
    * Build an evaluation context from AuthInfo and tool input.
    */
