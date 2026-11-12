@@ -2,6 +2,8 @@
  * PDF Renderer Tests
  */
 
+import { renderToStaticMarkup } from 'react-dom/server';
+
 import { PdfRenderer } from '../pdf';
 
 describe('PdfRenderer', () => {
@@ -55,6 +57,22 @@ describe('PdfRenderer', () => {
     it('should use default title', () => {
       const element = renderer.render('JVBERi0xLjQK');
       expect((element.props as { title: string }).title).toBe('PDF Document');
+    });
+  });
+
+  describe('data URIs', () => {
+    it('shows a PDF data URI in the viewer', () => {
+      const html = renderToStaticMarkup(renderer.render('data:application/pdf;base64,JVBERi0='));
+
+      expect(html).toContain('src="data:application/pdf;base64,JVBERi0="');
+    });
+
+    it('does not load a data URI of another media type', () => {
+      const html = renderToStaticMarkup(renderer.render('data:text/html,<script>parent.postMessage(1)</script>'));
+
+      expect(html).not.toContain('<iframe');
+      expect(html).not.toContain('text/html');
+      expect(html).toContain('This content is not a PDF document.');
     });
   });
 

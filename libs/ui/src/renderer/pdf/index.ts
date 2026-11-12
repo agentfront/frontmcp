@@ -41,8 +41,13 @@ const lazyReactPdf = createLazyImport<ReactPdfModule>('react-pdf', async () => {
 // Helpers
 // ============================================
 
-function toDataUri(content: string): string {
-  if (content.startsWith('data:')) return content;
+const PDF_DATA_URI = /^data:application\/pdf[;,]/i;
+
+/**
+ * Turn PDF content into a PDF data URI; a data URI of another media type gives `undefined`.
+ */
+function toDataUri(content: string): string | undefined {
+  if (content.startsWith('data:')) return PDF_DATA_URI.test(content) ? content : undefined;
   if (content.startsWith('%PDF-')) {
     const base64 = typeof btoa === 'function' ? btoa(content) : Buffer.from(content).toString('base64');
     return `data:application/pdf;base64,${base64}`;
@@ -112,6 +117,14 @@ function PdfView({ content, className, title }: PdfViewProps): React.ReactElemen
   const goToNext = useCallback(() => setPageNumber((p) => Math.min(numPages, p + 1)), []);
   const zoomIn = useCallback(() => setScale((s) => Math.min(3, s + 0.25)), []);
   const zoomOut = useCallback(() => setScale((s) => Math.max(0.25, s - 0.25)), []);
+
+  if (!dataUri) {
+    return React.createElement(
+      Typography,
+      { className, variant: 'body2', color: 'error' },
+      'This content is not a PDF document.',
+    );
+  }
 
   // Fallback: iframe if react-pdf not available
   if (!reactPdf) {
