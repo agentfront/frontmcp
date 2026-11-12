@@ -1,6 +1,7 @@
 import { getMetadata } from '@frontmcp/di';
 
 import type AgentRegistry from '../agent/agent.registry';
+import type { AgentScope } from '../agent/agent.scope';
 import {
   FrontMcpPluginTokens,
   type AgentEntry,
@@ -84,11 +85,22 @@ function problemsOf(label: string, metadata: unknown, isEnforced: (key: string) 
  * skills), for the entry's hook owner. So a server-level plugin covers every entry, an app's plugin
  * covers its app, with `appliesTo: 'uncovered-apps'` the apps that have no instance of it, and with
  * `appliesTo: 'all-apps'` every app.
- * Tools declared inside an `@Agent` run through the agent's own flow, so the agent's plugins cover
- * them, and with `execution.inheritPlugins` also those that cover the agent's app; none do with
- * `execution.useToolFlow: false`. Hidden entries are included.
+ * An agent's private scope is checked the same way against the hooks that scope's flows run: its own
+ * tools (through its call-tool flow, so by no hook with `execution.useToolFlow: false`), the tools
+ * its plugins contribute, its resources, prompts and nested agents, at any depth. Hidden entries are included.
  */
 export function findUnenforcedMetadata(scope: EnforcedMetadataScope): string[] {
+  return findUnenforcedInScope(scope, '', true);
+}
+
+/** The skills of an agent's private scope: it has none of its own (it reads the server's). */
+const NO_SKILLS: EnforcedMetadataScope['skills'] = { getSkills: () => [] };
+
+/**
+ * {@link findUnenforcedMetadata} for one scope, its entries labelled after the agents they sit in
+ * (`agentPath`); `toolsUseFlow` is false for the own tools of an agent that runs them directly.
+ */
+function findUnenforcedInScope(scope: EnforcedMetadataScope, agentPath: string, toolsUseFlow: boolean): string[] {
   const coveredBy = (flow: FlowName, ownerId: string | undefined) => {
     const hooks = scope.hooks.getFlowHooksForOwner(flow, ownerId);
     return (key: string) => hooks.some((hook) => keysEnforcedBy(hook).includes(key));
@@ -103,19 +115,27 @@ export function findUnenforcedMetadata(scope: EnforcedMetadataScope): string[] {
     const tool = (agent as { getToolInstance?: () => ToolEntry | null }).getToolInstance?.();
     if (tool) agentTools.add(tool);
     const ownerId = tool ? toolOwnerId(tool) : hookOwnerIdOf([], agent.owner);
-    problems.push(...problemsOf(`Agent "${agent.name}"`, agent.metadata, coveredBy('tools:call-tool', ownerId)));
+    const agentLabel = `${agentPath}${agent.name}`;
+    problems.push(...problemsOf(`Agent "${agentLabel}"`, agent.metadata, coveredBy('tools:call-tool', ownerId)));
 
-    // The agent's own tools are called through the agent's private scope, which has its plugins, and
-    // with `execution.inheritPlugins` the hooks the server runs for the agent's owner (AgentScope).
-    // They include the tools its plugins contribute, so read the tools that scope holds.
+    const usesToolFlow = agent.metadata.execution?.useToolFlow !== false;
+    const agentScope = (agent as { getAgentScope?: () => AgentScope | null }).getAgentScope?.();
+    if (agentScope) {
+      const { hooks, tools, resources, prompts, agents } = agentScope;
+      const privateScope = { hooks, tools, resources, prompts, agents, skills: NO_SKILLS };
+      problems.push(...findUnenforcedInScope(privateScope, `${agentLabel}:`, usesToolFlow));
+      continue;
+    }
+
+    // Not initialized yet: the tools it declares, against the plugins it declares, and with
+    // `execution.inheritPlugins` the hooks the server runs for the agent's owner.
     const agentPlugins = keysEnforcedByPlugins(agent.metadata.plugins);
     const inheritedPlugins =
       agent.metadata.execution?.inheritPlugins === true ? coveredBy('tools:call-tool', agent.owner.id) : () => false;
-    const usesToolFlow = agent.metadata.execution?.useToolFlow !== false;
     for (const metadata of agentToolMetadata(agent)) {
       problems.push(
         ...problemsOf(
-          `Tool "${agent.name}:${metadata.name}"`,
+          `Tool "${agentLabel}:${metadata.name}"`,
           metadata,
           (key) => usesToolFlow && (agentPlugins.has(key) || inheritedPlugins(key)),
         ),
@@ -125,19 +145,24 @@ export function findUnenforcedMetadata(scope: EnforcedMetadataScope): string[] {
 
   for (const tool of scope.tools.getTools(true)) {
     if (agentTools.has(tool)) continue;
-    problems.push(...problemsOf(`Tool "${tool.name}"`, tool.metadata, coveredBy('tools:call-tool', toolOwnerId(tool))));
+    const covered = toolsUseFlow ? coveredBy('tools:call-tool', toolOwnerId(tool)) : () => false;
+    problems.push(...problemsOf(`Tool "${agentPath}${tool.name}"`, tool.metadata, covered));
   }
   const readResource = (resource: ResourceEntry) =>
     coveredBy('resources:read-resource', appOwnerIdOf(scope.resources.lineageOf(resource) ?? [], resource.owner));
   for (const resource of scope.resources.getResources(true)) {
-    problems.push(...problemsOf(`Resource "${resource.name}"`, resource.metadata, readResource(resource)));
+    problems.push(...problemsOf(`Resource "${agentPath}${resource.name}"`, resource.metadata, readResource(resource)));
   }
   for (const template of scope.resources.getResourceTemplates()) {
-    problems.push(...problemsOf(`Resource template "${template.name}"`, template.metadata, readResource(template)));
+    problems.push(
+      ...problemsOf(`Resource template "${agentPath}${template.name}"`, template.metadata, readResource(template)),
+    );
   }
   for (const prompt of scope.prompts.getPrompts(true)) {
     const ownerId = appOwnerIdOf(scope.prompts.lineageOf(prompt) ?? [], prompt.owner);
-    problems.push(...problemsOf(`Prompt "${prompt.name}"`, prompt.metadata, coveredBy('prompts:get-prompt', ownerId)));
+    problems.push(
+      ...problemsOf(`Prompt "${agentPath}${prompt.name}"`, prompt.metadata, coveredBy('prompts:get-prompt', ownerId)),
+    );
   }
   for (const skill of scope.skills.getSkills(true)) {
     problems.push(...problemsOf(`Skill "${skill.name}"`, skill.metadata, coveredBy('skills:filter', undefined)));
