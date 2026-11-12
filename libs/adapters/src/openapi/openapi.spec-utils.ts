@@ -57,6 +57,10 @@ function deepClone<T>(obj: T): T {
  * Modify OpenAPI spec to force JWT/Bearer security on operations.
  * Returns a new spec object (does not mutate input).
  *
+ * The scheme is added as one more alternative to an operation's existing `security` list, so an
+ * operation that already accepts another scheme still accepts it. To make the scheme the only one,
+ * clear those operations first with `removeSecurityFromOperations`.
+ *
  * @param spec - Original OpenAPI specification
  * @param options - Security configuration options
  * @returns Modified OpenAPI specification with security applied
@@ -175,8 +179,7 @@ export function forceJwtSecurity(spec: OpenAPIDocument, options: ForceSecurityOp
         }
       }
 
-      // Add security requirement to operation
-      // This overrides any existing security for this operation
+      // Add the requirement as one more alternative; existing alternatives stay
       if (!operation.security) {
         operation.security = [];
       }
