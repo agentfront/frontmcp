@@ -523,6 +523,20 @@ describe('Auto-instrumentation Hooks', () => {
       );
     });
 
+    it('sends no traceparent when the context has autoInjectTracingHeaders off', async () => {
+      const ctx = makeFlowCtx();
+      const requestContext = ctx.get(Symbol.for('frontmcp:CONTEXT'));
+      ctx.get = () => ({ ...requestContext, config: { autoInjectTracingHeaders: false } });
+      onToolWillParse(DEFAULT_OPTS, ctx);
+      const origFetch = jest.fn().mockResolvedValue({ status: 200 } as Response);
+      ctx.state.toolContext = { fetch: origFetch };
+
+      wrapContextFetch(DEFAULT_OPTS, ctx);
+      await (ctx.state.toolContext as FetchingToolContext).fetch('https://api.example.com');
+
+      expect(new Headers(origFetch.mock.calls[0][1].headers).has('traceparent')).toBe(false);
+    });
+
     it('should handle missing context', () => {
       wrapContextFetch(DEFAULT_OPTS, { state: {} });
     });
