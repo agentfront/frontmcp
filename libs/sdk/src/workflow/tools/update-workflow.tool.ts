@@ -4,6 +4,7 @@ import { Tool, ToolContext } from '../../common';
 import { type WorkflowDynamicRecord } from '../../common/records/workflow.record';
 import { DynamicJobRegistrationDisabledError, InvalidInputError, JobNotAuthorizedError } from '../../errors';
 import { JobPermissionGuard } from '../../job/job-permission.guard';
+import { MAX_RUNTIME_WORKFLOW_STEPS } from './runtime-workflow.limits';
 
 @Tool({
   name: 'update_workflow',
@@ -18,11 +19,16 @@ import { JobPermissionGuard } from '../../job/job-permission.guard';
           id: z.string().describe('Step identifier'),
           jobName: z.string().describe('Job name to execute'),
           input: z.record(z.string(), z.unknown()).optional().describe('Static input for the step'),
-          dependsOn: z.array(z.string()).optional().describe('Step IDs that must complete first'),
+          dependsOn: z
+            .array(z.string())
+            .max(MAX_RUNTIME_WORKFLOW_STEPS)
+            .optional()
+            .describe('Step IDs that must complete first'),
           continueOnError: z.boolean().optional().describe('Continue on failure'),
           timeout: z.number().optional().describe('Step timeout in ms'),
         }),
       )
+      .max(MAX_RUNTIME_WORKFLOW_STEPS)
       .min(1)
       .optional()
       .describe('New step definitions'),

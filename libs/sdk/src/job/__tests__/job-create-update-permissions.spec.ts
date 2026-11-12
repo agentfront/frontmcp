@@ -172,6 +172,17 @@ describe('create and update permission rules', () => {
       expect(ran).toEqual(['open']);
     });
 
+    it('refuses a workflow registered or updated at runtime with more than 100 steps', async () => {
+      const stepsOf = (count: number) =>
+        Array.from({ length: count }, (_, index) => ({ id: `s${index}`, jobName: 'open' }));
+
+      await expect(server.callTool('register_workflow', { name: 'too-wide', steps: stepsOf(101) })).rejects.toThrow();
+      expect(entries().workflows.findByName('too-wide')).toBeUndefined();
+      await server.callTool('register_workflow', { name: 'wide', steps: stepsOf(100) });
+      await expect(server.callTool('update_workflow', { name: 'wide', steps: stepsOf(101) })).rejects.toThrow();
+      expect(entries().workflows.findByName('wide')?.metadata.steps).toHaveLength(100);
+    });
+
     it('refuses to update an entry declared in code', async () => {
       await expect(server.callTool('update_job', { name: 'open', script: 'return {};' })).rejects.toThrow(
         new InvalidInputError('Job "open" is declared in code and cannot be updated'),
