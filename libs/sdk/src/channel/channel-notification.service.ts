@@ -102,15 +102,19 @@ export class ChannelNotificationService {
       return;
     }
 
-    for (const sessionId of subscribers) {
-      const registered = this.notificationService.getRegisteredServer(sessionId);
-      if (registered && isChannelCapableSession(registered) && !hasExpiredCaller(registered)) {
-        this.notificationService.sendCustomNotification(
-          CHANNEL_NOTIFICATION_METHOD,
-          { content, meta: safeMeta },
-          (session) => session.sessionId === sessionId,
-        );
-      }
+    // One pass over the registered sessions for all recipients, not one per subscriber
+    const recipients = new Set(
+      subscribers.filter((sessionId) => {
+        const registered = this.notificationService.getRegisteredServer(sessionId);
+        return registered !== undefined && isChannelCapableSession(registered) && !hasExpiredCaller(registered);
+      }),
+    );
+    if (recipients.size > 0) {
+      this.notificationService.sendCustomNotification(
+        CHANNEL_NOTIFICATION_METHOD,
+        { content, meta: safeMeta },
+        (session) => recipients.has(session.sessionId),
+      );
     }
 
     this.logger.verbose(`Sent channel "${channelName}" notification to ${subscribers.length} subscriber(s)`);
