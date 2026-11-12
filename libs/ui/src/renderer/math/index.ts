@@ -7,6 +7,7 @@ import { injectStylesheet } from '../common/inject-stylesheet';
 import { createLazyImport, esmShUrl, runtimeImportWithFallback } from '../common/lazy-import';
 import { useLazyModule } from '../common/use-lazy-module';
 import type { ContentRenderer, RenderOptions } from '../types';
+import { findMathSpans, hasEscapedPair } from './math-spans';
 
 // ============================================
 // Constants
@@ -21,8 +22,6 @@ const KATEX_CSS_ID = 'fmcp-katex-css';
 
 const MATH_DISPLAY = /\$\$(?:[^$]|\$(?!\$))+\$\$/s;
 const MATH_INLINE = /\$[^$\n]+?\$/;
-const MATH_BRACKET_DISPLAY = /\\\[(?:[^\\]|\\.)*\\\]/s;
-const MATH_PAREN_INLINE = /\\\((?:[^\\]|\\.)*\\\)/s;
 const MATH_BEGIN = /\\begin\{(?:equation|align|gather|matrix|pmatrix|bmatrix|cases)\}/;
 
 export function isMath(content: string): boolean {
@@ -30,8 +29,8 @@ export function isMath(content: string): boolean {
   return (
     MATH_DISPLAY.test(trimmed) ||
     MATH_INLINE.test(trimmed) ||
-    MATH_BRACKET_DISPLAY.test(trimmed) ||
-    MATH_PAREN_INLINE.test(trimmed) ||
+    hasEscapedPair(trimmed, '[', ']') ||
+    hasEscapedPair(trimmed, '(', ')') ||
     MATH_BEGIN.test(trimmed)
   );
 }
@@ -94,19 +93,14 @@ interface MathSegment {
 
 function parseMathContent(source: string): MathSegment[] {
   const segments: MathSegment[] = [];
-  // Combined regex for all math delimiters
-  const mathRegex =
-    /(\$\$(?:[^$]|\$(?!\$))+\$\$|\$[^$\n]+?\$|\\\[(?:[^\\]|\\.)*\\\]|\\\((?:[^\\]|\\.)*\\\)|\\begin\{(?:[^\\]|\\.)*\\end\{[^}]+\})/gs;
-
   let lastIndex = 0;
-  let match: RegExpExecArray | null;
 
-  while ((match = mathRegex.exec(source)) !== null) {
-    if (match.index > lastIndex) {
-      segments.push({ type: 'text', content: source.slice(lastIndex, match.index) });
+  for (const span of findMathSpans(source)) {
+    if (span.start > lastIndex) {
+      segments.push({ type: 'text', content: source.slice(lastIndex, span.start) });
     }
 
-    const raw = match[0];
+    const raw = source.slice(span.start, span.end);
     if (raw.startsWith('$$')) {
       segments.push({ type: 'display', content: raw.slice(2, -2).trim() });
     } else if (raw.startsWith('\\[')) {
@@ -119,7 +113,7 @@ function parseMathContent(source: string): MathSegment[] {
       segments.push({ type: 'inline', content: raw.slice(1, -1).trim() });
     }
 
-    lastIndex = match.index + raw.length;
+    lastIndex = span.end;
   }
 
   if (lastIndex < source.length) {
