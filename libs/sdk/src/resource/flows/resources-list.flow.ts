@@ -213,7 +213,8 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Filter resources by entry-level authorities.
+   * Filter resources by entry-level authorities, leaving out every resource with authorities while no engine is
+   * configured to check them.
    * Hookable: developers can use Will/Did/Around on 'filterByAuthorities'.
    */
   @Stage('filterByAuthorities')
@@ -221,7 +222,6 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
     this.logger.verbose('filterByAuthorities:start');
     const engine = this.scope.authoritiesEngine;
     const ctxBuilder = this.scope.authoritiesContextBuilder;
-    if (!engine || !ctxBuilder) return;
 
     const resources = this.state.required.resources;
     const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
@@ -232,6 +232,7 @@ export default class ResourcesListFlow extends FlowBase<typeof name> {
         const metadata = item.resource.metadata as unknown as Record<string, unknown>;
         const authorities = metadata['authorities'];
         if (!authorities) return item;
+        if (!engine || !ctxBuilder) return null;
 
         const listed = await isListedByAuthorities(
           engine,

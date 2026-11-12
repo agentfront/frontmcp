@@ -5,6 +5,7 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 import { EmptyResultSchema, SubscribeRequestSchema } from '@frontmcp/protocol';
 
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
+import { AUTHORITIES_NOT_CONFIGURED } from '../../builtin/authorities/authorities-not-configured';
 import { Flow, FlowBase, FlowHooksOf, type FlowPlan, type FlowRunOptions, type ResourceEntry } from '../../common';
 import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../../common/availability';
 import { InvalidInputError, InvalidMethodError, ResourceNotFoundError } from '../../errors';
@@ -122,12 +123,19 @@ export default class SubscribeResourceFlow extends FlowBase<typeof name> {
     const engine = this.scope.authoritiesEngine;
     const ctxBuilder = this.scope.authoritiesContextBuilder;
     const { resource } = this.state;
-    if (!engine || !ctxBuilder || !resource) return;
+    if (!resource) return;
 
     const authorities = (resource.metadata as unknown as Record<string, unknown>)['authorities'] as
       | AuthoritiesMetadata
       | undefined;
     if (!authorities) return;
+    if (!engine || !ctxBuilder) {
+      throw new AuthorityDeniedError({
+        entryType: 'Resource',
+        entryName: resource.fullName || resource.name,
+        deniedBy: AUTHORITIES_NOT_CONFIGURED,
+      });
+    }
 
     const authInfo = (this.input.ctx as { authInfo?: Record<string, unknown> } | undefined)?.authInfo ?? {};
     const result = await engine.evaluate(authorities, ctxBuilder.build(authInfo));

@@ -8,6 +8,7 @@ import { randomBytes } from '@frontmcp/utils';
 import { fitResourceAnswer } from '../../answer';
 import { assertAppLoaded, loadAppOfPlaceholder } from '../../app/lazy/lazy-placeholders';
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
+import { AUTHORITIES_NOT_CONFIGURED } from '../../builtin/authorities/authorities-not-configured';
 import {
   Flow,
   FlowBase,
@@ -336,14 +337,11 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
   /**
    * Check entry-level authorities (RBAC/ABAC/ReBAC) declared in resource metadata.
    * Hookable: developers can use Will/Did/Around on 'checkEntryAuthorities'.
+   * Skips a resource without authorities, and refuses one whose authorities no engine is configured to check.
    */
   @Stage('checkEntryAuthorities')
   async checkEntryAuthorities() {
     this.logger.verbose('checkEntryAuthorities:start');
-    const engine = this.scope.authoritiesEngine;
-    const ctxBuilder = this.scope.authoritiesContextBuilder;
-    if (!engine || !ctxBuilder) return;
-
     const resource = this.state.resource;
     if (!resource) return;
 
@@ -352,6 +350,16 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     if (!authorities) {
       this.logger.verbose('checkEntryAuthorities:skip (no authorities)');
       return;
+    }
+
+    const engine = this.scope.authoritiesEngine;
+    const ctxBuilder = this.scope.authoritiesContextBuilder;
+    if (!engine || !ctxBuilder) {
+      throw new AuthorityDeniedError({
+        entryType: 'Resource',
+        entryName: resource.fullName || resource.name,
+        deniedBy: AUTHORITIES_NOT_CONFIGURED,
+      });
     }
 
     const authInfo = (this.state.authInfo ?? {}) as Record<string, unknown>;

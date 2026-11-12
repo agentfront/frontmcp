@@ -24,6 +24,7 @@
 
 import { AuthorityDeniedError, resolveRequiredScopes } from '@frontmcp/auth';
 
+import { AUTHORITIES_NOT_CONFIGURED } from '../builtin/authorities/authorities-not-configured';
 import type { FrontMcpLogger, ScopeEntry, SkillEntry } from '../common';
 import { isListedByAuthorities } from '../surface/entry-authorized';
 
@@ -71,9 +72,8 @@ export function getSkillAuthorities(skill: SkillEntry): import('@frontmcp/auth')
  * `AuthorityDeniedError` (MCP code -32003) when the skill declares
  * `authorities` and the caller's claims do not satisfy the policy.
  *
- * No-op (resolves) when:
- *   - no authorities engine/context builder is configured, or
- *   - the skill declares no `authorities`.
+ * No-op (resolves) when the skill declares no `authorities`. A skill that declares them while no
+ * authorities engine/context builder is configured is refused.
  *
  * @param scope    The active scope (provides engine/context builder/scopeMapping).
  * @param skill    The skill entry being loaded/read.
@@ -86,12 +86,18 @@ export async function assertSkillAuthorized(
   authInfo: Record<string, unknown>,
   input: Record<string, unknown> = {},
 ): Promise<void> {
-  const engine = scope.authoritiesEngine;
-  const ctxBuilder = scope.authoritiesContextBuilder;
-  if (!engine || !ctxBuilder) return;
-
   const authorities = getSkillAuthorities(skill);
   if (!authorities) return;
+
+  const engine = scope.authoritiesEngine;
+  const ctxBuilder = scope.authoritiesContextBuilder;
+  if (!engine || !ctxBuilder) {
+    throw new AuthorityDeniedError({
+      entryType: 'Skill',
+      entryName: skill.fullName || skill.name,
+      deniedBy: AUTHORITIES_NOT_CONFIGURED,
+    });
+  }
 
   const evalCtx = ctxBuilder.build(normalizeAuthInfoForAuthorities(authInfo), input);
   const result = await engine.evaluate(authorities, evalCtx);
@@ -118,8 +124,8 @@ export async function assertSkillAuthorized(
  * discover. Mirrors `filterByAuthorities` for tools/resources.
  *
  * Skills without `authorities` always pass. When no engine/context builder is
- * configured the list is returned unchanged. A skill whose policy throws is
- * left out and logged; the rest are still served.
+ * configured, every skill with `authorities` is left out. A skill whose policy
+ * throws is left out and logged; the rest are still served.
  *
  * Evaluated WITHOUT request input: `fromInput`/ReBAC-by-input policies cannot
  * be evaluated during discovery and will therefore be treated as a denial when
@@ -138,7 +144,7 @@ export async function filterSkillsByAuthorities<T extends SkillEntry>(
 ): Promise<T[]> {
   const engine = scope.authoritiesEngine;
   const ctxBuilder = scope.authoritiesContextBuilder;
-  if (!engine || !ctxBuilder) return [...skills];
+  if (!engine || !ctxBuilder) return skills.filter((skill) => !getSkillAuthorities(skill));
 
   // Evaluate each skill's policy (without request input) in parallel, keeping
   // the boolean grant per index so we can filter the original typed array and

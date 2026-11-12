@@ -7,6 +7,7 @@ import { CompleteRequestSchema, CompleteResultSchema, type AuthInfo } from '@fro
 import { assertAppLoaded, loadAppOfPlaceholder } from '../../app/lazy/lazy-placeholders';
 import { loadRemoteAppCapabilities } from '../../app/remote-capabilities.utils';
 import { enforcePublicAccess, publicAccessFor } from '../../auth/public-access.utils';
+import { AUTHORITIES_NOT_CONFIGURED } from '../../builtin/authorities/authorities-not-configured';
 import {
   buildPartitionContext,
   Flow,
@@ -268,12 +269,19 @@ export default class CompleteFlow extends FlowBase<typeof name> {
     const ctxBuilder = this.scope.authoritiesContextBuilder;
     const { prompt, resource } = this.state;
     const entry = prompt ?? resource;
-    if (!engine || !ctxBuilder || !entry) return;
+    if (!entry) return;
 
     const authorities = (entry.metadata as unknown as Record<string, unknown>)['authorities'] as
       | AuthoritiesMetadata
       | undefined;
     if (!authorities) return;
+    if (!engine || !ctxBuilder) {
+      throw new AuthorityDeniedError({
+        entryType: prompt ? 'Prompt' : 'Resource',
+        entryName: entry.fullName || entry.name,
+        deniedBy: AUTHORITIES_NOT_CONFIGURED,
+      });
+    }
 
     const evaluationContext = ctxBuilder.build((this.authInfo ?? {}) as Record<string, unknown>);
     const result = await engine.evaluate(authorities, evaluationContext);
