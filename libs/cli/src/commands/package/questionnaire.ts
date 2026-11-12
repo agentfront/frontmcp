@@ -178,22 +178,23 @@ async function promptText(step: ManifestSetupStep, defaultValue: string | undefi
   const schema = step.jsonSchema;
   const isOptional = schema.default !== undefined || (schema as Record<string, unknown>).nullable === true;
 
-  const result = await p.text({
-    message: step.prompt,
-    placeholder: step.description || (step.sensitive && defaultValue ? '****' : undefined),
-    defaultValue,
-    validate: (val) => {
-      const trimmed = val.trim();
-      if (!trimmed && !defaultValue && !isOptional) {
-        return 'This field is required.';
-      }
-      if (trimmed) {
-        const error = validateAgainstSchema(trimmed, step.jsonSchema);
-        if (error) return error;
-      }
-      return undefined;
-    },
-  });
+  const validate = (val: string): string | undefined => {
+    const trimmed = val.trim();
+    if (!trimmed && !defaultValue && !isOptional) {
+      return 'This field is required.';
+    }
+    if (trimmed) {
+      const error = validateAgainstSchema(trimmed, step.jsonSchema);
+      if (error) return error;
+    }
+    return undefined;
+  };
+  const result = step.sensitive
+    ? await p.password({
+        message: step.description ? `${step.prompt}\n${c('gray', step.description)}` : step.prompt,
+        validate,
+      })
+    : await p.text({ message: step.prompt, placeholder: step.description, defaultValue, validate });
 
   if (p.isCancel(result)) {
     p.cancel('Cancelled.');

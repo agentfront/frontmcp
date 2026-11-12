@@ -7,6 +7,14 @@ import { parseEnvContent } from '../../../shared/env';
 import { ManifestSetupStep } from '../../build/exec/manifest';
 import { runQuestionnaire, writeEnvFile } from '../questionnaire';
 
+const mockPrompts = {
+  text: jest.fn(async () => 'typed'),
+  password: jest.fn(async () => 'hidden'),
+  isCancel: () => false,
+  log: { step: jest.fn() },
+};
+jest.mock('../../../shared/prompts', () => ({ clack: async () => mockPrompts }));
+
 describe('questionnaire', () => {
   describe('runQuestionnaire (silent mode)', () => {
     it('should use defaults in silent mode', async () => {
@@ -136,6 +144,35 @@ describe('questionnaire', () => {
 
       expect(result.envContent).toContain('PORT=3001');
       expect(result.envContent).toContain('# Network');
+    });
+  });
+
+  describe('runQuestionnaire (interactive)', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('asks a sensitive text step with a masked prompt and keeps its default out of view', async () => {
+      const step: ManifestSetupStep = {
+        id: 'api_key',
+        prompt: 'API key',
+        jsonSchema: { type: 'string', default: 'sk-default' },
+        env: 'API_KEY',
+        sensitive: true,
+      };
+
+      const result = await runQuestionnaire([step]);
+
+      expect(result.answers.api_key).toBe('hidden');
+      expect(mockPrompts.text).not.toHaveBeenCalled();
+      expect(mockPrompts.password).toHaveBeenCalledWith({ message: 'API key', validate: expect.any(Function) });
+    });
+
+    it('asks any other text step with a text prompt', async () => {
+      const step: ManifestSetupStep = { id: 'name', prompt: 'Name', jsonSchema: { type: 'string' }, env: 'NAME' };
+
+      const result = await runQuestionnaire([step]);
+
+      expect(result.answers.name).toBe('typed');
+      expect(mockPrompts.password).not.toHaveBeenCalled();
     });
   });
 
