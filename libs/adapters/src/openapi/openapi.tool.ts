@@ -341,14 +341,14 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
         const timeoutError = new Error(`Request timeout after ${requestTimeout}ms for tool '${openapiTool.name}'`);
         logger.error(`[${openapiTool.name}] API request timeout`, {
           timeout: requestTimeout,
-          url,
+          url: urlWithoutQuery(url),
           method: openapiTool.metadata.method.toUpperCase(),
         });
         throw timeoutError;
       }
       // Log all other API request errors
       logger.error(`[${openapiTool.name}] API request failed`, {
-        url,
+        url: urlWithoutQuery(url),
         method: openapiTool.metadata.method.toUpperCase(),
         error: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : err,
       });
@@ -357,6 +357,14 @@ export function createOpenApiTool(openapiTool: McpOpenAPITool, options: OpenApiA
       clearTimeout(timeoutId);
     }
   });
+}
+
+/** The request URL without its query string and fragment, which can carry a credential, for logs. */
+function urlWithoutQuery(url: string): string {
+  const queryStart = url.indexOf('?');
+  const fragmentStart = url.indexOf('#');
+  const cutPoints = [queryStart, fragmentStart].filter((index) => index !== -1);
+  return cutPoints.length === 0 ? url : url.slice(0, Math.min(...cutPoints));
 }
 
 /** Default timeout for transform injection: 5 seconds */
