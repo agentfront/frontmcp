@@ -22,6 +22,8 @@ import { ensureDir, fileExists, readdir, readFile, rm, writeFile } from '@frontm
 
 import {
   applyPlan,
+  assertNoLinkOnPath,
+  findLinkOnPath,
   isPluginContainedPath,
   planSkills,
   refreshBundleSkills,
@@ -319,6 +321,7 @@ export async function emitClaudePlugin(opts: EmitClaudePluginOptions): Promise<E
   let written: string[];
   let removed: string[] = [];
   if (!opts.dryRun) {
+    await assertNoLinkOnPath(pluginDir, manifestPath);
     await ensureDir(claudePluginDir);
     ({ written, removed } = await applyPlan(layout, previouslyManaged, plannedFiles));
     await writeFile(manifestPath, serializeManifest(mergedManifest));
@@ -361,6 +364,7 @@ export async function refreshClaudeBundleSkills(opts: RefreshBundleSkillsOptions
   const layout: SkillTreeLayout = { root: pluginDir, skillsDir: path.join(pluginDir, 'skills') };
   const refreshed = await refreshBundleSkills(layout, claudeSkillRecord(manifest), opts.bundleSkills, !!opts.dryRun);
   if (!opts.dryRun) {
+    await assertNoLinkOnPath(pluginDir, manifestPath);
     const frontmcp = { ...manifest._meta.frontmcp, managedFiles: refreshed.record.managedFiles, bundleSkills: refreshed.record.bundleSkills };
     await writeFile(
       manifestPath,
@@ -398,12 +402,12 @@ export async function removeClaudePlugin(args: {
   for (const rel of managed) {
     if (!isPluginContainedPath(pluginDir, rel)) continue;
     const abs = path.join(pluginDir, rel);
-    if (await fileExists(abs)) {
+    if ((await fileExists(abs)) && !(await findLinkOnPath(pluginDir, path.dirname(abs)))) {
       await rm(abs, { recursive: true, force: true });
       removed.push(abs);
     }
   }
-  if (await fileExists(manifestPath)) {
+  if ((await fileExists(manifestPath)) && !(await findLinkOnPath(pluginDir, path.dirname(manifestPath)))) {
     await rm(manifestPath, { force: true });
     removed.push(manifestPath);
   }
@@ -511,8 +515,10 @@ export async function removeCodexSkills(args: {
   if (!previous) return { removed: [], skillsDir: layout.root };
   const { removed } = await applyPlan(layout, previous.managedFiles, []);
   const recordPath = path.join(layout.root, CODEX_SKILLS_RECORD);
-  await rm(recordPath, { force: true });
-  removed.push(recordPath);
+  if (!(await findLinkOnPath(layout.root, layout.root))) {
+    await rm(recordPath, { force: true });
+    removed.push(recordPath);
+  }
   await removeIfEmpty(layout.root);
   return { removed, skillsDir: layout.root };
 }
@@ -538,8 +544,10 @@ async function readCodexSkillsRecord(skillsDir: string): Promise<CodexSkillsReco
 }
 
 async function writeCodexSkillsRecord(skillsDir: string, record: CodexSkillsRecord): Promise<void> {
+  const recordPath = path.join(skillsDir, CODEX_SKILLS_RECORD);
+  await assertNoLinkOnPath(skillsDir, recordPath);
   await ensureDir(skillsDir);
-  await writeFile(path.join(skillsDir, CODEX_SKILLS_RECORD), serializeJson(record));
+  await writeFile(recordPath, serializeJson(record));
 }
 
 // ============================================================================

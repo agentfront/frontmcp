@@ -7,7 +7,7 @@
 
 import * as path from 'path';
 
-import { cp, ensureDir, fileExists, readdir, rm, writeFile } from '@frontmcp/utils';
+import { cp, ensureDir, fileExists, lstat, readdir, rm, writeFile } from '@frontmcp/utils';
 
 import type { PluginEmitterBundleSkillInput, PluginEmitterSkillInput } from './plugin-emitter';
 import { composeSkillMd, readSkillInstructions } from './skill-md-compose';
@@ -152,12 +152,13 @@ export async function applyPlan(
   previouslyManaged: string[],
   files: PlannedFile[],
 ): Promise<{ written: string[]; removed: string[] }> {
+  for (const file of files) await assertNoLinkOnPath(layout.root, file.absPath);
   const planned = new Set(files.map((file) => file.relPath));
   const removed: string[] = [];
   for (const relPath of previouslyManaged) {
     if (planned.has(relPath) || !isPluginContainedPath(layout.root, relPath)) continue;
     const absPath = path.join(layout.root, relPath);
-    if (!(await fileExists(absPath))) continue;
+    if (!(await fileExists(absPath)) || (await findLinkOnPath(layout.root, path.dirname(absPath)))) continue;
     await rm(absPath, { recursive: true, force: true });
     removed.push(absPath);
     await removeEmptySkillFolders(layout, path.dirname(absPath));
@@ -254,6 +255,28 @@ export function isPluginContainedPath(root: string, relPath: string): boolean {
   const relative = path.relative(root, path.resolve(root, relPath));
   if (relative === '') return false;
   return !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+/** The first entry from `root` down to `absPath` (both included) that is a symbolic link; undefined when none is. */
+export async function findLinkOnPath(root: string, absPath: string): Promise<string | undefined> {
+  let current = root;
+  for (const part of ['', ...path.relative(root, absPath).split(path.sep)]) {
+    current = path.join(current, part);
+    const stats = await lstat(current).catch(() => undefined);
+    if (!stats) return undefined;
+    if (stats.isSymbolicLink()) return current;
+  }
+  return undefined;
+}
+
+/** Throw when writing `absPath` would go through a symbolic link at or below `root`. */
+export async function assertNoLinkOnPath(root: string, absPath: string): Promise<void> {
+  const link = await findLinkOnPath(root, absPath);
+  if (link) {
+    throw new Error(
+      `Cannot write ${absPath}: ${link} is a symbolic link, and install writes only real folders and files under ${root}. Remove the link and run the install again.`,
+    );
+  }
 }
 
 /** Remove `dir` when it is empty. Returns whether it was removed. */
