@@ -99,7 +99,13 @@ describe('buildSkillsSection', () => {
   });
 
   it('summarizes each description to its first sentence as before, on one line or several', () => {
-    const descriptions = ['Reads files. Then writes them.', 'Ends with a period. ', 'First. Second.\nThird', 'One line\nTwo. Three', 'No sentence'];
+    const descriptions = [
+      'Reads files. Then writes them.',
+      'Ends with a period. ',
+      'First. Second.\nThird',
+      'One line\nTwo. Three',
+      'No sentence',
+    ];
     const section = buildSkillsSection(
       '1.0.0',
       descriptions.map((description, index) => ({ name: `skill-${index}`, description })),

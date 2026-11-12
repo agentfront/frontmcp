@@ -454,7 +454,10 @@ describe('OffloadPool', () => {
     const file = pathJoin(dir, 'crunch.cjs');
 
     await expect(
-      offload.run({ kind: 'job', file, key: workerJobKey(file, 'other'), name: 'other', input: {}, attempt: 1 }, call()),
+      offload.run(
+        { kind: 'job', file, key: workerJobKey(file, 'other'), name: 'other', input: {}, attempt: 1 },
+        call(),
+      ),
     ).rejects.toThrow(/registered no worker job "other"/);
   });
 

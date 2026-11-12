@@ -60,6 +60,10 @@ export default class ListWorkflowsTool extends ToolContext {
   }
 
   private maySee(workflow: WorkflowEntry): Promise<boolean> {
-    return JobPermissionGuard.maySee(workflow.metadata.permissions, this.authInfo, this.scope.authoritiesContextBuilder);
+    return JobPermissionGuard.maySee(
+      workflow.metadata.permissions,
+      this.authInfo,
+      this.scope.authoritiesContextBuilder,
+    );
   }
 }

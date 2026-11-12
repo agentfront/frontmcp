@@ -328,7 +328,11 @@ describe('project commands of the config the command line selects', () => {
     await mkdir(path.dirname(chosen), { recursive: true });
     await writeFile(
       chosen,
-      JSON.stringify({ name: 'chosen', deployments: [{ target: 'node' }], cli: { commands: { deploy: { entry: './deploy.ts' } } } }),
+      JSON.stringify({
+        name: 'chosen',
+        deployments: [{ target: 'node' }],
+        cli: { commands: { deploy: { entry: './deploy.ts' } } },
+      }),
     );
   });
 

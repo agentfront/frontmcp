@@ -403,7 +403,9 @@ describe('assertStaticStartupConfig', () => {
   });
 
   it("leaves to the full checks an agent's plugin that declares approval without a hook", async () => {
-    const config = server({ apps: [app('desk', { agents: [refundDeskAgent({ plugins: [HooklessApprovalPlugin] })] })] });
+    const config = server({
+      apps: [app('desk', { agents: [refundDeskAgent({ plugins: [HooklessApprovalPlugin] })] })],
+    });
 
     const full = await rejectionOf(FrontMcpInstance.createDirect(config));
 

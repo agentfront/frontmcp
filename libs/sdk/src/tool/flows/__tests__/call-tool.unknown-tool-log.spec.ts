@@ -3,15 +3,7 @@
  */
 import 'reflect-metadata';
 
-import {
-  App,
-  LogLevel,
-  LogTransport,
-  LogTransportInterface,
-  Tool,
-  ToolContext,
-  type LogRecord,
-} from '../../../common';
+import { App, LogLevel, LogTransport, LogTransportInterface, Tool, ToolContext, type LogRecord } from '../../../common';
 import { FrontMcpInstance } from '../../../front-mcp/front-mcp';
 
 const messages: string[] = [];

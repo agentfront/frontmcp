@@ -17,17 +17,20 @@ describe('the PID record beside a socket', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  (process.platform === 'win32' ? it.skip : it)('is written as a new file, not through a link already at its path', () => {
-    const elsewhere = path.join(dir, 'elsewhere.txt');
-    fs.writeFileSync(elsewhere, 'keep');
-    fs.symlinkSync(elsewhere, `${socketPath}.pid`);
+  (process.platform === 'win32' ? it.skip : it)(
+    'is written as a new file, not through a link already at its path',
+    () => {
+      const elsewhere = path.join(dir, 'elsewhere.txt');
+      fs.writeFileSync(elsewhere, 'keep');
+      fs.symlinkSync(elsewhere, `${socketPath}.pid`);
 
-    const pidPath = writePidFile(socketPath);
+      const pidPath = writePidFile(socketPath);
 
-    expect(fs.readFileSync(elsewhere, 'utf-8')).toBe('keep');
-    expect(fs.lstatSync(pidPath).isFile()).toBe(true);
-    expect(fs.readFileSync(pidPath, 'utf-8')).toBe(String(process.pid));
-  });
+      expect(fs.readFileSync(elsewhere, 'utf-8')).toBe('keep');
+      expect(fs.lstatSync(pidPath).isFile()).toBe(true);
+      expect(fs.readFileSync(pidPath, 'utf-8')).toBe(String(process.pid));
+    },
+  );
 
   it('replaces a stale record', () => {
     fs.writeFileSync(`${socketPath}.pid`, '123');

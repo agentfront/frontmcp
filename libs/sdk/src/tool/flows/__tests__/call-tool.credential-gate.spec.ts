@@ -249,7 +249,7 @@ describe('call-tool credential gate (checkToolCredentials)', () => {
     await expect(flow.checkToolCredentials()).resolves.toBeUndefined();
   });
 
-  it("gates the background run of a task, which the call that created the task never reached the gate for", async () => {
+  it('gates the background run of a task, which the call that created the task never reached the gate for', async () => {
     const flow = makeFlow({
       tool: { ...TOOL_BASE, metadata: { name: 'deploy', authProviders: ['github'] } },
       accessors: withAuthProviders({}),

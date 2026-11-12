@@ -119,7 +119,14 @@ describe('questionnaire', () => {
 
     it('finishes when routing returns to a step that a new answer now shows', async () => {
       const steps: ManifestSetupStep[] = [
-        { id: 'region', prompt: 'Region', jsonSchema: { type: 'string', default: 'eu' }, env: 'REGION', showWhen: { mode: 'cloud' }, next: 'port' },
+        {
+          id: 'region',
+          prompt: 'Region',
+          jsonSchema: { type: 'string', default: 'eu' },
+          env: 'REGION',
+          showWhen: { mode: 'cloud' },
+          next: 'port',
+        },
         { id: 'mode', prompt: 'Mode', jsonSchema: { type: 'string', default: 'cloud' }, env: 'MODE', next: 'region' },
         { id: 'port', prompt: 'Port', jsonSchema: { type: 'number', default: 3001 }, env: 'PORT' },
       ];
@@ -196,22 +203,28 @@ describe('questionnaire', () => {
       group: 'Keys\nGROUP_LINE=ran',
     }));
 
-    (process.platform === 'win32' ? it.skip : it)('holds every answer as the runner, which sources it, reads it back', async () => {
-      const dir = mkdtempSync(path.join(tmpdir(), 'frontmcp-env-'));
-      try {
-        const { envContent } = await runQuestionnaire(steps, { silent: true });
-        writeEnvFile(dir, envContent);
+    (process.platform === 'win32' ? it.skip : it)(
+      'holds every answer as the runner, which sources it, reads it back',
+      async () => {
+        const dir = mkdtempSync(path.join(tmpdir(), 'frontmcp-env-'));
+        try {
+          const { envContent } = await runQuestionnaire(steps, { silent: true });
+          writeEnvFile(dir, envContent);
 
-        const script = 'set -euo pipefail; set -a; source "$1"; set +a; exec "$2" -e "process.stdout.write(JSON.stringify(process.env))"';
-        const output = execFileSync('bash', ['-c', script, 'bash', path.join(dir, '.env'), process.execPath], { encoding: 'utf-8' });
-        const sourced = JSON.parse(output) as Record<string, string | undefined>;
+          const script =
+            'set -euo pipefail; set -a; source "$1"; set +a; exec "$2" -e "process.stdout.write(JSON.stringify(process.env))"';
+          const output = execFileSync('bash', ['-c', script, 'bash', path.join(dir, '.env'), process.execPath], {
+            encoding: 'utf-8',
+          });
+          const sourced = JSON.parse(output) as Record<string, string | undefined>;
 
-        for (const [env, value] of Object.entries(values)) expect(sourced[env]).toBe(value);
-        expect(sourced['GROUP_LINE']).toBeUndefined();
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    });
+          for (const [env, value] of Object.entries(values)) expect(sourced[env]).toBe(value);
+          expect(sourced['GROUP_LINE']).toBeUndefined();
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+    );
 
     it('holds the answers frontmcp start reads the same way, unless one mixes a single quote with $ or "', async () => {
       const { envContent } = await runQuestionnaire(steps, { silent: true });
@@ -220,23 +233,31 @@ describe('questionnaire', () => {
       expect(parseEnvContent(envContent)).toEqual(expect.objectContaining(readTheSame));
     });
 
-    (process.platform === 'win32' ? it.skip : it)('is readable by its owner only, when new and when it replaces one', () => {
-      const dir = mkdtempSync(path.join(tmpdir(), 'frontmcp-env-'));
-      try {
-        writeEnvFile(dir, 'KEY=new\n');
-        expect(statSync(path.join(dir, '.env')).mode & 0o777).toBe(0o600);
+    (process.platform === 'win32' ? it.skip : it)(
+      'is readable by its owner only, when new and when it replaces one',
+      () => {
+        const dir = mkdtempSync(path.join(tmpdir(), 'frontmcp-env-'));
+        try {
+          writeEnvFile(dir, 'KEY=new\n');
+          expect(statSync(path.join(dir, '.env')).mode & 0o777).toBe(0o600);
 
-        writeFileSync(path.join(dir, '.env'), 'KEY=old\n');
-        chmodSync(path.join(dir, '.env'), 0o644);
-        writeEnvFile(dir, 'KEY=again\n');
-        expect(statSync(path.join(dir, '.env')).mode & 0o777).toBe(0o600);
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    });
+          writeFileSync(path.join(dir, '.env'), 'KEY=old\n');
+          chmodSync(path.join(dir, '.env'), 0o644);
+          writeEnvFile(dir, 'KEY=again\n');
+          expect(statSync(path.join(dir, '.env')).mode & 0o777).toBe(0o600);
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+    );
 
     it('refuses an env name that is not an environment variable name', async () => {
-      const step: ManifestSetupStep = { id: 'key', prompt: 'Key', jsonSchema: { type: 'string', default: 'x' }, env: 'KEY;printf ran' };
+      const step: ManifestSetupStep = {
+        id: 'key',
+        prompt: 'Key',
+        jsonSchema: { type: 'string', default: 'x' },
+        env: 'KEY;printf ran',
+      };
 
       await expect(runQuestionnaire([step], { silent: true })).rejects.toThrow('not an environment variable name');
     });

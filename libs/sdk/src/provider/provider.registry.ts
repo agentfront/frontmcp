@@ -472,7 +472,9 @@ export default class ProviderRegistry
   }
   discoveryDeps(rec: ProviderRecord): Token[] {
     // A factory's dependencies registered here or in a parent registry, so their scope is checked too
-    const registered = { has: (token: Token) => this.tokens.has(token) || this.lookupDefInHierarchy(token) !== undefined };
+    const registered = {
+      has: (token: Token) => this.tokens.has(token) || this.lookupDefInHierarchy(token) !== undefined,
+    };
     return providerDiscoveryDeps(rec, registered, (k, phase) => depsOfClass(k, phase));
   }
 

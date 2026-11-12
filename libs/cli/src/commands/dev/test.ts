@@ -276,7 +276,9 @@ export function buildTestChildEnv(params: {
  *   frontmcp test --replay calls.jsonl  # Replay a call recording against the project server
  */
 /** Write the generated Jest config into a new folder of the temp directory that only this user can open; `remove` deletes it. */
-export async function writeGeneratedJestConfig(config: object): Promise<{ configPath: string; remove: () => Promise<void> }> {
+export async function writeGeneratedJestConfig(
+  config: object,
+): Promise<{ configPath: string; remove: () => Promise<void> }> {
   const configDir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-jest-config-'));
   const configPath = path.join(configDir, 'jest.config.json');
   await writeFile(configPath, JSON.stringify(config, null, 2));

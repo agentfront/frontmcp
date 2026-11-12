@@ -44,7 +44,11 @@ async function directorySkill(skillDir: string, frontmatter = ''): Promise<Skill
 /** A skill declared in code, in a module in `callerDir`. */
 function declaredSkill(callerDir: string, resources?: SkillMetadata['resources']): SkillInstance {
   const metadata: SkillMetadata = { name: 'my-skill', description: 'A test skill', instructions: 'Body.', resources };
-  return createSkillInstance({ kind: SkillKind.VALUE, provide: Symbol('skill'), metadata, callerDir }, providers, owner);
+  return createSkillInstance(
+    { kind: SkillKind.VALUE, provide: Symbol('skill'), metadata, callerDir },
+    providers,
+    owner,
+  );
 }
 
 describe('readSkillFileByPath', () => {
@@ -97,9 +101,7 @@ describe('readSkillFileByPath', () => {
       await expect(readSkillFileByPath(instance, 'references/guide.md')).resolves.toMatchObject({
         content: '# Guide\n\ninside',
       });
-      await expect(readSkillFileByPath(instance, 'references/secret.md')).rejects.toBeInstanceOf(
-        ResourceNotFoundError,
-      );
+      await expect(readSkillFileByPath(instance, 'references/secret.md')).rejects.toBeInstanceOf(ResourceNotFoundError);
     });
 
     it('does not serve a resource directory its SKILL.md names outside the skill directory', async () => {

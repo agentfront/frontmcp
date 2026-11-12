@@ -177,7 +177,7 @@ describe("McpClientService — remoteAuth: { mode: 'oauth' }", () => {
     expect(asked).not.toContain('elsewhere.test');
   });
 
-  it("sends nothing to an authorization server the remote names on another origin, with no issuer set", async () => {
+  it('sends nothing to an authorization server the remote names on another origin, with no issuer set', async () => {
     const { tokenRequests, fetchMock } = fakeRemoteWithAuthServer();
 
     const connecting = service.connect(connectRequest(withoutIssuer));
@@ -202,7 +202,7 @@ describe("McpClientService — remoteAuth: { mode: 'oauth' }", () => {
     expect(tokenRequests).toHaveLength(0);
   });
 
-  it("asks no token for a resource the remote names on another origin", async () => {
+  it('asks no token for a resource the remote names on another origin', async () => {
     const { tokenRequests } = fakeRemoteWithAuthServer({ resource: 'http://payroll.test/api' });
 
     const connecting = service.connect(connectRequest(credentials));

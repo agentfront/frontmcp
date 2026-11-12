@@ -21,7 +21,13 @@ function makeFlow<FlowClass extends new (...args: never[]) => { state: { set(key
   flowName: string,
   state: Record<string, unknown>,
 ): InstanceType<FlowClass> {
-  const metadata = { name: flowName, plan: { pre: [], execute: [], finalize: [] }, inputSchema: passThrough, outputSchema: passThrough, access: 'authorized' };
+  const metadata = {
+    name: flowName,
+    plan: { pre: [], execute: [], finalize: [] },
+    inputSchema: passThrough,
+    outputSchema: passThrough,
+    access: 'authorized',
+  };
   const rawInput = { request: { method: 'resources/read', params: {} }, ctx: {} };
   const Constructor = FlowClass as unknown as new (...args: unknown[]) => InstanceType<FlowClass>;
   const flow = new Constructor(metadata, rawInput, createMockScopeEntry(), jest.fn(), new Map());

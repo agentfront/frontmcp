@@ -23,7 +23,11 @@ class DeskApp {}
 
 describe('a resource argument completer', () => {
   it('sees the caller of the completion request', async () => {
-    const config = { info: { name: 'completer-caller', version: '1.0.0' }, apps: [DeskApp], logging: { level: LogLevel.Off } };
+    const config = {
+      info: { name: 'completer-caller', version: '1.0.0' },
+      apps: [DeskApp],
+      logging: { level: LogLevel.Off },
+    };
     const client = await connect(config, { session: { id: 'session-ada', user: { sub: 'ada' } } });
     try {
       const result = await client.complete({

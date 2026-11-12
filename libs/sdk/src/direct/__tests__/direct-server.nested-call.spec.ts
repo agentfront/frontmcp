@@ -26,7 +26,11 @@ describe('a direct call made inside another request', () => {
       logging: { level: LogLevel.Off },
     });
     try {
-      const outer = { sessionId: 'outer-session', scopeId: 'outer', authInfo: { user: { iss: 'x', sub: 'outer-user' } } };
+      const outer = {
+        sessionId: 'outer-session',
+        scopeId: 'outer',
+        authInfo: { user: { iss: 'x', sub: 'outer-user' } },
+      };
 
       const result = await new FrontMcpContextStorage().run(outer, () =>
         direct.callTool('whoami', {}, { authContext: { user: { sub: 'inner-user' }, sessionId: 'inner-session' } }),

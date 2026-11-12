@@ -24,7 +24,7 @@ const sharedReport = {
   useFactory: (session: CallerSession) => ({ session }),
 };
 
-describe("a DEFAULT-scoped factory that injects a CONTEXT-scoped provider", () => {
+describe('a DEFAULT-scoped factory that injects a CONTEXT-scoped provider', () => {
   it("is refused when the provider is a parent registry's", async () => {
     @App({ name: 'Reports', providers: [sharedReport] })
     class ReportsApp {}

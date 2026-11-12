@@ -127,7 +127,13 @@ describe('runReplay', () => {
       },
     ]);
     kit.formatReplayReport = (report) =>
-      (report.differences as Array<{ name: string; error: { code: number; message: string }; changes: Array<{ path: string }> }>)
+      (
+        report.differences as Array<{
+          name: string;
+          error: { code: number; message: string };
+          changes: Array<{ path: string }>;
+        }>
+      )
         .map((call) => `${call.name} ${call.error.code}: ${call.error.message} ${call.changes[0].path}`)
         .join('\n');
 

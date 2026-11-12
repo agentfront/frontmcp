@@ -162,7 +162,9 @@ export class ExtAppsMessageHandler {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorCode = this.getErrorCode(error);
 
-      this.logger.warn(`handleRequest: method=${escapeControlCharacters(method)} failed: ${escapeControlCharacters(errorMessage)}`);
+      this.logger.warn(
+        `handleRequest: method=${escapeControlCharacters(method)} failed: ${escapeControlCharacters(errorMessage)}`,
+      );
 
       return {
         jsonrpc: '2.0',
@@ -203,7 +205,9 @@ export class ExtAppsMessageHandler {
       await this.routeMethod(method, params);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`handleNotification: method=${escapeControlCharacters(method)} failed: ${escapeControlCharacters(errorMessage)}`);
+      this.logger.warn(
+        `handleNotification: method=${escapeControlCharacters(method)} failed: ${escapeControlCharacters(errorMessage)}`,
+      );
     }
   }
 

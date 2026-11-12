@@ -18,7 +18,13 @@ function makeFlow<FlowClass extends new (...args: never[]) => { state: { set(key
   flowName: string,
   state: Record<string, unknown>,
 ): InstanceType<FlowClass> {
-  const metadata = { name: flowName, plan: { pre: [], execute: [], finalize: [] }, inputSchema: passThrough, outputSchema: passThrough, access: 'authorized' };
+  const metadata = {
+    name: flowName,
+    plan: { pre: [], execute: [], finalize: [] },
+    inputSchema: passThrough,
+    outputSchema: passThrough,
+    access: 'authorized',
+  };
   const rawInput = { request: { method: 'prompts/get', params: {} }, ctx: {} };
   const Constructor = FlowClass as unknown as new (...args: unknown[]) => InstanceType<FlowClass>;
   const flow = new Constructor(metadata, rawInput, createMockScopeEntry(), jest.fn(), new Map());
@@ -27,7 +33,11 @@ function makeFlow<FlowClass extends new (...args: never[]) => { state: { set(key
 }
 
 const ADMIN_ONLY = { roles: { any: ['admin'] } };
-const auditBrief = { name: 'audit-brief', fullName: 'books:audit-brief', metadata: { name: 'audit-brief', authorities: ADMIN_ONLY } };
+const auditBrief = {
+  name: 'audit-brief',
+  fullName: 'books:audit-brief',
+  metadata: { name: 'audit-brief', authorities: ADMIN_ONLY },
+};
 const summary = { name: 'summary', fullName: 'books:summary', metadata: { name: 'summary' } };
 
 describe('prompt authorities with no engine configured to check them', () => {
