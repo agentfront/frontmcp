@@ -230,6 +230,19 @@ describe('SkillAuditWriter', () => {
     expect(all[0]!.outputHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it('records a denial whose input is too deeply nested to canonicalize', async () => {
+    const { writer, store } = makeWriter();
+    let deepInput: unknown = 'leaf';
+    for (let level = 0; level < 100_000; level++) deepInput = [deepInput];
+
+    await writer.writeAuthorityFail({ ...ctx, input: { nested: deepInput } }, { reason: 'roles missing: admin' });
+
+    const all = await store.read();
+    expect(all.map((record) => record.phase)).toEqual(['authority-check-fail']);
+    expect(all[0]!.inputHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(verifyChain(all, TRUSTED, defaultAuditSignatureVerifier).ok).toBe(true);
+  });
+
   it('writes an authority-check-fail record with the denial reason', async () => {
     const { writer, store } = makeWriter();
     await writer.writeAuthorityFail(ctx, { reason: 'roles missing: admin' });

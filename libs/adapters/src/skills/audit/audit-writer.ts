@@ -146,6 +146,9 @@ export const SKILL_AUDIT_QUEUE_MAX = 1000;
 const SUBJECT_HASH_KEY_INFO = 'frontmcp:audit:subject';
 const SUBJECT_HASH_KEY_LENGTH = 32;
 
+/** What the input hash of a record covers when the input cannot be canonicalized (too deeply nested). */
+const NON_CANONICALIZABLE_INPUT = 'audit:non-canonicalizable-input';
+
 /**
  * Options accepted by {@link SkillAuditWriter}. All fields optional — sane
  * defaults match the previous behavior except for `subjectMode`, which
@@ -337,13 +340,14 @@ export class SkillAuditWriter {
     try {
       inputHash = sha256Hex(canonicalize(ctx.input ?? null));
     } catch (e) {
-      this.logger.warn(`[skill-audit] failed to canonicalize input: ${(e as Error).message}`);
-      this.metrics?.incrementWriteFailure('unexpected');
-      return;
+      this.logger.warn(
+        `[skill-audit] failed to canonicalize input, recording a placeholder hash: ${(e as Error).message}`,
+      );
+      inputHash = sha256Hex(NON_CANONICALIZABLE_INPUT);
     }
 
-    // Allocate the sequence atomically AFTER the input has been successfully
-    // canonicalized. If the next steps (signing, persistence) fail, we
+    // Allocate the sequence atomically AFTER the input hash is computed.
+    // If the next steps (signing, persistence) fail, we
     // best-effort decrement the counter to avoid leaving a permanent gap
     // that the verifier reports as `sequence gap`. (M4 — not transactional
     // but better than the previous silent permanent gap.)
