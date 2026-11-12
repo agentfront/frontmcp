@@ -3,6 +3,7 @@
  */
 import { MemoryStorageAdapter } from '../adapters/memory';
 import { StorageNotConnectedError, StorageOperationError } from '../errors';
+import { escapeGlob } from '../utils/pattern';
 
 describe('MemoryStorageAdapter', () => {
   let adapter: MemoryStorageAdapter;
@@ -298,6 +299,20 @@ describe('MemoryStorageAdapter', () => {
         expect(keys).toHaveLength(2);
         expect(keys).toContain('user:1:profile');
         expect(keys).toContain('user:1:settings');
+      });
+
+      it('should answer a pattern with many wildcards on a long key', async () => {
+        // As a regular expression, this pattern on this key backtracks for longer than any test run.
+        const longKey = 'a'.repeat(5000);
+        await adapter.set(longKey, 'long');
+        expect(await adapter.keys('*a'.repeat(20) + 'b')).toEqual([]);
+        expect(await adapter.keys('*a'.repeat(20))).toEqual([longKey]);
+      });
+
+      it('should read an escaped wildcard as the literal character', async () => {
+        await adapter.set('id:a*b', 'literal');
+        await adapter.set('id:axb', 'other');
+        expect(await adapter.keys(`id:${escapeGlob('a*b')}`)).toEqual(['id:a*b']);
       });
 
       it('should exclude expired keys', async () => {

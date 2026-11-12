@@ -9,7 +9,7 @@ import { EventEmitter } from '#event-emitter';
 
 import { StorageOperationError } from '../errors';
 import type { MemoryAdapterOptions, MessageHandler, SetOptions, Unsubscribe } from '../types';
-import { globToRegex } from '../utils/pattern';
+import { createGlobMatcher } from '../utils/pattern';
 import { expiresAtToTTL, isExpired, ttlToExpiresAt, validateTTL } from '../utils/ttl';
 import { BaseStorageAdapter } from './base';
 
@@ -275,7 +275,7 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
   async keys(pattern = '*'): Promise<string[]> {
     this.ensureConnected();
 
-    const regex = globToRegex(pattern);
+    const matches = createGlobMatcher(pattern);
     const result: string[] = [];
 
     for (const [key, entry] of this.store) {
@@ -285,7 +285,7 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
         continue;
       }
 
-      if (regex.test(key)) {
+      if (matches(key)) {
         result.push(key);
       }
     }

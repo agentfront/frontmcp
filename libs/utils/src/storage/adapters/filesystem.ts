@@ -23,7 +23,7 @@ import { bytesToHex, randomBytes } from '../../crypto';
 import { ensureDir, fileExists, mkdir, readdir, readFile, readJSON, rename, unlink, writeFile } from '../../fs';
 import { StorageOperationError } from '../errors';
 import type { SetOptions } from '../types';
-import { globToRegex } from '../utils/pattern';
+import { createGlobMatcher } from '../utils/pattern';
 import { BaseStorageAdapter } from './base';
 
 /**
@@ -280,7 +280,7 @@ export class FileSystemStorageAdapter extends BaseStorageAdapter {
   async keys(pattern = '*'): Promise<string[]> {
     this.ensureConnected();
 
-    const regex = globToRegex(pattern);
+    const matches = createGlobMatcher(pattern);
     const result: string[] = [];
 
     try {
@@ -292,7 +292,7 @@ export class FileSystemStorageAdapter extends BaseStorageAdapter {
         const key = this.pathToKey(file);
 
         // Check if key matches pattern
-        if (!regex.test(key)) continue;
+        if (!matches(key)) continue;
 
         // Check expiration
         const filePath = this.keyToPath(key);

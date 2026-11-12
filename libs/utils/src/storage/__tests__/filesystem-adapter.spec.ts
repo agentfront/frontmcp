@@ -8,6 +8,7 @@ import * as path from 'path';
 import { fileExists, mkdtemp, rm, writeFile } from '../../fs';
 import { FileSystemStorageAdapter } from '../adapters/filesystem';
 import { StorageNotConnectedError, StorageOperationError } from '../errors';
+import { escapeGlob } from '../utils/pattern';
 
 describe('FileSystemStorageAdapter', () => {
   let adapter: FileSystemStorageAdapter;
@@ -218,6 +219,20 @@ describe('FileSystemStorageAdapter', () => {
 
       const keys = await adapter.keys('user:*');
       expect(keys.sort()).toEqual(['user:1', 'user:2']);
+    });
+
+    it('should answer a pattern with many wildcards on a long key', async () => {
+      // As a regular expression, this pattern on this key backtracks for longer than any test run.
+      const longKey = 'a'.repeat(200);
+      await adapter.set(longKey, 'long');
+      expect(await adapter.keys('*a'.repeat(20) + 'b')).toEqual([]);
+      expect(await adapter.keys('*a'.repeat(20))).toEqual([longKey]);
+    });
+
+    it('should read an escaped wildcard as the literal character', async () => {
+      await adapter.set('id:a*b', 'literal');
+      await adapter.set('id:axb', 'other');
+      expect(await adapter.keys(`id:${escapeGlob('a*b')}`)).toEqual(['id:a*b']);
     });
 
     it('should not list expired keys', async () => {
