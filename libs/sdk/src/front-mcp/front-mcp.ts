@@ -7,6 +7,7 @@ import {
   frontMcpMetadataSchema,
   FrontMcpServer,
   getDecoratorConfig,
+  loggingOptionsSchema,
   parseFrontMcpConfigLite,
   type FrontMcpConfigInput,
   type FrontMcpConfigType,
@@ -805,6 +806,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
    *
    * One connection serves every revision: `initialize` opens a session, a 2026-07-28 request is served statelessly.
    *
+   * Log lines go to stderr and to a file under `~/.frontmcp/logs/`, never to stdout, which carries the JSON-RPC
+   * frames. Without a `logging` option they are written as with `logging: {}`: at `FRONTMCP_LOG_LEVEL`, or `info`.
+   *
    * When stdin ends or the parent process exits, the server shuts down as on SIGTERM and exits 0, so a client that
    * dies leaves no orphan behind; when stdin ends, the requests in flight are answered first (for up to 2 seconds).
    * `lifecycle: { exitWhenOrphaned: false }` turns that off.
@@ -907,7 +911,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
         }
         parsedConfig.logging.transports = transports;
       } else {
+        // No `logging` option is `logging: {}`: the schema's defaults, without which the logger has no level
         (parsedConfig as Record<string, unknown>)['logging'] = {
+          ...loggingOptionsSchema.parse({}),
           enableConsole: true,
           transports: [fileLogTransport],
         };
