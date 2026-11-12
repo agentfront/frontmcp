@@ -62,6 +62,12 @@ describe('pm.paths', () => {
     it('should resolve registry path', () => {
       expect(registryPath()).toBe(path.join(root, 'registry.json'));
     });
+
+    it.each(['../../tmp/elsewhere', 'nested/app', 'nested\\app'])('refuses a process name with a path separator: %s', (name) => {
+      for (const filePath of [pidFilePath, logFilePath, errorLogFilePath, socketFilePath]) {
+        expect(() => filePath(name)).toThrow('contains a path separator');
+      }
+    });
   });
 });
 
