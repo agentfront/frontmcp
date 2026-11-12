@@ -295,6 +295,16 @@ export interface SessionSecurityConfig {
   };
 }
 
+/**
+ * When a stored session stops being valid regardless of access: the earlier of its own `maxLifetimeAt` and
+ * `createdAt + maxLifetimeMs`, or undefined when neither is set.
+ */
+export function sessionMaxLifetimeAt(session: StoredSession, maxLifetimeMs?: number): number | undefined {
+  const configured = maxLifetimeMs && maxLifetimeMs > 0 ? session.createdAt + maxLifetimeMs : undefined;
+  const deadlines = [session.maxLifetimeAt, configured].filter((deadline): deadline is number => !!deadline);
+  return deadlines.length > 0 ? Math.min(...deadlines) : undefined;
+}
+
 // ============================================
 // Zod Schemas
 // ============================================

@@ -216,6 +216,24 @@ describe('RedisSessionStore', () => {
       expect(result?.session.id).toBe(storedSession.session.id);
     });
 
+    it.each([
+      [120_000, null],
+      [1_000, 'kept'],
+    ])(
+      'should apply security.maxLifetimeMs to a session created %pms ago that has no maxLifetimeAt',
+      async (ageMs, expected) => {
+        const lifetimeStore = new RedisSessionStore({ host: 'localhost', security: { maxLifetimeMs: 60_000 } });
+        const storedSession = createValidStoredSession();
+        storedSession.createdAt = Date.now() - ageMs;
+        mockRedisClient.getex.mockResolvedValue(JSON.stringify(storedSession));
+
+        const result = await lifetimeStore.get('test-session-id');
+
+        expect(result === null ? null : 'kept').toBe(expected);
+        expect(mockStorageAdapter.delete).toHaveBeenCalledTimes(expected === null ? 1 : 0);
+      },
+    );
+
     it('should delete and return null for logically expired session', async () => {
       const storedSession = createValidStoredSession();
       storedSession.session.expiresAt = Date.now() - 1000; // Expired 1 second ago

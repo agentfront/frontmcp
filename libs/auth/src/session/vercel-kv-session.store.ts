@@ -20,6 +20,7 @@ import { SessionIdEmptyError } from '../errors/auth-internal.errors';
 import { signSession, verifySession } from './session-crypto';
 import { SessionRateLimiter } from './session-rate-limiter';
 import {
+  sessionMaxLifetimeAt,
   storedSessionSchema,
   type SessionSecurityConfig,
   type SessionStore,
@@ -216,10 +217,11 @@ export class VercelKvSessionStore implements SessionStore {
       const session = result.data;
 
       // Check absolute maximum lifetime (prevents indefinite session extension)
-      if (session.maxLifetimeAt && session.maxLifetimeAt < Date.now()) {
+      const maxLifetimeAt = sessionMaxLifetimeAt(session, this.security.maxLifetimeMs);
+      if (maxLifetimeAt && maxLifetimeAt < Date.now()) {
         this.logger?.info('[VercelKvSessionStore] Session exceeded max lifetime', {
           sessionId: sessionId.slice(0, 20),
-          maxLifetimeAt: session.maxLifetimeAt,
+          maxLifetimeAt,
         });
         await this.delete(sessionId);
         return null;

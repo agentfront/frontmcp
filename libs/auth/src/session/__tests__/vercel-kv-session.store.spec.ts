@@ -64,6 +64,22 @@ describe('VercelKvSessionStore', () => {
     await expect(store.get('session-1')).resolves.toMatchObject({ authorizationId: 'auth-1' });
   });
 
+  it.each([
+    [120_000, null],
+    [1_000, 'kept'],
+  ])(
+    'applies security.maxLifetimeMs to a session created %pms ago that has no maxLifetimeAt',
+    async (ageMs, expected) => {
+      const store = new VercelKvSessionStore({ ...connection, security: { maxLifetimeMs: 60_000 } });
+      mockStoredValues.set('session-1', JSON.stringify({ ...createStoredSession(), createdAt: Date.now() - ageMs }));
+
+      const result = await store.get('session-1');
+
+      expect(result === null ? null : 'kept').toBe(expected);
+      expect(mockStoredValues.has('session-1')).toBe(expected !== null);
+    },
+  );
+
   it('refuses and removes an unsigned session when signing is enabled', async () => {
     const store = new VercelKvSessionStore({
       ...connection,
