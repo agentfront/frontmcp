@@ -188,21 +188,21 @@ export class CimdService {
     this.logger.info(`Fetching CIMD document: ${clientId}`);
     const { document, headers } = await this.fetchMetadataDocument(clientId);
 
-    // Validate the document
-    this.validateDocument(clientId, document);
+    // Validate the document, and keep the parsed one: it carries the schema's defaults
+    const metadata = this.validateDocument(clientId, document);
 
     // Warn about localhost-only redirect URIs
-    if (this.securityConfig.warnOnLocalhostRedirects && hasOnlyLocalhostRedirectUris(document.redirect_uris)) {
+    if (this.securityConfig.warnOnLocalhostRedirects && hasOnlyLocalhostRedirectUris(metadata.redirect_uris)) {
       this.logger.warn(`CIMD client "${clientId}" has only localhost redirect URIs - this may be a development client`);
     }
 
     // Cache the result
-    await cache.set(clientId, document, headers);
+    await cache.set(clientId, metadata, headers);
     const entry = await cache.get(clientId);
 
     return {
       isCimdClient: true,
-      metadata: document,
+      metadata,
       fromCache: false,
       expiresAt: entry?.expiresAt,
       etag: entry?.etag,
@@ -568,8 +568,9 @@ export class CimdService {
    *
    * @param clientId - The URL from which the document was fetched
    * @param document - The document to validate
+   * @returns The parsed document, with the schema's defaults for the fields it leaves out
    */
-  private validateDocument(clientId: string, document: unknown): asserts document is ClientMetadataDocument {
+  private validateDocument(clientId: string, document: unknown): ClientMetadataDocument {
     // Parse with Zod schema
     const result = clientMetadataDocumentSchema.safeParse(document);
 
@@ -585,6 +586,8 @@ export class CimdService {
     if (result.data.client_id !== clientId) {
       throw new CimdClientIdMismatchError(clientId, result.data.client_id);
     }
+
+    return result.data;
   }
 }
 

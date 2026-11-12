@@ -33,6 +33,7 @@ jest.mock('@frontmcp/utils', () => {
     RedisStorageAdapter: jest
       .fn()
       .mockImplementation((opts: unknown) => ({ __kind: 'redis', opts, connect: connectRedis })),
+    requireOptionalModule: (_moduleName: string, load: () => unknown) => load(),
     __connectMemory: connectMemory,
     __connectRedis: connectRedis,
   };

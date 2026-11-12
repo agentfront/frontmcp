@@ -262,6 +262,26 @@ function canHoldStreams(): boolean {
   return getRuntimeContext().deployment !== 'serverless';
 }
 
+/** The startup line of streams nothing relays: what to set, or why a configured `events.store.redis` relays nothing. */
+function describeUnrelayedStreams(scope: ScopeEntry, eventsConfig: EventsConfig): string {
+  const carried = 'Event streams carry what this process publishes.';
+  if (!eventsConfig.store?.redis) {
+    return (
+      `${carried} With several processes, set events.store.redis so an event published on one reaches the streams ` +
+      'the others hold.'
+    );
+  }
+  const reasons: string[] = [];
+  if (!eventsConfig.webhook.enabled) reasons.push('events.webhook.enabled is false, so remove that setting');
+  if (!canIdentifyCallers(scope)) {
+    reasons.push('the server runs in public auth mode, so configure an auth mode that signs callers in');
+  }
+  return (
+    `${carried} events.store.redis is set, but it relays events between processes only with webhook delivery, ` +
+    `which is off: ${reasons.join('; ')}. Then an event published on one process reaches the streams the others hold.`
+  );
+}
+
 /** Keep the open `events/stream` requests, relay occurrences between processes when the storage can, and serve the method. */
 async function enableStreamDelivery(
   scope: ScopeEntry,
@@ -281,12 +301,7 @@ async function enableStreamDelivery(
   eventRegistry.streams = streams;
   await streams.start();
   scope.onDispose(() => streams.stop());
-  if (!streams.isRelayed) {
-    logger.info(
-      'Event streams carry what this process publishes. With several processes, set events.store.redis so an event ' +
-        'published on one reaches the streams the others hold.',
-    );
-  }
+  if (!streams.isRelayed) logger.info(describeUnrelayedStreams(scope, eventsConfig));
   eventRegistry.enableDeliveryMode('push');
   await scope.registryFlows(EventStreamFlow);
 }

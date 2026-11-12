@@ -133,7 +133,7 @@ Channels are a Claude Code research preview and may change. `references/channel-
 - [ ] `@FrontMcp({ channels: { enabled: true } })` is set
 - [ ] Channel classes extend `ChannelContext` with `@Channel()` decorator
 - [ ] Channels are listed in `@App({ channels: [...] })`; a channel and the tools in its `tools` resolve its app's providers with `this.get()`, and one whose `availableWhen` the runtime doesn't meet is left out at startup
-- [ ] `onEvent()` returns `{ content: string, meta?: Record<string, string> }`; a `meta` key with another character than a letter, a digit or `_` arrives with `_` in its place
+- [ ] `onEvent()` returns `{ content: string, meta?: Record<string, unknown> }`; a `meta` value is sent as a string, and a `meta` key with another character than a letter, a digit or `_` arrives with `_` in its place
 
 ### Capability
 
@@ -188,7 +188,7 @@ Each reference has matching examples under [`examples/<reference>/`](./examples/
 | [`job-completion`](./examples/channel-sources/job-completion.md)       | Intermediate | Notify Claude Code when background jobs and workflows complete                                                                   |
 | [`service-connector`](./examples/channel-sources/service-connector.md) | Advanced     | Build a persistent service connector that lets Claude send and receive messages through WhatsApp, Telegram, or any messaging API |
 | [`file-watcher`](./examples/channel-sources/file-watcher.md)           | Intermediate | Watch files for changes and notify Claude Code in real-time                                                                      |
-| [`replay-buffer`](./examples/channel-sources/replay-buffer.md)         | Advanced     | Buffer channel events so Claude Code receives them when it connects, even if events occurred while offline                       |
+| [`replay-buffer`](./examples/channel-sources/replay-buffer.md)         | Advanced     | Buffer channel events and send them to a session on demand, for events that occurred before it connected                         |
 
 ### `channel-two-way`
 

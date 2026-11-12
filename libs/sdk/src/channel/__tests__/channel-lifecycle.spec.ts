@@ -80,6 +80,17 @@ class MutedChannel extends ChannelContext {
   }
 }
 
+/** A `meta` with values of several types, as a handler may return it. */
+const mixedMeta = { attempt: 3, urgent: true, order: { id: 'o-1' }, 'chat-id': 42, owner: undefined, team: null };
+
+/** Sends a `meta` whose values are not all strings. */
+@Channel({ name: 'orders', source: { type: 'app-event', event: 'order' } })
+class OrdersChannel extends ChannelContext {
+  async onEvent(): Promise<ChannelNotification> {
+    return { content: 'order paid', meta: mixedMeta };
+  }
+}
+
 @Tool({ name: 'raise', inputSchema: { event: z.string(), text: z.string() } })
 class RaiseTool extends ToolContext {
   async execute(input: { event: string; text: string }) {
@@ -113,7 +124,7 @@ class ChannelPolicyPlugin {
   name: 'Desk',
   plugins: [ChannelPolicyPlugin],
   tools: [RaiseTool],
-  channels: [ChatChannel, PresenceChannel, AlertsChannel, MutedChannel],
+  channels: [ChatChannel, PresenceChannel, AlertsChannel, MutedChannel, OrdersChannel],
 })
 class DeskApp {}
 
@@ -194,6 +205,18 @@ describe('channels', () => {
     ]);
   });
 
+  it('sends a meta value that is not a string as one, an object as JSON, and leaves out one that is not there', async () => {
+    const sentMeta = { attempt: '3', urgent: 'true', order: '{"id":"o-1"}', chat_id: '42' };
+
+    await channelOf(server, 'orders').handleEvent({});
+    await scopeOf(server).channelNotifications?.send('alerts', 'manual push', mixedMeta);
+
+    expect(received).toEqual([
+      { content: 'order paid', meta: { server: 'desk', room: 'default', ...sentMeta, source: 'orders' } },
+      { content: 'manual push', meta: { server: 'desk', room: 'default', ...sentMeta, source: 'alerts' } },
+    ]);
+  });
+
   it('delivers a session-targeted push only to that session, through the flow', async () => {
     const alerts = channelOf(server, 'alerts');
     await alerts.pushNotification('for another session', {}, 'some-other-session');
@@ -215,6 +238,24 @@ describe('channels', () => {
 
     expect(alerts.replayBuffer.map((notification) => notification.content)).toEqual(['global two', 'global three']);
     expect(alerts.replayBuffer[0].meta).toEqual({ server: 'desk', room: 'default', source: 'alerts' });
+  });
+
+  it('counts the buffered notifications a replay sent, and none of those it refused', async () => {
+    const alerts = channelOf(server, 'alerts');
+    alerts.clearReplayBuffer();
+    await alerts.pushNotification('first');
+    await alerts.pushNotification('second');
+    received.length = 0;
+
+    const refused = alerts.replayBufferedEvents('a-session-that-is-not-connected');
+    const sent = alerts.replayBufferedEvents(client.getSessionId());
+    await settle();
+
+    expect([refused, sent]).toEqual([0, 2]);
+    expect(received.map(({ content, meta }) => [content, meta['replayed']])).toEqual([
+      ['first', 'true'],
+      ['second', 'true'],
+    ]);
   });
 
   it('lets a hook stop a notification', async () => {

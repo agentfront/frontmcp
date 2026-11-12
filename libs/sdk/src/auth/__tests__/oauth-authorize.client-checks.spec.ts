@@ -12,6 +12,8 @@
  */
 import 'reflect-metadata';
 
+import * as dns from 'node:dns';
+
 import { CimdService, type ClientMetadataDocument } from '@frontmcp/auth';
 
 import {
@@ -383,6 +385,26 @@ describe('the server honors the metadata a client declared (RFC 7591, client ID 
 
     const response = await authorizeCimd(server);
 
+    expect(response.status).toBe(200);
+  });
+
+  it('serves the sign-in page to a CIMD client whose fetched document leaves out the optional fields', async () => {
+    const loopbackRedirect = 'http://127.0.0.1:33418/callback';
+    jest.spyOn(dns.promises, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as never);
+    jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        Response.json({ client_id: CIMD_CLIENT, client_name: 'Desk companion', redirect_uris: [loopbackRedirect] }),
+      );
+    const server = await serverWith(localAuth());
+
+    const response = await httpGet(
+      server.handler,
+      authorizePath({ client_id: CIMD_CLIENT, redirect_uri: loopbackRedirect, state: 's' }),
+      HOST,
+    );
+
+    expect(await response.text()).not.toContain('Cannot read properties of undefined');
     expect(response.status).toBe(200);
   });
 });

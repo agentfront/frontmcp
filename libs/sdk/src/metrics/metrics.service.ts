@@ -102,6 +102,7 @@ const COUNTER_CATEGORY_PREFIX: Record<MetricsCategory, string[]> = {
   storage: ['frontmcp_storage_'],
   auth: ['frontmcp_auth_'],
   sessions: ['frontmcp_session_'],
+  events: ['frontmcp_events_'],
 };
 
 /**

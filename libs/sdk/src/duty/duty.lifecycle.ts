@@ -24,6 +24,7 @@ import {
   LeaseClaims,
   leaseKey,
   leaseStorageConfig,
+  nameKey,
   registerReadinessProbe,
   startsBackgroundWork,
 } from './lease-store';
@@ -181,7 +182,7 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown, Backgrou
     const config = this.providers.get(FrontMcpConfig);
     const serverName = config.info?.name ?? 'frontmcp';
     const key = leaseKey(name, scope, serverName);
-    this.claim(key, serverName);
+    this.claim(serverName);
     const storage = new LazyLeaseStore(dutyStorageConfig(config.redis, scope));
     const run = (context: DutyRunContext) => this.duty.run(context);
     const common = { name, key, leaseMs, storage, logger, run };
@@ -198,8 +199,9 @@ export class DutyLifecycle implements OnBootstrap, OnReady, OnShutdown, Backgrou
     return { runner, storage, removeHealthProbe };
   }
 
-  /** Take `key` for this duty's class in this process: another class with the same key would never run here. */
-  private claim(key: string, serverName: string): void {
+  /** Take the duty's name in its server for its class: another class with it fails to start, whatever its scope. */
+  private claim(serverName: string): void {
+    const key = nameKey(this.metadata.name, serverName);
     const type = this.duty.constructor;
     const otherClass = claims.claim(key, type);
     if (otherClass !== undefined) {

@@ -169,6 +169,66 @@ describe('SqliteKvStore', () => {
       const keys = store.keys();
       expect(keys).toEqual(['active']);
     });
+
+    it('matches a pattern as SQLite LIKE does', () => {
+      const keys = [
+        'session:1',
+        'session:22',
+        'cache:1',
+        'a%b',
+        'a_b',
+        'a\\b',
+        'axb',
+        'ab',
+        'a\nb',
+        'p\u{1F600}q',
+        'a.b',
+      ];
+      for (const key of keys) store.set(key, 'v');
+      const like = store.getDatabase().prepare("SELECT key FROM kv WHERE key LIKE ? ESCAPE '\\'");
+      const patterns = [
+        'session:%',
+        'session:_',
+        '%:1',
+        '%',
+        '_',
+        'a_b',
+        'a%b',
+        'a\\%b',
+        'a\\_b',
+        'a\\\\b',
+        'a\\b',
+        'a.b',
+        'p_q',
+        '%\\%%',
+        'a\\',
+        'a%\\',
+        'missing%',
+        '%%',
+        '%_',
+        '_%_',
+        '%s%:%2',
+        's%n%:_',
+        '%a%b',
+        'a%b%',
+        '%:%:%',
+        'session:%2_',
+      ];
+
+      for (const pattern of patterns) {
+        const expected = (like.all(pattern) as { key: string }[]).map((row) => row.key);
+        expect({ pattern, keys: store.keys(pattern).sort() }).toEqual({ pattern, keys: expected.sort() });
+      }
+    });
+
+    it('does not include expired keys under a pattern', async () => {
+      store.set('session:active', 'v1');
+      store.set('session:expired', 'v2', 1);
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(store.keys('session:%')).toEqual(['session:active']);
+    });
   });
 
   describe('constructor error handling', () => {

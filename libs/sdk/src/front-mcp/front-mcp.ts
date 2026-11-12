@@ -7,6 +7,7 @@ import {
   frontMcpMetadataSchema,
   FrontMcpServer,
   getDecoratorConfig,
+  loggingOptionsSchema,
   parseFrontMcpConfigLite,
   type FrontMcpConfigInput,
   type FrontMcpConfigType,
@@ -91,7 +92,10 @@ async function loadFileLogTransport(): Promise<typeof FileLogTransportInstance> 
   return (await import('../logger/instances/instance.file-logger.js')).FileLogTransportInstance;
 }
 
-/** A CLI-mode config: console only with `FRONTMCP_CLI_VERBOSE=1`, and the `~/.frontmcp/logs/` file with `fileLog`. */
+/**
+ * A CLI-mode config: console only with `FRONTMCP_CLI_VERBOSE=1`, and the `~/.frontmcp/logs/` file with `fileLog`.
+ * Without a `logging` option the lines are written as with `logging: {}`: at `FRONTMCP_LOG_LEVEL`, or `info`.
+ */
 async function parseCliConfig(
   options: FrontMcpConfigInput | FrontMcpConfigType,
   { fileLog }: { fileLog: boolean },
@@ -108,7 +112,9 @@ async function parseCliConfig(
     }
     parsedConfig.logging.transports = transports;
   } else {
+    // No `logging` option is `logging: {}`: the schema's defaults, without which the logger has no level
     (parsedConfig as Record<string, unknown>)['logging'] = {
+      ...loggingOptionsSchema.parse({}),
       enableConsole: verbose,
       transports: fileLogTransport ? [fileLogTransport] : [],
     };
@@ -795,6 +801,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
    *
    * One connection serves every revision: `initialize` opens a session, a 2026-07-28 request is served statelessly.
    *
+   * Log lines go to stderr and to a file under `~/.frontmcp/logs/`, never to stdout, which carries the JSON-RPC
+   * frames. Without a `logging` option they are written as with `logging: {}`: at `FRONTMCP_LOG_LEVEL`, or `info`.
+   *
    * When stdin ends or the parent process exits, the server shuts down as on SIGTERM and exits 0, so a client that
    * dies leaves no orphan behind; when stdin ends, the requests in flight are answered first (for up to 2 seconds).
    * `lifecycle: { exitWhenOrphaned: false }` turns that off.
@@ -897,7 +906,9 @@ export class FrontMcpInstance implements FrontMcpInterface {
         }
         parsedConfig.logging.transports = transports;
       } else {
+        // No `logging` option is `logging: {}`: the schema's defaults, without which the logger has no level
         (parsedConfig as Record<string, unknown>)['logging'] = {
+          ...loggingOptionsSchema.parse({}),
           enableConsole: true,
           transports: [fileLogTransport],
         };
@@ -918,7 +929,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       const scope = primaryScope as Scope;
 
       // Import the MCP handlers creator
-      const { createMcpHandlers } = await import('../transport/mcp-handlers/index.js');
+      const { createMcpHandlers, registerMcpHandler } = await import('../transport/mcp-handlers/index.js');
 
       // Check for remote apps
       const hasRemoteApps = scope.apps?.getApps().some((app) => app.isRemote) ?? false;
@@ -988,10 +999,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
           return originalHandler(request as any, enrichedCtx as any);
         };
-        // Cast required: MCP SDK's handler type expects specific context shape,
-        // but our wrapped handlers preserve all context properties via pass-through
-
-        mcpServer.setRequestHandler(handler.requestSchema, wrappedHandler as any);
+        registerMcpHandler(mcpServer, handler.requestSchema, wrappedHandler);
       }
 
       // Create stdio transport and connect

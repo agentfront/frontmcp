@@ -20,6 +20,7 @@ import {
   type ScopeEntry,
   type ServerRequest,
 } from '../../common';
+import { PublicMcpError } from '../../errors';
 import { matchRoutePath } from '../../flows/flow.http-path';
 import { verifyWorkflowWebhook } from '../../workflow/trigger/workflow-webhook.signature';
 import { eventSubscriberOf } from '../event-subscriber';
@@ -71,6 +72,7 @@ const stateSchema = z.object({
   claimedEventId: z.string().optional(),
   claimToken: z.string().optional(),
   result: z.object({ eventId: z.string(), matched: z.number() }),
+  flowError: z.instanceof(Error).optional(),
 });
 
 // No `post` stage: one would still run after a stage answered the request early.
@@ -164,13 +166,14 @@ export default class EventPublishHttpFlow extends FlowBase<typeof name> {
     return this.rawInput.request as ServerRequest;
   }
 
-  /** Answer the request with an error and end the flow. */
+  /** Answer the request with an error and end the flow; the refusal is the run's failure, for its span and hooks. */
   private refuse(
     status: number,
     error: string,
     details: Record<string, unknown> = {},
     headers?: Record<string, string>,
   ): never {
+    this.state.set('flowError', new PublicMcpError(`HTTP ${status}: ${error}`, 'EVENT_PUBLISH_REFUSED', status));
     return FlowControl.respond(httpRespond.json({ error, ...details }, { status, headers }));
   }
 
@@ -313,7 +316,7 @@ export default class EventPublishHttpFlow extends FlowBase<typeof name> {
     this.respond(httpRespond.json(this.state.required.result, { status: 202 }));
   }
 
-  /** Runs however the request ended, answered or failed, so a hook on it sees every request. */
+  /** Runs however the request ended, so a hook on it sees every request, with a refusal or a failure as `ctx.error`. */
   @Stage('finalize')
   async finalize() {
     this.logger.verbose(`finalize: ${this.state.result ? 'published' : 'not published'}`);

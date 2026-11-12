@@ -157,7 +157,7 @@ export interface EventSubscriptionsOptions {
   minTtlMs?: number;
   /** Grant `ttlMs: null`, a subscription that never expires. Needs `events.store`. @default false */
   allowNoExpiry?: boolean;
-  /** How many subscriptions one caller may hold. @default 100 */
+  /** How many webhook subscriptions, poll leases and open streams one caller may hold, each kind apart. @default 100 */
   maxPerPrincipal?: number;
   /** How often a publish checks a subscription's owner against the event's `authorities` again. @default 300_000 */
   reauthorizeEveryMs?: number;
@@ -244,7 +244,10 @@ export interface EventsPushOptions {
   heartbeatMs?: number;
 }
 
-/** Server-level events configuration (`@FrontMcp({ events })`). */
+/**
+ * Server-level events configuration (`@FrontMcp({ events })`). A key it does not know, at any level, fails the
+ * server's start with that key and where it is, such as `events.subscriptions: Unrecognized key: "maxPerPrincpal"`.
+ */
 export interface EventsConfigOptions {
   /** `false` turns events off although apps declare them. They are on whenever an app declares one. */
   enabled?: boolean;
@@ -269,6 +272,7 @@ const eventsStoreSchema = z
     sqlite: sqliteOptionsSchema.extend({ path: z.string().min(1) }).optional(),
     keyPrefix: z.string().min(1).optional(),
   })
+  .strict()
   .refine((store) => !(store.redis && store.sqlite), { message: 'events.store takes redis or sqlite, not both' });
 
 const eventSubscriptionsSchema = z
@@ -281,15 +285,18 @@ const eventSubscriptionsSchema = z
     reauthorizeEveryMs: positiveIntegerSchema.optional().default(300_000),
     suspendedTtlMs: positiveIntegerSchema.optional().default(604_800_000),
   } satisfies RawZodShape<EventSubscriptionsOptions>)
+  .strict()
   .refine((ttl) => ttl.minTtlMs <= ttl.defaultTtlMs && ttl.defaultTtlMs <= ttl.maxTtlMs, {
     message: 'events.subscriptions needs minTtlMs <= defaultTtlMs <= maxTtlMs; set the three together',
   });
 
-const eventsWebhookVerificationSchema = z.object({
-  cacheTtlMs: positiveIntegerSchema.optional().default(3_600_000),
-  timeoutMs: positiveIntegerSchema.optional().default(10_000),
-  maxAttemptsPerHost: positiveIntegerSchema.optional().default(10),
-} satisfies RawZodShape<EventsWebhookVerificationOptions>);
+const eventsWebhookVerificationSchema = z
+  .object({
+    cacheTtlMs: positiveIntegerSchema.optional().default(3_600_000),
+    timeoutMs: positiveIntegerSchema.optional().default(10_000),
+    maxAttemptsPerHost: positiveIntegerSchema.optional().default(10),
+  } satisfies RawZodShape<EventsWebhookVerificationOptions>)
+  .strict();
 
 const eventsWebhookDeliverySchema = z
   .object({
@@ -300,22 +307,25 @@ const eventsWebhookDeliverySchema = z
     maxBackoffMs: positiveIntegerSchema.optional().default(60_000),
     concurrency: positiveIntegerSchema.optional().default(16),
   } satisfies RawZodShape<EventsWebhookDeliveryOptions>)
+  .strict()
   .refine((delivery) => delivery.backoffMs <= delivery.maxBackoffMs, {
     message: 'events.webhook.delivery needs backoffMs <= maxBackoffMs',
   });
 
-const eventsWebhookSchema = z.object({
-  enabled: z.boolean().optional().default(true),
-  allowedCallbacks: z.array(z.string().url()).optional().default([]),
-  unsafeAllowLocalCallbacks: z.boolean().optional().default(false),
-  verification: eventsWebhookVerificationSchema
-    .optional()
-    .transform((verification) => verification ?? eventsWebhookVerificationSchema.parse({})),
-  delivery: eventsWebhookDeliverySchema
-    .optional()
-    .transform((delivery) => delivery ?? eventsWebhookDeliverySchema.parse({})),
-  rotationGraceMs: positiveIntegerSchema.optional().default(300_000),
-} satisfies RawZodShape<EventsWebhookOptions>);
+const eventsWebhookSchema = z
+  .object({
+    enabled: z.boolean().optional().default(true),
+    allowedCallbacks: z.array(z.string().url()).optional().default([]),
+    unsafeAllowLocalCallbacks: z.boolean().optional().default(false),
+    verification: eventsWebhookVerificationSchema
+      .optional()
+      .transform((verification) => verification ?? eventsWebhookVerificationSchema.parse({})),
+    delivery: eventsWebhookDeliverySchema
+      .optional()
+      .transform((delivery) => delivery ?? eventsWebhookDeliverySchema.parse({})),
+    rotationGraceMs: positiveIntegerSchema.optional().default(300_000),
+  } satisfies RawZodShape<EventsWebhookOptions>)
+  .strict();
 
 /** Literal segments only: the endpoint is one path, without parameters, a query or a fragment. */
 const PUBLISH_ENDPOINT_PATH = /^\/[^?#\s*(){}:]*$/;
@@ -342,27 +352,34 @@ const eventsPublishEndpointSchema = z
       })
       .optional(),
   } satisfies RawZodShape<EventsPublishEndpointOptions>)
+  .strict()
   .refine((endpoint) => endpoint.secret === undefined || endpoint.authorities === undefined, {
     message:
       'events.publishEndpoint takes secret or authorities, not both: a signed request names no caller for a rule ' +
       'to check',
   });
 
-const eventsBufferSchema = z.object({
-  maxAgeMs: positiveIntegerSchema.optional().default(600_000),
-  maxEvents: positiveIntegerSchema.optional().default(10_000),
-} satisfies RawZodShape<EventsBufferOptions>);
+const eventsBufferSchema = z
+  .object({
+    maxAgeMs: positiveIntegerSchema.optional().default(600_000),
+    maxEvents: positiveIntegerSchema.optional().default(10_000),
+  } satisfies RawZodShape<EventsBufferOptions>)
+  .strict();
 
-const eventsPollSchema = z.object({
-  enabled: z.boolean().optional().default(true),
-  nextPollMs: positiveIntegerSchema.optional().default(30_000),
-  maxEvents: positiveIntegerSchema.optional().default(100),
-} satisfies RawZodShape<EventsPollOptions>);
+const eventsPollSchema = z
+  .object({
+    enabled: z.boolean().optional().default(true),
+    nextPollMs: positiveIntegerSchema.optional().default(30_000),
+    maxEvents: positiveIntegerSchema.optional().default(100),
+  } satisfies RawZodShape<EventsPollOptions>)
+  .strict();
 
-const eventsPushSchema = z.object({
-  enabled: z.boolean().optional().default(true),
-  heartbeatMs: positiveIntegerSchema.optional().default(25_000),
-} satisfies RawZodShape<EventsPushOptions>);
+const eventsPushSchema = z
+  .object({
+    enabled: z.boolean().optional().default(true),
+    heartbeatMs: positiveIntegerSchema.optional().default(25_000),
+  } satisfies RawZodShape<EventsPushOptions>)
+  .strict();
 
 export const eventsConfigSchema = z
   .object({
@@ -381,6 +398,7 @@ export const eventsConfigSchema = z
     push: eventsPushSchema.optional().transform((push) => push ?? eventsPushSchema.parse({})),
     bridge: z.boolean().optional().default(true),
   } satisfies RawZodShape<EventsConfigOptions>)
+  .strict()
   .refine((config) => !config.subscriptions.allowNoExpiry || Boolean(config.store?.redis ?? config.store?.sqlite), {
     message: 'events.subscriptions.allowNoExpiry needs events.store.redis or events.store.sqlite',
   });

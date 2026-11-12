@@ -14,6 +14,8 @@ import { createMemoryStorage, createStorage, getEnv, type RootStorage, type Stor
 
 import { isVercelKvProvider, type FrontMcpLogger, type RedisOptionsInput } from '../../common';
 import { normalizeRedisOptions } from '../../common/types/options/redis/schema';
+import { requireOptionalModule } from '../../scope/optional-dependency.util';
+import { hasSqliteDriver, SQLITE_ON_EDGE_REMEDY } from '../../storage/sqlite-on-edge';
 import { StorageTaskStore } from './storage-task.store';
 import { isExplicitStorage } from './task-backend.utils';
 import { type TaskStore } from './task.store';
@@ -90,9 +92,11 @@ export async function createTaskStore(options: TaskStoreOptions = {}): Promise<T
 
   // Edge-runtime guard runs FIRST so SQLite (better-sqlite3 is a native module
   // and can't be loaded on Workers/Edge anyway) doesn't silently slip through.
-  if (isEdgeRuntime && sqlite) {
+  // A driver set with useSqliteDriver() opens the database without it.
+  if (isEdgeRuntime && sqlite && !hasSqliteDriver()) {
     throw new TaskStoreNotSupportedError(
-      'SQLite task store is not supported on Edge runtime (better-sqlite3 is a native module). Use Redis or Upstash.',
+      'SQLite task store is not supported on Edge runtime without a SQLite driver (better-sqlite3 is a native ' +
+        `module). ${SQLITE_ON_EDGE_REMEDY} Otherwise use Redis or Upstash.`,
     );
   }
 
@@ -100,7 +104,10 @@ export async function createTaskStore(options: TaskStoreOptions = {}): Promise<T
   if (sqlite) {
     // Lazy-require so we don't bundle @frontmcp/storage-sqlite (and better-sqlite3)
     // for users that never enable the SQLite backend.
-    const { SqliteTaskStore } = require('@frontmcp/storage-sqlite') as typeof import('@frontmcp/storage-sqlite');
+    const { SqliteTaskStore } = requireOptionalModule(
+      '@frontmcp/storage-sqlite',
+      () => require('@frontmcp/storage-sqlite') as typeof import('@frontmcp/storage-sqlite'),
+    );
     const store = new SqliteTaskStore({
       path: sqlite.path,
       encryption: sqlite.encryption,

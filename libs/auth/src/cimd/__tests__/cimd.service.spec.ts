@@ -291,6 +291,45 @@ describe('CimdService', () => {
     });
   });
 
+  describe('a document that leaves out the optional fields', () => {
+    const minimalDocument = {
+      client_id: 'https://example.com/oauth/client-metadata.json',
+      client_name: 'Minimal Client',
+      redirect_uris: ['http://127.0.0.1:33418/callback'],
+    };
+
+    beforeEach(() => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'cache-control': 'max-age=3600' }),
+        body: null,
+        arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(minimalDocument)).buffer,
+      } as unknown as Response);
+    });
+
+    it('resolves with the defaults the schema declares', async () => {
+      const { metadata } = await service.resolveClientMetadata(minimalDocument.client_id);
+
+      expect(metadata).toEqual({
+        ...minimalDocument,
+        token_endpoint_auth_method: 'none',
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+      });
+    });
+
+    it('is a client this server supports, fetched and from the cache', async () => {
+      const fetched = await service.resolveClientMetadata(minimalDocument.client_id);
+      const cached = await service.resolveClientMetadata(minimalDocument.client_id);
+
+      expect(cached.fromCache).toBe(true);
+      for (const { metadata } of [fetched, cached]) {
+        expect(() => service.assertSupportedClient(metadata as ClientMetadataDocument)).not.toThrow();
+      }
+    });
+  });
+
   describe('validateRedirectUri', () => {
     it('should pass for registered redirect URI', () => {
       expect(() => service.validateRedirectUri('https://example.com/callback', validCimdDocument)).not.toThrow();

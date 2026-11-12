@@ -12,7 +12,7 @@ npm install @frontmcp/storage-sqlite
 
 Requires Node.js 24 or later. `better-sqlite3` is a regular dependency, so it's installed with the package. It's a native module that downloads or compiles its binary at install time, so install on the platform the server runs on (in a Docker image, run `npm ci` inside the image). The peer dependency `@frontmcp/lazy-zod` comes with `@frontmcp/sdk`.
 
-`@frontmcp/sdk` loads this package only when a `sqlite` option is set, so importing the SDK never loads `better-sqlite3`. SQLite doesn't run on Cloudflare Workers or other V8-isolate runtimes; use Redis or Upstash there.
+`@frontmcp/sdk` loads this package only when a `sqlite` option is set, so importing the SDK never loads `better-sqlite3`. On Cloudflare Workers the stores run in a Durable Object, on its own SQLite database: see [In a Cloudflare Durable Object](#in-a-cloudflare-durable-object). Other V8-isolate runtimes have no SQLite; use Redis or Upstash there.
 
 ## Usage
 
@@ -75,7 +75,9 @@ store.close();
 | `SqliteKvStore`          | A synchronous key/value store with TTL, which the stores above are built on                           |
 | `SqliteStorageAdapter`   | The async `StorageAdapter` interface of `@frontmcp/utils` over the same file (no publish/subscribe)   |
 
-The package also exports `openDatabase` and `withBusyRetry` (helpers for opening a file and retrying on `SQLITE_BUSY`), `deriveEncryptionKey`, `encryptValue`, `decryptValue` and `SqliteDecryptionError`, and `sqliteStorageOptionsSchema`, the Zod schema for the options below.
+`SqliteStorageAdapter.keys(pattern)` and `SqliteKvStore.keys(pattern)` match letter case, as the memory and Redis storages do: `keys('session:*')` does not return `Session:1`. Up to 1.12.0 they ignored ASCII case, because they searched with SQL `LIKE`, and an adapter pattern lost its backslashes; a backslash is now matched as itself.
+
+The package also exports `openDatabase` and `withBusyRetry` (helpers for opening a file and retrying on `SQLITE_BUSY`), `useSqliteDriver` and `durableObjectSqlite` (a SQLite other than `better-sqlite3`, [below](#in-a-cloudflare-durable-object)), `deriveEncryptionKey`, `encryptValue`, `decryptValue` and `SqliteDecryptionError`, and `sqliteStorageOptionsSchema`, the Zod schema for the options below.
 
 ## Options
 
@@ -96,6 +98,45 @@ A lost `encryption.secret` loses the data, and a changed one makes stored values
 - **Back up the file.** It's an ordinary SQLite database: copy it, or use `sqlite3 .backup`.
 - **Write-ahead logging adds two files** next to it, `-wal` and `-shm`. Copy all three, or checkpoint first.
 - **One writer at a time.** Several processes can read the file; writes wait for each other, up to `busyTimeoutMs`.
+
+## In a Cloudflare Durable Object
+
+A Durable Object with SQLite storage has its own database, and the stores can run on it instead of `better-sqlite3`, which is a native module and doesn't load on Workers. Import this package in the Worker, hand it to the SDK, and set the driver in the Durable Object's constructor, before the server is created:
+
+```ts
+import { DurableObject } from 'cloudflare:workers';
+
+import { FrontMcpInstance, registerOptionalModule } from '@frontmcp/sdk';
+import * as storageSqlite from '@frontmcp/storage-sqlite';
+
+registerOptionalModule('@frontmcp/storage-sqlite', storageSqlite);
+
+export class HelpDeskServer extends DurableObject {
+  private readonly handler: ReturnType<typeof FrontMcpInstance.createFetchHandler>;
+
+  constructor(ctx: DurableObjectState, env: unknown) {
+    super(ctx, env);
+    storageSqlite.useSqliteDriver(storageSqlite.durableObjectSqlite(ctx.storage));
+    this.handler = FrontMcpInstance.createFetchHandler({
+      info: { name: 'help-desk', version: '1.0.0' },
+      apps: [HelpDeskApp],
+      events: { store: { sqlite: { path: 'help-desk.sqlite' } } },
+    });
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    return (await this.handler)(request, this.ctx, this.env);
+  }
+}
+```
+
+- **`registerOptionalModule()`** gives the SDK the package from the Worker's bundle: on Workers, `require()` can't reach a bundled module.
+- **`useSqliteDriver(durableObjectSqlite(ctx.storage))`** makes every store open the Durable Object's database. `createFetchHandler()` builds the server on its first request, so the constructor is early enough. Each instance of the Durable Object sets its own driver, and a store never gets a connection that an earlier instance opened.
+- **One instance per isolate.** The driver is set for the whole isolate, so use it in a Durable Object class that has one instance (one id, as `idFromName('main')`). Instances with different ids can share an isolate, and each server opens its stores on its first request: the storage set last then opens every instance's stores, Cloudflare refuses the I/O (`Cannot perform I/O on behalf of a different Durable Object`), and the other instances' servers don't start.
+- **Every `path` is the same database**, the Durable Object's one. The option only names it, and no file or folder is created.
+- **Writes run in `ctx.storage.transactionSync()`**, and `walMode` and `busyTimeoutMs` do nothing: a Durable Object has one connection and refuses both pragmas.
+
+`useSqliteDriver()` takes any function from a path to a database with the part of `better-sqlite3`'s `Database` the stores call (the `SqliteDriver` and `SqliteDatabase` types), and `useSqliteDriver(undefined)` goes back to `better-sqlite3`. `currentSqliteDriver()` returns the driver that is set, if any; on an edge runtime the SDK opens a `sqlite` store only when one is.
 
 ## Docs
 

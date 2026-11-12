@@ -173,6 +173,9 @@ export { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJson
 // Class identity across two copies of a package in one process (`instanceof` by brand)
 export { brandClass, isBrandedInstance } from './class-brand';
 
+// Optional packages a bundle hands over, for runtimes where `require()` cannot reach them
+export { registerOptionalModule, requireOptionalModule } from './optional-module';
+
 // Serialization utilities
 export { safeStringify, canonicalJson } from './serialization';
 

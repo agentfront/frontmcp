@@ -148,8 +148,11 @@ export type ChannelSourceConfig =
 export interface ChannelNotification {
   /** The notification content (appears inside <channel> tags in Claude) */
   content: string;
-  /** Optional metadata key-value pairs (become XML attributes on the <channel> tag) */
-  meta?: Record<string, string>;
+  /**
+   * Optional metadata key-value pairs (become XML attributes on the <channel> tag). A value that is `undefined` or
+   * `null` is left out, an object is sent as its JSON, and any other value as a string.
+   */
+  meta?: Record<string, unknown>;
 }
 
 // ============================================
@@ -210,8 +213,8 @@ export interface ChannelMetadata extends ExtendFrontMcpChannelMetadata {
 
   /**
    * Event replay configuration.
-   * When enabled, events are buffered so they can be replayed when Claude Code connects.
-   * Use this for channels where events should not be lost if Claude is not connected.
+   * When enabled, the channel keeps its latest global notifications in a buffer. The SDK does not send the buffer
+   * to a session that connects: send it with `ChannelInstance.replayBufferedEvents(sessionId)`, such as from a tool.
    *
    * The buffer is in-memory by default. For persistence across restarts, provide an
    * external store via `onConnect()`.

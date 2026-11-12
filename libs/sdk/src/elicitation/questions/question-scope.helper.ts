@@ -8,6 +8,7 @@ import {
   type PersistentQuestionsOptionsInterface,
   type PersistentQuestionsStorage,
 } from '../../common/types/options/elicitation';
+import { hasSqliteDriver, SQLITE_ON_EDGE_REMEDY } from '../../storage/sqlite-on-edge';
 import { createQuestionStore, resolveQuestionStorage, type QuestionStoreResult } from './question-store.factory';
 import { InvalidQuestionStoreError } from './question.errors';
 import { type QuestionStore } from './question.store';
@@ -57,15 +58,20 @@ export function parsePersistentQuestionsOptions(persistent: unknown): Persistent
 const NOT_ON_EDGE_RUNTIME =
   'it is not available on an edge runtime: a question must outlive the isolate that asked it, and none of its stores ' +
   "runs there ('redis' needs a TCP connection, 'sqlite' a local file, and 'memory' ends with the isolate). Run the " +
-  'server on Node.js to keep questions, or turn elicitation.persistent off';
+  "server on Node.js to keep questions, turn elicitation.persistent off, or name a 'sqlite' store in " +
+  `elicitation.persistent.storage and give it a SQLite driver: ${SQLITE_ON_EDGE_REMEDY}`;
 
-/** `elicitation.persistent`, checked for where the server runs: a mistake, or an edge runtime, fails the boot. */
+/**
+ * `elicitation.persistent`, checked for where the server runs: a mistake fails the boot, and so does an edge runtime,
+ * unless the questions name a SQLite store and a driver set with `useSqliteDriver()` can open it.
+ */
 export function persistentQuestionsSettings(
   persistent: unknown,
   onEdgeRuntime: boolean,
 ): PersistentQuestionsOptionsInterface {
   const settings = parsePersistentQuestionsOptions(persistent);
-  if (onEdgeRuntime) throw new InvalidQuestionStoreError(NOT_ON_EDGE_RUNTIME);
+  const opensOnEdge = settings.storage?.type === 'sqlite' && hasSqliteDriver();
+  if (onEdgeRuntime && !opensOnEdge) throw new InvalidQuestionStoreError(NOT_ON_EDGE_RUNTIME);
   return settings;
 }
 
