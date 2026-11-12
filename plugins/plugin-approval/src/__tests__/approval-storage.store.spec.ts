@@ -217,7 +217,7 @@ describe('ApprovalStorageStore', () => {
       });
     });
 
-    it('should store a time-limited approval of a session and a user under their combined key', async () => {
+    it('should store a time-limited approval of a session and a user under a time-limited key of its own', async () => {
       await store.grantApproval({
         toolId: 'tool-1',
         scope: ApprovalScope.TIME_LIMITED,
@@ -226,9 +226,11 @@ describe('ApprovalStorageStore', () => {
         ttlMs: 60000,
       });
 
-      expect(mockStorage.set).toHaveBeenCalledWith('tool-1:session:session-1:user:user-1', expect.any(String), {
-        ttlSeconds: 60,
-      });
+      expect(mockStorage.set).toHaveBeenCalledWith(
+        'tool-1:session:session-1:user:user-1:scope:time_limited',
+        expect.any(String),
+        { ttlSeconds: 60 },
+      );
     });
 
     it('should grant context-specific approval', async () => {
@@ -292,6 +294,7 @@ describe('ApprovalStorageStore', () => {
         'tool-1:user:user-1',
         'tool-1:user:user-1:scope:time_limited',
         'tool-1:session:session-1:user:user-1',
+        'tool-1:session:session-1:user:user-1:scope:time_limited',
         'tool-1:session:session-1:ctx:repo:acme',
         'tool-1:session:session-1:user:user-1:ctx:repo:acme',
       ]);
