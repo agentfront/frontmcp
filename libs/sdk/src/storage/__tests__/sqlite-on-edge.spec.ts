@@ -9,7 +9,8 @@ import { createTaskStore, TaskStoreNotSupportedError } from '../../task/store/ta
 
 const SQLITE = { path: 'server.sqlite', ttlCleanupIntervalMs: 0 };
 const QUESTIONS_IN_SQLITE = { storage: { type: 'sqlite' as const, sqlite: SQLITE } };
-const NAMES_THE_DRIVER = /without a SQLite driver.*useSqliteDriver\(durableObjectSqlite\(ctx\.storage\)\)/;
+const NAMES_THE_DRIVER =
+  /without a SQLite driver.*one instance.*useSqliteDriver\(durableObjectSqlite\(ctx\.storage\)\)/;
 const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } as never;
 
 describe('a SQLite store on an edge runtime', () => {
@@ -93,7 +94,7 @@ describe('a SQLite store on an edge runtime', () => {
       const opening = openPersistentQuestions({ persistent: QUESTIONS_IN_SQLITE, onEdgeRuntime: true, logger });
 
       await expect(opening).rejects.toBeInstanceOf(InvalidQuestionStoreError);
-      await expect(opening).rejects.toThrow(/not available on an edge runtime.*useSqliteDriver\(durableObjectSqlite/);
+      await expect(opening).rejects.toThrow(/not available on an edge runtime.*one instance.*useSqliteDriver\(/);
     });
   });
 });
