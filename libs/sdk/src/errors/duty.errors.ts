@@ -1,6 +1,6 @@
 import { InternalMcpError } from './mcp.error';
 
-/** Thrown when a duty starts with the lease of a duty of another class in this process: one of them would never run. */
+/** Thrown when a duty starts with the name a duty of another class has in its server, whatever their scopes. */
 export class DutyNameConflictError extends InternalMcpError {
   constructor(dutyName: string, serverName: string, firstClass: string, secondClass: string) {
     super(

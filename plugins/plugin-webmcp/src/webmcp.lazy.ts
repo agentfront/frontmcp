@@ -110,12 +110,20 @@ interface Placeholder {
   fingerprint: string;
   controller: AbortController;
   adopted: boolean;
+  /** The other origins the listed tool was offered to. */
+  exposedTo: readonly string[];
+}
+
+/** The plugin's `execute` of a tool it registered, and the other origins it offered the tool to. */
+interface Executor {
+  execute: ModelContextTool['execute'];
+  exposedTo: readonly string[];
 }
 
 class LazyWebMcpTools {
   private readonly placeholders = new Map<string, Placeholder>();
   /** The plugin's `execute` of every tool it registered, by name. */
-  private readonly executors = new Map<string, ModelContextTool['execute']>();
+  private readonly executors = new Map<string, Executor>();
   private loading?: Promise<void>;
 
   constructor(
@@ -132,11 +140,12 @@ class LazyWebMcpTools {
       fingerprint: fingerprintOf(tool, exposedTo),
       controller: new AbortController(),
       adopted: false,
+      exposedTo: exposedTo ?? [],
     };
     this.placeholders.set(tool.name, placeholder);
     try {
       await this.modelContext.registerTool(
-        { ...tool, execute: (input, options) => this.call(tool.name, input, options) },
+        { ...tool, execute: (input, options) => this.call(tool.name, placeholder, input, options) },
         { signal: placeholder.controller.signal, ...(exposedTo && { exposedTo }) },
       );
     } catch {
@@ -145,11 +154,24 @@ class LazyWebMcpTools {
     }
   }
 
-  private async call(name: string, input: Record<string, unknown>, options: ModelContextToolExecuteOptions) {
+  /**
+   * A call an agent made through a listed tool, run by the plugin once the server is loaded, unless the plugin no
+   * longer offers the tool to every origin the listed one was offered to: that call must come again through the
+   * plugin's own registration.
+   */
+  private async call(
+    name: string,
+    placeholder: Placeholder,
+    input: Record<string, unknown>,
+    options: ModelContextToolExecuteOptions,
+  ) {
     await this.load();
-    const execute = this.executors.get(name);
-    if (!execute) throw new Error(`Tool "${name}" not found`);
-    return execute(input, options);
+    const executor = this.executors.get(name);
+    if (!executor) throw new Error(`Tool "${name}" not found`);
+    if (!placeholder.exposedTo.every((origin) => executor.exposedTo.includes(origin))) {
+      throw new Error(`Tool "${name}" is no longer offered to every origin it was listed for: call it again`);
+    }
+    return executor.execute(input, options);
   }
 
   /** Load the server once; a failed load is tried again on the next call. */
@@ -205,12 +227,13 @@ class LazyWebMcpTools {
       placeholder && !placeholder.adopted && placeholder.fingerprint === fingerprintOf(descriptor, options?.exposedTo)
         ? placeholder
         : undefined;
-    this.executors.set(tool.name, execute);
+    const executor: Executor = { execute, exposedTo: options?.exposedTo ?? [] };
+    this.executors.set(tool.name, executor);
     options?.signal?.addEventListener(
       'abort',
       () => {
         if (attempt.failed) return;
-        if (this.executors.get(tool.name) === execute) this.executors.delete(tool.name);
+        if (this.executors.get(tool.name) === executor) this.executors.delete(tool.name);
         if (kept) this.release(tool.name, kept);
       },
       { once: true },

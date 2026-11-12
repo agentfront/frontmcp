@@ -3,22 +3,27 @@
 export const SITES_SET = 'et:sites';
 export const LEGACY_EMPLOYEES_SET = 'et:employees';
 
+/** Escape `%` and `:` in a key part, so different site and employee ids never build the same key. */
+function keyPart(id: string): string {
+  return id.replace(/%/g, '%25').replace(/:/g, '%3A');
+}
+
 export function siteEmployeesSetKey(siteId: string) {
-  return `et:site:${siteId}:employees`;
+  return `et:site:${keyPart(siteId)}:employees`;
 }
 
 export function employeeSitesSetKey(employeeId: string) {
-  return `et:emp:${employeeId}:sites`;
+  return `et:emp:${keyPart(employeeId)}:sites`;
 }
 
 export function openKey(siteId: string, employeeId: string) {
-  return `et:open:${siteId}:${employeeId}`;
+  return `et:open:${keyPart(siteId)}:${keyPart(employeeId)}`;
 }
 
 export function hoursKey(siteId: string, employeeId: string, day: string) {
-  return `et:hours:${siteId}:${employeeId}:${day}`;
+  return `et:hours:${keyPart(siteId)}:${keyPart(employeeId)}:${day}`;
 }
 
 export function sessionsKey(siteId: string, employeeId: string, day: string) {
-  return `et:sessions:${siteId}:${employeeId}:${day}`;
+  return `et:sessions:${keyPart(siteId)}:${keyPart(employeeId)}:${day}`;
 }

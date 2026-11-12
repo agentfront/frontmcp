@@ -61,6 +61,27 @@ function formatZodIssues(issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey
     .join('; ');
 }
 
+/**
+ * The values `entry`'s request is built from: the input with its schema's defaults filled in, and a required
+ * parameter that is absent or `null` given its spec default, as `buildRequest` sends it. An input the schema refuses
+ * is returned as given: validation refuses it before anything is sent.
+ */
+export function effectiveInputOf(entry: HiddenOpEntry, input: Record<string, unknown>): Record<string, unknown> {
+  const parsed = getCompiledOpSchemas(entry.op).input.safeParse(input);
+  if (!parsed.success) return input;
+  const effective = { ...(parsed.data as Record<string, unknown>) };
+  const properties = (entry.op.inputSchema['properties'] ?? {}) as Record<string, { default?: unknown } | null>;
+  for (const mapper of entry.op.mapper) {
+    if (mapper.security || !mapper.required) continue;
+    const value = effective[mapper.inputKey];
+    const specDefault = properties[mapper.inputKey]?.default;
+    if ((value === undefined || value === null) && specDefault !== undefined) {
+      effective[mapper.inputKey] = specDefault;
+    }
+  }
+  return effective;
+}
+
 /** The listing a call runs under, and the guard's answer for it. */
 export interface ActionAuthorization {
   entry: HiddenOpEntry;
@@ -82,6 +103,7 @@ const HIDDEN_SKILLS_REASON = 'skills:filter hides every skill that lists the act
  * skill-level rule of at least one of them. The call runs, and is audited,
  * under the first listing that admits the caller; when none does, the first
  * visible listing's denial is returned, and when none is visible, a `hidden` one.
+ * Each rule reads the values the listing's request would be sent with ({@link effectiveInputOf}).
  */
 export async function authorizeAction(args: {
   listings: OperationListings;
@@ -99,7 +121,7 @@ export async function authorizeAction(args: {
       isPublic: entry.op.public,
       unprotectedOps,
       authInfo: (authInfo ?? {}) as Parameters<AuthorityGuard['check']>[0]['authInfo'],
-      input,
+      input: effectiveInputOf(entry, input),
     });
 
   const [firstListing, ...otherListings] = await visibleListings(listings);
@@ -147,6 +169,8 @@ export async function executeSkillAction(args: {
     input: input ?? {},
   });
   const { entry, result: authResult } = authorization;
+  // The values the guard judged: validation, confirmation and the request use these, so no default is added after.
+  const effectiveInput = effectiveInputOf(entry, input ?? {});
 
   // Audit context shared by every write; writes are detached (a slow/failing
   // audit backend must never block or fail the caller).
@@ -156,7 +180,7 @@ export async function executeSkillAction(args: {
     actionId: entry.op.operationId,
     bundleId: entry.bundleId,
     bundleVersion: entry.bundleVersion,
-    input: input ?? {},
+    input: effectiveInput,
   };
   const detach = (op: Promise<void> | undefined, phase: string): void => {
     op?.catch((e) => logger.warn(`[skill-audit] ${phase} write failed: ${e instanceof Error ? e.message : String(e)}`));
@@ -172,7 +196,7 @@ export async function executeSkillAction(args: {
 
   // 2) Compile (cached) input/output schemas, then validate input strictly.
   const schemas = getCompiledOpSchemas(entry.op);
-  const inputParse = schemas.input.safeParse(input ?? {});
+  const inputParse = schemas.input.safeParse(effectiveInput);
   if (!inputParse.success) {
     const error = `input validation failed: ${formatZodIssues(inputParse.error.issues)}`;
     detach(audit?.writer.writeHttpCallFailure(auditCtx, { status: 0, error }), 'http-call-failure');

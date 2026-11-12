@@ -181,7 +181,7 @@ describe('Events conformance: push', () => {
     const reopened = await openConfirmed('grace', params);
 
     expect(refused.response.headers.get('content-type')).toContain('application/json');
-    expect(refusal.error).toMatchObject({ code: -32025, data: { limit: 'subscriptions', max: 3 } });
+    expect(refusal.error).toMatchObject({ code: -32025, data: { limit: 'streams', max: 3 } });
     expect(reopened.active.params?.['truncated']).toBe(false);
   });
 

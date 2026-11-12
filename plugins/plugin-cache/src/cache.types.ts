@@ -1,4 +1,4 @@
-import type { Redis as RedisClient } from 'ioredis';
+import type { Redis as RedisClient, RedisOptions } from 'ioredis';
 
 declare global {
   interface ExtendFrontMcpToolMetadata {
@@ -90,6 +90,10 @@ export interface RedisCachePluginOptions extends BaseCachePluginOptions {
     port: number;
     password?: string;
     db?: number;
+    /** TLS options for the connection; `{}` connects over TLS with the default certificate checks. */
+    tls?: RedisOptions['tls'];
+    /** Prefix of every cache key, so servers that share one Redis database keep their entries apart. */
+    keyPrefix?: string;
   };
 }
 

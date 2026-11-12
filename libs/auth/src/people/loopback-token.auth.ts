@@ -138,14 +138,21 @@ export class LoopbackTokenAuth {
     const previous = this.failures.get(client);
     const count = previous && now - previous.lastAt <= lockoutMs ? previous.count + 1 : 1;
     const locked = count >= maxFailedAttempts;
-    if (!previous && this.failures.size >= MAX_TRACKED_CLIENTS) this.forgetIdleClients(now);
+    this.failures.delete(client);
+    if (this.failures.size >= MAX_TRACKED_CLIENTS) this.forgetOldestClients(now);
     this.failures.set(client, { count: locked ? 0 : count, lastAt: now, lockedUntil: locked ? now + lockoutMs : 0 });
     return locked ? LOCKED : INVALID;
   }
 
-  private forgetIdleClients(now: number): void {
+  /**
+   * Clients are kept in the order of their last failure, so the idle ones come first: drop them, and stop at the
+   * first active one, unless the map is still full, when that oldest active one goes too.
+   */
+  private forgetOldestClients(now: number): void {
     for (const [client, failures] of this.failures) {
-      if (failures.lockedUntil <= now && now - failures.lastAt > this.options.lockoutMs) this.failures.delete(client);
+      const idle = failures.lockedUntil <= now && now - failures.lastAt > this.options.lockoutMs;
+      if (!idle && this.failures.size < MAX_TRACKED_CLIENTS) return;
+      this.failures.delete(client);
     }
   }
 }

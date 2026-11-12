@@ -3,13 +3,13 @@ import { Tool, ToolContext, type ScopeEntry } from '@frontmcp/sdk';
 
 import { assertDashboardToolAccess } from '../auth/dashboard-access';
 import { ParentScopeToken } from '../dashboard.symbol';
-import { safeRegex } from '../shared/safe-regex';
+import { containsText } from '../shared/name-filter';
 
 /**
  * Input schema for the list-resources tool.
  */
 export const listResourcesInputSchema = {
-  filter: z.string().optional().describe('Filter resources by name or URI pattern (regex supported)'),
+  filter: z.string().optional().describe('Only resources whose name or URI contains this text, ignoring case'),
   includeTemplates: z.boolean().default(true).describe('Include resource templates in the response'),
 };
 
@@ -89,14 +89,10 @@ export default class ListResourcesTool extends ToolContext {
       }
     }
 
-    // Apply filter if provided (with ReDoS protection)
     let filtered = results;
     if (input.filter) {
-      const pattern = safeRegex(input.filter);
-      if (pattern) {
-        filtered = results.filter((r) => pattern.test(r.name) || pattern.test(r.uri));
-      }
-      // If pattern is invalid, skip filtering and return all resources
+      const matches = containsText(input.filter);
+      filtered = results.filter((r) => matches(r.name) || matches(r.uri));
     }
 
     return {

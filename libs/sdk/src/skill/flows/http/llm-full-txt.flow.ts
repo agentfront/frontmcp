@@ -26,6 +26,7 @@ import {
 import { normalizeSkillsConfigOptions } from '../../../common/types/options/skills-http';
 import { authorizeSkillHttpRequest } from '../../auth';
 import { getSkillHttpCache } from '../../cache';
+import { fromCachedDocument, toCachedDocument } from '../../cache/skill-http-cache.catalog';
 import { filterSkillsByAuthorities } from '../../skill-authorities.helper';
 import { filterServableSkills, SKILLS_HTTP_SURFACE } from '../../skill-filter.helper';
 import { formatSkillsForLlmFull } from '../../skill-http.utils';
@@ -164,7 +165,8 @@ export default class LlmFullTxtFlow extends FlowBase<typeof name> {
     }
 
     // Leave out the skills the caller's authorities don't admit. The cached document lists every
-    // skill, so it is only served to a caller the authorities and the `skills:filter` flow let see all of them.
+    // skill, so it is only served to a caller the authorities and the `skills:filter` flow let see all of them,
+    // and only when it was made from the skills registered now.
     const allSkills = skillRegistry.getSkills(false);
     const skills = await filterServableSkills(
       this.scope,
@@ -174,7 +176,7 @@ export default class LlmFullTxtFlow extends FlowBase<typeof name> {
     );
     const cache = skills.length === allSkills.length ? await getSkillHttpCache(this.scope) : undefined;
     if (cache) {
-      const cached = await cache.getLlmFullTxt();
+      const cached = fromCachedDocument(await cache.getLlmFullTxt(), skills);
       if (cached) {
         this.respond({
           kind: 'text',
@@ -201,7 +203,7 @@ export default class LlmFullTxtFlow extends FlowBase<typeof name> {
 
     // Store in cache
     if (cache) {
-      await cache.setLlmFullTxt(content);
+      await cache.setLlmFullTxt(toCachedDocument(content, skills));
     }
 
     this.respond({

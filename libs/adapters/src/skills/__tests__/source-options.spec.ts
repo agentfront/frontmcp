@@ -89,6 +89,12 @@ describe('source-options schemas', () => {
           expect.stringMatching(/^pushReplayStorage: must be a storage config/),
         ]);
       });
+
+      it('refuses an in-memory SQLite database, which each process would keep to itself', () => {
+        expect(issuesOf({ type: 'sqlite', sqlite: { path: ':memory:' } })).toEqual([
+          expect.stringMatching(/^pushReplayStorage\.sqlite\.path: cannot be ":memory:"/),
+        ]);
+      });
     });
 
     it('rejects http:// endpoint (must be HTTPS)', () => {

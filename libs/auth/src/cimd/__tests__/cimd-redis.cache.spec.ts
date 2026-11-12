@@ -92,7 +92,16 @@ describe('RedisCimdCache', () => {
         redis: { url: 'redis://localhost:6379', keyPrefix: 'test:' },
       });
       expect(cache).toBeInstanceOf(RedisCimdCache);
-      expect(RedisStorageAdapter).toHaveBeenCalledWith({ url: 'redis://localhost:6379' });
+      expect(RedisStorageAdapter).toHaveBeenCalledWith({ url: 'redis://localhost:6379', config: {} });
+    });
+
+    it('passes tls, port, password and db beside a url, so they fill in what the url leaves out', () => {
+      createCache({ redis: { url: 'redis://cache.internal', port: 6380, password: 'secret', db: 2, tls: true } });
+
+      expect(RedisStorageAdapter).toHaveBeenCalledWith({
+        url: 'redis://cache.internal',
+        config: { port: 6380, password: 'secret', db: 2, tls: true },
+      });
     });
 
     it('should create instance with host-based redis config', () => {

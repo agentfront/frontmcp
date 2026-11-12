@@ -361,7 +361,7 @@ if (adapter.canHandle()) {
 The ext-apps protocol uses postMessage for communication. Security is enforced via:
 
 1. **Explicit Trusted Origins**: Configure allowed origins in adapter options
-2. **Trust-on-First-Use**: When no origins configured, trusts first message origin
+2. **Trust-on-First-Use**: When no origins are configured, trusts the origin of the first message from the parent frame; messages from any other frame are ignored
 
 ```typescript
 // Recommended: Explicit trusted origins

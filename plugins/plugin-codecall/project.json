@@ -39,6 +39,7 @@
             "vectoriadb",
             "@frontmcp/sdk",
             "@frontmcp/protocol",
+            "@frontmcp/utils",
             "@frontmcp/plugin-cache",
             "zod",
             "reflect-metadata"
@@ -72,6 +73,7 @@
             "vectoriadb",
             "@frontmcp/sdk",
             "@frontmcp/protocol",
+            "@frontmcp/utils",
             "@frontmcp/plugin-cache",
             "zod",
             "reflect-metadata"

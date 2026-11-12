@@ -5,7 +5,7 @@
  * Uses two adjacent fixed-window counters with weighted interpolation
  * to approximate a true sliding window with O(1) storage per check.
  *
- * Built entirely on StorageAdapter interface (incr, mget, expire) —
+ * Built entirely on StorageAdapter interface (incr, decr, mget, expire) —
  * works with Memory, Redis, Vercel KV, Upstash backends.
  */
 
@@ -34,22 +34,27 @@ export class SlidingWindowRateLimiter {
 
     const elapsed = now - currentWindowStart;
     const weight = 1 - elapsed / windowMs;
-    const estimatedCount = previousCount * weight + currentCount;
+    const rejected: RateLimitResult = {
+      allowed: false,
+      remaining: 0,
+      resetMs: windowMs - elapsed,
+      retryAfterMs: windowMs - elapsed,
+    };
 
-    if (estimatedCount >= maxRequests) {
-      return {
-        allowed: false,
-        remaining: 0,
-        resetMs: windowMs - elapsed,
-        retryAfterMs: windowMs - elapsed,
-      };
-    }
+    if (previousCount * weight + currentCount >= maxRequests) return rejected;
 
-    await this.storage.incr(currentKey);
+    // Decide on the count the increment returns: checks that run at the same time all read the same snapshot above.
+    const countedNow = await this.storage.incr(currentKey);
     const ttlSeconds = Math.ceil((windowMs * 2) / 1000);
     await this.storage.expire(currentKey, ttlSeconds);
 
-    const remaining = Math.max(0, Math.floor(maxRequests - estimatedCount - 1));
+    const estimatedCount = previousCount * weight + countedNow;
+    if (estimatedCount > maxRequests) {
+      await this.storage.decr(currentKey);
+      return rejected;
+    }
+
+    const remaining = Math.max(0, Math.floor(maxRequests - estimatedCount));
 
     return {
       allowed: true,

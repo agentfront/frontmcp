@@ -2,7 +2,14 @@
  * HTML/JS Escaping Utility Tests
  */
 
-import { escapeHtml, escapeHtmlAttr, escapeJsString, escapeScriptClose, safeJsonForScript } from './escape';
+import {
+  escapeControlCharacters,
+  escapeHtml,
+  escapeHtmlAttr,
+  escapeJsString,
+  escapeScriptClose,
+  safeJsonForScript,
+} from './escape';
 
 describe('escapeHtml', () => {
   describe('null and undefined handling', () => {
@@ -236,5 +243,30 @@ describe('safeJsonForScript', () => {
     const unescaped = result.replace(/<\\\//g, '</');
     expect(() => JSON.parse(unescaped)).not.toThrow();
     expect(JSON.parse(unescaped)).toEqual(malicious);
+  });
+});
+
+describe('escapeControlCharacters', () => {
+  it('keeps text without control characters unchanged', () => {
+    expect(escapeControlCharacters('tool "x" <y> é 中\t')).toBe('tool "x" <y> é 中\t');
+  });
+
+  it('turns line breaks into visible escapes so a value cannot start a new log line', () => {
+    expect(escapeControlCharacters('name\nINFO forged\r\nentry')).toBe('name\\nINFO forged\\r\\nentry');
+  });
+
+  it('escapes terminal escape sequences and other C0 and C1 controls', () => {
+    expect(escapeControlCharacters('\u001b[31mred\u0000\u007f\u0085')).toBe('\\u001b[31mred\\u0000\\u007f\\u0085');
+    expect(escapeControlCharacters('\b\f\v')).toBe('\\b\\f\\v');
+  });
+
+  it('escapes the Unicode line and paragraph separators', () => {
+    expect(escapeControlCharacters('a b c')).toBe('a\\u2028b\\u2029c');
+  });
+
+  it('converts non-strings and treats null and undefined as empty', () => {
+    expect(escapeControlCharacters(42)).toBe('42');
+    expect(escapeControlCharacters(null)).toBe('');
+    expect(escapeControlCharacters(undefined)).toBe('');
   });
 });

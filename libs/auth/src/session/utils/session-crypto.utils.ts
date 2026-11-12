@@ -3,7 +3,15 @@
 // Core session encryption/decryption utilities extracted from SDK's session-id.utils.ts.
 // These are pure crypto operations that don't depend on SDK framework primitives.
 
-import { decryptValue, encryptValue, getEnv, getMachineId, isProduction, sha256 } from '@frontmcp/utils';
+import {
+  decryptValue,
+  encryptValue,
+  getEnv,
+  getMachineId,
+  getRuntimeContext,
+  isProduction,
+  sha256,
+} from '@frontmcp/utils';
 
 import { SessionSecretRequiredError } from '../../errors/auth-internal.errors';
 
@@ -15,9 +23,10 @@ let cachedKey: Uint8Array | null = null;
  * Uses getMachineId() from authorization module as single source of truth.
  *
  * SECURITY: In production, MCP_SESSION_SECRET is REQUIRED.
+ * A distributed deployment requires it too, since every response there carries the machine id.
  * Falls back to getMachineId() only in development/test environments.
  *
- * @throws Error if MCP_SESSION_SECRET is not set in production
+ * @throws Error if MCP_SESSION_SECRET is not set in production or in a distributed deployment
  */
 export function getKey(): Uint8Array {
   if (cachedKey) return cachedKey;
@@ -28,6 +37,12 @@ export function getKey(): Uint8Array {
     // Fail fast in production - machine ID is not secure for production use
     if (isProduction()) {
       throw new SessionSecretRequiredError('session ID encryption');
+    }
+    if (getRuntimeContext().deployment === 'distributed') {
+      throw new SessionSecretRequiredError(
+        'session ID encryption in a distributed deployment, whose responses carry the machine id: ' +
+          'set MCP_SESSION_SECRET (openssl rand -hex 32)',
+      );
     }
     // Development/test fallback - log warning
     console.warn(

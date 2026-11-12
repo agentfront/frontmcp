@@ -15,6 +15,8 @@ import { createMemoryStorage, createStorage, getEnv, type RootStorage, type Stor
 import { isVercelKvProvider, type FrontMcpLogger, type RedisOptionsInput, type SqliteOptionsInput } from '../../common';
 import { normalizeRedisOptions } from '../../common/types/options/redis/schema';
 import { ElicitationNotSupportedError } from '../../errors/elicitation.error';
+import { requireOptionalModule } from '../../scope/optional-dependency.util';
+import { hasSqliteDriver, SQLITE_ON_EDGE_REMEDY } from '../../storage/sqlite-on-edge';
 import { isElicitationEncryptionAvailable } from './elicitation-encryption';
 import { type ElicitationStore } from './elicitation.store';
 import { EncryptedElicitationStore } from './encrypted-elicitation.store';
@@ -237,12 +239,13 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
   // SQLite branch (issue #401) — when a sqlite config is provided we bypass
   // the storage/redis path entirely. SqliteElicitationStore implements its
   // own in-process pub/sub so it satisfies `requiresPubSub` for single-node
-  // deployments. Edge runtimes don't support better-sqlite3 → fail loud.
+  // deployments. Edge runtimes don't support better-sqlite3 → fail loud,
+  // unless a driver set with useSqliteDriver() opens the database without it.
   if (sqlite) {
-    if (isEdgeRuntime) {
+    if (isEdgeRuntime && !hasSqliteDriver()) {
       throw new ElicitationNotSupportedError(
-        'SQLite elicitation store is not supported on Edge runtime (better-sqlite3 is a native module). ' +
-          'Use Redis or Upstash instead.',
+        'SQLite elicitation store is not supported on Edge runtime without a SQLite driver (better-sqlite3 is a ' +
+          `native module). ${SQLITE_ON_EDGE_REMEDY} Otherwise use Redis or Upstash instead.`,
       );
     }
     let sqliteStore = createSqliteElicitationStore(sqlite, { keyPrefix, logger });
@@ -252,11 +255,7 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
     const hasSecret = encryptionSecret || isElicitationEncryptionAvailable();
     if (encryptionEnabled === true) {
       if (!hasSecret) {
-        throw new ElicitationNotSupportedError(
-          'Elicitation encryption is enabled but no secret is available. ' +
-            'Set MCP_ELICITATION_SECRET, MCP_SESSION_SECRET, or MCP_SERVER_SECRET environment variable, ' +
-            'or provide a secret in the encryption configuration.',
-        );
+        throw missingEncryptionSecretError();
       }
       sqliteStore = new EncryptedElicitationStore(sqliteStore, { secret: encryptionSecret, logger });
       encrypted = true;
@@ -349,11 +348,7 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
   if (encryptionEnabled === true) {
     // Explicitly enabled - require encryption
     if (!hasSecret) {
-      throw new ElicitationNotSupportedError(
-        'Elicitation encryption is enabled but no secret is available. ' +
-          'Set MCP_ELICITATION_SECRET, MCP_SESSION_SECRET, or MCP_SERVER_SECRET environment variable, ' +
-          'or provide a secret in the encryption configuration.',
-      );
+      throw missingEncryptionSecretError();
     }
     store = new EncryptedElicitationStore(store, { secret: encryptionSecret, logger });
     encrypted = true;
@@ -403,6 +398,7 @@ export function createMemoryElicitationStore(
 
   let encrypted = false;
 
+  if (encryptionEnabled === true && !hasSecret) throw missingEncryptionSecretError();
   if (encryptionEnabled === true && hasSecret) {
     store = new EncryptedElicitationStore(store, { secret: encryptionSecret, logger });
     encrypted = true;
@@ -414,6 +410,15 @@ export function createMemoryElicitationStore(
   logger?.debug('[ElicitationStoreFactory] Created explicit in-memory elicitation store', { encrypted });
 
   return { store, type: 'memory', storage, encrypted };
+}
+
+/** The error for `encryption.enabled: true` when neither the options nor the environment give a secret. */
+function missingEncryptionSecretError(): ElicitationNotSupportedError {
+  return new ElicitationNotSupportedError(
+    'Elicitation encryption is enabled but no secret is available. ' +
+      'Set MCP_ELICITATION_SECRET, MCP_SESSION_SECRET, or MCP_SERVER_SECRET environment variable, ' +
+      'or provide a secret in the encryption configuration.',
+  );
 }
 
 /**
@@ -458,6 +463,7 @@ export function createElicitationStoreFromStorage(
 
   let encrypted = false;
 
+  if (encryptionEnabled === true && !hasSecret) throw missingEncryptionSecretError();
   if (encryptionEnabled === true && hasSecret) {
     store = new EncryptedElicitationStore(store, { secret: encryptionSecret, logger });
     encrypted = true;
@@ -502,7 +508,9 @@ export function createSqliteElicitationStore(
 
   // Lazy require to avoid bundling @frontmcp/storage-sqlite when not used
 
-  const { SqliteElicitationStore } = require('@frontmcp/storage-sqlite');
+  const { SqliteElicitationStore } = requireOptionalModule('@frontmcp/storage-sqlite', () =>
+    require('@frontmcp/storage-sqlite'),
+  );
 
   logger?.info('[ElicitationStoreFactory] Creating SQLite elicitation store', {
     path: sqliteConfig.path,

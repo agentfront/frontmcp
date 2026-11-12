@@ -9,7 +9,7 @@ import { isIanaTimeZone } from '../utils/time-zone.utils';
 export type DutyScope = 'machine' | 'workspace' | 'cluster';
 
 interface DutyCommonMetadata {
-  /** The lease's name within the server. Set it when a build renames classes. @default the class name */
+  /** The lease's name within the server, for one class. Set it when a build renames classes. @default the class name */
   name?: string;
   scope: DutyScope;
   /**

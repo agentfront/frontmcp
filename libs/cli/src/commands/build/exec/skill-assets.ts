@@ -20,9 +20,20 @@ import type { ExtractedSkillAsset } from './cli-runtime/schema-extractor';
  * source file, so their content is staged as `<skill>--instructions.md`.
  */
 export function stagedInstructionsName(asset: ExtractedSkillAsset): string | undefined {
-  if (asset.instructionFile) return `${asset.skillName}--${path.basename(asset.instructionFile)}`;
-  if (asset.instructionContent) return `${asset.skillName}--instructions.md`;
+  const skillName = stagedSkillName(asset.skillName);
+  if (asset.instructionFile) return `${skillName}--${path.basename(asset.instructionFile)}`;
+  if (asset.instructionContent) return `${skillName}--instructions.md`;
   return undefined;
+}
+
+/** Name of a skill's resource folder (`references`, `examples`, ...) under `_skills/`. */
+export function stagedResourceDirName(skillName: string, kind: string): string {
+  return `${stagedSkillName(skillName)}--${kind}`;
+}
+
+/** The skill name as part of one file name in `_skills/`: `%`, `/` and `\` are percent-encoded, so it cannot name another folder. */
+function stagedSkillName(skillName: string): string {
+  return skillName.replace(/%/g, '%25').replace(/\//g, '%2F').replace(/\\/g, '%5C');
 }
 
 export interface SkillAssetsResult {
@@ -68,9 +79,9 @@ export function copySkillAssets(
     if (asset.resourceDirs) {
       for (const [key, dirPath] of Object.entries(asset.resourceDirs)) {
         if (dirPath && fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
-          const destDir = path.join(skillsDir, `${asset.skillName}--${key}`);
-          fs.cpSync(dirPath, destDir, { recursive: true });
-          entry[key as keyof typeof entry] = `_skills/${asset.skillName}--${key}`;
+          const stagedDir = stagedResourceDirName(asset.skillName, key);
+          fs.cpSync(dirPath, path.join(skillsDir, stagedDir), { recursive: true });
+          entry[key as keyof typeof entry] = `_skills/${stagedDir}`;
           copiedCount++;
         }
       }

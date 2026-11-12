@@ -237,6 +237,9 @@ function Notes() {
   server's publish endpoint (`events.publishEndpoint`, bearer mode) with `Authorization: Bearer <getToken()>`, and
   resolves with its `{ eventId, matched }`. Any other status than 2xx throws `RemoteEventForwardError` with `status`
   and `body`.
+- An `@Event` class in page code extends `EventContext` from `@frontmcp/react`, which also exports the types its
+  methods use (`EventSubscriber`, `EventOccurrenceOf`, `EventSubscriptionRef`, `EventUnsubscribeReason`,
+  `EventCheckItem`, `EventCheckResult`, `EventCheckLimits`). Up to 1.12.0 they came from `@frontmcp/sdk` only.
 
 ## Exposing Tools to Browser Agents (WebMCP)
 

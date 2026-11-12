@@ -1,3 +1,5 @@
+import { metricsOptionsSchema } from '../../common/types/options/metrics';
+import { EVENT_COUNTERS } from '../../event/delivery/event-metrics';
 import { MetricsPathConflictError, MetricsTokenNotConfiguredError } from '../metrics.errors';
 import { createProcessStatsCollectorIfEnabled, MetricsService } from '../metrics.service';
 
@@ -149,6 +151,20 @@ describe('MetricsService (issue #397)', () => {
 
       expect(kept.getMetrics().body).toContain('frontmcp_event_loop_stall_seconds_total 0.6');
       expect(dropped.getMetrics().body).not.toContain('frontmcp_event_loop_stall_seconds_total');
+    });
+
+    it("serves every event counter under the 'events' category", () => {
+      const eventCounters = Object.values(EVENT_COUNTERS).map((name) => ({ name, count: 2, attributes: {} }));
+      const include = metricsOptionsSchema.parse({ enabled: true, include: ['events'] }).include;
+      const kept = new MetricsService({ enabled: true, include }, undefined, { snapshotSource: () => eventCounters });
+      const dropped = new MetricsService({ enabled: true, include: ['process'] }, undefined, {
+        snapshotSource: () => eventCounters,
+      });
+
+      for (const name of Object.values(EVENT_COUNTERS)) {
+        expect(kept.getMetrics().body).toContain(`${name} 2`);
+        expect(dropped.getMetrics().body).not.toContain(name);
+      }
     });
   });
 

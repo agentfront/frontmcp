@@ -27,15 +27,19 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 # Max 6 hours runtime
 jobs:
-  start-registry:
+  # Runs the PR's code (its setup action, install and build), so it gets no secrets and a read-only token.
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    permissions:
+      contents: read
     env:
       NX_DAEMON: "false"
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      full_sha: ${{ steps.pr-info.outputs.full_sha }}
 
     steps:
       - name: Validate PR number
@@ -50,6 +54,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: refs/pull/${{ inputs.pr_number }}/head
+          persist-credentials: false
 
       - name: Get PR info
         id: pr-info
@@ -69,6 +74,126 @@ jobs:
         with:
           node-version: ${{ steps.node-version.outputs.version }}
 
+      - name: Calculate PR version
+        id: version
+        run: |
+          PR_NUM="${{ inputs.pr_number }}"
+          SHA="${{ steps.pr-info.outputs.sha }}"
+
+          # Get current version from SDK package (the main package)
+          CURRENT_VERSION=$(jq -r '.version' libs/sdk/package.json)
+          echo "Current version: $CURRENT_VERSION"
+
+          # Create PR version based on current version: e.g., 0.7.2-pr.205.00cc1a6
+          VERSION="${CURRENT_VERSION}-pr.${PR_NUM}.${SHA}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "PR Version: $VERSION"
+
+      - name: Update package versions
+        run: |
+          npx nx release version "${{ steps.version.outputs.version }}" \
+            --git-tag=false --git-commit=false
+
+      - name: Build all packages
+        run: |
+          npx nx run-many -t build --parallel=5
+
+      - name: Pack packages
+        run: |
+          PACKAGES_DIR="$RUNNER_TEMP/pr-packages"
+          mkdir -p "$PACKAGES_DIR"
+          FAILED_PACKAGES=()
+
+          # Dynamically discover all publishable packages using Nx
+          echo "Discovering publishable packages..."
+          PUBLISHABLE_PROJECTS=($(npx nx show projects --with-target publish 2>/dev/null))
+          echo "Found ${#PUBLISHABLE_PROJECTS[@]} publishable packages: ${PUBLISHABLE_PROJECTS[*]}"
+
+          for project in "${PUBLISHABLE_PROJECTS[@]}"; do
+            # Determine dist path based on project location (libs/ or plugins/)
+            if [ -d "libs/$project/dist" ]; then
+              DIST_PATH="libs/$project/dist"
+            elif [ -d "plugins/$project/dist" ]; then
+              DIST_PATH="plugins/$project/dist"
+            else
+              echo "Warning: No dist folder found for $project"
+              continue
+            fi
+
+            echo "Packing $DIST_PATH..."
+            if ! npm pack "./$DIST_PATH" --pack-destination "$PACKAGES_DIR"; then
+              echo "Warning: pack failed for $project"
+              FAILED_PACKAGES+=("$project")
+            fi
+          done
+
+          if [ ${#FAILED_PACKAGES[@]} -gt 0 ]; then
+            echo "::warning::Failed to pack: ${FAILED_PACKAGES[*]}"
+          fi
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-packages
+          path: ${{ runner.temp }}/pr-packages/*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  # Runs only this workflow's own code: it publishes the build's tarballs and holds the tunnel secret.
+  start-registry:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Check the version and SHA from the build
+        id: version
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          FULL_SHA: ${{ needs.build.outputs.full_sha }}
+        run: |
+          # Both come from the PR's build, so they are used only in their expected form
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$ ]]; then
+            echo "::error::The build's package version is not a prerelease version such as 1.12.0-pr.123.abc1234."
+            exit 1
+          fi
+          if ! [[ "$FULL_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The build's commit SHA is not a 40-character hexadecimal SHA."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "full_sha=$FULL_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout (for .nvmrc + local action)
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .nvmrc
+            .github/actions/setup-node-yarn
+          sparse-checkout-cone-mode: false
+
+      - name: Get Node version
+        id: node-version
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node
+        uses: ./.github/actions/setup-node-yarn
+        with:
+          node-version: ${{ steps.node-version.outputs.version }}
+          install: "false"
+          # Sparse checkout: no yarn.lock to key a Yarn cache on.
+          cache: ""
+
+      - name: Download packages
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-packages
+          path: ${{ runner.temp }}/pr-packages
+
       - name: Create Verdaccio config
         run: |
           mkdir -p /tmp/verdaccio-pr
@@ -77,7 +202,7 @@ jobs:
           auth:
             htpasswd:
               file: /tmp/verdaccio-pr/htpasswd
-              max_users: 1000
+              max_users: -1
           uplinks:
             npmjs:
               url: https://registry.npmjs.org/
@@ -85,12 +210,12 @@ jobs:
           packages:
             "@frontmcp/*":
               access: $all
-              publish: $authenticated
-              unpublish: $authenticated
+              publish: ci-publisher
+              unpublish: ci-publisher
             "frontmcp":
               access: $all
-              publish: $authenticated
-              unpublish: $authenticated
+              publish: ci-publisher
+              unpublish: ci-publisher
             "**":
               access: $all
               proxy: npmjs
@@ -105,9 +230,14 @@ jobs:
             level: info
           EOF
 
-          # Create CI user for publishing
+          # Create the only user that can publish, with a password made for this run
           npm install -g htpasswd
-          htpasswd -cb /tmp/verdaccio-pr/htpasswd ci-publisher ci-publisher-pass
+          PUBLISH_PASSWORD=$(openssl rand -hex 16)
+          echo "::add-mask::$PUBLISH_PASSWORD"
+          htpasswd -cb /tmp/verdaccio-pr/htpasswd ci-publisher "$PUBLISH_PASSWORD"
+
+          # Login to local Verdaccio registry using basic auth (_auth not _authToken)
+          npm set //localhost:4873/:_auth "$(printf '%s' "ci-publisher:$PUBLISH_PASSWORD" | base64 | tr -d '\n')"
 
       - name: Install and start Verdaccio
         run: |
@@ -213,73 +343,26 @@ jobs:
           echo "NGROK_URL=$NGROK_URL" >> "$GITHUB_ENV"
           echo "ngrok_url=$NGROK_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Calculate PR version
-        id: version
-        run: |
-          PR_NUM="${{ inputs.pr_number }}"
-          SHA="${{ steps.pr-info.outputs.sha }}"
-
-          # Get current version from SDK package (the main package)
-          CURRENT_VERSION=$(jq -r '.version' libs/sdk/package.json)
-          echo "Current version: $CURRENT_VERSION"
-
-          # Create PR version based on current version: e.g., 0.7.2-pr.205.00cc1a6
-          VERSION="${CURRENT_VERSION}-pr.${PR_NUM}.${SHA}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "PR Version: $VERSION"
-
-      - name: Update package versions
-        run: |
-          npx nx release version "${{ steps.version.outputs.version }}" \
-            --git-tag=false --git-commit=false
-
-      - name: Build all packages
-        run: |
-          npx nx run-many -t build --parallel=5
-
-      - name: Authenticate with Verdaccio
-        run: |
-          # Login to local Verdaccio registry using basic auth (_auth not _authToken)
-          npm set //localhost:4873/:_auth "$(echo -n 'ci-publisher:ci-publisher-pass' | base64)"
-
       - name: Publish packages to local Verdaccio
+        env:
+          PR_NUM: ${{ inputs.pr_number }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          PR_NUM="${{ inputs.pr_number }}"
           FAILED_PACKAGES=()
           PUBLISHED_PACKAGES=()
 
-          # Dynamically discover all publishable packages using Nx
-          echo "Discovering publishable packages..."
-          PUBLISHABLE_PROJECTS=($(npx nx show projects --with-target publish 2>/dev/null))
-          echo "Found ${#PUBLISHABLE_PROJECTS[@]} publishable packages: ${PUBLISHABLE_PROJECTS[*]}"
-
-          for project in "${PUBLISHABLE_PROJECTS[@]}"; do
-            # Determine dist path based on project location (libs/ or plugins/)
-            if [ -d "libs/$project/dist" ]; then
-              DIST_PATH="libs/$project/dist"
-            elif [ -d "plugins/$project/dist" ]; then
-              DIST_PATH="plugins/$project/dist"
-            else
-              echo "Warning: No dist folder found for $project"
-              continue
-            fi
-
-            # Get actual package name from package.json
-            PKG_NAME=$(jq -r '.name // empty' "$DIST_PATH/package.json" 2>/dev/null)
-            if [ -z "$PKG_NAME" ] || [ "$PKG_NAME" = "null" ]; then
-              PKG_NAME="@frontmcp/$project"
-            fi
-
-            echo "Publishing $PKG_NAME@$VERSION from $DIST_PATH..."
-            if npm publish "$DIST_PATH" \
+          for TARBALL in "$RUNNER_TEMP"/pr-packages/*.tgz; do
+            PACKAGE_FILE=$(basename "$TARBALL")
+            echo "Publishing $PACKAGE_FILE..."
+            # The tarballs come from the PR's build: publish them without running their package scripts
+            if npm publish "$TARBALL" \
               --registry http://localhost:4873 \
               --access public \
-              --tag "pr-$PR_NUM"; then
-              PUBLISHED_PACKAGES+=("$PKG_NAME")
+              --tag "pr-$PR_NUM" \
+              --ignore-scripts; then
+              PUBLISHED_PACKAGES+=("$PACKAGE_FILE")
             else
-              echo "Warning: publish failed for $PKG_NAME"
-              FAILED_PACKAGES+=("$PKG_NAME")
+              echo "Warning: publish failed for $PACKAGE_FILE"
+              FAILED_PACKAGES+=("$PACKAGE_FILE")
             fi
           done
 
@@ -306,7 +389,7 @@ jobs:
           - **Registry URL:** ${{ env.NGROK_URL }}
           - **PR Number:** ${{ inputs.pr_number }}
           - **Version:** ${{ steps.version.outputs.version }}
-          - **SHA:** ${{ steps.pr-info.outputs.full_sha }}
+          - **SHA:** ${{ steps.version.outputs.full_sha }}
           - **Started:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           - **Expires:** Approximately ${{ inputs.timeout_hours }} hour(s) from start
 

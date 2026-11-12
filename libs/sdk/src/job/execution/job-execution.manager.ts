@@ -5,7 +5,6 @@ import { type JobEntry } from '../../common/entries/job.entry';
 import { type WorkflowEntry } from '../../common/entries/workflow.entry';
 import { type FrontMcpLogger } from '../../common/interfaces/logger.interface';
 import { type JobInterruptReason, type JobPermission, type JobRunner } from '../../common/metadata/job.metadata';
-import { resolvePrincipal } from '../../common/utils/principal.utils';
 import { FrontMcpContext } from '../../context';
 import {
   JobCancelledError,
@@ -36,7 +35,7 @@ import {
 } from '../job-attempt';
 import { detachedRunContext, jobContextProviders } from '../job-context-providers';
 import { JobPermissionGuard } from '../job-permission.guard';
-import { jobRunUri } from '../job-run-access';
+import { jobRunUri, runOwnerOf } from '../job-run-access';
 import { type JobRegistryInterface } from '../job.registry';
 import { runnerOf, spawnDetachedRunner, type DetachedRunnerProcess } from '../runner/job-runner';
 import { LatestValueFlusher, RunnerHeartbeat } from '../runner/run-flusher';
@@ -197,7 +196,7 @@ export class JobExecutionManager {
       jobId: job.metadata.id ?? job.name,
       jobName: job.name,
       sessionId: opts.sessionId,
-      ownerSub: resolvePrincipal(opts.authInfo, opts.authoritiesContextBuilder).sub || undefined,
+      ...runOwnerOf(opts.authInfo, opts.authoritiesContextBuilder),
       state: 'pending',
       input,
       startedAt: Date.now(),
@@ -318,7 +317,7 @@ export class JobExecutionManager {
       jobName: workflow.name,
       workflowName: workflow.name,
       sessionId: opts.sessionId,
-      ownerSub: resolvePrincipal(opts.authInfo, opts.authoritiesContextBuilder).sub || undefined,
+      ...runOwnerOf(opts.authInfo, opts.authoritiesContextBuilder),
       state: 'pending',
       input: workflowInput,
       startedAt: Date.now(),
@@ -327,6 +326,7 @@ export class JobExecutionManager {
       logs: [],
       background: opts.background ?? false,
       stepResults: {},
+      scopeId: this.scope?.id,
     };
     return { record, options: { ...opts, workflowInput } };
   }

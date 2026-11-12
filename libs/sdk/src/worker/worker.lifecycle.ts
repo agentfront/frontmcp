@@ -14,6 +14,7 @@ import {
   LeaseClaims,
   leaseKey,
   leaseStorageConfig,
+  nameKey,
   registerReadinessProbe,
   startsBackgroundWork,
   type LeaseScope,
@@ -169,6 +170,8 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown, Backgr
       logger.warn(`Worker "${name}" does not run in a serverless or edge deployment: it needs a long-lived process`);
       return undefined;
     }
+    const serverName = this.providers.get(FrontMcpConfig).info?.name ?? 'frontmcp';
+    this.claim(serverName);
     const supervisor = new WorkerSupervisor({ name, restart, logger, run: (context) => this.worker.run(context) });
     if (scope !== 'process') return this.contend(supervisor, scope, logger);
     logger.info(`Worker "${name}" runs in this process`);
@@ -189,7 +192,6 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown, Backgr
     const config = this.providers.get(FrontMcpConfig);
     const serverName = config.info?.name ?? 'frontmcp';
     const key = leaseKey(name, scope, serverName);
-    this.claim(key, serverName);
     const storage = new LazyLeaseStore(leaseStorageConfig(config.redis, 'worker', scope));
     const removeHealthProbe = this.registerHealthProbe(supervisor, storage);
     const holder = new LeaseHolder({
@@ -219,8 +221,9 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown, Backgr
     removeHealthProbe();
   }
 
-  /** Take `key` for this worker's class in this process: another class with the same key would never run here. */
-  private claim(key: string, serverName: string): void {
+  /** Take the worker's name in its server for its class: another class with it fails to start, whatever its scope. */
+  private claim(serverName: string): void {
+    const key = nameKey(this.metadata.name, serverName);
     const type = this.worker.constructor;
     const otherClass = claims.claim(key, type);
     if (otherClass !== undefined) {
@@ -229,7 +232,7 @@ export class WorkerLifecycle implements OnBootstrap, OnReady, OnShutdown, Backgr
     this.claimedKey = key;
   }
 
-  /** Give back this worker's claim on its lease key, if it took one. */
+  /** Give back this worker's claim on its name, if it took one. */
   private releaseClaim(): void {
     const key = this.claimedKey;
     this.claimedKey = undefined;

@@ -9,6 +9,8 @@
  * {@link signCredentialResumeToken}.
  */
 
+import { escapeControlCharacters } from '@frontmcp/utils';
+
 import { noopAuthLogger, type AuthLogger } from '../common/auth-logger.interface';
 import { buildCredentialResumeUrl, signCredentialResumeToken } from './credential-resume-link';
 import {
@@ -88,7 +90,9 @@ export class CredentialsAccessorImpl implements CredentialsAccessor {
 
     const token = signCredentialResumeToken({ sub, key, context, ttlMs: this.resumeTtlMs }, this.signingSecret);
     const resumeUrl = buildCredentialResumeUrl(this.basePath, token);
-    this.logger.debug(`CredentialsAccessor: credential "${key}" not connected; issued resume link`);
+    this.logger.debug(
+      `CredentialsAccessor: credential "${escapeControlCharacters(key)}" not connected; issued resume link`,
+    );
     return {
       connected: false,
       key,

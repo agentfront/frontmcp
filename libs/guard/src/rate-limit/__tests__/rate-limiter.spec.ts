@@ -113,6 +113,15 @@ describe('SlidingWindowRateLimiter', () => {
       expect(result.retryAfterMs).toBeGreaterThan(0);
     });
 
+    it('admits no more than maxRequests when checks run at the same time', async () => {
+      nowSpy.mockReturnValue(120_000);
+
+      const results = await Promise.all(Array.from({ length: 10 }, () => limiter.check('test-key', 3, 60_000)));
+
+      expect(results.filter((result) => result.allowed)).toHaveLength(3);
+      expect(await storage.get('test-key:120000')).toBe('3');
+    });
+
     it('should set expire on the current window key', async () => {
       nowSpy.mockReturnValue(120_000);
       await limiter.check('test-key', 10, 60_000);

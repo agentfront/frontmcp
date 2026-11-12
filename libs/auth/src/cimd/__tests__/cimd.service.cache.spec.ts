@@ -31,7 +31,7 @@ describe('CimdService cache', () => {
 
     await service.initialize();
 
-    expect(RedisStorageAdapter).toHaveBeenCalledWith({ url: 'redis://cache.example.com:6379' });
+    expect(RedisStorageAdapter).toHaveBeenCalledWith({ url: 'redis://cache.example.com:6379', config: {} });
     expect(mockRedisConnect).toHaveBeenCalledTimes(1);
     expect(await service.getCacheStats()).toEqual({ size: 2 });
     expect(mockRedisConnect).toHaveBeenCalledTimes(1);

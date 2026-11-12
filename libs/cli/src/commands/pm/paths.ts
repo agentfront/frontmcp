@@ -21,20 +21,28 @@ export const PM_DIRS = {
   esmCache: path.join(FRONTMCP_HOME, 'esm-cache'),
 } as const;
 
+/** `name` with `suffix`, as a file directly inside a pm directory: a path separator in the name would leave it. */
+function pmFileName(name: string, suffix: string): string {
+  if (/[/\\]/.test(name)) {
+    throw new Error(`Process name "${name}" contains a path separator. Use a name without "/" or "\\".`);
+  }
+  return `${name}${suffix}`;
+}
+
 export function pidFilePath(name: string): string {
-  return path.join(PM_DIRS.pids, `${name}.pid`);
+  return path.join(PM_DIRS.pids, pmFileName(name, '.pid'));
 }
 
 export function logFilePath(name: string): string {
-  return path.join(PM_DIRS.logs, `${name}.log`);
+  return path.join(PM_DIRS.logs, pmFileName(name, '.log'));
 }
 
 export function errorLogFilePath(name: string): string {
-  return path.join(PM_DIRS.logs, `${name}.error.log`);
+  return path.join(PM_DIRS.logs, pmFileName(name, '.error.log'));
 }
 
 export function socketFilePath(name: string): string {
-  return path.join(PM_DIRS.sockets, `${name}.sock`);
+  return path.join(PM_DIRS.sockets, pmFileName(name, '.sock'));
 }
 
 export function appDir(name: string): string {

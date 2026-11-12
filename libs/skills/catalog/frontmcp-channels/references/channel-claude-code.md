@@ -88,10 +88,10 @@ What stays as it was:
 FrontMCP makes the keys of every channel notification safe before it sends them, in one place (`channelMetaOf()`):
 
 - A character that is not a letter, a digit or an underscore becomes `_`: `chat-id` is sent as `chat_id`, `user.name` as `user_name`.
-- An empty key, and a value that is `undefined` or `null`, are left out. Every other value is sent as a string.
+- An empty key, and a value that is `undefined` or `null`, are left out. Every other value is sent as a string: an object as its JSON, or as `String()` gives it when it has none (a cyclic object, a BigInt inside one).
 - It applies to what `onEvent()` returns, to `scope.channelNotifications.send()`, to replayed events, and to the `meta` of an event with the `channel` option.
 
-This changed in 1.12. Before, such a key was sent as written, and Claude Code dropped it. A handler that returns `meta: { 'chat-id': id }` now delivers a `chat_id` attribute, so update instructions or prompts that name the attribute. The static `meta` of `@Channel` and `channels.defaultMeta` are still refused at startup when a key is not an identifier.
+This changed in 1.12. Before, such a key was sent as written, and Claude Code dropped it. A handler that returns `meta: { 'chat-id': id }` now delivers a `chat_id` attribute, so update instructions or prompts that name the attribute. The static `meta` of `@Channel` and `channels.defaultMeta` are still refused at startup when a key is not an identifier. Up to 1.12.0 a value that was not a string failed the send of a `@Channel` notification, and nothing arrived.
 
 ## Events with the `channel` Option
 

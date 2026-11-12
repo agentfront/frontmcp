@@ -21,7 +21,7 @@ import { type CorsOptions } from '../common/types/options/http/interfaces';
 import { type MetricsOptionsInterface } from '../common/types/options/metrics';
 import { normalizeEntryPrefix, normalizeScopeBase, resolveEntryPath } from '../common/utils/path.utils';
 import { PayloadTooLargeError } from '../errors';
-import { findMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
+import { findStartupMisconfiguration, misconfigurationBody } from '../errors/misconfiguration';
 import { machineIdHeader } from '../ha/ha-headers';
 import { isReadyzEnabled } from '../health/health.routes';
 import { serverCardPath } from '../mcp-registry/mcp-registry.utils';
@@ -243,7 +243,7 @@ function buildWebFetchHandler(
   // outcome the Express host reaches for a routable bind.
   const rebinding = httpConfig?.security?.dnsRebindingProtection;
   const hostValidation =
-    rebinding?.enabled === false || (!rebinding?.allowedHosts?.length && !rebinding?.allowedOrigins?.length)
+    rebinding?.enabled === false || (!rebinding?.allowedHosts?.length && rebinding?.allowedOrigins === undefined)
       ? undefined
       : compileHostValidation({
           allowedHosts: rebinding.allowedHosts,
@@ -693,18 +693,20 @@ async function toServerRequest(
 }
 
 /**
- * Render a recognized configuration fault as a Web `Response`, or `undefined`
- * when the error is not one.
+ * Render the configuration fault behind a server that failed to build as a Web
+ * `Response`, or `undefined` when the error is not one. The lazy scope build
+ * that `createFetchHandler` memoizes happens BEFORE any flow exists: it fails
+ * on a coded error (a `JwtSecretRequiredError` thrown while the auth instance
+ * is constructed) or on a validation error, which there is the configuration's
+ * (CONFIG_INVALID).
  *
- * Exported because a missing secret can surface on two different paths: from
- * inside the `http:request` flow (a `SessionSecretRequiredError` thrown during
- * `session:verify`) or out of the lazy scope build that `createFetchHandler`
- * memoizes, which happens BEFORE any flow exists (a `JwtSecretRequiredError`
- * thrown while the auth instance is constructed). Both must answer the same
- * structured body, so both go through here.
+ * An error thrown inside a flow (a `SessionSecretRequiredError` during
+ * `session:verify`) answers the same structured body through
+ * `flowErrorToHttpOutput`, which recognizes the coded errors only: a
+ * validation error a request raised is not the configuration's.
  */
 export function misconfigurationResponse(error: unknown): Response | undefined {
-  const misconfiguration = findMisconfiguration(error);
+  const misconfiguration = findStartupMisconfiguration(error);
   if (!misconfiguration) return undefined;
   return Response.json(misconfigurationBody(misconfiguration), { status: 500 });
 }

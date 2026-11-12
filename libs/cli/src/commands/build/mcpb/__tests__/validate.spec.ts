@@ -21,6 +21,20 @@ async function makeArchive(
   }
 }
 
+const CENTRAL_DIRECTORY_HEADER = Buffer.from([0x50, 0x4b, 0x01, 0x02]);
+
+/** Rewrite the expanded size the archive's central directory records for `entryName`, leaving its data as it is. */
+function declareExpandedSize(archivePath: string, entryName: string, size: number): void {
+  const zip = fs.readFileSync(archivePath);
+  let offset = zip.indexOf(CENTRAL_DIRECTORY_HEADER);
+  while (offset !== -1) {
+    const nameLength = zip.readUInt16LE(offset + 28);
+    if (zip.toString('utf-8', offset + 46, offset + 46 + nameLength) === entryName) zip.writeUInt32LE(size, offset + 24);
+    offset = zip.indexOf(CENTRAL_DIRECTORY_HEADER, offset + 4);
+  }
+  fs.writeFileSync(archivePath, zip);
+}
+
 const baseManifest = () => ({
   manifest_version: '0.3',
   name: 'demo',
@@ -47,6 +61,17 @@ describe('validateMcpb', () => {
     const result = await validateMcpb(path.join(tmp, 'missing.mcpb'));
     expect(result.ok).toBe(false);
     expect(result.errors[0]).toMatch(/Cannot open archive/);
+  });
+
+  it('refuses a server script that expands past what validate reads, before reading it', async () => {
+    const archive = path.join(tmp, 'large.mcpb');
+    await makeArchive({ 'manifest.json': JSON.stringify(baseManifest()), 'server/index.js': 'console.log("hi")' }, archive);
+    declareExpandedSize(archive, 'server/index.js', 0xf0000000);
+
+    const result = await validateMcpb(archive);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual([expect.stringMatching(/expand to more than 256 MB \(at server\/index\.js\)/)]);
   });
 
   it('accepts a valid archive', async () => {

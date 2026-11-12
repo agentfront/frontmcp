@@ -1,4 +1,4 @@
-import { httpOutputSchema, HttpRedirectSchema, httpRespond } from '../http-output.schema';
+import { httpOutputSchema, HttpRedirectSchema, httpRespond, withHttpHeaders } from '../http-output.schema';
 
 /** A redirect's `Location` is an absolute URL or a reference relative to the request (RFC 9110 section 10.2.2) (#1053). */
 describe('HttpRedirectSchema', () => {
@@ -24,5 +24,22 @@ describe('HttpRedirectSchema', () => {
     const parsed = httpOutputSchema.parse({ kind: 'redirect', location: '/board' });
 
     expect(parsed).toMatchObject({ kind: 'redirect', status: 302, location: '/board' });
+  });
+});
+
+describe('withHttpHeaders', () => {
+  it("sets a route's headers on a Web Response output, keeping its status, other headers and body", async () => {
+    const original = new Response('secret', {
+      status: 201,
+      headers: { 'cache-control': 'max-age=600', 'x-kept': 'yes' },
+    });
+
+    const output = withHttpHeaders(httpRespond.webResponse(original), { 'Cache-Control': 'no-store' });
+
+    const response = output.kind === 'web-response' ? output.response : undefined;
+    expect(response?.status).toBe(201);
+    expect(response?.headers.get('cache-control')).toBe('no-store');
+    expect(response?.headers.get('x-kept')).toBe('yes');
+    await expect(response?.text()).resolves.toBe('secret');
   });
 });

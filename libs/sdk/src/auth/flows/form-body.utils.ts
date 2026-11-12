@@ -8,10 +8,12 @@
 export function parseFormBody(body: unknown): Record<string, unknown> {
   if (body && typeof body === 'object' && !Array.isArray(body)) return body as Record<string, unknown>;
   if (typeof body !== 'string' || !body.includes('=')) return {};
-  const out: Record<string, string | string[]> = {};
+  const out: Record<string, string | string[]> = Object.create(null);
   for (const [key, value] of new URLSearchParams(body)) {
     const existing = out[key];
-    out[key] = existing === undefined ? value : Array.isArray(existing) ? [...existing, value] : [existing, value];
+    if (existing === undefined) out[key] = value;
+    else if (Array.isArray(existing)) existing.push(value);
+    else out[key] = [existing, value];
   }
   return out;
 }

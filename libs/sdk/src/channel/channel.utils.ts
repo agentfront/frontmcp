@@ -36,17 +36,38 @@ export function channelCapabilitiesOf(scope: ClaudeCodeChannelScope): Partial<Se
 
 const UNSAFE_META_KEY_CHARACTERS = /[^A-Za-z0-9_]/g;
 
+/** A `meta` value as a string: an object as its JSON, or as `String()` gives it when it has none (a cycle, a BigInt) */
+function metaValueOf(value: unknown): string {
+  if (typeof value !== 'object') return String(value);
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * The values of a notification's `meta` as they are sent, under their keys as written: a value that is `undefined`
+ * or `null` is left out, an object becomes its JSON, and every other value a string.
+ */
+export function channelMetaValuesOf(meta: Record<string, unknown>): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const [key, value] of Object.entries(meta)) {
+    if (value !== undefined && value !== null) values[key] = metaValueOf(value);
+  }
+  return values;
+}
+
 /**
  * A notification's `meta` as Claude Code takes it. Claude Code drops a key that has anything but letters, digits
  * and underscores, so any other character becomes `_`. A key that is empty, and a value that is not there, are left
- * out. Every other value is sent as a string.
+ * out. Every other value is sent as a string, an object as its JSON (see `channelMetaValuesOf`).
  */
 export function channelMetaOf(meta: Record<string, unknown>): Record<string, string> {
   const safeMeta: Record<string, string> = {};
-  for (const [key, value] of Object.entries(meta)) {
+  for (const [key, value] of Object.entries(channelMetaValuesOf(meta))) {
     const safeKey = key.replace(UNSAFE_META_KEY_CHARACTERS, '_');
-    if (safeKey === '' || value === undefined || value === null) continue;
-    safeMeta[safeKey] = String(value);
+    if (safeKey !== '') safeMeta[safeKey] = value;
   }
   return safeMeta;
 }

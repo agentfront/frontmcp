@@ -153,14 +153,14 @@ export abstract class AuthorizationBase implements Authorization {
    * Check if a tool is authorized
    */
   canAccessTool(toolId: string): boolean {
-    return toolId in this.authorizedTools || this.authorizedToolIds.includes(toolId);
+    return Object.hasOwn(this.authorizedTools, toolId) || this.authorizedToolIds.includes(toolId);
   }
 
   /**
    * Check if a prompt is authorized
    */
   canAccessPrompt(promptId: string): boolean {
-    return promptId in this.authorizedPrompts || this.authorizedPromptIds.includes(promptId);
+    return Object.hasOwn(this.authorizedPrompts, promptId) || this.authorizedPromptIds.includes(promptId);
   }
 
   /**
@@ -169,7 +169,7 @@ export abstract class AuthorizationBase implements Authorization {
    * @param appId - App ID to check
    */
   isAppAuthorized(appId: string): boolean {
-    return appId in this.authorizedApps || this.authorizedAppIds.includes(appId);
+    return Object.hasOwn(this.authorizedApps, appId) || this.authorizedAppIds.includes(appId);
   }
 
   /**

@@ -31,12 +31,30 @@ describe('channelMetaOf', () => {
     expect(channelMetaOf({ '': 'nameless', env: 'prod' })).toEqual({ env: 'prod' });
   });
 
-  it('sends every value as a string, and leaves out one that is not there', () => {
-    expect(channelMetaOf({ attempt: 3, urgent: true, note: '', owner: undefined, team: null })).toEqual({
+  it('sends every value as a string, an object as JSON, and leaves out one that is not there', () => {
+    const meta = { attempt: 3, urgent: true, note: '', order: { id: 'o-1' }, tags: ['a', 'b'], owner: undefined };
+
+    expect(channelMetaOf({ ...meta, team: null })).toEqual({
       attempt: '3',
       urgent: 'true',
       note: '',
+      order: '{"id":"o-1"}',
+      tags: '["a","b"]',
     });
+  });
+
+  it.each([
+    [
+      'a cyclic object',
+      () => {
+        const cyclic: Record<string, unknown> = { id: 'o-1' };
+        cyclic['self'] = cyclic;
+        return cyclic;
+      },
+    ],
+    ['an object that holds a BigInt', () => ({ total: 1n })],
+  ])('sends %s, which has no JSON, as String() gives it', (_label, value) => {
+    expect(channelMetaOf({ order: value(), env: 'prod' })).toEqual({ order: '[object Object]', env: 'prod' });
   });
 });
 

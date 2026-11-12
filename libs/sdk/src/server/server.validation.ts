@@ -2,6 +2,7 @@
 import { base64Decode } from '@frontmcp/utils';
 
 import { httpOutputSchema, serializeHttpCookie, type HttpCookie, type ServerResponse } from '../common';
+import { serializeContentDisposition } from '../common/utils/content-disposition.utils';
 import { toLocationHeader } from '../utils/http-location.utils';
 
 /* ----------------------- helpers ----------------------- */
@@ -19,10 +20,6 @@ function applyCookies(res: ServerResponse, cookies?: Array<HttpCookie>) {
   const existingArr = Array.isArray(existing) ? existing : existing ? [String(existing)] : [];
   const cookieStrings = cookies.map(serializeHttpCookie);
   res.setHeader('Set-Cookie', [...existingArr, ...cookieStrings]);
-}
-
-function contentDisposition(disposition: 'inline' | 'attachment', filename?: string) {
-  return `${disposition}${filename ? `; filename="${filename}"` : ''}`;
 }
 
 function utf8ByteLength(s: string): number {
@@ -125,7 +122,7 @@ export async function writeHttpResponse(res: ServerResponse, value: any): Promis
     case 'binary':
     case 'image': {
       res.setHeader('Content-Type', out.contentType);
-      res.setHeader('Content-Disposition', contentDisposition(out.disposition, out.filename));
+      res.setHeader('Content-Disposition', serializeContentDisposition(out.disposition, out.filename));
 
       const bytes: Uint8Array = typeof out.body === 'string' ? stringToBytes(out.body, out.encoding) : out.body;
 
@@ -137,7 +134,7 @@ export async function writeHttpResponse(res: ServerResponse, value: any): Promis
 
     case 'stream': {
       res.setHeader('Content-Type', out.contentType);
-      res.setHeader('Content-Disposition', contentDisposition(out.disposition, out.filename));
+      res.setHeader('Content-Disposition', serializeContentDisposition(out.disposition, out.filename));
       res.status(out.status);
       if ('flushHeaders' in res && typeof res.flushHeaders === 'function') res.flushHeaders();
 

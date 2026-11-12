@@ -110,7 +110,7 @@ export class ProcessManager {
 
     // Restart with same config
     return this.start({
-      name: pidData.name,
+      name,
       entry: pidData.entry,
       port: pidData.port,
       socketPath: pidData.socketPath,

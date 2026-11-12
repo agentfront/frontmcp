@@ -13,7 +13,7 @@ import {
 } from '../../errors/offload.errors';
 import { toSdkMcpError } from '../../transport/mcp-handlers/mcp-error.utils';
 import { OffloadPool, tsxApiOf } from '../offload-pool';
-import { workerResourceKey } from '../offload-worker.globals';
+import { workerJobKey, workerResourceKey } from '../offload-worker.globals';
 import type { OffloadRun } from '../offload.types';
 
 const WORK_MODULE = `
@@ -62,7 +62,7 @@ const RESOURCE_MODULE = `
 const { isMainThread } = require('node:worker_threads');
 const key = Symbol.for('@frontmcp/sdk:worker-resources');
 globalThis[key] = globalThis[key] || new Map();
-globalThis[key].set(__filename + '#report#report://{id}', {
+globalThis[key].set(JSON.stringify([__filename, 'report', 'report://{id}']), {
   read: async (uri, params, log) => {
     log('info', 'reading ' + uri);
     log('nonsense', 'unknown level');
@@ -75,7 +75,7 @@ const JOB_MODULE = `
 const { isMainThread } = require('node:worker_threads');
 const key = Symbol.for('@frontmcp/sdk:worker-jobs');
 globalThis[key] = globalThis[key] || new Map();
-globalThis[key].set(__filename + '#crunch', {
+globalThis[key].set(JSON.stringify([__filename, 'crunch', null]), {
   run: async (input, attempt, log, progress) => {
     log('info', 'crunching');
     progress({ progress: 1, total: 2, message: 'half way' });
@@ -440,7 +440,7 @@ describe('OffloadPool', () => {
     const file = pathJoin(dir, 'crunch.cjs');
 
     const value = await offload.run(
-      { kind: 'job', file, key: `${file}#crunch`, name: 'crunch', input: { n: 2 }, attempt: 3 },
+      { kind: 'job', file, key: workerJobKey(file, 'crunch'), name: 'crunch', input: { n: 2 }, attempt: 3 },
       { ...call({ label: 'crunch', logger }), onProgress },
     );
 
@@ -454,7 +454,10 @@ describe('OffloadPool', () => {
     const file = pathJoin(dir, 'crunch.cjs');
 
     await expect(
-      offload.run({ kind: 'job', file, key: `${file}#other`, name: 'other', input: {}, attempt: 1 }, call()),
+      offload.run(
+        { kind: 'job', file, key: workerJobKey(file, 'other'), name: 'other', input: {}, attempt: 1 },
+        call(),
+      ),
     ).rejects.toThrow(/registered no worker job "other"/);
   });
 

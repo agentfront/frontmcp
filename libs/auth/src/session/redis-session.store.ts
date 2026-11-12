@@ -5,10 +5,11 @@ import { randomUUID, RedisStorageAdapter } from '@frontmcp/utils';
 
 import type { AuthLogger } from '../common/auth-logger.interface';
 import { SessionIdEmptyError } from '../errors/auth-internal.errors';
-import { signSession, verifyOrParseSession } from './session-crypto';
+import { signSession, verifySession } from './session-crypto';
 import { SessionRateLimiter } from './session-rate-limiter';
 import {
   RedisConfig,
+  sessionMaxLifetimeAt,
   SessionSecurityConfig,
   SessionStore,
   StoredSession,
@@ -170,11 +171,10 @@ export class RedisSessionStore implements SessionStore {
     if (!raw) return null;
 
     try {
-      // If signing is enabled, verify and extract the session
-      // Otherwise, just parse it (supports both signed and unsigned sessions)
+      // With signing enabled, only a record whose signature verifies is read: an unsigned one is refused
       let parsed: StoredSession | null;
       if (this.security.enableSigning) {
-        parsed = verifyOrParseSession(raw, { secret: this.security.signingSecret });
+        parsed = verifySession(raw, { secret: this.security.signingSecret });
         if (!parsed) {
           this.logger?.warn('[RedisSessionStore] Session signature verification failed', {
             sessionId: sessionId.slice(0, 20),
@@ -201,10 +201,11 @@ export class RedisSessionStore implements SessionStore {
       const session = result.data;
 
       // Check absolute maximum lifetime (prevents indefinite session extension)
-      if (session.maxLifetimeAt && session.maxLifetimeAt < Date.now()) {
+      const maxLifetimeAt = sessionMaxLifetimeAt(session, this.security.maxLifetimeMs);
+      if (maxLifetimeAt && maxLifetimeAt < Date.now()) {
         this.logger?.info('[RedisSessionStore] Session exceeded max lifetime', {
           sessionId: sessionId.slice(0, 20),
-          maxLifetimeAt: session.maxLifetimeAt,
+          maxLifetimeAt,
         });
         await this.delete(sessionId);
         return null;

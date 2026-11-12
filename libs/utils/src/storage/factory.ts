@@ -9,6 +9,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { getEnv, isProduction } from '#env';
 import { getRuntimeContext } from '#runtime-context';
 
+import { requireOptionalModule } from '../optional-module';
 import { MemoryStorageAdapter } from './adapters/memory';
 import { StorageConfigError } from './errors';
 import { createNamespacedStorage, createRootStorage } from './namespace';
@@ -39,9 +40,10 @@ function parseSqliteOptions(options: SqliteAdapterOptions | undefined): SqliteAd
   throw new StorageConfigError('sqlite', problems.join('; '));
 }
 
+/** The SQLite package: the copy a bundle registered with `registerOptionalModule()`, else required. */
 function loadSqliteStorage(): SqliteStorageModule {
   try {
-    return require(SQLITE_STORAGE_PACKAGE) as SqliteStorageModule;
+    return requireOptionalModule(SQLITE_STORAGE_PACKAGE, () => require(SQLITE_STORAGE_PACKAGE) as SqliteStorageModule);
   } catch (error) {
     const missing = (error as { code?: unknown }).code === 'MODULE_NOT_FOUND';
     if (!missing || !String((error as Error).message).includes(SQLITE_STORAGE_PACKAGE)) throw error;

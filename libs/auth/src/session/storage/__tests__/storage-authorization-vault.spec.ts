@@ -153,6 +153,19 @@ describe('StorageAuthorizationVault', () => {
     it('should not throw for non-existent entry', async () => {
       await expect(vault.update('non-existent', { userEmail: 'test@test.com' })).resolves.not.toThrow();
     });
+
+    it('should warn on one line about a missing entry whose id has a line break', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        await vault.update('missing\n[ERROR] forged line', { userEmail: 'test@test.com' });
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0][0]).not.toContain('\n');
+        expect(warn.mock.calls[0][0]).toContain('missing\\n[ERROR] forged line');
+      } finally {
+        warn.mockRestore();
+      }
+    });
   });
 
   describe('delete', () => {

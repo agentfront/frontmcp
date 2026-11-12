@@ -93,9 +93,14 @@ export function leaseStorageConfig(redis: unknown, kind: LeaseKind, scope: Lease
   };
 }
 
+/** What names a duty or a worker of a server in this process, whatever its scope. */
+export function nameKey(name: string, serverName: string): string {
+  return [serverName, name].map(encodeURIComponent).join(':');
+}
+
 /** One lease per server name and duty or worker; a workspace one is also per project root. */
 export function leaseKey(name: string, scope: LeaseScope, serverName: string): string {
-  const key = [serverName, name].map(encodeURIComponent).join(':');
+  const key = nameKey(name, serverName);
   if (scope !== 'workspace') return key;
   const cwd = process.cwd();
   return `${key}:${sha256Hex(findProjectRoot(cwd) ?? cwd)}`;
@@ -123,12 +128,12 @@ async function prepareLeaseFile(file: string): Promise<void> {
   await writeFile(file, '', { mode: OWNER_ONLY_FILE, flag: 'a' });
 }
 
-/** The class that holds each lease key in this process, and how many of its instances started. */
+/** The class that holds each key in this process, and how many of its instances started. */
 export class LeaseClaims {
   private readonly claims = new Map<string, { type: unknown; typeName: string; instances: number }>();
 
   /**
-   * Take `key` for `type`: another class with the same key would never run in this process.
+   * Take `key` for `type`: another class with the same key would be a second duty or worker of that name.
    *
    * @returns The name of the other class that holds `key`, in which case nothing was taken
    */

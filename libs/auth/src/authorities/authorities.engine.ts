@@ -39,6 +39,28 @@ function invalidRule(problems: string[], policies: string[] = []): AuthoritiesRe
   };
 }
 
+/** The names a rule gives under `custom`, in the rule itself and in its `allOf`, `anyOf` and `not`. */
+function customEvaluatorNames(rule: unknown, seen = new Set<unknown>()): string[] {
+  if (typeof rule !== 'object' || rule === null || Array.isArray(rule) || seen.has(rule)) return [];
+  seen.add(rule);
+  const { custom, allOf, anyOf, not } = rule as AuthoritiesPolicyMetadata;
+  const nested = [...(Array.isArray(allOf) ? allOf : []), ...(Array.isArray(anyOf) ? anyOf : []), not];
+  return [
+    ...(typeof custom === 'object' && custom !== null ? Object.keys(custom) : []),
+    ...nested.flatMap((inner) => customEvaluatorNames(inner, seen)),
+  ];
+}
+
+/** Whether a rule checks relationships, in itself or in its `allOf`, `anyOf` and `not`. */
+function checksRelationships(rule: unknown, seen = new Set<unknown>()): boolean {
+  if (typeof rule !== 'object' || rule === null || Array.isArray(rule) || seen.has(rule)) return false;
+  seen.add(rule);
+  const { relationships, allOf, anyOf, not } = rule as AuthoritiesPolicyMetadata;
+  if (relationships !== undefined) return true;
+  const nested = [...(Array.isArray(allOf) ? allOf : []), ...(Array.isArray(anyOf) ? anyOf : []), not];
+  return nested.some((inner) => checksRelationships(inner, seen));
+}
+
 /** AND in order: a plain denial stops; an unresolved one is reported only if nothing after it denies. */
 async function evaluateEvery<T>(
   items: T[],
@@ -77,26 +99,50 @@ export class AuthoritiesEngine {
 
   /**
    * Problems with an `authorities` value declared on an entry (see {@link findAuthoritiesRuleProblems}),
-   * and each profile name it uses that no registered profile has. The server reports them when it
-   * starts; {@link evaluate} denies such a value (an unknown profile as `profile '…' is not registered`).
+   * each profile name it uses that no registered profile has, and each custom evaluator it names that
+   * is not registered. The server reports them when it starts; {@link evaluate} denies such a value.
    */
   findRuleProblems(authorities: unknown): string[] {
     const problems = findAuthoritiesRuleProblems(authorities);
     if (problems.length > 0) return problems;
     const names = typeof authorities === 'string' ? [authorities] : Array.isArray(authorities) ? authorities : [];
-    return names
-      .filter((name): name is string => typeof name === 'string' && !this.profiles.has(name))
-      .map((name) => `names an unknown profile "${name}"`);
+    return [
+      ...names
+        .filter((name): name is string => typeof name === 'string' && !this.profiles.has(name))
+        .map((name) => `names an unknown profile "${name}"`),
+      ...this.unknownEvaluatorProblems(authorities),
+    ];
   }
 
   /**
-   * Problems with every registered profile's rule (see {@link findAuthoritiesRuleProblems}).
-   * The server reports them when it starts.
+   * Problems with every registered profile's rule (see {@link findAuthoritiesRuleProblems}), and each
+   * custom evaluator a profile names that is not registered. The server reports them when it starts.
    */
   findProfileProblems(): string[] {
-    return Object.entries(this.profiles.getAll()).flatMap(([name, policy]) =>
-      findAuthoritiesProfileProblems(name, policy),
-    );
+    return Object.entries(this.profiles.getAll()).flatMap(([name, policy]) => {
+      const problems = findAuthoritiesProfileProblems(name, policy);
+      if (problems.length > 0) return problems;
+      return this.unknownEvaluatorProblems(policy).map((problem) => `profile "${name}": ${problem}`);
+    });
+  }
+
+  /** The registered profiles whose rule checks relationships, at any depth. */
+  profilesCheckingRelationships(): string[] {
+    return Object.entries(this.profiles.getAll())
+      .filter(([, policy]) => checksRelationships(policy))
+      .map(([name]) => name);
+  }
+
+  /** Whether an entry's rule object checks relationships, at any depth (a profile it names is not looked into). */
+  ruleChecksRelationships(authorities: unknown): boolean {
+    return checksRelationships(authorities);
+  }
+
+  /** A problem for each custom evaluator a rule names, at any depth, that is not registered. */
+  private unknownEvaluatorProblems(rule: unknown): string[] {
+    return [...new Set(customEvaluatorNames(rule))]
+      .filter((name) => !this.evaluators.has(name))
+      .map((name) => `names an unknown custom evaluator "${name}" (register it in authorities.evaluators)`);
   }
 
   /**
@@ -261,7 +307,8 @@ export class AuthoritiesEngine {
       if (!evaluator) {
         return {
           granted: false,
-          deniedBy: `custom evaluator '${name}' is not registered`,
+          unresolved: true,
+          deniedBy: `custom evaluator '${name}' is not registered (add it to authorities.evaluators)`,
           evaluatedPolicies: [`custom.${name}`],
         };
       }

@@ -151,8 +151,9 @@ Two mistakes are found when the server starts, in the duty's `onBootstrap()` pha
 The cluster check runs only where duties start: not in a serverless or edge deployment, not in a container without
 `runBackground`, and not when `frontmcp build` boots the server to read it.
 
-Two different classes whose duties share a lease in one process (both `name: 'sweep'` in one server, or two plugins'
-`CacheSweeper` classes) would leave one of them never running, so the second one to start fails with
+Two different classes whose duties share a name in one server (both `name: 'sweep'`, or two plugins'
+`CacheSweeper` classes), whatever their scopes, would leave one of them never running or run the work twice, so the
+second one to start fails with
 `DutyNameConflictError` (`DUTY_NAME_CONFLICT`): `Duty "sweep" of server "demo" is declared by two classes in this
 process (A and B): give one of them its own name with @Duty({ name })`. The same class built twice (a top-level
 provider of a `splitByApp` server is built once per app) is not a conflict: its copies share one lease.

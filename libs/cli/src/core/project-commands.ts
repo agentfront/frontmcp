@@ -15,7 +15,7 @@ import * as path from 'path';
 
 import type { Command } from 'commander';
 
-import { tryLoadFrontMcpConfig } from '../config/frontmcp-config.loader';
+import { tryLoadFrontMcpConfig, tryLoadFrontMcpConfigFromFile } from '../config/frontmcp-config.loader';
 import type {
   ProjectCommandArgument,
   ProjectCommandEntry,
@@ -49,11 +49,15 @@ export class ProjectCommandFailedError extends Error {
 }
 
 /**
- * Load `cli.commands` from `frontmcp.config` (in `cwd`) and attach each as
- * a top-level command on the program. No-op if no config is found.
+ * Load `cli.commands` from `frontmcp.config` (the file `configPath` names, else the one in `cwd`)
+ * and attach each as a top-level command on the program. No-op if no config is found.
  */
-export async function registerProjectCommands(program: Command, cwd: string = process.cwd()): Promise<void> {
-  const cfg = await safeLoad(cwd);
+export async function registerProjectCommands(
+  program: Command,
+  cwd: string = process.cwd(),
+  configPath?: string,
+): Promise<void> {
+  const cfg = await safeLoad(cwd, configPath);
   const commands = cfg?.cli?.commands;
   if (!commands) return;
 
@@ -67,8 +71,12 @@ export async function registerProjectCommands(program: Command, cwd: string = pr
   }
 }
 
-async function safeLoad(cwd: string): Promise<Awaited<ReturnType<typeof tryLoadFrontMcpConfig>>> {
+async function safeLoad(
+  cwd: string,
+  configPath: string | undefined,
+): Promise<Awaited<ReturnType<typeof tryLoadFrontMcpConfig>>> {
   try {
+    if (configPath) return await tryLoadFrontMcpConfigFromFile(path.resolve(cwd, configPath));
     return await tryLoadFrontMcpConfig(cwd);
   } catch (err) {
     process.stderr.write(

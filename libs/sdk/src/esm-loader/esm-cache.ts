@@ -143,7 +143,8 @@ function getDefaultCacheDir(): string {
       // Restricted environment
     }
 
-    return path.join(require('node:os').tmpdir?.() ?? '/tmp', '.frontmcp-esm-cache');
+    // No home directory: memory only, never a temp folder that other users of the machine can write to
+    return '';
   } catch {
     // node:path not available (browser fallback)
     return '';
@@ -226,6 +227,12 @@ export class EsmCacheManager {
       }
 
       if (Date.now() - meta.cachedAt >= this.maxAgeMs) {
+        return undefined;
+      }
+
+      // Only a bundle put() wrote in this entry's own folder is imported, whatever path the metadata names
+      const ownBundles = [path.join(entryDir, 'bundle.mjs'), path.join(entryDir, 'bundle.cjs')];
+      if (!ownBundles.includes(meta.bundlePath)) {
         return undefined;
       }
 

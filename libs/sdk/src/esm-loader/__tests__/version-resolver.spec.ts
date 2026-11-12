@@ -225,6 +225,30 @@ describe('VersionResolver', () => {
       expect(result.resolvedVersion).toBe('1.2.0');
     });
 
+    it('keeps a pinned version when the registry has a dist-tag of the same name', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => makeRegistryResponse({ 'dist-tags': { latest: '1.2.0', '1.0.0': '2.0.0-beta.1' } }),
+      });
+
+      const result = await new VersionResolver().resolve(makeSpecifier('1.0.0'));
+
+      expect(result.resolvedVersion).toBe('1.0.0');
+    });
+
+    it('keeps to a range when the registry has a dist-tag of the same name', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => makeRegistryResponse({ 'dist-tags': { latest: '1.2.0', '~1.1.0': '2.0.0-beta.1' } }),
+      });
+
+      const result = await new VersionResolver().resolve(makeSpecifier('~1.1.0'));
+
+      expect(result.resolvedVersion).toBe('1.1.0');
+    });
+
     it('uses default timeout of 15000ms', () => {
       const resolver = new VersionResolver();
       // Just verify construction works - timeout is internal

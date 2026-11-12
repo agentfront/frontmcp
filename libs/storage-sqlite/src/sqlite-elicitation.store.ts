@@ -54,6 +54,25 @@ export type ElicitResultCallback<T = unknown> = (result: ElicitResult<T>) => voi
 export type FallbackResultCallback = (result: FallbackExecutionResult) => void;
 export type ElicitUnsubscribe = () => Promise<void>;
 
+/**
+ * The route of a result: its session, with `%` and `:` escaped so the first `:` ends it, then its elicitation.
+ */
+function resultRoute(sessionId: string, elicitId: string): string {
+  return `${sessionId.replace(/%/g, '%25').replace(/:/g, '%3A')}:${elicitId}`;
+}
+
+/**
+ * The session a result subscription waits in: without it, a result could only be routed by elicitation ID.
+ */
+function requireSubscriberSession(sessionId: string | undefined): string {
+  if (!sessionId) {
+    throw new Error(
+      'A result subscription needs the session ID the elicitation belongs to; pass it as the third argument',
+    );
+  }
+  return sessionId;
+}
+
 export interface SqliteElicitationStoreOptions extends SqliteStorageOptions {
   /** Key prefix for elicitation keys. @default 'mcp:elicit:' */
   keyPrefix?: string;
@@ -96,9 +115,9 @@ export interface ElicitationStoreInterface {
  * - `fallback:{elicitId}` - Fallback context
  * - `resolved:{elicitId}` - Pre-resolved results
  *
- * Pub/sub channels (via EventEmitter):
- * - `result:{elicitId}` - Elicitation results
- * - `fallback-result:{elicitId}` - Fallback execution results
+ * Pub/sub channels (via EventEmitter), so a result reaches only the session that asked:
+ * - `result:{sessionId}:{elicitId}` - Elicitation results
+ * - `fallback-result:{sessionId}:{elicitId}` - Fallback execution results
  */
 export class SqliteElicitationStore implements ElicitationStoreInterface {
   private kv: SqliteKvStore;
@@ -124,12 +143,12 @@ export class SqliteElicitationStore implements ElicitationStoreInterface {
     return `${this.keyPrefix}resolved:${elicitId}`;
   }
 
-  private resultChannel(elicitId: string): string {
-    return `result:${elicitId}`;
+  private resultChannel(sessionId: string, elicitId: string): string {
+    return `result:${resultRoute(sessionId, elicitId)}`;
   }
 
-  private fallbackResultChannel(elicitId: string): string {
-    return `fallback-result:${elicitId}`;
+  private fallbackResultChannel(sessionId: string, elicitId: string): string {
+    return `fallback-result:${resultRoute(sessionId, elicitId)}`;
   }
 
   async setPending(record: PendingElicitRecord): Promise<void> {
@@ -149,9 +168,9 @@ export class SqliteElicitationStore implements ElicitationStoreInterface {
   async subscribeResult<T = unknown>(
     elicitId: string,
     callback: ElicitResultCallback<T>,
-    _sessionId?: string,
+    sessionId?: string,
   ): Promise<ElicitUnsubscribe> {
-    const channel = this.resultChannel(elicitId);
+    const channel = this.resultChannel(requireSubscriberSession(sessionId), elicitId);
     const handler = (result: ElicitResult<T>) => callback(result);
     this.emitter.on(channel, handler);
 
@@ -164,7 +183,7 @@ export class SqliteElicitationStore implements ElicitationStoreInterface {
     // Clean up pending record
     this.kv.del(this.pendingKey(sessionId));
     // Emit result to subscribers
-    this.emitter.emit(this.resultChannel(elicitId), result);
+    this.emitter.emit(this.resultChannel(sessionId, elicitId), result);
   }
 
   async setPendingFallback(record: PendingElicitFallback): Promise<void> {
@@ -198,9 +217,9 @@ export class SqliteElicitationStore implements ElicitationStoreInterface {
   async subscribeFallbackResult(
     elicitId: string,
     callback: FallbackResultCallback,
-    _sessionId?: string,
+    sessionId?: string,
   ): Promise<ElicitUnsubscribe> {
-    const channel = this.fallbackResultChannel(elicitId);
+    const channel = this.fallbackResultChannel(requireSubscriberSession(sessionId), elicitId);
     const handler = (result: FallbackExecutionResult) => callback(result);
     this.emitter.on(channel, handler);
 
@@ -209,8 +228,8 @@ export class SqliteElicitationStore implements ElicitationStoreInterface {
     };
   }
 
-  async publishFallbackResult(elicitId: string, _sessionId: string, result: FallbackExecutionResult): Promise<void> {
-    this.emitter.emit(this.fallbackResultChannel(elicitId), result);
+  async publishFallbackResult(elicitId: string, sessionId: string, result: FallbackExecutionResult): Promise<void> {
+    this.emitter.emit(this.fallbackResultChannel(sessionId, elicitId), result);
   }
 
   async destroy(): Promise<void> {

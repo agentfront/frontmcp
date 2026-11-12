@@ -2,6 +2,7 @@
 
 import { filterServableSkills, Tool, ToolContext } from '@frontmcp/sdk';
 
+import { skillsDiscoverableByAuthorities } from '../security/codecall-discovery-authorities';
 import {
   searchKnowledgeToolDescription,
   searchKnowledgeToolInputSchema,
@@ -43,8 +44,12 @@ export default class SearchKnowledgeTool extends ToolContext {
 
     const skillRegistry = this.scope.skills;
 
-    // The `skills:filter` flow (feature flags, for one) drops what the caller may not see, like every skill surface.
-    const knowledgeSkills = await filterServableSkills(this.scope, skillRegistry.getKnowledgeOnlySkills());
+    // The skills' authorities and the `skills:filter` flow (feature flags, for one) drop what the caller may not see,
+    // like every skill surface.
+    const knowledgeSkills = await filterServableSkills(
+      this.scope,
+      await skillsDiscoverableByAuthorities(this.scope, skillRegistry.getKnowledgeOnlySkills(), this.authInfo),
+    );
     const knowledgeSet = new Set(knowledgeSkills.map((s) => s.name));
     const totalKnowledgeSkills = knowledgeSkills.length;
 

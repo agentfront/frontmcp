@@ -167,6 +167,7 @@ function runEslintTypeImports(targets: string[]): void {
         '--fix',
         '--rule',
         '{"@typescript-eslint/consistent-type-imports": ["warn", {"prefer": "type-imports", "fixStyle": "inline-type-imports"}]}',
+        '--',
         ...targets,
       ],
       { encoding: 'utf-8', stdio: 'pipe', timeout: 120_000 },
@@ -180,7 +181,7 @@ function runPrettier(targets: string[]): void {
   if (targets.length === 0) return;
   console.log('Step 3: Prettier import sort...');
   try {
-    execFileSync('npx', ['prettier', '--write', ...targets], {
+    execFileSync('npx', ['prettier', '--write', '--', ...targets], {
       encoding: 'utf-8',
       stdio: 'pipe',
       timeout: 120_000,

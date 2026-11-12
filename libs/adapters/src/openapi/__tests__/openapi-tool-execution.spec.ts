@@ -421,6 +421,31 @@ describe('createOpenApiTool - Tool Execution', () => {
 
       await expect(executor({ id: '123' }, toolCtx)).rejects.toThrow('Network error');
     });
+
+    it.each([
+      ['a failed request', new Error('Network error')],
+      ['a timeout', Object.assign(new Error('The operation was aborted'), { name: 'AbortError' })],
+    ])('logs the URL of %s without its query string', async (_label, fetchError) => {
+      const mockLogger = createMockLogger();
+      mockFetch.mockRejectedValue(fetchError);
+
+      const tool = createOpenApiTool(
+        createMockTool({
+          metadata: { method: 'get', path: '/test?api_key=QUERY_KEY_VALUE', servers: [] },
+        } as Partial<McpOpenAPITool>),
+        { name: 'test-api', baseUrl: 'https://api.example.com', spec: basicOpenApiSpec, logger: mockLogger },
+        mockLogger,
+      );
+
+      const executor = tool() as unknown as ToolExecutor;
+      await expect(executor({ id: '123' }, createMockToolContext())).rejects.toThrow();
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ url: 'https://api.example.com/test' }),
+      );
+      expect(JSON.stringify(mockLogger.error.mock.calls)).not.toContain('QUERY_KEY_VALUE');
+    });
   });
 
   describe('Input Transforms', () => {

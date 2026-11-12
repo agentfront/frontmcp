@@ -6,6 +6,7 @@ import type Database from 'better-sqlite3';
 
 import { loadBetterSqlite3 } from '../better-sqlite3-loader';
 import { acquireConnection } from '../sqlite-connection';
+import { useSqliteDriver, type SqliteDatabase } from '../sqlite-driver';
 import { SqliteEventStore } from '../sqlite-event.store';
 import { SqliteKvStore } from '../sqlite-kv.store';
 import { SqliteStorageAdapter } from '../sqlite-storage.adapter';
@@ -140,6 +141,61 @@ describe('shared SQLite connections', () => {
     second.close();
     third.close();
     expect(third.getDatabase().open).toBe(false);
+  });
+
+  describe('when the driver changes', () => {
+    afterEach(() => useSqliteDriver(undefined));
+
+    /** A driver that hands out `database` for every path. */
+    function useDriverOf(database: SqliteDatabase): void {
+      useSqliteDriver(() => database);
+    }
+
+    function openInMemory(): Database.Database {
+      const BetterSqlite3 = loadBetterSqlite3();
+      return new BetterSqlite3(':memory:');
+    }
+
+    it('opens the path with the current driver, and never uses the earlier connection again', () => {
+      const earlierDatabase = openInMemory();
+      const currentDatabase = openInMemory();
+      useDriverOf(earlierDatabase);
+      const earlier = acquireConnection(dbPath, 'Test');
+      const earlierPragma = jest.spyOn(earlierDatabase, 'pragma');
+
+      useDriverOf(currentDatabase);
+      const current = acquireConnection(dbPath, 'Test', { walMode: true, busyTimeoutMs: 9000 });
+      const next = acquireConnection(dbPath, 'Test');
+
+      expect(current.db).toBe(currentDatabase);
+      expect(next.db).toBe(currentDatabase);
+      expect(earlierPragma).not.toHaveBeenCalled();
+
+      earlier.release();
+      expect(earlierDatabase.open).toBe(false);
+      expect(currentDatabase.open).toBe(true);
+      const afterRelease = acquireConnection(dbPath, 'Test');
+      expect(afterRelease.db).toBe(currentDatabase);
+
+      for (const connection of [current, next, afterRelease]) connection.release();
+      expect(currentDatabase.open).toBe(false);
+    });
+
+    it("does not hand a driver better-sqlite3's connection, nor better-sqlite3 a driver's", () => {
+      const builtIn = acquireConnection(dbPath, 'Test');
+      const driverDatabase = openInMemory();
+
+      useDriverOf(driverDatabase);
+      const fromDriver = acquireConnection(dbPath, 'Test');
+      expect(fromDriver.db).toBe(driverDatabase);
+
+      useSqliteDriver(undefined);
+      const builtInAgain = acquireConnection(dbPath, 'Test');
+      expect(builtInAgain.db).not.toBe(driverDatabase);
+      expect(builtInAgain.db).not.toBe(builtIn.db);
+
+      for (const connection of [builtIn, fromDriver, builtInAgain]) connection.release();
+    });
   });
 
   it('gives every in-memory store a database of its own', () => {

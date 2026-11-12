@@ -31,6 +31,12 @@ describe('consentRecordKey', () => {
   it('builds a stable consent:{userSub}:{clientId} key', () => {
     expect(consentRecordKey('user-1', 'client-1')).toBe('consent:user-1:client-1');
   });
+
+  it('escapes % and : in the subject only, so a URL client id keeps its key', () => {
+    expect(consentRecordKey('a:b%c', 'https://client.example/meta')).toBe(
+      'consent:a%3Ab%25c:https://client.example/meta',
+    );
+  });
 });
 
 /**
@@ -77,6 +83,14 @@ function runConsentStoreContract(name: string, makeStore: () => Promise<ConsentS
       expect((await store.get('user-1', 'client-1'))?.selectedToolIds).toEqual(['a']);
       expect((await store.get('user-1', 'client-2'))?.selectedToolIds).toEqual(['b']);
       expect((await store.get('user-2', 'client-1'))?.selectedToolIds).toEqual(['c']);
+    });
+
+    it('keeps two pairs apart when the subject of one contains a colon', async () => {
+      await store.set(makeRecord({ userSub: 'a:b', clientId: 'c', selectedToolIds: ['first'] }));
+      await store.set(makeRecord({ userSub: 'a', clientId: 'b:c', selectedToolIds: ['second'] }));
+
+      expect((await store.get('a:b', 'c'))?.selectedToolIds).toEqual(['first']);
+      expect((await store.get('a', 'b:c'))?.selectedToolIds).toEqual(['second']);
     });
 
     it('deletes a record', async () => {
@@ -137,6 +151,24 @@ describe('StorageConsentStore — key namespacing', () => {
     await store.set(makeRecord());
     const keys = await adapter.keys('*');
     expect(keys.some((k) => k.startsWith('remembered-consent:consent:user-1:client-1'))).toBe(true);
+  });
+
+  it('does not hand a record stored under the earlier key to another (user, client) pair', async () => {
+    const store = new StorageConsentStore(adapter);
+    const storedEarlier = makeRecord({ userSub: 'a:b', clientId: 'c' });
+    await adapter.set('remembered-consent:consent:a:b:c', JSON.stringify(storedEarlier));
+
+    expect(await store.get('a', 'b:c')).toBeNull();
+  });
+
+  it('still reads a record stored by an earlier version for a subject without a colon', async () => {
+    const store = new StorageConsentStore(adapter);
+    await adapter.set(
+      'remembered-consent:consent:user-1:https://client.example/meta',
+      JSON.stringify(makeRecord({ clientId: 'https://client.example/meta' })),
+    );
+
+    expect(await store.get('user-1', 'https://client.example/meta')).not.toBeNull();
   });
 
   it('honors a custom namespace', async () => {

@@ -146,6 +146,9 @@ export const SKILL_AUDIT_QUEUE_MAX = 1000;
 const SUBJECT_HASH_KEY_INFO = 'frontmcp:audit:subject';
 const SUBJECT_HASH_KEY_LENGTH = 32;
 
+/** What the input hash of a record covers when the input cannot be canonicalized (too deeply nested). */
+const NON_CANONICALIZABLE_INPUT = 'audit:non-canonicalizable-input';
+
 /**
  * Options accepted by {@link SkillAuditWriter}. All fields optional — sane
  * defaults match the previous behavior except for `subjectMode`, which
@@ -337,13 +340,14 @@ export class SkillAuditWriter {
     try {
       inputHash = sha256Hex(canonicalize(ctx.input ?? null));
     } catch (e) {
-      this.logger.warn(`[skill-audit] failed to canonicalize input: ${(e as Error).message}`);
-      this.metrics?.incrementWriteFailure('unexpected');
-      return;
+      this.logger.warn(
+        `[skill-audit] failed to canonicalize input, recording a placeholder hash: ${(e as Error).message}`,
+      );
+      inputHash = sha256Hex(NON_CANONICALIZABLE_INPUT);
     }
 
-    // Allocate the sequence atomically AFTER the input has been successfully
-    // canonicalized. If the next steps (signing, persistence) fail, we
+    // Allocate the sequence atomically AFTER the input hash is computed.
+    // If the next steps (signing, persistence) fail, we
     // best-effort decrement the counter to avoid leaving a permanent gap
     // that the verifier reports as `sequence gap`. (M4 — not transactional
     // but better than the previous silent permanent gap.)
@@ -370,7 +374,7 @@ export class SkillAuditWriter {
       ...(status !== undefined ? { status } : {}),
       ...(phase === 'http-call-success' ? { outputHash: this.safeHash(output) } : {}),
       ...(phase === 'http-call-failure' || phase === 'authority-check-fail'
-        ? { errorMessage: this.formatError(error) }
+        ? { errorMessage: this.formatError(error, ctx.subject) }
         : {}),
       ...(ctx.confirmation ? { confirmation: ctx.confirmation } : {}),
     };
@@ -445,8 +449,14 @@ export class SkillAuditWriter {
     }
   }
 
+  /** Replace the caller's subject in a message the way `subjectMode` records the subject itself. */
+  private protectSubjectIn(message: string, subject: string): string {
+    if (this.subjectMode === 'plain' || !subject || subject === 'anonymous') return message;
+    return message.split(subject).join(this.applySubjectMode(subject));
+  }
+
   /** Truncate + sanitize an error to fit in the record. */
-  private formatError(error: unknown): string {
+  private formatError(error: unknown, subject: string): string {
     let raw: string;
     if (error instanceof Error) {
       raw = error.message;
@@ -461,6 +471,7 @@ export class SkillAuditWriter {
         raw = String(error);
       }
     }
+    raw = this.protectSubjectIn(raw, subject);
     if (raw.length > SKILL_AUDIT_ERROR_MESSAGE_MAX) {
       return raw.slice(0, SKILL_AUDIT_ERROR_MESSAGE_MAX) + '...';
     }

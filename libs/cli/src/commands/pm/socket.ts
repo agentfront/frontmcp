@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'child_process';
+import * as fs from 'fs';
 import * as path from 'path';
 
 import { type ParsedArgs } from '../../core/args';
@@ -25,20 +26,19 @@ function resolveDbPath(opts: ParsedArgs): string | undefined {
   return path.resolve(opts.db);
 }
 
-function writePidFile(socketPath: string): string {
+/** Write `<socket>.pid` as a new file: a stale record or a link already there is removed, never written through. */
+export function writePidFile(socketPath: string): string {
   const pidPath = socketPath + '.pid';
-  const fs = require('fs');
-  fs.writeFileSync(pidPath, String(process.pid), 'utf-8');
+  fs.rmSync(pidPath, { force: true });
+  fs.writeFileSync(pidPath, String(process.pid), { encoding: 'utf-8', flag: 'wx', mode: 0o600 });
   return pidPath;
 }
 
-function cleanupPidFile(socketPath: string): void {
+/** Remove `<socket>.pid` when it is still this process's record. */
+export function cleanupPidFile(socketPath: string): void {
   const pidPath = socketPath + '.pid';
   try {
-    const fs = require('fs');
-    if (fs.existsSync(pidPath)) {
-      fs.unlinkSync(pidPath);
-    }
+    if (fs.readFileSync(pidPath, 'utf-8') === String(process.pid)) fs.unlinkSync(pidPath);
   } catch {
     // ignore
   }

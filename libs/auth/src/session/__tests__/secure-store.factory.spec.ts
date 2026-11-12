@@ -127,6 +127,39 @@ describe('createSecureStore', () => {
     }
   });
 
+  it('refuses a sqlite or redis backing without a pepper, before using its storage', async () => {
+    const adapter = new MemoryStorageAdapter();
+    await adapter.connect();
+    const set = jest.spyOn(adapter, 'set');
+
+    await expect(
+      createSecureStore({ config: { redis: { host: 'localhost', port: 6379 } }, storage: adapter }),
+    ).rejects.toThrow(
+      expect.objectContaining({
+        name: 'SecureStoreConfigError',
+        message: expect.stringContaining('the redis backing encrypts the secrets with a pepper, and none was given'),
+      }),
+    );
+    await expect(
+      createSecureStore({ config: { sqlite: { path: '/tmp/secrets.sqlite' } }, pepper: '  ', storage: adapter }),
+    ).rejects.toThrow('the sqlite backing encrypts the secrets with a pepper, and none was given');
+    expect(set).not.toHaveBeenCalled();
+    await adapter.disconnect();
+  });
+
+  it('encrypts the memory backing with a random pepper when none is given', async () => {
+    const adapter = new MemoryStorageAdapter();
+    await adapter.connect();
+    const writer = await createSecureStore({ config: 'memory', pepper: '', storage: adapter });
+    const reader = await createSecureStore({ config: 'memory', pepper: '', storage: adapter });
+
+    await writer.backend.set('u:ns', 'k', 'secret');
+
+    expect(await writer.backend.get('u:ns', 'k')).toBe('secret');
+    expect(await reader.backend.get('u:ns', 'k')).toBeNull();
+    await adapter.disconnect();
+  });
+
   it('explicit encryption.pepper isolates from the factory pepper', async () => {
     const adapter = new MemoryStorageAdapter();
     await adapter.connect();

@@ -22,7 +22,7 @@ import { writeJSON } from '@frontmcp/utils';
 import { getSelfVersion } from '../../../core/version';
 import type { FrontmcpExecConfig } from './config';
 import type { ExtractedSchema } from './cli-runtime/schema-extractor';
-import { stagedInstructionsName } from './skill-assets';
+import { stagedInstructionsName, stagedResourceDirName } from './skill-assets';
 
 export interface BinMeta {
   name: string;
@@ -69,7 +69,7 @@ export async function writeBinMeta(
       const resourceDirs: BinMeta['skills'][number]['resourceDirs'] = {};
       for (const kind of ['references', 'examples', 'scripts', 'assets'] as const) {
         if (asset.resourceDirs?.[kind]) {
-          resourceDirs[kind] = path.join('_skills', `${asset.skillName}--${kind}`);
+          resourceDirs[kind] = path.join('_skills', stagedResourceDirName(asset.skillName, kind));
         }
       }
       return {

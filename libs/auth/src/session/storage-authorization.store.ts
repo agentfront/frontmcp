@@ -12,14 +12,18 @@
  * minted records are byte-for-byte identical to the in-memory store's.
  */
 
-import { TypedStorage, type NamespacedStorage, type StorageAdapter } from '@frontmcp/utils';
+import { StorageNotSupportedError, TypedStorage, type NamespacedStorage, type StorageAdapter } from '@frontmcp/utils';
 
 import {
+  authorizationCodeRedeemedError,
   buildCodeRecord,
   buildPendingRecord,
   buildRefreshTokenRecord,
   generateAuthorizationCode,
   generateRefreshTokenValue,
+  isRedeemableCode,
+  isRotatableRefreshToken,
+  refreshTokenRedeemedError,
   type AuthorizationCodeRecord,
   type AuthorizationStore,
   type CreateCodeRecordParams,
@@ -45,12 +49,14 @@ export class StorageAuthorizationStore implements AuthorizationStore {
   private readonly refreshStore: TypedStorage<RefreshTokenRecord>;
   private readonly namespace: string;
   private readonly storageIsNamespaced: boolean;
+  private readonly base: StorageAdapter | NamespacedStorage;
 
   constructor(storage: StorageAdapter | NamespacedStorage, options: StorageAuthorizationStoreOptions = {}) {
     this.namespace = options.namespace ?? 'oauth';
     this.storageIsNamespaced = this.isNamespacedStorage(storage);
 
     const base = this.storageIsNamespaced ? (storage as NamespacedStorage).namespace(this.namespace) : storage;
+    this.base = base;
 
     this.codeStore = new TypedStorage<AuthorizationCodeRecord>(base);
     this.pendingStore = new TypedStorage<PendingAuthorizationRecord>(base);
@@ -100,6 +106,14 @@ export class StorageAuthorizationStore implements AuthorizationStore {
   }
 
   async markCodeUsed(code: string, issuedRefreshToken?: string): Promise<void> {
+    if (issuedRefreshToken === undefined) {
+      const claimed = await this.claim(this.codeStore, this.key('code', code), isRedeemableCode, (record) => ({
+        ...record,
+        used: true,
+      }));
+      if (!claimed) throw authorizationCodeRedeemedError();
+      return;
+    }
     const record = await this.getAuthorizationCode(code);
     if (record) {
       record.used = true;
@@ -160,7 +174,16 @@ export class StorageAuthorizationStore implements AuthorizationStore {
   }
 
   async rotateRefreshToken(oldToken: string, newRecord: RefreshTokenRecord): Promise<void> {
-    await this.revokeRefreshToken(oldToken);
+    const claimed = await this.claim(
+      this.refreshStore,
+      this.key('refresh', oldToken),
+      isRotatableRefreshToken,
+      (record) => ({
+        ...record,
+        revoked: true,
+      }),
+    );
+    if (!claimed) throw refreshTokenRedeemedError();
     newRecord.previousToken = oldToken;
     await this.storeRefreshToken(newRecord);
   }
@@ -177,6 +200,36 @@ export class StorageAuthorizationStore implements AuthorizationStore {
   // ============================================
   // Internals
   // ============================================
+
+  /**
+   * Replace the record under `key` with `update(record)` while `isLive(record)`. The compare-and-delete lets one
+   * request win: false when the record is missing or not live, or another request changed it first.
+   */
+  private async claim<T extends { expiresAt: number }>(
+    store: TypedStorage<T>,
+    key: string,
+    isLive: (record: T) => boolean,
+    update: (record: T) => T,
+  ): Promise<boolean> {
+    const raw = await this.base.get(key);
+    if (raw === null) return false;
+    const record = JSON.parse(raw) as T;
+    if (!isLive(record) || !(await this.deleteIfEquals(key, raw))) return false;
+    await store.set(key, update(record), this.ttl(record.expiresAt));
+    return true;
+  }
+
+  /** Delete `key` only while it holds `expectedValue`, on an adapter that can do that in one step. */
+  private deleteIfEquals(key: string, expectedValue: string): Promise<boolean> {
+    if (!this.base.deleteIfEquals) {
+      throw new StorageNotSupportedError(
+        'deleteIfEquals',
+        'this storage adapter',
+        'Use the memory, Redis, Upstash, Vercel KV or SQLite adapter, so an authorization code or refresh token is redeemed once.',
+      );
+    }
+    return this.base.deleteIfEquals(key, expectedValue);
+  }
 
   private ttl(expiresAtMs: number): { ttlSeconds: number } | undefined {
     const ttl = Math.ceil((expiresAtMs - Date.now()) / 1000);

@@ -4,7 +4,7 @@
 
 import { AdapterRegistry } from '../core/adapter-registry';
 import { createBridge, FrontMcpBridge, resetGlobalBridge } from '../core/bridge-factory';
-import type { AdapterCapabilities, DisplayMode, HostContext, PlatformAdapter } from '../types';
+import type { AdapterCapabilities, AdapterConfig, DisplayMode, HostContext, PlatformAdapter } from '../types';
 
 // Minimal mock adapter that doesn't need window
 class MockAdapter implements PlatformAdapter {
@@ -243,6 +243,51 @@ describe('FrontMcpBridge', () => {
       await bridge.initialize();
 
       expect(bridge.adapterId).toBe('fallback');
+    });
+  });
+
+  describe('trustedOrigins', () => {
+    function extAppsOrigins(): unknown {
+      const configs: (AdapterConfig | undefined)[] = [];
+      registry.register('ext-apps', (config) => {
+        configs.push(config);
+        return new MockAdapter();
+      });
+      registry.get('ext-apps');
+      return configs[0]?.options?.['trustedOrigins'];
+    }
+
+    it('limits the ext-apps adapter to the bridge trusted origins', () => {
+      new FrontMcpBridge({ trustedOrigins: ['https://host.example'] }, registry);
+
+      expect(extAppsOrigins()).toEqual(['https://host.example']);
+    });
+
+    it('lets the ext-apps adapter options narrow the bridge trusted origins but not widen them', () => {
+      new FrontMcpBridge(
+        {
+          trustedOrigins: ['https://host.example'],
+          adapterConfigs: {
+            'ext-apps': { options: { trustedOrigins: ['https://host.example', 'https://other.example'] } },
+          },
+        },
+        registry,
+      );
+
+      expect(extAppsOrigins()).toEqual(['https://host.example']);
+    });
+
+    it('refuses ext-apps adapter options that share no origin with the bridge trusted origins', () => {
+      expect(
+        () =>
+          new FrontMcpBridge(
+            {
+              trustedOrigins: ['https://host.example'],
+              adapterConfigs: { 'ext-apps': { options: { trustedOrigins: ['https://other.example'] } } },
+            },
+            registry,
+          ),
+      ).toThrow('have no origin in common');
     });
   });
 });

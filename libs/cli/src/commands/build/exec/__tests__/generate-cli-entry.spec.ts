@@ -106,8 +106,8 @@ describe('generateCliEntry', () => {
 
       expect(source).toContain('"search-users"');
       expect(source).toContain('"Search for users"');
-      expect(source).toContain("'--query <value>'");
-      expect(source).toContain("'--limit <number>'");
+      expect(source).toContain('"--query <value>"');
+      expect(source).toContain('"--limit <number>"');
       expect(source).toContain('callTool("search_users"');
     });
 
@@ -384,7 +384,7 @@ describe('generateCliEntry', () => {
       expect(source).toContain("'template'");
       expect(source).toContain('listResourceTemplates');
       expect(source).toContain('"user-profile"');
-      expect(source).toContain("'--user-id <value>'");
+      expect(source).toContain('"--user-id <value>"');
       expect(source).toContain('users://{userId}/profile');
     });
 
@@ -401,8 +401,8 @@ describe('generateCliEntry', () => {
         }),
       }));
 
-      expect(source).toContain("'--owner <value>'");
-      expect(source).toContain("'--repo <value>'");
+      expect(source).toContain('"--owner <value>"');
+      expect(source).toContain('"--repo <value>"');
     });
 
     it('keeps simple params required and expands them through the same helper', () => {
@@ -412,9 +412,9 @@ describe('generateCliEntry', () => {
         }),
       }));
 
-      expect(source).toContain(".requiredOption('--user-id <value>', 'Template parameter: userId')");
+      expect(source).toContain('.requiredOption("--user-id <value>", "Template parameter: userId")');
       expect(source).toContain('templateParams["userId"] = rawOpts["userId"];');
-      expect(source).not.toContain("'--+user-id");
+      expect(source).not.toContain('"--+user-id');
     });
 
     it('expands reserved-expansion params with their operator semantics, so "/" is not encoded', () => {
@@ -430,9 +430,9 @@ describe('generateCliEntry', () => {
         }),
       }));
 
-      expect(source).toContain(".option('--skill-path <value>', 'Template parameter: skillPath')");
-      expect(source).toContain(".option('--file-path <value>', 'Template parameter: filePath')");
-      expect(source).toContain(".addOption(new Option('--+skill-path <value>').hideHelp())");
+      expect(source).toContain('.option("--skill-path <value>", "Template parameter: skillPath")');
+      expect(source).toContain('.option("--file-path <value>", "Template parameter: filePath")');
+      expect(source).toContain('.addOption(new Option("--+skill-path <value>").hideHelp())');
       expect(source).toContain(
         'templateParams["skillPath"] = rawOpts["skillPath"] !== undefined ? rawOpts["skillPath"] : rawOpts["+skillPath"];',
       );
@@ -1033,8 +1033,8 @@ describe('generateCliEntry', () => {
       // Per-prompt subcommand keeps the original description but appends a
       // deprecation alias hint pointing to `prompt get <name>`.
       expect(source).toContain('Review code');
-      expect(source).toContain("'--code <value>'");
-      expect(source).toContain("'--language <value>'");
+      expect(source).toContain('"--code <value>"');
+      expect(source).toContain('"--language <value>"');
     });
 
     it('should include prompt list command', () => {
@@ -1370,8 +1370,8 @@ describe('generateCliEntry', () => {
       }));
 
       expect(source).toContain('"send-email"');
-      expect(source).toContain("'--to <value>'");
-      expect(source).toContain("'--subject <value>'");
+      expect(source).toContain('"--to <value>"');
+      expect(source).toContain('"--subject <value>"');
       expect(source).toContain('executeJob("send-email"');
     });
   });

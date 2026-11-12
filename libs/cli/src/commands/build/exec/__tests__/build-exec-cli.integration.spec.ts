@@ -687,6 +687,28 @@ describe('buildExec() integration', () => {
     });
   });
 
+  describe('intermediate folders of a nested entry', () => {
+    it('removes the folders tsc created and keeps the ones the output location already had', async () => {
+      fs.mkdirSync(path.join(outDir, 'assets'));
+      fs.writeFileSync(path.join(outDir, 'assets', 'logo.svg'), '<svg/>');
+      mockRunCmd.mockImplementation(async () => {
+        fs.mkdirSync(path.join(outDir, 'src'), { recursive: true });
+        fs.writeFileSync(path.join(outDir, 'src', 'main.js'), 'module.exports = {};');
+      });
+      const originalCwd = process.cwd();
+      process.chdir(tmpDir);
+
+      try {
+        await buildExec({ outDir, cli: false } as any);
+
+        expect(fs.existsSync(path.join(outDir, 'src'))).toBe(false);
+        expect(fs.readFileSync(path.join(outDir, 'assets', 'logo.svg'), 'utf-8')).toBe('<svg/>');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+  });
+
   describe('FileSource widgets (#649)', () => {
     it('ships widget sources flat into outDir, next to the bundle, after the intermediate cleanup', async () => {
       const { shipWidgetSources } = require('../../copy-widgets');

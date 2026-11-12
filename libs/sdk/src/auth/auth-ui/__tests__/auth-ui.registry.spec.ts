@@ -177,6 +177,20 @@ describe('AuthUiRegistry — accumulator + extra routing', () => {
     expect(reg.getAddedItems('pid')['envs:add']).toBeUndefined();
   });
 
+  it('keeps at most 100 items for one extra of one pending authorization', async () => {
+    const reg = new AuthUiRegistry();
+    reg.registerAuthExtrasMap({ 'envs:add': addEnvHandler });
+    for (let index = 0; index < 100; index++) {
+      expect((await reg.runExtra('envs:add', 'pid', { key: `KEY_${index}` })).ok).toBe(true);
+    }
+
+    const refused = await reg.runExtra('envs:add', 'pid', { key: 'ONE_MORE' });
+
+    expect(refused.ok).toBe(false);
+    expect(refused.error).toBe('This list holds at most 100 items.');
+    expect(reg.getAddedItems('pid')['envs:add']).toHaveLength(100);
+  });
+
   it('returns ok:false for an unknown extra', async () => {
     const reg = new AuthUiRegistry();
     reg.registerAuthExtrasMap({ 'envs:add': addEnvHandler });

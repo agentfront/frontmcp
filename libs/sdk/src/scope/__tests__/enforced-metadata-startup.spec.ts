@@ -183,6 +183,39 @@ describe('startup check for metadata that only a plugin enforces', () => {
     await expect(startup).rejects.toThrow(/Tool "queue_agent:purge_queue".*'approval'/);
   });
 
+  it("refuses to start when an agent's plugin declares the field but its hook does not reach the tool", async () => {
+    // The hook is the agent's own (`appliesTo` left out): it runs for the agent's tools, not for those
+    // another of its plugins contributes, so `purge_queue` would run without it.
+    @Agent({ name: 'own_queue_agent', inputSchema: {}, llm, plugins: [QueueToolsPlugin, OwnAppApprovalPlugin] })
+    class OwnQueueAgent extends AgentContext {}
+
+    const startup = start(server({ agents: [OwnQueueAgent] }));
+
+    await expect(startup).rejects.toBeInstanceOf(UnenforcedMetadataError);
+    await expect(startup).rejects.toThrow(/Tool "own_queue_agent:purge_queue".*'approval'/);
+  });
+
+  it("refuses to start when an agent's resource or prompt asks for a flag nothing on the agent enforces", async () => {
+    @Agent({ name: 'beta_agent', inputSchema: {}, llm, resources: [BetaFeedResource], prompts: [HiddenBetaPrompt] })
+    class BetaAgent extends AgentContext {}
+
+    const startup = start(server({ agents: [BetaAgent] }));
+
+    await expect(startup).rejects.toBeInstanceOf(UnenforcedMetadataError);
+    await expect(startup).rejects.toThrow(/Resource "beta_agent:beta-feed".*'featureFlag'/);
+    await expect(startup).rejects.toThrow(/Prompt "beta_agent:beta-brief".*'featureFlag'/);
+  });
+
+  it("refuses to start when a nested agent's tool asks for approval only the outer agent enforces", async () => {
+    @Agent({ name: 'outer_triage', inputSchema: {}, llm, agents: [TriageAgent], plugins: [AnyAppApprovalPlugin] })
+    class OuterTriageAgent extends AgentContext {}
+
+    const startup = start(server({ agents: [OuterTriageAgent] }));
+
+    await expect(startup).rejects.toBeInstanceOf(UnenforcedMetadataError);
+    await expect(startup).rejects.toThrow(/Tool "outer_triage:triage:close_ticket".*'approval'/);
+  });
+
   it('names every entry, the first five in the message', async () => {
     const tools = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((name) => tool(`tool_${name}`, APPROVAL));
 
@@ -220,6 +253,13 @@ describe('servers the check lets start', () => {
 
   it("starts when the agent's own plugin enforces the field of a tool another of its plugins contributes", async () => {
     await expect(start(server({ agents: [GuardedQueueAgent] }))).resolves.toBeUndefined();
+  });
+
+  it("starts when a nested agent's own plugin enforces its tools' field", async () => {
+    @Agent({ name: 'outer_guarded', inputSchema: {}, llm, agents: [GuardedTriageAgent] })
+    class OuterGuardedAgent extends AgentContext {}
+
+    await expect(start(server({ agents: [OuterGuardedAgent] }))).resolves.toBeUndefined();
   });
 
   it('starts when the field is off or absent', async () => {

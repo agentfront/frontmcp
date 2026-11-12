@@ -66,6 +66,13 @@ describe('forward-headers utils', () => {
       expect(forwards?.(`x-${'-'.repeat(252)}-id`)).toBe(false);
     });
 
+    it('tests a glob of many * against a long near-match in work bounded by name and glob lengths', () => {
+      const forward = createHeaderForwarder([`x-${'a*'.repeat(12)}b`]);
+
+      expect(forward?.(`x-${'a'.repeat(250)}`)).toBe(false);
+      expect(forward?.(`x-${'a'.repeat(20)}b`)).toBe(true);
+    });
+
     it('never forwards an x-forwarded-* header a narrower glob matches', () => {
       const forwards = createHeaderForwarder(['x-forwarded-po*']);
       expect(forwards?.('x-forwarded-port')).toBe(false);

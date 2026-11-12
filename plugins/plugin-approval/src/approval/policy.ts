@@ -47,7 +47,7 @@ export function isApprovalExpired(record: ApprovalRecord, requirement: ToolAppro
  */
 export function isApprovalUsable(record: ApprovalRecord, requirement: ToolApprovalRequirement, now: number): boolean {
   if (record.state !== ApprovalState.APPROVED) return false;
-  if (requirement.allowedScopes?.length && !requirement.allowedScopes.includes(record.scope)) return false;
+  if (requirement.allowedScopes && !requirement.allowedScopes.includes(record.scope)) return false;
   return !isApprovalExpired(record, requirement, now);
 }
 
@@ -73,7 +73,7 @@ export function checkGrantAgainstPolicy(
   assertValidTtl(ttlMs);
   if (!requirement) return ttlMs;
 
-  if (requirement.allowedScopes?.length && !requirement.allowedScopes.includes(scope)) {
+  if (requirement.allowedScopes && !requirement.allowedScopes.includes(scope)) {
     throw new ApprovalScopeNotAllowedError(scope, requirement.allowedScopes);
   }
 

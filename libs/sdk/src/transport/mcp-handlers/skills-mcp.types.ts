@@ -53,13 +53,16 @@ export type SkillsSearchResult = z.infer<typeof SkillsSearchResultSchema> & {
 // Skills Load Types
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** The most skill IDs one skills/load request may name. */
+export const MAX_SKILLS_PER_LOAD = 100;
+
 /**
  * Request schema for skills/load custom MCP method.
  */
 export const SkillsLoadRequestSchema = z.object({
   method: z.literal('skills/load'),
   params: z.object({
-    skillIds: z.array(z.string()).min(1).describe('Array of skill IDs to load'),
+    skillIds: z.array(z.string()).min(1).max(MAX_SKILLS_PER_LOAD).describe('Array of skill IDs to load'),
     format: z
       .enum(['full', 'markdown', 'instructions-only'])
       .optional()

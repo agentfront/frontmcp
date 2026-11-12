@@ -2,7 +2,7 @@
  * Storage Utilities
  */
 
-export { globToRegex, matchesPattern, validatePattern, escapeGlob } from './pattern';
+export { createGlobMatcher, globToRegex, matchesPattern, validatePattern, escapeGlob } from './pattern';
 export {
   MAX_TTL_SECONDS,
   validateTTL,

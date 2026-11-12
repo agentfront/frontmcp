@@ -67,6 +67,9 @@ interface PendingAuthUiState {
 /** Default TTL for the in-memory pending-ui state (mirrors pending-auth: 10m). */
 const PENDING_UI_TTL_MS = 10 * 60 * 1000;
 
+/** The most items one extra keeps for one pending authorization. */
+const MAX_ITEMS_PER_EXTRA = 100;
+
 /**
  * Registry of custom auth-UI slot files + extra handlers for a scope.
  */
@@ -318,6 +321,13 @@ export class AuthUiRegistry {
       return { ok: false, error: 'Validation failed. Please try again.' };
     }
     if (result.ok && pendingAuthId && Array.isArray(result.addedItems) && result.addedItems.length > 0) {
+      if (ctx.current.length + result.addedItems.length > MAX_ITEMS_PER_EXTRA) {
+        return {
+          ok: false,
+          error: `This list holds at most ${MAX_ITEMS_PER_EXTRA} items.`,
+          addedItems: this.getAddedItems(pendingAuthId),
+        };
+      }
       const addedItems = this.appendItems(pendingAuthId, name, result.addedItems);
       return { ok: true, sideEffects: result.sideEffects, addedItems };
     }

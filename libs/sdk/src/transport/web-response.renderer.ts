@@ -9,6 +9,7 @@
  * `consumed`) so the caller can fall through (e.g. to a 404).
  */
 import { serializeHttpCookie, type HttpCookie, type HttpOutput } from '../common/schemas/http-output.schema';
+import { serializeContentDisposition } from '../common/utils/content-disposition.utils';
 import { toLocationHeader } from '../utils/http-location.utils';
 
 const encoder = new TextEncoder();
@@ -104,16 +105,16 @@ export function renderHttpOutputToWebResponse(output: HttpOutput): Response | un
     case 'binary':
     case 'image': {
       const headers = buildHeaders(out, out.contentType);
-      headers.set(
-        'Content-Disposition',
-        out.filename ? `${out.disposition}; filename="${out.filename}"` : out.disposition,
-      );
+      headers.set('Content-Disposition', serializeContentDisposition(out.disposition, out.filename));
       return new Response(bytesFrom(out.body, out.encoding) as BodyInit, { status: out.status, headers });
     }
 
     case 'stream':
     case 'sse': {
       const headers = buildHeaders(out, out.contentType);
+      if (out.kind === 'stream') {
+        headers.set('Content-Disposition', serializeContentDisposition(out.disposition, out.filename));
+      }
       if (out.kind === 'sse' && !headers.has('Cache-Control')) headers.set('Cache-Control', 'no-cache');
       return new Response(toByteStream(out.stream), { status: out.status, headers });
     }

@@ -57,6 +57,18 @@ export class JobPermissionGuard {
     return true;
   }
 
+  /** Whether `list_jobs` / `list_workflows` show the entry to the caller: it passes its `list`, `create` and `execute` rules. */
+  static async maySee(
+    permissions: JobPermission[] | undefined,
+    authInfo: Partial<Record<string, unknown>> | undefined,
+    contextBuilder?: AuthoritiesContextBuilder,
+  ): Promise<boolean> {
+    for (const action of ['list', 'create', 'execute'] as const) {
+      if (!(await JobPermissionGuard.check(permissions, action, authInfo, contextBuilder))) return false;
+    }
+    return true;
+  }
+
   private static async checkSingle(
     perm: JobPermission,
     principal: ResolvedPrincipal,

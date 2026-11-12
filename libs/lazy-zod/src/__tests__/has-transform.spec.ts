@@ -15,6 +15,11 @@ describe('hasTransform', () => {
     ['a transform under optional and nullable', z.object({ a: z.string().transform(Number).optional().nullable() })],
     ['a transform in a record value', z.record(z.string(), z.string().transform(Number))],
     ['a transform behind z.lazy()', z.object({ next: z.lazy(() => z.string().transform(Number)) })],
+    ['a transform beside a field named _zod', z.object({ _zod: z.string(), at: z.string().transform(Number) })],
+    [
+      'a real zod transform beside a field named _zod',
+      realZ.object({ _zod: realZ.string(), at: realZ.string().transform(Number) }),
+    ],
     ['a real zod transform', realZ.object({ a: realZ.string() }).transform((value) => value.a)],
   ])('is true for %s', (_label, schema) => {
     expect(hasTransform(schema)).toBe(true);

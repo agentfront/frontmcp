@@ -329,6 +329,35 @@ describe('workers in createContainer(), over a store the processes share', () =>
     expect(again).toBeInstanceOf(FirstShared);
   });
 
+  it.each([
+    ['process', 'process'],
+    ['process', 'machine'],
+    ['machine', 'workspace'],
+  ] as const)(
+    'refuses a second worker class with the name of a %s worker of its server, as a %s worker',
+    async (firstScope, secondScope) => {
+      @Worker({ name: 'twin', scope: firstScope })
+      class FirstTwin {
+        run(context: WorkerRunContext): Promise<void> {
+          return untilAborted(this, context);
+        }
+      }
+      @Worker({ name: 'twin', scope: secondScope })
+      class SecondTwin {
+        run(context: WorkerRunContext): Promise<void> {
+          return untilAborted(this, context);
+        }
+      }
+
+      const conflict = container({ providers: [FirstTwin, SecondTwin], runBackground: true, info });
+
+      await expect(conflict).rejects.toBeInstanceOf(WorkerNameConflictError);
+      await expect(conflict).rejects.toThrow(
+        'Worker "twin" of server "worker-spec" is declared by two classes in this process (FirstTwin and SecondTwin)',
+      );
+    },
+  );
+
   it("runs the worker's own hooks: onBootstrap() once built, onReady() before run(), onShutdown() after it ended", async () => {
     const phases: string[] = [];
     @Worker({ name: 'hooked', scope: 'process' })
@@ -451,6 +480,24 @@ describe('workers in a server', () => {
     instance = undefined;
     expect(runs[0].signal.aborted).toBe(true);
     expect(ended).toHaveLength(1);
+  });
+
+  it('runs only the first of two process workers of a server that share a name, and reports the second', async () => {
+    @Worker({ name: 'flaky', scope: 'process' })
+    class SecondFlaky {
+      run(context: WorkerRunContext): Promise<void> {
+        return untilAborted(this, context);
+      }
+    }
+    @App({ name: 'Twins', providers: [FlakyWorker, SecondFlaky] })
+    class TwinsApp {}
+
+    const scope = await serve([TwinsApp]);
+    await instance?.emitProvidersReady();
+    const failures = await scope.providers.runReadyHooks(scope.logger);
+
+    expect(failures).toEqual([expect.any(WorkerNameConflictError)]);
+    expect(runs.map((run) => run.worker.constructor.name)).toEqual(['FlakyWorker']);
   });
 
   it('shows a running worker in /readyz as healthy, with its restarts and last error', async () => {

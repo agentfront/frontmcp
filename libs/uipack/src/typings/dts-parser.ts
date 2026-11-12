@@ -297,6 +297,7 @@ export function combineDtsContents(contents: Map<string, string>): string {
   for (const [url, content] of contents.entries()) {
     const lines = content.split('\n');
     let inReferences = true;
+    let markerAdded = false;
 
     for (const line of lines) {
       const trimmed = line.trim();
@@ -320,11 +321,9 @@ export function combineDtsContents(contents: Map<string, string>): string {
 
       // Add separator comment for each file
       if (declarations.length === 0 || declarations[declarations.length - 1] !== '') {
-        if (trimmed !== '') {
-          // Add file marker only for non-empty content
-          if (!declarations.some((d) => d.includes(`// Source: ${url}`))) {
-            declarations.push(`\n// Source: ${url}`);
-          }
+        if (trimmed !== '' && !markerAdded) {
+          declarations.push(`\n// Source: ${url}`);
+          markerAdded = true;
         }
       }
 

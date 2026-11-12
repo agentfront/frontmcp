@@ -7,7 +7,7 @@
 
 import 'reflect-metadata';
 
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -24,6 +24,22 @@ async function makeSkillDir(): Promise<string> {
 
 describe('SEP-2640 §Resource Mapping — no nested SKILL.md', () => {
   describe('findNestedSkillMd', () => {
+    it('walks a directory once, however many links lead to it', async () => {
+      const dir = await makeSkillDir();
+      await mkdir(join(dir, 'assets'));
+      await symlink(join(dir, 'assets'), join(dir, 'assets', 'again'), 'dir');
+
+      await expect(findNestedSkillMd(dir)).resolves.toEqual([]);
+    });
+
+    it('does not take the root SKILL.md, reached again through a link, for a nested one', async () => {
+      const dir = await makeSkillDir();
+      await mkdir(join(dir, 'assets'));
+      await symlink(dir, join(dir, 'assets', 'root'), 'dir');
+
+      await expect(findNestedSkillMd(dir)).resolves.toEqual([]);
+    });
+
     it('returns empty when only the root SKILL.md exists', async () => {
       const dir = await makeSkillDir();
       const nested = await findNestedSkillMd(dir);

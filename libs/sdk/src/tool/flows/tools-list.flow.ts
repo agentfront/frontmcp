@@ -324,7 +324,8 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
 
   /**
    * Filter tools by entry-level authorities (RBAC/ABAC/ReBAC).
-   * Removes tools the current user is not authorized to see, and a tool whose policy throws.
+   * Removes tools the current user is not authorized to see, a tool whose policy throws, and every tool
+   * with authorities while no engine is configured to check them.
    * Hookable: developers can use Will/Did/Around on 'filterByAuthorities'.
    */
   @Stage('filterByAuthorities')
@@ -332,11 +333,6 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     this.logger.verbose('filterByAuthorities:start');
     const engine = this.scope.authoritiesEngine;
     const ctxBuilder = this.scope.authoritiesContextBuilder;
-    if (!engine || !ctxBuilder) {
-      this.logger.verbose('filterByAuthorities:skip (no engine configured)');
-      return;
-    }
-
     const tools = this.state.required.tools;
     const authInfo = (this.state.authInfo ?? {}) as Record<string, unknown>;
 
@@ -345,6 +341,7 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
         const metadata = item.tool.metadata as unknown as Record<string, unknown>;
         const authorities = metadata['authorities'];
         if (!authorities) return item;
+        if (!engine || !ctxBuilder) return null;
 
         const listed = await isListedByAuthorities(
           engine,

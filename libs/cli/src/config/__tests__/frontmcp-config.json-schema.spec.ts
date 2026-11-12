@@ -81,4 +81,9 @@ describe('libs/cli/frontmcp.schema.json', () => {
     expect(mcpb.properties?.['includeNodeModules']?.['description']).toContain('native addons');
     expect(committed.properties?.['setup']?.properties?.['steps']).toBeDefined();
   });
+
+  it('says transport.http.host is the host clients connect to, not the address the server listens on', () => {
+    const host = committed.properties?.['transport']?.properties?.['http']?.properties?.['host'];
+    expect(host?.['description']).toContain('Not the address the server listens on');
+  });
 });

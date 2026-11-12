@@ -50,6 +50,9 @@ export default class UpdateJobTool extends ToolContext {
       return this.fail(new JobNotAuthorizedError(input.name));
     }
     if (!job.isDynamic()) {
+      if (!(await JobPermissionGuard.maySee(job.metadata.permissions, this.authInfo, builder))) {
+        return this.fail(new JobNotAuthorizedError(input.name));
+      }
       return this.fail(new InvalidInputError(`Job "${input.name}" is declared in code and cannot be updated`));
     }
 

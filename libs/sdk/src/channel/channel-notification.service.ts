@@ -6,7 +6,7 @@ import {
   isChannelCapableSession,
   type NotificationService,
 } from '../notification/notification.service';
-import { CHANNEL_NOTIFICATION_METHOD, channelMetaOf } from './channel.utils';
+import { CHANNEL_NOTIFICATION_METHOD, channelMetaOf, channelMetaValuesOf } from './channel.utils';
 
 /**
  * Metadata accompanying a channel notification.
@@ -24,11 +24,17 @@ export interface ChannelNotificationMeta {
 /** Receives the channel notifications a session-less stream listens to. */
 export type ChannelStreamListener = (content: string, meta: ChannelNotificationMeta) => void;
 
+/** A notification as it is sent: every `meta` value a string, `source` the channel's name. */
+export interface SentChannelNotification {
+  content: string;
+  meta: ChannelNotificationMeta;
+}
+
 /** What the `channels:send-notification` flow takes. */
 export interface ChannelSendInput {
   channelName: string;
   content: string;
-  meta?: Record<string, string>;
+  meta?: Record<string, unknown>;
   /** Deliver to this session only. */
   targetSessionId?: string;
 }
@@ -96,15 +102,19 @@ export class ChannelNotificationService {
       return;
     }
 
-    for (const sessionId of subscribers) {
-      const registered = this.notificationService.getRegisteredServer(sessionId);
-      if (registered && isChannelCapableSession(registered) && !hasExpiredCaller(registered)) {
-        this.notificationService.sendCustomNotification(
-          CHANNEL_NOTIFICATION_METHOD,
-          { content, meta: safeMeta },
-          (session) => session.sessionId === sessionId,
-        );
-      }
+    // One pass over the registered sessions for all recipients, not one per subscriber
+    const recipients = new Set(
+      subscribers.filter((sessionId) => {
+        const registered = this.notificationService.getRegisteredServer(sessionId);
+        return registered !== undefined && isChannelCapableSession(registered) && !hasExpiredCaller(registered);
+      }),
+    );
+    if (recipients.size > 0) {
+      this.notificationService.sendCustomNotification(
+        CHANNEL_NOTIFICATION_METHOD,
+        { content, meta: safeMeta },
+        (session) => recipients.has(session.sessionId),
+      );
     }
 
     this.logger.verbose(`Sent channel "${channelName}" notification to ${subscribers.length} subscriber(s)`);
@@ -196,12 +206,13 @@ export class ChannelNotificationService {
    *
    * @param channelName - The channel name (becomes the `source` attribute)
    * @param content - The notification content
-   * @param additionalMeta - Additional metadata to include
+   * @param additionalMeta - Additional metadata to include; a value that is not a string is sent as one
    */
-  async send(channelName: string, content: string, additionalMeta?: Record<string, string>): Promise<void> {
+  async send(channelName: string, content: string, additionalMeta?: Record<string, unknown>): Promise<void> {
     if (!this.sendThroughFlow) {
       // Not wired to a scope (constructed on its own): deliver right away.
-      this.sendToSubscribedSessions(content, { ...this.serverMeta, ...(additionalMeta ?? {}), source: channelName });
+      const ownMeta = channelMetaValuesOf(additionalMeta ?? {});
+      this.sendToSubscribedSessions(content, { ...this.serverMeta, ...ownMeta, source: channelName });
       return;
     }
     try {

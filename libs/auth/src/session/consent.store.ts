@@ -68,10 +68,13 @@ export interface ConsentStore {
  * Build the storage key for a remembered consent record.
  *
  * Shared by both store implementations so the in-memory and adapter-backed
- * variants can never drift on key shape.
+ * variants can never drift on key shape. `%` and `:` in the subject are escaped,
+ * so the first `:` after it always ends the subject and two (user, client) pairs
+ * never share a key; a subject without them keeps the key it had before.
  */
 export function consentRecordKey(userSub: string, clientId: string): string {
-  return `consent:${userSub}:${clientId}`;
+  const escapedSub = userSub.replace(/%/g, '%25').replace(/:/g, '%3A');
+  return `consent:${escapedSub}:${clientId}`;
 }
 
 /**

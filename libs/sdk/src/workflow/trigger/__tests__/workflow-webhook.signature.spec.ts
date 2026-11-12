@@ -133,17 +133,17 @@ describe('WorkflowWebhookReplayGuard', () => {
   it('forgets a signature once its timestamp leaves the tolerance', () => {
     const guard = new WorkflowWebhookReplayGuard();
 
-    expect(guard.claim('a', NOW, NOW)).toBe(true);
-    expect(guard.claim('a', NOW, NOW + WORKFLOW_WEBHOOK_TOLERANCE_SECONDS)).toBe(false);
-    expect(guard.claim('a', NOW, NOW + WORKFLOW_WEBHOOK_TOLERANCE_SECONDS + 1)).toBe(true);
+    expect(guard.claim('a', NOW, NOW)).toBeUndefined();
+    expect(guard.claim('a', NOW, NOW + WORKFLOW_WEBHOOK_TOLERANCE_SECONDS)).toBe('replayed');
+    expect(guard.claim('a', NOW, NOW + WORKFLOW_WEBHOOK_TOLERANCE_SECONDS + 1)).toBeUndefined();
   });
 
-  it('remembers at most 10000 signatures, forgetting the oldest first', () => {
+  it('remembers at most 10000 signatures, refusing new ones rather than forgetting one before it expires', () => {
     const guard = new WorkflowWebhookReplayGuard();
     for (let index = 0; index < 10_000; index++) guard.claim(`signature-${index}`, NOW, NOW);
 
-    expect(guard.claim('signature-10000', NOW, NOW)).toBe(true);
-    expect(guard.claim('signature-1', NOW, NOW)).toBe(false);
-    expect(guard.claim('signature-0', NOW, NOW)).toBe(true);
+    expect(guard.claim('signature-10000', NOW, NOW)).toBe('too many');
+    expect(guard.claim('signature-0', NOW, NOW)).toBe('replayed');
+    expect(guard.claim('signature-10000', NOW, NOW + WORKFLOW_WEBHOOK_TOLERANCE_SECONDS + 1)).toBeUndefined();
   });
 });

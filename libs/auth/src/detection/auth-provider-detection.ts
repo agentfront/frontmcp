@@ -129,6 +129,16 @@ export function detectAuthProviders(
 
     const providerId = deriveProviderId(app.auth);
     const existing = providers.get(providerId);
+    const providerUrl = getProviderUrl(app.auth);
+
+    if (existing && providerUrl && existing.providerUrl && !sameIssuer(providerUrl, existing.providerUrl)) {
+      const owner = existing.isParentProvider ? 'the server' : `app "${existing.appIds[0]}"`;
+      validationErrors.push(
+        `App "${app.id}" names the identity provider ${providerUrl} and ${owner} names ${existing.providerUrl}, ` +
+          `but both get the provider id "${providerId}", so a token from one would be accepted for the other. ` +
+          `Set a distinct providerConfig.id on each.`,
+      );
+    }
 
     if (existing) {
       existing.appIds.push(app.id);
@@ -213,6 +223,18 @@ function staticParentEnforces(parentAuth: AuthOptions | undefined, appAuth: Auth
   const sameChallenge =
     parent.data.header.toLowerCase() === app.data.header.toLowerCase() && parent.data.scheme === app.data.scheme;
   return sameChallenge && parent.data.tokens.every((token) => app.data.tokens.includes(token));
+}
+
+/** Whether two provider URLs name the same issuer: equal once parsed, ignoring trailing slashes. */
+function sameIssuer(first: string, second: string): boolean {
+  return issuerIdentity(first) === issuerIdentity(second);
+}
+
+/** A provider URL as an issuer identity: parsed when it parses, without trailing slashes. */
+function issuerIdentity(url: string): string {
+  let identity = URL.canParse(url) ? new URL(url).href : url;
+  while (identity.endsWith('/')) identity = identity.slice(0, -1);
+  return identity;
 }
 
 function getProviderUrl(options: AuthOptions): string | undefined {

@@ -212,10 +212,6 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
     this.logger.verbose('filterByAuthorities:start');
     const engine = this.scope.authoritiesEngine;
     const ctxBuilder = this.scope.authoritiesContextBuilder;
-    // Safe to skip: validateAuthoritiesConfig() at startup ensures that if any entry
-    // declares authorities, the engine is configured. This path only runs when no
-    // entries have authorities metadata (so nothing needs filtering).
-    if (!engine || !ctxBuilder) return;
 
     const templates = this.state.required.templates;
     const ctx = (this.rawInput as Record<string, unknown>)['ctx'] as Record<string, unknown> | undefined;
@@ -226,6 +222,8 @@ export default class ResourceTemplatesListFlow extends FlowBase<typeof name> {
         const metadata = item.template.metadata as unknown as Record<string, unknown>;
         const authorities = metadata['authorities'];
         if (!authorities) return item;
+        // An entry published after the startup check can declare authorities no engine checks
+        if (!engine || !ctxBuilder) return null;
 
         const listed = await isListedByAuthorities(
           engine,

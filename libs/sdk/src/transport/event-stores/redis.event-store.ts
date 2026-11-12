@@ -1,7 +1,9 @@
 import { type EventId, type EventStore, type JSONRPCMessage, type StreamId } from '@frontmcp/protocol';
 import { attachRedisErrorListener } from '@frontmcp/utils';
 
-import { type RedisOptionsInput } from '../../common';
+import { isVercelKvProvider, type RedisOptionsInput } from '../../common';
+import { normalizeRedisOptions } from '../../common/types/options/redis/schema';
+import { InternalMcpError } from '../../errors/mcp.error';
 import { VercelKvNotSupportedError } from '../../errors/sdk.errors';
 
 export interface RedisEventStoreOptions {
@@ -76,13 +78,16 @@ export class RedisEventStore implements EventStore {
     expire: (key: string, seconds: number) => Promise<number>;
   }> {
     if (!this.client) {
-      const redis = this.redisOptions;
-
-      // Check provider type - cast to unknown first to allow comparison with any string
-      const provider = 'provider' in redis ? (redis.provider as unknown as string) : undefined;
-      if (provider === 'vercel-kv' || provider === '@vercel/kv') {
+      // A `url` is read as the server's own config reads it, rather than dropped for localhost
+      const redis = normalizeRedisOptions(this.redisOptions);
+      if (typeof redis === 'string') {
+        throw new InternalMcpError(
+          `The event store's redis option cannot be used: ${redis}. Give a Redis url, or a host.`,
+          'INVALID_REDIS_CONFIG',
+        );
+      }
+      if (isVercelKvProvider(redis)) {
         // Vercel KV doesn't support Redis Streams (XADD/XRANGE)
-        // Fall back to a simple key-value based approach
         throw new VercelKvNotSupportedError(
           'Redis Streams (required for EventStore). Use standard Redis provider instead',
         );
@@ -91,20 +96,14 @@ export class RedisEventStore implements EventStore {
       // Use ioredis for 'redis' provider
 
       const Redis = require('ioredis');
-
-      // Extract connection config
-      const host = 'host' in redis && typeof redis.host === 'string' ? redis.host : 'localhost';
-      const port = 'port' in redis && typeof redis.port === 'number' ? redis.port : 6379;
-      const password = 'password' in redis && typeof redis.password === 'string' ? redis.password : undefined;
-      const db = 'db' in redis && typeof redis.db === 'number' ? redis.db : 0;
-      const tls = 'tls' in redis && redis.tls === true ? {} : undefined;
+      const { host, port, password, db, tls } = redis;
 
       this.client = new Redis({
         host,
         port,
         password,
         db,
-        tls,
+        tls: tls ? {} : undefined,
         lazyConnect: true,
         enableReadyCheck: false,
         maxRetriesPerRequest: 3,

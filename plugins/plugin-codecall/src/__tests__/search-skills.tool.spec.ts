@@ -94,6 +94,32 @@ describe('SearchSkillsTool', () => {
     tool.scope = { skills: mockRegistry };
   });
 
+  describe('authorities', () => {
+    it("leaves out a skill its authorities withhold, judging the caller's extra.user as its user", async () => {
+      mockRegistry.getExecutableSkills.mockReturnValue([
+        { ...entry('refund', true), metadata: { authorities: { role: 'billing' } } },
+        { ...entry('audit', true), metadata: { authorities: { role: 'auditor' } } },
+      ]);
+      mockRegistry.search.mockResolvedValueOnce([
+        { metadata: describeExecutable(), score: 0.85, availableTools: [], missingTools: [], source: 'local' as const },
+      ]);
+      Object.assign(tool, { authInfo: { extra: { user: { roles: ['auditor'] } } } });
+      Object.assign(tool.scope, {
+        authoritiesEngine: {
+          evaluate: async (authorities: { role: string }, context: { user?: { roles?: string[] } }) => ({
+            granted: context.user?.roles?.includes(authorities.role) === true,
+          }),
+        },
+        authoritiesContextBuilder: { build: (authInfo: unknown) => authInfo },
+      });
+
+      const result = await tool.execute({ queries: ['refund an order'], topK: 5, minRelevanceScore: 0.1 });
+
+      expect(result.skills).toEqual([]);
+      expect(result.totalExecutableSkills).toBe(1);
+    });
+  });
+
   describe('happy path', () => {
     it('returns ranked executable skills with inlined operations', async () => {
       mockRegistry.getExecutableSkills.mockReturnValue([entry('refund', true), entry('audit', true)]);

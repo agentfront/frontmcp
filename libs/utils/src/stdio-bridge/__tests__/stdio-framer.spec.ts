@@ -1,6 +1,7 @@
 import { PassThrough } from 'node:stream';
 
 import { createStdioFramer, type JsonRpcFrame } from '../stdio-framer';
+import { countNewlineSearch } from './helpers/newline-search';
 
 function makeLog() {
   const lines: Array<{ level: string; message: string; data?: Record<string, unknown> }> = [];
@@ -40,6 +41,27 @@ describe('stdio-framer (issue #399)', () => {
 
     expect(frames).toHaveLength(1);
     expect(frames[0]).toMatchObject({ id: 1, method: 'ping' });
+  });
+
+  it('looks through each character of a frame once for its newline, however it is split', () => {
+    const input = new PassThrough();
+    const { logger } = makeLog();
+    const frames: JsonRpcFrame[] = [];
+    const framer = createStdioFramer({
+      input,
+      output: new PassThrough(),
+      log: logger,
+      onFrame: (f) => void frames.push(f),
+    });
+    framer.start();
+    const frame = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping', params: { pad: 'x'.repeat(2000) } }) + '\n';
+
+    const search = countNewlineSearch('{"jsonrpc"');
+    for (const character of frame) input.emit('data', character);
+    search.stop();
+
+    expect(frames).toHaveLength(1);
+    expect(search.characters()).toBeLessThan(frame.length * 2);
   });
 
   it('reassembles frames split across chunks', async () => {

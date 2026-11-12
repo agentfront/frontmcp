@@ -64,7 +64,7 @@ async function wireServer(
   sessionIdGenerator: (() => string) | undefined,
   enableJsonResponse: boolean,
 ): Promise<WebStandardMcpPair> {
-  const { createMcpHandlers } = await import('./mcp-handlers/index.js');
+  const { createMcpHandlers, registerMcpHandler } = await import('./mcp-handlers/index.js');
 
   const mcpServer = createMcpServer(scope.metadata.info, serverOptions);
   const composeInstructions = (caller?: { authInfo?: unknown }, clientName?: string) =>
@@ -78,7 +78,7 @@ async function wireServer(
       const enrichedCtx = { ...ctx, authInfo: { ...existingAuthInfo, sessionId } };
       return originalHandler(req as never, enrichedCtx as never);
     };
-    mcpServer.setRequestHandler(handler.requestSchema, wrappedHandler as never);
+    registerMcpHandler(mcpServer, handler.requestSchema, wrappedHandler);
   }
 
   const transport = new WebStandardStreamableHTTPServerTransport({

@@ -52,6 +52,8 @@ export interface StdioFramer {
 export function createStdioFramer(options: StdioFramerOptions): StdioFramer {
   const { input, output, log, onFrame, onClose } = options;
   let buffer = '';
+  // How much of `buffer` holds no newline, so a chunk is searched once rather than with every chunk after it
+  let searchedUpTo = 0;
   // True while `output.write` is signalling backpressure. Read by `onData`
   // to pause the inbound stream so we don't keep buffering frames when the
   // outbound side can't keep up.
@@ -60,9 +62,10 @@ export function createStdioFramer(options: StdioFramerOptions): StdioFramer {
 
   function flushBuffer(): void {
     let nl: number;
-    while ((nl = buffer.indexOf('\n')) >= 0) {
+    while ((nl = buffer.indexOf('\n', searchedUpTo)) >= 0) {
       const raw = buffer.slice(0, nl).replace(/\r$/, '');
       buffer = buffer.slice(nl + 1);
+      searchedUpTo = 0;
       if (raw.length === 0) continue;
       let parsed: unknown;
       try {
@@ -95,6 +98,7 @@ export function createStdioFramer(options: StdioFramerOptions): StdioFramer {
         });
       });
     }
+    searchedUpTo = buffer.length;
   }
 
   let closed = false;

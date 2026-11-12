@@ -65,6 +65,16 @@ describe('ui-shell generator', () => {
     expect(barrel).toContain("from './admin-dashboard'");
   });
 
+  it.each(["admin's-dashboard", '../../libs/core/src/shell', 'admin/dashboard', 'admin.dashboard', ''])(
+    'rejects the shell name %j before writing any file',
+    async (name) => {
+      const changesBefore = tree.listChanges().length;
+      await expect(uiShellGenerator(tree, { name, skipFormat: true })).rejects.toThrow('must start with a letter');
+      expect(tree.listChanges()).toHaveLength(changesBefore);
+      expect(tree.read('ui/shells/src/index.ts', 'utf-8')).toBe('');
+    },
+  );
+
   it('should handle PascalCase input by converting to kebab-case', async () => {
     await uiShellGenerator(tree, { name: 'MyDashboard', skipFormat: true });
 

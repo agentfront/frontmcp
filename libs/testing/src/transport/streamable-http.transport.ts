@@ -16,6 +16,7 @@ import {
   revisionHeaders,
   withRequestMeta,
 } from './mcp-20260728';
+import { SseEventSplitter } from './sse-event-splitter';
 import type {
   JsonRpcRequest,
   JsonRpcResponse,
@@ -630,12 +631,10 @@ export class StreamableHttpTransport implements McpTransport {
     onEvent: (event: { type: string; data: string; id?: string }) => Promise<unknown>,
   ): Promise<void> {
     const decoder = new TextDecoder();
-    let buffer = '';
+    const splitter = new SseEventSplitter();
     try {
       for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-        const { completeEvents, remainder } = splitSSEEvents(buffer + decoder.decode(chunk.value, { stream: true }));
-        buffer = remainder;
-        for (const eventText of completeEvents) {
+        for (const eventText of splitter.push(decoder.decode(chunk.value, { stream: true }))) {
           for (const event of this.parseSSEEvents(eventText, undefined).events) {
             await onEvent(event);
           }
@@ -678,7 +677,7 @@ export class StreamableHttpTransport implements McpTransport {
     }
 
     const decoder = new TextDecoder();
-    let buffer = '';
+    const splitter = new SseEventSplitter();
     let finalResponse: JsonRpcResponse | null = null;
     let sseSessionId: string | undefined;
 
@@ -692,8 +691,9 @@ export class StreamableHttpTransport implements McpTransport {
 
         if (done) {
           // Process any remaining buffer
-          if (buffer.trim()) {
-            const parsed = this.parseSSEEvents(buffer, originalRequest.id);
+          const remainder = splitter.remainder();
+          if (remainder.trim()) {
+            const parsed = this.parseSSEEvents(remainder, originalRequest.id);
             for (const event of parsed.events) {
               const handled = await this.handleSSEEvent(event);
               if (handled.isFinal) {
@@ -707,17 +707,7 @@ export class StreamableHttpTransport implements McpTransport {
           break;
         }
 
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process complete SSE events from buffer
-        const eventEndPattern = /\n\n/g;
-        let lastEventEnd = 0;
-        let match;
-
-        while ((match = eventEndPattern.exec(buffer)) !== null) {
-          const eventText = buffer.slice(lastEventEnd, match.index);
-          lastEventEnd = match.index + 2; // Skip the \n\n
-
+        for (const eventText of splitter.push(decoder.decode(value, { stream: true }))) {
           if (eventText.trim()) {
             const parsed = this.parseSSEEvents(eventText, originalRequest.id);
             for (const event of parsed.events) {
@@ -731,9 +721,6 @@ export class StreamableHttpTransport implements McpTransport {
             }
           }
         }
-
-        // Keep unprocessed data in buffer
-        buffer = buffer.slice(lastEventEnd);
       }
     } finally {
       reader.releaseLock();
@@ -1081,13 +1068,4 @@ function parsedJsonRpc(data: string): Record<string, unknown> | undefined {
 
 function isAuthStatus(status: number): boolean {
   return status === 401 || status === 403;
-}
-
-/** Splits complete SSE events off the buffer, accepting CRLF, CR and LF line endings, even split across chunks. */
-function splitSSEEvents(buffer: string): { completeEvents: string[]; remainder: string } {
-  const endsWithCarriageReturn = buffer.endsWith('\r');
-  const normalized = (endsWithCarriageReturn ? buffer.slice(0, -1) : buffer).replace(/\r\n?/g, '\n');
-  const completeEvents = normalized.split('\n\n');
-  const remainder = completeEvents.pop() ?? '';
-  return { completeEvents, remainder: endsWithCarriageReturn ? `${remainder}\r` : remainder };
 }

@@ -156,4 +156,13 @@ describe('resolveTaskPrincipal', () => {
   it('falls back to anonymous with no auth at all', () => {
     expect(resolveTaskPrincipal(undefined)).toBe('anonymous');
   });
+
+  it('keeps the tasks of two issuers apart when their subjects are equal', () => {
+    const first = resolveTaskPrincipal({ clientId: 'user-9', user: { iss: 'https://a.example', sub: 'user-9' } });
+    const second = resolveTaskPrincipal({ clientId: 'user-9', user: { iss: 'https://b.example', sub: 'user-9' } });
+
+    expect(first).toBe('aHR0cHM6Ly9hLmV4YW1wbGU:user-9');
+    expect(second).not.toBe(first);
+    expect(resolveTaskOwner(second)).not.toEqual(resolveTaskOwner(first));
+  });
 });

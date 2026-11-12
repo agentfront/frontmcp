@@ -40,6 +40,12 @@ export default class RemoveWorkflowTool extends ToolContext {
     }
 
     if (!workflow.isDynamic()) {
+      const visible = await JobPermissionGuard.maySee(
+        workflow.metadata.permissions,
+        this.authInfo,
+        this.scope.authoritiesContextBuilder,
+      );
+      if (!visible) return this.fail(new JobNotAuthorizedError(input.name));
       return this.fail(new Error(`Workflow "${input.name}" is not dynamic and cannot be removed`));
     }
 

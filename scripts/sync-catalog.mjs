@@ -140,13 +140,15 @@ for (const { skill, reference, file, fullPath } of exampleFiles) {
 
   const oldDesc = typeof frontmatter.description === 'string' ? frontmatter.description : '';
   const oldFeatures = Array.isArray(frontmatter.features) ? frontmatter.features : [];
+  const featuresMatch =
+    oldFeatures.length === bullets.length && oldFeatures.every((feature, index) => feature === bullets[index]);
 
   let changed = false;
   if (firstPara && oldDesc !== firstPara) {
     frontmatter.description = firstPara;
     changed = true;
   }
-  if (bullets.length > 0 && JSON.stringify(oldFeatures) !== JSON.stringify(bullets)) {
+  if (bullets.length > 0 && !featuresMatch) {
     frontmatter.features = bullets;
     changed = true;
   }
