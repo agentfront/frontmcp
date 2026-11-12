@@ -921,6 +921,26 @@ describe('TypeFetcher Allowlist', () => {
       expect(result.errors[0].message).toContain('not in the allowlist');
     });
 
+    it('refuses an allowed package whose subpath or version would name another package in the URL', async () => {
+      const mockFetch = jest.fn();
+      const fetcher = new TypeFetcher({ fetch: mockFetch }, new MemoryTypeCache());
+
+      const result = await fetcher.fetchBatch({
+        imports: [
+          'import a from "react/../../other-package"',
+          'import b from "@frontmcp/../other-package"',
+          'import c from "zod/%2e%2e/other-package"',
+          'import d from "zod/..\\other-package"',
+          'import e from "react-dom"',
+        ],
+        versionOverrides: { 'react-dom': '18.2.0/../../other-package' },
+      });
+
+      expect(result.errors).toHaveLength(5);
+      expect(result.errors.every((error) => error.code === 'INVALID_SPECIFIER')).toBe(true);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it('should allow packages in default allowlist (with mocked fetch)', async () => {
       const cache = new MemoryTypeCache({ maxSize: 100 });
 
