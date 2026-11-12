@@ -1080,7 +1080,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
    *  - all declared providers are `required: false`, or
    *  - NO credential accessor is configured in the running scope (public mode,
    *    no auth, vault disabled), or
-   *  - the call is trusted internal dispatch / a background task re-dispatch.
+   *  - the call is trusted internal dispatch.
+   * A task-augmented call is answered before this stage runs, so the task's background run is gated instead.
    *
    * Hookable: developers may use Will/Did/Around on 'checkToolCredentials'.
    */
@@ -1089,12 +1090,11 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     this.logger.verbose('checkToolCredentials:start');
     const { tool } = this.state.required;
 
-    // Trusted internal dispatch (tool/agent invoking another tool, or the task
-    // re-dispatch) is exempt — the entry tool already passed its own gate and
-    // inner composition is an implementation detail. Mirrors the consent/
+    // Trusted internal dispatch (tool/agent invoking another tool) is exempt — the entry tool already
+    // passed its own gate and inner composition is an implementation detail. Mirrors the consent/
     // internal-visibility bypass in findTool/checkToolAuthorization.
-    const ctxObj = this.input.ctx as { internalCall?: boolean; taskId?: string } | undefined;
-    if (ctxObj?.internalCall || ctxObj?.taskId) {
+    const ctxObj = this.input.ctx as { internalCall?: boolean } | undefined;
+    if (ctxObj?.internalCall) {
       this.logger.verbose('checkToolCredentials:skip (internal call)');
       return;
     }

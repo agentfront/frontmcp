@@ -249,14 +249,14 @@ describe('call-tool credential gate (checkToolCredentials)', () => {
     await expect(flow.checkToolCredentials()).resolves.toBeUndefined();
   });
 
-  it('bypasses the gate for the background task re-dispatch (ctx.taskId set)', async () => {
+  it("gates the background run of a task, which the call that created the task never reached the gate for", async () => {
     const flow = makeFlow({
       tool: { ...TOOL_BASE, metadata: { name: 'deploy', authProviders: ['github'] } },
       accessors: withAuthProviders({}),
       ctx: { taskId: 'task_123' },
     });
 
-    await expect(flow.checkToolCredentials()).resolves.toBeUndefined();
+    await expect(flow.checkToolCredentials()).rejects.toBeInstanceOf(ToolCredentialsRequiredError);
   });
 
   it('keeps the connect URL out of the message, which names the provider to connect', async () => {
