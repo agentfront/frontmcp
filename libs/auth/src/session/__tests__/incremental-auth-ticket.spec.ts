@@ -27,6 +27,14 @@ describe('signIncrementalAuthTicket / verifyIncrementalAuthTicket', () => {
     expect(typeof payload?.jti).toBe('string');
   });
 
+  it('carries the endpoint it was minted for, and omits it when none is given', () => {
+    const bound = signIncrementalAuthTicket({ sub: 'u', appId: 'B', audience: 'https://mcp.example.com' }, SECRET);
+    const unbound = signIncrementalAuthTicket({ sub: 'u', appId: 'B' }, SECRET);
+
+    expect(verifyIncrementalAuthTicket(bound, SECRET)?.aud).toBe('https://mcp.example.com');
+    expect(verifyIncrementalAuthTicket(unbound, SECRET)).not.toHaveProperty('aud');
+  });
+
   it('carries prior app ids forward', () => {
     const token = signIncrementalAuthTicket({ sub: 'u', appId: 'B', priorAppIds: ['A'] }, SECRET);
     expect(verifyIncrementalAuthTicket(token, SECRET)?.priorAppIds).toEqual(['A']);
@@ -101,6 +109,9 @@ describe('signIncrementalAuthTicket / verifyIncrementalAuthTicket', () => {
         encode({ sub: 'u', appId: 'B', jti: 'j', exp: Date.now() + 1000, profile: 1 }),
         SECRET,
       ),
+    ).toBeNull();
+    expect(
+      verifyIncrementalAuthTicket(encode({ sub: 'u', appId: 'B', jti: 'j', exp: Date.now() + 1000, aud: 1 }), SECRET),
     ).toBeNull();
   });
 });

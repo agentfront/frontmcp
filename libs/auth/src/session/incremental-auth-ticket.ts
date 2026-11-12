@@ -38,6 +38,8 @@ export interface IncrementalAuthTicketPayload {
   priorAppIds?: string[];
   /** The subject's email and name, sealed because the ticket travels in URLs and logs. */
   profile?: string;
+  /** The server and endpoint the ticket was minted for; the authorize flow refuses it anywhere else. */
+  aud?: string;
   /** Unique ticket id, used to enforce single use. */
   jti: string;
   /** Absolute expiry, epoch milliseconds. */
@@ -70,6 +72,8 @@ export function signIncrementalAuthTicket(
     priorAppIds?: string[];
     email?: string;
     name?: string;
+    /** The server and endpoint the ticket is for, so it is refused at another one sharing the secret. */
+    audience?: string;
     ttlMs?: number;
   },
   secret: string,
@@ -90,6 +94,7 @@ export function signIncrementalAuthTicket(
           }),
         }
       : {}),
+    ...(input.audience !== undefined ? { aud: input.audience } : {}),
     jti,
     exp: Date.now() + (input.ttlMs ?? DEFAULT_INCREMENTAL_TICKET_TTL_MS),
   };
@@ -134,6 +139,7 @@ export function verifyIncrementalAuthTicket(
   if (!Number.isFinite(payload.exp)) return null;
   if (payload.toolId !== undefined && typeof payload.toolId !== 'string') return null;
   if (payload.profile !== undefined && typeof payload.profile !== 'string') return null;
+  if (payload.aud !== undefined && typeof payload.aud !== 'string') return null;
   if (
     payload.priorAppIds !== undefined &&
     (!Array.isArray(payload.priorAppIds) || payload.priorAppIds.some((id) => typeof id !== 'string'))

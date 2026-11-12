@@ -74,7 +74,7 @@ import {
   type AuthFlowState,
   type AuthUiRegistry,
 } from '../auth-ui';
-import { initialAuthorizedApps } from '../authorized-apps.utils';
+import { incrementalTicketAudience, initialAuthorizedApps } from '../authorized-apps.utils';
 import { CimdDisabledError, CimdService, clientMetadataDocumentSchema } from '../cimd';
 import { projectConsentTools } from '../consent-tools.helper';
 import {
@@ -694,7 +694,9 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
    * Verify a client-supplied incremental-authorization ticket.
    *
    * Returns the verified payload, or `undefined` when the parameter is absent,
-   * malformed, expired, or not signed by this server. Verification is
+   * malformed, expired, not signed by this server, minted for another endpoint,
+   * or names an app this endpoint does not authorize incrementally (incremental
+   * authorization off, or not one of its apps). Verification is
    * side-effect free — the ticket is CLAIMED (single use) later, in
    * {@link prepareAuthorizationRequest}, so a request that fails OAuth
    * validation does not burn the user's ticket.
@@ -710,6 +712,19 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
     const payload = verifyIncrementalAuthTicket(token, secret);
     if (!payload) {
       this.logger.warn('Incremental auth ticket failed verification — treating as an ordinary login');
+      return undefined;
+    }
+    if (payload.aud !== undefined && payload.aud !== incrementalTicketAudience(this.scope)) {
+      this.logger.warn(
+        'Incremental auth ticket was minted for another server or endpoint — treating as an ordinary login',
+      );
+      return undefined;
+    }
+    const grant = initialAuthorizedApps(this.scope.auth?.options, this.scope.apps.getApps(), [payload.appId]);
+    if (!grant?.includes(payload.appId)) {
+      this.logger.warn(
+        'Incremental auth ticket names an app this endpoint does not authorize incrementally — treating as an ordinary login',
+      );
       return undefined;
     }
     return payload;
