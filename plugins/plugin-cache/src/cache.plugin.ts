@@ -267,7 +267,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
       return;
     }
 
-    const hash = this.buildCacheKey(tool.fullName, toolContext);
+    const hash = this.buildCacheKey(tool.fullName, toolContext, callSurfaceOf(flowCtx));
     if (hash === undefined) return;
 
     const cacheStore = this.get(CacheStoreToken);
@@ -329,7 +329,7 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
       return;
     }
 
-    const hash = this.buildCacheKey(tool.fullName, toolContext);
+    const hash = this.buildCacheKey(tool.fullName, toolContext, callSurfaceOf(flowCtx));
     if (hash === undefined) return;
 
     const cacheStore = this.get(CacheStoreToken);
@@ -379,15 +379,20 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
    *
    * Read and write both go through here. They used to build the key at two separate call
    * sites, and a key that differs between them silently disables the cache rather than
-   * failing visibly.
+   * failing visibly. The call's surface is part of it: what a tool acting for the caller
+   * (CodeCall's search and describe) returns depends on it.
    */
-  private buildCacheKey(toolFullName: string, toolContext: { input?: unknown }): string | undefined {
+  private buildCacheKey(
+    toolFullName: string,
+    toolContext: { input?: unknown },
+    surface: string | undefined,
+  ): string | undefined {
     const identity = this.options.keyByIdentity === false ? 'shared' : this.resolveCallerIdentity(toolContext);
     if (identity === undefined) return undefined;
 
     // Digest rather than concatenate: `hashObject` joined keys and values with `:` and `;`,
     // so distinct inputs could produce the same string, and the key grew with the payload.
-    return sha256Hex(JSON.stringify({ identity, tool: toolFullName, input: stableValue(toolContext.input) }));
+    return sha256Hex(JSON.stringify({ identity, tool: toolFullName, input: stableValue(toolContext.input), surface }));
   }
 
   /**
@@ -397,6 +402,13 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   isCacheable(toolName: string): boolean {
     return matchesToolPattern(toolName, this.options.toolPatterns ?? []);
   }
+}
+
+/** The surface (`'mcp'`, `'agent'`, ...) a call arrived on, from the context its flow was started with. */
+function callSurfaceOf(flowCtx: FlowCtxOf<'tools:call-tool'>): string | undefined {
+  const rawInput = flowCtx.rawInput as { ctx?: { surface?: unknown } } | null | undefined;
+  const surface = rawInput?.ctx?.surface;
+  return typeof surface === 'string' ? surface : undefined;
 }
 
 /** The issuer of the caller's verified token, or undefined when it names none. */

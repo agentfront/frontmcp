@@ -256,4 +256,18 @@ describe('CachePlugin — caller identity in the key (GHSA-r6v6-p4r8-p936)', () 
     expect(key).toMatch(/^[0-9a-f]{64}$/);
     expect(key).not.toContain('user-a');
   });
+
+  it('does not serve a call from one surface a value cached for a call from another', async () => {
+    const { plugin, store } = createHarness();
+    const onSurface = (surface: string) =>
+      Object.assign(createFlowCtx(USER_A), { rawInput: { ctx: { surface } } }) as FlowCtxOf<'tools:call-tool'>;
+
+    await plugin.willWriteCache(onSurface('mcp'));
+    await plugin.willReadCache(onSurface('agent'));
+    await plugin.willReadCache(onSurface('mcp'));
+
+    const writtenKey = store.setValue.mock.calls[0][0];
+    expect(store.getValue.mock.calls[0][0]).not.toBe(writtenKey);
+    expect(store.getValue.mock.calls[1][0]).toBe(writtenKey);
+  });
 });
