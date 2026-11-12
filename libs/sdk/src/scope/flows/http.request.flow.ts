@@ -1020,7 +1020,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         return;
       }
 
-      this.logger.info(`[${this.requestId}] DELETE session: ${sessionId}`);
+      this.logger.info(`[${this.requestId}] DELETE session: ${sessionId.slice(0, 20)}...`);
 
       // Terminate the session - this unregisters the server AND adds to terminated set.
       // This prevents future non-initialize requests with this session ID from being accepted.
@@ -1043,7 +1043,7 @@ export default class HttpRequestFlow extends FlowBase<typeof name> {
         await transportService.deleteStoredSession(sessionId);
       }
 
-      this.logger.info(`[${this.requestId}] Session terminated: ${sessionId}`);
+      this.logger.info(`[${this.requestId}] Session terminated: ${sessionId.slice(0, 20)}...`);
       this.respond(httpRespond.noContent());
     } catch (error) {
       // FlowControl is expected control flow, not an error
