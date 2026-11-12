@@ -1,7 +1,7 @@
 import type { McpOpenAPITool, ParameterMapper, SecurityResolver } from 'mcp-from-openapi';
 
 import { PublicMcpError } from '@frontmcp/sdk';
-import { trimTrailing, validateBaseUrl } from '@frontmcp/utils';
+import { readTextWithLimit, ResponseTooLargeError, trimTrailing, validateBaseUrl } from '@frontmcp/utils';
 
 /**
  * Request configuration for building HTTP requests
@@ -315,18 +315,15 @@ export async function parseResponse(response: Response, options?: ParseResponseO
     // If length is Infinity or NaN, we'll catch it in the actual byte size check below
   }
 
-  // Read response body
-  // NOTE: This size check occurs AFTER loading the full response into memory.
-  // For responses without Content-Length headers, this provides defense-in-depth
-  // (detecting oversized responses) but does not protect against memory exhaustion.
-  // A streaming approach would be required for true memory protection, but adds
-  // complexity. The Content-Length check above handles the common case.
-  const text = await response.text();
-
-  // Check actual byte size (Content-Length may be missing or incorrect)
-  const byteSize = new TextEncoder().encode(text).length;
-  if (byteSize > maxSize) {
-    throw new Error(`Response size (${byteSize} bytes) exceeds maximum allowed (${maxSize} bytes)`);
+  // Read the body and stop as soon as it passes the limit (Content-Length may be missing or wrong)
+  let text: string;
+  try {
+    text = await readTextWithLimit(response, maxSize);
+  } catch (error) {
+    if (error instanceof ResponseTooLargeError) {
+      throw new Error(`Response size exceeds maximum allowed (${maxSize} bytes)`, { cause: error });
+    }
+    throw error;
   }
 
   // Parse response body
