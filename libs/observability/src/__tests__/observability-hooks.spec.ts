@@ -526,7 +526,7 @@ describe('Auto-instrumentation Hooks', () => {
     it('sends no traceparent when the context has autoInjectTracingHeaders off', async () => {
       const ctx = makeFlowCtx();
       const requestContext = ctx.get(Symbol.for('frontmcp:CONTEXT'));
-      ctx.get = () => ({ ...requestContext, config: { autoInjectTracingHeaders: false } });
+      ctx.get = (() => ({ ...requestContext, config: { autoInjectTracingHeaders: false } })) as typeof ctx.get;
       onToolWillParse(DEFAULT_OPTS, ctx);
       const origFetch = jest.fn().mockResolvedValue({ status: 200 } as Response);
       ctx.state.toolContext = { fetch: origFetch };
