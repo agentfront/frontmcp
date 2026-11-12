@@ -6,8 +6,6 @@
 import { execFile, spawn, type ChildProcess } from 'child_process';
 import { connect } from 'net';
 
-import { sha256Hex } from '@frontmcp/utils';
-
 import { ServerStartError } from '../errors';
 import { pidIsAlive, reservePort } from './port-registry';
 
@@ -669,7 +667,7 @@ function findListeningPid(port: number): Promise<number | undefined> {
  * reliably honor NODE_PATH in this path, so prefer creating the missing workspace
  * link and only fall back to NODE_PATH aliasing when that is not possible.
  */
-function withWorkspaceProtocolFallback(env: NodeJS.ProcessEnv, cwd: string): NodeJS.ProcessEnv {
+export function withWorkspaceProtocolFallback(env: NodeJS.ProcessEnv, cwd: string): NodeJS.ProcessEnv {
   if (findInstalledProtocolPackageDir(cwd)) {
     return env;
   }
@@ -685,7 +683,7 @@ function withWorkspaceProtocolFallback(env: NodeJS.ProcessEnv, cwd: string): Nod
       return env;
     }
 
-    return withProtocolNodePathAlias(env, cwd, workspacePackageDir);
+    return withProtocolNodePathAlias(env, workspacePackageDir);
   } catch (err) {
     if (DEBUG_SERVER) {
       console.error(
@@ -726,31 +724,10 @@ function ensureWorkspaceProtocolLink(cwd: string, workspacePackageDir: string): 
 // run in a synchronous code path. @frontmcp/utils only provides async FS wrappers,
 // so native APIs are required here for existsSync, mkdirSync, and symlinkSync.
 
-function withProtocolNodePathAlias(
-  env: NodeJS.ProcessEnv,
-  cwd: string,
-  workspacePackageDir: string,
-): NodeJS.ProcessEnv {
-  const fs = require('node:fs');
-  const os = require('node:os');
+function withProtocolNodePathAlias(env: NodeJS.ProcessEnv, workspacePackageDir: string): NodeJS.ProcessEnv {
   const path = require('node:path');
 
-  // Use a short deterministic hash to avoid Windows 260-char path limits
-  // (Buffer.from(cwd).toString('hex') would produce very long directory names).
-  const aliasRoot = path.join(os.tmpdir(), 'frontmcp-test-node-path', sha256Hex(cwd).slice(0, 12));
-  const scopeDir = path.join(aliasRoot, '@frontmcp');
-  const aliasPackageDir = path.join(scopeDir, 'protocol');
-
-  fs.mkdirSync(scopeDir, { recursive: true });
-  try {
-    if (!fs.existsSync(aliasPackageDir)) {
-      fs.symlinkSync(workspacePackageDir, aliasPackageDir, process.platform === 'win32' ? 'junction' : 'dir');
-    }
-  } catch (error) {
-    const err = error as NodeJS.ErrnoException;
-    if (err.code !== 'EEXIST') throw error;
-  }
-
+  const aliasRoot = protocolAliasRoot(workspacePackageDir);
   const existingNodePath = env['NODE_PATH'];
   const nodePathEntries = [aliasRoot, ...(existingNodePath ? existingNodePath.split(path.delimiter) : [])].filter(
     Boolean,
@@ -760,6 +737,50 @@ function withProtocolNodePathAlias(
     ...env,
     NODE_PATH: [...new Set(nodePathEntries)].join(path.delimiter),
   };
+}
+
+const protocolAliasRoots = new Map<string, string>();
+
+/**
+ * A directory where `@frontmcp/protocol` links to the workspace package: created fresh by this
+ * process with a random name and owner-only access, reused for its later servers, removed at exit.
+ */
+function protocolAliasRoot(workspacePackageDir: string): string {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+
+  const existingRoot = protocolAliasRoots.get(workspacePackageDir);
+  if (existingRoot) {
+    return existingRoot;
+  }
+
+  const aliasRoot: string = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-test-node-path-'));
+  if (protocolAliasRoots.size === 0) {
+    process.once('exit', removeProtocolAliasRoots);
+  }
+  protocolAliasRoots.set(workspacePackageDir, aliasRoot);
+  const scopeDir = path.join(aliasRoot, '@frontmcp');
+  fs.mkdirSync(scopeDir);
+  fs.symlinkSync(
+    workspacePackageDir,
+    path.join(scopeDir, 'protocol'),
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+  return aliasRoot;
+}
+
+/** Remove the alias directories this process created; the links are removed, not the packages they point to. */
+function removeProtocolAliasRoots(): void {
+  const fs = require('node:fs');
+  for (const aliasRoot of protocolAliasRoots.values()) {
+    try {
+      fs.rmSync(aliasRoot, { recursive: true, force: true });
+    } catch {
+      // Best effort at exit
+    }
+  }
+  protocolAliasRoots.clear();
 }
 
 /**
