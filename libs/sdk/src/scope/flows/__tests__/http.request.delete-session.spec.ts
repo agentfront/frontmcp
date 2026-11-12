@@ -91,7 +91,7 @@ describe('http:request handleDeleteSession', () => {
 
     await runStage(stage, 'handleDeleteSession');
 
-    const logged = JSON.stringify((stage['logger'] as { info: jest.Mock }).info.mock.calls);
+    const logged = JSON.stringify((stage['logger'] as unknown as { info: jest.Mock }).info.mock.calls);
     expect(logged).toContain(`${sessionId.slice(0, 20)}...`);
     expect(logged).not.toContain(sessionId);
   });
