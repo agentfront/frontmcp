@@ -6,12 +6,14 @@
  * @module skills/loader
  */
 
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { SkillCatalogEntry, SkillManifest } from './manifest';
 
 /**
- * Load the skills manifest from the catalog directory.
+ * Load the skills manifest from the catalog directory. The file is read and parsed as JSON; nothing in the
+ * catalog is run.
  *
  * @param catalogDir - Absolute path to the catalog directory. Defaults to the bundled catalog.
  * @returns The parsed skills manifest
@@ -19,7 +21,7 @@ import type { SkillCatalogEntry, SkillManifest } from './manifest';
 export function loadManifest(catalogDir?: string): SkillManifest {
   const dir = catalogDir ?? path.resolve(__dirname, '..', 'catalog');
   const manifestPath = path.join(dir, 'skills-manifest.json');
-  return require(manifestPath) as SkillManifest;
+  return JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as SkillManifest;
 }
 
 /**
