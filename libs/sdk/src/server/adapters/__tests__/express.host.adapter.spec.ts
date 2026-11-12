@@ -730,6 +730,13 @@ describe('ExpressHostAdapter — derived Origin check on a loopback bind', () =>
     expect(check(explicit, { host, origin: 'https://evil.example' })).toEqual(refused);
   });
 
+  it('refuses every Origin under an explicitly empty allowedOrigins, and allows a request with none', () => {
+    const adapter = new ExpressHostAdapter({ security: { dnsRebindingProtection: { allowedOrigins: [] } } });
+
+    expect(check(adapter, { host, origin: 'https://evil.example' })).toMatchObject({ status: 403 });
+    expect(check(adapter, { host })).toBe('allowed');
+  });
+
   it('allows a request with no Origin, and one from the server itself', () => {
     const adapter = listening(new ExpressHostAdapter(), 3000, '127.0.0.1');
 
