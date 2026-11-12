@@ -19,7 +19,13 @@
  * ```
  */
 
-import { randomUUID, TypedStorage, type NamespacedStorage, type StorageAdapter } from '@frontmcp/utils';
+import {
+  escapeControlCharacters,
+  randomUUID,
+  TypedStorage,
+  type NamespacedStorage,
+  type StorageAdapter,
+} from '@frontmcp/utils';
 
 import {
   authorizationVaultEntrySchema,
@@ -120,7 +126,9 @@ export class StorageAuthorizationVault implements AuthorizationVault {
   async update(id: string, updates: Partial<AuthorizationVaultEntry>): Promise<void> {
     const entry = await this.get(id);
     if (!entry) {
-      console.warn(`[StorageAuthorizationVault] Update failed: vault entry not found for id ${id}`);
+      console.warn(
+        `[StorageAuthorizationVault] Update failed: vault entry not found for id ${escapeControlCharacters(id)}`,
+      );
       return;
     }
 
