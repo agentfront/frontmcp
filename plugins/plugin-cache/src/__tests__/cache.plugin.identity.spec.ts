@@ -87,6 +87,29 @@ describe('CachePlugin — caller identity in the key (GHSA-r6v6-p4r8-p936)', () 
     expect(ctxB.state.toolContext?.respond).not.toHaveBeenCalled();
   });
 
+  it('does not serve a user of one issuer a value cached for the same subject of another issuer', async () => {
+    const { plugin, store } = createHarness();
+    const fromIssuerA = { user: { iss: 'https://a.example.com', sub: 'alice' }, clientId: 'alice' };
+    const fromIssuerB = { user: { iss: 'https://b.example.com', sub: 'alice' }, clientId: 'alice' };
+
+    await plugin.willWriteCache(createFlowCtx(fromIssuerA));
+    const ctxB = createFlowCtx(fromIssuerB);
+    await plugin.willReadCache(ctxB);
+
+    expect(store.getValue.mock.calls[0][0]).not.toBe(store.setValue.mock.calls[0][0]);
+    expect(ctxB.state.toolContext?.respond).not.toHaveBeenCalled();
+  });
+
+  it("shares a subject's entries across its sessions under one issuer", async () => {
+    const { plugin, store } = createHarness();
+    const alice = { user: { iss: 'https://a.example.com', sub: 'alice' }, clientId: 'alice' };
+
+    await plugin.willWriteCache(createFlowCtx(alice, 'session-1', 'session-1'));
+    await plugin.willReadCache(createFlowCtx(alice, 'session-2', 'session-2'));
+
+    expect(store.getValue.mock.calls[0][0]).toBe(store.setValue.mock.calls[0][0]);
+  });
+
   it('uses the same key on read and write for one caller, so the cache still works', async () => {
     const { plugin, store } = createHarness();
 

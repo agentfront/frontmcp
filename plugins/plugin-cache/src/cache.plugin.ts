@@ -6,6 +6,7 @@ import {
   isAnonymousSubject,
   isVercelKvProvider,
   Plugin,
+  resolvePrincipal,
   storeProvider,
   ToolHook,
   type FlowCtxOf,
@@ -358,11 +359,12 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
 
     const requestContext = ctx.tryGetContext?.();
     const authInfo = ctx.authInfo ?? requestContext?.authInfo;
+    const issuer = verifiedIssuerOf(authInfo);
 
     // An `anon:` id is minted per request or per session, so it names no one; the session below still can.
     const subject = authInfo?.extra?.['sub'] ?? authInfo?.extra?.['userId'];
-    if (!isAnonymousSubject(subject)) return `user:${subject}`;
-    if (!isAnonymousSubject(authInfo?.clientId)) return `client:${authInfo?.clientId}`;
+    if (!isAnonymousSubject(subject)) return subjectIdentity('user', subject, issuer);
+    if (!isAnonymousSubject(authInfo?.clientId)) return subjectIdentity('client', authInfo?.clientId, issuer);
 
     // Stateless, per-request and unaccepted client session ids identify no one; only a verified session does.
     const sessionId = requestContext?.verifiedSessionId;
@@ -395,6 +397,21 @@ export default class CachePlugin extends DynamicPlugin<CachePluginOptions> {
   isCacheable(toolName: string): boolean {
     return matchesToolPattern(toolName, this.options.toolPatterns ?? []);
   }
+}
+
+/** The issuer of the caller's verified token, or undefined when it names none. */
+function verifiedIssuerOf(authInfo: unknown): string | undefined {
+  const issuer = resolvePrincipal(authInfo as Partial<Record<string, unknown>> | undefined).claims['iss'];
+  return typeof issuer === 'string' && issuer.length > 0 ? issuer : undefined;
+}
+
+/**
+ * A signed-in caller's identity: `<kind>:<subject>`, paired with the issuer of its token when the token names one,
+ * since a subject is unique only within its issuer.
+ */
+function subjectIdentity(kind: 'user' | 'client', subject: unknown, issuer: string | undefined): string {
+  const identity = `${kind}:${subject}`;
+  return issuer === undefined ? identity : JSON.stringify([issuer, identity]);
 }
 
 /**
