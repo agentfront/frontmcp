@@ -17,7 +17,7 @@
  *   GITHUB_TOKEN - GitHub token for API access
  *   GITHUB_REPOSITORY - Repository in owner/repo format (auto-detected in CI)
  */
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
 
@@ -26,13 +26,13 @@ const BASELINE_END_MARKER = '<!-- PERF_BASELINE_END -->';
 const OUTPUT_PATH = 'perf-results/baseline.json';
 
 /**
- * Execute a command and return stdout.
+ * Run a command without a shell and return stdout.
  */
-function exec(cmd) {
+function exec(command, args) {
   try {
-    return execSync(cmd, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    return execFileSync(command, args, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
   } catch (error) {
-    console.error(`Command failed: ${cmd}`);
+    console.error(`Command failed: ${command} ${args.join(' ')}`);
     console.error(error.message);
     return null;
   }
@@ -49,7 +49,7 @@ function getRepoInfo() {
   }
 
   // Try to get from git remote
-  const remoteUrl = exec('git remote get-url origin');
+  const remoteUrl = exec('git', ['remote', 'get-url', 'origin']);
   if (!remoteUrl) {
     throw new Error('Could not determine repository info');
   }
@@ -67,7 +67,7 @@ function getRepoInfo() {
  * Get the latest release tag using GitHub CLI.
  */
 function getLatestRelease() {
-  const result = exec('gh release list --limit 1 --json tagName');
+  const result = exec('gh', ['release', 'list', '--limit', '1', '--json', 'tagName']);
   if (!result) {
     return null;
   }
@@ -85,7 +85,7 @@ function getLatestRelease() {
  */
 async function getReleaseComments(owner, repo, tag) {
   // First get the release ID
-  const releaseJson = exec(`gh api repos/${owner}/${repo}/releases/tags/${tag}`);
+  const releaseJson = exec('gh', ['api', `repos/${owner}/${repo}/releases/tags/${encodeURIComponent(tag)}`]);
   if (!releaseJson) {
     return [];
   }
