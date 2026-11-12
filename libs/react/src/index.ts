@@ -54,9 +54,19 @@ export { z } from '@frontmcp/sdk';
 // MCP Events
 export { Event, FrontMcpEvent, event, frontMcpEvent } from '@frontmcp/sdk';
 export type { EventOccurrence, EventDeliveryMode, EventPublishOptions, EventPublishResult } from '@frontmcp/sdk';
+// What the methods of an `@Event` class (`EventContext`) take and return
+export type {
+  EventSubscriber,
+  EventOccurrenceOf,
+  EventSubscriptionRef,
+  EventUnsubscribeReason,
+  EventCheckItem,
+  EventCheckResult,
+  EventCheckLimits,
+} from '@frontmcp/sdk';
 
 // Base context classes
-export { ToolContext, ResourceContext, PromptContext, ExecutionContextBase } from '@frontmcp/sdk';
+export { ToolContext, ResourceContext, PromptContext, EventContext, ExecutionContextBase } from '@frontmcp/sdk';
 
 // MCP protocol result types
 export type {
