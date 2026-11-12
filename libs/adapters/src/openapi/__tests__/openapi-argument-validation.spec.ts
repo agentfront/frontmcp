@@ -74,6 +74,16 @@ const spec: OpenAPIV3.Document = {
         responses: { '200': { description: 'ok' } },
       },
     },
+    '/codes/{code}': {
+      get: {
+        operationId: 'getCode',
+        parameters: [
+          { name: 'code', in: 'path', required: true, schema: { type: 'string', pattern: '^(a+)+$' } },
+          { name: 'region', in: 'query', schema: { type: 'string', pattern: '^[a-z]{2}$' } },
+        ],
+        responses: { '200': { description: 'ok' } },
+      },
+    },
     '/hosts/{hostId}': {
       get: {
         operationId: 'getHost',
@@ -163,6 +173,20 @@ describe('OpenAPI tool arguments', () => {
     expect(requestedUrls).toEqual([`https://api.example.com/hosts/${hostId}?hostname=my_host.internal`]);
   });
 
+  it('refuses a value that does not match the pattern of its parameter', async () => {
+    await expect(server.callTool('getCode', { code: 'aaa', region: 'EUROPE' })).rejects.toThrow(
+      /Invalid arguments for tool 'getCode': region:/,
+    );
+    expect(requestedUrls).toEqual([]);
+  });
+
+  it('leaves a pattern with nested repetition to the API', async () => {
+    const result = await server.callTool('getCode', { code: `${'a'.repeat(20)}!` });
+
+    expect(result.isError).toBeFalsy();
+    expect(requestedUrls).toHaveLength(1);
+  });
+
   it('sends the spec default of a required parameter the model left out', async () => {
     const result = await server.callTool('exportTickets', {});
 
@@ -189,5 +213,72 @@ describe('OpenAPI tool arguments', () => {
     expect(result.isError).toBeFalsy();
     expect(requestedUrls).toEqual(['https://api.example.com/tickets/T-1/notes']);
     expect(requestedBodies).toEqual([{ text: 'Rebooted', channel: 'mcp' }]);
+  });
+});
+
+describe('OpenAPI 3.1 tool arguments', () => {
+  const requestedUrls: string[] = [];
+  const realFetch = global.fetch;
+  let server: DirectMcpServer;
+
+  beforeAll(async () => {
+    global.fetch = (async (url: string | URL | Request) => {
+      requestedUrls.push(String(url));
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+
+    @App({
+      id: 'codes',
+      name: 'Codes',
+      adapters: [
+        OpenapiAdapter.init({
+          name: 'codes',
+          baseUrl: 'https://api.example.com',
+          spec: {
+            openapi: '3.1.0',
+            info: { title: 'Codes', version: '1.0.0' },
+            paths: {
+              '/codes': {
+                post: {
+                  operationId: 'saveCodes',
+                  requestBody: {
+                    required: true,
+                    content: {
+                      'application/json': {
+                        schema: {
+                          type: 'object',
+                          patternProperties: { '^(a+)+$': { type: 'string' } },
+                          additionalProperties: false,
+                        },
+                      },
+                    },
+                  },
+                  responses: { '200': { description: 'ok' } },
+                },
+              },
+            },
+          } as unknown as OpenAPIV3.Document,
+        }),
+      ],
+    })
+    class CodesApp {}
+
+    server = await FrontMcpInstance.createDirect({
+      info: { name: 'openapi-argument-validation-3-1', version: '1.0.0' },
+      apps: [CodesApp],
+      logging: { level: LogLevel.Off },
+    });
+  });
+
+  afterAll(async () => {
+    global.fetch = realFetch;
+    await server.dispose();
+  });
+
+  it('leaves property name patterns with nested repetition to the API', async () => {
+    const result = await server.callTool('saveCodes', { body: { [`${'a'.repeat(20)}!`]: 'x' } });
+
+    expect(result.isError).toBeFalsy();
+    expect(requestedUrls).toEqual(['https://api.example.com/codes']);
   });
 });

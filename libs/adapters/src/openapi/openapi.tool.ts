@@ -2,7 +2,7 @@ import { type McpOpenAPITool } from 'mcp-from-openapi';
 
 import { z, type JSONSchema } from '@frontmcp/lazy-zod';
 import { InvalidInputError, tool, type FrontMcpLogger } from '@frontmcp/sdk';
-import { isRedirectResponse } from '@frontmcp/utils';
+import { isPatternSafe, isRedirectResponse } from '@frontmcp/utils';
 
 import { validateFrontMcpExtension, type ValidatedFrontMcpExtension } from './openapi.frontmcp-schema';
 import { assertRequestHasCredential, resolveToolSecurity } from './openapi.security';
@@ -477,9 +477,10 @@ const SUBSCHEMA_MAP_KEYWORDS = ['properties', 'patternProperties', 'dependentSch
 /**
  * The schema a call's arguments are checked against. It is the input schema, relaxed where a
  * strict check would refuse calls the API takes: `format` is an annotation in draft 2020-12, an
- * open `oneOf` matches more than one branch for most objects, and a credential argument
+ * open `oneOf` matches more than one branch for most objects, a credential argument
  * (`securitySchemesInInput`) may be left to the server, which `assertRequestHasCredential` checks
- * on the built request.
+ * on the built request, and a `pattern` whose matching time can grow out of proportion to the
+ * value is left to the API.
  */
 function toArgumentJsonSchema(openapiTool: McpOpenAPITool): JsonSchema {
   const argumentSchema = relaxSchema(openapiTool.inputSchema) as Record<string, unknown>;
@@ -499,6 +500,14 @@ function relaxSchema(schema: unknown): unknown {
 
   const relaxed: Record<string, unknown> = { ...(schema as Record<string, unknown>) };
   delete relaxed['format'];
+  if (typeof relaxed['pattern'] === 'string' && !isPatternSafe(relaxed['pattern'])) delete relaxed['pattern'];
+  const propertyPatterns = relaxed['patternProperties'];
+  if (typeof propertyPatterns === 'object' && propertyPatterns !== null) {
+    if (Object.keys(propertyPatterns).some((propertyPattern) => !isPatternSafe(propertyPattern))) {
+      delete relaxed['patternProperties'];
+      delete relaxed['additionalProperties'];
+    }
+  }
   for (const keyword of SUBSCHEMA_KEYWORDS) {
     if (keyword in relaxed) relaxed[keyword] = relaxSchema(relaxed[keyword]);
   }
