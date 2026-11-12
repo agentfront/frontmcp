@@ -71,13 +71,15 @@ export default class SiteAuthorizationPlugin extends DynamicPlugin<SiteAuthoriza
       return;
     }
 
-    if (!siteId || typeof siteId !== 'string' || siteId.length === 0) {
-      throw new Error(`Missing required ${siteField} for site-scoped operation`);
-    }
-
     const allowed = this.getAllowedSites(ctx.authInfo);
-    if (allowed !== 'ALL' && !allowed.includes(siteId)) {
-      throw new Error(`Not authorized for site ${siteId}`);
+    const readsEverySite = siteId === undefined && allowed === 'ALL';
+    if (!readsEverySite) {
+      if (!siteId || typeof siteId !== 'string' || siteId.length === 0) {
+        throw new Error(`Missing required ${siteField}: pass a site this caller is allowed to use`);
+      }
+      if (allowed !== 'ALL' && !allowed.includes(siteId)) {
+        throw new Error(`Not authorized for site ${siteId}`);
+      }
     }
 
     if (adminRequired && !this.isAdmin(ctx.authInfo)) {
