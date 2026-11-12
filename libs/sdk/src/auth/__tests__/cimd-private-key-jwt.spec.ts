@@ -71,8 +71,8 @@ afterAll(async () => {
   await disposeServers(servers);
 });
 
-async function localServer(): Promise<TestFetchServer> {
-  const auth = { mode: 'local' } as NonNullable<FrontMcpConfigInput['auth']>;
+async function localServer(issuer?: string): Promise<TestFetchServer> {
+  const auth = { mode: 'local', ...(issuer ? { local: { issuer } } : {}) } as NonNullable<FrontMcpConfigInput['auth']>;
   const server = await createTestFetchServer({
     info: { name: 'private-key-jwt', version: '1.0.0' },
     apps: [DeskApp],
@@ -110,8 +110,8 @@ async function authorizationCode(server: TestFetchServer): Promise<string> {
   return redirectParams(callback).get('code') ?? '';
 }
 
-async function token(server: TestFetchServer, form: Record<string, string>) {
-  const response = await postForm(server.handler, '/oauth/token', form, HOST);
+async function token(server: TestFetchServer, form: Record<string, string>, host = HOST) {
+  const response = await postForm(server.handler, '/oauth/token', form, host);
   return { status: response.status, body: (await response.json()) as Record<string, unknown> };
 }
 
@@ -239,5 +239,43 @@ describe('CIMD clients authenticate with private_key_jwt', () => {
       expect.arrayContaining(['RS256', 'PS256', 'ES256', 'EdDSA']),
     );
     expect(metadata['token_endpoint_auth_signing_alg_values_supported']).not.toContain('HS256');
+  });
+});
+
+describe('private_key_jwt on a server with a configured issuer', () => {
+  const ISSUER = `https://${HOST}`;
+
+  it('refuses an assertion for the token endpoint of the Host the request names', async () => {
+    const server = await localServer(ISSUER);
+    const code = await authorizationCode(server);
+
+    const refused = await token(
+      server,
+      codeExchange(code, {
+        client_id: CIMD_CLIENT,
+        client_assertion_type: CLIENT_ASSERTION_TYPE_JWT_BEARER,
+        client_assertion: await clientAssertion('http://other.example.com/oauth/token'),
+      }),
+      'other.example.com',
+    );
+
+    expect(refused.body['error']).toBe('invalid_client');
+  });
+
+  it("accepts an assertion for the token endpoint on the issuer's origin", async () => {
+    const server = await localServer(ISSUER);
+    const code = await authorizationCode(server);
+
+    const issued = await token(
+      server,
+      codeExchange(code, {
+        client_id: CIMD_CLIENT,
+        client_assertion_type: CLIENT_ASSERTION_TYPE_JWT_BEARER,
+        client_assertion: await clientAssertion(`${ISSUER}/oauth/token`),
+      }),
+      'other.example.com',
+    );
+
+    expect(issued.status).toBe(200);
   });
 });
