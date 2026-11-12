@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
@@ -218,6 +218,21 @@ describe('questionnaire', () => {
       const { QUOTES: _mixedQuotes, ...readTheSame } = values;
 
       expect(parseEnvContent(envContent)).toEqual(expect.objectContaining(readTheSame));
+    });
+
+    (process.platform === 'win32' ? it.skip : it)('is readable by its owner only, when new and when it replaces one', () => {
+      const dir = mkdtempSync(path.join(tmpdir(), 'frontmcp-env-'));
+      try {
+        writeEnvFile(dir, 'KEY=new\n');
+        expect(statSync(path.join(dir, '.env')).mode & 0o777).toBe(0o600);
+
+        writeFileSync(path.join(dir, '.env'), 'KEY=old\n');
+        chmodSync(path.join(dir, '.env'), 0o644);
+        writeEnvFile(dir, 'KEY=again\n');
+        expect(statSync(path.join(dir, '.env')).mode & 0o777).toBe(0o600);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
 
     it('refuses an env name that is not an environment variable name', async () => {

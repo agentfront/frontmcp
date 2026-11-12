@@ -321,9 +321,10 @@ function envFileValue(value: string): string {
 }
 
 /**
- * Write .env file for an installed app.
+ * Write .env file for an installed app, readable by its owner only.
  */
 export function writeEnvFile(appDir: string, content: string): void {
   const envPath = path.join(appDir, '.env');
-  fs.writeFileSync(envPath, content, 'utf-8');
+  if (fs.existsSync(envPath)) fs.chmodSync(envPath, 0o600);
+  fs.writeFileSync(envPath, content, { encoding: 'utf-8', mode: 0o600 });
 }
