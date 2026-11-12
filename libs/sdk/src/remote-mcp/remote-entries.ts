@@ -84,10 +84,26 @@ interface RemoteEntryServer {
 
 const remoteServersByScope = new WeakMap<object, Map<string, Promise<RemoteEntryServer>>>();
 
+const functionIds = new WeakMap<object, number>();
+let nextFunctionId = 0;
+
+/** A function's id in this process, so connection options that differ only in a function (an auth mapper) differ. */
+function functionIdOf(fn: object): number {
+  let id = functionIds.get(fn);
+  if (id === undefined) {
+    id = nextFunctionId++;
+    functionIds.set(fn, id);
+  }
+  return id;
+}
+
 /** One id per URL and connection options, so entries with different credentials or headers never share a connection. */
 function remoteEntryAppId(source: RemoteEntrySource): string {
   const connection = { url: source.url, transportOptions: source.transportOptions, remoteAuth: source.remoteAuth };
-  return `remote-entry-${sha256Hex(JSON.stringify(connection)).slice(0, 16)}`;
+  const serialized = JSON.stringify(connection, (_key, value: unknown) =>
+    typeof value === 'function' ? `function#${functionIdOf(value)}` : value,
+  );
+  return `remote-entry-${sha256Hex(serialized).slice(0, 16)}`;
 }
 
 async function connectRemoteEntryServer(
