@@ -1,5 +1,11 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
+
+import { parseEnvContent } from '../../../shared/env';
 import { ManifestSetupStep } from '../../build/exec/manifest';
-import { runQuestionnaire } from '../questionnaire';
+import { runQuestionnaire, writeEnvFile } from '../questionnaire';
 
 describe('questionnaire', () => {
   describe('runQuestionnaire (silent mode)', () => {
@@ -109,6 +115,57 @@ describe('questionnaire', () => {
 
       expect(result.envContent).toContain('PORT=3001');
       expect(result.envContent).toContain('# Network');
+    });
+  });
+
+  describe('the .env file', () => {
+    const values: Record<string, string> = {
+      PLAIN: '3001',
+      SPACES: 'two words',
+      SEMICOLON: 'a;printf ran',
+      SUBSTITUTION: '$(printf ran)',
+      BACKTICKS: '`printf ran`',
+      DOLLAR: 'pa$word',
+      TILDE: '~/data',
+      BACKSLASH: 'C:\\path',
+      QUOTES: `it's "x" $y`,
+    };
+    const steps: ManifestSetupStep[] = Object.entries(values).map(([env, value]) => ({
+      id: env.toLowerCase(),
+      prompt: env,
+      jsonSchema: { type: 'string', default: value },
+      env,
+      group: 'Keys\nGROUP_LINE=ran',
+    }));
+
+    (process.platform === 'win32' ? it.skip : it)('holds every answer as the runner, which sources it, reads it back', async () => {
+      const dir = mkdtempSync(path.join(tmpdir(), 'frontmcp-env-'));
+      try {
+        const { envContent } = await runQuestionnaire(steps, { silent: true });
+        writeEnvFile(dir, envContent);
+
+        const script = 'set -euo pipefail; set -a; source "$1"; set +a; exec "$2" -e "process.stdout.write(JSON.stringify(process.env))"';
+        const output = execFileSync('bash', ['-c', script, 'bash', path.join(dir, '.env'), process.execPath], { encoding: 'utf-8' });
+        const sourced = JSON.parse(output) as Record<string, string | undefined>;
+
+        for (const [env, value] of Object.entries(values)) expect(sourced[env]).toBe(value);
+        expect(sourced['GROUP_LINE']).toBeUndefined();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('holds the answers frontmcp start reads the same way, unless one mixes a single quote with $ or "', async () => {
+      const { envContent } = await runQuestionnaire(steps, { silent: true });
+      const { QUOTES: _mixedQuotes, ...readTheSame } = values;
+
+      expect(parseEnvContent(envContent)).toEqual(expect.objectContaining(readTheSame));
+    });
+
+    it('refuses an env name that is not an environment variable name', async () => {
+      const step: ManifestSetupStep = { id: 'key', prompt: 'Key', jsonSchema: { type: 'string', default: 'x' }, env: 'KEY;printf ran' };
+
+      await expect(runQuestionnaire([step], { silent: true })).rejects.toThrow('not an environment variable name');
     });
   });
 });

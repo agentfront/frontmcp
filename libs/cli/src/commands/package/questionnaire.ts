@@ -6,6 +6,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { escapeControlCharacters } from '@frontmcp/utils';
+
 import { c } from '../../core/colors';
 import { clack } from '../../shared/prompts';
 import { ManifestSetupStep } from '../build/exec/manifest';
@@ -281,18 +283,29 @@ function answersToEnv(answers: Record<string, string>, steps: ManifestSetupStep[
 
     if (step.group && step.group !== currentGroup) {
       currentGroup = step.group;
-      lines.push(`\n# ${currentGroup}`);
+      lines.push(`\n# ${escapeControlCharacters(currentGroup)}`);
     }
 
-    const envName = step.env;
-    // Quote values that contain special characters
-    const needsQuotes = /[\s#"'\\]/.test(value) || value.includes('=');
-    const quotedValue = needsQuotes ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : value;
-
-    lines.push(`${envName}=${quotedValue}`);
+    if (!ENV_NAME.test(step.env)) {
+      throw new Error(
+        `Setup step "${escapeControlCharacters(step.id)}" saves its answer as "${escapeControlCharacters(step.env)}", ` +
+          'which is not an environment variable name. Ask the package author for a name of letters, digits and underscores.',
+      );
+    }
+    lines.push(`${step.env}=${envFileValue(value)}`);
   }
 
   return lines.join('\n') + '\n';
+}
+
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const PLAIN_ENV_VALUE = /^[\w./:@%+,-]*$/;
+
+/** The value as the runner's `source` reads it literally; `frontmcp start` reads it the same unless it mixes `'` with `"`, `$` or a backtick. */
+function envFileValue(value: string): string {
+  if (PLAIN_ENV_VALUE.test(value)) return value;
+  if (!value.includes("'")) return `'${value}'`;
+  return `"${value.replace(/[\\"$`]/g, '\\$&')}"`;
 }
 
 /**
