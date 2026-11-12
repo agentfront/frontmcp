@@ -208,7 +208,7 @@ export function createSkillToolGuardHook(
     await handleAuthorizationResult(
       authResult,
       sessionManager,
-      session.policyMode,
+      session.strictAllowlist ? 'strict' : session.policyMode,
       session.activeSkillId,
       onApprovalRequired,
       logger,

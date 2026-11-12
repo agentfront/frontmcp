@@ -193,6 +193,8 @@ export class SkillSessionManager extends EventEmitter {
       session.policyMode = this.options.defaultPolicyMode;
     }
 
+    if (policy?.strictAllowlist) session.strictAllowlist = true;
+
     // Set startedAt for first skill activation
     if (session.startedAt === 0) {
       session.startedAt = now;
@@ -356,6 +358,7 @@ export class SkillSessionManager extends EventEmitter {
     session.approvedTools.clear();
     session.deniedTools.clear();
     session.toolCallCount = 0;
+    delete session.strictAllowlist;
   }
 
   /**
@@ -423,6 +426,10 @@ export class SkillSessionManager extends EventEmitter {
         reason: 'skill_allowlist',
         ...baseResult,
       };
+    }
+
+    if (session.strictAllowlist) {
+      return { allowed: false, reason: 'not_in_allowlist', ...baseResult };
     }
 
     // Check if tool was dynamically approved

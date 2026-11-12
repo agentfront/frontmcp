@@ -699,6 +699,14 @@ describe('Session Serialization', () => {
     expect(deserialized.activeSkills.get('skill-1')?.name).toBe('Skill 1');
   });
 
+  it('keeps strictAllowlist through serialization', () => {
+    const state = { ...createEmptySessionState('session-1'), strictAllowlist: true };
+    expect(deserializeSessionState(serializeSessionState(state)).strictAllowlist).toBe(true);
+    expect(
+      deserializeSessionState(serializeSessionState(createEmptySessionState('s'))).strictAllowlist,
+    ).toBeUndefined();
+  });
+
   it('requireExplicitActivation refuses tools in a session with no active skill', async () => {
     const requiring = new SkillSessionManager({ requireExplicitActivation: true });
     const content: SkillContent = {

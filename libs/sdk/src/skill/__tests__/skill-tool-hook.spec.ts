@@ -245,6 +245,27 @@ describe('SkillToolGuardHook', () => {
     });
   });
 
+  describe('strictAllowlist', () => {
+    it('refuses a tool outside the allowlist in permissive mode, and an approval does not let it through', async () => {
+      const permissive = new SkillSessionManager({ defaultPolicyMode: 'permissive' }, undefined, store);
+      const guard = new (createSkillToolGuardHook(permissive, { verifiedSessionId: () => 'session-strict' }))();
+      const call = (name: string) => ({ state: { tool: { metadata: { name } } } });
+
+      await permissive.runWithSession('session-strict', async () => {
+        permissive.activateSkill('test-skill', mockSkillContent, mockLoadResult, {
+          policyMode: 'permissive',
+          strictAllowlist: true,
+        });
+        permissive.approveToolForSession('unlisted_tool');
+      });
+
+      await expect(guard.checkSkillToolAuthorization(call('unlisted_tool'))).rejects.toBeInstanceOf(
+        ToolNotAllowedError,
+      );
+      await expect(guard.checkSkillToolAuthorization(call('allowed_tool'))).resolves.toBeUndefined();
+    });
+  });
+
   describe('requireExplicitActivation', () => {
     it('refuses a tool call in a session that has no active skill', async () => {
       const requiring = new SkillSessionManager({ requireExplicitActivation: true }, undefined, store);
