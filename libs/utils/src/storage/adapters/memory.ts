@@ -62,8 +62,8 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
   private sweepInterval?: ReturnType<typeof setInterval>;
   private readonly options: Required<MemoryAdapterOptions>;
 
-  // LRU tracking (simple linked list via insertion order in Map)
-  private accessOrder: string[] = [];
+  // LRU tracking: a Set keeps insertion order, and adding a key again moves it to the end
+  private readonly accessOrder = new Set<string>();
 
   constructor(options: MemoryAdapterOptions = {}) {
     super();
@@ -98,7 +98,7 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
     this.stopSweeper();
     this.clearAllTimeouts();
     this.store.clear();
-    this.accessOrder = [];
+    this.accessOrder.clear();
     this.emitter.removeAllListeners();
     this.connected = false;
   }
@@ -164,13 +164,7 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
       }
     }
 
-    // Check LRU eviction
-    if (this.options.maxEntries > 0 && !this.store.has(key)) {
-      while (this.store.size >= this.options.maxEntries) {
-        this.evictOldest();
-      }
-    }
-
+    this.makeRoomFor(key);
     this.store.set(key, entry);
     this.touchLRU(key);
   }
@@ -338,6 +332,7 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
       }
     }
 
+    this.makeRoomFor(key);
     this.store.set(key, newEntry);
     this.touchLRU(key);
 
@@ -417,35 +412,38 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
   private touchLRU(key: string): void {
     if (this.options.maxEntries <= 0) return;
 
-    const idx = this.accessOrder.indexOf(key);
-    if (idx !== -1) {
-      this.accessOrder.splice(idx, 1);
-    }
-    this.accessOrder.push(key);
+    this.accessOrder.delete(key);
+    this.accessOrder.add(key);
   }
 
   /**
    * Remove key from LRU tracking.
    */
   private removeLRU(key: string): void {
-    if (this.options.maxEntries <= 0) return;
+    this.accessOrder.delete(key);
+  }
 
-    const idx = this.accessOrder.indexOf(key);
-    if (idx !== -1) {
-      this.accessOrder.splice(idx, 1);
+  /**
+   * Evict least recently used entries until a new key fits within maxEntries.
+   */
+  private makeRoomFor(key: string): void {
+    if (this.options.maxEntries <= 0 || this.store.has(key)) return;
+
+    while (this.store.size >= this.options.maxEntries) {
+      if (!this.evictOldest()) return;
     }
   }
 
   /**
-   * Evict oldest entry (LRU).
+   * Evict the least recently used entry. Returns false when no entry is left to evict.
    */
-  private evictOldest(): void {
-    if (this.accessOrder.length === 0) return;
+  private evictOldest(): boolean {
+    const oldest = this.accessOrder.values().next();
+    if (oldest.done) return false;
 
-    const oldestKey = this.accessOrder.shift();
-    if (oldestKey) {
-      this.deleteEntry(oldestKey);
-    }
+    this.accessOrder.delete(oldest.value);
+    this.deleteEntry(oldest.value);
+    return true;
   }
 
   /**

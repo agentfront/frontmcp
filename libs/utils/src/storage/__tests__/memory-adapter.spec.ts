@@ -485,6 +485,34 @@ describe('MemoryStorageAdapter', () => {
 
       await lruAdapter.disconnect();
     });
+
+    it('should evict an entry whose key is the empty string', async () => {
+      const lruAdapter = new MemoryStorageAdapter({ maxEntries: 1, enableSweeper: false });
+      await lruAdapter.connect();
+
+      await lruAdapter.set('', 'empty');
+      await lruAdapter.set('key1', 'value1'); // Should evict ''
+
+      expect(await lruAdapter.get('')).toBeNull();
+      expect(await lruAdapter.get('key1')).toBe('value1');
+
+      await lruAdapter.disconnect();
+    });
+
+    it('should keep new counters within maxEntries', async () => {
+      const lruAdapter = new MemoryStorageAdapter({ maxEntries: 2, enableSweeper: false });
+      await lruAdapter.connect();
+
+      await lruAdapter.incr('count1');
+      await lruAdapter.incr('count2');
+      await lruAdapter.incr('count3'); // Should evict count1
+
+      expect(lruAdapter.getStats().size).toBe(2);
+      expect(await lruAdapter.get('count1')).toBeNull();
+      expect(await lruAdapter.get('count3')).toBe('1');
+
+      await lruAdapter.disconnect();
+    });
   });
 
   describe('Error Handling', () => {
