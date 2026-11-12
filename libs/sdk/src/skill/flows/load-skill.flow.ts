@@ -10,7 +10,7 @@ import type { SkillActivationResult, SkillPolicyMode } from '../session/skill-se
 import { assertSkillAuthorized } from '../skill-authorities.helper';
 import { readySkillCatalog } from '../skill-catalog-source';
 import { createSkillEntryResolver } from '../skill-entry.resolver';
-import { isSkillServable, skillToolsForCaller } from '../skill-filter.helper';
+import { isSkillServable, skillToolsForCaller, skillToolsListedFor } from '../skill-filter.helper';
 import { formatSkillForLLMWithSchemas } from '../skill-http.utils';
 import type { SkillLoadResult } from '../skill-storage.interface';
 import { formatSkillForLLM } from '../skill.utils';
@@ -151,9 +151,13 @@ export default class LoadSkillFlow extends FlowBase<typeof name> {
         await assertSkillAuthorized(this.scope, entry, authInfo);
       }
 
-      // Only the tools the caller can reach count as available (and have schemas): an agent-only
-      // tool is missing to an MCP client, as `tools/list` and `tools/call` treat it.
-      const loadResult = skillToolsForCaller(result, this.scope.tools, ctx);
+      // Only the tools the caller can reach count as available (and have schemas): an agent-only tool,
+      // or one its authorities leave out of the caller's `tools/list`, is missing to that caller.
+      const loadResult = await skillToolsListedFor(
+        this.scope,
+        skillToolsForCaller(result, this.scope.tools, ctx),
+        authInfo,
+      );
       if (loadResult.warning) warnings.push(loadResult.warning);
       loadResults.push({ loadResult });
     }

@@ -8,12 +8,15 @@
  * treated as absent: left out of listings and not found when named.
  */
 
+import type { AuthoritiesMetadata } from '@frontmcp/auth';
 import type { EntryAvailability } from '@frontmcp/utils';
 
+import { isPubliclyListed, publicAccessFor } from '../auth/public-access.utils';
 import type { ScopeEntry, SkillEntry } from '../common';
 import { availabilityForCall, callSurfaceOf, isOfferedOnSurface, type CallSurface } from '../common/availability';
 import { getCallSurface } from '../context/call-surface';
-import { filterSkillsByAuthorities } from './skill-authorities.helper';
+import { isListedByAuthorities } from '../surface/entry-authorized';
+import { filterSkillsByAuthorities, normalizeAuthInfoForAuthorities } from './skill-authorities.helper';
 import { createSkillEntryResolver, skillResultId, type SkillEntryLookup } from './skill-entry.resolver';
 
 /**
@@ -113,32 +116,74 @@ export interface SkillToolLookup {
   getTools(includeHidden?: boolean): ReadonlyArray<{ name: string; metadata?: { availableWhen?: EntryAvailability } }>;
 }
 
+/** The tool fields of a skill load result. */
+interface LoadedSkillTools {
+  availableTools: string[];
+  missingTools: string[];
+  isComplete: boolean;
+  warning?: string;
+  skill?: { name?: string };
+}
+
 /**
  * A loaded skill's tools as the current caller sees them (the caller's surface is resolved as in
  * {@link filterServableSkills}). A tool `availableWhen.surface` doesn't offer the caller is one
  * `tools/list` leaves out and `tools/call` answers as unknown, so it is reported as missing, as a
  * tool that doesn't exist is, and neither its availability nor its schema reaches that caller.
  */
-export function skillToolsForCaller<
-  T extends {
-    availableTools: string[];
-    missingTools: string[];
-    isComplete: boolean;
-    warning?: string;
-    skill?: { name?: string };
-  },
->(loaded: T, tools: SkillToolLookup | null | undefined, ctx?: unknown, surface?: CallSurface): T {
+export function skillToolsForCaller<T extends LoadedSkillTools>(
+  loaded: T,
+  tools: SkillToolLookup | null | undefined,
+  ctx?: unknown,
+  surface?: CallSurface,
+): T {
   const caller = callerSurface(ctx, surface);
   if (!tools || caller === undefined || loaded.availableTools.length === 0) return loaded;
   const availability = new Map(tools.getTools(true).map((tool) => [tool.name, tool.metadata?.availableWhen]));
-  const notOffered = loaded.availableTools.filter((name) => !isOfferedOnSurface(availability.get(name), caller));
-  if (notOffered.length === 0) return loaded;
+  return withToolsMissing(
+    loaded,
+    loaded.availableTools.filter((name) => !isOfferedOnSurface(availability.get(name), caller)),
+  );
+}
+
+/**
+ * A loaded skill's tools less those `tools/list` leaves out for this caller, by their `authorities` or,
+ * for an anonymous caller, by `publicAccess`: reported as missing, without availability or schema.
+ */
+export async function skillToolsListedFor<T extends LoadedSkillTools>(
+  scope: Pick<ScopeEntry, 'tools' | 'auth' | 'authoritiesEngine' | 'authoritiesContextBuilder' | 'logger'>,
+  loaded: T,
+  authInfo: Record<string, unknown>,
+): Promise<T> {
+  const { tools, authoritiesEngine: engine, authoritiesContextBuilder: contextBuilder } = scope;
+  const publicAccess = publicAccessFor(scope.auth?.options, authInfo);
+  if (!tools || loaded.availableTools.length === 0 || (!publicAccess && (!engine || !contextBuilder))) return loaded;
+  const toolsByName = new Map(tools.getTools(true).map((tool) => [tool.name, tool]));
+  const caller = normalizeAuthInfoForAuthorities(authInfo);
+  const listed = await Promise.all(
+    loaded.availableTools.map(async (name) => {
+      const tool = toolsByName.get(name);
+      if (publicAccess && !isPubliclyListed(publicAccess, 'tools', [tool?.fullName ?? name, name])) return false;
+      const authorities = (tool?.metadata as { authorities?: AuthoritiesMetadata } | undefined)?.authorities;
+      if (!authorities || !engine || !contextBuilder) return true;
+      return isListedByAuthorities(engine, contextBuilder, authorities, caller, name, scope.logger);
+    }),
+  );
+  return withToolsMissing(
+    loaded,
+    loaded.availableTools.filter((_, index) => !listed[index]),
+  );
+}
+
+/** `loaded` with `names` moved from its available tools to its missing ones, and named in its warning. */
+function withToolsMissing<T extends LoadedSkillTools>(loaded: T, names: string[]): T {
+  if (names.length === 0) return loaded;
   return {
     ...loaded,
-    availableTools: loaded.availableTools.filter((name) => !notOffered.includes(name)),
-    missingTools: [...loaded.missingTools, ...notOffered],
+    availableTools: loaded.availableTools.filter((name) => !names.includes(name)),
+    missingTools: [...loaded.missingTools, ...names],
     isComplete: false,
-    warning: warningWithMissingTools(loaded.warning, loaded.skill?.name, notOffered),
+    warning: warningWithMissingTools(loaded.warning, loaded.skill?.name, names),
   };
 }
 
