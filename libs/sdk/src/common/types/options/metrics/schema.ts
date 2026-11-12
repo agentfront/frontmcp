@@ -37,6 +37,7 @@ export const metricsOptionsSchema = z.object({
         z.literal('skills'),
         z.literal('auth'),
         z.literal('sessions'),
+        z.literal('events'),
       ]),
     )
     .optional(),

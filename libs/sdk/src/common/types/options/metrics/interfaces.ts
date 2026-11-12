@@ -29,9 +29,19 @@ export type MetricsAuth = 'public' | 'token' | { token: string };
 
 /**
  * Metric category filter — exposes a knob for trimming the scrape payload.
- * The /metrics endpoint emits every category by default.
+ * The /metrics endpoint emits every category by default. `events` covers the
+ * `frontmcp_events_*` counters of event publishing and delivery.
  */
-export type MetricsCategory = 'process' | 'tools' | 'resources' | 'http' | 'storage' | 'skills' | 'auth' | 'sessions';
+export type MetricsCategory =
+  | 'process'
+  | 'tools'
+  | 'resources'
+  | 'http'
+  | 'storage'
+  | 'skills'
+  | 'auth'
+  | 'sessions'
+  | 'events';
 
 /**
  * Per-probe knobs for the built-in process-stats collector.
