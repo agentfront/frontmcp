@@ -6,6 +6,7 @@ import { CallToolRequestSchema, CallToolResultSchema, type AuthInfo } from '@fro
 import type { ToolResponseContent } from '@frontmcp/uipack/adapters';
 import {
   awaitOutsideRequest,
+  escapeControlCharacters,
   findNonFiniteNumber,
   getRuntimeContext,
   isDebug,
@@ -373,7 +374,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     if (!this.isClientCall()) return;
     if (!isSkillsOnlyRequest(this.state.authInfo, this.tryGetContext())) return;
     const { name } = this.state.required.input;
-    this.logger.verbose(`checkSkillsOnlyMode: refusing tool "${name}" in skills-only mode`);
+    this.logger.verbose(`checkSkillsOnlyMode: refusing tool "${escapeControlCharacters(name)}" in skills-only mode`);
     throw new ToolNotFoundError(name);
   }
 
@@ -405,7 +406,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const { name } = this.state.required.input;
     const tool = resolvedTools.peek(this.rawInput, name) ?? lookupTool(this.scope, name);
     if (tool && (await isEntryEnabled(tool.metadata.enabled, this.tryGetContext(), this.logger))) return;
-    this.logger.verbose(`checkSurface: "${name}" is not in the tool list that replaced this session's`);
+    this.logger.verbose(
+      `checkSurface: "${escapeControlCharacters(name)}" is not in the tool list that replaced this session's`,
+    );
     surface.refreshSession(sessionId);
     throw new StaleToolListError(name);
   }
@@ -457,7 +460,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
         );
         throw error;
       }
-      this.logger.warn(`findTool: tool "${name}" not found`);
+      this.logger.warn(`findTool: tool "${escapeControlCharacters(name)}" not found`);
       throw new ToolNotFoundError(name);
     }
 
