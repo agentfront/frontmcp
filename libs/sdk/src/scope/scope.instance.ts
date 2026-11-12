@@ -2158,6 +2158,7 @@ export class Scope extends ScopeEntry {
 
   async checkLateApp(app: LateAppRegistries): Promise<void> {
     const { tools, resources, prompts, agents, skills } = app;
+    assertEntryAuthorities(this._authoritiesEngine, this._authoritiesContextBuilder, entriesWithAuthorities(app));
     const problems = findUnenforcedMetadata({ hooks: this.scopeHooks, tools, resources, prompts, agents, skills });
     if (problems.length > 0) throw new UnenforcedMetadataError(problems);
     checkHookOrder(hookRunsOf(this.scopeHooks), (message) => this.logger.warn(message));
