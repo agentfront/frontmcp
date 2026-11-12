@@ -53,6 +53,7 @@ import {
   HttpRedirectSchema,
   httpRespond,
   HttpTextSchema,
+  isLocalMode,
   isOrchestratedMode,
   isPublicMode,
   isRemoteMode,
@@ -380,6 +381,24 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       const apps = this.scope.apps.getApps();
       const appsWithAuth = apps.filter((app) => app.metadata.auth);
       requiresFederatedLogin = configProviders.length > 0 || appsWithAuth.length > 0;
+    }
+
+    // `federatedAuth.minProviders` / `requiredProviders` ask for linked providers; with none to link, refuse.
+    const federatedAuth = metadata.auth && isLocalMode(metadata.auth) ? metadata.auth.federatedAuth : undefined;
+    if (!requiresFederatedLogin && (federatedAuth?.minProviders || federatedAuth?.requiredProviders?.length)) {
+      this.logger.error(
+        'OAuth authorize: federatedAuth.minProviders or requiredProviders is set, but there is no provider to link',
+      );
+      this.respondWithError(
+        [
+          'Sign-in is not available: this server requires linked providers but none is configured. ' +
+            'Add auth.providers (or an app with its own auth), or remove federatedAuth.minProviders and requiredProviders.',
+        ],
+        undefined,
+        rawState,
+        'server_error',
+      );
+      return;
     }
 
     // Check if consent flow is enabled

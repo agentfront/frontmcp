@@ -219,6 +219,25 @@ describe('unknown client ids are refused by default (#261)', () => {
     expect(response.status).toBe(200);
   });
 
+  it.each([
+    ['minProviders', { minProviders: 1 }],
+    ['requiredProviders', { requiredProviders: ['github'] }],
+  ])(
+    'refuses to sign in when federatedAuth.%s asks for providers and none is configured',
+    async (_label, federated) => {
+      const server = await serverWith(localAuth({ federatedAuth: federated }));
+
+      const response = await httpGet(
+        server.handler,
+        authorizePath({ client_id: REGISTERED_CLIENT, redirect_uri: REGISTERED_REDIRECT, state: 'x' }),
+        HOST,
+      );
+
+      expect(response.headers.get('location')).toBeNull();
+      expect(await response.text()).toContain('this server requires linked providers but none is configured');
+    },
+  );
+
   it('lets unknown clients in only with an explicit requireRegisteredClients: false', async () => {
     const server = await serverWith({ mode: 'local', requireRegisteredClients: false } as AuthConfig);
 
