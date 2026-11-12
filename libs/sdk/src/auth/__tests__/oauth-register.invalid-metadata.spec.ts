@@ -3,17 +3,13 @@
  * `invalid_client_metadata`, or `invalid_redirect_uri` when a redirect URI it lists is refused. It answered
  * 500 `server_misconfigured` (CONFIG_INVALID), as if the server's own configuration were invalid.
  *
- * Driven over the fetch handler and the Node server.
+ * Driven over the fetch handler: the flow answers by itself, so every host serves the same response.
  */
 import 'reflect-metadata';
 
-import * as http from 'node:http';
-import { type AddressInfo } from 'node:net';
-
 import { createTestFetchServer, type TestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { disposeServers } from '../../__test-utils__/helpers/oauth-flow.helpers';
-import { App, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
-import { FrontMcpInstance } from '../../front-mcp/front-mcp';
+import { App, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 
 @Tool({ name: 'ping', inputSchema: {} })
 class PingTool extends ToolContext {
@@ -26,52 +22,28 @@ class PingTool extends ToolContext {
 class DeskApp {}
 
 type AuthConfig = NonNullable<FrontMcpConfigInput['auth']>;
-type Register = (auth: AuthConfig, metadata: unknown) => Promise<Response>;
 
 const REDIRECT_URI = 'http://127.0.0.1:33418/callback';
-const JSON_HEADERS = { 'content-type': 'application/json' };
 
-const fetchServers: TestFetchServer[] = [];
-const nodeServers: http.Server[] = [];
+const servers: TestFetchServer[] = [];
 
-function config(auth: AuthConfig): FrontMcpConfigInput {
-  return { info: { name: 'desk', version: '1.0.0' }, logging: { level: LogLevel.Off }, apps: [DeskApp], auth };
-}
-
-const registerOverFetchHandler: Register = async (auth, metadata) => {
-  const server = await createTestFetchServer(config(auth));
-  fetchServers.push(server);
+async function register(auth: AuthConfig, metadata: unknown): Promise<Response> {
+  const server = await createTestFetchServer({ info: { name: 'desk', version: '1.0.0' }, apps: [DeskApp], auth });
+  servers.push(server);
   return server.handler(
     new Request('http://localhost/oauth/register', {
       method: 'POST',
-      headers: JSON_HEADERS,
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify(metadata),
     }),
   );
-};
-
-const registerOverNodeServer: Register = async (auth, metadata) => {
-  const listener = (await FrontMcpInstance.createHandler(config(auth))) as http.RequestListener;
-  const server = http.createServer(listener);
-  nodeServers.push(server);
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const { port } = server.address() as AddressInfo;
-  return fetch(`http://127.0.0.1:${port}/oauth/register`, {
-    method: 'POST',
-    headers: JSON_HEADERS,
-    body: JSON.stringify(metadata),
-  });
-};
+}
 
 afterAll(async () => {
-  await disposeServers(fetchServers);
-  await Promise.all(nodeServers.map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
+  await disposeServers(servers);
 });
 
-describe.each<[string, Register]>([
-  ['the fetch handler', registerOverFetchHandler],
-  ['the Node server', registerOverNodeServer],
-])('POST /oauth/register over %s', (_transport, register) => {
+describe('POST /oauth/register', () => {
   const registrationOpen = { mode: 'local', dcr: { enabled: true } } as AuthConfig;
 
   it.each<[string, unknown, string, string]>([

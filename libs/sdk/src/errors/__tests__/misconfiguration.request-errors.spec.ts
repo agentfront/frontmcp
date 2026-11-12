@@ -3,20 +3,35 @@
  * invalid server configuration, so a route (or any flow) that validated its input with zod answered 500
  * `server_misconfigured` with CONFIG_INVALID ("the server refuses to start").
  *
- * Driven over the fetch handler and the Node server.
+ * Both request paths are driven in process: the fetch handler (`flowErrorToHttpOutput()`), and the middleware a
+ * flow registers on the Node host (`FlowInstance`), called with a recorded response.
  */
 import 'reflect-metadata';
 
-import * as http from 'node:http';
-import { type AddressInfo } from 'node:net';
-
 import { z } from '@frontmcp/lazy-zod';
 
-import { createTestFetchServer, type TestFetchServer } from '../../__test-utils__/helpers/mcp-20260728.helpers';
+import {
+  createTestFetchServer,
+  rpc20260728,
+  type TestFetchServer,
+} from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { disposeServers } from '../../__test-utils__/helpers/oauth-flow.helpers';
-import { App, HttpRoute, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
+import {
+  App,
+  Flow,
+  FlowBase,
+  FlowHooksOf,
+  httpInputSchema,
+  HttpJsonSchema,
+  HttpRoute,
+  Tool,
+  ToolContext,
+  type FlowPlan,
+  type FlowRunOptions,
+  type ServerRequest,
+} from '../../common';
 import { HttpRouteContext } from '../../common/interfaces/http-route.interface';
-import { FrontMcpInstance } from '../../front-mcp/front-mcp';
+import type { Scope } from '../../scope/scope.instance';
 
 const orderSchema = z.object({ orderId: z.string() });
 
@@ -37,81 +52,76 @@ class OrdersRoute extends HttpRouteContext {
 @App({ id: 'desk', name: 'Desk', tools: [FindOrderTool], routes: [OrdersRoute] })
 class DeskApp {}
 
-const CONFIG: FrontMcpConfigInput = {
-  info: { name: 'desk', version: '1.0.0' },
-  logging: { level: LogLevel.Off },
-  apps: [DeskApp],
-};
+const lookupFlowName = 'test:order-lookup' as const;
+const lookupPlan = { execute: ['lookup'] } as const satisfies FlowPlan<string>;
+const lookupStateSchema = z.object({});
 
-const MCP_HEADERS = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' };
-const INITIALIZE = {
-  jsonrpc: '2.0',
-  id: 1,
-  method: 'initialize',
-  params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'spec-client', version: '1.0.0' } },
-};
-
-type Send = (path: string, init?: RequestInit) => Promise<Response>;
-
-const fetchServers: TestFetchServer[] = [];
-let nodeServer: http.Server | undefined;
-
-async function overFetchHandler(): Promise<Send> {
-  const server = await createTestFetchServer(CONFIG);
-  fetchServers.push(server);
-  return (path, init) => server.handler(new Request(`http://localhost${path}`, init));
+declare global {
+  interface ExtendFlows {
+    'test:order-lookup': FlowRunOptions<
+      OrderLookupFlow,
+      typeof lookupPlan,
+      typeof httpInputSchema,
+      typeof HttpJsonSchema,
+      typeof lookupStateSchema
+    >;
+  }
 }
 
-async function overNodeServer(): Promise<Send> {
-  const listener = (await FrontMcpInstance.createHandler(CONFIG)) as http.RequestListener;
-  const server = http.createServer(listener);
-  nodeServer = server;
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const { port } = server.address() as AddressInfo;
-  return (path, init) => fetch(`http://127.0.0.1:${port}${path}`, init);
+/** Validates the request's query with zod, as a hand-written flow does. */
+@Flow({
+  name: lookupFlowName,
+  plan: lookupPlan,
+  inputSchema: httpInputSchema,
+  outputSchema: HttpJsonSchema,
+  access: 'public',
+  middleware: { method: 'GET', path: '/order-lookup' },
+})
+class OrderLookupFlow extends FlowBase<typeof lookupFlowName> {
+  @(FlowHooksOf(lookupFlowName).Stage('lookup'))
+  async lookup() {
+    orderSchema.parse(this.rawInput.request.query);
+  }
 }
 
-afterAll(async () => {
-  await disposeServers(fetchServers);
-  await new Promise<void>((resolve) => (nodeServer ? nodeServer.close(() => resolve()) : resolve()));
-});
-
-describe.each<[string, () => Promise<Send>]>([
-  ['the fetch handler', overFetchHandler],
-  ['the Node server', overNodeServer],
-])('a validation error thrown while a request runs, over %s', (_transport, start) => {
-  let send: Send;
+describe('a validation error thrown while a request runs', () => {
+  let server: TestFetchServer;
 
   beforeAll(async () => {
-    send = await start();
+    server = await createTestFetchServer({ info: { name: 'desk', version: '1.0.0' }, apps: [DeskApp] });
   });
 
-  it('is not a server misconfiguration when a route throws it', async () => {
-    const response = await send('/orders');
+  afterAll(async () => {
+    await disposeServers([server]);
+  });
+
+  it('is a plain 500 on the fetch handler when a route throws it', async () => {
+    const response = await server.handler(new Request('http://localhost/orders'));
 
     expect(response.status).toBe(500);
-    expect(await response.text()).not.toContain('server_misconfigured');
+    expect(await response.text()).toBe('Internal Server Error');
+  });
+
+  it('is a plain 500 in the middleware of the Node host when a flow throws it', async () => {
+    const scope = server.instance.getScopes()[0] as Scope;
+    const register = jest.spyOn(scope.providers.getActiveServer(), 'registerMiddleware');
+    await scope.registryFlows(OrderLookupFlow);
+    const middleware = register.mock.calls.find(([path]) => path === '/order-lookup')?.[1];
+    const request = { method: 'GET', path: '/order-lookup', url: '/order-lookup', headers: {}, query: {} };
+    const response = { setHeader: jest.fn(), status: jest.fn().mockReturnThis(), end: jest.fn() };
+    const next = jest.fn();
+
+    await middleware?.(request as ServerRequest, response as never, next);
+
+    expect(response.status).toHaveBeenCalledWith(500);
+    expect(response.end).toHaveBeenCalledWith('Internal Server Error');
+    expect(next).not.toHaveBeenCalled();
   });
 
   it('is the error of the tool call when a tool throws it', async () => {
-    const initialized = await send('/', { method: 'POST', headers: MCP_HEADERS, body: JSON.stringify(INITIALIZE) });
-    const sessionId = initialized.headers.get('mcp-session-id');
-    await initialized.text();
+    const { status, message } = await rpc20260728(server.handler, 'tools/call', { name: 'find_order', arguments: {} });
 
-    const response = await send('/', {
-      method: 'POST',
-      headers: { ...MCP_HEADERS, ...(sessionId ? { 'mcp-session-id': sessionId } : {}) },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 2,
-        method: 'tools/call',
-        params: { name: 'find_order', arguments: {} },
-      }),
-    });
-
-    expect(response.status).toBe(200);
-    const answer = await response.text();
-    expect(answer).toContain('TOOL_EXECUTION_ERROR');
-    expect(answer).not.toContain('server_misconfigured');
+    expect(status).toBe(200);
+    expect(message.result).toMatchObject({ isError: true, _meta: { code: 'TOOL_EXECUTION_ERROR' } });
   });
 });
