@@ -90,7 +90,7 @@ async function startWebhookRun(
   const refusal = verifyWorkflowWebhook({ headers: request.headers, body }, current.secret, replays);
   if (refusal) {
     logger.warn(`Webhook of workflow "${workflowName}" refused a request: ${refusal}`);
-    return httpRespond.unauthorized();
+    return refusal === 'too many' ? problem(429, 'Too many requests; retry later') : httpRespond.unauthorized();
   }
 
   const input = jsonObjectOf(body);
