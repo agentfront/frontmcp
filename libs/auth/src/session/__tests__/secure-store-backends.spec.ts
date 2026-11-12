@@ -100,6 +100,21 @@ describe('EncryptedStorageSecureStoreBackend', () => {
     });
   });
 
+  describe('without a pepper', () => {
+    it.each([undefined, '', '   '])(
+      'encrypts with a random pepper (%p), so another backend over the same storage cannot read the value',
+      async (pepper) => {
+        const writer = new EncryptedStorageSecureStoreBackend({ storage: adapter, pepper });
+        const reader = new EncryptedStorageSecureStoreBackend({ storage: adapter, pepper });
+
+        await writer.set(NS, 'api-key', 'sk-secret-123');
+
+        expect(await writer.get(NS, 'api-key')).toBe('sk-secret-123');
+        expect(await reader.get(NS, 'api-key')).toBeNull();
+      },
+    );
+  });
+
   describe('namespace isolation', () => {
     it('one namespace cannot read another namespace value', async () => {
       await backend.set('u:alice', 'token', 'alice-secret');

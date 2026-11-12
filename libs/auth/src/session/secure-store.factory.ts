@@ -53,7 +53,8 @@ export interface CreateSecureStoreOptions {
   /**
    * Master pepper for the built-in encrypted backings. Used when the config
    * does not carry an explicit `encryption.pepper`. Typically the server
-   * JWT/VAULT secret.
+   * JWT/VAULT secret. A sqlite or redis backing needs one; the memory backing
+   * without one uses a random pepper.
    */
   pepper?: string;
   /**
@@ -153,6 +154,13 @@ export async function createSecureStore(options: CreateSecureStoreOptions): Prom
 
   // Built-in encrypted backing over a StorageAdapter (memory / sqlite / redis).
   const kind: SecureStoreBackendKind = isSqliteConfig(config) ? 'sqlite' : isRedisConfig(config) ? 'redis' : 'memory';
+  const effectivePepper = readPepper(config) ?? pepper;
+  if (kind !== 'memory' && !effectivePepper?.trim()) {
+    throw new SecureStoreConfigError(
+      `the ${kind} backing encrypts the secrets with a pepper, and none was given. Set VAULT_SECRET or JWT_SECRET ` +
+        '(or pass pepper to createSecureStore()), or set secureStore.encryption.pepper.',
+    );
+  }
 
   let adapter: StorageAdapter;
   if (storage) {
@@ -166,7 +174,7 @@ export async function createSecureStore(options: CreateSecureStoreOptions): Prom
 
   const backend = new EncryptedStorageSecureStoreBackend({
     storage: adapter,
-    pepper: readPepper(config) ?? pepper,
+    pepper: effectivePepper,
     logger,
   });
 
