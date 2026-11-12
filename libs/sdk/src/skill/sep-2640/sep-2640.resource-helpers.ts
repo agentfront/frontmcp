@@ -115,6 +115,10 @@ export async function findAndLoadSkillByPath(
   if (!loadResult) {
     throw new PublicMcpError(`Failed to load skill at "${skillPath}".`, 'INTERNAL_ERROR', 500);
   }
+  // The content goes with the registration the caller is checked against: one replaced meanwhile is not served
+  if (findSkillByPath(scope, skillPath) !== entry) {
+    throw new ResourceNotFoundError(`skill://${skillPath}/SKILL.md`);
+  }
 
   return { loadResult, instance: entry as SkillInstance };
 }
