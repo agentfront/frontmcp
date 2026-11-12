@@ -26,14 +26,15 @@ function containsPipe(value: unknown, seen: WeakSet<object>): boolean {
   seen.add(def);
   if (def['type'] === 'pipe') return true;
   if (def['type'] === 'lazy') return containsPipe((def['getter'] as () => unknown)(), seen);
-  return Object.values(def).some((child) => nestedSchemas(child).some((nested) => containsPipe(nested, seen)));
+  return Object.entries(def).some(([key, child]) =>
+    nestedSchemas(key, child).some((nested) => containsPipe(nested, seen)),
+  );
 }
 
-/** The schemas a definition field can hold: one schema, a list (options, items) or a shape. */
-function nestedSchemas(field: unknown): unknown[] {
+/** The schemas a definition field can hold: one schema, a list (options, items) or an object's shape. */
+function nestedSchemas(key: string, field: unknown): unknown[] {
   if (Array.isArray(field)) return field;
-  const isShape = field !== null && typeof field === 'object' && (field as { _zod?: unknown })._zod === undefined;
-  if (isShape) return Object.values(field);
+  if (key === 'shape' && field !== null && typeof field === 'object') return Object.values(field);
   return [field];
 }
 
