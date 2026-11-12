@@ -11,6 +11,7 @@
 import { escapeControlCharacters, isDevelopment } from '@frontmcp/utils';
 
 import type { FrontMcpLogger } from '../common';
+import { toMcpError } from '../errors';
 import {
   EXT_APPS_ERROR_CODES,
   type ExtAppsCallServerToolParams,
@@ -168,7 +169,7 @@ export class ExtAppsMessageHandler {
         id,
         error: {
           code: errorCode,
-          message: errorMessage,
+          message: this.widgetMessageOf(error),
           // Only include stack traces in development to avoid leaking internals in production
           data: isDevelopment() && error instanceof Error ? { stack: error.stack } : undefined,
         },
@@ -545,6 +546,12 @@ export class ExtAppsMessageHandler {
     this.logger.verbose(`handleUnregisterTool: name=${name}`);
 
     await this.context.unregisterTool(name);
+  }
+
+  /** The message a widget is answered with: an internal failure's own message stays in the server log outside development. */
+  private widgetMessageOf(error: unknown): string {
+    if (error instanceof ExtAppsError || isDevelopment()) return error instanceof Error ? error.message : String(error);
+    return toMcpError(error).getPublicMessage();
   }
 
   /**
