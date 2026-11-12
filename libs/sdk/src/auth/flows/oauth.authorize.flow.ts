@@ -75,7 +75,7 @@ import {
   type AuthUiRegistry,
 } from '../auth-ui';
 import { incrementalTicketAudience, initialAuthorizedApps } from '../authorized-apps.utils';
-import { CimdDisabledError, CimdService, clientMetadataDocumentSchema } from '../cimd';
+import { CimdDisabledError, CimdError, CimdService, clientMetadataDocumentSchema } from '../cimd';
 import { projectConsentTools } from '../consent-tools.helper';
 import {
   getConfiguredProviders,
@@ -597,9 +597,10 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
         // CIMD validation failed - respond with error
         // Per OAuth 2.1 spec, do NOT redirect to unvalidated redirect_uri - show error page instead
         // This prevents open-redirect attacks when CIMD validation fails
-        const errorMessage = error instanceof Error ? error.message : 'CIMD validation failed';
-        this.logger.warn(`CIMD validation failed for ${client_id}: ${errorMessage}`);
-        this.respondWithError([errorMessage], undefined, rawState);
+        const detail = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`CIMD validation failed for ${client_id}: ${detail}`);
+        const publicMessage = error instanceof CimdError ? error.getPublicMessage() : 'CIMD validation failed';
+        this.respondWithError([publicMessage], undefined, rawState);
         return;
       }
     }
