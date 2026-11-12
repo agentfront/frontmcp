@@ -254,7 +254,11 @@ export class FrontMcpContext {
   /** Unique request identifier (UUID v4) */
   readonly requestId: string;
 
-  /** Session identifier (validated) */
+  /**
+   * The session id the request names: over HTTP, the client's `mcp-session-id` header (a fresh `anon:` id when it
+   * sends none). Only its length and characters are checked, so it does not prove a session; key per-session state
+   * on {@link verifiedSessionId}.
+   */
   readonly sessionId: string;
 
   /** Scope identifier */
