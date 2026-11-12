@@ -2,6 +2,7 @@
  * SKILL.md Frontmatter Parser Tests
  */
 
+import { InvalidSkillError } from '../../errors/sdk.errors';
 import { parseSkillMdFrontmatter, skillMdFrontmatterToMetadata, stripFrontmatter } from '../skill-md-parser';
 
 describe('skill-md-parser', () => {
@@ -642,5 +643,35 @@ Body content here.`;
       const content = '---\nname: incomplete\nNo closing.';
       expect(stripFrontmatter(content)).toBe(content);
     });
+  });
+});
+
+describe('skillMdFrontmatterToMetadata with YAML aliases', () => {
+  /** Frontmatter whose `field` repeats one value 10^levels times through aliases, in a few lines of YAML. */
+  function aliasedFrontmatter(field: string, levels: number): string {
+    const lines = ['name: aliased', `${field}:`, '  a0: &a0 ["xxxxxxxxxx","xxxxxxxxxx","xxxxxxxxxx"]'];
+    for (let level = 1; level <= levels; level++) {
+      lines.push(
+        `  a${level}: &a${level} [${Array(10)
+          .fill(`*a${level - 1}`)
+          .join(',')}]`,
+      );
+    }
+    return `---\n${lines.join('\n')}\n---\nBody`;
+  }
+
+  it('refuses a metadata value that aliases repeat past the limit, before building it', () => {
+    const { frontmatter, body } = parseSkillMdFrontmatter(aliasedFrontmatter('metadata', 6));
+    expect(() => skillMdFrontmatterToMetadata(frontmatter, body)).toThrow(InvalidSkillError);
+  });
+
+  it('refuses an unknown field that aliases repeat past the limit', () => {
+    const { frontmatter, body } = parseSkillMdFrontmatter(aliasedFrontmatter('custom-field', 6));
+    expect(() => skillMdFrontmatterToMetadata(frontmatter, body)).toThrow(/custom-field/);
+  });
+
+  it('keeps a small aliased value', () => {
+    const { frontmatter, body } = parseSkillMdFrontmatter(aliasedFrontmatter('custom-field', 1));
+    expect(skillMdFrontmatterToMetadata(frontmatter, body).specMetadata?.['custom-field']).toContain('xxxxxxxxxx');
   });
 });
