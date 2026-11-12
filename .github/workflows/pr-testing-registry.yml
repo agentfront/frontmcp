@@ -202,7 +202,7 @@ jobs:
           auth:
             htpasswd:
               file: /tmp/verdaccio-pr/htpasswd
-              max_users: 1000
+              max_users: -1
           uplinks:
             npmjs:
               url: https://registry.npmjs.org/
@@ -210,12 +210,12 @@ jobs:
           packages:
             "@frontmcp/*":
               access: $all
-              publish: $authenticated
-              unpublish: $authenticated
+              publish: ci-publisher
+              unpublish: ci-publisher
             "frontmcp":
               access: $all
-              publish: $authenticated
-              unpublish: $authenticated
+              publish: ci-publisher
+              unpublish: ci-publisher
             "**":
               access: $all
               proxy: npmjs
@@ -230,9 +230,14 @@ jobs:
             level: info
           EOF
 
-          # Create CI user for publishing
+          # Create the only user that can publish, with a password made for this run
           npm install -g htpasswd
-          htpasswd -cb /tmp/verdaccio-pr/htpasswd ci-publisher ci-publisher-pass
+          PUBLISH_PASSWORD=$(openssl rand -hex 16)
+          echo "::add-mask::$PUBLISH_PASSWORD"
+          htpasswd -cb /tmp/verdaccio-pr/htpasswd ci-publisher "$PUBLISH_PASSWORD"
+
+          # Login to local Verdaccio registry using basic auth (_auth not _authToken)
+          npm set //localhost:4873/:_auth "$(printf '%s' "ci-publisher:$PUBLISH_PASSWORD" | base64 | tr -d '\n')"
 
       - name: Install and start Verdaccio
         run: |
@@ -337,11 +342,6 @@ jobs:
 
           echo "NGROK_URL=$NGROK_URL" >> "$GITHUB_ENV"
           echo "ngrok_url=$NGROK_URL" >> "$GITHUB_OUTPUT"
-
-      - name: Authenticate with Verdaccio
-        run: |
-          # Login to local Verdaccio registry using basic auth (_auth not _authToken)
-          npm set //localhost:4873/:_auth "$(echo -n 'ci-publisher:ci-publisher-pass' | base64)"
 
       - name: Publish packages to local Verdaccio
         env:
