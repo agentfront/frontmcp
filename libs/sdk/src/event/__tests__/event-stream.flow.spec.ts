@@ -227,6 +227,8 @@ describe('events:stream', () => {
       const refusal = openStream(limited, { arguments: { status: 'two' } });
 
       await expect(refusal).rejects.toThrow(EventResourceExhaustedError);
+      await expect(refusal).rejects.toMatchObject({ jsonRpcCode: -32025, data: { limit: 'streams', max: 1 } });
+      await expect(refusal).rejects.toThrow('open event streams per caller is reached. Close one, then retry.');
       await expect(openStream(limited, { ctx: asBob })).resolves.toBeDefined();
       first.close();
       await limited.dispose();

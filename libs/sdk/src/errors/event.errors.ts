@@ -58,16 +58,23 @@ export class EventForbiddenError extends EventProtocolError {
 
 const RESOURCE_LIMIT_MESSAGES = {
   subscriptions: (max: number) =>
-    `The limit of ${max} subscriptions per caller is reached. Remove one with events/unsubscribe, then retry.`,
+    `The limit of ${max} webhook subscriptions per caller is reached. Remove one with events/unsubscribe, then retry.`,
+  pollLeases: (max: number, leaseMs: number) =>
+    `The limit of ${max} poll leases per caller is reached. A lease ends ${Math.ceil(leaseMs / 60_000)} minutes ` +
+    'after the last events/poll of its subscription: stop polling one, and retry after that.',
+  streams: (max: number) => `The limit of ${max} open event streams per caller is reached. Close one, then retry.`,
   verifications: (max: number) =>
     `The callback host was sent ${max} verification requests in the last minute. Retry in a minute.`,
 } as const;
 
-/** `ResourceExhausted`: the caller reached a limit, such as its number of subscriptions. */
+/** `ResourceExhausted`: the caller reached a limit: webhook subscriptions, poll leases, streams or verifications. */
 export class EventResourceExhaustedError extends EventProtocolError {
   /** Names the limit that was reached and its ceiling. */
-  constructor(codes: EventErrorCodes, limit: 'subscriptions' | 'verifications', max: number) {
-    super(RESOURCE_LIMIT_MESSAGES[limit](max), 'EVENT_RESOURCE_EXHAUSTED', 429, codes.resourceExhausted, {
+  constructor(codes: EventErrorCodes, limit: 'subscriptions' | 'streams' | 'verifications', max: number);
+  /** Names the poll lease limit and its ceiling; `leaseMs` is how long a lease outlives its last poll. */
+  constructor(codes: EventErrorCodes, limit: 'pollLeases', max: number, leaseMs: number);
+  constructor(codes: EventErrorCodes, limit: keyof typeof RESOURCE_LIMIT_MESSAGES, max: number, leaseMs = 0) {
+    super(RESOURCE_LIMIT_MESSAGES[limit](max, leaseMs), 'EVENT_RESOURCE_EXHAUSTED', 429, codes.resourceExhausted, {
       limit,
       max,
     });

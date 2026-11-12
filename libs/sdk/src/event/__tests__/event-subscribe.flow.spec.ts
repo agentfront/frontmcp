@@ -492,6 +492,7 @@ describe('events:subscribe', () => {
 
       await expect(refusal).rejects.toThrow(EventResourceExhaustedError);
       await expect(refusal).rejects.toMatchObject({ jsonRpcCode: -32025, data: { limit: 'subscriptions', max: 2 } });
+      await expect(refusal).rejects.toThrow('The limit of 2 webhook subscriptions per caller is reached');
       await expect(subscribe(limited, { arguments: { status: 'one' } })).resolves.toMatchObject({ id: first.id });
       await expect(
         subscribe(limited, { arguments: { status: 'three' }, ctx: { authInfo: bob, surface: 'mcp' } }),

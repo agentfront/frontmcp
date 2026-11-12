@@ -157,7 +157,7 @@ export interface EventSubscriptionsOptions {
   minTtlMs?: number;
   /** Grant `ttlMs: null`, a subscription that never expires. Needs `events.store`. @default false */
   allowNoExpiry?: boolean;
-  /** How many subscriptions one caller may hold. @default 100 */
+  /** How many webhook subscriptions, poll leases and open streams one caller may hold, each kind apart. @default 100 */
   maxPerPrincipal?: number;
   /** How often a publish checks a subscription's owner against the event's `authorities` again. @default 300_000 */
   reauthorizeEveryMs?: number;

@@ -54,11 +54,24 @@ describe('events protocol errors', () => {
     });
   });
 
-  it('names the limit that was reached and its ceiling', () => {
+  it('names the limit that was reached, its ceiling and what frees a place', () => {
     expect(new EventResourceExhaustedError(EVENTS_ERROR_CODES, 'subscriptions', 100).toJsonRpcError()).toEqual({
       code: -32025,
-      message: 'The limit of 100 subscriptions per caller is reached. Remove one with events/unsubscribe, then retry.',
+      message:
+        'The limit of 100 webhook subscriptions per caller is reached. Remove one with events/unsubscribe, then retry.',
       data: { limit: 'subscriptions', max: 100 },
+    });
+    expect(new EventResourceExhaustedError(EVENTS_ERROR_CODES, 'pollLeases', 100, 330_000).toJsonRpcError()).toEqual({
+      code: -32025,
+      message:
+        'The limit of 100 poll leases per caller is reached. A lease ends 6 minutes after the last events/poll of ' +
+        'its subscription: stop polling one, and retry after that.',
+      data: { limit: 'pollLeases', max: 100 },
+    });
+    expect(new EventResourceExhaustedError(EVENTS_ERROR_CODES, 'streams', 100).toJsonRpcError()).toEqual({
+      code: -32025,
+      message: 'The limit of 100 open event streams per caller is reached. Close one, then retry.',
+      data: { limit: 'streams', max: 100 },
     });
     expect(new EventResourceExhaustedError(EVENTS_ERROR_CODES, 'verifications', 10).toJsonRpcError()).toEqual({
       code: -32025,
