@@ -13,7 +13,7 @@ import {
 } from '../common';
 import type { ChannelNotification } from '../common/metadata/channel.metadata';
 import type ProviderRegistry from '../provider/provider.registry';
-import type { ChannelNotificationMeta, ChannelNotificationService } from './channel-notification.service';
+import type { ChannelNotificationService, SentChannelNotification } from './channel-notification.service';
 import { wireFileWatcherSource } from './sources/file-watcher.source';
 
 /**
@@ -38,7 +38,7 @@ export class ChannelInstance extends ChannelEntry {
   /** Ends the watch of a file-watcher source's paths; set while the channel is connected */
   private _stopFileWatch?: () => void;
   /** The channel's latest global notifications, kept for `replayBufferedEvents()` when replay is enabled */
-  private _replayBuffer: ChannelNotification[] = [];
+  private _replayBuffer: SentChannelNotification[] = [];
   /** Maximum replay buffer size */
   private readonly _maxReplayEvents: number;
 
@@ -171,7 +171,7 @@ export class ChannelInstance extends ChannelEntry {
   /**
    * Get the current replay buffer contents (read-only).
    */
-  get replayBuffer(): readonly ChannelNotification[] {
+  get replayBuffer(): readonly SentChannelNotification[] {
     return this._replayBuffer;
   }
 
@@ -189,10 +189,10 @@ export class ChannelInstance extends ChannelEntry {
    * (appropriate for global events like webhooks, file changes, etc.).
    *
    * @param content - The notification content
-   * @param meta - Additional metadata
+   * @param meta - Additional metadata; a value that is not a string is sent as one
    * @param targetSessionId - If set, deliver ONLY to this session
    */
-  async pushNotification(content: string, meta?: Record<string, string>, targetSessionId?: string): Promise<void> {
+  async pushNotification(content: string, meta?: Record<string, unknown>, targetSessionId?: string): Promise<void> {
     try {
       await this.scope.runFlow('channels:send-notification', {
         channelName: this.name,
@@ -211,7 +211,7 @@ export class ChannelInstance extends ChannelEntry {
    *
    * @internal
    */
-  recordForReplay(notification: ChannelNotification): void {
+  recordForReplay(notification: SentChannelNotification): void {
     if (!this.replayEnabled) return;
     this._replayBuffer.push(notification);
     while (this._replayBuffer.length > this._maxReplayEvents) {
@@ -234,14 +234,7 @@ export class ChannelInstance extends ChannelEntry {
 
     let count = 0;
     for (const notification of this._replayBuffer) {
-      // Buffered notifications were emitted by pushNotification(), which always
-      // sets source. Re-pin source here so the type stays narrowed even though
-      // ChannelNotification.meta is the looser Record<string, string>.
-      const replayMeta: ChannelNotificationMeta = {
-        ...(notification.meta ?? {}),
-        source: notification.meta?.['source'] ?? this.name,
-        replayed: 'true',
-      };
+      const replayMeta = { ...notification.meta, replayed: 'true' };
       this._channelNotificationService.sendToSession(sessionId, notification.content, replayMeta);
       count++;
     }

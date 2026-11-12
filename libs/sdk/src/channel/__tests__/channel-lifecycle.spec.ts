@@ -80,11 +80,14 @@ class MutedChannel extends ChannelContext {
   }
 }
 
-/** Sends its payload as the notification's `meta`, whatever the types of its values. */
+/** A `meta` with values of several types, as a handler may return it. */
+const mixedMeta = { attempt: 3, urgent: true, order: { id: 'o-1' }, 'chat-id': 42, owner: undefined, team: null };
+
+/** Sends a `meta` whose values are not all strings. */
 @Channel({ name: 'orders', source: { type: 'app-event', event: 'order' } })
 class OrdersChannel extends ChannelContext {
-  async onEvent(payload: unknown): Promise<ChannelNotification> {
-    return { content: 'order paid', meta: payload as Record<string, string> };
+  async onEvent(): Promise<ChannelNotification> {
+    return { content: 'order paid', meta: mixedMeta };
   }
 }
 
@@ -203,11 +206,10 @@ describe('channels', () => {
   });
 
   it('sends a meta value that is not a string as one, an object as JSON, and leaves out one that is not there', async () => {
-    const mixedMeta = { attempt: 3, urgent: true, order: { id: 'o-1' }, 'chat-id': 42, owner: undefined, team: null };
     const sentMeta = { attempt: '3', urgent: 'true', order: '{"id":"o-1"}', chat_id: '42' };
 
-    await channelOf(server, 'orders').handleEvent(mixedMeta);
-    await scopeOf(server).channelNotifications?.send('alerts', 'manual push', mixedMeta as never);
+    await channelOf(server, 'orders').handleEvent({});
+    await scopeOf(server).channelNotifications?.send('alerts', 'manual push', mixedMeta);
 
     expect(received).toEqual([
       { content: 'order paid', meta: { server: 'desk', room: 'default', ...sentMeta, source: 'orders' } },
