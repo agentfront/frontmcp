@@ -4,9 +4,10 @@
  */
 import 'reflect-metadata';
 
-import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+
+import { mkdtemp, readdir, readFile, rm } from '@frontmcp/utils';
 
 import { type FrontMcpConfigInput } from '../../common';
 
@@ -81,13 +82,13 @@ describe('runStdio logging', () => {
   };
   let logDir: string;
 
-  beforeEach(() => {
-    logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-stdio-logging-'));
+  beforeEach(async () => {
+    logDir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-stdio-logging-'));
     process.env['FRONTMCP_LOG_DIR'] = logDir;
     delete process.env['FRONTMCP_LOG_LEVEL'];
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     jest.restoreAllMocks();
     Object.assign(console, savedConsole);
     for (const [name, value] of Object.entries(savedEnv)) {
@@ -99,14 +100,13 @@ describe('runStdio logging', () => {
         if (!savedSignalListeners[signal].includes(listener)) process.removeListener(signal, listener);
       }
     }
-    fs.rmSync(logDir, { recursive: true, force: true });
+    await rm(logDir, { recursive: true, force: true });
   });
 
-  function logFileText(): string {
-    return fs
-      .readdirSync(logDir)
-      .map((fileName) => fs.readFileSync(path.join(logDir, fileName), 'utf8'))
-      .join('');
+  async function logFileText(): Promise<string> {
+    const fileNames = await readdir(logDir);
+    const files = await Promise.all(fileNames.map((fileName) => readFile(path.join(logDir, fileName))));
+    return files.join('');
   }
 
   it.each<[string, FrontMcpConfigInput['logging']]>([
@@ -120,7 +120,7 @@ describe('runStdio logging', () => {
 
     const stderrText = stderr.mock.calls.map(([chunk]) => String(chunk)).join('');
     expect(stderrText).toContain(START_LINE);
-    expect(logFileText()).toContain(START_LINE);
+    expect(await logFileText()).toContain(START_LINE);
     expect(stdout).not.toHaveBeenCalled();
   });
 
@@ -131,6 +131,6 @@ describe('runStdio logging', () => {
     await runStdioServer(undefined);
 
     expect(stderr.mock.calls.map(([chunk]) => String(chunk)).join('')).not.toContain(START_LINE);
-    expect(logFileText()).not.toContain(START_LINE);
+    expect(await logFileText()).not.toContain(START_LINE);
   });
 });

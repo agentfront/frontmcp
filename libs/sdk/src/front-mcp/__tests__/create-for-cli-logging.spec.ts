@@ -4,9 +4,10 @@
  */
 import 'reflect-metadata';
 
-import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+
+import { mkdtemp, readdir, readFile, rm } from '@frontmcp/utils';
 
 import { App, type FrontMcpConfigInput } from '../../common';
 import { FrontMcpInstance } from '../front-mcp';
@@ -22,20 +23,20 @@ describe('createForCli logging', () => {
   let logDir: string;
   let consoleInfo: jest.SpyInstance;
 
-  beforeEach(() => {
-    logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-cli-logging-'));
+  beforeEach(async () => {
+    logDir = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-cli-logging-'));
     for (const name of ENV_NAMES) delete process.env[name];
     process.env['FRONTMCP_LOG_DIR'] = logDir;
     consoleInfo = jest.spyOn(console, 'info').mockImplementation(() => undefined);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     jest.restoreAllMocks();
     for (const [name, value] of savedEnv) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
     }
-    fs.rmSync(logDir, { recursive: true, force: true });
+    await rm(logDir, { recursive: true, force: true });
   });
 
   /** Start a CLI-mode server and stop it; returns what its log file holds and what it printed on the console. */
@@ -46,11 +47,12 @@ describe('createForCli logging', () => {
       ...(logging ? { logging } : {}),
     });
     await instance.shutdown();
-    const file = fs
-      .readdirSync(logDir)
-      .map((fileName) => fs.readFileSync(path.join(logDir, fileName), 'utf8'))
-      .join('');
-    return { file, console: consoleInfo.mock.calls.map((args) => args.map(String).join(' ')).join('\n') };
+    const fileNames = await readdir(logDir);
+    const files = await Promise.all(fileNames.map((fileName) => readFile(path.join(logDir, fileName))));
+    return {
+      file: files.join(''),
+      console: consoleInfo.mock.calls.map((args) => args.map(String).join(' ')).join('\n'),
+    };
   }
 
   it.each<[string, FrontMcpConfigInput['logging']]>([
