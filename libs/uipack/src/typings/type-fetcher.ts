@@ -540,9 +540,12 @@ export class TypeFetcher {
   }
 
   /**
-   * Fetch with timeout support.
+   * Fetch with timeout support, from the origin of `cdnBaseUrl` only: a URL that a declaration file
+   * or a redirect points elsewhere is refused.
    */
   private async fetchWithTimeout(url: string, timeout: number, method: 'GET' | 'HEAD'): Promise<Response> {
+    const cdnOrigin = new URL(this.cdnBaseUrl).origin;
+    assertSameOrigin(url, cdnOrigin);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -554,6 +557,7 @@ export class TypeFetcher {
           Accept: 'application/typescript, text/plain, */*',
         },
       });
+      if (response.url) assertSameOrigin(response.url, cdnOrigin);
       return response;
     } finally {
       clearTimeout(timeoutId);
@@ -640,6 +644,13 @@ function isBuiltinModule(name: string): boolean {
   ]);
 
   return builtins.has(name);
+}
+
+/** Throws unless `url` is on `origin`, the origin of the CDN that declarations are fetched from. */
+function assertSameOrigin(url: string, origin: string): void {
+  if (new URL(url).origin !== origin) {
+    throw new Error(`${url} is outside ${origin}, the origin of cdnBaseUrl, so it is not fetched.`);
+  }
 }
 
 /**

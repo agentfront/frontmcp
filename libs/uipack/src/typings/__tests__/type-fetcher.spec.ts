@@ -774,6 +774,42 @@ describe('TypeFetcher', () => {
       expect(result.networkRequests).toBe(0);
     });
   });
+
+  describe('fetches from the cdnBaseUrl origin only', () => {
+    const typesHeader = new Headers({ 'X-TypeScript-Types': '/zod@3.23.8/index.d.ts' });
+    const respond = (body: string, url = '') =>
+      ({ ok: true, status: 200, statusText: 'OK', url, headers: typesHeader, text: async () => body }) as Response;
+
+    it('does not follow a reference or import in a declaration file to another host', async () => {
+      const declaration = [
+        '/// <reference path="https://internal.example/secret.d.ts" />',
+        "import type { Other } from '//internal.example/other';",
+        'export declare const z: unknown;',
+      ].join('\n');
+      const mockFetch = jest.fn(async (url: string) =>
+        respond(url.startsWith('https://esm.sh/') ? declaration : 'internal data'),
+      );
+      const fetcher = new TypeFetcher({ fetch: mockFetch as typeof fetch }, new MemoryTypeCache());
+
+      const result = await fetcher.fetchBatch({ imports: ['import { z } from "zod"'] });
+
+      const requestedUrls = mockFetch.mock.calls.map(([url]) => url);
+      expect(requestedUrls).toEqual(['https://esm.sh/zod', 'https://esm.sh/zod@3.23.8/index.d.ts']);
+      expect(result.results[0].files.map((file) => file.content)).toEqual([declaration]);
+    });
+
+    it('does not read a response that a redirect took to another host', async () => {
+      const mockFetch = jest.fn(async (url: string) =>
+        url === 'https://esm.sh/zod' ? respond('') : respond('internal data', 'https://internal.example/x.d.ts'),
+      );
+      const fetcher = new TypeFetcher({ fetch: mockFetch as typeof fetch }, new MemoryTypeCache());
+
+      const result = await fetcher.fetchBatch({ imports: ['import { z } from "zod"'] });
+
+      expect(result.results).toHaveLength(0);
+      expect(result.errors[0].message).toContain('outside https://esm.sh');
+    });
+  });
 });
 
 // ============================================
