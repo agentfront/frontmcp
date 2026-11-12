@@ -246,6 +246,7 @@ export class FilesystemSkillsSource {
       this.logger.warn(`[fs-skills] failed to load ${absDir}: ${(e as Error).message}`);
       return; // do not unregister on transient parse failures (editor swap files etc.)
     }
+    content = await this.withoutResourcesOutsideRoot(content);
 
     const prev = this.known.get(absDir);
     if (prev && skillContentEqual(prev, content)) {
@@ -255,6 +256,18 @@ export class FilesystemSkillsSource {
     }
     this.known.set(absDir, content);
     this.emit({ op: 'upsert', skill: content, absPath: absDir });
+  }
+
+  /** The skill without the resource directories (scripts/, references/, ...) that resolve outside skillsDir. */
+  private async withoutResourcesOutsideRoot(content: FilesystemSkillContent): Promise<FilesystemSkillContent> {
+    if (!content.resources) return content;
+    const resources: NonNullable<FilesystemSkillContent['resources']> = {};
+    for (const [kind, dir] of Object.entries(content.resources) as Array<[keyof typeof resources, string]>) {
+      if (await this.staysInsideRoot(dir)) resources[kind] = dir;
+      else this.logger.warn(`[fs-skills] skipping ${dir}: it resolves outside skillsDir`);
+    }
+    const { resources: _all, ...rest } = content;
+    return Object.keys(resources).length > 0 ? { ...rest, resources } : rest;
   }
 
   /** Whether `path` resolves, through any symlinks, inside skillsDir; a missing path is left to the read that follows. */

@@ -335,6 +335,30 @@ describe('FilesystemSkillsSource', () => {
     }
   });
 
+  it('leaves out a resource directory that is a symlink to a directory outside skillsDir', async () => {
+    const root = await mkTempDir();
+    const outside = await mkTempDir();
+    const warn = jest.fn();
+    try {
+      const dir = await writeSkill(root, 'linked', { name: 'linked', description: 'D' }, '# Body');
+      await mkdir(pathJoin(dir, 'scripts'), { recursive: true });
+      await symlink(outside, pathJoin(dir, 'references'));
+
+      const events: FilesystemSkillsEvent[] = [];
+      const source = new FilesystemSkillsSource({ skillsDir: root, watch: false }, { ...noopLogger, warn });
+      source.onChange((e) => events.push(e));
+      await source.start();
+      await source.stop();
+
+      const [upsert] = events.filter(isUpsert);
+      expect(Object.keys(upsert.skill.resources ?? {})).toEqual(['scripts']);
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/references: it resolves outside skillsDir/));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
   it('skips broken symlinks without throwing', async () => {
     const root = await mkTempDir();
     try {
