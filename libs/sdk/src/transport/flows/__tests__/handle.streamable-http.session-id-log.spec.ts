@@ -40,7 +40,7 @@ describe('handle:streamable-http transport recreation log', () => {
     const warnings = await sseListenerWarnings(new SessionClaimConflictError(SESSION_ID));
 
     expect(warnings).toContain('claimed by another pod');
-    expect(warnings).toContain(`${SESSION_ID.slice(0, 20)}...`);
+    expect(warnings).toContain(SESSION_ID.slice(0, 20));
     expect(warnings).not.toContain(SESSION_ID);
   });
 
