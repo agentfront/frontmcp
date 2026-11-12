@@ -5,7 +5,7 @@
 import * as os from 'os';
 import * as path from 'path';
 
-import { fileExists, mkdtemp, rm, writeFile } from '../../fs';
+import { fileExists, mkdtemp, rm, stat, writeFile } from '../../fs';
 import { FileSystemStorageAdapter } from '../adapters/filesystem';
 import { StorageNotConnectedError, StorageOperationError } from '../errors';
 import { escapeGlob } from '../utils/pattern';
@@ -53,6 +53,15 @@ describe('FileSystemStorageAdapter', () => {
     it('should throw when operating while disconnected', async () => {
       await adapter.disconnect();
       await expect(adapter.get('key')).rejects.toThrow(StorageNotConnectedError);
+    });
+
+    (process.platform === 'win32' ? it.skip : it)('creates its directory with dirMode', async () => {
+      const dir = path.join(testDir, 'private', 'keys');
+      const privateAdapter = new FileSystemStorageAdapter({ baseDir: dir });
+      await privateAdapter.connect();
+
+      expect((await stat(dir)).mode & 0o777).toBe(0o700);
+      await privateAdapter.disconnect();
     });
   });
 

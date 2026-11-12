@@ -20,7 +20,7 @@
  */
 
 import { bytesToHex, randomBytes } from '../../crypto';
-import { ensureDir, fileExists, mkdir, readdir, readFile, readJSON, rename, unlink, writeFile } from '../../fs';
+import { fileExists, mkdir, readdir, readFile, readJSON, rename, unlink, writeFile } from '../../fs';
 import { StorageOperationError } from '../errors';
 import type { SetOptions } from '../types';
 import { createGlobMatcher } from '../utils/pattern';
@@ -123,15 +123,8 @@ export class FileSystemStorageAdapter extends BaseStorageAdapter {
   async connect(): Promise<void> {
     if (this.connected) return;
 
-    // Ensure base directory exists with proper permissions
-    await ensureDir(this.baseDir);
-
-    // Try to set directory permissions (may not work on all platforms)
-    try {
-      await mkdir(this.baseDir, { recursive: true, mode: this.dirMode });
-    } catch {
-      // Directory already exists, ignore error
-    }
+    // Create the base directory with dirMode; an existing directory keeps its permissions
+    await mkdir(this.baseDir, { recursive: true, mode: this.dirMode });
 
     this.connected = true;
   }
