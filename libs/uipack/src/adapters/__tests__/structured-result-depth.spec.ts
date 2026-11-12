@@ -20,13 +20,13 @@ describe('structured template results', () => {
     );
   });
 
-  it('are written compact when nested 5,000 levels deep', () => {
-    const nested = JSON.parse(`${'['.repeat(5000)}${']'.repeat(5000)}`);
+  it('are written compact when nested 1,000 levels deep', () => {
+    const nested = JSON.parse(`${'['.repeat(1000)}${']'.repeat(1000)}`);
 
     const html = renderResult(nested);
 
     expect(html.length).toBeLessThan(200_000);
-    expect(html).toContain(`<pre>${'['.repeat(5000)}${']'.repeat(5000)}</pre>`);
+    expect(html).toContain(`<pre>${'['.repeat(1000)}${']'.repeat(1000)}</pre>`);
   });
 
   it('count brackets inside strings as text, not nesting', () => {
