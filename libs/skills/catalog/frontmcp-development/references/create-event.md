@@ -82,7 +82,7 @@ that app's tools do. An app that declares events cannot be a lazy app.
 ### Step 4: Check what clients see
 
 `events/list` answers one definition per event. On a server whose auth signs callers in, an event is offered by
-poll and by webhook; on a server in public auth mode, by poll only (see [Delivery Modes](#delivery-modes)):
+poll, push and webhook; on a server in public auth mode, by poll and push (see [Delivery Modes](#delivery-modes)):
 
 ```json
 {
@@ -90,7 +90,7 @@ poll and by webhook; on a server in public auth mode, by poll only (see [Deliver
     {
       "name": "order.created",
       "description": "Fires when an order is placed",
-      "delivery": ["poll", "webhook"],
+      "delivery": ["poll", "push", "webhook"],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -179,7 +179,8 @@ The server performs `poll` unless `events.poll.enabled` is `false`, on every run
 The server performs `webhook` when its auth signs callers in (any `auth.mode` other than `public`) and
 `events.webhook.enabled` is not `false`. A subscription belongs to a caller, so in public mode the server logs
 `Webhook event delivery is off: the server runs in public auth mode, so a subscription would have no owner.` and
-offers its events by poll and push only.
+offers its events by poll and push only. On a server that does not perform `webhook`, `events/subscribe` and
+`events/unsubscribe` answer `-32601` (Method not found).
 
 The server performs `push` unless `events.push.enabled` is `false`, except in a serverless deployment (see
 [Streaming](#streaming)).
@@ -1548,6 +1549,7 @@ functions) to get the same `this`.
 | A type error on the class under `@Event`                       | `EventContext<Args, Payload>` differs from the schemas                                 | Declare the types the schemas describe, or extend plain `EventContext`                  |
 | The app cannot be lazy: `it declares events`                   | Events are registered at startup                                                       | Import the app normally                                                                 |
 | `Webhook event delivery is off` at startup                     | The server runs in public auth mode                                                    | Configure an `auth.mode` that signs callers in                                          |
+| `events/subscribe` answers `-32601`                            | Webhook delivery is off: public auth mode, or `events.webhook.enabled: false`          | Use an `auth.mode` that signs callers in, or `events/poll` or `events/stream`           |
 | `events/subscribe` answers `Forbidden`                         | An anonymous caller, the event's `authorities`, or `authorize()`                       | Read `data.reason`; sign the caller in, or grant the role                               |
 | `events/subscribe` answers `CallbackEndpointError`             | The callback did not answer the challenge with `2xx` and the nonce                     | Echo `challenge` from the verification request; read `data.reason`                      |
 | `Invalid delivery.url: it must use https`                      | An `http:` callback                                                                    | Use `https`; in tests only, `events.webhook.unsafeAllowLocalCallbacks`                  |
