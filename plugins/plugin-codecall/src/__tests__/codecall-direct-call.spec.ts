@@ -135,7 +135,9 @@ describe('CodeCallPlugin.refuseDirectCallOfHiddenTool', () => {
     const plugin = new CodeCallPlugin({ mode: 'codecall_only', appIds: ['crm'] });
     const logger = { verbose: jest.fn(), child: () => logger };
     const scope = { tools: { lineageOf: () => [{ kind: 'app', id: 'crm' }] } };
-    jest.spyOn(plugin, 'get').mockImplementation(((token: unknown) => (token === ScopeEntry ? scope : logger)) as never);
+    jest
+      .spyOn(plugin, 'get')
+      .mockImplementation(((token: unknown) => (token === ScopeEntry ? scope : logger)) as never);
     const adapterTool = { ...hiddenTool, owner: { kind: 'adapter', id: 'crm-openapi' } };
 
     await expect(plugin.refuseDirectCallOfHiddenTool(flowCtxFor(adapterTool, {}))).rejects.toBeInstanceOf(
