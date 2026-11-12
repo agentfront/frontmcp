@@ -121,7 +121,7 @@ export class FileLogTransportInstance extends LogTransportInterface {
 
     const ts = rec.timestamp.toISOString();
     const level = LOG_LEVEL_LABELS[rec.level] ?? 'INFO';
-    const prefix = rec.prefix ? ` [${rec.prefix}]` : '';
+    const prefix = rec.prefix ? ` [${escapeControlCharacters(rec.prefix)}]` : '';
     const message = escapeControlCharacters(stripAnsi(String(rec.message)));
     const line = `[${ts}] ${level}${prefix} ${message}\n`;
 

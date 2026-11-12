@@ -118,6 +118,17 @@ describe('FileLogTransportInstance', () => {
     ]);
   });
 
+  it('keeps a record on one line when its logger name holds a line break', () => {
+    const transport = createTransport();
+
+    transport.log(makeRecord({ message: 'found', prefix: 'ReadResourceFlow(a\nb)' }));
+
+    const files = fs.readdirSync(tmpDir).filter((f) => f.endsWith('.log'));
+    const content = fs.readFileSync(path.join(tmpDir, files[0]), 'utf-8');
+
+    expect(content).toBe('[2026-04-06T12:34:56.789Z] INFO [ReadResourceFlow(a\\nb)] found\n');
+  });
+
   it('should use timestamped filename with underscores instead of colons', () => {
     createTransport();
 

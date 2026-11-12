@@ -1,3 +1,5 @@
+import { format } from 'node:util';
+
 import { LogLevel, type LogRecord } from '../../common';
 import { ConsoleLogTransportInstance } from '../instances/instance.console-logger';
 
@@ -46,6 +48,14 @@ describe('ConsoleLogTransportInstance', () => {
     new ConsoleLogTransportInstance().log(record('lookup', ['a\nb\u001b', details, 3]));
 
     expect(printed()).toEqual(['lookup', 'a\n  b\\u001b', details, 3]);
+  });
+
+  it('prints a logger name as text: its control characters escaped and a % in it not taken as a format directive', () => {
+    new ConsoleLogTransportInstance().log({ ...record('found'), prefix: 'ReadResourceFlow(file:///caf%c3%a9\nX)' });
+
+    const line = format(...(consoleInfo.mock.calls[0] as unknown[]));
+    expect(line).toContain('[ReadResourceFlow(file:///caf%c3%a9\\nX)]');
+    expect(line).toMatch(/found$/);
   });
 
   it('formats what the bound development logger prints the same way', () => {

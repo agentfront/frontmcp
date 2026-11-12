@@ -58,7 +58,9 @@ export class ConsoleLogTransportInstance extends LogTransportInterface {
 
     const useAnsi = supportsAnsi();
     const timePart = useAnsi ? `${DIM}[${ts}]${RESET}` : `[${ts}]`;
-    const scopePart = loggerPrefix ? (useAnsi ? `${BOLD}[${loggerPrefix}]${RESET}` : `[${loggerPrefix}]`) : undefined;
+    // The name goes into the format string: a `%` in it must print as is, not take the place of a value
+    const prefixText = loggerPrefix ? escapeControlCharacters(loggerPrefix).replace(/%/g, '%%') : undefined;
+    const scopePart = prefixText ? (useAnsi ? `${BOLD}[${prefixText}]${RESET}` : `[${prefixText}]`) : undefined;
     const levelPart = useAnsi ? `${BOLD}${meta.ansi}${meta.label}${RESET}` : meta.label;
 
     const fmt = [timePart, scopePart, levelPart, '%s'].filter(Boolean).join(' ');
