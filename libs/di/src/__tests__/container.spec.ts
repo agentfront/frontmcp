@@ -342,6 +342,20 @@ describe('DiContainer', () => {
       expect(container.get(GlobalService)).toBeDefined();
     });
 
+    it('gives each context its own instance of a provider declared CONTEXT through metadata', async () => {
+      class ContextService {}
+      Reflect.defineMetadata(TEST_TOKENS.type, true, ContextService);
+      Reflect.defineMetadata(TEST_TOKENS.scope, ProviderScope.CONTEXT, ContextService);
+
+      const container = createContainer([ContextService]);
+      await container.ready;
+      const first = await container.buildViews('session-1');
+      const second = await container.buildViews('session-2');
+
+      expect(() => container.get(ContextService)).toThrow(/is scoped/);
+      expect(container.getScoped(ContextService, first)).not.toBe(container.getScoped(ContextService, second));
+    });
+
     it('should resolve CONTEXT scope via buildViews', async () => {
       class ContextService {
         id = Math.random();

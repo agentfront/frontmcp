@@ -97,10 +97,16 @@ export class DiContainer<ParentType extends DiContainer<any> | undefined = undef
       ? createProviderNormalizer({ tokens: options.providerTokens })
       : createBasicNormalizer();
 
-    super('DiContainer', parent as ParentType, providers, false);
+    // The maps are built here rather than by the base class, so the configured normalizer reads each provider
+    super('DiContainer', parent as ParentType, [], false);
 
     this.normalizeProvider = normalizer;
     this.parentContainer = parent as ParentType;
+    this.list = providers;
+    const { tokens, defs, graph } = this.buildMap(providers);
+    this.tokens = tokens;
+    this.defs = defs;
+    this.graph = graph;
 
     if (options.asyncTimeoutMs) {
       this.asyncTimeoutMs = options.asyncTimeoutMs;
