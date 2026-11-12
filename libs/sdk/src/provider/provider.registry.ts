@@ -265,21 +265,26 @@ export default class ProviderRegistry
           );
         }
 
-        const depRec = isLocal ? this.defs.get(d)! : up!.rec;
-        const depScope = isLocal ? this.getProviderScope(depRec) : up!.registry.getProviderScope(depRec);
-
-        if (this.getProviderScope(rec) === ProviderScope.GLOBAL && depScope !== ProviderScope.GLOBAL) {
-          throw new InvalidDependencyScopeError(
-            `Invalid dependency: DEFAULT-scoped provider ${tokenName(
-              token,
-            )} cannot depend on scoped provider ${tokenName(d)}.`,
-          );
-        }
+        this.assertDependencyScope(token, rec, d);
 
         // Only wire local -> local edges in our local graph; parent deps are external to this DAG.
         if (isLocal) this.graph.get(token)!.add(d);
       }
     }
+  }
+
+  /** A DEFAULT-scoped provider cannot depend on a scoped one, here or in a parent registry: it would keep one caller's instance. */
+  private assertDependencyScope(token: Token, rec: ProviderRecord, dependency: Token): void {
+    if (this.getProviderScope(rec) !== ProviderScope.GLOBAL) return;
+    const local = this.defs.get(dependency);
+    const up = local ? undefined : this.lookupDefInHierarchy(dependency);
+    const depScope = local ? this.getProviderScope(local) : up && up.registry.getProviderScope(up.rec);
+    if (depScope === undefined || depScope === ProviderScope.GLOBAL) return;
+    throw new InvalidDependencyScopeError(
+      `Invalid dependency: DEFAULT-scoped provider ${tokenName(token)} cannot depend on scoped provider ${tokenName(
+        dependency,
+      )}.`,
+    );
   }
 
   protected topoSort() {
@@ -466,7 +471,9 @@ export default class ProviderRegistry
     return out;
   }
   discoveryDeps(rec: ProviderRecord): Token[] {
-    return providerDiscoveryDeps(rec, this.tokens, (k, phase) => depsOfClass(k, phase));
+    // A factory's dependencies registered here or in a parent registry, so their scope is checked too
+    const registered = { has: (token: Token) => this.tokens.has(token) || this.lookupDefInHierarchy(token) !== undefined };
+    return providerDiscoveryDeps(rec, registered, (k, phase) => depsOfClass(k, phase));
   }
 
   invocationTokens(_token: Token, rec: ProviderRecord): Token[] {
@@ -960,6 +967,10 @@ export default class ProviderRegistry
           this.graph.get(provide)!.add(d);
         }
       }
+    }
+    // Once all of them are registered, so one may depend on another added with it
+    for (const rec of normalized) {
+      for (const d of this.discoveryDeps(rec)) this.assertDependencyScope(rec.provide, rec, d);
     }
 
     // Only instantiate GLOBAL-scoped providers (skip CONTEXT-scoped)

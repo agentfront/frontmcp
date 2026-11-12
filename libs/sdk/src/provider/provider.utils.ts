@@ -117,12 +117,12 @@ export function normalizeProvider(item: Type | ProviderLike): ProviderRecord {
 /**
  * For graph/cycle detection. Returns dependency tokens that should be graphed.
  * - VALUE: no deps
- * - FACTORY: only includes deps that are registered (others will be resolved ad-hoc)
+ * - FACTORY: only includes deps that are registered (others will be resolved ad-hoc); `tokens` says which are
  * - CLASS / CLASS_TOKEN: deps come from the class constructor or static with(...)
  */
 export function providerDiscoveryDeps(
   rec: ProviderRecord,
-  tokens: Set<Token>,
+  tokens: Pick<Set<Token>, 'has'>,
   depsOfClass: (klass: any, phase: 'discovery' | 'invocation') => Token[],
 ): Token[] {
   switch (rec.kind) {
