@@ -8,7 +8,7 @@
  * @packageDocumentation
  */
 
-import { isDevelopment } from '@frontmcp/utils';
+import { escapeControlCharacters, isDevelopment } from '@frontmcp/utils';
 
 import type { FrontMcpLogger } from '../common';
 import {
@@ -472,8 +472,10 @@ export class ExtAppsMessageHandler {
     }
   }
 
-  private writeWidgetLog(level: ExtAppsLogLevel, message: string, data: unknown): void {
+  /** Write a widget's log message to the server log, on one line whatever it holds. */
+  private writeWidgetLog(level: ExtAppsLogLevel, text: string, data: unknown): void {
     const widgetLogger = this.logger.child(`Widget:${this.context.sessionId}`);
+    const message = escapeControlCharacters(text);
 
     switch (level) {
       case 'debug':
