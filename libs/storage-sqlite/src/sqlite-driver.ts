@@ -22,7 +22,10 @@ export interface SqliteDatabase {
   close(): unknown;
 }
 
-/** Opens the database a store asks for by `path`: a file path, `:memory:` or an empty string. */
+/**
+ * Opens the database a store asks for by `path`: a file path, `:memory:` or an empty string. Each call returns a
+ * database of its own, never the same object twice: the stores that share it close it when the last of them is done.
+ */
 export type SqliteDriver = (path: string) => SqliteDatabase;
 
 const SQLITE_DRIVER = Symbol.for('frontmcp.sqliteDriver');
