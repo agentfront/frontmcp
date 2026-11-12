@@ -56,7 +56,7 @@ function classifyReason(reason: string): string {
  * The longest text `canonicalize` writes. A value parsed from YAML can repeat one object through aliases, and
  * each repeat is written out in full, so a small document can stand for text far longer than itself.
  */
-const CANONICAL_MAX_LENGTH = 32 * 1024 * 1024;
+export const CANONICAL_MAX_LENGTH = 32 * 1024 * 1024;
 
 /**
  * Stable JSON canonicalization for signing: sorted object keys, no whitespace.
