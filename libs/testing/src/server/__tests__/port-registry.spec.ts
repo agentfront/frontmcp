@@ -1,4 +1,4 @@
-import { createServer } from 'net';
+import { createServer, type AddressInfo } from 'net';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -20,6 +20,18 @@ function canListen(port: number): Promise<boolean> {
     const server = createServer();
     server.once('error', () => resolve(false));
     server.listen(port, () => server.close(() => resolve(true)));
+  });
+}
+
+/** A port the system reports free right now, so the test does not depend on a fixed port being unused. */
+function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, () => {
+      const { port } = server.address() as AddressInfo;
+      server.close(() => resolve(port));
+    });
   });
 }
 
@@ -87,11 +99,11 @@ describe('port-registry', () => {
 
   it('takes over a lock left by a dead process', async () => {
     const dir = userLockDir();
-    const range = getPortRange('mock-cimd');
-    const lock = path.join(dir, `${range.start}.lock`);
+    const freePort = await findFreePort();
+    const lock = path.join(dir, `${freePort}.lock`);
     fs.writeFileSync(lock, JSON.stringify({ pid: 2 ** 22 + 12345, at: Date.now() }));
-    const { port, release } = await reservePort('mock-cimd');
-    expect(port).toBe(range.start);
+    const { port, release } = await reservePort('mock-cimd', freePort);
+    expect(port).toBe(freePort);
     await release();
     expect(fs.existsSync(lock)).toBe(false);
   });
