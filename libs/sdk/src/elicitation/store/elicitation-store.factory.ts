@@ -255,11 +255,7 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
     const hasSecret = encryptionSecret || isElicitationEncryptionAvailable();
     if (encryptionEnabled === true) {
       if (!hasSecret) {
-        throw new ElicitationNotSupportedError(
-          'Elicitation encryption is enabled but no secret is available. ' +
-            'Set MCP_ELICITATION_SECRET, MCP_SESSION_SECRET, or MCP_SERVER_SECRET environment variable, ' +
-            'or provide a secret in the encryption configuration.',
-        );
+        throw missingEncryptionSecretError();
       }
       sqliteStore = new EncryptedElicitationStore(sqliteStore, { secret: encryptionSecret, logger });
       encrypted = true;
@@ -352,11 +348,7 @@ export async function createElicitationStore(options: ElicitationStoreOptions = 
   if (encryptionEnabled === true) {
     // Explicitly enabled - require encryption
     if (!hasSecret) {
-      throw new ElicitationNotSupportedError(
-        'Elicitation encryption is enabled but no secret is available. ' +
-          'Set MCP_ELICITATION_SECRET, MCP_SESSION_SECRET, or MCP_SERVER_SECRET environment variable, ' +
-          'or provide a secret in the encryption configuration.',
-      );
+      throw missingEncryptionSecretError();
     }
     store = new EncryptedElicitationStore(store, { secret: encryptionSecret, logger });
     encrypted = true;
@@ -406,6 +398,7 @@ export function createMemoryElicitationStore(
 
   let encrypted = false;
 
+  if (encryptionEnabled === true && !hasSecret) throw missingEncryptionSecretError();
   if (encryptionEnabled === true && hasSecret) {
     store = new EncryptedElicitationStore(store, { secret: encryptionSecret, logger });
     encrypted = true;
@@ -417,6 +410,15 @@ export function createMemoryElicitationStore(
   logger?.debug('[ElicitationStoreFactory] Created explicit in-memory elicitation store', { encrypted });
 
   return { store, type: 'memory', storage, encrypted };
+}
+
+/** The error for `encryption.enabled: true` when neither the options nor the environment give a secret. */
+function missingEncryptionSecretError(): ElicitationNotSupportedError {
+  return new ElicitationNotSupportedError(
+    'Elicitation encryption is enabled but no secret is available. ' +
+      'Set MCP_ELICITATION_SECRET, MCP_SESSION_SECRET, or MCP_SERVER_SECRET environment variable, ' +
+      'or provide a secret in the encryption configuration.',
+  );
 }
 
 /**
@@ -461,6 +463,7 @@ export function createElicitationStoreFromStorage(
 
   let encrypted = false;
 
+  if (encryptionEnabled === true && !hasSecret) throw missingEncryptionSecretError();
   if (encryptionEnabled === true && hasSecret) {
     store = new EncryptedElicitationStore(store, { secret: encryptionSecret, logger });
     encrypted = true;
