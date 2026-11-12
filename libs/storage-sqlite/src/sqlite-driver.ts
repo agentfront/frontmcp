@@ -32,7 +32,8 @@ type SqliteDriverHost = typeof globalThis & { [SQLITE_DRIVER]?: SqliteDriver };
 /**
  * Sets the driver that opens every database from now on, in place of better-sqlite3; `undefined` restores it.
  * With a driver set, no folder is created and better-sqlite3 is not loaded. Kept on `globalThis`, so the
- * package's CommonJS and ESM copies share it.
+ * package's CommonJS and ESM copies share it. There is one driver for the whole process or isolate: every server
+ * in it opens its stores with the driver set last, so set one only where a single database serves them all.
  */
 export function useSqliteDriver(driver: SqliteDriver | undefined): void {
   (globalThis as SqliteDriverHost)[SQLITE_DRIVER] = driver;

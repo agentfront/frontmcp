@@ -60,7 +60,10 @@ class DurableObjectDatabase implements SqliteDatabase {
 /**
  * A driver that runs the stores on a Durable Object's own SQLite database. In the Durable Object's
  * constructor, before the server is created: `useSqliteDriver(durableObjectSqlite(ctx.storage))`.
- * Every path a store opens is that one database, so `sqlite.path` only names it.
+ * Every path a store opens is that one database, so `sqlite.path` only names it. The driver is set for the whole
+ * isolate, so use it in a class with one instance (one id, as `idFromName('main')`): instances with other ids can
+ * share the isolate, where the storage set last opens every instance's stores and Cloudflare refuses the I/O
+ * (`Cannot perform I/O on behalf of a different Durable Object`).
  */
 export function durableObjectSqlite(storage: DurableObjectStorageLike): SqliteDriver {
   return () => new DurableObjectDatabase(storage);

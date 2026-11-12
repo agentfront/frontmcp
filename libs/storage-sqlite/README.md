@@ -130,6 +130,7 @@ export class HelpDeskServer extends DurableObject {
 
 - **`registerOptionalModule()`** gives the SDK the package from the Worker's bundle: on Workers, `require()` can't reach a bundled module.
 - **`useSqliteDriver(durableObjectSqlite(ctx.storage))`** makes every store open the Durable Object's database. `createFetchHandler()` builds the server on its first request, so the constructor is early enough. Each instance of the Durable Object sets its own driver, and a store never gets a connection that an earlier instance opened.
+- **One instance per isolate.** The driver is set for the whole isolate, so use it in a Durable Object class that has one instance (one id, as `idFromName('main')`). Instances with different ids can share an isolate, and each server opens its stores on its first request: the storage set last then opens every instance's stores, Cloudflare refuses the I/O (`Cannot perform I/O on behalf of a different Durable Object`), and the other instances' servers don't start.
 - **Every `path` is the same database**, the Durable Object's one. The option only names it, and no file or folder is created.
 - **Writes run in `ctx.storage.transactionSync()`**, and `walMode` and `busyTimeoutMs` do nothing: a Durable Object has one connection and refuses both pragmas.
 
