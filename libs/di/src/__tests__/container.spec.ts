@@ -356,6 +356,22 @@ describe('DiContainer', () => {
       expect(container.getScoped(ContextService, first)).not.toBe(container.getScoped(ContextService, second));
     });
 
+    it("refuses a GLOBAL factory that injects a parent's CONTEXT provider", async () => {
+      class ContextService {
+        static metadata = { name: 'ContextService', scope: ProviderScope.CONTEXT };
+      }
+      const parent = createContainer([ContextService]);
+      await parent.ready;
+
+      const build = () =>
+        createContainer(
+          [{ provide: 'shared', inject: () => [ContextService], useFactory: (dep: unknown) => dep }],
+          parent,
+        );
+
+      expect(build).toThrow(/GLOBAL-scoped provider shared cannot depend on scoped provider ContextService/);
+    });
+
     it('should resolve CONTEXT scope via buildViews', async () => {
       class ContextService {
         id = Math.random();

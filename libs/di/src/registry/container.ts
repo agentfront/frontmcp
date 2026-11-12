@@ -605,8 +605,12 @@ export class DiContainer<ParentType extends DiContainer<any> | undefined = undef
 
   /**
    * Get all discovered dependencies for a provider record.
+   * A factory's include the tokens it injects from a parent container, so their scope is checked too.
    */
   discoveryDeps(rec: ProviderRecord): Token[] {
+    if (rec.kind === ProviderKind.FACTORY) {
+      return rec.inject().filter((dep) => this.tokens.has(dep) || this.lookupDefInHierarchy(dep) !== undefined);
+    }
     return providerDiscoveryDeps(rec, this.tokens, (k, phase) => depsOfClass(k, phase));
   }
 
