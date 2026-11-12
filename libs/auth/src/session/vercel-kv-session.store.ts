@@ -17,7 +17,7 @@ import { randomUUID, VercelKvStorageAdapter } from '@frontmcp/utils';
 
 import type { AuthLogger } from '../common/auth-logger.interface';
 import { SessionIdEmptyError } from '../errors/auth-internal.errors';
-import { signSession, verifyOrParseSession } from './session-crypto';
+import { signSession, verifySession } from './session-crypto';
 import { SessionRateLimiter } from './session-rate-limiter';
 import {
   storedSessionSchema,
@@ -185,12 +185,11 @@ export class VercelKvSessionStore implements SessionStore {
     });
 
     try {
-      // If signing is enabled, verify and extract the session
-      // Otherwise, just parse it (supports both signed and unsigned sessions)
+      // With signing enabled, only a record whose signature verifies is read: an unsigned one is refused
       let parsed: StoredSession | null;
 
       if (this.security.enableSigning) {
-        parsed = verifyOrParseSession(raw, { secret: this.security.signingSecret });
+        parsed = verifySession(raw, { secret: this.security.signingSecret });
         if (!parsed) {
           this.logger?.warn('[VercelKvSessionStore] Session signature verification failed', {
             sessionId: sessionId.slice(0, 20),

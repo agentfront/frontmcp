@@ -63,4 +63,16 @@ describe('VercelKvSessionStore', () => {
 
     await expect(store.get('session-1')).resolves.toMatchObject({ authorizationId: 'auth-1' });
   });
+
+  it('refuses and removes an unsigned session when signing is enabled', async () => {
+    const store = new VercelKvSessionStore({
+      ...connection,
+      security: { enableSigning: true, signingSecret: 'test-signing-secret-with-enough-length' },
+    });
+    mockStoredValues.set('session-1', JSON.stringify(createStoredSession()));
+
+    await expect(store.get('session-1')).resolves.toBeNull();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(mockStoredValues.has('session-1')).toBe(false);
+  });
 });
