@@ -299,6 +299,17 @@ describe('FileSystemStorageAdapter', () => {
       const ttl = await adapter.ttl('counter');
       expect(ttl).toBeGreaterThan(0);
     });
+
+    it('counts every increment when increments and expiry updates run at the same time', async () => {
+      const counted = await Promise.all(
+        Array.from({ length: 10 }, (_, index) =>
+          index % 2 === 0 ? adapter.incr('counter') : adapter.expire('counter', 60).then(() => adapter.incr('counter')),
+        ),
+      );
+
+      expect(counted.sort((left, right) => left - right)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      expect(await adapter.get('counter')).toBe('10');
+    });
   });
 
   describe('Batch Operations', () => {

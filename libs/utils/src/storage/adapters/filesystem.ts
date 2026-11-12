@@ -107,6 +107,8 @@ export class FileSystemStorageAdapter extends BaseStorageAdapter {
   private readonly extension: string;
   private readonly dirMode: number;
   private readonly fileMode: number;
+  /** The last update queued for each key, so a counter's read and write never interleave with another update. */
+  private readonly keyUpdates = new Map<string, Promise<unknown>>();
 
   constructor(options: FileSystemAdapterOptions) {
     super();
@@ -231,7 +233,11 @@ export class FileSystemStorageAdapter extends BaseStorageAdapter {
 
   async expire(key: string, ttlSeconds: number): Promise<boolean> {
     this.ensureConnected();
+    return this.updateInTurn(key, () => this.expireNow(key, ttlSeconds));
+  }
 
+  /** Set the expiry of `key` from its current entry; run only through {@link updateInTurn}. */
+  private async expireNow(key: string, ttlSeconds: number): Promise<boolean> {
     const filePath = this.keyToPath(key);
     const entry = await this.readEntry(filePath);
 
@@ -323,7 +329,11 @@ export class FileSystemStorageAdapter extends BaseStorageAdapter {
 
   async incrBy(key: string, amount: number): Promise<number> {
     this.ensureConnected();
+    return this.updateInTurn(key, () => this.incrByNow(key, amount));
+  }
 
+  /** Add `amount` to the counter at `key`; run only through {@link updateInTurn}. */
+  private async incrByNow(key: string, amount: number): Promise<number> {
     const filePath = this.keyToPath(key);
     const entry = await this.readEntry(filePath);
 
@@ -353,6 +363,23 @@ export class FileSystemStorageAdapter extends BaseStorageAdapter {
   // ============================================
   // Internal Helpers
   // ============================================
+
+  /**
+   * Run `update` once the updates of `key` queued before it in this process have finished, so two updates of
+   * one key never read the same entry. Processes that share a directory are not coordinated.
+   */
+  private updateInTurn<T>(key: string, update: () => Promise<T>): Promise<T> {
+    const result = (this.keyUpdates.get(key) ?? Promise.resolve()).then(update);
+    const settled = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.keyUpdates.set(key, settled);
+    void settled.then(() => {
+      if (this.keyUpdates.get(key) === settled) this.keyUpdates.delete(key);
+    });
+    return result;
+  }
 
   /**
    * Convert a storage key to a file path.
