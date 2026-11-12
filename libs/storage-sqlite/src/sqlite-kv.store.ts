@@ -19,10 +19,48 @@ interface KvPreparedStatements {
   delExpired: SqliteStatement;
   has: SqliteStatement;
   keys: SqliteStatement;
-  keysPattern: SqliteStatement;
+  keysInRange: SqliteStatement;
   cleanup: SqliteStatement;
   ttl: SqliteStatement;
   expire: SqliteStatement;
+}
+
+/** One character of a LIKE pattern, with the `\` before it when there is one. */
+const LIKE_TOKEN = /\\?./gsu;
+const REGEXP_SYNTAX = /[\\^$.*+?()[\]{}|]/g;
+const LAST_CODE_POINT = 0x10ffff;
+const FIRST_SURROGATE = 0xd800;
+const FIRST_AFTER_SURROGATES = 0xe000;
+
+/** One LIKE token as a regular expression, and the character it stands for unless it is a wildcard. */
+function parseLikeToken(token: string): { source: string; literal?: string } {
+  if (token === '%') return { source: '.*' };
+  if (token === '_') return { source: '.' };
+  // A `\` that ends the pattern matches nothing, as in SQLite.
+  if (token === '\\') return { source: '(?!)' };
+  const literal = token.replace(/^\\/, '');
+  return { source: literal.replace(REGEXP_SYNTAX, '\\$&'), literal };
+}
+
+/** A LIKE pattern (`%`, `_`, `\` before a literal character) as the text every match starts with, and a test of a key. */
+function parseLikePattern(pattern: string): { prefix: string; matcher: RegExp } {
+  const tokens = (pattern.match(LIKE_TOKEN) ?? []).map(parseLikeToken);
+  const prefixLength = tokens.findIndex((token) => token.literal === undefined);
+  const prefixTokens = prefixLength === -1 ? tokens : tokens.slice(0, prefixLength);
+  return {
+    prefix: prefixTokens.map((token) => token.literal).join(''),
+    matcher: new RegExp(`^${tokens.map((token) => token.source).join('')}$`, 'su'),
+  };
+}
+
+/** The first string that sorts after every key starting with `prefix` (SQLite sorts UTF-8 text by code point), if any. */
+function upperBoundOf(prefix: string): string | undefined {
+  const codePoints = Array.from(prefix, (character) => character.codePointAt(0) ?? 0);
+  while (codePoints.at(-1) === LAST_CODE_POINT) codePoints.pop();
+  const last = codePoints.pop();
+  if (last === undefined) return undefined;
+  const next = last + 1 === FIRST_SURROGATE ? FIRST_AFTER_SURROGATES : last + 1;
+  return String.fromCodePoint(...codePoints, next);
 }
 
 /**
@@ -98,10 +136,8 @@ export class SqliteKvStore {
       delExpired: this.db.prepare('DELETE FROM kv WHERE key = ? AND expires_at IS NOT NULL AND expires_at <= ?'),
       has: this.db.prepare('SELECT 1 FROM kv WHERE key = ? AND (expires_at IS NULL OR expires_at > ?)'),
       keys: this.db.prepare('SELECT key FROM kv WHERE (expires_at IS NULL OR expires_at > ?)'),
-      keysPattern: this.db.prepare(
-        // ESCAPE '\' lets callers (e.g. SqliteStorageAdapter.keys) escape literal
-        // `%`/`_` as `\%`/`\_`; without it SQLite treats the backslash literally.
-        "SELECT key FROM kv WHERE key LIKE ? ESCAPE '\\' AND (expires_at IS NULL OR expires_at > ?)",
+      keysInRange: this.db.prepare(
+        'SELECT key FROM kv WHERE key >= ? AND key < ? AND (expires_at IS NULL OR expires_at > ?)',
       ),
       cleanup: this.db.prepare('DELETE FROM kv WHERE expires_at IS NOT NULL AND expires_at <= ?'),
       ttl: this.db.prepare('SELECT expires_at FROM kv WHERE key = ?'),
@@ -197,23 +233,22 @@ export class SqliteKvStore {
 
   /**
    * List keys matching an optional glob-like pattern.
-   * Pattern uses SQL LIKE syntax: `%` for any characters, `_` for single character.
+   * Pattern uses SQL LIKE syntax: `%` for any characters, `_` for single character, and `\` before a
+   * character to match it literally. Letter case matters. No LIKE query is sent: the keys are selected
+   * by the text the pattern starts with, through the primary key, and the pattern is applied here.
    *
-   * @param pattern - Optional pattern (uses SQL LIKE). Without pattern, returns all keys.
+   * @param pattern - Optional pattern (uses SQL LIKE syntax). Without pattern, returns all keys.
    * @returns Array of matching key strings
    */
   keys(pattern?: string): string[] {
     const stmts = this.prepared();
     const now = Date.now();
-    let rows: { key: string }[];
+    if (!pattern) return (stmts.keys.all(now) as { key: string }[]).map((r) => r.key);
 
-    if (pattern) {
-      rows = stmts.keysPattern.all(pattern, now) as { key: string }[];
-    } else {
-      rows = stmts.keys.all(now) as { key: string }[];
-    }
-
-    return rows.map((r) => r.key);
+    const { prefix, matcher } = parseLikePattern(pattern);
+    const upperBound = upperBoundOf(prefix);
+    const rows = upperBound === undefined ? stmts.keys.all(now) : stmts.keysInRange.all(prefix, upperBound, now);
+    return (rows as { key: string }[]).map((r) => r.key).filter((key) => matcher.test(key));
   }
 
   /**

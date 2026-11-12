@@ -12,6 +12,8 @@ export { acquireConnection, SqliteConnection } from './sqlite-connection';
 export type { OpenDatabaseOptions, BusyRetryOptions } from './open-database';
 export { useSqliteDriver } from './sqlite-driver';
 export type { SqliteDriver, SqliteDatabase, SqliteStatement } from './sqlite-driver';
+export { durableObjectSqlite } from './durable-object-sqlite';
+export type { DurableObjectStorageLike } from './durable-object-sqlite';
 export { loadBetterSqlite3 } from './better-sqlite3-loader';
 export { SqliteSessionStore } from './sqlite-session.store';
 export type { SqliteSessionStoreOptions, SessionStoreInterface, StoredSessionData } from './sqlite-session.store';

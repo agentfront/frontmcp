@@ -7,6 +7,7 @@ import type Database from 'better-sqlite3';
 import { StorageOperationError, StorageTTLError } from '@frontmcp/utils';
 
 import { loadBetterSqlite3 } from '../better-sqlite3-loader';
+import { useSqliteDriver } from '../sqlite-driver';
 import { SqliteKvStore } from '../sqlite-kv.store';
 import { SqliteStorageAdapter } from '../sqlite-storage.adapter';
 
@@ -21,6 +22,11 @@ function cleanup(dbPath: string): void {
   } catch {
     // ignore
   }
+}
+
+/** An entry for `mset()` whose value does not matter. */
+function withValue(entry: { key: string }): { key: string; value: string } {
+  return { ...entry, value: '1' };
 }
 
 describe('SqliteStorageAdapter', () => {
@@ -48,9 +54,8 @@ describe('SqliteStorageAdapter', () => {
   }
 
   describe('keys() LIKE escaping', () => {
-    // The adapter escapes LIKE metacharacters as `\%` / `\_`; this only works
-    // if SqliteKvStore's LIKE query declares `ESCAPE '\'`. These cases would
-    // over-match (treating %/_ as wildcards) without the ESCAPE clause.
+    // The adapter escapes LIKE metacharacters as `\%` / `\_`, which SqliteKvStore.keys()
+    // matches literally. These cases would over-match (treating %/_ as wildcards) otherwise.
     it('treats a literal "%" in the pattern as a literal, not a wildcard', async () => {
       await adapter.set('a%b', '1');
       await adapter.set('axb', '2'); // would match if % were a wildcard
@@ -83,6 +88,95 @@ describe('SqliteStorageAdapter', () => {
       await adapter.set('k1', '1');
       await adapter.set('k2', '2');
       expect((await adapter.keys()).sort()).toEqual(['k1', 'k2']);
+    });
+  });
+
+  describe('keys() without a LIKE pattern', () => {
+    it('finds the keys under a prefix', async () => {
+      await adapter.mset(
+        [{ key: 'session:1' }, { key: 'session:22' }, { key: 'session' }, { key: 'sessions:1' }].map(withValue),
+      );
+
+      expect((await adapter.keys('session:*')).sort()).toEqual(['session:1', 'session:22']);
+    });
+
+    it('leaves out the keys that sort just before and just after the prefix', async () => {
+      const lastBeforeSurrogates = '\uD7FF';
+      const firstAfterSurrogates = '\uE000';
+      const keys = [
+        'a9',
+        'a:',
+        'a:x',
+        'a;',
+        `p${lastBeforeSurrogates}x`,
+        `p${firstAfterSurrogates}`,
+        'q\u{10FFFF}x',
+        'r',
+      ];
+      await adapter.mset(keys.map((key) => withValue({ key })));
+
+      expect((await adapter.keys('a:*')).sort()).toEqual(['a:', 'a:x']);
+      expect(await adapter.keys(`p${lastBeforeSurrogates}*`)).toEqual([`p${lastBeforeSurrogates}x`]);
+      expect(await adapter.keys('q\u{10FFFF}*')).toEqual(['q\u{10FFFF}x']);
+      expect(await adapter.keys('\u{10FFFF}*')).toEqual([]);
+    });
+
+    it('matches a wildcard in the middle of the pattern', async () => {
+      const keys = ['user:1:profile', 'user:22:profile', 'user::profile', 'user:1:settings', 'user:1:profile:old'];
+      await adapter.mset(keys.map((key) => withValue({ key })));
+
+      expect((await adapter.keys('user:*:profile')).sort()).toEqual([
+        'user:1:profile',
+        'user:22:profile',
+        'user::profile',
+      ]);
+      expect(await adapter.keys('user:?:profile')).toEqual(['user:1:profile']);
+      expect((await adapter.keys('*:profile')).sort()).toEqual(['user:1:profile', 'user:22:profile', 'user::profile']);
+    });
+
+    it('finds keys that contain "%", "_" and a backslash', async () => {
+      const keys = ['a%b:1', 'a_b:1', 'a\\b:1', 'axb:1', 'ab:1'];
+      await adapter.mset(keys.map((key) => withValue({ key })));
+
+      expect(await adapter.keys('a%b:*')).toEqual(['a%b:1']);
+      expect(await adapter.keys('a_b:*')).toEqual(['a_b:1']);
+      expect(await adapter.keys('a\\b:*')).toEqual(['a\\b:1']);
+      expect((await adapter.keys('a?b:*')).sort()).toEqual(['a%b:1', 'a\\b:1', 'a_b:1', 'axb:1']);
+    });
+
+    it('finds the keys under a prefix longer than 50 bytes', async () => {
+      const prefix = `mcp:events:index:principal:${'f'.repeat(64)}:`;
+      await adapter.mset(
+        [{ key: `${prefix}sub_1` }, { key: `${prefix}sub_2` }, { key: 'mcp:events:other' }].map(withValue),
+      );
+
+      expect((await adapter.keys(`${prefix}*`)).sort()).toEqual([`${prefix}sub_1`, `${prefix}sub_2`]);
+    });
+
+    it('keeps letter case, as the other storage adapters do', async () => {
+      await adapter.mset([{ key: 'session:1' }, { key: 'Session:1' }].map(withValue));
+
+      expect(await adapter.keys('session:*')).toEqual(['session:1']);
+      expect(await adapter.keys('session:?')).toEqual(['session:1']);
+    });
+
+    it('searches by the primary key, and prepares no LIKE statement', async () => {
+      const BetterSqlite3 = loadBetterSqlite3();
+      const database = new BetterSqlite3(':memory:');
+      const prepare = jest.spyOn(database, 'prepare');
+      useSqliteDriver(() => database);
+      const store = new SqliteKvStore({ path: 'spied.sqlite', ttlCleanupIntervalMs: 0 });
+      useSqliteDriver(undefined);
+
+      const sources = prepare.mock.calls.map(([source]) => source);
+      const rangeSearch = sources.find((source) => source.includes('key >= ?'));
+      const plan = database.prepare(`EXPLAIN QUERY PLAN ${rangeSearch}`).all('a', 'b', 0) as { detail: string }[];
+
+      expect(sources.filter((source) => /\bLIKE\b/i.test(source))).toEqual([]);
+      expect(plan.map((step) => step.detail)).toEqual([
+        'SEARCH kv USING INDEX sqlite_autoindex_kv_1 (key>? AND key<?)',
+      ]);
+      store.close();
     });
   });
 
