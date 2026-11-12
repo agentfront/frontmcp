@@ -393,7 +393,8 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
     const canSeeSwarm = agent.canSeeSwarm();
     if (!canSeeSwarm) return [];
 
-    const visibleIds = agent.getVisibleAgentIds();
+    // An empty whitelist sees no peer; only a missing one leaves every visible peer in
+    const visibleIds = agent.metadata.swarm?.visibleAgents;
     const allAgents = this.getAvailableInstances();
 
     return allAgents.filter((a) => {
@@ -404,7 +405,7 @@ export default class AgentRegistry extends RegistryAbstract<AgentInstance, Agent
       if (!a.isVisibleToSwarm()) return false;
 
       // If whitelist is specified, only include those
-      if (visibleIds && visibleIds.length > 0) {
+      if (visibleIds) {
         return visibleIds.includes(a.id);
       }
 
