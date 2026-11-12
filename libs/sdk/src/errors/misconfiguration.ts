@@ -51,25 +51,11 @@ export const MISCONFIGURATION_REMEDIES: Record<string, string> = {
     'server refuses to start. Configure the plugin in one place; the server log names the option and the plugin.',
 };
 
-/** Set on a validation error raised where the server's own configuration is parsed; every copy of the SDK reads it. */
-const CONFIG_VALIDATION_ERROR = Symbol.for('@frontmcp/sdk:config-validation-error');
-
 /**
- * Mark an error thrown where the server's own configuration is parsed (its options, a plugin's) when a
- * validation error is in its cause chain, and return it. Only a marked error is CONFIG_INVALID: a
- * `ZodError` thrown while a request runs is that request's failure.
- */
-export function markConfigValidationError(error: unknown): unknown {
-  if (describeConfigIssues(error) !== undefined && Object.isExtensible(error)) {
-    Object.defineProperty(error, CONFIG_VALIDATION_ERROR, { value: true });
-  }
-  return error;
-}
-
-/**
- * Recognize an error that carries one of the codes above, or that {@link markConfigValidationError}
- * marked (CONFIG_INVALID), however deeply it is wrapped. The message is never echoed — only the fixed
- * code and remedy are.
+ * Recognize an error that carries one of the codes above, however deeply it is
+ * wrapped. The message is never echoed — only the fixed code and remedy are.
+ * For an error a request raised: a validation error (`ZodError`) there is the
+ * request's failure, not the configuration's.
  */
 export function findMisconfiguration(error: unknown): { code: string; remedy: string } | undefined {
   let current: unknown = error;
@@ -78,13 +64,20 @@ export function findMisconfiguration(error: unknown): { code: string; remedy: st
     if (typeof code === 'string' && Object.prototype.hasOwnProperty.call(MISCONFIGURATION_REMEDIES, code)) {
       return { code, remedy: MISCONFIGURATION_REMEDIES[code] };
     }
-    // The config itself failed validation (the server's schema, not the request's).
-    if ((current as { [CONFIG_VALIDATION_ERROR]?: unknown })[CONFIG_VALIDATION_ERROR] === true) {
-      return { code: 'CONFIG_INVALID', remedy: CONFIG_INVALID_REMEDY };
-    }
     current = (current as { cause?: unknown }).cause;
   }
   return undefined;
+}
+
+/**
+ * As {@link findMisconfiguration}, for an error that failed the server's start. No request runs
+ * there, so a validation error in the cause chain is the configuration's: CONFIG_INVALID.
+ */
+export function findStartupMisconfiguration(error: unknown): { code: string; remedy: string } | undefined {
+  const coded = findMisconfiguration(error);
+  if (coded) return coded;
+  if (describeConfigIssues(error) === undefined) return undefined;
+  return { code: 'CONFIG_INVALID', remedy: CONFIG_INVALID_REMEDY };
 }
 
 interface ConfigIssueLike {

@@ -18,7 +18,6 @@ import { withoutStores } from '../common/metadata/front-mcp-stores';
 import { type SqliteOptionsInput } from '../common/types/options/sqlite/schema';
 import { DirectMcpServerImpl, type DirectMcpServer, type DirectServerOptions } from '../direct';
 import { describeConfigIssues, InternalMcpError, ScopeConfigurationError, ServerNotFoundError } from '../errors';
-import { markConfigValidationError } from '../errors/misconfiguration';
 import type { HealthService } from '../health';
 import type { FileLogTransportInstance } from '../logger/instances/instance.file-logger';
 import LoggerRegistry from '../logger/logger.registry';
@@ -81,15 +80,6 @@ function resolveConfigInput(optionsOrClass: ConfigOrServerClass): FrontMcpConfig
     );
   }
   return optionsOrClass;
-}
-
-/** Parse the server's options; a validation error is marked as the configuration's, so it reads as CONFIG_INVALID. */
-function parseServerConfig(options: unknown): FrontMcpConfigType {
-  try {
-    return frontMcpMetadataSchema.parse(options);
-  } catch (error) {
-    throw markConfigValidationError(error);
-  }
 }
 
 /** Set while a build loads the entry only to read its metadata (`frontmcp build`, `skills install --from-entry`). */
@@ -414,7 +404,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // `frontmcp start --db`, `frontmcp socket --db` and the generated installer
     // hand the database location over as FRONTMCP_SQLITE_PATH.
     const sqlitePath = process.env['FRONTMCP_SQLITE_PATH'];
-    const parsedConfig = parseServerConfig(
+    const parsedConfig = frontMcpMetadataSchema.parse(
       sqlitePath
         ? {
             ...options,
@@ -464,7 +454,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
    * export default FrontMcpInstance.createHandler(config);
    */
   public static async createHandler(options: FrontMcpConfigInput | FrontMcpConfigType): Promise<unknown> {
-    const parsedConfig = parseServerConfig(options);
+    const parsedConfig = frontMcpMetadataSchema.parse(options);
     const sessionSecretMissing = checkSessionSecret(parsedConfig, 'legacy');
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
@@ -513,7 +503,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       let sessionSecretMissing: boolean;
       try {
         // A fetch handler never listens, so it gets no HTTP host (a browser or worker build has no Express)
-        const parsedConfig = parseServerConfig({ ...options, serve: false });
+        const parsedConfig = frontMcpMetadataSchema.parse({ ...options, serve: false });
         sessionSecretMissing = checkSessionSecret(parsedConfig, '2026-07-28');
         frontMcp = new FrontMcpInstance(parsedConfig);
         await frontMcp.ready;
@@ -597,7 +587,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
    */
   public static async createForGraph(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
     // Never listens, so no HTTP host: a browser build has no Express
-    const parsedConfig = parseServerConfig({ ...options, serve: false });
+    const parsedConfig = frontMcpMetadataSchema.parse({ ...options, serve: false });
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
     return frontMcp;
@@ -605,7 +595,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
 
   /** @internal The instance `connect()` serves in process: it never listens, and its scopes are direct-only. */
   public static async createForConnect(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
-    const parsedConfig = parseServerConfig({ ...options, serve: false });
+    const parsedConfig = frontMcpMetadataSchema.parse({ ...options, serve: false });
     markDirectOnly(parsedConfig);
     const frontMcp = new FrontMcpInstance(parsedConfig);
     await frontMcp.ready;
@@ -623,7 +613,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
    */
   public static async createForCli(options: FrontMcpConfigInput): Promise<FrontMcpInstance> {
     // Under the build flag the decorator left the store settings unvalidated (#1041), and the lite schema skips some
-    const config = getEnvFlag('FRONTMCP_BUILD_EXTRACT') ? parseServerConfig(options) : options;
+    const config = getEnvFlag('FRONTMCP_BUILD_EXTRACT') ? frontMcpMetadataSchema.parse(options) : options;
     const frontMcp = new FrontMcpInstance(await parseCliConfig(config, { fileLog: true }));
     await frontMcp.ready;
     return frontMcp;
@@ -685,7 +675,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     // `workerEnv` is the direct server's default bindings (#706), held by the server, not config
     const { workerEnv, ...config } = options;
     // Parse config through Zod to apply defaults, then disable HTTP server
-    const parsedConfig = parseServerConfig({
+    const parsedConfig = frontMcpMetadataSchema.parse({
       ...config,
       // Direct access never listens: no HTTP host (a browser build has no Express), so of `http` only the
       // headers in-process calls keep apply (#1052)
@@ -763,7 +753,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
     }
 
     // Parse config with HTTP enabled, overriding socketPath
-    const parsedConfig = parseServerConfig({
+    const parsedConfig = frontMcpMetadataSchema.parse({
       ...configInput,
       http: {
         ...((configInput.http as Record<string, unknown>) ?? {}),
@@ -895,7 +885,7 @@ export class FrontMcpInstance implements FrontMcpInterface {
       // clean for MCP JSON-RPC; structured logs also persist to
       // ~/.frontmcp/logs/ (fix: stdio servers were previously silent on the
       // terminal — see issue 03).
-      const parsedConfig = parseServerConfig({
+      const parsedConfig = frontMcpMetadataSchema.parse({
         ...options,
         http: undefined,
         serve: false,

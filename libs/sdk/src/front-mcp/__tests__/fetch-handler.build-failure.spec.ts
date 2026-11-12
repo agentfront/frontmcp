@@ -15,13 +15,16 @@ import 'reflect-metadata';
 import { z } from '@frontmcp/lazy-zod';
 
 import {
+  Adapter,
   App,
+  DynamicAdapter,
   DynamicPlugin,
   LogLevel,
   Plugin,
   ProviderScope,
   Tool,
   ToolContext,
+  type FrontMcpAdapterResponse,
   type FrontMcpConfigInput,
 } from '../../common';
 import { createDeferredServerBuild } from '../../transport/web-fetch-handler';
@@ -71,6 +74,27 @@ class LedgerPlugin extends DynamicPlugin<LedgerOptions> {
   constructor(options: LedgerOptions) {
     super();
     this.options = z.object({ currency: z.string() }).parse(options);
+  }
+}
+
+interface RatesOptions {
+  name: string;
+  currencies: string[];
+}
+
+/** Validates its options when the server builds it, in `fetch()`. */
+@Adapter({ name: 'rates' })
+class RatesAdapter extends DynamicAdapter<RatesOptions> {
+  options: RatesOptions;
+
+  constructor(options: RatesOptions) {
+    super();
+    this.options = options;
+  }
+
+  async fetch(): Promise<FrontMcpAdapterResponse> {
+    z.object({ currencies: z.array(z.string()) }).parse(this.options);
+    return {};
   }
 }
 
@@ -179,6 +203,19 @@ describe('createFetchHandler() on an edge isolate: a server that fails to build'
       ...config,
       plugins: [LedgerPlugin.init({ useFactory: () => refusedOptions })],
     });
+
+    const { status, body } = await answer(await handler(initialize()));
+
+    expect({ status, error: body['error'], code: body['code'] }).toEqual({
+      status: 500,
+      error: 'server_misconfigured',
+      code: 'CONFIG_INVALID',
+    });
+  });
+
+  it('answers 500 server_misconfigured with CONFIG_INVALID for options an adapter refuses while it is built', async () => {
+    const refusedOptions = { name: 'rates', currencies: 'EUR' } as unknown as RatesOptions;
+    const handler = await createOnEdge({ ...config, adapters: [RatesAdapter.init(refusedOptions)] });
 
     const { status, body } = await answer(await handler(initialize()));
 

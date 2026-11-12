@@ -1,6 +1,3 @@
-import { z } from '@frontmcp/lazy-zod';
-
-import { DynamicPlugin, Plugin } from '../../common';
 import {
   DuplicatePluginEntryError,
   DuplicatePluginError,
@@ -12,7 +9,7 @@ import {
 import {
   describeConfigIssues,
   findMisconfiguration,
-  markConfigValidationError,
+  findStartupMisconfiguration,
   MISCONFIGURATION_REMEDIES,
   misconfigurationBody,
 } from '../misconfiguration';
@@ -63,35 +60,15 @@ describe('misconfiguration classification (#646)', () => {
     expect(found?.remedy).toContain('Configure the plugin in one place');
   });
 
-  it('maps a ZodError marked where the configuration is parsed to CONFIG_INVALID, wrapped or not', () => {
+  it('maps a ZodError that failed the server start to CONFIG_INVALID, wrapped or not', () => {
     const err = new Error('bad config');
     err.name = 'ZodError';
-    const wrapped = new Error('plugin options refused', { cause: err });
 
-    expect(markConfigValidationError(err)).toBe(err);
-    expect(findMisconfiguration(err)?.code).toBe('CONFIG_INVALID');
-    expect(findMisconfiguration(markConfigValidationError(wrapped))?.code).toBe('CONFIG_INVALID');
+    expect(findStartupMisconfiguration(err)?.code).toBe('CONFIG_INVALID');
+    expect(findStartupMisconfiguration(new Error('build failed', { cause: err }))?.code).toBe('CONFIG_INVALID');
   });
 
-  it('recognizes options a plugin refuses in init()', () => {
-    @Plugin({ name: 'ledger' })
-    class LedgerPlugin extends DynamicPlugin<{ currency: string }> {
-      constructor(options: { currency: string }) {
-        super();
-        z.object({ currency: z.string() }).parse(options);
-      }
-    }
-    let refusal: unknown;
-    try {
-      LedgerPlugin.init({ currency: 42 as unknown as string });
-    } catch (error) {
-      refusal = error;
-    }
-
-    expect(findMisconfiguration(refusal)?.code).toBe('CONFIG_INVALID');
-  });
-
-  it('does not take a ZodError nothing marked for a misconfiguration: a request raised it', () => {
+  it('does not take the ZodError of a request for a misconfiguration', () => {
     const err = new Error('bad request body');
     err.name = 'ZodError';
 
@@ -99,12 +76,12 @@ describe('misconfiguration classification (#646)', () => {
     expect(findMisconfiguration(new Error('flow failed', { cause: err }))).toBeUndefined();
   });
 
-  it('marks only an error with a validation error in its cause chain', () => {
-    const frozen = Object.freeze(Object.assign(new Error('bad config'), { name: 'ZodError' }));
+  it('recognizes a coded error that failed the server start, and no other failure', () => {
+    const wrapped = new Error('build failed', { cause: new JwtSecretRequiredError('local') });
 
-    expect(findMisconfiguration(markConfigValidationError(new Error('connect ECONNREFUSED')))).toBeUndefined();
-    expect(markConfigValidationError('not an error')).toBe('not an error');
-    expect(findMisconfiguration(markConfigValidationError(frozen))).toBeUndefined();
+    expect(findStartupMisconfiguration(wrapped)?.code).toBe('JWT_SECRET_REQUIRED');
+    expect(findStartupMisconfiguration(new Error('connect ECONNREFUSED'))).toBeUndefined();
+    expect(findStartupMisconfiguration('not an error')).toBeUndefined();
   });
 
   it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])(

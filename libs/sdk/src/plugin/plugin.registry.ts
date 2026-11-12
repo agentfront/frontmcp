@@ -30,7 +30,6 @@ import {
   InvalidRegistryKindError,
   RegistryDependencyNotRegisteredError,
 } from '../errors';
-import { markConfigValidationError } from '../errors/misconfiguration';
 import { normalizeHooksFromCls, normalizeHooksFromProviders } from '../hooks/hooks.utils';
 import PromptRegistry from '../prompt/prompt.registry';
 import ProviderRegistry from '../provider/provider.registry';
@@ -265,10 +264,7 @@ export default class PluginRegistry
       await providers.ready;
 
       // Registered before nested plugins so they can inject the providers this plugin derives from its options.
-      // Options the plugin's schema refuses are an invalid server configuration (CONFIG_INVALID).
-      const { pluginInstance, dynamicProviders, dynamicTools } = await this.instantiatePlugin(rec, deps).catch(
-        (error: unknown) => Promise.reject(markConfigValidationError(error)),
-      );
+      const { pluginInstance, dynamicProviders, dynamicTools } = await this.instantiatePlugin(rec, deps);
       if (dynamicProviders) {
         await providers.addDynamicProviders(dynamicProviders);
       }
