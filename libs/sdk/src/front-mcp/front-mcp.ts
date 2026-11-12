@@ -92,7 +92,10 @@ async function loadFileLogTransport(): Promise<typeof FileLogTransportInstance> 
   return (await import('../logger/instances/instance.file-logger.js')).FileLogTransportInstance;
 }
 
-/** A CLI-mode config: console only with `FRONTMCP_CLI_VERBOSE=1`, and the `~/.frontmcp/logs/` file with `fileLog`. */
+/**
+ * A CLI-mode config: console only with `FRONTMCP_CLI_VERBOSE=1`, and the `~/.frontmcp/logs/` file with `fileLog`.
+ * Without a `logging` option the lines are written as with `logging: {}`: at `FRONTMCP_LOG_LEVEL`, or `info`.
+ */
 async function parseCliConfig(
   options: FrontMcpConfigInput | FrontMcpConfigType,
   { fileLog }: { fileLog: boolean },
@@ -109,7 +112,9 @@ async function parseCliConfig(
     }
     parsedConfig.logging.transports = transports;
   } else {
+    // No `logging` option is `logging: {}`: the schema's defaults, without which the logger has no level
     (parsedConfig as Record<string, unknown>)['logging'] = {
+      ...loggingOptionsSchema.parse({}),
       enableConsole: verbose,
       transports: fileLogTransport ? [fileLogTransport] : [],
     };
