@@ -170,6 +170,38 @@ function noticeStringResult(toolName: string, logger: { warn: (message: string) 
   );
 }
 
+/** Deepest nesting a structured result is indented to; deeper ones are written compact, as indentation grows with depth. */
+const MAX_INDENTED_DEPTH = 20;
+
+/** The deepest nesting of arrays and objects in a JSON text. */
+function jsonDepth(json: string): number {
+  let depth = 0;
+  let deepest = 0;
+  let inString = false;
+  for (let index = 0; index < json.length; index++) {
+    const character = json[index];
+    if (inString) {
+      if (character === '\\') index++;
+      else if (character === '"') inString = false;
+    } else if (character === '"') {
+      inString = true;
+    } else if (character === '[' || character === '{') {
+      depth++;
+      deepest = Math.max(deepest, depth);
+    } else if (character === ']' || character === '}') {
+      depth--;
+    }
+  }
+  return deepest;
+}
+
+/** A structured result as JSON text, indented unless it is nested deeper than `MAX_INDENTED_DEPTH`. */
+function resultJson(value: unknown): string | undefined {
+  const compact = JSON.stringify(value);
+  if (compact === undefined || jsonDepth(compact) > MAX_INDENTED_DEPTH) return compact;
+  return JSON.stringify(value, null, 2);
+}
+
 /**
  * Body markup for a template result no content renderer claimed.
  *
@@ -182,7 +214,7 @@ function renderUnwrappedResult(rawResult: unknown, options: RenderToolTemplateOp
     return String(rawResult);
   }
   if (typeof rawResult !== 'string') {
-    return `<pre>${escapeHtml(JSON.stringify(rawResult, null, 2))}</pre>`;
+    return `<pre>${escapeHtml(resultJson(rawResult))}</pre>`;
   }
   const looksLikeMarkup = detectContentType(rawResult) === 'html';
   if (looksLikeMarkup && options.escapeStringResults === false) {
