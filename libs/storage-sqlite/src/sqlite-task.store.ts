@@ -26,13 +26,12 @@
 
 import { EventEmitter } from 'node:events';
 
-import type Database from 'better-sqlite3';
-
 import { getHostname } from '@frontmcp/utils';
 
 import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
 import { withBusyRetry } from './open-database';
 import { acquireConnection, type SqliteConnection } from './sqlite-connection';
+import type { SqliteDatabase, SqliteStatement } from './sqlite-driver';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 // ───────────────────────────────────────────────────────────────
@@ -147,20 +146,20 @@ interface TaskRow {
 }
 
 interface Prepared {
-  insert: Database.Statement;
-  insertWithinLimit: Database.Statement;
-  unfinishedWithWorker: Database.Statement;
-  get: Database.Statement;
-  update: Database.Statement;
-  del: Database.Statement;
-  listBySession: Database.Statement;
-  countBySession: Database.Statement;
-  cleanup: Database.Statement;
+  insert: SqliteStatement;
+  insertWithinLimit: SqliteStatement;
+  unfinishedWithWorker: SqliteStatement;
+  get: SqliteStatement;
+  update: SqliteStatement;
+  del: SqliteStatement;
+  listBySession: SqliteStatement;
+  countBySession: SqliteStatement;
+  cleanup: SqliteStatement;
 }
 
 export class SqliteTaskStore implements TaskStoreInterface {
   private readonly connection: SqliteConnection;
-  private readonly db: Database.Database;
+  private readonly db: SqliteDatabase;
   private readonly emitter = new EventEmitter();
   private readonly logger?: SqliteTaskLogger;
   private readonly liveness: ProcessLivenessProbe;
@@ -404,7 +403,7 @@ export class SqliteTaskStore implements TaskStoreInterface {
     }
   }
 
-  getDatabase(): Database.Database {
+  getDatabase(): SqliteDatabase {
     return this.db;
   }
 

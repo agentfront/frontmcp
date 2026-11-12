@@ -5,25 +5,24 @@
  * Supports TTL expiration, optional encryption, and WAL mode.
  */
 
-import type Database from 'better-sqlite3';
-
 import { decryptValue, deriveEncryptionKey, encryptValue } from './encryption';
 import { withBusyRetry } from './open-database';
 import { acquireConnection, type SqliteConnection } from './sqlite-connection';
+import type { SqliteDatabase, SqliteStatement } from './sqlite-driver';
 import type { SqliteStorageOptions } from './sqlite.options';
 
 /** Bundled prepared statements - all-or-nothing initialization. */
 interface KvPreparedStatements {
-  get: Database.Statement;
-  set: Database.Statement;
-  del: Database.Statement;
-  delExpired: Database.Statement;
-  has: Database.Statement;
-  keys: Database.Statement;
-  keysPattern: Database.Statement;
-  cleanup: Database.Statement;
-  ttl: Database.Statement;
-  expire: Database.Statement;
+  get: SqliteStatement;
+  set: SqliteStatement;
+  del: SqliteStatement;
+  delExpired: SqliteStatement;
+  has: SqliteStatement;
+  keys: SqliteStatement;
+  keysPattern: SqliteStatement;
+  cleanup: SqliteStatement;
+  ttl: SqliteStatement;
+  expire: SqliteStatement;
 }
 
 /**
@@ -40,7 +39,7 @@ interface KvPreparedStatements {
  */
 export class SqliteKvStore {
   private readonly connection: SqliteConnection;
-  private readonly db: Database.Database;
+  private readonly db: SqliteDatabase;
   private encryptionKey: Uint8Array | null = null;
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private stmts: KvPreparedStatements | null = null;
@@ -275,7 +274,7 @@ export class SqliteKvStore {
    * Get the underlying database instance (for advanced use cases / testing).
    * Other stores on the same file share it, so do not close it directly.
    */
-  getDatabase(): Database.Database {
+  getDatabase(): SqliteDatabase {
     return this.db;
   }
 

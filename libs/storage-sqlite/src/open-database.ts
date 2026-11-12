@@ -1,8 +1,8 @@
 /**
  * openDatabase
  *
- * Shared helper to open a better-sqlite3 database file. Centralizes two
- * concerns that every file-backed SQLite store needs:
+ * Shared helper to open a SQLite database: with the driver set by `useSqliteDriver()`,
+ * or else with better-sqlite3, which needs two things done for every file-backed store:
  *
  * 1. **Parent-directory creation.** better-sqlite3 will NOT create missing
  *    parent directories — opening `~/.frontmcp/data/auth.sqlite` when
@@ -12,11 +12,10 @@
  * 2. **ESM-safe native module load.** See {@link loadBetterSqlite3}.
  */
 
-import type Database from 'better-sqlite3';
-
 import { dirname, ensureDirSync } from '@frontmcp/utils';
 
 import { loadBetterSqlite3 } from './better-sqlite3-loader';
+import { currentSqliteDriver, type SqliteDatabase, type SqliteDriver } from './sqlite-driver';
 
 /** Special better-sqlite3 path that opens a transient in-memory database. */
 const MEMORY_PATH = ':memory:';
@@ -64,17 +63,8 @@ export function withBusyRetry<T>(operation: () => T, options: BusyRetryOptions =
   }
 }
 
-/**
- * Open (or create) a better-sqlite3 database at `path`, creating the parent
- * directory if necessary.
- *
- * @param path - Filesystem path to the `.sqlite` file, or `:memory:`.
- * @param storeName - Name used in error messages (e.g. `'SqliteKvStore'`).
- * @param options - `busyTimeoutMs` (set before anything else touches the file) and `walMode`.
- * @returns An open better-sqlite3 `Database` instance.
- * @throws Error wrapping the underlying failure with the store name and path.
- */
-export function openDatabase(path: string, storeName: string, options: OpenDatabaseOptions = {}): Database.Database {
+/** better-sqlite3 as a driver, once the parent directory of `path` exists: better-sqlite3 does not create it. */
+function builtInDriver(path: string, storeName: string): SqliteDriver {
   const BetterSqlite3 = loadBetterSqlite3();
 
   // better-sqlite3 does not create parent dirs. Skip for in-memory and for
@@ -94,9 +84,25 @@ export function openDatabase(path: string, storeName: string, options: OpenDatab
     }
   }
 
-  let db: Database.Database;
+  return (databasePath) => new BetterSqlite3(databasePath);
+}
+
+/**
+ * Open (or create) the database at `path`: with the driver set by `useSqliteDriver()`, or else with
+ * better-sqlite3, creating the parent directory if necessary.
+ *
+ * @param path - Filesystem path to the `.sqlite` file, or `:memory:`.
+ * @param storeName - Name used in error messages (e.g. `'SqliteKvStore'`).
+ * @param options - `busyTimeoutMs` (set before anything else touches the file) and `walMode`.
+ * @returns An open database: a better-sqlite3 `Database`, or the one the driver opened.
+ * @throws Error wrapping the underlying failure with the store name and path.
+ */
+export function openDatabase(path: string, storeName: string, options: OpenDatabaseOptions = {}): SqliteDatabase {
+  const open = currentSqliteDriver() ?? builtInDriver(path, storeName);
+
+  let db: SqliteDatabase;
   try {
-    db = new BetterSqlite3(path);
+    db = open(path);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`${storeName}: failed to open database at "${path}": ${message}`, { cause: err });

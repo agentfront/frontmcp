@@ -10,6 +10,8 @@ export { SqliteStorageAdapter } from './sqlite-storage.adapter';
 export { openDatabase, withBusyRetry, isBusyError } from './open-database';
 export { acquireConnection, SqliteConnection } from './sqlite-connection';
 export type { OpenDatabaseOptions, BusyRetryOptions } from './open-database';
+export { useSqliteDriver } from './sqlite-driver';
+export type { SqliteDriver, SqliteDatabase, SqliteStatement } from './sqlite-driver';
 export { loadBetterSqlite3 } from './better-sqlite3-loader';
 export { SqliteSessionStore } from './sqlite-session.store';
 export type { SqliteSessionStoreOptions, SessionStoreInterface, StoredSessionData } from './sqlite-session.store';

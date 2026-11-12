@@ -1,5 +1,3 @@
-import type Database from 'better-sqlite3';
-
 import { pathResolve } from '@frontmcp/utils';
 
 import {
@@ -9,6 +7,7 @@ import {
   withBusyRetry,
   type OpenDatabaseOptions,
 } from './open-database';
+import type { SqliteDatabase } from './sqlite-driver';
 
 const MIN_BACKOFF_MS = 2;
 const MAX_BACKOFF_MS = 50;
@@ -24,7 +23,7 @@ class SharedDatabase {
   private lastProgressAt = 0;
 
   constructor(
-    readonly db: Database.Database,
+    readonly db: SqliteDatabase,
     private busyTimeoutMs: number,
     private readonly cacheKey?: string,
   ) {}
@@ -91,7 +90,7 @@ export class SqliteConnection {
 
   constructor(private readonly shared: SharedDatabase) {}
 
-  get db(): Database.Database {
+  get db(): SqliteDatabase {
     return this.shared.db;
   }
 
