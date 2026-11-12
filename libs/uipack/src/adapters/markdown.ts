@@ -24,25 +24,72 @@ const SAFE_HREF = /^(https?:|mailto:|\/|#)/i;
 const PLACEHOLDER = '\uE000';
 // A bare URL in escaped text ends at whitespace or a `<` (escaped), and before held markup
 const BARE_URL = /(?<![\w/@.])(?:https?:\/\/|www\.)(?:(?!&lt;)[^\s<])+/gi;
-const AUTOLINK_TRAILER = /(?:[?!.,:*_~]|&[a-z0-9#]+;)$/i;
-const TABLE_DELIMITER = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+const AUTOLINK_PUNCTUATION = '?!.,:*_~';
+const ENTITY_NAME_CHARACTER = /[a-z0-9#]/i;
+const HREF_END = /[)\s]/g;
+// Tested on the trimmed line: surrounding `\s*` on both sides would try every split of the whitespace
+const TABLE_DELIMITER = /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/;
 const TASK_ITEM = /^\[([ xX])\]\s+(.*)$/;
 
 function emphasis(text: string): string {
   return text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\*([^*]+)\*/g, '<em>$1</em>');
 }
 
+/**
+ * Replace each `[label](href)` link: the label runs to the first `]`, the href to the first `)` or whitespace.
+ * Links that share a `]` or an href share its search, so the text is read once.
+ */
+function replaceLinks(text: string, render: (label: string, href: string) => string): string {
+  let result = '';
+  let copied = 0;
+  let labelEnd = -1;
+  let hrefEnd = -1;
+  let start = text.indexOf('[');
+  while (start !== -1) {
+    if (labelEnd < start) labelEnd = text.indexOf(']', start + 1);
+    if (labelEnd === -1) break;
+    const hrefStart = labelEnd + 2;
+    if (labelEnd > start + 1 && text[labelEnd + 1] === '(') {
+      if (hrefEnd < hrefStart) {
+        HREF_END.lastIndex = hrefStart;
+        hrefEnd = HREF_END.exec(text)?.index ?? text.length;
+      }
+      if (hrefEnd > hrefStart && text[hrefEnd] === ')') {
+        result += text.slice(copied, start) + render(text.slice(start + 1, labelEnd), text.slice(hrefStart, hrefEnd));
+        copied = hrefEnd + 1;
+        start = text.indexOf('[', copied);
+        continue;
+      }
+    }
+    start = text.indexOf('[', start + 1);
+  }
+  return result + text.slice(copied);
+}
+
+/** Where the character reference (`&name;`) that ends the text at `end` starts, or -1. */
+function entityStart(text: string, end: number): number {
+  if (text[end - 1] !== ';') return -1;
+  let index = end - 2;
+  while (index >= 0 && ENTITY_NAME_CHARACTER.test(text[index])) index--;
+  return index < end - 2 && text[index] === '&' ? index : -1;
+}
+
 /** GitHub's rules for where a bare URL ends: not on trailing punctuation, an entity or an unmatched `)`. */
 function trimAutolink(url: string): string {
-  let trimmed = url;
+  let end = url.length;
+  let unmatchedCloses = url.split(')').length - url.split('(').length;
   for (;;) {
-    const trailer = AUTOLINK_TRAILER.exec(trimmed);
-    if (trailer) {
-      trimmed = trimmed.slice(0, -trailer[0].length);
-    } else if (trimmed.endsWith(')') && trimmed.split('(').length < trimmed.split(')').length) {
-      trimmed = trimmed.slice(0, -1);
+    const last = url[end - 1] ?? '';
+    const entity = entityStart(url, end);
+    if (last !== '' && AUTOLINK_PUNCTUATION.includes(last)) {
+      end--;
+    } else if (entity !== -1) {
+      end = entity;
+    } else if (last === ')' && unmatchedCloses > 0) {
+      end--;
+      unmatchedCloses--;
     } else {
-      return trimmed;
+      return url.slice(0, end);
     }
   }
 }
@@ -61,7 +108,7 @@ function inline(text: string, gfm = false): string {
     hold(`<code>${code}</code>`),
   );
   // Links are stashed before emphasis so `*` / `**` inside an href never becomes markup
-  out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, href: string) =>
+  out = replaceLinks(out, (label, href) =>
     SAFE_HREF.test(href) ? hold(`<a href="${href}" rel="noopener noreferrer">${emphasis(label)}</a>`) : label,
   );
   if (gfm) {
@@ -114,7 +161,7 @@ function isTableStart(line: string, next: string | undefined): boolean {
   return (
     line.includes('|') &&
     next !== undefined &&
-    TABLE_DELIMITER.test(next) &&
+    TABLE_DELIMITER.test(next.trim()) &&
     tableCells(line).length === tableCells(next).length
   );
 }
