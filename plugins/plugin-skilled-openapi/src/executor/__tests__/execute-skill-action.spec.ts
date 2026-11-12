@@ -287,6 +287,65 @@ describe('executeSkillAction', () => {
   });
 });
 
+describe('executeSkillAction: the guard judges the values the request is sent with', () => {
+  const projectEntry = () =>
+    makeEntry({
+      operationId: 'getProject',
+      pathTemplate: '/projects/{project}',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: ['string', 'null'], default: 'restricted' },
+          page: { type: 'number', default: 2 },
+        },
+        additionalProperties: false,
+      },
+      mapper: [
+        { inputKey: 'project', type: 'path', key: 'project', required: true },
+        { inputKey: 'page', type: 'query', key: 'page', required: false },
+      ],
+    } as never);
+
+  /** A guard that grants every project but "restricted". */
+  const projectGuard = () => ({
+    check: jest.fn(async ({ input }: { input: Record<string, unknown> }) =>
+      input['project'] === 'restricted' ? { granted: false, deniedBy: 'restricted project' } : { granted: true },
+    ),
+  });
+
+  beforeEach(() => {
+    mockExecuteOperation.mockReset();
+    mockExecuteOperation.mockResolvedValue({ ok: true, status: 200, data: {}, contentType: 'application/json' });
+  });
+
+  it.each([
+    ['given as null', { project: null }],
+    ['left out', {}],
+  ])('denies a project %s that the request would send as its restricted default', async (_case, input) => {
+    const deps = { ...makeDeps(), guard: projectGuard() as never };
+
+    const res = await executeSkillAction({ listings: [projectEntry()], input, authInfo: {}, deps });
+
+    expect(res).toMatchObject({ ok: false, error: 'authority denied: restricted project' });
+    expect(mockExecuteOperation).not.toHaveBeenCalled();
+  });
+
+  it('sends exactly the values the guard granted', async () => {
+    const guard = projectGuard();
+
+    const res = await executeSkillAction({
+      listings: [projectEntry()],
+      input: { project: 'open' },
+      authInfo: {},
+      deps: { ...makeDeps(), guard: guard as never },
+    });
+
+    expect(res.ok).toBe(true);
+    expect(guard.check).toHaveBeenCalledWith(expect.objectContaining({ input: { project: 'open', page: 2 } }));
+    expect(mockExecuteOperation).toHaveBeenCalledWith(expect.objectContaining({ input: { project: 'open', page: 2 } }));
+  });
+});
+
 describe('executeSkillAction: an action the confirm option names', () => {
   const DELETES = { methods: ['DELETE' as const], whenUnsupported: 'refuse' as const };
   const deleteThing = () => makeEntry({ operationId: 'deleteThing', httpMethod: 'DELETE' });
