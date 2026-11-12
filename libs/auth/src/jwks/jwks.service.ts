@@ -1,7 +1,14 @@
 // auth/jwks/jwks.service.ts
 import type { JSONWebKeySet, JWK } from 'jose';
 
-import { bytesToHex, isProduction, isRedirectResponse, randomBytes, rsaVerify } from '@frontmcp/utils';
+import {
+  bytesToHex,
+  isProduction,
+  isRedirectResponse,
+  randomBytes,
+  readTextWithLimit,
+  rsaVerify,
+} from '@frontmcp/utils';
 
 import { resolveAndCheckHostname } from '../cimd/cimd.validator';
 import { noopAuthLogger, type AuthLogger } from '../common/auth-logger.interface';
@@ -596,15 +603,7 @@ export class JwksService {
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-        // Size cap: reject by Content-Length up front, then bound the read.
-        const contentLength = res.headers.get('content-length');
-        if (contentLength && Number(contentLength) > MAX_JWKS_FETCH_BYTES) {
-          throw new Error('response too large');
-        }
-        const text = await res.text();
-        if (text.length > MAX_JWKS_FETCH_BYTES) {
-          throw new Error('response too large');
-        }
+        const text = await readTextWithLimit(res, MAX_JWKS_FETCH_BYTES);
         return JSON.parse(text) as T;
       }
     } finally {
