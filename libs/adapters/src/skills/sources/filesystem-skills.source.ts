@@ -234,6 +234,11 @@ export class FilesystemSkillsSource {
       return;
     }
 
+    if (!(await this.staysInsideRoot(absDir)) || !(await this.staysInsideRoot(joinPath(absDir, 'SKILL.md')))) {
+      this.logger.warn(`[fs-skills] skipping ${absDir}: it or its SKILL.md resolves outside skillsDir`);
+      return;
+    }
+
     let content: FilesystemSkillContent;
     try {
       content = await loadFilesystemSkill(absDir);
@@ -250,6 +255,17 @@ export class FilesystemSkillsSource {
     }
     this.known.set(absDir, content);
     this.emit({ op: 'upsert', skill: content, absPath: absDir });
+  }
+
+  /** Whether `path` resolves, through any symlinks, inside skillsDir; a missing path is left to the read that follows. */
+  private async staysInsideRoot(path: string): Promise<boolean> {
+    let resolved: string;
+    try {
+      resolved = await realpath(path);
+    } catch {
+      return true;
+    }
+    return resolved === this.rootResolved || resolved.startsWith(this.rootResolved + sep);
   }
 
   private emit(event: FilesystemSkillsEvent): void {

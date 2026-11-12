@@ -288,6 +288,53 @@ describe('FilesystemSkillsSource', () => {
     }
   });
 
+  it('skips a skill whose SKILL.md is a symlink to a file outside skillsDir', async () => {
+    const root = await mkTempDir();
+    const outside = await mkTempDir();
+    const warn = jest.fn();
+    try {
+      await writeFile(pathJoin(outside, 'notes.md'), '---\nname: outside\ndescription: D\n---\n# Outside body\n');
+      await mkdir(pathJoin(root, 'linked'), { recursive: true });
+      await symlink(pathJoin(outside, 'notes.md'), pathJoin(root, 'linked', 'SKILL.md'));
+      await writeSkill(root, 'good', { name: 'good', description: 'D' }, '# Body');
+
+      const events: FilesystemSkillsEvent[] = [];
+      const source = new FilesystemSkillsSource({ skillsDir: root, watch: false }, { ...noopLogger, warn });
+      source.onChange((e) => events.push(e));
+      await source.start();
+      await source.stop();
+
+      expect(events.filter(isUpsert).map((e) => e.skill.id)).toEqual(['good']);
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/resolves outside skillsDir/));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('skips a directory symlink outside skillsDir on a refresh a file change starts', async () => {
+    const root = await mkTempDir();
+    const outside = await mkTempDir();
+    try {
+      await writeSkill(outside, 'evil-skill', { name: 'evil', description: 'D' }, '# Body');
+      const events: FilesystemSkillsEvent[] = [];
+      const source = new FilesystemSkillsSource({ skillsDir: root, watch: false }, noopLogger);
+      source.onChange((e) => events.push(e));
+      await source.start();
+
+      await symlink(pathJoin(outside, 'evil-skill'), pathJoin(root, 'evil-skill'));
+      const refreshSkill = (source as unknown as { refreshSkill: (absDir: string) => Promise<void> }).refreshSkill;
+      const rootResolved = (source as unknown as { rootResolved: string }).rootResolved;
+      await refreshSkill.call(source, pathJoin(rootResolved, 'evil-skill'));
+      await source.stop();
+
+      expect(events).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
   it('skips broken symlinks without throwing', async () => {
     const root = await mkTempDir();
     try {
