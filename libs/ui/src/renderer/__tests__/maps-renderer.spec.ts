@@ -2,7 +2,7 @@
  * Maps Renderer Tests
  */
 
-import { isMap, MapsRenderer } from '../maps';
+import { isMap, MapsRenderer, type MapConfig } from '../maps';
 
 describe('MapsRenderer', () => {
   const renderer = new MapsRenderer();
@@ -129,6 +129,24 @@ describe('MapsRenderer', () => {
     it('should use custom className', () => {
       const element = renderer.render(geojson, { className: 'custom' });
       expect((element.props as { className: string }).className).toBe('custom');
+    });
+
+    it('keeps attribution links but drops scripts, event handlers and srcdoc from the document', () => {
+      const element = renderer.render(
+        JSON.stringify({
+          center: [0, 0],
+          tileLayer: {
+            url: 'https://tiles.example/{z}/{x}/{y}.png',
+            attribution:
+              '<a href="https://tiles.example">Tiles</a><img src="x" onerror="alert(1)">' +
+              '<iframe srcdoc="<script>alert(1)</script>"></iframe><script>alert(2)</script>',
+          },
+        }),
+      );
+      const { config } = element.props as { config: MapConfig };
+      expect(config.tileLayer?.attribution).toBe(
+        '<a href="https://tiles.example">Tiles</a><img src="x"><iframe></iframe>',
+      );
     });
   });
 
