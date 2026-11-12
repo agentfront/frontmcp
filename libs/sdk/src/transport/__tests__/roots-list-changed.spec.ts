@@ -1,19 +1,18 @@
 /**
  * A session whose client declares `roots`: the server keeps the roots it read per session, and reads them again once
  * the client says they changed with `notifications/roots/list_changed`. Checked in an in-memory session
- * (`createInMemoryServer()`, what `connect()` runs on) and in a session of the Node HTTP server.
+ * (`createInMemoryServer()`, what `connect()` runs on), and on the server a local adapter connects for an HTTP session,
+ * over a transport the spec holds.
  */
 import 'reflect-metadata';
 
-import * as http from 'node:http';
-import { type AddressInfo } from 'node:net';
-
-import { ListRootsRequestSchema, type Root } from '@frontmcp/protocol';
-import { Client, SSEClientTransport } from '@frontmcp/protocol/client';
+import { ListRootsRequestSchema, type JSONRPCMessage, type Root, type Transport } from '@frontmcp/protocol';
+import { Client } from '@frontmcp/protocol/client';
 
 import { App, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { type Scope } from '../../scope/scope.instance';
+import { LocalTransportAdapter } from '../adapters/transport.local.adapter';
 import { createInMemoryServer } from '../in-memory-server';
 
 /** Answers the roots the server holds for the caller's session. */
@@ -72,22 +71,46 @@ async function rootsBeforeAndAfterChange(session: RootsClient): Promise<string[]
   return [before, await session.readRoots()];
 }
 
+/** Stands in for the wire of an HTTP session: answers the server's `roots/list`, and delivers what the client sends. */
+class SessionWire {
+  onmessage?: Transport['onmessage'];
+
+  /** Takes the root this session's client answers with. */
+  constructor(private readonly rootUri: string) {}
+
+  /** Nothing to start: the spec delivers the client's messages itself. */
+  async start(): Promise<void> {
+    return undefined;
+  }
+
+  /** Answers a `roots/list` request of the server as the client would. */
+  async send(message: JSONRPCMessage): Promise<void> {
+    if (!('method' in message) || message.method !== 'roots/list' || !('id' in message)) return;
+    this.onmessage?.({ jsonrpc: '2.0', id: message.id, result: { roots: [{ uri: this.rootUri }] } });
+  }
+
+  /** Nothing to close. */
+  async close(): Promise<void> {
+    return undefined;
+  }
+}
+
+/** Connects the server of a local adapter for `sessionId` to a wire, without the adapter's own transport. */
+async function connectLocalAdapter(scope: Scope, sessionId: string, rootUri: string): Promise<SessionWire> {
+  const wire = new SessionWire(rootUri);
+  const adapter = Object.create(LocalTransportAdapter.prototype) as LocalTransportAdapter<never>;
+  Object.assign(adapter, { scope, key: { sessionId }, logger: scope.logger, transport: wire });
+  await adapter.connectServer();
+  scope.notifications.setClientCapabilities(sessionId, { roots: { listChanged: true } });
+  return wire;
+}
+
 describe('notifications/roots/list_changed', () => {
   const FIRST_THEN_SECOND = [['file:///workspace/first'], ['file:///workspace/second']];
-  const savedSessionSecret = process.env['MCP_SESSION_SECRET'];
   const cleanups: Array<() => Promise<unknown>> = [];
-
-  beforeAll(() => {
-    process.env['MCP_SESSION_SECRET'] = 'roots-list-changed-spec-secret';
-  });
 
   afterEach(async () => {
     for (const cleanup of cleanups.splice(0)) await cleanup();
-  });
-
-  afterAll(() => {
-    if (savedSessionSecret === undefined) delete process.env['MCP_SESSION_SECRET'];
-    else process.env['MCP_SESSION_SECRET'] = savedSessionSecret;
   });
 
   it('makes the server of an in-memory session read the roots again', async () => {
@@ -105,19 +128,20 @@ describe('notifications/roots/list_changed', () => {
     expect(await rootsBeforeAndAfterChange(session)).toEqual(FIRST_THEN_SECOND);
   });
 
-  it('makes the server of an HTTP session read the roots again', async () => {
-    const handler = (await FrontMcpInstance.createHandler({ ...config, http: { entryPath: '/mcp' } })) as never;
-    const server = http.createServer(handler);
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const { port } = server.address() as AddressInfo;
-    const session = rootsClient(['file:///workspace/first']);
-    cleanups.push(
-      () => session.client.close(),
-      async () => server.closeAllConnections(),
-      () => new Promise<void>((resolve) => server.close(() => resolve())),
-    );
-    await session.client.connect(new SSEClientTransport(new URL(`http://127.0.0.1:${port}/mcp/sse`)));
+  it('clears the roots a local adapter holds for its own session, and for no other session', async () => {
+    const instance = await FrontMcpInstance.createForGraph(config);
+    const scope = instance.getScopes()[0] as Scope;
+    cleanups.push(() => scope.dispose());
+    const firstWire = await connectLocalAdapter(scope, 'session-one', 'file:///workspace/one');
+    await connectLocalAdapter(scope, 'session-two', 'file:///workspace/two');
+    await scope.notifications.listRoots('session-one');
+    await scope.notifications.listRoots('session-two');
+    expect(scope.notifications.getCachedRoots('session-one')).toEqual([{ uri: 'file:///workspace/one' }]);
 
-    expect(await rootsBeforeAndAfterChange(session)).toEqual(FIRST_THEN_SECOND);
+    firstWire.onmessage?.({ jsonrpc: '2.0', method: 'notifications/roots/list_changed' });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(scope.notifications.getCachedRoots('session-one')).toBeUndefined();
+    expect(scope.notifications.getCachedRoots('session-two')).toEqual([{ uri: 'file:///workspace/two' }]);
   });
 });
