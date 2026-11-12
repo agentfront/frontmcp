@@ -1,8 +1,6 @@
 /** A `POST` to the publish endpoint of a real server (`createFetchHandler()`) ends its span by how it was answered. */
 import 'reflect-metadata';
 
-import { createHmac } from 'node:crypto';
-
 import { diag, DiagLogLevel, SpanStatusCode, trace } from '@opentelemetry/api';
 import {
   BasicTracerProvider,
@@ -12,6 +10,7 @@ import {
 } from '@opentelemetry/sdk-trace-base';
 
 import { App, event, FrontMcpInstance, LogLevel, z } from '@frontmcp/sdk';
+import { bytesToHex, hmacSha256 } from '@frontmcp/utils';
 
 import ObservabilityPlugin from '../plugin/observability.plugin';
 
@@ -21,6 +20,7 @@ diag.setLogger({ debug() {}, info() {}, warn() {}, error() {}, verbose() {} }, D
 trace.setGlobalTracerProvider(provider);
 
 const SECRET = 'publish-endpoint-secret-of-32-chars!';
+const encoder = new TextEncoder();
 const orderCreated = event({ name: 'order.created', payloadSchema: { orderId: z.string() } });
 
 @App({ id: 'shop', name: 'Shop', events: [orderCreated] })
@@ -33,7 +33,7 @@ let signedSecondsAgo = 0;
 function publishRequest(body: unknown, headers: Record<string, string> = {}): Request {
   const text = JSON.stringify(body);
   const timestamp = String(Math.floor(Date.now() / 1000) - signedSecondsAgo++);
-  const signature = createHmac('sha256', SECRET).update(`${timestamp}.${text}`).digest('hex');
+  const signature = bytesToHex(hmacSha256(encoder.encode(SECRET), encoder.encode(`${timestamp}.${text}`)));
   return new Request('https://shop.example.com/events/publish', {
     method: 'POST',
     headers: {
