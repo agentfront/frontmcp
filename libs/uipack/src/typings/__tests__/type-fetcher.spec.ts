@@ -228,6 +228,34 @@ import React from 'react';`;
 
       expect(combined).toContain('// Source: https://esm.sh/test.d.ts');
     });
+
+    it('marks each file once, even when an earlier file URL begins with its URL', () => {
+      const contents = new Map([
+        ['https://esm.sh/pkg/index.d.ts?raw', 'declare const a: number;'],
+        ['https://esm.sh/pkg/index.d.ts', 'declare const b: string;\ndeclare const c: string;'],
+      ]);
+
+      const markers = combineDtsContents(contents).match(/^\/\/ Source: .*$/gm);
+
+      expect(markers).toEqual([
+        '// Source: https://esm.sh/pkg/index.d.ts?raw',
+        '// Source: https://esm.sh/pkg/index.d.ts',
+      ]);
+    });
+
+    it('combines two files of 50,000 declarations each, with one marker per file', () => {
+      const file = (name: string) =>
+        Array.from({ length: 50_000 }, (_, index) => `declare const ${name}${index}: number;`).join('\n');
+      const contents = new Map([
+        ['https://esm.sh/a.d.ts', file('a')],
+        ['https://esm.sh/b.d.ts', file('b')],
+      ]);
+
+      const combined = combineDtsContents(contents);
+
+      expect(combined.match(/^\/\/ Source: /gm)).toHaveLength(2);
+      expect(combined.split('\n')).toHaveLength(100_003);
+    });
   });
 });
 
