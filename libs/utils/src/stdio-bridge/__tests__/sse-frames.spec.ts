@@ -5,6 +5,7 @@
 import { relaySseFrames } from '../sse-frames';
 import type { JsonRpcFrame } from '../stdio-framer';
 import { recordingLog } from './helpers/fake-mcp-server';
+import { countNewlineSearch } from './helpers/newline-search';
 
 const listChanged: JsonRpcFrame = { jsonrpc: '2.0', method: 'notifications/tools/list_changed' };
 const logLine: JsonRpcFrame = { jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info' } };
@@ -43,6 +44,17 @@ describe('relaySseFrames', () => {
 
     expect(frames).toEqual([listChanged]);
     expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('looks through each character of a line once for its newline, however it is split', async () => {
+    const line = `data: ${JSON.stringify({ ...logLine, params: { level: 'info', data: 'x'.repeat(2000) } })}`;
+
+    const search = countNewlineSearch('data: {"jsonrpc"');
+    const { frames } = await framesOf([...line, '\n\n']);
+    search.stop();
+
+    expect(frames).toHaveLength(1);
+    expect(search.characters()).toBeLessThan(line.length * 2);
   });
 
   it('reads an event that arrives in several chunks, with CRLF line ends', async () => {
