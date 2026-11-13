@@ -660,9 +660,11 @@ describe('EnclaveService', () => {
       });
 
       const serviceWithNoLimit = new EnclaveService(config);
-      // Use 8KB which is under the AST guard's maxLineLength of 10000
-      // but still a "large" script relative to typical maxScriptLengthWhenDisabled thresholds
-      const largeScript = 'return "' + 'x'.repeat(8000) + '";';
+      // Over 8 KB in all, in lines under the sandbox's own per-line limit
+      const largeScript = [
+        ...Array.from({ length: 8 }, (_, index) => `const part${index} = "${'x'.repeat(1000)}";`),
+        'return part0.length;',
+      ].join('\n');
 
       // Should not throw - length check is disabled
       const result = await serviceWithNoLimit.execute(largeScript, mockEnvironment);
