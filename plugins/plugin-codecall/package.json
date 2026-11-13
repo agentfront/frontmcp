@@ -52,8 +52,8 @@
     }
   },
   "dependencies": {
-    "@enclave-vm/ast": "^2.19.1",
-    "@enclave-vm/core": "^2.19.1",
+    "@enclave-vm/ast": "^2.19.2",
+    "@enclave-vm/core": "^2.19.2",
     "@frontmcp/protocol": "1.12.0",
     "@frontmcp/utils": "1.12.0",
     "acorn": "^8.15.0",
