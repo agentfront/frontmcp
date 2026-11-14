@@ -7,6 +7,7 @@
 
 import { StorageNotSupportedError } from './errors';
 import type { MessageHandler, NamespacedStorage, SetEntry, SetOptions, StorageAdapter, Unsubscribe } from './types';
+import { escapeGlob } from './utils/pattern';
 
 /**
  * Separator used between namespace segments.
@@ -66,10 +67,10 @@ export class NamespacedStorageImpl implements NamespacedStorage {
   }
 
   /**
-   * Add prefix to a pattern (for keys() operation).
+   * Add prefix to a pattern (for keys() operation). The prefix is matched as itself, whatever characters it has.
    */
   private prefixPattern(pattern: string): string {
-    return this.prefix + pattern;
+    return escapeGlob(this.prefix) + pattern;
   }
 
   /**
