@@ -1,5 +1,4 @@
 import {
-  AuthInternalError,
   createSecureStore,
   createTokenStorageAdapter,
   DcrClientRegistry,
@@ -8,6 +7,7 @@ import {
   InMemoryConsentStore,
   InMemoryFederatedAuthSessionStore,
   InMemoryOrchestratedTokenStore,
+  isGrantRedeemedError,
   isPersistentTokenStorage,
   isRedisTokenStorage,
   isSqliteTokenStorage,
@@ -316,13 +316,6 @@ function originOf(value: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-const REDEEMED_GRANT_CODES = new Set(['AUTHORIZATION_CODE_REDEEMED', 'REFRESH_TOKEN_REDEEMED']);
-
-/** Whether the store refused to claim a code or a refresh token because a concurrent token request claimed it first. */
-function isRedeemedByAnotherRequest(error: unknown): boolean {
-  return error instanceof AuthInternalError && REDEEMED_GRANT_CODES.has(error.code);
 }
 
 export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
@@ -1251,7 +1244,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     try {
       await this.authorizationStore.markCodeUsed(code);
     } catch (err) {
-      if (!isRedeemedByAnotherRequest(err)) throw err;
+      if (!isGrantRedeemedError(err)) throw err;
       this.logger.warn('Authorization code was redeemed by a concurrent request');
       return { error: 'invalid_grant', error_description: 'Authorization code has already been used' };
     }
@@ -1518,7 +1511,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       await this.authorizationStore.rotateRefreshToken(refreshToken, newRefreshRecord);
     } catch (err) {
       if (copiedTo) await this.discardProviderTokens(copiedTo);
-      if (!isRedeemedByAnotherRequest(err)) throw err;
+      if (!isGrantRedeemedError(err)) throw err;
       this.logger.warn('Refresh token was redeemed by a concurrent request');
       return { error: 'invalid_grant', error_description: 'Refresh token is invalid or expired' };
     }
