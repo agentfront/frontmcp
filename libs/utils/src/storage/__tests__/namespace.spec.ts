@@ -217,6 +217,17 @@ describe('Namespaced Storage', () => {
       expect(await ns.count('*')).toBe(3);
       expect(await ns.count('sub:*')).toBe(1);
     });
+
+    it('should match a namespace name with glob characters as itself', async () => {
+      await adapter.set('a*b:own', 'value');
+      await adapter.set('axxb:other', 'value');
+      await adapter.set('tenant\\:own', 'value');
+      await adapter.set('tenant:other', 'value');
+
+      expect(await storage.namespace('a*b').keys('*')).toEqual(['own']);
+      expect(await storage.namespace('a*b').count('*')).toBe(1);
+      expect(await storage.namespace('tenant\\').keys('*')).toEqual(['own']);
+    });
   });
 
   describe('atomic operations with prefixing', () => {

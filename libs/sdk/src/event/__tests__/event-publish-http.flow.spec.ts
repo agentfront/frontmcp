@@ -9,6 +9,7 @@ import {
   type TestJwtIssuer,
 } from '../../__test-utils__/helpers/mcp-20260728.helpers';
 import { App, event, LogLevel, Plugin, type FlowCtxOf, type FrontMcpConfigInput } from '../../common';
+import { PublicMcpError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
 import { EventPublishHook, EventPublishHttpHook } from '../../index';
 import { type Scope } from '../../scope/scope.instance';
@@ -468,6 +469,9 @@ describe('events:publish-http guards', () => {
 
     expect(answer).toMatchObject({ status: 403 });
     expect(published).not.toHaveBeenCalled();
+    const [refusal] = finished.mock.calls[0];
+    expect(refusal).toBeInstanceOf(PublicMcpError);
+    expect(refusal).toMatchObject({ code: 'EVENT_PUBLISH_REFUSED', statusCode: 403, message: 'HTTP 403: forbidden' });
     await scope.dispose();
   });
 
@@ -482,6 +486,11 @@ describe('events:publish-http guards', () => {
     expect(first.status).toBe(202);
     expect(second.status).toBe(429);
     expect(published).toHaveBeenCalledTimes(1);
+    expect(finished.mock.calls).toEqual([
+      [undefined],
+      [expect.objectContaining({ code: 'EVENT_PUBLISH_REFUSED', statusCode: 429, message: 'HTTP 429: rate_limited' })],
+    ]);
+    expect(finished.mock.calls[1][0]).toBeInstanceOf(PublicMcpError);
     await stop(server);
   });
 });
