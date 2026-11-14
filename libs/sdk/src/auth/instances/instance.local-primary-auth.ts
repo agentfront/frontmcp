@@ -7,6 +7,7 @@ import {
   InMemoryConsentStore,
   InMemoryFederatedAuthSessionStore,
   InMemoryOrchestratedTokenStore,
+  isGrantRedeemedError,
   isPersistentTokenStorage,
   isRedisTokenStorage,
   isSqliteTokenStorage,
@@ -1240,7 +1241,13 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     }
 
     // Mark code as used
-    await this.authorizationStore.markCodeUsed(code);
+    try {
+      await this.authorizationStore.markCodeUsed(code);
+    } catch (err) {
+      if (!isGrantRedeemedError(err)) throw err;
+      this.logger.warn('Authorization code was redeemed by a concurrent request');
+      return { error: 'invalid_grant', error_description: 'Authorization code has already been used' };
+    }
 
     // Generate tokens
     const user: UserInfo = {
@@ -1504,7 +1511,9 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       await this.authorizationStore.rotateRefreshToken(refreshToken, newRefreshRecord);
     } catch (err) {
       if (copiedTo) await this.discardProviderTokens(copiedTo);
-      throw err;
+      if (!isGrantRedeemedError(err)) throw err;
+      this.logger.warn('Refresh token was redeemed by a concurrent request');
+      return { error: 'invalid_grant', error_description: 'Refresh token is invalid or expired' };
     }
     if (sourceId && copiedTo) await this.discardProviderTokens(sourceId);
     // A store that cannot copy moves them now; the rotated record names their new place once the move succeeded.
