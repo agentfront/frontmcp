@@ -5,6 +5,7 @@ import { assertDefined } from '../../__test-utils__/assertion.helpers';
 import {
   generatePkceChallenge,
   InMemoryAuthorizationStore,
+  isGrantRedeemedError,
   RedisAuthorizationStore,
   verifyPkce,
   type AuthorizationCodeRecord,
@@ -187,6 +188,9 @@ describe('InMemoryAuthorizationStore', () => {
       const results = await Promise.allSettled([store.markCodeUsed(record.code), store.markCodeUsed(record.code)]);
 
       expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+      const refusal = results.find((result) => result.status === 'rejected');
+      expect(isGrantRedeemedError(refusal?.reason)).toBe(true);
+      expect(isGrantRedeemedError(new Error('already redeemed'))).toBe(false);
     });
 
     it('should record the refresh token issued from a code marked used', async () => {
@@ -319,6 +323,8 @@ describe('InMemoryAuthorizationStore', () => {
 
       expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
       expect(liveSuccessors).toHaveLength(1);
+      const refusal = results.find((result) => result.status === 'rejected');
+      expect(isGrantRedeemedError(refusal?.reason)).toBe(true);
     });
 
     it('should refuse to rotate an unknown refresh token', async () => {

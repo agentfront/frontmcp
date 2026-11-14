@@ -508,6 +508,14 @@ export function refreshTokenRedeemedError(): AuthFlowError {
   );
 }
 
+/** Whether a store refused to claim a code or a refresh token because a concurrent token request claimed it first. */
+export function isGrantRedeemedError(error: unknown): boolean {
+  return (
+    error instanceof AuthFlowError &&
+    (error.code === 'AUTHORIZATION_CODE_REDEEMED' || error.code === 'REFRESH_TOKEN_REDEEMED')
+  );
+}
+
 /** Redis Lua script: delete KEYS[1] only while it holds ARGV[1], returning 1 or 0. */
 const COMPARE_AND_DELETE_SCRIPT = `if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0`;
 

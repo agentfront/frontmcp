@@ -75,7 +75,7 @@ store.close();
 | `SqliteKvStore`          | A synchronous key/value store with TTL, which the stores above are built on                           |
 | `SqliteStorageAdapter`   | The async `StorageAdapter` interface of `@frontmcp/utils` over the same file (no publish/subscribe)   |
 
-`SqliteStorageAdapter.keys(pattern)` and `SqliteKvStore.keys(pattern)` match letter case, as the memory and Redis storages do: `keys('session:*')` does not return `Session:1`. Up to 1.12.0 they ignored ASCII case, because they searched with SQL `LIKE`, and an adapter pattern lost its backslashes; a backslash is now matched as itself.
+`SqliteStorageAdapter.keys(pattern)` and `SqliteKvStore.keys(pattern)` match letter case, as the memory and Redis storages do: `keys('session:*')` does not return `Session:1`. Up to 1.12.0 they ignored ASCII case, because they searched with SQL `LIKE`, and an adapter pattern lost its backslashes. In an adapter pattern a backslash makes the next character literal, as in the other storages, so `escapeGlob()` output finds the same keys everywhere; in 1.12.1 a backslash was matched as itself.
 
 The package also exports `openDatabase` and `withBusyRetry` (helpers for opening a file and retrying on `SQLITE_BUSY`), `useSqliteDriver` and `durableObjectSqlite` (a SQLite other than `better-sqlite3`, [below](#in-a-cloudflare-durable-object)), `deriveEncryptionKey`, `encryptValue`, `decryptValue` and `SqliteDecryptionError`, and `sqliteStorageOptionsSchema`, the Zod schema for the options below.
 
