@@ -17,6 +17,7 @@ import {
   type EventPublisher,
   type FlowPlan,
   type FlowRunOptions,
+  type HttpOutput,
   type ScopeEntry,
   type ServerRequest,
 } from '../../common';
@@ -182,10 +183,15 @@ export default class EventPublishHttpFlow extends FlowBase<typeof name> {
     try {
       await guard();
     } catch (signal) {
-      if (signal instanceof FlowControl && signal.type === 'respond') {
-        const { status, body } = signal.output as { status: number; body?: { error?: unknown } };
-        const error = typeof body?.error === 'string' ? body.error : 'Refused';
-        this.state.set('flowError', new PublicMcpError(`HTTP ${status}: ${error}`, 'EVENT_PUBLISH_REFUSED', status));
+      const refusal: HttpOutput | undefined =
+        signal instanceof FlowControl && signal.type === 'respond' ? signal.output : undefined;
+      if (refusal?.kind === 'json') {
+        const reason = Array.isArray(refusal.body) ? undefined : refusal.body['error'];
+        const error = typeof reason === 'string' ? reason : 'Refused';
+        this.state.set(
+          'flowError',
+          new PublicMcpError(`HTTP ${refusal.status}: ${error}`, 'EVENT_PUBLISH_REFUSED', refusal.status),
+        );
       }
       throw signal;
     }
