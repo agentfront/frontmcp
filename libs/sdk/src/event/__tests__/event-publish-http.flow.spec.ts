@@ -468,6 +468,9 @@ describe('events:publish-http guards', () => {
 
     expect(answer).toMatchObject({ status: 403 });
     expect(published).not.toHaveBeenCalled();
+    expect(finished).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'EVENT_PUBLISH_REFUSED', statusCode: 403, message: 'HTTP 403: forbidden' }),
+    );
     await scope.dispose();
   });
 
@@ -482,6 +485,10 @@ describe('events:publish-http guards', () => {
     expect(first.status).toBe(202);
     expect(second.status).toBe(429);
     expect(published).toHaveBeenCalledTimes(1);
+    expect(finished.mock.calls).toEqual([
+      [undefined],
+      [expect.objectContaining({ code: 'EVENT_PUBLISH_REFUSED', statusCode: 429, message: 'HTTP 429: rate_limited' })],
+    ]);
     await stop(server);
   });
 });

@@ -177,16 +177,30 @@ export default class EventPublishHttpFlow extends FlowBase<typeof name> {
     return FlowControl.respond(httpRespond.json({ error, ...details }, { status, headers }));
   }
 
+  /** Run a guard that answers its own refusals, and keep such a refusal as the run's failure, as `refuse()` does. */
+  private async recordingRefusal(guard: () => void | Promise<void>): Promise<void> {
+    try {
+      await guard();
+    } catch (signal) {
+      if (signal instanceof FlowControl && signal.type === 'respond') {
+        const { status, body } = signal.output as { status: number; body?: { error?: unknown } };
+        const error = typeof body?.error === 'string' ? body.error : 'Refused';
+        this.state.set('flowError', new PublicMcpError(`HTTP ${status}: ${error}`, 'EVENT_PUBLISH_REFUSED', status));
+      }
+      throw signal;
+    }
+  }
+
   /** Refuse a caller `throttle.ipFilter` blocks. */
   @Stage('checkIpFilter')
   async checkIpFilter() {
-    enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp);
+    await this.recordingRefusal(() => enforceIpFilter(this.scope, this.tryGetContext()?.metadata.clientIp));
   }
 
   /** Count the request against the server's global rate limit. */
   @Stage('acquireQuota')
   async acquireQuota() {
-    await enforceGlobalRateLimit(this.scope, this.tryGetContext());
+    await this.recordingRefusal(() => enforceGlobalRateLimit(this.scope, this.tryGetContext()));
   }
 
   /** Take the body's bytes: JSON, no larger than one delivery may be. */
