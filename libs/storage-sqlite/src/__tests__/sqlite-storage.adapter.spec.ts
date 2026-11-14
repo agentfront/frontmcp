@@ -4,7 +4,7 @@ import * as path from 'path';
 
 import type Database from 'better-sqlite3';
 
-import { StorageOperationError, StorageTTLError } from '@frontmcp/utils';
+import { escapeGlob, MemoryStorageAdapter, StorageOperationError, StorageTTLError } from '@frontmcp/utils';
 
 import { loadBetterSqlite3 } from '../better-sqlite3-loader';
 import { useSqliteDriver } from '../sqlite-driver';
@@ -140,8 +140,32 @@ describe('SqliteStorageAdapter', () => {
 
       expect(await adapter.keys('a%b:*')).toEqual(['a%b:1']);
       expect(await adapter.keys('a_b:*')).toEqual(['a_b:1']);
-      expect(await adapter.keys('a\\b:*')).toEqual(['a\\b:1']);
+      expect(await adapter.keys('a\\\\b:*')).toEqual(['a\\b:1']);
       expect((await adapter.keys('a?b:*')).sort()).toEqual(['a%b:1', 'a\\b:1', 'a_b:1', 'axb:1']);
+    });
+
+    it('reads a backslash in a pattern as an escape, as the memory storage does', async () => {
+      const keys = ['user:a*b:1', 'user:a\\xb:1', 'user:axb:1', 'user:a?b:1', 'user:a\\b:1', 'user:ab:1', 'end\\'];
+      const memory = new MemoryStorageAdapter();
+      await memory.connect();
+      await memory.mset(keys.map((key) => withValue({ key })));
+      await adapter.mset(keys.map((key) => withValue({ key })));
+      const patterns = [
+        `user:${escapeGlob('a*b')}:*`,
+        `user:${escapeGlob('a?b')}:*`,
+        `user:${escapeGlob('a\\b')}:*`,
+        'user:a\\b:*',
+        'end\\',
+      ];
+
+      for (const pattern of patterns) {
+        expect({ pattern, keys: (await adapter.keys(pattern)).sort() }).toEqual({
+          pattern,
+          keys: (await memory.keys(pattern)).sort(),
+        });
+      }
+      expect(await adapter.keys(`user:${escapeGlob('a*b')}:*`)).toEqual(['user:a*b:1']);
+      await memory.disconnect();
     });
 
     it('finds the keys under a prefix longer than 50 bytes', async () => {
