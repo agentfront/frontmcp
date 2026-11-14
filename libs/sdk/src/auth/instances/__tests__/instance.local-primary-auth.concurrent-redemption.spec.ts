@@ -87,4 +87,37 @@ describe('LocalPrimaryAuth — a grant redeemed by two requests at once', () => 
 
     expect(result).toEqual({ error: 'invalid_grant', error_description: 'Authorization code has already been used' });
   });
+
+  it('gives the second of two exchanges that both reach the claim of one code invalid_grant', async () => {
+    const auth = await makeAuth();
+    const { code, verifier } = await createCode(auth);
+    const store = (
+      auth as unknown as { authorizationStore: { markCodeUsed(code: string, issued?: string): Promise<void> } }
+    ).authorizationStore;
+    const markCodeUsed = store.markCodeUsed.bind(store);
+    let claimsWaiting = 0;
+    let releaseClaims: () => void = () => undefined;
+    const bothValidated = new Promise<void>((resolve) => {
+      releaseClaims = resolve;
+    });
+    jest.spyOn(store, 'markCodeUsed').mockImplementation(async (claimed: string, issued?: string) => {
+      if (issued === undefined) {
+        claimsWaiting += 1;
+        if (claimsWaiting === 2) releaseClaims();
+        await bothValidated;
+      }
+      return markCodeUsed(claimed, issued);
+    });
+
+    const results = await Promise.all([
+      auth.exchangeCode(code, CLIENT_ID, REDIRECT_URI, verifier),
+      auth.exchangeCode(code, CLIENT_ID, REDIRECT_URI, verifier),
+    ]);
+
+    expect(claimsWaiting).toBe(2);
+    expect(results.filter((result) => 'access_token' in result)).toHaveLength(1);
+    expect(results.filter((result) => 'error' in result)).toEqual([
+      { error: 'invalid_grant', error_description: 'Authorization code has already been used' },
+    ]);
+  });
 });
