@@ -106,6 +106,7 @@ export {
   signinBindingMatches,
   verifyPkce,
   generatePkceChallenge,
+  isGrantRedeemedError,
   generateAuthorizationCode,
   generateRefreshTokenValue,
   buildCodeRecord,

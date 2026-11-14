@@ -12,6 +12,7 @@ export {
   // Functions
   verifyPkce,
   generatePkceChallenge,
+  isGrantRedeemedError,
   // Record builders (pure, backend-agnostic)
   generateAuthorizationCode,
   generateRefreshTokenValue,

@@ -24,6 +24,33 @@ import { type SqliteConnection } from './sqlite-connection';
 import { SqliteKvStore } from './sqlite-kv.store';
 import { type SqliteStorageOptions } from './sqlite.options';
 
+/** A character of a key, written so SqliteKvStore's LIKE matches it as itself. */
+function likeLiteral(char: string): string {
+  return char === '%' || char === '_' || char === '\\' ? `\\${char}` : char;
+}
+
+/**
+ * A glob key pattern as SqliteKvStore's LIKE pattern, read as the other storages read it: `*` and `?` are wildcards,
+ * a backslash makes the next character literal, and a trailing lone backslash is a literal backslash.
+ */
+function globToLike(pattern: string): string {
+  let like = '';
+  for (let index = 0; index < pattern.length; index++) {
+    const char = pattern[index];
+    if (char === '\\' && index + 1 < pattern.length) {
+      index++;
+      like += likeLiteral(pattern[index]);
+    } else if (char === '*') {
+      like += '%';
+    } else if (char === '?') {
+      like += '_';
+    } else {
+      like += likeLiteral(char);
+    }
+  }
+  return like;
+}
+
 export class SqliteStorageAdapter extends BaseStorageAdapter {
   protected readonly backendName = 'sqlite';
 
@@ -166,15 +193,10 @@ export class SqliteStorageAdapter extends BaseStorageAdapter {
 
   async keys(pattern = '*'): Promise<string[]> {
     this.ensureConnected();
-    // Translate glob (`*`/`?`) to SqliteKvStore's LIKE syntax (`%`/`_`). `*` => `%`, `?` => `_`.
-    // Existing LIKE metacharacters and backslashes are escaped with `\`, so they are matched literally.
     if (pattern === '*' || pattern === undefined) {
       return this.connection.read(() => this.kv.keys());
     }
-    const like = pattern
-      .replace(/[%_\\]/g, (c) => `\\${c}`)
-      .replace(/\*/g, '%')
-      .replace(/\?/g, '_');
+    const like = globToLike(pattern);
     return this.connection.read(() => this.kv.keys(like));
   }
 

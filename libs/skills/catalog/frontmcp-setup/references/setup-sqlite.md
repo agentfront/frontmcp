@@ -380,7 +380,7 @@ await storage.set('lock:reindex', process.pid.toString(), { ifNotExists: true, t
 | `prefix` (provider only)                                      | `''`                 | Prefix for every key the storage reads and writes                 |
 | `provide` (provider only)                                     | `SqliteStorageToken` | Register under another token to hold more than one SQLite storage |
 
-`storage.keys(pattern)` matches letter case, as the memory and Redis storages do: `keys('session:*')` does not return `Session:1`. Up to 1.12.0 the SQLite storage ignored ASCII case there, because it searched with SQL `LIKE`; a caller that relied on it has to search for each spelling.
+`storage.keys(pattern)` matches letter case, as the memory and Redis storages do: `keys('session:*')` does not return `Session:1`. Up to 1.12.0 the SQLite storage ignored ASCII case there, because it searched with SQL `LIKE`; a caller that relied on it has to search for each spelling. A backslash in the pattern makes the next character literal, as in the other storages, so `escapeGlob()` output finds the same keys in SQLite as in memory or Redis.
 
 The provider opens the file at boot, fails the boot on an invalid option or a missing `@frontmcp/storage-sqlite` (it never falls back to memory), and disconnects at shutdown; it works in `createContainer()` scripts too. `createStorage` throws `StorageConfigError` for an invalid `sqlite` block whatever its `fallback`; with `fallback: 'memory'` (the default outside production) a missing package falls back to memory with a warning, as the other backends do. The same `{ type: 'sqlite', sqlite: { path } }` works for `throttle.storage` and for plugins that take a `StorageConfig`. SQLite storage has no pub/sub.
 
