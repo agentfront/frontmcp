@@ -156,12 +156,34 @@ per-script limits (1000 calls, 1 MB; one more call fails the script) and at most
 of that second's are dropped, with one warning). Without it, a script that refers to the global `console` is refused
 before it runs (a field named `console` is fine): log with `mcpLog(level, message)`. Up to 1.11.2 `vm.allowConsole` had
 no effect. The `codecall:execute` description is written from the effective
-`vm` options (loops, `disabledBuiltins`/`disabledGlobals`, `timeoutMs`, the `maxSteps` tool-call cap), and
+`vm` options (loops, `disabledBuiltins`/`disabledGlobals`, `timeoutMs`, the `maxToolCalls` tool-call cap), and
 `codecall:search`'s from `topK` and the `minRelevanceScore` default, `0.1` (up to 1.9.2 both named fixed values).
 `vm.disabledBuiltins` and `vm.disabledGlobals` refuse a script that refers to a listed global (`illegal_access`,
 `JSON is disabled by vm.disabledGlobals`); they add to what the sandbox already refuses (up to 1.9.2 they were
 ignored). Every loop that runs more than 10,000 times ends with `Maximum iteration limit exceeded (10000). This limit
 prevents infinite loops.`
+
+`vm.maxToolCalls` caps the tool calls of one script (`callTool()`, namespace methods and `parallel()` calls alike), an
+integer from 1 to 100,000. `vm.maxSteps` is its deprecated old name: it still counts tool calls, never interpreter
+steps, and a `maxSteps` different from `maxToolCalls` is refused when the plugin starts (up to 1.12.2 a fraction or a
+larger number was accepted).
+
+#### Runtime, security level and process boundary
+
+A preset is CodeCall's policy, not where scripts run. `vm.runtime` picks the Enclave runtime: `'node-vm'` (the
+default) is Enclave's sandbox on Node's `vm` module, Node only, and an explicit `'node-vm'` in a
+`frontmcp build --target cloudflare` bundle is refused when the plugin starts (`nodejs_compat` only stubs `node:vm`).
+`'interpreter'`, Enclave's AgentScript interpreter, is refused when the plugin starts in this version. Its budgets,
+`vm.maxInterpreterSteps` (default 1,000,000, max 5,000,000), `vm.memoryLimitBytes` (default 1 MiB, max 64 MiB),
+`vm.maxCallDepth` (max 256) and `vm.maxPendingCalls` (max 4096), are integers that can be lowered but not raised past
+those maxima or turned off, and setting one without `vm.runtime: 'interpreter'` is refused. Enclave's security level
+is `STANDARD` for every script, and no option turns off its validation or transformation.
+
+Neither runtime, and no preset, is a process boundary: scripts run in the server's own process. On Node, a dedicated,
+constrained child process or container around the server is what contains native stderr output and a process-wide
+memory failure. A Worker can forward `codecall:execute` to such a service, but then the script does not run in the
+Worker. Time, step, call, memory and Cloudflare platform limits are finite on purpose; no sandbox is promised
+unbreakable.
 
 ### Meta-Tools Exposed
 
@@ -214,7 +236,7 @@ CodeCallPlugin.init({
 - Hiding a tool from search is not the control; the refusal at execution is. Do not rely on search ranking to protect a tool. Hiding it from `list_tools` (`visibleInListTools: false`) does also refuse a client's direct `tools/call` of it, but CodeCall's own surfaces then apply this policy.
 - `includeTools` and `directCalls.filter` receive the same object, with the tool's `annotations` and declared `metadata` (`tool.metadata?.annotations` is the same object as `tool.annotations`). It is a deep read-only copy, so a filter cannot change what the next decision reads.
 - A lazy app's tools (`apps: [{ name, lazy }]`) are judged by what `frontmcp.manifest.json` records until the app's first call imports it, so they cannot declare `codecall` (`LazyAppConfigurationError: ... cannot be lazy`), and a filter should read their name, `appId`, tags or annotations rather than other metadata.
-- Namespace bindings (`mail.send({...})` for a tool named `mail.send`) are AgentScript wrappers over `callTool()` inside the sandbox: they count toward `vm.maxSteps` and pass the rate limit and suspicious-sequence checks exactly like `callTool('mail.send', {...})`. A binding with no argument sends `{}`.
+- Namespace bindings (`mail.send({...})` for a tool named `mail.send`) are AgentScript wrappers over `callTool()` inside the sandbox: they count toward `vm.maxToolCalls` and pass the rate limit and suspicious-sequence checks exactly like `callTool('mail.send', {...})`. A binding with no argument sends `{}`.
 - The sandbox's rate checks: more than `vm.rapidEnumerationThreshold` calls (default 30; per tool with `vm.rapidEnumerationOverrides`) to one tool within about 2 seconds stop the script with `Suspicious pattern detected: … [RAPID_ENUMERATION]`, and all tool calls together are capped at 100 per second. Calls made through `parallel()` count, so a `parallel()` of 31 calls to one tool is stopped by default; batch it, or raise the threshold. The sandbox's message says "in 5s", but it keeps only the last 2 seconds of calls. The `codecall:execute` description names the effective limit.
 - A failed `callTool()` carries one of these codes (`error.code` with `{ throwOnError: false }`, the thrown error's `code`, and `tool_error.code` when the script doesn't catch it): `NOT_FOUND`, `VALIDATION` (the input fails the tool's schema), `EXECUTION`, `TIMEOUT` (the tool ran past its `timeout.executeMs`), `ACCESS_DENIED`, `RATE_LIMITED` (a rate limit, quota or concurrency limit refused the call). Up to 1.9.4 schema and rate-limit refusals came back as `EXECUTION`.
 - The code comes from the error's type, never from the words of its message, and the message is what an MCP client calling the tool would be told, without stack frames or server paths: a tool's `PublicMcpError` or `this.fail(...)` message reaches the script as written, and an internal error (a plain `Error`) reads `Tool "<name>" execution failed`. Up to 1.11.2 the code was guessed from the message's words, so `User u9 not found` became `NOT_FOUND` with `Tool "<name>" was not found`, and only `VALIDATION` kept the tool's message.

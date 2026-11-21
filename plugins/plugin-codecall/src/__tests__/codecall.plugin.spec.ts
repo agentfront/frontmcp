@@ -4,7 +4,7 @@ import { type ProviderType, type ScopeEntry } from '@frontmcp/sdk';
 
 import CodeCallPlugin from '../codecall.plugin';
 import { type CodeCallMode, type CodeCallPluginOptionsInput } from '../codecall.types';
-import CodeCallConfig from '../providers/code-call.config';
+import CodeCallConfig, { CodeCallVmRuntimeUnavailableError } from '../providers/code-call.config';
 import { ToolSearchService } from '../services';
 import { AuditLoggerService } from '../services/audit-logger.service';
 import EnclaveService from '../services/enclave.service';
@@ -47,6 +47,26 @@ describe('CodeCallPlugin', () => {
       expect(configProvider).toBeDefined();
       expect(configProvider?.provide).toBe(CodeCallConfig);
       expect(configProvider?.useValue).toBeInstanceOf(CodeCallConfig);
+    });
+
+    it('resolves vm.maxSteps as the tool-call budget of the config it provides', () => {
+      const providers = CodeCallPlugin.dynamicProviders({ vm: { preset: 'secure', maxSteps: 40 } });
+      const config = (providers.find((p) => p.name === 'codecall:config') as ValueProvider).useValue as CodeCallConfig;
+
+      expect(config.getAll().resolvedVm).toMatchObject({ runtime: 'node-vm', maxToolCalls: 40 });
+    });
+
+    it('refuses, when the plugin starts, a vm.runtime this version does not run', () => {
+      const options = { vm: { preset: 'secure', runtime: 'interpreter' } } as const;
+
+      expect(() => CodeCallPlugin.dynamicProviders(options)).toThrow(CodeCallVmRuntimeUnavailableError);
+      expect(() => CodeCallPlugin.dynamicTools(options)).toThrow(CodeCallVmRuntimeUnavailableError);
+    });
+
+    it('refuses, when the plugin starts, an interpreter budget without the interpreter', () => {
+      expect(() => CodeCallPlugin.dynamicProviders({ vm: { preset: 'secure', maxInterpreterSteps: 1000 } })).toThrow(
+        "vm.maxInterpreterSteps applies only to vm.runtime 'interpreter'",
+      );
     });
 
     it('should include codecall:audit-logger provider', () => {
