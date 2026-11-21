@@ -104,17 +104,17 @@ The plugin adds a `codecall` field to `@Tool`:
 
 ## Options
 
-| Option           | Default                | Description                                                                                                                                      |
-| ---------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `mode`           | `'codecall_only'`      | Which tools `tools/list` shows, and which CodeCall may use. See [Modes](#modes).                                                                 |
-| `appIds`         | every app              | In `codecall_only`, hide only these apps' tools from `tools/list`. It doesn't limit what CodeCall searches or calls.                             |
-| `includeTools`   |                        | `(tool) => boolean`. A tool it returns `false` for isn't searched, described, invoked or callable from scripts.                                  |
-| `directCalls`    | unset                  | `{ enabled, allowedTools?, filter? }`, limits what `codecall:invoke` may call.                                                                   |
-| `vm`             | `{ preset: 'secure' }` | The sandbox's limits: `preset` (`'locked_down'`, `'secure'`, `'balanced'`, `'experimental'`), `timeoutMs`, `maxSteps`, `allowLoops`, and others. |
-| `embedding`      | TF-IDF                 | How `codecall:search` ranks tools: `strategy` (`'tfidf'` or `'ml'`), `modelName`, `cacheDir`, `useHNSW`, `synonymExpansion`.                     |
-| `sidecar`        | `{ enabled: false }`   | Allows scripts longer than 64 KB.                                                                                                                |
-| `topK`           | `8`                    | Results per query when a `codecall:search` call doesn't give its own `topK`.                                                                     |
-| `maxDefinitions` | `8`                    | Most tools one `codecall:describe` call may name.                                                                                                |
+| Option           | Default                | Description                                                                                                                                                     |
+| ---------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`           | `'codecall_only'`      | Which tools `tools/list` shows, and which CodeCall may use. See [Modes](#modes).                                                                                |
+| `appIds`         | every app              | In `codecall_only`, hide only these apps' tools from `tools/list`. It doesn't limit what CodeCall searches or calls.                                            |
+| `includeTools`   |                        | `(tool) => boolean`. A tool it returns `false` for isn't searched, described, invoked or callable from scripts.                                                 |
+| `directCalls`    | unset                  | `{ enabled, allowedTools?, filter? }`, limits what `codecall:invoke` may call.                                                                                  |
+| `vm`             | `{ preset: 'secure' }` | The sandbox's limits: `preset` (`'locked_down'`, `'secure'`, `'balanced'`, `'experimental'`), `runtime`, `timeoutMs`, `maxToolCalls`, `allowLoops`, and others. |
+| `embedding`      | TF-IDF                 | How `codecall:search` ranks tools: `strategy` (`'tfidf'` or `'ml'`), `modelName`, `cacheDir`, `useHNSW`, `synonymExpansion`.                                    |
+| `sidecar`        | `{ enabled: false }`   | Allows scripts longer than 64 KB.                                                                                                                               |
+| `topK`           | `8`                    | Results per query when a `codecall:search` call doesn't give its own `topK`.                                                                                    |
+| `maxDefinitions` | `8`                    | Most tools one `codecall:describe` call may name.                                                                                                               |
 
 ```ts
 CodeCallPlugin.init({
@@ -128,8 +128,11 @@ CodeCallPlugin.init({
 ## Limits
 
 - **Script time and calls.** Under the default `secure` preset, a script times out after 3.5 seconds (`vm.timeoutMs`)
-  and may call tools up to 5,000 times (`vm.maxSteps`). Loops are limited to `for…of`, and `for (…; …; …)` with
+  and may call tools up to 5,000 times (`vm.maxToolCalls`). Loops are limited to `for…of`, and `for (…; …; …)` with
   `vm.allowLoops: true`. The other presets set other limits.
+- **`vm.maxSteps` is the old name of `vm.maxToolCalls`.** It still works and still counts tool calls, not interpreter
+  steps. Setting both to different values is refused when the plugin starts. Either one must be an integer from 1 to
+  100,000; up to 1.12.2 a fraction or a larger number was accepted.
 - **Calls to one tool.** More than `vm.rapidEnumerationThreshold` calls (default 30) to one tool within about 2
   seconds stop the script with `[RAPID_ENUMERATION]`; calls made through `parallel()` count. Set per-tool values with
   `vm.rapidEnumerationOverrides` (`{ 'users:get': 100 }`). The sandbox's message says "in 5s", but it keeps only the
@@ -139,6 +142,42 @@ CodeCallPlugin.init({
   (offline with nothing cached, `@huggingface/transformers` missing, or embedding the tools fails), CodeCall logs one
   warning and searches with TF-IDF. A tool whose metadata can't be read is skipped with a warning; the others stay
   searchable.
+
+## Runtime and process boundary
+
+Three settings are easy to confuse, and they are separate:
+
+- **`vm.preset`** is CodeCall's policy: the syntax a script may use and its limits. It never chooses where scripts run,
+  and it never changes Enclave's security level, which is `STANDARD` for every script. No option turns off Enclave's
+  validation or transformation of a script.
+- **`vm.runtime`** chooses the Enclave runtime that runs scripts:
+  - `'node-vm'` (the default) is Enclave's sandbox on Node's `vm` module. It runs on Node only. An explicit
+    `vm.runtime: 'node-vm'` in a `frontmcp build --target cloudflare` bundle is refused when the plugin starts, because
+    `nodejs_compat` only stubs `node:vm`.
+  - `'interpreter'` is Enclave's AgentScript interpreter, which needs no Node module. This version refuses it when the
+    plugin starts: scripts don't run in it yet.
+
+  Neither runtime is a process boundary. Both run scripts inside the server's own process.
+
+- **The deployment boundary** is the process or container that runs the server. On Node, running CodeCall in a
+  dedicated, constrained child process or container is what contains native stderr output and a process-wide memory
+  failure. A Cloudflare Worker can forward `codecall:execute` to such a service, but then the script doesn't run in the
+  Worker. Changing `vm.preset` or `vm.runtime` doesn't give you this boundary.
+
+The interpreter has budgets of its own. Each one applies only with `vm.runtime: 'interpreter'`, and setting one with
+`'node-vm'` (set or left as the default) is refused when the plugin starts. Each must be an integer from 1 to its
+maximum. You can lower a budget, but you can't raise it past Enclave's own default or ceiling, and you can't turn it off.
+
+| Option                   | Default   | Maximum   | What it bounds                                                                        |
+| ------------------------ | --------- | --------- | ------------------------------------------------------------------------------------- |
+| `vm.maxInterpreterSteps` | 1,000,000 | 5,000,000 | Interpreter instructions per script; tool calls are `vm.maxToolCalls`                 |
+| `vm.memoryLimitBytes`    | 1 MiB     | 64 MiB    | What a script may allocate, by the interpreter's estimate, and the size of its result |
+| `vm.maxCallDepth`        | 256       | 256       | How deep a script's calls may nest                                                    |
+| `vm.maxPendingCalls`     | 4096      | 4096      | Calls of a script unfinished at once, running or waiting                              |
+
+Time, steps, tool calls, memory and, on Cloudflare, the platform's own CPU and memory limits are all finite on purpose.
+They're part of how CodeCall runs scripts safely. A sandbox can't be promised unbreakable, and none of these limits
+can be removed.
 
 ## Docs
 
