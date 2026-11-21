@@ -1,7 +1,30 @@
 // file: libs/plugins/src/codecall/__tests__/codecall-options.spec.ts
 
-import { codeCallPluginOptionsSchema } from '../codecall.types';
-import { rapidEnumerationThresholdOf, resolveVmOptions } from '../providers/code-call.config';
+import {
+  codeCallPluginOptionsSchema,
+  INTERPRETER_BUDGET_LIMITS,
+  MAX_TOOL_CALLS,
+  type CodeCallInterpreterBudget,
+} from '../codecall.types';
+import {
+  maxToolCallsOf,
+  rapidEnumerationThresholdOf,
+  resolveVmOptions,
+  vmRuntimeUnavailableReason,
+} from '../providers/code-call.config';
+
+/** The `vm` options with every default applied, as the plugin resolves them. */
+function resolvedVmOf(vm: unknown) {
+  return resolveVmOptions(codeCallPluginOptionsSchema.parse({ vm }).vm);
+}
+
+/** The messages of the issues refusing `vm`, or [] when it parses. */
+function vmIssues(vm: unknown): string[] {
+  const parsed = codeCallPluginOptionsSchema.safeParse({ vm });
+  return parsed.success ? [] : parsed.error.issues.map((issue) => issue.message);
+}
+
+const INTERPRETER_BUDGETS = Object.keys(INTERPRETER_BUDGET_LIMITS) as CodeCallInterpreterBudget[];
 
 describe('CodeCallPluginOptions Zod Schema', () => {
   describe('default values', () => {
@@ -221,6 +244,164 @@ describe('CodeCallPluginOptions Zod Schema', () => {
       expect(
         parsed.includeTools?.({ name: 'tool2', appId: 'app', source: 'src', description: 'desc', tags: ['dev'] }),
       ).toBe(false);
+    });
+  });
+});
+
+describe('CodeCall vm runtime and budgets', () => {
+  describe('defaults', () => {
+    it('resolve to the node-vm runtime, the preset tool-call budget and the interpreter defaults', () => {
+      const resolved = resolvedVmOf(undefined);
+
+      expect(resolved.runtime).toBe('node-vm');
+      expect(resolved.maxToolCalls).toBe(5000);
+      expect(maxToolCallsOf(resolved)).toBe(5000);
+      expect(resolved.maxInterpreterSteps).toBe(1_000_000);
+      expect(resolved.memoryLimitBytes).toBe(1024 * 1024);
+      expect(resolved.maxCallDepth).toBe(256);
+      expect(resolved.maxPendingCalls).toBe(4096);
+      expect(resolved).not.toHaveProperty('maxSteps');
+    });
+
+    it.each([
+      ['locked_down', 2000],
+      ['secure', 5000],
+      ['balanced', 10000],
+      ['experimental', 20000],
+    ] as const)('keep the %s preset tool-call budget (%i) and never choose the runtime', (preset, maxToolCalls) => {
+      const resolved = resolvedVmOf({ preset });
+
+      expect(resolved.maxToolCalls).toBe(maxToolCalls);
+      expect(resolved.runtime).toBe('node-vm');
+    });
+
+    it('leave out an option given as undefined instead of overriding the preset with it', () => {
+      const resolved = resolvedVmOf({ preset: 'balanced', timeoutMs: undefined, maxSanitizeDepth: undefined });
+
+      expect(resolved.timeoutMs).toBe(5000);
+      expect(resolved.maxSanitizeDepth).toBe(50);
+    });
+  });
+
+  describe('vm.runtime', () => {
+    it('carries an explicit interpreter selection and its budgets through, the preset policy unchanged', () => {
+      const resolved = resolvedVmOf({
+        preset: 'secure',
+        runtime: 'interpreter',
+        maxInterpreterSteps: 200_000,
+        memoryLimitBytes: 4 * 1024 * 1024,
+        maxCallDepth: 64,
+        maxPendingCalls: 512,
+      });
+
+      expect(resolved).toMatchObject({
+        runtime: 'interpreter',
+        maxInterpreterSteps: 200_000,
+        memoryLimitBytes: 4 * 1024 * 1024,
+        maxCallDepth: 64,
+        maxPendingCalls: 512,
+        preset: 'secure',
+        timeoutMs: 3500,
+        allowLoops: false,
+        maxToolCalls: 5000,
+      });
+    });
+
+    it('applies the interpreter defaults to an interpreter selection that sets no budget', () => {
+      const resolved = resolvedVmOf({ runtime: 'interpreter' });
+
+      expect(resolved.maxInterpreterSteps).toBe(INTERPRETER_BUDGET_LIMITS.maxInterpreterSteps.default);
+      expect(resolved.memoryLimitBytes).toBe(INTERPRETER_BUDGET_LIMITS.memoryLimitBytes.default);
+    });
+
+    it('accepts an explicit node-vm', () => {
+      expect(resolvedVmOf({ runtime: 'node-vm' }).runtime).toBe('node-vm');
+    });
+
+    it.each(['worker_threads', 'isolated-vm', 'quickjs', '', 'NODE-VM'])('refuses the runtime %p', (runtime) => {
+      expect(vmIssues({ runtime })).not.toEqual([]);
+    });
+  });
+
+  describe('vm.maxToolCalls and its deprecated alias vm.maxSteps', () => {
+    it('reads vm.maxSteps as the tool-call budget, never as interpreter steps', () => {
+      const resolved = resolvedVmOf({ maxSteps: 40 });
+
+      expect(resolved.maxToolCalls).toBe(40);
+      expect(maxToolCallsOf(resolved)).toBe(40);
+      expect(resolved.maxInterpreterSteps).toBe(INTERPRETER_BUDGET_LIMITS.maxInterpreterSteps.default);
+    });
+
+    it('takes vm.maxToolCalls', () => {
+      expect(resolvedVmOf({ preset: 'locked_down', maxToolCalls: 12 }).maxToolCalls).toBe(12);
+    });
+
+    it('accepts both names set to the same value', () => {
+      expect(resolvedVmOf({ maxSteps: 25, maxToolCalls: 25 }).maxToolCalls).toBe(25);
+    });
+
+    it('refuses both names set to different values', () => {
+      expect(vmIssues({ maxSteps: 10, maxToolCalls: 20 })).toEqual([
+        'vm.maxSteps is the deprecated name of vm.maxToolCalls, and they differ (10 and 20): set only vm.maxToolCalls',
+      ]);
+    });
+
+    it.each(['maxToolCalls', 'maxSteps'])('bounds vm.%s to a finite integer from 1 to MAX_TOOL_CALLS', (name) => {
+      for (const invalid of [0, -1, 2.5, Number.NaN, Number.POSITIVE_INFINITY, MAX_TOOL_CALLS + 1, '10']) {
+        expect(vmIssues({ [name]: invalid })).not.toEqual([]);
+      }
+      expect(resolvedVmOf({ [name]: MAX_TOOL_CALLS }).maxToolCalls).toBe(MAX_TOOL_CALLS);
+      expect(resolvedVmOf({ [name]: 1 }).maxToolCalls).toBe(1);
+    });
+  });
+
+  describe('interpreter budgets', () => {
+    it.each(INTERPRETER_BUDGETS)('bound vm.%s to a finite integer from 1 to its maximum', (budget) => {
+      const { max } = INTERPRETER_BUDGET_LIMITS[budget];
+      for (const invalid of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, max + 1]) {
+        expect(vmIssues({ runtime: 'interpreter', [budget]: invalid })).not.toEqual([]);
+      }
+      expect(resolvedVmOf({ runtime: 'interpreter', [budget]: max })[budget]).toBe(max);
+      expect(resolvedVmOf({ runtime: 'interpreter', [budget]: 1 })[budget]).toBe(1);
+    });
+
+    it.each(INTERPRETER_BUDGETS)('refuse vm.%s with an explicit node-vm, which does not enforce it', (budget) => {
+      expect(vmIssues({ runtime: 'node-vm', [budget]: 1 })).toEqual([
+        `vm.${budget} applies only to vm.runtime 'interpreter'; the 'node-vm' runtime does not enforce it`,
+      ]);
+    });
+
+    it.each(INTERPRETER_BUDGETS)('refuse vm.%s when vm.runtime is unset, which runs node-vm', (budget) => {
+      expect(vmIssues({ [budget]: 1 })).toEqual([
+        `vm.${budget} applies only to vm.runtime 'interpreter'; the 'node-vm' runtime does not enforce it`,
+      ]);
+    });
+
+    it("keep their maxima at Enclave's interpreter defaults and ceiling", () => {
+      expect(INTERPRETER_BUDGET_LIMITS.maxInterpreterSteps.max).toBe(5_000_000);
+      expect(INTERPRETER_BUDGET_LIMITS.memoryLimitBytes.max).toBe(64 * 1024 * 1024);
+      expect(INTERPRETER_BUDGET_LIMITS.maxCallDepth.max).toBe(256);
+      expect(INTERPRETER_BUDGET_LIMITS.maxPendingCalls.max).toBe(4096);
+      for (const budget of INTERPRETER_BUDGETS) {
+        const { default: fallback, max } = INTERPRETER_BUDGET_LIMITS[budget];
+        expect(fallback).toBeLessThanOrEqual(max);
+      }
+    });
+  });
+
+  describe('vmRuntimeUnavailableReason', () => {
+    it.each(['node', 'unknown', 'cli', 'distributed'])('lets node-vm run in a %s build', (target) => {
+      expect(vmRuntimeUnavailableReason('node-vm', target)).toBeUndefined();
+    });
+
+    it('refuses node-vm in a Cloudflare Workers build', () => {
+      expect(vmRuntimeUnavailableReason('node-vm', 'cloudflare')).toBe(
+        "CodeCall vm.runtime 'node-vm' needs Node's vm module, which Cloudflare Workers do not provide (nodejs_compat only stubs it): use vm.runtime 'interpreter'",
+      );
+    });
+
+    it.each(['node', 'cloudflare'])('allows the interpreter in a %s build', (target) => {
+      expect(vmRuntimeUnavailableReason('interpreter', target)).toBeUndefined();
     });
   });
 });
