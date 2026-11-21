@@ -16,7 +16,7 @@ For user-facing docs, see the **CodeCall** page in the main FrontMCP documentati
   - `codecall.describe`
   - `codecall.execute`
   - (optional) `codecall.invoke` for direct calls without a VM
-- The LLM writes **JavaScript execution plans** that run inside a `vm2` sandbox and call real tools through well-defined globals.
+- The LLM writes **JavaScript execution plans** that run inside an Enclave sandbox (`@enclave-vm/core`) and call real tools through well-defined globals.
 
 Goals:
 
@@ -82,7 +82,7 @@ Goals:
      - Parses the script into an AST.
      - Validates the AST against security rules (no banned builtins/globals, optional loop ban).
      - Applies a CSP-style VM preset + overrides.
-     - Spawns a `vm2` sandbox with:
+     - Runs the script in Enclave (the `vm.runtime`) with:
        - `callTool`
        - `getTool`
        - `codecallContext`
@@ -329,14 +329,40 @@ export interface CodeCallOptions {
    */
   vm?: {
     /**
-     * CSP-like VM preset ('locked_down', 'secure', 'balanced', 'experimental').
+     * CSP-like VM preset ('locked_down', 'secure', 'balanced', 'experimental'): the syntax policy and limits.
+     * It never chooses the runtime or Enclave's security level (always 'STANDARD').
      * @default 'secure'
      */
     preset?: CodeCallVmPreset;
 
+    /**
+     * Where scripts run: 'node-vm' (Enclave on Node's vm module; Node only) or 'interpreter' (Enclave's
+     * AgentScript interpreter for Node and Cloudflare Workers with nodejs_compat). Neither is a process boundary.
+     * An explicit 'node-vm' is refused in a Cloudflare Workers build. The interpreter needs @enclave-vm/core 2.20.0
+     * or later and refuses execution if an older Enclave resolves.
+     * @default 'node-vm'
+     */
+    runtime?: CodeCallVmRuntime;
+
     timeoutMs?: number;
     allowLoops?: boolean;
+
+    /** Tool calls one script may make: an integer from 1 to 100,000. Defaults vary by preset (secure: 5000). */
+    maxToolCalls?: number;
+    /** @deprecated The old name of `maxToolCalls` (tool calls, not interpreter steps); a different value from it is refused. */
     maxSteps?: number;
+
+    /**
+     * The interpreter's budgets: integers from 1 to the maximum, refused with 'node-vm'.
+     * maxInterpreterSteps: default 1,000,000, max 5,000,000.
+     * memoryLimitBytes: default 1 MiB, max 64 MiB (allocation, by the interpreter's estimate, and result size).
+     * maxCallDepth: default 256, max 256. maxPendingCalls: default 4096, max 4096.
+     */
+    maxInterpreterSteps?: number;
+    memoryLimitBytes?: number;
+    maxCallDepth?: number;
+    maxPendingCalls?: number;
+
     disabledBuiltins?: string[];
     disabledGlobals?: string[];
     /**
@@ -510,6 +536,12 @@ Keep `allowComposites: false` unless you specifically need string concatenation 
 
 ## VM presets and security
 
+A preset is CodeCall's syntax policy and limits. It is separate from the runtime (`vm.runtime`), from Enclave's
+security level (always `STANDARD`), and from the deployment's process boundary. No preset, and no `vm.runtime`, is
+process isolation: both runtimes run scripts in the server's own process. Containing native stderr output or a
+process-wide memory failure takes a dedicated, constrained child process or container around the server; a Cloudflare
+Worker can forward to such a service, but that is not running the script in the Worker.
+
 ### Preset type
 
 ```ts
@@ -566,13 +598,15 @@ No preset gives scripts `console`: only an explicit `vm.allowConsole: true` does
 
 2. **VM configuration**
    - Start from preset defaults.
-   - Apply `vm` overrides.
-   - Construct `vm2` options with:
-     - `sandbox` object (`callTool`, `getTool`, `codecallContext`, `console` with `vm.allowConsole: true`, optional `mcpLog` / `mcpNotify`).
+   - Apply `vm` overrides; the options schema refuses contradictions (a `maxSteps` unlike `maxToolCalls`, an
+     interpreter budget with `'node-vm'`) and values out of range, and the plugin refuses a `vm.runtime` the
+     deployment can't run when it starts.
+   - Construct the Enclave options with:
+     - Globals `callTool`, `getTool`, `codecallContext`, `console` with `vm.allowConsole: true`, optional `mcpLog` / `mcpNotify`.
      - No `require` or other Node internals.
 
 3. **Execution**
-   - Run script with `vm2` and `timeoutMs`.
+   - Run the script in Enclave (`vm.runtime`, default `'node-vm'`) with `timeoutMs` and the tool-call budget.
    - Map outcomes to `CodeCallExecuteResult`:
      - `ok`
      - `syntax_error`

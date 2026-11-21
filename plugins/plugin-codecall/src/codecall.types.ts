@@ -77,6 +77,49 @@ export const codeCallModeSchema = z
 
 export const codeCallVmPresetSchema = z.enum(['locked_down', 'secure', 'balanced', 'experimental']).default('secure');
 
+/**
+ * Where scripts run. `'interpreter'` is Enclave's AgentScript interpreter, which needs no Node module and so can run on
+ * Node and in Cloudflare Workers. `'node-vm'` is Enclave's sandbox on Node's `vm` module: Node only.
+ */
+export const codeCallVmRuntimeSchema = z.enum(['node-vm', 'interpreter']);
+
+/** The runtime when `vm.runtime` is unset. */
+export const DEFAULT_VM_RUNTIME: CodeCallVmRuntime = 'node-vm';
+
+/** The most tool calls `vm.maxToolCalls` (or `vm.maxSteps`) may allow one script. */
+export const MAX_TOOL_CALLS = 100_000;
+
+/**
+ * Budgets only the `'interpreter'` runtime enforces. Each maximum is Enclave's own default or ceiling for the
+ * interpreter, which Enclave's tests cover: a server may lower a budget, never raise it past that.
+ */
+export const INTERPRETER_BUDGET_LIMITS = {
+  /**
+   * Interpreter instructions per script. Measured on Node 24 (Apple M4 Pro), 1,000,000 steps ran in 0.3–1.1 s, inside
+   * every preset's timeout; 5,000,000, Enclave's own default, took 1.9–5.1 s, past the `secure` preset's 3.5 s.
+   */
+  maxInterpreterSteps: { default: 1_000_000, max: 5_000_000 },
+  /**
+   * Bytes a script may allocate, by the interpreter's estimate; also the most its result may serialize to. The
+   * default is Enclave's own `memoryLimit` default, the limit `'node-vm'` scripts run under; the maximum is the
+   * interpreter's allocation ceiling.
+   */
+  memoryLimitBytes: { default: 1024 * 1024, max: 64 * 1024 * 1024 },
+  /** How deep a script's calls may nest. */
+  maxCallDepth: { default: 256, max: 256 },
+  /** Calls of a script that may be unfinished at once, running or waiting. */
+  maxPendingCalls: { default: 4096, max: 4096 },
+} as const;
+
+export type CodeCallInterpreterBudget = keyof typeof INTERPRETER_BUDGET_LIMITS;
+
+const INTERPRETER_BUDGETS = Object.keys(INTERPRETER_BUDGET_LIMITS) as CodeCallInterpreterBudget[];
+
+const interpreterBudgetSchema = (budget: CodeCallInterpreterBudget) =>
+  z.number().int().min(1).max(INTERPRETER_BUDGET_LIMITS[budget].max).optional();
+
+const toolCallBudgetSchema = z.number().int().min(1).max(MAX_TOOL_CALLS).optional();
+
 // Default values for VM options
 const DEFAULT_VM_OPTIONS = {
   preset: 'secure' as const,
@@ -85,10 +128,17 @@ const DEFAULT_VM_OPTIONS = {
 export const codeCallVmOptionsSchema = z
   .object({
     /**
-     * CSP-like preset; see README.
+     * CSP-like preset; see README. It sets the syntax policy and the limits below, never the runtime.
      * @default 'secure'
      */
     preset: codeCallVmPresetSchema,
+
+    /**
+     * Where scripts run: `'node-vm'` (Node only) or `'interpreter'` (Node and Cloudflare Workers). Neither is a
+     * process boundary: both run scripts in the server's own process.
+     * @default 'node-vm'
+     */
+    runtime: codeCallVmRuntimeSchema.optional(),
 
     /**
      * Timeout for script execution in milliseconds
@@ -104,10 +154,43 @@ export const codeCallVmOptionsSchema = z
     allowLoops: z.boolean().optional(),
 
     /**
-     * Maximum number of steps (if applicable)
-     * Defaults vary by preset
+     * Tool calls one script may make, `callTool()`, namespace methods and `parallel()` calls alike; one more fails
+     * the script. An integer from 1 to 100,000.
+     * Defaults vary by preset (secure: 5000)
      */
-    maxSteps: z.number().positive().optional(),
+    maxToolCalls: toolCallBudgetSchema,
+
+    /**
+     * @deprecated The old name of `maxToolCalls`, with the same meaning: tool calls, not interpreter steps. Setting
+     * both to different values is refused.
+     */
+    maxSteps: toolCallBudgetSchema,
+
+    /**
+     * Interpreter instructions one script may run (`runtime: 'interpreter'` only). An integer from 1 to 5,000,000.
+     * @default 1_000_000
+     */
+    maxInterpreterSteps: interpreterBudgetSchema('maxInterpreterSteps'),
+
+    /**
+     * Bytes one script may allocate, by the interpreter's estimate, and the most its result may serialize to
+     * (`runtime: 'interpreter'` only). An integer from 1 to 64 MiB.
+     * @default 1_048_576 (1 MiB)
+     */
+    memoryLimitBytes: interpreterBudgetSchema('memoryLimitBytes'),
+
+    /**
+     * How deep a script's calls may nest (`runtime: 'interpreter'` only). An integer from 1 to 256.
+     * @default 256
+     */
+    maxCallDepth: interpreterBudgetSchema('maxCallDepth'),
+
+    /**
+     * Calls of a script that may be unfinished at once, running or waiting (`runtime: 'interpreter'` only). An
+     * integer from 1 to 4096.
+     * @default 4096
+     */
+    maxPendingCalls: interpreterBudgetSchema('maxPendingCalls'),
 
     /**
      * List of disabled builtin functions
@@ -158,6 +241,25 @@ export const codeCallVmOptionsSchema = z
      * Per-tool values of `rapidEnumerationThreshold`, by tool name, e.g. `{ 'users:get': 100 }`.
      */
     rapidEnumerationOverrides: z.record(z.string(), z.number().int().positive()).optional(),
+  })
+  .superRefine((vm, ctx) => {
+    if (vm.maxSteps !== undefined && vm.maxToolCalls !== undefined && vm.maxSteps !== vm.maxToolCalls) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['maxSteps'],
+        message: `vm.maxSteps is the deprecated name of vm.maxToolCalls, and they differ (${vm.maxSteps} and ${vm.maxToolCalls}): set only vm.maxToolCalls`,
+      });
+    }
+    const runtime = vm.runtime ?? DEFAULT_VM_RUNTIME;
+    if (runtime === 'interpreter') return;
+    for (const budget of INTERPRETER_BUDGETS) {
+      if (vm[budget] === undefined) continue;
+      ctx.addIssue({
+        code: 'custom',
+        path: [budget],
+        message: `vm.${budget} applies only to vm.runtime 'interpreter'; the '${runtime}' runtime does not enforce it`,
+      });
+    }
   })
   .default(() => DEFAULT_VM_OPTIONS);
 
@@ -406,6 +508,7 @@ export const codeCallPluginOptionsSchema = codeCallPluginOptionsObjectSchema.pre
 // Output types (after parsing, with defaults applied) - use for internal plugin logic
 export type CodeCallMode = z.infer<typeof codeCallModeSchema>;
 export type CodeCallVmPreset = z.infer<typeof codeCallVmPresetSchema>;
+export type CodeCallVmRuntime = z.infer<typeof codeCallVmRuntimeSchema>;
 export type CodeCallVmOptions = z.infer<typeof codeCallVmOptionsSchema>;
 export type CodeCallDirectCallsOptions = z.infer<typeof codeCallDirectCallsOptionsSchema>;
 export type EmbeddingStrategy = z.infer<typeof embeddingStrategySchema>;

@@ -2,7 +2,13 @@
 
 import { BaseConfig } from '@frontmcp/sdk';
 
-import { CodeCallPluginOptions, CodeCallPluginOptionsInput, codeCallPluginOptionsSchema } from '../codecall.types';
+import {
+  codeCallPluginOptionsSchema,
+  type CodeCallPluginOptions,
+  type CodeCallPluginOptionsInput,
+} from '../codecall.types';
+import CodeCallConfig, { CODECALL_ENCLAVE_SECURITY_LEVEL, maxToolCallsOf } from '../providers/code-call.config';
+import type * as CodeCallConfigModule from '../providers/code-call.config';
 
 // Create a test implementation that extends BaseConfig (without decorator for testing)
 class CodeCallConfigProvider extends BaseConfig<CodeCallPluginOptions> {
@@ -310,6 +316,94 @@ describe('CodeCallConfigProvider', () => {
       expect(str).toContain('"mode": "metadata_driven"');
       expect(str).toContain('"topK": 15');
       expect(typeof str).toBe('string');
+    });
+  });
+});
+
+describe('CodeCallConfig vm runtime', () => {
+  it('resolves the default runtime and budgets when the server sets none', () => {
+    const resolvedVm = new CodeCallConfig().getAll().resolvedVm;
+
+    expect(resolvedVm.runtime).toBe('node-vm');
+    expect(maxToolCallsOf(resolvedVm)).toBe(5000);
+    expect(resolvedVm.maxInterpreterSteps).toBe(1_000_000);
+    expect(resolvedVm.memoryLimitBytes).toBe(1024 * 1024);
+  });
+
+  it('accepts an explicit node-vm outside a Cloudflare build', () => {
+    expect(new CodeCallConfig({ vm: { preset: 'secure', runtime: 'node-vm' } }).getAll().resolvedVm.runtime).toBe(
+      'node-vm',
+    );
+  });
+
+  it("carries vm.maxSteps through as the tool-call budget the execute tool's limits read", () => {
+    const config = new CodeCallConfig({ vm: { preset: 'secure', maxSteps: 7 } });
+
+    expect(maxToolCallsOf(config.getAll().resolvedVm)).toBe(7);
+    expect(config.get('vm.maxSteps')).toBe(7);
+  });
+
+  it('accepts the interpreter and applies its finite budgets', () => {
+    const resolved = new CodeCallConfig({ vm: { preset: 'secure', runtime: 'interpreter' } }).getAll().resolvedVm;
+
+    expect(resolved.runtime).toBe('interpreter');
+    expect(resolved.maxInterpreterSteps).toBe(1_000_000);
+    expect(resolved.memoryLimitBytes).toBe(1024 * 1024);
+  });
+
+  it('refuses conflicting tool-call budgets when the plugin starts', () => {
+    expect(() => new CodeCallConfig({ vm: { preset: 'secure', maxSteps: 3, maxToolCalls: 4 } })).toThrow(
+      'vm.maxSteps is the deprecated name of vm.maxToolCalls',
+    );
+  });
+
+  it('runs every script at the fixed Enclave security level', () => {
+    expect(CODECALL_ENCLAVE_SECURITY_LEVEL).toBe('STANDARD');
+  });
+
+  describe('in a Cloudflare Workers build', () => {
+    const globalWithTarget = globalThis as { FRONTMCP_BUILD_TARGET?: string };
+
+    /** code-call.config as a `frontmcp build --target cloudflare` bundle loads it: the CLI's inlined target first. */
+    function loadCloudflareConfigModule(): typeof CodeCallConfigModule {
+      globalWithTarget.FRONTMCP_BUILD_TARGET = 'cloudflare';
+      let configModule: typeof CodeCallConfigModule | undefined;
+      jest.isolateModules(() => {
+        configModule = require('../providers/code-call.config') as typeof CodeCallConfigModule;
+      });
+      if (!configModule) throw new Error('code-call.config did not load');
+      return configModule;
+    }
+
+    afterEach(() => {
+      delete globalWithTarget.FRONTMCP_BUILD_TARGET;
+    });
+
+    it('refuses an explicit node-vm when the plugin starts', () => {
+      const { default: Config, CodeCallVmRuntimeUnavailableError } = loadCloudflareConfigModule();
+
+      const start = () => new Config({ vm: { preset: 'secure', runtime: 'node-vm' } });
+      expect(start).toThrow(CodeCallVmRuntimeUnavailableError);
+      expect(start).toThrow(
+        expect.objectContaining({
+          code: 'CODECALL_VM_RUNTIME_UNAVAILABLE',
+          message: expect.stringContaining("CodeCall vm.runtime 'node-vm' needs Node's vm module"),
+        }),
+      );
+    });
+
+    it('accepts an explicit interpreter in a Cloudflare Workers build', () => {
+      const { default: Config } = loadCloudflareConfigModule();
+
+      expect(new Config({ vm: { preset: 'secure', runtime: 'interpreter' } }).getAll().resolvedVm.runtime).toBe(
+        'interpreter',
+      );
+    });
+
+    it('leaves an unset runtime to the execution boundary', () => {
+      const { default: Config } = loadCloudflareConfigModule();
+
+      expect(new Config().getAll().resolvedVm.runtime).toBe('node-vm');
     });
   });
 });
