@@ -173,7 +173,9 @@ larger number was accepted).
 A preset is CodeCall's policy, not where scripts run. `vm.runtime` picks the Enclave runtime: `'node-vm'` (the
 default) is Enclave's sandbox on Node's `vm` module, Node only, and an explicit `'node-vm'` in a
 `frontmcp build --target cloudflare` bundle is refused when the plugin starts (`nodejs_compat` only stubs `node:vm`).
-`'interpreter'`, Enclave's AgentScript interpreter, is refused when the plugin starts in this version. Its budgets,
+`'interpreter'`, Enclave's validated AgentScript interpreter, runs on Node and in Cloudflare Workers with
+`nodejs_compat` when the installed `@enclave-vm/core/worker` exports `AgentScriptRunner`; execution fails closed
+otherwise. Select it explicitly in a Worker build. Its budgets,
 `vm.maxInterpreterSteps` (default 1,000,000, max 5,000,000), `vm.memoryLimitBytes` (default 1 MiB, max 64 MiB),
 `vm.maxCallDepth` (max 256) and `vm.maxPendingCalls` (max 4096), are integers that can be lowered but not raised past
 those maxima or turned off, and setting one without `vm.runtime: 'interpreter'` is refused. Enclave's security level
@@ -181,8 +183,8 @@ is `STANDARD` for every script, and no option turns off its validation or transf
 
 Neither runtime, and no preset, is a process boundary: scripts run in the server's own process. On Node, a dedicated,
 constrained child process or container around the server is what contains native stderr output and a process-wide
-memory failure. A Worker can forward `codecall:execute` to such a service, but then the script does not run in the
-Worker. Time, step, call, memory and Cloudflare platform limits are finite on purpose; no sandbox is promised
+memory failure. A Worker can instead run the interpreter in its own isolate. Time, step, call, memory and Cloudflare
+platform limits are finite on purpose; no sandbox is promised
 unbreakable.
 
 ### Meta-Tools Exposed

@@ -154,8 +154,9 @@ Three settings are easy to confuse, and they are separate:
   - `'node-vm'` (the default) is Enclave's sandbox on Node's `vm` module. It runs on Node only. An explicit
     `vm.runtime: 'node-vm'` in a `frontmcp build --target cloudflare` bundle is refused when the plugin starts, because
     `nodejs_compat` only stubs `node:vm`.
-  - `'interpreter'` is Enclave's AgentScript interpreter, which needs no Node module. This version refuses it when the
-    plugin starts: scripts don't run in it yet.
+  - `'interpreter'` is Enclave's validated AgentScript interpreter. It runs on Node and in Cloudflare Workers with
+    `nodejs_compat`. Select it explicitly in a Worker build. It requires an `@enclave-vm/core/worker` version that
+    exports `AgentScriptRunner`; execution fails closed if the installed Enclave version lacks that runner.
 
   Neither runtime is a process boundary. Both run scripts inside the server's own process.
 

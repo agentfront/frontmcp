@@ -17,6 +17,7 @@ import {
   type CodeCallScriptRuntimes,
 } from '../services/runtime';
 import { ExecutionEndedError } from '../services/runtime/execution-gate';
+import { createInterpreterRuntime } from '../services/runtime/interpreter.runtime';
 
 /**
  * A configuration whose resolved `vm` options carry the runtime fields, as the configuration
@@ -98,9 +99,12 @@ describe('EnclaveService runtime selection', () => {
     expect(interpreter.disposed).toBe(1);
   });
 
-  it('refuses an interpreter run with the installed Enclave, before anything of the script runs', async () => {
+  it('refuses an interpreter run when Enclave has no validated runner', async () => {
     const env = environment();
-    const service = new EnclaveService(configWith({ runtime: 'interpreter' }), undefined, createDefaultRuntimes());
+    const service = new EnclaveService(configWith({ runtime: 'interpreter' }), undefined, {
+      interpreter: createInterpreterRuntime(async () => ({})),
+      'node-vm': unusedRuntime('node-vm'),
+    });
 
     const result = await service.execute("const t = getTool('a'); return await callTool('a', {});", env);
 
@@ -443,6 +447,34 @@ describe('EnclaveService on the real node-vm runtime', () => {
       releaseFirst();
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(callTool.mock.calls.map(([name]) => name)).toEqual(['slow']);
+    },
+    REAL_ENCLAVE_TIMEOUT_MS,
+  );
+});
+
+const workerEntry = require('@enclave-vm/core/worker') as { AgentScriptRunner?: unknown };
+const describeWithRunner = typeof workerEntry.AgentScriptRunner === 'function' ? describe : describe.skip;
+
+describeWithRunner('EnclaveService on the real interpreter runtime in Node', () => {
+  it(
+    'runs a tool call and a host lookup through the validated runner',
+    async () => {
+      const callTool = jest.fn().mockResolvedValue({ id: 7, name: 'user-7' });
+      const env = environment({ callTool });
+      const service = new EnclaveService(
+        new CodeCallConfig({ vm: { preset: 'secure', runtime: 'interpreter', timeoutMs: 5000 } }),
+      );
+
+      const result = await service.execute(
+        "const user = await callTool('users.get', { id: 7 }); return { user, tool: getTool('users.get').name };",
+        env,
+      );
+
+      expect(result).toMatchObject({
+        success: true,
+        result: { user: { id: 7, name: 'user-7' }, tool: 'a' },
+      });
+      expect(callTool).toHaveBeenCalledWith('users.get', { id: 7 });
     },
     REAL_ENCLAVE_TIMEOUT_MS,
   );

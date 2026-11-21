@@ -337,8 +337,9 @@ export interface CodeCallOptions {
 
     /**
      * Where scripts run: 'node-vm' (Enclave on Node's vm module; Node only) or 'interpreter' (Enclave's
-     * AgentScript interpreter). Neither is a process boundary. This version refuses 'interpreter' when the plugin
-     * starts, and refuses an explicit 'node-vm' in a Cloudflare Workers build.
+     * AgentScript interpreter for Node and Cloudflare Workers with nodejs_compat). Neither is a process boundary.
+     * An explicit 'node-vm' is refused in a Cloudflare Workers build. The interpreter needs an Enclave worker entry
+     * that exports AgentScriptRunner and refuses execution if the installed version lacks it.
      * @default 'node-vm'
      */
     runtime?: CodeCallVmRuntime;

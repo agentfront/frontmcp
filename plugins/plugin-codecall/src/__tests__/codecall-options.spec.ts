@@ -396,17 +396,12 @@ describe('CodeCall vm runtime and budgets', () => {
 
     it('refuses node-vm in a Cloudflare Workers build', () => {
       expect(vmRuntimeUnavailableReason('node-vm', 'cloudflare')).toBe(
-        "CodeCall vm.runtime 'node-vm' needs Node's vm module, which Cloudflare Workers do not provide (nodejs_compat only stubs it): this version of @frontmcp/plugin-codecall cannot run scripts in a Worker",
+        "CodeCall vm.runtime 'node-vm' needs Node's vm module, which Cloudflare Workers do not provide (nodejs_compat only stubs it): use vm.runtime 'interpreter'",
       );
     });
 
-    it.each(['node', 'cloudflare'])(
-      'refuses the interpreter, which this version does not run yet, in a %s build',
-      (target) => {
-        expect(vmRuntimeUnavailableReason('interpreter', target)).toBe(
-          "CodeCall vm.runtime 'interpreter' is not available in this version of @frontmcp/plugin-codecall (available: 'node-vm')",
-        );
-      },
-    );
+    it.each(['node', 'cloudflare'])('allows the interpreter in a %s build', (target) => {
+      expect(vmRuntimeUnavailableReason('interpreter', target)).toBeUndefined();
+    });
   });
 });

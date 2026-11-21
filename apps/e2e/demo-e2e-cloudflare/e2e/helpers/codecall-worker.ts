@@ -7,7 +7,6 @@ import { Miniflare } from 'miniflare';
 import { mkdtemp, readFile, rm, runCmd } from '@frontmcp/utils';
 
 const ROOT_DIR = resolve(__dirname, '../../../../..');
-const FIXTURE_DIR = resolve(__dirname, '../../fixture-codecall');
 const FRONTMCP_BIN = join(ROOT_DIR, 'libs', 'cli', 'dist', 'src', 'core', 'cli.js');
 const WRANGLER_BIN = join(ROOT_DIR, 'node_modules', '.bin', 'wrangler');
 const MCP_URL = 'http://localhost/mcp';
@@ -54,16 +53,17 @@ export class CodecallWorker {
     readonly bundle: string,
   ) {}
 
-  static async start(): Promise<CodecallWorker> {
-    await rm(join(FIXTURE_DIR, 'dist'), { recursive: true, force: true });
+  static async start(fixtureName = 'fixture-codecall'): Promise<CodecallWorker> {
+    const fixtureDir = resolve(__dirname, '..', '..', fixtureName);
+    await rm(join(fixtureDir, 'dist'), { recursive: true, force: true });
     await runCmd('node', [FRONTMCP_BIN, 'build', '--target', 'cloudflare'], {
-      cwd: FIXTURE_DIR,
+      cwd: fixtureDir,
       env: { ...process.env, FRONTMCP_LOG_LEVEL: 'error' },
     });
 
     const bundleDir = await mkdtemp(join(tmpdir(), 'frontmcp-codecall-worker-'));
     await runCmd(WRANGLER_BIN, ['deploy', '--dry-run', '--outdir', bundleDir], {
-      cwd: FIXTURE_DIR,
+      cwd: fixtureDir,
       env: { ...process.env, WRANGLER_SEND_METRICS: 'false', WRANGLER_LOG: 'error', CI: '1' },
     });
     const bundlePath = join(bundleDir, 'index.js');

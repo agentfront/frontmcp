@@ -342,19 +342,12 @@ describe('CodeCallConfig vm runtime', () => {
     expect(config.get('vm.maxSteps')).toBe(7);
   });
 
-  it('refuses the interpreter until this version runs scripts in it', () => {
-    const start = () => new CodeCallConfig({ vm: { preset: 'secure', runtime: 'interpreter' } });
+  it('accepts the interpreter and applies its finite budgets', () => {
+    const resolved = new CodeCallConfig({ vm: { preset: 'secure', runtime: 'interpreter' } }).getAll().resolvedVm;
 
-    expect(start).toThrow(CodeCallVmRuntimeUnavailableError);
-    expect(start).toThrow("CodeCall vm.runtime 'interpreter' is not available in this version");
-    try {
-      start();
-    } catch (error) {
-      expect(error).toBeInstanceOf(Error);
-      expect((error as CodeCallVmRuntimeUnavailableError).code).toBe('CODECALL_VM_RUNTIME_UNAVAILABLE');
-      expect((error as CodeCallVmRuntimeUnavailableError).name).toBe('CodeCallVmRuntimeUnavailableError');
-    }
-    expect.assertions(5);
+    expect(resolved.runtime).toBe('interpreter');
+    expect(resolved.maxInterpreterSteps).toBe(1_000_000);
+    expect(resolved.memoryLimitBytes).toBe(1024 * 1024);
   });
 
   it('refuses conflicting tool-call budgets when the plugin starts', () => {
@@ -388,8 +381,20 @@ describe('CodeCallConfig vm runtime', () => {
     it('refuses an explicit node-vm when the plugin starts', () => {
       const Config = loadCloudflareConfig();
 
-      expect(() => new Config({ vm: { preset: 'secure', runtime: 'node-vm' } })).toThrow(
-        "CodeCall vm.runtime 'node-vm' needs Node's vm module, which Cloudflare Workers do not provide",
+      const start = () => new Config({ vm: { preset: 'secure', runtime: 'node-vm' } });
+      expect(start).toThrow("CodeCall vm.runtime 'node-vm' needs Node's vm module");
+      try {
+        start();
+      } catch (error) {
+        expect((error as CodeCallVmRuntimeUnavailableError).code).toBe('CODECALL_VM_RUNTIME_UNAVAILABLE');
+      }
+    });
+
+    it('accepts an explicit interpreter in a Cloudflare Workers build', () => {
+      const Config = loadCloudflareConfig();
+
+      expect(new Config({ vm: { preset: 'secure', runtime: 'interpreter' } }).getAll().resolvedVm.runtime).toBe(
+        'interpreter',
       );
     });
 

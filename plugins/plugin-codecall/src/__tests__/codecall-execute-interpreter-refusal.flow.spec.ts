@@ -1,14 +1,11 @@
 /**
- * `codecall:execute` with `vm.runtime: 'interpreter'` against an Enclave that does not export the
- * validated AgentScript runner (`@enclave-vm/core` 2.19.2), driven through a real server.
+ * `codecall:execute` with `vm.runtime: 'interpreter'` against an Enclave worker entry that does not
+ * export the validated AgentScript runner, driven through a real server.
  *
  * CodeCall refuses the run before any of the script executes, says why, and does not fall back to
- * the Node VM or to the bare `InterpreterAdapter`. The runtime selection is resolved here the way
- * the configuration resolves `vm.runtime`.
+ * the Node VM or to the bare `InterpreterAdapter`.
  */
 import 'reflect-metadata';
-
-import { InterpreterAdapter } from '@enclave-vm/core/worker';
 
 import { type CallToolResult } from '@frontmcp/protocol';
 import { Client } from '@frontmcp/protocol/client';
@@ -16,15 +13,7 @@ import { App, createInMemoryServer, FrontMcpInstance, LogLevel, Tool, ToolContex
 
 import CodeCallPlugin from '../codecall.plugin';
 
-jest.mock('../services/runtime/runtime-settings', () => {
-  const actual = jest.requireActual<typeof import('../services/runtime/runtime-settings')>(
-    '../services/runtime/runtime-settings',
-  );
-  return {
-    runtimeSettingsOf: (vm: Parameters<typeof actual.runtimeSettingsOf>[0]) =>
-      actual.runtimeSettingsOf({ ...vm, runtime: 'interpreter' } as Parameters<typeof actual.runtimeSettingsOf>[0]),
-  };
-});
+jest.mock('@enclave-vm/core/worker', () => ({}));
 
 const executed: string[] = [];
 
@@ -45,7 +34,7 @@ describe("codecall:execute with vm.runtime 'interpreter' and no validated runner
       id: 'refusal-app',
       name: 'Refusal App',
       tools: [ListUsersTool],
-      plugins: [CodeCallPlugin.init({ mode: 'codecall_only' })],
+      plugins: [CodeCallPlugin.init({ mode: 'codecall_only', vm: { preset: 'secure', runtime: 'interpreter' } })],
     })
     class RefusalApp {}
 
@@ -76,25 +65,19 @@ describe("codecall:execute with vm.runtime 'interpreter' and no validated runner
   }
 
   it('refuses the run, names the missing runner, and runs nothing', async () => {
-    const execute = jest.spyOn(InterpreterAdapter.prototype, 'execute');
-    try {
-      const outcome = await run("return await callTool('users.list', {});");
+    const outcome = await run("return await callTool('users.list', {});");
 
-      expect(outcome).toEqual({
-        status: 'runtime_error',
-        error: {
-          source: 'script',
-          name: 'CodeCallRuntimeError',
-          message: expect.stringContaining(
-            "CodeCall vm.runtime 'interpreter' needs Enclave's validated AgentScript runner (AgentScriptRunner from @enclave-vm/core/worker)",
-          ),
-        },
-      });
-      expect(executed).toEqual([]);
-      expect(execute).not.toHaveBeenCalled();
-    } finally {
-      execute.mockRestore();
-    }
+    expect(outcome).toEqual({
+      status: 'runtime_error',
+      error: {
+        source: 'script',
+        name: 'CodeCallRuntimeError',
+        message: expect.stringContaining(
+          "CodeCall vm.runtime 'interpreter' needs Enclave's validated AgentScript runner (AgentScriptRunner from @enclave-vm/core/worker)",
+        ),
+      },
+    });
+    expect(executed).toEqual([]);
   });
 
   it('still refuses a script the policy blocks as illegal access, before the runtime', async () => {
