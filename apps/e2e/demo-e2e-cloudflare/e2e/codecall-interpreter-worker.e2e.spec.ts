@@ -1,17 +1,14 @@
 /**
  * Runs CodeCall's validated AgentScript interpreter in workerd with nodejs_compat.
- * The suite becomes active when the installed Enclave worker entry exports AgentScriptRunner.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { CodecallWorker } from './helpers/codecall-worker';
 
-const workerEntry = require('@enclave-vm/core/worker') as { AgentScriptRunner?: unknown };
-const describeWithRunner = typeof workerEntry.AgentScriptRunner === 'function' ? describe : describe.skip;
 const coreDir = path.resolve(__dirname, '../../../../node_modules/@enclave-vm/core');
 
-describeWithRunner('CodeCall interpreter on Cloudflare Workers (workerd)', () => {
+describe('CodeCall interpreter on Cloudflare Workers (workerd)', () => {
   let worker: CodecallWorker;
 
   beforeAll(async () => {
