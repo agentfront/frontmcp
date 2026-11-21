@@ -3,10 +3,11 @@
 // The runtime seam: how `vm.runtime` and its budgets are read, how each runtime loads its Enclave
 // entry point and maps a run spec, and how they refuse what they cannot run or enforce.
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { InterpreterAdapter } from '@enclave-vm/core/worker';
+
+import { readdir, readFile } from '@frontmcp/utils';
 
 import type { ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import CodeCallConfig from '../providers/code-call.config';
@@ -447,18 +448,25 @@ describe('ExecutionGate', () => {
 
 describe('the Node-only barrel stays out of the execution path', () => {
   const servicesDir = path.join(__dirname, '..', 'services');
-  const files = [
-    path.join(servicesDir, 'enclave.service.ts'),
-    ...fs.readdirSync(path.join(servicesDir, 'runtime')).map((file) => path.join(servicesDir, 'runtime', file)),
-  ].filter((file) => file.endsWith('.ts'));
+  const runtimeDir = path.join(servicesDir, 'runtime');
+  const valueImportOfBarrel = /^import\s+(?!type\b)[^;]*?from\s+'@enclave-vm\/core';/m;
+  const dynamicLoadOfBarrel = /(?:import|require)\(\s*'@enclave-vm\/core'\s*\)/;
 
-  it.each(files.map((file) => [path.relative(servicesDir, file), file]))(
-    '%s imports @enclave-vm/core only as types',
-    (_name, file) => {
-      const source = fs.readFileSync(file, 'utf8');
-      const valueImports = source.match(/^import\s+(?!type\b)[^;]*?from\s+'@enclave-vm\/core';/gm) ?? [];
-      expect(valueImports).toEqual([]);
-      expect(source).not.toMatch(/(?:import|require)\(\s*'@enclave-vm\/core'\s*\)/);
-    },
-  );
+  it('imports @enclave-vm/core only as types in the execution service and every runtime', async () => {
+    const runtimeFiles = (await readdir(runtimeDir)).map((file) => path.join(runtimeDir, file));
+    const files = [path.join(servicesDir, 'enclave.service.ts'), ...runtimeFiles].filter((file) =>
+      file.endsWith('.ts'),
+    );
+
+    const filesLoadingBarrel: string[] = [];
+    for (const file of files) {
+      const source = await readFile(file);
+      if (valueImportOfBarrel.test(source) || dynamicLoadOfBarrel.test(source)) {
+        filesLoadingBarrel.push(path.relative(servicesDir, file));
+      }
+    }
+
+    expect(files.length).toBeGreaterThan(1);
+    expect(filesLoadingBarrel).toEqual([]);
+  });
 });
