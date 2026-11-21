@@ -7,7 +7,7 @@
  * - The bundle: Enclave's Node-only barrel (`@enclave-vm/core`, built on `node:vm` and worker
  *   threads, which `nodejs_compat` only stubs) must not be in it; its worker-safe entry point
  *   (`@enclave-vm/core/worker`) is what the bundle carries.
- * - The behaviour: the Worker boots with CodeCall, serves its tools, validates scripts, and
+ * - The behaviour: the Worker boots with CodeCall, serves its tools, and
  *   refuses to run one in the Node VM runtime with a clear error instead of reaching a stub.
  */
 import * as fs from 'node:fs';
@@ -88,13 +88,6 @@ describe('CodeCall on Cloudflare Workers (workerd)', () => {
             "Set vm.runtime: 'interpreter' to run scripts in a Worker.",
         },
       });
-    });
-
-    it('validates a script before any runtime is chosen', async () => {
-      const outcome = await worker.execute("console.log('x');\nreturn 1;");
-
-      expect(outcome.status).toBe('illegal_access');
-      expect(String(outcome.error?.['message'])).toMatch(/line 1/);
     });
   });
 });

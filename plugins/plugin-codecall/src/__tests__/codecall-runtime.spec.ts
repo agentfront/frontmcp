@@ -243,10 +243,12 @@ describe('interpreter runtime', () => {
     return { entry: { [AGENT_SCRIPT_RUNNER_EXPORT]: FakeRunner }, constructed, run, dispose };
   }
 
-  it('refuses with the installed @enclave-vm/core, which has no validated runner, and never uses the bare adapter', async () => {
+  it('refuses a worker entry without the validated runner and never uses the bare adapter', async () => {
     const execute = jest.spyOn(InterpreterAdapter.prototype, 'execute');
     try {
-      const error = await refusalOf(createInterpreterRuntime().createRunner(spec()));
+      const error = await refusalOf(
+        createInterpreterRuntime(async () => ({ InterpreterAdapter })).createRunner(spec()),
+      );
 
       expect(error.code).toBe('RUNTIME_UNAVAILABLE');
       expect(error.runtime).toBe('interpreter');

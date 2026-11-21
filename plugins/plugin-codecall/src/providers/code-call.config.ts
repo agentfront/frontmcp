@@ -70,7 +70,7 @@ export const CODECALL_ENCLAVE_SECURITY_LEVEL = 'STANDARD' as const;
  * The runtimes this version of CodeCall runs scripts in. A server that names another one in `vm.runtime` is refused
  * when the plugin starts, rather than having its scripts run somewhere it did not choose.
  */
-export const AVAILABLE_VM_RUNTIMES: readonly CodeCallVmRuntime[] = ['node-vm'];
+export const AVAILABLE_VM_RUNTIMES: readonly CodeCallVmRuntime[] = ['node-vm', 'interpreter'];
 
 /**
  * Why scripts can't run in `runtime` in a deployment built for `buildTarget` (`getRuntimeContext().target`, which
