@@ -2,12 +2,13 @@
 
 import { BaseConfig } from '@frontmcp/sdk';
 
-import { CodeCallPluginOptions, CodeCallPluginOptionsInput, codeCallPluginOptionsSchema } from '../codecall.types';
-import CodeCallConfig, {
-  CODECALL_ENCLAVE_SECURITY_LEVEL,
-  CodeCallVmRuntimeUnavailableError,
-  maxToolCallsOf,
-} from '../providers/code-call.config';
+import {
+  codeCallPluginOptionsSchema,
+  type CodeCallPluginOptions,
+  type CodeCallPluginOptionsInput,
+} from '../codecall.types';
+import CodeCallConfig, { CODECALL_ENCLAVE_SECURITY_LEVEL, maxToolCallsOf } from '../providers/code-call.config';
+import type * as CodeCallConfigModule from '../providers/code-call.config';
 
 // Create a test implementation that extends BaseConfig (without decorator for testing)
 class CodeCallConfigProvider extends BaseConfig<CodeCallPluginOptions> {
@@ -363,15 +364,15 @@ describe('CodeCallConfig vm runtime', () => {
   describe('in a Cloudflare Workers build', () => {
     const globalWithTarget = globalThis as { FRONTMCP_BUILD_TARGET?: string };
 
-    /** CodeCallConfig as a `frontmcp build --target cloudflare` bundle loads it: the CLI's inlined target first. */
-    function loadCloudflareConfig(): typeof CodeCallConfig {
+    /** code-call.config as a `frontmcp build --target cloudflare` bundle loads it: the CLI's inlined target first. */
+    function loadCloudflareConfigModule(): typeof CodeCallConfigModule {
       globalWithTarget.FRONTMCP_BUILD_TARGET = 'cloudflare';
-      let Config: typeof CodeCallConfig | undefined;
+      let configModule: typeof CodeCallConfigModule | undefined;
       jest.isolateModules(() => {
-        Config = (require('../providers/code-call.config') as { default: typeof CodeCallConfig }).default;
+        configModule = require('../providers/code-call.config') as typeof CodeCallConfigModule;
       });
-      if (!Config) throw new Error('code-call.config did not load');
-      return Config;
+      if (!configModule) throw new Error('code-call.config did not load');
+      return configModule;
     }
 
     afterEach(() => {
@@ -379,19 +380,20 @@ describe('CodeCallConfig vm runtime', () => {
     });
 
     it('refuses an explicit node-vm when the plugin starts', () => {
-      const Config = loadCloudflareConfig();
+      const { default: Config, CodeCallVmRuntimeUnavailableError } = loadCloudflareConfigModule();
 
       const start = () => new Config({ vm: { preset: 'secure', runtime: 'node-vm' } });
-      expect(start).toThrow("CodeCall vm.runtime 'node-vm' needs Node's vm module");
-      try {
-        start();
-      } catch (error) {
-        expect((error as CodeCallVmRuntimeUnavailableError).code).toBe('CODECALL_VM_RUNTIME_UNAVAILABLE');
-      }
+      expect(start).toThrow(CodeCallVmRuntimeUnavailableError);
+      expect(start).toThrow(
+        expect.objectContaining({
+          code: 'CODECALL_VM_RUNTIME_UNAVAILABLE',
+          message: expect.stringContaining("CodeCall vm.runtime 'node-vm' needs Node's vm module"),
+        }),
+      );
     });
 
     it('accepts an explicit interpreter in a Cloudflare Workers build', () => {
-      const Config = loadCloudflareConfig();
+      const { default: Config } = loadCloudflareConfigModule();
 
       expect(new Config({ vm: { preset: 'secure', runtime: 'interpreter' } }).getAll().resolvedVm.runtime).toBe(
         'interpreter',
@@ -399,7 +401,7 @@ describe('CodeCallConfig vm runtime', () => {
     });
 
     it('leaves an unset runtime to the execution boundary', () => {
-      const Config = loadCloudflareConfig();
+      const { default: Config } = loadCloudflareConfigModule();
 
       expect(new Config().getAll().resolvedVm.runtime).toBe('node-vm');
     });

@@ -10,8 +10,9 @@
  * - The behaviour: the Worker boots with CodeCall, serves its tools, and
  *   refuses to run one in the Node VM runtime with a clear error instead of reaching a stub.
  */
-import * as fs from 'node:fs';
 import * as path from 'node:path';
+
+import { readFile } from '@frontmcp/utils';
 
 import { CodecallWorker } from './helpers/codecall-worker';
 
@@ -43,8 +44,15 @@ describe('CodeCall on Cloudflare Workers (workerd)', () => {
   });
 
   describe('the bundle', () => {
-    const barrel = fs.readFileSync(path.join(ENCLAVE_CORE_DIR, 'esm', 'index.mjs'), 'utf8');
-    const workerEntry = fs.readFileSync(path.join(ENCLAVE_CORE_DIR, 'esm', 'worker.mjs'), 'utf8');
+    let barrel: string;
+    let workerEntry: string;
+
+    beforeAll(async () => {
+      [barrel, workerEntry] = await Promise.all([
+        readFile(path.join(ENCLAVE_CORE_DIR, 'esm', 'index.mjs')),
+        readFile(path.join(ENCLAVE_CORE_DIR, 'esm', 'worker.mjs')),
+      ]);
+    });
 
     it.each(NODE_BARREL_MARKERS)('identifies the Node barrel by %p', (marker) => {
       expect(barrel).toContain(marker);

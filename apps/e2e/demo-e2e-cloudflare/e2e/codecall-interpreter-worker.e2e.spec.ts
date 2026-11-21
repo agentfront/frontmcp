@@ -1,8 +1,9 @@
 /**
  * Runs CodeCall's validated AgentScript interpreter in workerd with nodejs_compat.
  */
-import * as fs from 'node:fs';
 import * as path from 'node:path';
+
+import { readFile } from '@frontmcp/utils';
 
 import { CodecallWorker } from './helpers/codecall-worker';
 
@@ -19,8 +20,8 @@ describe('CodeCall interpreter on Cloudflare Workers (workerd)', () => {
     await worker?.stop();
   });
 
-  it('bundles the validated runner without the Node VM barrel', () => {
-    expect(fs.readFileSync(path.join(coreDir, 'esm', 'worker.mjs'), 'utf8')).toContain('AgentScriptRunner');
+  it('bundles the validated runner without the Node VM barrel', async () => {
+    expect(await readFile(path.join(coreDir, 'esm', 'worker.mjs'))).toContain('AgentScriptRunner');
     expect(worker.bundle).toContain('AgentScriptRunner');
     expect(worker.bundle).not.toContain('wrapWithDoubleVm');
     expect(worker.bundle).not.toMatch(/from\s*["'](?:node:)?(?:vm|worker_threads)["']/);
