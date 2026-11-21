@@ -165,6 +165,15 @@ Three settings are easy to confuse, and they are separate:
   failure. A Cloudflare Worker can forward `codecall:execute` to such a service, but then the script doesn't run in the
   Worker. Changing `vm.preset` or `vm.runtime` doesn't give you this boundary.
 
+For a Cloudflare Worker build, select the interpreter in the plugin options:
+
+```ts
+CodeCallPlugin.init({
+  mode: 'codecall_only',
+  vm: { preset: 'secure', runtime: 'interpreter' },
+});
+```
+
 The interpreter has budgets of its own. Each one applies only with `vm.runtime: 'interpreter'`, and setting one with
 `'node-vm'` (set or left as the default) is refused when the plugin starts. Each must be an integer from 1 to its
 maximum. You can lower a budget, but you can't raise it past Enclave's own default or ceiling, and you can't turn it off.
