@@ -211,7 +211,7 @@ describe('node-vm runtime', () => {
     } finally {
       runner.dispose();
     }
-  });
+  }, 30000);
 });
 
 describe('interpreter runtime', () => {

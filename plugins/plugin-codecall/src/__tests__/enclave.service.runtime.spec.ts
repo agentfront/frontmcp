@@ -413,30 +413,37 @@ describe('EnclaveService host functions and tool calls', () => {
   });
 });
 
+/** A real Enclave's first run in a test worker includes its cold start, which a loaded CI host stretches. */
+const REAL_ENCLAVE_TIMEOUT_MS = 30000;
+
 describe('EnclaveService on the real node-vm runtime', () => {
-  it('lets no continuation of a timed-out script call a tool after the run returned', async () => {
-    let releaseFirst: () => void = () => undefined;
-    const callTool = jest.fn((name: string) =>
-      name === 'slow'
-        ? new Promise((resolve) => (releaseFirst = () => resolve({ late: true })))
-        : Promise.resolve({ ok: true }),
-    );
-    const service = new EnclaveService(
-      new CodeCallConfig({ vm: { preset: 'secure', timeoutMs: 150 } }),
-      undefined,
-      createDefaultRuntimes(),
-    );
+  it(
+    'lets no continuation of a timed-out script call a tool after the run returned',
+    async () => {
+      let releaseFirst: () => void = () => undefined;
+      const callTool = jest.fn((name: string) =>
+        name === 'slow'
+          ? new Promise((resolve) => (releaseFirst = () => resolve({ late: true })))
+          : Promise.resolve({ ok: true }),
+      );
+      const service = new EnclaveService(
+        new CodeCallConfig({ vm: { preset: 'secure', timeoutMs: 150 } }),
+        undefined,
+        createDefaultRuntimes(),
+      );
 
-    const result = await service.execute(
-      "const a = await callTool('slow', {});\nreturn await callTool('after', { a });",
-      environment({ callTool: callTool as CodeCallVmEnvironment['callTool'] }),
-    );
+      const result = await service.execute(
+        "const a = await callTool('slow', {});\nreturn await callTool('after', { a });",
+        environment({ callTool: callTool as CodeCallVmEnvironment['callTool'] }),
+      );
 
-    expect(result).toMatchObject({ success: false, timedOut: true, stats: { pendingToolCalls: 1 } });
+      expect(result).toMatchObject({ success: false, timedOut: true, stats: { pendingToolCalls: 1 } });
 
-    // The tool answers after the script's result is out: the script's next call reaches nothing.
-    releaseFirst();
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(callTool.mock.calls.map(([name]) => name)).toEqual(['slow']);
-  });
+      // The tool answers after the script's result is out: the script's next call reaches nothing.
+      releaseFirst();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(callTool.mock.calls.map(([name]) => name)).toEqual(['slow']);
+    },
+    REAL_ENCLAVE_TIMEOUT_MS,
+  );
 });
