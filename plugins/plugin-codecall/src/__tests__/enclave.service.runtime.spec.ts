@@ -452,10 +452,7 @@ describe('EnclaveService on the real node-vm runtime', () => {
   );
 });
 
-const workerEntry = require('@enclave-vm/core/worker') as { AgentScriptRunner?: unknown };
-const describeWithRunner = typeof workerEntry.AgentScriptRunner === 'function' ? describe : describe.skip;
-
-describeWithRunner('EnclaveService on the real interpreter runtime in Node', () => {
+describe('EnclaveService on the real interpreter runtime in Node', () => {
   it(
     'runs a tool call and a host lookup through the validated runner',
     async () => {
