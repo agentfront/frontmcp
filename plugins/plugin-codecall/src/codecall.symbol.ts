@@ -1,6 +1,6 @@
 // file: libs/plugins/src/codecall/codecall.symbol.ts
 
-import { type CodeCallVmPreset } from './codecall.types';
+import { type CodeCallVmPreset, type CodeCallVmRuntime } from './codecall.types';
 import type { CallToolOptions, ToolCallResult } from './errors';
 
 export interface CodeCallAstValidationIssue {
@@ -31,10 +31,24 @@ export interface CodeCallAstValidator {
  * Plugins compute this once and pass into providers.
  */
 export interface ResolvedCodeCallVmOptions {
+  /** The syntax policy and limits the options start from; never chooses the runtime. */
   preset: CodeCallVmPreset;
+  /** Where scripts run: `vm.runtime`, else `'node-vm'`. */
+  runtime: CodeCallVmRuntime;
   timeoutMs: number;
   allowLoops: boolean;
-  maxSteps?: number;
+  /** Tool calls one script may make: `vm.maxToolCalls`, else its deprecated alias `vm.maxSteps`, else the preset's. */
+  maxToolCalls: number;
+  // The interpreter's budgets, with defaults applied whatever the runtime: only `runtime: 'interpreter'` enforces
+  // them, and the options refuse setting one with `'node-vm'`.
+  /** Interpreter instructions one script may run. */
+  maxInterpreterSteps: number;
+  /** Bytes one script may allocate, by the interpreter's estimate, and the most its result may serialize to. */
+  memoryLimitBytes: number;
+  /** How deep a script's calls may nest. */
+  maxCallDepth: number;
+  /** Calls of a script that may be unfinished at once. */
+  maxPendingCalls: number;
   disabledBuiltins: string[];
   disabledGlobals: string[];
   /** `true` only when the server's options set `vm.allowConsole: true`; no preset sets it. */

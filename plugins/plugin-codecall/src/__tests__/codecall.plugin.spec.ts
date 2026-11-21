@@ -49,6 +49,28 @@ describe('CodeCallPlugin', () => {
       expect(configProvider?.useValue).toBeInstanceOf(CodeCallConfig);
     });
 
+    it('resolves vm.maxSteps as the tool-call budget of the config it provides', () => {
+      const providers = CodeCallPlugin.dynamicProviders({ vm: { preset: 'secure', maxSteps: 40 } });
+      const config = (providers.find((p) => p.name === 'codecall:config') as ValueProvider).useValue as CodeCallConfig;
+
+      expect(config.getAll().resolvedVm).toMatchObject({ runtime: 'node-vm', maxToolCalls: 40 });
+    });
+
+    it('accepts the interpreter runtime in plugin setup', () => {
+      const options = { vm: { preset: 'secure', runtime: 'interpreter' } } as const;
+
+      const providers = CodeCallPlugin.dynamicProviders(options);
+      const config = (providers.find((p) => p.name === 'codecall:config') as ValueProvider).useValue as CodeCallConfig;
+      expect(config.getAll().resolvedVm.runtime).toBe('interpreter');
+      expect(() => CodeCallPlugin.dynamicTools(options)).not.toThrow();
+    });
+
+    it('refuses, when the plugin starts, an interpreter budget without the interpreter', () => {
+      expect(() => CodeCallPlugin.dynamicProviders({ vm: { preset: 'secure', maxInterpreterSteps: 1000 } })).toThrow(
+        "vm.maxInterpreterSteps applies only to vm.runtime 'interpreter'",
+      );
+    });
+
     it('should include codecall:audit-logger provider', () => {
       const providers = CodeCallPlugin.dynamicProviders({});
       const auditProvider = providers.find((p) => p.name === 'codecall:audit-logger') as FactoryProvider | undefined;
