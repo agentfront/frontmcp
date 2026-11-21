@@ -1,23 +1,29 @@
 // file: libs/plugins/src/codecall/services/enclave.service.ts
 
-import {
-  Enclave,
-  type ConsoleHandler,
-  type CreateEnclaveOptions,
-  type ExecutionResult,
-  type ReferenceSidecarOptions,
-  type ToolHandler,
-} from '@enclave-vm/core';
+import type { ConsoleHandler, ReferenceSidecarOptions } from '@enclave-vm/core';
+import type { ToolHandler } from '@enclave-vm/core/worker';
 
 import { Provider, ProviderScope, type FrontMcpLogger } from '@frontmcp/sdk';
 
 import type { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import type { CodeCallSidecarOptions } from '../codecall.types';
 import type CodeCallConfig from '../providers/code-call.config';
-import { MAX_ITERATIONS_PER_LOOP, maxToolCallsOf } from '../providers/code-call.config';
+import { MAX_ITERATIONS_PER_LOOP } from '../providers/code-call.config';
 import { findScriptPolicyIssues } from '../security/script-policy';
 import { toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
 import { withScriptLines } from '../utils/script-lines';
+import {
+  CodeCallRuntimeError,
+  createDefaultRuntimes,
+  runtimeSettingsOf,
+  type CodeCallHostFunction,
+  type CodeCallRunResult,
+  type CodeCallRuntimeSettings,
+  type CodeCallScriptRunner,
+  type CodeCallScriptRunSpec,
+  type CodeCallScriptRuntimes,
+} from './runtime';
+import { ExecutionGate } from './runtime/execution-gate';
 import { ScriptConsoleLog } from './script-console';
 
 /**
@@ -50,6 +56,11 @@ export interface EnclaveExecutionResult {
     duration: number;
     toolCallCount: number;
     iterationCount: number;
+    /**
+     * Tool calls that had started and not settled when the execution ended (set only when there
+     * were any). The script no longer receives their results, but their effects are not rolled back.
+     */
+    pendingToolCalls?: number;
   };
 }
 
@@ -111,15 +122,6 @@ function parseFailureOf(message: string): { message: string; location?: { line: 
 }
 
 /**
- * Service for executing AgentScript code using enclave-vm
- *
- * This service wraps the Enclave class and provides:
- * - Safe AgentScript execution with AST validation
- * - Automatic code transformation (callTool -> __safe_callTool)
- * - Runtime limits (timeout, iterations, tool calls)
- * - Tool call integration with FrontMCP pipeline
- */
-/**
  * Error thrown when script exceeds maximum length and sidecar is disabled
  */
 export class ScriptTooLargeError extends Error {
@@ -138,6 +140,18 @@ export class ScriptTooLargeError extends Error {
   }
 }
 
+/**
+ * Service for executing AgentScript code using enclave-vm
+ *
+ * It runs each script in the Enclave runtime `vm.runtime` selects (see ./runtime) and provides:
+ * - Safe AgentScript execution: Enclave pre-scans, transforms and validates the raw script before
+ *   anything runs, on every runtime
+ * - Runtime limits (timeout, iterations, tool calls, and the interpreter's own budgets)
+ * - Tool call integration with FrontMCP pipeline, closed when the run returns
+ *
+ * It loads no Enclave entry point until a script runs, and the Node-only `@enclave-vm/core` barrel
+ * only for `vm.runtime: 'node-vm'`.
+ */
 @Provider({
   name: 'codecall:enclave',
   description: 'Executes AgentScript code in a secure enclave',
@@ -148,16 +162,23 @@ export default class EnclaveService {
   private readonly sidecarOptions: CodeCallSidecarOptions;
   /** Where scripts' console calls go: set only with an explicit `vm.allowConsole: true`. */
   private readonly consoleHandler?: ConsoleHandler;
+  private readonly runtimes: CodeCallScriptRuntimes;
 
   /**
    * @param config - The plugin's resolved options
    * @param scriptLogger - The logger scripts' console output goes to with `vm.allowConsole: true`
+   * @param runtimes - The runtimes scripts run in, by `vm.runtime` name (replaced in tests)
    */
-  constructor(config: CodeCallConfig, scriptLogger?: FrontMcpLogger) {
+  constructor(
+    config: CodeCallConfig,
+    scriptLogger?: FrontMcpLogger,
+    runtimes: CodeCallScriptRuntimes = createDefaultRuntimes(),
+  ) {
     // Use getAll() to avoid deep type instantiation with DottedPath<T>
     const all = config.getAll();
     this.vmOptions = all.resolvedVm;
     this.sidecarOptions = all.sidecar;
+    this.runtimes = runtimes;
     if (this.vmOptions.allowConsole && scriptLogger) {
       this.consoleHandler = new ScriptConsoleLog(scriptLogger).write;
     }
@@ -203,11 +224,23 @@ export default class EnclaveService {
       };
     }
 
+    let settings: CodeCallRuntimeSettings;
+    try {
+      settings = runtimeSettingsOf(this.vmOptions);
+    } catch (error: unknown) {
+      if (error instanceof CodeCallRuntimeError) return runtimeRefusal(error, logs);
+      throw error;
+    }
+
+    // The host side of this execution. Once the run returns, a continuation of the script that is
+    // still scheduled reaches none of the closures below, whatever the runtime.
+    const gate = new ExecutionGate();
+
     // Create tool handler that bridges to CodeCallVmEnvironment. It always throws on a failing
     // tool: the sandbox applies the script's `{ throwOnError: false }` itself, for `callTool()` and
     // namespace methods alike. Failures are kept so a script a failing tool ended is a tool error.
     const toolFailures: ToolFailure[] = [];
-    const toolHandler: ToolHandler = async (toolName: string, args: Record<string, unknown>) => {
+    const toolHandler: ToolHandler = gate.guardToolHandler(async (toolName: string, args: Record<string, unknown>) => {
       try {
         return await environment.callTool(toolName, args);
       } catch (error: unknown) {
@@ -220,7 +253,7 @@ export default class EnclaveService {
         });
         throw error;
       }
-    };
+    });
 
     // Build sidecar configuration if enabled
     const sidecar: ReferenceSidecarOptions | undefined = this.sidecarOptions.enabled
@@ -234,87 +267,100 @@ export default class EnclaveService {
         }
       : undefined;
 
-    const { mcpLog, mcpNotify } = environment;
-    const globals: Record<string, unknown> = {
-      // Provide getTool as a custom global
-      getTool: environment.getTool,
-      // Provide logging functions if available
-      ...(mcpLog
-        ? {
-            mcpLog: (
-              level: 'debug' | 'info' | 'warn' | 'error',
-              message: string,
-              metadata?: Record<string, unknown>,
-            ) => {
-              mcpLog(level, message, metadata);
-              logs.push(`[mcp:${level}] ${message}`);
-            },
-          }
-        : {}),
-      ...(mcpNotify
-        ? {
-            mcpNotify: (event: string, payload: Record<string, unknown>) => {
-              mcpNotify(event, payload);
-              logs.push(`[notify] ${event}`);
-            },
-          }
-        : {}),
-    };
-
+    const hostFunctions = this.hostFunctionsOf(environment, logs, gate);
     const { rapidEnumerationThreshold, rapidEnumerationOverrides } = this.vmOptions;
 
-    // Create enclave with configuration from CodeCallConfig
-    const options: CreateEnclaveOptions = {
-      timeout: this.vmOptions.timeoutMs,
-      maxToolCalls: maxToolCallsOf(this.vmOptions),
+    const spec: CodeCallScriptRunSpec = {
+      timeoutMs: this.vmOptions.timeoutMs,
       maxIterations: MAX_ITERATIONS_PER_LOOP,
+      maxToolCalls: settings.maxToolCalls,
+      // Interpreter-only budgets: the Node VM has no such engine counters.
+      ...(settings.runtime === 'interpreter' && {
+        maxInterpreterSteps: settings.maxInterpreterSteps,
+        maxCallDepth: settings.maxCallDepth,
+        maxPendingCalls: settings.maxPendingCalls,
+        memoryLimitBytes: settings.memoryLimitBytes,
+      }),
       maxSanitizeDepth: this.vmOptions.maxSanitizeDepth,
       maxSanitizeProperties: this.vmOptions.maxSanitizeProperties,
       toolHandler,
-      validate: true,
-      transform: true,
-      sidecar,
-      // Error stacks name no host file, whatever stage raised them.
-      sanitizeStackTraces: true,
-      // Allow functions in globals since we intentionally provide getTool, mcpLog and mcpNotify
-      allowFunctionsInGlobals: true,
+      hostFunctions,
       // Scripts get `console` only with it; the sandbox bounds each script's console calls and bytes.
       consoleHandler: this.consoleHandler,
-      globals,
       // Tool namespaces (`acme.getUser()` for a tool named `acme.getUser`) are built by the sandbox
       // itself: a method call is exactly `callTool('acme.getUser', args, options)`, with the
       // sandbox's tool-call cap, rate limit, suspicious-sequence checks and `throwOnError`.
-      toolNamespaces: toSandboxToolNamespaces(environment.toolNamespaces, Object.keys(globals)),
-      doubleVm: {
-        parentValidation: {
-          ...(rapidEnumerationThreshold !== undefined && { rapidEnumerationThreshold }),
-          ...(rapidEnumerationOverrides !== undefined && { rapidEnumerationOverrides }),
-        },
+      toolNamespaces: toSandboxToolNamespaces(environment.toolNamespaces, Object.keys(hostFunctions)),
+      sidecar,
+      rapidEnumeration: {
+        ...(rapidEnumerationThreshold !== undefined && { threshold: rapidEnumerationThreshold }),
+        ...(rapidEnumerationOverrides !== undefined && { overrides: rapidEnumerationOverrides }),
       },
     };
 
-    const enclave = createEnclave(options);
+    let runner: CodeCallScriptRunner;
     try {
-      const result = await enclave.run<unknown>(code);
-      return this.mapEnclaveResult(result, logs, toolFailures, code);
-    } finally {
-      enclave.dispose();
+      runner = await this.runtimes[settings.runtime].createRunner(spec);
+    } catch (error: unknown) {
+      gate.close();
+      if (error instanceof CodeCallRuntimeError) return runtimeRefusal(error, logs);
+      throw error;
     }
+
+    try {
+      const result = await runner.run(code);
+      const { pendingToolCalls } = gate.close();
+      return this.mapEnclaveResult(result, logs, toolFailures, code, pendingToolCalls);
+    } finally {
+      gate.close();
+      runner.dispose();
+    }
+  }
+
+  /**
+   * The host functions a script may call: `getTool` always, `mcpLog` and `mcpNotify` when the
+   * environment has them. Each is closed with the execution.
+   */
+  private hostFunctionsOf(
+    environment: CodeCallVmEnvironment,
+    logs: string[],
+    gate: ExecutionGate,
+  ): Record<string, CodeCallHostFunction> {
+    const { getTool, mcpLog, mcpNotify } = environment;
+    const functions: Record<string, CodeCallHostFunction> = {
+      getTool: gate.guardHostFunction('getTool', (name) => getTool(name as string)),
+    };
+    if (mcpLog) {
+      functions['mcpLog'] = gate.guardHostFunction('mcpLog', (level, message, metadata) => {
+        const logLevel = level as 'debug' | 'info' | 'warn' | 'error';
+        mcpLog(logLevel, message as string, metadata as Record<string, unknown> | undefined);
+        logs.push(`[mcp:${logLevel}] ${message as string}`);
+      });
+    }
+    if (mcpNotify) {
+      functions['mcpNotify'] = gate.guardHostFunction('mcpNotify', (event, payload) => {
+        mcpNotify(event as string, payload as Record<string, unknown>);
+        logs.push(`[notify] ${event as string}`);
+      });
+    }
+    return functions;
   }
 
   /**
    * Map Enclave ExecutionResult to EnclaveExecutionResult
    */
   private mapEnclaveResult(
-    result: ExecutionResult<unknown>,
+    result: CodeCallRunResult,
     logs: string[],
     toolFailures: readonly ToolFailure[] = [],
     script = '',
+    pendingToolCalls = 0,
   ): EnclaveExecutionResult {
-    const stats = {
+    const stats: NonNullable<EnclaveExecutionResult['stats']> = {
       duration: result.stats.duration,
       toolCallCount: result.stats.toolCallCount,
       iterationCount: result.stats.iterationCount,
+      ...(pendingToolCalls > 0 && { pendingToolCalls }),
     };
     if (result.success) {
       return { success: true, result: result.value, logs, timedOut: false, stats };
@@ -404,21 +450,15 @@ export default class EnclaveService {
 }
 
 /**
- * An enclave for these options. The sandbox refuses a whole `toolNamespaces` configuration over one
- * name it can't bind; `toSandboxToolNamespaces` leaves such names out, and should one still get
- * through, the script runs without namespaces rather than failing (`callTool()` always works).
+ * A refusal to run the script in the configured runtime, before any of it ran: the runtime is not
+ * available here, cannot enforce a control this configuration needs, or is misconfigured.
  */
-function createEnclave(options: CreateEnclaveOptions): Enclave {
-  try {
-    return new Enclave(options);
-  } catch (error: unknown) {
-    if (
-      !options.toolNamespaces ||
-      !(error instanceof TypeError) ||
-      !error.message.startsWith('Invalid toolNamespaces')
-    ) {
-      throw error;
-    }
-    return new Enclave({ ...options, toolNamespaces: undefined });
-  }
+function runtimeRefusal(error: CodeCallRuntimeError, logs: string[]): EnclaveExecutionResult {
+  return {
+    success: false,
+    error: { message: error.message, name: error.name, code: error.code, runtime: error.runtime },
+    logs,
+    timedOut: false,
+    stats: { duration: 0, toolCallCount: 0, iterationCount: 0 },
+  };
 }
