@@ -13,6 +13,10 @@ import { App, createInMemoryServer, FrontMcpInstance, LogLevel, Tool, ToolContex
 import CodeCallPlugin from '../codecall.plugin';
 import type { CodeCallPluginOptions } from '../codecall.types';
 
+// The first script a test worker runs includes the sandbox's cold start; the timeout test waits
+// on real timers.
+jest.setTimeout(30000);
+
 const executed: string[] = [];
 
 @Tool({ name: 'users.get', description: 'Gets a user for the runtime spec', inputSchema: { id: z.number() } })
