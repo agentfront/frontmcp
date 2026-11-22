@@ -344,10 +344,18 @@ export default class ExecuteTool extends ToolContext {
       // Map execution result to CodeCall result
       if (executionResult.timedOut) {
         audit?.logExecutionTimeout(executionId, script, durationMs);
+        // A tool that was still running when the script ended may yet complete: say so, since
+        // nothing rolls its effects back.
+        const pending = executionResult.stats?.pendingToolCalls ?? 0;
         return {
           status: 'timeout',
           error: {
-            message: `Script execution timed out after ${config.getAll().resolvedVm.timeoutMs}ms`,
+            message:
+              `Script execution timed out after ${config.getAll().resolvedVm.timeoutMs}ms` +
+              (pending > 0
+                ? ` (${pending} tool call${pending === 1 ? ' was' : 's were'} still running; ` +
+                  'the script did not receive the result, and the effects are not rolled back)'
+                : ''),
           },
         };
       }
