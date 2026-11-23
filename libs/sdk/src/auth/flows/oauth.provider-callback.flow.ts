@@ -89,6 +89,7 @@ const stateSchema = z.object({
   federatedSession: z.unknown().optional(), // FederatedAuthSession
   // Provider tokens
   providerTokens: z.unknown().optional(), // ProviderTokens
+  providerIssuer: z.string().optional(),
   providerUserInfo: z.unknown().optional(), // ProviderUserInfo
   // Consent round-trip (the consent screen POSTs back here after all providers
   // are linked): the federated session id, the screen's CSRF token and the
@@ -488,6 +489,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
 
     try {
       // Exchange authorization code for tokens with upstream provider
+      const providerIssuer = localAuth.providerAuthorizationServer(providerId);
       const result = await localAuth.exchangeProviderCode(providerId, code, session.currentProviderPkce?.verifier);
 
       if ('error' in result) {
@@ -513,7 +515,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
         idToken: result.id_token,
       };
 
-      this.state.set('providerTokens', tokens);
+      this.state.set({ providerTokens: tokens, providerIssuer });
 
       // Resolve the upstream identity. SECURITY: this is REQUIRED for a
       // federated login — the provider is the identity source. If no stable
@@ -553,7 +555,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
 
   @Stage('storeProviderTokens')
   async storeProviderTokens() {
-    const { providerId, federatedSession, providerTokens, providerUserInfo } = this.state;
+    const { providerId, federatedSession, providerTokens, providerUserInfo, providerIssuer } = this.state;
     const session = federatedSession as FederatedAuthSession | undefined;
     const tokens = providerTokens as ProviderTokens | null | undefined;
     const userInfo = providerUserInfo as ProviderUserInfo | undefined;
@@ -574,6 +576,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
+        issuer: providerIssuer,
       });
 
       this.logger.info(`Stored tokens for provider ${providerId} (temp auth: ${tempAuthId})`);
