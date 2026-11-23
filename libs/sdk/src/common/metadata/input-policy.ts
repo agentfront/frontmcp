@@ -1,0 +1,31 @@
+// file: libs/sdk/src/common/metadata/input-policy.ts
+import { internalZ as z } from '@frontmcp/lazy-zod';
+import { isDevelopment } from '@frontmcp/utils';
+
+/** What `tools/call` does with argument keys `inputSchema` does not declare: drop them, also tell, or refuse the call. */
+export const INPUT_UNDECLARED_KEYS_POLICIES = ['strip', 'warn', 'fail'] as const;
+export type InputUndeclaredKeysPolicy = (typeof INPUT_UNDECLARED_KEYS_POLICIES)[number];
+
+/** Input policy, declarable on `@FrontMcp`, `@App` and `@Tool`, resolved Tool > App > server > default. */
+export interface InputPolicy {
+  /**
+   * `'strip'` drops undeclared argument keys; `'warn'` drops them, logs each once per tool and ends the answer with a
+   * line naming them; `'fail'` refuses the call with `INVALID_INPUT`. Both name the closest declared key.
+   *
+   * @default 'warn' when NODE_ENV is 'development', otherwise 'strip'
+   */
+  undeclaredKeys?: InputUndeclaredKeysPolicy;
+}
+
+export const inputPolicySchema = z.object({
+  undeclaredKeys: z.enum(INPUT_UNDECLARED_KEYS_POLICIES).optional(),
+});
+
+/** Resolve the undeclared-argument policy: Tool > App > server > 'warn' in development, 'strip' otherwise. */
+export function resolveInputUndeclaredKeysPolicy(
+  tool?: InputPolicy,
+  app?: InputPolicy,
+  server?: InputPolicy,
+): InputUndeclaredKeysPolicy {
+  return tool?.undeclaredKeys ?? app?.undeclaredKeys ?? server?.undeclaredKeys ?? (isDevelopment() ? 'warn' : 'strip');
+}
