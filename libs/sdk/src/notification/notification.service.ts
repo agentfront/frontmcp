@@ -15,6 +15,7 @@ import { awaitOutsideRequest } from '@frontmcp/utils';
 import type { AIPlatformType, FrontMcpLogger, PlatformDetectionConfig, PlatformMappingEntry } from '../common';
 import type { Scope } from '../scope';
 import { announcesListChangeNow } from '../surface/list-change-batch';
+import { mcpRequestSurface } from '../transport/mcp-handlers/mcp-surface';
 
 /**
  * Re-export Root from MCP SDK for convenience.
@@ -787,7 +788,7 @@ export class NotificationService {
   /**
    * Send a resource update notification to subscribed sessions only.
    * Per MCP 2025-11-25 spec, only sessions that have subscribed to this
-   * resource via `resources/subscribe` will receive the notification.
+   * resource via `resources/subscribe` will receive the notification, and only while their caller may still read it.
    *
    * @param uri - The resource URI that was updated
    */
@@ -802,8 +803,21 @@ export class NotificationService {
     this.logger.verbose(`Notifying ${subscribers.length} subscriber(s) of resource update: ${uri}`);
 
     for (const sessionId of subscribers) {
-      this.sendNotificationToSession(sessionId, 'notifications/resources/updated', { uri });
+      void this.notifyIfStillReadable(sessionId, uri);
     }
+  }
+
+  /** Tell a subscribed session of an update when `resources:subscribe` still admits its latest, unexpired caller. */
+  private async notifyIfStillReadable(sessionId: string, uri: string): Promise<void> {
+    const registered = this.servers.get(sessionId);
+    if (!registered || hasExpiredCaller(registered)) return;
+    const request = { method: 'resources/subscribe' as const, params: { uri } };
+    const ctx = { authInfo: registered.caller ?? {}, surface: mcpRequestSurface(this.scope), ownRequest: true };
+    const readable = await this.scope.runFlow('resources:subscribe', { request, ctx }).then(
+      () => true,
+      () => false,
+    );
+    if (readable) this.sendNotificationToSession(sessionId, 'notifications/resources/updated', { uri });
   }
 
   // =====================================================
