@@ -60,8 +60,13 @@ async function runVerify(opts: {
   expectedAudience?: string | string[];
   requireAudience?: boolean;
   forwardedHost?: string;
+  allowedHosts?: string[];
 }) {
   const scope = createTransparentScope(opts.providerJwks, opts.expectedAudience, opts.requireAudience);
+  if (opts.allowedHosts) {
+    const http = scope.metadata.http as Record<string, unknown>;
+    http['security'] = { dnsRebindingProtection: { allowedHosts: opts.allowedHosts } };
+  }
   const input = createMockHttpRequest({
     method: 'POST',
     path: '/',
@@ -113,6 +118,28 @@ describe('SessionVerifyFlow — transparent audience validation (GHSA-hvvp-67p3-
     const { output } = await runVerify({ jwt, providerJwks, forwardedHost: 'service-a.example' });
 
     expect(output?.kind).toBe('unauthorized');
+  });
+
+  it('accepts a token for the host the server is configured to answer under (allowedHosts)', async () => {
+    const jwt = await mint({ sub: 'user123', aud: VICTIM_AUDIENCE });
+    const { output, error } = await runVerify({ jwt, providerJwks, allowedHosts: [VICTIM_HOST] });
+
+    expect(output).toBeUndefined();
+    expect(error).toBeUndefined();
+  });
+
+  it('checks the audience against the pinned FRONTMCP_PUBLIC_URL, whatever the Host header says', async () => {
+    process.env['FRONTMCP_PUBLIC_URL'] = 'https://mcp.example';
+    try {
+      const pinned = await runVerify({ jwt: await mint({ sub: 'user123', aud: 'https://mcp.example' }), providerJwks });
+      expect(pinned.output).toBeUndefined();
+      expect(pinned.error).toBeUndefined();
+
+      const hostDerived = await runVerify({ jwt: await mint({ sub: 'user123', aud: VICTIM_AUDIENCE }), providerJwks });
+      expect(hostDerived.output?.kind).toBe('unauthorized');
+    } finally {
+      delete process.env['FRONTMCP_PUBLIC_URL'];
+    }
   });
 
   it('accepts a token whose aud matches this resource (host-derived)', async () => {
