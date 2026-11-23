@@ -99,6 +99,14 @@ function contextInstanceOf(providers: ProviderRegistry, token: Token): NonNullab
  * Give each hook declared on a CONTEXT-scoped provider the instance of that provider for this flow run;
  * other hooks are returned as they are.
  */
+/** The registry metadata each bound copy was made from, so a run can find the hooks of a registry entry again. */
+const boundFrom = new WeakMap<HookMetadata, HookMetadata>();
+
+/** The registry metadata a stage entry's hook came from: itself, or the hook a context target was bound for. */
+export function sourceMetadataOf(metadata: HookMetadata): HookMetadata {
+  return boundFrom.get(metadata) ?? metadata;
+}
+
 export async function bindContextHookTargets<T extends Pick<HookEntry, 'metadata'>>(
   hooks: readonly T[],
   run: HookContextRun,
@@ -113,10 +121,11 @@ export async function bindContextHookTargets<T extends Pick<HookEntry, 'metadata
     }
     const target = await contextTarget(run);
     // `target` holds the object a hook method runs on (an instance, here), as `hooksBoundTo` stores it.
-    if (target)
-      bound.push({
-        metadata: { ...hook.metadata, target: target as HookMetadata['target'], contextTarget: undefined },
-      });
+    if (target) {
+      const metadata = { ...hook.metadata, target: target as HookMetadata['target'], contextTarget: undefined };
+      boundFrom.set(metadata, hook.metadata);
+      bound.push({ metadata });
+    }
   }
   return bound;
 }

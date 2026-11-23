@@ -805,6 +805,8 @@ class TransferTool extends ToolContext {
 
 An instance method on an earlier stage, or `Will`/`Around` on `createToolCallContext`, fails startup with `InvalidHookFlowError` whose message says to make it `static`. A list-flow hook (`ListToolsHook`; listing builds no instance and runs for no single entry) fails startup whether static or not -- put it on a plugin or a provider. Up to 1.9.3 static hooks on earlier stages were refused too. A `@Job` class declares hooks for the `jobs:execute-job` flow its attempts run (`JobHook`), with the same rules: instance methods from `createJobContext` on, `static` methods for earlier stages; a hook for another flow fails startup (up to 1.9.3 any hook on a job class did). Up to 1.8.7 these hooks were accepted and silently never ran.
 
+A run's app hooks and `static` entry hooks are those of the entry the request names. In `prompts:get-prompt`, a hook that switches to another prompt (rewriting `state.input.name` before `findPrompt`, or setting `state.prompt` after it) hands the run over to that prompt at the `usePromptHooks` stage, right after `findPrompt`: from there on, its app's hooks and its class's `static` hooks run, and the first prompt's no longer do; the hooks that already ran stay as they ran. Up to 1.12.2 the replacement prompt ran with the first prompt's hooks, so its own guards never ran. `tools:call-tool` and `resources:read-resource` still keep the hooks of the entry the request names.
+
 ## Common Patterns
 
 | Pattern               | Correct                                                               | Incorrect                                                              | Why                                                                                |
