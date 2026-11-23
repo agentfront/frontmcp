@@ -115,8 +115,9 @@ export interface CreateKeyPersistenceOptions {
    * Only used when type is 'localstorage' or 'auto' with localStorage fallback.
    * If not provided, the values are encrypted with a non-extractable WebCrypto key created once and kept in
    * IndexedDB, so a reader of localStorage alone cannot decrypt them; records written under the key 1.12.2 and
-   * earlier derived from localStorage are re-encrypted with it. Where IndexedDB or WebCrypto is unavailable,
-   * 'localstorage' throws without this key, and 'auto' falls back to memory.
+   * earlier derived from localStorage are re-encrypted with it. Where IndexedDB or WebCrypto is unavailable, that
+   * derived key is still used, with a warning: anyone who can read this origin's localStorage can derive it. From
+   * 1.13 this key is needed there.
    */
   encryptionKey?: Uint8Array;
 }
