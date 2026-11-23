@@ -56,8 +56,12 @@ export class RunSpans implements RunJournalObserver {
     }
   }
 
-  /** Ends the run span with what the run's record says, and its id when one was kept. */
-  end(run: CodeCallRunInput, runId: string | undefined): void {
+  /** Ends the run span with what the run's record says, or with an error when the run threw before it had one. */
+  end(run: CodeCallRunInput | undefined, runId: string | undefined): void {
+    if (!run) {
+      this.runSpan.endWithError('the run threw before it returned a result');
+      return;
+    }
     this.runSpan.setAttributes({
       'codecall.run.status': run.status,
       'codecall.run.calls': run.journal.length,

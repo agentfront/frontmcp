@@ -143,6 +143,15 @@ describe('RunJournal', () => {
     expect(journal.close()[0]).not.toHaveProperty('result');
   });
 
+  it('ends a call whose result has no JSON form as a success of 0 bytes', () => {
+    const callEnded = jest.fn();
+    const journal = new RunJournal({ observer: { callStarted: jest.fn(), callEnded } });
+    journal.begin('users.count', {}).succeed(BigInt(1));
+
+    expect(journal.close()[0]).toMatchObject({ outcome: 'success', resultBytes: 0 });
+    expect(callEnded).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps no values without keepValues', () => {
     const journal = new RunJournal();
     journal.begin('users.get', { id: 1 }).succeed({ id: 1 });

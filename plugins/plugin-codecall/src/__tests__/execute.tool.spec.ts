@@ -3,6 +3,7 @@
 import CodeCallConfig from '../providers/code-call.config';
 import { RunJournal } from '../runs/run-journal';
 import { CodeCallRunStoreToken } from '../runs/run-record.types';
+import { RunTelemetryToken } from '../runs/run-spans';
 import EnclaveService, { type EnclaveExecutionResult } from '../services/enclave.service';
 import ExecuteTool from '../tools/execute.tool';
 
@@ -1143,6 +1144,45 @@ describe('ExecuteTool', () => {
       await tool.execute({ script: 'return 1;' });
 
       expect(warn).toHaveBeenCalledWith('codecall: could not keep the run record', { error: 'offline' });
+    });
+  });
+
+  describe('Run spans', () => {
+    function withTelemetry(execute?: jest.Mock) {
+      const created = createExecuteTool();
+      const callSpan = { setAttributes: jest.fn(), end: jest.fn(), endWithError: jest.fn() };
+      const runSpan = { ...callSpan, startChildSpan: jest.fn(() => callSpan) };
+      created.tool._setDependency(RunTelemetryToken, { startSpan: jest.fn(() => runSpan) });
+      if (execute) created.mockEnclave.execute = execute;
+      return { ...created, runSpan, callSpan };
+    }
+
+    it('ends the run span with an error when the run throws before the enclave runs', async () => {
+      const { tool, runSpan } = withTelemetry();
+      (tool as unknown as { dependencies: Map<unknown, unknown> }).dependencies.delete(EnclaveService);
+
+      await expect(tool.execute({ script: 'return 1;' })).rejects.toThrow('Dependency not found');
+
+      expect(runSpan.endWithError).toHaveBeenCalledWith('the run threw before it returned a result');
+      expect(runSpan.end).not.toHaveBeenCalled();
+    });
+
+    it('ends a call span still open when the enclave throws, and the run span with the run status', async () => {
+      const { tool, runSpan, callSpan } = withTelemetry(
+        jest.fn(async (_script: string, _environment: unknown, journal: RunJournal) => {
+          journal.begin('users.get', { id: 1 });
+          throw new Error('tool handler crashed');
+        }),
+      );
+
+      const result = await tool.execute({ script: "return await callTool('users.get', { id: 1 });" });
+
+      expect(result.status).toBe('runtime_error');
+      expect(callSpan.setAttributes).toHaveBeenCalledWith(
+        expect.objectContaining({ 'codecall.call.outcome': 'unfinished' }),
+      );
+      expect(callSpan.end).toHaveBeenCalledTimes(1);
+      expect(runSpan.endWithError).toHaveBeenCalledWith('runtime_error');
     });
   });
 });

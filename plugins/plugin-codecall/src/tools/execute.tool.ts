@@ -110,20 +110,26 @@ export default class ExecuteTool extends ToolContext {
     const spans = this.startRunSpans(scriptHash, resolvedVm.runtime);
     const journal = new RunJournal({ keepResults: runs?.keepsResults, keepValues: trace.values, observer: spans });
     const startedAt = new Date();
-    const result = await this.runScript(input, journal);
-    const run: CodeCallRunInput = {
-      scriptHash,
-      status: result.status,
-      startedAt: startedAt.toISOString(),
-      endedAt: new Date().toISOString(),
-      reviewDecision: null,
-      ...(result.status === 'ok' && { resultBytes: jsonBytes(result.result) }),
-      journal: [...journal.close()],
-    };
-    const runId = runs ? await this.keepRun(runs, run) : undefined;
-    spans?.end(run, runId);
-    const traceLines = traceOf(result.status, journal, trace);
-    return { ...result, ...(runId && { runId }), ...(traceLines && { trace: traceLines }) };
+    let run: CodeCallRunInput | undefined;
+    let runId: string | undefined;
+    try {
+      const result = await this.runScript(input, journal);
+      run = {
+        scriptHash,
+        status: result.status,
+        startedAt: startedAt.toISOString(),
+        endedAt: new Date().toISOString(),
+        reviewDecision: null,
+        ...(result.status === 'ok' && { resultBytes: jsonBytes(result.result) }),
+        journal: [...journal.close()],
+      };
+      runId = runs ? await this.keepRun(runs, run) : undefined;
+      const traceLines = traceOf(result.status, journal, trace);
+      return { ...result, ...(runId && { runId }), ...(traceLines && { trace: traceLines }) };
+    } finally {
+      journal.close();
+      spans?.end(run, runId);
+    }
   }
 
   /** The run's spans while observability traces requests, else none. */
