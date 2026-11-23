@@ -39,8 +39,8 @@ export interface SubscriptionStreamOptions {
   /** Fires when the client disconnects so the registry listeners are released. */
   signal?: AbortSignal;
   /**
-   * Whether the stream may be told of an update to `uri`, a resource under one of its acknowledged URIs (an exact
-   * match was checked when acknowledged). Without it, every such update is sent.
+   * Whether the stream may be told of an update to `uri`, an acknowledged URI or a resource under one, asked again for
+   * each update, so a caller that lost access stops hearing of it. Without it, every such update is sent.
    */
   mayReceiveUpdate?: (uri: string) => Promise<boolean>;
 }
@@ -134,10 +134,6 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
         const uri = typeof updatedUri === 'string' ? updatedUri : undefined;
         if (event.kind === 'updated') {
           if (!uri) return;
-          if (watchedUris.has(uri)) {
-            push('notifications/resources/updated', { uri });
-            return;
-          }
           // A subscription is on a URI prefix, so a sub-resource update counts once the caller may receive it.
           if (![...watchedUris].some((watched) => uri.startsWith(watched))) return;
           void (mayReceiveUpdate?.(uri) ?? Promise.resolve(true)).then(
