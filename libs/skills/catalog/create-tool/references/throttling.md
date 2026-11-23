@@ -90,7 +90,7 @@ Order of effects per call:
 
 ## Timeout and abort signals
 
-`this.signal` is aborted when the call is cancelled (including `tasks/cancel` for a task-augmented call) and when its `timeout` passes. Separately from a tool's `concurrency`, `@FrontMcp({ tasks: { maxConcurrentPerSession } })` (default 16, at most 1000) caps how many tasks one caller may have unfinished at once; a task over it is refused with `CONCURRENCY_LIMIT`. `FrontMcpContext` has no `abortSignal` property, so don't reach for `this.context.abortSignal`.
+`this.signal` is aborted when the call is cancelled (including `tasks/cancel` for a task-augmented call) and when its `timeout` passes. Separately from a tool's `concurrency`, `@FrontMcp({ tasks: { maxConcurrentPerSession } })` (default 16, at most 1000) caps how many tasks one caller may have unfinished at once; a task over it is refused with `CONCURRENCY_LIMIT`. `tasks/list` returns a session's tasks in the order they were created, read from a per-session index the task store keeps beside the task records (`index:<session>:<n>`, `index-count:<session>`), so a page costs reads in proportion to its size, whatever other sessions store; the first list or task of a session whose tasks an earlier version wrote scans the task keys once to index them. Up to 1.12.2 every `tasks/list` read every stored task key of every session, and listed the tasks in task-id order. `FrontMcpContext` has no `abortSignal` property, so don't reach for `this.context.abortSignal`.
 
 `this.fetch()` is aborted with `this.signal` on its own, on top of its per-request timeout (default 30s). Pass `this.signal` to any other cancellable work, so a timed-out call stops instead of running on:
 

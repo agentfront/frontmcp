@@ -135,6 +135,57 @@ describe('StorageTaskStore', () => {
       expect(page.tasks).toEqual([]);
       expect(page.nextCursor).toBeUndefined();
     });
+
+    it("lists a session's tasks in the order they were created, from its index, without scanning task keys", async () => {
+      for (const taskId of ['z-first', 'a-second', 'm-third']) await store.create(makeRecord({ taskId }));
+      await store.create(makeRecord({ sessionId: 'session-B', taskId: 'b-1' }));
+      const scans = jest.spyOn(storage.root, 'keys');
+
+      const firstPage = await store.list('session-A', { pageSize: 2 });
+      const secondPage = await store.list('session-A', { pageSize: 2, cursor: firstPage.nextCursor });
+
+      expect(firstPage.tasks.map((task) => task.taskId)).toEqual(['z-first', 'a-second']);
+      expect(secondPage.tasks.map((task) => task.taskId)).toEqual(['m-third']);
+      expect(secondPage.nextCursor).toBeUndefined();
+      expect(scans).not.toHaveBeenCalled();
+    });
+
+    it('fills a page past the positions of deleted tasks', async () => {
+      for (let index = 0; index < 4; index++) await store.create(makeRecord({ taskId: `t-${index}` }));
+      await store.delete('t-0', 'session-A');
+      await store.delete('t-1', 'session-A');
+
+      const page = await store.list('session-A', { pageSize: 2 });
+
+      expect(page.tasks.map((task) => task.taskId)).toEqual(['t-2', 't-3']);
+      expect(page.nextCursor).toBeUndefined();
+    });
+
+    it('lists the tasks an earlier version stored without an index, scanning once, and the tasks created after them', async () => {
+      const records = storage.namespace('records');
+      for (const taskId of ['old-1', 'old-2']) {
+        await records.set(`session-A:${taskId}`, JSON.stringify(makeRecord({ taskId })), { ttlSeconds: 60 });
+      }
+      const scans = jest.spyOn(storage.root, 'keys');
+
+      await store.create(makeRecord({ taskId: 'new-1' }));
+      const page = await store.list('session-A');
+      await store.list('session-A');
+
+      expect(page.tasks.map((task) => task.taskId)).toEqual(['old-1', 'old-2', 'new-1']);
+      expect(scans).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps a session's index count as long as its longest-lived task", async () => {
+      await store.create(makeRecord({ taskId: 'short', expiresAt: Date.now() + 60_000 }));
+      await store.create(makeRecord({ taskId: 'long', expiresAt: Date.now() + 7_200_000 }));
+      await store.create(makeRecord({ taskId: 'short-again', expiresAt: Date.now() + 60_000 }));
+
+      const remaining = await storage.namespace('index-count').ttl('session-A');
+
+      expect(remaining).toBeGreaterThan(7_000);
+      expect(remaining).toBeLessThanOrEqual(7_200);
+    });
   });
 
   describe('pub/sub', () => {
