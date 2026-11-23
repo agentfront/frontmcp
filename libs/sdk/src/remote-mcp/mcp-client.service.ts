@@ -524,7 +524,7 @@ export class McpClientService {
         }
 
         const result = await this.withinTimeout(appId, toolName, () =>
-          withRemoteRequestHeaders(callerHeaders, () =>
+          withRemoteRequestHeaders(appId, callerHeaders, () =>
             connection.client.callTool({ name: toolName, arguments: args }),
           ),
         );
@@ -597,7 +597,7 @@ export class McpClientService {
     try {
       const callerHeaders = await this.callerHeaders(appId, authContext);
       const result = await this.withinTimeout(appId, uri, () =>
-        withRemoteRequestHeaders(callerHeaders, () => connection.client.readResource({ uri })),
+        withRemoteRequestHeaders(appId, callerHeaders, () => connection.client.readResource({ uri })),
       );
 
       // Update heartbeat
@@ -642,7 +642,7 @@ export class McpClientService {
 
       const callerHeaders = await this.callerHeaders(appId, authContext);
       const result = await this.withinTimeout(appId, promptName, () =>
-        withRemoteRequestHeaders(callerHeaders, () =>
+        withRemoteRequestHeaders(appId, callerHeaders, () =>
           connection.client.getPrompt({ name: promptName, arguments: args }),
         ),
       );
@@ -835,7 +835,7 @@ export class McpClientService {
 
   /** The `fetch` a transport to the remote sends through, with the connection's OAuth token when it has one. */
   private remoteFetchOf(request: McpConnectRequest, headers: Record<string, string> | undefined): typeof fetch {
-    return createRemoteRequestFetch(headers !== undefined, this.oauthSources.get(request.appId));
+    return createRemoteRequestFetch(request.appId, headers !== undefined, this.oauthSources.get(request.appId));
   }
 
   /** Milliseconds one request to `appId` may take: its `transportOptions.timeout`, else 30 seconds. */
