@@ -19,6 +19,7 @@ import {
   ToolContext,
   type FlowCtxOf,
   type LogRecord,
+  type OutputPolicy,
   type TemplateContext,
 } from '../../../common';
 import { InvalidOutputError } from '../../../errors';
@@ -269,6 +270,19 @@ class GetQuoteResultTool extends ToolContext {
   }
 }
 
+@Tool({ name: 'get_off_schema_result', inputSchema: {}, outputSchema: { price: z.number() } })
+class GetOffSchemaResultTool extends ToolContext {
+  async execute() {
+    const offSchema = { price: 'ten' };
+    return {
+      content: [{ type: 'text', text: JSON.stringify(offSchema) }],
+      structuredContent: offSchema,
+    } as unknown as {
+      price: number;
+    };
+  }
+}
+
 @Tool({ name: 'get_partner_quote', inputSchema: {}, outputSchema: { price: z.number() } })
 class GetPartnerQuoteTool extends ToolContext {
   async execute() {
@@ -291,7 +305,14 @@ class GetTaggedQuoteTool extends ToolContext {
 @App({
   id: 'quotes',
   name: 'Quotes',
-  tools: [GetQuoteTool, GetStrictQuoteTool, ShowQuoteTool, GetTaggedQuoteTool, GetQuoteResultTool],
+  tools: [
+    GetQuoteTool,
+    GetStrictQuoteTool,
+    ShowQuoteTool,
+    GetTaggedQuoteTool,
+    GetQuoteResultTool,
+    GetOffSchemaResultTool,
+  ],
 })
 class QuotesApp {}
 
@@ -322,7 +343,7 @@ describe('tools/call undeclared output keys', () => {
     quoteWarnings.length = 0;
   });
 
-  function startServer(output?: { undeclaredKeys?: 'strip' | 'keep' | 'warn' | 'fail' }) {
+  function startServer(output?: OutputPolicy) {
     return createTestFetchServer({
       info: { name: 'undeclared-keys', version: '1.0.0' },
       apps: [QuotesApp, PartnersApp],
@@ -486,6 +507,24 @@ describe('tools/call undeclared output keys', () => {
     const server = await startServer({ undeclaredKeys: 'keep' });
 
     expect((await callQuote(server, 'get_quote_result')).structuredContent).toEqual(quoteAnswer);
+  });
+
+  it('sends a CallToolResult off its outputSchema as returned by default, warning once per tool', async () => {
+    const server = await startServer();
+
+    const first = await callQuote(server, 'get_off_schema_result');
+    await callQuote(server, 'get_off_schema_result');
+
+    expect(first).toMatchObject({ isError: false, structuredContent: { price: 'ten' } });
+    const warnings = quoteWarnings.filter((line) => line.includes('get_off_schema_result'));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("output.validateStructuredContent: 'enforce'");
+  });
+
+  it("refuses a CallToolResult off its outputSchema under validateStructuredContent: 'enforce'", async () => {
+    const server = await startServer({ validateStructuredContent: 'enforce' });
+
+    expect(await callQuote(server, 'get_off_schema_result')).toMatchObject({ isError: true, code: 'INVALID_OUTPUT' });
   });
 
   it("refuses a CallToolResult with undeclared keys under 'fail'", async () => {

@@ -246,6 +246,10 @@ function withDeclaredStructuredContent(
   const schema = structuredOutputSchemaOf(descriptor);
   const { structuredContent } = result;
   if (!schema || structuredContent === undefined || result.isError) return result;
+  if (options.validateStructuredContent !== 'enforce' && !matchesOutputSchema(schema, structuredContent)) {
+    options.onInvalidStructuredContent?.();
+    return result;
+  }
   const declared = toStructuredContent(parseAgainstOutputSchema(schema, structuredContent, options));
   const sentText = JSON.stringify(structuredContent);
   if (JSON.stringify(declared) === sentText) return result;
@@ -253,6 +257,15 @@ function withDeclaredStructuredContent(
     block.type === 'text' && block.text === sentText ? makeJsonTextContent(declared) : block,
   );
   return { ...result, content, structuredContent: declared };
+}
+
+function matchesOutputSchema(schema: z.ZodType, value: unknown): boolean {
+  try {
+    parseDeclaredOutput(schema, value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** The schema an output descriptor gives `structuredContent` as a whole; none for a scalar, a literal or a list. */

@@ -41,6 +41,7 @@ import {
   resolveAllowNonFinite,
   resolveOutputBudget,
   resolveOutputSchemaMode,
+  resolveStructuredContentValidation,
   resolveUndeclaredKeysPolicy,
   ToolContext,
   ToolEntry,
@@ -267,6 +268,9 @@ const resolvedTools = new ResolvedEntries<ToolEntry>();
 
 /** The undeclared key paths already reported per tool, so the 'warn' policy names each one once. */
 const reportedUndeclaredKeyPaths = new WeakMap<CallToolEntry, Set<string>>();
+
+/** Tools that returned a structuredContent off their outputSchema and had it sent, so it is logged once. */
+const reportedInvalidStructuredContent = new WeakSet<CallToolEntry>();
 
 /** Tools whose answer the budget left whole because a cut broke the outputSchema, so it is logged once. */
 const reportedUnfittedTools = new WeakSet<CallToolEntry>();
@@ -1721,6 +1725,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const parseResult = tool.safeParseOutput(rawOutput, {
       undeclaredKeys,
       onUndeclaredKeys: (keyPaths) => this.warnUndeclaredKeysOnce(tool, keyPaths),
+      validateStructuredContent: resolveStructuredContentValidation(...outputPolicies),
+      onInvalidStructuredContent: () => this.warnInvalidStructuredContentOnce(tool),
     });
 
     if (!parseResult.success) {
@@ -1924,6 +1930,16 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     if (!tool) return rawOutput;
     const keepsUndeclaredKeys = resolveUndeclaredKeysPolicy(...toolOutputPolicies(tool, this.scope)) === 'keep';
     return declaredOutput(tool, rawOutput, keepsUndeclaredKeys ? 'keep' : 'strip');
+  }
+
+  private warnInvalidStructuredContentOnce(tool: CallToolEntry): void {
+    if (reportedInvalidStructuredContent.has(tool)) return;
+    reportedInvalidStructuredContent.add(tool);
+    this.logger.warn(
+      `Tool "${tool.metadata.name}" returned a CallToolResult whose structuredContent does not match its ` +
+        "outputSchema, and it was sent as returned. Set output.validateStructuredContent: 'enforce' to refuse such " +
+        'an answer with INVALID_OUTPUT now; FrontMCP 1.13 refuses it by default.',
+    );
   }
 
   private warnUndeclaredKeysOnce(tool: CallToolEntry, keyPaths: string[]): void {
