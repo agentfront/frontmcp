@@ -170,6 +170,35 @@ describe('LocalStorageAdapter — encryption', () => {
     });
   });
 
+  describe('WebCrypto key', () => {
+    it('encrypts with a CryptoKey in the same record format as its raw bytes', async () => {
+      const bytes = makeKey();
+      const cryptoKey = await crypto.subtle.importKey('raw', new Uint8Array(bytes), 'AES-GCM', false, [
+        'encrypt',
+        'decrypt',
+      ]);
+      const withCryptoKey = new LocalStorageAdapter({ encryptionKey: cryptoKey });
+      const withBytes = new LocalStorageAdapter({ encryptionKey: bytes });
+
+      await withCryptoKey.set('from-crypto-key', 'sealed by WebCrypto');
+      await withBytes.set('from-bytes', 'sealed by the byte key');
+
+      expect(await withBytes.get('from-crypto-key')).toBe('sealed by WebCrypto');
+      expect(await withCryptoKey.get('from-bytes')).toBe('sealed by the byte key');
+      expect(store.get('frontmcp:from-crypto-key')).not.toContain('sealed by WebCrypto');
+    });
+
+    it('reads a record sealed by another key as missing', async () => {
+      const cryptoKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, [
+        'encrypt',
+        'decrypt',
+      ]);
+      await new LocalStorageAdapter({ encryptionKey: makeKey() }).set('other', 'value');
+
+      expect(await new LocalStorageAdapter({ encryptionKey: cryptoKey }).get('other')).toBeNull();
+    });
+  });
+
   describe('TTL with encryption', () => {
     it('should respect TTL on encrypted entries', async () => {
       const key = makeKey();

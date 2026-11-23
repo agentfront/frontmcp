@@ -111,12 +111,12 @@ export interface CreateKeyPersistenceOptions {
   enableCache?: boolean;
 
   /**
-   * Optional 32-byte AES-256-GCM key for encrypting values at rest in localStorage.
+   * Optional 32-byte AES-256-GCM key for encrypting values at rest in localStorage, kept outside localStorage.
    * Only used when type is 'localstorage' or 'auto' with localStorage fallback.
-   * If not provided, HKDF-SHA256 derives a key from a fixed IKM, a random salt kept in the same
-   * localStorage and the page origin: values are not readable at a glance, but anyone who can read
-   * this origin's localStorage can derive the key and decrypt them. To protect them from such a
-   * reader, pass a key kept outside localStorage.
+   * If not provided, the values are encrypted with a non-extractable WebCrypto key created once and kept in
+   * IndexedDB, so a reader of localStorage alone cannot decrypt them; records written under the key 1.12.2 and
+   * earlier derived from localStorage are re-encrypted with it. Where IndexedDB or WebCrypto is unavailable,
+   * 'localstorage' throws without this key, and 'auto' falls back to memory.
    */
   encryptionKey?: Uint8Array;
 }
