@@ -458,6 +458,15 @@ describe('OpenAPI Adapter - Real HTTP Server Integration', () => {
     });
     routes.set('/invalid-json', invalidJsonRoutes);
 
+    // POST /echo
+    const echoRoutes = new Map<string, RouteHandler>();
+    echoRoutes.set('post', async (req, res) => {
+      const body = await readBody(req);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(body);
+    });
+    routes.set('/echo', echoRoutes);
+
     testServer = createTestServer({ routes });
     baseUrl = await testServer.start();
   });
@@ -787,6 +796,60 @@ describe('OpenAPI Adapter - Real HTTP Server Integration', () => {
       expect(tool.metadata.rawOutputSchema.properties.data).toEqual({ description: 'OK', 'x-status-code': 200 });
       const listedSchema = z.fromJSONSchema(tool.metadata.rawOutputSchema);
       expect(listedSchema.safeParse({ status: 200, ok: true, data: { id: 'user-1' } }).success).toBe(true);
+    });
+
+    it('lists a data schema that accepts any answer when a 2XX range response has a description only', async () => {
+      const specWithRangeResponse: OpenAPIV3.Document = {
+        openapi: '3.0.0',
+        info: { title: 'Range API', version: '1.0.0' },
+        servers: [{ url: baseUrl }],
+        paths: {
+          '/minimal': {
+            get: {
+              operationId: 'rangeEndpoint',
+              responses: { '2XX': { description: 'OK' } },
+            },
+          },
+        },
+      };
+
+      const tool = findTool(await getTools(specWithRangeResponse), 'rangeEndpoint');
+
+      expect(tool.metadata.rawOutputSchema.properties.data).toEqual({ description: 'OK', 'x-status-code': '2XX' });
+      const listedSchema = z.fromJSONSchema(tool.metadata.rawOutputSchema);
+      expect(listedSchema.safeParse({ status: 200, ok: true, data: { id: 'user-1' } }).success).toBe(true);
+    });
+  });
+
+  describe('Request Bodies', () => {
+    it('sends an open object body, which is one body input, as the request body itself', async () => {
+      const specWithOpenBody: OpenAPIV3.Document = {
+        openapi: '3.0.0',
+        info: { title: 'Echo API', version: '1.0.0' },
+        servers: [{ url: baseUrl }],
+        paths: {
+          '/echo': {
+            post: {
+              operationId: 'echoNote',
+              requestBody: {
+                required: true,
+                content: {
+                  'application/json': {
+                    schema: { type: 'object', properties: { title: { type: 'string' } }, additionalProperties: true },
+                  },
+                },
+              },
+              responses: { '200': { description: 'The body the server received' } },
+            },
+          },
+        },
+      };
+
+      const tool = findTool(await getTools(specWithOpenBody), 'echoNote');
+      const result = await tool.executor({ body: { title: 'Q3', pinned: true } }, createContext());
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual({ title: 'Q3', pinned: true });
     });
   });
 

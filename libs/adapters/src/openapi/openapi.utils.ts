@@ -88,6 +88,37 @@ function appendCookie(headers: Headers, name: string, value: unknown): void {
   headers.set('Cookie', combined);
 }
 
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** A path, query, header or cookie parameter defined with a JSON media type (`content`), sent as its JSON text. */
+function isJsonContentParameter(mapper: ParameterMapper): boolean {
+  const mediaType = mapper.serialization?.contentType?.split(';')[0]?.trim().toLowerCase();
+  if (mapper.type === 'body' || mediaType === undefined) return false;
+  return mediaType === 'application/json' || mediaType.endsWith('+json');
+}
+
+const OUTSIDE_PRINTABLE_ASCII = /[^ -~]/g;
+
+/** The JSON text of a `content` parameter; a header writes non-ASCII characters as `\uXXXX`, the same JSON value. */
+function jsonContentText(mapper: ParameterMapper, value: unknown): string {
+  const jsonText = JSON.stringify(value);
+  if (mapper.type !== 'header') return jsonText;
+  return jsonText.replace(
+    OUTSIDE_PRINTABLE_ASCII,
+    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
+  );
+}
+
+/** The input's value for a parameter, else the spec's `default` for a required one; `null` counts only for JSON content. */
+function parameterInputValue(tool: McpOpenAPITool, mapper: ParameterMapper, input: Record<string, unknown>): unknown {
+  const inputValue = input[mapper.inputKey];
+  const sendsNull = isJsonContentParameter(mapper);
+  if (inputValue !== undefined && (inputValue !== null || sendsNull)) return inputValue;
+  return mapper.required ? specDefault(tool, mapper.inputKey) : undefined;
+}
+
 const DOT_SEGMENTS = new Set(['.', '..']);
 
 /** Refuse a URL whose path parameters add a dot segment or leave the base path plus the template's literal prefix. */
@@ -150,10 +181,11 @@ export function buildRequest(
     // Skip security parameters (already handled by SecurityResolver)
     if (mapper.security) continue;
 
-    const value = input[mapper.inputKey] ?? (mapper.required ? specDefault(tool, mapper.inputKey) : undefined);
+    const jsonContent = isJsonContentParameter(mapper);
+    const value = parameterInputValue(tool, mapper, input);
 
     // Check required parameters
-    if (value === undefined || value === null) {
+    if (value === undefined || (value === null && !jsonContent)) {
       if (mapper.required) {
         throw new Error(
           `Required ${mapper.type} parameter '${mapper.key}' (input: '${mapper.inputKey}') is missing for operation '${tool.name}'`,
@@ -162,10 +194,12 @@ export function buildRequest(
       continue;
     }
 
+    const parameterValue = jsonContent ? jsonContentText(mapper, value) : value;
+
     // Apply parameter to correct location
     switch (mapper.type) {
       case 'path': {
-        const pathValue = coerceToString(value, mapper.key, 'path');
+        const pathValue = coerceToString(parameterValue, mapper.key, 'path');
         // encodeURIComponent leaves dots as they are, and URL parsing resolves a dot segment
         if (DOT_SEGMENTS.has(pathValue)) {
           throw new PublicMcpError(
@@ -180,13 +214,13 @@ export function buildRequest(
       }
 
       case 'query':
-        for (const [queryName, queryValue] of serializeQueryParameter(mapper, value)) {
+        for (const [queryName, queryValue] of serializeQueryParameter(mapper, parameterValue)) {
           queryParams.append(queryName, queryValue);
         }
         break;
 
       case 'header': {
-        const headerValue = coerceToString(value, mapper.key, 'header');
+        const headerValue = coerceToString(parameterValue, mapper.key, 'header');
         // Validate header values for injection attacks
         // Check for: CR, LF, null byte, form feed, vertical tab
 
@@ -203,10 +237,14 @@ export function buildRequest(
       }
 
       case 'cookie':
-        appendCookie(headers, mapper.key, value);
+        appendCookie(headers, mapper.key, parameterValue);
         break;
 
       case 'body':
+        if (mapper.wholeBody && isJsonObject(value)) {
+          body = value;
+          break;
+        }
         if (!body) body = {};
         body[mapper.key] = value;
         break;

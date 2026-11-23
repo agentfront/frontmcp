@@ -9,7 +9,7 @@ const BODYLESS_STATUS_CODES = new Set([204, 205]);
 
 /** The `x-status-code` the generator gives a `default` response, and a `2XX` one. */
 const DEFAULT_RESPONSE_STATUS = 0;
-const SUCCESS_RANGE_STATUS = 2;
+const SUCCESS_RANGE_STATUS = '2XX';
 
 function isSuccessWithBody(statusCode: unknown): boolean {
   if (statusCode === DEFAULT_RESPONSE_STATUS || statusCode === SUCCESS_RANGE_STATUS) return true;
@@ -29,16 +29,15 @@ function acceptAnyUndeclaredBody(schema: JsonSchema): JsonSchema {
 
 /**
  * The tool's output schema, accepting any answer to a success response whose body the spec doesn't describe
- * (a description and no `content`), which the generator types `null`. 204, 205 and HEAD stay bodyless. The
- * generator's union of status codes becomes an `anyOf`, since an answer may fit more than one status.
+ * (a description and no `content`), which the generator types `null`, in each branch of its `anyOf` of status
+ * codes too. 204, 205 and HEAD stay bodyless.
  */
 export function outputSchemaOf(tool: McpOpenAPITool): JsonSchema | undefined {
   const outputSchema = tool.outputSchema;
   if (!outputSchema || tool.metadata.method === 'head') return outputSchema;
-  const statusBranches = outputSchema.oneOf;
+  const statusBranches = outputSchema.anyOf;
   if (statusBranches && outputSchema['x-status-code'] === undefined) {
-    const { oneOf: _exclusive, ...union } = outputSchema;
-    return { ...union, anyOf: statusBranches.map(acceptAnyUndeclaredBody) };
+    return { ...outputSchema, anyOf: statusBranches.map(acceptAnyUndeclaredBody) };
   }
   return acceptAnyUndeclaredBody(outputSchema);
 }
