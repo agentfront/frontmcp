@@ -1,6 +1,7 @@
 /**
- * localStorage key records are encrypted with a non-extractable key kept in IndexedDB, never with one that can be
- * derived from localStorage itself (#1318). Records written under the derived key of 1.12.2 and earlier are moved to it.
+ * localStorage key records are encrypted with a non-extractable key kept in IndexedDB rather than one that can be
+ * derived from localStorage itself (#1318), and records written under the derived key are moved to it. Without
+ * IndexedDB, 1.12.x keeps the derived key and warns.
  */
 import { cryptoProvider } from '#crypto-provider';
 
@@ -138,10 +139,26 @@ describe('createKeyPersistence with localStorage', () => {
     expect(await derived.get('session')).toBeNull();
   });
 
-  it('refuses without IndexedDB, unless given an encryptionKey', async () => {
-    await expect(createKeyPersistence({ type: 'localstorage' })).rejects.toThrow(/encryptionKey/);
+  it('without IndexedDB, keeps the key derived from localStorage and warns once, naming encryptionKey', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const keys = await createKeyPersistence({ type: 'localstorage' });
+      const secret = await keys.getOrCreateSecret('session');
+      const reopened = await createKeyPersistence({ type: 'localstorage', enableCache: false });
 
+      expect(await reopened.getSecret('session')).toEqual(secret);
+      expect(lsStore.has(INSTALL_SALT_KEY)).toBe(true);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('encryptionKey'));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('without IndexedDB, uses an encryptionKey it is given, with no salt', async () => {
     const keys = await createKeyPersistence({ type: 'localstorage', encryptionKey: randomBytes(32) });
+
     expect((await keys.getOrCreateSecret('session')).type).toBe('secret');
+    expect(lsStore.has(INSTALL_SALT_KEY)).toBe(false);
   });
 });
