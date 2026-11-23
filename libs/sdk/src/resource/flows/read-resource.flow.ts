@@ -256,9 +256,17 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       throw new ResourceNotFoundError(uri);
     }
 
+    this.resolveResource({ resource: match.instance, params: match.params });
+    this.logger.verbose('findResource:done');
+  }
+
+  /** Settle the resource this read gets, `availableWhen` checked, as `findResource` does; a hook standing in calls it. */
+  resolveResource({ resource, params = {} }: { resource: ResourceEntry; params?: Record<string, string> }): void {
+    const { uri } = this;
+    const loggedUri = escapeControlCharacters(uri);
     // `availableWhen` gates reads by URI, not only the listings: a surface the resource isn't offered
     // on answers like an unknown URI, and a process-wide axis answers EntryUnavailableError.
-    const { availableWhen } = match.instance.metadata;
+    const { availableWhen } = resource.metadata;
     const callSurface = callSurfaceOf(this.input.ctx);
     const availability = availabilityForCall(availableWhen, callSurface);
     if (availability === 'not-offered') {
@@ -268,7 +276,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     if (availability === 'unavailable') {
       this.logger.warn(`findResource: resource for URI "${loggedUri}" is unavailable in this environment`);
       throw entryUnavailableError(
-        match.instance.isTemplate ? 'ResourceTemplate' : 'Resource',
+        resource.isTemplate ? 'ResourceTemplate' : 'Resource',
         uri,
         availableWhen,
         callSurface,
@@ -276,17 +284,13 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     }
 
     // Store resource owner ID in flow state for hook filtering
-    if (match.instance.owner) {
-      this.state.set('resourceOwnerId', match.instance.owner.id);
+    if (resource.owner) {
+      this.state.set('resourceOwnerId', resource.owner.id);
     }
 
     this.logger = this.logger.child(`ReadResourceFlow(${loggedUri})`);
-    this.state.set('resource', match.instance);
-    this.state.set('params', match.params);
-    this.logger.verbose(
-      `findResource: resource "${match.instance.name}" found (template: ${match.instance.isTemplate})`,
-    );
-    this.logger.verbose('findResource:done');
+    this.state.set({ resource, params });
+    this.logger.verbose(`findResource: resource "${resource.name}" found (template: ${resource.isTemplate})`);
   }
 
   /** Whether `uri` names a tool's widget, kept for 'finalize'; any other `ui://` URI is looked up as a resource. */

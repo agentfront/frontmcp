@@ -382,6 +382,17 @@ export default class ToolsListFlow extends FlowBase<typeof name> {
     );
   }
 
+  /** Leave a tool out of this listing, by its listed or its own name: for a hook on any stage up to `parseTools`. */
+  removeTool(name: string): void {
+    const isNamed = (tool: { fullName: string; metadata: { id?: string; name: string } }, finalName?: string) =>
+      finalName === name || tool.fullName === name || (tool.metadata.id ?? tool.metadata.name) === name;
+    const { tools, resolvedTools } = this.state;
+    const keptTools = tools?.filter(({ tool }) => !isNamed(tool));
+    const keptResolvedTools = resolvedTools?.filter(({ tool, finalName }) => !isNamed(tool, finalName));
+    if (keptTools) this.state.set('tools', keptTools);
+    if (keptResolvedTools) this.state.set('resolvedTools', keptResolvedTools);
+  }
+
   /** A tool for the MCP Apps page only (`_meta.ui.visibility: ['app']`) is listed only to a client that renders it. */
   @Stage('filterByAppVisibility')
   async filterByAppVisibility() {
