@@ -260,6 +260,22 @@ class SetupGatePlugin {
   }
 }
 
+@Plugin({ name: 'uncovered-gate' })
+class UncoveredGatePlugin {
+  @(FlowHooksOf('tools:call-tool').Will('execute', { appliesTo: 'uncovered-apps' }))
+  gate() {
+    // a guard for the apps that do not install this plugin
+  }
+}
+
+@Plugin({ name: 'review-gate', enforcesMetadata: ['reviewTicket'] })
+class ReviewGatePlugin {
+  @(FlowHooksOf('tools:call-tool').Will('execute', { appliesTo: 'uncovered-apps' }))
+  gate() {
+    // refuses a call to an entry that declares `reviewTicket`, which startup checks is enforced
+  }
+}
+
 @Duty({ every: 60_000, scope: 'machine' })
 class SweepDuty {
   async run() {
@@ -286,6 +302,13 @@ class FlaggedTool extends ToolContext {
   }
 }
 
+@Tool({ name: 'flag_free', inputSchema: {} })
+class FlaggedFreeTool extends ToolContext {
+  async execute() {
+    return 'ok';
+  }
+}
+
 const invoicePaid = event({ name: 'invoice.paid', payloadSchema: { invoiceId: z.string() } });
 
 describe('an app that cannot be lazy', () => {
@@ -301,6 +324,11 @@ describe('an app that cannot be lazy', () => {
     ['a nested server-scoped plugin', { plugins: [WrapperPlugin] }, /plugin "every-app-gate" has scope 'server'/],
     ['a hook on a list flow', { plugins: [ListFilterPlugin] }, /hook list-filter\.filter is on tools:list-tools/],
     ['a hook for all apps', { plugins: [SetupGatePlugin] }, /hook setup-gate\.gate applies to all apps/],
+    [
+      'a hook for apps without its plugin',
+      { plugins: [UncoveredGatePlugin] },
+      /hook uncovered-gate\.gate applies to apps without its plugin.*enforcesMetadata/,
+    ],
     ['a duty', { providers: [SweepDuty] }, /duties \("SweepDuty"\)/],
     ['a worker', { providers: [InboxWatcher] }, /workers \("InboxWatcher"\), which start with the server/],
     [
@@ -358,6 +386,16 @@ describe('an app that cannot be lazy', () => {
     );
 
     expect(answer).toContain("Unknown arguments: 'amountCents'");
+    await client.close();
+  });
+
+  it('accepts a hook for apps without its plugin when the plugin declares the metadata it enforces', async () => {
+    @App({ id: 'billing', name: 'Billing', tools: [FlaggedFreeTool], plugins: [ReviewGatePlugin] })
+    class ReviewedBillingApp {}
+
+    const client = await connect(lazyServer(billingImport({ ReviewedBillingApp })));
+
+    expect(JSON.stringify(await client.listTools())).toContain('flag_free');
     await client.close();
   });
 
