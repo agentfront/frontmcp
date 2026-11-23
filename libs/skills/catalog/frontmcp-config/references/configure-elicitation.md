@@ -218,6 +218,10 @@ class InboxLinkTool extends ToolContext {
   their TTL). An answer nobody took is dropped with its question when `ttlMs` passes. An invalid `persistent` fails
   startup with `InvalidQuestionStoreError`.
 - `persist.ttlMs` must be longer than the call's `ttl`; URL mode cannot be persisted (`INVALID_INPUT`).
+- **Who is woken.** A change to a question (asked, answered, taken) wakes only the call waiting on that question, in any
+  process on the storage, through a topic of its own named by the question's storage key (digests, so neither the
+  subject nor the key shows); the inbox's live list still follows every change. On SQLite that topic's counter expires
+  with its question. Up to 1.12.2 every change woke every waiting call on the server, each reading its own question.
 
 ## Confirming Skilled OpenAPI Actions
 

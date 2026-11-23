@@ -122,7 +122,7 @@ describe('askPersistentQuestion', () => {
     const slow = {
       ask: async () => ({ kind: 'waiting', question: { expiresAt: Date.now() + DAY_MS } }),
       take: () => new Promise((settle) => (deliver = settle)),
-      subscribe: () => () => undefined,
+      subscribeToQuestion: () => () => undefined,
       restore,
     } as unknown as QuestionStore;
     const call = askPersistentQuestion(
@@ -227,7 +227,7 @@ describe('askPersistentQuestion', () => {
       take: async () => {
         throw new Error('the store is down');
       },
-      subscribe: () => () => undefined,
+      subscribeToQuestion: () => () => undefined,
     } as unknown as QuestionStore;
 
     await expect(
