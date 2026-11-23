@@ -370,7 +370,7 @@ for a bad one.
 | `defaultTimeoutMs`        | `30000`     | How long a request may take, in milliseconds. An operation's `timeoutMs` overrides it.                                              |
 | `defaultMaxResponseBytes` | `262144`    | The largest response read (256 KB). An operation's `maxResponseBytes` overrides it.                                                 |
 | `maxConcurrencyPerHost`   | `10`        | Requests in flight to one host; more wait their turn.                                                                               |
-| `egressProxy`             |             | A proxy URL every request to your API goes through. Needs `undici` on Node.js.                                                      |
+| `egressProxy`             |             | A proxy URL every request to your API goes through, to an address the outbound check approved. Needs `undici` on Node.js.           |
 | `errorBodies`             | `'include'` | `'include'` adds your API's error body, redacted and cut to 2 KB, to a failed call's error; `'status-only'` names the status alone. |
 
 ### Sources
@@ -707,8 +707,10 @@ the server to be ready, and a request applies a bundle that failed to apply agai
   internal details.
 - **Outbound requests.** URLs must be `https:` (unless `allowHttp`) and on the operation's service host. The host's
   addresses are checked before sending: private and loopback addresses are refused unless `allowPrivateNetworks`, and
-  link-local and cloud metadata addresses always. In a browser, which can't resolve a name, only an IP-literal host's
-  address is checked (see [Browser](#browser)). Responses are size- and time-limited.
+  link-local and cloud metadata addresses always. On Node.js the request connects only to the checked addresses, and
+  through `egressProxy` the proxy is asked for one of them (`CONNECT <address>:<port>`) rather than the hostname. In a
+  browser, which can't resolve a name, only an IP-literal host's address is checked (see [Browser](#browser)).
+  Responses are size- and time-limited.
 - **What reaches the model.** The model sees only what the script returns, but the content of your API's answers isn't
   checked. Treat text your API returns, like ticket bodies or notes, as you would user input.
 

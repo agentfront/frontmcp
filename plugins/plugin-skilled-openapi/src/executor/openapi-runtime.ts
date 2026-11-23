@@ -26,7 +26,7 @@ import {
 } from '@frontmcp/adapters/openapi';
 import type { AuthBinding } from '@frontmcp/adapters/skills';
 import { ToolCredentialsRequiredError, type FrontMcpLogger } from '@frontmcp/sdk';
-import { isEdgeRuntime, isRedirectResponse } from '@frontmcp/utils';
+import { isEdgeRuntime, isRedirectResponse, pinnedFetch } from '@frontmcp/utils';
 
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
 import type { OutboundOptions } from '../skilled-openapi.types';
@@ -34,7 +34,6 @@ import { callerTokenOf, callerTokenRefusal } from './caller-token';
 import type { CallerAuthInfo, CredentialResolver } from './credential-resolver';
 import { proxiedFetch } from './egress-proxy';
 import { withHostConcurrency } from './host-concurrency';
-import { pinnedFetch } from './pinned-fetch';
 import { checkOutboundUrl, type SsrfCheckResult } from './ssrf-guard';
 
 /** Caller-supplied input. Flat keys match `mapper[].inputKey`. */
@@ -370,7 +369,7 @@ export async function executeOperation(args: {
  * addresses the outbound check resolved and judged. A Worker resolves and connects on the platform.
  */
 async function outboundFetch(outbound: OutboundOptions, ssrf: SsrfCheckResult): Promise<typeof fetch> {
-  if (outbound.egressProxy) return proxiedFetch(outbound.egressProxy);
+  if (outbound.egressProxy) return proxiedFetch(outbound.egressProxy, ssrf.addresses);
   if (ssrf.addresses?.length && !isEdgeRuntime()) return pinnedFetch(ssrf.addresses);
   return fetch;
 }
