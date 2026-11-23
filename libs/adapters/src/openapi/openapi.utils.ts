@@ -246,7 +246,7 @@ export function buildRequest(
           break;
         }
         if (!body) body = {};
-        body[mapper.key] = value;
+        Object.defineProperty(body, mapper.key, { value, enumerable: true, writable: true, configurable: true });
         break;
 
       default:

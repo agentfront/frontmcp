@@ -73,6 +73,24 @@ describe('OpenapiAdapter - Utilities', () => {
       expect(result.body).toEqual({ name: 'John Doe', email: 'john@example.com' });
     });
 
+    it('keeps a body property named __proto__ as the body own field, not its prototype', () => {
+      const tool: McpOpenAPITool = {
+        name: 'saveSettings',
+        description: 'Save settings',
+        inputSchema: { type: 'object', properties: {} },
+        mapper: [{ inputKey: 'proto', type: 'body', key: '__proto__', required: true }],
+        metadata: { path: '/settings', method: 'post', servers: [{ url: 'https://api.example.com' }] },
+      };
+      const security = { headers: {}, query: {}, cookies: {} };
+
+      const result = buildRequest(tool, { proto: { polluted: true } }, security, 'https://api.example.com');
+      const body = result.body as Record<string, unknown>;
+
+      expect(Object.getPrototypeOf(body)).toBe(Object.prototype);
+      expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
+      expect(JSON.stringify(body)).toBe('{"__proto__":{"polluted":true}}');
+    });
+
     it('should build request with query parameters', () => {
       const tool: McpOpenAPITool = {
         name: 'searchUsers',
