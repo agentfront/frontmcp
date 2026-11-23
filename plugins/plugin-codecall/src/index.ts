@@ -4,3 +4,12 @@ export * from './codecall.types';
 // token and subscribe. The whole module goes out, not just the class -- a listener needs the event
 // types and AUDIT_EVENT_TYPES to do anything useful with what it receives.
 export * from './services/audit-logger.service';
+export { CodeCallRunStore, type CodeCallRunCaller, type CodeCallRunInput } from './runs/run-record.store';
+export {
+  CodeCallRunStoreToken,
+  type CodeCallCallOutcome,
+  type CodeCallCallPhase,
+  type CodeCallJournalEntry,
+  type CodeCallRunRecord,
+  type CodeCallRunStatus,
+} from './runs/run-record.types';

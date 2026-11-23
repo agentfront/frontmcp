@@ -7,6 +7,7 @@
 import type { CodeCallVmEnvironment } from '../codecall.symbol';
 import type { CodeCallPluginOptions } from '../codecall.types';
 import CodeCallConfig from '../providers/code-call.config';
+import { RunJournal } from '../runs/run-journal';
 import EnclaveService, { ScriptTooLargeError } from '../services/enclave.service';
 import {
   createDefaultRuntimes,
@@ -400,6 +401,36 @@ describe('EnclaveService host functions and tool calls', () => {
     release();
 
     expect(result).toMatchObject({ success: false, timedOut: true, stats: { toolCallCount: 1, pendingToolCalls: 1 } });
+  });
+
+  it('journals each call the tool handler is entered with, and closes the journal when the run returns', async () => {
+    const env = environment({
+      callTool: jest.fn((name: string) =>
+        name === 'a'
+          ? Promise.resolve({ ok: true })
+          : Promise.reject(Object.assign(new Error('no'), { code: 'VALIDATION' })),
+      ) as CodeCallVmEnvironment['callTool'],
+    });
+    let captured: CodeCallScriptRunSpec | undefined;
+    const runtime = fakeRuntime('interpreter', async (spec) => {
+      captured = spec;
+      await spec.toolHandler('a', { n: 1 });
+      await spec.toolHandler('b', {}).catch(() => undefined);
+      return okResult('ok', 2);
+    });
+    const service = new EnclaveService(configWith({ runtime: 'interpreter' }), undefined, {
+      interpreter: runtime,
+      'node-vm': unusedRuntime('node-vm'),
+    });
+    const journal = new RunJournal();
+
+    await service.execute('return 1;', env, journal);
+    await captured?.toolHandler('late', {}).catch(() => undefined);
+
+    expect(journal.close().map(({ position, tool, outcome, phase }) => ({ position, tool, outcome, phase }))).toEqual([
+      { position: 1, tool: 'a', outcome: 'success', phase: undefined },
+      { position: 2, tool: 'b', outcome: 'failure', phase: 'input' },
+    ]);
   });
 
   it('reports no pending tool calls when every call settled', async () => {

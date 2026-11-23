@@ -115,6 +115,7 @@ The plugin adds a `codecall` field to `@Tool`:
 | `sidecar`        | `{ enabled: false }`   | Allows scripts longer than 64 KB.                                                                                                                               |
 | `topK`           | `8`                    | Results per query when a `codecall:search` call doesn't give its own `topK`.                                                                                    |
 | `maxDefinitions` | `8`                    | Most tools one `codecall:describe` call may name.                                                                                                               |
+| `runs`           | `{ enabled: true }`    | A record of each `codecall:execute` run, with a journal of its tool calls. See [Run records](#run-records).                                                     |
 
 ```ts
 CodeCallPlugin.init({
@@ -142,6 +143,29 @@ CodeCallPlugin.init({
   (offline with nothing cached, `@huggingface/transformers` missing, or embedding the tools fails), CodeCall logs one
   warning and searches with TF-IDF. A tool whose metadata can't be read is skipped with a warning; the others stay
   searchable.
+
+## Run records
+
+Each `codecall:execute` that has an owner (a session, or a signed-in caller) leaves a run record, and its result
+carries `runId`. The record holds the owner, the script's SHA-256, the status, the start and end times,
+`reviewDecision` (`null` until a review stage exists), the return value's size, and a journal with one entry per tool
+call: its position (in the order the host's tool handler was entered, on either runtime), the tool, a SHA-256 of the
+arguments, the outcome (`success`, `failure` or `unfinished`), the phase of a failure (`access`, `input`, `limit` or
+`execute`), the duration and the result's size. Results are kept only with `runs.resume: true`.
+
+Records are kept like result handles: encrypted under keys derived from the run id and the owner, readable only by
+that owner (`this.get(CodeCallRunStoreToken).read(runId, this)`), until they expire.
+
+| Option                | Default            | Description                                                                                                                       |
+| --------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `runs.enabled`        | `true`             | `false` keeps no records, and results carry no `runId`.                                                                           |
+| `runs.ttlSeconds`     | `600`              | How long a record can be read.                                                                                                    |
+| `runs.maxRecordBytes` | `262144` (256 KiB) | The most one record takes; journal entries past it are left out and counted. A record whose metadata alone is over it isn't kept. |
+| `runs.resume`         | `false`            | Keep each call's result in its journal entry.                                                                                     |
+| `runs.storage`        | `{ type: 'auto' }` | Where records are kept, through `createStorage()`; at most 1000 records in memory.                                                |
+| `runs.namespace`      | `'codecall-runs'`  | The key prefix of records in the storage.                                                                                         |
+
+A store that fails is logged as a warning, and the result goes out without `runId`.
 
 ## Runtime and process boundary
 

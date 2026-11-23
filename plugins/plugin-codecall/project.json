@@ -4,7 +4,7 @@
   "sourceRoot": "plugins/plugin-codecall/src",
   "projectType": "library",
   "tags": ["scope:plugins", "scope:publishable", "versioning:synchronized"],
-  "implicitDependencies": ["plugin-cache"],
+  "implicitDependencies": ["plugin-cache", "plugin-result-handles"],
   "targets": {
     "build-cjs": {
       "executor": "@nx/esbuild:esbuild",
@@ -41,6 +41,7 @@
             "@frontmcp/protocol",
             "@frontmcp/utils",
             "@frontmcp/plugin-cache",
+            "@frontmcp/plugin-result-handles",
             "zod",
             "reflect-metadata"
           ]
@@ -75,6 +76,7 @@
             "@frontmcp/protocol",
             "@frontmcp/utils",
             "@frontmcp/plugin-cache",
+            "@frontmcp/plugin-result-handles",
             "zod",
             "reflect-metadata"
           ]

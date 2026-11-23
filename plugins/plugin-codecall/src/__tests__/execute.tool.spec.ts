@@ -1,6 +1,8 @@
 // file: libs/plugins/src/codecall/__tests__/execute.tool.spec.ts
 
 import CodeCallConfig from '../providers/code-call.config';
+import { RunJournal } from '../runs/run-journal';
+import { CodeCallRunStoreToken } from '../runs/run-record.types';
 import EnclaveService, { type EnclaveExecutionResult } from '../services/enclave.service';
 import ExecuteTool from '../tools/execute.tool';
 
@@ -1076,6 +1078,70 @@ describe('ExecuteTool', () => {
       });
 
       expect(result.status).toBe('runtime_error');
+    });
+  });
+
+  describe('Run records', () => {
+    function withRunStore(keep: jest.Mock, enclaveResult?: Partial<EnclaveExecutionResult>) {
+      const created = createExecuteTool({ enclaveResult });
+      const runs = { keepsResults: false, keep };
+      const warn = jest.fn();
+      created.tool._setDependency(CodeCallRunStoreToken, runs);
+      created.tool.logger = { warn };
+      return { ...created, warn };
+    }
+
+    it('keeps a record of the run and returns its run id', async () => {
+      const keep = jest.fn().mockResolvedValue('run-1');
+      const { tool, mockEnclave } = withRunStore(keep, { success: true, result: { total: 3 } });
+
+      const result = await tool.execute({ script: 'return { total: 3 };' });
+
+      expect(result).toEqual({ status: 'ok', result: { total: 3 }, logs: undefined, runId: 'run-1' });
+      expect(mockEnclave.execute).toHaveBeenCalledWith(
+        'return { total: 3 };',
+        expect.any(Object),
+        expect.any(RunJournal),
+      );
+      expect(keep).toHaveBeenCalledWith(tool, {
+        scriptHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+        status: 'ok',
+        startedAt: expect.any(String),
+        endedAt: expect.any(String),
+        reviewDecision: null,
+        resultBytes: '{"total":3}'.length,
+        journal: [],
+      });
+    });
+
+    it('returns no run id when the store keeps nothing for the caller', async () => {
+      const { tool } = withRunStore(jest.fn().mockResolvedValue(undefined), {
+        success: false,
+        error: { name: 'Error', message: 'x' },
+      });
+
+      const result = await tool.execute({ script: 'return 1;' });
+
+      expect(result.status).toBe('runtime_error');
+      expect(result).not.toHaveProperty('runId');
+    });
+
+    it('logs a store that fails and still returns the result', async () => {
+      const { tool, warn } = withRunStore(jest.fn().mockRejectedValue(new Error('store down')));
+
+      const result = await tool.execute({ script: 'return 1;' });
+
+      expect(result).toMatchObject({ status: 'ok' });
+      expect(result).not.toHaveProperty('runId');
+      expect(warn).toHaveBeenCalledWith('codecall: could not keep the run record', { error: 'store down' });
+    });
+
+    it('logs a store that fails with a value that is not an error', async () => {
+      const { tool, warn } = withRunStore(jest.fn().mockRejectedValue('offline'));
+
+      await tool.execute({ script: 'return 1;' });
+
+      expect(warn).toHaveBeenCalledWith('codecall: could not keep the run record', { error: 'offline' });
     });
   });
 });

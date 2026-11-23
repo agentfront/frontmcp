@@ -1,6 +1,7 @@
 // file: libs/plugins/src/codecall/codecall.types.ts
 
 import { z } from '@frontmcp/lazy-zod';
+import type { StorageConfig } from '@frontmcp/utils';
 
 // ===== Filter Function Types =====
 
@@ -431,6 +432,38 @@ export const codeCallSidecarOptionsSchema = z
     maxScriptLengthWhenDisabled: 64 * 1024,
   }));
 
+/** How many run records a memory store holds at once, dropping the oldest, unless `runs.storage.memory.maxEntries` is set. */
+export const DEFAULT_RUNS_MEMORY_MAX_ENTRIES = 1000;
+
+export const codeCallRunsOptionsSchema = z
+  .object({
+    /** Keep a record of each `codecall:execute` run that has an owner, a session or a signed-in caller (true by default). */
+    enabled: z.boolean().default(true),
+    /** How long a run record can be read, in seconds (600 by default). */
+    ttlSeconds: z.number().int().min(1).default(600),
+    /** The most one record may take as UTF-8 JSON; journal entries past it are left out and counted (256 KiB by default). */
+    maxRecordBytes: z
+      .number()
+      .int()
+      .min(1024)
+      .default(256 * 1024),
+    /** Keep each call's result in its journal entry, for resuming a run (false by default). */
+    resume: z.boolean().default(false),
+    /** Where records are kept, through `createStorage()` from `@frontmcp/utils` ({ type: 'auto' }, 1000 at most in memory). */
+    storage: z
+      .custom<StorageConfig>((value) => typeof value === 'object' && value !== null && !Array.isArray(value), {
+        message: 'must be a storage config, such as { type: "redis", redis: { url } }',
+      })
+      .default({ type: 'auto' })
+      .transform((storage) => ({
+        ...storage,
+        memory: { maxEntries: DEFAULT_RUNS_MEMORY_MAX_ENTRIES, ...storage.memory },
+      })),
+    /** The key prefix of run records in the storage ('codecall-runs'). */
+    namespace: z.string().min(1).default('codecall-runs'),
+  })
+  .prefault({});
+
 // Inner schema without the outer .default() - used for extracting input type
 const codeCallPluginOptionsObjectSchema = z.object({
   /**
@@ -485,6 +518,9 @@ const codeCallPluginOptionsObjectSchema = z.object({
    * When enabled, large data is stored outside the sandbox and resolved at callTool boundary
    */
   sidecar: codeCallSidecarOptionsSchema,
+
+  /** A record of each `codecall:execute` run, with a journal of its tool calls, readable by its owner. */
+  runs: codeCallRunsOptionsSchema,
 });
 
 // Default values for plugin options
@@ -514,6 +550,7 @@ export type CodeCallDirectCallsOptions = z.infer<typeof codeCallDirectCallsOptio
 export type EmbeddingStrategy = z.infer<typeof embeddingStrategySchema>;
 export type SynonymExpansionConfig = z.infer<typeof synonymExpansionConfigSchema>;
 export type CodeCallSidecarOptions = z.infer<typeof codeCallSidecarOptionsSchema>;
+export type CodeCallRunsOptions = z.infer<typeof codeCallRunsOptionsSchema>;
 
 export type CodeCallEmbeddingOptions = z.infer<typeof codeCallEmbeddingOptionsSchema>;
 export type CodeCallEmbeddingOptionsInput = z.input<typeof codeCallEmbeddingOptionsSchema>;

@@ -9,6 +9,7 @@ import type { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codeca
 import type { CodeCallSidecarOptions } from '../codecall.types';
 import type CodeCallConfig from '../providers/code-call.config';
 import { MAX_ITERATIONS_PER_LOOP } from '../providers/code-call.config';
+import { RunJournal } from '../runs/run-journal';
 import { findScriptPolicyIssues } from '../security/script-policy';
 import { toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
 import { withScriptLines } from '../utils/script-lines';
@@ -189,10 +190,15 @@ export default class EnclaveService {
    *
    * @param code - The AgentScript code to execute (raw, not transformed)
    * @param environment - The VM environment with callTool, getTool, etc.
+   * @param journal - Records each tool call as the tool handler is entered; closed when the run returns
    * @returns Execution result with success/error and logs
    * @throws ScriptTooLargeError if script exceeds max length and sidecar is disabled
    */
-  async execute(code: string, environment: CodeCallVmEnvironment): Promise<EnclaveExecutionResult> {
+  async execute(
+    code: string,
+    environment: CodeCallVmEnvironment,
+    journal = new RunJournal(),
+  ): Promise<EnclaveExecutionResult> {
     const logs: string[] = [];
 
     // Validate script length when sidecar is disabled
@@ -241,9 +247,13 @@ export default class EnclaveService {
     // namespace methods alike. Failures are kept so a script a failing tool ended is a tool error.
     const toolFailures: ToolFailure[] = [];
     const toolHandler: ToolHandler = gate.guardToolHandler(async (toolName: string, args: Record<string, unknown>) => {
+      const call = journal.begin(toolName, args);
       try {
-        return await environment.callTool(toolName, args);
+        const result = await environment.callTool(toolName, args);
+        call.succeed(result);
+        return result;
       } catch (error: unknown) {
+        call.fail(error);
         const code = (error as { code?: unknown } | null | undefined)?.code;
         toolFailures.push({
           toolName,
@@ -313,6 +323,7 @@ export default class EnclaveService {
       return this.mapEnclaveResult(result, logs, toolFailures, code, pendingToolCalls);
     } finally {
       gate.close();
+      journal.close();
       runner.dispose();
     }
   }

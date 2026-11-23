@@ -69,6 +69,7 @@ describe("codecall:execute with vm.runtime 'interpreter' and no validated runner
 
     expect(outcome).toEqual({
       status: 'runtime_error',
+      runId: expect.any(String),
       error: {
         source: 'script',
         name: 'CodeCallRuntimeError',
