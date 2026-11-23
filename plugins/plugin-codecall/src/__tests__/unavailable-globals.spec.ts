@@ -5,7 +5,7 @@ describe('unavailableGlobals', () => {
   });
 
   it('lists the globals the sandbox lacks', async () => {
-    const { unavailableGlobals } = await import('../security/script-policy');
+    const { unavailableGlobals } = await import('../security/script-policy.js');
 
     expect(unavailableGlobals().map(({ name }) => name)).toEqual([
       'Set',
@@ -30,7 +30,7 @@ describe('unavailableGlobals', () => {
         getAgentScriptGlobals: (level: string) => [...actual.getAgentScriptGlobals(level), 'Set', 'Map', 'Error'],
       };
     });
-    const { unavailableGlobals, findScriptPolicyIssues } = await import('../security/script-policy');
+    const { unavailableGlobals, findScriptPolicyIssues } = await import('../security/script-policy.js');
 
     expect(unavailableGlobals().map(({ name }) => name)).toEqual([
       'WeakMap',
