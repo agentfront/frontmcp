@@ -42,15 +42,31 @@ export interface RunJournalCall {
   fail(error: unknown): void;
 }
 
+/** A call's arguments and result, kept in memory only for `trace.values`. */
+export interface RunCallValues {
+  arguments: unknown;
+  result?: unknown;
+}
+
+/** Told when a call starts and when it ends, with its values when they are kept. */
+export interface RunJournalObserver {
+  callStarted(entry: CodeCallJournalEntry): void;
+  callEnded(entry: CodeCallJournalEntry, values?: RunCallValues): void;
+}
+
 export interface RunJournalOptions {
   /** Keep each call's result in its entry (`runs.resume`). */
   keepResults?: boolean;
+  /** Keep each call's arguments and result beside its entry, never in it (`trace.values`). */
+  keepValues?: boolean;
+  observer?: RunJournalObserver;
 }
 
 /** The journal of one run: an entry per tool call, in the order the host's tool handler was entered. */
 export class RunJournal {
   private readonly entries: CodeCallJournalEntry[] = [];
   private readonly unsettledStartTimes = new Map<CodeCallJournalEntry, number>();
+  private readonly values = new Map<CodeCallJournalEntry, RunCallValues>();
   private closed = false;
 
   constructor(private readonly options: RunJournalOptions = {}) {}
@@ -66,6 +82,8 @@ export class RunJournal {
     };
     this.entries.push(entry);
     this.unsettledStartTimes.set(entry, Date.now());
+    if (this.options.keepValues) this.values.set(entry, { arguments: args });
+    this.options.observer?.callStarted(entry);
     return {
       succeed: (result) => {
         if (!this.settle(entry)) return;
@@ -73,20 +91,36 @@ export class RunJournal {
         entry.outcome = 'success';
         entry.resultBytes = jsonBytes(snapshot);
         if (this.options.keepResults) entry.result = snapshot;
+        const values = this.values.get(entry);
+        if (values) values.result = snapshot;
+        this.ended(entry);
       },
       fail: (error) => {
         if (!this.settle(entry)) return;
         entry.outcome = 'failure';
         entry.phase = phaseOf(error);
+        this.ended(entry);
       },
     };
   }
 
+  /** The arguments and result of a call, when `keepValues` is on. */
+  valuesOf(entry: CodeCallJournalEntry): RunCallValues | undefined {
+    return this.values.get(entry);
+  }
+
   /** Ends the journal: a call still running stays `unfinished`, and nothing changes an entry after. */
   close(): readonly CodeCallJournalEntry[] {
-    for (const entry of [...this.unsettledStartTimes.keys()]) this.settle(entry);
+    for (const entry of [...this.unsettledStartTimes.keys()]) {
+      this.settle(entry);
+      this.ended(entry);
+    }
     this.closed = true;
     return this.entries;
+  }
+
+  private ended(entry: CodeCallJournalEntry): void {
+    this.options.observer?.callEnded(entry, this.values.get(entry));
   }
 
   private settle(entry: CodeCallJournalEntry): boolean {

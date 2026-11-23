@@ -120,6 +120,45 @@ describe('RunJournal', () => {
     expect(journal.close()[0].tool).toBe('x'.repeat(128));
   });
 
+  it('tells its observer when each call starts and ends, with the values only when it keeps them', () => {
+    const started: number[] = [];
+    const ended: Array<[number, string, unknown]> = [];
+    const observer = {
+      callStarted: (entry: { position: number }) => started.push(entry.position),
+      callEnded: (entry: { position: number; outcome: string }, values?: unknown) =>
+        ended.push([entry.position, entry.outcome, values]),
+    };
+    const journal = new RunJournal({ keepValues: true, observer });
+    journal.begin('users.get', { id: 1 }).succeed({ id: 1 });
+    journal.begin('users.get', { id: 2 }).fail(new Error('no'));
+    journal.begin('users.slow', {});
+    journal.close();
+
+    expect(started).toEqual([1, 2, 3]);
+    expect(ended).toEqual([
+      [1, 'success', { arguments: { id: 1 }, result: { id: 1 } }],
+      [2, 'failure', { arguments: { id: 2 } }],
+      [3, 'unfinished', { arguments: {} }],
+    ]);
+    expect(journal.close()[0]).not.toHaveProperty('result');
+  });
+
+  it('ends a call whose result has no JSON form as a success of 0 bytes', () => {
+    const callEnded = jest.fn();
+    const journal = new RunJournal({ observer: { callStarted: jest.fn(), callEnded } });
+    journal.begin('users.count', {}).succeed(BigInt(1));
+
+    expect(journal.close()[0]).toMatchObject({ outcome: 'success', resultBytes: 0 });
+    expect(callEnded).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps no values without keepValues', () => {
+    const journal = new RunJournal();
+    journal.begin('users.get', { id: 1 }).succeed({ id: 1 });
+
+    expect(journal.valuesOf(journal.close()[0])).toBeUndefined();
+  });
+
   it('settles a call once', () => {
     const journal = new RunJournal();
     const call = journal.begin('users.get', {});

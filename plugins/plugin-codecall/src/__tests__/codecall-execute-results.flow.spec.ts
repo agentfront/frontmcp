@@ -140,6 +140,10 @@ describe('codecall:execute result kinds', () => {
           message: 'Tool "mail.fail" execution failed',
           code: 'EXECUTION',
         },
+        trace: [
+          expect.stringMatching(/^1\. mail\.list: success, \d+ ms, 19 bytes$/),
+          expect.stringMatching(/^2\. mail\.fail: failure \(execute\), \d+ ms$/),
+        ],
       });
     });
 
@@ -173,6 +177,7 @@ describe('codecall:execute result kinds', () => {
           message: 'Maximum iteration limit exceeded in the validation of 50000 rows',
           code: 'EXECUTION',
         },
+        trace: [expect.stringMatching(/^1\. mail\.import: failure \(execute\), \d+ ms$/)],
       });
     });
 

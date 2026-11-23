@@ -95,6 +95,8 @@ function createHarness(options: { tools?: ToolStub[]; registerAudit?: boolean } 
     'resolvedVm.timeoutMs': 5000,
     'resolvedVm.allowConsole': false,
     mode: 'codecall_only',
+    resolvedVm: { runtime: 'node-vm' },
+    trace: { level: 'failure', maxLines: 20, values: false },
   };
 
   tool._setDependency(EnclaveService, mockEnclave);

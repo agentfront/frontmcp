@@ -116,6 +116,7 @@ The plugin adds a `codecall` field to `@Tool`:
 | `topK`           | `8`                    | Results per query when a `codecall:search` call doesn't give its own `topK`.                                                                                    |
 | `maxDefinitions` | `8`                    | Most tools one `codecall:describe` call may name.                                                                                                               |
 | `runs`           | `{ enabled: true }`    | A record of each `codecall:execute` run, with a journal of its tool calls. See [Run records](#run-records).                                                     |
+| `trace`          | `{ level: 'failure' }` | The tool calls `codecall:execute` lists in its result, and the spans it sends. See [Trace](#trace).                                                             |
 
 ```ts
 CodeCallPlugin.init({
@@ -166,6 +167,28 @@ that owner (`this.get(CodeCallRunStoreToken).read(runId, this)`), until they exp
 | `runs.namespace`      | `'codecall-runs'`  | The key prefix of records in the storage.                                                                                         |
 
 A store that fails is logged as a warning, and the result goes out without `runId`.
+
+## Trace
+
+`codecall:execute` returns a short `trace` from the run's journal, one line per tool call, so the agent sees which
+calls ran before a script failed:
+
+```json
+{
+  "status": "tool_error",
+  "trace": ["1. users-list: success, 4 ms, 412 bytes", "2. users-get: failure (input), 3 ms"]
+}
+```
+
+| Option           | Default     | Description                                                                              |
+| ---------------- | ----------- | ---------------------------------------------------------------------------------------- |
+| `trace.level`    | `'failure'` | `'off'`, `'failure'` (only a run whose status is not `ok`) or `'calls'` (every run).     |
+| `trace.maxLines` | `20`        | The most lines; the last calls are kept, and the first line counts the earlier ones.     |
+| `trace.values`   | `false`     | Add each call's arguments and a successful call's result, as JSON cut to 200 characters. |
+
+With observability on, each run is also a `codecall run` span with a `codecall call <tool>` child span per tool call,
+carrying the same position, outcome, phase, duration and size, and values only with `trace.values: true`. With
+observability off, CodeCall sends no spans.
 
 ## Runtime and process boundary
 
