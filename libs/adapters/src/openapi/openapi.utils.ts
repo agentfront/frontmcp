@@ -88,6 +88,17 @@ function appendCookie(headers: Headers, name: string, value: unknown): void {
   headers.set('Cookie', combined);
 }
 
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** A path, query, header or cookie parameter defined with a JSON media type (`content`), sent as its JSON text. */
+function isJsonContentParameter(mapper: ParameterMapper): boolean {
+  const mediaType = mapper.serialization?.contentType?.split(';')[0]?.trim().toLowerCase();
+  if (mapper.type === 'body' || mediaType === undefined) return false;
+  return mediaType === 'application/json' || mediaType.endsWith('+json');
+}
+
 const DOT_SEGMENTS = new Set(['.', '..']);
 
 /** Refuse a URL whose path parameters add a dot segment or leave the base path plus the template's literal prefix. */
@@ -162,10 +173,12 @@ export function buildRequest(
       continue;
     }
 
+    const parameterValue = isJsonContentParameter(mapper) ? JSON.stringify(value) : value;
+
     // Apply parameter to correct location
     switch (mapper.type) {
       case 'path': {
-        const pathValue = coerceToString(value, mapper.key, 'path');
+        const pathValue = coerceToString(parameterValue, mapper.key, 'path');
         // encodeURIComponent leaves dots as they are, and URL parsing resolves a dot segment
         if (DOT_SEGMENTS.has(pathValue)) {
           throw new PublicMcpError(
@@ -180,13 +193,13 @@ export function buildRequest(
       }
 
       case 'query':
-        for (const [queryName, queryValue] of serializeQueryParameter(mapper, value)) {
+        for (const [queryName, queryValue] of serializeQueryParameter(mapper, parameterValue)) {
           queryParams.append(queryName, queryValue);
         }
         break;
 
       case 'header': {
-        const headerValue = coerceToString(value, mapper.key, 'header');
+        const headerValue = coerceToString(parameterValue, mapper.key, 'header');
         // Validate header values for injection attacks
         // Check for: CR, LF, null byte, form feed, vertical tab
 
@@ -203,10 +216,14 @@ export function buildRequest(
       }
 
       case 'cookie':
-        appendCookie(headers, mapper.key, value);
+        appendCookie(headers, mapper.key, parameterValue);
         break;
 
       case 'body':
+        if (mapper.wholeBody && isJsonObject(value)) {
+          body = value;
+          break;
+        }
         if (!body) body = {};
         body[mapper.key] = value;
         break;

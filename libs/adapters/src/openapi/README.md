@@ -128,6 +128,9 @@ const adapter = new OpenapiAdapter({
     preferredStatusCodes: [200, 201, 202, 204], // Preferred response codes
     includeAllResponses: true, // Include all response schemas (default: true)
 
+    // A schema over this many nodes is cut shallower (default: 25,000; 100,000 up to 1.12.2, when its tool was dropped)
+    maxSchemaNodes: 25000,
+
     // Security (see Authentication section)
     includeSecurityInInput: false, // Add auth to input schema: true for every scheme, or a list of scheme names (default: false)
 
@@ -1205,10 +1208,10 @@ paths:
 ```
 
 The tool's output schema lists the API's answer under `data`, built from the operation's responses. A 2xx response
-the spec documents with a description only (no `content`) accepts any answer; a 204, a 205 and a `HEAD` operation stay
-`null`. Several status codes give an `anyOf` of their schemas, so an answer that fits more than one passes. Up to
-1.11.0 a description-only response was listed as `{ "type": "null" }`, which every JSON answer failed, and the union
-was a `oneOf`.
+(or a `2XX` range) the spec documents with a description only (no `content`) accepts any answer; a 204, a 205 and a
+`HEAD` operation stay `null`. Several status codes give an `anyOf` of their schemas, so an answer that fits more than
+one passes. `writeOnly` properties are left out. Up to 1.11.0 a description-only response was listed as
+`{ "type": "null" }`, which every JSON answer failed, and the union was a `oneOf`.
 
 ### 3. Request Building
 
@@ -1220,9 +1223,18 @@ The adapter automatically builds requests using the parameter mapper:
   parameter. With `explode: false` the items are joined: by commas for `form`, spaces for `spaceDelimited`, pipes for
   `pipeDelimited`. `deepObject` sends `?filter[status]=open`. Up to 1.11.0 every array was sent comma-joined and an
   object was refused.
-- **Header parameters** → HTTP headers
-- **Body parameters** → Request body (JSON)
+- **Header parameters** → HTTP headers. A header the HTTP client, a credential or a proxy sets (`Accept`,
+  `Content-Type`, `Authorization`, `Host`, `X-Forwarded-*`, ...) is not an input; send it with `additionalHeaders`,
+  `headersMapper` or a security scheme.
+- **Body parameters** → Request body (JSON). Each property of an object body is an input, except `readOnly` ones. A
+  body that takes properties it doesn't name (`additionalProperties` or `unevaluatedProperties` other than `false`),
+  or whose properties are all `readOnly`, is one `body` input, sent as the request body.
+- **Parameters defined with `content`** (a media type instead of a `schema`) → the media type's schema; with a JSON
+  media type the value is sent as its JSON text.
 - **Security** → Authentication headers (resolved from context)
+
+Up to 1.12.2 those headers and `readOnly` properties were inputs, an open object body was split into the properties it
+names, so the others could not be sent, and a `content` parameter was a string the model wrote as JSON.
 
 ### 4. Authentication Resolution
 
@@ -1281,7 +1293,10 @@ re-validates every redirect hop. FrontMCP's secure defaults:
   ULA/link-local); hostnames are DNS-resolved and re-checked.
 
 `loadOptions.refResolution` (`allowedHosts` / `blockedHosts` / `allowInternalIPs`)
-governs **both** the spec URL and `$ref`s. For local/internal specs (e.g.
+governs **both** the spec URL and `$ref`s. `blockedHosts` matches an address
+however it is written (IPv4-mapped, NAT64 or 6to4 IPv6, decimal, a Unicode
+name), and `allowedHosts` admits exactly the hosts it lists: an IPv6 address
+that embeds a listed IPv4 address is not admitted. For local/internal specs (e.g.
 `http://localhost:3000/openapi.json`) set `refResolution.allowInternalIPs: true`
 (trusted environments only). See the
 [OpenAPI adapter docs](https://frontmcp.dev/reference/adapters/openapi)

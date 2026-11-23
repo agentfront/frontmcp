@@ -240,6 +240,32 @@ describe('OpenapiAdapter - Utilities', () => {
       // Security parameters should not be processed from input
       expect(result.headers.get('Authorization')).toBeNull();
     });
+
+    it('sends a header parameter defined with a JSON media type as its JSON text', () => {
+      const tool: McpOpenAPITool = {
+        name: 'search',
+        description: 'Search',
+        inputSchema: { type: 'object', properties: {} },
+        mapper: [
+          {
+            inputKey: 'X-Filter',
+            type: 'header',
+            key: 'X-Filter',
+            serialization: { contentType: 'application/json' },
+          },
+        ],
+        metadata: {
+          path: '/search',
+          method: 'get',
+          servers: [{ url: 'https://api.example.com' }],
+        },
+      };
+      const security = { headers: {}, query: {}, cookies: {} };
+
+      const result = buildRequest(tool, { 'X-Filter': { a: 1 } }, security, 'https://api.example.com');
+
+      expect(result.headers.get('X-Filter')).toBe('{"a":1}');
+    });
   });
 
   describe('applyAdditionalHeaders', () => {
