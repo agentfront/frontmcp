@@ -324,11 +324,6 @@ describe('an app that cannot be lazy', () => {
     ['a nested server-scoped plugin', { plugins: [WrapperPlugin] }, /plugin "every-app-gate" has scope 'server'/],
     ['a hook on a list flow', { plugins: [ListFilterPlugin] }, /hook list-filter\.filter is on tools:list-tools/],
     ['a hook for all apps', { plugins: [SetupGatePlugin] }, /hook setup-gate\.gate applies to all apps/],
-    [
-      'a hook for apps without its plugin',
-      { plugins: [UncoveredGatePlugin] },
-      /hook uncovered-gate\.gate applies to apps without its plugin.*enforcesMetadata/,
-    ],
     ['a duty', { providers: [SweepDuty] }, /duties \("SweepDuty"\)/],
     ['a worker', { providers: [InboxWatcher] }, /workers \("InboxWatcher"\), which start with the server/],
     [
@@ -368,6 +363,20 @@ describe('an app that cannot be lazy', () => {
     await expect(connect(config)).rejects.toThrow(DuplicateAppIdError);
   });
 
+  it('loads an app with a hook for apps without its plugin, and warns that 1.13 refuses it', async () => {
+    @App({ id: 'billing', name: 'Billing', tools: [FlaggedFreeTool], plugins: [UncoveredGatePlugin] })
+    class UncoveredBillingApp {}
+
+    const client = await connect(lazyServer(billingImport({ UncoveredBillingApp })));
+
+    expect(JSON.stringify(await client.listTools())).toContain('flag_free');
+    const warnings = capturedLogs.filter(({ level }) => level === LogLevel.Warn).map(({ message }) => message);
+    expect(warnings.filter((line) => line.includes('uncovered-gate.gate'))).toEqual([
+      expect.stringMatching(/applies to apps without its plugin.*FrontMCP 1\.13 refuses it.*enforcesMetadata/),
+    ]);
+    await client.close();
+  });
+
   it('accepts a hook for apps without its plugin when the plugin declares the metadata it enforces', async () => {
     @App({ id: 'billing', name: 'Billing', tools: [FlaggedFreeTool], plugins: [ReviewGatePlugin] })
     class ReviewedBillingApp {}
@@ -375,6 +384,7 @@ describe('an app that cannot be lazy', () => {
     const client = await connect(lazyServer(billingImport({ ReviewedBillingApp })));
 
     expect(JSON.stringify(await client.listTools())).toContain('flag_free');
+    expect(capturedLogs.filter(({ message }) => message.includes('review-gate.gate'))).toEqual([]);
     await client.close();
   });
 

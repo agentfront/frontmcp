@@ -109,17 +109,11 @@ export function whyLoadedAppCannotBeLazy(entries: LoadedEntries): string[] {
     reasons.push(`it has workers (${names(entries.workers)}), which start with the server`);
   }
   for (const hook of entries.hooks) {
-    const label = `${hook.metadata.pluginName ?? classNameOf(hook)}.${hook.metadata.method}`;
+    const label = hookLabelOf(hook);
     if (!ENTRY_CALL_FLOWS.has(hook.metadata.flow)) {
       reasons.push(`the hook ${label} is on ${hook.metadata.flow}, which runs it for every app`);
     } else if (hook.metadata.appliesTo === 'all-apps') {
       reasons.push(`the hook ${label} applies to all apps`);
-    } else if (hook.metadata.appliesTo === 'uncovered-apps' && keysEnforcedBy(hook).length === 0) {
-      // A plugin's `enforcesMetadata` keys are covered at startup: an eager entry that declares one stops the server
-      reasons.push(
-        `the hook ${label} applies to apps without its plugin, which it would guard only once this app is imported ` +
-          '(declare the entry metadata it enforces with @Plugin({ enforcesMetadata }), or make the app eager)',
-      );
     }
   }
 
@@ -149,6 +143,25 @@ export function whyLoadedAppCannotBeLazy(entries: LoadedEntries): string[] {
       ...entries.prompts.map((prompt) => facts(`prompt "${prompt.name}"`, prompt.metadata)),
     ]),
   ];
+}
+
+/**
+ * A warning for each hook of a loaded lazy app that guards other apps only once the app is imported: an
+ * `'uncovered-apps'` hook whose plugin declares no `enforcesMetadata` (whose keys startup covers). 1.13 refuses them.
+ */
+export function lateGuardWarnings(appId: string, hooks: readonly HookEntry[]): string[] {
+  return hooks
+    .filter((hook) => hook.metadata.appliesTo === 'uncovered-apps' && keysEnforcedBy(hook).length === 0)
+    .map(
+      (hook) =>
+        `App "${appId}": the hook ${hookLabelOf(hook)} applies to apps without its plugin, so it guards them only ` +
+        'once this lazy app is imported. FrontMCP 1.13 refuses it: declare the entry metadata it enforces with ' +
+        '@Plugin({ enforcesMetadata }), or make the app eager.',
+    );
+}
+
+function hookLabelOf(hook: HookEntry): string {
+  return `${hook.metadata.pluginName ?? classNameOf(hook)}.${hook.metadata.method}`;
 }
 
 function classNameOf(hook: HookEntry): string {
