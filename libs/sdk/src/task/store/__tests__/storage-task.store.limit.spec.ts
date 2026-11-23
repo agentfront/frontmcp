@@ -63,6 +63,35 @@ class FakeRedisClient {
     return 1;
   }
 
+  async incr(key: string): Promise<number> {
+    return this.incrby(key, 1);
+  }
+
+  /** As Redis: a missing key counts from 0, and the key keeps its TTL. */
+  async incrby(key: string, amount: number): Promise<number> {
+    await Promise.resolve();
+    const entry = this.liveEntry(key);
+    const next = Number(entry?.value ?? 0) + amount;
+    this.entries.set(key, { value: String(next), expiresAt: entry?.expiresAt });
+    return next;
+  }
+
+  async expire(key: string, ttlSeconds: number): Promise<number> {
+    await Promise.resolve();
+    const entry = this.liveEntry(key);
+    if (!entry) return 0;
+    entry.expiresAt = Date.now() + ttlSeconds * 1000;
+    return 1;
+  }
+
+  /** As Redis: -2 for a missing key, -1 for a key without a TTL, else the seconds left. */
+  async ttl(key: string): Promise<number> {
+    await Promise.resolve();
+    const entry = this.liveEntry(key);
+    if (!entry) return -2;
+    return entry.expiresAt === undefined ? -1 : Math.round((entry.expiresAt - Date.now()) / 1000);
+  }
+
   async publish(): Promise<number> {
     return 0;
   }
@@ -72,6 +101,10 @@ class FakeRedisClient {
     const prefix = pattern.endsWith('*') ? pattern.slice(0, -1) : pattern;
     const keys = [...this.entries.keys()].filter((key) => key.startsWith(prefix) && this.read(key) !== null);
     return ['0', keys];
+  }
+
+  private liveEntry(key: string): { value: string; expiresAt?: number } | undefined {
+    return this.read(key) === null ? undefined : this.entries.get(key);
   }
 
   private read(key: string): string | null {
