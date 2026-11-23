@@ -3,9 +3,20 @@
  *
  * Secure token encryption/decryption using AES-256-GCM.
  * Supports key rotation for seamless key management.
+ *
+ * A blob is encrypted under a key derived (HKDF) from the master key, its `kid`
+ * and its `exp`, so a blob whose `kid` or `exp` was changed does not decrypt.
+ * Blobs written before that binding (no `v`) still decrypt with the master key.
  */
 
-import { base64urlDecode, base64urlEncode, decryptAesGcm, encryptAesGcm, randomBytes } from '@frontmcp/utils';
+import {
+  base64urlDecode,
+  base64urlEncode,
+  decryptAesGcm,
+  encryptAesGcm,
+  hkdfSha256,
+  randomBytes,
+} from '@frontmcp/utils';
 
 export type EncBlob = {
   alg: 'A256GCM';
@@ -15,9 +26,18 @@ export type EncBlob = {
   data: string; // base64url
   exp?: number; // optional epoch seconds
   meta?: Record<string, unknown>;
+  v?: 2; // kid and exp bound to the ciphertext; absent on blobs written before
 };
 
 export type VaultKey = { kid: string; key: Uint8Array };
+
+const BOUND_KEY_SALT = new TextEncoder().encode('frontmcp-token-vault');
+
+/** The key a version 2 blob is encrypted under: the master key bound to the blob's `kid` and `exp`. */
+function deriveBoundKey(masterKey: Uint8Array, kid: string, exp: number | undefined): Uint8Array {
+  const info = new TextEncoder().encode(JSON.stringify(['token-vault:v2', kid, exp ?? null]));
+  return hkdfSha256(masterKey, BOUND_KEY_SALT, info, 32);
+}
 
 export class TokenVault {
   /** Active key used for new encryptions */
@@ -59,17 +79,25 @@ export class TokenVault {
   }
 
   async encrypt(plaintext: string, opts?: { exp?: number; meta?: Record<string, unknown> }): Promise<EncBlob> {
+    const { kid, key } = this.active;
+    const exp = opts?.exp;
+    const meta = opts?.meta;
     const iv = randomBytes(12);
-    const { ciphertext, tag } = await encryptAesGcm(this.active.key, new TextEncoder().encode(plaintext), iv);
+    const { ciphertext, tag } = await encryptAesGcm(
+      deriveBoundKey(key, kid, exp),
+      new TextEncoder().encode(plaintext),
+      iv,
+    );
 
     return {
       alg: 'A256GCM',
-      kid: this.active.kid,
+      kid,
       iv: base64urlEncode(iv),
       tag: base64urlEncode(tag),
       data: base64urlEncode(ciphertext),
-      exp: opts?.exp,
-      meta: opts?.meta,
+      exp,
+      meta,
+      v: 2,
     };
   }
 
@@ -89,7 +117,8 @@ export class TokenVault {
     const tag = base64urlDecode(blob.tag);
     const data = base64urlDecode(blob.data);
 
-    const plaintext = await decryptAesGcm(key, data, iv, tag);
+    const decryptionKey = blob.v === 2 ? deriveBoundKey(key, blob.kid, blob.exp) : key;
+    const plaintext = await decryptAesGcm(decryptionKey, data, iv, tag);
     return new TextDecoder().decode(plaintext);
   }
 }
