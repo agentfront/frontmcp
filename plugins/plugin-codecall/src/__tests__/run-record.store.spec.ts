@@ -128,6 +128,13 @@ describe('CodeCallRunStore limits', () => {
     expect(new TextEncoder().encode(JSON.stringify(record)).byteLength).toBeLessThanOrEqual(1024);
   });
 
+  it('refuses a record whose metadata alone is over maxRecordBytes, and stores nothing', async () => {
+    const { root, store } = await memoryStore({ maxRecordBytes: 1024, resume: false });
+
+    await expect(store.keep(callerOf('s'.repeat(2048), 'alice'), runOf([]))).rejects.toBeInstanceOf(RangeError);
+    expect(await root.keys('*')).toEqual([]);
+  });
+
   it('keeps the record encrypted, under a key that is not its run id', async () => {
     const { root, store } = await memoryStore({ maxRecordBytes: 256 * 1024, resume: true });
     const runId = await store.keep(alice, runOf([entry(1)]));

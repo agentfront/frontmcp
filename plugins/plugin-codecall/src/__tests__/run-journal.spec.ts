@@ -87,6 +87,17 @@ describe('RunJournal', () => {
     expect(withResults.close()[0]).toMatchObject({ resultBytes: jsonBytes(result), result });
   });
 
+  it('keeps and measures a detached copy of a result, which the script changing it later does not reach', () => {
+    const journal = new RunJournal({ keepResults: true });
+    const result = { items: [1] };
+    journal.begin('items.list', {}).succeed(result);
+    result.items.push(2);
+
+    const [entry] = journal.close();
+    expect(entry.result).toEqual({ items: [1] });
+    expect(entry.resultBytes).toBe(jsonBytes({ items: [1] }));
+  });
+
   it('leaves a call still running at close unfinished, and changes nothing after', () => {
     const now = jest.spyOn(Date, 'now').mockReturnValue(5_000);
     const journal = new RunJournal({ keepResults: true });

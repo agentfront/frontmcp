@@ -223,7 +223,8 @@ CodeCallPlugin.init({
 });
 ```
 
-A store that fails is logged as a warning, and the result goes out without `runId`. In a browser, a `runs.storage` on
+A store that fails is logged as a warning, and the result goes out without `runId`; so does a record whose metadata
+alone (a very long session id, say) is over `runs.maxRecordBytes`. In a browser, a `runs.storage` on
 Redis or SQLite is refused at startup.
 
 ### Per-Tool CodeCall Metadata

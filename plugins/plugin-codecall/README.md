@@ -156,14 +156,14 @@ arguments, the outcome (`success`, `failure` or `unfinished`), the phase of a fa
 Records are kept like result handles: encrypted under keys derived from the run id and the owner, readable only by
 that owner (`this.get(CodeCallRunStoreToken).read(runId, this)`), until they expire.
 
-| Option                | Default            | Description                                                                        |
-| --------------------- | ------------------ | ---------------------------------------------------------------------------------- |
-| `runs.enabled`        | `true`             | `false` keeps no records, and results carry no `runId`.                            |
-| `runs.ttlSeconds`     | `600`              | How long a record can be read.                                                     |
-| `runs.maxRecordBytes` | `262144` (256 KiB) | The most one record takes; journal entries past it are left out and counted.       |
-| `runs.resume`         | `false`            | Keep each call's result in its journal entry.                                      |
-| `runs.storage`        | `{ type: 'auto' }` | Where records are kept, through `createStorage()`; at most 1000 records in memory. |
-| `runs.namespace`      | `'codecall-runs'`  | The key prefix of records in the storage.                                          |
+| Option                | Default            | Description                                                                                                                       |
+| --------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `runs.enabled`        | `true`             | `false` keeps no records, and results carry no `runId`.                                                                           |
+| `runs.ttlSeconds`     | `600`              | How long a record can be read.                                                                                                    |
+| `runs.maxRecordBytes` | `262144` (256 KiB) | The most one record takes; journal entries past it are left out and counted. A record whose metadata alone is over it isn't kept. |
+| `runs.resume`         | `false`            | Keep each call's result in its journal entry.                                                                                     |
+| `runs.storage`        | `{ type: 'auto' }` | Where records are kept, through `createStorage()`; at most 1000 records in memory.                                                |
+| `runs.namespace`      | `'codecall-runs'`  | The key prefix of records in the storage.                                                                                         |
 
 A store that fails is logged as a warning, and the result goes out without `runId`.
 

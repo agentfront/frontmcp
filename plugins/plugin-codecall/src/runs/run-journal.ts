@@ -1,6 +1,7 @@
 import { canonicalJson, sha256Hex } from '@frontmcp/utils';
 
 import { TOOL_CALL_ERROR_CODES } from '../errors';
+import { toPlainJson } from '../utils/plain-json';
 import type { CodeCallCallPhase, CodeCallJournalEntry } from './run-record.types';
 
 const PHASE_BY_ERROR_CODE: Partial<Record<string, CodeCallCallPhase>> = {
@@ -68,9 +69,10 @@ export class RunJournal {
     return {
       succeed: (result) => {
         if (!this.settle(entry)) return;
+        const snapshot = toPlainJson(result);
         entry.outcome = 'success';
-        entry.resultBytes = jsonBytes(result);
-        if (this.options.keepResults) entry.result = result;
+        entry.resultBytes = jsonBytes(snapshot);
+        if (this.options.keepResults) entry.result = snapshot;
       },
       fail: (error) => {
         if (!this.settle(entry)) return;

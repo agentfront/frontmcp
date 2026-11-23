@@ -20,6 +20,9 @@ export interface CodeCallRunStoreOptions {
 function fittedRecord(record: CodeCallRunRecord, maxBytes: number): CodeCallRunRecord {
   const { journal } = record;
   let bytes = jsonBytes({ ...record, journal: [], omittedEntries: journal.length });
+  if (bytes > maxBytes) {
+    throw new RangeError(`The run record's metadata takes ${bytes} bytes, over runs.maxRecordBytes (${maxBytes})`);
+  }
   const kept: CodeCallJournalEntry[] = [];
   for (const entry of journal) {
     bytes += jsonBytes(entry) + 1;
@@ -41,7 +44,7 @@ export class CodeCallRunStore implements OnShutdown {
     return this.options.resume;
   }
 
-  /** Keeps `run` for the caller and returns its run id, or keeps nothing for a caller with no session and no subject. */
+  /** Keeps `run` for the caller and returns its id; none without an owner, and a RangeError for metadata over the limit. */
   async keep(caller: CodeCallRunCaller, run: CodeCallRunInput): Promise<string | undefined> {
     const owner = resultOwnerOf(caller);
     if (owner.session === undefined && owner.caller === undefined) return undefined;

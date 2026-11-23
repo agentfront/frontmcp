@@ -240,6 +240,14 @@ describe('run record options', () => {
     expect(record?.journal[0]?.result).toEqual({ id: 4, name: 'user-4' });
   });
 
+  it('keeps no record and returns no run id when its metadata alone is over runs.maxRecordBytes', async () => {
+    const config = serverConfig({ runs: { storage: { type: 'memory' }, maxRecordBytes: 1024 } });
+    const client = await open(config, 's'.repeat(2048));
+    const outcome = await execute(client, "return await callTool('users.get', { id: 6 });");
+
+    expect(outcome).toEqual({ status: 'ok', result: { id: 6, name: 'user-6' } });
+  });
+
   it('keeps no record and returns no run id with runs.enabled false', async () => {
     const config = serverConfig({ runs: { enabled: false } });
     const client = await open(config, 'disabled-session');
