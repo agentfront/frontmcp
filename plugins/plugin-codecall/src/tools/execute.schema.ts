@@ -8,12 +8,24 @@ import {
   rapidEnumerationThresholdOf,
   resolveVmOptions,
 } from '../providers/code-call.config';
+import { unavailableGlobals } from '../security/script-policy';
 
 /** Minimum script length - at least a simple callTool invocation */
 const MIN_EXECUTE_SCRIPT_LENGTH = 'return callTool("a",{})'.length;
 
 /** Names the AgentScript sandbox refuses in every preset, shown in the description. */
 const ALWAYS_BLOCKED_NAMES = ['eval', 'require', 'fetch', 'setTimeout', 'process', 'globalThis'];
+
+/** The globals a model would reach for that the sandbox lacks, with what to use instead; empty when it has them all. */
+function unavailableGlobalsLine(): string {
+  const names = unavailableGlobals().map(({ name }) => name);
+  if (names.length === 0) return '';
+  const listed = names.includes('RegExp') ? [...names, 'regex literals'] : names;
+  const instead = ['plain objects and arrays'];
+  if (names.includes('Promise')) instead.push('parallel(items, fn) for Promise.all');
+  if (names.includes('Error')) instead.push('throw a string for Error');
+  return `\nNOT AVAILABLE: ${listed.join(', ')}. Use ${instead.join(', ')}.`;
+}
 
 /** The `codecall:execute` description for the server's resolved `vm` options. */
 export function buildExecuteToolDescription(vmOptions: ResolvedCodeCallVmOptions): string {
@@ -44,11 +56,11 @@ for (const u of users.items) {
 return results;
 
 ALLOWED: ${loops}, arrow fn, map/filter/reduce/find, ${namespaces.join('')}if/else, destructuring, spread, template literals
-BLOCKED: ${blockedLoops}, ${blockedConsole}function decl, ${[...blockedNames].join(', ')}${consoleLine}
+BLOCKED: ${blockedLoops}, ${blockedConsole}function decl, ${[...blockedNames].join(', ')}${unavailableGlobalsLine()}${consoleLine}
 
-ERRORS: NOT_FOUND | VALIDATION | EXECUTION | TIMEOUT | ACCESS_DENIED | RATE_LIMITED
+ERRORS: NOT_FOUND | VALIDATION | EXECUTION | TIMEOUT | ACCESS_DENIED | RATE_LIMITED | RESULT_TOO_LARGE
 STATUS: ok | syntax_error | illegal_access | runtime_error | tool_error | timeout
-LIMITS: ${MAX_ITERATIONS_PER_LOOP} iterations per loop, ${timeoutSeconds}s timeout, ${maxToolCalls} tool calls, ${callsPerTool} calls to one tool per 2s (parallel() included)`;
+LIMITS: ${MAX_ITERATIONS_PER_LOOP} iterations per loop, ${timeoutSeconds}s timeout, ${maxToolCalls} tool calls, ${callsPerTool} calls to one tool per 2s (parallel() included), ${vmOptions.maxSanitizeProperties} values (array items and object keys, at every depth) in each tool result and in the return value`;
 }
 
 export const executeToolDescription = buildExecuteToolDescription(resolveVmOptions());

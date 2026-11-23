@@ -224,8 +224,9 @@ export const codeCallVmOptionsSchema = z
     maxSanitizeDepth: z.number().positive().optional(),
 
     /**
-     * Maximum properties per object in sanitized output values
-     * Limits array sizes and object keys in return values
+     * The most values a tool result, or the script's return value, may hold: every array item and object key,
+     * counted at every depth (a page of 400 rows of four fields holds about 2,000). A tool result over it fails
+     * that call with `RESULT_TOO_LARGE`, naming the tool and the count.
      * @default varies by preset (secure: 2000)
      */
     maxSanitizeProperties: z.number().positive().optional(),

@@ -13,9 +13,9 @@ const PAGE_ORIGIN = 'https://app.example';
 const API_ORIGIN = 'https://billing.example';
 const pageEntry = resolve(__dirname, '../../browser/skilled-page.mjs');
 
-// mcp-from-openapi, under the plugin's OpenAPI runtime, imports these inside try/catch; webpack can't resolve them for a page
+// mcp-from-openapi, under the plugin's OpenAPI runtime, imports these on paths a page never takes; webpack can't resolve them
 const mcpFromOpenApiNodeImports = new webpack.IgnorePlugin({
-  resourceRegExp: /^(node:)?(dns|http|https|path|fs\/promises)$/,
+  resourceRegExp: /^(node:)?(dns|fs|fs\/promises|http|https|path|url)$/,
   contextRegExp: /mcp-from-openapi/,
 });
 

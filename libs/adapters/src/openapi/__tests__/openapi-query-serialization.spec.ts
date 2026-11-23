@@ -92,6 +92,12 @@ describe('buildRequest query serialization', () => {
     expect(queryOf({ style: 'pipeDelimited', explode: false }, 'a b')).toBe('?ids=a+b');
   });
 
+  it('sends a parameter defined with a JSON media type as its JSON text', () => {
+    const search = queryOf({ serialization: { contentType: 'application/json' } }, { tag: 'news' });
+
+    expect(new URLSearchParams(search).get('ids')).toBe('{"tag":"news"}');
+  });
+
   it('still refuses an exploded object property named like a security query parameter', () => {
     const security = { headers: {}, query: { api_key: 'secret' }, cookies: {} };
 

@@ -7,6 +7,7 @@ import type { McpOpenAPITool } from 'mcp-from-openapi';
 import { FrontMcpToolTokens } from '@frontmcp/sdk';
 
 import OpenapiAdapter from '../openapi.adapter';
+import type { OpenApiAdapterOptions } from '../openapi.types';
 import { basicOpenApiSpec, createMockLogger } from './fixtures';
 
 // Mock the OpenAPIToolGenerator
@@ -708,6 +709,84 @@ describe('OpenapiAdapter - Input Transforms', () => {
     });
 
     await expect(adapter.fetch()).rejects.toThrow("Invalid inputKey 'prototype'");
+  });
+
+  describe('a transform whose inputKey is not an input', () => {
+    const listUsers = createMockTool();
+    const createUser = createMockTool({
+      name: 'create_user',
+      inputSchema: { type: 'object', properties: { tenant_id: { type: 'string' }, name: { type: 'string' } } },
+    });
+
+    async function warningsFor(inputTransforms: OpenApiAdapterOptions['inputTransforms']): Promise<string[]> {
+      const { OpenAPIToolGenerator } = require('mcp-from-openapi');
+      OpenAPIToolGenerator.fromJSON.mockResolvedValue({
+        generateTools: jest.fn().mockResolvedValue([listUsers, createUser]),
+      });
+      const logger = createMockLogger();
+      const adapter = new OpenapiAdapter({
+        name: 'test-api',
+        baseUrl: 'https://api.example.com',
+        spec: basicOpenApiSpec,
+        logger,
+        inputTransforms,
+      });
+
+      await adapter.fetch();
+
+      return logger.warn.mock.calls
+        .map(([message]: [string]) => message)
+        .filter((message) => message.includes('inputTransforms:'));
+    }
+
+    it('warns once for a per-tool transform, naming the tool, the key and the header options', async () => {
+      const warnings = await warningsFor({
+        perTool: {
+          get_users: [
+            { inputKey: 'Authorization', inject: () => 'Bearer token' },
+            { inputKey: 'Authorization', inject: () => 'Bearer token' },
+          ],
+        },
+      });
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain("tool 'get_users' has no input 'Authorization'");
+      expect(warnings[0]).toContain('Authorization, Accept, Content-Type, Host, X-Forwarded-*');
+      expect(warnings[0]).toContain("one 'body' input");
+      expect(warnings[0]).toContain('additionalHeaders');
+      expect(warnings[0]).toContain('headersMapper');
+    });
+
+    it('warns for each tool a generator gives a transform for an input it does not have', async () => {
+      const warnings = await warningsFor({
+        generator: () => [{ inputKey: 'X-Request-Id', inject: () => 'request-1' }],
+      });
+
+      expect(warnings).toEqual([
+        expect.stringContaining("tool 'get_users' has no input 'X-Request-Id'"),
+        expect.stringContaining("tool 'create_user' has no input 'X-Request-Id'"),
+      ]);
+    });
+
+    it('warns once for a global transform whose key is an input of no tool, and not for one some tool has', async () => {
+      const warnings = await warningsFor({
+        global: [
+          { inputKey: 'tenant_id', inject: () => 'tenant-1' },
+          { inputKey: 'Accept', inject: () => 'application/json' },
+        ],
+      });
+
+      expect(warnings).toEqual([expect.stringContaining("no tool has an input 'Accept'")]);
+    });
+
+    it('stays silent when every transform names an input of its tool', async () => {
+      const warnings = await warningsFor({
+        global: [{ inputKey: 'limit', inject: () => 10 }],
+        perTool: { create_user: [{ inputKey: 'tenant_id', inject: () => 'tenant-1' }] },
+      });
+
+      expect(warnings).toEqual([]);
+    });
   });
 });
 
