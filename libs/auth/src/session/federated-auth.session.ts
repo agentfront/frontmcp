@@ -154,6 +154,9 @@ export interface FederatedAuthSession {
    */
   authorizedAppIds?: string[];
 
+  /** How the client authenticates at the token endpoint, from its registration when the authorization started. */
+  clientAuthMethod?: string;
+
   /** Session creation timestamp */
   createdAt: number;
 
@@ -190,6 +193,7 @@ export interface FederatedAuthSessionRecord {
   consentCsrf?: string;
   signinBinding?: string;
   authorizedAppIds?: string[];
+  clientAuthMethod?: string;
   createdAt: number;
   expiresAt: number;
 }
@@ -248,6 +252,8 @@ export interface FederatedAuthSessionCreateParams {
   signinBinding?: string;
   /** The `authorized_apps` grant (see `FederatedAuthSession.authorizedAppIds`). */
   authorizedAppIds?: string[];
+  /** How the client authenticates (see `FederatedAuthSession.clientAuthMethod`). */
+  clientAuthMethod?: string;
 }
 
 /**
@@ -346,6 +352,7 @@ export class InMemoryFederatedAuthSessionStore implements FederatedAuthSessionSt
       skippedProviders: [],
       signinBinding: params.signinBinding,
       authorizedAppIds: params.authorizedAppIds,
+      clientAuthMethod: params.clientAuthMethod,
       createdAt: now,
       expiresAt: now + this.sessionTtlMs,
     };
@@ -395,6 +402,7 @@ export function createFederatedAuthSession(
     skippedProviders: [],
     signinBinding: params.signinBinding,
     authorizedAppIds: params.authorizedAppIds,
+    clientAuthMethod: params.clientAuthMethod,
     createdAt: now,
     expiresAt: now + ttlMs,
   };

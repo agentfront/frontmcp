@@ -1222,6 +1222,12 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       };
     }
 
+    // Unknown here (registered on another instance): only a code issued to a public client goes on.
+    if (!declared.authMethod && codeRecord.clientAuthMethod !== 'none') {
+      this.logger.warn('Authorization code belongs to a client this server has no registration for');
+      return { error: 'invalid_client', error_description: 'Client authentication failed' };
+    }
+
     // Verify redirect_uri matches
     if (codeRecord.redirectUri !== redirectUri) {
       this.logger.warn(`Redirect URI mismatch`);
@@ -1316,6 +1322,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       selectedProviderIds: codeRecord.selectedProviderIds,
       skippedProviderIds: codeRecord.skippedProviderIds,
       providerTokensId,
+      clientAuthMethod: declared.authMethod ?? 'none',
     });
     await this.authorizationStore.storeRefreshToken(refreshTokenRecord);
     // Bind the issued refresh token to the (already used-marked) code so a later
@@ -1328,15 +1335,19 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   /**
    * Refuse a grant the client did not declare in its `grant_types` (RFC 7591): in its registration, its
    * `dcr.clients` entry or its client ID metadata document. A client that declared nothing (an unregistered
-   * id under `requireRegisteredClients: false`) is not limited, and gets `grantTypes: undefined`. A CIMD client
-   * whose document declares `private_key_jwt` must also present a valid client assertion.
+   * id under `requireRegisteredClients: false`, or one registered on another instance or before a restart)
+   * is not limited, and gets `grantTypes: undefined` and `authMethod: undefined`. A CIMD client whose document
+   * declares `private_key_jwt` must also present a valid client assertion.
    */
   private async checkDeclaredGrant(
     clientId: string,
     grantType: 'authorization_code' | 'refresh_token',
     clientAssertion: ClientAssertionInput | undefined,
-  ): Promise<{ grantTypes: string[] | undefined } | { error: string; error_description: string }> {
+  ): Promise<
+    { grantTypes: string[] | undefined; authMethod: string | undefined } | { error: string; error_description: string }
+  > {
     let grantTypes: string[] | undefined;
+    let authMethod: string | undefined;
     try {
       const cimd = this.cimdService;
       if (cimd?.enabled && cimd.isCimdClientId(clientId)) {
@@ -1350,8 +1361,11 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
           });
         }
         grantTypes = metadata?.grant_types;
+        authMethod = metadata?.token_endpoint_auth_method ?? 'none';
       } else {
-        grantTypes = this.dcrClientRegistryImpl.get(clientId)?.grant_types;
+        const registered = this.dcrClientRegistryImpl.get(clientId);
+        grantTypes = registered?.grant_types;
+        authMethod = registered?.token_endpoint_auth_method;
       }
     } catch (err) {
       this.logger.warn(`Client metadata refused at token endpoint (${grantType}): ${(err as Error).message}`);
@@ -1361,7 +1375,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.logger.warn(`Client did not declare the ${grantType} grant`);
       return { error: 'unauthorized_client', error_description: `This client may not use the ${grantType} grant` };
     }
-    return { grantTypes };
+    return { grantTypes, authMethod };
   }
 
   /**
@@ -1453,6 +1467,12 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       };
     }
 
+    // Unknown here (after a restart, on another instance): only a grant issued to a public client goes on.
+    if (!declared.authMethod && tokenRecord.clientAuthMethod !== 'none') {
+      this.logger.warn('Refresh token belongs to a client this server has no registration for');
+      return { error: 'invalid_client', error_description: 'Client authentication failed' };
+    }
+
     // Generate new access token — rebuild the identity + consent/progressive-
     // auth metadata from the stored refresh record so the refreshed token keeps
     // its `consent` / `authorized_apps` / custom claims. Without this the tool
@@ -1506,6 +1526,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       selectedProviderIds: tokenRecord.selectedProviderIds,
       skippedProviderIds: tokenRecord.skippedProviderIds,
       providerTokensId: copiedTo ?? sourceId,
+      clientAuthMethod: declared.authMethod ?? 'none',
     });
     try {
       await this.authorizationStore.rotateRefreshToken(refreshToken, newRefreshRecord);
@@ -1561,6 +1582,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     authorizedAppIds?: string[];
     // Custom claims from a local authenticate() verifier (Checkpoint 3a)
     customClaims?: Record<string, unknown>;
+    // How the client authenticates, recorded when the authorization started; undefined when it wasn't.
+    clientAuthMethod: string | undefined;
   }): Promise<string> {
     const codeRecord = this.authorizationStore.createCodeRecord({
       clientId: params.clientId,
@@ -1584,6 +1607,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       authorizedAppIds: params.authorizedAppIds,
       // Custom claims from a local authenticate() verifier (Checkpoint 3a)
       customClaims: params.customClaims,
+      clientAuthMethod: params.clientAuthMethod,
     });
 
     await this.authorizationStore.storeAuthorizationCode(codeRecord);

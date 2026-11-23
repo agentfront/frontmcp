@@ -439,6 +439,12 @@ describe('InMemoryAuthorizationStore', () => {
       expect(record.expiresAt).toBeGreaterThan(record.createdAt);
     });
 
+    it('should keep the client auth method', () => {
+      expect(makePendingRecord(store, { clientAuthMethod: 'client_secret_basic' }).clientAuthMethod).toBe(
+        'client_secret_basic',
+      );
+    });
+
     it('should set incremental auth fields', () => {
       const record = makePendingRecord(store, {
         isIncremental: true,
@@ -487,6 +493,23 @@ describe('InMemoryAuthorizationStore', () => {
         resource: 'https://api.example.com',
       });
       expect(record.resource).toBe('https://api.example.com');
+    });
+
+    it('should keep the client auth method on a code', () => {
+      const record = store.createCodeRecord({
+        clientId: 'client-1',
+        redirectUri: 'https://app.example.com/cb',
+        scopes: [],
+        pkce: { challenge: 'c'.repeat(43), method: 'S256' },
+        userSub: 'user-1',
+        clientAuthMethod: 'client_secret_post',
+      });
+      expect(record.clientAuthMethod).toBe('client_secret_post');
+    });
+
+    it('should keep the client auth method', () => {
+      const record = makeRefreshTokenRecord(store, { clientAuthMethod: 'client_secret_basic' });
+      expect(record.clientAuthMethod).toBe('client_secret_basic');
     });
   });
 });
