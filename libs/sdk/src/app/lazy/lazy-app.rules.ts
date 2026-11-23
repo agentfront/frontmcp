@@ -7,6 +7,7 @@ import type { LocalAppMetadata } from '../../common/metadata/app.metadata';
 import { isEnabledSource, type EnabledOption } from '../../common/metadata/enabled.metadata';
 import { isEnforcementRequested } from '../../common/utils/enforced-metadata.utils';
 import { hookClassOf } from '../../hooks/hook.registry';
+import { keysEnforcedBy } from '../../plugin/enforced-metadata.check';
 import { normalizePlugin } from '../../plugin/plugin.utils';
 import { hasUIConfig } from '../../tool/ui/ui-shared';
 import type { ListedApp } from './lazy-manifest';
@@ -113,6 +114,12 @@ export function whyLoadedAppCannotBeLazy(entries: LoadedEntries): string[] {
       reasons.push(`the hook ${label} is on ${hook.metadata.flow}, which runs it for every app`);
     } else if (hook.metadata.appliesTo === 'all-apps') {
       reasons.push(`the hook ${label} applies to all apps`);
+    } else if (hook.metadata.appliesTo === 'uncovered-apps' && keysEnforcedBy(hook).length === 0) {
+      // A plugin's `enforcesMetadata` keys are covered at startup: an eager entry that declares one stops the server
+      reasons.push(
+        `the hook ${label} applies to apps without its plugin, which it would guard only once this app is imported ` +
+          '(declare the entry metadata it enforces with @Plugin({ enforcesMetadata }), or make the app eager)',
+      );
     }
   }
 
