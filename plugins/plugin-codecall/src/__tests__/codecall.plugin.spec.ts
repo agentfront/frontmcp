@@ -38,7 +38,27 @@ describe('CodeCallPlugin', () => {
         'codecall:enclave',
         'codecall:audit-logger',
         'codecall:tool-search',
+        'codecall:runs',
       ]);
+    });
+
+    it.each([
+      ['redis', { type: 'redis', redis: { url: 'redis://127.0.0.1:6379' } }, "runs.storage: { type: 'redis' }"],
+      ['sqlite', { type: 'sqlite', sqlite: { path: '/var/lib/app/runs.sqlite' } }, "runs.storage: { type: 'sqlite' }"],
+      ['memory', { type: 'memory' }, undefined],
+    ] as const)('names a runs.storage on %s among the stores a browser refuses', (_, storage, option) => {
+      expect(CodeCallPlugin.browserStores({ runs: { storage } })).toEqual([
+        { plugin: 'CodeCallPlugin', option, memory: "runs.storage: { type: 'memory' }" },
+      ]);
+    });
+
+    it('names no store a browser refuses with runs.enabled false', () => {
+      expect(CodeCallPlugin.browserStores({ runs: { enabled: false } })).toEqual([]);
+    });
+
+    it('registers no run store with runs.enabled false', () => {
+      const providers = CodeCallPlugin.dynamicProviders({ runs: { enabled: false } });
+      expect(providers.map((p) => p.name)).not.toContain('codecall:runs');
     });
 
     it('should include codecall:config provider', () => {

@@ -168,16 +168,16 @@ describe('CodeCall namespace functions go through the sandbox limits', () => {
   it('still runs a namespace call and returns its result', async () => {
     const outcome = await runScript(server(), 'const r = await mail.list({});\nreturn r;');
 
-    expect(outcome).toEqual({ status: 'ok', result: { ran: 'mail.list' } });
+    expect(outcome).toEqual({ status: 'ok', runId: expect.any(String), result: { ran: 'mail.list' } });
     expect(executedTools).toEqual(['mail.list']);
   });
 
   it('still works when a namespace is aliased or shadowed', async () => {
     const aliased = await runScript(server(), 'const m = mail;\nconst fn = m.list;\nreturn await fn({});');
-    expect(aliased).toEqual({ status: 'ok', result: { ran: 'mail.list' } });
+    expect(aliased).toEqual({ status: 'ok', runId: expect.any(String), result: { ran: 'mail.list' } });
 
     const shadowed = await runScript(server(), "const mail = { list: 'mine' };\nreturn mail.list;");
-    expect(shadowed).toEqual({ status: 'ok', result: 'mine' });
+    expect(shadowed).toEqual({ status: 'ok', runId: expect.any(String), result: 'mine' });
   });
 
   it('keeps { throwOnError: false } on namespace functions', async () => {
@@ -186,7 +186,11 @@ describe('CodeCall namespace functions go through the sandbox limits', () => {
       'const r = await mail.fail({}, { throwOnError: false });\nreturn { success: r.success, toolName: r.error.toolName };',
     );
 
-    expect(outcome).toEqual({ status: 'ok', result: { success: false, toolName: 'mail.fail' } });
+    expect(outcome).toEqual({
+      status: 'ok',
+      runId: expect.any(String),
+      result: { success: false, toolName: 'mail.fail' },
+    });
   });
 });
 

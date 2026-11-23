@@ -2571,6 +2571,7 @@ __metadata:
   dependencies:
     "@enclave-vm/ast": "npm:^2.20.1"
     "@enclave-vm/core": "npm:^2.20.1"
+    "@frontmcp/plugin-result-handles": "npm:1.12.2"
     "@frontmcp/protocol": "npm:1.12.2"
     "@frontmcp/sdk": "npm:1.12.2"
     "@frontmcp/utils": "npm:1.12.2"
@@ -2636,7 +2637,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@frontmcp/plugin-result-handles@workspace:plugins/plugin-result-handles":
+"@frontmcp/plugin-result-handles@npm:1.12.2, @frontmcp/plugin-result-handles@workspace:plugins/plugin-result-handles":
   version: 0.0.0-use.local
   resolution: "@frontmcp/plugin-result-handles@workspace:plugins/plugin-result-handles"
   dependencies:

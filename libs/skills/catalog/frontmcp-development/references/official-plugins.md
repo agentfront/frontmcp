@@ -196,6 +196,36 @@ CodeCall contributes 4 tools to your server:
 - `codecall:execute` -- Runs an AgentScript program in the sandboxed VM. Input: `{ script: string }` (AgentScript code). Use `callTool(name, args)` to invoke tools within scripts. The script can call multiple tools, branch on results, and compose outputs.
 - `codecall:invoke` -- Direct single-tool invocation (available when `directCalls` is enabled). Bypasses the VM for simple one-shot calls.
 
+### Run records
+
+Each `codecall:execute` that has an owner (a session, or a signed-in caller) leaves a run record, and its result
+carries `runId`. The record holds the owner (session and caller), the script's SHA-256, the status, `startedAt` and
+`endedAt`, `reviewDecision` (`null` until a review stage exists), the return value's size in bytes, and a journal with
+one entry per tool call: `position` (from 1, in the order the host's tool handler was entered, the same on both
+runtimes), `tool`, `argumentsHash` (SHA-256 of the arguments' canonical JSON), `outcome` (`success`, `failure`, or
+`unfinished` when the run ended first), `phase` for a failure (`access`, `input`, `limit` or `execute`), `durationMs`
+and `resultBytes`. A call's result is kept only with `runs.resume: true`.
+
+Records live in the result-handle store (`ResultHandleStore` from `@frontmcp/plugin-result-handles`): encrypted under
+keys derived from the run id and the owner, so only the owner reads one, until `runs.ttlSeconds`. A tool reads one with
+`this.get(CodeCallRunStoreToken).read(runId, this)`; another session or caller gets `undefined`.
+
+```typescript
+CodeCallPlugin.init({
+  runs: {
+    enabled: true, // false keeps no records, and results carry no runId
+    ttlSeconds: 600,
+    maxRecordBytes: 256 * 1024, // journal entries past it are left out and counted in omittedEntries
+    resume: false, // true keeps each call's result in its journal entry
+    storage: { type: 'auto' }, // createStorage(): memory, redis, vercel-kv, upstash, cloudflare-kv or sqlite
+    namespace: 'codecall-runs',
+  },
+});
+```
+
+A store that fails is logged as a warning, and the result goes out without `runId`. In a browser, a `runs.storage` on
+Redis or SQLite is refused at startup.
+
 ### Per-Tool CodeCall Metadata
 
 Control how individual tools interact with CodeCall:

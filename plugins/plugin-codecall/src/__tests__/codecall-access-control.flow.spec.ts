@@ -208,13 +208,13 @@ describe('CodeCall tool access through the real tools:call-tool flow (GHSA-6w3j-
          return names.map((name) => getTool(name) === undefined);`,
       );
 
-      expect(outcome).toEqual({ status: 'ok', result: DENIED_TOOLS.map(() => true) });
+      expect(outcome).toEqual({ status: 'ok', runId: expect.any(String), result: DENIED_TOOLS.map(() => true) });
     });
 
     it('resolves getTool through the same hyphen/underscore alias as callTool', async () => {
       const outcome = await runScript(server(), `return getTool('get-report')?.name;`);
 
-      expect(outcome).toEqual({ status: 'ok', result: 'get_report' });
+      expect(outcome).toEqual({ status: 'ok', runId: expect.any(String), result: 'get_report' });
     });
 
     it('binds namespace methods only for allowed tools', async () => {
@@ -230,6 +230,7 @@ describe('CodeCall tool access through the real tools:call-tool flow (GHSA-6w3j-
 
       expect(outcome).toEqual({
         status: 'ok',
+        runId: expect.any(String),
         result: { getInvoice: 'function', refundAll: 'undefined', voidLedger: 'undefined', purgeCache: 'undefined' },
       });
     });

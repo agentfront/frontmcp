@@ -10,7 +10,7 @@ export {
   type ResultHandlesPluginOptions,
   type ResultHandlesPluginOptionsInput,
 } from './result-handles.options';
-export { ResultHandleStore, type ResultOwner } from './result-handle.store';
+export { ResultHandleStore, resultOwnerOf, type ResultOwner } from './result-handle.store';
 export { createResultHandleStore, type ResultHandleStoreOptions } from './result-handle-store.factory';
 export { ResultHandlesConfigToken, ResultHandleStoreToken } from './result-handles.symbols';
 export {

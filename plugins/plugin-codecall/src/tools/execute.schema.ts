@@ -119,6 +119,12 @@ const timeoutErrorPayloadSchema = z.object({
   message: z.string(),
 });
 
+/** What every result carries besides its status. */
+const runFields = {
+  /** The id of the run's record, set when one was kept. */
+  runId: z.string().optional(),
+};
+
 /**
  * Result variants
  */
@@ -126,31 +132,37 @@ export const codeCallOkResultSchema = z.object({
   status: z.literal('ok'),
   result: z.unknown(),
   logs: z.array(z.string()).optional(),
+  ...runFields,
 });
 
 export const codeCallSyntaxErrorResultSchema = z.object({
   status: z.literal('syntax_error'),
   error: syntaxErrorPayloadSchema,
+  ...runFields,
 });
 
 export const codeCallIllegalAccessResultSchema = z.object({
   status: z.literal('illegal_access'),
   error: illegalAccessErrorPayloadSchema,
+  ...runFields,
 });
 
 export const codeCallRuntimeErrorResultSchema = z.object({
   status: z.literal('runtime_error'),
   error: runtimeErrorPayloadSchema,
+  ...runFields,
 });
 
 export const codeCallToolErrorResultSchema = z.object({
   status: z.literal('tool_error'),
   error: toolErrorPayloadSchema,
+  ...runFields,
 });
 
 export const codeCallTimeoutResultSchema = z.object({
   status: z.literal('timeout'),
   error: timeoutErrorPayloadSchema,
+  ...runFields,
 });
 
 /**

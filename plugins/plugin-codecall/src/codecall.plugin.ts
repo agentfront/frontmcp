@@ -1,6 +1,7 @@
 // file: plugins/plugin-codecall/src/codecall.plugin.ts
 
 import CachePlugin from '@frontmcp/plugin-cache';
+import { createResultHandleStore } from '@frontmcp/plugin-result-handles';
 import {
   DynamicPlugin,
   FrontMcpLogger,
@@ -8,12 +9,15 @@ import {
   isEntryGatedBy,
   ListToolsHook,
   Plugin,
+  ProviderScope,
   resolveToolVisibility,
   ScopeEntry,
+  storeProvider,
   ToolHook,
   ToolNotFoundError,
   type FlowCtxOf,
   type HookGatedEntry,
+  type PluginStoreInBrowser,
   type ProviderType,
   type ToolEntry,
   type ToolType,
@@ -24,9 +28,12 @@ import {
   type CodeCallMode,
   type CodeCallPluginOptions,
   type CodeCallPluginOptionsInput,
+  type CodeCallRunsOptions,
   type CodeCallToolMetadata,
 } from './codecall.types';
 import CodeCallConfig from './providers/code-call.config';
+import { CodeCallRunStore } from './runs/run-record.store';
+import { CodeCallRunStoreToken } from './runs/run-record.types';
 import { codeCallAppIdOf, isInProcessDispatch } from './security';
 import { ToolSearchService } from './services';
 import { AuditLoggerService, type AuditEvent } from './services/audit-logger.service';
@@ -46,6 +53,22 @@ import { buildSearchToolDescription } from './tools/search.schema';
 function auditLogFields(event: AuditEvent): Record<string, unknown> {
   const { executionId, durationMs, data } = event;
   return durationMs === undefined ? { executionId, ...data } : { executionId, durationMs, ...data };
+}
+
+/** The store of run records, opened when the server starts and closed when it stops. */
+function runStoreProvider(runs: CodeCallRunsOptions): ProviderType {
+  const { storage, namespace, ttlSeconds, maxRecordBytes, resume } = runs;
+  return storeProvider({
+    name: 'codecall:runs',
+    provide: CodeCallRunStoreToken,
+    scope: ProviderScope.GLOBAL,
+    inject: () => [] as const,
+    useFactory: async () =>
+      new CodeCallRunStore(await createResultHandleStore({ storage, namespace, ttlSeconds }), {
+        maxRecordBytes,
+        resume,
+      }),
+  });
 }
 
 /**
@@ -79,6 +102,20 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
     super();
     // Parse options with Zod schema to apply all defaults
     this.options = codeCallPluginOptionsSchema.parse(options);
+  }
+
+  /** A `runs.storage` on Redis or SQLite, which a browser refuses at startup. */
+  static override browserStores(options: CodeCallPluginOptionsInput): PluginStoreInBrowser[] {
+    const { enabled, storage } = codeCallPluginOptionsSchema.parse(options).runs;
+    if (!enabled) return [];
+    const opensServerStore = storage.type === 'redis' || storage.type === 'sqlite';
+    return [
+      {
+        plugin: 'CodeCallPlugin',
+        option: opensServerStore ? `runs.storage: { type: '${storage.type}' }` : undefined,
+        memory: "runs.storage: { type: 'memory' }",
+      },
+    ];
   }
 
   /**
@@ -137,6 +174,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
           );
         },
       },
+      ...(parsedOptions.runs.enabled ? [runStoreProvider(parsedOptions.runs)] : []),
     ];
   }
 

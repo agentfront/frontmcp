@@ -2,6 +2,7 @@
 
 import {
   codeCallPluginOptionsSchema,
+  DEFAULT_RUNS_MEMORY_MAX_ENTRIES,
   INTERPRETER_BUDGET_LIMITS,
   MAX_TOOL_CALLS,
   type CodeCallInterpreterBudget,
@@ -403,5 +404,34 @@ describe('CodeCall vm runtime and budgets', () => {
     it.each(['node', 'cloudflare'])('allows the interpreter in a %s build', (target) => {
       expect(vmRuntimeUnavailableReason('interpreter', target)).toBeUndefined();
     });
+  });
+});
+
+describe('CodeCall runs options', () => {
+  it('keeps run records by default, for 600 seconds, up to 256 KiB each, without results', () => {
+    expect(codeCallPluginOptionsSchema.parse({}).runs).toEqual({
+      enabled: true,
+      ttlSeconds: 600,
+      maxRecordBytes: 256 * 1024,
+      resume: false,
+      storage: { type: 'auto', memory: { maxEntries: DEFAULT_RUNS_MEMORY_MAX_ENTRIES } },
+      namespace: 'codecall-runs',
+    });
+  });
+
+  it("keeps a storage's own memory limit", () => {
+    const { storage } = codeCallPluginOptionsSchema.parse({
+      runs: { storage: { type: 'memory', memory: { maxEntries: 10 } } },
+    }).runs;
+    expect(storage).toEqual({ type: 'memory', memory: { maxEntries: 10 } });
+  });
+
+  it.each([
+    ['a ttlSeconds below 1', { ttlSeconds: 0 }],
+    ['a maxRecordBytes below 1024', { maxRecordBytes: 512 }],
+    ['a storage that is not an object', { storage: 'redis' }],
+    ['an empty namespace', { namespace: '' }],
+  ])('refuses %s', (_, runs) => {
+    expect(() => codeCallPluginOptionsSchema.parse({ runs })).toThrow();
   });
 });

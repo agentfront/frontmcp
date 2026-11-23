@@ -331,8 +331,8 @@ describe('CodeCall iteration limit', () => {
       'const items = [1];\nfor (const item of items) { items.push(item); }\nreturn items.length;',
     );
 
-    expect(forLoop).toEqual({ status: 'runtime_error', error: ITERATION_LIMIT });
-    expect(forOfLoop).toEqual({ status: 'runtime_error', error: ITERATION_LIMIT });
+    expect(forLoop).toEqual({ status: 'runtime_error', runId: expect.any(String), error: ITERATION_LIMIT });
+    expect(forOfLoop).toEqual({ status: 'runtime_error', runId: expect.any(String), error: ITERATION_LIMIT });
   });
 });
 

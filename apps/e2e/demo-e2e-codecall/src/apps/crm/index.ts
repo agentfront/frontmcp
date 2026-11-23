@@ -8,6 +8,7 @@ import ActivitiesLogTool from './tools/activities-log.tool';
 import ActivitiesStatsTool from './tools/activities-stats.tool';
 import AdminPurgeUsersTool from './tools/admin-purge-users.tool';
 import CrmResetTool from './tools/crm-reset.tool';
+import RunsReadTool from './tools/runs-read.tool';
 import SystemWipeConfigTool from './tools/system-wipe-config.tool';
 import UsersCreateTool from './tools/users-create.tool';
 import UsersDeleteTool from './tools/users-delete.tool';
@@ -41,6 +42,7 @@ import UsersUpdateTool from './tools/users-update.tool';
     ActivitiesLogTool,
     ActivitiesStatsTool,
     CrmResetTool,
+    RunsReadTool,
     // Withheld by the CodeCall access policy (GHSA-6w3j-82v5-6qrr)
     AdminPurgeUsersTool,
     SystemWipeConfigTool,

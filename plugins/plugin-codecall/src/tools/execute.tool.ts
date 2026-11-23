@@ -1,7 +1,7 @@
 // file: libs/plugins/src/codecall/tools/execute.tool.ts
 
 import { getCallSurface, toMcpError, Tool, ToolContext, type McpError, type ToolEntry } from '@frontmcp/sdk';
-import { escapeControlCharacters } from '@frontmcp/utils';
+import { escapeControlCharacters, sha256Hex } from '@frontmcp/utils';
 
 import type { CodeCallToolDescription, CodeCallVmEnvironment } from '../codecall.symbol';
 import {
@@ -14,6 +14,9 @@ import {
   type ToolCallResult,
 } from '../errors';
 import CodeCallConfig from '../providers/code-call.config';
+import { jsonBytes, RunJournal } from '../runs/run-journal';
+import type { CodeCallRunStore } from '../runs/run-record.store';
+import { CodeCallRunStoreToken } from '../runs/run-record.types';
 import {
   asCodeCallDispatch,
   assertNotSelfReference,
@@ -99,6 +102,41 @@ export default class ExecuteTool extends ToolContext {
   }
 
   async execute(input: ExecuteToolInput): Promise<CodeCallExecuteResult> {
+    const runs = this.tryGet(CodeCallRunStoreToken);
+    const journal = new RunJournal({ keepResults: runs?.keepsResults });
+    const startedAt = new Date();
+    const result = await this.runScript(input, journal);
+    const runId = runs ? await this.keepRun(runs, input.script, startedAt, result, journal) : undefined;
+    return runId ? { ...result, runId } : result;
+  }
+
+  /** Keeps the run's record for its owner; a store that fails is logged, and the result goes out without a run id. */
+  private async keepRun(
+    runs: CodeCallRunStore,
+    script: string,
+    startedAt: Date,
+    result: CodeCallExecuteResult,
+    journal: RunJournal,
+  ): Promise<string | undefined> {
+    try {
+      return await runs.keep(this, {
+        scriptHash: sha256Hex(script),
+        status: result.status,
+        startedAt: startedAt.toISOString(),
+        endedAt: new Date().toISOString(),
+        reviewDecision: null,
+        ...(result.status === 'ok' && { resultBytes: jsonBytes(result.result) }),
+        journal: [...journal.close()],
+      });
+    } catch (error: unknown) {
+      this.logger?.warn('codecall: could not keep the run record', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }
+
+  private async runScript(input: ExecuteToolInput, journal: RunJournal): Promise<CodeCallExecuteResult> {
     const { script, allowedTools } = input;
 
     // The script acts for the client that called this tool, so every tool it reaches is judged,
@@ -338,7 +376,7 @@ export default class ExecuteTool extends ToolContext {
     audit?.logExecutionStart(executionId, script);
 
     try {
-      const executionResult = await enclaveService.execute(script, environment);
+      const executionResult = await enclaveService.execute(script, environment, journal);
       const durationMs = elapsed(executionResult.stats?.duration);
 
       // Map execution result to CodeCall result

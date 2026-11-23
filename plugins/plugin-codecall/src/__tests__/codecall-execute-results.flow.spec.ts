@@ -133,6 +133,7 @@ describe('codecall:execute result kinds', () => {
 
       expect(outcome).toEqual({
         status: 'tool_error',
+        runId: expect.any(String),
         error: {
           source: 'tool',
           toolName: 'mail.fail',
@@ -165,6 +166,7 @@ describe('codecall:execute result kinds', () => {
 
       expect(outcome).toEqual({
         status: 'tool_error',
+        runId: expect.any(String),
         error: {
           source: 'tool',
           toolName: 'mail.import',
@@ -260,6 +262,7 @@ describe('codecall:execute result kinds', () => {
 
       expect(outcome).toEqual({
         status: 'ok',
+        runId: expect.any(String),
         result: [{ ran: 'mail.list' }, { ran: 'mail.fetch' }, { ran: '_internal.sync' }],
       });
     });
