@@ -7,6 +7,8 @@
  * Key layout (under the store's NamespacedStorage):
  *  - `records:{sessionId}:{taskId}` — the TaskRecord JSON
  *  - `slots:{sessionId}:{n}` — the taskId holding the owner's concurrency slot `n`; expires with its record
+ *  - `index:{sessionId}:{n}` — the taskId a session created `n`th, which `tasks/list` pages through; expires with it
+ *  - `index-count:{sessionId}` — how many index positions the session used; kept as long as its longest-lived task
  *  - Pub/sub channels:
  *      - `terminal:{taskId}` — fires when a task reaches terminal status
  *      - `cancel:{taskId}`   — fires when a task is asked to cancel
@@ -25,13 +27,17 @@ import {
 
 import { type FrontMcpLogger } from '../../common';
 import { isAlive, isLocalWorker } from '../helpers/process-liveness';
-import { isTerminal, type TaskRecord } from '../task.types';
+import { isTerminal, TASK_DEFAULTS, type TaskRecord } from '../task.types';
 import type { TaskCancelCallback, TaskListPage, TaskStore, TaskTerminalCallback, TaskUnsubscribe } from './task.store';
 
 const TERMINAL_CHANNEL_PREFIX = 'terminal:';
 const CANCEL_CHANNEL_PREFIX = 'cancel:';
 const RECORDS_NAMESPACE = 'records';
 const SLOTS_NAMESPACE = 'slots';
+const INDEX_NAMESPACE = 'index';
+const INDEX_COUNT_NAMESPACE = 'index-count';
+/** How long the index of a session that has no task is kept, so its next lists do not scan for its tasks again. */
+const EMPTY_INDEX_TTL_SECONDS = TASK_DEFAULTS.defaultTtlMs / 1000;
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -43,10 +49,16 @@ function slotKey(sessionId: string, slot: number): string {
   return `${sessionId}:${slot}`;
 }
 
+function indexKey(sessionId: string, position: number): string {
+  return `${sessionId}:${position}`;
+}
+
 export class StorageTaskStore implements TaskStore {
   private readonly storage: NamespacedStorage;
   private readonly records: TypedStorage<TaskRecord>;
   private readonly slots: NamespacedStorage;
+  private readonly index: NamespacedStorage;
+  private readonly indexCounts: NamespacedStorage;
   private readonly logger?: FrontMcpLogger;
 
   private readonly terminalCallbacks = new Map<string, Set<TaskTerminalCallback>>();
@@ -59,6 +71,8 @@ export class StorageTaskStore implements TaskStore {
     this.logger = logger;
     this.records = new TypedStorage(storage.namespace(RECORDS_NAMESPACE));
     this.slots = storage.namespace(SLOTS_NAMESPACE);
+    this.index = storage.namespace(INDEX_NAMESPACE);
+    this.indexCounts = storage.namespace(INDEX_COUNT_NAMESPACE);
   }
 
   async create(record: TaskRecord): Promise<void> {
@@ -70,6 +84,8 @@ export class StorageTaskStore implements TaskStore {
       return;
     }
     const key = recordKey(record.sessionId, record.taskId);
+    // Indexed first: a session without an index yet scans for its earlier tasks, which must not find this one
+    await this.addToIndex(record, ttlSeconds);
     await this.records.set(key, record, { ttlSeconds });
     this.logger?.debug('[StorageTaskStore] created', { taskId: record.taskId, ttlSeconds });
   }
@@ -196,34 +212,74 @@ export class StorageTaskStore implements TaskStore {
     }
   }
 
+  /** A page of the session's tasks in creation order, read from its index, skipping the positions of tasks gone. */
   async list(sessionId: string, opts: { cursor?: string; pageSize?: number } = {}): Promise<TaskListPage> {
     const pageSize = Math.max(1, Math.min(opts.pageSize ?? DEFAULT_PAGE_SIZE, 500));
+    if (!(await this.indexCounts.exists(sessionId))) await this.backfillIndex(sessionId);
+    const positionsUsed = Number((await this.indexCounts.get(sessionId)) ?? 0);
 
-    // TypedStorage wraps a namespaced store; `.keys()` on the adapter returns
-    // the namespaced keys with the `records:` prefix already present. We scan
-    // for keys starting with `{sessionId}:` and return stable-sorted page.
-    const namespaced = this.storage.namespace(RECORDS_NAMESPACE);
-    const allKeys = await namespaced.keys();
-    const sessionPrefix = `${sessionId}:`;
-    const matching = allKeys
-      .filter((k) => k.startsWith(sessionPrefix))
-      .map((k) => k.slice(sessionPrefix.length))
-      .sort();
-
-    const offset = opts.cursor ? decodeCursor(opts.cursor) : 0;
-    const slice = matching.slice(offset, offset + pageSize);
-    const records: TaskRecord[] = [];
-    for (const taskId of slice) {
-      const rec = await this.get(taskId, sessionId);
-      if (rec) records.push(rec);
+    let position = opts.cursor ? decodeCursor(opts.cursor) : 0;
+    const tasks: TaskRecord[] = [];
+    const listedTaskIds = new Set<string>();
+    while (tasks.length < pageSize && position < positionsUsed) {
+      const batchEnd = Math.min(positionsUsed, position + pageSize - tasks.length);
+      const positions = Array.from({ length: batchEnd - position }, (_, index) => position + index + 1);
+      const taskIds = await this.index.mget(positions.map((indexed) => indexKey(sessionId, indexed)));
+      position = batchEnd;
+      for (const taskId of taskIds) {
+        if (taskId === null || listedTaskIds.has(taskId)) continue;
+        listedTaskIds.add(taskId);
+        const record = await this.get(taskId, sessionId);
+        if (record) tasks.push(record);
+      }
     }
 
-    const nextOffset = offset + slice.length;
-    const page: TaskListPage = { tasks: records };
-    if (nextOffset < matching.length) {
-      page.nextCursor = encodeCursor(nextOffset);
-    }
+    const page: TaskListPage = { tasks };
+    if (position < positionsUsed) page.nextCursor = encodeCursor(position);
     return page;
+  }
+
+  /** Give the task the session's next index position, after indexing the tasks it had before it had an index. */
+  private async addToIndex(record: TaskRecord, ttlSeconds: number): Promise<void> {
+    const { sessionId } = record;
+    if (!(await this.indexCounts.exists(sessionId))) await this.backfillIndex(sessionId);
+    const position = await this.indexCounts.incr(sessionId);
+    await this.index.set(indexKey(sessionId, position), record.taskId, { ttlSeconds });
+    await this.keepIndexFor(sessionId, ttlSeconds);
+  }
+
+  /**
+   * Index the tasks a session has that no index lists, written before the store kept one: a scan of every task key,
+   * as `tasks/list` did on every call, once per session. Racing backfills index a task twice; a page shows it once.
+   */
+  private async backfillIndex(sessionId: string): Promise<void> {
+    const sessionPrefix = `${sessionId}:`;
+    const taskIds = (await this.storage.namespace(RECORDS_NAMESPACE).keys())
+      .filter((key) => key.startsWith(sessionPrefix))
+      .map((key) => key.slice(sessionPrefix.length))
+      .sort();
+    const records = await this.records.mget(taskIds.map((taskId) => recordKey(sessionId, taskId)));
+    const live = records.filter(
+      (record): record is TaskRecord =>
+        record !== null && record.sessionId === sessionId && expiresAtToTTL(record.expiresAt) > 0,
+    );
+    const lastPosition = await this.indexCounts.incrBy(sessionId, live.length);
+    const firstPosition = lastPosition - live.length + 1;
+    await Promise.all(
+      live.map((record, offset) =>
+        this.index.set(indexKey(sessionId, firstPosition + offset), record.taskId, {
+          ttlSeconds: expiresAtToTTL(record.expiresAt),
+        }),
+      ),
+    );
+    const longestTtl = Math.max(EMPTY_INDEX_TTL_SECONDS, ...live.map((record) => expiresAtToTTL(record.expiresAt)));
+    await this.keepIndexFor(sessionId, longestTtl);
+  }
+
+  /** Keep the session's index count at least `ttlSeconds` longer, so it outlives every position it numbered. */
+  private async keepIndexFor(sessionId: string, ttlSeconds: number): Promise<void> {
+    const remaining = await this.indexCounts.ttl(sessionId);
+    if (remaining === null || remaining < ttlSeconds) await this.indexCounts.expire(sessionId, ttlSeconds);
   }
 
   async subscribeTerminal(taskId: string, _sessionId: string, cb: TaskTerminalCallback): Promise<TaskUnsubscribe> {
