@@ -31,6 +31,8 @@ const NODE_VM_PACKAGE = '@enclave-vm/core';
 /** The part of the barrel this runtime uses. */
 export interface NodeVmModule {
   Enclave: new (options: CreateEnclaveOptions) => Pick<Enclave, 'run' | 'dispose'>;
+  /** Exported by an Enclave whose `review` option runs its hooks; an older one would ignore the option. */
+  REVIEW_ERROR_CODES?: unknown;
 }
 
 /**
@@ -65,7 +67,8 @@ const UNAVAILABLE_IN_WORKERS =
 /** How the runtime loads the barrel; replaced in tests. */
 export type NodeVmModuleLoader = () => Promise<NodeVmModule>;
 
-const loadNodeVmModule: NodeVmModuleLoader = async () => (await importAtRuntime(NODE_VM_PACKAGE)) as NodeVmModule;
+export const loadNodeVmModule: NodeVmModuleLoader = async () =>
+  (await importAtRuntime(NODE_VM_PACKAGE)) as NodeVmModule;
 
 /** The Enclave options for a run spec: the CodeCall configuration this runtime has always used. */
 export function toEnclaveOptions(spec: CodeCallScriptRunSpec): CreateEnclaveOptions {
@@ -91,6 +94,7 @@ export function toEnclaveOptions(spec: CodeCallScriptRunSpec): CreateEnclaveOpti
     // A namespace method call is exactly `callTool('ns.method', args, options)` in the sandbox,
     // with its tool-call cap, rate limit, suspicious-sequence checks and `throwOnError`.
     toolNamespaces: spec.toolNamespaces,
+    review: spec.review,
     doubleVm: {
       parentValidation: {
         ...(threshold !== undefined && { rapidEnumerationThreshold: threshold }),
@@ -146,9 +150,16 @@ export function createNodeVmRuntime(loader: NodeVmModuleLoader = loadNodeVmModul
           `CodeCall vm.runtime 'node-vm' could not load ${NODE_VM_PACKAGE}: it exports no Enclave here.`,
         );
       }
+      if (spec.review && module.REVIEW_ERROR_CODES === undefined) {
+        throw new CodeCallRuntimeError(
+          'RUNTIME_FEATURE_UNSUPPORTED',
+          'node-vm',
+          `CodeCall review needs ${NODE_VM_PACKAGE} 2.21 or later, which runs review hooks; the script was not run.`,
+        );
+      }
       const enclave = createEnclave(module, toEnclaveOptions(spec));
       return {
-        run: (code) => enclave.run<unknown>(code),
+        run: (code) => enclave.run<unknown>(code, undefined, { reviewContext: spec.reviewContext }),
         dispose: () => enclave.dispose(),
       };
     },

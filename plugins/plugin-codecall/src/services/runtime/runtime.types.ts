@@ -6,7 +6,7 @@
 // must never make a Worker bundle load the Node-only `@enclave-vm/core` barrel.
 
 import type { ConsoleHandler, ReferenceSidecarOptions } from '@enclave-vm/core';
-import type { ExecutionResult, ToolHandler } from '@enclave-vm/core/worker';
+import type { ExecutionResult, ReviewContext, ReviewOptions, ToolHandler } from '@enclave-vm/core/worker';
 
 /**
  * The Enclave runtime a script runs in (`vm.runtime`).
@@ -92,6 +92,10 @@ export interface CodeCallScriptRunSpec {
   /** Pass-by-reference sidecar, when enabled. */
   sidecar?: ReferenceSidecarOptions;
   rapidEnumeration: CodeCallRapidEnumerationPolicy;
+  /** Review hooks before the run and each tool call, when the server's `review` is on. */
+  review?: ReviewOptions;
+  /** What the review hooks of this run receive as `context`: the caller. */
+  reviewContext?: ReviewContext;
 }
 
 /** The outcome of one run, in Enclave's `ExecutionResult` shape. */

@@ -14,6 +14,12 @@ import {
   type ToolCallResult,
 } from '../errors';
 import CodeCallConfig from '../providers/code-call.config';
+import { approvalAnswerSchema, approvalQuestionOf, clientCanElicit } from '../review/approval-elicitation';
+import { createRunReview, reviewContextOf } from '../review/create-run-review';
+import { ApprovalServiceViewToken } from '../review/review-approvals';
+import { reviewDecisionOf, reviewResultOf } from '../review/review-result';
+import CodeCallReviewService from '../review/review.service';
+import { reviewOutcomeOf, type RunReview } from '../review/run-review';
 import { jsonBytes, RunJournal } from '../runs/run-journal';
 import type { CodeCallRunInput, CodeCallRunStore } from '../runs/run-record.store';
 import { CodeCallRunStoreToken } from '../runs/run-record.types';
@@ -41,6 +47,16 @@ import {
   type CodeCallExecuteResult,
   type ExecuteToolInput,
 } from './execute.schema';
+
+/** How many times one `codecall:execute` asks a person, through elicitation, to approve a call it stopped at. */
+const MAX_APPROVALS_ASKED = 5;
+
+/** One run of the script, with its journal and, with `review` on, its review. */
+interface ReviewedAttempt {
+  result: CodeCallExecuteResult;
+  journal: RunJournal;
+  review?: RunReview;
+}
 
 /**
  * The code of a failed tool call, from the error's type and code. Its message is never read: a tool's own
@@ -108,28 +124,90 @@ export default class ExecuteTool extends ToolContext {
     const scriptHash = sha256Hex(input.script);
     const runs = this.tryGet(CodeCallRunStoreToken);
     const spans = this.startRunSpans(scriptHash, resolvedVm.runtime);
-    const journal = new RunJournal({ keepResults: runs?.keepsResults, keepValues: trace.values, observer: spans });
+    const newJournal = () =>
+      new RunJournal({ keepResults: runs?.keepsResults, keepValues: trace.values, observer: spans });
     const startedAt = new Date();
+    let attempt: ReviewedAttempt | undefined;
     let run: CodeCallRunInput | undefined;
     let runId: string | undefined;
     try {
-      const result = await this.runScript(input, journal);
+      attempt = await this.runApproved(input, scriptHash, newJournal);
+      const { result, journal, review } = attempt;
       run = {
         scriptHash,
         status: result.status,
         startedAt: startedAt.toISOString(),
         endedAt: new Date().toISOString(),
-        reviewDecision: null,
+        reviewDecision: review ? reviewDecisionOf(result) : null,
         ...(result.status === 'ok' && { resultBytes: jsonBytes(result.result) }),
         journal: [...journal.close()],
       };
       runId = runs ? await this.keepRun(runs, run) : undefined;
       const traceLines = traceOf(result.status, journal, trace);
+      if (review && 'findings' in result && result.findings) spans?.recordFindings(result.findings);
       return { ...result, ...(runId && { runId }), ...(traceLines && { trace: traceLines }) };
     } finally {
-      journal.close();
+      attempt?.journal.close();
       spans?.end(run, runId);
     }
+  }
+
+  /**
+   * Runs the script, and again each time a person approves, through elicitation, the call it stopped at. Without
+   * `review`, or without a client that can ask, it runs once.
+   */
+  private async runApproved(
+    input: ExecuteToolInput,
+    scriptHash: string,
+    newJournal: () => RunJournal,
+  ): Promise<ReviewedAttempt> {
+    const reviewService = this.tryGet(CodeCallReviewService);
+    const approvedByPerson = new Set<string>();
+    const canElicit = reviewService !== undefined && clientCanElicit(this.scope, this.tryGetContext());
+    let attempt = await this.attemptRun(input, scriptHash, newJournal(), reviewService, approvedByPerson, canElicit);
+    for (let asked = 0; canElicit && asked < MAX_APPROVALS_ASKED; asked++) {
+      const pending = attempt.review?.pendingApproval;
+      if (attempt.result.status !== 'needs_approval' || !pending) break;
+      const answer = await this.elicit(approvalQuestionOf(attempt.result.reason, pending), approvalAnswerSchema);
+      if (answer.status !== 'accept' || answer.content?.approve !== true) {
+        return {
+          ...attempt,
+          result: { status: 'denied', reason: `${attempt.result.reason}; the person did not approve it` },
+        };
+      }
+      approvedByPerson.add(pending.reference.id);
+      attempt.journal.close();
+      attempt = await this.attemptRun(input, scriptHash, newJournal(), reviewService, approvedByPerson, canElicit);
+    }
+    return attempt;
+  }
+
+  private async attemptRun(
+    input: ExecuteToolInput,
+    scriptHash: string,
+    journal: RunJournal,
+    reviewService: CodeCallReviewService | undefined,
+    approvedByPerson: ReadonlySet<string>,
+    canElicit: boolean,
+  ): Promise<ReviewedAttempt> {
+    const review = reviewService
+      ? await createRunReview(
+          reviewService,
+          {
+            scope: this.scope,
+            config: this.get(CodeCallConfig),
+            authInfo: this.authInfo,
+            surface: getCallSurface(),
+            allowedTools: input.allowedTools ? new Set(input.allowedTools) : undefined,
+            approvalService: this.tryGet(ApprovalServiceViewToken),
+            canElicit,
+            granted: approvedByPerson,
+          },
+          scriptHash,
+        )
+      : undefined;
+    const result = await this.runScript(input, journal, review);
+    return { result, journal, review };
   }
 
   /** The run's spans while observability traces requests, else none. */
@@ -155,7 +233,11 @@ export default class ExecuteTool extends ToolContext {
     }
   }
 
-  private async runScript(input: ExecuteToolInput, journal: RunJournal): Promise<CodeCallExecuteResult> {
+  private async runScript(
+    input: ExecuteToolInput,
+    journal: RunJournal,
+    review?: RunReview,
+  ): Promise<CodeCallExecuteResult> {
     const { script, allowedTools } = input;
 
     // The script acts for the client that called this tool, so every tool it reaches is judged,
@@ -395,8 +477,21 @@ export default class ExecuteTool extends ToolContext {
     audit?.logExecutionStart(executionId, script);
 
     try {
-      const executionResult = await enclaveService.execute(script, environment, journal);
+      const executionResult = await enclaveService.execute(
+        script,
+        environment,
+        journal,
+        review && { hooks: review.hooks, context: reviewContextOf(this, callerSurface) },
+      );
       const durationMs = elapsed(executionResult.stats?.duration);
+
+      const reviewOutcome = executionResult.review
+        ? reviewOutcomeOf(executionResult.review.decisions, executionResult.error)
+        : undefined;
+      if (reviewOutcome) {
+        audit?.logExecutionFailure(executionId, script, durationMs, `review: ${reviewOutcome.status}`);
+        return reviewResultOf(reviewOutcome, review?.pendingApproval);
+      }
 
       // Map execution result to CodeCall result
       if (executionResult.timedOut) {

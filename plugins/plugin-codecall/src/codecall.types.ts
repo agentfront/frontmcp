@@ -1,5 +1,7 @@
 // file: libs/plugins/src/codecall/codecall.types.ts
 
+import type { ReviewDecision, ReviewerRequest } from '@enclave-vm/core/worker';
+
 import { z } from '@frontmcp/lazy-zod';
 import type { StorageConfig } from '@frontmcp/utils';
 
@@ -479,6 +481,59 @@ export const codeCallTraceOptionsSchema = z
   })
   .prefault({});
 
+/** What the read-then-send rule answers: `needs_changes`, `denied`, or nothing with `false`. */
+export const codeCallReadThenSendSchema = z.union([z.literal(false), z.enum(['needs_changes', 'denied'])]);
+
+export const codeCallReviewRulesSchema = z.object({
+  /** A literal argument against the tool's input schema, and each call's real arguments: `needs_changes`. */
+  inputSchema: z.boolean().default(true),
+  /** A tool outside the CodeCall policy, the caller's authorities or the script's `allowedTools`: `denied`. */
+  availability: z.boolean().default(true),
+  /** A tool with `destructiveHint: true`: `needs_approval`, or `denied` when nobody can approve. */
+  destructive: z.boolean().default(true),
+  /** A `readOnlyHint` tool's result flowing into an `openWorldHint` tool's arguments ('needs_changes'). */
+  readThenSend: codeCallReadThenSendSchema.default('needs_changes'),
+  /** A call in a loop over a tool result with no bound below the call budget: `needs_changes`. */
+  fanOut: z.boolean().default(true),
+});
+
+const reviewerFunctionSchema = z.custom<CodeCallReviewerFunction>((value) => typeof value === 'function', {
+  message: 'review.reviewer must be a function with signature (request: ReviewerRequest) => ReviewDecision',
+});
+
+export const codeCallReviewProviderSchema = z.object({
+  provider: z.literal('openai'),
+  /** Sent only in the request's authorization header; never logged. */
+  apiKey: z.string().min(1),
+  model: z.string().min(1),
+  /** An OpenAI-compatible endpoint (https://api.openai.com/v1). */
+  baseUrl: z.string().url().optional(),
+  /** How long one review may take, in ms (20000). */
+  timeoutMs: z.number().int().min(1).optional(),
+});
+
+export const codeCallReviewOptionsSchema = z
+  .object({
+    /** The built-in rules, from tool annotations and input schemas; `false` turns them off (all on). */
+    rules: z.union([z.literal(false), codeCallReviewRulesSchema]).prefault({}),
+    /** A model provider that reviews each script against `policy`. */
+    provider: codeCallReviewProviderSchema.optional(),
+    /** The server's own reviewer of each script, as Enclave's `functionReviewer` calls it. */
+    reviewer: reviewerFunctionSchema.optional(),
+    /** The server's rules for scripts, as text, for `provider` and `reviewer`. */
+    policy: z.string().optional(),
+    /** Changing it asks again for every approval; set it when `reviewer` changes. Approvals also follow the other options. */
+    policyVersion: z.string().optional(),
+    /** How long one review hook may take, in ms (30000). */
+    timeoutMs: z.number().int().min(1).optional(),
+    /** How long an approval counts after it was granted, in seconds (3600). */
+    approvalMaxAgeSeconds: z.number().int().min(1).default(3600),
+  })
+  .refine((review) => !review.provider || review.policy !== undefined, {
+    path: ['policy'],
+    message: 'review.provider needs review.policy, the rules the model reviews scripts against',
+  });
+
 // Inner schema without the outer .default() - used for extracting input type
 const codeCallPluginOptionsObjectSchema = z.object({
   /**
@@ -539,6 +594,9 @@ const codeCallPluginOptionsObjectSchema = z.object({
 
   /** The trace of tool calls `codecall:execute` returns to the agent. */
   trace: codeCallTraceOptionsSchema,
+
+  /** Review of each script and each call before it runs; off unless set. */
+  review: codeCallReviewOptionsSchema.optional(),
 });
 
 // Default values for plugin options
@@ -571,6 +629,9 @@ export type CodeCallSidecarOptions = z.infer<typeof codeCallSidecarOptionsSchema
 export type CodeCallRunsOptions = z.infer<typeof codeCallRunsOptionsSchema>;
 export type CodeCallTraceLevel = z.infer<typeof codeCallTraceLevelSchema>;
 export type CodeCallTraceOptions = z.infer<typeof codeCallTraceOptionsSchema>;
+export type CodeCallReviewOptions = z.infer<typeof codeCallReviewOptionsSchema>;
+export type CodeCallReviewRules = z.infer<typeof codeCallReviewRulesSchema>;
+export type CodeCallReviewerFunction = (request: ReviewerRequest) => ReviewDecision | Promise<ReviewDecision>;
 
 export type CodeCallEmbeddingOptions = z.infer<typeof codeCallEmbeddingOptionsSchema>;
 export type CodeCallEmbeddingOptionsInput = z.input<typeof codeCallEmbeddingOptionsSchema>;

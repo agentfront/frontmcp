@@ -26,8 +26,16 @@ function unavailableGlobalsLine(): string {
   return `\nNOT AVAILABLE: ${listed.join(', ')}. Use ${instead.join(', ')}.`;
 }
 
-/** The `codecall:execute` description for the server's resolved `vm` options. */
-export function buildExecuteToolDescription(vmOptions: ResolvedCodeCallVmOptions): string {
+const REVIEW_STATUSES = ' | needs_changes | needs_approval | denied | review_failed';
+
+const REVIEW_LINE =
+  '\nREVIEW: the server checks each script and call first. ' +
+  'needs_changes: fix what the findings say and send again. ' +
+  'needs_approval: a person approves, then send the same script again. ' +
+  'denied: do not retry. review_failed: send the same script again later.';
+
+/** The `codecall:execute` description for the server's resolved `vm` options, and whether its `review` is on. */
+export function buildExecuteToolDescription(vmOptions: ResolvedCodeCallVmOptions, reviewed = false): string {
   const loops = vmOptions.allowLoops ? 'for, for-of' : 'for-of';
   const blockedLoops = vmOptions.allowLoops ? 'while, do-while' : 'while, do-while, for';
   const blockedNames = new Set([...ALWAYS_BLOCKED_NAMES, ...vmOptions.disabledBuiltins, ...vmOptions.disabledGlobals]);
@@ -58,8 +66,8 @@ ALLOWED: ${loops}, arrow fn, map/filter/reduce/find, ${namespaces.join('')}if/el
 BLOCKED: ${blockedLoops}, ${blockedConsole}function decl, ${[...blockedNames].join(', ')}${unavailableGlobalsLine()}${consoleLine}
 
 ERRORS: NOT_FOUND | VALIDATION | EXECUTION | TIMEOUT | ACCESS_DENIED | RATE_LIMITED | RESULT_TOO_LARGE
-STATUS: ok | syntax_error | illegal_access | runtime_error | tool_error | timeout
-LIMITS: ${MAX_ITERATIONS_PER_LOOP} iterations per loop, ${timeoutSeconds}s timeout, ${maxToolCalls} tool calls, ${callsPerTool} calls to one tool per 2s (parallel() included), ${vmOptions.maxSanitizeProperties} values (array items and object keys, at every depth) in each tool result and in the return value`;
+STATUS: ok | syntax_error | illegal_access | runtime_error | tool_error | timeout${reviewed ? REVIEW_STATUSES : ''}
+LIMITS: ${MAX_ITERATIONS_PER_LOOP} iterations per loop, ${timeoutSeconds}s timeout, ${maxToolCalls} tool calls, ${callsPerTool} calls to one tool per 2s (parallel() included), ${vmOptions.maxSanitizeProperties} values (array items and object keys, at every depth) in each tool result and in the return value${reviewed ? REVIEW_LINE : ''}`;
 }
 
 export const executeToolDescription = buildExecuteToolDescription(resolveVmOptions());
@@ -138,6 +146,25 @@ const runFields = {
   trace: z.array(z.string()).optional(),
 };
 
+/** What a review found: the rule, what is wrong, where, and how to fix it. */
+const reviewFindingSchema = z.object({
+  rule: z.string(),
+  message: z.string(),
+  location: z.object({ line: z.number(), column: z.number() }).optional(),
+  suggestion: z.string().optional(),
+  toolName: z.string().optional(),
+});
+
+/** What a person approves for a `needs_approval` run to go ahead; see the review section of the README. */
+const approvalReferenceSchema = z.object({
+  /** Covers this script, this call's arguments, the caller and the review policy. */
+  id: z.string(),
+  toolName: z.string().optional(),
+  argumentsHash: z.string().optional(),
+  /** Covers any arguments of this tool in this script, up to the grant's `metadata.maxCalls` calls a run. */
+  anyArgumentsId: z.string().optional(),
+});
+
 /**
  * Result variants
  */
@@ -178,6 +205,34 @@ export const codeCallTimeoutResultSchema = z.object({
   ...runFields,
 });
 
+export const codeCallNeedsChangesResultSchema = z.object({
+  status: z.literal('needs_changes'),
+  findings: z.array(reviewFindingSchema),
+  ...runFields,
+});
+
+export const codeCallNeedsApprovalResultSchema = z.object({
+  status: z.literal('needs_approval'),
+  reason: z.string(),
+  approval: approvalReferenceSchema.optional(),
+  findings: z.array(reviewFindingSchema).optional(),
+  ...runFields,
+});
+
+export const codeCallDeniedResultSchema = z.object({
+  status: z.literal('denied'),
+  reason: z.string(),
+  findings: z.array(reviewFindingSchema).optional(),
+  ...runFields,
+});
+
+/** The review itself failed: the same script can be sent again. */
+export const codeCallReviewFailedResultSchema = z.object({
+  status: z.literal('review_failed'),
+  error: z.object({ message: z.string() }),
+  ...runFields,
+});
+
 /**
  * Discriminated union for the whole result
  */
@@ -188,6 +243,10 @@ export const executeToolOutputSchema = z.discriminatedUnion('status', [
   codeCallRuntimeErrorResultSchema,
   codeCallToolErrorResultSchema,
   codeCallTimeoutResultSchema,
+  codeCallNeedsChangesResultSchema,
+  codeCallNeedsApprovalResultSchema,
+  codeCallDeniedResultSchema,
+  codeCallReviewFailedResultSchema,
 ]);
 
 /**
@@ -200,6 +259,10 @@ export type CodeCallIllegalAccessResult = z.infer<typeof codeCallIllegalAccessRe
 export type CodeCallRuntimeErrorResult = z.infer<typeof codeCallRuntimeErrorResultSchema>;
 export type CodeCallToolErrorResult = z.infer<typeof codeCallToolErrorResultSchema>;
 export type CodeCallTimeoutResult = z.infer<typeof codeCallTimeoutResultSchema>;
+export type CodeCallNeedsChangesResult = z.infer<typeof codeCallNeedsChangesResultSchema>;
+export type CodeCallNeedsApprovalResult = z.infer<typeof codeCallNeedsApprovalResultSchema>;
+export type CodeCallDeniedResult = z.infer<typeof codeCallDeniedResultSchema>;
+export type CodeCallReviewFailedResult = z.infer<typeof codeCallReviewFailedResultSchema>;
 
 export type CodeCallExecuteResult =
   | CodeCallOkResult
@@ -207,4 +270,8 @@ export type CodeCallExecuteResult =
   | CodeCallIllegalAccessResult
   | CodeCallRuntimeErrorResult
   | CodeCallToolErrorResult
-  | CodeCallTimeoutResult;
+  | CodeCallTimeoutResult
+  | CodeCallNeedsChangesResult
+  | CodeCallNeedsApprovalResult
+  | CodeCallDeniedResult
+  | CodeCallReviewFailedResult;

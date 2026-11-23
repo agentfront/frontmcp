@@ -13,3 +13,4 @@ export {
   type CodeCallRunRecord,
   type CodeCallRunStatus,
 } from './runs/run-record.types';
+export type { CodeCallApprovalReference } from './review/review-approvals';

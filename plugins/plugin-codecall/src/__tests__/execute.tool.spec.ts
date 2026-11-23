@@ -1104,6 +1104,7 @@ describe('ExecuteTool', () => {
         'return { total: 3 };',
         expect.any(Object),
         expect.any(RunJournal),
+        undefined,
       );
       expect(keep).toHaveBeenCalledWith(tool, {
         scriptHash: expect.stringMatching(/^[0-9a-f]{64}$/),

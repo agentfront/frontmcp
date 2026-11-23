@@ -23,7 +23,8 @@ export function jsonBytes(value: unknown): number {
   return encoder.encode(JSON.stringify(value) ?? '').byteLength;
 }
 
-function argumentsHashOf(args: unknown): string {
+/** SHA-256 (hex) of the arguments' canonical JSON. */
+export function argumentsHashOf(args: unknown): string {
   try {
     return sha256Hex(canonicalJson(args ?? null));
   } catch {

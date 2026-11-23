@@ -28,10 +28,12 @@ import {
   type CodeCallMode,
   type CodeCallPluginOptions,
   type CodeCallPluginOptionsInput,
+  type CodeCallReviewOptions,
   type CodeCallRunsOptions,
   type CodeCallToolMetadata,
 } from './codecall.types';
 import CodeCallConfig from './providers/code-call.config';
+import CodeCallReviewService from './review/review.service';
 import { CodeCallRunStore } from './runs/run-record.store';
 import { CodeCallRunStoreToken } from './runs/run-record.types';
 import { codeCallAppIdOf, isInProcessDispatch } from './security';
@@ -69,6 +71,15 @@ function runStoreProvider(runs: CodeCallRunsOptions): ProviderType {
         resume,
       }),
   });
+}
+
+/** The review of scripts and calls, with the reviewers from the Enclave entry the scripts' runtime loads. */
+function reviewServiceProvider(review: CodeCallReviewOptions, config: CodeCallConfig): ProviderType {
+  return {
+    name: 'codecall:review',
+    provide: CodeCallReviewService,
+    useValue: new CodeCallReviewService(review, config.getAll().resolvedVm.runtime),
+  };
 }
 
 /**
@@ -175,6 +186,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
         },
       },
       ...(parsedOptions.runs.enabled ? [runStoreProvider(parsedOptions.runs)] : []),
+      ...(parsedOptions.review ? [reviewServiceProvider(parsedOptions.review, config)] : []),
     ];
   }
 
@@ -193,7 +205,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
     );
     Reflect.defineMetadata(
       FrontMcpToolTokens.description,
-      buildExecuteToolDescription(config.resolvedVm),
+      buildExecuteToolDescription(config.resolvedVm, config.review !== undefined),
       ConfiguredExecuteTool,
     );
     return [

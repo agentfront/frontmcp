@@ -186,6 +186,31 @@ describe.each<CodeCallVmRuntime>(['node-vm', 'interpreter'])('codecall:execute t
       });
     });
 
+    it("puts the review's decision and findings on the run span, without the suggestion's values", async () => {
+      const outcome = await execute(
+        serverConfig({ vm, review: {} }, true),
+        "return await callTool('users.get', { id: 'secret-name-7' });",
+      );
+
+      expect(outcome.status).toBe('needs_changes');
+      const runSpan = codecallSpans().find((span) => span.name === 'codecall run');
+      expect(runSpan?.attributes).toMatchObject({
+        'codecall.run.status': 'needs_changes',
+        'codecall.review.decision': 'needs_changes',
+        'codecall.review.findings.count': 1,
+        'codecall.review.findings.rules': 'input-schema',
+        'codecall.review.findings': JSON.stringify([
+          {
+            rule: 'input-schema',
+            message: 'users.get: "id" must be a number, not a string',
+            toolName: 'users.get',
+            location: { line: 1, column: 13 },
+          },
+        ]),
+      });
+      expect(JSON.stringify(runSpan?.attributes)).not.toContain('secret-name');
+    });
+
     it('sends no span while observability is off', async () => {
       await execute(serverConfig({ vm }, false), THREE_CALLS);
 
