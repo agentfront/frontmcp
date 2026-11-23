@@ -4,7 +4,9 @@
  * Validates client_id URLs per CIMD specification and provides
  * Server-Side Request Forgery (SSRF) protection.
  */
-import { classifyIpAddress } from '@frontmcp/utils';
+import type { LookupAddress } from 'node:dns';
+
+import { classifyIpAddress, isEdgeRuntime, pinnedFetch } from '@frontmcp/utils';
 
 import { CimdSecurityError, InvalidClientIdUrlError } from './cimd.errors';
 import type { CimdSecurityConfig } from './cimd.types';
@@ -141,6 +143,8 @@ export function validateClientIdUrl(clientId: string, securityConfig?: Partial<C
 interface SsrfCheckResult {
   allowed: boolean;
   reason: string;
+  /** For a hostname resolved here, the addresses it resolved to, all checked: the only ones to connect to. */
+  addresses?: LookupAddress[];
 }
 
 /**
@@ -184,11 +188,8 @@ export function checkSsrfProtection(hostname: string): SsrfCheckResult {
  * function closes that gap by resolving the name and rejecting if ANY resolved
  * address is internal.
  *
- * Residual risk (documented, not yet closed here): DNS rebinding — the resolver
- * used here and the resolver used by `fetch()` are distinct, so a TOCTOU
- * attacker could return a public IP to this check and an internal IP to the
- * fetch. Fully closing it requires pinning the socket to the validated IP
- * (custom undici `lookup`/dispatcher), which is left to the caller/runtime.
+ * The resolved addresses are returned with the result; {@link fetchPinnedTo}
+ * connects to them only, so a second lookup's answer is never used.
  *
  * Degrades gracefully when `node:dns` is unavailable (e.g. a V8-isolate runtime)
  * or the name fails to resolve: an unresolvable name cannot be reached by
@@ -213,10 +214,10 @@ export async function resolveAndCheckHostname(hostname: string): Promise<SsrfChe
     return { allowed: true, reason: '' };
   }
 
-  let addresses: Array<{ address: string }>;
+  let addresses: LookupAddress[];
   try {
     const result = await dns.promises.lookup(hostname, { all: true, verbatim: true });
-    addresses = Array.isArray(result) ? result : [result as unknown as { address: string }];
+    addresses = Array.isArray(result) ? result : [result as unknown as LookupAddress];
   } catch {
     // node:dns IS available but resolution failed. Fail CLOSED: a transient
     // lookup failure here does NOT prove the host is unreachable — the fetch()
@@ -241,7 +242,7 @@ export async function resolveAndCheckHostname(hostname: string): Promise<SsrfChe
       };
     }
   }
-  return { allowed: true, reason: '' };
+  return { allowed: true, reason: '', addresses };
 }
 
 /**
@@ -250,13 +251,24 @@ export async function resolveAndCheckHostname(hostname: string): Promise<SsrfChe
  * redirect hop) so an attacker-supplied `client_id` host cannot resolve to an
  * internal address.
  *
+ * @returns The checked addresses to connect to, when the hostname was resolved
  * @throws CimdSecurityError if the host (or any resolved address) is internal.
  */
-export async function assertHostNotSsrf(hostname: string, clientId: string): Promise<void> {
+export async function assertHostNotSsrf(hostname: string, clientId: string): Promise<LookupAddress[] | undefined> {
   const check = await resolveAndCheckHostname(hostname);
   if (!check.allowed) {
     throw new CimdSecurityError(clientId, check.reason);
   }
+  return check.addresses;
+}
+
+/**
+ * `fetch` that connects only to `addresses`, the ones the SSRF check approved, keeping the hostname
+ * for `Host` and TLS. Plain `fetch` where there are none to pin to (an IP literal, a host the check
+ * skipped) or no lookup hook (a Worker, a browser), where the check covers the hostname only.
+ */
+export function fetchPinnedTo(addresses: readonly LookupAddress[] | undefined): typeof fetch {
+  return addresses?.length && !isEdgeRuntime() ? pinnedFetch(addresses) : fetch;
 }
 
 /**

@@ -1,7 +1,6 @@
-// file: plugins/plugin-skilled-openapi/src/executor/pinned-fetch.ts
-
 import type { LookupAddress } from 'node:dns';
 import type * as Http from 'node:http';
+import type { LookupFunction } from 'node:net';
 import type * as Stream from 'node:stream';
 import type * as Zlib from 'node:zlib';
 
@@ -36,25 +35,21 @@ function zlibSyncFlush(zlib: typeof Zlib): Zlib.ZlibOptions {
 }
 
 /**
- * `fetch` that connects only to `addresses`, the DNS answer the outbound check judged. `fetch`
+ * `fetch` that connects only to `addresses`, the DNS answer an outbound check judged. `fetch`
  * resolves the hostname again, and a second answer can name an address the check never saw. The
  * hostname still goes in `Host` and names the TLS server (SNI and the certificate check).
  *
  * Node.js only. It sends a string body or none, sends `fetch`'s default `accept`, `accept-encoding`
- * and `user-agent` when the request has none, decodes a compressed body as `fetch` does, and opens
- * a connection per request: a pooled one may lead elsewhere. The module names are not literals, so
- * Worker bundles never pull them in.
+ * and `user-agent` when the request has none, decodes a compressed body as `fetch` does, does not
+ * follow a redirect, and opens a connection per request: a pooled one may lead elsewhere.
  */
 export function pinnedFetch(addresses: readonly LookupAddress[]): typeof fetch {
   const lookup = pinnedLookup(addresses);
   return (async (input: string | URL, init: RequestInit = {}) => {
     const url = new URL(String(input));
-    const transportModuleName = url.protocol === 'https:' ? 'node:https' : 'node:http';
-    const streamModuleName = 'node:stream';
-    const zlibModuleName = 'node:zlib';
-    const { request } = (await import(transportModuleName)) as typeof Http;
-    const stream = (await import(streamModuleName)) as typeof Stream;
-    const zlib = (await import(zlibModuleName)) as typeof Zlib;
+    const transport: typeof Http = url.protocol === 'https:' ? require('node:https') : require('node:http');
+    const stream: typeof Stream = require('node:stream');
+    const zlib: typeof Zlib = require('node:zlib');
 
     const headers = new Headers(init.headers);
     const body = init.body as string | undefined;
@@ -68,7 +63,7 @@ export function pinnedFetch(addresses: readonly LookupAddress[]): typeof fetch {
     });
 
     const incoming = await new Promise<Http.IncomingMessage>((resolve, reject) => {
-      const outgoing = request(
+      const outgoing = transport.request(
         url,
         {
           method: init.method,
@@ -84,17 +79,18 @@ export function pinnedFetch(addresses: readonly LookupAddress[]): typeof fetch {
     });
 
     const status = incoming.statusCode ?? 0;
+    const statusText = incoming.statusMessage ?? '';
     const responseHeaders = new Headers();
     for (let index = 0; index < incoming.rawHeaders.length; index += 2) {
       responseHeaders.append(incoming.rawHeaders[index], incoming.rawHeaders[index + 1]);
     }
     if (NULL_BODY_STATUSES.has(status) || init.method?.toUpperCase() === 'HEAD') {
       incoming.resume();
-      return new Response(null, { status, headers: responseHeaders });
+      return new Response(null, { status, statusText, headers: responseHeaders });
     }
     const decoded = decodeBody(incoming, stream, zlib);
     const responseBody = stream.Readable.toWeb(decoded) as unknown as ReadableStream<Uint8Array>;
-    return new Response(responseBody, { status, headers: responseHeaders });
+    return new Response(responseBody, { status, statusText, headers: responseHeaders });
   }) as typeof fetch;
 }
 
@@ -121,14 +117,14 @@ function decodeBody(incoming: Http.IncomingMessage, stream: typeof Stream, zlib:
   return decoders[decoders.length - 1];
 }
 
-/** A `lookup` for the connection that answers with `addresses`, in whichever shape it asks for. */
-function pinnedLookup(addresses: readonly LookupAddress[]): NonNullable<Http.RequestOptions['lookup']> {
-  return ((_hostname, options, callback) => {
+/** A `lookup` that answers with the checked addresses only, in whichever shape the connection asks for. */
+export function pinnedLookup(addresses: readonly LookupAddress[]): LookupFunction {
+  return (_hostname, options, callback) => {
     if (options.all) {
       callback(null, [...addresses]);
       return;
     }
     const [first] = addresses;
     callback(null, first.address, first.family);
-  }) as NonNullable<Http.RequestOptions['lookup']>;
+  };
 }

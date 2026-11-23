@@ -62,6 +62,7 @@ export {
   isGloballyRoutableIp,
   parseIpv4,
   isRedirectResponse,
+  pinnedFetch,
   validateOutboundUrl,
   sendOutboundRequest,
   outboundFailureCategory,

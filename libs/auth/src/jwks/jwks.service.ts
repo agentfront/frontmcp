@@ -1,4 +1,6 @@
 // auth/jwks/jwks.service.ts
+import type { LookupAddress } from 'node:dns';
+
 import type { JSONWebKeySet, JWK } from 'jose';
 
 import {
@@ -10,7 +12,7 @@ import {
   rsaVerify,
 } from '@frontmcp/utils';
 
-import { resolveAndCheckHostname } from '../cimd/cimd.validator';
+import { fetchPinnedTo, resolveAndCheckHostname } from '../cimd/cimd.validator';
 import { noopAuthLogger, type AuthLogger } from '../common/auth-logger.interface';
 import { loadJose } from './jose.loader';
 import {
@@ -581,12 +583,15 @@ export class JwksService {
         // Preserve the localhost dev exception: a local IdP at localhost passes
         // the scheme check above, so it must not be blocked by the SSRF check in
         // non-production (in production, localhost is still rejected).
+        // The fetch connects only to the addresses the check approved.
+        let checkedAddresses: LookupAddress[] | undefined;
         if (!(isLocalhost && !isProduction())) {
           const ssrf = await resolveAndCheckHostname(parsed.hostname);
           if (!ssrf.allowed) throw new Error(`blocked host: ${ssrf.reason}`);
+          checkedAddresses = ssrf.addresses;
         }
 
-        const res = await fetch(currentUrl, {
+        const res = await fetchPinnedTo(checkedAddresses)(currentUrl, {
           method: 'GET',
           headers: { accept: 'application/json' },
           signal: ctl?.signal,
