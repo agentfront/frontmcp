@@ -49,24 +49,35 @@ jobs:
             exit 1
           fi
 
+      # Node comes from this workflow's own commit, without the shared cache, before the PR is checked out.
+      - name: Checkout the setup action
+        uses: actions/checkout@v6
+        with:
+          path: trusted
+          persist-credentials: false
+          sparse-checkout: |
+            .nvmrc
+            .github/actions/setup-node-yarn
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Node
+        uses: ./trusted/.github/actions/setup-node-yarn
+        with:
+          node-version-file: trusted/.nvmrc
+          install: "false"
+          cache: ""
+
       - name: Checkout PR branch
         uses: actions/checkout@v6
         with:
+          path: pr
           fetch-depth: 0
           ref: refs/pull/${{ inputs.pr_number }}/head
           persist-credentials: false
 
-      # The setup action comes from this workflow's own commit, not from the PR.
-      - name: Checkout the setup action
-        uses: actions/checkout@v6
-        with:
-          path: .trusted-actions
-          persist-credentials: false
-          sparse-checkout: .github/actions/setup-node-yarn
-          sparse-checkout-cone-mode: false
-
       - name: Get PR info
         id: pr-info
+        working-directory: pr
         run: |
           SHA=$(git rev-parse --short HEAD)
           FULL_SHA=$(git rev-parse HEAD)
@@ -74,19 +85,15 @@ jobs:
           echo "full_sha=$FULL_SHA" >> "$GITHUB_OUTPUT"
           echo "PR SHA: $SHA"
 
-      - name: Get Node version
-        id: node-version
-        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
-
-      - name: Setup Node + Yarn
-        uses: ./.trusted-actions/.github/actions/setup-node-yarn
-        with:
-          node-version: ${{ steps.node-version.outputs.version }}
-          # The PR's code runs here, so nothing it installs is saved to, or restored from, the shared cache.
-          cache: ""
+      - name: Install dependencies
+        working-directory: pr
+        run: yarn install --immutable
+        env:
+          npm_config_onnxruntime_node_install_cuda: skip
 
       - name: Calculate PR version
         id: version
+        working-directory: pr
         run: |
           PR_NUM="${{ inputs.pr_number }}"
           SHA="${{ steps.pr-info.outputs.sha }}"
@@ -101,15 +108,18 @@ jobs:
           echo "PR Version: $VERSION"
 
       - name: Update package versions
+        working-directory: pr
         run: |
           npx nx release version "${{ steps.version.outputs.version }}" \
             --git-tag=false --git-commit=false
 
       - name: Build all packages
+        working-directory: pr
         run: |
           npx nx run-many -t build --parallel=5
 
       - name: Pack packages
+        working-directory: pr
         run: |
           PACKAGES_DIR="$RUNNER_TEMP/pr-packages"
           mkdir -p "$PACKAGES_DIR"

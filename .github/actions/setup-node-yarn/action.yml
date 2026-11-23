@@ -46,6 +46,7 @@ runs:
         node-version-file: ${{ inputs.node-version-file }}
         registry-url: ${{ inputs.registry-url }}
         cache: ${{ inputs.cache }}
+        package-manager-cache: ${{ inputs.cache != '' }}
 
     - name: Install dependencies
       if: ${{ inputs.install == 'true' }}
