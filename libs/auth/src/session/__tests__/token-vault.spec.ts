@@ -7,7 +7,7 @@
  * Uses real crypto from @frontmcp/utils (no mocking).
  */
 
-import { randomBytes } from '@frontmcp/utils';
+import { base64urlEncode, encryptAesGcm, randomBytes } from '@frontmcp/utils';
 
 import { TokenVault, type EncBlob, type VaultKey } from '../token.vault';
 
@@ -17,6 +17,20 @@ import { TokenVault, type EncBlob, type VaultKey } from '../token.vault';
 
 function makeKey(kid: string): VaultKey {
   return { kid, key: randomBytes(32) };
+}
+
+/** A blob as TokenVault wrote it before `kid` and `exp` were bound: encrypted under the master key, no `v`. */
+function encryptWithoutBinding(vaultKey: VaultKey, plaintext: string, exp?: number): EncBlob {
+  const iv = randomBytes(12);
+  const { ciphertext, tag } = encryptAesGcm(vaultKey.key, new TextEncoder().encode(plaintext), iv);
+  return {
+    alg: 'A256GCM',
+    kid: vaultKey.kid,
+    iv: base64urlEncode(iv),
+    tag: base64urlEncode(tag),
+    data: base64urlEncode(ciphertext),
+    exp,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +134,7 @@ describe('TokenVault', () => {
       expect(typeof blob.data).toBe('string');
       expect(blob.exp).toBeUndefined();
       expect(blob.meta).toBeUndefined();
+      expect(blob.v).toBe(2);
     });
 
     it('should produce different ciphertext for same plaintext (random IV)', async () => {
@@ -346,6 +361,69 @@ describe('TokenVault', () => {
       blob.exp = undefined;
 
       expect(await vault.decrypt(blob)).toBe('data');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // kid and exp bound to the ciphertext
+  // -----------------------------------------------------------------------
+  describe('bound kid and exp', () => {
+    const nowSeconds = () => Math.floor(Date.now() / 1000);
+
+    it('should refuse a blob whose exp was raised', async () => {
+      const vault = new TokenVault([makeKey('k1')]);
+      const blob = await vault.encrypt('secret', { exp: nowSeconds() + 60 });
+
+      await expect(vault.decrypt({ ...blob, exp: nowSeconds() + 86_400 })).rejects.toThrow();
+    });
+
+    it('should refuse a blob whose exp was removed', async () => {
+      const vault = new TokenVault([makeKey('k1')]);
+      const blob = await vault.encrypt('secret', { exp: nowSeconds() + 60 });
+
+      await expect(vault.decrypt({ ...blob, exp: undefined })).rejects.toThrow();
+    });
+
+    it('should refuse a blob given an exp it was not encrypted with', async () => {
+      const vault = new TokenVault([makeKey('k1')]);
+      const blob = await vault.encrypt('secret');
+
+      await expect(vault.decrypt({ ...blob, exp: nowSeconds() + 60 })).rejects.toThrow();
+    });
+
+    it('should refuse a blob whose kid names another key with the same key material', async () => {
+      const material = randomBytes(32);
+      const vault = new TokenVault([
+        { kid: 'k1', key: material },
+        { kid: 'k2', key: material },
+      ]);
+      const blob = await vault.encrypt('secret');
+
+      await expect(vault.decrypt({ ...blob, kid: 'k2' })).rejects.toThrow();
+    });
+
+    it('should refuse a version 2 blob presented without its version', async () => {
+      const vault = new TokenVault([makeKey('k1')]);
+      const blob = await vault.encrypt('secret', { exp: nowSeconds() + 60 });
+
+      await expect(vault.decrypt({ ...blob, v: undefined })).rejects.toThrow();
+    });
+
+    it('should still decrypt a blob written before the binding, with or without exp', async () => {
+      const k1 = makeKey('k1');
+      const vault = new TokenVault([k1]);
+      const blobWrittenBefore = encryptWithoutBinding(k1, 'written-before', nowSeconds() + 60);
+
+      expect(await vault.decrypt(blobWrittenBefore)).toBe('written-before');
+      expect(await vault.decrypt({ ...blobWrittenBefore, exp: undefined })).toBe('written-before');
+    });
+
+    it('should still refuse an expired blob written before the binding', async () => {
+      const k1 = makeKey('k1');
+      const vault = new TokenVault([k1]);
+      const blobWrittenBefore = encryptWithoutBinding(k1, 'written-before', nowSeconds() - 1);
+
+      await expect(vault.decrypt(blobWrittenBefore)).rejects.toThrow('vault_expired:k1');
     });
   });
 });
