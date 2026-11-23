@@ -720,6 +720,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.orchestratedTokenStoreImpl = new StorageOrchestratedTokenStore(adapter, {
         encryptionKey: this.secret,
         refreshSkewMs: this.providerRefreshSkewMs(),
+        providerIssuer: (providerId) => this.providerAuthorizationServer(providerId),
       });
       this.consentStoreImpl = new StorageConsentStore(adapter);
 
@@ -1726,6 +1727,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
     this.providerConfigs.set(config.id, config);
     this.logger.info(`Registered upstream provider: ${config.id}`);
+  }
+
+  /** The authorization server a provider's tokens come from: its issuer, else its token endpoint. */
+  private providerAuthorizationServer(providerId: string): string | undefined {
+    const config = this.providerConfigs.get(providerId);
+    if (!config) {
+      return undefined;
+    }
+    return config.issuer ? normalizeIssuer(config.issuer) : config.tokenEndpoint;
   }
 
   /**

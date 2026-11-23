@@ -9,6 +9,11 @@
  */
 import 'reflect-metadata';
 
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { mkdtemp, rm } from '@frontmcp/utils';
+
 import { LocalPrimaryAuth } from '../instance.local-primary-auth';
 
 function createProviders() {
@@ -383,5 +388,44 @@ describe('LocalPrimaryAuth — provider token renewals in flight', () => {
     const renewals = await Promise.all([refresher?.('a:b', 'c'), refresher?.('a', 'b:c')]);
 
     expect(renewals.map((renewal) => renewal?.accessToken)).toEqual(['renewed-for-a:b', 'renewed-for-a']);
+  });
+});
+
+describe('LocalPrimaryAuth — stored provider tokens across a change of issuer', () => {
+  let directory: string;
+
+  beforeEach(async () => {
+    directory = await mkdtemp(path.join(os.tmpdir(), 'frontmcp-provider-issuer-'));
+  });
+
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  function serverWithIssuer(issuer: string) {
+    return makeAuth({
+      mode: 'local',
+      tokenStorage: { sqlite: { path: path.join(directory, 'tokens.sqlite') } },
+      providers: [
+        {
+          id: 'idp',
+          authorizeUrl: `${issuer}/authorize`,
+          tokenUrl: `${issuer}/token`,
+          clientId: 'client',
+          issuer,
+        },
+      ],
+    });
+  }
+
+  it("drops a provider's stored tokens after a restart under another issuer, and keeps them under the same one", async () => {
+    const before = await serverWithIssuer('https://old-idp.example');
+    await before.orchestratedTokenStore.storeTokens('auth-1', 'idp', { accessToken: 'at', refreshToken: 'rt' });
+
+    const sameIssuer = await serverWithIssuer('https://old-idp.example/');
+    expect(await sameIssuer.orchestratedTokenStore.getRefreshToken('auth-1', 'idp')).toBe('rt');
+
+    const otherIssuer = await serverWithIssuer('https://new-idp.example');
+    expect(await otherIssuer.orchestratedTokenStore.getRefreshToken('auth-1', 'idp')).toBeNull();
   });
 });

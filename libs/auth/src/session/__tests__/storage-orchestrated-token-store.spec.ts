@@ -309,6 +309,71 @@ describe('StorageOrchestratedTokenStore', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Binding to the provider's authorization server
+  // -------------------------------------------------------------------------
+  describe('provider issuer', () => {
+    const OLD_ISSUER = 'https://old-idp.example';
+    const NEW_ISSUER = 'https://new-idp.example';
+
+    function storeFor(issuer: string | undefined, encryptionKey?: Uint8Array): StorageOrchestratedTokenStore {
+      return new StorageOrchestratedTokenStore(adapter, { encryptionKey, providerIssuer: () => issuer });
+    }
+
+    it('records the issuer the provider uses when the tokens are stored', async () => {
+      await storeFor(OLD_ISSUER).storeTokens('auth-1', 'github', { accessToken: 'a', refreshToken: 'r' });
+      expect(JSON.parse((await adapter.get('otok:auth-1:github')) ?? '{}').issuer).toBe(OLD_ISSUER);
+    });
+
+    it.each([
+      ['plaintext', undefined],
+      ['encrypted', encKey()],
+    ])('drops %s tokens once the provider names another issuer after a restart', async (_mode, encryptionKey) => {
+      await storeFor(OLD_ISSUER, encryptionKey).storeTokens('auth-1', 'github', {
+        accessToken: 'a',
+        refreshToken: 'r',
+      });
+
+      const restarted = storeFor(NEW_ISSUER, encryptionKey);
+      expect(await restarted.getRefreshToken('auth-1', 'github')).toBeNull();
+      expect(await restarted.getAccessToken('auth-1', 'github')).toBeNull();
+      expect(await restarted.hasTokens('auth-1', 'github')).toBe(false);
+      expect(await restarted.getProviderIds('auth-1')).toEqual([]);
+      expect(await adapter.get('otok:auth-1:github')).toBeNull();
+    });
+
+    it('keeps tokens while the provider names the same issuer', async () => {
+      const key = encKey();
+      await storeFor(OLD_ISSUER, key).storeTokens('auth-1', 'github', { accessToken: 'a', refreshToken: 'r' });
+      expect(await storeFor(OLD_ISSUER, key).getRefreshToken('auth-1', 'github')).toBe('r');
+    });
+
+    it('reads tokens stored without an issuer, and binds them at their next write', async () => {
+      await new StorageOrchestratedTokenStore(adapter).storeTokens('auth-1', 'github', {
+        accessToken: 'a',
+        refreshToken: 'r',
+      });
+
+      const upgraded = storeFor(OLD_ISSUER);
+      expect(await upgraded.getRefreshToken('auth-1', 'github')).toBe('r');
+      await upgraded.storeTokens('auth-1', 'github', { accessToken: 'a2', refreshToken: 'r2' });
+
+      expect(await storeFor(NEW_ISSUER).getRefreshToken('auth-1', 'github')).toBeNull();
+    });
+
+    it('keeps the issuer when tokens move to another authorization id', async () => {
+      await storeFor(OLD_ISSUER).storeTokens('pending:1', 'github', { accessToken: 'a', refreshToken: 'r' });
+      await storeFor(OLD_ISSUER).migrateTokens('pending:1', 'auth-1');
+
+      expect(await storeFor(NEW_ISSUER).getRefreshToken('auth-1', 'github')).toBeNull();
+    });
+
+    it('keeps tokens for a provider whose current issuer is unknown', async () => {
+      await storeFor(OLD_ISSUER).storeTokens('auth-1', 'github', { accessToken: 'a', refreshToken: 'r' });
+      expect(await storeFor(undefined).getRefreshToken('auth-1', 'github')).toBe('r');
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Namespacing
   // -------------------------------------------------------------------------
   describe('key namespacing', () => {

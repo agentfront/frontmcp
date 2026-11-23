@@ -158,6 +158,14 @@ and move to the new token when the client refreshes FrontMCP's own. The IdP
 controls only the upstream tokens' lifetime: FrontMCP's own access token lasts an
 hour and its refresh token 30 days (rotated on each use).
 
+With a persistent `tokenStorage`, stored upstream tokens are bound to the
+authorization server that issued them: the provider's `issuer`, or its token endpoint
+when it has none. After a restart under another `issuer` (or, without one, another
+token endpoint), a provider's stored tokens are dropped instead of renewed, and the
+user authorizes that provider again. Tokens stored up to 1.12.2 name no issuer: they
+are bound to the provider's issuer when they are next renewed, so don't change an
+`issuer` in the same deploy as the upgrade.
+
 **Dynamic client registration** (`providerConfig.dcrEnabled`): without a `clientId`,
 FrontMCP registers itself with the provider (RFC 7591) at startup and signs in
 with that client. It registers at `providerConfig.registrationEndpoint`, or at the

@@ -53,6 +53,13 @@ export interface StorageOrchestratedTokenStoreOptions {
    * @default 0
    */
   refreshSkewMs?: number;
+
+  /**
+   * The authorization server that issues a provider's tokens now. Stored tokens are bound to it: a
+   * record issued by another one is dropped, so its refresh token is never sent to a server that did
+   * not issue it. A record stored without one is bound at its next write.
+   */
+  providerIssuer?: (providerId: string) => string | undefined;
 }
 
 export class StorageOrchestratedTokenStore implements TokenStore {
@@ -62,6 +69,7 @@ export class StorageOrchestratedTokenStore implements TokenStore {
   private readonly refreshSkewMs: number;
   private readonly namespace: string;
   private readonly storageIsNamespaced: boolean;
+  private readonly providerIssuer?: (providerId: string) => string | undefined;
 
   /** HKDF-derived subkey cache, keyed by composite key. */
   private readonly derivedKeys = new Map<string, Uint8Array>();
@@ -70,6 +78,7 @@ export class StorageOrchestratedTokenStore implements TokenStore {
     this.encryptionKey = options.encryptionKey;
     this.defaultTtlMs = options.defaultTtlMs;
     this.refreshSkewMs = options.refreshSkewMs ?? 0;
+    this.providerIssuer = options.providerIssuer;
     this.namespace = options.namespace ?? 'otok';
     this.storageIsNamespaced = this.isNamespacedStorage(storage);
     this.storage = this.storageIsNamespaced ? (storage as NamespacedStorage).namespace(this.namespace) : storage;
@@ -102,6 +111,7 @@ export class StorageOrchestratedTokenStore implements TokenStore {
       expiresAt: tokens.expiresAt ?? (this.defaultTtlMs ? now + this.defaultTtlMs : undefined),
       createdAt: now,
       updatedAt: now,
+      issuer: this.providerIssuer?.(providerId),
     };
 
     const value = this.encryptionKey ? encryptRecord(this.keyFor(compositeKey), record) : JSON.stringify(record);
@@ -232,12 +242,18 @@ export class StorageOrchestratedTokenStore implements TokenStore {
 
     // Defensive expiry check (TTL backends usually handle this themselves).
     const dropAt = recordDropAt(record);
-    if (dropAt && dropAt < Date.now()) {
+    if ((dropAt && dropAt < Date.now()) || this.issuedByAnotherServer(providerId, record)) {
       await this.storage.delete(this.storageKey(compositeKey));
       return null;
     }
 
     return record;
+  }
+
+  /** Whether the record names an authorization server other than the one the provider uses now. */
+  private issuedByAnotherServer(providerId: string, record: ProviderTokenRecord): boolean {
+    const currentIssuer = this.providerIssuer?.(providerId);
+    return record.issuer !== undefined && currentIssuer !== undefined && record.issuer !== currentIssuer;
   }
 
   private keyFor(compositeKey: string): Uint8Array {
