@@ -7,11 +7,13 @@ import { Provider, ProviderScope, type FrontMcpLogger } from '@frontmcp/sdk';
 
 import type { CodeCallVmEnvironment, ResolvedCodeCallVmOptions } from '../codecall.symbol';
 import type { CodeCallSidecarOptions } from '../codecall.types';
+import { createPublicToolCallError, TOOL_CALL_ERROR_CODES } from '../errors';
 import type CodeCallConfig from '../providers/code-call.config';
 import { MAX_ITERATIONS_PER_LOOP } from '../providers/code-call.config';
 import { findScriptPolicyIssues } from '../security/script-policy';
 import { toSandboxToolNamespaces } from '../utils/build-tool-namespaces';
 import { withScriptLines } from '../utils/script-lines';
+import { countResultValues } from '../utils/value-count';
 import {
   CodeCallRuntimeError,
   createDefaultRuntimes,
@@ -104,6 +106,75 @@ const ITERATION_LIMIT_ERROR = {
 
 /** `@enclave-vm/ast`'s message for a script that doesn't parse. */
 const PARSE_FAILURE_PREFIX = 'Failed to parse AgentScript code: ';
+
+/** How the sandbox's message starts for a value over `vm.maxSanitizeProperties`, whichever value it is. */
+const TOO_MANY_VALUES_PREFIX = 'Tool handler return value exceeds maximum properties';
+
+function formatCount(count: number): string {
+  return count.toLocaleString('en-US');
+}
+
+function toolResultTooLargeMessage(toolName: string, resultValues: number, maxResultValues: number): string {
+  return (
+    `The result of "${toolName}" holds ${formatCount(resultValues)} values (array items and object keys, at every ` +
+    `depth); vm.maxSanitizeProperties allows ${formatCount(maxResultValues)}. Ask the tool for fewer items or fields.`
+  );
+}
+
+function returnValueTooLargeMessage(maxResultValues: number): string {
+  return (
+    `The script's return value holds more than ${formatCount(maxResultValues)} values (array items and object keys, ` +
+    `at every depth), the vm.maxSanitizeProperties limit. Return fewer items or fields, or a summary.`
+  );
+}
+
+interface ValidationIssueSummary {
+  code?: string;
+  message?: string;
+  location?: { line?: number };
+  data?: { identifier?: unknown; allowedGlobals?: unknown };
+}
+
+/** The prefix the sandbox gives a global it renames before validating the script. */
+const SANDBOX_NAME_PREFIX = '__safe_';
+
+/** The names of the sandbox's own globals, which a script can't use. */
+const INTERNAL_NAME_PREFIX = '__';
+
+function scriptGlobalsOf(allowedGlobals: unknown): string[] {
+  if (!Array.isArray(allowedGlobals)) return [];
+  return allowedGlobals.filter(
+    (name): name is string => typeof name === 'string' && !name.startsWith(INTERNAL_NAME_PREFIX),
+  );
+}
+
+/**
+ * An issue's message; an unknown identifier is named as the script wrote it, not by the sandbox's name for
+ * it, with the globals a script can use in full instead of the sandbox's cut list of its internal ones.
+ */
+function issueMessageOf(issue: ValidationIssueSummary): string | undefined {
+  const identifier = issue.data?.identifier;
+  if (issue.code !== 'UNKNOWN_GLOBAL' || typeof identifier !== 'string') return issue.message;
+  const scriptName = identifier.startsWith(SANDBOX_NAME_PREFIX)
+    ? identifier.slice(SANDBOX_NAME_PREFIX.length)
+    : identifier;
+  const scriptGlobals = scriptGlobalsOf(issue.data?.allowedGlobals);
+  const globalsText = scriptGlobals.length > 0 ? ` Globals a script can use: ${scriptGlobals.join(', ')}.` : '';
+  return `Unknown identifier "${scriptName}". Declare it with const or let before using it.${globalsText}`;
+}
+
+/** A refusal and its issues, one per line, the same whichever runtime refused the script. */
+function validationMessageOf(reportedMessage: string, issues: readonly ValidationIssueSummary[]): string {
+  const lines = issues.flatMap((issue) => {
+    const message = issueMessageOf(issue);
+    if (!message) return [];
+    const line = issue.location?.line === undefined ? '' : ` (line ${issue.location.line})`;
+    return [`${issue.code ?? 'VALIDATION_ERROR'}${line}: ${message}`];
+  });
+  if (lines.length === 0) return reportedMessage;
+  const summary = reportedMessage.split('\n', 1)[0].replace(/:$/, '');
+  return `${summary}:\n${lines.join('\n')}`;
+}
 
 /** The `(line:column)` a parser message ends with. */
 const PARSE_POSITION_RE = /\((\d+):(\d+)\)$/;
@@ -240,9 +311,19 @@ export default class EnclaveService {
     // tool: the sandbox applies the script's `{ throwOnError: false }` itself, for `callTool()` and
     // namespace methods alike. Failures are kept so a script a failing tool ended is a tool error.
     const toolFailures: ToolFailure[] = [];
+    const maxResultValues = this.vmOptions.maxSanitizeProperties;
     const toolHandler: ToolHandler = gate.guardToolHandler(async (toolName: string, args: Record<string, unknown>) => {
       try {
-        return await environment.callTool(toolName, args);
+        const result = await environment.callTool(toolName, args);
+        const resultValues = countResultValues(result);
+        if (resultValues > maxResultValues) {
+          throw createPublicToolCallError(
+            TOOL_CALL_ERROR_CODES.RESULT_TOO_LARGE,
+            toolName,
+            toolResultTooLargeMessage(toolName, resultValues, maxResultValues),
+          );
+        }
+        return result;
       } catch (error: unknown) {
         const code = (error as { code?: unknown } | null | undefined)?.code;
         toolFailures.push({
@@ -414,18 +495,34 @@ export default class EnclaveService {
 
     // Check if it's a validation error
     if (error.code === 'VALIDATION_ERROR') {
-      const issues = (error.data as { issues?: Array<{ code?: string }> } | undefined)?.issues ?? [];
+      const issues = (error.data as { issues?: ValidationIssueSummary[] } | undefined)?.issues ?? [];
       const blockedPatterns = [...new Set(issues.map((issue) => issue.code).filter((code): code is string => !!code))];
+      const message = validationMessageOf(error.message, issues);
 
       return {
         success: false,
         error: {
           // The enclave names lines of the code it validated (the script wrapped and printed again),
           // not the script's own.
-          message: withScriptLines(error.message, script),
+          message: withScriptLines(message, script),
           name: 'ValidationError',
           code: error.code,
           ...(blockedPatterns.length > 0 ? { blockedPatterns } : {}),
+        },
+        logs,
+        timedOut: false,
+        stats,
+      };
+    }
+
+    // The tool handler refuses a tool result over the limit itself, so what is left over it is the return value.
+    if (error.message?.startsWith(TOO_MANY_VALUES_PREFIX) && error.code !== 'TOOL_RESULT_NOT_SAFE') {
+      return {
+        success: false,
+        error: {
+          message: returnValueTooLargeMessage(this.vmOptions.maxSanitizeProperties),
+          name: 'RangeError',
+          code: TOOL_CALL_ERROR_CODES.RESULT_TOO_LARGE,
         },
         logs,
         timedOut: false,

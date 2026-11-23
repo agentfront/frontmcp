@@ -2,7 +2,9 @@
 
 import {
   ForbiddenLoopRule,
+  getAgentScriptGlobals,
   JSAstValidator,
+  UnknownGlobalRule,
   ValidationSeverity,
   type ValidationContext,
   type ValidationIssue,
@@ -10,6 +12,7 @@ import {
 } from '@enclave-vm/ast';
 
 import type { ResolvedCodeCallVmOptions } from '../codecall.symbol';
+import { CODECALL_ENCLAVE_SECURITY_LEVEL } from '../providers/code-call.config';
 
 type ScriptPolicyOptions = Pick<
   ResolvedCodeCallVmOptions,
@@ -96,6 +99,58 @@ class DisallowedGlobalsRule implements ValidationRule {
   }
 }
 
+/** Globals of JavaScript that models reach for, and what a script uses instead where AgentScript has none. */
+const ALTERNATIVES_TO_GLOBALS: ReadonlyArray<{ name: string; alternative: string }> = [
+  { name: 'Set', alternative: 'use an object with true values, or an array' },
+  { name: 'Map', alternative: 'use a plain object' },
+  { name: 'WeakMap', alternative: 'use a plain object' },
+  { name: 'WeakSet', alternative: 'use an object with true values, or an array' },
+  { name: 'Symbol', alternative: 'use a string' },
+  { name: 'RegExp', alternative: 'use string methods such as includes, startsWith, split and replaceAll' },
+  { name: 'Promise', alternative: 'use parallel(items, (item) => callTool(name, args)) to run calls at once' },
+  { name: 'Error', alternative: 'throw a string' },
+  { name: 'TypeError', alternative: 'throw a string' },
+  { name: 'RangeError', alternative: 'throw a string' },
+  { name: 'structuredClone', alternative: 'use JSON.parse(JSON.stringify(value))' },
+];
+
+/** The globals of {@link ALTERNATIVES_TO_GLOBALS} the sandbox doesn't give CodeCall scripts. */
+export function unavailableGlobals(): ReadonlyArray<{ name: string; alternative: string }> {
+  const sandboxGlobals = new Set(getAgentScriptGlobals(CODECALL_ENCLAVE_SECURITY_LEVEL));
+  return ALTERNATIVES_TO_GLOBALS.filter(({ name }) => !sandboxGlobals.has(name));
+}
+
+/**
+ * Refuses a reference to a global the sandbox lacks, naming it as the script wrote it, with what to use instead.
+ * A name the script declares itself (`const { Map } = data`) is the script's own and is left alone.
+ */
+class UnavailableGlobalsRule implements ValidationRule {
+  readonly name = 'codecall-unavailable-globals';
+  readonly description = 'Globals AgentScript does not have';
+  readonly defaultSeverity = ValidationSeverity.ERROR;
+  readonly enabledByDefault = true;
+  private readonly globalReferences = new UnknownGlobalRule({ allowedGlobals: [], allowStandardGlobals: false });
+
+  constructor(private readonly alternatives: ReadonlyMap<string, string>) {}
+
+  validate(context: ValidationContext): void {
+    this.globalReferences.validate({
+      ...context,
+      report: (issue) => {
+        const name = issue.data?.['identifier'];
+        const alternative = typeof name === 'string' ? this.alternatives.get(name) : undefined;
+        if (alternative === undefined) return;
+        context.report({
+          code: 'DISALLOWED_IDENTIFIER',
+          message: `${name} is not available in AgentScript; ${alternative}`,
+          location: issue.location,
+          data: { identifier: name },
+        });
+      },
+    });
+  }
+}
+
 /** Why each refused global is refused; `console` is refused unless the server set `vm.allowConsole: true`. */
 function disallowedGlobalMessages({
   disabledBuiltins,
@@ -116,7 +171,11 @@ function disallowedGlobalMessages({
 }
 
 function scriptPolicyRules(options: ScriptPolicyOptions): ValidationRule[] {
-  const rules: ValidationRule[] = [new DisallowedGlobalsRule(disallowedGlobalMessages(options))];
+  const alternatives = new Map(unavailableGlobals().map(({ name, alternative }) => [name, alternative]));
+  const rules: ValidationRule[] = [
+    new DisallowedGlobalsRule(disallowedGlobalMessages(options)),
+    new UnavailableGlobalsRule(alternatives),
+  ];
   if (!options.allowLoops) {
     rules.push(
       new ForbiddenLoopRule({
@@ -134,9 +193,10 @@ function scriptPolicyRules(options: ScriptPolicyOptions): ValidationRule[] {
 
 /**
  * The places a script uses a loop `vm.allowLoops: false` turns off, a global `vm.disabledBuiltins` or
- * `vm.disabledGlobals` lists, or `console` without `vm.allowConsole: true`, in the script's own lines. The sandbox takes no option for these, so CodeCall checks before it runs the script,
- * parsing it the way the sandbox does. A script none of those parses accept is left to the sandbox,
- * which fails on the same parse and reports the syntax error.
+ * `vm.disabledGlobals` lists, `console` without `vm.allowConsole: true`, or a global the sandbox doesn't have
+ * (`Set`, `Promise`, ...), in the script's own lines. The sandbox takes no option for the first three and has no
+ * advice for the last, so CodeCall checks before it runs the script, parsing it the way the sandbox does. A script
+ * none of those parses accept is left to the sandbox, which fails on the same parse and reports the syntax error.
  */
 export async function findScriptPolicyIssues(code: string, options: ScriptPolicyOptions): Promise<ValidationIssue[]> {
   const validator = new JSAstValidator(scriptPolicyRules(options));

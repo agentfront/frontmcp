@@ -244,8 +244,18 @@ describe('CodeCall tool descriptions follow the effective config', () => {
       const description = await listedDescription(server(), 'codecall:execute');
 
       expect(lineStartingWith(description, 'LIMITS:')).toBe(
-        'LIMITS: 10000 iterations per loop, 3.5s timeout, 5000 tool calls, 30 calls to one tool per 2s (parallel() included)',
+        'LIMITS: 10000 iterations per loop, 3.5s timeout, 5000 tool calls, 30 calls to one tool per 2s (parallel() included), 2000 values (array items and object keys, at every depth) in each tool result and in the return value',
       );
+    });
+
+    it('tells codecall:execute which globals scripts lack, and what to use instead', async () => {
+      const description = await listedDescription(server(), 'codecall:execute');
+
+      expect(lineStartingWith(description, 'NOT AVAILABLE:')).toBe(
+        'NOT AVAILABLE: Set, Map, WeakMap, WeakSet, Symbol, RegExp, Promise, Error, TypeError, RangeError, structuredClone, regex literals. ' +
+          'Use plain objects and arrays, parallel(items, fn) for Promise.all, throw a string for Error.',
+      );
+      expect(lineStartingWith(description, 'ERRORS:')).toContain('RESULT_TOO_LARGE');
     });
   });
 
@@ -264,7 +274,7 @@ describe('CodeCall tool descriptions follow the effective config', () => {
       const description = await listedDescription(server(), 'codecall:execute');
 
       expect(lineStartingWith(description, 'LIMITS:')).toBe(
-        'LIMITS: 10000 iterations per loop, 1.2s timeout, 40 tool calls, 20 calls to one tool per 2s (parallel() included)',
+        'LIMITS: 10000 iterations per loop, 1.2s timeout, 40 tool calls, 20 calls to one tool per 2s (parallel() included), 2000 values (array items and object keys, at every depth) in each tool result and in the return value',
       );
       expect(lineStartingWith(description, 'ALLOWED:')).toMatch(/^ALLOWED: for, for-of,/);
       expect(lineStartingWith(description, 'ALLOWED:')).not.toContain('JSON.*');

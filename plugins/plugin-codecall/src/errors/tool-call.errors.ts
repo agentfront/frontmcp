@@ -14,6 +14,7 @@ export const TOOL_CALL_ERROR_CODES = {
   ACCESS_DENIED: 'ACCESS_DENIED',
   RATE_LIMITED: 'RATE_LIMITED',
   SELF_REFERENCE: 'SELF_REFERENCE',
+  RESULT_TOO_LARGE: 'RESULT_TOO_LARGE',
 } as const;
 
 export type ToolCallErrorCode = (typeof TOOL_CALL_ERROR_CODES)[keyof typeof TOOL_CALL_ERROR_CODES];
@@ -106,6 +107,9 @@ function getSanitizedMessage(code: ToolCallErrorCode, toolName: string, rawMessa
 
     case TOOL_CALL_ERROR_CODES.SELF_REFERENCE:
       return `Cannot call CodeCall tools from within AgentScript`;
+
+    case TOOL_CALL_ERROR_CODES.RESULT_TOO_LARGE:
+      return `The result of "${toolName}" holds more values than vm.maxSanitizeProperties allows`;
 
     default:
       return `An error occurred while calling "${toolName}"`;
