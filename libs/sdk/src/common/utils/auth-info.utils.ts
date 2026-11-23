@@ -19,6 +19,7 @@ export interface AuthorizationAuthInfo {
     /** The request's verified session: one the request presented and session verification accepted. */
     sessionId: string | undefined;
     sessionPayload: NonNullable<Authorization['session']>['payload'];
+    principalIssuer: Authorization['principalIssuer'];
   };
 }
 
@@ -63,7 +64,7 @@ export function authInfoFromAuthorization(
   authorization: Authorization,
   presentedSessionId?: string,
 ): AuthorizationAuthInfo {
-  const { token, user, session } = authorization;
+  const { token, user, session, principalIssuer } = authorization;
   const verifiedSession =
     session !== undefined && presentedSessionId !== undefined && session.id === presentedSessionId
       ? session
@@ -78,6 +79,7 @@ export function authInfoFromAuthorization(
       user,
       sessionId: verifiedSession?.id,
       sessionPayload: verifiedSession?.payload,
+      principalIssuer,
     },
   };
 }

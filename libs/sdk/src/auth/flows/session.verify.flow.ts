@@ -34,6 +34,7 @@ import {
   extractBearerToken,
   isJwt,
   JwksService,
+  normalizeIssuer,
   scopesFromClaims,
   validateAudience,
   type ProviderVerifyRef,
@@ -69,6 +70,7 @@ const stateSchema = z.object({
   jwtPayload: z.object({}).passthrough().optional(),
   user: userClaimSchema.optional(),
   session: sessionIdSchema.optional(),
+  principalIssuer: z.string().optional(),
 });
 
 const UnauthorizedSchema = z
@@ -642,6 +644,10 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     if (result.ok) {
       this.state.set({ jwtPayload: result.payload });
+      const tokenIssuer = normalizeIssuer(result.issuer);
+      if (isTransparentMode(authOptions) && tokenIssuer !== normalizeIssuer(auth.issuer)) {
+        this.state.set('principalIssuer', tokenIssuer);
+      }
 
       // Validate audience (RFC 8707 / MCP Authorization spec) in transparent
       // mode. Transparent tokens are verified against an EXTERNAL IdP's shared
@@ -762,6 +768,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const {
       required: { token, user },
       session,
+      principalIssuer,
     } = this.state;
 
     this.logger.verbose('Session verified successfully', {
@@ -775,6 +782,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
         token,
         user,
         session,
+        ...(principalIssuer !== undefined && { principalIssuer }),
       },
     });
   }
