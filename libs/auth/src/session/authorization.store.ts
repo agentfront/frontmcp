@@ -85,6 +85,8 @@ export interface AuthorizationCodeRecord {
    * (sub/iss/exp/…) are stripped when signed.
    */
   customClaims?: Record<string, unknown>;
+  /** How the client authenticates at the token endpoint, from its registration when the authorization started. */
+  clientAuthMethod?: string;
 }
 
 /**
@@ -202,6 +204,8 @@ export interface PendingAuthorizationRecord {
    * request that doesn't carry the matching cookie.
    */
   signinBinding?: string;
+  /** How the client authenticates at the token endpoint, from its registration when the authorization started. */
+  clientAuthMethod?: string;
 }
 
 /**
@@ -253,6 +257,12 @@ export interface RefreshTokenRecord {
    * moves them to the new access token's id.
    */
   providerTokensId?: string;
+  /**
+   * How the client authenticates at the token endpoint (`token_endpoint_auth_method`) when the grant
+   * was issued, so a refresh still requires its credentials where its registration is not known.
+   * Absent on records written before it was kept.
+   */
+  clientAuthMethod?: string;
 }
 
 /**
@@ -288,6 +298,7 @@ export const authorizationCodeRecordSchema = z.object({
   authorizedAppIds: z.array(z.string()).optional(),
   // Custom claims from a local authenticate() verifier (Checkpoint 3a).
   customClaims: z.record(z.string(), z.unknown()).optional(),
+  clientAuthMethod: z.string().optional(),
 });
 
 /**
@@ -315,6 +326,7 @@ export interface CreateCodeRecordParams {
   authorizedAppIds?: string[];
   // Custom claims from a local authenticate() verifier (Checkpoint 3a).
   customClaims?: Record<string, unknown>;
+  clientAuthMethod?: string;
 }
 
 /**
@@ -347,6 +359,7 @@ export interface CreatePendingRecordParams {
   authUiCsrf?: string;
   /** SHA-256 of the sign-in binding cookie (see `PendingAuthorizationRecord.signinBinding`). */
   signinBinding?: string;
+  clientAuthMethod?: string;
 }
 
 /**
@@ -368,6 +381,7 @@ export interface CreateRefreshTokenRecordParams {
   selectedProviderIds?: string[];
   skippedProviderIds?: string[];
   providerTokensId?: string;
+  clientAuthMethod?: string;
 }
 
 /** Default TTL for authorization codes (60 seconds). */
@@ -419,6 +433,7 @@ export function buildCodeRecord(params: CreateCodeRecordParams): AuthorizationCo
     pendingAuthId: params.pendingAuthId,
     authorizedAppIds: params.authorizedAppIds,
     customClaims: params.customClaims,
+    clientAuthMethod: params.clientAuthMethod,
   };
 }
 
@@ -448,6 +463,7 @@ export function buildPendingRecord(params: CreatePendingRecordParams): PendingAu
     consent: params.consent,
     authUiCsrf: params.authUiCsrf,
     signinBinding: params.signinBinding,
+    clientAuthMethod: params.clientAuthMethod,
   };
 }
 
@@ -477,6 +493,7 @@ export function buildRefreshTokenRecord(params: CreateRefreshTokenRecordParams):
     selectedProviderIds: params.selectedProviderIds,
     skippedProviderIds: params.skippedProviderIds,
     providerTokensId: params.providerTokensId,
+    clientAuthMethod: params.clientAuthMethod,
   };
 }
 

@@ -60,6 +60,7 @@ async function mintAndExchange(
   const redirectUri = 'http://127.0.0.1:9999/cb';
   const code = await auth.createAuthorizationCode({
     clientId,
+    clientAuthMethod: 'none',
     redirectUri,
     scopes: SCOPES,
     codeChallenge: challenge,

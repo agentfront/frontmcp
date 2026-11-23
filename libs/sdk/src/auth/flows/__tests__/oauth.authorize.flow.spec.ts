@@ -690,6 +690,40 @@ describe('OAuth Authorize Flow', () => {
       expect(typeof state.pendingAuthId).toBe('string');
     });
 
+    it.each([
+      ['client_secret_post', 'client_secret_post'],
+      ['none', 'none'],
+    ] as const)(
+      'records how a client registered with %s authenticates on the pending authorization',
+      async (registeredMethod, recorded) => {
+        const scope = flowScenarios.orchestratedLocal();
+        const auth = scope.auth as unknown as Record<string, unknown>;
+        auth['dcrClientRegistry'] = new DcrClientRegistry({
+          clients: [
+            {
+              clientId: 'test-client-id',
+              clientSecret: 'secret',
+              tokenEndpointAuthMethod: registeredMethod,
+              redirectUris: ['https://client.example.com/callback'],
+            },
+          ],
+        });
+        const flow = new OauthAuthorizeFlow(
+          createFlowMetadata(),
+          createOAuthInput(createValidOAuthRequest()),
+          scope,
+          jest.fn(),
+          new Map(),
+        );
+
+        await runFlowStages(flow, ['parseInput', 'validateInput', 'checkIfAuthorized', 'prepareAuthorizationRequest']);
+
+        const store = auth['authorizationStore'] as InMemoryAuthorizationStore;
+        const pending = await store.getPendingAuthorization(flow.state.snapshot().pendingAuthId as string);
+        expect(pending?.clientAuthMethod).toBe(recorded);
+      },
+    );
+
     it('should show error page when redirect_uri is invalid', async () => {
       const scope = flowScenarios.orchestratedLocal();
       const metadata = createFlowMetadata();

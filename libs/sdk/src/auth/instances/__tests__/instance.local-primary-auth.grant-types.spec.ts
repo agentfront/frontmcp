@@ -57,6 +57,7 @@ async function redeemCode(auth: LocalPrimaryAuth, clientId: string) {
   const verifier = generateCodeVerifier();
   const code = await auth.createAuthorizationCode({
     clientId,
+    clientAuthMethod: 'none',
     redirectUri: REDIRECT,
     scopes: ['openid'],
     codeChallenge: sha256Base64url(verifier),
