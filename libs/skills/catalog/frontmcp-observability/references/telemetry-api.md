@@ -174,12 +174,22 @@ its own. End it like any other span. CodeCall uses it for one span per tool call
 
 ```typescript
 const batch = this.telemetry.startSpan('import-batch');
-for (const item of items) {
-  const itemSpan = batch.startChildSpan('import-item', { 'item.id': item.id });
-  await processItem(item);
-  itemSpan.end();
+try {
+  for (const item of items) {
+    const itemSpan = batch.startChildSpan('import-item', { 'item.id': item.id });
+    try {
+      await processItem(item);
+      itemSpan.end();
+    } catch (err) {
+      itemSpan.endWithError(err instanceof Error ? err : String(err));
+      throw err;
+    }
+  }
+  batch.end();
+} catch (err) {
+  batch.endWithError(err instanceof Error ? err : String(err));
+  throw err;
 }
-batch.end();
 ```
 
 ## Access to Raw OTel Span
