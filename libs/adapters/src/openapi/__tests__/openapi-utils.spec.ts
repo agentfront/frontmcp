@@ -266,6 +266,70 @@ describe('OpenapiAdapter - Utilities', () => {
 
       expect(result.headers.get('X-Filter')).toBe('{"a":1}');
     });
+
+    describe('a parameter defined with a JSON media type', () => {
+      const security = { headers: {}, query: {}, cookies: {} };
+
+      function toolWith(
+        location: 'query' | 'header',
+        required: boolean,
+        contentType?: string,
+        specDefault?: unknown,
+      ): McpOpenAPITool {
+        return {
+          name: 'search',
+          description: 'Search',
+          inputSchema: {
+            type: 'object',
+            properties: { filter: specDefault === undefined ? {} : { default: specDefault } },
+          },
+          mapper: [
+            {
+              inputKey: 'filter',
+              type: location,
+              key: location === 'header' ? 'X-Filter' : 'filter',
+              required,
+              ...(contentType && { serialization: { contentType } }),
+            },
+          ],
+          metadata: { path: '/search', method: 'get', servers: [{ url: 'https://api.example.com' }] },
+        };
+      }
+
+      function queryFilter(tool: McpOpenAPITool, input: Record<string, unknown>): string | null {
+        return new URL(buildRequest(tool, input, security, 'https://api.example.com').url).searchParams.get('filter');
+      }
+
+      it('writes non-ASCII characters of a header value as \\u escapes, the same JSON value', () => {
+        const tool = toolWith('header', false, 'application/json');
+
+        const headerValue = buildRequest(
+          tool,
+          { filter: { name: '日本 é' } },
+          security,
+          'https://api.example.com',
+        ).headers.get('X-Filter');
+
+        expect(headerValue).toBe('{"name":"\\u65e5\\u672c \\u00e9"}');
+        expect(JSON.parse(headerValue ?? '')).toEqual({ name: '日本 é' });
+      });
+
+      it('sends an explicit null as the JSON text null, required or not', () => {
+        expect(queryFilter(toolWith('query', true, 'application/json'), { filter: null })).toBe('null');
+        expect(queryFilter(toolWith('query', false, 'application/json'), { filter: null })).toBe('null');
+      });
+
+      it('sends a null spec default of a required parameter the input leaves out as null', () => {
+        expect(queryFilter(toolWith('query', true, 'application/json', null), {})).toBe('null');
+      });
+
+      it('still drops a null for an optional ordinary parameter and refuses it for a required one', () => {
+        expect(queryFilter(toolWith('query', false), { filter: null })).toBeNull();
+        expect(() => queryFilter(toolWith('query', true), { filter: null })).toThrow(
+          "Required query parameter 'filter' (input: 'filter') is missing",
+        );
+      });
+    });
   });
 
   describe('applyAdditionalHeaders', () => {
