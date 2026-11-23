@@ -130,7 +130,8 @@ after the rebind the browser genuinely considers the request same-origin. Valida
 server-side defence.
 
 With no `allowedHosts` configured, the list is derived from what the process listens on: `localhost`,
-`127.0.0.1` and `[::1]`, each with and without the bound port. Matching is case-insensitive and
+`127.0.0.1` and `[::1]`, each with and without the bound port. Setting `allowedOrigins` alone keeps that
+derived list (up to 1.12.2 it turned the `Host` check off). Matching is case-insensitive and
 treats `host` and `host:80`/`host:443` as equal. A loopback listener is reachable only under those
 names, so the derived list is exact and is enforced as-is; a routable bind enforces nothing derived
 until you name the public host, and the bound NIC address then joins the list alongside it.
