@@ -52,7 +52,7 @@ Public mode allows all connections without authentication. Use this for developm
 class MyApp {}
 ```
 
-- `sessionTtl` -- lifetime in seconds (a positive whole number, default 3600) of the anonymous tokens `/oauth/token` issues (`expires_in` and `exp`); session ids don't expire.
+- `sessionTtl` -- lifetime in seconds (a positive whole number, default 3600) of the anonymous tokens `/oauth/token` issues (`expires_in` and `exp`), and of the anonymous session id a client resumes its session with (`mcp-session-id`, or the legacy SSE `?sessionId=`): a request under an older id is answered as an unknown session (`404`), and the client initializes a new one. Raise it for clients that keep one session for longer. Up to 1.12.2 session ids did not expire.
 - `anonymousScopes` -- scopes granted to all unauthenticated clients (`this.auth.scopes`).
 - `publicAccess` -- `{ tools, prompts, rateLimit }`: the tools and prompts an anonymous caller may list and call (`'all'` by default; others answer `PUBLIC_ACCESS_DENIED`), and its calls per IP per minute (default 60).
 
