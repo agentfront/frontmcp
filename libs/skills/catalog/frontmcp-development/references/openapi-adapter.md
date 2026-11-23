@@ -64,6 +64,16 @@ credential argument (`securitySchemesInInput`) may be left out when the server s
 parameter with a spec `default` that the model leaves out is sent with that default (up to 1.9.2 the call failed with
 `Required query parameter '<name>' … is missing`).
 
+A header the HTTP client, a credential or a proxy sets (`Accept`, `Content-Type`, `Authorization`, `Host`,
+`X-Forwarded-*`, ...) is not an input (send it with `additionalHeaders`, `headersMapper` or a security scheme), nor is
+a `readOnly` property. Each property of an object body is an input of its own, but a body that takes properties it
+doesn't name (`additionalProperties` or `unevaluatedProperties` other than `false`), or whose properties are all
+`readOnly`, is one `body` input, sent as the request body. A parameter defined with `content` (a media type instead of
+a `schema`) takes the media type's schema, and with a JSON media type its value is sent as its JSON text. An operation
+whose security can't be satisfied (every requirement names a scheme that isn't defined or can't be sent) makes no tool.
+Up to 1.12.2 those headers and `readOnly` properties were inputs, an open object body was split into the properties it
+names, and a `content` parameter was a string the model wrote as JSON.
+
 ## Authentication
 
 Five strategies with different security risk levels:
@@ -323,6 +333,13 @@ OpenapiAdapter.init({
 });
 ```
 
+An `inputKey` must name an input of the tool: a value injected for any other key is not sent. The adapter warns at
+startup (`inputTransforms: tool '<name>' has no input '<key>'`, or `no tool has an input '<key>'` for a `global` one),
+once per tool and key, and keeps starting. The headers the HTTP client sets (`Authorization`, `Accept`,
+`Content-Type`, `Host`, `X-Forwarded-*`) are not inputs, and an object body that takes properties it doesn't name is
+one `body` input; up to 1.12.2 a transform could fill them. Send such a header with `additionalHeaders` (a fixed value)
+or `headersMapper` (from the request context), and set a body property with `bodyMapper`.
+
 When the model sends a value for an injected input anyway, that value is dropped before the arguments are checked and
 the injected one is sent (in 1.9.2 such a call was refused with `Unrecognized key`).
 
@@ -331,10 +348,14 @@ the injected one is sent (in 1.9.2 such a call was refused with `Unrecognized ke
 Each tool starts from what `mcp-from-openapi` derives for its operation, and `tools/list` lists it: `annotations` inferred from the HTTP method (`GET` → `readOnlyHint`, `DELETE` → `destructiveHint`; turn off with `generateOptions: { inferAnnotations: false }`), the `title` from the operation summary, `icons` from `x-frontmcp.icons` / `x-mcp.icons` (or `info['x-logo']` with `generateOptions: { inheritDocumentIcons: true }`), and `_meta` with `dev.agentfront.openapi/operation` when `generateOptions: { emitMeta: true }`. `x-frontmcp` annotations merge over the derived ones and `toolTransforms` over both. Up to 1.9.1 the adapter dropped all four. `x-frontmcp` takes `annotations`, `cache`, `codecall`, `tags`, `hideFromDiscovery`, `examples`, `icons` and `meta`; any other field is ignored with an `Unknown field` warning (up to 1.9.2 `icons` and `meta` were warned about too, though they worked).
 
 The tool's `outputSchema` lists the API's answer under `data`, built from the operation's responses. A 2xx response
-the spec documents with a description only (no `content`) accepts any answer; a 204, a 205 and a `HEAD` operation
-stay `null`. When the operation lists several status codes, `data` is an `anyOf` of their schemas, so an answer that
-fits more than one passes. Up to 1.11.0 a description-only response was listed as `{ "type": "null" }`, so a client
-that checks `structuredContent` refused every JSON answer, and the union was a `oneOf`.
+(or a `2XX` range) the spec documents with a description only (no `content`) accepts any answer; a 204, a 205 and a
+`HEAD` operation stay `null`. When the operation lists several status codes, `data` is an `anyOf` of their schemas, so
+an answer that fits more than one passes. `writeOnly` properties are left out. Up to 1.11.0 a description-only
+response was listed as `{ "type": "null" }`, so a client that checks `structuredContent` refused every JSON answer, and
+the union was a `oneOf`.
+
+A schema over `generateOptions.maxSchemaNodes` (default 25,000) is cut shallower. Up to 1.12.2 the default was 100,000
+and a schema over it dropped its tool; set `maxSchemaNodes: 100000` for the deeper schemas back.
 
 ## Format Resolution
 
@@ -472,8 +493,8 @@ These apply to **both** the spec-URL fetch and external `$ref` resolution (`mcp-
 | Option             | Type       | Default (FrontMCP) | Description                                                                                                                           |
 | ------------------ | ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `allowedProtocols` | `string[]` | `[]`               | Protocols allowed for external `$ref` resolution. **FrontMCP defaults to `[]`** (external refs off); set `['http','https']` to enable |
-| `allowedHosts`     | `string[]` | `undefined`        | When set, only the spec URL / `$ref` URLs to these hostnames are allowed                                                              |
-| `blockedHosts`     | `string[]` | `undefined`        | Additional hostnames/IPs to block beyond the built-in internal-address list                                                           |
+| `allowedHosts`     | `string[]` | `undefined`        | When set, only the spec URL / `$ref` URLs to exactly these hosts are allowed (an IPv6 address embedding a listed IPv4 one is not)     |
+| `blockedHosts`     | `string[]` | `undefined`        | Additional hostnames/IPs to block beyond the built-in internal-address list, however an address is written (IPv4-mapped, 6to4, ...)   |
 | `allowInternalIPs` | `boolean`  | `false`            | Allow loopback/private/internal targets for the spec URL **and** `$ref`s (skips ranges + DNS recheck). Trusted/local only             |
 
 > `followRedirects` (a `loadOptions` field, not `refResolution`) defaults to `false` in FrontMCP.

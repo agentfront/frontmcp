@@ -617,12 +617,16 @@ describes. `compileSkilledBundleFromOpenApi()` from
 `canonicalize()`, `bundleDigest()` and `verifyBundleSignature()` for signing in CI. See
 [The bundle](https://frontmcp.dev/reference/plugins/skilled-openapi#the-bundle) for every field.
 
-An operation it compiles checks a JSON answer against the schema of the operation's responses. A 2xx response the spec
-documents with a description only, or with a media type that names no schema, accepts any answer; a 204, a 205 and a
-`HEAD` operation stay bodyless. Several status codes give an `anyOf`, so an answer that fits more than one passes. Each
-query parameter's `style` and `explode` are kept in the operation's `mapper`, and its requests follow them: by default
-an array repeats its key (`ids=1&ids=2`), and `explode: false` joins it with commas. Up to 1.11.0 a description-only
-response compiled to `{ "type": "null" }`, which every JSON answer failed, and every array was sent comma-joined.
+An operation it compiles checks a JSON answer against the schema of the operation's responses. A 2xx response (or a
+`2XX` range) the spec documents with a description only, or with a media type that names no schema, accepts any answer;
+a 204, a 205 and a `HEAD` operation stay bodyless. Several status codes give an `anyOf`, so an answer that fits more
+than one passes. Its inputs leave out `readOnly` properties and the headers the HTTP client, a credential or a proxy
+sets (`Accept`, `Authorization`, ...), and a body that takes properties it doesn't name (`additionalProperties` other
+than `false`) is one `body` input, sent as the request body. Up to 1.12.2 those properties and headers were inputs,
+and such a body was split into the properties it names. Each query parameter's `style` and `explode` are kept in the
+operation's `mapper`, and its requests follow them: by default an array repeats its key (`ids=1&ids=2`), and
+`explode: false` joins it with commas. Up to 1.11.0 a description-only response compiled to `{ "type": "null" }`, which
+every JSON answer failed, and every array was sent comma-joined.
 
 ## Browser
 
@@ -671,9 +675,11 @@ npm install @frontmcp/plugin-skilled-openapi @enclave-vm/browser @enclave-vm/ast
   secret. The visitor can also change what runs in the page, so `requiredAuthorities` there decide what the agent is
   shown, not what reaches your API: the API must authorize each request itself.
 - **Bundlers.** Vite builds the page as it is. `mcp-from-openapi`, which the plugin's OpenAPI runtime uses, imports
-  Node's `dns`, `http`, `https`, `path` and `fs/promises` inside `try`/`catch`, which esbuild and webpack 5 try to
-  resolve: give esbuild `external: ['node:http', 'node:https', 'path', 'fs/promises']`, and webpack
-  `new webpack.IgnorePlugin({ resourceRegExp: /^(node:)?(dns|http|https|path|fs\/promises)$/, contextRegExp: /mcp-from-openapi/ })`.
+  Node's `dns`, `fs`, `fs/promises`, `http`, `https`, `path` and `url` inside `try`/`catch` or on paths a page never
+  takes, which esbuild and webpack 5 try to resolve: give esbuild
+  `external: ['node:fs', 'node:http', 'node:https', 'node:url', 'path', 'fs/promises', 'url']`, and webpack
+  `new webpack.IgnorePlugin({ resourceRegExp: /^(node:)?(dns|fs|fs\/promises|http|https|path|url)$/, contextRegExp: /mcp-from-openapi/ })`.
+  Up to 1.12.2 `fs` and `url` were not imported, and the lists left them out.
 
 Up to 1.11.0 the plugin didn't start in a browser (`setImmediate is not defined`), refused every request to a named
 host, and `run_workflow` needed `@enclave-vm/core`. Up to 1.11.2 a browser Web Worker could apply the first bundle
