@@ -35,11 +35,17 @@ export const outboundOptionsSchema = z
     allowPrivateNetworks: z.boolean().default(false),
     /**
      * Proxy URL every outbound REST call goes through (undici's `ProxyAgent`: Node.js, with the
-     * `undici` package installed). The proxy is asked to connect to an address the outbound check
-     * approved (`CONNECT <address>:<port>`), with the hostname kept in `Host` and as the TLS server
-     * name. Without it, Node's `fetch` uses `HTTPS_PROXY` only when started with `NODE_USE_ENV_PROXY=1`.
+     * `undici` package installed). Without it, Node's `fetch` uses `HTTPS_PROXY` only when started
+     * with `NODE_USE_ENV_PROXY=1`.
      */
     egressProxy: z.string().url().optional(),
+    /**
+     * What `egressProxy` is asked to connect to. `'approved-address'`: an address the outbound check
+     * approved (`CONNECT <address>:<port>`), with the hostname kept in `Host` and as the TLS server
+     * name. `'hostname'`: the hostname, which the proxy resolves itself. Unset means `'hostname'` and
+     * logs a warning at startup; 1.13 makes `'approved-address'` the default.
+     */
+    egressProxyConnectTo: z.enum(['approved-address', 'hostname']).optional(),
     /** Per-host concurrent request cap. */
     maxConcurrencyPerHost: z.number().int().positive().default(10),
     /** Default per-op HTTP timeout in milliseconds. */

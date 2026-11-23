@@ -161,6 +161,24 @@ describe('SkilledOpenApiPlugin', () => {
       }
     });
 
+    it.each([
+      [undefined, true],
+      ['hostname' as const, false],
+      ['approved-address' as const, false],
+    ])('with egressProxy and egressProxyConnectTo %p, warns about the proxy: %p', (egressProxyConnectTo, warns) => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        new SkilledOpenApiPlugin({
+          source: { type: 'static', path: '/x' },
+          outbound: { egressProxy: 'http://proxy.internal:3128', egressProxyConnectTo },
+        });
+        const proxyWarnings = warn.mock.calls.filter(([message]) => String(message).includes('egressProxyConnectTo'));
+        expect(proxyWarnings).toHaveLength(warns ? 1 : 0);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
     it('does not warn when both requireSignature=true and dev=false (default safe config)', () => {
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
       try {

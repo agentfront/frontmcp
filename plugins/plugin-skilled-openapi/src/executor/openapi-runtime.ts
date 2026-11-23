@@ -369,7 +369,10 @@ export async function executeOperation(args: {
  * addresses the outbound check resolved and judged. A Worker resolves and connects on the platform.
  */
 async function outboundFetch(outbound: OutboundOptions, ssrf: SsrfCheckResult): Promise<typeof fetch> {
-  if (outbound.egressProxy) return proxiedFetch(outbound.egressProxy, ssrf.addresses);
+  if (outbound.egressProxy) {
+    const approvedAddresses = outbound.egressProxyConnectTo === 'approved-address' ? ssrf.addresses : undefined;
+    return proxiedFetch(outbound.egressProxy, approvedAddresses);
+  }
   if (ssrf.addresses?.length && !isEdgeRuntime()) return pinnedFetch(ssrf.addresses);
   return fetch;
 }
