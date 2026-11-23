@@ -236,6 +236,22 @@ ui: { template: { file: widgetPath }, htmlResponsePrefix: 'Here is the weather d
 - The page in the model's context costs tokens (about 38 KB for the default shell); set the option on the tools whose page is worth it.
 - Startup refuses an empty prefix or one longer than 500 characters.
 
+## Tools for the app page only
+
+A tool the page calls but the model should not see, such as one that records what the person picked on the page, is marked as MCP Apps (SEP-1865) does it, with `_meta.ui.visibility`:
+
+```typescript
+@Tool({ name: 'canvas_answer', inputSchema: { answer: z.string() }, _meta: { ui: { visibility: ['app'] } } })
+class CanvasAnswerTool extends ToolContext {
+  /* … */
+}
+```
+
+- A visibility without `'model'` makes it a tool for the page alone. It is listed to and callable by clients that render pages: those that declare the MCP Apps extension (`'ext-apps'`) and ChatGPT (`'openai'`), whose hosts keep it from the model.
+- Any other client (Claude Code, Codex, an MCP inspector) has no page to call it, so `tools/list` leaves it out and `tools/call` answers it like an unknown tool. A call in process (`this.callTool()`, an agent, a job) still reaches it. Up to 1.12.2 it was listed to and callable by every client, whose model could then call it.
+- To list it to another client, map that client to `'ext-apps'` in `transport.platformDetection.mappings`, or hook the `filterByAppVisibility` stage of `tools:list-tools`.
+- A tool with a widget keeps the `_meta.ui` fields it declares (`visibility` included) next to the `resourceUri` `tools/list` adds.
+
 ## CSP origins
 
 The page FrontMCP writes also carries its own Content-Security-Policy built from `ui.csp`:
