@@ -680,21 +680,29 @@ describe('executeOperation outbound.egressProxy (#767)', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+    proxiedRequests.length = 0;
   });
 
-  it('sends the request through the configured proxy, to the address the outbound check approved', async () => {
+  it.each([
+    ['the hostname by default', undefined, false],
+    ['the hostname with egressProxyConnectTo: hostname', 'hostname' as const, false],
+    ['an approved address with egressProxyConnectTo: approved-address', 'approved-address' as const, true],
+  ])('asks the configured proxy for %s', async (_label, egressProxyConnectTo, pinned) => {
     jest.spyOn(dns.promises, 'lookup').mockResolvedValue([{ address: '127.0.0.1', family: 4 }] as never);
 
     const result = await executeOperation({
       entry: buildEntry(),
       bundleId: 'acme',
       input: { id: 'inv_1', amount: 5 },
-      deps: buildDeps({ outbound: baseOutbound({ egressProxy: 'http://proxy.internal:3128' }), fetchImpl: undefined }),
+      deps: buildDeps({
+        outbound: baseOutbound({ egressProxy: 'http://proxy.internal:3128', egressProxyConnectTo }),
+        fetchImpl: undefined,
+      }),
     });
 
     expect(result.ok).toBe(true);
     expect(proxiedRequests).toEqual([
-      { url: 'http://localhost:9999/v1/invoices/inv_1', proxyUrl: 'http://proxy.internal:3128', pinned: true },
+      { url: 'http://localhost:9999/v1/invoices/inv_1', proxyUrl: 'http://proxy.internal:3128', pinned },
     ]);
   });
 });
