@@ -56,6 +56,15 @@ jobs:
           ref: refs/pull/${{ inputs.pr_number }}/head
           persist-credentials: false
 
+      # The setup action comes from this workflow's own commit, not from the PR.
+      - name: Checkout the setup action
+        uses: actions/checkout@v6
+        with:
+          path: .trusted-actions
+          persist-credentials: false
+          sparse-checkout: .github/actions/setup-node-yarn
+          sparse-checkout-cone-mode: false
+
       - name: Get PR info
         id: pr-info
         run: |
@@ -70,9 +79,11 @@ jobs:
         run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node + Yarn
-        uses: ./.github/actions/setup-node-yarn
+        uses: ./.trusted-actions/.github/actions/setup-node-yarn
         with:
           node-version: ${{ steps.node-version.outputs.version }}
+          # The PR's code runs here, so nothing it installs is saved to, or restored from, the shared cache.
+          cache: ""
 
       - name: Calculate PR version
         id: version
