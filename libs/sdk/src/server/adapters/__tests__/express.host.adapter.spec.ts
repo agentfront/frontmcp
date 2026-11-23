@@ -793,6 +793,47 @@ describe('ExpressHostAdapter — derived Origin check on a loopback bind', () =>
     expect(check(adapter, { host, origin: 'http://localhost:3000' })).toMatchObject({ status: 403 });
   });
 
+  it('keeps the derived Host check when only allowedOrigins is configured (#1344)', () => {
+    const adapter = listening(
+      new ExpressHostAdapter({ security: { dnsRebindingProtection: { allowedOrigins: ['https://app.example.com'] } } }),
+      3000,
+      '127.0.0.1',
+    );
+
+    expect(check(adapter, { host: 'evil.example' })).toMatchObject({ status: 403 });
+    expect(check(adapter, { host: 'evil.example', origin: 'https://app.example.com' })).toMatchObject({ status: 403 });
+    expect(check(adapter, { host, origin: 'https://app.example.com' })).toBe('allowed');
+  });
+
+  it('checks a configured allowedOrigins before start(), which a serverless handler never calls', () => {
+    const adapter = new ExpressHostAdapter({
+      security: { dnsRebindingProtection: { allowedOrigins: ['https://app.example.com'] } },
+    });
+
+    expect(check(adapter, { host: 'mcp.example.com', origin: 'https://evil.example' })).toMatchObject({ status: 403 });
+    expect(check(adapter, { host: 'mcp.example.com', origin: 'https://app.example.com' })).toBe('allowed');
+  });
+
+  it('keeps checking a configured allowedOrigins on a routable bind, which derives no Host list', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const adapter = listening(
+        new ExpressHostAdapter({
+          security: { dnsRebindingProtection: { allowedOrigins: ['https://app.example.com'] } },
+        }),
+        3000,
+        '0.0.0.0',
+      );
+
+      expect(check(adapter, { host: 'mcp.example.com', origin: 'https://evil.example' })).toMatchObject({
+        status: 403,
+      });
+      expect(check(adapter, { host: 'mcp.example.com' })).toBe('allowed');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('leaves Origin to the operator when the Host list is explicit', () => {
     const adapter = listening(
       new ExpressHostAdapter({ security: { dnsRebindingProtection: { allowedHosts: [host] } } }),
