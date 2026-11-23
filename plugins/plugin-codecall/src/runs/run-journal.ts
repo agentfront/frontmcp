@@ -10,6 +10,7 @@ const PHASE_BY_ERROR_CODE: Partial<Record<string, CodeCallCallPhase>> = {
   [TOOL_CALL_ERROR_CODES.NOT_FOUND]: 'access',
   [TOOL_CALL_ERROR_CODES.VALIDATION]: 'input',
   [TOOL_CALL_ERROR_CODES.RATE_LIMITED]: 'limit',
+  [TOOL_CALL_ERROR_CODES.RESULT_TOO_LARGE]: 'limit',
 };
 
 /** The longest tool name a journal entry keeps: a script can pass any string as one. */

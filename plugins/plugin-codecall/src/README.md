@@ -363,6 +363,13 @@ export interface CodeCallOptions {
     maxCallDepth?: number;
     maxPendingCalls?: number;
 
+    /**
+     * The most values a tool result, or the script's return value, may hold: every array item and object key,
+     * counted at every depth. A tool result over it fails that call with `RESULT_TOO_LARGE`.
+     * @default varies by preset (secure: 2000)
+     */
+    maxSanitizeProperties?: number;
+
     disabledBuiltins?: string[];
     disabledGlobals?: string[];
     /**
@@ -592,6 +599,7 @@ No preset gives scripts `console`: only an explicit `vm.allowConsole: true` does
    - Parse `script` to an AST.
    - Reject:
      - Disallowed identifiers (from `disabledBuiltins` / `disabledGlobals`).
+     - Globals AgentScript doesn't have (`Set`, `Map`, `Promise`, `Error`, `structuredClone`, ...), named as the script wrote them, with what to use instead.
      - Loop nodes (`ForStatement`, `WhileStatement`, `DoWhileStatement`, `ForOfStatement`, `ForInStatement`) if `allowLoops === false`.
 
    - Happens _before_ any VM execution.
@@ -878,7 +886,7 @@ These are **thin wrappers** over core logging/notification APIs and must not byp
 
 The LLM can also wrap `callTool` in `try/catch` inside the plan. If it doesn’t, CodeCall surfaces failures as `tool_error` with enough context for retries.
 
-A failed `callTool` carries one of these codes: `NOT_FOUND` (unknown tool), `VALIDATION` (the input fails the tool's schema), `EXECUTION`, `TIMEOUT` (the tool ran past its `timeout.executeMs`), `ACCESS_DENIED` (the CodeCall policy or the script's `allowedTools` refuses the tool), and `RATE_LIMITED` (a rate limit, quota or concurrency limit refused the call). The code comes from the error's type, never from the words of its message. The code is on `error.code` with `{ throwOnError: false }`, on the thrown error, and on `tool_error` when the script doesn't catch it.
+A failed `callTool` carries one of these codes: `NOT_FOUND` (unknown tool), `VALIDATION` (the input fails the tool's schema), `EXECUTION`, `TIMEOUT` (the tool ran past its `timeout.executeMs`), `ACCESS_DENIED` (the CodeCall policy or the script's `allowedTools` refuses the tool), `RATE_LIMITED` (a rate limit, quota or concurrency limit refused the call), and `RESULT_TOO_LARGE` (the result holds more values than `vm.maxSanitizeProperties` allows). The code comes from the error's type, never from the words of its message. The code is on `error.code` with `{ throwOnError: false }`, on the thrown error, and on `tool_error` when the script doesn't catch it.
 
 The message is the one an MCP client calling the tool would be told, without stack frames or server paths: a tool's `PublicMcpError` or `this.fail(...)` message reaches the script as written. An internal error (a plain `Error`) gets a generic message, such as `Tool "<name>" execution failed`. Up to 1.11.2 the code was guessed from words in the message, so a tool failing with `User u9 not found` reached the script as `NOT_FOUND` with `Tool "<name>" was not found`, and only `VALIDATION` kept the tool's message.
 
