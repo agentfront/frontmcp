@@ -258,6 +258,17 @@ class ShowQuoteTool extends ToolContext {
   }
 }
 
+@Tool({ name: 'get_quote_result', inputSchema: {}, outputSchema: { price: z.number() } })
+class GetQuoteResultTool extends ToolContext {
+  async execute() {
+    const content = [
+      { type: 'text', text: JSON.stringify(quoteAnswer) },
+      { type: 'text', text: 'Quote ready' },
+    ];
+    return { content, structuredContent: quoteAnswer } as unknown as { price: number };
+  }
+}
+
 @Tool({ name: 'get_partner_quote', inputSchema: {}, outputSchema: { price: z.number() } })
 class GetPartnerQuoteTool extends ToolContext {
   async execute() {
@@ -277,7 +288,11 @@ class GetTaggedQuoteTool extends ToolContext {
   }
 }
 
-@App({ id: 'quotes', name: 'Quotes', tools: [GetQuoteTool, GetStrictQuoteTool, ShowQuoteTool, GetTaggedQuoteTool] })
+@App({
+  id: 'quotes',
+  name: 'Quotes',
+  tools: [GetQuoteTool, GetStrictQuoteTool, ShowQuoteTool, GetTaggedQuoteTool, GetQuoteResultTool],
+})
 class QuotesApp {}
 
 @Tool({ name: 'get_plugin_quote', inputSchema: {}, outputSchema: { price: z.number() } })
@@ -329,6 +344,7 @@ describe('tools/call undeclared output keys', () => {
       isError: result['isError'] === true,
       code: resultMeta?.['code'],
       structuredContent: result['structuredContent'],
+      content: result['content'],
       wire: JSON.stringify(result),
     };
   }
@@ -423,14 +439,59 @@ describe('tools/call undeclared output keys', () => {
   it.each([
     ['a client that takes structuredContent', undefined],
     ['a client that takes no structuredContent', { name: 'claude-desktop', version: '1.0.0' }],
-  ])("renders a tool's UI from declared keys only under 'keep', for %s", async (_label, clientInfo) => {
-    const server = await startServer({ undeclaredKeys: 'keep' });
+  ])("renders a tool's UI from declared keys only by default, for %s", async (_label, clientInfo) => {
+    process.env['NODE_ENV'] = 'production';
+    const server = await startServer();
 
     const result = await callQuote(server, 'show_quote', clientInfo);
 
     expect(result.isError).toBe(false);
     expect(result.wire).toContain('ui/html');
     expect(result.wire).not.toContain('QCC-4410');
+  });
+
+  it.each([
+    ['a client that takes structuredContent', undefined],
+    ['a client that takes no structuredContent', { name: 'claude-desktop', version: '1.0.0' }],
+  ])("renders a tool's UI and answers with undeclared keys under 'keep', for %s", async (_label, clientInfo) => {
+    const server = await startServer({ undeclaredKeys: 'keep' });
+
+    const result = await callQuote(server, 'show_quote', clientInfo);
+
+    expect(result.isError).toBe(false);
+    expect(result.wire).toContain('ui/html');
+    expect(result.wire).toContain('QCC-4410');
+  });
+
+  it("refuses a tool's UI answer with undeclared keys under 'fail'", async () => {
+    const server = await startServer({ undeclaredKeys: 'fail' });
+
+    expect(await callQuote(server, 'show_quote')).toMatchObject({ isError: true, code: 'INVALID_OUTPUT' });
+  });
+
+  it('strips the structuredContent of a CallToolResult the tool returns, and the text that repeats it', async () => {
+    process.env['NODE_ENV'] = 'production';
+    const server = await startServer();
+
+    const result = await callQuote(server, 'get_quote_result');
+
+    expect(result.structuredContent).toEqual({ price: 10 });
+    expect(result.content).toEqual([
+      { type: 'text', text: '{"price":10}' },
+      { type: 'text', text: 'Quote ready' },
+    ]);
+  });
+
+  it("keeps the undeclared keys of a CallToolResult the tool returns under 'keep'", async () => {
+    const server = await startServer({ undeclaredKeys: 'keep' });
+
+    expect((await callQuote(server, 'get_quote_result')).structuredContent).toEqual(quoteAnswer);
+  });
+
+  it("refuses a CallToolResult with undeclared keys under 'fail'", async () => {
+    const server = await startServer({ undeclaredKeys: 'fail' });
+
+    expect(await callQuote(server, 'get_quote_result')).toMatchObject({ isError: true, code: 'INVALID_OUTPUT' });
   });
 
   it('refuses an unknown undeclaredKeys policy at boot', async () => {

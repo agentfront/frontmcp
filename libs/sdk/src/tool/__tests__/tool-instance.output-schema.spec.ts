@@ -305,3 +305,42 @@ describe('ToolInstance.parseOutput and undeclared keys', () => {
     });
   });
 });
+
+describe('ToolInstance.parseOutput of a CallToolResult the tool returns', () => {
+  const quote = { price: 10, costCenter: 'CC-7' };
+  const quoteResult = { content: [{ type: 'text', text: JSON.stringify(quote) }], structuredContent: quote };
+
+  it('parses its structuredContent against an object outputSchema and rebuilds the text that repeats it', () => {
+    const { tool } = toolWithOutput(z.object({ price: z.number() }));
+    const onUndeclaredKeys = jest.fn();
+
+    const result = tool.parseOutput(quoteResult, { undeclaredKeys: 'warn', onUndeclaredKeys });
+
+    expect(result).toEqual({ content: [{ type: 'text', text: '{"price":10}' }], structuredContent: { price: 10 } });
+    expect(onUndeclaredKeys).toHaveBeenCalledWith(['costCenter']);
+  });
+
+  it('leaves a result whose structuredContent has no undeclared key as it is', () => {
+    const { tool } = toolWithOutput({ price: z.number() });
+    const declaredResult = { content: [{ type: 'text', text: 'Ten' }], structuredContent: { price: 10 } };
+
+    expect(tool.parseOutput(declaredResult)).toBe(declaredResult);
+  });
+
+  it('fails with INVALID_OUTPUT when its structuredContent does not match the outputSchema', () => {
+    const { tool } = toolWithOutput({ price: z.string() });
+
+    expect(() => tool.parseOutput(quoteResult)).toThrow(InvalidOutputError);
+  });
+
+  it.each([
+    ['an error result', { price: z.number() }, { ...quoteResult, isError: true }],
+    ["a remote tool's result (outputSchema 'json')", 'json', quoteResult],
+    ['a scalar outputSchema', z.string(), quoteResult],
+    ['no outputSchema', undefined, quoteResult],
+  ])('sends %s as returned', (_label, outputSchema, result) => {
+    const { tool } = toolWithOutput(outputSchema);
+
+    expect(tool.parseOutput(result)).toBe(result);
+  });
+});

@@ -1468,8 +1468,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   @Stage('applyUI')
   async applyUI() {
     this.logger.verbose('applyUI:start');
-    const { tool, rawOutput: executeOutput, input } = this.state;
-    const rawOutput = declaredOutput(tool, executeOutput);
+    const { tool, input } = this.state;
+    const rawOutput = this.uiOutput();
 
     // Skip UI for calls that want the data only: an agent's tool calls, and the calls a widget
     // makes back to the server, through `ui/callServerTool` or a `tools/call` its bridge marks
@@ -1658,9 +1658,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
    * is rendered for this call when the serving mode didn't, and goes to this caller only.
    */
   private async applyHtmlResponse(prefix: string, renderedHtml: string | undefined, platformType: AIPlatformType) {
-    const { tool, rawOutput: executeOutput, input } = this.state;
+    const { tool, input } = this.state;
     if (!tool || !this.scope.toolUI) return;
-    const rawOutput = declaredOutput(tool, executeOutput);
+    const rawOutput = this.uiOutput();
     const { buildHtmlResponseText, buildToolResponseContent, isUIRenderFailure } = await import('../ui/ui-render.js');
 
     let html = renderedHtml;
@@ -1719,8 +1719,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const outputPolicies = toolOutputPolicies(tool, this.scope);
     const undeclaredKeys = resolveUndeclaredKeysPolicy(...outputPolicies);
     const parseResult = tool.safeParseOutput(rawOutput, {
-      // A call that renders the tool's UI sends declared keys only, whatever the policy
-      undeclaredKeys: uiResult && undeclaredKeys === 'keep' ? 'strip' : undeclaredKeys,
+      undeclaredKeys,
       onUndeclaredKeys: (keyPaths) => this.warnUndeclaredKeysOnce(tool, keyPaths),
     });
 
@@ -1919,6 +1918,14 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     return (schemaMode === 'definition' || schemaMode === 'both') && isObjectSchema;
   }
 
+  /** What the UI renders and echoes: what the `outputSchema` declares, and undeclared keys under 'keep'. */
+  private uiOutput(): unknown {
+    const { tool, rawOutput } = this.state;
+    if (!tool) return rawOutput;
+    const keepsUndeclaredKeys = resolveUndeclaredKeysPolicy(...toolOutputPolicies(tool, this.scope)) === 'keep';
+    return declaredOutput(tool, rawOutput, keepsUndeclaredKeys ? 'keep' : 'strip');
+  }
+
   private warnUndeclaredKeysOnce(tool: CallToolEntry, keyPaths: string[]): void {
     const reportedKeyPaths = reportedUndeclaredKeyPaths.get(tool) ?? new Set<string>();
     reportedUndeclaredKeyPaths.set(tool, reportedKeyPaths);
@@ -1941,11 +1948,12 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 function declaredOutput(
   tool: Pick<ToolEntry, 'outputSchema' | 'safeParseOutput'> | undefined,
   output: unknown,
+  undeclaredKeys: 'strip' | 'keep',
 ): unknown {
   if (!tool?.outputSchema || typeof output !== 'object' || output === null || Array.isArray(output)) return output;
-  if (Array.isArray((output as Record<string, unknown>)['content'])) return output;
-  const parsed = tool.safeParseOutput(output);
+  const parsed = tool.safeParseOutput(output, { undeclaredKeys });
   if (!parsed.success) return output;
+  if (Array.isArray((output as Record<string, unknown>)['content'])) return parsed.data;
   const structured = parsed.data.structuredContent;
   return typeof structured === 'object' && structured !== null && !Array.isArray(structured) ? structured : output;
 }

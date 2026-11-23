@@ -38,9 +38,10 @@ export type SchemaDescriptionFormat = (typeof SCHEMA_DESCRIPTION_FORMATS)[number
  *   schema's objects open to undeclared keys.
  * - `'fail'`: refuse the answer with `InvalidOutputError` naming the keys.
  *
- * A call that renders the tool's UI sends declared keys only, whatever the policy, and so does an
- * `outputSchema` with a transform (`.transform()`, `z.preprocess()`, `.pipe()`), whose output cannot
- * be compared with the answer key by key.
+ * The policy applies to a call that renders the tool's UI too, and to the `structuredContent` of a
+ * `CallToolResult` the tool returns itself. An `outputSchema` with a transform (`.transform()`,
+ * `z.preprocess()`, `.pipe()`) sends declared keys only, whatever the policy: its output cannot be
+ * compared with the answer key by key.
  */
 export const UNDECLARED_KEYS_POLICIES = ['strip', 'warn', 'keep', 'fail'] as const;
 export type UndeclaredKeysPolicy = (typeof UNDECLARED_KEYS_POLICIES)[number];

@@ -147,10 +147,8 @@ export function buildParsedToolResult(
   raw: unknown,
   options: OutputParseOptions = {},
 ): ParsedToolResult {
-  // If raw is already a valid CallToolResult (e.g., from remote tools), return it as-is
-  // This prevents double-wrapping of MCP-formatted responses
   if (isCallToolResult(raw)) {
-    return raw;
+    return withDeclaredStructuredContent(descriptor, raw, options);
   }
 
   const content: ContentBlock[] = [];
@@ -234,6 +232,36 @@ export function buildParsedToolResult(
   }
 
   return result;
+}
+
+/**
+ * A CallToolResult the tool returned itself, its `structuredContent` parsed against the tool's object
+ * `outputSchema` and undeclared-keys policy, and the text block that repeats it rebuilt to match.
+ */
+function withDeclaredStructuredContent(
+  descriptor: unknown,
+  result: ParsedToolResult,
+  options: OutputParseOptions,
+): ParsedToolResult {
+  const schema = structuredOutputSchemaOf(descriptor);
+  const { structuredContent } = result;
+  if (!schema || structuredContent === undefined || result.isError) return result;
+  const declared = toStructuredContent(parseAgainstOutputSchema(schema, structuredContent, options));
+  const sentText = JSON.stringify(structuredContent);
+  if (JSON.stringify(declared) === sentText) return result;
+  const content = result.content.map((block) =>
+    block.type === 'text' && block.text === sentText ? makeJsonTextContent(declared) : block,
+  );
+  return { ...result, content, structuredContent: declared };
+}
+
+/** The schema an output descriptor gives `structuredContent` as a whole; none for a scalar, a literal or a list. */
+function structuredOutputSchemaOf(descriptor: unknown): z.ZodType | undefined {
+  if (descriptor instanceof z.ZodType) {
+    const scalarSchemas = [ZodString, ZodNumber, ZodBoolean, ZodBigInt, ZodDate];
+    return scalarSchemas.some((scalarSchema) => descriptor instanceof scalarSchema) ? undefined : descriptor;
+  }
+  return !Array.isArray(descriptor) && isZodRawShape(descriptor) ? z.object(descriptor) : undefined;
 }
 
 /**
