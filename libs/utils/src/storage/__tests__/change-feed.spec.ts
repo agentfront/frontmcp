@@ -174,6 +174,19 @@ describe('createChangeFeed()', () => {
       await storage.disconnect();
     });
 
+    it('keeps the counter of a topic published with ttlSeconds for that long, and others for good', async () => {
+      const { storage } = pollingStorage();
+      await storage.connect();
+      const feed = open(storage);
+
+      await feed.publish('question:42', { ttlSeconds: 30 });
+      await feed.publish('board');
+
+      expect(await storage.ttl('feed:question:42')).toBe(30);
+      expect(await storage.ttl('feed:board')).toBe(-1);
+      await storage.disconnect();
+    });
+
     it('tells another feed on the file in this process at once, since its connection sees no data_version move', async () => {
       const { storage } = pollingStorage();
       await storage.connect();

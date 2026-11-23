@@ -328,6 +328,38 @@ describe('QuestionStore', () => {
     });
   });
 
+  describe('wake-ups', () => {
+    it('tells the call waiting on a question of its changes, and not of the changes of other questions', async () => {
+      const deployListener = jest.fn();
+      const rollbackListener = jest.fn();
+      store.subscribeToQuestion('principal:alice', 'deploy', deployListener);
+      store.subscribeToQuestion('principal:alice', 'rollback', rollbackListener);
+
+      await store.ask(request());
+      await waitFor(() => deployListener.mock.calls.length > 0);
+
+      expect(rollbackListener).not.toHaveBeenCalled();
+    });
+
+    it("keeps a question's change counter on a polling storage no longer than the question", async () => {
+      const storage = createMemoryStorage();
+      await storage.connect();
+      Object.assign(storage, { supportsPubSub: () => false });
+      Object.assign(storage.root, { dataVersion: async () => 1 });
+      const feed = createChangeFeed(storage);
+      const polled = new QuestionStore({ storage, feed });
+
+      await polled.ask(request({ ttlMs: 60_000 }));
+      const [questionCounter] = await storage.keys('feed:question:*');
+
+      expect(feed.kind).toBe('poll');
+      expect(await storage.ttl(questionCounter)).toBeGreaterThan(0);
+      expect(await storage.ttl(questionCounter)).toBeLessThanOrEqual(60);
+      expect(await storage.ttl('feed:questions')).toBe(-1);
+      await polled.close();
+    });
+  });
+
   describe('TTL', () => {
     it('forgets a question once its TTL passes', async () => {
       jest.useFakeTimers({ now: 1_000_000, doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
