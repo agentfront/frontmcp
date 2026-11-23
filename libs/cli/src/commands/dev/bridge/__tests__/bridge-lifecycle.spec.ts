@@ -34,6 +34,7 @@ jest.mock('../child-supervisor', () => ({
   },
   resolveChildCommand: () => ({ command: process.execPath, args: [] }),
   resolveProjectTsxLoader: () => undefined,
+  sdkPredatesReadySentinel: () => false,
 }));
 jest.mock('../watcher', () => ({
   createDevWatcher: () => ({ start: jest.fn(), stop: watcherStop }),
