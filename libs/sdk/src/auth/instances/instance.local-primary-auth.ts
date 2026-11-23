@@ -700,8 +700,9 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * adapter-backed equivalents. For `'memory'` (or unset) this is a no-op, so
    * the default behavior is preserved exactly.
    *
-   * The orchestrated-token store keeps using the JWT secret as its encryption
-   * key, so upstream provider tokens stay encrypted at rest in every backend.
+   * The orchestrated-token and federated-session stores use the JWT secret as
+   * their encryption key, so upstream provider tokens stay encrypted at rest in
+   * every backend.
    */
   private async initializeStores(): Promise<void> {
     if (!isPersistentTokenStorage(this.tokenStorage)) {
@@ -715,7 +716,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.disposeInMemoryStores();
 
       this.authorizationStoreImpl = new StorageAuthorizationStore(adapter);
-      this.federatedSessionStoreImpl = new StorageFederatedAuthSessionStore(adapter);
+      this.federatedSessionStoreImpl = new StorageFederatedAuthSessionStore(adapter, { encryptionKey: this.secret });
       this.orchestratedTokenStoreImpl = new StorageOrchestratedTokenStore(adapter, {
         encryptionKey: this.secret,
         refreshSkewMs: this.providerRefreshSkewMs(),

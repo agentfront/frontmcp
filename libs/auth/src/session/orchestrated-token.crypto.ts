@@ -64,9 +64,9 @@ export function deriveKeyForRecord(
 }
 
 /**
- * Encrypt a token record into a base64url JSON envelope string.
+ * Encrypt a record (a token record, or a federated session) into a base64url JSON envelope string.
  */
-export function encryptRecord(key: Uint8Array, record: ProviderTokenRecord): string {
+export function encryptRecord<T = ProviderTokenRecord>(key: Uint8Array, record: T): string {
   const plaintext = JSON.stringify(record);
   const iv = randomBytes(12);
   const { ciphertext, tag } = encryptAesGcm(key, new TextEncoder().encode(plaintext), iv);
@@ -78,13 +78,13 @@ export function encryptRecord(key: Uint8Array, record: ProviderTokenRecord): str
 }
 
 /**
- * Decrypt a base64url JSON envelope string back into a token record.
+ * Decrypt a base64url JSON envelope string back into the record it holds.
  */
-export function decryptRecord(key: Uint8Array, encrypted: string): ProviderTokenRecord {
+export function decryptRecord<T = ProviderTokenRecord>(key: Uint8Array, encrypted: string): T {
   const { iv, tag, data } = JSON.parse(encrypted) as { iv: string; tag: string; data: string };
   const ivBytes = Buffer.from(iv, 'base64url');
   const tagBytes = Buffer.from(tag, 'base64url');
   const ciphertextBytes = Buffer.from(data, 'base64url');
   const plaintext = decryptAesGcm(key, ciphertextBytes, ivBytes, tagBytes);
-  return JSON.parse(new TextDecoder().decode(plaintext)) as ProviderTokenRecord;
+  return JSON.parse(new TextDecoder().decode(plaintext)) as T;
 }
