@@ -94,15 +94,14 @@ export default class SubscribeResourceFlow extends FlowBase<typeof name> {
     this.logger.verbose('validateResource:start');
 
     const { uri } = this.state.required.input;
-    // `ui://` widget URIs are served from the tool UI registry and carry no `availableWhen` of their own
-    if (isUIResourceUri(uri)) return;
-
     let match = this.scope.resources.findResourceForUri(uri);
     if (!match) {
       // Remote apps list their resources lazily, as resources/read accounts for
       await loadRemoteAppCapabilities(this.scope);
       match = this.scope.resources.findResourceForUri(uri);
     }
+    // A `ui://` URI no resource matches is a tool's widget, which has no `availableWhen` of its own
+    if (!match && isUIResourceUri(uri)) return;
     if (!match) throw new ResourceNotFoundError(uri);
 
     const { availableWhen } = match.instance.metadata;

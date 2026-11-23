@@ -39,7 +39,7 @@ import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { assertEntryEnabled } from '../../surface';
-import { isUIResourceUri } from '../../tool/ui/ui-shared';
+import { isStaticWidgetUri, isUIResourceUri } from '../../tool/ui/ui-shared';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
 
 const inputSchema = z.object({
@@ -241,42 +241,10 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
     const loggedUri = escapeControlCharacters(uri);
     this.logger.verbose(`findResource: looking for resource with URI "${loggedUri}"`);
 
-    // Check for UI resource URIs (ui://...) first
-    if (isUIResourceUri(uri)) {
-      this.logger.verbose(`findResource: detected UI resource URI "${loggedUri}"`);
-
-      // Get platform type: first check sessionIdPayload (detected from user-agent),
-      // then fall back to notification service (detected from MCP clientInfo)
-      const { sessionId, authInfo } = this.state;
-      const platformType =
-        authInfo?.sessionIdPayload?.platformType ??
-        this.tryGetContext()?.platformType ??
-        (sessionId ? this.scope.notifications.getPlatformType(sessionId) : undefined);
-
-      this.logger.verbose(`findResource: platform type for session: ${platformType ?? 'unknown'}`);
-
-      if (!this.scope.toolUI) {
-        this.logger.verbose('findResource: toolUI not available, skipping UI resource handling');
-        throw new ResourceNotFoundError(uri);
-      }
-
-      const { handleUIResourceRead } = await import('../../tool/ui/ui-resource.handler.js');
-      const serverUrl = this.tryGetContext()?.metadata.serverUrl ?? getPinnedPublicUrl();
-      const uiResult = handleUIResourceRead(uri, this.scope.toolUI, platformType, serverUrl);
-
-      if (uiResult.handled) {
-        if (uiResult.error) {
-          this.logger.warn(`findResource: UI resource error - ${escapeControlCharacters(uiResult.error)}`);
-          throw new ResourceNotFoundError(uri);
-        }
-
-        // Store the UI resource result and mark as UI resource
-        this.state.set('isUIResource', true);
-        this.state.set('uiResourceResult', uiResult.result);
-        this.logger.verbose(`findResource: UI resource "${loggedUri}" resolved from cache`);
-        this.logger.verbose('findResource:done');
-        return;
-      }
+    if (isUIResourceUri(uri) && (await this.resolveToolWidget(uri))) {
+      this.logger.verbose(`findResource: UI resource "${loggedUri}" resolved from cache`);
+      this.logger.verbose('findResource:done');
+      return;
     }
 
     // Try to find a resource that matches this URI
@@ -319,6 +287,29 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       `findResource: resource "${match.instance.name}" found (template: ${match.instance.isTemplate})`,
     );
     this.logger.verbose('findResource:done');
+  }
+
+  /** Whether `uri` names a tool's widget, kept for 'finalize'; any other `ui://` URI is looked up as a resource. */
+  private async resolveToolWidget(uri: string): Promise<boolean> {
+    const toolUI = this.scope.toolUI;
+    if (!toolUI || (!isStaticWidgetUri(uri) && !toolUI.resolveCustomUri(uri))) return false;
+
+    const { sessionId, authInfo } = this.state;
+    const platformType =
+      authInfo?.sessionIdPayload?.platformType ??
+      this.tryGetContext()?.platformType ??
+      (sessionId ? this.scope.notifications.getPlatformType(sessionId) : undefined);
+
+    const { handleUIResourceRead } = await import('../../tool/ui/ui-resource.handler.js');
+    const serverUrl = this.tryGetContext()?.metadata.serverUrl ?? getPinnedPublicUrl();
+    const uiResult = handleUIResourceRead(uri, toolUI, platformType, serverUrl);
+    if (uiResult.error || !uiResult.result) {
+      this.logger.warn(`findResource: UI resource error - ${escapeControlCharacters(uiResult.error ?? 'no result')}`);
+      throw new ResourceNotFoundError(uri);
+    }
+
+    this.state.set({ isUIResource: true, uiResourceResult: uiResult.result });
+    return true;
   }
 
   /** A resource or template whose `enabled` is off is refused with `FEATURE_OFF` and the remedy of its source. */
