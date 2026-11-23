@@ -333,6 +333,30 @@ describe.each(RUNTIMES)('CodeCall review on the %s runtime', (runtime) => {
       expect(await execute(client, script)).toMatchObject({ status: 'ok', result: 'closed' });
     });
 
+    it('asks for its own script, not an approval, when a call that is not read-only ran before it', async () => {
+      const client = await open(setup);
+      const script =
+        "await callTool('mail.send', { to: 'ops@example.com' });\n" +
+        "const page = await callTool('users.list', { limit: 1 });\n" +
+        "await callTool('users.close', { id: page.items[0].id });\nreturn 'closed';";
+
+      const outcome = await execute(client, script);
+
+      expect(outcome).toMatchObject({
+        status: 'needs_changes',
+        findings: [
+          {
+            rule: 'approval-after-effects',
+            toolName: 'users.close',
+            message: expect.stringContaining('but mail.send already ran in this script'),
+            suggestion: 'Call users.close in a script of its own, or run mail.send in a separate script first',
+          },
+        ],
+      });
+      expect(outcome).not.toHaveProperty('approval');
+      expect(executed).toEqual(['mail.send:ops@example.com', 'users.list']);
+    });
+
     it('lets a grant with limits cover any arguments of the tool, up to its maxCalls', async () => {
       const client = await open(setup);
       const script =
@@ -345,7 +369,10 @@ describe.each(RUNTIMES)('CodeCall review on the %s runtime', (runtime) => {
       await grant(client, asked.approval?.anyArgumentsId as string, 2);
       executed.length = 0;
       const limited = await execute(client, script);
-      expect(limited.status).toBe('needs_approval');
+      expect(limited).toMatchObject({
+        status: 'needs_changes',
+        findings: [{ rule: 'approval-after-effects', message: expect.stringContaining('but users.close already ran') }],
+      });
       expect(executed).toEqual(['users.list', 'users.close:u1', 'users.close:u2']);
     });
   });
@@ -380,6 +407,20 @@ describe.each(RUNTIMES)('CodeCall review on the %s runtime', (runtime) => {
       expect(await execute(client, script)).toMatchObject({ status: 'ok', result: 'closed' });
       expect(questions).toEqual([expect.stringContaining('Tool: users.close\nArguments: {"id":"u3"}')]);
       expect(executed).toEqual(['users.close:u3']);
+    });
+
+    it('does not ask the person when a call that is not read-only ran before the one that needs approval', async () => {
+      const onElicitation = jest.fn(async () => ({ action: 'accept' as const, content: { approve: true } }));
+      const client = await open(setup, { onElicitation });
+
+      const outcome = await execute(
+        client,
+        "await callTool('mail.send', { to: 'ops@example.com' });\nconst id = 'u' + '3';\nawait callTool('users.close', { id });\nreturn 'closed';",
+      );
+
+      expect(outcome.status).toBe('needs_changes');
+      expect(onElicitation).not.toHaveBeenCalled();
+      expect(executed).toEqual(['mail.send:ops@example.com']);
     });
 
     it('denies the call when the person declines', async () => {

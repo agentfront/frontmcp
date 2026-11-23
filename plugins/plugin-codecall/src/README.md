@@ -867,7 +867,10 @@ on both runtimes. The code lives in `src/review/`:
   budget); at `phase: 'call'` they read the real arguments. `input-schema-check.ts` checks arguments against the
   tool's JSON Schema (type, enum, `anyOf`/`oneOf`, required names).
 - `run-review.ts`: the `pre` hook of one run. The rules answer first; a destructive call goes through the approvals;
-  then the server's reviewers (`reviewer`, then `provider`) review the script. `reviewOutcomeOf` reads
+  then the server's reviewers (`reviewer`, then `provider`) review the script. A call that needs approval after a
+  tool without `readOnlyHint` reached its tool in the run (`effectsSoFar`, from the run's journal) gets
+  `needs_changes` (`approval-after-effects`) instead, with no pending approval: an approval runs the whole script
+  again, until #1335 resumes a run from its journal. `reviewOutcomeOf` reads
   `result.review.decisions`, never the error code: on the double VM an uncaught refused call ends as
   `DOUBLE_VM_EXECUTION_ERROR`, and only its error name (`ReviewError`) tells it apart.
 - `review.service.ts`: the options, the policy version approvals are bound to, and the reviewers, loaded from the

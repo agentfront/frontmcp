@@ -3,6 +3,8 @@ import type { ReviewContext, ReviewerTool } from '@enclave-vm/core/worker';
 import type { ToolEntry } from '@frontmcp/sdk';
 
 import type CodeCallConfig from '../providers/code-call.config';
+import type { RunJournal } from '../runs/run-journal';
+import type { CodeCallJournalEntry } from '../runs/run-record.types';
 import {
   checkCodeCallToolAccess,
   checkCodeCallToolPolicy,
@@ -31,6 +33,13 @@ export interface RunReviewCaller {
   canElicit: boolean;
   /** Approval ids a person approved during this request. */
   granted: ReadonlySet<string>;
+  /** The journal of the run, whose calls that reached their tool are the run's effects so far. */
+  journal?: RunJournal;
+}
+
+/** Whether a journal entry's call reached its tool: it succeeded, is still running, or the tool itself failed. */
+function reachedTool(entry: CodeCallJournalEntry): boolean {
+  return entry.outcome !== 'failure' || entry.phase === 'execute';
 }
 
 /** The tool context a review runs for: the call it serves, and who made it. */
@@ -97,8 +106,13 @@ export async function createRunReview(
     approvalContext: approvalContextOf(caller.authInfo),
     granted: caller.granted,
   });
+  const effectsSoFar = (): string[] => {
+    const ranTools = (caller.journal?.entriesSoFar() ?? []).filter(reachedTool).map((entry) => entry.tool);
+    return [...new Set(ranTools)].filter((name) => toolOf(name)?.annotations?.readOnlyHint !== true);
+  };
   return new RunReview({
     rules,
+    effectsSoFar,
     reviewers: async () => (service.hasReviewers ? service.reviewersFor(reviewerToolsOf(caller)) : []),
     approvals,
     timeoutMs: options.timeoutMs,

@@ -293,7 +293,9 @@ binds the caller and the expiry. Grant it with the Approval plugin (`this.approv
 or any other scope) and send the same script again; a changed script asks again. A grant on `approval.anyArgumentsId`
 with `metadata: { maxCalls: 20 }` covers any arguments of that tool in that script, up to 20 calls a run. With
 `elicitation: { enabled: true }` and a client that declares it, CodeCall asks the person itself and runs the same script
-again once they approve. `codecall:invoke` is reviewed the same way, as the one-call script it stands for. Tools a
+again once they approve. An approved script runs again from the start, so a call that needs approval after a tool
+without `readOnlyHint` already ran in the script gets `needs_changes` (`approval-after-effects`): send that call in a
+script of its own, or run the earlier calls separately. `codecall:invoke` is reviewed the same way, as the one-call script it stands for. Tools a
 client calls directly (listed outside `codecall_only`) are not reviewed yet.
 
 ### Per-Tool CodeCall Metadata

@@ -29,9 +29,13 @@ export interface RunReviewOptions {
   approvals: ReviewApprovals;
   /** How long one review hook may take, in ms; Enclave's default when unset. */
   timeoutMs?: number;
+  /** The tools that are not read-only and have already run in this run, in the order they first ran. */
+  effectsSoFar?: () => readonly string[];
 }
 
 const ALLOW: ReviewDecision = { decision: 'allow' };
+/** How many earlier tools a finding names, within the length Enclave accepts for a message. */
+const MAX_NAMED_TOOLS = 10;
 const REVIEW_ERROR_NAME = 'ReviewError';
 
 function isCallRefusal(record: ReviewRecord): boolean {
@@ -129,7 +133,29 @@ export class RunReview {
     if (state === 'denied') {
       return { ...request, decision: 'denied', reason: `${request.reason}; a person refused the approval` };
     }
+    const repeated = consume && pending.call ? (this.options.effectsSoFar?.() ?? []) : [];
+    if (pending.call && repeated.length > 0) return needsOwnScript(pending.call.toolName, repeated);
     this.pendingApproval = pending;
     return request;
   }
+}
+
+/**
+ * The answer for a call that needs approval after tools with effects ran: approving it would run the whole script, and
+ * those tools, again, until a run resumes from its journal (#1335).
+ */
+function needsOwnScript(toolName: string, repeated: readonly string[]): ReviewDecision {
+  const more = repeated.length - MAX_NAMED_TOOLS;
+  const earlier = `${repeated.slice(0, MAX_NAMED_TOOLS).join(', ')}${more > 0 ? ` and ${more} more` : ''}`;
+  return {
+    decision: 'needs_changes',
+    findings: [
+      {
+        rule: 'approval-after-effects',
+        message: `Tool "${toolName}" needs a person's approval, but ${earlier} already ran in this script; once approved, the whole script, ${earlier} included, would run again`,
+        suggestion: `Call ${toolName} in a script of its own, or run ${earlier} in a separate script first`,
+        toolName,
+      },
+    ],
+  };
 }

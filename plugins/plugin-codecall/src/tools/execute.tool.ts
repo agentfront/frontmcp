@@ -202,6 +202,7 @@ export default class ExecuteTool extends ToolContext {
             approvalService: this.tryGet(ApprovalServiceViewToken),
             canElicit,
             granted: approvedByPerson,
+            journal,
           },
           scriptHash,
         )

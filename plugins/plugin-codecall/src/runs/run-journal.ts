@@ -106,6 +106,11 @@ export class RunJournal {
     };
   }
 
+  /** The entries so far, without closing the journal. */
+  entriesSoFar(): readonly CodeCallJournalEntry[] {
+    return this.entries;
+  }
+
   /** The arguments and result of a call, when `keepValues` is on. */
   valuesOf(entry: CodeCallJournalEntry): RunCallValues | undefined {
     return this.values.get(entry);

@@ -9,6 +9,7 @@ import { invocationScriptOf, reviewInvocation } from '../review/review-invocatio
 import { reviewDecisionOf, reviewResultOf } from '../review/review-result';
 import CodeCallReviewService, { type EnclaveReviewerFactories } from '../review/review.service';
 import { RunReview } from '../review/run-review';
+import { RunJournal } from '../runs/run-journal';
 
 // Loading an Enclave entry for the first time in a test worker takes a few seconds.
 jest.setTimeout(30000);
@@ -272,6 +273,24 @@ describe('createRunReview', () => {
 
     expect(await inContext.pre(closeInput)).toEqual({ decision: 'allow' });
     expect((await elsewhere.pre(closeInput)).decision).toBe('needs_approval');
+  });
+
+  it('counts as effects the tools that are not read-only and reached their tool, from the journal', async () => {
+    const service = new CodeCallReviewService(reviewOptions(), 'node-vm');
+    const journal = new RunJournal();
+    journal.begin('users.close', { id: 'u0' }).succeed({});
+    journal.begin('users.close', { id: 'u9' }).fail({ code: 'ACCESS_DENIED' });
+    const review = await createRunReview(service, callerWith({ canElicit: true, journal }), 'h');
+
+    expect(await review.pre(closeInput)).toMatchObject({
+      decision: 'needs_changes',
+      findings: [{ rule: 'approval-after-effects', message: expect.stringContaining('but users.close already ran') }],
+    });
+
+    const refusedOnly = new RunJournal();
+    refusedOnly.begin('users.close', { id: 'u9' }).fail({ code: 'ACCESS_DENIED' });
+    const clean = await createRunReview(service, callerWith({ canElicit: true, journal: refusedOnly }), 'h');
+    expect((await clean.pre(closeInput)).decision).toBe('needs_approval');
   });
 
   it('denies a destructive call without the Approval plugin or elicitation, and asks with elicitation', async () => {

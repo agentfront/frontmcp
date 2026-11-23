@@ -30,6 +30,7 @@ function reviewWith(options: {
   approvals?: ReviewApprovals;
   rules?: boolean;
   timeoutMs?: number;
+  effectsSoFar?: () => readonly string[];
 }): RunReview {
   const rules = options.rules
     ? new ReviewRules({
@@ -43,6 +44,7 @@ function reviewWith(options: {
     reviewers: async () => options.reviewers ?? [],
     approvals: options.approvals ?? approvalsWith(),
     timeoutMs: options.timeoutMs,
+    effectsSoFar: options.effectsSoFar,
   });
 }
 
@@ -179,5 +181,54 @@ describe('RunReview', () => {
       reference: expect.objectContaining({ toolName: 'users.close' }),
       call: { toolName: 'users.close', args: { id: 'u9' } },
     });
+  });
+
+  it('asks for a script of its own, not an approval, for a call after tools with effects ran', async () => {
+    const review = reviewWith({ rules: true, effectsSoFar: () => ['mail.send', 'crm.note'] });
+
+    const decision = await review.pre({
+      phase: 'call',
+      toolName: 'users.close',
+      args: { id: 'u1' },
+      callIndex: 2,
+      analysis: analyzeScript('return 1;'),
+    });
+
+    expect(decision).toEqual({
+      decision: 'needs_changes',
+      findings: [
+        expect.objectContaining({
+          rule: 'approval-after-effects',
+          toolName: 'users.close',
+          suggestion: 'Call users.close in a script of its own, or run mail.send, crm.note in a separate script first',
+        }),
+      ],
+    });
+    expect(review.pendingApproval).toBeUndefined();
+  });
+
+  it('names at most ten earlier tools', async () => {
+    const tools = Array.from({ length: 12 }, (_, index) => `tool.${index}`);
+    const review = reviewWith({ rules: true, effectsSoFar: () => tools });
+
+    const decision = await review.pre({
+      phase: 'call',
+      toolName: 'users.close',
+      args: { id: 'u1' },
+      callIndex: 12,
+      analysis: analyzeScript('return 1;'),
+    });
+
+    expect(decision.decision === 'needs_changes' && decision.findings[0]?.suggestion).toBe(
+      `Call users.close in a script of its own, or run ${tools.slice(0, 10).join(', ')} and 2 more in a separate script first`,
+    );
+  });
+
+  it('still asks for approval before the script runs, whatever ran in other runs', async () => {
+    const review = reviewWith({ rules: true, effectsSoFar: () => ['mail.send'] });
+
+    const decision = await review.pre(scriptInput("return await callTool('users.close', { id: 'u1' });"));
+
+    expect(decision.decision).toBe('needs_approval');
   });
 });

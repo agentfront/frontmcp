@@ -251,6 +251,13 @@ A refused script runs no statement. A call the rules refuse while the script run
 type, a computed tool name) throws in the script, which may catch it; uncaught, it ends the run with that status. A
 call that needs approval stops the run, after the calls before it ran.
 
+An approved script runs again from the start. So when a call needs approval after a call to a tool without
+`readOnlyHint` has run in the same script (sending an email, say), the answer is `needs_changes`, not
+`needs_approval`: the finding (`approval-after-effects`) names those tools and asks for the call in a script of its
+own, or for the earlier calls in a separate script. No approval is asked for, by elicitation either. A call that needs
+approval after read-only calls only, or before the script runs, asks as usual. Resuming a run from its journal (#1335)
+will lift this.
+
 ### Approvals
 
 `approval.id` covers this script (its SHA-256), the call's arguments and the review policy version. The Approval
