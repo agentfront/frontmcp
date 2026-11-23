@@ -16,6 +16,7 @@ import { isVercelKvProvider, type FrontMcpLogger, type RedisOptionsInput } from 
 import { normalizeRedisOptions } from '../../common/types/options/redis/schema';
 import { requireOptionalModule } from '../../scope/optional-dependency.util';
 import { hasSqliteDriver, SQLITE_ON_EDGE_REMEDY } from '../../storage/sqlite-on-edge';
+import { type TaskListSource } from '../task.types';
 import { StorageTaskStore } from './storage-task.store';
 import { isExplicitStorage } from './task-backend.utils';
 import { type TaskStore } from './task.store';
@@ -38,6 +39,8 @@ export interface TaskStoreOptions {
   logger?: FrontMcpLogger;
   /** Edge runtime mode — requires distributed storage. */
   isEdgeRuntime?: boolean;
+  /** Where `tasks/list` reads a session's tasks (not the SQLite store, which queries by session). Default `'scan'`. */
+  listFrom?: TaskListSource;
   /**
    * SQLite backend options. When provided, the factory returns a
    * `SqliteTaskStore` instead of the utils-backed implementation.
@@ -163,7 +166,7 @@ export async function createTaskStore(options: TaskStoreOptions = {}): Promise<T
     fallback: isEdgeRuntime ? 'error' : 'memory',
   });
 
-  const store: TaskStore = new StorageTaskStore(storage, logger);
+  const store: TaskStore = new StorageTaskStore(storage, logger, { listFrom: options.listFrom });
   const type = detectStorageType(storage, finalStorageConfig?.type);
 
   logger?.info('[TaskStoreFactory] Created task store', {

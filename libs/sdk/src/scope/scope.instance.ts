@@ -627,6 +627,7 @@ export class Scope extends ScopeEntry {
             keyPrefix: tasksConfig?.keyPrefix ?? 'mcp:task:',
             logger: this.logger,
             isEdgeRuntime: onEdge,
+            listFrom: tasksConfig?.listFrom,
           });
           this._taskStore = taskStore;
           this.onDispose(async () => {
