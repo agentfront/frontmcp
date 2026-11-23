@@ -327,10 +327,18 @@ describe('ToolInstance.parseOutput of a CallToolResult the tool returns', () => 
     expect(tool.parseOutput(declaredResult)).toBe(declaredResult);
   });
 
-  it('fails with INVALID_OUTPUT when its structuredContent does not match the outputSchema', () => {
+  it('sends a structuredContent that does not match the outputSchema as returned, and says so, by default', () => {
+    const { tool } = toolWithOutput({ price: z.string() });
+    const onInvalidStructuredContent = jest.fn();
+
+    expect(tool.parseOutput(quoteResult, { onInvalidStructuredContent })).toBe(quoteResult);
+    expect(onInvalidStructuredContent).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails with INVALID_OUTPUT when its structuredContent does not match the outputSchema under 'enforce'", () => {
     const { tool } = toolWithOutput({ price: z.string() });
 
-    expect(() => tool.parseOutput(quoteResult)).toThrow(InvalidOutputError);
+    expect(() => tool.parseOutput(quoteResult, { validateStructuredContent: 'enforce' })).toThrow(InvalidOutputError);
   });
 
   it.each([
