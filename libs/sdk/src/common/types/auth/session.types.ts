@@ -20,6 +20,11 @@ export interface Authorization {
     /** Payload may be undefined when session validation failed but ID is passed for transport lookup */
     payload?: SessionIdPayload;
   };
+  /**
+   * The issuer of a token from another issuer than the server's own (transparent mode with
+   * `additionalIssuers` or `verifyIssuer: false`): its subject names a principal only together with it.
+   */
+  principalIssuer?: string;
 }
 
 export const sessionIdSchema = z.object({
@@ -32,4 +37,5 @@ export const authorizationSchema = z.object({
   token: z.string(),
   session: sessionIdSchema.optional(),
   user: userClaimSchema,
+  principalIssuer: z.string().optional(),
 } satisfies RawZodShape<Authorization>);
