@@ -27,7 +27,7 @@ import {
 
 import { type FrontMcpLogger } from '../../common';
 import { isAlive, isLocalWorker } from '../helpers/process-liveness';
-import { isTerminal, TASK_DEFAULTS, type TaskRecord } from '../task.types';
+import { isTerminal, TASK_DEFAULTS, type TaskListSource, type TaskRecord } from '../task.types';
 import type { TaskCancelCallback, TaskListPage, TaskStore, TaskTerminalCallback, TaskUnsubscribe } from './task.store';
 
 const TERMINAL_CHANNEL_PREFIX = 'terminal:';
@@ -60,15 +60,17 @@ export class StorageTaskStore implements TaskStore {
   private readonly index: NamespacedStorage;
   private readonly indexCounts: NamespacedStorage;
   private readonly logger?: FrontMcpLogger;
+  private readonly listFrom: TaskListSource;
 
   private readonly terminalCallbacks = new Map<string, Set<TaskTerminalCallback>>();
   private readonly terminalSubs = new Map<string, Unsubscribe>();
   private readonly cancelCallbacks = new Map<string, Set<TaskCancelCallback>>();
   private readonly cancelSubs = new Map<string, Unsubscribe>();
 
-  constructor(storage: NamespacedStorage, logger?: FrontMcpLogger) {
+  constructor(storage: NamespacedStorage, logger?: FrontMcpLogger, options: { listFrom?: TaskListSource } = {}) {
     this.storage = storage;
     this.logger = logger;
+    this.listFrom = options.listFrom ?? 'scan';
     this.records = new TypedStorage(storage.namespace(RECORDS_NAMESPACE));
     this.slots = storage.namespace(SLOTS_NAMESPACE);
     this.index = storage.namespace(INDEX_NAMESPACE);
@@ -212,13 +214,35 @@ export class StorageTaskStore implements TaskStore {
     }
   }
 
-  /** A page of the session's tasks in creation order, read from its index, skipping the positions of tasks gone. */
   async list(sessionId: string, opts: { cursor?: string; pageSize?: number } = {}): Promise<TaskListPage> {
     const pageSize = Math.max(1, Math.min(opts.pageSize ?? DEFAULT_PAGE_SIZE, 500));
+    return this.listFrom === 'index'
+      ? this.listFromIndex(sessionId, opts.cursor, pageSize)
+      : this.listFromScan(sessionId, opts.cursor, pageSize);
+  }
+
+  /** A page of the session's tasks in task-id order, from a scan of every stored task key (`tasks.listFrom: 'scan'`). */
+  private async listFromScan(sessionId: string, cursor: string | undefined, pageSize: number): Promise<TaskListPage> {
+    const matching = await this.scanSessionTaskIds(sessionId);
+    const offset = cursor ? decodeCursor(cursor) : 0;
+    const slice = matching.slice(offset, offset + pageSize);
+    const tasks: TaskRecord[] = [];
+    for (const taskId of slice) {
+      const record = await this.get(taskId, sessionId);
+      if (record) tasks.push(record);
+    }
+    const nextOffset = offset + slice.length;
+    const page: TaskListPage = { tasks };
+    if (nextOffset < matching.length) page.nextCursor = encodeCursor(nextOffset);
+    return page;
+  }
+
+  /** A page of the session's tasks in creation order, read from its index, skipping the positions of tasks gone. */
+  private async listFromIndex(sessionId: string, cursor: string | undefined, pageSize: number): Promise<TaskListPage> {
     if (!(await this.indexCounts.exists(sessionId))) await this.backfillIndex(sessionId);
     const positionsUsed = Number((await this.indexCounts.get(sessionId)) ?? 0);
 
-    let position = opts.cursor ? decodeCursor(opts.cursor) : 0;
+    let position = cursor ? decodeCursor(cursor) : 0;
     const tasks: TaskRecord[] = [];
     const listedTaskIds = new Set<string>();
     while (tasks.length < pageSize && position < positionsUsed) {
@@ -253,11 +277,7 @@ export class StorageTaskStore implements TaskStore {
    * as `tasks/list` did on every call, once per session. Racing backfills index a task twice; a page shows it once.
    */
   private async backfillIndex(sessionId: string): Promise<void> {
-    const sessionPrefix = `${sessionId}:`;
-    const taskIds = (await this.storage.namespace(RECORDS_NAMESPACE).keys())
-      .filter((key) => key.startsWith(sessionPrefix))
-      .map((key) => key.slice(sessionPrefix.length))
-      .sort();
+    const taskIds = await this.scanSessionTaskIds(sessionId);
     const records = await this.records.mget(taskIds.map((taskId) => recordKey(sessionId, taskId)));
     const live = records.filter(
       (record): record is TaskRecord =>
@@ -274,6 +294,15 @@ export class StorageTaskStore implements TaskStore {
     );
     const longestTtl = Math.max(EMPTY_INDEX_TTL_SECONDS, ...live.map((record) => expiresAtToTTL(record.expiresAt)));
     await this.keepIndexFor(sessionId, longestTtl);
+  }
+
+  /** The ids of the session's stored tasks, sorted, from every stored task key. */
+  private async scanSessionTaskIds(sessionId: string): Promise<string[]> {
+    const sessionPrefix = `${sessionId}:`;
+    return (await this.storage.namespace(RECORDS_NAMESPACE).keys())
+      .filter((key) => key.startsWith(sessionPrefix))
+      .map((key) => key.slice(sessionPrefix.length))
+      .sort();
   }
 
   /** Keep the session's index count at least `ttlSeconds` longer, so it outlives every position it numbered. */
