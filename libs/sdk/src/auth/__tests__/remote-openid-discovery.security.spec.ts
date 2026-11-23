@@ -29,6 +29,11 @@ import { type Scope } from '../../scope/scope.instance';
 
 // The provider's hosts resolve to a public address (the JWKS fetch checks where a host points).
 jest.mock('node:dns', () => ({ promises: { lookup: jest.fn() } }));
+// The DNS answers here are public addresses no test dials: a pinned request goes to the mocked `fetch`.
+jest.mock('@frontmcp/utils', () => ({
+  ...jest.requireActual('@frontmcp/utils'),
+  pinnedFetch: () => (input: string | URL, init?: RequestInit) => fetch(input, init),
+}));
 
 @Tool({ name: 'whoami', inputSchema: {} })
 class WhoAmITool extends ToolContext {
