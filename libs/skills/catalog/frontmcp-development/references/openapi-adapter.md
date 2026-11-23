@@ -333,6 +333,13 @@ OpenapiAdapter.init({
 });
 ```
 
+An `inputKey` must name an input of the tool: a value injected for any other key is not sent. The adapter warns at
+startup (`inputTransforms: tool '<name>' has no input '<key>'`, or `no tool has an input '<key>'` for a `global` one),
+once per tool and key, and keeps starting. The headers the HTTP client sets (`Authorization`, `Accept`,
+`Content-Type`, `Host`, `X-Forwarded-*`) are not inputs, and an object body that takes properties it doesn't name is
+one `body` input; up to 1.12.2 a transform could fill them. Send such a header with `additionalHeaders` (a fixed value)
+or `headersMapper` (from the request context), and set a body property with `bodyMapper`.
+
 When the model sends a value for an injected input anyway, that value is dropped before the arguments are checked and
 the injected one is sent (in 1.9.2 such a call was refused with `Unrecognized key`).
 

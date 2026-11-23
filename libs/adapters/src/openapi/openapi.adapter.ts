@@ -53,6 +53,21 @@ function normalizeMethods(
   });
 }
 
+function hasInput(tool: McpOpenAPITool, inputKey: string): boolean {
+  const inputProperties = tool.inputSchema?.properties;
+  return inputProperties !== undefined && Object.prototype.hasOwnProperty.call(inputProperties, inputKey);
+}
+
+function transformWithoutInputWarning(adapterName: string, finding: string): string {
+  return (
+    `[OpenAPI Adapter: ${adapterName}] inputTransforms: ${finding}, so the value injected for it is not sent. ` +
+    'Since mcp-from-openapi 2.10.0 the headers the HTTP client sets (Authorization, Accept, Content-Type, Host, ' +
+    "X-Forwarded-*) are not inputs, and an object body that takes properties it doesn't name is one 'body' input. " +
+    'Send a header with the adapter option additionalHeaders (a fixed value) or headersMapper (a value from the ' +
+    'request context), and set a body property with bodyMapper.'
+  );
+}
+
 /**
  * Creates a simple console-based logger for use outside the SDK context.
  */
@@ -205,7 +220,9 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
 
     // 3. Apply input transforms (hide inputs, inject values at runtime)
     if (this.options.inputTransforms) {
+      const toolsWithEveryInput = transformedTools;
       transformedTools = transformedTools.map((tool) => this.applyInputTransforms(tool));
+      this.warnAboutGlobalTransformsWithoutInput(toolsWithEveryInput);
     }
 
     // 4. Apply schema transforms (modify input/output schema definitions)
@@ -447,26 +464,19 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
   }
 
   /**
-   * Collect all input transforms for a specific tool
+   * Collect the per-tool and generator-produced input transforms for a specific tool
    * @private
    */
-  private collectTransformsForTool(tool: McpOpenAPITool): InputTransform[] {
+  private collectToolInputTransforms(tool: McpOpenAPITool): InputTransform[] {
     const transforms: InputTransform[] = [];
     const opts = this.options.inputTransforms;
     if (!opts) return transforms;
 
-    // 1. Add global transforms
-    if (opts.global) {
-      transforms.push(...opts.global);
-    }
-
-    // 2. Add per-tool transforms
     const perToolInputTransforms = this.resolvePerTool(opts.perTool, tool);
     if (perToolInputTransforms) {
       transforms.push(...perToolInputTransforms);
     }
 
-    // 3. Add generator-produced transforms
     if (opts.generator) {
       transforms.push(...opts.generator(tool));
     }
@@ -481,7 +491,8 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
    * @private
    */
   private applyInputTransforms(tool: McpOpenAPITool): McpOpenAPITool {
-    const transforms = this.collectTransformsForTool(tool);
+    const toolInputTransforms = this.collectToolInputTransforms(tool);
+    const transforms = [...(this.options.inputTransforms?.global ?? []), ...toolInputTransforms];
     if (transforms.length === 0) return tool;
 
     // Validate input keys against reserved keys (prototype pollution protection)
@@ -492,6 +503,15 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
             `reserved keys (${RESERVED_KEYS.join(', ')}) cannot be used`,
         );
       }
+    }
+
+    const inputKeysNotInTool = new Set(
+      toolInputTransforms.map((transform) => transform.inputKey).filter((inputKey) => !hasInput(tool, inputKey)),
+    );
+    for (const inputKey of inputKeysNotInTool) {
+      this.logger.warn(
+        transformWithoutInputWarning(this.options.name, `tool '${tool.name}' has no input '${inputKey}'`),
+      );
     }
 
     const transformedInputKeys = new Set(transforms.map((t) => t.inputKey));
@@ -530,6 +550,21 @@ export default class OpenapiAdapter extends DynamicAdapter<OpenApiAdapterOptions
         },
       },
     } as ExtendedMcpOpenAPITool;
+  }
+
+  /**
+   * Warn once per key about a global input transform whose inputKey is an input of no tool: its value is never sent.
+   * @private
+   */
+  private warnAboutGlobalTransformsWithoutInput(tools: McpOpenAPITool[]): void {
+    const globalInputKeys = new Set(
+      (this.options.inputTransforms?.global ?? []).map((transform) => transform.inputKey),
+    );
+    for (const inputKey of globalInputKeys) {
+      if (!tools.some((tool) => hasInput(tool, inputKey))) {
+        this.logger.warn(transformWithoutInputWarning(this.options.name, `no tool has an input '${inputKey}'`));
+      }
+    }
   }
 
   /**

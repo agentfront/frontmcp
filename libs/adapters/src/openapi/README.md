@@ -539,6 +539,13 @@ const adapter = new OpenapiAdapter({
 Hide inputs from the AI/users and inject values at request time. This is useful for tenant headers, correlation IDs, and
 other server-side data that shouldn't be exposed to MCP clients.
 
+An `inputKey` names an input of the tool, and a value injected for a key that is not one is not sent. The adapter
+warns at startup, once per tool and key, for a `perTool` or `generator` transform whose key is not an input of its tool,
+and for a `global` transform whose key is an input of no tool. The headers the HTTP client sets (`Authorization`,
+`Accept`, `Content-Type`, `Host`, `X-Forwarded-*`) are not inputs, and an object body that takes properties it doesn't
+name is one `body` input (up to 1.12.2 both were split into inputs a transform could fill): send such a header with
+`additionalHeaders` or `headersMapper`, and set a body property with `bodyMapper`.
+
 ### Basic Usage
 
 ```typescript
