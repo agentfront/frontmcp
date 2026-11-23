@@ -118,6 +118,7 @@ function createMockConfig(overrides: Record<string, unknown> = {}) {
       ...((overrides['resolvedVm'] as Record<string, unknown>) || {}),
       ...resolvedVmOverrides,
     },
+    trace: { level: 'failure', maxLines: 20, values: false },
     ...overrides,
   };
   return {

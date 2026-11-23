@@ -464,6 +464,20 @@ export const codeCallRunsOptionsSchema = z
   })
   .prefault({});
 
+/** Which runs' tool calls `codecall:execute` lists in its result. */
+export const codeCallTraceLevelSchema = z.enum(['off', 'failure', 'calls']);
+
+export const codeCallTraceOptionsSchema = z
+  .object({
+    /** Which runs' calls `trace` lists: 'off', 'failure' (a failed run's) or 'calls' (every run's) ('failure'). */
+    level: codeCallTraceLevelSchema.default('failure'),
+    /** The most lines one trace has; earlier calls past it are counted in its first line (20). */
+    maxLines: z.number().int().min(1).max(1000).default(20),
+    /** Show each call's arguments and result, cut to 200 characters, in the trace and the spans (false). */
+    values: z.boolean().default(false),
+  })
+  .prefault({});
+
 // Inner schema without the outer .default() - used for extracting input type
 const codeCallPluginOptionsObjectSchema = z.object({
   /**
@@ -521,6 +535,9 @@ const codeCallPluginOptionsObjectSchema = z.object({
 
   /** A record of each `codecall:execute` run, with a journal of its tool calls, readable by its owner. */
   runs: codeCallRunsOptionsSchema,
+
+  /** The trace of tool calls `codecall:execute` returns to the agent. */
+  trace: codeCallTraceOptionsSchema,
 });
 
 // Default values for plugin options
@@ -551,6 +568,8 @@ export type EmbeddingStrategy = z.infer<typeof embeddingStrategySchema>;
 export type SynonymExpansionConfig = z.infer<typeof synonymExpansionConfigSchema>;
 export type CodeCallSidecarOptions = z.infer<typeof codeCallSidecarOptionsSchema>;
 export type CodeCallRunsOptions = z.infer<typeof codeCallRunsOptionsSchema>;
+export type CodeCallTraceLevel = z.infer<typeof codeCallTraceLevelSchema>;
+export type CodeCallTraceOptions = z.infer<typeof codeCallTraceOptionsSchema>;
 
 export type CodeCallEmbeddingOptions = z.infer<typeof codeCallEmbeddingOptionsSchema>;
 export type CodeCallEmbeddingOptionsInput = z.input<typeof codeCallEmbeddingOptionsSchema>;

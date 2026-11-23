@@ -435,3 +435,17 @@ describe('CodeCall runs options', () => {
     expect(() => codeCallPluginOptionsSchema.parse({ runs })).toThrow();
   });
 });
+
+describe('CodeCall trace options', () => {
+  it('lists the calls of a failed run by default, up to 20 lines, without values', () => {
+    expect(codeCallPluginOptionsSchema.parse({}).trace).toEqual({ level: 'failure', maxLines: 20, values: false });
+  });
+
+  it.each([
+    ['an unknown level', { level: 'verbose' }],
+    ['a maxLines below 1', { maxLines: 0 }],
+    ['a maxLines above 1000', { maxLines: 1001 }],
+  ])('refuses %s', (_, trace) => {
+    expect(() => codeCallPluginOptionsSchema.parse({ trace })).toThrow();
+  });
+});

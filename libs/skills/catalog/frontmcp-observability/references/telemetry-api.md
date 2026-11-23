@@ -167,6 +167,21 @@ try {
 }
 ```
 
+### Child Spans
+
+`span.startChildSpan(name, attributes?)` starts a span under `span`, in the same trace, with no request attributes of
+its own. End it like any other span. CodeCall uses it for one span per tool call under its `codecall run` span.
+
+```typescript
+const batch = this.telemetry.startSpan('import-batch');
+for (const item of items) {
+  const itemSpan = batch.startChildSpan('import-item', { 'item.id': item.id });
+  await processItem(item);
+  itemSpan.end();
+}
+batch.end();
+```
+
 ## Access to Raw OTel Span
 
 For advanced use cases, access the underlying OTel Span:

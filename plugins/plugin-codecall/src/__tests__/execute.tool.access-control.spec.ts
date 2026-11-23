@@ -100,6 +100,8 @@ function createToolHarness(options: { mode?: string; tools?: ToolStub[]; include
     'resolvedVm.allowConsole': false,
     mode: options.mode ?? 'codecall_only',
     includeTools: options.includeTools,
+    resolvedVm: { runtime: 'node-vm' },
+    trace: { level: 'failure', maxLines: 20, values: false },
   };
   const mockConfig = {
     get: jest.fn((key: string) => configValues[key]),

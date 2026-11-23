@@ -15,8 +15,10 @@ import {
 } from '../errors';
 import CodeCallConfig from '../providers/code-call.config';
 import { jsonBytes, RunJournal } from '../runs/run-journal';
-import type { CodeCallRunStore } from '../runs/run-record.store';
+import type { CodeCallRunInput, CodeCallRunStore } from '../runs/run-record.store';
 import { CodeCallRunStoreToken } from '../runs/run-record.types';
+import { RunSpans, RunTelemetryToken } from '../runs/run-spans';
+import { traceOf } from '../runs/run-trace';
 import {
   asCodeCallDispatch,
   assertNotSelfReference,
@@ -102,32 +104,43 @@ export default class ExecuteTool extends ToolContext {
   }
 
   async execute(input: ExecuteToolInput): Promise<CodeCallExecuteResult> {
+    const { resolvedVm, trace } = this.get(CodeCallConfig).getAll();
+    const scriptHash = sha256Hex(input.script);
     const runs = this.tryGet(CodeCallRunStoreToken);
-    const journal = new RunJournal({ keepResults: runs?.keepsResults });
+    const spans = this.startRunSpans(scriptHash, resolvedVm.runtime);
+    const journal = new RunJournal({ keepResults: runs?.keepsResults, keepValues: trace.values, observer: spans });
     const startedAt = new Date();
     const result = await this.runScript(input, journal);
-    const runId = runs ? await this.keepRun(runs, input.script, startedAt, result, journal) : undefined;
-    return runId ? { ...result, runId } : result;
+    const run: CodeCallRunInput = {
+      scriptHash,
+      status: result.status,
+      startedAt: startedAt.toISOString(),
+      endedAt: new Date().toISOString(),
+      reviewDecision: null,
+      ...(result.status === 'ok' && { resultBytes: jsonBytes(result.result) }),
+      journal: [...journal.close()],
+    };
+    const runId = runs ? await this.keepRun(runs, run) : undefined;
+    spans?.end(run, runId);
+    const traceLines = traceOf(result.status, journal, trace);
+    return { ...result, ...(runId && { runId }), ...(traceLines && { trace: traceLines }) };
+  }
+
+  /** The run's spans while observability traces requests, else none. */
+  private startRunSpans(scriptHash: string, runtime: string): RunSpans | undefined {
+    const telemetry = this.tryGet(RunTelemetryToken);
+    if (!telemetry) return undefined;
+    const runSpan = telemetry.startSpan('codecall run', {
+      'codecall.script.hash': scriptHash,
+      'codecall.vm.runtime': runtime,
+    });
+    return new RunSpans(runSpan);
   }
 
   /** Keeps the run's record for its owner; a store that fails is logged, and the result goes out without a run id. */
-  private async keepRun(
-    runs: CodeCallRunStore,
-    script: string,
-    startedAt: Date,
-    result: CodeCallExecuteResult,
-    journal: RunJournal,
-  ): Promise<string | undefined> {
+  private async keepRun(runs: CodeCallRunStore, run: CodeCallRunInput): Promise<string | undefined> {
     try {
-      return await runs.keep(this, {
-        scriptHash: sha256Hex(script),
-        status: result.status,
-        startedAt: startedAt.toISOString(),
-        endedAt: new Date().toISOString(),
-        reviewDecision: null,
-        ...(result.status === 'ok' && { resultBytes: jsonBytes(result.result) }),
-        journal: [...journal.close()],
-      });
+      return await runs.keep(this, run);
     } catch (error: unknown) {
       this.logger?.warn('codecall: could not keep the run record', {
         error: error instanceof Error ? error.message : String(error),

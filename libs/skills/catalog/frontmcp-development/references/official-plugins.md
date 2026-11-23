@@ -227,6 +227,29 @@ A store that fails is logged as a warning, and the result goes out without `runI
 alone (a very long session id, say) is over `runs.maxRecordBytes`. In a browser, a `runs.storage` on
 Redis or SQLite is refused at startup.
 
+### Trace
+
+`codecall:execute` returns a short `trace` from the run's journal, one line per tool call:
+`2. users-get: failure (input), 3 ms` or `1. users-list: success, 4 ms, 412 bytes`. The server picks the level with
+`trace.level`: `'off'`, `'failure'` (the default: only a run whose status is not `ok`) or `'calls'` (every run). A
+trace has at most `trace.maxLines` lines (default 20): it keeps the last calls, and its first line counts the earlier
+ones (`12 earlier calls not shown`). Lines show sizes, never values, unless `trace.values: true`, which adds each
+call's arguments and a successful call's result as JSON cut to 200 characters.
+
+With observability on (`@frontmcp/observability` tracing), each run is a `codecall run` span under the
+`codecall:execute` tool span (`codecall.run.id`, `codecall.run.status`, `codecall.run.calls`,
+`codecall.run.result_bytes`, `codecall.script.hash`, `codecall.vm.runtime`, and `codecall.review.decision` once a
+review stage sets one), with a child span per tool call, `codecall call <tool>` (`codecall.call.position`, `.tool`,
+`.outcome`, `.phase`, `.duration_ms`, `.result_bytes`). A failed run or call ends with ERROR status. The call spans
+carry `codecall.call.arguments` and `codecall.call.result` only with `trace.values: true`. With observability off,
+CodeCall sends no spans.
+
+```typescript
+CodeCallPlugin.init({
+  trace: { level: 'failure', maxLines: 20, values: false }, // the defaults
+});
+```
+
 ### Per-Tool CodeCall Metadata
 
 Control how individual tools interact with CodeCall:

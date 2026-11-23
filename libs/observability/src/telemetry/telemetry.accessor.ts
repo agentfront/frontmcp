@@ -33,6 +33,7 @@
  */
 
 import {
+  context as otelContext,
   SpanKind,
   SpanStatusCode,
   trace,
@@ -107,6 +108,13 @@ export class TelemetrySpan {
     if (error instanceof Error) this.span.recordException(error);
     this.span.setStatus({ code: SpanStatusCode.ERROR, message: msg });
     this.span.end();
+  }
+
+  /** Start a span under this one. You MUST call `end()` or `endWithError()` on it. */
+  startChildSpan(name: string, attributes?: Record<string, string | number | boolean>): TelemetrySpan {
+    const parent = trace.setSpan(otelContext.active(), this.span);
+    const tracer = trace.getTracer('@frontmcp/observability');
+    return new TelemetrySpan(tracer.startSpan(name, { kind: SpanKind.INTERNAL, attributes }, parent));
   }
 
   /** Get the underlying OTel span (escape hatch) */

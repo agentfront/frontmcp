@@ -123,6 +123,8 @@ const timeoutErrorPayloadSchema = z.object({
 const runFields = {
   /** The id of the run's record, set when one was kept. */
   runId: z.string().optional(),
+  /** A line per tool call (position, tool, outcome, duration, size), when the server's `trace.level` shows them. */
+  trace: z.array(z.string()).optional(),
 };
 
 /**

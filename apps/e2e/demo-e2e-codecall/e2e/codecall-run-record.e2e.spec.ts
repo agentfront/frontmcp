@@ -1,4 +1,4 @@
-/** E2E tests for CodeCall run records: one record per execute, a journal entry per tool call, read by its owner only. */
+/** E2E tests for CodeCall run records and the default trace a failed run returns. */
 import { expect, test } from '@frontmcp/testing';
 
 interface JournalEntry {
@@ -58,5 +58,29 @@ test.describe('CodeCall run records E2E', () => {
     const other = await server.createClient();
     const otherRead = await other.tools.call('runs-read', { runId });
     expect(otherRead.json<{ record: RunRecord | null }>().record).toBeNull();
+  });
+
+  test('lists the calls a failed script made before it failed, by default, without values', async ({ mcp }) => {
+    const executed = await mcp.tools.call('codecall:execute', {
+      script: `
+        const users = await callTool('users-list', {});
+        return await callTool('users-get', { id: 42 });
+      `,
+    });
+    const { status, trace } = executed.json<{ status: string; trace?: string[] }>();
+
+    expect(status).toBe('tool_error');
+    expect(trace).toEqual([
+      expect.stringMatching(/^1\. users-list: success, \d+ ms, \d+ bytes$/),
+      expect.stringMatching(/^2\. users-get: failure \(input\), \d+ ms$/),
+    ]);
+    expect(JSON.stringify(trace)).not.toContain('John Doe');
+  });
+
+  test('returns no trace for a script that returned, by default', async ({ mcp }) => {
+    const executed = await mcp.tools.call('codecall:execute', { script: "return await callTool('users-list', {});" });
+
+    expect(executed.json<{ status: string }>().status).toBe('ok');
+    expect(executed.json<Record<string, unknown>>()).not.toHaveProperty('trace');
   });
 });

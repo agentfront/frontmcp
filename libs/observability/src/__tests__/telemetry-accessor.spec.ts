@@ -268,6 +268,20 @@ describe('TelemetrySpan', () => {
     expect(exporter.getFinishedSpans()[0].status.code).toBe(SpanStatusCode.ERROR);
   });
 
+  it('starts a child span under this span, in its trace', () => {
+    const accessor = new TelemetryAccessor(makeCtx());
+    const parent = accessor.startSpan('parent');
+    const child = parent.startChildSpan('child', { 'child.key': 'value' });
+    child.end();
+    parent.end();
+
+    const [exportedChild, exportedParent] = exporter.getFinishedSpans();
+    expect(exportedChild.name).toBe('child');
+    expect(exportedChild.attributes['child.key']).toBe('value');
+    expect(exportedChild.spanContext().traceId).toBe(exportedParent.spanContext().traceId);
+    expect(exportedChild.parentSpanContext?.spanId).toBe(exportedParent.spanContext().spanId);
+  });
+
   it('should expose raw OTel span', () => {
     const accessor = new TelemetryAccessor(makeCtx());
     const span = accessor.startSpan('raw');
