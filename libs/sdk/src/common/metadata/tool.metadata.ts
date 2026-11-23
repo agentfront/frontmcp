@@ -20,6 +20,7 @@ import { entryAvailabilitySchema, type EntryAvailability } from '@frontmcp/utils
 import { type ToolInputOf, type ToolOutputOf } from '../decorators';
 import { type RawZodShape } from '../types';
 import { enabledOptionSchema, type EnabledOption } from './enabled.metadata';
+import { inputPolicySchema, type InputPolicy } from './input-policy';
 import { outputPolicySchema, type OutputPolicy } from './output-policy';
 import { type ToolUIConfig } from './tool-ui.metadata';
 
@@ -525,6 +526,12 @@ export interface ToolMetadata<InSchema = ToolInputType, OutSchema extends ToolOu
    * happens to undeclared answer keys (`undeclaredKeys`: `'strip'` / `'warn'` / `'keep'` / `'fail'`).
    */
   output?: OutputPolicy;
+
+  /**
+   * Input policy for this tool — overrides `@App` and `@FrontMcp`: what `tools/call` does with argument
+   * keys `inputSchema` does not declare (`undeclaredKeys`: `'strip'` / `'warn'` / `'fail'`).
+   */
+  input?: InputPolicy;
 }
 
 /**
@@ -591,5 +598,6 @@ export const frontMcpToolMetadataSchema = z
       })
       .optional(),
     output: outputPolicySchema.optional(),
+    input: inputPolicySchema.optional(),
   } satisfies RawZodShape<ToolMetadata, ExtendFrontMcpToolMetadata>)
   .passthrough();
