@@ -397,6 +397,8 @@ export interface RegisteredServer {
   stdio?: boolean;
   /** The caller of the session's latest request, without its token: an event pushed to the session is checked against it */
   caller?: SessionCaller;
+  /** The platform bindings (`this.workerEnv`) of the session's latest subscribing request: an update is checked with them */
+  platformEnv?: unknown;
   /** Client capabilities from the initialize request */
   clientCapabilities?: ClientCapabilities;
   /** Client info (name/version) from the initialize request */
@@ -714,13 +716,16 @@ export class NotificationService {
    *
    * @param sessionId - The session to subscribe
    * @param uri - The resource URI to subscribe to
+   * @param platformEnv - The subscribing request's platform bindings, which each update's access check runs with
    * @returns true if this is a new subscription, false if already subscribed
    */
-  subscribeResource(sessionId: string, uri: string): boolean {
-    if (!this.servers.has(sessionId)) {
+  subscribeResource(sessionId: string, uri: string, platformEnv?: unknown): boolean {
+    const registered = this.servers.get(sessionId);
+    if (!registered) {
       this.logger.warn(`Cannot subscribe unregistered session ${sessionId.slice(0, 20)}... to resource ${uri}`);
       return false;
     }
+    if (platformEnv !== undefined) registered.platformEnv = platformEnv;
 
     let sessionSubs = this.subscriptions.get(sessionId);
     if (!sessionSubs) {
@@ -822,7 +827,7 @@ export class NotificationService {
     let checkedCaller = registered.caller;
     // The check is async: a request meanwhile may replace the caller, which is then checked in its turn
     for (let attempt = 0; attempt < MAX_CALLER_RECHECKS; attempt++) {
-      const mayRead = await callerMayStillRead(this.scope, sessionId, checkedCaller, uri);
+      const mayRead = await callerMayStillRead(this.scope, registered, checkedCaller, uri);
       const current = this.servers.get(sessionId);
       if (current !== registered || !this.isSubscribed(sessionId, uri) || hasExpiredCaller(current)) return;
       if (isSameCaller(current.caller, checkedCaller)) {

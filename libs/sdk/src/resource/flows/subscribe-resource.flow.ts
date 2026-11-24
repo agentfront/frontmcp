@@ -168,7 +168,7 @@ export default class SubscribeResourceFlow extends FlowBase<typeof name> {
       return;
     }
 
-    const isNew = this.scope.notifications.subscribeResource(sessionId, uri);
+    const isNew = this.scope.notifications.subscribeResource(sessionId, uri, this.tryGetContext()?.platformEnv);
 
     if (isNew) {
       this.logger.info(`subscribe: session subscribed to resource ${uri}`);

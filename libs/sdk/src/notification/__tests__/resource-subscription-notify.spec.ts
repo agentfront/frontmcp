@@ -158,6 +158,17 @@ describe('NotificationService - resource subscription notifications', () => {
       expect(server.notification).toHaveBeenCalledTimes(1);
     });
 
+    it('runs the check with the platform bindings of the request that subscribed', async () => {
+      const server = createMockServer();
+      service.registerServer('session-1', server);
+      service.subscribeResource('session-1', 'file://notes.txt', { NOTES_ON: true });
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
+      expect(mockScope.runFlow.mock.calls[0][1].ctx.platformEnv).toEqual({ NOTES_ON: true });
+    });
+
     it('runs each check in a request turn of its own', async () => {
       const turnsHeld: boolean[] = [];
       mockScope.runFlow.mockImplementation(async () => {
