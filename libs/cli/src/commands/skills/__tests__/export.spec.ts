@@ -111,6 +111,16 @@ posixOnly('exportSkills with linked rule files', () => {
     expect(fs.readdirSync(outside)).toEqual([]);
   });
 
+  it('does not take a checkout that a linked output folder leads to for the project', async () => {
+    const otherCheckout = path.join(outside, 'checkout');
+    fs.mkdirSync(path.join(otherCheckout, '.git'), { recursive: true });
+    fs.symlinkSync(otherCheckout, path.join(project, 'linked-out'));
+
+    await expect(exportDemo('cursor', path.join(project, 'linked-out'))).rejects.toThrow('process.exit(1)');
+
+    expect(fs.existsSync(path.join(otherCheckout, '.cursor'))).toBe(false);
+  });
+
   it('refuses a rule file that links to a missing file', async () => {
     fs.mkdirSync(path.join(project, '.cursor/rules'), { recursive: true });
     fs.symlinkSync(path.join(outside, 'missing.md'), path.join(project, '.cursor/rules/demo.mdc'));
