@@ -252,10 +252,11 @@ describe('CodeCall tool descriptions follow the effective config', () => {
       const description = await listedDescription(server(), 'codecall:execute');
 
       expect(lineStartingWith(description, 'NOT AVAILABLE:')).toBe(
-        'NOT AVAILABLE: Set, Map, WeakMap, WeakSet, Symbol, RegExp, Promise, Error, TypeError, RangeError, structuredClone, regex literals. ' +
-          'Use plain objects and arrays, parallel(items, fn) for Promise.all, throw a string for Error.',
+        'NOT AVAILABLE: WeakMap, WeakSet, Symbol, RegExp, Promise, structuredClone, regex literals. ' +
+          'Use Map, Set, plain objects and arrays, parallel(items, fn) for Promise.all.',
       );
       expect(lineStartingWith(description, 'ERRORS:')).toContain('RESULT_TOO_LARGE');
+      expect(description).not.toMatch(/throw a string|instead of (Map|Set)|Set, Map,/);
     });
   });
 

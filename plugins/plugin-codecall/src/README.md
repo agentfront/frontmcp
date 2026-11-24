@@ -599,7 +599,7 @@ No preset gives scripts `console`: only an explicit `vm.allowConsole: true` does
    - Parse `script` to an AST.
    - Reject:
      - Disallowed identifiers (from `disabledBuiltins` / `disabledGlobals`).
-     - Globals AgentScript doesn't have (`Set`, `Map`, `Promise`, `Error`, `structuredClone`, ...), named as the script wrote them, with what to use instead.
+     - Globals AgentScript doesn't have (`WeakMap`, `WeakSet`, `Symbol`, `Promise`, `structuredClone`, ...), named as the script wrote them, with what to use instead. It has `Set`, `Map` and `Error` since Enclave 2.21.
      - Loop nodes (`ForStatement`, `WhileStatement`, `DoWhileStatement`, `ForOfStatement`, `ForInStatement`) if `allowLoops === false`.
 
    - Happens _before_ any VM execution.
