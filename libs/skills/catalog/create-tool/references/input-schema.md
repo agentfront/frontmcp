@@ -109,21 +109,21 @@ async execute(input: { start: string; end: string }) {
 
 Parsing drops argument keys `inputSchema` does not declare, at any depth (`timeoutMs` sent to a tool that declares `timeoutSec`, `filter.owner`), so the call runs without them. `input.undeclaredKeys` decides whether anyone hears of it. It cascades **Tool > App > server > default**, like `output.undeclaredKeys`.
 
-| `undeclaredKeys` | Effect                                                                                                                                                                                                             |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `'strip'`        | Drop them (the 1.12 default outside development).                                                                                                                                                                  |
-| `'warn'`         | Drop them, log a server warning naming each key once per tool, and end the answer with a text line the model reads: `These arguments are not declared and were ignored: 'timeoutMs' (did you mean 'timeoutSec'?).` |
-| `'fail'`         | Refuse the call with `INVALID_INPUT`: `Unknown arguments: 'timeoutMs' (did you mean 'timeoutSec'?)`. `execute()` does not run. **Default** since 1.13.                                                             |
+| `undeclaredKeys` | Effect                                                                                                                                                                                                                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'strip'`        | Drop them without a word, as up to 1.12 outside development.                                                                                                                                                                                              |
+| `'warn'`         | Drop them, log a server warning naming each key once per tool, and end the answer with a text line the model reads: `These arguments are not declared and were ignored: 'timeoutMs' (did you mean 'timeoutSec'?).` The call runs. **Default** since 1.13. |
+| `'fail'`         | Refuse the call with `INVALID_INPUT`: `Unknown arguments: 'timeoutMs' (did you mean 'timeoutSec'?)`. `execute()` does not run.                                                                                                                            |
 
 ```typescript
-// Run calls without the arguments the tool does not declare, and tell the model which ones were ignored
-@Tool({ name: 'agent_wait', inputSchema: { timeoutSec: z.number().default(45) }, input: { undeclaredKeys: 'warn' } })
+// Refuse calls whose arguments the tool does not declare, instead of running them with defaults
+@Tool({ name: 'agent_wait', inputSchema: { timeoutSec: z.number().default(45) }, input: { undeclaredKeys: 'fail' } })
 class AgentWaitTool extends ToolContext {
   /* … */
 }
 ```
 
-The closest declared key is named for a top-level key close enough to be a slip, compared without case. Below a field whose schema has a transform (`.transform()`, `z.transform()`, `z.preprocess()`, `.pipe()`) or a `.catch()` fallback the parsed value can differ in shape from what was sent, so only the field itself is checked. A message names the first 20 undeclared arguments and counts the rest, and cuts a key longer than 64 characters short. A tool whose input is a JSON Schema (a remote app, the OpenAPI adapter) keeps every argument, so the policy does not apply to it. Up to 1.12.2 undeclared arguments were dropped without a word in every environment; 1.12 dropped them by default (`'warn'` in development), and 1.13 refuses them by default: set `'strip'` or `'warn'` where clients send arguments a tool does not declare.
+The closest declared key is named for a top-level key close enough to be a slip, compared without case. Below a field whose schema has a transform (`.transform()`, `z.transform()`, `z.preprocess()`, `.pipe()`) or a `.catch()` fallback the parsed value can differ in shape from what was sent, so only the field itself is checked. A message names the first 20 undeclared arguments and counts the rest, and cuts a key longer than 64 characters short. A tool whose input is a JSON Schema (a remote app, the OpenAPI adapter) keeps every argument, so the policy does not apply to it. Up to 1.12 undeclared arguments were dropped without a word, as `'strip'` does. Since 1.13 the default is `'warn'` everywhere: the call runs without them, the answer ends with the line naming them and the server logs each once per tool. Set `'fail'` to refuse such calls, or `'strip'` to keep the 1.12 behaviour.
 
 ## Empty input
 

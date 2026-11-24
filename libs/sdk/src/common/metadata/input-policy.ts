@@ -10,7 +10,7 @@ export interface InputPolicy {
    * `'strip'` drops undeclared argument keys; `'warn'` drops them, logs each once per tool and ends the answer with a
    * line naming them; `'fail'` refuses the call with `INVALID_INPUT`. Both name the closest declared key.
    *
-   * @default 'fail' (up to 1.12, 'warn' when NODE_ENV is 'development', otherwise 'strip')
+   * @default 'warn' (up to 1.12 undeclared keys were dropped without a word, as 'strip' does)
    */
   undeclaredKeys?: InputUndeclaredKeysPolicy;
 }
@@ -19,11 +19,11 @@ export const inputPolicySchema = z.object({
   undeclaredKeys: z.enum(['strip', 'warn', 'fail']).optional(),
 });
 
-/** Resolve the undeclared-argument policy: Tool > App > server > 'fail'. */
+/** Resolve the undeclared-argument policy: Tool > App > server > 'warn'. */
 export function resolveInputUndeclaredKeysPolicy(
   tool?: InputPolicy,
   app?: InputPolicy,
   server?: InputPolicy,
 ): InputUndeclaredKeysPolicy {
-  return tool?.undeclaredKeys ?? app?.undeclaredKeys ?? server?.undeclaredKeys ?? 'fail';
+  return tool?.undeclaredKeys ?? app?.undeclaredKeys ?? server?.undeclaredKeys ?? 'warn';
 }

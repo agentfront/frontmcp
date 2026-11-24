@@ -98,12 +98,21 @@ describe('tools/call input.undeclaredKeys', () => {
     return { isError: result['isError'] === true, texts, wire: JSON.stringify(message) };
   }
 
-  it('refuses an undeclared argument by default, in development and outside it alike', async () => {
+  it('runs the call by default and tells the model and the log, in development and outside it alike', async () => {
     for (const nodeEnv of ['production', 'development']) {
       process.env['NODE_ENV'] = nodeEnv;
+      inputWarnings.length = 0;
       const server = await startServer();
 
-      expect((await callWait(server, 'agent_wait')).wire).toContain("Unknown arguments: 'timeoutMs'");
+      const answer = await callWait(server, 'agent_wait');
+
+      expect(answer.isError).toBe(false);
+      expect(answer.texts).toEqual([
+        'waited 45s',
+        "These arguments are not declared and were ignored: 'timeoutMs' (did you mean 'timeoutSec'?).",
+      ]);
+      expect(answer.wire).not.toContain('INVALID_INPUT');
+      expect(inputWarnings.filter((line) => line.includes('agent_wait'))).toHaveLength(1);
     }
   });
 
@@ -142,8 +151,8 @@ describe('tools/call input.undeclaredKeys', () => {
     expect(cachedAnswer.content).toHaveLength(1);
   });
 
-  it('refuses the call by default, naming the key and the closest declared one', async () => {
-    const server = await startServer();
+  it("refuses the call under 'fail', naming the key and the closest declared one", async () => {
+    const server = await startServer({ undeclaredKeys: 'fail' });
 
     const refused = await callWait(server, 'agent_wait');
 
