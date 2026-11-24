@@ -251,4 +251,29 @@ describe('a subscriptions/listen stream and resource access', () => {
     await cancelled;
     controller.abort();
   });
+
+  it('checks an update under an acknowledged URI that no resource names as that URI', async () => {
+    const switched = server.instance.getScopes()[0].resources.findResourceForUri('switched://note')?.instance;
+    if (!switched) throw new Error('no switched://note resource');
+    const controller = new AbortController();
+    const reader = (await listen(server, ['switched://note'], controller.signal)).body?.getReader();
+    if (!reader) throw new Error('no stream');
+    await collect(reader, (messages) => messages.length === 1);
+
+    const touchChild = () =>
+      rpc20260728(server.handler, 'tools/call', { name: 'touch', arguments: { uri: 'switched://note/attachment' } });
+    await touchChild();
+    const whileOn = await collect(reader, (received) => updatedUris(received).length === 1);
+    switched.metadata.enabled = false;
+    await touchChild();
+    const whileOff = await collect(reader, () => false, 300);
+
+    expect(updatedUris(whileOn)).toEqual(['switched://note/attachment']);
+    expect(updatedUris(whileOff)).toEqual([]);
+    switched.metadata.enabled = true;
+    const cancelled = reader.cancel();
+    await touchChild();
+    await cancelled;
+    controller.abort();
+  });
 });

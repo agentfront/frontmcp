@@ -435,10 +435,10 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       requested,
       channels: await this.listenedChannels((body['params'] as { _meta?: Record<string, unknown> } | undefined)?._meta),
       signal: controller.signal,
-      // Not once its credentials expired; an update of a URI no resource names belongs to the one it sits under
-      mayReceiveUpdate: async (uri) =>
+      // Not once its credentials expired; an update of a URI no resource names is checked as the URI it sits under
+      mayReceiveUpdate: async (uri, watchedUri) =>
         !hasExpiredCaller({ caller: sessionCallerOf(listenerAuthInfo) }) &&
-        (!this.scope.resources.findResourceForUri(uri) || mayRead(uri)),
+        mayRead(this.scope.resources.findResourceForUri(uri) ? uri : watchedUri),
     });
 
     this.log.info('handleSubscriptions: stream opened', {
