@@ -18,7 +18,8 @@
  *     `__FRONTMCP_BOOTSTRAP_COMPLETE__` sentinel the SDK writes to stderr when
  *     `FRONTMCP_DEV_BOOTSTRAP_SENTINEL=1`; the SDK appends the port and MCP path
  *     it actually serves (a decorator can hard-code both). A TCP probe of the
- *     expected port covers SDKs that predate the sentinel.
+ *     expected port covers SDKs that predate the sentinel (before 1.3.0); with
+ *     a newer SDK it is not used, since any process on the port answers it.
  *
  *   - **Pipe mode (`--serve`)**: `stdio: ['ignore', 'pipe', 'pipe', 'ipc']`.
  *     `FRONTMCP_DEV_STDIO_FD=3` + `FRONTMCP_STDIO=1` make the SDK serve MCP
@@ -29,7 +30,7 @@ import { type ChildProcess } from 'node:child_process';
 import * as net from 'node:net';
 import { pathToFileURL } from 'node:url';
 
-import { processTreeSpawnOptions, stopProcessTree, type BridgeLogger } from '@frontmcp/utils';
+import { processTreeSpawnOptions, readFileSync, stopProcessTree, type BridgeLogger } from '@frontmcp/utils';
 
 import { packageManagerCommand, spawnTool, type ToolCommand, type ToolHost } from '../../../shared/tool-command';
 
@@ -50,8 +51,10 @@ export interface ChildSupervisorOptions {
   log: BridgeLogger;
   /** Base env for the child (config overlays, `.env`, `PORT`). Defaults to `process.env`. */
   env?: NodeJS.ProcessEnv;
-  /** Port for HTTP mode (TCP readiness probe). Ignored in pipe mode. */
+  /** Port for HTTP mode. Ignored in pipe mode. */
   port?: number;
+  /** HTTP mode: also take a connection to `port` as ready, for an SDK that predates the sentinel. */
+  acceptPortProbe?: boolean;
   /** Called once the child is ready to accept traffic. */
   onReady: (child: ChildProcess, info: ChildReadyInfo) => void | Promise<void>;
   /** Called when the child exits (expected or otherwise). */
@@ -101,6 +104,22 @@ export function parseReadySentinel(line: string): ChildReadyInfo | undefined {
   }
 }
 
+/**
+ * Whether the `@frontmcp/sdk` that code in `directory` (the entry's folder) loads predates the ready sentinel (1.3.0),
+ * so only a connection to its port can tell that it listens. An SDK that can't be found is taken to write the sentinel.
+ */
+export function sdkPredatesReadySentinel(directory: string): boolean {
+  let version: string;
+  try {
+    const manifestPath = require.resolve('@frontmcp/sdk/package.json', { paths: [directory] });
+    version = (JSON.parse(readFileSync(manifestPath)) as { version: string }).version;
+  } catch {
+    return false;
+  }
+  const [major, minor] = version.split('.').map(Number);
+  return major < 1 || (major === 1 && minor < 3);
+}
+
 /** Resolve the project's tsx loader (`tsx` package root export) as a `file:` URL. */
 export function resolveProjectTsxLoader(cwd: string = process.cwd()): string | undefined {
   for (const base of [cwd, __dirname]) {
@@ -140,7 +159,7 @@ export function resolveChildCommand(
 }
 
 export function createChildSupervisor(options: ChildSupervisorOptions): ChildSupervisor {
-  const { mode, entry, log, port, onReady, onExit, readyTimeoutMs = 30_000 } = options;
+  const { mode, entry, log, port, acceptPortProbe = false, onReady, onExit, readyTimeoutMs = 30_000 } = options;
   const resolveTsxLoader = options.resolveTsxLoader ?? (() => resolveProjectTsxLoader());
 
   let current: ChildProcess | undefined;
@@ -252,7 +271,7 @@ export function createChildSupervisor(options: ChildSupervisorOptions): ChildSup
       // accepting connections counts as ready — after a short grace period in
       // which a sentinel can still report the real port/path.
       const tcpProbeTimer =
-        mode === 'http' && port
+        mode === 'http' && port && acceptPortProbe
           ? setInterval(() => {
               if (resolved || graceTimer) return;
               const sock = net.createConnection({ host: '127.0.0.1', port }, () => {
