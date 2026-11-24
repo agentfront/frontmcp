@@ -5,7 +5,18 @@
 
 import * as path from 'path';
 
-import { ensureDir, fileExists, lstat, randomUUID, realpath, rename, rm, writeFile } from '@frontmcp/utils';
+import {
+  chmod,
+  ensureDir,
+  fileExists,
+  lstat,
+  randomUUID,
+  realpath,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from '@frontmcp/utils';
 
 /** A write refused because the path leads outside the project. */
 export class ExportTargetRefusal extends Error {}
@@ -52,12 +63,20 @@ export async function exportTargetOf(file: string, root: string): Promise<string
   return target;
 }
 
-/** Write `contents` to `target` through a new file renamed into place, so no link made after the check is followed. */
+/**
+ * Write `contents` to `target` through a new file renamed into place, so no link made after the check is followed. A
+ * file it replaces keeps its permissions.
+ */
 export async function writeExportTarget(target: string, contents: string): Promise<void> {
   await ensureDir(path.dirname(target));
   const temporary = path.join(path.dirname(target), `.${path.basename(target)}.${randomUUID()}.tmp`);
-  await writeFile(temporary, contents, { flag: 'wx' });
+  const mode = await stat(target).then(
+    (stats) => stats.mode & 0o7777,
+    () => undefined,
+  );
+  await writeFile(temporary, contents, { flag: 'wx', mode });
   try {
+    if (mode !== undefined) await chmod(temporary, mode);
     await rename(temporary, target);
   } catch (error) {
     await rm(temporary, { force: true });
