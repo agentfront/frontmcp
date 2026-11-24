@@ -209,6 +209,13 @@ frontmcp skills export --all --target copilot --out ./.github
 See **Other AI clients (Cursor / Windsurf / Copilot)** below for the
 output-filename mapping per target.
 
+A rule file, or a folder above it, may be a link (to a shared `AGENTS.md`, say)
+as long as it leads inside the project: the git repository holding the output
+folder, or the output folder outside a repository. A link that leads elsewhere,
+or to a missing file, is refused by name (`Not writing <file>: ...`) and the
+command exits 1. The file the link leads to is replaced by a new file renamed
+into place, so the link stays. Up to 1.12.2 the export followed any link.
+
 With `--from-entry`, `export` writes **your project's own** `@Skill` entries
 to agent skills folders instead, and `--check` reports copies that drifted —
 see **Exporting project-defined skills to every agent** below.

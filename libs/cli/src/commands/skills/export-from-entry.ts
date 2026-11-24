@@ -21,6 +21,7 @@ import { resolveEntry } from '../../shared/fs';
 import { assertValidPluginName } from '../build/exec/cli-runtime/plugin-emitter';
 import type { ExtractedManifest, ExtractedSkillAsset } from '../build/exec/cli-runtime/schema-extractor';
 import { composeSkillMd, readSkillInstructions } from '../build/exec/cli-runtime/skill-md-compose';
+import { isWithin } from './export-target';
 import { extractProjectSchema } from './from-entry';
 import { PROVIDER_DIRS } from './install';
 
@@ -65,12 +66,6 @@ function readMarker(skillMd: string): { source: string; hash: string } | undefin
 }
 
 const withLf = (text: string) => text.replace(/\r\n/g, '\n');
-
-/** True for `parent` itself and any path inside it. */
-function isWithin(child: string, parent: string): boolean {
-  const relative = path.relative(parent, child);
-  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
-}
 
 /** Files under `root` with their real paths, following links that stay inside it; the others are in `outside`. */
 async function filesUnder(root: string): Promise<{ files: Array<{ name: string; real: string }>; outside: string[] }> {
