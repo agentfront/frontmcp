@@ -51,8 +51,7 @@ export type UndeclaredKeysPolicy = (typeof UNDECLARED_KEYS_POLICIES)[number];
  * object `outputSchema`: `'warn'` sends it as returned and logs a warning once per tool, `'enforce'` refuses it with
  * `InvalidOutputError`. `'warn'` is the default in 1.12; 1.13 makes `'enforce'` the default.
  */
-export const STRUCTURED_CONTENT_VALIDATIONS = ['warn', 'enforce'] as const;
-export type StructuredContentValidation = (typeof STRUCTURED_CONTENT_VALIDATIONS)[number];
+export type StructuredContentValidation = 'warn' | 'enforce';
 
 /**
  * Which end of a list an answer budget keeps when it has to leave items out.
@@ -146,7 +145,7 @@ export const outputPolicySchema = z.object({
   schemaMode: z.enum(OUTPUT_SCHEMA_MODES).optional(),
   schemaDescriptionFormat: z.enum(SCHEMA_DESCRIPTION_FORMATS).optional(),
   undeclaredKeys: z.enum(UNDECLARED_KEYS_POLICIES).optional(),
-  validateStructuredContent: z.enum(STRUCTURED_CONTENT_VALIDATIONS).optional(),
+  validateStructuredContent: z.enum(['warn', 'enforce']).optional(),
   budget: z
     .union([
       z.literal(false),
@@ -200,17 +199,6 @@ export function resolveUndeclaredKeysPolicy(
   server?: OutputPolicy,
 ): UndeclaredKeysPolicy {
   return tool?.undeclaredKeys ?? app?.undeclaredKeys ?? server?.undeclaredKeys ?? (isDevelopment() ? 'warn' : 'strip');
-}
-
-/** Resolve how a returned `CallToolResult`'s `structuredContent` is validated: Tool > App > server > 'warn'. */
-export function resolveStructuredContentValidation(
-  tool?: OutputPolicy,
-  app?: OutputPolicy,
-  server?: OutputPolicy,
-): StructuredContentValidation {
-  return (
-    tool?.validateStructuredContent ?? app?.validateStructuredContent ?? server?.validateStructuredContent ?? 'warn'
-  );
 }
 
 /** Resolve the answer budget: Tool > App > server, where `false` turns off the budget a wider level set. */

@@ -5,6 +5,7 @@ import {
   type EntryLineage,
   type OutputPolicy,
   type ScopeEntry,
+  type StructuredContentValidation,
   type ToolEntry,
 } from '../common';
 import { appOwnerIdOf } from '../utils/lineage.utils';
@@ -36,6 +37,17 @@ export function toolOutputPolicies<Tool extends OutputPolicyTool>(
   // Remote apps have no `output` option
   const appOutput = (app?.metadata as { output?: OutputPolicy } | undefined)?.output;
   return [tool.metadata.output, appOutput, scope.metadata.output];
+}
+
+/** Resolve how a returned `CallToolResult`'s `structuredContent` is validated: Tool > App > server > 'warn'. */
+export function resolveStructuredContentValidation(
+  tool?: OutputPolicy,
+  app?: OutputPolicy,
+  server?: OutputPolicy,
+): StructuredContentValidation {
+  return (
+    tool?.validateStructuredContent ?? app?.validateStructuredContent ?? server?.validateStructuredContent ?? 'warn'
+  );
 }
 
 /**
