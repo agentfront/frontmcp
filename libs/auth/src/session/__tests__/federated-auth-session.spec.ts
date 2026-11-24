@@ -204,6 +204,12 @@ describe('federated-auth.session', () => {
       expect(session.expiresAt - session.createdAt).toBe(15 * 60 * 1000);
     });
 
+    it('should keep the client auth method', () => {
+      const session = createFederatedAuthSession({ ...makeCreateParams(), clientAuthMethod: 'client_secret_post' });
+
+      expect(session.clientAuthMethod).toBe('client_secret_post');
+    });
+
     it('should create a session with custom TTL', () => {
       const params = makeCreateParams();
       const ttlMs = 5 * 60 * 1000;

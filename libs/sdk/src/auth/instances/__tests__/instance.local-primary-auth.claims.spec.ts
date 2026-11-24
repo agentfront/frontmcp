@@ -110,6 +110,7 @@ describe('LocalPrimaryAuth.signAccessToken — custom claims (Checkpoint 3a)', (
 
     const code = await auth.createAuthorizationCode({
       clientId,
+      clientAuthMethod: 'none',
       redirectUri,
       scopes: FIXED_SCOPES,
       codeChallenge: challenge,
@@ -137,6 +138,7 @@ describe('LocalPrimaryAuth.signAccessToken — custom claims (Checkpoint 3a)', (
 
     const code = await auth.createAuthorizationCode({
       clientId,
+      clientAuthMethod: 'none',
       redirectUri,
       scopes: FIXED_SCOPES,
       codeChallenge: challenge,
@@ -187,6 +189,7 @@ describe('LocalPrimaryAuth.signAccessToken — progressive/incremental authorize
 
     const code = await auth.createAuthorizationCode({
       clientId,
+      clientAuthMethod: 'none',
       redirectUri,
       scopes: FIXED_SCOPES,
       codeChallenge: challenge,
@@ -210,6 +213,7 @@ describe('LocalPrimaryAuth.signAccessToken — progressive/incremental authorize
 
     const code = await auth.createAuthorizationCode({
       clientId,
+      clientAuthMethod: 'none',
       redirectUri,
       scopes: FIXED_SCOPES,
       codeChallenge: challenge,
