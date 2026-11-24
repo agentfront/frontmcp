@@ -94,22 +94,34 @@ export async function exportTargetOf(file: string, root: string): Promise<string
 }
 
 /**
- * Write `contents` to `target` through a new file renamed into place, so no link made after the check is followed. A
- * file it replaces keeps its permissions.
+ * Write `contents` to `target` through a new file renamed into place, so no link made after the check is followed. The
+ * writes run inside the verified folder, entered once and checked, so its path isn't followed again. A file it
+ * replaces keeps its permissions.
  */
 export async function writeExportTarget(target: string, contents: string): Promise<void> {
-  await ensureDir(path.dirname(target));
-  const temporary = path.join(path.dirname(target), `.${path.basename(target)}.${randomUUID()}.tmp`);
-  const mode = await stat(target).then(
-    (stats) => stats.mode & 0o7777,
-    () => undefined,
-  );
-  await writeFile(temporary, contents, { flag: 'wx', mode });
+  const directory = path.dirname(target);
+  const name = path.basename(target);
+  await ensureDir(directory);
+  const previousDirectory = process.cwd();
+  process.chdir(directory);
   try {
-    if (mode !== undefined) await chmod(temporary, mode);
-    await rename(temporary, target);
-  } catch (error) {
-    await rm(temporary, { force: true });
-    throw error;
+    if (process.cwd() !== directory) {
+      throw new ExportTargetRefusal(`${directory} now leads to ${process.cwd()}, so it was not written to`);
+    }
+    const temporary = `.${name}.${randomUUID()}.tmp`;
+    const mode = await stat(name).then(
+      (stats) => stats.mode & 0o7777,
+      () => undefined,
+    );
+    await writeFile(temporary, contents, { flag: 'wx', mode });
+    try {
+      if (mode !== undefined) await chmod(temporary, mode);
+      await rename(temporary, name);
+    } catch (error) {
+      await rm(temporary, { force: true });
+      throw error;
+    }
+  } finally {
+    process.chdir(previousDirectory);
   }
 }

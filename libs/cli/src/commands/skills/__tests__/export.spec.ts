@@ -7,6 +7,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { exportSkills } from '../export';
+import { ExportTargetRefusal, writeExportTarget } from '../export-target';
 
 const posixOnly = process.platform === 'win32' ? describe.skip : describe;
 
@@ -141,6 +142,21 @@ posixOnly('exportSkills with linked rule files', () => {
     await expect(exportDemo('cursor', path.join(project, 'linked', 'nested'))).rejects.toThrow('process.exit(1)');
 
     expect(fs.existsSync(path.join(otherCheckout, 'nested', '.cursor'))).toBe(false);
+  });
+
+  it('does not write through a folder swapped for a link after it was verified', async () => {
+    const verified = path.join(project, '.cursor/rules');
+    fs.mkdirSync(verified, { recursive: true });
+    fs.rmSync(verified, { recursive: true });
+    fs.symlinkSync(outside, verified);
+    const cwd = process.cwd();
+
+    await expect(writeExportTarget(path.join(verified, 'demo.mdc'), 'text')).rejects.toBeInstanceOf(
+      ExportTargetRefusal,
+    );
+
+    expect(fs.readdirSync(outside)).toEqual([]);
+    expect(process.cwd()).toBe(cwd);
   });
 
   it('refuses a rule file that links to a missing file', async () => {

@@ -62,25 +62,24 @@ export async function exportSkills(options: ExportSkillsOptions): Promise<void> 
     };
     const out = renderForTarget(options.target, input);
 
-    let target: string;
     try {
-      target = await exportTargetOf(path.join(outDir, out.relativePath), root);
+      const target = await exportTargetOf(path.join(outDir, out.relativePath), root);
+      if (options.target === 'windsurf') {
+        // Windsurf rules live in a single file — append rather than overwrite.
+        let existing = '';
+        try {
+          existing = await readFile(target, 'utf8');
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+        }
+        await writeExportTarget(target, mergeWindsurf(existing, skill.name, out.contents));
+      } else {
+        await writeExportTarget(target, out.contents);
+      }
     } catch (err) {
       if (!(err instanceof ExportTargetRefusal)) throw err;
       console.error(c('red', `Not writing ${out.relativePath}: ${err.message}.`));
       process.exit(1);
-    }
-    if (options.target === 'windsurf') {
-      // Windsurf rules live in a single file — append rather than overwrite.
-      let existing = '';
-      try {
-        existing = await readFile(target, 'utf8');
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-      }
-      await writeExportTarget(target, mergeWindsurf(existing, skill.name, out.contents));
-    } else {
-      await writeExportTarget(target, out.contents);
     }
     console.log(c('green', `wrote ${out.relativePath}`));
     written++;
