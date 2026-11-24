@@ -87,7 +87,9 @@ class StandInPlugin {
 
   @ReadResourceHook.Will('parseInput')
   rewriteRequest(flowCtx: FlowCtxOf<'resources:read-resource'>) {
-    if (flowCtx.input.request.params.uri === 'rewrite://guarded') flowCtx.input.request.params.uri = 'guarded://doc';
+    // `input` is the flow's own parsed request, which a hook reaches only past its type
+    const { params } = (flowCtx as unknown as { input: { request: { params: { uri: string } } } }).input.request;
+    if (params.uri === 'rewrite://guarded') params.uri = 'guarded://doc';
   }
 
   @ListToolsHook.Will('findTools')
