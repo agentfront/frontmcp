@@ -28,9 +28,9 @@ export const TASK_DEFAULTS = {
 } as const;
 
 /**
- * Where `tasks/list` reads a session's tasks: `'scan'` reads every stored task key, `'index'` the per-session index
- * every task write keeps. `'scan'` is the 1.12 default, since a task an older instance writes has no index entry; 1.13
- * makes `'index'` the default.
+ * Where `tasks/list` reads a session's tasks: `'index'` (the default since 1.13) the per-session index every task write
+ * keeps, `'scan'` every stored task key. A task an instance from before the index writes has no index entry, so a
+ * deployment upgrading from such a version lists from `'scan'` until every instance writes the index.
  */
 export type TaskListSource = 'scan' | 'index';
 

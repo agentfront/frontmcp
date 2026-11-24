@@ -39,7 +39,7 @@ export interface TaskStoreOptions {
   logger?: FrontMcpLogger;
   /** Edge runtime mode — requires distributed storage. */
   isEdgeRuntime?: boolean;
-  /** Where `tasks/list` reads a session's tasks (not the SQLite store, which queries by session). Default `'scan'`. */
+  /** Where `tasks/list` reads a session's tasks (not the SQLite store, which queries by session). Default `'index'`. */
   listFrom?: TaskListSource;
   /** The longest a task lives (`tasks.maxTtlMs`), which the session index keeps its count for. */
   maxTtlMs?: number;

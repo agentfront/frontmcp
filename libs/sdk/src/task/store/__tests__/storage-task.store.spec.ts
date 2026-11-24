@@ -144,13 +144,37 @@ describe('StorageTaskStore', () => {
       expect(page.nextCursor).toBeUndefined();
     });
 
-    it('lists in task-id order from a scan by default, a task an older instance wrote after the index started too', async () => {
-      await store.create(makeRecord({ taskId: 'z-new' }));
-      await writtenByAnOlderInstance('a-old');
+    it('lists from the index by default, in the order the tasks were written', async () => {
+      for (const taskId of ['z-first', 'a-second']) await store.create(makeRecord({ taskId }));
 
       const page = await store.list('session-A');
 
+      expect(page.tasks.map((task) => task.taskId)).toEqual(['z-first', 'a-second']);
+    });
+
+    it("lists in task-id order under tasks.listFrom: 'scan', a task an older instance wrote after the index started too", async () => {
+      const scanning = new StorageTaskStore(storage, undefined, { listFrom: 'scan' });
+      await scanning.create(makeRecord({ taskId: 'z-new' }));
+      await writtenByAnOlderInstance('a-old');
+
+      const page = await scanning.list('session-A');
+
       expect(page.tasks.map((task) => task.taskId)).toEqual(['a-old', 'z-new']);
+      await scanning.destroy();
+    });
+
+    it('goes on with a cursor in the order its first page was read in, whichever source the next instance lists from', async () => {
+      const scanning = new StorageTaskStore(storage, undefined, { listFrom: 'scan' });
+      for (const taskId of ['z-first', 'a-second', 'm-third']) await store.create(makeRecord({ taskId }));
+
+      const fromIndex = await store.list('session-A', { pageSize: 1 });
+      const indexGoesOn = await scanning.list('session-A', { pageSize: 1, cursor: fromIndex.nextCursor });
+      const fromScan = await scanning.list('session-A', { pageSize: 1 });
+      const scanGoesOn = await store.list('session-A', { pageSize: 1, cursor: fromScan.nextCursor });
+
+      expect([fromIndex, indexGoesOn].map((page) => page.tasks[0].taskId)).toEqual(['z-first', 'a-second']);
+      expect([fromScan, scanGoesOn].map((page) => page.tasks[0].taskId)).toEqual(['a-second', 'm-third']);
+      await scanning.destroy();
     });
   });
 
@@ -272,7 +296,7 @@ describe('StorageTaskStore', () => {
       expect(await storage.namespace('index').ttl('session-A:1')).toBeGreaterThan(10_000);
     });
 
-    it('does not list a task an older instance writes after the session was indexed, which is why it is not the default', async () => {
+    it('does not list a task an older instance writes after the session was indexed, so an upgrade lists from the scan until it ends', async () => {
       await indexed.create(makeRecord({ taskId: 'z-new' }));
       await indexed.list('session-A');
       await writtenByAnOlderInstance('a-old');
@@ -281,6 +305,98 @@ describe('StorageTaskStore', () => {
 
       expect(page.tasks.map((task) => task.taskId)).toEqual(['z-new']);
       expect(await indexed.get('a-old', 'session-A')).not.toBeNull();
+    });
+  });
+
+  describe('the per-session index', () => {
+    let indexed: StorageTaskStore;
+
+    beforeEach(() => {
+      indexed = new StorageTaskStore(storage, undefined, { listFrom: 'index', maxTtlMs: 1_500 });
+    });
+
+    afterEach(async () => {
+      await indexed.destroy();
+    });
+
+    it('keeps its count for whole seconds when tasks.maxTtlMs is not a multiple of 1000', async () => {
+      const expiries = jest.spyOn(storage.root, 'expire');
+
+      await indexed.create(makeRecord({ taskId: 'short', expiresAt: Date.now() + 1_500 }));
+
+      expect(expiries.mock.calls.every(([, ttlSeconds]) => Number.isInteger(ttlSeconds))).toBe(true);
+      expect(await indexed.list('session-A')).toEqual({ tasks: [expect.objectContaining({ taskId: 'short' })] });
+    });
+
+    it('keeps its count alive past a task an update extended, and a later task never shortens it', async () => {
+      await indexed.create(makeRecord({ taskId: 'extended', expiresAt: Date.now() + 1_000 }));
+      await indexed.update('extended', 'session-A', { expiresAt: Date.now() + 7_200_000 });
+      await indexed.create(makeRecord({ taskId: 'later', expiresAt: Date.now() + 1_000 }));
+
+      expect(await storage.namespace('index-count').ttl('session-A')).toBeGreaterThan(10_000);
+    });
+
+    it('renews its backfill claim while it indexes the earlier tasks', async () => {
+      await writtenByAnOlderInstance('old-1');
+      const expiries = jest.spyOn(storage.root, 'expire');
+
+      await indexed.list('session-A');
+
+      expect(expiries).toHaveBeenCalledWith(expect.stringContaining('index-ready:session-A'), 60);
+    });
+
+    it('numbers again an earlier task whose index-of key has no position, left by a request that died', async () => {
+      await writtenByAnOlderInstance('old-1');
+      await storage.namespace('index-of').set('session-A:old-1', '7', { ttlSeconds: 60 });
+
+      const page = await indexed.list('session-A');
+
+      expect(page.tasks.map((task) => task.taskId)).toEqual(['old-1']);
+    });
+
+    it('leaves unnumbered an earlier task that expires while the backfill runs', async () => {
+      const realNow = Date.now.bind(Date);
+      let skewMs = 0;
+      jest.spyOn(Date, 'now').mockImplementation(() => realNow() + skewMs);
+      await storage
+        .namespace('records')
+        .set('session-A:fading', JSON.stringify(makeRecord({ taskId: 'fading', expiresAt: realNow() + 2_000 })), {
+          ttlSeconds: 60,
+        });
+      const rootMget = storage.root.mget.bind(storage.root);
+      jest.spyOn(storage.root, 'mget').mockImplementation(async (keys: string[]) => {
+        if (keys.some((key) => key.includes('index-of:'))) skewMs = 5_000;
+        return rootMget(keys);
+      });
+
+      await expect(indexed.list('session-A')).resolves.toEqual({ tasks: [] });
+      expect(await storage.namespace('index-of').get('session-A:fading')).toBeNull();
+      jest.restoreAllMocks();
+    });
+
+    it('starts a first page after the positions whose keys expired, once every write before them has settled', async () => {
+      for (const taskId of ['t-1', 't-2', 't-3']) await indexed.create(makeRecord({ taskId }));
+      for (const taskId of ['t-1', 't-2']) {
+        await storage.namespace('records').delete(`session-A:${taskId}`);
+        await storage.namespace('index-of').delete(`session-A:${taskId}`);
+      }
+      for (const position of [1, 2]) await storage.namespace('index').delete(`session-A:${position}`);
+      await storage.namespace('index-settled').set('session-A', `2:${Date.now() - 120_000}`, { ttlSeconds: 60 });
+
+      const page = await indexed.list('session-A');
+
+      expect(page.tasks.map((task) => task.taskId)).toEqual(['t-3']);
+      expect(await storage.namespace('index-start').get('session-A')).toBe('2');
+    });
+
+    it('keeps reading an empty position numbered after the last settled write, which may be a write in progress', async () => {
+      await indexed.create(makeRecord({ taskId: 't-1' }));
+      await storage.namespace('index').delete('session-A:1');
+      await storage.namespace('index-settled').set('session-A', `1:${Date.now()}`, { ttlSeconds: 60 });
+
+      await indexed.list('session-A');
+
+      expect(await storage.namespace('index-start').get('session-A')).toBeNull();
     });
   });
 

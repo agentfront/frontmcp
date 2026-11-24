@@ -69,7 +69,7 @@ export class StorageTaskStore implements TaskStore {
   ) {
     this.storage = storage;
     this.logger = logger;
-    this.listFrom = options.listFrom ?? 'scan';
+    this.listFrom = options.listFrom ?? 'index';
     this.maxTtlMs = options.maxTtlMs ?? TASK_DEFAULTS.maxTtlMs;
     this.records = new TypedStorage(storage.namespace(RECORDS_NAMESPACE));
     this.slots = storage.namespace(SLOTS_NAMESPACE);
@@ -217,15 +217,18 @@ export class StorageTaskStore implements TaskStore {
 
   async list(sessionId: string, opts: { cursor?: string; pageSize?: number } = {}): Promise<TaskListPage> {
     const pageSize = Math.max(1, Math.min(opts.pageSize ?? DEFAULT_PAGE_SIZE, 500));
-    return this.listFrom === 'index'
-      ? this.listFromIndex(sessionId, opts.cursor, pageSize)
-      : this.listFromScan(sessionId, opts.cursor, pageSize);
+    // A cursor goes on in the order its first page was read in, whichever source this instance lists from
+    const resumed = opts.cursor ? decodeCursor(opts.cursor) : undefined;
+    const startAt = resumed?.offset ?? 0;
+    const source = resumed?.source ?? this.listFrom;
+    return source === 'scan'
+      ? this.listFromScan(sessionId, startAt, pageSize)
+      : this.listFromIndex(sessionId, startAt, pageSize);
   }
 
   /** A page of the session's tasks in task-id order, from a scan of every stored task key (`tasks.listFrom: 'scan'`). */
-  private async listFromScan(sessionId: string, cursor: string | undefined, pageSize: number): Promise<TaskListPage> {
+  private async listFromScan(sessionId: string, offset: number, pageSize: number): Promise<TaskListPage> {
     const matching = await this.scanSessionTaskIds(sessionId);
-    const offset = cursor ? decodeCursor(cursor).offset : 0;
     const slice = matching.slice(offset, offset + pageSize);
     const tasks: TaskRecord[] = [];
     for (const taskId of slice) {
@@ -239,14 +242,11 @@ export class StorageTaskStore implements TaskStore {
   }
 
   /** A page of the session's tasks in creation order, read from its index (`tasks.listFrom: 'index'`). */
-  private async listFromIndex(sessionId: string, cursor: string | undefined, pageSize: number): Promise<TaskListPage> {
-    const resumed = cursor ? decodeCursor(cursor) : { offset: 0, source: 'index' };
-    // A listing that began on the scan, while another request indexed the session, goes on in task-id order
-    if (resumed.source === 'scan') return this.listFromScan(sessionId, cursor, pageSize);
+  private async listFromIndex(sessionId: string, startPosition: number, pageSize: number): Promise<TaskListPage> {
     const sessionIndex = await this.loadSessionIndex();
-    const indexPage = await sessionIndex.page(sessionId, resumed.offset, pageSize);
+    const indexPage = await sessionIndex.page(sessionId, startPosition, pageSize);
     // Another request is indexing the session's earlier tasks: this one lists them from the scan
-    if (!indexPage) return this.listFromScan(sessionId, undefined, pageSize);
+    if (!indexPage) return this.listFromScan(sessionId, 0, pageSize);
     const { tasks, endPosition, positionsUsed } = indexPage;
     const page: TaskListPage = { tasks };
     if (endPosition < positionsUsed) page.nextCursor = encodeCursor(endPosition, 'index');

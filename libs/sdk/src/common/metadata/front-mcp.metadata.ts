@@ -697,7 +697,7 @@ export interface FrontMcpBaseMetadata {
     defaultPollIntervalMs?: number;
     /** Unfinished tasks a caller may have at once (per session, or per subject under 2026-07-28); default 16, at most 1000. */
     maxConcurrentPerSession?: number;
-    /** `tasks/list` reads `'scan'` (the 1.12 default), or `'index'` once every instance writes the index. */
+    /** `tasks/list` reads `'index'` (the default), or `'scan'` while an instance from before the index still runs. */
     listFrom?: TaskListSource;
     /**
      * Throw at startup instead of warning when the runtime cannot run tasks
