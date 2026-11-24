@@ -501,13 +501,28 @@ const reviewerFunctionSchema = z.custom<CodeCallReviewerFunction>((value) => typ
   message: 'review.reviewer must be a function with signature (request: ReviewerRequest) => ReviewDecision',
 });
 
+const REVIEW_ENDPOINT_MESSAGE = 'review.provider.baseUrl must be https; http is allowed for a loopback host only';
+
+/** Whether a provider endpoint is one Enclave's `providerReviewer` accepts: https, or http on a loopback host. */
+function isReviewEndpoint(baseUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    return false;
+  }
+  if (url.protocol === 'https:') return true;
+  const loopback = ['localhost', '[::1]'].includes(url.hostname) || /^127(\.\d{1,3}){3}$/.test(url.hostname);
+  return url.protocol === 'http:' && loopback;
+}
+
 export const codeCallReviewProviderSchema = z.object({
   provider: z.literal('openai'),
   /** Sent only in the request's authorization header; never logged. */
   apiKey: z.string().min(1),
   model: z.string().min(1),
-  /** An OpenAI-compatible endpoint (https://api.openai.com/v1). */
-  baseUrl: z.string().url().optional(),
+  /** An OpenAI-compatible endpoint (https://api.openai.com/v1): https, or http on a loopback host only. */
+  baseUrl: z.string().url().refine(isReviewEndpoint, REVIEW_ENDPOINT_MESSAGE).optional(),
   /** How long one review may take, in ms (20000). */
   timeoutMs: z.number().int().min(1).optional(),
 });

@@ -67,8 +67,7 @@ const UNAVAILABLE_IN_WORKERS =
 /** How the runtime loads the barrel; replaced in tests. */
 export type NodeVmModuleLoader = () => Promise<NodeVmModule>;
 
-export const loadNodeVmModule: NodeVmModuleLoader = async () =>
-  (await importAtRuntime(NODE_VM_PACKAGE)) as NodeVmModule;
+const loadNodeVmModule: NodeVmModuleLoader = async () => (await importAtRuntime(NODE_VM_PACKAGE)) as NodeVmModule;
 
 /** The Enclave options for a run spec: the CodeCall configuration this runtime has always used. */
 export function toEnclaveOptions(spec: CodeCallScriptRunSpec): CreateEnclaveOptions {

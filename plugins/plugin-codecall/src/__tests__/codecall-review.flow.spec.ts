@@ -360,8 +360,8 @@ describe.each(RUNTIMES)('CodeCall review on the %s runtime', (runtime) => {
     it('lets a grant with limits cover any arguments of the tool, up to its maxCalls', async () => {
       const client = await open(setup);
       const script =
-        "const page = await callTool('users.list', { limit: 3 });\nconst ids = page.items.slice(0, 3).map((user) => user.id);\n" +
-        "for (const id of ids) {\n  await callTool('users.close', { id });\n}\nreturn ids;";
+        "const page = await callTool('users.list', { limit: 3 });\nconst users = page.items.slice(0, 3);\n" +
+        "for (const user of users) {\n  await callTool('users.close', { id: user.id });\n}\nreturn users.length;";
 
       const asked = await execute(client, script);
       expect(asked.status).toBe('needs_approval');

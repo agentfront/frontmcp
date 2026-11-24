@@ -228,15 +228,15 @@ instructions. The API key goes only into the provider request's `authorization` 
 never in a result. The rules answer first, then `reviewer`, then `provider`; the first answer that isn't `allow` is
 the review's.
 
-| Option                         | Default | Description                                                                     |
-| ------------------------------ | ------- | ------------------------------------------------------------------------------- |
-| `review.rules`                 | all on  | The built-in rules above; `false` turns them all off.                           |
-| `review.provider`              |         | `{ provider: 'openai', apiKey, model, baseUrl?, timeoutMs? }`.                  |
-| `review.reviewer`              |         | `({ code, analysis, policy, tools }) => ReviewDecision`, your own reviewer.     |
-| `review.policy`                |         | Your rules for scripts, as text, for `provider` and `reviewer`.                 |
-| `review.policyVersion`         |         | Change it to ask again for every approval, for example when `reviewer` changes. |
-| `review.timeoutMs`             | `30000` | How long one review may take; a review that takes longer fails.                 |
-| `review.approvalMaxAgeSeconds` | `3600`  | How long an approval counts after it was granted.                               |
+| Option                         | Default | Description                                                                                                    |
+| ------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------- |
+| `review.rules`                 | all on  | The built-in rules above; `false` turns them all off.                                                          |
+| `review.provider`              |         | `{ provider: 'openai', apiKey, model, baseUrl?, timeoutMs? }`; `baseUrl` is https, or http on a loopback host. |
+| `review.reviewer`              |         | `({ code, analysis, policy, tools }) => ReviewDecision`, your own reviewer.                                    |
+| `review.policy`                |         | Your rules for scripts, as text, for `provider` and `reviewer`.                                                |
+| `review.policyVersion`         |         | Change it to ask again for every approval, for example when `reviewer` changes.                                |
+| `review.timeoutMs`             | `30000` | How long one review may take; a review that takes longer fails.                                                |
+| `review.approvalMaxAgeSeconds` | `3600`  | How long an approval counts after it was granted.                                                              |
 
 With `review` on, `codecall:execute` has four more statuses, and its description lists them:
 

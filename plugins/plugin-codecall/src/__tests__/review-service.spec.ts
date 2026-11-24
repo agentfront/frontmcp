@@ -37,6 +37,19 @@ describe('codeCallReviewOptionsSchema', () => {
     expect(reviewOptions({ rules: false }).rules).toBe(false);
   });
 
+  it('takes an https endpoint, or http on a loopback host only', () => {
+    const withBaseUrl = (baseUrl: string) =>
+      codeCallReviewOptionsSchema.safeParse({ provider: { ...PROVIDER, baseUrl }, policy: 'p' }).success;
+
+    expect(withBaseUrl('https://models.example.com/v1')).toBe(true);
+    expect(withBaseUrl('http://localhost:11434/v1')).toBe(true);
+    expect(withBaseUrl('http://127.0.0.1:8080')).toBe(true);
+    expect(withBaseUrl('http://[::1]:8080')).toBe(true);
+    expect(withBaseUrl('http://models.example.com/v1')).toBe(false);
+    expect(withBaseUrl('ftp://models.example.com')).toBe(false);
+    expect(withBaseUrl('not a url')).toBe(false);
+  });
+
   it('needs a policy with a provider, and a function as the reviewer', () => {
     expect(codeCallReviewOptionsSchema.safeParse({ provider: PROVIDER }).success).toBe(false);
     expect(codeCallReviewOptionsSchema.safeParse({ provider: PROVIDER, policy: 'Read only' }).success).toBe(true);
@@ -46,8 +59,7 @@ describe('codeCallReviewOptionsSchema', () => {
 
 describe('CodeCallReviewService', () => {
   it('versions the policy by what decides, never by the API key', () => {
-    const version = (input: Record<string, unknown>) =>
-      new CodeCallReviewService(reviewOptions(input), 'node-vm').policyVersion;
+    const version = (input: Record<string, unknown>) => new CodeCallReviewService(reviewOptions(input)).policyVersion;
 
     expect(version({ provider: PROVIDER, policy: 'a' })).toBe(
       version({ provider: { ...PROVIDER, apiKey: 'sk-other' }, policy: 'a' }),
@@ -60,19 +72,18 @@ describe('CodeCallReviewService', () => {
 
   it('has no reviewers without a provider or a function', async () => {
     const factories = fakeFactories();
-    const service = new CodeCallReviewService(reviewOptions(), 'node-vm', async () => factories);
+    const service = new CodeCallReviewService(reviewOptions(), async () => factories);
 
     expect(service.hasReviewers).toBe(false);
     expect(await service.reviewersFor(TOOLS)).toEqual([]);
   });
 
-  it("makes the function reviewer, then the provider's, from the runtime's entry, again only when the tools change", async () => {
+  it("makes the function reviewer, then the provider's, again only when the tools change", async () => {
     const factories = fakeFactories();
     const load = jest.fn(async () => factories);
     const reviewer = async (): Promise<ReviewDecision> => ({ decision: 'allow' });
     const service = new CodeCallReviewService(
       reviewOptions({ provider: PROVIDER, reviewer, policy: 'Read only' }),
-      'interpreter',
       load,
     );
 
@@ -80,7 +91,6 @@ describe('CodeCallReviewService', () => {
     expect(await service.reviewersFor(TOOLS)).toHaveLength(2);
     await service.reviewersFor([...TOOLS]);
     expect(load).toHaveBeenCalledTimes(1);
-    expect(load).toHaveBeenCalledWith('interpreter');
     expect(factories.functionReviewer).toHaveBeenCalledWith(reviewer, { policy: 'Read only', tools: TOOLS });
     expect(factories.providerReviewer).toHaveBeenCalledWith({ ...PROVIDER, policy: 'Read only', tools: TOOLS });
 
@@ -88,21 +98,18 @@ describe('CodeCallReviewService', () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 
-  it.each(['node-vm', 'interpreter'] as const)(
-    "loads Enclave's reviewers from the %s runtime's entry",
-    async (runtime) => {
-      const reviewer = jest.fn(async (): Promise<ReviewDecision> => ({ decision: 'denied', reason: 'no' }));
-      const service = new CodeCallReviewService(reviewOptions({ reviewer, policy: 'p' }), runtime);
-      const [functionReviewer] = await service.reviewersFor(TOOLS);
+  it("loads Enclave's reviewers from the worker entry", async () => {
+    const reviewer = jest.fn(async (): Promise<ReviewDecision> => ({ decision: 'denied', reason: 'no' }));
+    const service = new CodeCallReviewService(reviewOptions({ reviewer, policy: 'p' }));
+    const [functionReviewer] = await service.reviewersFor(TOOLS);
 
-      const input: PreReviewInput = {
-        phase: 'script',
-        code: 'return 1;',
-        analysis: { toolCalls: [], flows: [], bounds: [], complete: true },
-      };
-      expect(await functionReviewer?.(input)).toEqual({ decision: 'denied', reason: 'no' });
-    },
-  );
+    const input: PreReviewInput = {
+      phase: 'script',
+      code: 'return 1;',
+      analysis: { toolCalls: [], flows: [], bounds: [], complete: true },
+    };
+    expect(await functionReviewer?.(input)).toEqual({ decision: 'denied', reason: 'no' });
+  });
 });
 
 describe('reviewResultOf and reviewDecisionOf', () => {
@@ -258,7 +265,7 @@ describe('createRunReview', () => {
   }
 
   it("reads a context-specific grant in the caller's approval context", async () => {
-    const service = new CodeCallReviewService(reviewOptions(), 'node-vm');
+    const service = new CodeCallReviewService(reviewOptions());
     const context = { type: 'repo', identifier: 'crm' };
     const approvalService: ApprovalServiceView = {
       queryApprovals: async () => [{ state: 'approved', scope: 'context_specific', grantedAt: Date.now(), context }],
@@ -276,7 +283,7 @@ describe('createRunReview', () => {
   });
 
   it('counts as effects the tools that are not read-only and reached their tool, from the journal', async () => {
-    const service = new CodeCallReviewService(reviewOptions(), 'node-vm');
+    const service = new CodeCallReviewService(reviewOptions());
     const journal = new RunJournal();
     journal.begin('users.close', { id: 'u0' }).succeed({});
     journal.begin('users.close', { id: 'u9' }).fail({ code: 'ACCESS_DENIED' });
@@ -294,7 +301,7 @@ describe('createRunReview', () => {
   });
 
   it('denies a destructive call without the Approval plugin or elicitation, and asks with elicitation', async () => {
-    const service = new CodeCallReviewService(reviewOptions(), 'node-vm');
+    const service = new CodeCallReviewService(reviewOptions());
 
     expect((await (await createRunReview(service, callerWith(), 'h')).pre(closeInput)).decision).toBe('denied');
     expect(
@@ -305,11 +312,7 @@ describe('createRunReview', () => {
   it("gives the server's reviewers the tools CodeCall may call, and runs no rule with rules off", async () => {
     const reviewer = jest.fn(async (): Promise<ReviewDecision> => ({ decision: 'allow' }));
     const factories = fakeFactories();
-    const service = new CodeCallReviewService(
-      reviewOptions({ rules: false, reviewer }),
-      'node-vm',
-      async () => factories,
-    );
+    const service = new CodeCallReviewService(reviewOptions({ rules: false, reviewer }), async () => factories);
     const review = await createRunReview(service, callerWith(), 'h');
 
     expect(await review.pre(closeInput)).toEqual({ decision: 'allow' });

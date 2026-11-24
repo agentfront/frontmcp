@@ -73,13 +73,9 @@ function runStoreProvider(runs: CodeCallRunsOptions): ProviderType {
   });
 }
 
-/** The review of scripts and calls, with the reviewers from the Enclave entry the scripts' runtime loads. */
-function reviewServiceProvider(review: CodeCallReviewOptions, config: CodeCallConfig): ProviderType {
-  return {
-    name: 'codecall:review',
-    provide: CodeCallReviewService,
-    useValue: new CodeCallReviewService(review, config.getAll().resolvedVm.runtime),
-  };
+/** The review of scripts and calls, with the server's rules and reviewers. */
+function reviewServiceProvider(review: CodeCallReviewOptions): ProviderType {
+  return { name: 'codecall:review', provide: CodeCallReviewService, useValue: new CodeCallReviewService(review) };
 }
 
 /**
@@ -186,7 +182,7 @@ export default class CodeCallPlugin extends DynamicPlugin<CodeCallPluginOptions,
         },
       },
       ...(parsedOptions.runs.enabled ? [runStoreProvider(parsedOptions.runs)] : []),
-      ...(parsedOptions.review ? [reviewServiceProvider(parsedOptions.review, config)] : []),
+      ...(parsedOptions.review ? [reviewServiceProvider(parsedOptions.review)] : []),
     ];
   }
 

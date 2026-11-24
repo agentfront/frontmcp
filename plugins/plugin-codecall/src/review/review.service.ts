@@ -3,25 +3,21 @@ import type { ReviewerTool } from '@enclave-vm/core/worker';
 import { Provider, ProviderScope } from '@frontmcp/sdk';
 import { canonicalJson, sha256Hex } from '@frontmcp/utils';
 
-import type { CodeCallReviewOptions, CodeCallVmRuntime } from '../codecall.types';
+import type { CodeCallReviewOptions } from '../codecall.types';
 import { loadWorkerEntry } from '../services/runtime/interpreter.runtime';
-import { loadNodeVmModule } from '../services/runtime/node-vm.runtime';
 import type { CodeCallPreReviewer } from './run-review';
 
-/** Enclave's reviewer factories, from the entry point the runtime runs scripts with. */
+/** Enclave's reviewer factories. */
 export interface EnclaveReviewerFactories {
   functionReviewer: typeof import('@enclave-vm/core/worker').functionReviewer;
   providerReviewer: typeof import('@enclave-vm/core/worker').providerReviewer;
 }
 
-export type EnclaveReviewerLoader = (runtime: CodeCallVmRuntime) => Promise<EnclaveReviewerFactories>;
+export type EnclaveReviewerLoader = () => Promise<EnclaveReviewerFactories>;
 
-/**
- * The factories come from the entry the runtime loads: a reviewer's failure keeps its message only in an Enclave of
- * the same entry, since each entry has its own `ReviewerError`.
- */
-const loadReviewerFactories: EnclaveReviewerLoader = async (runtime) =>
-  (runtime === 'node-vm' ? await loadNodeVmModule() : await loadWorkerEntry()) as unknown as EnclaveReviewerFactories;
+/** From the worker entry, on either runtime: both entries recognize a `ReviewerError` from the other. */
+const loadReviewerFactories: EnclaveReviewerLoader = async () =>
+  (await loadWorkerEntry()) as unknown as EnclaveReviewerFactories;
 
 /** The version of the review policy an approval is bound to: the options that decide, never the API key. */
 function policyVersionOf(options: CodeCallReviewOptions): string {
@@ -49,7 +45,6 @@ export default class CodeCallReviewService {
 
   constructor(
     readonly options: CodeCallReviewOptions,
-    private readonly runtime: CodeCallVmRuntime,
     private readonly loadFactories: EnclaveReviewerLoader = loadReviewerFactories,
   ) {
     this.policyVersion = policyVersionOf(options);
@@ -71,7 +66,7 @@ export default class CodeCallReviewService {
 
   private async createReviewers(tools: readonly ReviewerTool[]): Promise<readonly CodeCallPreReviewer[]> {
     const { provider, reviewer, policy = '' } = this.options;
-    const { functionReviewer, providerReviewer } = await this.loadFactories(this.runtime);
+    const { functionReviewer, providerReviewer } = await this.loadFactories();
     const reviewers: CodeCallPreReviewer[] = [];
     if (reviewer) reviewers.push(functionReviewer(reviewer, { policy, tools }));
     if (provider) reviewers.push(providerReviewer({ ...provider, policy, tools }));

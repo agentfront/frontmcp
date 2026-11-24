@@ -873,9 +873,8 @@ on both runtimes. The code lives in `src/review/`:
   again, until #1335 resumes a run from its journal. `reviewOutcomeOf` reads
   `result.review.decisions`, never the error code: on the double VM an uncaught refused call ends as
   `DOUBLE_VM_EXECUTION_ERROR`, and only its error name (`ReviewError`) tells it apart.
-- `review.service.ts`: the options, the policy version approvals are bound to, and the reviewers, loaded from the
-  Enclave entry the runtime loads (`@enclave-vm/core` for `node-vm`, `@enclave-vm/core/worker` for `interpreter`):
-  each entry has its own `ReviewerError`, and only the session of the same entry keeps a reviewer's message.
+- `review.service.ts`: the options, the policy version approvals are bound to, and the reviewers, loaded from
+  `@enclave-vm/core/worker` on either runtime (both entries recognize each other's `ReviewerError`).
 - `review-approvals.ts`: approval ids (`codecall:approval:<sha256 of { scriptHash, toolName, argumentsHash,
 policyVersion }>`), read from the Approval plugin's `this.approval` (`Symbol.for('plugin:approval:service')`)
   without depending on the plugin. A grant on `anyArgumentsId` needs `metadata.maxCalls`, counted per run.
