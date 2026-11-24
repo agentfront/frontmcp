@@ -2,7 +2,6 @@
 
 import type { LookupAddress } from 'node:dns';
 import type { IncomingMessage } from 'node:http';
-import type { LookupFunction } from 'node:net';
 
 import { isEdgeRuntime } from '#env';
 
@@ -13,6 +12,7 @@ import {
   validateOutboundUrl,
   type OutboundTargetOptions,
 } from './outbound-url';
+import { pinnedLookup } from './pinned-fetch';
 
 export const OUTBOUND_TIMEOUT_MS = 10_000;
 export const OUTBOUND_MAX_REQUEST_BYTES = 262_144;
@@ -184,18 +184,6 @@ async function resolveAllowedAddresses(
     throw new OutboundRefusal('forbidden_address');
   }
   return addresses;
-}
-
-/** A `lookup` that answers with the checked addresses only, so the connection cannot go anywhere else. */
-function pinnedLookup(addresses: readonly LookupAddress[]): LookupFunction {
-  return (_hostname, options, callback) => {
-    if (options.all) {
-      callback(null, [...addresses]);
-      return;
-    }
-    const [first] = addresses;
-    callback(null, first.address, first.family);
-  };
 }
 
 /** Sends the request over Node sockets pinned to the checked addresses. */

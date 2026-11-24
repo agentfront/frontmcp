@@ -31,8 +31,10 @@
 // is judged by the IPv4 address it reaches.
 //
 // A resolved name's addresses are returned with the result, and on Node.js the
-// request connects to those addresses only (`pinned-fetch.ts`), so it reaches
-// the addresses checked here rather than the answer of a second lookup.
+// request connects to those addresses only (`pinnedFetch`, or through
+// `outbound.egressProxy` to the first of them with `egressProxyConnectTo:
+// 'approved-address'`), so it reaches the addresses checked here rather than
+// the answer of a second lookup.
 
 import type * as Dns from 'node:dns';
 

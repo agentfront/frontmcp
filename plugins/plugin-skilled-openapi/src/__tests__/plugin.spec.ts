@@ -161,6 +161,45 @@ describe('SkilledOpenApiPlugin', () => {
       }
     });
 
+    it.each([
+      [undefined, true],
+      ['hostname' as const, false],
+      ['approved-address' as const, false],
+    ])('with egressProxy and egressProxyConnectTo %p, warns about the proxy: %p', (egressProxyConnectTo, warns) => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        new SkilledOpenApiPlugin({
+          source: { type: 'static', path: '/x' },
+          outbound: { egressProxy: 'http://proxy.internal:3128', egressProxyConnectTo },
+        });
+        const proxyWarnings = warn.mock.calls.filter(([message]) => String(message).includes('egressProxyConnectTo'));
+        expect(proxyWarnings).toHaveLength(warns ? 1 : 0);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('refuses a SOCKS egressProxy with egressProxyConnectTo approved-address at startup', () => {
+      expect(
+        () =>
+          new SkilledOpenApiPlugin({
+            source: { type: 'static', path: '/x' },
+            outbound: { egressProxy: 'socks5://proxy.internal:1080', egressProxyConnectTo: 'approved-address' },
+          }),
+      ).toThrow(/needs an http: or https: egressProxy/);
+    });
+
+    it('reports an egressProxy that is not a URL as an option error, not a bare TypeError', () => {
+      const build = () =>
+        new SkilledOpenApiPlugin({
+          source: { type: 'static', path: '/x' },
+          outbound: { egressProxy: '10.0.0.1:3128', egressProxyConnectTo: 'approved-address' },
+        });
+
+      expect(build).toThrow(/egressProxy/);
+      expect(build).not.toThrow(/Invalid URL$/);
+    });
+
     it('does not warn when both requireSignature=true and dev=false (default safe config)', () => {
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
       try {
