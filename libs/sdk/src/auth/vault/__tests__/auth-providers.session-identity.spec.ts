@@ -67,11 +67,17 @@ function accessorFor(ctx: FrontMcpContext, storage: StorageAdapter): AuthProvide
 }
 
 /** The context of an HTTP request that sent `sessionId` and that session verification did not accept. */
-async function requestContext(sub: string, sessionId?: string): Promise<FrontMcpContext> {
+async function requestContext(sub: string, sessionId?: string, principalIssuer?: string): Promise<FrontMcpContext> {
   const storage = new FrontMcpContextStorage();
   const headers = sessionId ? { 'mcp-session-id': sessionId } : {};
   const ctx = await storage.runForHttpRequest({ headers }, 'scope', () => storage.getStoreOrThrow());
-  ctx.updateAuthInfo(authInfoFromAuthorization({ token: 'token', user: { iss: 'https://idp.example.com', sub } }));
+  ctx.updateAuthInfo(
+    authInfoFromAuthorization({
+      token: 'token',
+      user: { iss: principalIssuer ?? 'https://idp.example.com', sub },
+      ...(principalIssuer !== undefined && { principalIssuer }),
+    }),
+  );
   return ctx;
 }
 
@@ -144,6 +150,43 @@ describe('session-scoped auth-provider credentials of callers without a verified
 
     expect(second).toBe('gh-second');
     expect(issued.sessions.some((session) => session.includes('shared-session'))).toBe(false);
+  });
+});
+
+describe('session-scoped auth-provider credentials of callers from several issuers', () => {
+  const TENANT_B = 'https://tenant-b.example.com';
+
+  it('are not shared between callers with the same subject from different issuers', async () => {
+    const storage = await memoryStorage();
+    await tokenFor(accessorFor(await requestContext('alice', undefined), storage), 'gh-primary-alice');
+
+    const served = await tokenFor(accessorFor(await requestContext('alice', undefined, TENANT_B), storage), 'gh-b');
+
+    expect(served).toBe('gh-b');
+    expect(issued.sessions).toEqual(['principal:alice', `issuer-principal:${encodeURIComponent(TENANT_B)}:alice`]);
+  });
+
+  it("last across the requests of a caller from another issuer, and keep the key of the server's own issuer", async () => {
+    const storage = await memoryStorage();
+    await tokenFor(accessorFor(await requestContext('alice', undefined, TENANT_B), storage), 'gh-b');
+    await tokenFor(accessorFor(await requestContext('alice'), storage), 'gh-primary-alice');
+
+    expect(await tokenFor(accessorFor(await requestContext('alice', undefined, TENANT_B), storage), 'unused')).toBe(
+      'gh-b',
+    );
+    expect(await tokenFor(accessorFor(await requestContext('alice'), storage), 'unused')).toBe('gh-primary-alice');
+  });
+
+  it('keep an issuer and a subject apart however they are spelled', async () => {
+    const storage = await memoryStorage();
+    await tokenFor(accessorFor(await requestContext('b:alice', undefined, 'https://a'), storage), 'gh-first');
+
+    const served = await tokenFor(
+      accessorFor(await requestContext('alice', undefined, 'https://a:b'), storage),
+      'gh-second',
+    );
+
+    expect(served).toBe('gh-second');
   });
 });
 

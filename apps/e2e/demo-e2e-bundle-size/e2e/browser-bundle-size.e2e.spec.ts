@@ -21,8 +21,9 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_333_604 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_340_837 },
+  // +74 bytes each (#1309): every verified caller's auth info carries the issuer that keys its session storage
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_333_678 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_340_911 },
 ];
 
 const VITE_INITIAL_CHUNK_MAX_BYTES = 783_847;
