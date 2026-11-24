@@ -68,6 +68,18 @@ posixOnly('exportSkills with linked rule files', () => {
     expect(fs.readFileSync(path.join(project, 'shared/AGENTS.md'), 'utf8')).toContain('Use the demo skill.');
   });
 
+  it('keeps the permissions of a rule file it replaces', async () => {
+    fs.mkdirSync(path.join(project, '.cursor/rules'), { recursive: true });
+    fs.writeFileSync(path.join(project, '.cursor/rules/demo.mdc'), 'old', { mode: 0o600 });
+    fs.chmodSync(path.join(project, '.cursor/rules/demo.mdc'), 0o600);
+
+    await exportDemo('cursor');
+
+    const replaced = fs.statSync(path.join(project, '.cursor/rules/demo.mdc'));
+    expect(replaced.mode & 0o777).toBe(0o600);
+    expect(fs.readFileSync(path.join(project, '.cursor/rules/demo.mdc'), 'utf8')).toContain('Use the demo skill.');
+  });
+
   it('merges into a linked .windsurfrules inside the repository', async () => {
     fs.writeFileSync(path.join(project, 'RULES.md'), '## other\nKeep me.\n');
     fs.symlinkSync(path.join(project, 'RULES.md'), path.join(project, '.windsurfrules'));
