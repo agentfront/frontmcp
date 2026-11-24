@@ -27,13 +27,27 @@ export function isWithin(child: string, parent: string): boolean {
   return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }
 
-/** The project an export writes into, with its links resolved: the git repository holding `outDir`, else `outDir`. */
+/**
+ * The project an export writes into, with its links resolved: the git repository holding `outDir`, else `outDir`. A
+ * `.git` is looked for only where the path to it crosses no link, so a linked output folder can't name the project.
+ */
 export async function exportRoot(outDir: string): Promise<string> {
-  const lexicalOutDir = path.resolve(outDir);
-  for (let dir = lexicalOutDir; ; dir = path.dirname(dir)) {
-    if (await fileExists(path.join(dir, '.git'))) return resolveLinks(dir);
-    if (path.dirname(dir) === dir) return resolveLinks(lexicalOutDir);
+  const ancestors = [path.resolve(outDir)];
+  for (let dir = ancestors[0]; path.dirname(dir) !== dir; dir = path.dirname(dir)) {
+    ancestors.push(path.dirname(dir));
   }
+  const linked = await Promise.all(ancestors.map(isLink));
+  for (const dir of ancestors.slice(linked.lastIndexOf(true) + 1)) {
+    if (await fileExists(path.join(dir, '.git'))) return resolveLinks(dir);
+  }
+  return resolveLinks(ancestors[0]);
+}
+
+function isLink(target: string): Promise<boolean> {
+  return lstat(target).then(
+    (stats) => stats.isSymbolicLink(),
+    () => false,
+  );
 }
 
 /** `target` with the links on the part of it that exists resolved; the part that doesn't is kept as given. */
@@ -43,11 +57,7 @@ async function resolveLinks(target: string): Promise<string> {
     try {
       return path.join(await realpath(existing), ...missing);
     } catch {
-      const isDanglingLink = await lstat(existing).then(
-        (stats) => stats.isSymbolicLink(),
-        () => false,
-      );
-      if (isDanglingLink) throw new ExportTargetRefusal(`${existing} is a link to a missing file`);
+      if (await isLink(existing)) throw new ExportTargetRefusal(`${existing} is a link to a missing file`);
       if (path.dirname(existing) === existing) return target;
       missing.unshift(path.basename(existing));
     }
