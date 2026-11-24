@@ -22,6 +22,12 @@ import type { ListChangedKind } from '../../common/interfaces/flow.interface';
 import { type Scope } from '../../scope';
 import { announcesListChangeNow } from '../../surface/list-change-batch';
 
+/** Whether a listener may be told of an update: its credentials unexpired both before and after the async check. */
+export async function listenerMayReceive(isExpired: () => boolean, mayRead: () => Promise<boolean>): Promise<boolean> {
+  if (isExpired()) return false;
+  return (await mayRead()) && !isExpired();
+}
+
 /** How often a bare SSE comment is emitted to hold the connection open. */
 const KEEPALIVE_INTERVAL_MS = 15_000;
 
@@ -39,10 +45,10 @@ export interface SubscriptionStreamOptions {
   /** Fires when the client disconnects so the registry listeners are released. */
   signal?: AbortSignal;
   /**
-   * Whether the stream may be told of an update to `uri`, a resource under one of its acknowledged URIs (an exact
-   * match was checked when acknowledged). Without it, every such update is sent.
+   * Whether the stream may be told of an update to `uri`, under the acknowledged `watchedUri` (the longest that
+   * matches), asked again for each update, so a caller that lost access stops hearing of it. Without it, all are sent.
    */
-  mayReceiveUpdate?: (uri: string) => Promise<boolean>;
+  mayReceiveUpdate?: (uri: string, watchedUri: string) => Promise<boolean>;
 }
 
 /**
@@ -134,13 +140,12 @@ export function createSubscriptionStream(options: SubscriptionStreamOptions): {
         const uri = typeof updatedUri === 'string' ? updatedUri : undefined;
         if (event.kind === 'updated') {
           if (!uri) return;
-          if (watchedUris.has(uri)) {
-            push('notifications/resources/updated', { uri });
-            return;
-          }
           // A subscription is on a URI prefix, so a sub-resource update counts once the caller may receive it.
-          if (![...watchedUris].some((watched) => uri.startsWith(watched))) return;
-          void (mayReceiveUpdate?.(uri) ?? Promise.resolve(true)).then(
+          const watchedUri = [...watchedUris]
+            .filter((watched) => uri.startsWith(watched))
+            .sort((longer, shorter) => shorter.length - longer.length)[0];
+          if (watchedUri === undefined) return;
+          void (mayReceiveUpdate?.(uri, watchedUri) ?? Promise.resolve(true)).then(
             (allowed) => allowed && push('notifications/resources/updated', { uri }),
             () => undefined,
           );
