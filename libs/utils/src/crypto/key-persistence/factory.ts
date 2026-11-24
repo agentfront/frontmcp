@@ -26,6 +26,9 @@ const KEY_RECORD_PREFIX = 'frontmcp:keys:';
 const LS_HKDF_IKM = new TextEncoder().encode('frontmcp:localstorage:v1');
 const INSTALL_SALT_KEY = '__frontmcp_internal__:install_salt';
 const LEGACY_SALT_KEY = 'frontmcp:_install_salt';
+/** Set once the records are encrypted with the key kept in IndexedDB, so no other key is ever used to read them. */
+const KEPT_KEY_SCHEME_KEY = '__frontmcp_internal__:key_scheme';
+const KEPT_KEY_SCHEME = 'indexeddb';
 
 type LocalStorageAdapterClass = typeof import('../../storage/adapters/localstorage.js').LocalStorageAdapter;
 
@@ -75,12 +78,19 @@ function deriveLocalStorageKey(): Uint8Array {
 
 /**
  * Key records in localStorage, encrypted with `encryptionKey`, or else with a non-extractable key kept in IndexedDB.
- * Where IndexedDB or WebCrypto is unavailable, the key 1.12.2 derives from localStorage is kept, with a warning.
+ * Where IndexedDB or WebCrypto is unavailable, the key 1.12.2 derives from localStorage is kept, with a warning,
+ * unless the records already use the IndexedDB key: then it throws rather than read them with another key.
  */
 async function createLocalStorageKeyAdapter(encryptionKey?: Uint8Array): Promise<StorageAdapter> {
   const { LocalStorageAdapter } = await import('../../storage/adapters/localstorage.js');
   if (encryptionKey) return new LocalStorageAdapter({ prefix: KEY_RECORD_PREFIX, encryptionKey });
   const keptKey = await loadLocalStorageKey();
+  if (!keptKey && localStorage.getItem(KEPT_KEY_SCHEME_KEY) === KEPT_KEY_SCHEME) {
+    throw new Error(
+      'localStorage key records are encrypted with a key kept in IndexedDB, which could not be loaded; ' +
+        'they are not read with another key',
+    );
+  }
   if (!keptKey) {
     if (!derivedKeyWarned) {
       derivedKeyWarned = true;
@@ -94,6 +104,7 @@ async function createLocalStorageKeyAdapter(encryptionKey?: Uint8Array): Promise
   }
   const adapter = new LocalStorageAdapter({ prefix: KEY_RECORD_PREFIX, encryptionKey: keptKey });
   await adapter.connect();
+  localStorage.setItem(KEPT_KEY_SCHEME_KEY, KEPT_KEY_SCHEME);
   await moveDerivedKeyRecords(adapter, LocalStorageAdapter);
   return adapter;
 }
