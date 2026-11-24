@@ -159,6 +159,18 @@ posixOnly('exportSkills with linked rule files', () => {
     expect(process.cwd()).toBe(cwd);
   });
 
+  it('creates no folder through a link swapped in above the levels it creates', async () => {
+    fs.symlinkSync(outside, path.join(project, '.cursor'));
+    const cwd = process.cwd();
+
+    await expect(writeExportTarget(path.join(project, '.cursor/rules/demo.mdc'), 'text')).rejects.toBeInstanceOf(
+      ExportTargetRefusal,
+    );
+
+    expect(fs.readdirSync(outside)).toEqual([]);
+    expect(process.cwd()).toBe(cwd);
+  });
+
   it('refuses a rule file that links to a missing file', async () => {
     fs.mkdirSync(path.join(project, '.cursor/rules'), { recursive: true });
     fs.symlinkSync(path.join(outside, 'missing.md'), path.join(project, '.cursor/rules/demo.mdc'));

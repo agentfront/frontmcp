@@ -5,18 +5,7 @@
 
 import * as path from 'path';
 
-import {
-  chmod,
-  ensureDir,
-  fileExists,
-  lstat,
-  randomUUID,
-  realpath,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from '@frontmcp/utils';
+import { chmod, fileExists, lstat, mkdir, randomUUID, realpath, rename, rm, stat, writeFile } from '@frontmcp/utils';
 
 /** A write refused because the path leads outside the project. */
 export class ExportTargetRefusal extends Error {}
@@ -95,19 +84,14 @@ export async function exportTargetOf(file: string, root: string): Promise<string
 
 /**
  * Write `contents` to `target` through a new file renamed into place, so no link made after the check is followed. The
- * writes run inside the verified folder, entered once and checked, so its path isn't followed again. A file it
- * replaces keeps its permissions.
+ * writes run inside the verified folder, entered level by level and checked, so its path isn't followed again. A file
+ * it replaces keeps its permissions.
  */
 export async function writeExportTarget(target: string, contents: string): Promise<void> {
-  const directory = path.dirname(target);
   const name = path.basename(target);
-  await ensureDir(directory);
   const previousDirectory = process.cwd();
-  process.chdir(directory);
   try {
-    if (process.cwd() !== directory) {
-      throw new ExportTargetRefusal(`${directory} now leads to ${process.cwd()}, so it was not written to`);
-    }
+    await enterVerifiedDirectory(path.dirname(target));
     const temporary = `.${name}.${randomUUID()}.tmp`;
     const mode = await stat(name).then(
       (stats) => stats.mode & 0o7777,
@@ -123,5 +107,37 @@ export async function writeExportTarget(target: string, contents: string): Promi
     }
   } finally {
     process.chdir(previousDirectory);
+  }
+}
+
+/**
+ * Enter `directory`, a resolved path: its deepest existing folder first, then each missing level, created inside the
+ * folder entered before it. Each is checked to be where its path says, so no level is reached through a link swapped
+ * in after the check, and no folder is created through one.
+ */
+async function enterVerifiedDirectory(directory: string): Promise<void> {
+  const missing: string[] = [];
+  let existing = directory;
+  while (!(await fileExists(existing)) && path.dirname(existing) !== existing) {
+    missing.unshift(path.basename(existing));
+    existing = path.dirname(existing);
+  }
+  await enterAndVerify(existing, existing);
+  let expected = existing;
+  for (const level of missing) {
+    expected = path.join(expected, level);
+    await mkdir(level).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'EEXIST') throw error;
+    });
+    await enterAndVerify(level, expected);
+  }
+}
+
+/** `process.chdir(next)`, refused when the folder entered, resolved through its links and junctions, isn't `expected`. */
+async function enterAndVerify(next: string, expected: string): Promise<void> {
+  process.chdir(next);
+  const entered = await realpath('.');
+  if (entered !== expected) {
+    throw new ExportTargetRefusal(`${expected} now leads to ${entered}, so it was not written to`);
   }
 }
