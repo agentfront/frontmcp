@@ -810,9 +810,14 @@ export class NotificationService {
   private async notifyIfStillReadable(sessionId: string, uri: string): Promise<void> {
     const registered = this.servers.get(sessionId);
     if (!registered || hasExpiredCaller(registered)) return;
+    const { caller } = registered;
     const { callerMayStillRead } = await import('./resource-update-access.js');
-    if (await callerMayStillRead(this.scope, registered.caller, uri))
-      this.sendNotificationToSession(sessionId, 'notifications/resources/updated', { uri });
+    if (!(await callerMayStillRead(this.scope, caller, uri))) return;
+    // The check is async: the session, its caller or its subscription may have changed meanwhile
+    const current = this.servers.get(sessionId);
+    const unchanged = current === registered && current.caller === caller && this.isSubscribed(sessionId, uri);
+    if (!unchanged || hasExpiredCaller(current)) return;
+    this.sendNotificationToSession(sessionId, 'notifications/resources/updated', { uri });
   }
 
   // =====================================================

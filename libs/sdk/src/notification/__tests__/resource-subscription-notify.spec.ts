@@ -147,6 +147,32 @@ describe('NotificationService - resource subscription notifications', () => {
       expect(server.notification).not.toHaveBeenCalled();
     });
 
+    it('sends nothing when the session unsubscribed while its access was checked', async () => {
+      const server = subscribedSession({ clientId: 'client-1' });
+      mockScope.runFlow.mockImplementationOnce(async () => {
+        service.unsubscribeResource('session-1', 'file://notes.txt');
+        return {};
+      });
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
+      expect(server.notification).not.toHaveBeenCalled();
+    });
+
+    it("sends nothing when the session's caller changed while its access was checked", async () => {
+      const server = subscribedSession({ clientId: 'client-1' });
+      mockScope.runFlow.mockImplementationOnce(async () => {
+        service.setCaller('session-1', { clientId: 'client-2' });
+        return {};
+      });
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
+      expect(server.notification).not.toHaveBeenCalled();
+    });
+
     it("sends nothing, and checks nothing, once the caller's credentials expired", async () => {
       const server = subscribedSession({ clientId: 'client-1', expiresAt: Math.floor(Date.now() / 1000) - 60 });
 
