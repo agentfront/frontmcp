@@ -18,6 +18,7 @@ import {
   callTool,
   clientOf,
   initialize,
+  recordLoopbackRequests,
   structuredOf,
   type Frame,
 } from '../../__test-utils__/helpers/shared-session-client';
@@ -148,7 +149,7 @@ posixOnly('a shared session across servers', () => {
   describe.each(['unix', 'http'] as const)('over %s', (transport) => {
     it('reaches the next server when its server goes away, replays initialize, then says the lists changed', async () => {
       const first = await serve(transport, configOf('first'));
-      const sent = jest.spyOn(globalThis, 'fetch');
+      const sent = recordLoopbackRequests();
       const { client } = attach(transport, { serves: configOf('second') });
       try {
         expect((await client.request(initializeWithCapabilities)).result).toBeDefined();
@@ -165,8 +166,8 @@ posixOnly('a shared session across servers', () => {
         expect(changed).toBeLessThan(answered);
         expect(client.received.filter(({ id }) => id === 1)).toHaveLength(1);
         if (transport === 'http') {
-          const initializes = sent.mock.calls
-            .map(([, init]) => (typeof init?.body === 'string' ? (JSON.parse(init.body) as Frame) : undefined))
+          const initializes = sent.requests
+            .map(({ body }) => (body ? (JSON.parse(body) as Frame) : undefined))
             .filter((frame) => frame?.method === 'initialize');
           expect(initializes).toHaveLength(2);
           expect(initializes[1]?.params).toEqual({
@@ -176,7 +177,7 @@ posixOnly('a shared session across servers', () => {
           expect(String(initializes[1]?.id)).toMatch(/reinitialize/);
         }
       } finally {
-        sent.mockRestore();
+        sent.restore();
       }
     });
 

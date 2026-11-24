@@ -1,8 +1,11 @@
+import * as http from 'node:http';
+import type { Socket } from 'node:net';
+
 import { createSharedServerNonce, verifySharedServerIdentity } from '@frontmcp/auth';
 import { readTextWithLimit } from '@frontmcp/utils';
 
 import { SharedServerIdentityError } from '../errors/shared-server.errors';
-import { unixSocketFetch } from './unix-socket-fetch';
+import { nodeHttpFetch, unixSocketFetch } from './unix-socket-fetch';
 
 /** Where a shared server answers an identity challenge; it needs no token, since the token comes after. */
 export const SHARED_IDENTIFY_PATH = '/.well-known/frontmcp-shared-server';
@@ -99,12 +102,30 @@ export async function identifySharedServer(
   return { outcome: 'refused' };
 }
 
-/** Challenge the endpoint before every request: a process on the port of a server that stopped never gets one. */
+/**
+ * Challenge the endpoint over HTTP before every request, and send the request on the connection that answered: when
+ * that connection closed in between, the request fails unsent, so a process on the port of a server that stopped
+ * never gets one.
+ */
 export function fetchAfterIdentity(endpoint: SharedEndpoint, proofKey: Uint8Array): typeof fetch {
+  const { hostname, port } = new URL(endpoint.baseUrl);
   return async (input, init) => {
-    const { outcome } = await identifySharedServer(endpoint, proofKey);
-    if (outcome !== 'verified') throw new SharedServerIdentityError(endpoint.id);
-    return endpoint.fetch(input, init);
+    const agent = new http.Agent({ keepAlive: true, maxSockets: 1 });
+    let answered: Socket | undefined;
+    const challenge = nodeHttpFetch({ host: hostname, port, agent }, (socket) => {
+      answered = socket;
+      return undefined;
+    });
+    const { outcome } = await identifySharedServer({ ...endpoint, fetch: challenge }, proofKey);
+    if (outcome !== 'verified') {
+      agent.destroy();
+      throw new SharedServerIdentityError(endpoint.id);
+    }
+    const onAnsweredConnection = nodeHttpFetch(
+      { host: hostname, port, agent, headers: { connection: 'close' } },
+      (socket) => (socket === answered ? undefined : new SharedServerIdentityError(endpoint.id)),
+    );
+    return onAnsweredConnection(input, init);
   };
 }
 
