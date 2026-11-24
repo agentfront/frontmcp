@@ -9,6 +9,17 @@ import { LocalStorageAdapter } from '../../../storage/adapters/localstorage';
 import { base64urlEncode, randomBytes } from '../../index';
 import { createKeyPersistence } from '../factory';
 
+let browserLike = false;
+
+jest.mock('../../runtime', () => {
+  const runtime = jest.requireActual('../../runtime');
+  return {
+    ...runtime,
+    isNode: () => !browserLike && runtime.isNode(),
+    isBrowser: () => browserLike || runtime.isBrowser(),
+  };
+});
+
 const RECORD_PREFIX = 'frontmcp:keys:';
 const INSTALL_SALT_KEY = '__frontmcp_internal__:install_salt';
 
@@ -152,6 +163,29 @@ describe('createKeyPersistence with localStorage', () => {
     installFakeIndexedDB().set(RECORD_PREFIX, storageKey);
     const reopened = await createKeyPersistence({ type: 'localstorage', enableCache: false });
     expect(await reopened.getSecret('session')).toEqual(secret);
+  });
+
+  it('refuses, writing no new key, when IndexedDB was cleared but localStorage still holds records under its key', async () => {
+    installFakeIndexedDB();
+    await (await createKeyPersistence({ type: 'localstorage' })).getOrCreateSecret('session');
+    const record = lsStore.get(`${RECORD_PREFIX}session`);
+    const cleared = installFakeIndexedDB();
+
+    await expect(createKeyPersistence({ type: 'localstorage' })).rejects.toThrow(/key kept in IndexedDB/);
+    expect(cleared.size).toBe(0);
+    expect(lsStore.get(`${RECORD_PREFIX}session`)).toBe(record);
+  });
+
+  it("propagates the refusal from 'auto' instead of falling back to memory", async () => {
+    installFakeIndexedDB();
+    await (await createKeyPersistence({ type: 'localstorage' })).getOrCreateSecret('session');
+    removeFakeIndexedDB();
+    browserLike = true;
+    try {
+      await expect(createKeyPersistence({ type: 'auto' })).rejects.toThrow(/key kept in IndexedDB/);
+    } finally {
+      browserLike = false;
+    }
   });
 
   it('without IndexedDB, keeps the key derived from localStorage and warns once, naming encryptionKey', async () => {

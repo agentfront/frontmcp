@@ -34,6 +34,9 @@ type LocalStorageAdapterClass = typeof import('../../storage/adapters/localstora
 
 let derivedKeyWarned = false;
 
+/** The records use the key kept in IndexedDB, which can't be loaded: they are left as they are, not read with another key. */
+class LocalStorageKeyUnavailableError extends Error {}
+
 /**
  * Get or create a per-installation random salt stored in localStorage.
  * This ensures the derived key is unique per browser installation.
@@ -84,9 +87,10 @@ function deriveLocalStorageKey(): Uint8Array {
 async function createLocalStorageKeyAdapter(encryptionKey?: Uint8Array): Promise<StorageAdapter> {
   const { LocalStorageAdapter } = await import('../../storage/adapters/localstorage.js');
   if (encryptionKey) return new LocalStorageAdapter({ prefix: KEY_RECORD_PREFIX, encryptionKey });
-  const keptKey = await loadLocalStorageKey();
-  if (!keptKey && localStorage.getItem(KEPT_KEY_SCHEME_KEY) === KEPT_KEY_SCHEME) {
-    throw new Error(
+  const usesKeptKey = localStorage.getItem(KEPT_KEY_SCHEME_KEY) === KEPT_KEY_SCHEME;
+  const keptKey = await loadLocalStorageKey(!usesKeptKey);
+  if (!keptKey && usesKeptKey) {
+    throw new LocalStorageKeyUnavailableError(
       'localStorage key records are encrypted with a key kept in IndexedDB, which could not be loaded; ' +
         'they are not read with another key',
     );
@@ -199,7 +203,8 @@ export async function createKeyPersistence(options?: CreateKeyPersistenceOptions
             adapter = await createLocalStorageKeyAdapter(options?.encryptionKey);
             await adapter.connect();
             connected = true;
-          } catch {
+          } catch (error) {
+            if (error instanceof LocalStorageKeyUnavailableError) throw error;
             adapter = new MemoryStorageAdapter();
           }
         } else {
@@ -211,7 +216,8 @@ export async function createKeyPersistence(options?: CreateKeyPersistenceOptions
         adapter = await createLocalStorageKeyAdapter(options?.encryptionKey);
         await adapter.connect();
         connected = true;
-      } catch {
+      } catch (error) {
+        if (error instanceof LocalStorageKeyUnavailableError) throw error;
         adapter = new MemoryStorageAdapter();
       }
     } else {

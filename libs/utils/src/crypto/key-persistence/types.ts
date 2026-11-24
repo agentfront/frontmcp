@@ -117,8 +117,8 @@ export interface CreateKeyPersistenceOptions {
    * IndexedDB, so a reader of localStorage alone cannot decrypt them; records written under the key 1.12.2 and
    * earlier derived from localStorage are re-encrypted with it. Where IndexedDB or WebCrypto is unavailable, that
    * derived key is still used, with a warning: anyone who can read this origin's localStorage can derive it. From
-   * 1.13 this key is needed there. Once the records use the IndexedDB key, a session that can't load it throws
-   * rather than read them with another key.
+   * 1.13 this key is needed there. Once the records use the IndexedDB key, a session that can't load it, or finds
+   * it gone, throws (for 'auto' too) rather than read them with another key or create a new one.
    */
   encryptionKey?: Uint8Array;
 }
