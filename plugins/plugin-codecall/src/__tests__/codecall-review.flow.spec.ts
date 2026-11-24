@@ -357,24 +357,37 @@ describe.each(RUNTIMES)('CodeCall review on the %s runtime', (runtime) => {
       expect(executed).toEqual(['mail.send:ops@example.com', 'users.list']);
     });
 
-    it('lets a grant with limits cover any arguments of the tool, up to its maxCalls', async () => {
-      const client = await open(setup);
-      const script =
+    it.each([
+      [
+        'a cut array mapped into a variable',
+        "const page = await callTool('users.list', { limit: 3 });\nconst ids = page.items.slice(0, 3).map((user) => user.id);\n" +
+          "for (const id of ids) {\n  await callTool('users.close', { id });\n}\nreturn ids;",
+      ],
+      [
+        'a cut array in a variable',
         "const page = await callTool('users.list', { limit: 3 });\nconst users = page.items.slice(0, 3);\n" +
-        "for (const user of users) {\n  await callTool('users.close', { id: user.id });\n}\nreturn users.length;";
+          "for (const user of users) {\n  await callTool('users.close', { id: user.id });\n}\nreturn users.length;",
+      ],
+    ])(
+      'lets a grant with limits cover any arguments of the tool, up to its maxCalls, over %s',
+      async (_form, script) => {
+        const client = await open(setup);
 
-      const asked = await execute(client, script);
-      expect(asked.status).toBe('needs_approval');
+        const asked = await execute(client, script);
+        expect(asked.status).toBe('needs_approval');
 
-      await grant(client, asked.approval?.anyArgumentsId as string, 2);
-      executed.length = 0;
-      const limited = await execute(client, script);
-      expect(limited).toMatchObject({
-        status: 'needs_changes',
-        findings: [{ rule: 'approval-after-effects', message: expect.stringContaining('but users.close already ran') }],
-      });
-      expect(executed).toEqual(['users.list', 'users.close:u1', 'users.close:u2']);
-    });
+        await grant(client, asked.approval?.anyArgumentsId as string, 2);
+        executed.length = 0;
+        const limited = await execute(client, script);
+        expect(limited).toMatchObject({
+          status: 'needs_changes',
+          findings: [
+            { rule: 'approval-after-effects', message: expect.stringContaining('but users.close already ran') },
+          ],
+        });
+        expect(executed).toEqual(['users.list', 'users.close:u1', 'users.close:u2']);
+      },
+    );
   });
 
   describe('without an approval channel', () => {
