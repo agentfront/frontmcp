@@ -50,8 +50,8 @@ const cachedAnswer = Object.freeze({ content: Object.freeze([Object.freeze({ typ
 
 @Tool({ name: 'cached_wait', inputSchema: { timeoutSec: z.number().default(45) } })
 class CachedWaitTool extends ToolContext {
-  async execute() {
-    return cachedAnswer as unknown as string;
+  async execute(_input: { timeoutSec: number }) {
+    return cachedAnswer as unknown as Record<string, unknown>;
   }
 }
 

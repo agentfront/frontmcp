@@ -391,8 +391,8 @@ describe('an app that cannot be lazy', () => {
   it("applies the input policy of the app once it loads: 'fail' refuses an undeclared argument", async () => {
     @Tool({ name: 'strict_charge', inputSchema: { amount: z.number() } })
     class StrictChargeTool extends ToolContext {
-      async execute() {
-        return 'charged';
+      async execute(input: { amount: number }) {
+        return `charged ${input.amount}`;
       }
     }
 
