@@ -5,7 +5,7 @@ export type { ProviderMetadata } from '@frontmcp/di';
 
 export * from './front-mcp.metadata';
 export * from './output-policy';
-export * from './input-policy';
+export type { InputPolicy, InputUndeclaredKeysPolicy } from './input-policy';
 export * from './enabled.metadata';
 export * from './materialized.metadata';
 export * from './flow.metadata';

@@ -39,7 +39,6 @@ import {
   GLOBAL_RATE_LIMIT_CHECKED,
   isOrchestratedMode,
   resolveAllowNonFinite,
-  resolveInputUndeclaredKeysPolicy,
   resolveOutputBudget,
   resolveOutputSchemaMode,
   resolveUndeclaredKeysPolicy,
@@ -53,6 +52,7 @@ import {
   type Token,
 } from '../../common';
 import { callSurfaceOf, entryUnavailableError, isOfferedOnSurface } from '../../common/availability';
+import { resolveInputUndeclaredKeysPolicy } from '../../common/metadata/input-policy';
 import { normalizeToolAuthProviders, resolveToolVisibility } from '../../common/metadata/tool.metadata';
 import {
   lookupTool,
@@ -101,7 +101,7 @@ import { resolveStructuredContentValidation, toolInputPolicies, toolOutputPolici
 import { isCallToolResult } from '../tool.utils';
 import { toolServingMode } from '../ui/serving-mode-default';
 import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
-import { describeUndeclaredArguments, findUndeclaredArguments } from '../undeclared-arguments';
+import { findUndeclaredArguments } from '../undeclared-arguments';
 import { askToOpenConnectPages, credentialsRequiredErrorOf, evaluateToolCredentialGate } from './tool-credentials.gate';
 
 /**
@@ -1260,16 +1260,17 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       this.logger.error('validateInput: failed to parse input', err);
       throw new InvalidInputError('Unknown error occurred when trying to parse input');
     }
-    this.applyInputPolicy(tool, input.arguments, toolContext.input);
+    await this.applyInputPolicy(tool, input.arguments, toolContext.input);
     this.logger.verbose('validateInput:done');
   }
 
   /** `input.undeclaredKeys` for the arguments the `inputSchema` does not declare, which parsing dropped. */
-  private applyInputPolicy(tool: CallToolEntry, sent: unknown, parsed: unknown): void {
+  private async applyInputPolicy(tool: CallToolEntry, sent: unknown, parsed: unknown): Promise<void> {
     const keyPaths = findUndeclaredArguments(tool.inputSchema ?? {}, sent, parsed);
     if (keyPaths.length === 0) return;
     const policy = resolveInputUndeclaredKeysPolicy(...toolInputPolicies(tool, this.scope));
     if (policy === 'strip') return;
+    const { describeUndeclaredArguments } = await import('../undeclared-arguments-message.js');
     const described = describeUndeclaredArguments(keyPaths, Object.keys(tool.inputSchema ?? {}));
     if (policy === 'fail') throw new InvalidInputError(`Unknown arguments: ${described}`);
     this.state.set('undeclaredArgumentsNote', `These arguments are not declared and were ignored: ${described}.`);
