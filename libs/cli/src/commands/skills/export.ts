@@ -6,10 +6,11 @@
 
 import * as path from 'path';
 
-import { ensureDir, readFile, writeFile } from '@frontmcp/utils';
+import { readFile } from '@frontmcp/utils';
 
 import { c } from '../../core/colors';
 import { getCatalogDir, loadCatalog } from './catalog';
+import { exportRoot, exportTargetOf, ExportTargetRefusal, writeExportTarget } from './export-target';
 import { exportToCopilot, exportToCursor, exportToWindsurf, type ExporterOutput, type ExportTarget } from './exporters';
 
 export interface ExportSkillsOptions {
@@ -38,6 +39,7 @@ export async function exportSkills(options: ExportSkillsOptions): Promise<void> 
   }
 
   const catalogDir = getCatalogDir();
+  const root = await exportRoot(outDir);
   let written = 0;
   for (const skill of skills) {
     const skillDir = path.join(catalogDir, skill.path);
@@ -60,19 +62,24 @@ export async function exportSkills(options: ExportSkillsOptions): Promise<void> 
     };
     const out = renderForTarget(options.target, input);
 
-    const absPath = path.join(outDir, out.relativePath);
-    await ensureDir(path.dirname(absPath));
-    if (options.target === 'windsurf') {
-      // Windsurf rules live in a single file — append rather than overwrite.
-      let existing = '';
-      try {
-        existing = await readFile(absPath, 'utf8');
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    try {
+      const target = await exportTargetOf(path.join(outDir, out.relativePath), root);
+      if (options.target === 'windsurf') {
+        // Windsurf rules live in a single file — append rather than overwrite.
+        let existing = '';
+        try {
+          existing = await readFile(target, 'utf8');
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+        }
+        await writeExportTarget(target, mergeWindsurf(existing, skill.name, out.contents));
+      } else {
+        await writeExportTarget(target, out.contents);
       }
-      await writeFile(absPath, mergeWindsurf(existing, skill.name, out.contents));
-    } else {
-      await writeFile(absPath, out.contents);
+    } catch (err) {
+      if (!(err instanceof ExportTargetRefusal)) throw err;
+      console.error(c('red', `Not writing ${out.relativePath}: ${err.message}.`));
+      process.exit(1);
     }
     console.log(c('green', `wrote ${out.relativePath}`));
     written++;
