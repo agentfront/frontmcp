@@ -21,12 +21,13 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  // +74 bytes each (#1309): every verified caller's auth info carries the issuer that keys its session storage
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_333_678 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_340_911 },
+  // +1,987 / +1,988 bytes (#1316, #1347): a returned CallToolResult is parsed against its outputSchema, and a UI call follows undeclaredKeys
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_335_665 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_342_899 },
 ];
 
-const VITE_INITIAL_CHUNK_MAX_BYTES = 783_847;
+// +64 bytes (#1316, #1347): a returned CallToolResult is parsed against its outputSchema, and a UI call follows undeclaredKeys
+const VITE_INITIAL_CHUNK_MAX_BYTES = 783_911;
 
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {
