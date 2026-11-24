@@ -49,6 +49,13 @@ class HiddenByHookTool extends ToolContext {
   }
 }
 
+@Tool({ name: 'hidden_early', inputSchema: {}, outputSchema: 'string' })
+class HiddenEarlyTool extends ToolContext {
+  async execute() {
+    return 'ok';
+  }
+}
+
 @Plugin({ name: 'stand-in' })
 class StandInPlugin {
   @ReadResourceHook.Around('findResource')
@@ -63,6 +70,11 @@ class StandInPlugin {
     flowCtx.resolveResource({ resource: match.instance, params: match.params });
   }
 
+  @ListToolsHook.Will('findTools')
+  hideEarly(flowCtx: FlowCtxOf<'tools:list-tools'>) {
+    flowCtx.removeTool('hidden_early');
+  }
+
   @ListToolsHook.Will('parseTools')
   hideTool(flowCtx: FlowCtxOf<'tools:list-tools'>) {
     flowCtx.removeTool('hidden_by_hook');
@@ -73,7 +85,7 @@ class StandInPlugin {
   id: 'notes',
   name: 'Notes',
   resources: [NoteResource, AgentNotesResource],
-  tools: [PublicTool, HiddenByHookTool],
+  tools: [PublicTool, HiddenByHookTool, HiddenEarlyTool],
   plugins: [StandInPlugin],
 })
 class NotesApp {}
@@ -98,11 +110,12 @@ describe('a hook that stands in for a stage', () => {
     expect(message.error?.message).toBe('Resource not found: alias://agent');
   });
 
-  it('leaves a tool out of tools/list with ctx.removeTool', async () => {
+  it('leaves a tool out of tools/list with ctx.removeTool, called before or after the tools are found', async () => {
     const { message } = await rpc20260728(server.handler, 'tools/list');
     const names = ((message.result?.['tools'] ?? []) as Array<{ name: string }>).map(({ name }) => name);
 
     expect(names).toContain('public_tool');
     expect(names).not.toContain('hidden_by_hook');
+    expect(names).not.toContain('hidden_early');
   });
 });
