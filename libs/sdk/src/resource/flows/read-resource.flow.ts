@@ -27,6 +27,7 @@ import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../..
 import { getPinnedPublicUrl } from '../../common/utils/path.utils';
 import { runOnSurface } from '../../context/call-surface';
 import {
+  InternalMcpError,
   InvalidInputError,
   InvalidMethodError,
   isClientFacingError,
@@ -36,7 +37,7 @@ import {
 import { invalidOutputFromParseFailure } from '../../errors/mcp.error';
 import { ResolvedEntries } from '../../flows/resolved-entries';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
-import { hooksBoundTo } from '../../hooks/hooks.utils';
+import { hooksBoundTo, staticHooksFor } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { assertEntryEnabled } from '../../surface';
 import { isUIResourceUri } from '../../tool/ui/ui-shared';
@@ -256,12 +257,36 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
       throw new ResourceNotFoundError(uri);
     }
 
-    this.resolveResource({ resource: match.instance, params: match.params });
+    this.settleResource(match.instance, match.params);
     this.logger.verbose('findResource:done');
   }
 
-  /** Settle the resource this read gets, `availableWhen` checked, as `findResource` does; a hook standing in calls it. */
+  /**
+   * Hand over the resource a hook standing in for `findResource` found, settled as that stage settles one. Refused when
+   * its app or class has hooks this read did not install from the URI, since its guards would not run.
+   */
   resolveResource({ resource, params = {} }: { resource: ResourceEntry; params?: Record<string, string> }): void {
+    const requested = this.scope.resources.findResourceForUri(this.input.request.params.uri)?.instance;
+    const installedHooks = new Set(this.entryHooksOf(requested));
+    if (this.entryHooksOf(resource).some((hook) => !installedHooks.has(hook))) {
+      throw new InternalMcpError(
+        `ctx.resolveResource() was handed resource "${resource.name}", whose app or class hooks this read did not install`,
+        'RESOURCE_HANDOFF_SKIPS_HOOKS',
+      );
+    }
+    this.settleResource(resource, params);
+  }
+
+  /** The app and `static` class hooks of `resources:read-resource` a read of `resource` installs; none for no resource. */
+  private entryHooksOf(resource: ResourceEntry | undefined): readonly unknown[] {
+    const { hooks, resources } = this.scope;
+    const ownerId = resource ? appOwnerIdOf(resources.lineageOf(resource) ?? [], resource.owner) : undefined;
+    const classHooks = resource ? staticHooksFor(hooks.getClsHooks(resource.record.provide), name) : [];
+    return [...(hooks.getFlowHooksForOwner(name, ownerId) ?? []), ...classHooks];
+  }
+
+  /** Settle the resource this read gets, as `findResource` does: its `availableWhen` checked, the hook owner set. */
+  private settleResource(resource: ResourceEntry, params: Record<string, string> = {}): void {
     const { uri } = this;
     const loggedUri = escapeControlCharacters(uri);
     // `availableWhen` gates reads by URI, not only the listings: a surface the resource isn't offered

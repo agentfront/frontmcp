@@ -35,6 +35,18 @@ class AgentNotesResource extends ResourceContext {
   }
 }
 
+@Resource({ name: 'guarded-doc', uri: 'guarded://doc' })
+class GuardedDocResource extends ResourceContext {
+  @ReadResourceHook.Will('execute')
+  static guard() {
+    // a guard of this resource's own, which a read of another URI never installs
+  }
+
+  async execute() {
+    return 'guarded content';
+  }
+}
+
 @Tool({ name: 'public_tool', inputSchema: {}, outputSchema: 'string' })
 class PublicTool extends ToolContext {
   async execute() {
@@ -63,6 +75,7 @@ class StandInPlugin {
     const aliasTargets: Record<string, string> = {
       'alias://note': 'notes://aliased',
       'alias://agent': 'agent://notes',
+      'alias://guarded': 'guarded://doc',
     };
     const target = aliasTargets[flowCtx.uri];
     const match = target ? flowCtx.get(ScopeEntry).resources.findResourceForUri(target) : undefined;
@@ -84,7 +97,7 @@ class StandInPlugin {
 @App({
   id: 'notes',
   name: 'Notes',
-  resources: [NoteResource, AgentNotesResource],
+  resources: [NoteResource, AgentNotesResource, GuardedDocResource],
   tools: [PublicTool, HiddenByHookTool, HiddenEarlyTool],
   plugins: [StandInPlugin],
 })
@@ -108,6 +121,13 @@ describe('a hook that stands in for a stage', () => {
     const { message } = await rpc20260728(server.handler, 'resources/read', { uri: 'alias://agent' });
 
     expect(message.error?.message).toBe('Resource not found: alias://agent');
+  });
+
+  it('refuses to hand over a resource whose own hooks this read did not install, since they would not run', async () => {
+    const { message } = await rpc20260728(server.handler, 'resources/read', { uri: 'alias://guarded' });
+
+    expect(message.error).toBeDefined();
+    expect(JSON.stringify(message)).not.toContain('guarded content');
   });
 
   it('leaves a tool out of tools/list with ctx.removeTool, called before or after the tools are found', async () => {
