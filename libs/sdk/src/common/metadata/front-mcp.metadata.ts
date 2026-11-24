@@ -3,7 +3,7 @@ import { guardConfigSchema, type GuardConfig } from '@frontmcp/guard';
 import { internalZ as z } from '@frontmcp/lazy-zod';
 
 import type { ServerManifest } from '../../manifest/server-manifest.schema';
-import { MAX_CONCURRENT_TASKS_PER_SESSION, TASK_LIST_SOURCES, type TaskListSource } from '../../task/task.types';
+import { MAX_CONCURRENT_TASKS_PER_SESSION, type TaskListSource } from '../../task/task.types';
 import type { AdapterType, AppType, PluginType, ProviderType, ResourceType, SkillType, ToolType } from '../interfaces';
 import {
   annotatedFrontMcpAdaptersSchema,
@@ -869,7 +869,7 @@ export const frontMcpBaseSchema = z.object({
       maxTtlMs: z.number().int().positive().optional(),
       defaultPollIntervalMs: z.number().int().positive().optional(),
       maxConcurrentPerSession: z.number().int().positive().max(MAX_CONCURRENT_TASKS_PER_SESSION).optional(),
-      listFrom: z.enum(TASK_LIST_SOURCES).optional(),
+      listFrom: z.enum(['scan', 'index']).optional(),
       strict: z.boolean().optional(),
       runner: z.enum(['in-process', 'cli']).optional(),
       sqlite: z
