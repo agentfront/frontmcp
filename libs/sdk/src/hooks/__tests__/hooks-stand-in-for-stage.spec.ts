@@ -20,6 +20,7 @@ import {
 
 const ReadResourceHook = FlowHooksOf('resources:read-resource');
 const ListToolsHook = FlowHooksOf('tools:list-tools');
+const guardsRun: string[] = [];
 
 @ResourceTemplate({ name: 'note', uriTemplate: 'notes://{id}', mimeType: 'text/plain' })
 class NoteResource extends ResourceContext<{ id: string }> {
@@ -39,7 +40,7 @@ class AgentNotesResource extends ResourceContext {
 class GuardedDocResource extends ResourceContext {
   @ReadResourceHook.Will('execute')
   static guard() {
-    // a guard of this resource's own, which a read of another URI never installs
+    guardsRun.push('guarded-doc');
   }
 
   async execute() {
@@ -76,7 +77,6 @@ class StandInPlugin {
       'alias://note': 'notes://aliased',
       'alias://agent': 'agent://notes',
       'alias://guarded': 'guarded://doc',
-      'guarded://doc': 'guarded://doc',
       'rewrite://guarded': 'guarded://doc',
     };
     const target = aliasTargets[flowCtx.uri];
@@ -90,6 +90,12 @@ class StandInPlugin {
     // `input` is the flow's own parsed request, which a hook reaches only past its type
     const { params } = (flowCtx as unknown as { input: { request: { params: { uri: string } } } }).input.request;
     if (params.uri === 'rewrite://guarded') params.uri = 'guarded://doc';
+  }
+
+  @ReadResourceHook.Will('findResource')
+  switchResource(flowCtx: FlowCtxOf<'resources:read-resource'>) {
+    const input = flowCtx.state.input;
+    if (input?.uri === 'switch://guarded') flowCtx.state.set('input', { ...input, uri: 'guarded://doc' });
   }
 
   @ListToolsHook.Will('findTools')
@@ -132,25 +138,17 @@ describe('a hook that stands in for a stage', () => {
     expect(message.error?.message).toBe('Resource not found: alias://agent');
   });
 
-  it('refuses to hand over a resource whose own hooks this read did not install, since they would not run', async () => {
-    const { message } = await rpc20260728(server.handler, 'resources/read', { uri: 'alias://guarded' });
+  it.each(['alias://guarded', 'rewrite://guarded', 'switch://guarded'])(
+    'runs the hooks of the resource it hands over for %s from useResourceHooks on, its own guards included',
+    async (uri) => {
+      guardsRun.length = 0;
 
-    expect(message.error).toBeDefined();
-    expect(JSON.stringify(message)).not.toContain('guarded content');
-  });
+      const { message } = await rpc20260728(server.handler, 'resources/read', { uri });
 
-  it('compares with the hooks the read installed when it started, not those of the URI a hook rewrote it to', async () => {
-    const { message } = await rpc20260728(server.handler, 'resources/read', { uri: 'rewrite://guarded' });
-
-    expect(message.error).toBeDefined();
-    expect(JSON.stringify(message)).not.toContain('guarded content');
-  });
-
-  it('hands over a resource whose hooks the read installed', async () => {
-    const { message } = await rpc20260728(server.handler, 'resources/read', { uri: 'guarded://doc' });
-
-    expect(JSON.stringify(message.result)).toContain('guarded content');
-  });
+      expect(JSON.stringify(message.result)).toContain('guarded content');
+      expect(guardsRun).toEqual(['guarded-doc']);
+    },
+  );
 
   it('leaves a tool out of tools/list with ctx.removeTool, called before or after the tools are found', async () => {
     const { message } = await rpc20260728(server.handler, 'tools/list');

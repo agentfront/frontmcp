@@ -27,7 +27,6 @@ import { availabilityForCall, callSurfaceOf, entryUnavailableError } from '../..
 import { getPinnedPublicUrl } from '../../common/utils/path.utils';
 import { runOnSurface } from '../../context/call-surface';
 import {
-  InternalMcpError,
   InvalidInputError,
   InvalidMethodError,
   isClientFacingError,
@@ -37,7 +36,7 @@ import {
 import { invalidOutputFromParseFailure } from '../../errors/mcp.error';
 import { ResolvedEntries } from '../../flows/resolved-entries';
 import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
-import { hooksBoundTo, staticHooksFor } from '../../hooks/hooks.utils';
+import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { assertEntryEnabled } from '../../surface';
 import { isUIResourceUri } from '../../tool/ui/ui-shared';
@@ -82,6 +81,8 @@ const plan = {
     'parseInput',
     'ensureRemoteCapabilities',
     'findResource',
+    // A hook that switched the resource, or handed one over, hands the run over to the hooks of the resource that runs
+    'useResourceHooks',
     'checkEnabled',
     'checkAppLoaded',
     'checkEntryAuthorities',
@@ -113,17 +114,6 @@ const { Stage } = FlowHooksOf<'resources:read-resource'>(name);
 /** Resources `resolveHookOwnerId` matched, reused by the same run's `findResource`. */
 const resolvedResources = new ResolvedEntries<{ instance: ResourceEntry; params: Record<string, string> }>();
 
-/** The app and `static` class hooks each run installed, for the resource its URI matched when it started. */
-const installedEntryHooks = new WeakMap<object, readonly unknown[]>();
-
-/** The app and `static` class hooks of `resources:read-resource` a read of `resource` installs; every app's for none. */
-function entryHooksOf(scope: ScopeEntry, resource: ResourceEntry | undefined): readonly unknown[] {
-  const { hooks, resources } = scope;
-  const ownerId = resource ? appOwnerIdOf(resources.lineageOf(resource) ?? [], resource.owner) : undefined;
-  const classHooks = resource ? staticHooksFor(hooks.getClsHooks(resource.record.provide), name) : [];
-  return [...(hooks.getFlowHooksForOwner(name, ownerId) ?? []), ...classHooks];
-}
-
 @Flow({
   name,
   plan,
@@ -151,15 +141,8 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
   /** The class of the resource the URI matches, whose `static` hooks run from `parseInput` on (#701). */
   static override resolveHookEntryClass(rawInput: unknown, scope: ScopeEntry): Token | undefined {
     const uri = (rawInput as { request?: { params?: { uri?: unknown } } } | undefined)?.request?.params?.uri;
-    const resource =
-      typeof uri === 'string'
-        ? (resolvedResources.peek(rawInput, uri) ?? scope.resources.findResourceForUri(uri))?.instance
-        : undefined;
-    // The hooks the runner installs from the owner and class resolved here, which `ctx.resolveResource()` compares with
-    if (typeof rawInput === 'object' && rawInput !== null) {
-      installedEntryHooks.set(rawInput, entryHooksOf(scope, resource));
-    }
-    return resource?.record.provide;
+    if (typeof uri !== 'string') return undefined;
+    return (resolvedResources.peek(rawInput, uri) ?? scope.resources.findResourceForUri(uri))?.instance.record.provide;
   }
 
   logger = this.scopeLogger.child('ReadResourceFlow');
@@ -280,17 +263,10 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
   }
 
   /**
-   * Hand over the resource a hook standing in for `findResource` found, settled as that stage settles one. Refused when
-   * its app or class has hooks this read did not install from the URI, since its guards would not run.
+   * Hand over the resource a hook standing in for `findResource` found, settled as that stage settles one; its app and
+   * `static` hooks run from `useResourceHooks` on.
    */
   resolveResource({ resource, params = {} }: { resource: ResourceEntry; params?: Record<string, string> }): void {
-    const installedHooks = new Set(installedEntryHooks.get(this.rawInput as object) ?? []);
-    if (entryHooksOf(this.scope, resource).some((hook) => !installedHooks.has(hook))) {
-      throw new InternalMcpError(
-        `ctx.resolveResource() was handed resource "${resource.name}", whose app or class hooks this read did not install`,
-        'RESOURCE_HANDOFF_SKIPS_HOOKS',
-      );
-    }
     this.settleResource(resource, params);
   }
 
@@ -348,6 +324,17 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
 
     this.state.set({ isUIResource: true, uiResourceResult: uiResult.result });
     return true;
+  }
+
+  /** The settled resource's hooks run from here on, in place of the requested one's when a hook switched it. */
+  @Stage('useResourceHooks')
+  async useResourceHooks() {
+    const { resource } = this.state;
+    if (!resource) return;
+    await this.useEntryHooks(
+      appOwnerIdOf(this.scope.resources.lineageOf(resource) ?? [], resource.owner),
+      resource.record.provide,
+    );
   }
 
   /** A resource or template whose `enabled` is off is refused with `FEATURE_OFF` and the remedy of its source. */
