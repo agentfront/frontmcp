@@ -160,7 +160,7 @@ describe('NotificationService - resource subscription notifications', () => {
       expect(server.notification).not.toHaveBeenCalled();
     });
 
-    it("sends nothing when the session's caller changed while its access was checked", async () => {
+    it("checks the session's latest caller when a request replaced it while its access was checked", async () => {
       const server = subscribedSession({ clientId: 'client-1' });
       mockScope.runFlow.mockImplementationOnce(async () => {
         service.setCaller('session-1', { clientId: 'client-2' });
@@ -170,7 +170,38 @@ describe('NotificationService - resource subscription notifications', () => {
       service.notifyResourceUpdated('file://notes.txt');
       await flushChecks();
 
+      expect(mockScope.runFlow).toHaveBeenCalledTimes(2);
+      expect(mockScope.runFlow.mock.calls[1][1].ctx.authInfo).toEqual({ clientId: 'client-2' });
+      expect(server.notification).toHaveBeenCalledTimes(1);
+    });
+
+    it("sends nothing when the session's latest caller is refused", async () => {
+      const server = subscribedSession({ clientId: 'client-1' });
+      mockScope.runFlow
+        .mockImplementationOnce(async () => {
+          service.setCaller('session-1', { clientId: 'client-2' });
+          return {};
+        })
+        .mockRejectedValueOnce(new Error('denied'));
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
       expect(server.notification).not.toHaveBeenCalled();
+    });
+
+    it('sends to a subscriber whose caller a request kept again as an equal copy, checking it once', async () => {
+      const server = subscribedSession({ clientId: 'client-1', scopes: ['notes:read'] });
+      mockScope.runFlow.mockImplementationOnce(async () => {
+        service.setCaller('session-1', { clientId: 'client-1', scopes: ['notes:read'] });
+        return {};
+      });
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
+      expect(mockScope.runFlow).toHaveBeenCalledTimes(1);
+      expect(server.notification).toHaveBeenCalledTimes(1);
     });
 
     it("sends nothing, and checks nothing, once the caller's credentials expired", async () => {

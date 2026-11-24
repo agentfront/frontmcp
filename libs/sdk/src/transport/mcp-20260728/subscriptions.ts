@@ -22,6 +22,12 @@ import type { ListChangedKind } from '../../common/interfaces/flow.interface';
 import { type Scope } from '../../scope';
 import { announcesListChangeNow } from '../../surface/list-change-batch';
 
+/** Whether a listener may be told of an update: its credentials unexpired both before and after the async check. */
+export async function listenerMayReceive(isExpired: () => boolean, mayRead: () => Promise<boolean>): Promise<boolean> {
+  if (isExpired()) return false;
+  return (await mayRead()) && !isExpired();
+}
+
 /** How often a bare SSE comment is emitted to hold the connection open. */
 const KEEPALIVE_INTERVAL_MS = 15_000;
 
