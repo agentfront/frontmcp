@@ -139,6 +139,21 @@ describe('createKeyPersistence with localStorage', () => {
     expect(await derived.get('session')).toBeNull();
   });
 
+  it('refuses, keeping its records, when the IndexedDB key they use can no longer be loaded', async () => {
+    const kept = installFakeIndexedDB();
+    const secret = await (await createKeyPersistence({ type: 'localstorage' })).getOrCreateSecret('session');
+    const storageKey = kept.get(RECORD_PREFIX);
+    const record = lsStore.get(`${RECORD_PREFIX}session`);
+    removeFakeIndexedDB();
+
+    await expect(createKeyPersistence({ type: 'localstorage' })).rejects.toThrow(/key kept in IndexedDB/);
+    expect(lsStore.get(`${RECORD_PREFIX}session`)).toBe(record);
+
+    installFakeIndexedDB().set(RECORD_PREFIX, storageKey);
+    const reopened = await createKeyPersistence({ type: 'localstorage', enableCache: false });
+    expect(await reopened.getSecret('session')).toEqual(secret);
+  });
+
   it('without IndexedDB, keeps the key derived from localStorage and warns once, naming encryptionKey', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
