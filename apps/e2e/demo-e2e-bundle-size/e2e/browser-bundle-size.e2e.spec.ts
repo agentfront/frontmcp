@@ -21,9 +21,9 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  // +1,826 / +1,821 bytes (#1346): every tools/call looks for arguments its inputSchema does not declare
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_337_491 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_344_720 },
+  // +1,157 / +1,158 bytes (#1345): tools/list and tools/call hold back a tool meant for the MCP Apps page
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_338_648 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_345_878 },
 ];
 
 // +291 bytes (#1346): every tools/call looks for arguments its inputSchema does not declare
