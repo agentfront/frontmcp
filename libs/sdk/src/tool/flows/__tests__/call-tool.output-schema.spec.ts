@@ -283,6 +283,18 @@ class GetOffSchemaResultTool extends ToolContext {
   }
 }
 
+@Tool({
+  name: 'show_lines',
+  inputSchema: {},
+  outputSchema: { content: z.array(z.string()) },
+  ui: { template: (ctx: TemplateContext<unknown, { content: string[] }>) => JSON.stringify(ctx.output) },
+})
+class ShowLinesTool extends ToolContext {
+  async execute() {
+    return { content: ['first line'], linesCostCenter: 'LCC-2210' } as { content: string[] };
+  }
+}
+
 @Tool({ name: 'get_partner_quote', inputSchema: {}, outputSchema: { price: z.number() } })
 class GetPartnerQuoteTool extends ToolContext {
   async execute() {
@@ -312,6 +324,7 @@ class GetTaggedQuoteTool extends ToolContext {
     GetTaggedQuoteTool,
     GetQuoteResultTool,
     GetOffSchemaResultTool,
+    ShowLinesTool,
   ],
 })
 class QuotesApp {}
@@ -488,6 +501,17 @@ describe('tools/call undeclared output keys', () => {
     const server = await startServer({ undeclaredKeys: 'fail' });
 
     expect(await callQuote(server, 'show_quote')).toMatchObject({ isError: true, code: 'INVALID_OUTPUT' });
+  });
+
+  it("parses a UI tool's own data that has a content array as data, not as a CallToolResult", async () => {
+    process.env['NODE_ENV'] = 'production';
+    const server = await startServer();
+
+    const { message } = await rpc20260728(server.handler, 'tools/call', { name: 'show_lines', arguments: {} });
+    const widgetHtml = String((message.result?.['_meta'] as Record<string, unknown> | undefined)?.['ui/html']);
+
+    expect(widgetHtml).toContain('window.__mcpToolOutput = {"content":["first line"]};');
+    expect(JSON.stringify(message)).not.toContain('LCC-2210');
   });
 
   it('strips the structuredContent of a CallToolResult the tool returns, and the text that repeats it', async () => {

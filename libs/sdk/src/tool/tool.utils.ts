@@ -120,7 +120,7 @@ export function toolDiscoveryDeps(rec: ToolRecord): Token[] {
  * Check if a value is already a valid CallToolResult.
  * Remote tools return CallToolResult directly, so we should pass it through as-is.
  */
-function isCallToolResult(value: unknown): value is ParsedToolResult {
+export function isCallToolResult(value: unknown): value is ParsedToolResult {
   if (typeof value !== 'object' || value === null) return false;
   const obj = value as Record<string, unknown>;
 
@@ -251,12 +251,39 @@ function withDeclaredStructuredContent(
     return result;
   }
   const declared = toStructuredContent(parseAgainstOutputSchema(schema, structuredContent, options));
-  const sentText = JSON.stringify(structuredContent);
-  if (JSON.stringify(declared) === sentText) return result;
+  const sent: unknown = JSON.parse(JSON.stringify(structuredContent));
+  if (isSameJson(declared, sent)) return result;
   const content = result.content.map((block) =>
-    block.type === 'text' && block.text === sentText ? makeJsonTextContent(declared) : block,
+    block.type === 'text' && repeatsJson(block.text, sent) ? { ...block, text: JSON.stringify(declared) } : block,
   );
   return { ...result, content, structuredContent: declared };
+}
+
+/** Whether `text` is JSON for `value`, however it is spaced or its keys are ordered. */
+function repeatsJson(text: string, value: unknown): boolean {
+  try {
+    return isSameJson(JSON.parse(text), value);
+  } catch {
+    return false;
+  }
+}
+
+function isSameJson(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((item, index) => isSameJson(item, right[index]))
+    );
+  }
+  if (!isRecord(left) || !isRecord(right)) return false;
+  const leftKeys = Object.keys(left);
+  return (
+    leftKeys.length === Object.keys(right).length &&
+    leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key) && isSameJson(left[key], right[key]))
+  );
 }
 
 function matchesOutputSchema(schema: z.ZodType, value: unknown): boolean {
@@ -268,11 +295,13 @@ function matchesOutputSchema(schema: z.ZodType, value: unknown): boolean {
   }
 }
 
-/** The schema an output descriptor gives `structuredContent` as a whole; none for a scalar, a literal or a list. */
+/** Zod schema types whose answer is a JSON object, as a `CallToolResult`'s `structuredContent` is. */
+const OBJECT_OUTPUT_TYPES: ReadonlySet<string> = new Set(['object', 'union', 'intersection', 'record']);
+
+/** The schema an output descriptor gives `structuredContent` as a whole; none for a scalar, a list or a literal. */
 function structuredOutputSchemaOf(descriptor: unknown): z.ZodType | undefined {
   if (descriptor instanceof z.ZodType) {
-    const scalarSchemas = [ZodString, ZodNumber, ZodBoolean, ZodBigInt, ZodDate];
-    return scalarSchemas.some((scalarSchema) => descriptor instanceof scalarSchema) ? undefined : descriptor;
+    return OBJECT_OUTPUT_TYPES.has((descriptor as { type?: string }).type ?? '') ? descriptor : undefined;
   }
   return !Array.isArray(descriptor) && isZodRawShape(descriptor) ? z.object(descriptor) : undefined;
 }

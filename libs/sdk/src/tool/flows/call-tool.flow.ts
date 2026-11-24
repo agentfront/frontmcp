@@ -97,6 +97,7 @@ import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.typ
 import { linkedAbortController } from '../../utils/abort.utils';
 import { appOwnerIdOf, hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
 import { resolveStructuredContentValidation, toolOutputPolicies } from '../tool-output-policy';
+import { isCallToolResult } from '../tool.utils';
 import { toolServingMode } from '../ui/serving-mode-default';
 import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
 import { askToOpenConnectPages, credentialsRequiredErrorOf, evaluateToolCredentialGate } from './tool-credentials.gate';
@@ -1968,7 +1969,7 @@ function declaredOutput(
   if (!tool?.outputSchema || typeof output !== 'object' || output === null || Array.isArray(output)) return output;
   const parsed = tool.safeParseOutput(output, { undeclaredKeys });
   if (!parsed.success) return output;
-  if (Array.isArray((output as Record<string, unknown>)['content'])) return parsed.data;
+  if (isCallToolResult(output)) return parsed.data;
   const structured = parsed.data.structuredContent;
   return typeof structured === 'object' && structured !== null && !Array.isArray(structured) ? structured : output;
 }
