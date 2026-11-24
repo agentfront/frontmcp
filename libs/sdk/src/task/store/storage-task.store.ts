@@ -149,8 +149,12 @@ export class StorageTaskStore implements TaskStore {
     const existing = await this.records.get(recordKey(sessionId, taskId));
     await this.records.delete(recordKey(sessionId, taskId));
     if (!existing) return;
-    await (await this.loadSessionIndex()).remove(existing);
-    await this.releaseSlot(existing);
+    // The record is gone, so a retry would find nothing: the slot is released even when the index write fails
+    try {
+      await (await this.loadSessionIndex()).remove(existing);
+    } finally {
+      await this.releaseSlot(existing);
+    }
   }
 
   private async acquireSlot(record: TaskRecord, maxActive: number, ttlSeconds: number): Promise<number | undefined> {
@@ -245,7 +249,7 @@ export class StorageTaskStore implements TaskStore {
   private async listFromIndex(sessionId: string, startPosition: number, pageSize: number): Promise<TaskListPage> {
     const sessionIndex = await this.loadSessionIndex();
     const indexPage = await sessionIndex.page(sessionId, startPosition, pageSize);
-    // Another request is indexing the session's earlier tasks: this one lists them from the scan
+    // Another request is indexing the session's earlier tasks: a first page lists them from the scan
     if (!indexPage) return this.listFromScan(sessionId, 0, pageSize);
     const { tasks, endPosition, positionsUsed } = indexPage;
     const page: TaskListPage = { tasks };

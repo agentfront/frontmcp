@@ -96,9 +96,12 @@ export class TaskSessionIndex {
     await this.positionOf.delete(sessionTaskKey(record.sessionId, record.taskId));
   }
 
-  /** The live tasks of a page from `startPosition` on (after the leading gone ones for a first page). */
+  /**
+   * The live tasks of a page from `startPosition` on (after the leading gone ones for a first page). Only a first page
+   * waits for the session's earlier tasks to be indexed; a continuation reads the positions its first page numbered.
+   */
   async page(sessionId: string, startPosition: number, pageSize: number): Promise<TaskIndexPage> {
-    if (!(await this.ensureBackfilled(sessionId))) return undefined;
+    if (startPosition === 0 && !(await this.ensureBackfilled(sessionId))) return undefined;
     const positionsUsed = Number((await this.counts.get(sessionId)) ?? 0);
     const firstPage = startPosition === 0;
     const leadingGone = firstPage ? Number((await this.starts.get(sessionId)) ?? 0) : 0;

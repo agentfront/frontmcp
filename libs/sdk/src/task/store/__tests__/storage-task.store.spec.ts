@@ -354,6 +354,29 @@ describe('StorageTaskStore', () => {
       expect(page.tasks.map((task) => task.taskId)).toEqual(['old-1']);
     });
 
+    it('goes on with an index cursor while another request holds the backfill, instead of starting over', async () => {
+      for (const taskId of ['z-first', 'm-second', 'a-third']) await indexed.create(makeRecord({ taskId }));
+      const firstPage = await indexed.list('session-A', { pageSize: 1 });
+      await storage.namespace('index-ready').set('session-A', 'running:another-request', { ttlSeconds: 60 });
+
+      const nextPage = await indexed.list('session-A', { pageSize: 1, cursor: firstPage.nextCursor });
+
+      expect(nextPage.tasks.map((task) => task.taskId)).toEqual(['m-second']);
+    });
+
+    it('releases the concurrency slot of a deleted task even when its index entry cannot be removed', async () => {
+      const task = makeRecord({ taskId: 'capped' });
+      await indexed.createWithinLimit(task, 1);
+      const sessionIndex = await (
+        indexed as unknown as { loadSessionIndex(): Promise<TaskSessionIndex> }
+      ).loadSessionIndex();
+      jest.spyOn(sessionIndex, 'remove').mockRejectedValueOnce(new Error('index unreachable'));
+
+      await expect(indexed.delete('capped', 'session-A')).rejects.toThrow('index unreachable');
+
+      expect(await indexed.createWithinLimit(makeRecord({ taskId: 'next' }), 1)).toBe(true);
+    });
+
     it('leaves unnumbered an earlier task that expires while the backfill runs', async () => {
       const realNow = Date.now.bind(Date);
       let skewMs = 0;
