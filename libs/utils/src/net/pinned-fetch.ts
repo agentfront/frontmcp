@@ -34,6 +34,12 @@ function zlibSyncFlush(zlib: typeof Zlib): Zlib.ZlibOptions {
   return { flush: zlib.constants.Z_SYNC_FLUSH, finishFlush: zlib.constants.Z_SYNC_FLUSH };
 }
 
+/** The request `pinnedFetch` sends: a string body or none. */
+export type PinnedRequestInit = Omit<RequestInit, 'body'> & { body?: string };
+
+/** A `fetch` for a URL, not a `Request`, with a string body or none. */
+export type PinnedFetch = (input: string | URL, init?: PinnedRequestInit) => Promise<Response>;
+
 /**
  * `fetch` that connects only to `addresses`, the DNS answer an outbound check judged. `fetch`
  * resolves the hostname again, and a second answer can name an address the check never saw. The
@@ -43,16 +49,16 @@ function zlibSyncFlush(zlib: typeof Zlib): Zlib.ZlibOptions {
  * and `user-agent` when the request has none, decodes a compressed body as `fetch` does, does not
  * follow a redirect, and opens a connection per request: a pooled one may lead elsewhere.
  */
-export function pinnedFetch(addresses: readonly LookupAddress[]): typeof fetch {
+export function pinnedFetch(addresses: readonly LookupAddress[]): PinnedFetch {
   const lookup = pinnedLookup(addresses);
-  return (async (input: string | URL, init: RequestInit = {}) => {
+  return async (input, init = {}) => {
     const url = new URL(String(input));
     const transport: typeof Http = url.protocol === 'https:' ? require('node:https') : require('node:http');
     const stream: typeof Stream = require('node:stream');
     const zlib: typeof Zlib = require('node:zlib');
 
     const headers = new Headers(init.headers);
-    const body = init.body as string | undefined;
+    const { body } = init;
     if (!headers.has('accept')) headers.set('accept', '*/*');
     if (!headers.has('accept-encoding')) headers.set('accept-encoding', 'gzip, deflate');
     if (!headers.has('user-agent')) headers.set('user-agent', 'node');
@@ -91,7 +97,7 @@ export function pinnedFetch(addresses: readonly LookupAddress[]): typeof fetch {
     const decoded = decodeBody(incoming, stream, zlib);
     const responseBody = stream.Readable.toWeb(decoded) as unknown as ReadableStream<Uint8Array>;
     return new Response(responseBody, { status, statusText, headers: responseHeaders });
-  }) as typeof fetch;
+  };
 }
 
 /**

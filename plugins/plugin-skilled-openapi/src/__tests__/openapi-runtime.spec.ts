@@ -705,4 +705,40 @@ describe('executeOperation outbound.egressProxy (#767)', () => {
       { url: 'http://localhost:9999/v1/invoices/inv_1', proxyUrl: 'http://proxy.internal:3128', pinned },
     ]);
   });
+
+  it('refuses a hostname with no approved address when the proxy is to connect to one', async () => {
+    jest.spyOn(dns.promises, 'lookup').mockRejectedValue(new Error('getaddrinfo ENOTFOUND localhost'));
+
+    const result = await executeOperation({
+      entry: buildEntry(),
+      bundleId: 'acme',
+      input: { id: 'inv_1', amount: 5 },
+      deps: buildDeps({
+        outbound: baseOutbound({ egressProxy: 'http://proxy.internal:3128', egressProxyConnectTo: 'approved-address' }),
+        fetchImpl: undefined,
+      }),
+    });
+
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/no address of "localhost" was approved/) });
+    expect(proxiedRequests).toEqual([]);
+  });
+
+  it('sends an IP-literal host, checked as it is, through the proxy that is to connect to an approved address', async () => {
+    const entry = buildEntry();
+    const result = await executeOperation({
+      entry: { ...entry, service: { ...entry.service, baseUrl: 'http://127.0.0.1:9999' } },
+      bundleId: 'acme',
+      input: { id: 'inv_1', amount: 5 },
+      deps: buildDeps({
+        outbound: baseOutbound({ egressProxy: 'http://proxy.internal:3128', egressProxyConnectTo: 'approved-address' }),
+        allowedHosts: new Set(['127.0.0.1']),
+        fetchImpl: undefined,
+      }),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(proxiedRequests).toEqual([
+      { url: 'http://127.0.0.1:9999/v1/invoices/inv_1', proxyUrl: 'http://proxy.internal:3128', pinned: false },
+    ]);
+  });
 });

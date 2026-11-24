@@ -18,10 +18,21 @@ interface ProxyAgentOptions {
   factory?: (origin: string, options: PoolOptions) => { origin: string; options: PoolOptions };
 }
 
-const sentRequests: Array<{ url: string; agent: ProxyAgentOptions }> = [];
+interface MockProxyAgent {
+  options: ProxyAgentOptions;
+  closed: boolean;
+}
+
+const sentRequests: Array<{ url: string; agent: ProxyAgentOptions; dispatcher: MockProxyAgent }> = [];
 
 jest.mock('undici', () => ({
   ProxyAgent: class {
+    closed = false;
+
+    async close(): Promise<void> {
+      this.closed = true;
+    }
+
     constructor(readonly options: ProxyAgentOptions) {
       if (failNextProxyAgent) {
         failNextProxyAgent = false;
@@ -35,8 +46,8 @@ jest.mock('undici', () => ({
       readonly options: PoolOptions,
     ) {}
   },
-  fetch: async (url: string, init: RequestInit & { dispatcher: { options: ProxyAgentOptions } }) => {
-    sentRequests.push({ url, agent: init.dispatcher.options });
+  fetch: async (url: string, init: RequestInit & { dispatcher: MockProxyAgent }) => {
+    sentRequests.push({ url, agent: init.dispatcher.options, dispatcher: init.dispatcher });
     return new Response('ok');
   },
 }));
@@ -76,7 +87,10 @@ describe('proxiedFetch', () => {
     await send('https://203.0.113.7/v1/items');
 
     expect(sentRequests).toEqual([
-      { url: 'https://203.0.113.7/v1/items', agent: { uri: 'http://proxy-b.internal:3128', proxyTunnel: true } },
+      expect.objectContaining({
+        url: 'https://203.0.113.7/v1/items',
+        agent: { uri: 'http://proxy-b.internal:3128', proxyTunnel: true },
+      }),
     ]);
   });
 
@@ -118,5 +132,17 @@ describe('proxiedFetch', () => {
     expect(again).toBe(first);
     expect(otherHost).not.toBe(first);
     expect(otherAddress).not.toBe(first);
+  });
+  it('closes the least recently used agent once it keeps more than 64', async () => {
+    const send = await proxiedFetch('http://proxy-d.internal:3128', [{ address: '203.0.113.7', family: 4 }]);
+
+    for (let index = 0; index <= 64; index++) await send(`https://host-${index}.example.com/`);
+    const [host0, host1, host2] = sentRequests.map((request) => request.dispatcher);
+    expect([host0.closed, host1.closed]).toEqual([true, false]);
+
+    await send('https://host-0.example.com/');
+
+    expect(sentRequests[sentRequests.length - 1].dispatcher).not.toBe(host0);
+    expect([host1.closed, host2.closed]).toEqual([true, false]);
   });
 });

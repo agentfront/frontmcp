@@ -6,7 +6,7 @@
  */
 import type { LookupAddress } from 'node:dns';
 
-import { classifyIpAddress, isEdgeRuntime, pinnedFetch } from '@frontmcp/utils';
+import { classifyIpAddress, isEdgeRuntime, pinnedFetch, type PinnedFetch } from '@frontmcp/utils';
 
 import { CimdSecurityError, InvalidClientIdUrlError } from './cimd.errors';
 import type { CimdSecurityConfig } from './cimd.types';
@@ -267,7 +267,7 @@ export async function assertHostNotSsrf(hostname: string, clientId: string): Pro
  * for `Host` and TLS. Plain `fetch` where there are none to pin to (an IP literal, a host the check
  * skipped) or no lookup hook (a Worker, a browser), where the check covers the hostname only.
  */
-export function fetchPinnedTo(addresses: readonly LookupAddress[] | undefined): typeof fetch {
+export function fetchPinnedTo(addresses: readonly LookupAddress[] | undefined): PinnedFetch {
   return addresses?.length && !isEdgeRuntime() ? pinnedFetch(addresses) : fetch;
 }
 
