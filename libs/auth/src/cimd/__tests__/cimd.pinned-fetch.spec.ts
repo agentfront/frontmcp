@@ -110,6 +110,67 @@ describe('CIMD and JWKS fetches pinned to the checked addresses', () => {
   });
 });
 
+describe('CIMD and JWKS answers whose body is not read', () => {
+  let cancelled: string[];
+  let answer: (url: string) => Response;
+
+  /** A response whose body never ends, as a pinned connection's does until it is cancelled. */
+  function openResponse(label: string, status: number, headers: Record<string, string> = {}): Response {
+    const body = new ReadableStream<Uint8Array>({
+      start: (controller) => controller.enqueue(new TextEncoder().encode('{')),
+      cancel: () => {
+        cancelled.push(label);
+      },
+    });
+    return new Response(body, { status, headers });
+  }
+
+  beforeEach(() => {
+    cancelled = [];
+    mockDnsLookup.mockReset();
+    mockDnsLookup.mockImplementation(async (hostname: string) => ANSWERS[hostname] ?? []);
+    mockPinnedFetch.mockReset();
+    mockPinnedFetch.mockImplementation(() => async (input: string | URL) => answer(String(input)));
+  });
+
+  const fetchJwks = (url: string) =>
+    (new JwksService() as unknown as { fetchJson(url: string): Promise<unknown> }).fetchJson(url);
+
+  it('cancels a redirect body before following it', async () => {
+    const movedUrl = 'https://cdn.example.com/metadata.json';
+    answer = (url) =>
+      url === METADATA.client_id ? openResponse('redirect', 302, { location: movedUrl }) : jsonResponse(METADATA);
+
+    await new CimdService(undefined, { network: { redirectPolicy: 'allow' } }).resolveClientMetadata(
+      METADATA.client_id,
+    );
+
+    expect(cancelled).toEqual(['redirect']);
+  });
+
+  it.each([
+    ['an error status', () => openResponse('error', 500)],
+    ['a Content-Length over the limit', () => openResponse('oversized', 200, { 'content-length': '10000000' })],
+  ])('cancels the body of %s', async (_label, respond) => {
+    answer = respond;
+
+    await expect(new CimdService().resolveClientMetadata(METADATA.client_id)).rejects.toThrow();
+
+    expect(cancelled).toHaveLength(1);
+  });
+
+  it('cancels a JWKS redirect body before following it, and an error body', async () => {
+    answer = (url) =>
+      url.endsWith('/old.json')
+        ? openResponse('redirect', 301, { location: 'https://cdn.example.com/jwks.json' })
+        : openResponse('error', 404);
+
+    await expect(fetchJwks('https://cdn.example.com/old.json')).rejects.toThrow('HTTP 404');
+
+    expect(cancelled).toEqual(['redirect', 'error']);
+  });
+});
+
 describe('fetchPinnedTo', () => {
   it('is plain fetch when there are no checked addresses to pin to', () => {
     expect(fetchPinnedTo(undefined)).toBe(fetch);
