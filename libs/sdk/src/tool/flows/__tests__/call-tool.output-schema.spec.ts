@@ -288,7 +288,14 @@ const offSchemaResult = {
   structuredContent: { price: 'ten' },
 } as unknown as { price: number };
 
-@Tool({ name: 'get_readonly_off_schema', inputSchema: {}, outputSchema: z.object({ price: z.number() }).readonly() })
+/** The decorator's types take no wrapped or scalar-union schema; a cast (or JavaScript) still passes one at runtime. */
+type PriceSchema = z.ZodObject<{ price: z.ZodNumber }>;
+
+@Tool({
+  name: 'get_readonly_off_schema',
+  inputSchema: {},
+  outputSchema: z.object({ price: z.number() }).readonly() as unknown as PriceSchema,
+})
 class GetReadonlyOffSchemaTool extends ToolContext {
   async execute() {
     return offSchemaResult;
@@ -298,7 +305,7 @@ class GetReadonlyOffSchemaTool extends ToolContext {
 @Tool({
   name: 'get_lazy_off_schema',
   inputSchema: {},
-  outputSchema: z.lazy(() => z.object({ price: z.number() })),
+  outputSchema: z.lazy(() => z.object({ price: z.number() })) as unknown as PriceSchema,
 })
 class GetLazyOffSchemaTool extends ToolContext {
   async execute() {
@@ -306,7 +313,11 @@ class GetLazyOffSchemaTool extends ToolContext {
   }
 }
 
-@Tool({ name: 'get_scalar_union_result', inputSchema: {}, outputSchema: z.union([z.string(), z.number()]) })
+@Tool({
+  name: 'get_scalar_union_result',
+  inputSchema: {},
+  outputSchema: z.union([z.string(), z.number()]) as unknown as z.ZodString,
+})
 class GetScalarUnionResultTool extends ToolContext {
   async execute() {
     return { content: [{ type: 'text', text: 'ten' }] } as unknown as string;
@@ -338,7 +349,7 @@ const quoteParses = { count: 0 };
   outputSchema: z.object({ price: z.number() }).transform((quote) => {
     quoteParses.count++;
     return quote;
-  }),
+  }) as unknown as PriceSchema,
 })
 class GetCountedQuoteTool extends ToolContext {
   async execute() {
