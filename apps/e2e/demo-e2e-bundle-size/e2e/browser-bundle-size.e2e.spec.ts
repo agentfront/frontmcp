@@ -21,13 +21,13 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  // +1,225 bytes each (#1315, #1405): task writes keep the per-session index that tasks/list reads by default, and a deleted task's slot is released
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_343_993 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_351_225 },
+  // +385 / +384 bytes (#1315): the task index never shortens a TTL (an atomic extendTtl in the storage adapters) and jumps runs of gone tasks
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_344_378 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_351_609 },
 ];
 
-// +104 bytes (#1315, #1405): task writes keep the per-session index that tasks/list reads by default, and a deleted task's slot is released
-const VITE_INITIAL_CHUNK_MAX_BYTES = 785_226;
+// +372 bytes (#1315): the task index never shortens a TTL (an atomic extendTtl in the storage adapters) and jumps runs of gone tasks
+const VITE_INITIAL_CHUNK_MAX_BYTES = 785_598;
 
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {
