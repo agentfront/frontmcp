@@ -46,6 +46,13 @@ describe('authInfoFromAuthorization', () => {
       { user, sessionId: undefined, sessionPayload: undefined },
     ]);
   });
+
+  it("carries the issuer of a token from another issuer than the server's own", () => {
+    const fromOtherIssuer = { token: 'access-token', user, principalIssuer: 'https://tenant-b.example.com' };
+
+    expect(authInfoFromAuthorization(fromOtherIssuer).extra?.['principalIssuer']).toBe('https://tenant-b.example.com');
+    expect(authInfoFromAuthorization({ token: 'access-token', user }).extra?.['principalIssuer']).toBeUndefined();
+  });
 });
 
 describe('sessionIdPresentedBy', () => {

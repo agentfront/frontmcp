@@ -37,6 +37,7 @@ async function runVerify(opts: {
   providerJwks: { keys: JWK[] };
   verifyIssuer?: boolean;
   additionalIssuers?: string[];
+  stages?: string[];
 }) {
   const scope = createMockScopeEntry({ auth: { mode: 'transparent' } as never });
   const auth = scope.auth as unknown as Record<string, unknown>;
@@ -58,7 +59,16 @@ async function runVerify(opts: {
   });
   const deps = new Map<unknown, unknown>([[JwksService, new JwksService()]]);
   const flow = new SessionVerifyFlow(createMetadata(), input as never, scope, jest.fn(), deps as never);
-  return runFlowStages(flow, ['parseInput', 'verifyIfJwt']);
+  return runFlowStages(flow, opts.stages ?? ['parseInput', 'verifyIfJwt']);
+}
+
+/** The authorization the flow builds for a token, from parsing the request to its output. */
+async function authorizationFor(opts: Parameters<typeof runVerify>[0]) {
+  const { output } = await runVerify({
+    ...opts,
+    stages: ['parseInput', 'verifyIfJwt', 'deriveUser', 'buildAuthorizedOutput'],
+  });
+  return output?.authorization;
 }
 
 describe('SessionVerifyFlow — transparent issuer validation (GHSA-hvvp-67p3-j379)', () => {
@@ -117,5 +127,57 @@ describe('SessionVerifyFlow — transparent issuer validation (GHSA-hvvp-67p3-j3
 
     expect(output).toBeUndefined();
     expect(error).toBeUndefined();
+  });
+
+  describe("names the issuer of a token from another issuer than the server's own", () => {
+    it('for an issuer listed in additionalIssuers', async () => {
+      const jwt = await mint('https://gateway.example');
+      const authorization = await authorizationFor({
+        jwt,
+        providerJwks,
+        additionalIssuers: ['https://gateway.example'],
+      });
+
+      expect(authorization?.principalIssuer).toBe('https://gateway.example');
+    });
+
+    it('as one issuer however a trailing slash spells it', async () => {
+      const additionalIssuers = ['https://gateway.example'];
+      const bare = await authorizationFor({
+        jwt: await mint('https://gateway.example'),
+        providerJwks,
+        additionalIssuers,
+      });
+      const slashed = await authorizationFor({
+        jwt: await mint('https://gateway.example/'),
+        providerJwks,
+        additionalIssuers,
+      });
+
+      expect([bare?.principalIssuer, slashed?.principalIssuer]).toEqual([
+        'https://gateway.example',
+        'https://gateway.example',
+      ]);
+    });
+
+    it('for any issuer accepted with verifyIssuer: false', async () => {
+      const jwt = await mint('https://gateway-rewritten.example');
+      const authorization = await authorizationFor({ jwt, providerJwks, verifyIssuer: false });
+
+      expect(authorization?.principalIssuer).toBe('https://gateway-rewritten.example');
+    });
+
+    it("but not for the server's own issuer, with or without a trailing slash", async () => {
+      const own = await authorizationFor({ jwt: await mint(CONFIGURED_ISSUER), providerJwks });
+      const withSlash = await authorizationFor({
+        jwt: await mint(`${CONFIGURED_ISSUER}/`),
+        providerJwks,
+        verifyIssuer: false,
+      });
+
+      expect(own?.user.sub).toBe('user123');
+      expect(own).not.toHaveProperty('principalIssuer');
+      expect(withSlash).not.toHaveProperty('principalIssuer');
+    });
   });
 });

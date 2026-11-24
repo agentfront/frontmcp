@@ -9,12 +9,14 @@ import { type FrontMcpContext } from '../context/frontmcp-context';
 /**
  * The identity that keys session-scoped storage (secure-store secrets, auth-provider credentials)
  * for the current request: the session the server verified (`FrontMcpContext.verifiedSessionId`),
- * else `principal:<sub>` for a signed-in caller, so its storage lasts across its requests.
+ * else `principal:<sub>` for a signed-in caller, so its storage lasts across its requests. A caller
+ * whose token comes from another issuer than the server's own (`Authorization.principalIssuer`) gets
+ * `issuer-principal:<encoded issuer>:<sub>`, since its subject is unique only within that issuer.
  *
  * Never `FrontMcpContext.sessionId` itself: under MCP 2026-07-28 and on the stateless transports it
  * is whatever `mcp-session-id` the client sent, so a caller who sent another caller's id reached
- * that caller's storage. The `principal:` form never matches a session id the server mints
- * (`iv.tag.data`, no `:`).
+ * that caller's storage. Neither principal form matches a session id the server mints (`iv.tag.data`,
+ * no `:`).
  *
  * @returns The identity, or undefined for an anonymous caller without a verified session
  */
@@ -26,5 +28,10 @@ export function sessionScopeIdentity(ctx: FrontMcpContext): string | undefined {
   const principal = [authInfo.user?.sub, extraUser?.sub, authInfo.clientId].find(
     (candidate): candidate is string => !isAnonymousSubject(candidate),
   );
-  return principal ? `principal:${principal}` : undefined;
+  if (!principal) return undefined;
+  const principalIssuer = authInfo.extra?.['principalIssuer'];
+  if (typeof principalIssuer === 'string') {
+    return `issuer-principal:${encodeURIComponent(principalIssuer)}:${principal}`;
+  }
+  return `principal:${principal}`;
 }
