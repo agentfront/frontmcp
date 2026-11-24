@@ -43,7 +43,7 @@ import {
 } from '../hooks/hook-observers';
 import { hookOwnerName } from '../hooks/hook-order';
 import type HookRegistry from '../hooks/hook.registry';
-import { bindContextHookTargets, staticHooksFor } from '../hooks/hooks.utils';
+import { bindContextHookTargets, sourceMetadataOf, staticHooksFor } from '../hooks/hooks.utils';
 import type ProviderRegistry from '../provider/provider.registry';
 import { writeHttpResponse } from '../server/server.validation';
 import { flowErrorToHttpOutput } from '../transport/flow-error-output';
@@ -63,6 +63,9 @@ import { collectFlowMetadata } from './flow.utils';
 type StageOutcome = 'ok' | 'respond' | 'next' | 'handled' | 'fail' | 'abort' | 'unknown_error';
 
 const FAILED_OUTCOMES: ReadonlySet<StageOutcome> = new Set(['fail', 'abort', 'unknown_error']);
+
+/** Where a run's registry hooks start in a stage's order: before the flow's own steps of the same priority. */
+const REGISTRY_HOOK_ORDER_START = -1_000_000;
 
 interface StageResult {
   outcome: StageOutcome;
@@ -527,14 +530,13 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
     const entryStaticHooks = entryClass ? staticHooksFor(this.hooks.getClsHooks(entryClass), name) : [];
 
     // A hook declared on a CONTEXT-scoped provider runs on this run's instance of that provider.
+    const bindRun = { sessionKey, contextProviders: mergedDeps, contextSource: this.globalProviders };
+    const ownerHooks: readonly HookEntry[] = this.hooks.getFlowHooksForOwner(name, hookOwnerId) ?? [];
+    // The next order in the registry tier, for the registry hooks of an entry a hook switches to
+    let registryHookOrder = REGISTRY_HOOK_ORDER_START + ownerHooks.length;
     const initialInjectedHooks = await bindContextHookTargets(
-      (this.hooks.getFlowHooksForOwner(name, hookOwnerId) as HookEntry<
-        FlowInputOf<Name>,
-        Name,
-        FlowStagesOf<Name>,
-        FlowCtxOf<Name>
-      >[]) ?? [],
-      { sessionKey, contextProviders: mergedDeps, contextSource: this.globalProviders },
+      ownerHooks as HookEntry<FlowInputOf<Name>, Name, FlowStagesOf<Name>, FlowCtxOf<Name>>[],
+      bindRun,
     );
 
     let contextReady = false;
@@ -591,17 +593,53 @@ export class FlowInstance<Name extends FlowName> extends FlowEntry<Name> {
       await materializeAndMerge(hooks);
     };
 
+    // The registry and static hooks of the entry the run serves; a hook that switches the entry hands them over
+    let entryHooks: readonly HookEntry[] = [...ownerHooks, ...entryStaticHooks];
+    let entryTarget = { ownerId: hookOwnerId, entryClass };
+    const retargetEntryHooks = async (ownerId: string | undefined, nextEntryClass: Token | undefined) => {
+      if (ownerId === entryTarget.ownerId && nextEntryClass === entryTarget.entryClass) return;
+      entryTarget = { ownerId, entryClass: nextEntryClass };
+      const nextStaticHooks = nextEntryClass ? staticHooksFor(this.hooks.getClsHooks(nextEntryClass), name) : [];
+      const nextOwnerHooks: readonly HookEntry[] = this.hooks.getFlowHooksForOwner(name, ownerId) ?? [];
+      const nextHooks = [...nextOwnerHooks, ...nextStaticHooks];
+      const leaving = new Set(entryHooks.filter((hook) => !nextHooks.includes(hook)).map((hook) => hook.metadata));
+      const joining = nextHooks.filter((hook) => !entryHooks.includes(hook));
+      entryHooks = nextHooks;
+      if (leaving.size > 0) {
+        if (!ownsStages) {
+          stages = cloneStageMap(baseStages);
+          ownsStages = true;
+        }
+        for (const key of Object.keys(stages)) {
+          stages[key] = stages[key].filter((entry) => !leaving.has(sourceMetadataOf(entry.hook)));
+        }
+      }
+      const joiningOwnerHooks = joining.filter((hook) => nextOwnerHooks.includes(hook));
+      await materializeAndMerge(await bindContextHookTargets(joiningOwnerHooks, bindRun), {
+        orderStart: registryHookOrder,
+      });
+      registryHookOrder += joiningOwnerHooks.length;
+      await materializeAndMerge(joining.filter((hook) => !nextOwnerHooks.includes(hook)));
+    };
+
     // Construct flow instance with merged dependencies (includes scoped providers)
 
     // FlowClass generic type is erased at runtime, so we use FlowBase<any>
     // to avoid complex type gymnastics while maintaining basic type safety
-    const context: FlowBase<any> = new FlowClass(this.metadata, input, scope, appendContextHooks, mergedDeps);
+    const context: FlowBase<any> = new FlowClass(
+      this.metadata,
+      input,
+      scope,
+      appendContextHooks,
+      mergedDeps,
+      retargetEntryHooks,
+    );
 
     // Now injections can materialize
     contextReady = true;
 
     // Initial registry hooks should not pre-empt stages; they just get registered
-    await materializeAndMerge(initialInjectedHooks, { orderStart: -1_000_000 });
+    await materializeAndMerge(initialInjectedHooks, { orderStart: REGISTRY_HOOK_ORDER_START });
 
     // Refresh order base to be after everything currently present
     if (ownsStages) orderBase = nextStageOrder(stages);
