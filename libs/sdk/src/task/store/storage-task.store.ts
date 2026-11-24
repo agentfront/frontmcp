@@ -9,6 +9,7 @@
  *  - `slots:{sessionId}:{n}` — the taskId holding the owner's concurrency slot `n`; expires with its record
  *  - `index:{sessionId}:{n}` — the taskId a session created `n`th, which `tasks/list` pages through; expires with it
  *  - `index-count:{sessionId}` — how many index positions the session used; kept as long as its longest-lived task
+ *  - `index-of:`, `index-start:`, `index-ready:{sessionId}` — the rest of the index: see `task-session-index.ts`
  *  - Pub/sub channels:
  *      - `terminal:{taskId}` — fires when a task reaches terminal status
  *      - `cancel:{taskId}`   — fires when a task is asked to cancel
@@ -133,6 +134,7 @@ export class StorageTaskStore implements TaskStore {
       return null;
     }
     await this.records.set(recordKey(sessionId, taskId), merged, { ttlSeconds });
+    if (merged.expiresAt > existing.expiresAt) await (await this.loadSessionIndex()).extend(merged, ttlSeconds);
     if (isTerminal(merged.status)) await this.releaseSlot(merged);
     return merged;
   }
@@ -231,11 +233,10 @@ export class StorageTaskStore implements TaskStore {
   /** A page of the session's tasks in creation order, read from its index (`tasks.listFrom: 'index'`). */
   private async listFromIndex(sessionId: string, cursor: string | undefined, pageSize: number): Promise<TaskListPage> {
     const sessionIndex = await this.loadSessionIndex();
-    const { tasks, endPosition, positionsUsed } = await sessionIndex.page(
-      sessionId,
-      cursor ? decodeCursor(cursor) : 0,
-      pageSize,
-    );
+    const indexPage = await sessionIndex.page(sessionId, cursor ? decodeCursor(cursor) : 0, pageSize);
+    // Another request is indexing the session's earlier tasks: this one lists them from the scan
+    if (!indexPage) return this.listFromScan(sessionId, cursor, pageSize);
+    const { tasks, endPosition, positionsUsed } = indexPage;
     const page: TaskListPage = { tasks };
     if (endPosition < positionsUsed) page.nextCursor = encodeCursor(endPosition);
     return page;
