@@ -50,6 +50,7 @@ import {
   dispatch20260728,
   eventStreamFrames,
   isProtocol20260728Request,
+  listenerMayReceive,
   MCP_HEADERS,
   readHeader,
   RequestNotificationSink,
@@ -436,9 +437,11 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       channels: await this.listenedChannels((body['params'] as { _meta?: Record<string, unknown> } | undefined)?._meta),
       signal: controller.signal,
       // Not once its credentials expired; an update of a URI no resource names is checked as the URI it sits under
-      mayReceiveUpdate: async (uri, watchedUri) =>
-        !hasExpiredCaller({ caller: sessionCallerOf(listenerAuthInfo) }) &&
-        mayRead(this.scope.resources.findResourceForUri(uri) ? uri : watchedUri),
+      mayReceiveUpdate: (uri, watchedUri) =>
+        listenerMayReceive(
+          () => hasExpiredCaller({ caller: sessionCallerOf(listenerAuthInfo) }),
+          () => mayRead(this.scope.resources.findResourceForUri(uri) ? uri : watchedUri),
+        ),
     });
 
     this.log.info('handleSubscriptions: stream opened', {

@@ -335,6 +335,14 @@ export function sessionCallerOf(authInfo: Partial<AuthInfo>): SessionCaller {
   return { clientId, scopes, user, claims, expiresAt: authInfo.expiresAt ?? user?.exp };
 }
 
+/** How many times an update checks a session's caller that requests keep replacing before it gives the update up. */
+const MAX_CALLER_RECHECKS = 3;
+
+/** Whether two callers a session kept name the same caller with the same claims: a request keeps a new copy. */
+function isSameCaller(left: SessionCaller | undefined, right: SessionCaller | undefined): boolean {
+  return left === right || JSON.stringify(left) === JSON.stringify(right);
+}
+
 /** Whether a session's caller was last seen with credentials that have since expired. */
 export function hasExpiredCaller(session: Pick<RegisteredServer, 'caller'>): boolean {
   const expiresAt = session.caller?.expiresAt;
@@ -810,14 +818,19 @@ export class NotificationService {
   private async notifyIfStillReadable(sessionId: string, uri: string): Promise<void> {
     const registered = this.servers.get(sessionId);
     if (!registered || hasExpiredCaller(registered)) return;
-    const { caller } = registered;
     const { callerMayStillRead } = await import('./resource-update-access.js');
-    if (!(await callerMayStillRead(this.scope, caller, uri))) return;
-    // The check is async: the session, its caller or its subscription may have changed meanwhile
-    const current = this.servers.get(sessionId);
-    const unchanged = current === registered && current.caller === caller && this.isSubscribed(sessionId, uri);
-    if (!unchanged || hasExpiredCaller(current)) return;
-    this.sendNotificationToSession(sessionId, 'notifications/resources/updated', { uri });
+    let checkedCaller = registered.caller;
+    // The check is async: a request meanwhile may replace the caller, which is then checked in its turn
+    for (let attempt = 0; attempt < MAX_CALLER_RECHECKS; attempt++) {
+      const mayRead = await callerMayStillRead(this.scope, checkedCaller, uri);
+      const current = this.servers.get(sessionId);
+      if (current !== registered || !this.isSubscribed(sessionId, uri) || hasExpiredCaller(current)) return;
+      if (isSameCaller(current.caller, checkedCaller)) {
+        if (mayRead) this.sendNotificationToSession(sessionId, 'notifications/resources/updated', { uri });
+        return;
+      }
+      checkedCaller = current.caller;
+    }
   }
 
   // =====================================================
