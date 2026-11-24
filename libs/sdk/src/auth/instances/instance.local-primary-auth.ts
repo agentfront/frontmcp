@@ -722,6 +722,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.orchestratedTokenStoreImpl = new StorageOrchestratedTokenStore(adapter, {
         encryptionKey: this.secret,
         refreshSkewMs: this.providerRefreshSkewMs(),
+        providerIssuer: (providerId) => this.providerAuthorizationServer(providerId),
       });
       this.consentStoreImpl = new StorageConsentStore(adapter);
 
@@ -1728,6 +1729,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     this.logger.info(`Registered upstream provider: ${config.id}`);
   }
 
+  /** The authorization server a provider's tokens come from: its issuer, else its token endpoint. */
+  providerAuthorizationServer(providerId: string): string | undefined {
+    const config = this.providerConfigs.get(providerId);
+    if (!config) {
+      return undefined;
+    }
+    return config.issuer ? normalizeIssuer(config.issuer) : config.tokenEndpoint;
+  }
+
   /**
    * Drop every stored credential for a provider whose authorization server changed.
    *
@@ -2245,6 +2255,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   }
 
   private async renewProviderToken(providerId: string, refreshToken: string): ReturnType<TokenRefreshCallback> {
+    const issuer = this.providerAuthorizationServer(providerId);
     const result = await this.refreshProviderToken(providerId, refreshToken);
     if ('error' in result || typeof result.access_token !== 'string' || !result.access_token) {
       this.logger.warn(
@@ -2254,7 +2265,12 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
         `Provider "${providerId}" did not refresh its token; the user has to sign in again`,
       );
     }
-    return { accessToken: result.access_token, refreshToken: result.refresh_token, expiresIn: result.expires_in };
+    return {
+      accessToken: result.access_token,
+      refreshToken: result.refresh_token,
+      expiresIn: result.expires_in,
+      issuer,
+    };
   }
 
   /** How long before its expiry a provider token is renewed: `refresh.skewSeconds` (default 60), none with `refresh` off. */

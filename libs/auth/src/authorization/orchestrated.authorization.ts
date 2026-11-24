@@ -33,6 +33,8 @@ export interface TokenStore {
       accessToken: string;
       refreshToken?: string;
       expiresAt?: number;
+      /** The authorization server the tokens came from; the provider's current one when omitted. */
+      issuer?: string;
     },
   ): Promise<void>;
 
@@ -81,6 +83,8 @@ export type TokenRefreshCallback = (
   accessToken: string;
   refreshToken?: string;
   expiresIn?: number;
+  /** The authorization server that renewed the tokens. */
+  issuer?: string;
 }>;
 
 /**
@@ -367,6 +371,7 @@ export class OrchestratedAuthorization extends AuthorizationBase {
       accessToken: result.accessToken,
       refreshToken: result.refreshToken ?? refreshToken,
       expiresAt: result.expiresIn ? Date.now() + result.expiresIn * 1000 : undefined,
+      issuer: result.issuer,
     });
 
     // Update provider state

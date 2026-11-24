@@ -305,6 +305,27 @@ describe('OrchestratedAuthorization', () => {
       );
     });
 
+    it('stores renewed tokens with the issuer that renewed them', async () => {
+      const onRefresh: TokenRefreshCallback = jest
+        .fn()
+        .mockResolvedValue({ accessToken: 'new-at', issuer: 'https://idp.example' });
+      const store = createMockTokenStore({
+        hasTokens: jest.fn().mockResolvedValue(true),
+        getAccessToken: jest.fn().mockResolvedValue(null),
+        getRefreshToken: jest.fn().mockResolvedValue('old-rt'),
+      });
+      const auth = OrchestratedAuthorization.create(
+        createDefaultCtx({ primaryProviderId: 'github', tokenStore: store, onTokenRefresh: onRefresh }),
+      );
+
+      await auth.getToken();
+      expect(store.storeTokens).toHaveBeenCalledWith(
+        MOCK_AUTH_ID,
+        'github',
+        expect.objectContaining({ issuer: 'https://idp.example' }),
+      );
+    });
+
     it('keeps the current refresh token when the provider does not rotate it', async () => {
       const onRefresh: TokenRefreshCallback = jest.fn().mockResolvedValue({ accessToken: 'new-at', expiresIn: 7200 });
       const store = createMockTokenStore({
