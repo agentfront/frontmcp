@@ -68,9 +68,13 @@ describe('resources/read of a ui:// URI that is not a tool widget', () => {
     expect(result.contents[0]).toEqual(expect.objectContaining({ uri: 'ui://widget/forecast.html' }));
   });
 
-  it.each(['ui://nothing/here', 'ui://widget/no-such-tool.html'])('answers %s with resource not found', async (uri) => {
-    expect(await errorCodeOf(client.readResource(uri))).toBe(-32002);
-  });
+  it.each(['ui://nothing/here', 'ui://widget/no-such-tool.html'])(
+    'answers a read of and a subscription to %s with resource not found',
+    async (uri) => {
+      expect(await errorCodeOf(client.readResource(uri))).toBe(-32002);
+      expect(await errorCodeOf(client.subscribeResource(uri))).toBe(-32002);
+    },
+  );
 
   it('applies the checks of the resource it finds, as for any other scheme', async () => {
     const read = await errorCodeOf(client.readResource('ui://closed/abc'));

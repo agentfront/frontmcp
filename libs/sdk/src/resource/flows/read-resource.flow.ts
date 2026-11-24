@@ -39,7 +39,7 @@ import { entryClassHooksJoin } from '../../hooks/entry-class-hooks';
 import { hooksBoundTo } from '../../hooks/hooks.utils';
 import { FlowContextProviders } from '../../provider/flow-context-providers';
 import { assertEntryEnabled } from '../../surface';
-import { isStaticWidgetUri, isUIResourceUri } from '../../tool/ui/ui-shared';
+import { isUIResourceUri } from '../../tool/ui/ui-shared';
 import { appOwnerIdOf } from '../../utils/lineage.utils';
 
 const inputSchema = z.object({
@@ -292,7 +292,7 @@ export default class ReadResourceFlow extends FlowBase<typeof name> {
   /** Whether `uri` names a tool's widget, kept for 'finalize'; any other `ui://` URI is looked up as a resource. */
   private async resolveToolWidget(uri: string): Promise<boolean> {
     const toolUI = this.scope.toolUI;
-    if (!toolUI || (!isStaticWidgetUri(uri) && !toolUI.resolveCustomUri(uri))) return false;
+    if (!toolUI?.holdsWidgetUri(uri)) return false;
 
     const { sessionId, authInfo } = this.state;
     const platformType =
