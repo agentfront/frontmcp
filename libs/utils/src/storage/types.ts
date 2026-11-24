@@ -186,6 +186,15 @@ export interface StorageAdapter {
   expire(key: string, ttlSeconds: number): Promise<boolean>;
 
   /**
+   * Give a key at least `ttlSeconds` to live: set its TTL when it has none or a shorter one, never shortening it.
+   * Atomic where the backend can check and set in one step (memory, Redis, Upstash, Vercel KV); elsewhere a read of the
+   * TTL then `expire`, which never lowers the TTL it read.
+   *
+   * @returns true if this call set the TTL, false if the key was missing or already lived as long
+   */
+  extendTtl?(key: string, ttlSeconds: number): Promise<boolean>;
+
+  /**
    * Get remaining TTL for a key.
    *
    * @param key - Storage key
@@ -388,6 +397,9 @@ export interface NamespacedStorage extends StorageAdapter {
 
   /** {@link StorageAdapter.expireIfEquals}; throws StorageNotSupportedError when the adapter has none. */
   expireIfEquals(key: string, expectedValue: string, ttlSeconds: number): Promise<boolean>;
+
+  /** {@link StorageAdapter.extendTtl}; a read of the TTL then `expire` where the adapter has none. */
+  extendTtl(key: string, ttlSeconds: number): Promise<boolean>;
 
   /** {@link StorageAdapter.setIfEquals}; throws StorageNotSupportedError when the adapter has none. */
   setIfEquals(key: string, expectedValue: string, value: string): Promise<boolean>;

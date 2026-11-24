@@ -95,3 +95,14 @@ export function isExpired(expiresAt: number | undefined): boolean {
 export function normalizeTTL(ttl: number, unit: 'seconds' | 'milliseconds'): number {
   return unit === 'milliseconds' ? Math.ceil(ttl / 1000) : ttl;
 }
+
+/** `extendTtl` for an adapter that cannot check and set in one step: never lowers the TTL it reads. */
+export async function extendTtlByReading(
+  adapter: { ttl(key: string): Promise<number | null>; expire(key: string, ttlSeconds: number): Promise<boolean> },
+  key: string,
+  ttlSeconds: number,
+): Promise<boolean> {
+  const remaining = await adapter.ttl(key);
+  if (remaining === null || (remaining !== -1 && remaining >= ttlSeconds)) return false;
+  return adapter.expire(key, ttlSeconds);
+}

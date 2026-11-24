@@ -40,7 +40,8 @@ export type TaskIndexPage = { tasks: TaskRecord[]; endPosition: number; position
  * Each session's tasks numbered in the order they were written, beside the task records: `index:{session}:{n}` holds
  * the id of the `n`th task (kept an hour past it), `index-of:{session}:{taskId}` its number (gone with the task, so a
  * position whose task has none is gone for good), `index-count:{session}` the numbers used, `index-start:{session}`
- * the leading numbers whose tasks are gone, `index-settled:{session}` a number every position up to which had been
+ * the leading numbers whose tasks are gone, `index-skip:{session}:{n}` the last of the numbers after `n` whose tasks
+ * are gone, `index-settled:{session}` a number every position up to which had been
  * written by a time (`{number}:{epoch ms}`), and `index-ready:{session}` that the session's earlier tasks were indexed.
  */
 export class TaskSessionIndex {
@@ -48,6 +49,7 @@ export class TaskSessionIndex {
   private readonly positionOf: NamespacedStorage;
   private readonly counts: NamespacedStorage;
   private readonly starts: NamespacedStorage;
+  private readonly skips: NamespacedStorage;
   private readonly settled: NamespacedStorage;
   private readonly readiness: NamespacedStorage;
   /** The longest a task lives, plus the grace: the count outlives every position it numbered. */
@@ -62,6 +64,7 @@ export class TaskSessionIndex {
     this.positionOf = storage.namespace('index-of');
     this.counts = storage.namespace('index-count');
     this.starts = storage.namespace('index-start');
+    this.skips = storage.namespace('index-skip');
     this.settled = storage.namespace('index-settled');
     this.readiness = storage.namespace('index-ready');
     this.countTtlSeconds = Math.ceil(maxTaskTtlSeconds) + POSITION_GRACE_SECONDS;
@@ -74,21 +77,22 @@ export class TaskSessionIndex {
     await this.number(record, position, ttlSeconds);
   }
 
-  /** Keep a task's index entry as long as its record, whose expiry an update moved later. */
+  /**
+   * Keep a task's index entry as long as its record lives, `ttlSeconds` from now, never shortening it, so the same
+   * call can be repeated after one that failed halfway.
+   */
   async extend(record: TaskRecord, ttlSeconds: number): Promise<void> {
     const { sessionId, taskId } = record;
     const position = await this.positionOf.get(sessionTaskKey(sessionId, taskId));
     if (position === null) return;
-    await this.positionOf.expire(sessionTaskKey(sessionId, taskId), ttlSeconds);
-    await this.positions.expire(sessionTaskKey(sessionId, position), ttlSeconds + POSITION_GRACE_SECONDS);
+    await this.positionOf.extendTtl(sessionTaskKey(sessionId, taskId), ttlSeconds);
+    await this.positions.extendTtl(sessionTaskKey(sessionId, position), ttlSeconds + POSITION_GRACE_SECONDS);
     await this.keepCountAlive(sessionId, ttlSeconds + POSITION_GRACE_SECONDS);
   }
 
   /** Keep the session's count at least `ttlSeconds` longer, never shorter: it outlives every position it numbered. */
   private async keepCountAlive(sessionId: string, ttlSeconds: number): Promise<void> {
-    const remaining = await this.counts.ttl(sessionId);
-    if (remaining !== null && remaining >= ttlSeconds) return;
-    await this.counts.expire(sessionId, ttlSeconds);
+    await this.counts.extendTtl(sessionId, ttlSeconds);
   }
 
   /** Mark a deleted task gone for good, so a first page may start after its position. */
@@ -103,34 +107,62 @@ export class TaskSessionIndex {
   async page(sessionId: string, startPosition: number, pageSize: number): Promise<TaskIndexPage> {
     if (startPosition === 0 && !(await this.ensureBackfilled(sessionId))) return undefined;
     const positionsUsed = Number((await this.counts.get(sessionId)) ?? 0);
-    const firstPage = startPosition === 0;
-    const leadingGone = firstPage ? Number((await this.starts.get(sessionId)) ?? 0) : 0;
-    const writtenUpTo = firstPage ? await this.writtenUpTo(sessionId, positionsUsed) : 0;
-    let position = Math.max(startPosition, leadingGone);
-    let lastLeadingGone = position;
-    let stillLeading = firstPage;
+    const writtenUpTo = await this.writtenUpTo(sessionId, positionsUsed);
     const tasks: TaskRecord[] = [];
     const listedTaskIds = new Set<string>();
+    // A run of positions gone for good after the head or a live task is remembered, and later lists jump it
+    let anchor = startPosition;
+    let skippedTo = await this.skippedTo(sessionId, anchor);
+    let goneUpTo = skippedTo;
+    let runOpen = true;
+    let position = skippedTo;
     while (tasks.length < pageSize && position < positionsUsed) {
       const batchEnd = Math.min(positionsUsed, position + pageSize - tasks.length);
       const batch = Array.from({ length: batchEnd - position }, (_, offset) => position + offset + 1);
       const taskIds = await this.positions.mget(batch.map((indexed) => sessionTaskKey(sessionId, indexed)));
+      position = batchEnd;
       for (const [offset, taskId] of taskIds.entries()) {
+        const at = batch[offset];
         const record = taskId === null ? null : await this.source.readTask(taskId, sessionId);
-        if (record === null) {
-          stillLeading = stillLeading && (await this.isGoneForGood(sessionId, taskId, batch[offset], writtenUpTo));
-          if (stillLeading) lastLeadingGone = batch[offset];
+        if (record === null || listedTaskIds.has(record.taskId)) {
+          const gone = record === null && (await this.isGoneForGood(sessionId, taskId, at, writtenUpTo));
+          runOpen = runOpen && gone;
+          if (runOpen) goneUpTo = at;
           continue;
         }
-        stillLeading = false;
-        if (listedTaskIds.has(record.taskId)) continue;
+        if (goneUpTo > skippedTo) await this.rememberSkip(sessionId, anchor, goneUpTo);
         listedTaskIds.add(record.taskId);
         tasks.push(record);
+        anchor = at;
+        skippedTo = await this.skippedTo(sessionId, at);
+        goneUpTo = skippedTo;
+        runOpen = true;
+        if (skippedTo > at && tasks.length < pageSize) {
+          position = Math.min(skippedTo, positionsUsed);
+          break;
+        }
       }
-      position = batchEnd;
     }
-    if (firstPage && lastLeadingGone > leadingGone) await this.rememberLeadingGone(sessionId, lastLeadingGone);
+    if (goneUpTo > skippedTo) await this.rememberSkip(sessionId, anchor, goneUpTo);
     return { tasks, endPosition: position, positionsUsed };
+  }
+
+  /** Where a list goes on after `anchor`: past the run of positions gone for good it remembered there, if any. */
+  private async skippedTo(sessionId: string, anchor: number): Promise<number> {
+    const stored =
+      anchor === 0 ? await this.starts.get(sessionId) : await this.skips.get(sessionTaskKey(sessionId, anchor));
+    return Math.max(anchor, Number(stored ?? 0));
+  }
+
+  /** The positions after `anchor` up to `goneUpTo` hold tasks gone for good: a list jumps them from now on. */
+  private async rememberSkip(sessionId: string, anchor: number, goneUpTo: number): Promise<void> {
+    const remaining = await this.counts.ttl(sessionId);
+    if (remaining === null || remaining <= 0) return;
+    if (anchor === 0) {
+      await this.starts.set(sessionId, String(goneUpTo), { ttlSeconds: remaining });
+    } else {
+      await this.skips.set(sessionTaskKey(sessionId, anchor), String(goneUpTo), { ttlSeconds: remaining });
+    }
   }
 
   /**
@@ -222,20 +254,26 @@ export class TaskSessionIndex {
     const missing = live.filter((record, index) => numbered[index] === null || listedAt[index] !== record.taskId);
     await renewClaim();
     const lastPosition = await this.counts.incrBy(sessionId, missing.length);
-    await this.keepCountAlive(sessionId, this.countTtlSeconds);
+    // An earlier task can live longer than tasks.maxTtlMs allows now: the count outlives its position too
+    const longestTtl = Math.max(0, ...missing.map((record) => expiresAtToTTL(record.expiresAt)));
+    await this.keepCountAlive(sessionId, Math.max(this.countTtlSeconds, longestTtl + POSITION_GRACE_SECONDS));
     const firstPosition = lastPosition - missing.length + 1;
     for (const [offset, record] of missing.entries()) {
       // A task that expired since it was read keeps its number unused; an empty position is skipped
       const ttlSeconds = expiresAtToTTL(record.expiresAt);
-      if (ttlSeconds > 0) await this.number(record, firstPosition + offset, ttlSeconds);
+      if (ttlSeconds > 0) await this.numberAsItIsNow(record, firstPosition + offset, ttlSeconds);
       if ((offset + 1) % READ_BATCH_SIZE === 0) await renewClaim();
     }
   }
 
-  /** The positions up to `position` hold tasks gone for good: a first page starts after them from now on. */
-  private async rememberLeadingGone(sessionId: string, position: number): Promise<void> {
-    const remaining = await this.counts.ttl(sessionId);
-    if (remaining === null || remaining <= 0) return;
-    await this.starts.set(sessionId, String(position), { ttlSeconds: remaining });
+  /**
+   * Number an earlier task, then read it again: an update that moved its expiry later before its `index-of` key existed
+   * found nothing to extend, so the position takes the record's expiry as it is now.
+   */
+  private async numberAsItIsNow(record: TaskRecord, position: number, ttlSeconds: number): Promise<void> {
+    await this.number(record, position, ttlSeconds);
+    const current = await this.source.readTask(record.taskId, record.sessionId);
+    const currentTtl = current ? expiresAtToTTL(current.expiresAt) : 0;
+    if (current && currentTtl > ttlSeconds) await this.extend(current, currentTtl);
   }
 }

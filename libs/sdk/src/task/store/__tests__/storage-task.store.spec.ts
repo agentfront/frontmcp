@@ -377,6 +377,87 @@ describe('StorageTaskStore', () => {
       expect(await indexed.createWithinLimit(makeRecord({ taskId: 'next' }), 1)).toBe(true);
     });
 
+    it('takes an expiry an update asked for on a retry, after the first attempt failed in the index', async () => {
+      await indexed.create(makeRecord({ taskId: 'retried', expiresAt: Date.now() + 1_000 }));
+      const sessionIndex = await (
+        indexed as unknown as { loadSessionIndex(): Promise<TaskSessionIndex> }
+      ).loadSessionIndex();
+      const extendedTo = Date.now() + 7_200_000;
+      jest.spyOn(sessionIndex, 'extend').mockRejectedValueOnce(new Error('index unreachable'));
+
+      await expect(indexed.update('retried', 'session-A', { expiresAt: extendedTo })).rejects.toThrow(
+        'index unreachable',
+      );
+      await indexed.update('retried', 'session-A', { expiresAt: extendedTo });
+
+      expect(await storage.namespace('index-of').ttl('session-A:retried')).toBeGreaterThan(7_000);
+    });
+
+    it('keeps the longest count TTL when an extension and a short task write at the same time', async () => {
+      await indexed.create(makeRecord({ taskId: 'long', expiresAt: Date.now() + 1_000 }));
+
+      await Promise.all([
+        indexed.update('long', 'session-A', { expiresAt: Date.now() + 7_200_000 }),
+        indexed.create(makeRecord({ taskId: 'short', expiresAt: Date.now() + 1_000 })),
+      ]);
+
+      expect(await storage.namespace('index-count').ttl('session-A')).toBeGreaterThan(10_000);
+    });
+
+    it('jumps a run of deleted tasks after a live one on the next list, instead of reading it again', async () => {
+      for (let index = 1; index <= 42; index++) await indexed.create(makeRecord({ taskId: `t-${index}` }));
+      for (let index = 2; index <= 41; index++) await indexed.delete(`t-${index}`, 'session-A');
+      const first = await indexed.list('session-A', { pageSize: 5 });
+      const reads = jest.spyOn(storage.root, 'mget');
+
+      const again = await indexed.list('session-A', { pageSize: 5 });
+
+      const positionsRead = reads.mock.calls.flatMap(([keys]) => keys.filter((key) => key.includes(':index:')));
+      expect(first.tasks.map((task) => task.taskId)).toEqual(['t-1', 't-42']);
+      expect(again.tasks.map((task) => task.taskId)).toEqual(['t-1', 't-42']);
+      expect(await storage.namespace('index-skip').get('session-A:1')).toBe('41');
+      // One batch of the page size from the head, then the position after the jump, not the 40 deleted ones
+      expect(positionsRead).toHaveLength(6);
+    });
+
+    it('keeps the count as long as an earlier task the backfill numbered, beyond tasks.maxTtlMs', async () => {
+      await storage
+        .namespace('records')
+        .set(
+          'session-A:old-long',
+          JSON.stringify(makeRecord({ taskId: 'old-long', expiresAt: Date.now() + 7_200_000 })),
+          {
+            ttlSeconds: 7_200,
+          },
+        );
+
+      await indexed.list('session-A');
+
+      expect(await storage.namespace('index-count').ttl('session-A')).toBeGreaterThan(10_000);
+    });
+
+    it('gives an earlier task the expiry an update set while the backfill was numbering it', async () => {
+      await storage
+        .namespace('records')
+        .set('session-A:old', JSON.stringify(makeRecord({ taskId: 'old', expiresAt: Date.now() + 60_000 })), {
+          ttlSeconds: 60,
+        });
+      const rootMget = storage.root.mget.bind(storage.root);
+      let updated = false;
+      jest.spyOn(storage.root, 'mget').mockImplementation(async (keys: string[]) => {
+        if (!updated && keys.some((key) => key.includes('index-of:'))) {
+          updated = true;
+          await indexed.update('old', 'session-A', { expiresAt: Date.now() + 7_200_000 });
+        }
+        return rootMget(keys);
+      });
+
+      await indexed.list('session-A');
+
+      expect(await storage.namespace('index-of').ttl('session-A:old')).toBeGreaterThan(7_000);
+      jest.restoreAllMocks();
+    });
+
     it('leaves unnumbered an earlier task that expires while the backfill runs', async () => {
       const realNow = Date.now.bind(Date);
       let skewMs = 0;

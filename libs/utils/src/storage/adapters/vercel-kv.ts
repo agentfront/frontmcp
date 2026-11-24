@@ -7,7 +7,7 @@
 
 import { StorageConfigError, StorageConnectionError } from '../errors';
 import type { SetOptions, VercelKvAdapterOptions } from '../types';
-import { COMPARE_AND_DELETE_SCRIPT, COMPARE_AND_EXPIRE_SCRIPT } from '../utils/compare-and-delete';
+import { COMPARE_AND_DELETE_SCRIPT, COMPARE_AND_EXPIRE_SCRIPT, EXTEND_TTL_SCRIPT } from '../utils/compare-and-delete';
 import { validateTTL } from '../utils/ttl';
 import { BaseStorageAdapter } from './base';
 
@@ -231,6 +231,16 @@ export class VercelKvStorageAdapter extends BaseStorageAdapter {
       [expectedValue],
     );
     return deleted === 1;
+  }
+
+  override async extendTtl(key: string, ttlSeconds: number): Promise<boolean> {
+    validateTTL(ttlSeconds);
+    const extended = await this.getConnectedClient().eval(
+      EXTEND_TTL_SCRIPT,
+      [this.prefixKey(key)],
+      [String(ttlSeconds)],
+    );
+    return extended === 1;
   }
 
   override async expireIfEquals(key: string, expectedValue: string, ttlSeconds: number): Promise<boolean> {

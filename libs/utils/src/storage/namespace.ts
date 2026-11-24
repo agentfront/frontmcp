@@ -8,6 +8,7 @@
 import { StorageNotSupportedError } from './errors';
 import type { MessageHandler, NamespacedStorage, SetEntry, SetOptions, StorageAdapter, Unsubscribe } from './types';
 import { escapeGlob } from './utils/pattern';
+import { extendTtlByReading } from './utils/ttl';
 
 /**
  * Separator used between namespace segments.
@@ -157,6 +158,12 @@ export class NamespacedStorageImpl implements NamespacedStorage {
 
   async ttl(key: string): Promise<number | null> {
     return this.adapter.ttl(this.prefixKey(key));
+  }
+
+  async extendTtl(key: string, ttlSeconds: number): Promise<boolean> {
+    const prefixed = this.prefixKey(key);
+    if (this.adapter.extendTtl) return this.adapter.extendTtl(prefixed, ttlSeconds);
+    return extendTtlByReading(this.adapter, prefixed, ttlSeconds);
   }
 
   // ============================================

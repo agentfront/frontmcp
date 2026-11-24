@@ -140,7 +140,8 @@ export class StorageTaskStore implements TaskStore {
       return null;
     }
     await this.records.set(recordKey(sessionId, taskId), merged, { ttlSeconds });
-    if (merged.expiresAt > existing.expiresAt) await (await this.loadSessionIndex()).extend(merged, ttlSeconds);
+    // Asked for an expiry: the index takes it, never shortening, also when a retry finds the record already saved
+    if (patch.expiresAt !== undefined) await (await this.loadSessionIndex()).extend(merged, ttlSeconds);
     if (isTerminal(merged.status)) await this.releaseSlot(merged);
     return merged;
   }
