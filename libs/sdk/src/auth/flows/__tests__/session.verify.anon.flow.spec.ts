@@ -27,9 +27,9 @@ function createMetadata(): FlowMetadata<'session:verify'> {
   } as unknown as FlowMetadata<'session:verify'>;
 }
 
-function runPublic(headers: Record<string, string>, body?: unknown) {
+function runPublic(headers: Record<string, string>, body?: unknown, sessionTtl?: number) {
   const scope = createMockScopeEntry({ auth: { mode: 'public' } as never });
-  (scope.auth as unknown as Record<string, unknown>)['options'] = { mode: 'public' };
+  (scope.auth as unknown as Record<string, unknown>)['options'] = { mode: 'public', sessionTtl };
   const input = createMockHttpRequest({ method: 'POST', path: '/', headers, body });
   const flow = new SessionVerifyFlow(createMetadata(), input as never, scope, jest.fn(), new Map());
   return runFlowStages(flow, ['parseInput', 'handlePublicMode']);
@@ -207,5 +207,52 @@ describe('SessionVerifyFlow — anonymous sessions across secrets and instances'
     expect(output?.kind).toBe('authorized');
     if (output?.kind !== 'authorized') return;
     expect(output.authorization.session?.id).toBe(beforeRestart);
+  });
+});
+
+describe('SessionVerifyFlow — public session ids past sessionTtl', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  async function mintSession(sessionTtl?: number): Promise<{ sessionId: string; mintedAt: number }> {
+    const mintedAt = Date.now();
+    const first = await runPublic({}, undefined, sessionTtl);
+    if (first.output?.kind !== 'authorized') throw new Error('not authorized');
+    return { sessionId: first.output.authorization.session?.id as string, mintedAt };
+  }
+
+  async function resumedSessionId(
+    minted: { sessionId: string; mintedAt: number },
+    secondsLater: number,
+    sessionTtl?: number,
+  ): Promise<string | undefined> {
+    jest.spyOn(Date, 'now').mockReturnValue(minted.mintedAt + secondsLater * 1000);
+    const { output } = await runPublic({ 'mcp-session-id': minted.sessionId }, undefined, sessionTtl);
+    if (output?.kind !== 'authorized') throw new Error('not authorized');
+    return output.authorization.session?.id;
+  }
+
+  it('resumes a session within sessionTtl', async () => {
+    const minted = await mintSession(60);
+
+    expect(await resumedSessionId(minted, 30, 60)).toBe(minted.sessionId);
+  });
+
+  it('mints a fresh session for an id older than sessionTtl, also once it was resumed before', async () => {
+    const minted = await mintSession(60);
+    expect(await resumedSessionId(minted, 1, 60)).toBe(minted.sessionId);
+
+    const resumed = await resumedSessionId(minted, 62, 60);
+
+    expect(resumed).toBeDefined();
+    expect(resumed).not.toBe(minted.sessionId);
+  });
+
+  it('applies the default sessionTtl of an hour when none is set', async () => {
+    const minted = await mintSession();
+
+    expect(await resumedSessionId(minted, 3598)).toBe(minted.sessionId);
+    expect(await resumedSessionId(minted, 3602)).not.toBe(minted.sessionId);
   });
 });

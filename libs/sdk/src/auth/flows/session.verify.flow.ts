@@ -165,6 +165,9 @@ function buildStaticChallenge(options: StaticAuthOptions, description?: string):
   return parts.join(', ');
 }
 
+/** Public mode's `sessionTtl` when the options were not parsed with its default. */
+const DEFAULT_PUBLIC_SESSION_TTL_SECONDS = 3600;
+
 /** Auth mode for session payload - distinguishes between anonymous session types */
 type AuthMode = 'public' | 'transparent-anon' | 'static';
 
@@ -184,6 +187,8 @@ interface AnonymousSessionOptions {
   subject?: string;
   /** Existing session ID header from client (if present) */
   sessionIdHeader?: string;
+  /** How long a session id may resume its session after it was minted, in seconds (public mode's `sessionTtl`). */
+  sessionTtlSeconds?: number;
 }
 
 @Flow({
@@ -207,7 +212,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
    * Encapsulates the shared logic for session creation, payload encryption, and user derivation.
    */
   private createAnonymousSession(options: AnonymousSessionOptions): void {
-    const { authMode, subject, sessionIdHeader } = options;
+    const { authMode, subject, sessionIdHeader, sessionTtlSeconds } = options;
     this.logger.verbose('createAnonymousSession', { authMode, hasExistingSession: !!sessionIdHeader });
 
     // A sessionless request (MCP 2026-07-28) has no session to resume or to start: the caller is
@@ -258,7 +263,10 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       const isInitialize =
         typeof body === 'object' && body !== null && 'method' in body && body.method === 'initialize';
       const decrypted = decryptPublicSession(sessionIdHeader, authSignature);
-      const existingPayload = decrypted && isInitialize && decrypted.nodeId !== machineId ? undefined : decrypted;
+      const outlived =
+        !!decrypted && sessionTtlSeconds !== undefined && decrypted.iat + sessionTtlSeconds <= Date.now() / 1000;
+      const existingPayload =
+        outlived || (decrypted && isInitialize && decrypted.nodeId !== machineId) ? undefined : decrypted;
       // `decryptPublicSession` already rejects any payload not signed with this
       // exact signature, so a session issued for one mode — or, in static mode,
       // for a DIFFERENT token — never reaches here.
@@ -504,6 +512,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       issuer: 'public',
       scopes: authOptions.anonymousScopes ?? ['anonymous'],
       sessionIdHeader: this.state.sessionIdHeader,
+      sessionTtlSeconds: authOptions.sessionTtl ?? DEFAULT_PUBLIC_SESSION_TTL_SECONDS,
     });
   }
 
