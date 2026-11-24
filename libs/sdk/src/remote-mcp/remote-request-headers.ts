@@ -4,39 +4,35 @@ import { retryAfterMsOf } from '../transport/mcp-20260728/client/mcp-stateless.c
 import { type RemoteOAuthTokenSource } from './remote-oauth';
 import { remoteHttpFailureOf, type RemoteHttpFailure } from './resilience/retry';
 
-interface RemoteRequestScope {
+export interface RemoteRequestScope {
   headers: Record<string, string>;
   refusal?: RemoteHttpFailure;
 }
 
 /**
- * One storage per remote app, so a call's headers reach only the remote it was made to. Without `AsyncContext` a
- * storage answers with the newest open call of the request, and calls to two remotes then never share one.
+ * The headers of the calls running on one remote connection, which owns it: its transport's requests read only these,
+ * so a call's headers reach only the remote it was made to. Without `AsyncContext` a storage answers with the newest
+ * open call of the request, and calls on two connections then never share one.
  */
-const requestScopesByApp = new Map<string, AsyncLocalStorage<RemoteRequestScope>>();
+export type RemoteRequestScopes = AsyncLocalStorage<RemoteRequestScope>;
 
-function requestScopesOf(appId: string): AsyncLocalStorage<RemoteRequestScope> {
-  let requestScopes = requestScopesByApp.get(appId);
-  if (!requestScopes) {
-    requestScopes = new AsyncLocalStorage<RemoteRequestScope>();
-    requestScopesByApp.set(appId, requestScopes);
-  }
-  return requestScopes;
+export function createRemoteRequestScopes(): RemoteRequestScopes {
+  return new AsyncLocalStorage<RemoteRequestScope>();
 }
 
 /**
- * Runs `operation` so that every request the transport of `appId` sends while it runs carries `headers`. When it fails
- * after the remote refused a request, the failure carries that response's `Retry-After` (as the 2026-07-28 client's
- * failures do), which a retry waits for.
+ * Runs `operation` so that every request the connection owning `requestScopes` sends while it runs carries `headers`.
+ * When it fails after the remote refused a request, the failure carries that response's `Retry-After` (as the
+ * 2026-07-28 client's failures do), which a retry waits for.
  */
 export async function withRemoteRequestHeaders<T>(
-  appId: string,
+  requestScopes: RemoteRequestScopes,
   headers: Record<string, string>,
   operation: () => Promise<T>,
 ): Promise<T> {
   const scope: RemoteRequestScope = { headers };
   try {
-    return await requestScopesOf(appId).run(scope, operation);
+    return await requestScopes.run(scope, operation);
   } catch (error) {
     throw withRefusal(error, scope.refusal);
   }
@@ -52,20 +48,19 @@ function withRefusal(error: unknown, refusal: RemoteHttpFailure | undefined): un
 }
 
 /**
- * The `fetch` the transport of `appId` sends through: it adds the headers of the running
- * {@link withRemoteRequestHeaders} for `appId`. While a request carries credentials (the connection's own headers,
- * or a caller's), a redirect is not followed, so they cannot reach an origin the remote sent it to.
+ * The `fetch` a connection's transport sends through: it adds the headers of the {@link withRemoteRequestHeaders}
+ * running on that connection. While a request carries credentials (the connection's own headers, or a caller's), a
+ * redirect is not followed, so they cannot reach an origin the remote sent it to.
  *
- * @param appId - The remote app whose calls' headers the requests carry
+ * @param requestScopes - The connection's scopes, whose calls' headers the requests carry
  * @param connectionCarriesHeaders - Whether the connection sends its own headers (`transportOptions.headers`, static `remoteAuth`)
  * @param oauth - The OAuth token every request carries; a request the remote refuses with 401 is sent once more with a new token
  */
 export function createRemoteRequestFetch(
-  appId: string,
+  requestScopes: RemoteRequestScopes,
   connectionCarriesHeaders: boolean,
   oauth?: RemoteOAuthTokenSource,
 ): typeof fetch {
-  const requestScopes = requestScopesOf(appId);
   return async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const scope = requestScopes.getStore();
     const extra = scope?.headers ?? {};

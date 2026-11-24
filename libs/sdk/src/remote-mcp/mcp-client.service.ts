@@ -57,7 +57,12 @@ import type {
 } from './mcp-client.types';
 import { McpStatelessClientAdapter, negotiateRemoteProtocol } from './mcp-stateless-client.adapter';
 import { RemoteOAuthTokenSource } from './remote-oauth';
-import { createRemoteRequestFetch, withRemoteRequestHeaders } from './remote-request-headers';
+import {
+  createRemoteRequestFetch,
+  createRemoteRequestScopes,
+  withRemoteRequestHeaders,
+  type RemoteRequestScopes,
+} from './remote-request-headers';
 import {
   CircuitBreakerManager,
   CircuitOpenError,
@@ -200,11 +205,12 @@ export class McpClientService {
 
     try {
       const headers = await this.connectionHeaders(request);
+      const requestScopes = createRemoteRequestScopes();
       // Protocol 2026-07-28 remotes are stateless and have no `initialize`, so
       // the upstream SDK client cannot drive them. When selected (or discovered
       // via `auto`), swap in FrontMCP's own client behind an adapter that
       // presents the same surface to everything downstream.
-      const connection2026 = await this.tryConnect2026(request, headers);
+      const connection2026 = await this.tryConnect2026(request, headers, requestScopes);
       if (connection2026) {
         this.connections.set(appId, connection2026);
         await this.discoverCapabilities(appId);
@@ -219,7 +225,7 @@ export class McpClientService {
 
       // Create transport based on type
       const protocolClient = await loadProtocolClient();
-      let transport = this.createTransport(protocolClient, request, headers);
+      let transport = this.createTransport(protocolClient, request, headers, requestScopes);
 
       // Create MCP client with configurable name/version
       const client = new protocolClient.Client(
@@ -244,7 +250,7 @@ export class McpClientService {
             `Streamable HTTP connection failed for ${appId}: ${(connectError as Error).message}. ` +
               `Falling back to SSE transport.`,
           );
-          transport = this.createFallbackSSETransport(protocolClient, request, headers);
+          transport = this.createFallbackSSETransport(protocolClient, request, headers, requestScopes);
           await this.connectWithin(appId, client, transport);
         } else {
           throw connectError;
@@ -255,6 +261,7 @@ export class McpClientService {
       const connection: McpClientConnection = {
         client,
         transport,
+        requestScopes,
         status: 'connected',
         connectedAt: new Date(),
         lastHeartbeat: new Date(),
@@ -524,7 +531,7 @@ export class McpClientService {
         }
 
         const result = await this.withinTimeout(appId, toolName, () =>
-          withRemoteRequestHeaders(appId, callerHeaders, () =>
+          withRemoteRequestHeaders(connection.requestScopes, callerHeaders, () =>
             connection.client.callTool({ name: toolName, arguments: args }),
           ),
         );
@@ -597,7 +604,9 @@ export class McpClientService {
     try {
       const callerHeaders = await this.callerHeaders(appId, authContext);
       const result = await this.withinTimeout(appId, uri, () =>
-        withRemoteRequestHeaders(appId, callerHeaders, () => connection.client.readResource({ uri })),
+        withRemoteRequestHeaders(connection.requestScopes, callerHeaders, () =>
+          connection.client.readResource({ uri }),
+        ),
       );
 
       // Update heartbeat
@@ -642,7 +651,7 @@ export class McpClientService {
 
       const callerHeaders = await this.callerHeaders(appId, authContext);
       const result = await this.withinTimeout(appId, promptName, () =>
-        withRemoteRequestHeaders(appId, callerHeaders, () =>
+        withRemoteRequestHeaders(connection.requestScopes, callerHeaders, () =>
           connection.client.getPrompt({ name: promptName, arguments: args }),
         ),
       );
@@ -834,8 +843,12 @@ export class McpClientService {
   }
 
   /** The `fetch` a transport to the remote sends through, with the connection's OAuth token when it has one. */
-  private remoteFetchOf(request: McpConnectRequest, headers: Record<string, string> | undefined): typeof fetch {
-    return createRemoteRequestFetch(request.appId, headers !== undefined, this.oauthSources.get(request.appId));
+  private remoteFetchOf(
+    request: McpConnectRequest,
+    headers: Record<string, string> | undefined,
+    requestScopes: RemoteRequestScopes,
+  ): typeof fetch {
+    return createRemoteRequestFetch(requestScopes, headers !== undefined, this.oauthSources.get(request.appId));
   }
 
   /** Milliseconds one request to `appId` may take: its `transportOptions.timeout`, else 30 seconds. */
@@ -890,6 +903,7 @@ export class McpClientService {
   private async tryConnect2026(
     request: McpConnectRequest,
     headers: Record<string, string> | undefined,
+    requestScopes: RemoteRequestScopes,
   ): Promise<McpClientConnection | undefined> {
     const httpOptions = request.transportOptions as McpHttpTransportOptions | undefined;
 
@@ -905,7 +919,7 @@ export class McpClientService {
       }
       return undefined;
     }
-    const remoteFetch = this.remoteFetchOf(request, headers);
+    const remoteFetch = this.remoteFetchOf(request, headers, requestScopes);
     const requestTimeoutMs = this.timeoutOf(request.appId);
     const negotiated = await negotiateRemoteProtocol(request.url, httpOptions?.protocolVersion, headers, remoteFetch, {
       requestTimeoutMs,
@@ -928,6 +942,7 @@ export class McpClientService {
       // that every consumer would then have to narrow.
       client: adapter as unknown as McpClientConnection['client'],
       // No `transport`: this revision is stateless, so there is nothing to keep.
+      requestScopes,
       status: 'connected',
       connectedAt: new Date(),
       lastHeartbeat: new Date(),
@@ -939,11 +954,12 @@ export class McpClientService {
     protocolClient: ProtocolClientModule,
     request: McpConnectRequest,
     headers: Record<string, string> | undefined,
+    requestScopes: RemoteRequestScopes,
   ): Transport {
     const { transportType, url } = request;
     const options = {
       requestInit: headers ? { headers } : undefined,
-      fetch: this.remoteFetchOf(request, headers),
+      fetch: this.remoteFetchOf(request, headers, requestScopes),
     };
 
     switch (transportType) {
@@ -972,10 +988,11 @@ export class McpClientService {
     { SSEClientTransport }: ProtocolClientModule,
     request: McpConnectRequest,
     headers: Record<string, string> | undefined,
+    requestScopes: RemoteRequestScopes,
   ): Transport {
     return new SSEClientTransport(new URL(request.url), {
       requestInit: headers ? { headers } : undefined,
-      fetch: this.remoteFetchOf(request, headers),
+      fetch: this.remoteFetchOf(request, headers, requestScopes),
     });
   }
 
