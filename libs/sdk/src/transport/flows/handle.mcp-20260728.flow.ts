@@ -41,6 +41,7 @@ import {
 import { lookupTool } from '../../common/utils/tool-lookup.utils';
 import { FrontMcpContextStorage } from '../../context';
 import { resolvePlatformType, supportsChannels, type ClientCapabilities, type ClientInfo } from '../../notification';
+import { hasExpiredCaller, sessionCallerOf } from '../../notification/notification.service';
 import { type Scope } from '../../scope';
 import { composeCallerInstructions } from '../../skill/skill-instructions.helper';
 import {
@@ -49,6 +50,7 @@ import {
   dispatch20260728,
   eventStreamFrames,
   isProtocol20260728Request,
+  listenerMayReceive,
   MCP_HEADERS,
   readHeader,
   RequestNotificationSink,
@@ -411,7 +413,8 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       return;
     }
     const auth = request[ServerRequestTokens.auth] as Authorization | undefined;
-    const mayRead = this.resourceReadCheck(auth ? authInfoFromAuthorization(auth) : {});
+    const listenerAuthInfo = auth ? authInfoFromAuthorization(auth) : {};
+    const mayRead = this.resourceReadCheck(listenerAuthInfo);
     const requested: SubscriptionFilter = {
       ...parsedParams.data.notifications,
       resourceSubscriptions: await this.readableUris(parsedParams.data.notifications.resourceSubscriptions, mayRead),
@@ -433,8 +436,12 @@ export default class HandleMcp20260728Flow extends FlowBase<typeof name> {
       requested,
       channels: await this.listenedChannels((body['params'] as { _meta?: Record<string, unknown> } | undefined)?._meta),
       signal: controller.signal,
-      // An update of a URI no resource is named by belongs to the acknowledged resource it sits under.
-      mayReceiveUpdate: async (uri) => !this.scope.resources.findResourceForUri(uri) || mayRead(uri),
+      // Not once its credentials expired; an update of a URI no resource names is checked as the URI it sits under
+      mayReceiveUpdate: (uri, watchedUri) =>
+        listenerMayReceive(
+          () => hasExpiredCaller({ caller: sessionCallerOf(listenerAuthInfo) }),
+          () => mayRead(this.scope.resources.findResourceForUri(uri) ? uri : watchedUri),
+        ),
     });
 
     this.log.info('handleSubscriptions: stream opened', {

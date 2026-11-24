@@ -4,6 +4,7 @@
  *
  * Verifies that:
  * - notifyResourceUpdated sends notifications only to subscribed sessions
+ * - each update is sent only while resources:subscribe still admits the session's caller
  * - notifyResourceUpdated is a no-op when no subscribers exist
  * - NotificationService.initialize() dispatches 'updated' events vs 'list_changed'
  * - ResourceRegistry.notifyContentChanged() emits proper events
@@ -11,6 +12,23 @@
 
 import { ResourceEmitter } from '../../resource/resource.events';
 import { NotificationService } from '../notification.service';
+
+const mockRequestTurn = { held: false };
+
+jest.mock('@frontmcp/utils', () => {
+  const actual = jest.requireActual('@frontmcp/utils');
+  return {
+    ...actual,
+    runRequestExclusive: jest.fn(async (fn: () => unknown) => {
+      mockRequestTurn.held = true;
+      try {
+        return await fn();
+      } finally {
+        mockRequestTurn.held = false;
+      }
+    }),
+  };
+});
 
 const createMockServer = () =>
   ({
@@ -35,11 +53,16 @@ function createMockScope() {
     providers: {
       cleanupSession: jest.fn(),
     },
+    metadata: {},
+    runFlow: jest.fn().mockResolvedValue({}),
     resources: { subscribe: jest.fn().mockReturnValue(() => {}) },
     tools: { subscribe: jest.fn().mockReturnValue(() => {}) },
     prompts: { subscribe: jest.fn().mockReturnValue(() => {}) },
   };
 }
+
+/** Let the access check each update runs settle. */
+const flushChecks = () => new Promise((resolve) => setImmediate(resolve));
 
 describe('NotificationService - resource subscription notifications', () => {
   let service: NotificationService;
@@ -51,7 +74,7 @@ describe('NotificationService - resource subscription notifications', () => {
   });
 
   describe('notifyResourceUpdated', () => {
-    it('should send notification only to sessions subscribed to the URI', () => {
+    it('should send notification only to sessions subscribed to the URI', async () => {
       const server1 = createMockServer();
       const server2 = createMockServer();
       const server3 = createMockServer();
@@ -65,6 +88,7 @@ describe('NotificationService - resource subscription notifications', () => {
       // session-3 is NOT subscribed
 
       service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
 
       expect((server1 as any).notification).toHaveBeenCalledWith({
         method: 'notifications/resources/updated',
@@ -108,6 +132,135 @@ describe('NotificationService - resource subscription notifications', () => {
     });
   });
 
+  describe('access checked again for each update', () => {
+    function subscribedSession(caller?: Record<string, unknown>) {
+      const server = createMockServer();
+      service.registerServer('session-1', server);
+      if (caller) service.setCaller('session-1', caller);
+      service.subscribeResource('session-1', 'file://notes.txt');
+      return server as unknown as { notification: jest.Mock };
+    }
+
+    it("checks the session's latest caller with resources:subscribe, without subscribing it again", async () => {
+      const server = subscribedSession({ clientId: 'client-1', scopes: ['notes:read'] });
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
+      expect(mockScope.runFlow).toHaveBeenCalledWith('resources:subscribe', {
+        request: { method: 'resources/subscribe', params: { uri: 'file://notes.txt' } },
+        ctx: expect.objectContaining({
+          authInfo: expect.objectContaining({ clientId: 'client-1', sessionId: 'session-1' }),
+          ownRequest: true,
+          checkOnly: true,
+        }),
+      });
+      expect(server.notification).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs the check with the platform bindings of the request that subscribed', async () => {
+      const server = createMockServer();
+      service.registerServer('session-1', server);
+      service.subscribeResource('session-1', 'file://notes.txt', { NOTES_ON: true });
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
+      expect(mockScope.runFlow.mock.calls[0][1].ctx.platformEnv).toEqual({ NOTES_ON: true });
+    });
+
+    it('runs each check in a request turn of its own', async () => {
+      const turnsHeld: boolean[] = [];
+      mockScope.runFlow.mockImplementation(async () => {
+        turnsHeld.push(mockRequestTurn.held);
+        return {};
+      });
+      subscribedSession({ clientId: 'client-1' });
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
+      expect(turnsHeld).toEqual([true]);
+    });
+
+    it('sends nothing once the check refuses the caller', async () => {
+      mockScope.runFlow.mockRejectedValueOnce(new Error('denied'));
+      const server = subscribedSession({ clientId: 'client-1' });
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
+      expect(server.notification).not.toHaveBeenCalled();
+    });
+
+    it('sends nothing when the session unsubscribed while its access was checked', async () => {
+      const server = subscribedSession({ clientId: 'client-1' });
+      mockScope.runFlow.mockImplementationOnce(async () => {
+        service.unsubscribeResource('session-1', 'file://notes.txt');
+        return {};
+      });
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
+      expect(server.notification).not.toHaveBeenCalled();
+    });
+
+    it("checks the session's latest caller when a request replaced it while its access was checked", async () => {
+      const server = subscribedSession({ clientId: 'client-1' });
+      mockScope.runFlow.mockImplementationOnce(async () => {
+        service.setCaller('session-1', { clientId: 'client-2' });
+        return {};
+      });
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
+      expect(mockScope.runFlow).toHaveBeenCalledTimes(2);
+      expect(mockScope.runFlow.mock.calls[1][1].ctx.authInfo).toEqual({ clientId: 'client-2', sessionId: 'session-1' });
+      expect(server.notification).toHaveBeenCalledTimes(1);
+    });
+
+    it("sends nothing when the session's latest caller is refused", async () => {
+      const server = subscribedSession({ clientId: 'client-1' });
+      mockScope.runFlow
+        .mockImplementationOnce(async () => {
+          service.setCaller('session-1', { clientId: 'client-2' });
+          return {};
+        })
+        .mockRejectedValueOnce(new Error('denied'));
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
+      expect(server.notification).not.toHaveBeenCalled();
+    });
+
+    it('sends to a subscriber whose caller a request kept again as an equal copy, checking it once', async () => {
+      const server = subscribedSession({ clientId: 'client-1', scopes: ['notes:read'] });
+      mockScope.runFlow.mockImplementationOnce(async () => {
+        service.setCaller('session-1', { clientId: 'client-1', scopes: ['notes:read'] });
+        return {};
+      });
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
+      expect(mockScope.runFlow).toHaveBeenCalledTimes(1);
+      expect(server.notification).toHaveBeenCalledTimes(1);
+    });
+
+    it("sends nothing, and checks nothing, once the caller's credentials expired", async () => {
+      const server = subscribedSession({ clientId: 'client-1', expiresAt: Math.floor(Date.now() / 1000) - 60 });
+
+      service.notifyResourceUpdated('file://notes.txt');
+      await flushChecks();
+
+      expect(mockScope.runFlow).not.toHaveBeenCalled();
+      expect(server.notification).not.toHaveBeenCalled();
+    });
+  });
+
   describe('initialize() - event dispatching', () => {
     it('should dispatch notifyResourceUpdated for updated events with updatedUri', async () => {
       let resourceCallback: (event: any) => void = () => {};
@@ -129,6 +282,7 @@ describe('NotificationService - resource subscription notifications', () => {
         snapshot: [],
         updatedUri: 'file://data.json',
       });
+      await flushChecks();
 
       expect((server as any).notification).toHaveBeenCalledWith({
         method: 'notifications/resources/updated',

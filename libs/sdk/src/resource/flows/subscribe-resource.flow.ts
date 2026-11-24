@@ -82,8 +82,9 @@ export default class SubscribeResourceFlow extends FlowBase<typeof name> {
       throw new InvalidMethodError(method, 'resources/subscribe');
     }
 
-    // The session the subscription belongs to: a request without one is answered without subscribing
-    const sessionId = mcpRequestSessionId(ctx);
+    // The session the subscription belongs to: a request without one, or a check-only one, subscribes nothing
+    const checkOnly = (ctx as { checkOnly?: unknown } | undefined)?.checkOnly === true;
+    const sessionId = checkOnly ? undefined : mcpRequestSessionId(ctx);
     this.state.set({ input: params, sessionId });
     this.logger.verbose('parseInput:done');
   }
@@ -161,13 +162,13 @@ export default class SubscribeResourceFlow extends FlowBase<typeof name> {
     this.logger.verbose('subscribe:start');
     const { uri } = this.state.required.input;
     const { sessionId } = this.state;
-    // A 2026-07-28 `subscriptions/listen` stream checks its URIs with this flow and holds the subscriptions itself
+    // A 2026-07-28 `subscriptions/listen` stream holds its subscriptions itself, and an update's access check only checks
     if (!sessionId) {
-      this.logger.verbose('subscribe: no session ID in the request context');
+      this.logger.verbose('subscribe: no session ID in the request context, or a check-only request');
       return;
     }
 
-    const isNew = this.scope.notifications.subscribeResource(sessionId, uri);
+    const isNew = this.scope.notifications.subscribeResource(sessionId, uri, this.tryGetContext()?.platformEnv);
 
     if (isNew) {
       this.logger.info(`subscribe: session subscribed to resource ${uri}`);
