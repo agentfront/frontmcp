@@ -17,6 +17,12 @@ import {
   type InputPolicy,
   type LogRecord,
 } from '../../../common';
+import { findUndeclaredArguments } from '../../undeclared-arguments';
+
+jest.mock('../../undeclared-arguments', () => {
+  const actual = jest.requireActual('../../undeclared-arguments');
+  return { ...actual, findUndeclaredArguments: jest.fn(actual.findUndeclaredArguments) };
+});
 
 const inputWarnings: string[] = [];
 
@@ -138,6 +144,16 @@ describe('tools/call input.undeclaredKeys', () => {
     expect(refused.wire).toContain('INVALID_INPUT');
     expect(refused.wire).toContain("Unknown arguments: 'timeoutMs' (did you mean 'timeoutSec'?)");
     expect(refused.wire).not.toContain('waited');
+  });
+
+  it("does not compare the arguments under 'strip'", async () => {
+    process.env['NODE_ENV'] = 'production';
+    const server = await startServer();
+    jest.mocked(findUndeclaredArguments).mockClear();
+
+    await callWait(server, 'agent_wait');
+
+    expect(findUndeclaredArguments).not.toHaveBeenCalled();
   });
 
   it("lets a tool's policy override the server's", async () => {
