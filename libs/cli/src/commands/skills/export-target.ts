@@ -29,18 +29,38 @@ export function isWithin(child: string, parent: string): boolean {
 
 /**
  * The project an export writes into, with its links resolved: the git repository holding `outDir`, else `outDir`. A
- * `.git` is looked for only where the path to it crosses no link, so a linked output folder can't name the project.
+ * folder that is itself a link is not taken for a checkout, and a checkout reached through a link that sits inside an
+ * outer checkout gives way to that outer one: such a link redirects output out of the project. A link with no
+ * checkout above it (an alias such as macOS's `/var`) is followed.
  */
 export async function exportRoot(outDir: string): Promise<string> {
   const ancestors = [path.resolve(outDir)];
   for (let dir = ancestors[0]; path.dirname(dir) !== dir; dir = path.dirname(dir)) {
     ancestors.push(path.dirname(dir));
   }
-  const linked = await Promise.all(ancestors.map(isLink));
-  for (const dir of ancestors.slice(linked.lastIndexOf(true) + 1)) {
-    if (await fileExists(path.join(dir, '.git'))) return resolveLinks(dir);
+  const links = await Promise.all(ancestors.map(isLink));
+  let searchFrom = 0;
+  for (;;) {
+    const checkout = await nearestCheckout(ancestors, links, searchFrom);
+    if (checkout === undefined) return resolveLinks(ancestors[0]);
+    const linkAbove = links.indexOf(true, checkout + 1);
+    if (linkAbove === -1 || (await nearestCheckout(ancestors, links, linkAbove + 1)) === undefined) {
+      return resolveLinks(ancestors[checkout]);
+    }
+    searchFrom = linkAbove + 1;
   }
-  return resolveLinks(ancestors[0]);
+}
+
+/** The index of the nearest of `ancestors`, from `searchFrom` up, that holds a `.git` and is not itself a link. */
+async function nearestCheckout(
+  ancestors: readonly string[],
+  links: readonly boolean[],
+  searchFrom: number,
+): Promise<number | undefined> {
+  for (let index = searchFrom; index < ancestors.length; index++) {
+    if (!links[index] && (await fileExists(path.join(ancestors[index], '.git')))) return index;
+  }
+  return undefined;
 }
 
 function isLink(target: string): Promise<boolean> {

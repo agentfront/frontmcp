@@ -121,6 +121,28 @@ posixOnly('exportSkills with linked rule files', () => {
     expect(fs.existsSync(path.join(otherCheckout, '.cursor'))).toBe(false);
   });
 
+  it('finds a repository reached through an alias above it, such as /tmp on macOS', async () => {
+    fs.symlinkSync(scratch, path.join(outside, 'alias'));
+    fs.mkdirSync(path.join(project, 'sub/.cursor/rules'), { recursive: true });
+    fs.mkdirSync(path.join(project, 'shared'));
+    fs.writeFileSync(path.join(project, 'shared/AGENTS.md'), 'old');
+    fs.symlinkSync(path.join(project, 'shared/AGENTS.md'), path.join(project, 'sub/.cursor/rules/demo.mdc'));
+
+    await exportDemo('cursor', path.join(outside, 'alias', 'project', 'sub'));
+
+    expect(fs.readFileSync(path.join(project, 'shared/AGENTS.md'), 'utf8')).toContain('Use the demo skill.');
+  });
+
+  it('does not take a checkout reached through a link inside the repository for the project', async () => {
+    const otherCheckout = path.join(outside, 'checkout');
+    fs.mkdirSync(path.join(otherCheckout, 'nested', '.git'), { recursive: true });
+    fs.symlinkSync(otherCheckout, path.join(project, 'linked'));
+
+    await expect(exportDemo('cursor', path.join(project, 'linked', 'nested'))).rejects.toThrow('process.exit(1)');
+
+    expect(fs.existsSync(path.join(otherCheckout, 'nested', '.cursor'))).toBe(false);
+  });
+
   it('refuses a rule file that links to a missing file', async () => {
     fs.mkdirSync(path.join(project, '.cursor/rules'), { recursive: true });
     fs.symlinkSync(path.join(outside, 'missing.md'), path.join(project, '.cursor/rules/demo.mdc'));
