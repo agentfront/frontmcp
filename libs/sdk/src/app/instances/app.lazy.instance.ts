@@ -55,7 +55,12 @@ import { keepingListsUnchanged } from '../../surface/unchanged-lists';
 import { ToolInstance } from '../../tool/tool.instance';
 import ToolRegistry from '../../tool/tool.registry';
 import { appIdOf, normalizeApp } from '../app.utils';
-import { whyAppCannotBeLazy, whyListedAppCannotBeLazy, whyLoadedAppCannotBeLazy } from '../lazy/lazy-app.rules';
+import {
+  lateGuardWarnings,
+  whyAppCannotBeLazy,
+  whyListedAppCannotBeLazy,
+  whyLoadedAppCannotBeLazy,
+} from '../lazy/lazy-app.rules';
 import {
   changedLists,
   listedAppOf,
@@ -201,17 +206,19 @@ export class AppLazyInstance extends AppEntry<LazyAppRecordMetadata> implements 
     const providers = [...app.providers.getAllSingletons().values()];
     const duties = providers.flatMap((value) => dutyMetadataOf(value) ?? []);
     const workers = providers.flatMap((value) => workerMetadataOf(value) ?? []);
+    const hooks = this.hooksRegisteredBy(app, hooksBefore).filter((hook) => hook.metadata.owner);
     const reasons = whyLoadedAppCannotBeLazy({
       tools: app.tools.listAllInstances(),
       resources: app.resources.listAllInstances(),
       prompts: app.prompts.listAllInstances(),
       skills: app.skills.getSkills(true),
       agents: app.agents.listAllInstances(),
-      hooks: this.hooksRegisteredBy(app, hooksBefore).filter((hook) => hook.metadata.owner),
+      hooks,
       duties,
       workers,
     });
     if (reasons.length > 0) throw cannotBeLazy(this.id, reasons);
+    for (const warning of lateGuardWarnings(this.id, hooks)) this.scope.logger.warn(warning);
   }
 
   /** The hooks `app`'s initialization registered: those the app owns, and those its entries' classes declare. */

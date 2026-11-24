@@ -258,7 +258,12 @@ startup. ...` once; production does not start: `App "billing" is lazy, and no fr
   carries only the manifest's fields). Nor hooks that run for more than its own calls: a plugin with
   `scope: 'server'`, a hook with `appliesTo: 'all-apps'`, or a hook on any flow but `tools:call-tool`,
   `resources:read-resource`, `prompts:get-prompt` and `completion:complete` (a list hook, say), since until the app is
-  imported they would guard and shape nothing. A lazy app that has one fails with
+  imported they would guard and shape nothing. A hook with `appliesTo: 'uncovered-apps'` whose plugin declares no
+  `enforcesMetadata` has the same gap: the app still loads, with a warning when it does
+  (`App "billing": the hook <plugin>.<method> applies to apps without its plugin, ... FrontMCP 1.13 refuses it`), and
+  1.13 refuses it. A plugin that declares the entry metadata it enforces (`@Plugin({ enforcesMetadata })`, as
+  `ApprovalPlugin` does) is fine: an eager entry that declares such a key while only a lazy app's plugin enforces it
+  stops the server at startup. A lazy app that has any of the others fails with
   `LazyAppConfigurationError: App "billing" cannot be lazy: <what>. ...` when it loads (at startup in development, in
   `frontmcp build`), or at startup when the manifest lists one for it. Its `id` must be no other app's
   (`DuplicateAppIdError`).
@@ -509,7 +514,7 @@ export default class Server {}
 
 - [ ] `frontmcp build` wrote `frontmcp.manifest.json`, and it ships next to the server's entry (or `@FrontMcp({ manifest })` names it)
 - [ ] Each lazy app's `id` (or `name`) is the id of the `@App` its import loads, and no other app's
-- [ ] Plugins that guard or filter every app (`scope: 'server'`, list hooks, `appliesTo: 'all-apps'`) are installed on the server or an app that is not lazy
+- [ ] Plugins that guard or filter every app (`scope: 'server'`, list hooks, `appliesTo: 'all-apps'`, `'uncovered-apps'` without `enforcesMetadata`, refused from 1.13) are installed on the server or an app that is not lazy
 - [ ] The server logs no `does not match frontmcp.manifest.json` warning after a lazy app's first call
 
 ### Remote Apps

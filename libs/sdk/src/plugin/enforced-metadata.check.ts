@@ -37,7 +37,7 @@ export interface EnforcedMetadataScope {
 }
 
 /** Metadata keys a hook's plugin class declares with `@Plugin({ enforcesMetadata })`. */
-function keysEnforcedBy(hook: HookEntry): readonly string[] {
+export function keysEnforcedBy(hook: HookEntry): readonly string[] {
   const cls = hookClassOf(hook);
   if (typeof cls !== 'function') return [];
   const keys: unknown = getMetadata(FrontMcpPluginTokens.enforcesMetadata, cls);
