@@ -140,6 +140,7 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
     protected readonly scope: ScopeEntry,
     protected readonly appendContextHooks: (hooks: Array<Pick<HookEntry, 'metadata'>>) => void,
     protected readonly deps: ReadonlyMap<Token, unknown> = new Map(),
+    private readonly retargetEntryHooks?: (ownerId: string | undefined, entryClass: Token | undefined) => Promise<void>,
   ) {
     this.input = (metadata.inputSchema as any)?.parse?.(rawInput);
     this.scopeLogger = scope.logger;
@@ -187,6 +188,11 @@ export abstract class FlowBase<N extends FlowName = FlowName> {
 
   set error(value: Error | undefined) {
     shadowWithOwnValue(this, 'error', value);
+  }
+
+  /** Hand the stages still to come to the app and `static` hooks of the entry a hook switched to, in place of the first's. */
+  protected async useEntryHooks(ownerId: string | undefined, entryClass: Token | undefined): Promise<void> {
+    await this.retargetEntryHooks?.(ownerId, entryClass);
   }
 
   respond(output: FlowOutputOf<N>) {
