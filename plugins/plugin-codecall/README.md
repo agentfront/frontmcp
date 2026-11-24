@@ -240,12 +240,12 @@ the review's.
 
 With `review` on, `codecall:execute` has four more statuses, and its description lists them:
 
-| `status`         | Payload                                                             | What the agent does                                                        |
-| ---------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `needs_changes`  | `findings`: `rule`, `message`, `location`, `suggestion`, `toolName` | Fixes the script and sends it again.                                       |
-| `needs_approval` | `reason`, `approval`, `findings?`                                   | Waits for a person to approve, then sends the same script again.           |
-| `denied`         | `reason`, `findings?`                                               | Doesn't retry.                                                             |
-| `review_failed`  | `error.message`                                                     | Sends the same script again later: the reviewer failed, and failed closed. |
+| `status`         | Payload                                                             | What the agent does                                                                                                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `needs_changes`  | `findings`: `rule`, `message`, `location`, `suggestion`, `toolName` | Fixes the script and sends it again.                                                                                                                                                                                  |
+| `needs_approval` | `reason`, `approval`, `findings?`                                   | Waits for a person to approve, then sends the same script again.                                                                                                                                                      |
+| `denied`         | `reason`, `findings?`                                               | Doesn't retry.                                                                                                                                                                                                        |
+| `review_failed`  | `error.message`                                                     | Reads the message: a review that failed before the script ran nothing, and the same script can be sent again; one that failed at a call stopped the run after the calls before it, whose effects are not rolled back. |
 
 A refused script runs no statement. A call the rules refuse while the script runs (a computed argument of the wrong
 type, a computed tool name) throws in the script, which may catch it; uncaught, it ends the run with that status. A

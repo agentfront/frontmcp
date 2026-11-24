@@ -1,9 +1,12 @@
-/** A JSON Schema as the input-schema rule reads it: the type, enum, `anyOf`/`oneOf`, properties and required names. */
+import { canonicalJson } from '@frontmcp/utils';
+
+/** A JSON Schema as the input-schema rule reads it: type, enum, `anyOf`/`oneOf`/`allOf`, properties, required names. */
 interface PropertySchema {
   type?: string | string[];
   enum?: unknown[];
   anyOf?: PropertySchema[];
   oneOf?: PropertySchema[];
+  allOf?: PropertySchema[];
 }
 
 interface ObjectSchema {
@@ -29,25 +32,33 @@ function withArticle(words: string): string {
   return /^[aeiou]/.test(words) ? `an ${words}` : `a ${words}`;
 }
 
+/** The types the schema names, its own or else those of its `anyOf`/`oneOf` branches, for the message. */
 function expectedTypesOf(schema: PropertySchema): string[] {
-  const branches = schema.anyOf ?? schema.oneOf;
-  if (branches) return branches.flatMap(expectedTypesOf);
-  if (schema.type === undefined) return [];
-  return Array.isArray(schema.type) ? schema.type : [schema.type];
+  if (schema.type !== undefined) return Array.isArray(schema.type) ? schema.type : [schema.type];
+  return (schema.anyOf ?? schema.oneOf ?? []).flatMap(expectedTypesOf);
 }
 
 function enumOf(schema: PropertySchema): unknown[] {
-  const branches = schema.anyOf ?? schema.oneOf;
-  if (branches) return branches.flatMap(enumOf);
-  return schema.enum ?? [];
+  return schema.enum ?? (schema.anyOf ?? schema.oneOf ?? []).flatMap(enumOf);
 }
 
+/** Equal as JSON, whatever the order of object members. */
+function sameJson(left: unknown, right: unknown): boolean {
+  try {
+    return canonicalJson(left) === canonicalJson(right);
+  } catch {
+    return false;
+  }
+}
+
+/** The schema's own type and enum, and its `anyOf`, `oneOf` (exactly one branch) and `allOf`, all together. */
 function matchesSchema(value: unknown, schema: PropertySchema): boolean {
-  const branches = schema.anyOf ?? schema.oneOf;
-  if (branches) return branches.some((branch) => matchesSchema(value, branch));
-  const expectedTypes = expectedTypesOf(schema);
-  if (expectedTypes.length > 0 && !jsonTypesOf(value).some((type) => expectedTypes.includes(type))) return false;
-  if (schema.enum && !schema.enum.some((allowed) => JSON.stringify(allowed) === JSON.stringify(value))) return false;
+  const ownTypes = schema.type === undefined ? [] : [schema.type].flat();
+  if (ownTypes.length > 0 && !jsonTypesOf(value).some((type) => ownTypes.includes(type))) return false;
+  if (schema.enum && !schema.enum.some((allowed) => sameJson(allowed, value))) return false;
+  if (schema.anyOf && !schema.anyOf.some((branch) => matchesSchema(value, branch))) return false;
+  if (schema.oneOf && schema.oneOf.filter((branch) => matchesSchema(value, branch)).length !== 1) return false;
+  if (schema.allOf && !schema.allOf.every((branch) => matchesSchema(value, branch))) return false;
   return true;
 }
 
@@ -76,6 +87,7 @@ function issueOf(argument: string, value: unknown, schema: PropertySchema): Argu
     const allowed = allowedValues.map((option) => JSON.stringify(option)).join(', ');
     return { argument, message: `"${argument}" must be one of ${allowed}` };
   }
+  if (typeMatches) return { argument, message: `"${argument}" does not match its schema` };
   const expected = withArticle(expectedTypes.join(' or '));
   const suggestion = suggestionFor(argument, value, expectedTypes);
   return {

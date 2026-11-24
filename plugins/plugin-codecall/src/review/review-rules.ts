@@ -45,7 +45,7 @@ const MAX_REASON_CHARS = 4096;
 /** A script can name any string as a tool; a finding shows at most this much of it. */
 const MAX_TOOL_NAME_CHARS = 128;
 
-const NO_APPROVAL_CHANNEL =
+export const NO_APPROVAL_CHANNEL =
   'nobody can approve it here: the server has no Approval plugin, and the client does not support elicitation';
 
 function locationOf(call: { location?: ScriptLocation } | undefined): Pick<ReviewFinding, 'location'> {

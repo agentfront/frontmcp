@@ -32,7 +32,7 @@ const REVIEW_LINE =
   '\nREVIEW: the server checks each script and call first. ' +
   'needs_changes: fix what the findings say and send again. ' +
   'needs_approval: a person approves, then send the same script again. ' +
-  'denied: do not retry. review_failed: send the same script again later.';
+  'denied: do not retry. review_failed: its message says whether anything ran.';
 
 /** The `codecall:execute` description for the server's resolved `vm` options, and whether its `review` is on. */
 export function buildExecuteToolDescription(vmOptions: ResolvedCodeCallVmOptions, reviewed = false): string {

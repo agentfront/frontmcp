@@ -7,7 +7,7 @@ import type {
 } from '@enclave-vm/core/worker';
 
 import type { CodeCallApprovalReference, ReviewApprovals } from './review-approvals';
-import type { ApprovalCall, ReviewRules, RulesVerdict } from './review-rules';
+import { NO_APPROVAL_CHANNEL, type ApprovalCall, type ReviewRules, type RulesVerdict } from './review-rules';
 
 /** A `pre` hook of Enclave's review: CodeCall's own, or a reviewer the server configured. */
 export type CodeCallPreReviewer = (input: PreReviewInput) => Promise<ReviewDecision>;
@@ -20,6 +20,8 @@ export interface CodeCallReviewOutcome {
   status: CodeCallReviewStatus;
   reason?: string;
   findings?: ReviewFinding[];
+  /** Where a failed review failed: before the script (`script`), or at a call, after the calls before it ran. */
+  phase?: ReviewRecord['phase'];
 }
 
 export interface RunReviewOptions {
@@ -29,11 +31,15 @@ export interface RunReviewOptions {
   approvals: ReviewApprovals;
   /** How long one review hook may take, in ms; Enclave's default when unset. */
   timeoutMs?: number;
+  /** Whether a person can approve: the Approval plugin is installed, or the client can answer an elicitation. */
+  hasApprovalChannel: boolean;
   /** The tools that are not read-only and have already run in this run, in the order they first ran. */
   effectsSoFar?: () => readonly string[];
 }
 
 const ALLOW: ReviewDecision = { decision: 'allow' };
+/** Enclave's own limit on one review hook when `review.timeoutMs` is unset. */
+const DEFAULT_REVIEW_TIMEOUT_MS = 30_000;
 /** How many earlier tools a finding names, within the length Enclave accepts for a message. */
 const MAX_NAMED_TOOLS = 10;
 const REVIEW_ERROR_NAME = 'ReviewError';
@@ -52,7 +58,7 @@ export function reviewOutcomeOf(
   runError?: { name?: string },
 ): CodeCallReviewOutcome | undefined {
   const failed = decisions.find((record) => record.decision === 'review_failed');
-  if (failed) return { status: 'review_failed', reason: failed.reason };
+  if (failed) return { status: 'review_failed', reason: failed.reason, phase: failed.phase };
   const stopping = decisions.find(
     (record) => record.decision === 'needs_approval' || (record.phase === 'script' && record.decision !== 'allow'),
   );
@@ -78,6 +84,11 @@ export class RunReview {
   pendingApproval?: PendingApproval;
 
   constructor(private readonly options: RunReviewOptions) {}
+
+  /** How long one review hook may take, in ms. */
+  get timeoutMs(): number {
+    return this.options.timeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS;
+  }
 
   /** Enclave's `review` option for the run. */
   get hooks(): ReviewOptions {
@@ -132,6 +143,9 @@ export class RunReview {
     if (state === 'approved') return undefined;
     if (state === 'denied') {
       return { ...request, decision: 'denied', reason: `${request.reason}; a person refused the approval` };
+    }
+    if (!this.options.hasApprovalChannel) {
+      return { ...request, decision: 'denied', reason: `${request.reason}; ${NO_APPROVAL_CHANNEL}` };
     }
     const repeated = consume && pending.call ? (this.options.effectsSoFar?.() ?? []) : [];
     if (pending.call && repeated.length > 0) return needsOwnScript(pending.call.toolName, repeated);

@@ -77,4 +77,39 @@ describe('argumentIssuesOf', () => {
       { argument: 'limit', message: '"limit" must be a number, not a string' },
     ]);
   });
+
+  it("checks a schema's own type together with its anyOf branches", () => {
+    const composed = {
+      properties: { id: { type: 'string', anyOf: [{ type: 'string' }, { type: 'number' }] } },
+    };
+
+    expect(argumentIssuesOf({ id: 'u1' }, composed, false)).toEqual([]);
+    expect(argumentIssuesOf({ id: 3 }, composed, false)).toEqual([
+      { argument: 'id', message: '"id" must be a string, not a number', suggestion: 'id: "3"' },
+    ]);
+  });
+
+  it('needs exactly one oneOf branch to match, and every allOf branch', () => {
+    const schemaWith = (property: Record<string, unknown>) => ({ properties: { n: property } });
+    const oneOf = schemaWith({ oneOf: [{ type: 'number' }, { type: 'integer' }] });
+    const allOf = schemaWith({ allOf: [{ type: 'number' }, { enum: [1, 2] }] });
+
+    expect(argumentIssuesOf({ n: 1.5 }, oneOf, false)).toEqual([]);
+    expect(argumentIssuesOf({ n: 3 }, oneOf, false)).toEqual([
+      { argument: 'n', message: '"n" does not match its schema' },
+    ]);
+    expect(argumentIssuesOf({ n: 2 }, allOf, false)).toEqual([]);
+    expect(argumentIssuesOf({ n: 3 }, allOf, false)).toEqual([
+      { argument: 'n', message: '"n" does not match its schema' },
+    ]);
+  });
+
+  it('compares enum members as JSON, whatever the order of their keys', () => {
+    const schema = { properties: { range: { type: 'object', enum: [{ a: 1, b: 2 }] } } };
+
+    expect(argumentIssuesOf({ range: { b: 2, a: 1 } }, schema, false)).toEqual([]);
+    expect(argumentIssuesOf({ range: { a: 2, b: 1 } }, schema, false)).toEqual([
+      { argument: 'range', message: '"range" must be one of {"a":1,"b":2}' },
+    ]);
+  });
 });

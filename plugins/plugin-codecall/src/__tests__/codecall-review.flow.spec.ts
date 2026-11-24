@@ -528,7 +528,10 @@ describe.each(RUNTIMES)('CodeCall review on the %s runtime', (runtime) => {
 
       expect(outcome).toMatchObject({
         status: 'review_failed',
-        error: { message: 'Review failed: The OpenAI review request failed' },
+        error: {
+          message:
+            'Review failed: The OpenAI review request failed. Nothing ran, so the same script can be sent again.',
+        },
       });
       expect(JSON.stringify(outcome)).not.toContain(API_KEY);
       expect(executed).toEqual([]);

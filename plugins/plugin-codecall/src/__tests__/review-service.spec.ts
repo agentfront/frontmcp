@@ -58,6 +58,13 @@ describe('codeCallReviewOptionsSchema', () => {
 });
 
 describe('CodeCallReviewService', () => {
+  it('versions the policy by the provider endpoint, so a grant from one endpoint does not cover another', () => {
+    const version = (baseUrl: string) =>
+      new CodeCallReviewService(reviewOptions({ provider: { ...PROVIDER, baseUrl }, policy: 'a' })).policyVersion;
+
+    expect(version('https://models-a.example.com/v1')).not.toBe(version('https://models-b.example.com/v1'));
+  });
+
   it('versions the policy by what decides, never by the API key', () => {
     const version = (input: Record<string, unknown>) => new CodeCallReviewService(reviewOptions(input)).policyVersion;
 
@@ -117,9 +124,13 @@ describe('reviewResultOf and reviewDecisionOf', () => {
   const pending = { reference: { id: 'codecall:approval:x' } };
 
   it('gives each status its result', () => {
-    expect(reviewResultOf({ status: 'review_failed', reason: 'down' })).toEqual({
+    expect(reviewResultOf({ status: 'review_failed', reason: 'down', phase: 'script' })).toEqual({
       status: 'review_failed',
-      error: { message: 'Review failed: down' },
+      error: { message: 'Review failed: down. Nothing ran, so the same script can be sent again.' },
+    });
+    expect(reviewResultOf({ status: 'review_failed', reason: 'down', phase: 'call' })).toEqual({
+      status: 'review_failed',
+      error: { message: 'Review failed: down. The calls before it ran, and their effects are not rolled back.' },
     });
     expect(reviewResultOf({ status: 'needs_changes', findings })).toEqual({ status: 'needs_changes', findings });
     expect(reviewResultOf({ status: 'needs_changes' })).toEqual({ status: 'needs_changes', findings: [] });
@@ -145,14 +156,32 @@ describe('reviewResultOf and reviewDecisionOf', () => {
 });
 
 describe('reviewInvocation', () => {
-  function runReviewWith(pre: RunReview['pre']): RunReview {
+  function runReviewWith(pre: RunReview['pre'], timeoutMs?: number): RunReview {
     const review = new RunReview({
       reviewers: async () => [],
       approvals: new ReviewApprovals({ scriptHash: 'h', policyVersion: 'v', maxAgeMs: 1, granted: new Set() }),
+      hasApprovalChannel: true,
+      timeoutMs,
     });
     Object.defineProperty(review, 'pre', { value: pre });
     return review;
   }
+
+  it('fails the review, failing closed, when it takes longer than review.timeoutMs', async () => {
+    const neverAnswers = () => new Promise<never>(() => undefined);
+
+    expect(await reviewInvocation(runReviewWith(neverAnswers, 20), invocationScriptOf('users.list', {}), {})).toEqual({
+      status: 'review_failed',
+      error: {
+        message:
+          'Review failed: The review hook did not answer within 20 ms. Nothing ran, so the same script can be sent again.',
+      },
+    });
+  });
+
+  it("bounds the review by Enclave's default when review.timeoutMs is unset", () => {
+    expect(runReviewWith(async () => ({ decision: 'allow' })).timeoutMs).toBe(30_000);
+  });
 
   it('stands for a one-call script with canonical arguments', () => {
     expect(invocationScriptOf('users.list', { b: 1, a: 2 })).toBe(
@@ -192,7 +221,12 @@ describe('reviewInvocation', () => {
         code,
         {},
       ),
-    ).toEqual({ status: 'review_failed', error: { message: 'Review failed: The model answer is not JSON' } });
+    ).toEqual({
+      status: 'review_failed',
+      error: {
+        message: 'Review failed: The model answer is not JSON. Nothing ran, so the same script can be sent again.',
+      },
+    });
     expect(
       await reviewInvocation(
         runReviewWith(async () => {
@@ -201,7 +235,10 @@ describe('reviewInvocation', () => {
         code,
         {},
       ),
-    ).toEqual({ status: 'review_failed', error: { message: 'Review failed: The review hook threw' } });
+    ).toEqual({
+      status: 'review_failed',
+      error: { message: 'Review failed: The review hook threw. Nothing ran, so the same script can be sent again.' },
+    });
   });
 });
 

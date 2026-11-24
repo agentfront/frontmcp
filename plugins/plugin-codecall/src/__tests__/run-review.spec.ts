@@ -31,6 +31,7 @@ function reviewWith(options: {
   rules?: boolean;
   timeoutMs?: number;
   effectsSoFar?: () => readonly string[];
+  hasApprovalChannel?: boolean;
 }): RunReview {
   const rules = options.rules
     ? new ReviewRules({
@@ -44,6 +45,7 @@ function reviewWith(options: {
     reviewers: async () => options.reviewers ?? [],
     approvals: options.approvals ?? approvalsWith(),
     timeoutMs: options.timeoutMs,
+    hasApprovalChannel: options.hasApprovalChannel ?? true,
     effectsSoFar: options.effectsSoFar,
   });
 }
@@ -59,7 +61,7 @@ describe('reviewOutcomeOf', () => {
         record({ decision: 'needs_changes', findings: [{ rule: 'r', message: 'm' }] }),
         record({ phase: 'call', decision: 'review_failed', reason: 'down' }),
       ]),
-    ).toEqual({ status: 'review_failed', reason: 'down' });
+    ).toEqual({ status: 'review_failed', reason: 'down', phase: 'call' });
   });
 
   it('reports a refused script, and a call that stopped the run for approval', () => {
@@ -148,6 +150,32 @@ describe('RunReview', () => {
       approvals: approvalsWith(undefined, [reference?.id as string]),
     });
     expect(await approved.pre(scriptInput('return 1;'))).toEqual({ decision: 'allow' });
+  });
+
+  it("denies a reviewer's needs_approval when nobody can approve, and keeps no pending approval", async () => {
+    const reviewer = async (): Promise<ReviewDecision> => ({ decision: 'needs_approval', reason: 'A person decides' });
+    const review = reviewWith({ reviewers: [reviewer], hasApprovalChannel: false });
+
+    const decision = await review.pre(scriptInput('return 1;'));
+
+    expect(decision).toEqual({
+      decision: 'denied',
+      reason:
+        'A person decides; nobody can approve it here: the server has no Approval plugin, and the client does not support elicitation',
+    });
+    expect(review.pendingApproval).toBeUndefined();
+  });
+
+  it("still honours a grant for a reviewer's needs_approval when nobody could ask again", async () => {
+    const reviewer = async (): Promise<ReviewDecision> => ({ decision: 'needs_approval', reason: 'A person decides' });
+    const id = approvalsWith().referenceFor().id;
+    const review = reviewWith({
+      reviewers: [reviewer],
+      hasApprovalChannel: false,
+      approvals: approvalsWith(undefined, [id]),
+    });
+
+    expect(await review.pre(scriptInput('return 1;'))).toEqual({ decision: 'allow' });
   });
 
   it('denies a destructive call a person refused', async () => {

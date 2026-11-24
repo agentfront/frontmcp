@@ -26,6 +26,7 @@ function policyVersionOf(options: CodeCallReviewOptions): string {
     canonicalJson({
       rules,
       model: provider?.model ?? null,
+      baseUrl: provider?.baseUrl ?? null,
       reviewer: reviewer !== undefined,
       policy: policy ?? null,
       policyVersion: policyVersion ?? null,

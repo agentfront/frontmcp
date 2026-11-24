@@ -283,8 +283,9 @@ The built-in rules use explicit tool annotations and input schemas, with no mode
 - `fanOut`: a call in a loop over a tool result with no bound below `vm.maxToolCalls`: `needs_changes`.
 
 `codecall:execute` then has four more statuses, listed in its description: `needs_changes` (`findings`),
-`needs_approval` (`reason`, `approval`), `denied` (`reason`) and `review_failed` (`error.message`: the reviewer failed,
-nothing ran, send the same script again later). The model provider and the function reviewer get the script, its
+`needs_approval` (`reason`, `approval`), `denied` (`reason`) and `review_failed` (`error.message`). A review that fails
+before the script runs leaves nothing run, and the same script can be sent again; one that fails at a call stops the run
+after the calls before it, whose effects are not rolled back, and the message says which. The model provider and the function reviewer get the script, its
 analysis and the tool descriptions as untrusted data, never as instructions; the API key goes only into the request's
 `authorization` header.
 

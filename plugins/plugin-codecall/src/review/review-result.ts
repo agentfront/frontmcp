@@ -16,13 +16,21 @@ export type CodeCallReviewResult =
 
 const REVIEW_STATUSES: ReadonlySet<string> = new Set(['needs_changes', 'needs_approval', 'denied', 'review_failed']);
 
+/** What a failed review leaves behind: nothing before the script ran, the calls before it after a call. */
+function whatRanBefore(outcome: CodeCallReviewOutcome): string {
+  if (outcome.phase === undefined || outcome.phase === 'script') {
+    return 'Nothing ran, so the same script can be sent again.';
+  }
+  return 'The calls before it ran, and their effects are not rolled back.';
+}
+
 /** The result for how the review ended a run. */
 export function reviewResultOf(outcome: CodeCallReviewOutcome, pending?: PendingApproval): CodeCallReviewResult {
   const findings = outcome.findings ?? [];
   const reason = outcome.reason ?? '';
   switch (outcome.status) {
     case 'review_failed':
-      return { status: 'review_failed', error: { message: `Review failed: ${reason}` } };
+      return { status: 'review_failed', error: { message: `Review failed: ${reason}. ${whatRanBefore(outcome)}` } };
     case 'needs_changes':
       return { status: 'needs_changes', findings };
     case 'needs_approval':

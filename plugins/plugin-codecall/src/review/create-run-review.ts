@@ -90,14 +90,9 @@ export async function createRunReview(
     const { entry } = access;
     return { name: entry.name, annotations: entry.metadata.annotations, inputSchema: entry.getInputJsonSchema() };
   };
+  const hasApprovalChannel = caller.approvalService !== undefined || caller.canElicit;
   const rules =
-    options.rules === false
-      ? undefined
-      : new ReviewRules({
-          rules: options.rules,
-          toolOf,
-          hasApprovalChannel: caller.approvalService !== undefined || caller.canElicit,
-        });
+    options.rules === false ? undefined : new ReviewRules({ rules: options.rules, toolOf, hasApprovalChannel });
   const approvals = new ReviewApprovals({
     scriptHash,
     policyVersion,
@@ -112,6 +107,7 @@ export async function createRunReview(
   };
   return new RunReview({
     rules,
+    hasApprovalChannel,
     effectsSoFar,
     reviewers: async () => (service.hasReviewers ? service.reviewersFor(reviewerToolsOf(caller)) : []),
     approvals,
