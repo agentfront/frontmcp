@@ -1,7 +1,7 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import { createMockOwner, createMockProviderRegistry } from '../../__test-utils__/mocks';
-import { ToolContext, ToolKind, type ToolMetadata, type ToolRecord } from '../../common';
+import { ToolContext, ToolKind, type OutputPolicy, type ToolMetadata, type ToolRecord } from '../../common';
 import { InvalidOutputError } from '../../errors';
 import { ToolInstance } from '../tool.instance';
 import { asElicitationFallback } from '../tool.utils';
@@ -12,13 +12,16 @@ class AnswerTool extends ToolContext {
   }
 }
 
-function toolWithOutput(outputSchema: unknown): { tool: ToolInstance } {
+function toolWithOutput(outputSchema: unknown, serverOutput?: OutputPolicy): { tool: ToolInstance } {
   const record = {
     kind: ToolKind.CLASS_TOKEN,
     provide: AnswerTool,
     metadata: { name: 'answer', inputSchema: {}, outputSchema } as unknown as ToolMetadata,
   } as unknown as ToolRecord;
-  return { tool: new ToolInstance(record, createMockProviderRegistry(), createMockOwner()) };
+  const providers = createMockProviderRegistry();
+  if (serverOutput)
+    (providers.getActiveScope() as { metadata: { output?: OutputPolicy } }).metadata.output = serverOutput;
+  return { tool: new ToolInstance(record, providers, createMockOwner()) };
 }
 
 const documentHit = z.object({ kind: z.literal('document'), title: z.string() });
@@ -328,12 +331,27 @@ describe('ToolInstance.parseOutput of a CallToolResult the tool returns', () => 
     expect(tool.parseOutput(declaredResult)).toBe(declaredResult);
   });
 
-  it('sends a structuredContent that does not match the outputSchema as returned, and says so, by default', () => {
+  it('refuses a structuredContent that does not match the outputSchema when the caller passes no policy', () => {
+    const { tool } = toolWithOutput({ price: z.string() });
+
+    expect(() => tool.parseOutput(quoteResult)).toThrow(InvalidOutputError);
+    expect(tool.safeParseOutput(quoteResult).success).toBe(false);
+  });
+
+  it("sends such a structuredContent as returned, and says so, under 'warn'", () => {
     const { tool } = toolWithOutput({ price: z.string() });
     const onInvalidStructuredContent = jest.fn();
 
-    expect(tool.parseOutput(quoteResult, { onInvalidStructuredContent })).toBe(quoteResult);
+    expect(tool.parseOutput(quoteResult, { validateStructuredContent: 'warn', onInvalidStructuredContent })).toBe(
+      quoteResult,
+    );
     expect(onInvalidStructuredContent).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the server's 'warn' for a caller that passes no policy, as tools/call does", () => {
+    const { tool } = toolWithOutput({ price: z.string() }, { validateStructuredContent: 'warn' });
+
+    expect(tool.parseOutput(quoteResult)).toBe(quoteResult);
   });
 
   it('treats a successful result without structuredContent as one that misses an object outputSchema', () => {
@@ -341,9 +359,11 @@ describe('ToolInstance.parseOutput of a CallToolResult the tool returns', () => 
     const contentOnly = { content: [{ type: 'text', text: 'Ten' }] };
     const onInvalidStructuredContent = jest.fn();
 
-    expect(tool.parseOutput(contentOnly, { onInvalidStructuredContent })).toBe(contentOnly);
+    expect(tool.parseOutput(contentOnly, { validateStructuredContent: 'warn', onInvalidStructuredContent })).toBe(
+      contentOnly,
+    );
     expect(onInvalidStructuredContent).toHaveBeenCalledTimes(1);
-    expect(() => tool.parseOutput(contentOnly, { validateStructuredContent: 'enforce' })).toThrow(InvalidOutputError);
+    expect(() => tool.parseOutput(contentOnly)).toThrow(InvalidOutputError);
   });
 
   it("sends the SDK's elicitation fallback answer as returned, under 'enforce' too", () => {

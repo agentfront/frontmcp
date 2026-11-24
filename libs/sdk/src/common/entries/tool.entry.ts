@@ -55,8 +55,8 @@ export interface OutputParseOptions {
   /** Called with the undeclared key paths an answer carried, under the `'warn'` policy. */
   onUndeclaredKeys?: (keyPaths: string[]) => void;
   /**
-   * What happens to a returned `CallToolResult` whose `structuredContent` does not match the schema. `tools/call`
-   * passes the resolved policy, `'enforce'` unless one is set. @default 'warn'
+   * What happens to a returned `CallToolResult` whose `structuredContent` does not match the schema. A tool that is
+   * passed none uses its own policy (Tool > App > server); any other caller gets `'enforce'`. @default 'enforce'
    */
   validateStructuredContent?: StructuredContentValidation;
   /** Called when such a result is sent as returned, under `'warn'`. */

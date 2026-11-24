@@ -25,6 +25,7 @@ import {
 import { InvalidEntityError, InvalidOutputError } from '../errors';
 import { isPackageSpecifier, parsePackageSpecifier } from '../esm-loader/package-specifier';
 import { toStructuredContent } from '../utils/content.utils';
+import { resolveStructuredContentValidation } from './tool-output-policy';
 
 // Import utilities from @frontmcp/utils
 
@@ -267,7 +268,11 @@ function withDeclaredStructuredContent(
   const { structuredContent } = result;
   const parsed = declaredStructuredContent(schema, structuredContent);
   if ('error' in parsed) {
-    if (options.validateStructuredContent === 'enforce') throw parsed.error;
+    if (
+      resolveStructuredContentValidation({ validateStructuredContent: options.validateStructuredContent }) === 'enforce'
+    ) {
+      throw parsed.error;
+    }
     options.onInvalidStructuredContent?.();
     return result;
   }
