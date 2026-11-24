@@ -108,9 +108,11 @@ With the Unix socket, a socket path longer than a socket address holds (103 byte
    (the config's `info.version`) and an HMAC of the nonce, its endpoint (the socket path, or `http://127.0.0.1:<port>`)
    and that version, keyed by a key derived from the secret in the record. Only when the proof verifies (compared in
    constant time) does the session trust the version and send the token, also derived from that secret, as
-   `Authorization: Bearer` on every MCP request. Over loopback HTTP it challenges the server again before each request,
-   so a process that takes the port of a server that stopped gets none. An answer to a challenge that doesn't state
-   its length, or is longer than 1 KiB, is refused unread.
+   `Authorization: Bearer` on every MCP request. Over loopback HTTP it challenges the server again before each request
+   and sends the request on the connection that answered; when that connection closed in between, the request fails
+   unsent (`SHARED_SERVER_IDENTITY_REFUSED`), so a process that takes the port of a server that stopped gets none (up to
+   1.12.2 the request could go on another connection). An answer to a challenge that doesn't state its length, or is
+   longer than 1 KiB, is refused unread.
 2. **Versions.** A session attaches only to a server of its own `info.name` (the server records it in `server.json`):
    one that finds its key taken by a running server of another name never attaches to it nor replaces it, and runs the
    server in its own process (`its key is taken by a server of another info.name; give each server a key of its own`).
