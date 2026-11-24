@@ -105,13 +105,13 @@ export function parseReadySentinel(line: string): ChildReadyInfo | undefined {
 }
 
 /**
- * Whether the project's `@frontmcp/sdk` predates the ready sentinel (1.3.0), so only a connection to its port can tell
- * that it listens. An SDK that can't be found is taken to write the sentinel.
+ * Whether the `@frontmcp/sdk` that code in `directory` (the entry's folder) loads predates the ready sentinel (1.3.0),
+ * so only a connection to its port can tell that it listens. An SDK that can't be found is taken to write the sentinel.
  */
-export function sdkPredatesReadySentinel(cwd: string = process.cwd()): boolean {
+export function sdkPredatesReadySentinel(directory: string): boolean {
   let version: string;
   try {
-    const manifestPath = require.resolve('@frontmcp/sdk/package.json', { paths: [cwd] });
+    const manifestPath = require.resolve('@frontmcp/sdk/package.json', { paths: [directory] });
     version = (JSON.parse(readFileSync(manifestPath)) as { version: string }).version;
   } catch {
     return false;

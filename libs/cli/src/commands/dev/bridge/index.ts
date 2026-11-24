@@ -201,7 +201,7 @@ export async function runDevBridge(opts: ParsedArgs): Promise<void> {
     log,
     env: launch.childEnv,
     port: runtime.mode === 'http' ? launch.port : undefined,
-    acceptPortProbe: sdkPredatesReadySentinel(launch.cwd),
+    acceptPortProbe: sdkPredatesReadySentinel(path.dirname(path.resolve(launch.cwd, launch.entry))),
     resolveTsxLoader: () => resolveProjectTsxLoader(launch.cwd),
     onReady: async (child, info) => {
       // Close any previous upstream (reload path). A rejection here MUST
