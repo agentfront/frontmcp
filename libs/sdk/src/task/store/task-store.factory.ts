@@ -41,6 +41,8 @@ export interface TaskStoreOptions {
   isEdgeRuntime?: boolean;
   /** Where `tasks/list` reads a session's tasks (not the SQLite store, which queries by session). Default `'scan'`. */
   listFrom?: TaskListSource;
+  /** The longest a task lives (`tasks.maxTtlMs`), which the session index keeps its count for. */
+  maxTtlMs?: number;
   /**
    * SQLite backend options. When provided, the factory returns a
    * `SqliteTaskStore` instead of the utils-backed implementation.
@@ -166,7 +168,10 @@ export async function createTaskStore(options: TaskStoreOptions = {}): Promise<T
     fallback: isEdgeRuntime ? 'error' : 'memory',
   });
 
-  const store: TaskStore = new StorageTaskStore(storage, logger, { listFrom: options.listFrom });
+  const store: TaskStore = new StorageTaskStore(storage, logger, {
+    listFrom: options.listFrom,
+    maxTtlMs: options.maxTtlMs,
+  });
   const type = detectStorageType(storage, finalStorageConfig?.type);
 
   logger?.info('[TaskStoreFactory] Created task store', {

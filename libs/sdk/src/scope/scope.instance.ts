@@ -628,6 +628,7 @@ export class Scope extends ScopeEntry {
             logger: this.logger,
             isEdgeRuntime: onEdge,
             listFrom: tasksConfig?.listFrom,
+            maxTtlMs: tasksConfig?.maxTtlMs,
           });
           this._taskStore = taskStore;
           this.onDispose(async () => {

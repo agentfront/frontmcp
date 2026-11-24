@@ -6,6 +6,7 @@ import { createMemoryStorage, type RootStorage } from '@frontmcp/utils';
 
 import type { TaskRecord } from '../../task.types';
 import { StorageTaskStore } from '../storage-task.store';
+import type { TaskSessionIndex } from '../task-session-index';
 
 function makeRecord(overrides: Partial<TaskRecord> = {}): TaskRecord {
   const now = Date.now();
@@ -220,15 +221,46 @@ describe('StorageTaskStore', () => {
       expect(await storage.namespace('index-count').get('session-A')).toBe('2');
     });
 
-    it("keeps a session's index count as long as its longest-lived task", async () => {
-      await indexed.create(makeRecord({ taskId: 'short', expiresAt: Date.now() + 60_000 }));
+    it("keeps a session's index count as long as a task can live, plus the hour its positions outlive it", async () => {
       await indexed.create(makeRecord({ taskId: 'long', expiresAt: Date.now() + 7_200_000 }));
-      await indexed.create(makeRecord({ taskId: 'short-again', expiresAt: Date.now() + 60_000 }));
+      await indexed.create(makeRecord({ taskId: 'short', expiresAt: Date.now() + 60_000 }));
 
       const remaining = await storage.namespace('index-count').ttl('session-A');
 
-      expect(remaining).toBeGreaterThan(7_000);
-      expect(remaining).toBeLessThanOrEqual(7_200);
+      expect(remaining).toBeGreaterThan(89_000);
+      expect(remaining).toBeLessThanOrEqual(90_000);
+    });
+
+    it('never starts a first page after a task whose record is still being written', async () => {
+      await indexed.create(makeRecord({ taskId: 't-0' }));
+      await indexed.delete('t-0', 'session-A');
+      const sessionIndex = await (
+        indexed as unknown as { loadSessionIndex(): Promise<TaskSessionIndex> }
+      ).loadSessionIndex();
+      await sessionIndex.add(makeRecord({ taskId: 'in-flight' }), 60);
+      await indexed.create(makeRecord({ taskId: 't-2' }));
+
+      const whileWriting = await indexed.list('session-A');
+      await storage
+        .namespace('records')
+        .set('session-A:in-flight', JSON.stringify(makeRecord({ taskId: 'in-flight' })));
+      const written = await indexed.list('session-A');
+
+      expect(whileWriting.tasks.map((task) => task.taskId)).toEqual(['t-2']);
+      expect(await storage.namespace('index-start').get('session-A')).toBe('1');
+      expect(written.tasks.map((task) => task.taskId)).toEqual(['in-flight', 't-2']);
+    });
+
+    it('goes on in task-id order with a cursor from a page listed from the scan while another request indexed', async () => {
+      for (const taskId of ['c', 'a', 'b']) await indexed.create(makeRecord({ taskId }));
+      await storage.namespace('index-ready').set('session-A', 'running:another-request', { ttlSeconds: 60 });
+
+      const firstPage = await indexed.list('session-A', { pageSize: 2 });
+      await storage.namespace('index-ready').set('session-A', 'done', { ttlSeconds: 60 });
+      const secondPage = await indexed.list('session-A', { pageSize: 2, cursor: firstPage.nextCursor });
+
+      expect(firstPage.tasks.map((task) => task.taskId)).toEqual(['a', 'b']);
+      expect(secondPage.tasks.map((task) => task.taskId)).toEqual(['c']);
     });
 
     it("keeps a task's index entry as long as its record when an update moves its expiry later", async () => {
@@ -236,7 +268,8 @@ describe('StorageTaskStore', () => {
 
       await indexed.update('extended', 'session-A', { expiresAt: Date.now() + 7_200_000 });
 
-      expect(await storage.namespace('index').ttl('session-A:1')).toBeGreaterThan(7_000);
+      expect(await storage.namespace('index-of').ttl('session-A:extended')).toBeGreaterThan(7_000);
+      expect(await storage.namespace('index').ttl('session-A:1')).toBeGreaterThan(10_000);
     });
 
     it('does not list a task an older instance writes after the session was indexed, which is why it is not the default', async () => {
