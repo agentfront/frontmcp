@@ -897,6 +897,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       federatedLogin,
       // Consent State
       consent,
+      clientAuthMethod: this.clientAuthMethodOf(validatedRequest.client_id, localAuth),
     });
 
     // The token the grant expansion mints keeps the email and name of the subject the ticket proved.
@@ -1164,6 +1165,15 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
    * EMPTY `userInfo` so the minted token's `sub`/`email`/`name` derive solely
    * from the upstream provider (see the provider-callback flow).
    */
+  /** How the client validated here authenticates at the token endpoint: its CIMD document's or registration's method. */
+  private clientAuthMethodOf(clientId: string, localAuth: LocalPrimaryAuth): string {
+    return (
+      this.state.cimdMetadata?.token_endpoint_auth_method ??
+      localAuth.dcrClientRegistry.get(clientId)?.token_endpoint_auth_method ??
+      'none'
+    );
+  }
+
   private async startRemoteFederation(pendingAuthId: string, validatedRequest: OAuthAuthorizeRequest): Promise<void> {
     const auth = this.scope.auth;
     if (!auth || !('federatedSessionStore' in auth)) {
@@ -1198,6 +1208,7 @@ export default class OauthAuthorizeFlow extends FlowBase<typeof name> {
       frontmcpPkce: { challenge: validatedRequest.code_challenge, method: 'S256' },
       providerIds: [providerId],
       signinBinding: this.signinBindingHash,
+      clientAuthMethod: this.clientAuthMethodOf(validatedRequest.client_id, localAuth),
       authorizedAppIds: initialAuthorizedApps(
         this.scope.auth?.options,
         this.scope.apps.getApps(),

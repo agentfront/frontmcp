@@ -83,6 +83,7 @@ const stateSchema = z.object({
   name: z.string().optional(),
   // From pending authorization record
   clientId: z.string().optional(),
+  clientAuthMethod: z.string().optional(),
   redirectUri: z.string().optional(),
   scopes: z.array(z.string()).optional(),
   codeChallenge: z.string().optional(),
@@ -733,6 +734,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
 
     this.state.set({
       clientId: pendingAuth.clientId,
+      clientAuthMethod: pendingAuth.clientAuthMethod,
       redirectUri: pendingAuth.redirectUri,
       scopes: pendingAuth.scopes,
       codeChallenge: pendingAuth.pkce.challenge,
@@ -922,6 +924,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       // The provider callback checks the same browser binding.
       signinBinding: this.state.signinBinding,
       authorizedAppIds,
+      clientAuthMethod: this.state.clientAuthMethod,
     });
 
     // Store the session
@@ -1054,6 +1057,7 @@ export default class OauthCallbackFlow extends FlowBase<typeof name> {
       authorizedAppIds,
       // Checkpoint 3a — custom claims to embed (namespaced) in the access token.
       customClaims,
+      clientAuthMethod: this.state.clientAuthMethod,
     });
 
     this.logger.info(

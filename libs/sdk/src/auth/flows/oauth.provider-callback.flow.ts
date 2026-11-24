@@ -886,6 +886,7 @@ export default class OauthProviderCallbackFlow extends FlowBase<typeof name> {
       authorizedAppIds,
       // Token migration: pendingAuthId links to tokens stored during provider callbacks
       pendingAuthId: session.pendingAuthId,
+      clientAuthMethod: session.clientAuthMethod,
     });
 
     // Delete the federated session (no longer needed)
