@@ -21,13 +21,13 @@ import {
 } from './helpers/browser-bundle';
 
 const BUDGETS: Array<{ entry: string; label: string; maxBytes: number }> = [
-  // +12 bytes each (#1407): AES-GCM additional data in the crypto helpers every encrypted store uses
-  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_335_780 },
-  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_343_011 },
+  // +2,961 bytes each (#1316, #1347): a returned CallToolResult is parsed against its outputSchema, wrapped and union schemas included, under each tool's own policy, and a UI call follows undeclaredKeys
+  { entry: 'create-tool.ts', label: 'create() + one tool', maxBytes: 1_338_741 },
+  { entry: 'create-webmcp-tool.ts', label: 'create() + WebMcpPlugin + one tool', maxBytes: 1_345_972 },
 ];
 
-// +24 bytes (#1407): AES-GCM additional data in the crypto helpers every encrypted store uses
-const VITE_INITIAL_CHUNK_MAX_BYTES = 784_665;
+// +104 bytes (#1316, #1347): a returned CallToolResult is parsed against its outputSchema, wrapped and union schemas included, under each tool's own policy, and a UI call follows undeclaredKeys
+const VITE_INITIAL_CHUNK_MAX_BYTES = 784_769;
 
 // What create() never needs: the parser behind @enclave-vm/ast (#885), the MCP client (#886) and server-only code
 const NEVER_BUNDLED: Record<string, RegExp> = {
