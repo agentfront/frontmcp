@@ -7,14 +7,11 @@
  * @module @frontmcp/utils/key-persistence
  */
 
-import { cryptoProvider } from '#crypto-provider';
-
 import { MemoryStorageAdapter } from '../../storage/adapters/memory';
 import type { StorageAdapter } from '../../storage/types';
-import { base64urlDecode, base64urlEncode, randomBytes } from '../index';
 import { isBrowser, isNode } from '../runtime';
 import { KeyPersistence } from './key-persistence';
-import { loadLocalStorageKey } from './local-storage-key';
+import { LocalStorageKeyRequiredError, LocalStorageKeyUnavailableError } from './local-storage-key';
 import type { CreateKeyPersistenceOptions } from './types';
 
 /**
@@ -22,112 +19,28 @@ import type { CreateKeyPersistenceOptions } from './types';
  */
 const DEFAULT_BASE_DIR = '.frontmcp/keys';
 
-const KEY_RECORD_PREFIX = 'frontmcp:keys:';
-const LS_HKDF_IKM = new TextEncoder().encode('frontmcp:localstorage:v1');
-const INSTALL_SALT_KEY = '__frontmcp_internal__:install_salt';
-const LEGACY_SALT_KEY = 'frontmcp:_install_salt';
-/** Set once the records are encrypted with the key kept in IndexedDB, so no other key is ever used to read them. */
-const KEPT_KEY_SCHEME_KEY = '__frontmcp_internal__:key_scheme';
-const KEPT_KEY_SCHEME = 'indexeddb';
+let keysInMemoryWarned = false;
 
-type LocalStorageAdapterClass = typeof import('../../storage/adapters/localstorage.js').LocalStorageAdapter;
-
-let derivedKeyWarned = false;
-
-/** The records use the key kept in IndexedDB, which can't be loaded: they are left as they are, not read with another key. */
-class LocalStorageKeyUnavailableError extends Error {}
-
-/**
- * Get or create a per-installation random salt stored in localStorage.
- * This ensures the derived key is unique per browser installation.
- */
-function getOrCreateInstallationSalt(): Uint8Array {
-  if (typeof localStorage === 'undefined') {
-    throw new Error('localStorage unavailable: cannot derive installation salt');
-  }
-  const existing = localStorage.getItem(INSTALL_SALT_KEY);
-  if (existing) {
-    try {
-      return base64urlDecode(existing);
-    } catch {
-      // Corrupted salt — regenerate
-    }
-  }
-
-  // Migrate from legacy key if present
-  const legacy = localStorage.getItem(LEGACY_SALT_KEY);
-  if (legacy) {
-    try {
-      const salt = base64urlDecode(legacy);
-      localStorage.setItem(INSTALL_SALT_KEY, base64urlEncode(salt));
-      localStorage.removeItem(LEGACY_SALT_KEY);
-      return salt;
-    } catch {
-      localStorage.removeItem(LEGACY_SALT_KEY);
-    }
-  }
-
-  const salt = randomBytes(32);
-  localStorage.setItem(INSTALL_SALT_KEY, base64urlEncode(salt));
-  return salt;
-}
-
-/** The key 1.12.2 and earlier use for localStorage records: HKDF of a fixed IKM, the installation salt and the origin. */
-function deriveLocalStorageKey(): Uint8Array {
-  const salt = getOrCreateInstallationSalt();
-  const origin = typeof location !== 'undefined' ? location.origin : 'unknown';
-  return cryptoProvider.hkdfSha256(LS_HKDF_IKM, salt, new TextEncoder().encode(origin), 32);
-}
-
-/**
- * Key records in localStorage, encrypted with `encryptionKey`, or else with a non-extractable key kept in IndexedDB.
- * Where IndexedDB or WebCrypto is unavailable, the key 1.12.2 derives from localStorage is kept, with a warning,
- * unless the records already use the IndexedDB key: then it throws rather than read them with another key.
- */
 async function createLocalStorageKeyAdapter(encryptionKey?: Uint8Array): Promise<StorageAdapter> {
-  const { LocalStorageAdapter } = await import('../../storage/adapters/localstorage.js');
-  if (encryptionKey) return new LocalStorageAdapter({ prefix: KEY_RECORD_PREFIX, encryptionKey });
-  const usesKeptKey = localStorage.getItem(KEPT_KEY_SCHEME_KEY) === KEPT_KEY_SCHEME;
-  const keptKey = await loadLocalStorageKey(!usesKeptKey);
-  if (!keptKey && usesKeptKey) {
-    throw new LocalStorageKeyUnavailableError(
-      'localStorage key records are encrypted with a key kept in IndexedDB, which could not be loaded; ' +
-        'they are not read with another key',
-    );
-  }
-  if (!keptKey) {
-    if (!derivedKeyWarned) {
-      derivedKeyWarned = true;
+  const records = await import('./local-storage-key-records.js');
+  return records.createLocalStorageKeyAdapter(encryptionKey);
+}
+
+/** For 'auto': localStorage key records, else memory; a refusal to read the records already there is passed on. */
+async function localStorageKeysOrMemory(encryptionKey?: Uint8Array): Promise<StorageAdapter> {
+  try {
+    return await createLocalStorageKeyAdapter(encryptionKey);
+  } catch (error) {
+    if (error instanceof LocalStorageKeyUnavailableError) throw error;
+    if (error instanceof LocalStorageKeyRequiredError && !keysInMemoryWarned) {
+      keysInMemoryWarned = true;
       console.warn(
-        '[frontmcp] createKeyPersistence: IndexedDB or WebCrypto is unavailable, so localStorage key records are ' +
-          'encrypted with a key derived from localStorage itself, which anyone who can read it can derive. Pass ' +
-          'encryptionKey, a 32-byte key kept outside localStorage; from 1.13 localStorage key records need it here.',
+        '[frontmcp] createKeyPersistence: IndexedDB or WebCrypto is unavailable and no encryptionKey was given, so ' +
+          'keys are kept in memory only. Pass encryptionKey, a 32-byte key kept outside localStorage, to keep them.',
       );
     }
-    return new LocalStorageAdapter({ prefix: KEY_RECORD_PREFIX, encryptionKey: deriveLocalStorageKey() });
+    return new MemoryStorageAdapter();
   }
-  const adapter = new LocalStorageAdapter({ prefix: KEY_RECORD_PREFIX, encryptionKey: keptKey });
-  await adapter.connect();
-  localStorage.setItem(KEPT_KEY_SCHEME_KEY, KEPT_KEY_SCHEME);
-  await moveDerivedKeyRecords(adapter, LocalStorageAdapter);
-  return adapter;
-}
-
-/**
- * Re-encrypt the records written under the derived key with `adapter`'s key, then remove the salt, so localStorage no
- * longer holds what decrypts them.
- */
-async function moveDerivedKeyRecords(
-  adapter: StorageAdapter,
-  LocalStorageAdapter: LocalStorageAdapterClass,
-): Promise<void> {
-  if (localStorage.getItem(INSTALL_SALT_KEY) === null && localStorage.getItem(LEGACY_SALT_KEY) === null) return;
-  const derived = new LocalStorageAdapter({ prefix: KEY_RECORD_PREFIX, encryptionKey: deriveLocalStorageKey() });
-  for (const kid of await derived.keys()) {
-    const record = await derived.get(kid);
-    if (record !== null) await adapter.set(kid, record);
-  }
-  localStorage.removeItem(INSTALL_SALT_KEY);
 }
 
 /**
@@ -198,28 +111,13 @@ export async function createKeyPersistence(options?: CreateKeyPersistenceOptions
         connected = true;
       } catch {
         // Fall through to localStorage
-        if (typeof localStorage !== 'undefined') {
-          try {
-            adapter = await createLocalStorageKeyAdapter(options?.encryptionKey);
-            await adapter.connect();
-            connected = true;
-          } catch (error) {
-            if (error instanceof LocalStorageKeyUnavailableError) throw error;
-            adapter = new MemoryStorageAdapter();
-          }
-        } else {
-          adapter = new MemoryStorageAdapter();
-        }
+        adapter =
+          typeof localStorage !== 'undefined'
+            ? await localStorageKeysOrMemory(options?.encryptionKey)
+            : new MemoryStorageAdapter();
       }
     } else if (isBrowser() && typeof localStorage !== 'undefined') {
-      try {
-        adapter = await createLocalStorageKeyAdapter(options?.encryptionKey);
-        await adapter.connect();
-        connected = true;
-      } catch (error) {
-        if (error instanceof LocalStorageKeyUnavailableError) throw error;
-        adapter = new MemoryStorageAdapter();
-      }
+      adapter = await localStorageKeysOrMemory(options?.encryptionKey);
     } else {
       adapter = new MemoryStorageAdapter();
     }

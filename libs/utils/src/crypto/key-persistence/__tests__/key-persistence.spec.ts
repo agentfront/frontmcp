@@ -586,28 +586,39 @@ describe('INSTALL_SALT_KEY namespace', () => {
 
   beforeEach(() => lsStore.clear());
 
-  it('should use new namespaced key, not frontmcp: prefix', async () => {
-    const keys = await createKeyPersistence({ type: 'localstorage' });
+  it('writes no installation salt', async () => {
+    const { randomBytes: rb } = await import('../../../crypto');
+    const keys = await createKeyPersistence({ type: 'localstorage', encryptionKey: rb(32) });
+    await keys.getOrCreateSecret('session');
 
-    // The salt should be stored under the new key, not the legacy one
     expect(lsStore.has('frontmcp:_install_salt')).toBe(false);
-    expect(lsStore.has('__frontmcp_internal__:install_salt')).toBe(true);
+    expect(lsStore.has('__frontmcp_internal__:install_salt')).toBe(false);
 
     await keys.getAdapter().disconnect();
   });
 
-  it('should migrate salt from legacy key to new key', async () => {
+  it('reads records under the key derived from a salt kept at the legacy key', async () => {
     const { base64urlEncode, randomBytes: rb } = await import('../../../crypto');
+    const { cryptoProvider } = await import('#crypto-provider');
+    const { LocalStorageAdapter } = await import('../../../storage/adapters/localstorage');
     const legacySalt = rb(32);
     lsStore.set('frontmcp:_install_salt', base64urlEncode(legacySalt));
+    const origin = new TextEncoder().encode(typeof location !== 'undefined' ? location.origin : 'unknown');
+    const derivedKey = cryptoProvider.hkdfSha256(
+      new TextEncoder().encode('frontmcp:localstorage:v1'),
+      legacySalt,
+      origin,
+      32,
+    );
+    const secret = await (await createKeyPersistence({ type: 'memory' })).getOrCreateSecret('session');
+    await new LocalStorageAdapter({ prefix: 'frontmcp:keys:', encryptionKey: derivedKey }).set(
+      'session',
+      JSON.stringify(secret),
+    );
 
-    const keys = await createKeyPersistence({ type: 'localstorage' });
+    const keys = await createKeyPersistence({ type: 'localstorage', encryptionKey: rb(32), enableCache: false });
 
-    // Legacy key should be removed
-    expect(lsStore.has('frontmcp:_install_salt')).toBe(false);
-    // New key should exist
-    expect(lsStore.has('__frontmcp_internal__:install_salt')).toBe(true);
-
+    expect(await keys.getSecret('session')).toEqual(secret);
     await keys.getAdapter().disconnect();
   });
 

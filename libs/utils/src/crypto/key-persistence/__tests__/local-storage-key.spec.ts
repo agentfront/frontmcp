@@ -1,13 +1,14 @@
 /**
  * localStorage key records are encrypted with a non-extractable key kept in IndexedDB rather than one that can be
  * derived from localStorage itself (#1318), and records written under the derived key are moved to it. Without
- * IndexedDB, 1.12.x keeps the derived key and warns.
+ * IndexedDB, an encryptionKey is required (#1399).
  */
 import { cryptoProvider } from '#crypto-provider';
 
 import { LocalStorageAdapter } from '../../../storage/adapters/localstorage';
 import { base64urlEncode, randomBytes } from '../../index';
 import { createKeyPersistence } from '../factory';
+import { LocalStorageKeyRequiredError, UnreadableKeyRecordError } from '../local-storage-key';
 
 let browserLike = false;
 
@@ -22,6 +23,8 @@ jest.mock('../../runtime', () => {
 
 const RECORD_PREFIX = 'frontmcp:keys:';
 const INSTALL_SALT_KEY = '__frontmcp_internal__:install_salt';
+const SALT_KEPT_UNTIL_KEY = '__frontmcp_internal__:install_salt_kept_until';
+const EIGHT_DAYS_MS = 8 * 24 * 60 * 60 * 1000;
 
 const lsStore = new Map<string, string>();
 const lsMock: Storage = {
@@ -107,6 +110,17 @@ function derivedKey(salt: Uint8Array): Uint8Array {
   return cryptoProvider.hkdfSha256(new TextEncoder().encode('frontmcp:localstorage:v1'), salt, info, 32);
 }
 
+/** Records as a tab still running 1.12 writes them: under the key derived from a salt kept in localStorage. */
+function recordsOfAnOlderTab(): LocalStorageAdapter {
+  const salt = randomBytes(32);
+  lsStore.set(INSTALL_SALT_KEY, base64urlEncode(salt));
+  return new LocalStorageAdapter({ prefix: RECORD_PREFIX, encryptionKey: derivedKey(salt) });
+}
+
+async function newSecret(kid: string) {
+  return (await createKeyPersistence({ type: 'memory' })).getOrCreateSecret(kid);
+}
+
 describe('createKeyPersistence with localStorage', () => {
   beforeAll(() => {
     Object.defineProperty(globalThis, 'localStorage', { value: lsMock, writable: true, configurable: true });
@@ -134,20 +148,55 @@ describe('createKeyPersistence with localStorage', () => {
     expect(await reopened.getSecret('session')).toEqual(secret);
   });
 
-  it('moves records written under the derived key to the kept key, and drops the salt', async () => {
+  it('moves records written under the derived key to the kept key, and keeps the salt only for a transition', async () => {
     installFakeIndexedDB();
-    const salt = randomBytes(32);
-    lsStore.set(INSTALL_SALT_KEY, base64urlEncode(salt));
-    const derived = new LocalStorageAdapter({ prefix: RECORD_PREFIX, encryptionKey: derivedKey(salt) });
-    const earlier = await createKeyPersistence({ type: 'memory' });
-    const secret = await earlier.getOrCreateSecret('session');
+    const derived = recordsOfAnOlderTab();
+    const secret = await newSecret('session');
     await derived.set('session', JSON.stringify(secret));
 
     const keys = await createKeyPersistence({ type: 'localstorage', enableCache: false });
 
     expect(await keys.getSecret('session')).toEqual(secret);
-    expect(lsStore.has(INSTALL_SALT_KEY)).toBe(false);
     expect(await derived.get('session')).toBeNull();
+    expect(lsStore.has(INSTALL_SALT_KEY)).toBe(true);
+
+    const now = Date.now();
+    const later = jest.spyOn(Date, 'now').mockReturnValue(now + EIGHT_DAYS_MS);
+    try {
+      const afterTransition = await createKeyPersistence({ type: 'localstorage', enableCache: false });
+      expect(await afterTransition.getSecret('session')).toEqual(secret);
+      expect(lsStore.has(INSTALL_SALT_KEY)).toBe(false);
+      expect(lsStore.has(SALT_KEPT_UNTIL_KEY)).toBe(false);
+    } finally {
+      later.mockRestore();
+    }
+  });
+
+  it('reads, and moves, a record a 1.12 tab writes with the derived key after the records moved', async () => {
+    installFakeIndexedDB();
+    const olderTab = recordsOfAnOlderTab();
+    await olderTab.set('session', JSON.stringify(await newSecret('session')));
+    const keys = await createKeyPersistence({ type: 'localstorage', enableCache: false });
+    await keys.getSecret('session');
+
+    const writtenLater = await newSecret('written-later');
+    await olderTab.set('written-later', JSON.stringify(writtenLater));
+
+    expect(await keys.getOrCreateSecret('written-later')).toEqual(writtenLater);
+    expect(await olderTab.get('written-later')).toBeNull();
+  });
+
+  it('reads a record no key of the session reads as missing, and refuses to replace it', async () => {
+    installFakeIndexedDB();
+    const keys = await createKeyPersistence({ type: 'localstorage', enableCache: false });
+    const otherKey = new LocalStorageAdapter({ prefix: RECORD_PREFIX, encryptionKey: randomBytes(32) });
+    await otherKey.set('foreign', JSON.stringify(await newSecret('foreign')));
+    const record = lsStore.get(`${RECORD_PREFIX}foreign`);
+
+    expect(await keys.getSecret('foreign')).toBeNull();
+    expect(await keys.list()).not.toContain('foreign');
+    await expect(keys.getOrCreateSecret('foreign')).rejects.toThrow(UnreadableKeyRecordError);
+    expect(lsStore.get(`${RECORD_PREFIX}foreign`)).toBe(record);
   });
 
   it('refuses, keeping its records, when the IndexedDB key they use can no longer be loaded', async () => {
@@ -188,20 +237,39 @@ describe('createKeyPersistence with localStorage', () => {
     }
   });
 
-  it('without IndexedDB, keeps the key derived from localStorage and warns once, naming encryptionKey', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    try {
-      const keys = await createKeyPersistence({ type: 'localstorage' });
-      const secret = await keys.getOrCreateSecret('session');
-      const reopened = await createKeyPersistence({ type: 'localstorage', enableCache: false });
+  it("without IndexedDB or an encryptionKey, refuses 'localstorage', naming encryptionKey, and writes nothing", async () => {
+    await expect(createKeyPersistence({ type: 'localstorage' })).rejects.toThrow(LocalStorageKeyRequiredError);
+    await expect(createKeyPersistence({ type: 'localstorage' })).rejects.toThrow(/encryptionKey/);
+    expect(lsStore.size).toBe(0);
+  });
 
-      expect(await reopened.getSecret('session')).toEqual(secret);
-      expect(lsStore.has(INSTALL_SALT_KEY)).toBe(true);
+  it("without IndexedDB or an encryptionKey, keeps 'auto' keys in memory and warns once, naming encryptionKey", async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    browserLike = true;
+    try {
+      const keys = await createKeyPersistence({ type: 'auto' });
+      await keys.getOrCreateSecret('session');
+      await createKeyPersistence({ type: 'auto' });
+
+      expect(lsStore.has(`${RECORD_PREFIX}session`)).toBe(false);
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('encryptionKey'));
     } finally {
+      browserLike = false;
       warn.mockRestore();
     }
+  });
+
+  it('without IndexedDB, moves records written under the derived key to an encryptionKey it is given', async () => {
+    const derived = recordsOfAnOlderTab();
+    const secret = await newSecret('session');
+    await derived.set('session', JSON.stringify(secret));
+    const encryptionKey = randomBytes(32);
+
+    await createKeyPersistence({ type: 'localstorage', encryptionKey });
+
+    const keptWithKey = new LocalStorageAdapter({ prefix: RECORD_PREFIX, encryptionKey });
+    expect(JSON.parse((await keptWithKey.get('session')) ?? '{}')).toEqual(secret);
   });
 
   it('without IndexedDB, uses an encryptionKey it is given, with no salt', async () => {

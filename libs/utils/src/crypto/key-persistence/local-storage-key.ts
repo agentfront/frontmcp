@@ -57,3 +57,34 @@ function keepFirstKey(database: IDBDatabase, created: CryptoKey | undefined): Pr
     transaction.onabort = () => reject(transaction.error);
   });
 }
+
+/** The records use the key kept in IndexedDB, which can't be loaded: they are left as they are, not read with another key. */
+export class LocalStorageKeyUnavailableError extends Error {
+  constructor() {
+    super(
+      'localStorage key records are encrypted with a key kept in IndexedDB, which could not be loaded; they are not ' +
+        'read with another key. Restore IndexedDB, or remove the frontmcp:keys: records and ' +
+        '__frontmcp_internal__:key_scheme from localStorage to start with new keys.',
+    );
+    this.name = 'LocalStorageKeyUnavailableError';
+  }
+}
+
+/** IndexedDB or WebCrypto is unavailable, so no key can be kept outside localStorage, and none was given. */
+export class LocalStorageKeyRequiredError extends Error {
+  constructor() {
+    super(
+      'createKeyPersistence: IndexedDB or WebCrypto is unavailable, so localStorage key records need encryptionKey, ' +
+        'a 32-byte key kept outside localStorage.',
+    );
+    this.name = 'LocalStorageKeyRequiredError';
+  }
+}
+
+/** A key record is in localStorage, but no key this session has reads it, so it is not replaced. */
+export class UnreadableKeyRecordError extends Error {
+  constructor(kid: string) {
+    super(`localStorage key record "${kid}" can't be read with this session's key, so it is not replaced`);
+    this.name = 'UnreadableKeyRecordError';
+  }
+}

@@ -60,3 +60,8 @@ export { KeyPersistence } from './key-persistence';
 
 // Factory functions
 export { createKeyPersistence, createKeyPersistenceWithStorage } from './factory';
+export {
+  LocalStorageKeyRequiredError,
+  LocalStorageKeyUnavailableError,
+  UnreadableKeyRecordError,
+} from './local-storage-key';

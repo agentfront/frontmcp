@@ -315,6 +315,9 @@ export {
   KeyPersistence,
   createKeyPersistence,
   createKeyPersistenceWithStorage,
+  LocalStorageKeyRequiredError,
+  LocalStorageKeyUnavailableError,
+  UnreadableKeyRecordError,
 } from './crypto';
 export type { CryptoProvider, EncBlob, EncryptedBlob } from './crypto';
 

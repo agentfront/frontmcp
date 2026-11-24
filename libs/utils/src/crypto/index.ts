@@ -471,4 +471,7 @@ export {
   // Factory functions
   createKeyPersistence,
   createKeyPersistenceWithStorage,
+  LocalStorageKeyRequiredError,
+  LocalStorageKeyUnavailableError,
+  UnreadableKeyRecordError,
 } from './key-persistence';

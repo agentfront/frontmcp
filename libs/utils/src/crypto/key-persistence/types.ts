@@ -114,11 +114,12 @@ export interface CreateKeyPersistenceOptions {
    * Optional 32-byte AES-256-GCM key for encrypting values at rest in localStorage, kept outside localStorage.
    * Only used when type is 'localstorage' or 'auto' with localStorage fallback.
    * If not provided, the values are encrypted with a non-extractable WebCrypto key created once and kept in
-   * IndexedDB, so a reader of localStorage alone cannot decrypt them; records written under the key 1.12.2 and
-   * earlier derived from localStorage are re-encrypted with it. Where IndexedDB or WebCrypto is unavailable, that
-   * derived key is still used, with a warning: anyone who can read this origin's localStorage can derive it. From
-   * 1.13 this key is needed there. Once the records use the IndexedDB key, a session that can't load it, or finds
-   * it gone, throws (for 'auto' too) rather than read them with another key or create a new one.
+   * IndexedDB, so a reader of localStorage alone cannot decrypt them. Where IndexedDB or WebCrypto is unavailable
+   * it is required: 'localstorage' throws `LocalStorageKeyRequiredError`, and 'auto' keeps the keys in memory.
+   * Records written under the key 1.12 and earlier derived from localStorage are re-encrypted with the key in use.
+   * Once the records use the IndexedDB key, a session that can't load it, or finds it gone, throws
+   * `LocalStorageKeyUnavailableError` (for 'auto' too) rather than read them with another key or create a new one;
+   * a record no key of the session reads reads as missing, and writing it throws `UnreadableKeyRecordError`.
    */
   encryptionKey?: Uint8Array;
 }
