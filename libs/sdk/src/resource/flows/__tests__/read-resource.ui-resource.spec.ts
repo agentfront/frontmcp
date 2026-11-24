@@ -5,6 +5,7 @@ import { z } from '@frontmcp/lazy-zod';
 import { App, LogLevel, ResourceContext, ResourceTemplate, Tool, ToolContext } from '../../../common';
 import { connect } from '../../../direct';
 import type { DirectClient } from '../../../direct/client.types';
+import { MCP_ERROR_CODES } from '../../../errors';
 
 const PAGE_MIME_TYPE = 'text/html;profile=mcp-app';
 
@@ -29,7 +30,23 @@ class ForecastTool extends ToolContext {
   }
 }
 
-@App({ id: 'canvas-app', name: 'Canvas', tools: [ForecastTool], resources: [CanvasPage, ClosedCanvasPage] })
+@Tool({
+  name: 'closed_card',
+  inputSchema: {},
+  ui: { template: '<div id="closed-card"></div>', resourceUri: 'ui://closed/card' },
+})
+class ClosedCardTool extends ToolContext {
+  async execute() {
+    return {};
+  }
+}
+
+@App({
+  id: 'canvas-app',
+  name: 'Canvas',
+  tools: [ForecastTool, ClosedCardTool],
+  resources: [CanvasPage, ClosedCanvasPage],
+})
 class CanvasApp {}
 
 async function errorCodeOf(promise: Promise<unknown>): Promise<unknown> {
@@ -38,6 +55,15 @@ async function errorCodeOf(promise: Promise<unknown>): Promise<unknown> {
     return 'accepted';
   } catch (error) {
     return (error as { code?: unknown }).code;
+  }
+}
+
+async function errorOf(promise: Promise<unknown>): Promise<{ code?: unknown; message?: unknown } | 'accepted'> {
+  try {
+    await promise;
+    return 'accepted';
+  } catch (error) {
+    return error as { code?: unknown; message?: unknown };
   }
 }
 
@@ -71,16 +97,24 @@ describe('resources/read of a ui:// URI that is not a tool widget', () => {
   it.each(['ui://nothing/here', 'ui://widget/no-such-tool.html'])(
     'answers a read of and a subscription to %s with resource not found',
     async (uri) => {
-      expect(await errorCodeOf(client.readResource(uri))).toBe(-32002);
-      expect(await errorCodeOf(client.subscribeResource(uri))).toBe(-32002);
+      expect(await errorCodeOf(client.readResource(uri))).toBe(MCP_ERROR_CODES.RESOURCE_NOT_FOUND);
+      expect(await errorCodeOf(client.subscribeResource(uri))).toBe(MCP_ERROR_CODES.RESOURCE_NOT_FOUND);
     },
   );
 
   it('applies the checks of the resource it finds, as for any other scheme', async () => {
-    const read = await errorCodeOf(client.readResource('ui://closed/abc'));
+    // The direct client answers with the protocol's McpError, which keeps the code and message, not the SDK's class
+    const turnedOff = { code: MCP_ERROR_CODES.FORBIDDEN, message: expect.stringContaining('is turned off') };
 
-    expect(read).not.toBe('accepted');
-    expect(await errorCodeOf(client.subscribeResource('ui://closed/abc'))).toBe(read);
+    expect(await errorOf(client.readResource('ui://closed/abc'))).toEqual(expect.objectContaining(turnedOff));
+    expect(await errorOf(client.subscribeResource('ui://closed/abc'))).toEqual(expect.objectContaining(turnedOff));
+  });
+
+  it("reads and subscribes to a tool's custom ui.resourceUri as its widget, before a template that also matches it", async () => {
+    const result = await client.readResource('ui://closed/card');
+
+    expect(result.contents[0]).toEqual(expect.objectContaining({ uri: 'ui://closed/card' }));
+    expect(await errorCodeOf(client.subscribeResource('ui://closed/card'))).toBe('accepted');
   });
 
   it('subscribes to a ui:// resource template and to a tool widget', async () => {
