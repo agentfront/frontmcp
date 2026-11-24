@@ -422,6 +422,11 @@ export class CimdService {
           return { notModified: true, headers: response.headers };
         }
 
+        // A body that won't be read is cancelled, so the connection it holds is released.
+        if (isRedirectResponse(response) || !response.ok) {
+          await response.body?.cancel().catch(() => undefined);
+        }
+
         // Handle redirects based on policy (an opaque redirect has no readable Location and is refused)
         if (isRedirectResponse(response)) {
           const location = response.headers.get('location');
@@ -484,6 +489,7 @@ export class CimdService {
         if (contentLength) {
           const length = parseInt(contentLength, 10);
           if (!isNaN(length) && length > this.networkConfig.maxResponseSizeBytes) {
+            await response.body?.cancel().catch(() => undefined);
             throw new CimdResponseTooLargeError(url, this.networkConfig.maxResponseSizeBytes, length);
           }
         }
@@ -552,6 +558,7 @@ export class CimdService {
 
         totalBytes += value.length;
         if (totalBytes > maxBytes) {
+          await reader.cancel().catch(() => undefined);
           throw new CimdResponseTooLargeError(clientId, maxBytes, totalBytes);
         }
 

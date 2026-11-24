@@ -599,6 +599,10 @@ export class JwksService {
           redirect: 'manual',
         });
 
+        if (isRedirectResponse(res) || !res.ok) {
+          // A body that won't be read is cancelled, so the connection it holds is released.
+          await res.body?.cancel().catch(() => undefined);
+        }
         if (isRedirectResponse(res)) {
           const location = res.headers.get('location');
           if (!location) throw new Error('redirect without a readable Location header');
