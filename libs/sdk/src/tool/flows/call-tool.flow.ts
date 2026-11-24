@@ -101,7 +101,7 @@ import { resolveStructuredContentValidation, toolInputPolicies, toolOutputPolici
 import { asElicitationFallback, isReturnedCallToolResult } from '../tool.utils';
 import { toolServingMode } from '../ui/serving-mode-default';
 import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
-import { findUndeclaredArguments } from '../undeclared-arguments';
+import { findUndeclaredArguments, formatKeyPath } from '../undeclared-arguments';
 import { askToOpenConnectPages, credentialsRequiredErrorOf, evaluateToolCredentialGate } from './tool-credentials.gate';
 
 /**
@@ -1277,7 +1277,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     const declaredKeys = Object.keys(tool.inputSchema ?? {});
     if (policy === 'fail') throw new InvalidInputError(messages.undeclaredArgumentsRefusal(keyPaths, declaredKeys));
     this.state.set('undeclaredArgumentsNote', messages.undeclaredArgumentsNote(keyPaths, declaredKeys));
-    const newKeyPaths = unreportedKeyPaths(reportedUndeclaredArguments, tool, keyPaths);
+    const newKeyPaths = unreportedKeyPaths(reportedUndeclaredArguments, tool, keyPaths.map(formatKeyPath));
     if (newKeyPaths.length > 0) this.logger.warn(messages.undeclaredArgumentsWarning(tool.metadata.name, newKeyPaths));
   }
 
@@ -1782,7 +1782,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       }
     }
 
-    const result = parseResult.data;
+    // A copy: the parsed answer can be the tool's own CallToolResult, which may be cached or frozen
+    const result = { ...parseResult.data };
 
     // Preserve any _meta the tool returned itself
     // Runtime type guard to safely extract _meta from rawOutput

@@ -1,13 +1,16 @@
 // file: libs/sdk/src/tool/undeclared-arguments-message.ts
-import { topLevelKeyOf } from './undeclared-arguments';
+import { formatKeyPath, type ArgumentKeyPath } from './undeclared-arguments';
 
 /** The `INVALID_INPUT` message of a call refused under `input.undeclaredKeys: 'fail'`. */
-export function undeclaredArgumentsRefusal(keyPaths: readonly string[], declaredKeys: readonly string[]): string {
+export function undeclaredArgumentsRefusal(
+  keyPaths: readonly ArgumentKeyPath[],
+  declaredKeys: readonly string[],
+): string {
   return `Unknown arguments: ${describeUndeclaredArguments(keyPaths, declaredKeys)}`;
 }
 
 /** The last text line of an answer under `input.undeclaredKeys: 'warn'`, for the model that called. */
-export function undeclaredArgumentsNote(keyPaths: readonly string[], declaredKeys: readonly string[]): string {
+export function undeclaredArgumentsNote(keyPaths: readonly ArgumentKeyPath[], declaredKeys: readonly string[]): string {
   return `These arguments are not declared and were ignored: ${describeUndeclaredArguments(keyPaths, declaredKeys)}.`;
 }
 
@@ -20,11 +23,15 @@ export function undeclaredArgumentsWarning(toolName: string, newKeyPaths: readon
 }
 
 /** Each undeclared argument, quoted, with the declared key it is closest to when one is close enough to be a slip. */
-export function describeUndeclaredArguments(keyPaths: readonly string[], declaredKeys: readonly string[]): string {
+export function describeUndeclaredArguments(
+  keyPaths: readonly ArgumentKeyPath[],
+  declaredKeys: readonly string[],
+): string {
   return keyPaths
     .map((keyPath) => {
-      const closest = keyPath === topLevelKeyOf(keyPath) ? closestKey(keyPath, declaredKeys) : undefined;
-      return closest ? `'${keyPath}' (did you mean '${closest}'?)` : `'${keyPath}'`;
+      const shown = formatKeyPath(keyPath);
+      const closest = keyPath.length === 1 ? closestKey(keyPath[0], declaredKeys) : undefined;
+      return closest ? `'${shown}' (did you mean '${closest}'?)` : `'${shown}'`;
     })
     .join(', ');
 }

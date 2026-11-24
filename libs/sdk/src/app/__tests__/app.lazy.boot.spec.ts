@@ -388,6 +388,27 @@ describe('an app that cannot be lazy', () => {
     await client.close();
   });
 
+  it("applies the input policy of the app once it loads: 'fail' refuses an undeclared argument", async () => {
+    @Tool({ name: 'strict_charge', inputSchema: { amount: z.number() } })
+    class StrictChargeTool extends ToolContext {
+      async execute() {
+        return 'charged';
+      }
+    }
+
+    @App({ id: 'billing', name: 'Billing', tools: [StrictChargeTool], input: { undeclaredKeys: 'fail' } })
+    class StrictBillingApp {}
+
+    const client = await connect(lazyServer(billingImport({ StrictBillingApp })));
+    const answer = await client.callTool('strict_charge', { amount: 5, amountCents: 500 }).then(
+      (result) => JSON.stringify(result),
+      (error: Error) => error.message,
+    );
+
+    expect(answer).toContain("Unknown arguments: 'amountCents'");
+    await client.close();
+  });
+
   it('accepts a module whose default export is the app', async () => {
     const client = await connect(lazyServer(billingImport({ default: BillingApp })));
 

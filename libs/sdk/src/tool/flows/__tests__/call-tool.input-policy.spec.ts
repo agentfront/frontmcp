@@ -46,7 +46,16 @@ class LenientWaitTool extends ToolContext {
   }
 }
 
-@App({ id: 'agents', name: 'Agents', tools: [AgentWaitTool, LenientWaitTool] })
+const cachedAnswer = Object.freeze({ content: Object.freeze([Object.freeze({ type: 'text', text: 'cached' })]) });
+
+@Tool({ name: 'cached_wait', inputSchema: { timeoutSec: z.number().default(45) } })
+class CachedWaitTool extends ToolContext {
+  async execute() {
+    return cachedAnswer as unknown as string;
+  }
+}
+
+@App({ id: 'agents', name: 'Agents', tools: [AgentWaitTool, LenientWaitTool, CachedWaitTool] })
 class AgentsApp {}
 
 @Tool({ name: 'strict_wait', inputSchema: { timeoutSec: z.number().default(45) }, outputSchema: 'string' })
@@ -106,6 +115,19 @@ describe('tools/call input.undeclaredKeys', () => {
     const warnings = inputWarnings.filter((line) => line.includes('agent_wait'));
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('timeoutMs');
+  });
+
+  it('adds the line to a copy of a CallToolResult the tool returns, which may be cached and frozen', async () => {
+    process.env['NODE_ENV'] = 'development';
+    const server = await startServer();
+
+    const first = await callWait(server, 'cached_wait');
+    const second = await callWait(server, 'cached_wait');
+
+    expect(first.isError).toBe(false);
+    expect(first.texts).toEqual(['cached', expect.stringContaining("'timeoutMs'")]);
+    expect(second.texts).toEqual(first.texts);
+    expect(cachedAnswer.content).toHaveLength(1);
   });
 
   it("refuses the call under a server-level 'fail', naming the key and the closest declared one", async () => {

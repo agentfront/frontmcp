@@ -1,7 +1,13 @@
 import { type Token, type Type } from '@frontmcp/di';
 
 import { type AppEntry } from '../entries';
-import { type LazyAppMetadata, type LocalAppMetadata, type OutputPolicy, type RemoteAppMetadata } from '../metadata';
+import {
+  type InputPolicy,
+  type LazyAppMetadata,
+  type LocalAppMetadata,
+  type OutputPolicy,
+  type RemoteAppMetadata,
+} from '../metadata';
 
 export enum AppKind {
   LOCAL_CLASS = 'LOCAL_CLASS',
@@ -26,7 +32,12 @@ export type AppValue = {
  * A lazy app always joins the server's scope: it has no scope of its own and no `auth` of its own. Its `output` is
  * the loaded app's, read from the manifest until then.
  */
-export type LazyAppRecordMetadata = LazyAppMetadata & { standalone: false; auth?: undefined; output?: OutputPolicy };
+export type LazyAppRecordMetadata = LazyAppMetadata & {
+  standalone: false;
+  auth?: undefined;
+  output?: OutputPolicy;
+  input?: InputPolicy;
+};
 
 export type AppLazyImport = {
   kind: AppKind.LAZY_IMPORT;
