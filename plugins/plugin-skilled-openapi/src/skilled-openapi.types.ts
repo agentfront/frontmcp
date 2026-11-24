@@ -42,7 +42,8 @@ export const outboundOptionsSchema = z
     /**
      * What `egressProxy` is asked to connect to. `'approved-address'`: an address the outbound check
      * approved (`CONNECT <address>:<port>`), with the hostname kept in `Host` and as the TLS server
-     * name. `'hostname'`: the hostname, which the proxy resolves itself. Unset means `'hostname'` and
+     * name; a hostname with no approved address (DNS failed under `allowPrivateNetworks`) is refused.
+     * `'hostname'`: the hostname, which the proxy resolves itself. Unset means `'hostname'` and
      * logs a warning at startup; 1.13 makes `'approved-address'` the default.
      */
     egressProxyConnectTo: z.enum(['approved-address', 'hostname']).optional(),

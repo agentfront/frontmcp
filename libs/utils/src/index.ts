@@ -74,6 +74,8 @@ export type {
   IpAddressRange,
   SpecialPurposeIpRange,
   RedirectCandidate,
+  PinnedFetch,
+  PinnedRequestInit,
   OutboundTargetOptions,
   OutboundUrlCheck,
   OutboundUrlProblem,

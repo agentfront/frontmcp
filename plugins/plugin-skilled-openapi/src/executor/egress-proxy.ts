@@ -20,16 +20,23 @@ interface ProxyAgentOptions {
   factory?: (origin: string, options: PoolOptions) => unknown;
 }
 
-interface UndiciModule {
-  fetch: (input: string, init: RequestInit & { dispatcher: unknown }) => Promise<Response>;
-  ProxyAgent: new (options: ProxyAgentOptions) => unknown;
-  Pool: new (origin: string, options: PoolOptions) => unknown;
+interface Dispatcher {
+  close(): Promise<void>;
 }
+
+interface UndiciModule {
+  fetch: (input: string, init: RequestInit & { dispatcher: Dispatcher }) => Promise<Response>;
+  ProxyAgent: new (options: ProxyAgentOptions) => Dispatcher;
+  Pool: new (origin: string, options: PoolOptions) => Dispatcher;
+}
+
+/** The most hostname and address pairs whose agents a proxy keeps; the least recently used one is closed. */
+const MAX_PINNED_AGENTS = 64;
 
 /** The agents of one proxy: one for a URL whose host is sent as it is, one per hostname and checked address. */
 class EgressProxy {
-  private readonly agent: unknown;
-  private readonly pinnedAgents = new Map<string, unknown>();
+  private readonly agent: Dispatcher;
+  private readonly pinnedAgents = new Map<string, Dispatcher>();
 
   constructor(
     readonly undici: UndiciModule,
@@ -38,22 +45,27 @@ class EgressProxy {
     this.agent = new undici.ProxyAgent({ uri: proxyUrl, proxyTunnel: true });
   }
 
-  agentFor(hostname: string, address: LookupAddress | undefined): unknown {
+  agentFor(hostname: string, address: LookupAddress | undefined): Dispatcher {
     if (!address) return this.agent;
     const key = `${hostname} ${address.address}`;
-    let pinnedAgent = this.pinnedAgents.get(key);
-    if (!pinnedAgent) {
-      pinnedAgent = this.createPinnedAgent(hostname, address);
-      this.pinnedAgents.set(key, pinnedAgent);
-    }
+    const pinnedAgent = this.pinnedAgents.get(key) ?? this.createPinnedAgent(hostname, address);
+    this.pinnedAgents.delete(key);
+    this.pinnedAgents.set(key, pinnedAgent);
+    if (this.pinnedAgents.size > MAX_PINNED_AGENTS) this.closeLeastRecentlyUsed();
     return pinnedAgent;
+  }
+
+  private closeLeastRecentlyUsed(): void {
+    const [key, leastRecentlyUsed] = this.pinnedAgents.entries().next().value as [string, Dispatcher];
+    this.pinnedAgents.delete(key);
+    leastRecentlyUsed.close().catch(() => undefined);
   }
 
   /**
    * An agent whose tunnels to `hostname` the proxy opens to `address`. The URL keeps the hostname,
    * so `Host` and the TLS server name (SNI and the certificate check) still name it.
    */
-  private createPinnedAgent(hostname: string, address: LookupAddress): unknown {
+  private createPinnedAgent(hostname: string, address: LookupAddress): Dispatcher {
     const addressHost = address.family === 6 ? `[${address.address}]` : address.address;
     return new this.undici.ProxyAgent({
       uri: this.proxyUrl,

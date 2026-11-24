@@ -26,7 +26,7 @@ import {
 } from '@frontmcp/adapters/openapi';
 import type { AuthBinding } from '@frontmcp/adapters/skills';
 import { ToolCredentialsRequiredError, type FrontMcpLogger } from '@frontmcp/sdk';
-import { isEdgeRuntime, isRedirectResponse, pinnedFetch } from '@frontmcp/utils';
+import { classifyIpAddress, isEdgeRuntime, isRedirectResponse, pinnedFetch, type PinnedFetch } from '@frontmcp/utils';
 
 import type { HiddenOpEntry } from '../registry/hidden-op.registry';
 import type { OutboundOptions } from '../skilled-openapi.types';
@@ -251,6 +251,15 @@ export async function executeOperation(args: {
   if (!ssrf.ok) {
     return failure(0, `ssrf check rejected request: ${ssrf.reason}`);
   }
+  if (outbound.egressProxy && outbound.egressProxyConnectTo === 'approved-address' && !ssrf.addresses?.length) {
+    const hostname = new URL(req.url).hostname.replace(/^\[|\]$/g, '');
+    if (!classifyIpAddress(hostname)) {
+      return failure(
+        0,
+        `ssrf check rejected request: no address of "${hostname}" was approved to ask the egress proxy for`,
+      );
+    }
+  }
 
   // The body is sent JSON-serialized below. Label it: a string body with no content-type goes out
   // as `text/plain;charset=UTF-8`, which a JSON API rejects or misreads. A content-type the
@@ -265,7 +274,7 @@ export async function executeOperation(args: {
     req.headers.set('content-type', 'application/json');
   }
 
-  let fetchImpl: typeof fetch;
+  let fetchImpl: typeof fetch | PinnedFetch;
   try {
     fetchImpl = deps.fetchImpl ?? (await outboundFetch(outbound, ssrf));
   } catch (e) {
@@ -368,7 +377,7 @@ export async function executeOperation(args: {
  * The `fetch` a request goes out with: through the egress proxy when one is set, else to the
  * addresses the outbound check resolved and judged. A Worker resolves and connects on the platform.
  */
-async function outboundFetch(outbound: OutboundOptions, ssrf: SsrfCheckResult): Promise<typeof fetch> {
+async function outboundFetch(outbound: OutboundOptions, ssrf: SsrfCheckResult): Promise<typeof fetch | PinnedFetch> {
   if (outbound.egressProxy) {
     const approvedAddresses = outbound.egressProxyConnectTo === 'approved-address' ? ssrf.addresses : undefined;
     return proxiedFetch(outbound.egressProxy, approvedAddresses);
