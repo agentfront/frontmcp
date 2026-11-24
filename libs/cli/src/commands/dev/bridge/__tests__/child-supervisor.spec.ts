@@ -7,6 +7,7 @@
  * - The ready sentinel carries the port and MCP path the server really serves.
  */
 import * as fs from 'node:fs';
+import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -18,6 +19,7 @@ import {
   READY_SENTINEL,
   resolveChildCommand,
   resolveProjectTsxLoader,
+  sdkPredatesReadySentinel,
   type ChildReadyInfo,
 } from '../child-supervisor';
 
@@ -119,6 +121,43 @@ describe('resolveProjectTsxLoader', () => {
   });
 });
 
+describe('sdkPredatesReadySentinel', () => {
+  let project: string;
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'frontmcp-sdk-version-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(project, { recursive: true, force: true });
+  });
+
+  function installSdk(version: string): void {
+    const sdkDir = path.join(project, 'node_modules', '@frontmcp', 'sdk');
+    fs.mkdirSync(sdkDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sdkDir, 'package.json'),
+      JSON.stringify({ name: '@frontmcp/sdk', version, exports: { './package.json': './package.json' } }),
+    );
+  }
+
+  it.each([
+    ['1.2.9', true],
+    ['0.12.0', true],
+    ['1.3.0', false],
+    ['1.12.2', false],
+    ['2.0.0-rc.1', false],
+  ])('for an SDK at %s is %p', (version, predates) => {
+    installSdk(version);
+
+    expect(sdkPredatesReadySentinel(project)).toBe(predates);
+  });
+
+  it('takes an SDK it cannot find to write the sentinel', () => {
+    expect(sdkPredatesReadySentinel(project)).toBe(false);
+  });
+});
+
 describe('createChildSupervisor (real child processes)', () => {
   let dir: string;
 
@@ -155,6 +194,65 @@ setInterval(() => {}, 1000);\n`,
     }
     expect(supervisor.current()).toBeUndefined();
   }, 20_000);
+
+  // #1298 — another process on the port is not taken for the server.
+  describe('HTTP mode with another process on the port', () => {
+    let squatter: net.Server;
+    let squattedPort: number;
+
+    beforeEach(async () => {
+      squatter = net.createServer((socket) => socket.end());
+      await new Promise<void>((resolve) => squatter.listen(0, '127.0.0.1', resolve));
+      squattedPort = (squatter.address() as net.AddressInfo).port;
+    });
+
+    afterEach(async () => {
+      await new Promise<void>((resolve) => squatter.close(() => resolve()));
+    });
+
+    function silentChild(): string {
+      const entry = path.join(dir, 'server.js');
+      fs.writeFileSync(entry, 'setInterval(() => {}, 1000);\n');
+      return entry;
+    }
+
+    it('waits for the sentinel instead of taking a connection to the port as ready', async () => {
+      const onReady = jest.fn();
+      const supervisor = createChildSupervisor({
+        mode: 'http',
+        entry: silentChild(),
+        log: silentLog(),
+        port: squattedPort,
+        env: { ...process.env },
+        readyTimeoutMs: 3_000,
+        onReady,
+        onExit: jest.fn(),
+      });
+
+      await expect(supervisor.start()).rejects.toThrow('child did not become ready within 3000ms');
+      expect(onReady).not.toHaveBeenCalled();
+    }, 20_000);
+
+    it('takes a connection to the port as ready for an SDK that predates the sentinel', async () => {
+      const ready: ChildReadyInfo[] = [];
+      const supervisor = createChildSupervisor({
+        mode: 'http',
+        entry: silentChild(),
+        log: silentLog(),
+        port: squattedPort,
+        acceptPortProbe: true,
+        env: { ...process.env },
+        onReady: (_child, info) => void ready.push(info),
+        onExit: jest.fn(),
+      });
+      try {
+        await supervisor.start();
+        expect(ready).toEqual([{}]);
+      } finally {
+        await supervisor.stop();
+      }
+    }, 20_000);
+  });
 
   it('pipe mode: the server process itself owns the IPC channel', async () => {
     const entry = path.join(dir, 'server.js');

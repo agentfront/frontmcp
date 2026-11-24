@@ -27,6 +27,7 @@ jest.mock('../log', () => ({
     close: async () => undefined,
   }),
 }));
+const mockSdkPredatesReadySentinel = jest.fn((_directory: string) => false);
 jest.mock('../child-supervisor', () => ({
   createChildSupervisor: (options: typeof supervisorOptions) => {
     supervisorOptions = options;
@@ -34,6 +35,7 @@ jest.mock('../child-supervisor', () => ({
   },
   resolveChildCommand: () => ({ command: process.execPath, args: [] }),
   resolveProjectTsxLoader: () => undefined,
+  sdkPredatesReadySentinel: (directory: string) => mockSdkPredatesReadySentinel(directory),
 }));
 jest.mock('../watcher', () => ({
   createDevWatcher: () => ({ start: jest.fn(), stop: watcherStop }),
@@ -101,6 +103,15 @@ describe('runDevBridge lifecycle (dev --stdio must not return while the child is
     expect(settled).toBe(true);
     expect(supervisorStop).toHaveBeenCalledTimes(1);
     expect(watcherStop).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads the SDK version from the folder of the entry it launches, not the command's folder", async () => {
+    const run = runDevBridge({ _: [], stdio: true } as never);
+    await new Promise((r) => setTimeout(r, 25));
+    framerOptions.onClose?.();
+    await run;
+
+    expect(mockSdkPredatesReadySentinel).toHaveBeenCalledWith('/proj/src');
   });
 
   it('shuts down after boot when stdin closed while the first child was still starting', async () => {
