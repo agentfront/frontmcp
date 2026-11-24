@@ -32,6 +32,12 @@ import {
 } from '../../__test-utils__/helpers/oauth-flow.helpers';
 import { App, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 
+// The DNS answers here are public addresses no test dials: a pinned request goes to the mocked `fetch`.
+jest.mock('@frontmcp/utils', () => ({
+  ...jest.requireActual('@frontmcp/utils'),
+  pinnedFetch: () => (input: string | URL, init?: RequestInit) => fetch(input, init),
+}));
+
 @Tool({ name: 'whoami', inputSchema: {} })
 class WhoAmITool extends ToolContext {
   async execute() {

@@ -39,6 +39,15 @@ export const outboundOptionsSchema = z
      * with `NODE_USE_ENV_PROXY=1`.
      */
     egressProxy: z.string().url().optional(),
+    /**
+     * What `egressProxy` is asked to connect to. `'approved-address'`: an address the outbound check
+     * approved (`CONNECT <address>:<port>`), with the hostname kept in `Host` and as the TLS server
+     * name; a hostname with no approved address (DNS failed under `allowPrivateNetworks`) is refused, and
+     * the proxy must be `http:` or `https:` (a SOCKS proxy is sent the hostname).
+     * `'hostname'`: the hostname, which the proxy resolves itself. Unset means `'hostname'` and
+     * logs a warning at startup; 1.13 makes `'approved-address'` the default.
+     */
+    egressProxyConnectTo: z.enum(['approved-address', 'hostname']).optional(),
     /** Per-host concurrent request cap. */
     maxConcurrencyPerHost: z.number().int().positive().default(10),
     /** Default per-op HTTP timeout in milliseconds. */
@@ -209,6 +218,19 @@ export const skilledOpenApiPluginOptionsSchema = skilledOpenApiPluginOptionsObje
         path: ['authProviders'],
         message: vaultRefListedTwiceMessage(listedTwice),
         params: { vaultRefsListedTwice: listedTwice },
+      });
+    }
+    const { egressProxy, egressProxyConnectTo } = opts.outbound ?? {};
+    // An egressProxy that isn't a URL already has its own issue.
+    const tunnelsToAddress =
+      !egressProxy || !URL.canParse(egressProxy) || ['http:', 'https:'].includes(new URL(egressProxy).protocol);
+    if (egressProxyConnectTo === 'approved-address' && !tunnelsToAddress) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['outbound', 'egressProxyConnectTo'],
+        message:
+          "outbound.egressProxyConnectTo 'approved-address' needs an http: or https: egressProxy: " +
+          'a SOCKS proxy is sent the hostname',
       });
     }
   })

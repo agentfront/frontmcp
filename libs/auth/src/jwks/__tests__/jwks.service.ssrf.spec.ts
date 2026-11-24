@@ -10,6 +10,11 @@ import * as dns from 'node:dns';
 import { JwksService } from '../jwks.service';
 
 jest.mock('node:dns', () => ({ promises: { lookup: jest.fn() } }));
+// The DNS answers here are public addresses no test dials: a pinned request goes to the mocked `fetch`.
+jest.mock('@frontmcp/utils', () => ({
+  ...jest.requireActual('@frontmcp/utils'),
+  pinnedFetch: () => (input: string | URL, init?: RequestInit) => fetch(input, init),
+}));
 
 const mockDnsLookup = dns.promises.lookup as unknown as jest.Mock;
 
