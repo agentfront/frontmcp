@@ -41,7 +41,6 @@ import {
   resolveAllowNonFinite,
   resolveOutputBudget,
   resolveOutputSchemaMode,
-  resolveStructuredContentValidation,
   resolveUndeclaredKeysPolicy,
   ToolContext,
   ToolEntry,
@@ -97,7 +96,7 @@ import { TaskNotifier } from '../../task/helpers/task-notifier';
 import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.types';
 import { linkedAbortController } from '../../utils/abort.utils';
 import { appOwnerIdOf, hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
-import { toolOutputPolicies } from '../tool-output-policy';
+import { resolveStructuredContentValidation, toolOutputPolicies } from '../tool-output-policy';
 import { toolServingMode } from '../ui/serving-mode-default';
 import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
 import { askToOpenConnectPages, credentialsRequiredErrorOf, evaluateToolCredentialGate } from './tool-credentials.gate';
