@@ -1266,10 +1266,10 @@ export default class CallToolFlow extends FlowBase<typeof name> {
 
   /** `input.undeclaredKeys` for the arguments the `inputSchema` does not declare, which parsing dropped. */
   private async applyInputPolicy(tool: CallToolEntry, sent: unknown, parsed: unknown): Promise<void> {
-    const keyPaths = findUndeclaredArguments(tool.inputSchema ?? {}, sent, parsed);
-    if (keyPaths.length === 0) return;
     const policy = resolveInputUndeclaredKeysPolicy(...toolInputPolicies(tool, this.scope));
     if (policy === 'strip') return;
+    const keyPaths = findUndeclaredArguments(tool.inputSchema ?? {}, sent, parsed);
+    if (keyPaths.length === 0) return;
     const messages = await import('../undeclared-arguments-message.js');
     const declaredKeys = Object.keys(tool.inputSchema ?? {});
     if (policy === 'fail') throw new InvalidInputError(messages.undeclaredArgumentsRefusal(keyPaths, declaredKeys));
