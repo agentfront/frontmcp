@@ -5,7 +5,7 @@
 
 import * as path from 'node:path';
 
-import { InterpreterAdapter } from '@enclave-vm/core/worker';
+import { InterpreterAdapter, type ToolHandler } from '@enclave-vm/core/worker';
 
 import { readdir, readFile } from '@frontmcp/utils';
 
@@ -22,6 +22,12 @@ import {
   type AgentScriptRunnerOptions,
 } from '../services/runtime/interpreter.runtime';
 import { createNodeVmRuntime, isCloudflareWorkersRuntime, toEnclaveOptions } from '../services/runtime/node-vm.runtime';
+
+/** Calls a tool handler as the sandbox does: Enclave 2.21 adds the call's position, which 2.20 ignores. */
+function callToolHandler(handler: ToolHandler, toolName: string, args: Record<string, unknown>): Promise<unknown> {
+  const params = [toolName, args, { callIndex: 0 }] as unknown as Parameters<ToolHandler>;
+  return handler(...params);
+}
 
 function resolvedVm(extra: Record<string, unknown> = {}): ResolvedCodeCallVmOptions {
   const vm = new CodeCallConfig({ vm: { preset: 'secure' } }).getAll().resolvedVm;
@@ -410,14 +416,14 @@ describe('ExecutionGate', () => {
     const guardedHandler = gate.guardToolHandler(handler);
     const guardedFn = gate.guardHostFunction('getTool', fn);
 
-    await expect(guardedHandler('a', {})).resolves.toBe('ok');
+    await expect(callToolHandler(guardedHandler, 'a', {})).resolves.toBe('ok');
     expect(guardedFn('x')).toBe('value');
     expect(gate.isOpen).toBe(true);
 
     gate.close();
 
     expect(gate.isOpen).toBe(false);
-    await expect(guardedHandler('a', {})).rejects.toBeInstanceOf(ExecutionEndedError);
+    await expect(callToolHandler(guardedHandler, 'a', {})).rejects.toBeInstanceOf(ExecutionEndedError);
     expect(() => guardedFn('x')).toThrow(ExecutionEndedError);
     expect(handler).toHaveBeenCalledTimes(1);
     expect(fn).toHaveBeenCalledTimes(1);
@@ -429,8 +435,8 @@ describe('ExecutionGate', () => {
     const handler = gate.guardToolHandler(() => new Promise((resolve) => (finish = resolve)));
     const settled = gate.guardToolHandler(async () => 'done');
 
-    await settled('done', {});
-    const pending = handler('slow', {});
+    await callToolHandler(settled, 'done', {});
+    const pending = callToolHandler(handler, 'slow', {});
 
     expect(gate.close()).toEqual({ pendingToolCalls: 1 });
     finish('late');
