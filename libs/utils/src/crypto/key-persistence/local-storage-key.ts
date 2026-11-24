@@ -10,12 +10,15 @@ const KEY_ID = 'frontmcp:keys:';
 
 /**
  * The AES-GCM key for localStorage key records: created non-extractable on first use and kept in IndexedDB, so a
- * reader of localStorage alone cannot decrypt them. `undefined` where IndexedDB or WebCrypto is unavailable.
+ * reader of localStorage alone cannot decrypt them. With `createIfMissing` false, a missing key is not created.
+ * `undefined` where IndexedDB or WebCrypto is unavailable, or the key is missing and not to be created.
  */
-export async function loadLocalStorageKey(): Promise<CryptoKey | undefined> {
+export async function loadLocalStorageKey(createIfMissing: boolean): Promise<CryptoKey | undefined> {
   if (typeof indexedDB === 'undefined' || !globalThis.crypto?.subtle) return undefined;
   try {
-    const created = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    const created = createIfMissing
+      ? await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+      : undefined;
     const database = await openKeyDatabase();
     try {
       return await keepFirstKey(database, created);
@@ -38,8 +41,8 @@ function openKeyDatabase(): Promise<IDBDatabase> {
   });
 }
 
-/** The key kept already, else `created`, kept now, in one read-write transaction so that tabs opening together agree. */
-function keepFirstKey(database: IDBDatabase, created: CryptoKey): Promise<CryptoKey> {
+/** The key kept already, else `created` kept now, in one read-write transaction so that tabs opening together agree. */
+function keepFirstKey(database: IDBDatabase, created: CryptoKey | undefined): Promise<CryptoKey | undefined> {
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
@@ -47,7 +50,7 @@ function keepFirstKey(database: IDBDatabase, created: CryptoKey): Promise<Crypto
     const lookup = store.get(KEY_ID);
     lookup.onsuccess = () => {
       if (lookup.result) kept = lookup.result as CryptoKey;
-      else store.put(created, KEY_ID);
+      else if (created) store.put(created, KEY_ID);
     };
     transaction.oncomplete = () => resolve(kept);
     transaction.onerror = () => reject(transaction.error);
