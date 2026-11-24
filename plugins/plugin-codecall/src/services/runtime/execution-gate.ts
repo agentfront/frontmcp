@@ -41,11 +41,12 @@ export class ExecutionGate {
 
   /** The tool handler, refusing a call once the execution has ended and counting calls in flight. */
   guardToolHandler(handler: ToolHandler): ToolHandler {
-    return async (toolName: string, args: Record<string, unknown>) => {
+    return async (...params: Parameters<ToolHandler>) => {
+      const [toolName] = params;
       if (!this.open) throw new ExecutionEndedError(`tool "${String(toolName).slice(0, 128)}"`);
       this.inFlightToolCalls += 1;
       try {
-        return await handler(toolName, args);
+        return await handler(...params);
       } finally {
         this.inFlightToolCalls -= 1;
       }
