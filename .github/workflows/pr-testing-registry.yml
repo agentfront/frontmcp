@@ -49,23 +49,20 @@ jobs:
             exit 1
           fi
 
-      # Node comes from this workflow's own commit, without the shared cache, before the PR is checked out.
-      - name: Checkout the setup action
+      # The PR's code runs only in a container that gets the PR checkout and an output folder, not the runner's token.
+      - name: Checkout the build script
         uses: actions/checkout@v6
         with:
           path: trusted
           persist-credentials: false
           sparse-checkout: |
             .nvmrc
-            .github/actions/setup-node-yarn
+            .github/scripts/build-pr-packages.sh
           sparse-checkout-cone-mode: false
 
-      - name: Setup Node
-        uses: ./trusted/.github/actions/setup-node-yarn
-        with:
-          node-version-file: trusted/.nvmrc
-          install: "false"
-          cache: ""
+      - name: Get Node version
+        id: node-version
+        run: echo "version=$(sed 's/^v//' trusted/.nvmrc)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout PR branch
         uses: actions/checkout@v6
@@ -85,72 +82,36 @@ jobs:
           echo "full_sha=$FULL_SHA" >> "$GITHUB_OUTPUT"
           echo "PR SHA: $SHA"
 
-      - name: Install dependencies
-        working-directory: pr
-        run: yarn install --immutable
-        env:
-          npm_config_onnxruntime_node_install_cuda: skip
-
       - name: Calculate PR version
         id: version
-        working-directory: pr
         run: |
           PR_NUM="${{ inputs.pr_number }}"
           SHA="${{ steps.pr-info.outputs.sha }}"
-
-          # Get current version from SDK package (the main package)
-          CURRENT_VERSION=$(jq -r '.version' libs/sdk/package.json)
-          echo "Current version: $CURRENT_VERSION"
-
-          # Create PR version based on current version: e.g., 0.7.2-pr.205.00cc1a6
+          CURRENT_VERSION=$(jq -r '.version' pr/libs/sdk/package.json)
+          if ! [[ "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::Unexpected SDK version: $CURRENT_VERSION"
+            exit 1
+          fi
           VERSION="${CURRENT_VERSION}-pr.${PR_NUM}.${SHA}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "PR Version: $VERSION"
 
-      - name: Update package versions
-        working-directory: pr
+      - name: Build and pack the PR's packages in a container
+        env:
+          NODE_VERSION: ${{ steps.node-version.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          npx nx release version "${{ steps.version.outputs.version }}" \
-            --git-tag=false --git-commit=false
-
-      - name: Build all packages
-        working-directory: pr
-        run: |
-          npx nx run-many -t build --parallel=5
-
-      - name: Pack packages
-        working-directory: pr
-        run: |
-          PACKAGES_DIR="$RUNNER_TEMP/pr-packages"
-          mkdir -p "$PACKAGES_DIR"
-          FAILED_PACKAGES=()
-
-          # Dynamically discover all publishable packages using Nx
-          echo "Discovering publishable packages..."
-          PUBLISHABLE_PROJECTS=($(npx nx show projects --with-target publish 2>/dev/null))
-          echo "Found ${#PUBLISHABLE_PROJECTS[@]} publishable packages: ${PUBLISHABLE_PROJECTS[*]}"
-
-          for project in "${PUBLISHABLE_PROJECTS[@]}"; do
-            # Determine dist path based on project location (libs/ or plugins/)
-            if [ -d "libs/$project/dist" ]; then
-              DIST_PATH="libs/$project/dist"
-            elif [ -d "plugins/$project/dist" ]; then
-              DIST_PATH="plugins/$project/dist"
-            else
-              echo "Warning: No dist folder found for $project"
-              continue
-            fi
-
-            echo "Packing $DIST_PATH..."
-            if ! npm pack "./$DIST_PATH" --pack-destination "$PACKAGES_DIR"; then
-              echo "Warning: pack failed for $project"
-              FAILED_PACKAGES+=("$project")
-            fi
-          done
-
-          if [ ${#FAILED_PACKAGES[@]} -gt 0 ]; then
-            echo "::warning::Failed to pack: ${FAILED_PACKAGES[*]}"
-          fi
+          mkdir -p "$RUNNER_TEMP/pr-packages"
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE/pr:/work" \
+            --volume "$RUNNER_TEMP/pr-packages:/packages" \
+            --volume "$GITHUB_WORKSPACE/trusted/.github/scripts:/trusted:ro" \
+            --workdir /work \
+            --env VERSION \
+            --env NX_DAEMON=false \
+            --env npm_config_onnxruntime_node_install_cuda=skip \
+            "node:$NODE_VERSION" \
+            bash /trusted/build-pr-packages.sh
 
       - name: Upload packages
         uses: actions/upload-artifact@v7
