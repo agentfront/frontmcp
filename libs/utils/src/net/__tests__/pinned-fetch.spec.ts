@@ -181,6 +181,37 @@ describe('pinnedFetch', () => {
     expect(Buffer.from(await response.arrayBuffer())).toEqual(expected);
   });
 
+  it.each([
+    ['zlib-wrapped', zlib.deflateSync],
+    ['raw', zlib.deflateRawSync],
+  ])('decodes a %s deflate body, as fetch does', async (_label, compress) => {
+    respond = (response) => {
+      response.setHeader('content-encoding', 'deflate');
+      response.end(compress(JSON_BODY));
+    };
+
+    const response = await pinnedFetch(LOOPBACK)(`http://api.pinned.test:${port}/`);
+
+    await expect(response.json()).resolves.toEqual({ id: 'inv_1' });
+  });
+
+  it('refuses a URL with credentials before connecting, as fetch does', async () => {
+    await expect(pinnedFetch(LOOPBACK)(`http://user:secret@api.pinned.test:${port}/`)).rejects.toThrow(TypeError);
+
+    expect(received).toHaveLength(0);
+  });
+
+  it('connects to an IP-literal host only when it is one of the pinned addresses', async () => {
+    await expect(pinnedFetch([{ address: '203.0.113.9', family: 4 }])(`http://127.0.0.1:${port}/`)).rejects.toThrow(
+      '127.0.0.1 is not among the addresses this fetch connects to',
+    );
+    expect(received).toHaveLength(0);
+
+    const response = await pinnedFetch(LOOPBACK)(`http://127.0.0.1:${port}/`);
+    expect(response.status).toBe(200);
+    await response.text();
+  });
+
   it('refuses a response with more content codings than fetch allows', async () => {
     respond = (response) => {
       response.setHeader('content-encoding', 'gzip, gzip, gzip, gzip, gzip, gzip');

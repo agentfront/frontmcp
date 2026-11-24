@@ -172,8 +172,62 @@ describe('CIMD and JWKS answers whose body is not read', () => {
 });
 
 describe('fetchPinnedTo', () => {
+  const DISPATCHER = Symbol.for('undici.globalDispatcher.1');
+  const globals = globalThis as Record<symbol, unknown>;
+  const checked = ANSWERS['client.example.com'];
+  let installedDispatcher: unknown;
+  let environment: NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    installedDispatcher = globals[DISPATCHER];
+    environment = process.env;
+    process.env = { ...environment };
+    for (const name of ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy']) delete process.env[name];
+    mockPinnedFetch.mockReset();
+    mockPinnedFetch.mockReturnValue(async () => new Response('{}'));
+  });
+
+  afterEach(() => {
+    globals[DISPATCHER] = installedDispatcher;
+    process.env = environment;
+    jest.restoreAllMocks();
+  });
+
   it('is plain fetch when there are no checked addresses to pin to', () => {
     expect(fetchPinnedTo(undefined)).toBe(fetch);
     expect(fetchPinnedTo([])).toBe(fetch);
+  });
+
+  it("pins a direct connection, made through undici's own Agent", () => {
+    globals[DISPATCHER] = new (class Agent {})();
+
+    expect(fetchPinnedTo(checked)).not.toBe(fetch);
+    expect(mockPinnedFetch).toHaveBeenCalledWith(checked);
+  });
+
+  it('keeps plain fetch through NODE_USE_ENV_PROXY with HTTPS_PROXY, warning once that pinning needs a direct connection', () => {
+    globals[DISPATCHER] = new (class EnvHttpProxyAgent {})();
+    process.env['HTTPS_PROXY'] = 'http://proxy.internal:3128';
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    expect(fetchPinnedTo(checked)).toBe(fetch);
+    expect(fetchPinnedTo(checked)).toBe(fetch);
+    expect(mockPinnedFetch).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('when they connect directly'));
+  });
+
+  it('keeps plain fetch through a dispatcher installed for fetch', () => {
+    globals[DISPATCHER] = new (class ProxyAgent {})();
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    expect(fetchPinnedTo(checked)).toBe(fetch);
+    expect(mockPinnedFetch).not.toHaveBeenCalled();
+  });
+
+  it('pins when NODE_USE_ENV_PROXY is on but no proxy is set', () => {
+    globals[DISPATCHER] = new (class EnvHttpProxyAgent {})();
+
+    expect(fetchPinnedTo(checked)).not.toBe(fetch);
   });
 });

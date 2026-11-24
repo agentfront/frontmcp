@@ -4,13 +4,15 @@ import type { LookupFunction } from 'node:net';
 import type * as Stream from 'node:stream';
 import type * as Zlib from 'node:zlib';
 
+import { classifyIpAddress, expandIpv6 } from './ip-address';
+
 /** Statuses the Fetch API gives no body, as it does a HEAD response; `new Response` refuses one with a body. */
 const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
 /** The most content codings a response may list, as `fetch` allows. */
 const MAX_CONTENT_CODINGS = 5;
 
-type DecoderFactory = (zlib: typeof Zlib) => Stream.Transform;
+type DecoderFactory = (zlib: typeof Zlib, stream: typeof Stream) => Stream.Transform;
 
 /**
  * The content codings `fetch` decodes, and the decoder for each, flushing as `fetch` does so that an
@@ -19,7 +21,7 @@ type DecoderFactory = (zlib: typeof Zlib) => Stream.Transform;
 const DECODERS = new Map<string, DecoderFactory>([
   ['gzip', (zlib) => zlib.createGunzip(zlibSyncFlush(zlib))],
   ['x-gzip', (zlib) => zlib.createGunzip(zlibSyncFlush(zlib))],
-  ['deflate', (zlib) => zlib.createInflate(zlibSyncFlush(zlib))],
+  ['deflate', (zlib, stream) => inflateZlibOrRaw(zlib, stream)],
   [
     'br',
     (zlib) =>
@@ -32,6 +34,37 @@ const DECODERS = new Map<string, DecoderFactory>([
 
 function zlibSyncFlush(zlib: typeof Zlib): Zlib.ZlibOptions {
   return { flush: zlib.constants.Z_SYNC_FLUSH, finishFlush: zlib.constants.Z_SYNC_FLUSH };
+}
+
+/** A `deflate` body sent zlib-wrapped or, as some servers send it, raw, told apart by its first byte as `fetch` does. */
+function inflateZlibOrRaw(zlib: typeof Zlib, stream: typeof Stream): Stream.Transform {
+  let inflate: Stream.Transform | undefined;
+  const decoder: Stream.Transform = new stream.Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      if (!inflate) {
+        if (chunk.length === 0) return callback();
+        const isZlibWrapped = (chunk[0] & 0x0f) === 0x08;
+        inflate = isZlibWrapped ? zlib.createInflate(zlibSyncFlush(zlib)) : zlib.createInflateRaw(zlibSyncFlush(zlib));
+        inflate.on('data', (data: Buffer) => decoder.push(data));
+        inflate.on('error', (error: Error) => decoder.destroy(error));
+      }
+      inflate.write(chunk, callback);
+    },
+    flush(callback) {
+      if (!inflate) return callback();
+      inflate.once('end', () => callback());
+      inflate.end();
+    },
+  });
+  return decoder;
+}
+
+/** Whether two IP addresses are the same, whatever their IPv6 spelling. */
+function isSameAddress(left: string, right: string): boolean {
+  const leftGroups = expandIpv6(left);
+  const rightGroups = expandIpv6(right);
+  if (!leftGroups || !rightGroups) return left === right;
+  return leftGroups.every((group, index) => group === rightGroups[index]);
 }
 
 /** The request `pinnedFetch` sends: a string body or none. */
@@ -53,6 +86,14 @@ export function pinnedFetch(addresses: readonly LookupAddress[]): PinnedFetch {
   const lookup = pinnedLookup(addresses);
   return async (input, init = {}) => {
     const url = new URL(String(input));
+    if (url.username || url.password) {
+      throw new TypeError(`Request cannot be constructed from a URL that includes credentials: ${url.origin}`);
+    }
+    // An IP-literal host is connected to without a lookup, so it must be one of the pinned addresses itself.
+    const literal = url.hostname.replace(/^\[|\]$/g, '');
+    if (classifyIpAddress(literal) && !addresses.some(({ address }) => isSameAddress(address, literal))) {
+      throw new Error(`${literal} is not among the addresses this fetch connects to`);
+    }
     const transport: typeof Http = url.protocol === 'https:' ? require('node:https') : require('node:http');
     const stream: typeof Stream = require('node:stream');
     const zlib: typeof Zlib = require('node:zlib');
@@ -117,7 +158,7 @@ function decodeBody(incoming: Http.IncomingMessage, stream: typeof Stream, zlib:
   const decodable = decoderFactories.every((factory): factory is DecoderFactory => factory !== undefined);
   if (codings.length === 0 || !decodable) return incoming;
 
-  const decoders = decoderFactories.map((createDecoder) => createDecoder(zlib));
+  const decoders = decoderFactories.map((createDecoder) => createDecoder(zlib, stream));
   // A failure destroys every stage with its error, which the body's reader then gets from the last.
   stream.pipeline([incoming, ...decoders], () => undefined);
   return decoders[decoders.length - 1];

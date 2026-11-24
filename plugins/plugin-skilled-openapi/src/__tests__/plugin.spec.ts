@@ -179,6 +179,16 @@ describe('SkilledOpenApiPlugin', () => {
       }
     });
 
+    it('refuses a SOCKS egressProxy with egressProxyConnectTo approved-address at startup', () => {
+      expect(
+        () =>
+          new SkilledOpenApiPlugin({
+            source: { type: 'static', path: '/x' },
+            outbound: { egressProxy: 'socks5://proxy.internal:1080', egressProxyConnectTo: 'approved-address' },
+          }),
+      ).toThrow(/needs an http: or https: egressProxy/);
+    });
+
     it('does not warn when both requireSignature=true and dev=false (default safe config)', () => {
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
       try {

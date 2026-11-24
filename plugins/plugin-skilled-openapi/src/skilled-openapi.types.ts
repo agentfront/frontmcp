@@ -42,7 +42,8 @@ export const outboundOptionsSchema = z
     /**
      * What `egressProxy` is asked to connect to. `'approved-address'`: an address the outbound check
      * approved (`CONNECT <address>:<port>`), with the hostname kept in `Host` and as the TLS server
-     * name; a hostname with no approved address (DNS failed under `allowPrivateNetworks`) is refused.
+     * name; a hostname with no approved address (DNS failed under `allowPrivateNetworks`) is refused, and
+     * the proxy must be `http:` or `https:` (a SOCKS proxy is sent the hostname).
      * `'hostname'`: the hostname, which the proxy resolves itself. Unset means `'hostname'` and
      * logs a warning at startup; 1.13 makes `'approved-address'` the default.
      */
@@ -217,6 +218,17 @@ export const skilledOpenApiPluginOptionsSchema = skilledOpenApiPluginOptionsObje
         path: ['authProviders'],
         message: vaultRefListedTwiceMessage(listedTwice),
         params: { vaultRefsListedTwice: listedTwice },
+      });
+    }
+    const { egressProxy, egressProxyConnectTo } = opts.outbound ?? {};
+    const tunnelsToAddress = !egressProxy || ['http:', 'https:'].includes(new URL(egressProxy).protocol);
+    if (egressProxyConnectTo === 'approved-address' && !tunnelsToAddress) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['outbound', 'egressProxyConnectTo'],
+        message:
+          "outbound.egressProxyConnectTo 'approved-address' needs an http: or https: egressProxy: " +
+          'a SOCKS proxy is sent the hostname',
       });
     }
   })
