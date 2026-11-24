@@ -21,9 +21,8 @@ function unavailableGlobalsLine(): string {
   const names = unavailableGlobals().map(({ name }) => name);
   if (names.length === 0) return '';
   const listed = names.includes('RegExp') ? [...names, 'regex literals'] : names;
-  const instead = ['plain objects and arrays'];
+  const instead = ['Map, Set, plain objects and arrays'];
   if (names.includes('Promise')) instead.push('parallel(items, fn) for Promise.all');
-  if (names.includes('Error')) instead.push('throw a string for Error');
   return `\nNOT AVAILABLE: ${listed.join(', ')}. Use ${instead.join(', ')}.`;
 }
 

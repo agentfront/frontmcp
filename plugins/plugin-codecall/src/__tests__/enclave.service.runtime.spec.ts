@@ -422,8 +422,8 @@ describe('EnclaveService host functions and tool calls', () => {
     let captured: CodeCallScriptRunSpec | undefined;
     const runtime = fakeRuntime('interpreter', async (spec) => {
       captured = spec;
-      await spec.toolHandler('a', { n: 1 });
-      await spec.toolHandler('b', {}).catch(() => undefined);
+      await callToolHandler(spec.toolHandler, 'a', { n: 1 });
+      await callToolHandler(spec.toolHandler, 'b', {}).catch(() => undefined);
       return okResult('ok', 2);
     });
     const service = new EnclaveService(configWith({ runtime: 'interpreter' }), undefined, {
@@ -433,7 +433,7 @@ describe('EnclaveService host functions and tool calls', () => {
     const journal = new RunJournal();
 
     await service.execute('return 1;', env, journal);
-    await captured?.toolHandler('late', {}).catch(() => undefined);
+    if (captured) await callToolHandler(captured.toolHandler, 'late', {}).catch(() => undefined);
 
     expect(journal.close().map(({ position, tool, outcome, phase }) => ({ position, tool, outcome, phase }))).toEqual([
       { position: 1, tool: 'a', outcome: 'success', phase: undefined },

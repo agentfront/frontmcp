@@ -85,12 +85,12 @@ describe.each(['node-vm', 'interpreter'] as const)('codecall:execute feedback on
   });
 
   it('names a global AgentScript lacks as the script wrote it, at its line, with what to use instead', async () => {
-    const outcome = await server.run("const ids = [];\nconst seen = new Set(['a', 'b', 'a']);\nreturn seen.size;");
+    const outcome = await server.run('const ids = [];\nconst seen = new WeakSet();\nreturn ids.length;');
 
     expect(outcome.status).toBe('illegal_access');
     expect(outcome.error?.['message']).toBe(
       'AgentScript validation failed:\n' +
-        'DISALLOWED_IDENTIFIER (line 2): Set is not available in AgentScript; use an object with true values, or an array',
+        'DISALLOWED_IDENTIFIER (line 2): WeakSet is not available in AgentScript; use a Set',
     );
     expect(executed).toEqual([]);
   });
@@ -101,13 +101,63 @@ describe.each(['node-vm', 'interpreter'] as const)('codecall:execute feedback on
       'const all = await Promise.all([]);\nreturn all;',
       'use parallel(items, (item) => callTool(name, args))',
     ],
-    ['Error', "throw new Error('no overdue invoices');", 'throw a string'],
+    ['Symbol', "const key = Symbol('id');\nreturn 1;", 'use a string'],
+    ['WeakMap', 'const cache = new WeakMap();\nreturn 1;', 'use a Map'],
     ['structuredClone', 'return structuredClone({ a: 1 });', 'use JSON.parse(JSON.stringify(value))'],
   ])('refuses %s with its alternative', async (name, script, alternative) => {
     const outcome = await server.run(script);
 
     expect(outcome.status).toBe('illegal_access');
     expect(outcome.error?.['message']).toContain(`${name} is not available in AgentScript; ${alternative}`);
+  });
+
+  it('runs a script with Set, Map, and an Error it throws and catches', async () => {
+    const outcome = await server.run(
+      "const seen = new Set(['a', 'b', 'a']);\nconst totals = new Map([['k', 1]]);\n" +
+        "let caught = '';\ntry { throw new Error('x'); } catch (error) { caught = error.message; }\n" +
+        "return { size: seen.size, has: seen.has('a'), k: totals.get('k'), keys: [...totals.keys()], caught };",
+    );
+
+    expect(outcome).toMatchObject({
+      status: 'ok',
+      result: { size: 2, has: true, k: 1, keys: ['k'], caught: 'x' },
+    });
+  });
+
+  it('reports an Error the script throws as runtime_error with its message', async () => {
+    const outcome = await server.run("throw new Error('no overdue invoices');");
+
+    expect(outcome).toMatchObject({
+      status: 'runtime_error',
+      error: { source: 'script', name: 'Error', message: 'no overdue invoices' },
+    });
+  });
+
+  it('returns a Set as its values, a Map as its [key, value] pairs, and an Error as its name and message', async () => {
+    const outcome = await server.run(
+      "return { set: new Set(['a', 'b']), map: new Map([['k', 1]]), error: new Error('oops') };",
+    );
+
+    expect(outcome).toMatchObject({
+      status: 'ok',
+      result: { set: ['a', 'b'], map: [['k', 1]], error: { name: 'Error', message: 'oops' } },
+    });
+  });
+
+  it.each([
+    [
+      'Set',
+      'const all = new Set();\nfor (const index of Array(2500).fill(0).map((_, i) => i)) { all.add(index); }\nreturn all;',
+    ],
+    [
+      'Map',
+      'const all = new Map();\nfor (const index of Array(2500).fill(0).map((_, i) => i)) { all.set(String(index), index); }\nreturn all;',
+    ],
+  ])("counts a returned %s's entries against vm.maxSanitizeProperties", async (_kind, script) => {
+    const outcome = await server.run(script);
+
+    expect(outcome.status).toBe('runtime_error');
+    expect(outcome.error?.['message']).toMatch(/^The script's return value holds more than 2,000 values/);
   });
 
   it('names an undeclared identifier as written and lists only the globals a script can use', async () => {

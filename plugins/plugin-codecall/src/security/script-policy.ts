@@ -99,18 +99,16 @@ class DisallowedGlobalsRule implements ValidationRule {
   }
 }
 
-/** Globals of JavaScript that models reach for, and what a script uses instead where AgentScript has none. */
+/**
+ * Globals of JavaScript that models reach for, and what a script uses instead where AgentScript has none. Since
+ * Enclave 2.21 AgentScript has `Set`, `Map`, `Error`, `TypeError` and `RangeError`.
+ */
 const ALTERNATIVES_TO_GLOBALS: ReadonlyArray<{ name: string; alternative: string }> = [
-  { name: 'Set', alternative: 'use an object with true values, or an array' },
-  { name: 'Map', alternative: 'use a plain object' },
-  { name: 'WeakMap', alternative: 'use a plain object' },
-  { name: 'WeakSet', alternative: 'use an object with true values, or an array' },
+  { name: 'WeakMap', alternative: 'use a Map' },
+  { name: 'WeakSet', alternative: 'use a Set' },
   { name: 'Symbol', alternative: 'use a string' },
   { name: 'RegExp', alternative: 'use string methods such as includes, startsWith, split and replaceAll' },
   { name: 'Promise', alternative: 'use parallel(items, (item) => callTool(name, args)) to run calls at once' },
-  { name: 'Error', alternative: 'throw a string' },
-  { name: 'TypeError', alternative: 'throw a string' },
-  { name: 'RangeError', alternative: 'throw a string' },
   { name: 'structuredClone', alternative: 'use JSON.parse(JSON.stringify(value))' },
 ];
 

@@ -8,16 +8,11 @@ describe('unavailableGlobals', () => {
     const { unavailableGlobals } = await import('../security/script-policy.js');
 
     expect(unavailableGlobals().map(({ name }) => name)).toEqual([
-      'Set',
-      'Map',
       'WeakMap',
       'WeakSet',
       'Symbol',
       'RegExp',
       'Promise',
-      'Error',
-      'TypeError',
-      'RangeError',
       'structuredClone',
     ]);
   });
@@ -27,22 +22,13 @@ describe('unavailableGlobals', () => {
       const actual = jest.requireActual('@enclave-vm/ast');
       return {
         ...actual,
-        getAgentScriptGlobals: (level: string) => [...actual.getAgentScriptGlobals(level), 'Set', 'Map', 'Error'],
+        getAgentScriptGlobals: (level: string) => [...actual.getAgentScriptGlobals(level), 'WeakMap', 'Symbol'],
       };
     });
     const { unavailableGlobals, findScriptPolicyIssues } = await import('../security/script-policy.js');
 
-    expect(unavailableGlobals().map(({ name }) => name)).toEqual([
-      'WeakMap',
-      'WeakSet',
-      'Symbol',
-      'RegExp',
-      'Promise',
-      'TypeError',
-      'RangeError',
-      'structuredClone',
-    ]);
-    const issues = await findScriptPolicyIssues("const ids = new Set(['a']);\nreturn ids.size;", {
+    expect(unavailableGlobals().map(({ name }) => name)).toEqual(['WeakSet', 'RegExp', 'Promise', 'structuredClone']);
+    const issues = await findScriptPolicyIssues('const cache = new WeakMap();\nreturn 1;', {
       allowLoops: false,
       disabledBuiltins: [],
       disabledGlobals: [],
