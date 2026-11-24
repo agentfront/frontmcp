@@ -49,15 +49,32 @@ jobs:
             exit 1
           fi
 
+      # The PR's code runs only in a container that gets the PR checkout and an output folder, not the runner's token.
+      - name: Checkout the build script
+        uses: actions/checkout@v6
+        with:
+          path: trusted
+          persist-credentials: false
+          sparse-checkout: |
+            .nvmrc
+            .github/scripts/build-pr-packages.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Get Node version
+        id: node-version
+        run: echo "version=$(sed 's/^v//' trusted/.nvmrc)" >> "$GITHUB_OUTPUT"
+
       - name: Checkout PR branch
         uses: actions/checkout@v6
         with:
+          path: pr
           fetch-depth: 0
           ref: refs/pull/${{ inputs.pr_number }}/head
           persist-credentials: false
 
       - name: Get PR info
         id: pr-info
+        working-directory: pr
         run: |
           SHA=$(git rev-parse --short HEAD)
           FULL_SHA=$(git rev-parse HEAD)
@@ -65,77 +82,60 @@ jobs:
           echo "full_sha=$FULL_SHA" >> "$GITHUB_OUTPUT"
           echo "PR SHA: $SHA"
 
-      - name: Get Node version
-        id: node-version
-        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
-
-      - name: Setup Node + Yarn
-        uses: ./.github/actions/setup-node-yarn
-        with:
-          node-version: ${{ steps.node-version.outputs.version }}
-
       - name: Calculate PR version
         id: version
         run: |
           PR_NUM="${{ inputs.pr_number }}"
           SHA="${{ steps.pr-info.outputs.sha }}"
-
-          # Get current version from SDK package (the main package)
-          CURRENT_VERSION=$(jq -r '.version' libs/sdk/package.json)
-          echo "Current version: $CURRENT_VERSION"
-
-          # Create PR version based on current version: e.g., 0.7.2-pr.205.00cc1a6
+          CURRENT_VERSION=$(jq -r '.version' pr/libs/sdk/package.json)
+          if ! [[ "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Unexpected SDK version: $CURRENT_VERSION"
+            exit 1
+          fi
           VERSION="${CURRENT_VERSION}-pr.${PR_NUM}.${SHA}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "PR Version: $VERSION"
 
-      - name: Update package versions
+      - name: Build and pack the PR's packages in a container
+        env:
+          NODE_VERSION: ${{ steps.node-version.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          npx nx release version "${{ steps.version.outputs.version }}" \
-            --git-tag=false --git-commit=false
+          mkdir -p "$RUNNER_TEMP/pr-packages"
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE/pr:/work" \
+            --volume "$RUNNER_TEMP/pr-packages:/packages" \
+            --volume "$GITHUB_WORKSPACE/trusted/.github/scripts:/trusted:ro" \
+            --workdir /work \
+            --env VERSION \
+            --env NX_DAEMON=false \
+            --env npm_config_onnxruntime_node_install_cuda=skip \
+            "node:$NODE_VERSION" \
+            bash /trusted/build-pr-packages.sh
 
-      - name: Build all packages
+      # Only regular tarballs leave the container's output folder; a symlink or anything else is refused.
+      - name: Check the packages
         run: |
-          npx nx run-many -t build --parallel=5
-
-      - name: Pack packages
-        run: |
-          PACKAGES_DIR="$RUNNER_TEMP/pr-packages"
-          mkdir -p "$PACKAGES_DIR"
-          FAILED_PACKAGES=()
-
-          # Dynamically discover all publishable packages using Nx
-          echo "Discovering publishable packages..."
-          PUBLISHABLE_PROJECTS=($(npx nx show projects --with-target publish 2>/dev/null))
-          echo "Found ${#PUBLISHABLE_PROJECTS[@]} publishable packages: ${PUBLISHABLE_PROJECTS[*]}"
-
-          for project in "${PUBLISHABLE_PROJECTS[@]}"; do
-            # Determine dist path based on project location (libs/ or plugins/)
-            if [ -d "libs/$project/dist" ]; then
-              DIST_PATH="libs/$project/dist"
-            elif [ -d "plugins/$project/dist" ]; then
-              DIST_PATH="plugins/$project/dist"
-            else
-              echo "Warning: No dist folder found for $project"
-              continue
-            fi
-
-            echo "Packing $DIST_PATH..."
-            if ! npm pack "./$DIST_PATH" --pack-destination "$PACKAGES_DIR"; then
-              echo "Warning: pack failed for $project"
-              FAILED_PACKAGES+=("$project")
-            fi
-          done
-
-          if [ ${#FAILED_PACKAGES[@]} -gt 0 ]; then
-            echo "::warning::Failed to pack: ${FAILED_PACKAGES[*]}"
+          mkdir -p "$RUNNER_TEMP/pr-packages-checked"
+          find "$RUNNER_TEMP/pr-packages" -mindepth 1 -maxdepth 1 \( ! -type f -o ! -name '*.tgz' \) -print > "$RUNNER_TEMP/rejected.txt"
+          if [ -s "$RUNNER_TEMP/rejected.txt" ]; then
+            echo "::error::The build left entries that are not regular .tgz files:"
+            cat "$RUNNER_TEMP/rejected.txt"
+            exit 1
           fi
+          for package in "$RUNNER_TEMP"/pr-packages/*.tgz; do
+            if [ "$(head -c 2 "$package" | od -An -tx1 | tr -d ' ')" != "1f8b" ]; then
+              echo "::error::$(basename "$package") is not a gzip file"
+              exit 1
+            fi
+            cp "$package" "$RUNNER_TEMP/pr-packages-checked/"
+          done
 
       - name: Upload packages
         uses: actions/upload-artifact@v7
         with:
           name: pr-packages
-          path: ${{ runner.temp }}/pr-packages/*.tgz
+          path: ${{ runner.temp }}/pr-packages-checked/*.tgz
           if-no-files-found: error
           retention-days: 1
 
