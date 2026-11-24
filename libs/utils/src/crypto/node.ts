@@ -69,8 +69,14 @@ export const nodeCrypto: CryptoProvider = {
     return toUint8Array(Buffer.concat(chunks).subarray(0, length));
   },
 
-  encryptAesGcm(key: Uint8Array, plaintext: Uint8Array, iv: Uint8Array): { ciphertext: Uint8Array; tag: Uint8Array } {
+  encryptAesGcm(
+    key: Uint8Array,
+    plaintext: Uint8Array,
+    iv: Uint8Array,
+    additionalData?: Uint8Array,
+  ): { ciphertext: Uint8Array; tag: Uint8Array } {
     const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(key), Buffer.from(iv));
+    if (additionalData) cipher.setAAD(Buffer.from(additionalData));
     const encrypted = Buffer.concat([cipher.update(Buffer.from(plaintext)), cipher.final()]);
     const tag = cipher.getAuthTag();
 
@@ -80,8 +86,15 @@ export const nodeCrypto: CryptoProvider = {
     };
   },
 
-  decryptAesGcm(key: Uint8Array, ciphertext: Uint8Array, iv: Uint8Array, tag: Uint8Array): Uint8Array {
+  decryptAesGcm(
+    key: Uint8Array,
+    ciphertext: Uint8Array,
+    iv: Uint8Array,
+    tag: Uint8Array,
+    additionalData?: Uint8Array,
+  ): Uint8Array {
     const decipher = crypto.createDecipheriv('aes-256-gcm', Buffer.from(key), Buffer.from(iv));
+    if (additionalData) decipher.setAAD(Buffer.from(additionalData));
     decipher.setAuthTag(Buffer.from(tag));
     const decrypted = Buffer.concat([decipher.update(Buffer.from(ciphertext)), decipher.final()]);
 

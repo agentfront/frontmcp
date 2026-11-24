@@ -97,8 +97,13 @@ export const browserCrypto: CryptoProvider = {
     return hkdf(sha256Hash, ikm, effectiveSalt, info, length);
   },
 
-  encryptAesGcm(key: Uint8Array, plaintext: Uint8Array, iv: Uint8Array): { ciphertext: Uint8Array; tag: Uint8Array } {
-    const cipher = gcm(key, iv);
+  encryptAesGcm(
+    key: Uint8Array,
+    plaintext: Uint8Array,
+    iv: Uint8Array,
+    additionalData?: Uint8Array,
+  ): { ciphertext: Uint8Array; tag: Uint8Array } {
+    const cipher = gcm(key, iv, additionalData);
     const sealed = cipher.encrypt(plaintext);
 
     // GCM sealed format: ciphertext || tag (last 16 bytes)
@@ -108,8 +113,14 @@ export const browserCrypto: CryptoProvider = {
     return { ciphertext, tag };
   },
 
-  decryptAesGcm(key: Uint8Array, ciphertext: Uint8Array, iv: Uint8Array, tag: Uint8Array): Uint8Array {
-    const cipher = gcm(key, iv);
+  decryptAesGcm(
+    key: Uint8Array,
+    ciphertext: Uint8Array,
+    iv: Uint8Array,
+    tag: Uint8Array,
+    additionalData?: Uint8Array,
+  ): Uint8Array {
+    const cipher = gcm(key, iv, additionalData);
 
     // Reconstruct sealed format: ciphertext || tag
     const sealed = new Uint8Array(ciphertext.length + tag.length);

@@ -116,10 +116,11 @@ export interface CreateKeyPersistenceOptions {
    * If not provided, the values are encrypted with a non-extractable WebCrypto key created once and kept in
    * IndexedDB, so a reader of localStorage alone cannot decrypt them. Where IndexedDB or WebCrypto is unavailable
    * it is required: 'localstorage' throws `LocalStorageKeyRequiredError`, and 'auto' keeps the keys in memory.
-   * Records written under the key 1.12 and earlier derived from localStorage are re-encrypted with the key in use.
-   * Once the records use the IndexedDB key, a session that can't load it, or finds it gone, throws
-   * `LocalStorageKeyUnavailableError` (for 'auto' too) rather than read them with another key or create a new one;
-   * a record no key of the session reads reads as missing, and writing it throws `UnreadableKeyRecordError`.
+   * Records written under the key 1.12 and earlier derived from localStorage are copied to the key in use, and left
+   * as they are for seven days, for tabs still running 1.12. Once the records use the IndexedDB key, a session that
+   * can't load it throws `LocalStorageKeyUnavailableError` (retry later), and one that finds it gone throws
+   * `LocalStorageKeyLostError` (for 'auto' too), rather than read them with another key or create a new one; a
+   * record no key of the session reads reads as missing, and writing it throws `UnreadableKeyRecordError`.
    */
   encryptionKey?: Uint8Array;
 }

@@ -1,6 +1,6 @@
 /**
- * Key records in localStorage, encrypted with a key kept outside it, and the move of records written under the key
- * 1.12 and earlier derived from localStorage itself.
+ * Key records in localStorage, encrypted with a key kept outside it, and the copy of the records 1.12 and earlier
+ * wrote under a key derived from localStorage itself.
  *
  * @module @frontmcp/utils/key-persistence
  */
@@ -12,12 +12,15 @@ import type { SetOptions, StorageAdapter } from '../../storage/types';
 import { base64urlDecode } from '../index';
 import {
   loadLocalStorageKey,
+  LocalStorageKeyLostError,
   LocalStorageKeyRequiredError,
   LocalStorageKeyUnavailableError,
   UnreadableKeyRecordError,
 } from './local-storage-key';
 
-const KEY_RECORD_PREFIX = 'frontmcp:keys:';
+const KEY_RECORD_PREFIX = 'frontmcp:keys-v2:';
+/** Where 1.12 and earlier keep the records, under the key derived from localStorage. */
+const DERIVED_KEY_RECORD_PREFIX = 'frontmcp:keys:';
 const LS_HKDF_IKM = new TextEncoder().encode('frontmcp:localstorage:v1');
 const INSTALL_SALT_KEY = '__frontmcp_internal__:install_salt';
 const LEGACY_SALT_KEY = 'frontmcp:_install_salt';
@@ -25,19 +28,20 @@ const SALT_KEPT_UNTIL_KEY = '__frontmcp_internal__:install_salt_kept_until';
 /** Set once the records are encrypted with the key kept in IndexedDB, so no other key is ever used to read them. */
 const KEPT_KEY_SCHEME_KEY = '__frontmcp_internal__:key_scheme';
 const KEPT_KEY_SCHEME = 'indexeddb';
-/** How long the derived key's salt is kept after the records moved, for tabs still running 1.12 that write with it. */
+/** How long the records under the derived key stay as they are, for tabs still running 1.12 that read and write them. */
 const DERIVED_KEY_TRANSITION_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * localStorage key records under `encryptionKey`. A record it can't read is read with the key 1.12 derived from
- * localStorage while that key's salt is kept, and re-encrypted; one neither key reads is never replaced.
+ * localStorage key records under `encryptionKey`, each bound to its key id. A record missing here is copied from the
+ * records under the key 1.12 derived from localStorage, while that key's salt is kept, and those are left as they are
+ * for tabs still running 1.12. A record here that the key doesn't read is never replaced.
  */
 class KeyRecordAdapter extends LocalStorageAdapter {
   constructor(
     encryptionKey: Uint8Array | CryptoKey,
     private readonly derived: LocalStorageAdapter | undefined,
   ) {
-    super({ prefix: KEY_RECORD_PREFIX, encryptionKey });
+    super({ prefix: KEY_RECORD_PREFIX, encryptionKey, bindRecordKey: true });
   }
 
   override async get(key: string): Promise<string | null> {
@@ -46,35 +50,51 @@ class KeyRecordAdapter extends LocalStorageAdapter {
       return value;
     }
     const derivedValue = await this.derived.get(key);
-    if (derivedValue !== null) {
-      await this.set(key, derivedValue);
+    // Read again before the caller creates the record: another tab may have copied it meanwhile.
+    const copied = await super.get(key);
+    if (copied !== null || derivedValue === null) {
+      return copied;
+    }
+    if (!this.holdsRecord(key)) {
+      await super.set(key, derivedValue);
     }
     return derivedValue;
   }
 
   override async set(key: string, value: string, options?: SetOptions): Promise<void> {
-    if (await this.holdsUnreadableRecord(key)) {
+    if (this.holdsRecord(key) && (await super.get(key)) === null) {
       throw new UnreadableKeyRecordError(key);
     }
     await super.set(key, value, options);
   }
 
-  /** Re-encrypt the records still under the derived key, and retire its salt once the transition is over. */
-  async moveDerivedRecords(): Promise<void> {
+  override async delete(key: string): Promise<boolean> {
+    const deletedDerived = (await this.derived?.delete(key)) ?? false;
+    return (await super.delete(key)) || deletedDerived;
+  }
+
+  private holdsRecord(key: string): boolean {
+    return localStorage.getItem(`${KEY_RECORD_PREFIX}${key}`) !== null;
+  }
+
+  /** Copy the records still only under the derived key; once the transition is over, remove them and the salt. */
+  async copyDerivedRecords(): Promise<void> {
     if (!this.derived) {
       return;
     }
-    for (const key of await this.derived.keys()) {
+    const derivedKeys = await this.derived.keys();
+    for (const key of derivedKeys) {
       await this.get(key);
     }
-    retireInstallationSalt();
-  }
-
-  private async holdsUnreadableRecord(key: string): Promise<boolean> {
-    if (localStorage.getItem(`${KEY_RECORD_PREFIX}${key}`) === null) {
-      return false;
+    if (!derivedKeyTransitionOver()) {
+      return;
     }
-    return (await super.get(key)) === null && ((await this.derived?.get(key)) ?? null) === null;
+    for (const key of derivedKeys) {
+      await this.derived.delete(key);
+    }
+    localStorage.removeItem(INSTALL_SALT_KEY);
+    localStorage.removeItem(LEGACY_SALT_KEY);
+    localStorage.removeItem(SALT_KEPT_UNTIL_KEY);
   }
 }
 
@@ -99,37 +119,38 @@ function derivedKeyRecords(): LocalStorageAdapter | undefined {
   }
   const origin = new TextEncoder().encode(typeof location !== 'undefined' ? location.origin : 'unknown');
   const encryptionKey = cryptoProvider.hkdfSha256(LS_HKDF_IKM, salt, origin, 32);
-  return new LocalStorageAdapter({ prefix: KEY_RECORD_PREFIX, encryptionKey });
+  return new LocalStorageAdapter({ prefix: DERIVED_KEY_RECORD_PREFIX, encryptionKey });
 }
 
-/** Keep the salt for the transition after the records first moved, then remove it. */
-function retireInstallationSalt(): void {
+/** Whether the transition is over; it starts at the first copy, and a start date further ahead than it lasts is reset. */
+function derivedKeyTransitionOver(): boolean {
+  const now = Date.now();
   const keptUntil = Number(localStorage.getItem(SALT_KEPT_UNTIL_KEY));
-  if (!keptUntil) {
-    localStorage.setItem(SALT_KEPT_UNTIL_KEY, String(Date.now() + DERIVED_KEY_TRANSITION_MS));
-    return;
+  if (!keptUntil || keptUntil > now + DERIVED_KEY_TRANSITION_MS) {
+    localStorage.setItem(SALT_KEPT_UNTIL_KEY, String(now + DERIVED_KEY_TRANSITION_MS));
+    return false;
   }
-  if (Date.now() < keptUntil) {
-    return;
-  }
-  localStorage.removeItem(INSTALL_SALT_KEY);
-  localStorage.removeItem(LEGACY_SALT_KEY);
-  localStorage.removeItem(SALT_KEPT_UNTIL_KEY);
+  return now >= keptUntil;
 }
 
 /** The non-extractable key kept in IndexedDB, created on first use; it throws where none can be kept or loaded. */
 async function keptLocalStorageKey(): Promise<CryptoKey> {
   const usesKeptKey = localStorage.getItem(KEPT_KEY_SCHEME_KEY) === KEPT_KEY_SCHEME;
-  const keptKey = await loadLocalStorageKey(!usesKeptKey);
-  if (keptKey) {
-    return keptKey;
+  let keptKey: CryptoKey | undefined;
+  try {
+    keptKey = await loadLocalStorageKey(!usesKeptKey);
+  } catch (error) {
+    throw usesKeptKey ? new LocalStorageKeyUnavailableError(error) : new LocalStorageKeyRequiredError(error);
   }
-  throw usesKeptKey ? new LocalStorageKeyUnavailableError() : new LocalStorageKeyRequiredError();
+  if (!keptKey) {
+    throw new LocalStorageKeyLostError();
+  }
+  return keptKey;
 }
 
 /**
  * Key records in localStorage, encrypted with `encryptionKey`, or else with a non-extractable key kept in IndexedDB.
- * Records written under the key 1.12 and earlier derived from localStorage are moved to it.
+ * Records written under the key 1.12 and earlier derived from localStorage are copied to it.
  */
 export async function createLocalStorageKeyAdapter(encryptionKey?: Uint8Array): Promise<StorageAdapter> {
   const adapter = new KeyRecordAdapter(encryptionKey ?? (await keptLocalStorageKey()), derivedKeyRecords());
@@ -137,6 +158,6 @@ export async function createLocalStorageKeyAdapter(encryptionKey?: Uint8Array): 
   if (!encryptionKey) {
     localStorage.setItem(KEPT_KEY_SCHEME_KEY, KEPT_KEY_SCHEME);
   }
-  await adapter.moveDerivedRecords();
+  await adapter.copyDerivedRecords();
   return adapter;
 }

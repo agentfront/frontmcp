@@ -191,12 +191,14 @@ export function hkdfSha256(ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, 
  * @param key - 32-byte encryption key (AES-256)
  * @param plaintext - Data to encrypt
  * @param iv - 12-byte initialization vector (96 bits, recommended for GCM)
+ * @param additionalData - Data authenticated with the ciphertext but not encrypted (AAD)
  * @throws Error if key is not 32 bytes or IV is not 12 bytes
  */
 export function encryptAesGcm(
   key: Uint8Array,
   plaintext: Uint8Array,
   iv: Uint8Array,
+  additionalData?: Uint8Array,
 ): { ciphertext: Uint8Array; tag: Uint8Array } {
   if (key.length !== 32) {
     throw new Error(`AES-256-GCM requires a 32-byte key, got ${key.length} bytes`);
@@ -204,7 +206,7 @@ export function encryptAesGcm(
   if (iv.length !== 12) {
     throw new Error(`AES-GCM requires a 12-byte IV, got ${iv.length} bytes`);
   }
-  return getCrypto().encryptAesGcm(key, plaintext, iv);
+  return getCrypto().encryptAesGcm(key, plaintext, iv, additionalData);
 }
 
 /**
@@ -213,9 +215,16 @@ export function encryptAesGcm(
  * @param ciphertext - Encrypted data
  * @param iv - 12-byte initialization vector (96 bits)
  * @param tag - 16-byte authentication tag
+ * @param additionalData - The data the encryption authenticated (AAD), if any
  * @throws Error if key is not 32 bytes, IV is not 12 bytes, or tag is not 16 bytes
  */
-export function decryptAesGcm(key: Uint8Array, ciphertext: Uint8Array, iv: Uint8Array, tag: Uint8Array): Uint8Array {
+export function decryptAesGcm(
+  key: Uint8Array,
+  ciphertext: Uint8Array,
+  iv: Uint8Array,
+  tag: Uint8Array,
+  additionalData?: Uint8Array,
+): Uint8Array {
   if (key.length !== 32) {
     throw new Error(`AES-256-GCM requires a 32-byte key, got ${key.length} bytes`);
   }
@@ -225,7 +234,7 @@ export function decryptAesGcm(key: Uint8Array, ciphertext: Uint8Array, iv: Uint8
   if (tag.length !== 16) {
     throw new Error(`AES-GCM requires a 16-byte authentication tag, got ${tag.length} bytes`);
   }
-  return getCrypto().decryptAesGcm(key, ciphertext, iv, tag);
+  return getCrypto().decryptAesGcm(key, ciphertext, iv, tag, additionalData);
 }
 
 /**
@@ -471,6 +480,7 @@ export {
   // Factory functions
   createKeyPersistence,
   createKeyPersistenceWithStorage,
+  LocalStorageKeyLostError,
   LocalStorageKeyRequiredError,
   LocalStorageKeyUnavailableError,
   UnreadableKeyRecordError,

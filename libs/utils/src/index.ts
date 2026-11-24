@@ -315,6 +315,7 @@ export {
   KeyPersistence,
   createKeyPersistence,
   createKeyPersistenceWithStorage,
+  LocalStorageKeyLostError,
   LocalStorageKeyRequiredError,
   LocalStorageKeyUnavailableError,
   UnreadableKeyRecordError,

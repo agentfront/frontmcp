@@ -34,6 +34,13 @@ export interface LocalStorageAdapterOptions {
    * @default true
    */
   allowPlaintext?: boolean;
+
+  /**
+   * Authenticate each record's storage key as AES-GCM additional data, so a record copied under another key does
+   * not decrypt. Records written without it don't read with it, and the other way round.
+   * @default false
+   */
+  bindRecordKey?: boolean;
 }
 
 const AES_GCM_TAG_BYTES = 16;
@@ -41,6 +48,12 @@ const AES_GCM_TAG_BYTES = 16;
 /** The bytes in an `ArrayBuffer` of their own, as WebCrypto takes them. */
 function toBuffer(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   return new Uint8Array(bytes);
+}
+
+function webCryptoGcmParams(iv: Uint8Array, additionalData: Uint8Array | undefined): AesGcmParams {
+  return additionalData
+    ? { name: 'AES-GCM', iv: toBuffer(iv), additionalData: toBuffer(additionalData) }
+    : { name: 'AES-GCM', iv: toBuffer(iv) };
 }
 
 /**
@@ -78,6 +91,7 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
   private readonly prefix: string;
   private readonly encryptionKey: Uint8Array | CryptoKey | undefined;
   private readonly allowPlaintext: boolean;
+  private readonly bindRecordKey: boolean;
   private readonly encoder = new TextEncoder();
   private readonly decoder = new TextDecoder();
 
@@ -85,6 +99,7 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
     super();
     this.prefix = options?.prefix ?? 'frontmcp:';
     this.allowPlaintext = options?.allowPlaintext ?? true;
+    this.bindRecordKey = options?.bindRecordKey ?? false;
     const encryptionKey = options?.encryptionKey;
     if (encryptionKey instanceof Uint8Array && encryptionKey.length !== 32) {
       throw new Error(`encryptionKey must be exactly 32 bytes, got ${encryptionKey.length}`);
@@ -164,10 +179,13 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
         const iv = base64urlDecode(entry._enc.iv);
         const tag = base64urlDecode(entry._enc.tag);
         const ciphertext = base64urlDecode(entry._enc.data);
-        return this.decoder.decode(await this.decrypt(this.encryptionKey, ciphertext, iv, tag));
+        return this.decoder.decode(
+          await this.decrypt(this.encryptionKey, ciphertext, iv, tag, this.additionalDataFor(key)),
+        );
       }
 
-      return entry.v;
+      // With an encryption key, a record without `_enc` is not trusted: anyone who can write localStorage wrote it.
+      return this.encryptionKey ? null : entry.v;
     } catch {
       return null;
     }
@@ -194,7 +212,7 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
     if (this.encryptionKey) {
       const iv = randomBytes(12);
       const plainBytes = this.encoder.encode(value);
-      const { ciphertext, tag } = await this.encrypt(this.encryptionKey, plainBytes, iv);
+      const { ciphertext, tag } = await this.encrypt(this.encryptionKey, plainBytes, iv, this.additionalDataFor(key));
       entry._enc = {
         alg: 'A256GCM',
         iv: base64urlEncode(iv),
@@ -213,14 +231,20 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
     localStorage.setItem(this.key(key), JSON.stringify(entry));
   }
 
+  /** The record's full storage key, authenticated with it when `bindRecordKey` is set. */
+  private additionalDataFor(key: string): Uint8Array | undefined {
+    return this.bindRecordKey ? this.encoder.encode(this.key(key)) : undefined;
+  }
+
   private async encrypt(
     key: Uint8Array | CryptoKey,
     plainBytes: Uint8Array,
     iv: Uint8Array,
+    additionalData: Uint8Array | undefined,
   ): Promise<{ ciphertext: Uint8Array; tag: Uint8Array }> {
-    if (key instanceof Uint8Array) return encryptAesGcm(key, plainBytes, iv);
+    if (key instanceof Uint8Array) return encryptAesGcm(key, plainBytes, iv, additionalData);
     const sealed = new Uint8Array(
-      await crypto.subtle.encrypt({ name: 'AES-GCM', iv: toBuffer(iv) }, key, toBuffer(plainBytes)),
+      await crypto.subtle.encrypt(webCryptoGcmParams(iv, additionalData), key, toBuffer(plainBytes)),
     );
     return { ciphertext: sealed.slice(0, -AES_GCM_TAG_BYTES), tag: sealed.slice(-AES_GCM_TAG_BYTES) };
   }
@@ -230,12 +254,13 @@ export class LocalStorageAdapter extends BaseStorageAdapter {
     ciphertext: Uint8Array,
     iv: Uint8Array,
     tag: Uint8Array,
+    additionalData: Uint8Array | undefined,
   ): Promise<Uint8Array> {
-    if (key instanceof Uint8Array) return decryptAesGcm(key, ciphertext, iv, tag);
+    if (key instanceof Uint8Array) return decryptAesGcm(key, ciphertext, iv, tag, additionalData);
     const sealed = new Uint8Array(ciphertext.length + tag.length);
     sealed.set(ciphertext);
     sealed.set(tag, ciphertext.length);
-    return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: toBuffer(iv) }, key, sealed));
+    return new Uint8Array(await crypto.subtle.decrypt(webCryptoGcmParams(iv, additionalData), key, sealed));
   }
 
   async delete(key: string): Promise<boolean> {

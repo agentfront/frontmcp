@@ -349,6 +349,25 @@ describe('Crypto Module', () => {
       expect(new TextDecoder().decode(browserDecrypted)).toBe('Cross-platform encryption test');
     });
 
+    it('authenticates additional data in Node and browser implementations alike', () => {
+      const key = new Uint8Array(32).fill(0x42);
+      const iv = new Uint8Array(12).fill(0x24);
+      const plaintext = new TextEncoder().encode('bound to its record');
+      const recordKey = new TextEncoder().encode('frontmcp:keys-v2:session');
+
+      const nodeResult = nodeCrypto.encryptAesGcm(key, plaintext, iv, recordKey);
+      const browserResult = browserCrypto.encryptAesGcm(key, plaintext, iv, recordKey);
+      expect(nodeResult).toEqual(browserResult);
+
+      expect(decryptAesGcm(key, nodeResult.ciphertext, iv, nodeResult.tag, recordKey)).toEqual(plaintext);
+      const otherRecordKey = new TextEncoder().encode('frontmcp:keys-v2:signing');
+      expect(() => decryptAesGcm(key, nodeResult.ciphertext, iv, nodeResult.tag, otherRecordKey)).toThrow();
+      expect(() => decryptAesGcm(key, nodeResult.ciphertext, iv, nodeResult.tag)).toThrow();
+      expect(() =>
+        browserCrypto.decryptAesGcm(key, browserResult.ciphertext, iv, browserResult.tag, otherRecordKey),
+      ).toThrow();
+    });
+
     // Input validation tests
     it('should throw for wrong key size in encryptAesGcm', () => {
       const wrongKey = randomBytes(16); // Should be 32

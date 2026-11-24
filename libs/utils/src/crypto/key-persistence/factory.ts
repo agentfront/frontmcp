@@ -11,7 +11,11 @@ import { MemoryStorageAdapter } from '../../storage/adapters/memory';
 import type { StorageAdapter } from '../../storage/types';
 import { isBrowser, isNode } from '../runtime';
 import { KeyPersistence } from './key-persistence';
-import { LocalStorageKeyRequiredError, LocalStorageKeyUnavailableError } from './local-storage-key';
+import {
+  LocalStorageKeyLostError,
+  LocalStorageKeyRequiredError,
+  LocalStorageKeyUnavailableError,
+} from './local-storage-key';
 import type { CreateKeyPersistenceOptions } from './types';
 
 /**
@@ -31,12 +35,13 @@ async function localStorageKeysOrMemory(encryptionKey?: Uint8Array): Promise<Sto
   try {
     return await createLocalStorageKeyAdapter(encryptionKey);
   } catch (error) {
-    if (error instanceof LocalStorageKeyUnavailableError) throw error;
+    if (error instanceof LocalStorageKeyUnavailableError || error instanceof LocalStorageKeyLostError) throw error;
     if (error instanceof LocalStorageKeyRequiredError && !keysInMemoryWarned) {
       keysInMemoryWarned = true;
       console.warn(
         '[frontmcp] createKeyPersistence: IndexedDB or WebCrypto is unavailable and no encryptionKey was given, so ' +
-          'keys are kept in memory only. Pass encryptionKey, a 32-byte key kept outside localStorage, to keep them.',
+          'keys are kept in memory only, and keys saved in localStorage by earlier versions are ignored (not ' +
+          'deleted). Pass encryptionKey, a 32-byte key kept outside localStorage, to keep keys and read the saved ones.',
       );
     }
     return new MemoryStorageAdapter();
