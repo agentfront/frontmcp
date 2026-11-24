@@ -17,6 +17,8 @@ import {
 } from '@frontmcp/protocol';
 import { type Client } from '@frontmcp/protocol/client';
 
+import type { RemoteRequestScopes } from './remote-request-headers';
+
 // ═══════════════════════════════════════════════════════════════════
 // CONNECTION TYPES
 // ═══════════════════════════════════════════════════════════════════
@@ -52,6 +54,8 @@ export interface McpClientConnection {
   lastHeartbeat?: Date;
   /** Timestamp when connection was established */
   connectedAt?: Date;
+  /** @internal The headers of the calls running on this connection, which its transport's requests carry. */
+  requestScopes: RemoteRequestScopes;
 }
 
 /**

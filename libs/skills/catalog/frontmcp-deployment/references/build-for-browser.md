@@ -111,6 +111,9 @@ info or running tool:
 - A request waiting on its client (elicitation, `roots/list`) steps aside while it waits.
 - Concurrent tool calls inside one request (`Promise.all`) are refused with
   `AsyncContextOverlapError` once they overlap. Run them one after another.
+- Calls to two remote MCP apps that overlap inside one request send each remote only the headers of its
+  own call (`remoteAuth` `forward` or `mapped` credentials), polling included; up to 1.12.2 a call's
+  requests could carry the headers of a later call to another remote.
 - A workflow runs its ready steps one at a time, whatever its `maxConcurrency`, so each step runs
   once instead of overlapping and being retried.
 - A tool must not call its own server through a `DirectClient`/`DirectMcpServer` (it waits for its
