@@ -193,32 +193,62 @@ describe('fetchPinnedTo', () => {
     jest.restoreAllMocks();
   });
 
+  /** A dispatcher shaped as undici's `Agent`: its options under a symbol described `options`. */
+  function agentWith(options: Record<string, unknown>): object {
+    const optionsKey = Symbol('options');
+    const agent = new (class Agent {})() as Record<symbol, unknown>;
+    agent[optionsKey] = options;
+    return agent;
+  }
+
+  /** `fetchPinnedTo` from a fresh module, whose one-time warning hasn't been given yet. */
+  function freshFetchPinnedTo(): typeof fetchPinnedTo {
+    let loaded: typeof fetchPinnedTo = fetchPinnedTo;
+    jest.isolateModules(() => {
+      loaded = jest.requireActual<typeof import('../cimd.validator')>('../cimd.validator').fetchPinnedTo;
+    });
+    return loaded;
+  }
+
   it('is plain fetch when there are no checked addresses to pin to', () => {
     expect(fetchPinnedTo(undefined)).toBe(fetch);
     expect(fetchPinnedTo([])).toBe(fetch);
   });
 
-  it("pins a direct connection, made through undici's own Agent", () => {
-    globals[DISPATCHER] = new (class Agent {})();
+  it.each([
+    ['no dispatcher installed yet', undefined],
+    ["the plain Agent Node's fetch creates (undici 6)", agentWith({})],
+    ["the plain Agent Node's fetch creates (undici 7)", agentWith({ maxOrigins: null })],
+  ])('pins a direct connection: %s', (_label, dispatcher) => {
+    globals[DISPATCHER] = dispatcher;
 
     expect(fetchPinnedTo(checked)).not.toBe(fetch);
     expect(mockPinnedFetch).toHaveBeenCalledWith(checked);
   });
 
-  it('keeps plain fetch through NODE_USE_ENV_PROXY with HTTPS_PROXY, warning once that pinning needs a direct connection', () => {
-    globals[DISPATCHER] = new (class EnvHttpProxyAgent {})();
-    process.env['HTTPS_PROXY'] = 'http://proxy.internal:3128';
+  it('keeps plain fetch through an Agent installed with a connector of its own, warning once', () => {
+    globals[DISPATCHER] = agentWith({ connect: () => undefined });
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const fetchPinnedToOnce = freshFetchPinnedTo();
 
-    expect(fetchPinnedTo(checked)).toBe(fetch);
-    expect(fetchPinnedTo(checked)).toBe(fetch);
-    expect(mockPinnedFetch).not.toHaveBeenCalled();
+    expect(fetchPinnedToOnce(checked)).toBe(fetch);
+    expect(fetchPinnedToOnce(checked)).toBe(fetch);
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('when they connect directly'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("Node's default dispatcher"));
   });
 
-  it('keeps plain fetch through a dispatcher installed for fetch', () => {
-    globals[DISPATCHER] = new (class ProxyAgent {})();
+  it.each([
+    ['an Agent carrying a CA', () => agentWith({ connect: { ca: 'corporate CA' } })],
+    ['a ProxyAgent', () => new (class ProxyAgent {})()],
+    [
+      'NODE_USE_ENV_PROXY with HTTPS_PROXY',
+      () => {
+        process.env['HTTPS_PROXY'] = 'http://proxy.internal:3128';
+        return new (class EnvHttpProxyAgent {})();
+      },
+    ],
+  ])('keeps plain fetch through %s', (_label, install) => {
+    globals[DISPATCHER] = install();
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     expect(fetchPinnedTo(checked)).toBe(fetch);

@@ -262,38 +262,46 @@ export async function assertHostNotSsrf(hostname: string, clientId: string): Pro
   return check.addresses;
 }
 
-let proxiedFetchWarned = false;
+let dispatchedFetchWarned = false;
 
 /**
  * `fetch` that connects only to `addresses`, the ones the SSRF check approved, keeping the hostname
  * for `Host` and TLS. Plain `fetch` where there are none to pin to (an IP literal, a host the check
- * skipped), no lookup hook (a Worker, a browser), or a proxy in effect for `fetch`, which resolves
- * the hostname itself: the check then covers the hostname only, and a proxy is warned about once.
+ * skipped), no lookup hook (a Worker, a browser), or a dispatcher of its own for `fetch`, such as a
+ * proxy, which may resolve the hostname itself: the check then covers the hostname only, said once.
  */
 export function fetchPinnedTo(addresses: readonly LookupAddress[] | undefined): PinnedFetch {
   if (!addresses?.length || isEdgeRuntime()) return fetch;
-  if (!fetchUsesProxy()) return pinnedFetch(addresses);
-  if (!proxiedFetchWarned) {
-    proxiedFetchWarned = true;
+  if (!fetchHasOwnDispatcher()) return pinnedFetch(addresses);
+  if (!dispatchedFetchWarned) {
+    dispatchedFetchWarned = true;
     console.warn(
-      '[frontmcp] CIMD and JWKS fetches go through the proxy fetch is configured with, which resolves each ' +
-        'hostname itself: they connect only to the addresses the private-address check approved when they ' +
-        'connect directly.',
+      '[frontmcp] CIMD and JWKS fetches go through the dispatcher installed for fetch (a proxy, or an Agent with ' +
+        'its own connector or CA): they connect only to the addresses the private-address check approved when ' +
+        "fetch uses Node's default dispatcher.",
     );
   }
   return fetch;
 }
 
 /**
- * Whether `fetch` sends requests through a proxy: a dispatcher other than undici's `Agent` installed for it
- * (`setGlobalDispatcher`), or the one `NODE_USE_ENV_PROXY` installs with a proxy set in the environment.
+ * Whether `fetch` sends requests through a dispatcher other than the plain `Agent` Node creates for it: one installed
+ * with `setGlobalDispatcher` (a proxy, or an `Agent` with options such as a SOCKS connector or a CA), or the one
+ * `NODE_USE_ENV_PROXY` installs when a proxy is set in the environment.
  */
-function fetchUsesProxy(): boolean {
-  const dispatcher = (globalThis as Record<symbol, object | undefined>)[Symbol.for('undici.globalDispatcher.1')];
-  const dispatcherName = dispatcher?.constructor.name;
-  if (dispatcherName === undefined || dispatcherName === 'Agent') return false;
-  if (dispatcherName !== 'EnvHttpProxyAgent') return true;
-  return ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'].some((name) => Boolean(getEnv(name)));
+function fetchHasOwnDispatcher(): boolean {
+  const dispatcher = (globalThis as Record<symbol, Record<symbol, unknown> | undefined>)[
+    Symbol.for('undici.globalDispatcher.1')
+  ];
+  if (dispatcher === undefined) return false;
+  const dispatcherName = dispatcher.constructor.name;
+  if (dispatcherName === 'EnvHttpProxyAgent') {
+    return ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'].some((name) => Boolean(getEnv(name)));
+  }
+  if (dispatcherName !== 'Agent') return true;
+  const optionsKey = Object.getOwnPropertySymbols(dispatcher).find((key) => key.description === 'options');
+  const options = optionsKey ? (dispatcher[optionsKey] as Record<string, unknown> | undefined) : undefined;
+  return !options || Object.values(options).some((value) => value !== undefined && value !== null);
 }
 
 /**

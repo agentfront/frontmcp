@@ -189,6 +189,17 @@ describe('SkilledOpenApiPlugin', () => {
       ).toThrow(/needs an http: or https: egressProxy/);
     });
 
+    it('reports an egressProxy that is not a URL as an option error, not a bare TypeError', () => {
+      const build = () =>
+        new SkilledOpenApiPlugin({
+          source: { type: 'static', path: '/x' },
+          outbound: { egressProxy: '10.0.0.1:3128', egressProxyConnectTo: 'approved-address' },
+        });
+
+      expect(build).toThrow(/egressProxy/);
+      expect(build).not.toThrow(/Invalid URL$/);
+    });
+
     it('does not warn when both requireSignature=true and dev=false (default safe config)', () => {
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
       try {

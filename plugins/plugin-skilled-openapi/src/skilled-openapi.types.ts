@@ -221,7 +221,9 @@ export const skilledOpenApiPluginOptionsSchema = skilledOpenApiPluginOptionsObje
       });
     }
     const { egressProxy, egressProxyConnectTo } = opts.outbound ?? {};
-    const tunnelsToAddress = !egressProxy || ['http:', 'https:'].includes(new URL(egressProxy).protocol);
+    // An egressProxy that isn't a URL already has its own issue.
+    const tunnelsToAddress =
+      !egressProxy || !URL.canParse(egressProxy) || ['http:', 'https:'].includes(new URL(egressProxy).protocol);
     if (egressProxyConnectTo === 'approved-address' && !tunnelsToAddress) {
       ctx.addIssue({
         code: 'custom',
