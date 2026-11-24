@@ -446,6 +446,28 @@ export interface CodeCallOptions {
      */
     maxScriptLengthWhenDisabled?: number | null;
   };
+
+  /**
+   * Review of each script before it runs and of each call before the tool sees it; off unless set.
+   * See "Review stage" below.
+   */
+  review?: {
+    rules?:
+      | false
+      | {
+          inputSchema?: boolean;
+          availability?: boolean;
+          destructive?: boolean;
+          readThenSend?: false | 'needs_changes' | 'denied';
+          fanOut?: boolean;
+        };
+    provider?: { provider: 'openai'; apiKey: string; model: string; baseUrl?: string; timeoutMs?: number };
+    reviewer?: (request: ReviewerRequest) => ReviewDecision | Promise<ReviewDecision>;
+    policy?: string;
+    policyVersion?: string;
+    timeoutMs?: number;
+    approvalMaxAgeSeconds?: number; // 3600
+  };
 }
 ```
 
@@ -819,8 +841,49 @@ export type CodeCallExecuteResult =
   | {
       status: 'timeout';
       error: { message: string };
-    };
+    }
+  // With `review` on:
+  | { status: 'needs_changes'; findings: ReviewFinding[] }
+  | {
+      status: 'needs_approval';
+      reason: string;
+      approval?: { id: string; toolName?: string; argumentsHash?: string; anyArgumentsId?: string };
+      findings?: ReviewFinding[];
+    }
+  | { status: 'denied'; reason: string; findings?: ReviewFinding[] }
+  | { status: 'review_failed'; error: { message: string } };
 ```
+
+`ReviewFinding` is Enclave's `{ rule, message, location?: { line, column }, suggestion?, toolName? }`. Every variant
+also carries `runId` and `trace` when the run has them.
+
+### Review stage
+
+`review` plugs into Enclave's review hooks (`review: { pre, timeoutMs }`, `run(code, handler, { reviewContext })`),
+on both runtimes. The code lives in `src/review/`:
+
+- `review-rules.ts`: the built-in rules. At `phase: 'script'` they read Enclave's `analyzeScript` result (tool calls
+  with literal arguments, flows from one call's result into another's arguments, loop bounds against the call
+  budget); at `phase: 'call'` they read the real arguments. `input-schema-check.ts` checks arguments against the
+  tool's JSON Schema (type, enum, `anyOf`/`oneOf`, required names).
+- `run-review.ts`: the `pre` hook of one run. The rules answer first; a destructive call goes through the approvals;
+  then the server's reviewers (`reviewer`, then `provider`) review the script. A call that needs approval after a
+  tool without `readOnlyHint` reached its tool in the run (`effectsSoFar`, from the run's journal) gets
+  `needs_changes` (`approval-after-effects`) instead, with no pending approval: an approval runs the whole script
+  again, until #1335 resumes a run from its journal. `reviewOutcomeOf` reads
+  `result.review.decisions`, never the error code: on the double VM an uncaught refused call ends as
+  `DOUBLE_VM_EXECUTION_ERROR`, and only its error name (`ReviewError`) tells it apart.
+- `review.service.ts`: the options, the policy version approvals are bound to, and the reviewers, loaded from
+  `@enclave-vm/core/worker` on either runtime (both entries recognize each other's `ReviewerError`).
+- `review-approvals.ts`: approval ids (`codecall:approval:<sha256 of { scriptHash, toolName, argumentsHash,
+policyVersion }>`), read from the Approval plugin's `this.approval` (`Symbol.for('plugin:approval:service')`)
+  without depending on the plugin. A grant on `anyArgumentsId` needs `metadata.maxCalls`, counted per run.
+- `approval-elicitation.ts`: asking the person when the server enables elicitation and the client declares it.
+  `codecall:execute` runs the same script again after each approval, up to 5 times.
+- `review-invocation.ts`: `codecall:invoke` reviewed as `return await callTool(name, <canonical JSON>)`.
+
+The hooks get `{ session, subject, surface }` as `context`. Enclave's reviewers do not pass it on to `reviewer`
+(`ReviewerRequest` is `{ code, analysis, policy, tools }`), and keep decisions by the script's digest alone.
 
 ### Tool call notifications & error model
 
@@ -915,6 +978,9 @@ Behavior:
   - other lifecycle plugins
 
 - No VM is created and no user JS is run.
+- With `review` on, the call is reviewed first, as the one-call script it stands for: a refusal is an error result
+  whose `structuredContent` is the `codecall:execute` review payload (`needs_changes`, `needs_approval`, `denied`,
+  `review_failed`).
 
 Output:
 

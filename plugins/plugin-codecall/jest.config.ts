@@ -7,6 +7,7 @@ module.exports = {
     ...require('../../jest.imports-mapper'),
     '^@frontmcp/sdk$': '<rootDir>/../../libs/sdk/src/index.ts',
     '^@frontmcp/plugin-cache$': '<rootDir>/../plugin-cache/src/index.ts',
+    '^@frontmcp/plugin-approval$': '<rootDir>/../plugin-approval/src/index.ts',
   },
   transform: {
     '^.+\\.[tj]s$': [

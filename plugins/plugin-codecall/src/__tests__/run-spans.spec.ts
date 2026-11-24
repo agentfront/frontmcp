@@ -68,6 +68,22 @@ describe('RunSpans', () => {
     expect(runSpan.ended).toBe('ok');
   });
 
+  it("puts the review's findings on the run span without suggestions, cutting a long list", () => {
+    const runSpan = fakeSpan();
+    const finding = { rule: 'fan-out', message: 'm'.repeat(100), suggestion: 'secret value', toolName: 'a' };
+
+    new RunSpans(runSpan).recordFindings(Array.from({ length: 30 }, () => finding));
+
+    expect(runSpan.attributes).toMatchObject({
+      'codecall.review.findings.count': 30,
+      'codecall.review.findings.rules': 'fan-out',
+    });
+    const json = runSpan.attributes['codecall.review.findings'] as string;
+    expect(json).toHaveLength(2003);
+    expect(json.endsWith('...')).toBe(true);
+    expect(json).not.toContain('secret value');
+  });
+
   it('ignores the end of a call it never started', () => {
     const runSpan = fakeSpan();
     const spans = new RunSpans(runSpan);

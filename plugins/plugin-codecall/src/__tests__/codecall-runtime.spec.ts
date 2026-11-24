@@ -219,6 +219,33 @@ describe('node-vm runtime', () => {
       runner.dispose();
     }
   }, 30000);
+
+  it('refuses a reviewed run on an Enclave that would ignore the review hooks', async () => {
+    const Enclave = jest.fn();
+    const error = await refusalOf(
+      createNodeVmRuntime(async () => ({ Enclave }) as never).createRunner(spec({ review: { pre: jest.fn() } })),
+    );
+
+    expect(error.code).toBe('RUNTIME_FEATURE_UNSUPPORTED');
+    expect(error.message).toContain('2.21 or later');
+    expect(Enclave).not.toHaveBeenCalled();
+  });
+
+  it("gives the real Enclave the review hooks and the run's review context", async () => {
+    const pre = jest.fn(async () => ({ decision: 'denied' as const, reason: 'no scripts today' }));
+    const runner = await createNodeVmRuntime().createRunner(
+      spec({ review: { pre }, reviewContext: { session: 's-1' } }),
+    );
+    try {
+      const result = await runner.run('return 1;');
+
+      expect(result).toMatchObject({ success: false, error: { code: 'REVIEW_DENIED' } });
+      expect(result.review?.decisions).toEqual([expect.objectContaining({ phase: 'script', decision: 'denied' })]);
+      expect(pre).toHaveBeenCalledWith(expect.objectContaining({ phase: 'script', context: { session: 's-1' } }));
+    } finally {
+      runner.dispose();
+    }
+  }, 30000);
 });
 
 describe('interpreter runtime', () => {
@@ -229,6 +256,7 @@ describe('interpreter runtime', () => {
     'sidecar',
     'console',
     'rapid-enumeration',
+    'review',
   ];
 
   function fakeRunnerEntry(capabilities: readonly string[] = fullCapabilities) {
@@ -290,6 +318,7 @@ describe('interpreter runtime', () => {
           toolNamespaces: { acme: { run: 'acme.run' } },
           sidecar: { enabled: true },
           consoleHandler: jest.fn(),
+          review: { pre: jest.fn() },
         }),
       ),
     ).toEqual([
@@ -299,6 +328,7 @@ describe('interpreter runtime', () => {
       'tool-namespaces',
       'sidecar',
       'console',
+      'review',
     ]);
     expect(requiredCapabilities(spec({ toolNamespaces: {} }))).not.toContain('tool-namespaces');
   });
@@ -310,6 +340,7 @@ describe('interpreter runtime', () => {
     ['console', { consoleHandler: jest.fn() }],
     ['sidecar', { sidecar: { enabled: true } }],
     ['tool-namespaces', { toolNamespaces: { acme: { run: 'acme.run' } } }],
+    ['review', { review: { pre: jest.fn() } }],
   ] as Array<[string, Partial<CodeCallScriptRunSpec>]>)(
     'refuses a run that needs %s from a runner that does not enforce it',
     async (capability, overrides) => {
@@ -363,6 +394,19 @@ describe('interpreter runtime', () => {
     expect(maxHostFunctionCallsOf(3)).toBe(30);
   });
 
+  it('gives the runner the review hooks only when the run is reviewed, and the review context to each run', async () => {
+    const review = { pre: jest.fn() };
+    expect(toRunnerOptions(spec({ review })).review).toBe(review);
+    expect(toRunnerOptions(spec())).not.toHaveProperty('review');
+
+    const { entry, run } = fakeRunnerEntry();
+    const runner = await createInterpreterRuntime(async () => entry).createRunner(
+      spec({ review, reviewContext: { session: 's-1' } }),
+    );
+    await runner.run('return 1;');
+    expect(run).toHaveBeenCalledWith('return 1;', undefined, { reviewContext: { session: 's-1' } });
+  });
+
   it('runs raw AgentScript through the runner and disposes it', async () => {
     const { entry, constructed, run, dispose } = fakeRunnerEntry();
     const runner = await createInterpreterRuntime(async () => entry).createRunner(spec());
@@ -371,7 +415,7 @@ describe('interpreter runtime', () => {
     runner.dispose();
 
     expect(constructed).toHaveLength(1);
-    expect(run).toHaveBeenCalledWith('return 1;');
+    expect(run).toHaveBeenCalledWith('return 1;', undefined, { reviewContext: undefined });
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 

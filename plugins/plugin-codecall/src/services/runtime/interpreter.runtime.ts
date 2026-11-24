@@ -19,7 +19,7 @@
 // built-in. Only types come from the full barrel, and they are erased.
 
 import type { ConsoleHandler, ReferenceSidecarOptions } from '@enclave-vm/core';
-import type { ExecutionResult, ToolHandler } from '@enclave-vm/core/worker';
+import type { ExecutionResult, ReviewContext, ReviewOptions, ToolHandler } from '@enclave-vm/core/worker';
 
 import { CodeCallRuntimeError } from './runtime.errors';
 import {
@@ -46,7 +46,9 @@ export type AgentScriptRunnerCapability =
   /** Console calls and bytes bounded per run. */
   | 'console'
   /** The per-tool rapid-enumeration threshold and overrides. */
-  | 'rapid-enumeration';
+  | 'rapid-enumeration'
+  /** Review hooks before the run and each tool call. */
+  | 'review';
 
 /** The options CodeCall gives the runner. */
 export interface AgentScriptRunnerOptions {
@@ -70,11 +72,16 @@ export interface AgentScriptRunnerOptions {
   toolNamespaces?: Record<string, Record<string, string>>;
   sidecar?: ReferenceSidecarOptions;
   rapidEnumeration: { threshold?: number; overrides?: Record<string, number> };
+  review?: ReviewOptions;
 }
 
 /** One runner per execution. */
 export interface AgentScriptRunnerInstance {
-  run<T = unknown>(code: string): Promise<ExecutionResult<T>>;
+  run<T = unknown>(
+    code: string,
+    toolHandler?: ToolHandler,
+    options?: { reviewContext?: ReviewContext },
+  ): Promise<ExecutionResult<T>>;
   dispose(): void;
 }
 
@@ -87,7 +94,7 @@ export interface AgentScriptRunnerClass {
 /** How the runtime loads the worker entry; replaced in tests. */
 export type WorkerEntryLoader = () => Promise<Record<string, unknown>>;
 
-const loadWorkerEntry: WorkerEntryLoader = async () =>
+export const loadWorkerEntry: WorkerEntryLoader = async () =>
   (await import('@enclave-vm/core/worker')) as unknown as Record<string, unknown>;
 
 /** Host-function calls a script may make: as many as the Node VM allows by default. */
@@ -101,6 +108,7 @@ export function requiredCapabilities(spec: CodeCallScriptRunSpec): AgentScriptRu
   if (spec.toolNamespaces && Object.keys(spec.toolNamespaces).length > 0) required.push('tool-namespaces');
   if (spec.sidecar) required.push('sidecar');
   if (spec.consoleHandler) required.push('console');
+  if (spec.review) required.push('review');
   return required;
 }
 
@@ -125,6 +133,7 @@ export function toRunnerOptions(spec: CodeCallScriptRunSpec): AgentScriptRunnerO
     toolNamespaces: spec.toolNamespaces,
     sidecar: spec.sidecar,
     rapidEnumeration: { ...spec.rapidEnumeration },
+    ...(spec.review && { review: spec.review }),
   };
 }
 
@@ -188,7 +197,7 @@ export function createInterpreterRuntime(loader: WorkerEntryLoader = loadWorkerE
       }
       const runner = createRunner(Runner, toRunnerOptions(spec));
       return {
-        run: (code) => runner.run<unknown>(code),
+        run: (code) => runner.run<unknown>(code, undefined, { reviewContext: spec.reviewContext }),
         dispose: () => runner.dispose(),
       };
     },
