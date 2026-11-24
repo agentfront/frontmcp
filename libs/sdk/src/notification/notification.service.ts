@@ -15,7 +15,6 @@ import { awaitOutsideRequest } from '@frontmcp/utils';
 import type { AIPlatformType, FrontMcpLogger, PlatformDetectionConfig, PlatformMappingEntry } from '../common';
 import type { Scope } from '../scope';
 import { announcesListChangeNow } from '../surface/list-change-batch';
-import { mcpRequestSurface } from '../transport/mcp-handlers/mcp-surface';
 
 /**
  * Re-export Root from MCP SDK for convenience.
@@ -811,13 +810,9 @@ export class NotificationService {
   private async notifyIfStillReadable(sessionId: string, uri: string): Promise<void> {
     const registered = this.servers.get(sessionId);
     if (!registered || hasExpiredCaller(registered)) return;
-    const request = { method: 'resources/subscribe' as const, params: { uri } };
-    const ctx = { authInfo: registered.caller ?? {}, surface: mcpRequestSurface(this.scope), ownRequest: true };
-    const readable = await this.scope.runFlow('resources:subscribe', { request, ctx }).then(
-      () => true,
-      () => false,
-    );
-    if (readable) this.sendNotificationToSession(sessionId, 'notifications/resources/updated', { uri });
+    const { callerMayStillRead } = await import('./resource-update-access.js');
+    if (await callerMayStillRead(this.scope, registered.caller, uri))
+      this.sendNotificationToSession(sessionId, 'notifications/resources/updated', { uri });
   }
 
   // =====================================================
