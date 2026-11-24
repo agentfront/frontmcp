@@ -97,7 +97,7 @@ import { TASK_DEFAULTS, toWireShape, type TaskRecord } from '../../task/task.typ
 import { linkedAbortController } from '../../utils/abort.utils';
 import { appOwnerIdOf, hookOwnerIdOf, isServerEntryOwner } from '../../utils/lineage.utils';
 import { resolveStructuredContentValidation, toolOutputPolicies } from '../tool-output-policy';
-import { isCallToolResult } from '../tool.utils';
+import { asElicitationFallback, isReturnedCallToolResult } from '../tool.utils';
 import { toolServingMode } from '../ui/serving-mode-default';
 import { hasUIConfig, WIDGET_CALL_META_KEY } from '../ui/ui-shared';
 import { askToOpenConnectPages, credentialsRequiredErrorOf, evaluateToolCredentialGate } from './tool-credentials.gate';
@@ -313,6 +313,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   }
 
   logger = this.scopeLogger.child('CallToolFlow');
+
+  /** The output the UI renders, parsed once per call (see {@link uiOutput}). */
+  private declaredUiOutput?: { value: unknown };
 
   /** The tool's name (its `id`, else its `name`) once `findTool` resolved it, else the name the call asks for. */
   get toolName(): string {
@@ -1402,7 +1405,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
             },
           },
         };
-        toolContext.output = fallbackResponse;
+        toolContext.output = asElicitationFallback(fallbackResponse);
 
         this.logger.verbose('execute:done (elicitation fire-and-forget fallback)');
         return;
@@ -1473,7 +1476,6 @@ export default class CallToolFlow extends FlowBase<typeof name> {
   async applyUI() {
     this.logger.verbose('applyUI:start');
     const { tool, input } = this.state;
-    const rawOutput = this.uiOutput();
 
     // Skip UI for calls that want the data only: an agent's tool calls, and the calls a widget
     // makes back to the server, through `ui/callServerTool` or a `tools/call` its bridge marks
@@ -1488,6 +1490,7 @@ export default class CallToolFlow extends FlowBase<typeof name> {
       this.logger.verbose('applyUI:skip (no UI config)');
       return;
     }
+    const rawOutput = this.uiOutput();
 
     try {
       const scope = this.scope;
@@ -1924,12 +1927,14 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     return (schemaMode === 'definition' || schemaMode === 'both') && isObjectSchema;
   }
 
-  /** What the UI renders and echoes: what the `outputSchema` declares, and undeclared keys under 'keep'. */
+  /** What the UI renders and echoes: what the `outputSchema` declares, and undeclared keys under 'keep'; parsed once. */
   private uiOutput(): unknown {
     const { tool, rawOutput } = this.state;
     if (!tool) return rawOutput;
+    if (this.declaredUiOutput) return this.declaredUiOutput.value;
     const keepsUndeclaredKeys = resolveUndeclaredKeysPolicy(...toolOutputPolicies(tool, this.scope)) === 'keep';
-    return declaredOutput(tool, rawOutput, keepsUndeclaredKeys ? 'keep' : 'strip');
+    this.declaredUiOutput = { value: declaredOutput(tool, rawOutput, keepsUndeclaredKeys ? 'keep' : 'strip') };
+    return this.declaredUiOutput.value;
   }
 
   private warnInvalidStructuredContentOnce(tool: CallToolEntry): void {
@@ -1937,8 +1942,8 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     reportedInvalidStructuredContent.add(tool);
     this.logger.warn(
       `Tool "${tool.metadata.name}" returned a CallToolResult whose structuredContent is missing or does not ` +
-        "match its outputSchema, and it was sent as returned. Set output.validateStructuredContent: 'enforce' to " +
-        'refuse such an answer with INVALID_OUTPUT now; FrontMCP 1.13 refuses it by default.',
+        "match its outputSchema, and output.validateStructuredContent: 'warn' sent it as returned. Without 'warn' " +
+        'such an answer is refused with INVALID_OUTPUT.',
     );
   }
 
@@ -1969,7 +1974,7 @@ function declaredOutput(
   if (!tool?.outputSchema || typeof output !== 'object' || output === null || Array.isArray(output)) return output;
   const parsed = tool.safeParseOutput(output, { undeclaredKeys });
   if (!parsed.success) return output;
-  if (isCallToolResult(output)) return parsed.data;
+  if (isReturnedCallToolResult(tool.outputSchema, output)) return parsed.data;
   const structured = parsed.data.structuredContent;
   return typeof structured === 'object' && structured !== null && !Array.isArray(structured) ? structured : output;
 }

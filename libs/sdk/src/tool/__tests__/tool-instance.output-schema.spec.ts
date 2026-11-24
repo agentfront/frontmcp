@@ -4,6 +4,7 @@ import { createMockOwner, createMockProviderRegistry } from '../../__test-utils_
 import { ToolContext, ToolKind, type ToolMetadata, type ToolRecord } from '../../common';
 import { InvalidOutputError } from '../../errors';
 import { ToolInstance } from '../tool.instance';
+import { asElicitationFallback } from '../tool.utils';
 
 class AnswerTool extends ToolContext {
   async execute() {
@@ -347,16 +348,26 @@ describe('ToolInstance.parseOutput of a CallToolResult the tool returns', () => 
 
   it("sends the SDK's elicitation fallback answer as returned, under 'enforce' too", () => {
     const { tool } = toolWithOutput({ price: z.number() });
-    const fallback = {
+    const fallback = asElicitationFallback({
       content: [{ type: 'text', text: 'Answer first' }],
       _meta: { elicitationPending: { elicitId: 'e-1' } },
-    };
+    });
     const onInvalidStructuredContent = jest.fn();
 
     expect(tool.parseOutput(fallback, { validateStructuredContent: 'enforce', onInvalidStructuredContent })).toBe(
       fallback,
     );
     expect(onInvalidStructuredContent).not.toHaveBeenCalled();
+  });
+
+  it("validates a tool's own answer that only names an elicitation in its _meta", () => {
+    const { tool } = toolWithOutput({ price: z.number() });
+    const claimed = {
+      content: [{ type: 'text', text: 'Answer first' }],
+      _meta: { elicitationPending: { elicitId: 'e-1' } },
+    };
+
+    expect(() => tool.parseOutput(claimed, { validateStructuredContent: 'enforce' })).toThrow(InvalidOutputError);
   });
 
   it("fails with INVALID_OUTPUT when its structuredContent does not match the outputSchema under 'enforce'", () => {

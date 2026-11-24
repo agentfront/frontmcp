@@ -147,7 +147,7 @@ export function buildParsedToolResult(
   raw: unknown,
   options: OutputParseOptions = {},
 ): ParsedToolResult {
-  if (isCallToolResult(raw)) {
+  if (isReturnedCallToolResult(descriptor, raw)) {
     return withDeclaredStructuredContent(descriptor, raw, options);
   }
 
@@ -235,6 +235,25 @@ export function buildParsedToolResult(
 }
 
 /**
+ * Whether `raw` is a `CallToolResult` the tool returned, not its own data: a value with an empty `content` list and no
+ * `structuredContent` that the tool's object `outputSchema` accepts is the tool's data.
+ */
+export function isReturnedCallToolResult(descriptor: unknown, raw: unknown): raw is ParsedToolResult {
+  if (!isCallToolResult(raw)) return false;
+  if (raw.content.length > 0 || raw.structuredContent !== undefined || raw.isError) return true;
+  return !structuredOutputSchemaOf(descriptor)?.safeParse(raw).success;
+}
+
+/** The SDK's own answers that ask the model to collect an elicitation's input; they carry no `structuredContent`. */
+const elicitationFallbacks = new WeakSet<object>();
+
+/** Mark `answer` as the SDK's elicitation fallback, which `outputSchema` validation leaves as it is. */
+export function asElicitationFallback<Answer extends object>(answer: Answer): Answer {
+  elicitationFallbacks.add(answer);
+  return answer;
+}
+
+/**
  * A CallToolResult the tool returned itself, its `structuredContent` parsed against the tool's object
  * `outputSchema` and undeclared-keys policy, and the text block that repeats it rebuilt to match.
  */
@@ -244,7 +263,7 @@ function withDeclaredStructuredContent(
   options: OutputParseOptions,
 ): ParsedToolResult {
   const schema = structuredOutputSchemaOf(descriptor);
-  if (!schema || result.isError || awaitsElicitation(result)) return result;
+  if (!schema || result.isError || elicitationFallbacks.has(result)) return result;
   const { structuredContent } = result;
   const parsed = declaredStructuredContent(schema, structuredContent);
   if ('error' in parsed) {
@@ -302,19 +321,38 @@ function declaredStructuredContent(
   }
 }
 
-/** The SDK's elicitation fallback answer, which carries the question in `_meta` and no `structuredContent`. */
-function awaitsElicitation(result: ParsedToolResult): boolean {
-  return isRecord(result._meta) && 'elicitationPending' in result._meta;
-}
+/** Zod wrappers whose answer has the shape of the schema they wrap. */
+const SHAPE_KEEPING_WRAPPERS: ReadonlySet<string> = new Set([
+  'readonly',
+  'optional',
+  'nullable',
+  'default',
+  'prefault',
+  'nonoptional',
+  'catch',
+]);
 
-/** Zod schema types whose answer is a JSON object, as a `CallToolResult`'s `structuredContent` is. */
-const OBJECT_OUTPUT_TYPES: ReadonlySet<string> = new Set(['object', 'union', 'intersection', 'record']);
+/**
+ * Whether a schema answers a JSON object, as a `CallToolResult`'s `structuredContent` is: an object or a record, a
+ * union or an intersection of nothing else, a pipe from one, or one of them behind `z.lazy()` or a shape-keeping wrapper.
+ */
+function answersObject(schema: unknown, lazies: ReadonlySet<object> = new Set()): boolean {
+  const def = (schema as { _zod?: { def?: Record<string, unknown> } } | null | undefined)?._zod?.def;
+  if (!def) return false;
+  const type = String(def['type']);
+  if (type === 'object' || type === 'record') return true;
+  if (type === 'lazy') {
+    return !lazies.has(def) && answersObject((def['getter'] as () => unknown)(), new Set([...lazies, def]));
+  }
+  if (type === 'pipe') return answersObject(def['in'], lazies);
+  if (type === 'union') return (def['options'] as unknown[]).every((option) => answersObject(option, lazies));
+  if (type === 'intersection') return answersObject(def['left'], lazies) && answersObject(def['right'], lazies);
+  return SHAPE_KEEPING_WRAPPERS.has(type) && answersObject(def['innerType'], lazies);
+}
 
 /** The schema an output descriptor gives `structuredContent` as a whole; none for a scalar, a list or a literal. */
 function structuredOutputSchemaOf(descriptor: unknown): z.ZodType | undefined {
-  if (descriptor instanceof z.ZodType) {
-    return OBJECT_OUTPUT_TYPES.has((descriptor as { type?: string }).type ?? '') ? descriptor : undefined;
-  }
+  if (descriptor instanceof z.ZodType) return answersObject(descriptor) ? descriptor : undefined;
   return !Array.isArray(descriptor) && isZodRawShape(descriptor) ? z.object(descriptor) : undefined;
 }
 

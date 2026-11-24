@@ -39,14 +39,14 @@ export function toolOutputPolicies<Tool extends OutputPolicyTool>(
   return [tool.metadata.output, appOutput, scope.metadata.output];
 }
 
-/** Resolve how a returned `CallToolResult`'s `structuredContent` is validated: Tool > App > server > 'warn'. */
+/** Resolve how a returned `CallToolResult`'s `structuredContent` is validated: Tool > App > server > 'enforce'. */
 export function resolveStructuredContentValidation(
   tool?: OutputPolicy,
   app?: OutputPolicy,
   server?: OutputPolicy,
 ): StructuredContentValidation {
   return (
-    tool?.validateStructuredContent ?? app?.validateStructuredContent ?? server?.validateStructuredContent ?? 'warn'
+    tool?.validateStructuredContent ?? app?.validateStructuredContent ?? server?.validateStructuredContent ?? 'enforce'
   );
 }
 

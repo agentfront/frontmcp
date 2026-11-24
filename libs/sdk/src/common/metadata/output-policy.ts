@@ -48,8 +48,8 @@ export type UndeclaredKeysPolicy = (typeof UNDECLARED_KEYS_POLICIES)[number];
 
 /**
  * What `tools/call` does with a `CallToolResult` a tool returns itself whose `structuredContent` does not match its
- * object `outputSchema`: `'warn'` sends it as returned and logs a warning once per tool, `'enforce'` refuses it with
- * `InvalidOutputError`. `'warn'` is the default in 1.12; 1.13 makes `'enforce'` the default.
+ * object `outputSchema`: `'enforce'` (the default since 1.13) refuses it with `InvalidOutputError`; `'warn'`, the 1.12
+ * behaviour, sends it as returned and logs a warning once per tool.
  */
 export type StructuredContentValidation = 'warn' | 'enforce';
 
@@ -123,7 +123,7 @@ export interface OutputPolicy {
    * What `tools/call` does with a returned `CallToolResult` whose `structuredContent` does not match `outputSchema`.
    * See {@link StructuredContentValidation}.
    *
-   * @default 'warn'
+   * @default 'enforce'
    */
   validateStructuredContent?: StructuredContentValidation;
 

@@ -283,6 +283,69 @@ class GetOffSchemaResultTool extends ToolContext {
   }
 }
 
+const offSchemaResult = {
+  content: [{ type: 'text', text: '{"price":"ten"}' }],
+  structuredContent: { price: 'ten' },
+} as unknown as { price: number };
+
+@Tool({ name: 'get_readonly_off_schema', inputSchema: {}, outputSchema: z.object({ price: z.number() }).readonly() })
+class GetReadonlyOffSchemaTool extends ToolContext {
+  async execute() {
+    return offSchemaResult;
+  }
+}
+
+@Tool({
+  name: 'get_lazy_off_schema',
+  inputSchema: {},
+  outputSchema: z.lazy(() => z.object({ price: z.number() })),
+})
+class GetLazyOffSchemaTool extends ToolContext {
+  async execute() {
+    return offSchemaResult;
+  }
+}
+
+@Tool({ name: 'get_scalar_union_result', inputSchema: {}, outputSchema: z.union([z.string(), z.number()]) })
+class GetScalarUnionResultTool extends ToolContext {
+  async execute() {
+    return { content: [{ type: 'text', text: 'ten' }] } as unknown as string;
+  }
+}
+
+@Tool({ name: 'list_lines', inputSchema: {}, outputSchema: { content: z.array(z.string()) } })
+class ListLinesTool extends ToolContext {
+  async execute() {
+    return { content: [] as string[] };
+  }
+}
+
+@Tool({ name: 'get_pending_claim_result', inputSchema: {}, outputSchema: { price: z.number() } })
+class GetPendingClaimResultTool extends ToolContext {
+  async execute() {
+    return {
+      content: [{ type: 'text', text: 'not a question' }],
+      _meta: { elicitationPending: { elicitId: 'made-up' } },
+    } as unknown as { price: number };
+  }
+}
+
+const quoteParses = { count: 0 };
+
+@Tool({
+  name: 'get_counted_quote',
+  inputSchema: {},
+  outputSchema: z.object({ price: z.number() }).transform((quote) => {
+    quoteParses.count++;
+    return quote;
+  }),
+})
+class GetCountedQuoteTool extends ToolContext {
+  async execute() {
+    return { price: 10 };
+  }
+}
+
 @Tool({
   name: 'show_lines',
   inputSchema: {},
@@ -325,6 +388,12 @@ class GetTaggedQuoteTool extends ToolContext {
     GetQuoteResultTool,
     GetOffSchemaResultTool,
     ShowLinesTool,
+    GetReadonlyOffSchemaTool,
+    GetLazyOffSchemaTool,
+    GetScalarUnionResultTool,
+    ListLinesTool,
+    GetPendingClaimResultTool,
+    GetCountedQuoteTool,
   ],
 })
 class QuotesApp {}
@@ -533,8 +602,14 @@ describe('tools/call undeclared output keys', () => {
     expect((await callQuote(server, 'get_quote_result')).structuredContent).toEqual(quoteAnswer);
   });
 
-  it('sends a CallToolResult off its outputSchema as returned by default, warning once per tool', async () => {
+  it('refuses a CallToolResult off its outputSchema with INVALID_OUTPUT by default', async () => {
     const server = await startServer();
+
+    expect(await callQuote(server, 'get_off_schema_result')).toMatchObject({ isError: true, code: 'INVALID_OUTPUT' });
+  });
+
+  it("sends a CallToolResult off its outputSchema as returned under validateStructuredContent: 'warn', warning once per tool", async () => {
+    const server = await startServer({ validateStructuredContent: 'warn' });
 
     const first = await callQuote(server, 'get_off_schema_result');
     await callQuote(server, 'get_off_schema_result');
@@ -542,13 +617,48 @@ describe('tools/call undeclared output keys', () => {
     expect(first).toMatchObject({ isError: false, structuredContent: { price: 'ten' } });
     const warnings = quoteWarnings.filter((line) => line.includes('get_off_schema_result'));
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain("output.validateStructuredContent: 'enforce'");
+    expect(warnings[0]).toContain("output.validateStructuredContent: 'warn'");
   });
 
-  it("refuses a CallToolResult off its outputSchema under validateStructuredContent: 'enforce'", async () => {
-    const server = await startServer({ validateStructuredContent: 'enforce' });
+  it.each(['get_readonly_off_schema', 'get_lazy_off_schema'])(
+    'validates the structuredContent of %s, whose object outputSchema sits behind a wrapper',
+    async (name) => {
+      const server = await startServer();
 
-    expect(await callQuote(server, 'get_off_schema_result')).toMatchObject({ isError: true, code: 'INVALID_OUTPUT' });
+      expect(await callQuote(server, name)).toMatchObject({ isError: true, code: 'INVALID_OUTPUT' });
+    },
+  );
+
+  it('sends a CallToolResult of a tool whose outputSchema is a union of scalars as returned', async () => {
+    const server = await startServer();
+
+    expect(await callQuote(server, 'get_scalar_union_result')).toMatchObject({
+      isError: false,
+      content: [{ type: 'text', text: 'ten' }],
+    });
+  });
+
+  it('answers with the data of a tool whose own output has an empty content list', async () => {
+    const server = await startServer();
+
+    expect(await callQuote(server, 'list_lines')).toMatchObject({ isError: false, structuredContent: { content: [] } });
+  });
+
+  it('validates a CallToolResult that only claims to be an elicitation question in its _meta', async () => {
+    const server = await startServer();
+
+    expect(await callQuote(server, 'get_pending_claim_result')).toMatchObject({
+      isError: true,
+      code: 'INVALID_OUTPUT',
+    });
+  });
+
+  it('parses the output of a call that renders no UI once', async () => {
+    const server = await startServer();
+    quoteParses.count = 0;
+
+    expect(await callQuote(server, 'get_counted_quote')).toMatchObject({ isError: false });
+    expect(quoteParses.count).toBe(1);
   });
 
   it("refuses a CallToolResult with undeclared keys under 'fail'", async () => {
