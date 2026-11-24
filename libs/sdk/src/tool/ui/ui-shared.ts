@@ -164,6 +164,17 @@ export class ToolUIRegistry {
     return this.customUris.get(uri);
   }
 
+  /** Whether only a tool's widget answers `uri`: the `ui://widget/` namespace or a tool's custom `ui.resourceUri`. */
+  holdsWidgetUri(uri: string): boolean {
+    return isStaticWidgetUri(uri) || this.customUris.has(uri);
+  }
+
+  /** Whether `uri` names the widget of a tool that declared a UI. */
+  hasWidget(uri: string): boolean {
+    const toolName = this.resolveCustomUri(uri) ?? parseWidgetUri(uri)?.toolName;
+    return toolName !== undefined && this.hasTool(toolName);
+  }
+
   /**
    * Whether `name` (or its app-qualified form `app:name`) is a tool with a UI.
    */

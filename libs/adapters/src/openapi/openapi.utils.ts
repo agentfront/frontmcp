@@ -113,7 +113,7 @@ function jsonContentText(mapper: ParameterMapper, value: unknown): string {
 
 /** The input's value for a parameter, else the spec's `default` for a required one; `null` counts only for JSON content. */
 function parameterInputValue(tool: McpOpenAPITool, mapper: ParameterMapper, input: Record<string, unknown>): unknown {
-  const inputValue = input[mapper.inputKey];
+  const inputValue = Object.hasOwn(input, mapper.inputKey) ? input[mapper.inputKey] : undefined;
   const sendsNull = isJsonContentParameter(mapper);
   if (inputValue !== undefined && (inputValue !== null || sendsNull)) return inputValue;
   return mapper.required ? specDefault(tool, mapper.inputKey) : undefined;
@@ -246,7 +246,7 @@ export function buildRequest(
           break;
         }
         if (!body) body = {};
-        body[mapper.key] = value;
+        Object.defineProperty(body, mapper.key, { value, enumerable: true, writable: true, configurable: true });
         break;
 
       default:

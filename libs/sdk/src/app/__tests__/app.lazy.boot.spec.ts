@@ -260,6 +260,22 @@ class SetupGatePlugin {
   }
 }
 
+@Plugin({ name: 'uncovered-gate' })
+class UncoveredGatePlugin {
+  @(FlowHooksOf('tools:call-tool').Will('execute', { appliesTo: 'uncovered-apps' }))
+  gate() {
+    // a guard for the apps that do not install this plugin
+  }
+}
+
+@Plugin({ name: 'review-gate', enforcesMetadata: ['reviewTicket'] })
+class ReviewGatePlugin {
+  @(FlowHooksOf('tools:call-tool').Will('execute', { appliesTo: 'uncovered-apps' }))
+  gate() {
+    // refuses a call to an entry that declares `reviewTicket`, which startup checks is enforced
+  }
+}
+
 @Duty({ every: 60_000, scope: 'machine' })
 class SweepDuty {
   async run() {
@@ -281,6 +297,13 @@ const READ_BY_PLUGINS: Record<string, unknown> = {
 
 @Tool({ name: 'flagged', inputSchema: {}, ...READ_BY_PLUGINS })
 class FlaggedTool extends ToolContext {
+  async execute() {
+    return 'ok';
+  }
+}
+
+@Tool({ name: 'flag_free', inputSchema: {} })
+class FlaggedFreeTool extends ToolContext {
   async execute() {
     return 'ok';
   }
@@ -338,6 +361,31 @@ describe('an app that cannot be lazy', () => {
     const config = { ...lazyServer(billingImport()), apps: [CoreApp, lazyCore] } as FrontMcpConfigInput;
 
     await expect(connect(config)).rejects.toThrow(DuplicateAppIdError);
+  });
+
+  it('loads an app with a hook for apps without its plugin, and warns that 1.13 refuses it', async () => {
+    @App({ id: 'billing', name: 'Billing', tools: [FlaggedFreeTool], plugins: [UncoveredGatePlugin] })
+    class UncoveredBillingApp {}
+
+    const client = await connect(lazyServer(billingImport({ UncoveredBillingApp })));
+
+    expect(JSON.stringify(await client.listTools())).toContain('flag_free');
+    const warnings = capturedLogs.filter(({ level }) => level === LogLevel.Warn).map(({ message }) => message);
+    expect(warnings.filter((line) => line.includes('uncovered-gate.gate'))).toEqual([
+      expect.stringMatching(/applies to apps without its plugin.*FrontMCP 1\.13 refuses it.*enforcesMetadata/),
+    ]);
+    await client.close();
+  });
+
+  it('accepts a hook for apps without its plugin when the plugin declares the metadata it enforces', async () => {
+    @App({ id: 'billing', name: 'Billing', tools: [FlaggedFreeTool], plugins: [ReviewGatePlugin] })
+    class ReviewedBillingApp {}
+
+    const client = await connect(lazyServer(billingImport({ ReviewedBillingApp })));
+
+    expect(JSON.stringify(await client.listTools())).toContain('flag_free');
+    expect(capturedLogs.filter(({ message }) => message.includes('review-gate.gate'))).toEqual([]);
+    await client.close();
   });
 
   it('accepts a module whose default export is the app', async () => {

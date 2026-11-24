@@ -40,6 +40,7 @@ import {
 import {
   assertHostNotSsrf,
   blocksPrivateAddressesFor,
+  fetchPinnedTo,
   hasOnlyLocalhostRedirectUris,
   isCimdClientId,
   validateClientIdUrl,
@@ -395,12 +396,13 @@ export class CimdService {
         // host cannot reach cloud-metadata / private addresses via a
         // DNS record or a 3xx to an internal target. `validateClientIdUrl`
         // (literal-IP checks) already ran for the initial URL and each redirect
-        // target; this adds the resolved-address check. Skipped for a localhost
-        // host under allowInsecureForTesting, and when blockPrivateIPs is off.
+        // target; this adds the resolved-address check, and the fetch connects
+        // to the checked addresses only. Skipped for a localhost host under
+        // allowInsecureForTesting, and when blockPrivateIPs is off.
         const hostname = new URL(currentUrl).hostname;
-        if (blocksPrivateAddressesFor(hostname, this.securityConfig)) {
-          await assertHostNotSsrf(hostname, url);
-        }
+        const checkedAddresses = blocksPrivateAddressesFor(hostname, this.securityConfig)
+          ? await assertHostNotSsrf(hostname, url)
+          : undefined;
 
         const headers: Record<string, string> = {
           Accept: 'application/json',
@@ -409,7 +411,7 @@ export class CimdService {
           Object.assign(headers, conditionalHeaders);
         }
 
-        const response = await fetch(currentUrl, {
+        const response = await fetchPinnedTo(checkedAddresses)(currentUrl, {
           method: 'GET',
           headers,
           signal: controller.signal,
@@ -418,6 +420,11 @@ export class CimdService {
 
         if (response.status === 304) {
           return { notModified: true, headers: response.headers };
+        }
+
+        // A body that won't be read is cancelled, so the connection it holds is released.
+        if (isRedirectResponse(response) || !response.ok) {
+          await response.body?.cancel().catch(() => undefined);
         }
 
         // Handle redirects based on policy (an opaque redirect has no readable Location and is refused)
@@ -482,6 +489,7 @@ export class CimdService {
         if (contentLength) {
           const length = parseInt(contentLength, 10);
           if (!isNaN(length) && length > this.networkConfig.maxResponseSizeBytes) {
+            await response.body?.cancel().catch(() => undefined);
             throw new CimdResponseTooLargeError(url, this.networkConfig.maxResponseSizeBytes, length);
           }
         }
@@ -550,6 +558,7 @@ export class CimdService {
 
         totalBytes += value.length;
         if (totalBytes > maxBytes) {
+          await reader.cancel().catch(() => undefined);
           throw new CimdResponseTooLargeError(clientId, maxBytes, totalBytes);
         }
 

@@ -14,7 +14,13 @@ import { PassThrough } from 'node:stream';
 import { createSharedServerNonce, deriveSharedServerKeys, verifySharedServerIdentity } from '@frontmcp/auth';
 import type { RootStorage } from '@frontmcp/utils';
 
-import { clientOf, initialize, pidOf, post } from '../../__test-utils__/helpers/shared-session-client';
+import {
+  clientOf,
+  initialize,
+  pidOf,
+  post,
+  recordLoopbackRequests,
+} from '../../__test-utils__/helpers/shared-session-client';
 import { App, LogLevel, Tool, ToolContext, type FrontMcpConfigInput } from '../../common';
 import { SharedServerStartError } from '../../errors';
 import { FrontMcpInstance } from '../../front-mcp/front-mcp';
@@ -370,7 +376,7 @@ posixOnly('a shared local server', () => {
   describe('over loopback HTTP', () => {
     it('ends its MCP session on the server when the session stops', async () => {
       await serve('http');
-      const sent = jest.spyOn(globalThis, 'fetch');
+      const sent = recordLoopbackRequests();
       const input = new PassThrough();
       const output = new PassThrough();
       const session = attachSharedSession(sessionOptions('http', input, output));
@@ -378,12 +384,11 @@ posixOnly('a shared local server', () => {
         await session.attached;
         await clientOf(input, output).request(initialize);
         await session.stop();
-        const ended = sent.mock.calls.find(([, init]) => init?.method === 'DELETE');
-        const headers = ended?.[1]?.headers as Record<string, string> | undefined;
-        expect(headers?.['mcp-session-id']).toEqual(expect.any(String));
-        expect(headers?.['authorization']).toMatch(/^Bearer /);
+        const ended = sent.requests.find(({ method }) => method === 'DELETE');
+        expect(ended?.headers['mcp-session-id']).toEqual(expect.any(String));
+        expect(ended?.headers['authorization']).toMatch(/^Bearer /);
       } finally {
-        sent.mockRestore();
+        sent.restore();
       }
     });
 

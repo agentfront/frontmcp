@@ -52,6 +52,7 @@ describe('LocalPrimaryAuth — authorization-code replay revocation', () => {
 
     const code = await auth.createAuthorizationCode({
       clientId,
+      clientAuthMethod: 'none',
       redirectUri: REDIRECT,
       scopes: ['openid'],
       codeChallenge: challenge,
@@ -72,6 +73,7 @@ describe('LocalPrimaryAuth — authorization-code replay revocation', () => {
     const verifier2 = generateCodeVerifier();
     const code2 = await auth.createAuthorizationCode({
       clientId,
+      clientAuthMethod: 'none',
       redirectUri: REDIRECT,
       scopes: ['openid'],
       codeChallenge: sha256Base64url(verifier2),

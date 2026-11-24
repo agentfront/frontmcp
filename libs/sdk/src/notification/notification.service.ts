@@ -335,6 +335,14 @@ export function sessionCallerOf(authInfo: Partial<AuthInfo>): SessionCaller {
   return { clientId, scopes, user, claims, expiresAt: authInfo.expiresAt ?? user?.exp };
 }
 
+/** How many times an update checks a session's caller that requests keep replacing before it gives the update up. */
+const MAX_CALLER_RECHECKS = 3;
+
+/** Whether two callers a session kept name the same caller with the same claims: a request keeps a new copy. */
+function isSameCaller(left: SessionCaller | undefined, right: SessionCaller | undefined): boolean {
+  return left === right || JSON.stringify(left) === JSON.stringify(right);
+}
+
 /** Whether a session's caller was last seen with credentials that have since expired. */
 export function hasExpiredCaller(session: Pick<RegisteredServer, 'caller'>): boolean {
   const expiresAt = session.caller?.expiresAt;
@@ -389,6 +397,8 @@ export interface RegisteredServer {
   stdio?: boolean;
   /** The caller of the session's latest request, without its token: an event pushed to the session is checked against it */
   caller?: SessionCaller;
+  /** The platform bindings (`this.workerEnv`) of the session's latest subscribing request: an update is checked with them */
+  platformEnv?: unknown;
   /** Client capabilities from the initialize request */
   clientCapabilities?: ClientCapabilities;
   /** Client info (name/version) from the initialize request */
@@ -706,13 +716,16 @@ export class NotificationService {
    *
    * @param sessionId - The session to subscribe
    * @param uri - The resource URI to subscribe to
+   * @param platformEnv - The subscribing request's platform bindings, which each update's access check runs with
    * @returns true if this is a new subscription, false if already subscribed
    */
-  subscribeResource(sessionId: string, uri: string): boolean {
-    if (!this.servers.has(sessionId)) {
+  subscribeResource(sessionId: string, uri: string, platformEnv?: unknown): boolean {
+    const registered = this.servers.get(sessionId);
+    if (!registered) {
       this.logger.warn(`Cannot subscribe unregistered session ${sessionId.slice(0, 20)}... to resource ${uri}`);
       return false;
     }
+    if (platformEnv !== undefined) registered.platformEnv = platformEnv;
 
     let sessionSubs = this.subscriptions.get(sessionId);
     if (!sessionSubs) {
@@ -787,7 +800,7 @@ export class NotificationService {
   /**
    * Send a resource update notification to subscribed sessions only.
    * Per MCP 2025-11-25 spec, only sessions that have subscribed to this
-   * resource via `resources/subscribe` will receive the notification.
+   * resource via `resources/subscribe` will receive the notification, and only while their caller may still read it.
    *
    * @param uri - The resource URI that was updated
    */
@@ -802,7 +815,26 @@ export class NotificationService {
     this.logger.verbose(`Notifying ${subscribers.length} subscriber(s) of resource update: ${uri}`);
 
     for (const sessionId of subscribers) {
-      this.sendNotificationToSession(sessionId, 'notifications/resources/updated', { uri });
+      void this.notifyIfStillReadable(sessionId, uri);
+    }
+  }
+
+  /** Tell a subscribed session of an update when `resources:subscribe` still admits its latest, unexpired caller. */
+  private async notifyIfStillReadable(sessionId: string, uri: string): Promise<void> {
+    const registered = this.servers.get(sessionId);
+    if (!registered || hasExpiredCaller(registered)) return;
+    const { callerMayStillRead } = await import('./resource-update-access.js');
+    let checkedCaller = registered.caller;
+    // The check is async: a request meanwhile may replace the caller, which is then checked in its turn
+    for (let attempt = 0; attempt < MAX_CALLER_RECHECKS; attempt++) {
+      const mayRead = await callerMayStillRead(this.scope, registered, checkedCaller, uri);
+      const current = this.servers.get(sessionId);
+      if (current !== registered || !this.isSubscribed(sessionId, uri) || hasExpiredCaller(current)) return;
+      if (isSameCaller(current.caller, checkedCaller)) {
+        if (mayRead) this.sendNotificationToSession(sessionId, 'notifications/resources/updated', { uri });
+        return;
+      }
+      checkedCaller = current.caller;
     }
   }
 

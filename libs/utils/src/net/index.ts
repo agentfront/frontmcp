@@ -2,6 +2,8 @@ export { classifyIpAddress, expandIpv6, extractEmbeddedIpv4, isGloballyRoutableI
 export type { IpAddressClassification, IpAddressRange, SpecialPurposeIpRange } from './ip-address';
 export { isRedirectResponse } from './redirect';
 export type { RedirectCandidate } from './redirect';
+export { pinnedFetch } from './pinned-fetch';
+export type { PinnedFetch, PinnedRequestInit } from './pinned-fetch';
 export { validateOutboundUrl } from './outbound-url';
 export type { OutboundTargetOptions, OutboundUrlCheck, OutboundUrlProblem } from './outbound-url';
 export {

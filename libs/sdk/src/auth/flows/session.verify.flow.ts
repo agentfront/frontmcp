@@ -8,7 +8,6 @@ import {
   httpRequestInputSchema,
   isOrchestratedMode,
   isPublicMode,
-  isPublicUrlPinned,
   isStaticMode,
   isTransparentMode,
   normalizeEntryPrefix,
@@ -35,6 +34,7 @@ import {
   extractBearerToken,
   isJwt,
   JwksService,
+  normalizeIssuer,
   scopesFromClaims,
   validateAudience,
   type ProviderVerifyRef,
@@ -70,6 +70,7 @@ const stateSchema = z.object({
   jwtPayload: z.object({}).passthrough().optional(),
   user: userClaimSchema.optional(),
   session: sessionIdSchema.optional(),
+  principalIssuer: z.string().optional(),
 });
 
 const UnauthorizedSchema = z
@@ -123,13 +124,6 @@ const name = 'session:verify' as const;
 const Stage = StageHookOf(name);
 
 /**
- * Emit the "audience is not pinned" warning at most once per process, so a
- * misconfigured transparent deployment is surfaced without spamming the log on
- * every request.
- */
-let warnedUnpinnedAudience = false;
-
-/**
  * Compare two secrets without leaking their contents or lengths by timing.
  *
  * `timingSafeEqual` requires equal-length inputs (and throws otherwise, which
@@ -171,6 +165,9 @@ function buildStaticChallenge(options: StaticAuthOptions, description?: string):
   return parts.join(', ');
 }
 
+/** Public mode's `sessionTtl` when the options were not parsed with its default. */
+const DEFAULT_PUBLIC_SESSION_TTL_SECONDS = 3600;
+
 /** Auth mode for session payload - distinguishes between anonymous session types */
 type AuthMode = 'public' | 'transparent-anon' | 'static';
 
@@ -190,6 +187,8 @@ interface AnonymousSessionOptions {
   subject?: string;
   /** Existing session ID header from client (if present) */
   sessionIdHeader?: string;
+  /** How long a session id may resume its session after it was minted, in seconds (public mode's `sessionTtl`). */
+  sessionTtlSeconds?: number;
 }
 
 @Flow({
@@ -213,7 +212,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
    * Encapsulates the shared logic for session creation, payload encryption, and user derivation.
    */
   private createAnonymousSession(options: AnonymousSessionOptions): void {
-    const { authMode, subject, sessionIdHeader } = options;
+    const { authMode, subject, sessionIdHeader, sessionTtlSeconds } = options;
     this.logger.verbose('createAnonymousSession', { authMode, hasExistingSession: !!sessionIdHeader });
 
     // A sessionless request (MCP 2026-07-28) has no session to resume or to start: the caller is
@@ -264,7 +263,10 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       const isInitialize =
         typeof body === 'object' && body !== null && 'method' in body && body.method === 'initialize';
       const decrypted = decryptPublicSession(sessionIdHeader, authSignature);
-      const existingPayload = decrypted && isInitialize && decrypted.nodeId !== machineId ? undefined : decrypted;
+      const outlived =
+        !!decrypted && sessionTtlSeconds !== undefined && decrypted.iat + sessionTtlSeconds <= Date.now() / 1000;
+      const existingPayload =
+        outlived || (decrypted && isInitialize && decrypted.nodeId !== machineId) ? undefined : decrypted;
       // `decryptPublicSession` already rejects any payload not signed with this
       // exact signature, so a session issued for one mode — or, in static mode,
       // for a DIFFERENT token — never reaches here.
@@ -510,6 +512,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       issuer: 'public',
       scopes: authOptions.anonymousScopes ?? ['anonymous'],
       sessionIdHeader: this.state.sessionIdHeader,
+      sessionTtlSeconds: authOptions.sessionTtl ?? DEFAULT_PUBLIC_SESSION_TTL_SECONDS,
     });
   }
 
@@ -650,6 +653,10 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
 
     if (result.ok) {
       this.state.set({ jwtPayload: result.payload });
+      const tokenIssuer = normalizeIssuer(result.issuer);
+      if (isTransparentMode(authOptions) && tokenIssuer !== normalizeIssuer(auth.issuer)) {
+        this.state.set('principalIssuer', tokenIssuer);
+      }
 
       // Validate audience (RFC 8707 / MCP Authorization spec) in transparent
       // mode. Transparent tokens are verified against an EXTERNAL IdP's shared
@@ -662,21 +669,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
       // the same JWT_SECRET signs with the same key.
       if (isTransparentMode(authOptions)) {
         const configuredAudience = (authOptions as TransparentAuthOptions).expectedAudience;
-        // SECURITY: when `expectedAudience` is not configured we derive it from
-        // `baseUrl`. `baseUrl` comes from `getRequestBaseUrl`, which now ignores
-        // `X-Forwarded-*` unless a trusted proxy / `FRONTMCP_PUBLIC_URL` is set —
-        // so an attacker can no longer set `X-Forwarded-Host` to make the
-        // expected audience match a token minted for another service. For the
-        // strongest binding, operators should pin `FRONTMCP_PUBLIC_URL` or set
-        // `expectedAudience`; warn once when neither is present.
-        if (!configuredAudience && !isPublicUrlPinned() && !warnedUnpinnedAudience) {
-          warnedUnpinnedAudience = true;
-          this.logger.warn(
-            'transparent audience validation is deriving the expected audience from the request Host: ' +
-              'set auth.expectedAudience or FRONTMCP_PUBLIC_URL to bind tokens to a fixed resource. ' +
-              'X-Forwarded-Host is ignored unless FRONTMCP_TRUST_PROXY is enabled.',
-          );
-        }
+        // Without `expectedAudience`: the pinned `FRONTMCP_PUBLIC_URL`, else the request host (`RemotePrimaryAuth` warns).
         const expectedAudiences = configuredAudience
           ? Array.isArray(configuredAudience)
             ? configuredAudience
@@ -784,6 +777,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
     const {
       required: { token, user },
       session,
+      principalIssuer,
     } = this.state;
 
     this.logger.verbose('Session verified successfully', {
@@ -797,6 +791,7 @@ export default class SessionVerifyFlow extends FlowBase<typeof name> {
         token,
         user,
         session,
+        ...(principalIssuer !== undefined && { principalIssuer }),
       },
     });
   }

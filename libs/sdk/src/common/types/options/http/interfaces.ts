@@ -291,7 +291,10 @@ export interface SecurityOptions {
   dnsRebindingProtection?: {
     /** Set `false` to turn host/origin header validation off. @default true */
     enabled?: boolean;
-    /** Allowed Host header values (e.g., ['localhost:3001', 'api.example.com']) */
+    /**
+     * Allowed Host header values (e.g., ['localhost:3001', 'api.example.com']). Unset: derived from the listener and
+     * enforced on a loopback bind or with an issuer, whether or not `allowedOrigins` is set.
+     */
     allowedHosts?: string[];
     /**
      * Allowed Origin header values (e.g., ['https://app.example.com']). A request with no Origin is always allowed,

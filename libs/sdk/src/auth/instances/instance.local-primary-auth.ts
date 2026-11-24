@@ -1,4 +1,5 @@
 import {
+  clientAuthMethodToRecord,
   createSecureStore,
   createTokenStorageAdapter,
   DcrClientRegistry,
@@ -13,6 +14,7 @@ import {
   isSqliteTokenStorage,
   JwksService,
   LocalTokenKeys,
+  meetsRecordedClientAuth,
   resolveUpstreamClient,
   SessionCredentialVault,
   StorageAuthorizationStore,
@@ -700,8 +702,9 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
    * adapter-backed equivalents. For `'memory'` (or unset) this is a no-op, so
    * the default behavior is preserved exactly.
    *
-   * The orchestrated-token store keeps using the JWT secret as its encryption
-   * key, so upstream provider tokens stay encrypted at rest in every backend.
+   * The orchestrated-token and federated-session stores use the JWT secret as
+   * their encryption key, so upstream provider tokens stay encrypted at rest in
+   * every backend.
    */
   private async initializeStores(): Promise<void> {
     if (!isPersistentTokenStorage(this.tokenStorage)) {
@@ -715,10 +718,11 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.disposeInMemoryStores();
 
       this.authorizationStoreImpl = new StorageAuthorizationStore(adapter);
-      this.federatedSessionStoreImpl = new StorageFederatedAuthSessionStore(adapter);
+      this.federatedSessionStoreImpl = new StorageFederatedAuthSessionStore(adapter, { encryptionKey: this.secret });
       this.orchestratedTokenStoreImpl = new StorageOrchestratedTokenStore(adapter, {
         encryptionKey: this.secret,
         refreshSkewMs: this.providerRefreshSkewMs(),
+        providerIssuer: (providerId) => this.providerAuthorizationServer(providerId),
       });
       this.consentStoreImpl = new StorageConsentStore(adapter);
 
@@ -1222,6 +1226,11 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       };
     }
 
+    if (!meetsRecordedClientAuth(codeRecord.clientAuthMethod, declared.authMethod)) {
+      this.logger.warn('Authorization code needs client authentication this client did not provide');
+      return { error: 'invalid_client', error_description: 'Client authentication failed' };
+    }
+
     // Verify redirect_uri matches
     if (codeRecord.redirectUri !== redirectUri) {
       this.logger.warn(`Redirect URI mismatch`);
@@ -1316,6 +1325,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       selectedProviderIds: codeRecord.selectedProviderIds,
       skippedProviderIds: codeRecord.skippedProviderIds,
       providerTokensId,
+      clientAuthMethod: clientAuthMethodToRecord(codeRecord.clientAuthMethod, declared.authMethod),
     });
     await this.authorizationStore.storeRefreshToken(refreshTokenRecord);
     // Bind the issued refresh token to the (already used-marked) code so a later
@@ -1328,15 +1338,19 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   /**
    * Refuse a grant the client did not declare in its `grant_types` (RFC 7591): in its registration, its
    * `dcr.clients` entry or its client ID metadata document. A client that declared nothing (an unregistered
-   * id under `requireRegisteredClients: false`) is not limited, and gets `grantTypes: undefined`. A CIMD client
-   * whose document declares `private_key_jwt` must also present a valid client assertion.
+   * id under `requireRegisteredClients: false`, or one registered on another instance or before a restart)
+   * is not limited, and gets `grantTypes: undefined` and `authMethod: undefined`. A CIMD client whose document
+   * declares `private_key_jwt` must also present a valid client assertion.
    */
   private async checkDeclaredGrant(
     clientId: string,
     grantType: 'authorization_code' | 'refresh_token',
     clientAssertion: ClientAssertionInput | undefined,
-  ): Promise<{ grantTypes: string[] | undefined } | { error: string; error_description: string }> {
+  ): Promise<
+    { grantTypes: string[] | undefined; authMethod: string | undefined } | { error: string; error_description: string }
+  > {
     let grantTypes: string[] | undefined;
+    let authMethod: string | undefined;
     try {
       const cimd = this.cimdService;
       if (cimd?.enabled && cimd.isCimdClientId(clientId)) {
@@ -1350,8 +1364,11 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
           });
         }
         grantTypes = metadata?.grant_types;
+        authMethod = metadata?.token_endpoint_auth_method ?? 'none';
       } else {
-        grantTypes = this.dcrClientRegistryImpl.get(clientId)?.grant_types;
+        const registered = this.dcrClientRegistryImpl.get(clientId);
+        grantTypes = registered?.grant_types;
+        authMethod = registered?.token_endpoint_auth_method;
       }
     } catch (err) {
       this.logger.warn(`Client metadata refused at token endpoint (${grantType}): ${(err as Error).message}`);
@@ -1361,7 +1378,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       this.logger.warn(`Client did not declare the ${grantType} grant`);
       return { error: 'unauthorized_client', error_description: `This client may not use the ${grantType} grant` };
     }
-    return { grantTypes };
+    return { grantTypes, authMethod };
   }
 
   /**
@@ -1453,6 +1470,11 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       };
     }
 
+    if (!meetsRecordedClientAuth(tokenRecord.clientAuthMethod, declared.authMethod)) {
+      this.logger.warn('Refresh token needs client authentication this client did not provide');
+      return { error: 'invalid_client', error_description: 'Client authentication failed' };
+    }
+
     // Generate new access token — rebuild the identity + consent/progressive-
     // auth metadata from the stored refresh record so the refreshed token keeps
     // its `consent` / `authorized_apps` / custom claims. Without this the tool
@@ -1506,6 +1528,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       selectedProviderIds: tokenRecord.selectedProviderIds,
       skippedProviderIds: tokenRecord.skippedProviderIds,
       providerTokensId: copiedTo ?? sourceId,
+      clientAuthMethod: clientAuthMethodToRecord(tokenRecord.clientAuthMethod, declared.authMethod),
     });
     try {
       await this.authorizationStore.rotateRefreshToken(refreshToken, newRefreshRecord);
@@ -1561,6 +1584,8 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
     authorizedAppIds?: string[];
     // Custom claims from a local authenticate() verifier (Checkpoint 3a)
     customClaims?: Record<string, unknown>;
+    // How the client authenticates, recorded when the authorization started; undefined when it wasn't.
+    clientAuthMethod: string | undefined;
   }): Promise<string> {
     const codeRecord = this.authorizationStore.createCodeRecord({
       clientId: params.clientId,
@@ -1584,6 +1609,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
       authorizedAppIds: params.authorizedAppIds,
       // Custom claims from a local authenticate() verifier (Checkpoint 3a)
       customClaims: params.customClaims,
+      clientAuthMethod: params.clientAuthMethod,
     });
 
     await this.authorizationStore.storeAuthorizationCode(codeRecord);
@@ -1701,6 +1727,15 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
 
     this.providerConfigs.set(config.id, config);
     this.logger.info(`Registered upstream provider: ${config.id}`);
+  }
+
+  /** The authorization server a provider's tokens come from: its issuer, else its token endpoint. */
+  providerAuthorizationServer(providerId: string): string | undefined {
+    const config = this.providerConfigs.get(providerId);
+    if (!config) {
+      return undefined;
+    }
+    return config.issuer ? normalizeIssuer(config.issuer) : config.tokenEndpoint;
   }
 
   /**
@@ -2220,6 +2255,7 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
   }
 
   private async renewProviderToken(providerId: string, refreshToken: string): ReturnType<TokenRefreshCallback> {
+    const issuer = this.providerAuthorizationServer(providerId);
     const result = await this.refreshProviderToken(providerId, refreshToken);
     if ('error' in result || typeof result.access_token !== 'string' || !result.access_token) {
       this.logger.warn(
@@ -2229,7 +2265,12 @@ export class LocalPrimaryAuth extends FrontMcpAuth<LocalPrimaryAuthOptions> {
         `Provider "${providerId}" did not refresh its token; the user has to sign in again`,
       );
     }
-    return { accessToken: result.access_token, refreshToken: result.refresh_token, expiresIn: result.expires_in };
+    return {
+      accessToken: result.access_token,
+      refreshToken: result.refresh_token,
+      expiresIn: result.expires_in,
+      issuer,
+    };
   }
 
   /** How long before its expiry a provider token is renewed: `refresh.skewSeconds` (default 60), none with `refresh` off. */

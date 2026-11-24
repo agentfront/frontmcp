@@ -46,6 +46,7 @@ async function createCode(auth: LocalPrimaryAuth): Promise<{ code: string; verif
   const verifier = generateCodeVerifier();
   const code = await auth.createAuthorizationCode({
     clientId: CLIENT_ID,
+    clientAuthMethod: 'none',
     redirectUri: REDIRECT_URI,
     scopes: ['openid'],
     codeChallenge: sha256Base64url(verifier),

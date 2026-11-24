@@ -73,6 +73,8 @@ const plan = {
     'parseInput',
     'ensureRemoteCapabilities',
     'findPrompt',
+    // A hook that switched the prompt hands the run over to the hooks of the prompt that runs
+    'usePromptHooks',
     'checkEnabled',
     'checkAppLoaded',
     'checkPublicAccess',
@@ -265,6 +267,17 @@ export default class GetPromptFlow extends FlowBase<typeof name> {
     this.state.set('prompt', prompt);
     this.logger.verbose(`findPrompt: prompt "${prompt.name}" found`);
     this.logger.verbose('findPrompt:done');
+  }
+
+  /** The settled prompt's hooks run from here on, in place of the requested one's when a hook switched it. */
+  @Stage('usePromptHooks')
+  async usePromptHooks() {
+    const { prompt } = this.state;
+    if (!prompt) return;
+    await this.useEntryHooks(
+      appOwnerIdOf(this.scope.prompts.lineageOf(prompt) ?? [], prompt.owner),
+      prompt.record.provide,
+    );
   }
 
   /** A prompt whose `enabled` is off is refused with `FEATURE_OFF` and the remedy of its source. */

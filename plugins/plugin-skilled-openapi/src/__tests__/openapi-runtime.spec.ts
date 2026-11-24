@@ -1,3 +1,5 @@
+import * as dns from 'node:dns';
+
 import { ToolCredentialsRequiredError } from '@frontmcp/sdk';
 import { base64urlEncode } from '@frontmcp/utils';
 
@@ -654,17 +656,18 @@ describe('executeOperation — IPv6-literal service hosts (GHSA-4r57-gvgj-5crm)'
 });
 
 describe('executeOperation outbound.egressProxy (#767)', () => {
-  const proxiedRequests: Array<{ url: string; proxyUrl: string }> = [];
+  const proxiedRequests: Array<{ url: string; proxyUrl: string; pinned: boolean }> = [];
 
   beforeAll(() => {
     jest.doMock('undici', () => {
       class ProxyAgent {
-        constructor(readonly proxyUrl: string) {}
+        constructor(readonly options: { uri: string; factory?: unknown }) {}
       }
       return {
         ProxyAgent,
-        fetch: async (url: string, init: { dispatcher: ProxyAgent }) => {
-          proxiedRequests.push({ url, proxyUrl: init.dispatcher.proxyUrl });
+        fetch: async (url: string, init: RequestInit & { dispatcher: ProxyAgent }) => {
+          const { uri, factory } = init.dispatcher.options;
+          proxiedRequests.push({ url, proxyUrl: uri, pinned: factory !== undefined });
           return new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json' } });
         },
       };
@@ -675,17 +678,67 @@ describe('executeOperation outbound.egressProxy (#767)', () => {
     jest.dontMock('undici');
   });
 
-  it('sends the request through the configured proxy', async () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+    proxiedRequests.length = 0;
+  });
+
+  it.each([
+    ['the hostname by default', undefined, false],
+    ['the hostname with egressProxyConnectTo: hostname', 'hostname' as const, false],
+    ['an approved address with egressProxyConnectTo: approved-address', 'approved-address' as const, true],
+  ])('asks the configured proxy for %s', async (_label, egressProxyConnectTo, pinned) => {
+    jest.spyOn(dns.promises, 'lookup').mockResolvedValue([{ address: '127.0.0.1', family: 4 }] as never);
+
     const result = await executeOperation({
       entry: buildEntry(),
       bundleId: 'acme',
       input: { id: 'inv_1', amount: 5 },
-      deps: buildDeps({ outbound: baseOutbound({ egressProxy: 'http://proxy.internal:3128' }), fetchImpl: undefined }),
+      deps: buildDeps({
+        outbound: baseOutbound({ egressProxy: 'http://proxy.internal:3128', egressProxyConnectTo }),
+        fetchImpl: undefined,
+      }),
     });
 
     expect(result.ok).toBe(true);
     expect(proxiedRequests).toEqual([
-      { url: 'http://localhost:9999/v1/invoices/inv_1', proxyUrl: 'http://proxy.internal:3128' },
+      { url: 'http://localhost:9999/v1/invoices/inv_1', proxyUrl: 'http://proxy.internal:3128', pinned },
+    ]);
+  });
+
+  it('refuses a hostname with no approved address when the proxy is to connect to one', async () => {
+    jest.spyOn(dns.promises, 'lookup').mockRejectedValue(new Error('getaddrinfo ENOTFOUND localhost'));
+
+    const result = await executeOperation({
+      entry: buildEntry(),
+      bundleId: 'acme',
+      input: { id: 'inv_1', amount: 5 },
+      deps: buildDeps({
+        outbound: baseOutbound({ egressProxy: 'http://proxy.internal:3128', egressProxyConnectTo: 'approved-address' }),
+        fetchImpl: undefined,
+      }),
+    });
+
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/no address of "localhost" was approved/) });
+    expect(proxiedRequests).toEqual([]);
+  });
+
+  it('sends an IP-literal host, checked as it is, through the proxy that is to connect to an approved address', async () => {
+    const entry = buildEntry();
+    const result = await executeOperation({
+      entry: { ...entry, service: { ...entry.service, baseUrl: 'http://127.0.0.1:9999' } },
+      bundleId: 'acme',
+      input: { id: 'inv_1', amount: 5 },
+      deps: buildDeps({
+        outbound: baseOutbound({ egressProxy: 'http://proxy.internal:3128', egressProxyConnectTo: 'approved-address' }),
+        allowedHosts: new Set(['127.0.0.1']),
+        fetchImpl: undefined,
+      }),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(proxiedRequests).toEqual([
+      { url: 'http://127.0.0.1:9999/v1/invoices/inv_1', proxyUrl: 'http://proxy.internal:3128', pinned: false },
     ]);
   });
 });

@@ -52,7 +52,7 @@ Public mode allows all connections without authentication. Use this for developm
 class MyApp {}
 ```
 
-- `sessionTtl` -- lifetime in seconds (a positive whole number, default 3600) of the anonymous tokens `/oauth/token` issues (`expires_in` and `exp`); session ids don't expire.
+- `sessionTtl` -- lifetime in seconds (a positive whole number, default 3600) of the anonymous tokens `/oauth/token` issues (`expires_in` and `exp`), and of the anonymous session id a client resumes its session with (`mcp-session-id`, or the legacy SSE `?sessionId=`): a request under an older id is answered as an unknown session (`404`), and the client initializes a new one. Raise it for clients that keep one session for longer. Up to 1.12.2 session ids did not expire.
 - `anonymousScopes` -- scopes granted to all unauthenticated clients (`this.auth.scopes`).
 - `publicAccess` -- `{ tools, prompts, rateLimit }`: the tools and prompts an anonymous caller may list and call (`'all'` by default; others answer `PUBLIC_ACCESS_DENIED`), and its calls per IP per minute (default 60).
 
@@ -72,8 +72,8 @@ class MyApp {}
 ```
 
 - `provider` -- the authorization server URL. FrontMCP fetches JWKS from `{provider}/.well-known/jwks.json`.
-- JWKS, discovery and CIMD client-id fetches are SSRF-guarded: a host that is, or resolves to, a loopback, private, link-local or cloud-metadata address is refused in any IPv4 or IPv6 spelling (IPv4-mapped, -translated, -compatible, NAT64 and 6to4 forms included; the local-use NAT64 prefix `64:ff9b:1::/48` is refused outright), every redirect hop is re-checked, and an opaque (status-0) redirect is refused. A `localhost` IdP is allowed outside production.
-- `expectedAudience` -- the `aud` claim value that tokens must contain. Supported in **transparent, local, AND remote** modes (it lives on the shared/orchestrated auth options), so set it wherever FrontMCP verifies bearer tokens — not transparent-only.
+- JWKS, discovery and CIMD client-id fetches are SSRF-guarded: a host that is, or resolves to, a loopback, private, link-local or cloud-metadata address is refused in any IPv4 or IPv6 spelling (IPv4-mapped, -translated, -compatible, NAT64 and 6to4 forms included; the local-use NAT64 prefix `64:ff9b:1::/48` is refused outright), every redirect hop is re-checked, and an opaque (status-0) redirect is refused. On Node.js each fetch connects only to the addresses the check approved, so a second DNS answer is never used (up to 1.12.2 the fetch resolved the name again); on a Worker or in a browser, which have no lookup hook, the check covers the name's answer at check time. When `fetch` has a dispatcher of its own (one set with undici's `setGlobalDispatcher`, such as a proxy or an `Agent` with a SOCKS connector or a CA, or `NODE_USE_ENV_PROXY=1` with `HTTPS_PROXY` or `HTTP_PROXY`), the fetches go through it as before, and a warning says once that pinning needs Node's default dispatcher. A `localhost` IdP is allowed outside production.
+- `expectedAudience` -- the `aud` claim value that tokens must contain. Supported in **transparent, local, AND remote** modes (it lives on the shared/orchestrated auth options), so set it wherever FrontMCP verifies bearer tokens — not transparent-only. In transparent mode without it, the audience is `FRONTMCP_PUBLIC_URL`, else the request's address, limited to `security.dnsRebindingProtection.allowedHosts` when they are set and the protection is on. With none of them the request's `Host` header picks it, and startup logs a warning: FrontMCP 1.13 will refuse tokens that carry an `aud` then.
 - `allowAnonymous` (default `false`) -- when `true`, requests without a token get an anonymous session (scoped by `anonymousScopes`, default `['anonymous']`) instead of a 401.
 
 Use transparent mode when clients already have tokens from your identity provider and the server only needs to verify them.
@@ -106,7 +106,7 @@ Without `local.signKey`, token signing uses **HS256, a symmetric secret** read f
 
 Key local-mode options:
 
-- `tokenStorage` -- where authorization codes / refresh tokens / federated sessions persist. Defaults to `'memory'` (lost on restart). Use `{ sqlite: { path } }` for single-node persistence or `{ redis: { ... } }` for multi-instance. This is honored in local mode.
+- `tokenStorage` -- where authorization codes / refresh tokens / federated sessions persist. Defaults to `'memory'` (lost on restart). Use `{ sqlite: { path } }` for single-node persistence or `{ redis: { ... } }` for multi-instance. This is honored in local mode. A federated session, which holds the tokens of the providers already linked during a multi-provider sign-in, is stored encrypted with the `JWT_SECRET`, as the upstream tokens are once the sign-in completes; up to 1.12.2 it was stored as plain JSON, and such a record is still read, and stored encrypted at its next update.
 - `requireEmail` (default `true`) -- when `false`, the login callback mints a code without prompting for an email, deriving a stable `sub` from `anonymousSubject` (default `'local-operator'`). Use for single-operator setups (e.g. Claude Code).
 - `consent` -- enables an **interactive tool-selection screen** during login AND **call-time enforcement**. When `consent.enabled` is `true`, `/oauth/callback` renders a consent screen (after authentication) listing the available tools; the user's checked tools are GET-submitted back to `/oauth/callback`, embedded in the token's `consent` claim, and enforced on every `tools/call` — a call to an unselected tool is rejected with `TOOL_NOT_CONSENTED` (JSON-RPC `-32003`). Honored flags: `groupByApp` (default `true`), `showDescriptions` (default `true`), `allowSelectAll` (default `true`), `requireSelection` (default `true` — rejects an empty submit), `customMessage`, `rememberConsent` (default `true`), `excludedTools` (never offered, always available), `defaultSelectedTools` (pre-checked). Federated logins show the screen after the last provider links. Tokens minted without consent (disabled, or via the test factory) carry no claim and stay all-tools-allowed. `rememberConsent` persists each user's per-client selection (keyed by `consent:{userSub}:{clientId}`, sharing the configured `tokenStorage` backend) and reuses it on the next login: the screen is skipped when no new tool appeared, or re-shown pre-filled when a NEW tool was added (a newly-added tool is never silently granted). Set `rememberConsent: false` to always re-show the screen. An agent is offered as its `invoke_<agent>` tool. The tools declared inside an `@Agent` and its nested agents are never offered, and the consent given to the agent covers them; the other agents and server tools an agent calls (`swarm`, `execution.inheritParentTools`) are offered and need their own consent.
 - `login` -- customize the built-in login page: `title` / `subtitle` / `logoUri`, declarative `fields` (each `{ type: 'text'|'password'|'email'|'select'|'hidden'; label?; required?; placeholder?; options? }`), a full HTML `render(ctx)` override, and a `subject` strategy (`{ fromField, strategy: 'per-session'|'per-account' }`). Omitting `login` keeps the default email/name page.
@@ -204,6 +204,8 @@ class Server {}
 - `clients` -- pre-registered trusted clients (`{ clientId, redirectUris, clientName?, clientSecret?, tokenEndpointAuthMethod?, grantTypes?, responseTypes?, scope? }`) seeded at startup; accepted by the authorize/token flows **without** a DCR round-trip. Lets you disable DCR and still ship known clients. `grantTypes` defaults to `['authorization_code', 'refresh_token']` (it was documented as `['authorization_code']`, which nothing enforced).
 
 What a client declared is enforced, for a registered client (DCR or `clients`) as for a CIMD document (RFC 7591): its `scope` limits the scopes it is granted (a request for others is narrowed, as `allowedScopes` narrows it), and its `grant_types` limit the token endpoint: without `refresh_token` it gets no refresh token and a refresh is refused (`400 unauthorized_client`), and without `authorization_code` a code exchange is refused the same way. A DCR registration or a CIMD document that leaves out `grant_types` gets both grants, and the registration response says so. Up to 1.11.2 none of this was enforced.
+
+Clients registered through `POST /oauth/register` live in memory, so a restart or another instance sharing a Redis or SQLite `tokenStorage` has no record of them, while their refresh tokens are still stored. A refresh token records how its client authenticates (`token_endpoint_auth_method`): where the client's registration is not known, a refresh token issued to a confidential client (`client_secret_basic` / `client_secret_post`) is refused (`400 invalid_client`), and one issued to a public client (`none`) still refreshes. The method is recorded when the authorization starts (on the pending authorization, then the code), so a confidential client's sign-in finished, or code exchanged, on an instance without its registration is refused the same way. A grant issued to a confidential client keeps requiring its credentials, also after its registration changes to `none` (it signs in again). Refresh tokens stored up to 1.12.2 record no method, so for a client the server has no registration for they are refused the same way: the client registers again and signs in. Pre-registered `clients` and CIMD clients are known on every instance, and are not affected. Up to 1.12.2 such a refresh token was redeemed with its `client_id` alone.
 
 A successful registration responds `201 Created`. Client metadata that fails validation responds `400 invalid_client_metadata` (`400 invalid_redirect_uri` for a `redirect_uris` entry that is not a URL), with each field and its problem in `error_description`; up to 1.12.0 it responded `500 server_misconfigured`. The checks above come first: `404` with registration off, `401` without the initial access token. This `dcr` block governs the **local Authorization Server only** — it is unrelated to the upstream-provider `providerConfig.dcrEnabled` / `registrationEndpoint` fields (which register THIS server against an upstream IdP).
 
@@ -396,6 +398,15 @@ old token only once the refresh token has been rotated, so a failed refresh can 
 retried with the same refresh token; of two redemptions of one refresh token at once,
 one may get `invalid_grant`.
 
+With a persistent `tokenStorage`, stored upstream tokens are bound to the
+authorization server that issued them: the provider's `issuer`, or its token endpoint
+when it has none. After a restart under another `issuer` (or, without one, another
+token endpoint), a provider's stored tokens are no longer used or renewed, and the
+user authorizes that provider again. They stay in the store, for instances still on
+the previous issuer, until they expire. Tokens stored up to 1.12.2 name no issuer: they
+are bound to the provider's issuer when they are next renewed, so don't change an
+`issuer` in the same deploy as the upgrade.
+
 **Dynamic client registration** (`providerConfig.dcrEnabled`): without a `clientId`,
 FrontMCP registers itself with the provider (RFC 7591) at startup and signs in
 with that client. It registers at `providerConfig.registrationEndpoint`, or at the
@@ -511,7 +522,11 @@ The `authProviders` accessor (from `@frontmcp/auth`) exposes:
 The factory gets the caller's `userSub`, `userEmail`, `userName` and `sessionId`. The server keeps the credential it
 returns, per scope: a `global` one for every caller, a `user` one for that user in any session, a `session`
 one for that verified session; a signed-in caller without a verified session gets one `session` credential for all
-its requests. Later requests of the scope get it without running the factory again, until it expires,
+its requests, kept by its `sub` together with its token's issuer when that is not the server's own (transparent mode
+with `providerConfig.additionalIssuers` or `verifyIssuer: false`), so callers with one `sub` from two issuers don't share
+it. A caller from the server's own issuer keeps the key it had; up to 1.12.2 a caller from another issuer shared it,
+and the `session` credentials it stored then are not found again. Later requests of the scope get it without running
+the factory again, until it expires,
 or, for a credential without an expiry, until the provider's `cacheTtl` passes (default `defaultCacheTtl`, one hour).
 With a Redis or SQLite `tokenStorage`, the credentials go to that store, encrypted with a key derived from
 `VAULT_SECRET`, else `JWT_SECRET`, so every instance on the store and a restart find them; without either secret the

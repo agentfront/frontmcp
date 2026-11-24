@@ -122,3 +122,35 @@ export function openStream(
     request.end();
   });
 }
+
+export interface LoopbackRequest {
+  method: string;
+  path: string;
+  headers: Record<string, string>;
+  body?: string;
+}
+
+/**
+ * Record the requests sent with `http.request` until `restore()`: over loopback HTTP a session sends each request on
+ * the connection that answered its identity challenge, through `http.request` rather than `fetch`.
+ */
+export function recordLoopbackRequests(): { requests: LoopbackRequest[]; restore: () => void } {
+  const requests: LoopbackRequest[] = [];
+  const realRequest = http.request;
+  const spy = jest.spyOn(http, 'request').mockImplementation(((options: http.RequestOptions, callback) => {
+    const outgoing = realRequest(options, callback);
+    const sent: LoopbackRequest = {
+      method: options.method ?? 'GET',
+      path: options.path ?? '/',
+      headers: options.headers as Record<string, string>,
+    };
+    requests.push(sent);
+    const end = outgoing.end.bind(outgoing);
+    outgoing.end = ((chunk?: unknown) => {
+      if (typeof chunk === 'string') sent.body = chunk;
+      return end(chunk as string);
+    }) as typeof outgoing.end;
+    return outgoing;
+  }) as typeof http.request);
+  return { requests, restore: () => spy.mockRestore() };
+}

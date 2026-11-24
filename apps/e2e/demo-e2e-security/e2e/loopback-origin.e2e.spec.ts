@@ -3,6 +3,7 @@
  * page's `Origin`; the `Host` is a loopback name, so the Host check alone let it through. A request
  * with no `Origin` (CLI and agent clients) and one from the server's own origin are still served.
  */
+import * as http from 'node:http';
 import * as path from 'node:path';
 
 import { expect, TestServer } from '@frontmcp/testing';
@@ -26,6 +27,25 @@ function initialize(server: TestServer, origin?: string): Promise<Response> {
       ...(origin ? { Origin: origin } : {}),
     },
     body: INITIALIZE,
+  });
+}
+
+/** The status an `initialize` gets when it names `host` in `Host`, which `fetch` would not send. */
+function statusUnderHost(server: TestServer, host: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      `${server.info.baseUrl}/`,
+      {
+        method: 'POST',
+        headers: { host, 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      },
+      (response) => {
+        response.resume();
+        resolve(response.statusCode ?? 0);
+      },
+    );
+    request.on('error', reject);
+    request.end(INITIALIZE);
   });
 }
 
@@ -73,5 +93,10 @@ describe('Origin check on a loopback bind', () => {
     expect((await initialize(explicit, 'https://app.example.com')).status).toBe(200);
     expect((await initialize(explicit, `http://localhost:${explicit.info.port}`)).status).toBe(403);
     expect((await initialize(explicit)).status).toBe(200);
+  });
+
+  it('keeps checking Host when allowedOrigins is set without allowedHosts (#1344)', async () => {
+    expect(await statusUnderHost(explicit, 'evil.example')).toBe(403);
+    expect(await statusUnderHost(explicit, `localhost:${explicit.info.port}`)).toBe(200);
   });
 });
