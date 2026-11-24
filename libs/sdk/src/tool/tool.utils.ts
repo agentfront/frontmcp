@@ -244,13 +244,15 @@ function withDeclaredStructuredContent(
   options: OutputParseOptions,
 ): ParsedToolResult {
   const schema = structuredOutputSchemaOf(descriptor);
+  if (!schema || result.isError || awaitsElicitation(result)) return result;
   const { structuredContent } = result;
-  if (!schema || structuredContent === undefined || result.isError) return result;
-  if (options.validateStructuredContent !== 'enforce' && !matchesOutputSchema(schema, structuredContent)) {
+  const parsed = declaredStructuredContent(schema, structuredContent);
+  if ('error' in parsed) {
+    if (options.validateStructuredContent === 'enforce') throw parsed.error;
     options.onInvalidStructuredContent?.();
     return result;
   }
-  const declared = toStructuredContent(parseAgainstOutputSchema(schema, structuredContent, options));
+  const declared = toStructuredContent(applyUndeclaredKeysPolicy(schema, structuredContent, parsed.declared, options));
   const sent: unknown = JSON.parse(JSON.stringify(structuredContent));
   if (isSameJson(declared, sent)) return result;
   const content = result.content.map((block) =>
@@ -286,13 +288,23 @@ function isSameJson(left: unknown, right: unknown): boolean {
   );
 }
 
-function matchesOutputSchema(schema: z.ZodType, value: unknown): boolean {
+/** The declared part of a returned `structuredContent`, or why it misses the `outputSchema` (a missing one does). */
+function declaredStructuredContent(
+  schema: z.ZodType,
+  structuredContent: unknown,
+): { declared: unknown } | { error: InvalidOutputError } {
+  if (structuredContent === undefined)
+    return { error: new InvalidOutputError({ reason: 'missing structuredContent' }) };
   try {
-    parseDeclaredOutput(schema, value);
-    return true;
-  } catch {
-    return false;
+    return { declared: parseDeclaredOutput(schema, structuredContent) };
+  } catch (error) {
+    return { error: error instanceof InvalidOutputError ? error : new InvalidOutputError() };
   }
+}
+
+/** The SDK's elicitation fallback answer, which carries the question in `_meta` and no `structuredContent`. */
+function awaitsElicitation(result: ParsedToolResult): boolean {
+  return isRecord(result._meta) && 'elicitationPending' in result._meta;
 }
 
 /** Zod schema types whose answer is a JSON object, as a `CallToolResult`'s `structuredContent` is. */
@@ -431,7 +443,16 @@ function parseSingleValue(
  * A schema with a transform is always stripped: its output cannot be compared with the answer key by key.
  */
 function parseAgainstOutputSchema(schema: z.ZodType, value: unknown, options: OutputParseOptions = {}): unknown {
-  const declared = parseDeclaredOutput(schema, value);
+  return applyUndeclaredKeysPolicy(schema, value, parseDeclaredOutput(schema, value), options);
+}
+
+/** `declared`, what the schema accepts of `value`, with the undeclared keys of `value` handled per the policy. */
+function applyUndeclaredKeysPolicy(
+  schema: z.ZodType,
+  value: unknown,
+  declared: unknown,
+  options: OutputParseOptions,
+): unknown {
   const policy = options.undeclaredKeys ?? 'strip';
   if (policy === 'strip' || hasTransform(schema)) return declared;
   const undeclaredKeys = findDroppedKeys(value, declared);

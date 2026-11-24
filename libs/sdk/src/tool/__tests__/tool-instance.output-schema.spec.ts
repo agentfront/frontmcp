@@ -335,6 +335,30 @@ describe('ToolInstance.parseOutput of a CallToolResult the tool returns', () => 
     expect(onInvalidStructuredContent).toHaveBeenCalledTimes(1);
   });
 
+  it('treats a successful result without structuredContent as one that misses an object outputSchema', () => {
+    const { tool } = toolWithOutput({ price: z.number() });
+    const contentOnly = { content: [{ type: 'text', text: 'Ten' }] };
+    const onInvalidStructuredContent = jest.fn();
+
+    expect(tool.parseOutput(contentOnly, { onInvalidStructuredContent })).toBe(contentOnly);
+    expect(onInvalidStructuredContent).toHaveBeenCalledTimes(1);
+    expect(() => tool.parseOutput(contentOnly, { validateStructuredContent: 'enforce' })).toThrow(InvalidOutputError);
+  });
+
+  it("sends the SDK's elicitation fallback answer as returned, under 'enforce' too", () => {
+    const { tool } = toolWithOutput({ price: z.number() });
+    const fallback = {
+      content: [{ type: 'text', text: 'Answer first' }],
+      _meta: { elicitationPending: { elicitId: 'e-1' } },
+    };
+    const onInvalidStructuredContent = jest.fn();
+
+    expect(tool.parseOutput(fallback, { validateStructuredContent: 'enforce', onInvalidStructuredContent })).toBe(
+      fallback,
+    );
+    expect(onInvalidStructuredContent).not.toHaveBeenCalled();
+  });
+
   it("fails with INVALID_OUTPUT when its structuredContent does not match the outputSchema under 'enforce'", () => {
     const { tool } = toolWithOutput({ price: z.string() });
 

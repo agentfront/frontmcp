@@ -1936,9 +1936,9 @@ export default class CallToolFlow extends FlowBase<typeof name> {
     if (reportedInvalidStructuredContent.has(tool)) return;
     reportedInvalidStructuredContent.add(tool);
     this.logger.warn(
-      `Tool "${tool.metadata.name}" returned a CallToolResult whose structuredContent does not match its ` +
-        "outputSchema, and it was sent as returned. Set output.validateStructuredContent: 'enforce' to refuse such " +
-        'an answer with INVALID_OUTPUT now; FrontMCP 1.13 refuses it by default.',
+      `Tool "${tool.metadata.name}" returned a CallToolResult whose structuredContent is missing or does not ` +
+        "match its outputSchema, and it was sent as returned. Set output.validateStructuredContent: 'enforce' to " +
+        'refuse such an answer with INVALID_OUTPUT now; FrontMCP 1.13 refuses it by default.',
     );
   }
 
