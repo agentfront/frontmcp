@@ -1,7 +1,7 @@
 import { z } from '@frontmcp/lazy-zod';
 
 import { findUndeclaredArguments, formatKeyPath } from '../undeclared-arguments';
-import { describeUndeclaredArguments } from '../undeclared-arguments-message';
+import { describeUndeclaredArguments, undeclaredArgumentsWarning } from '../undeclared-arguments-message';
 
 describe('findUndeclaredArguments', () => {
   const shape = {
@@ -90,5 +90,18 @@ describe('describeUndeclaredArguments', () => {
     const longKey = `timeoutSec${'x'.repeat(100)}`;
 
     expect(describeUndeclaredArguments([[longKey]], ['timeoutSec'])).toBe(`'${longKey.slice(0, 64)}…'`);
+  });
+});
+
+describe('undeclaredArgumentsWarning', () => {
+  it('names the first 20 key paths, each cut to 64 characters, and counts the rest', () => {
+    const keyPaths = Array.from({ length: 23 }, (_, index) => `${'k'.repeat(100)}${index}`);
+
+    const warning = undeclaredArgumentsWarning('agent_wait', keyPaths);
+
+    expect(warning).toContain(`${'k'.repeat(64)}…, `);
+    expect(warning).not.toContain('k'.repeat(65));
+    expect(warning).toContain(' and 3 more. Declare them');
+    expect(warning.split('…')).toHaveLength(21);
   });
 });

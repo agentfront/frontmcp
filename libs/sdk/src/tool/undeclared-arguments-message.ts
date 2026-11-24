@@ -18,7 +18,7 @@ export function undeclaredArgumentsNote(keyPaths: readonly ArgumentKeyPath[], de
 export function undeclaredArgumentsWarning(toolName: string, newKeyPaths: readonly string[]): string {
   return (
     `Tool "${toolName}" was called with arguments its inputSchema does not declare, so they were ignored: ` +
-    `${newKeyPaths.join(', ')}. Declare them, or set input.undeclaredKeys to 'strip' or 'fail'.`
+    `${namedWithTheRestCounted(newKeyPaths.map(shortened))}. Declare them, or set input.undeclaredKeys to 'strip' or 'fail'.`
   );
 }
 
@@ -39,12 +39,18 @@ export function describeUndeclaredArguments(
   keyPaths: readonly ArgumentKeyPath[],
   declaredKeys: readonly string[],
 ): string {
-  const named = keyPaths.slice(0, MAX_NAMED_ARGUMENTS).map((keyPath) => {
+  const described = keyPaths.slice(0, MAX_NAMED_ARGUMENTS).map((keyPath) => {
     const shown = shortened(formatKeyPath(keyPath));
     const closest = keyPath.length === 1 ? closestKey(keyPath[0], declaredKeys) : undefined;
     return closest ? `'${shown}' (did you mean '${closest}'?)` : `'${shown}'`;
   });
-  const unnamed = keyPaths.length - named.length;
+  return namedWithTheRestCounted(described, keyPaths.length);
+}
+
+/** The first {@link MAX_NAMED_ARGUMENTS} of `names`, then how many more of `total` there are. */
+function namedWithTheRestCounted(names: readonly string[], total = names.length): string {
+  const named = names.slice(0, MAX_NAMED_ARGUMENTS);
+  const unnamed = total - named.length;
   return unnamed > 0 ? `${named.join(', ')} and ${unnamed} more` : named.join(', ');
 }
 

@@ -397,7 +397,7 @@ export interface FrontMcpBaseMetadata {
    * - `undeclaredKeys`: what `tools/call` does with argument keys a tool's `inputSchema` does not
    *   declare — `'strip'` drops them; `'warn'` drops them, logs a warning once per tool and key, and adds
    *   a text block to the answer naming them; `'fail'` refuses the call with `INVALID_INPUT`. Default
-   *   `'warn'` when `NODE_ENV` is `'development'`, otherwise `'strip'`.
+   *   `'warn'`, in every environment.
    */
   input?: InputPolicy;
 
