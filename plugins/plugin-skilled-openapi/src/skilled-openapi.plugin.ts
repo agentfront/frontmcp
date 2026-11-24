@@ -338,6 +338,12 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
           'addresses (link-local and cloud-metadata addresses stay blocked). Use it only when the API lives on a private network.',
       );
     }
+    if (this.options.outbound.egressProxy && this.options.outbound.egressProxyConnectTo === undefined) {
+      console.info(
+        '[skilled-openapi] outbound.egressProxy is asked to connect to the addresses the outbound check approved; ' +
+          "set outbound.egressProxyConnectTo: 'hostname' if it allows destinations by hostname.",
+      );
+    }
     if (this.options.outbound.egressProxy && this.options.outbound.egressProxyConnectTo === 'hostname') {
       console.warn(
         "[skilled-openapi] outbound.egressProxyConnectTo 'hostname': the proxy is asked for the hostname, which it " +

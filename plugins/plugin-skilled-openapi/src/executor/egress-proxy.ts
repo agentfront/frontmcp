@@ -86,8 +86,9 @@ const egressProxies = new Map<string, Promise<EgressProxy>>();
 
 /**
  * `fetch` that sends every request through `outbound.egressProxy`. Given `addresses`, the ones the
- * outbound check approved, the proxy is asked to connect to the first of them rather than to resolve
- * the hostname itself.
+ * outbound check approved, the proxy is asked to connect to them rather than to resolve the hostname
+ * itself: IPv4 first, so a proxy without IPv6 egress still reaches a dual-stack API, and the next one
+ * when the proxy refuses the tunnel, before anything was sent to the API.
  *
  * It uses undici's `ProxyAgent`, so it needs Node.js and the `undici` package, an optional peer
  * loaded only when a proxy is configured: the module name is not a literal, so Worker bundles never
@@ -95,11 +96,41 @@ const egressProxies = new Map<string, Promise<EgressProxy>>();
  */
 export async function proxiedFetch(proxyUrl: string, addresses: readonly LookupAddress[] = []): Promise<typeof fetch> {
   const proxy = await egressProxy(proxyUrl);
-  const [address] = addresses;
-  return ((input: string | URL, init?: RequestInit) => {
+  const approvedAddresses = [...addresses].sort((left, right) => left.family - right.family);
+  return (async (input: string | URL, init?: RequestInit) => {
     const url = new URL(String(input));
-    return proxy.undici.fetch(url.href, { ...init, dispatcher: proxy.agentFor(url.hostname, address) });
+    if (approvedAddresses.length === 0) {
+      return proxy.undici.fetch(url.href, { ...init, dispatcher: proxy.agentFor(url.hostname, undefined) });
+    }
+    let tunnelRefusal: unknown;
+    for (const address of approvedAddresses) {
+      try {
+        return await proxy.undici.fetch(url.href, { ...init, dispatcher: proxy.agentFor(url.hostname, address) });
+      } catch (error) {
+        if (!isTunnelRefusal(error)) throw error;
+        tunnelRefusal = error;
+      }
+    }
+    throw tunnelRefusal;
   }) as typeof fetch;
+}
+
+/**
+ * Whether undici failed a fetch because the proxy answered its `CONNECT` with anything but 200. The causes are read
+ * by shape: undici builds one of them in another realm, so it isn't `instanceof Error` here.
+ */
+function isTunnelRefusal(error: unknown): boolean {
+  let cause = error as { message?: unknown; cause?: unknown } | null | undefined;
+  while (typeof cause === 'object' && cause !== null) {
+    if (
+      typeof cause.message === 'string' &&
+      /^Proxy response \(\d+\) !== 200 when HTTP Tunneling$/.test(cause.message)
+    ) {
+      return true;
+    }
+    cause = cause.cause as typeof cause;
+  }
+  return false;
 }
 
 function egressProxy(proxyUrl: string): Promise<EgressProxy> {

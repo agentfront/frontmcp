@@ -657,6 +657,8 @@ describe('executeOperation — IPv6-literal service hosts (GHSA-4r57-gvgj-5crm)'
 
 describe('executeOperation outbound.egressProxy (#767)', () => {
   const proxiedRequests: Array<{ url: string; proxyUrl: string; pinned: boolean }> = [];
+  /** What the proxied fetch throws next; unset, it answers. */
+  let proxyFailure: Error | undefined;
 
   beforeAll(() => {
     jest.doMock('undici', () => {
@@ -668,6 +670,7 @@ describe('executeOperation outbound.egressProxy (#767)', () => {
         fetch: async (url: string, init: RequestInit & { dispatcher: ProxyAgent }) => {
           const { uri, factory } = init.dispatcher.options;
           proxiedRequests.push({ url, proxyUrl: uri, pinned: factory !== undefined });
+          if (proxyFailure) throw proxyFailure;
           return new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json' } });
         },
       };
@@ -681,6 +684,7 @@ describe('executeOperation outbound.egressProxy (#767)', () => {
   afterEach(() => {
     jest.restoreAllMocks();
     proxiedRequests.length = 0;
+    proxyFailure = undefined;
   });
 
   it.each([
@@ -706,9 +710,13 @@ describe('executeOperation outbound.egressProxy (#767)', () => {
     ]);
   });
 
-  it.each([undefined, 'approved-address' as const])(
-    'refuses a hostname with no approved address with egressProxyConnectTo %p',
-    async (egressProxyConnectTo) => {
+  it.each([
+    [undefined, false],
+    ['approved-address' as const, false],
+    ['hostname' as const, true],
+  ])(
+    'with egressProxyConnectTo %p, sends a hostname whose lookup failed to the proxy by name: %p',
+    async (egressProxyConnectTo, sentByName) => {
       jest.spyOn(dns.promises, 'lookup').mockRejectedValue(new Error('getaddrinfo ENOTFOUND localhost'));
 
       const result = await executeOperation({
@@ -721,30 +729,66 @@ describe('executeOperation outbound.egressProxy (#767)', () => {
         }),
       });
 
-      expect(result).toMatchObject({
-        ok: false,
-        error: expect.stringMatching(/no address of "localhost" was approved/),
-      });
-      expect(proxiedRequests).toEqual([]);
+      const sentRequest = { url: 'http://localhost:9999/v1/invoices/inv_1', proxyUrl: 'http://proxy.internal:3128' };
+      expect(proxiedRequests).toEqual(sentByName ? [{ ...sentRequest, pinned: false }] : []);
+      expect(result).toMatchObject(
+        sentByName
+          ? { ok: true }
+          : {
+              ok: false,
+              error: expect.stringMatching(
+                /no address of "localhost" was approved to ask the egress proxy for; set outbound\.egressProxyConnectTo: 'hostname'/,
+              ),
+            },
+      );
     },
   );
 
-  it('sends an IP-literal host, checked as it is, through the proxy that is to connect to an approved address', async () => {
-    const entry = buildEntry();
-    const result = await executeOperation({
-      entry: { ...entry, service: { ...entry.service, baseUrl: 'http://127.0.0.1:9999' } },
-      bundleId: 'acme',
-      input: { id: 'inv_1', amount: 5 },
-      deps: buildDeps({
-        outbound: baseOutbound({ egressProxy: 'http://proxy.internal:3128', egressProxyConnectTo: 'approved-address' }),
-        allowedHosts: new Set(['127.0.0.1']),
-        fetchImpl: undefined,
-      }),
-    });
+  it.each([
+    [undefined, true],
+    ['approved-address' as const, false],
+  ])(
+    "reports the proxy's refusal, and with egressProxyConnectTo %p the setting to change: %p",
+    async (egressProxyConnectTo, hinted) => {
+      jest.spyOn(dns.promises, 'lookup').mockResolvedValue([{ address: '127.0.0.1', family: 4 }] as never);
+      const refusal = new Error('Proxy response (403) !== 200 when HTTP Tunneling');
+      proxyFailure = new TypeError('fetch failed', { cause: new Error('Request was cancelled.', { cause: refusal }) });
 
-    expect(result.ok).toBe(true);
-    expect(proxiedRequests).toEqual([
-      { url: 'http://127.0.0.1:9999/v1/invoices/inv_1', proxyUrl: 'http://proxy.internal:3128', pinned: false },
-    ]);
-  });
+      const result = await executeOperation({
+        entry: buildEntry(),
+        bundleId: 'acme',
+        input: { id: 'inv_1', amount: 5 },
+        deps: buildDeps({
+          outbound: baseOutbound({ egressProxy: 'http://proxy.internal:3128', egressProxyConnectTo }),
+          fetchImpl: undefined,
+        }),
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('fetch failed: Proxy response (403) !== 200 when HTTP Tunneling');
+      expect(result.error?.includes("set outbound.egressProxyConnectTo: 'hostname'")).toBe(hinted);
+    },
+  );
+
+  it.each([undefined, 'approved-address' as const])(
+    'sends an IP-literal host, checked as it is, through the proxy with egressProxyConnectTo %p',
+    async (egressProxyConnectTo) => {
+      const entry = buildEntry();
+      const result = await executeOperation({
+        entry: { ...entry, service: { ...entry.service, baseUrl: 'http://127.0.0.1:9999' } },
+        bundleId: 'acme',
+        input: { id: 'inv_1', amount: 5 },
+        deps: buildDeps({
+          outbound: baseOutbound({ egressProxy: 'http://proxy.internal:3128', egressProxyConnectTo }),
+          allowedHosts: new Set(['127.0.0.1']),
+          fetchImpl: undefined,
+        }),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(proxiedRequests).toEqual([
+        { url: 'http://127.0.0.1:9999/v1/invoices/inv_1', proxyUrl: 'http://proxy.internal:3128', pinned: false },
+      ]);
+    },
+  );
 });

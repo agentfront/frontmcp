@@ -179,6 +179,20 @@ describe('SkilledOpenApiPlugin', () => {
       }
     });
 
+    it('says once at startup, by default, that the egress proxy is asked for approved addresses and how to switch', () => {
+      const info = jest.spyOn(console, 'info').mockImplementation(() => {});
+      try {
+        new SkilledOpenApiPlugin({
+          source: { type: 'static', path: '/x' },
+          outbound: { egressProxy: 'http://proxy.internal:3128' },
+        });
+        expect(info).toHaveBeenCalledTimes(1);
+        expect(info).toHaveBeenCalledWith(expect.stringContaining("egressProxyConnectTo: 'hostname'"));
+      } finally {
+        info.mockRestore();
+      }
+    });
+
     it.each([undefined, 'approved-address' as const])(
       'refuses a SOCKS egressProxy at startup with egressProxyConnectTo %p',
       (egressProxyConnectTo) => {
@@ -188,7 +202,9 @@ describe('SkilledOpenApiPlugin', () => {
               source: { type: 'static', path: '/x' },
               outbound: { egressProxy: 'socks5://proxy.internal:1080', egressProxyConnectTo },
             }),
-        ).toThrow(/needs an http: or https: proxy/);
+        ).toThrow(
+          /needs an http: or https: proxy.*Set outbound\.egressProxyConnectTo: 'hostname' to keep a SOCKS proxy/,
+        );
       },
     );
 

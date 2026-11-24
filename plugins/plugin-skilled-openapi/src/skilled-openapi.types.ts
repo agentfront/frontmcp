@@ -41,8 +41,8 @@ export const outboundOptionsSchema = z
     egressProxy: z.string().url().optional(),
     /**
      * What `egressProxy` is asked to connect to. `'approved-address'` (the default since 1.13): an
-     * address the outbound check approved (`CONNECT <address>:<port>`), with the hostname kept in
-     * `Host` and as the TLS server name; a hostname with no approved address (DNS failed under
+     * address the outbound check approved (`CONNECT <address>:<port>`), IPv4 first and the next one
+     * when the proxy refuses the tunnel, with the hostname kept in `Host` and as the TLS server name; a hostname with no approved address (DNS failed under
      * `allowPrivateNetworks`) is refused, and the proxy must be `http:` or `https:` (a SOCKS proxy is
      * sent the hostname). `'hostname'`: the hostname, which the proxy resolves itself, so the outbound
      * check doesn't bind the connection; it logs a warning at startup.
