@@ -21,6 +21,8 @@ export interface ProviderTokenRecord {
   expiresAt?: number;
   createdAt: number;
   updatedAt: number;
+  /** The authorization server that issued the tokens; absent on records stored before it was kept. */
+  issuer?: string;
 }
 
 /**
