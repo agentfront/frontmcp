@@ -1,6 +1,7 @@
 import { z } from '@frontmcp/lazy-zod';
 
-import { describeUndeclaredArguments, findUndeclaredArguments } from '../undeclared-arguments';
+import { findUndeclaredArguments } from '../undeclared-arguments';
+import { describeUndeclaredArguments } from '../undeclared-arguments-message';
 
 describe('findUndeclaredArguments', () => {
   const shape = {

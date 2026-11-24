@@ -3,8 +3,7 @@ import { internalZ as z } from '@frontmcp/lazy-zod';
 import { isDevelopment } from '@frontmcp/utils';
 
 /** What `tools/call` does with argument keys `inputSchema` does not declare: drop them, also tell, or refuse the call. */
-export const INPUT_UNDECLARED_KEYS_POLICIES = ['strip', 'warn', 'fail'] as const;
-export type InputUndeclaredKeysPolicy = (typeof INPUT_UNDECLARED_KEYS_POLICIES)[number];
+export type InputUndeclaredKeysPolicy = 'strip' | 'warn' | 'fail';
 
 /** Input policy, declarable on `@FrontMcp`, `@App` and `@Tool`, resolved Tool > App > server > default. */
 export interface InputPolicy {
@@ -18,7 +17,7 @@ export interface InputPolicy {
 }
 
 export const inputPolicySchema = z.object({
-  undeclaredKeys: z.enum(INPUT_UNDECLARED_KEYS_POLICIES).optional(),
+  undeclaredKeys: z.enum(['strip', 'warn', 'fail']).optional(),
 });
 
 /** Resolve the undeclared-argument policy: Tool > App > server > 'warn' in development, 'strip' otherwise. */
