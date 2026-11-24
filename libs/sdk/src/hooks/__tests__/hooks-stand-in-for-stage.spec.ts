@@ -76,11 +76,18 @@ class StandInPlugin {
       'alias://note': 'notes://aliased',
       'alias://agent': 'agent://notes',
       'alias://guarded': 'guarded://doc',
+      'guarded://doc': 'guarded://doc',
+      'rewrite://guarded': 'guarded://doc',
     };
     const target = aliasTargets[flowCtx.uri];
     const match = target ? flowCtx.get(ScopeEntry).resources.findResourceForUri(target) : undefined;
     if (!match) return next();
     flowCtx.resolveResource({ resource: match.instance, params: match.params });
+  }
+
+  @ReadResourceHook.Will('parseInput')
+  rewriteRequest(flowCtx: FlowCtxOf<'resources:read-resource'>) {
+    if (flowCtx.input.request.params.uri === 'rewrite://guarded') flowCtx.input.request.params.uri = 'guarded://doc';
   }
 
   @ListToolsHook.Will('findTools')
@@ -128,6 +135,19 @@ describe('a hook that stands in for a stage', () => {
 
     expect(message.error).toBeDefined();
     expect(JSON.stringify(message)).not.toContain('guarded content');
+  });
+
+  it('compares with the hooks the read installed when it started, not those of the URI a hook rewrote it to', async () => {
+    const { message } = await rpc20260728(server.handler, 'resources/read', { uri: 'rewrite://guarded' });
+
+    expect(message.error).toBeDefined();
+    expect(JSON.stringify(message)).not.toContain('guarded content');
+  });
+
+  it('hands over a resource whose hooks the read installed', async () => {
+    const { message } = await rpc20260728(server.handler, 'resources/read', { uri: 'guarded://doc' });
+
+    expect(JSON.stringify(message.result)).toContain('guarded content');
   });
 
   it('leaves a tool out of tools/list with ctx.removeTool, called before or after the tools are found', async () => {
