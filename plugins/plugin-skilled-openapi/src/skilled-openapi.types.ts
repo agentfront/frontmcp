@@ -40,12 +40,12 @@ export const outboundOptionsSchema = z
      */
     egressProxy: z.string().url().optional(),
     /**
-     * What `egressProxy` is asked to connect to. `'approved-address'`: an address the outbound check
-     * approved (`CONNECT <address>:<port>`), with the hostname kept in `Host` and as the TLS server
-     * name; a hostname with no approved address (DNS failed under `allowPrivateNetworks`) is refused, and
-     * the proxy must be `http:` or `https:` (a SOCKS proxy is sent the hostname).
-     * `'hostname'`: the hostname, which the proxy resolves itself. Unset means `'hostname'` and
-     * logs a warning at startup; 1.13 makes `'approved-address'` the default.
+     * What `egressProxy` is asked to connect to. `'approved-address'` (the default since 1.13): an
+     * address the outbound check approved (`CONNECT <address>:<port>`), with the hostname kept in
+     * `Host` and as the TLS server name; a hostname with no approved address (DNS failed under
+     * `allowPrivateNetworks`) is refused, and the proxy must be `http:` or `https:` (a SOCKS proxy is
+     * sent the hostname). `'hostname'`: the hostname, which the proxy resolves itself, so the outbound
+     * check doesn't bind the connection; it logs a warning at startup.
      */
     egressProxyConnectTo: z.enum(['approved-address', 'hostname']).optional(),
     /** Per-host concurrent request cap. */
@@ -224,13 +224,13 @@ export const skilledOpenApiPluginOptionsSchema = skilledOpenApiPluginOptionsObje
     // An egressProxy that isn't a URL already has its own issue.
     const tunnelsToAddress =
       !egressProxy || !URL.canParse(egressProxy) || ['http:', 'https:'].includes(new URL(egressProxy).protocol);
-    if (egressProxyConnectTo === 'approved-address' && !tunnelsToAddress) {
+    if (egressProxyConnectTo !== 'hostname' && !tunnelsToAddress) {
       ctx.addIssue({
         code: 'custom',
         path: ['outbound', 'egressProxyConnectTo'],
         message:
-          "outbound.egressProxyConnectTo 'approved-address' needs an http: or https: egressProxy: " +
-          'a SOCKS proxy is sent the hostname',
+          'outbound.egressProxy is connected to the approved address, which needs an http: or https: proxy: ' +
+          "a SOCKS proxy is sent the hostname. Set outbound.egressProxyConnectTo: 'hostname' to keep a SOCKS proxy",
       });
     }
   })

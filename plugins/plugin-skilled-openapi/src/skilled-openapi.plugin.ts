@@ -338,12 +338,11 @@ export default class SkilledOpenApiPlugin extends DynamicPlugin<
           'addresses (link-local and cloud-metadata addresses stay blocked). Use it only when the API lives on a private network.',
       );
     }
-    if (this.options.outbound.egressProxy && this.options.outbound.egressProxyConnectTo === undefined) {
+    if (this.options.outbound.egressProxy && this.options.outbound.egressProxyConnectTo === 'hostname') {
       console.warn(
-        '[skilled-openapi] outbound.egressProxy is asked to connect to the hostname, which it resolves itself, so the ' +
-          "outbound address check doesn't bind it. Set outbound.egressProxyConnectTo: 'approved-address' to connect it " +
-          "to an address the check approved, or 'hostname' to keep this and silence the warning; 1.13 defaults to " +
-          "'approved-address'.",
+        "[skilled-openapi] outbound.egressProxyConnectTo 'hostname': the proxy is asked for the hostname, which it " +
+          "resolves itself, so the outbound address check doesn't bind it. Remove the option to connect the proxy " +
+          'to an address the check approved.',
       );
     }
   }

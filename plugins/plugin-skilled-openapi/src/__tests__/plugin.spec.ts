@@ -162,8 +162,8 @@ describe('SkilledOpenApiPlugin', () => {
     });
 
     it.each([
-      [undefined, true],
-      ['hostname' as const, false],
+      [undefined, false],
+      ['hostname' as const, true],
       ['approved-address' as const, false],
     ])('with egressProxy and egressProxyConnectTo %p, warns about the proxy: %p', (egressProxyConnectTo, warns) => {
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -179,14 +179,32 @@ describe('SkilledOpenApiPlugin', () => {
       }
     });
 
-    it('refuses a SOCKS egressProxy with egressProxyConnectTo approved-address at startup', () => {
-      expect(
-        () =>
-          new SkilledOpenApiPlugin({
-            source: { type: 'static', path: '/x' },
-            outbound: { egressProxy: 'socks5://proxy.internal:1080', egressProxyConnectTo: 'approved-address' },
-          }),
-      ).toThrow(/needs an http: or https: egressProxy/);
+    it.each([undefined, 'approved-address' as const])(
+      'refuses a SOCKS egressProxy at startup with egressProxyConnectTo %p',
+      (egressProxyConnectTo) => {
+        expect(
+          () =>
+            new SkilledOpenApiPlugin({
+              source: { type: 'static', path: '/x' },
+              outbound: { egressProxy: 'socks5://proxy.internal:1080', egressProxyConnectTo },
+            }),
+        ).toThrow(/needs an http: or https: proxy/);
+      },
+    );
+
+    it("keeps a SOCKS egressProxy with egressProxyConnectTo 'hostname'", () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        expect(
+          () =>
+            new SkilledOpenApiPlugin({
+              source: { type: 'static', path: '/x' },
+              outbound: { egressProxy: 'socks5://proxy.internal:1080', egressProxyConnectTo: 'hostname' },
+            }),
+        ).not.toThrow();
+      } finally {
+        warn.mockRestore();
+      }
     });
 
     it('reports an egressProxy that is not a URL as an option error, not a bare TypeError', () => {

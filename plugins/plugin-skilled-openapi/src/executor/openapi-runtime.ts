@@ -251,7 +251,7 @@ export async function executeOperation(args: {
   if (!ssrf.ok) {
     return failure(0, `ssrf check rejected request: ${ssrf.reason}`);
   }
-  if (outbound.egressProxy && outbound.egressProxyConnectTo === 'approved-address' && !ssrf.addresses?.length) {
+  if (outbound.egressProxy && outbound.egressProxyConnectTo !== 'hostname' && !ssrf.addresses?.length) {
     const hostname = new URL(req.url).hostname.replace(/^\[|\]$/g, '');
     if (!classifyIpAddress(hostname)) {
       return failure(
@@ -379,7 +379,7 @@ export async function executeOperation(args: {
  */
 async function outboundFetch(outbound: OutboundOptions, ssrf: SsrfCheckResult): Promise<typeof fetch | PinnedFetch> {
   if (outbound.egressProxy) {
-    const approvedAddresses = outbound.egressProxyConnectTo === 'approved-address' ? ssrf.addresses : undefined;
+    const approvedAddresses = outbound.egressProxyConnectTo === 'hostname' ? undefined : ssrf.addresses;
     return proxiedFetch(outbound.egressProxy, approvedAddresses);
   }
   if (ssrf.addresses?.length && !isEdgeRuntime()) return pinnedFetch(ssrf.addresses);

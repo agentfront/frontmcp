@@ -684,7 +684,7 @@ describe('executeOperation outbound.egressProxy (#767)', () => {
   });
 
   it.each([
-    ['the hostname by default', undefined, false],
+    ['an approved address by default', undefined, true],
     ['the hostname with egressProxyConnectTo: hostname', 'hostname' as const, false],
     ['an approved address with egressProxyConnectTo: approved-address', 'approved-address' as const, true],
   ])('asks the configured proxy for %s', async (_label, egressProxyConnectTo, pinned) => {
@@ -706,22 +706,28 @@ describe('executeOperation outbound.egressProxy (#767)', () => {
     ]);
   });
 
-  it('refuses a hostname with no approved address when the proxy is to connect to one', async () => {
-    jest.spyOn(dns.promises, 'lookup').mockRejectedValue(new Error('getaddrinfo ENOTFOUND localhost'));
+  it.each([undefined, 'approved-address' as const])(
+    'refuses a hostname with no approved address with egressProxyConnectTo %p',
+    async (egressProxyConnectTo) => {
+      jest.spyOn(dns.promises, 'lookup').mockRejectedValue(new Error('getaddrinfo ENOTFOUND localhost'));
 
-    const result = await executeOperation({
-      entry: buildEntry(),
-      bundleId: 'acme',
-      input: { id: 'inv_1', amount: 5 },
-      deps: buildDeps({
-        outbound: baseOutbound({ egressProxy: 'http://proxy.internal:3128', egressProxyConnectTo: 'approved-address' }),
-        fetchImpl: undefined,
-      }),
-    });
+      const result = await executeOperation({
+        entry: buildEntry(),
+        bundleId: 'acme',
+        input: { id: 'inv_1', amount: 5 },
+        deps: buildDeps({
+          outbound: baseOutbound({ egressProxy: 'http://proxy.internal:3128', egressProxyConnectTo }),
+          fetchImpl: undefined,
+        }),
+      });
 
-    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/no address of "localhost" was approved/) });
-    expect(proxiedRequests).toEqual([]);
-  });
+      expect(result).toMatchObject({
+        ok: false,
+        error: expect.stringMatching(/no address of "localhost" was approved/),
+      });
+      expect(proxiedRequests).toEqual([]);
+    },
+  );
 
   it('sends an IP-literal host, checked as it is, through the proxy that is to connect to an approved address', async () => {
     const entry = buildEntry();
