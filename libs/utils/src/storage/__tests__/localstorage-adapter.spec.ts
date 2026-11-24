@@ -170,6 +170,58 @@ describe('LocalStorageAdapter — encryption', () => {
     });
   });
 
+  describe('WebCrypto key', () => {
+    it('encrypts with a CryptoKey in the same record format as its raw bytes', async () => {
+      const bytes = makeKey();
+      const cryptoKey = await crypto.subtle.importKey('raw', new Uint8Array(bytes), 'AES-GCM', false, [
+        'encrypt',
+        'decrypt',
+      ]);
+      const withCryptoKey = new LocalStorageAdapter({ encryptionKey: cryptoKey });
+      const withBytes = new LocalStorageAdapter({ encryptionKey: bytes });
+
+      await withCryptoKey.set('from-crypto-key', 'sealed by WebCrypto');
+      await withBytes.set('from-bytes', 'sealed by the byte key');
+
+      expect(await withBytes.get('from-crypto-key')).toBe('sealed by WebCrypto');
+      expect(await withCryptoKey.get('from-bytes')).toBe('sealed by the byte key');
+      expect(store.get('frontmcp:from-crypto-key')).not.toContain('sealed by WebCrypto');
+    });
+
+    it('reads a record sealed by another key as missing', async () => {
+      const cryptoKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, [
+        'encrypt',
+        'decrypt',
+      ]);
+      await new LocalStorageAdapter({ encryptionKey: makeKey() }).set('other', 'value');
+
+      expect(await new LocalStorageAdapter({ encryptionKey: cryptoKey }).get('other')).toBeNull();
+    });
+  });
+
+  describe('bindRecordKey', () => {
+    it.each([
+      ['bytes', async () => makeKey()],
+      ['a CryptoKey', () => crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])],
+    ] as const)('with %s, reads its records but not one copied under another key', async (_kind, makeEncryptionKey) => {
+      const adapter = new LocalStorageAdapter({ encryptionKey: await makeEncryptionKey(), bindRecordKey: true });
+      await adapter.set('signing', 'signing secret');
+      store.set('frontmcp:session', store.get('frontmcp:signing') ?? '');
+
+      expect(await adapter.get('signing')).toBe('signing secret');
+      expect(await adapter.get('session')).toBeNull();
+    });
+
+    it('does not read records written without it, nor the other way round', async () => {
+      const key = makeKey();
+      await new LocalStorageAdapter({ encryptionKey: key }).set('unbound', 'value');
+      await new LocalStorageAdapter({ encryptionKey: key, bindRecordKey: true }).set('bound', 'value');
+
+      expect(await new LocalStorageAdapter({ encryptionKey: key, bindRecordKey: true }).get('unbound')).toBeNull();
+      expect(await new LocalStorageAdapter({ encryptionKey: key }).get('bound')).toBeNull();
+    });
+  });
+
   describe('TTL with encryption', () => {
     it('should respect TTL on encrypted entries', async () => {
       const key = makeKey();
@@ -195,16 +247,13 @@ describe('LocalStorageAdapter — encryption', () => {
   });
 
   describe('backward compatibility', () => {
-    it('should read legacy plaintext entries when adapter has encryption key', async () => {
-      // Write a legacy (no encryption) entry directly
-      store.set('frontmcp:legacy', JSON.stringify({ v: 'old-value' }));
+    it('does not read an entry without encryption when it has an encryption key', async () => {
+      store.set('frontmcp:planted', JSON.stringify({ v: 'planted-value' }));
 
-      const key = makeKey();
-      const adapter = new LocalStorageAdapter({ encryptionKey: key });
+      const adapter = new LocalStorageAdapter({ encryptionKey: makeKey() });
       await adapter.connect();
 
-      // Should return the plaintext value (no _enc field → passthrough)
-      expect(await adapter.get('legacy')).toBe('old-value');
+      expect(await adapter.get('planted')).toBeNull();
     });
 
     it('should return null when plaintext adapter reads an encrypted entry', async () => {

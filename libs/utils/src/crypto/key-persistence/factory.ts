@@ -7,13 +7,15 @@
  * @module @frontmcp/utils/key-persistence
  */
 
-import { cryptoProvider } from '#crypto-provider';
-
 import { MemoryStorageAdapter } from '../../storage/adapters/memory';
 import type { StorageAdapter } from '../../storage/types';
-import { base64urlDecode, base64urlEncode, randomBytes } from '../index';
 import { isBrowser, isNode } from '../runtime';
 import { KeyPersistence } from './key-persistence';
+import {
+  LocalStorageKeyLostError,
+  LocalStorageKeyRequiredError,
+  LocalStorageKeyUnavailableError,
+} from './local-storage-key';
 import type { CreateKeyPersistenceOptions } from './types';
 
 /**
@@ -21,55 +23,29 @@ import type { CreateKeyPersistenceOptions } from './types';
  */
 const DEFAULT_BASE_DIR = '.frontmcp/keys';
 
-const LS_HKDF_IKM = new TextEncoder().encode('frontmcp:localstorage:v1');
-const INSTALL_SALT_KEY = '__frontmcp_internal__:install_salt';
-const LEGACY_SALT_KEY = 'frontmcp:_install_salt';
+let keysInMemoryWarned = false;
 
-/**
- * Get or create a per-installation random salt stored in localStorage.
- * This ensures the derived key is unique per browser installation.
- */
-function getOrCreateInstallationSalt(): Uint8Array {
-  if (typeof localStorage === 'undefined') {
-    throw new Error('localStorage unavailable: cannot derive installation salt');
-  }
-  const existing = localStorage.getItem(INSTALL_SALT_KEY);
-  if (existing) {
-    try {
-      return base64urlDecode(existing);
-    } catch {
-      // Corrupted salt — regenerate
-    }
-  }
-
-  // Migrate from legacy key if present
-  const legacy = localStorage.getItem(LEGACY_SALT_KEY);
-  if (legacy) {
-    try {
-      const salt = base64urlDecode(legacy);
-      localStorage.setItem(INSTALL_SALT_KEY, base64urlEncode(salt));
-      localStorage.removeItem(LEGACY_SALT_KEY);
-      return salt;
-    } catch {
-      localStorage.removeItem(LEGACY_SALT_KEY);
-    }
-  }
-
-  const salt = randomBytes(32);
-  localStorage.setItem(INSTALL_SALT_KEY, base64urlEncode(salt));
-  return salt;
+async function createLocalStorageKeyAdapter(encryptionKey?: Uint8Array): Promise<StorageAdapter> {
+  const records = await import('./local-storage-key-records.js');
+  return records.createLocalStorageKeyAdapter(encryptionKey);
 }
 
-/**
- * Derive or pass-through a 32-byte AES-256-GCM key for localStorage encryption.
- * Uses HKDF-SHA256 with a fixed IKM, per-installation salt, and `location.origin` as info context.
- */
-function deriveLocalStorageKey(userKey?: Uint8Array): Uint8Array {
-  if (userKey) return userKey;
-  const salt = getOrCreateInstallationSalt();
-  const origin = typeof location !== 'undefined' ? location.origin : 'unknown';
-  const info = new TextEncoder().encode(origin);
-  return cryptoProvider.hkdfSha256(LS_HKDF_IKM, salt, info, 32);
+/** For 'auto': localStorage key records, else memory; a refusal to read the records already there is passed on. */
+async function localStorageKeysOrMemory(encryptionKey?: Uint8Array): Promise<StorageAdapter> {
+  try {
+    return await createLocalStorageKeyAdapter(encryptionKey);
+  } catch (error) {
+    if (error instanceof LocalStorageKeyUnavailableError || error instanceof LocalStorageKeyLostError) throw error;
+    if (error instanceof LocalStorageKeyRequiredError && !keysInMemoryWarned) {
+      keysInMemoryWarned = true;
+      console.warn(
+        '[frontmcp] createKeyPersistence: IndexedDB or WebCrypto is unavailable and no encryptionKey was given, so ' +
+          'keys are kept in memory only, and keys saved in localStorage by earlier versions are ignored (not ' +
+          'deleted). Pass encryptionKey, a 32-byte key kept outside localStorage, to keep keys and read the saved ones.',
+      );
+    }
+    return new MemoryStorageAdapter();
+  }
 }
 
 /**
@@ -118,11 +94,7 @@ export async function createKeyPersistence(options?: CreateKeyPersistenceOptions
     const { IndexedDBStorageAdapter } = await import('../../storage/adapters/indexeddb.js');
     adapter = new IndexedDBStorageAdapter({ prefix: 'frontmcp:keys:' });
   } else if (type === 'localstorage') {
-    const { LocalStorageAdapter } = await import('../../storage/adapters/localstorage.js');
-    adapter = new LocalStorageAdapter({
-      prefix: 'frontmcp:keys:',
-      encryptionKey: deriveLocalStorageKey(options?.encryptionKey),
-    });
+    adapter = await createLocalStorageKeyAdapter(options?.encryptionKey);
   } else {
     // Auto-detect with fallback chain: filesystem → indexeddb → localStorage → memory
     let connected = false;
@@ -144,34 +116,13 @@ export async function createKeyPersistence(options?: CreateKeyPersistenceOptions
         connected = true;
       } catch {
         // Fall through to localStorage
-        if (typeof localStorage !== 'undefined') {
-          try {
-            const { LocalStorageAdapter } = await import('../../storage/adapters/localstorage.js');
-            adapter = new LocalStorageAdapter({
-              prefix: 'frontmcp:keys:',
-              encryptionKey: deriveLocalStorageKey(options?.encryptionKey),
-            });
-            await adapter.connect();
-            connected = true;
-          } catch {
-            adapter = new MemoryStorageAdapter();
-          }
-        } else {
-          adapter = new MemoryStorageAdapter();
-        }
+        adapter =
+          typeof localStorage !== 'undefined'
+            ? await localStorageKeysOrMemory(options?.encryptionKey)
+            : new MemoryStorageAdapter();
       }
     } else if (isBrowser() && typeof localStorage !== 'undefined') {
-      try {
-        const { LocalStorageAdapter } = await import('../../storage/adapters/localstorage.js');
-        adapter = new LocalStorageAdapter({
-          prefix: 'frontmcp:keys:',
-          encryptionKey: deriveLocalStorageKey(options?.encryptionKey),
-        });
-        await adapter.connect();
-        connected = true;
-      } catch {
-        adapter = new MemoryStorageAdapter();
-      }
+      adapter = await localStorageKeysOrMemory(options?.encryptionKey);
     } else {
       adapter = new MemoryStorageAdapter();
     }

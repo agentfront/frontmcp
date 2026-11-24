@@ -52,14 +52,25 @@ export interface CryptoProvider {
   hkdfSha256(ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, length: number): Uint8Array;
 
   /**
-   * Encrypt using AES-256-GCM.
+   * Encrypt using AES-256-GCM, authenticating `additionalData` too when given.
    */
-  encryptAesGcm(key: Uint8Array, plaintext: Uint8Array, iv: Uint8Array): { ciphertext: Uint8Array; tag: Uint8Array };
+  encryptAesGcm(
+    key: Uint8Array,
+    plaintext: Uint8Array,
+    iv: Uint8Array,
+    additionalData?: Uint8Array,
+  ): { ciphertext: Uint8Array; tag: Uint8Array };
 
   /**
-   * Decrypt using AES-256-GCM.
+   * Decrypt using AES-256-GCM; `additionalData` must be what the encryption authenticated.
    */
-  decryptAesGcm(key: Uint8Array, ciphertext: Uint8Array, iv: Uint8Array, tag: Uint8Array): Uint8Array;
+  decryptAesGcm(
+    key: Uint8Array,
+    ciphertext: Uint8Array,
+    iv: Uint8Array,
+    tag: Uint8Array,
+    additionalData?: Uint8Array,
+  ): Uint8Array;
 
   /**
    * Constant-time comparison to prevent timing attacks.
