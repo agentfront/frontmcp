@@ -10,9 +10,11 @@ import { PublicMcpError } from '../../../errors';
 
 const PromptHook = FlowHooksOf('prompts:get-prompt');
 const hooksRun: string[] = [];
+const promptsRun: string[] = [];
 const promptArguments = [
   { name: 'to', required: false },
   { name: 'pass', required: false },
+  { name: 'seal', required: false },
 ];
 
 function textResult(text: string) {
@@ -34,6 +36,7 @@ class VaultSummaryPrompt extends PromptContext {
   }
 
   async execute() {
+    promptsRun.push('vault_summary');
     return textResult('vault summary');
   }
 }
@@ -62,6 +65,13 @@ class VaultGuardPlugin {
       flowCtx.fail(new PublicMcpError('the vault is locked', 'VAULT_LOCKED', 403));
     }
   }
+
+  @PromptHook.Stage('execute')
+  checkSeal(flowCtx: FlowCtxOf<'prompts:get-prompt'>) {
+    if (flowCtx.state.input?.arguments?.['seal'] === 'broken') {
+      flowCtx.fail(new PublicMcpError('the vault seal is broken', 'VAULT_SEALED', 403));
+    }
+  }
 }
 
 @App({ id: 'public', name: 'Public', prompts: [SummaryPrompt], plugins: [RedirectPlugin] })
@@ -82,11 +92,16 @@ describe('prompts/get when a hook switches to another prompt', () => {
 
   beforeEach(() => {
     hooksRun.length = 0;
+    promptsRun.length = 0;
   });
 
-  async function getSummary(args: Record<string, string>): Promise<string> {
-    const { message } = await rpc20260728(server.handler, 'prompts/get', { name: 'summary', arguments: args });
+  async function getPrompt(name: string, args: Record<string, string>): Promise<string> {
+    const { message } = await rpc20260728(server.handler, 'prompts/get', { name, arguments: args });
     return JSON.stringify(message);
+  }
+
+  async function getSummary(args: Record<string, string>): Promise<string> {
+    return getPrompt('summary', args);
   }
 
   it("runs the requested prompt's hooks when no hook switches it", async () => {
@@ -105,5 +120,14 @@ describe('prompts/get when a hook switches to another prompt', () => {
     expect(answer).toContain('the vault is locked');
     expect(answer).not.toContain('vault summary');
     expect(hooksRun).not.toContain('public-app');
+  });
+
+  it("runs an execute-stage guard of the prompt it switched to before that prompt's execute(), as a direct request does", async () => {
+    const direct = await getPrompt('vault_summary', { pass: 'open', seal: 'broken' });
+    const switched = await getSummary({ to: 'vault', pass: 'open', seal: 'broken' });
+
+    expect(direct).toContain('the vault seal is broken');
+    expect(switched).toContain('the vault seal is broken');
+    expect(promptsRun).toEqual([]);
   });
 });
