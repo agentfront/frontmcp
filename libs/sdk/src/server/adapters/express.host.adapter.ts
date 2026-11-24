@@ -209,8 +209,9 @@ export class ExpressHostAdapter extends HostServerAdapter {
    *
    * ON by default since v1.7.2 (BC-035). `allowedHosts` falls back to the names
    * this process actually answers to — the loopback aliases with and without
-   * the bound port, the bound NIC address, and the configured issuer host. On a
-   * loopback bind `allowedOrigins` falls back to its own origins and the CORS list.
+   * the bound port, the bound NIC address, and the configured issuer host —
+   * whether or not `allowedOrigins` is set. On a loopback bind `allowedOrigins`
+   * falls back to its own origins and the CORS list.
    *
    * Escape hatches, in precedence order: explicit
    * `security.dnsRebindingProtection.allowedHosts`, the
@@ -225,13 +226,17 @@ export class ExpressHostAdapter extends HostServerAdapter {
 
     // An EXPLICIT allow-list applies to every deployment shape — this process
     // did not have to guess it.
-    if (explicitHosts?.length || allowedOrigins !== undefined) {
+    if (explicitHosts?.length) {
       this.hostValidation = createHostValidationMiddleware({
         enabled: true,
-        allowedHosts: explicitHosts?.length ? explicitHosts : undefined,
+        allowedHosts: explicitHosts,
         allowedOrigins,
       });
     } else {
+      // Configured origins apply before `start()`, which a serverless handler never calls; the derived hosts join them.
+      if (allowedOrigins !== undefined) {
+        this.hostValidation = createHostValidationMiddleware({ enabled: true, allowedOrigins });
+      }
       // Otherwise the allow-list can only be DERIVED, and that is sound only
       // when this process owns the listener and therefore knows the address and
       // port clients reach it on. `start()` says so; a serverless handler
@@ -277,12 +282,16 @@ export class ExpressHostAdapter extends HostServerAdapter {
 
         // A page on another site reaches a loopback server under a loopback Host; only its Origin differs.
         const corsOrigins = corsAllowedOrigins(options?.cors);
-        const allowedOrigins =
+        const derivedOrigins =
           isLoopbackAddress(derivation.bindAddress) && corsOrigins
             ? deriveAllowedOrigins({ port: derivation.port, issuer: derivation.issuer, extraOrigins: corsOrigins })
             : undefined;
 
-        return createHostValidationMiddleware({ enabled: true, allowedHosts, allowedOrigins });
+        return createHostValidationMiddleware({
+          enabled: true,
+          allowedHosts,
+          allowedOrigins: allowedOrigins ?? derivedOrigins,
+        });
       };
     }
 
@@ -300,8 +309,8 @@ export class ExpressHostAdapter extends HostServerAdapter {
    * `installHostValidation`.
    */
   private enableDerivedHostValidation(portOrSocketPath: number | string, bindAddress?: string): void {
-    if (this.hostValidation || !this.deriveHostValidation) return;
-    this.hostValidation = this.deriveHostValidation(portOrSocketPath, bindAddress);
+    if (!this.deriveHostValidation) return;
+    this.hostValidation = this.deriveHostValidation(portOrSocketPath, bindAddress) ?? this.hostValidation;
     this.deriveHostValidation = undefined;
   }
 
